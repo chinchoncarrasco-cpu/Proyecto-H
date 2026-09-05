@@ -93,3 +93,16 @@
     setTimeout(prepararTodos, 250);
     window.addEventListener("haiku:auth-ready", () => setTimeout(prepararTodos, 120));
 })();
+
+// Carga aislada del sidebar redimensionable en escritorio.
+(() => {
+    "use strict";
+
+    if (document.querySelector('script[data-haiku-sidebar-resize-v1]')) return;
+
+    const script = document.createElement("script");
+    script.src = `js/supabase-sidebar-resize-v1.js?v=${Date.now()}`;
+    script.async = true;
+    script.dataset.haikuSidebarResizeV1 = "1";
+    document.head.appendChild(script);
+})();
