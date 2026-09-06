@@ -26,7 +26,20 @@
         "ingreso",
         "checkout",
         "notaOperativa",
-        "notaAseo"
+        "notaAseo",
+        // El bloqueo es una capa comercial independiente de la reserva.
+        // Si una cabaña tiene reserva + bloqueo el mismo día, estos campos
+        // deben sobrevivir cuando el sync reconstruye la reserva desde Supabase.
+        "bloqueoId",
+        "bloqueoLegacyId",
+        "bloqueoAutomatico",
+        "bloqueoFechaInicio",
+        "bloqueoFechaFin",
+        "bloqueoMotivo",
+        "bloqueoCreadoEn",
+        "bloqueoEstadoAnterior",
+        "bloqueoSincronizadoSupabase",
+        "bloqueoSupabaseId"
     ];
 
     function sumarDias(fecha, dias) {
@@ -86,6 +99,13 @@
 
     function obtenerCamposOperativos(mapa, fecha, numero) {
         return mapa.get(claveOperativa(fecha, numero)) || {};
+    }
+
+    function tieneBloqueoOperativo(campos) {
+        return Boolean(
+            campos?.bloqueoSupabaseId ||
+            campos?.bloqueoId
+        );
     }
 
     async function obtenerReservasActivas() {
@@ -260,7 +280,7 @@
                     dia.cabanas[numero] = {
                         ...base,
                         ...op,
-                        estado: "fullday"
+                        estado: tieneBloqueoOperativo(op) ? "bloqueada" : "fullday"
                     };
                 }
             } else {
@@ -286,7 +306,9 @@
                     dia.cabanas[numero] = {
                         ...base,
                         ...op,
-                        estado,
+                        // Mientras el bloqueo siga activo, el cache queda bloqueado.
+                        // Así calendario.js no pierde la barra roja durante un sync.
+                        estado: tieneBloqueoOperativo(op) ? "bloqueada" : estado,
                         continuidadAutomatica: i > 0
                     };
                 }
@@ -354,7 +376,7 @@
             console.info(
                 "HAIKU · Cache visual sincronizado desde Supabase V3:",
                 estadias.length,
-                "estadías; operación diaria preservada"
+                "estadías; operación diaria y bloqueos preservados"
             );
         } catch (error) {
             console.error("HAIKU · No fue posible sincronizar cache visual V3:", error);
