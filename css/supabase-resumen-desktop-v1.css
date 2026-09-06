@@ -152,13 +152,14 @@
 
 /* =====================================================
    ADAPTACIÓN POR ANCHO REAL DEL RESUMEN
-   No depende del monitor, zoom ni ancho del sidebar.
+   Sólo escritorio/tablet horizontal. Nunca celular.
 ===================================================== */
 .tabla-contenedor {
     container-type: inline-size;
     container-name: haiku-resumen-tabla;
 }
 
+@media (min-width: 701px) {
 @container haiku-resumen-tabla (max-width: 920px) {
 
     /* En escritorio estrecho preservamos la forma original del Aseo.
@@ -253,5 +254,19 @@
         width: 100%;
         min-width: 0;
         max-width: none;
+    }
+}
+}
+
+/* =====================================================
+   CELULAR · CABAÑA UN POCO MÁS COMPACTA
+   Mueve el divisor CABAÑA / ESTADO levemente a la izquierda.
+===================================================== */
+@media (max-width: 700px) {
+    .tabla-contenedor > table th:nth-child(1),
+    .tabla-contenedor > table td:nth-child(1) {
+        width: 150px;
+        min-width: 150px;
+        max-width: 150px;
     }
 }
