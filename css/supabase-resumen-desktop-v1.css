@@ -149,3 +149,99 @@
         max-width: none;
     }
 }
+
+/* =====================================================
+   ESCRITORIO ANGOSTO · 769–1000 px
+   Pensado para monitores/ventanas pequeñas de trabajo.
+   Desde 1001 px hacia arriba no modifica el diseño normal.
+===================================================== */
+@media (min-width: 769px) and (max-width: 1000px) {
+
+    .tabla-contenedor > table {
+        table-layout: fixed;
+        width: 100%;
+        min-width: 800px;
+    }
+
+    /* Recuperamos espacio horizontal sin reducir la legibilidad. */
+    .tabla-contenedor > table th,
+    .tabla-contenedor > table td {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+
+    /* Reparto específico para este ancho. */
+    .tabla-contenedor > table th:nth-child(1),
+    .tabla-contenedor > table td:nth-child(1) { width: 21%; }
+
+    .tabla-contenedor > table th:nth-child(2),
+    .tabla-contenedor > table td:nth-child(2) { width: 9%; }
+
+    .tabla-contenedor > table th:nth-child(3),
+    .tabla-contenedor > table td:nth-child(3) { width: 18%; }
+
+    .tabla-contenedor > table th:nth-child(4),
+    .tabla-contenedor > table td:nth-child(4) { width: 9%; }
+
+    .tabla-contenedor > table th:nth-child(5),
+    .tabla-contenedor > table td:nth-child(5) { width: 13%; }
+
+    .tabla-contenedor > table th:nth-child(6),
+    .tabla-contenedor > table td:nth-child(6) { width: 19%; }
+
+    .tabla-contenedor > table th:nth-child(7),
+    .tabla-contenedor > table td:nth-child(7) { width: 11%; }
+
+    /* Aseo: encargado arriba y horarios IN / OUT apilados.
+       Así cada input dispone del ancho completo de la columna. */
+    .tabla-contenedor .campo-encargado-aseo {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .tabla-contenedor .aseo-horarios {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        gap: 4px;
+        align-items: stretch;
+    }
+
+    .tabla-contenedor .aseo-horarios::after {
+        display: none;
+    }
+
+    .tabla-contenedor .aseo-horarios input:first-child,
+    .tabla-contenedor .aseo-horarios input:last-child {
+        grid-column: 1;
+        width: 100%;
+        min-width: 0;
+        min-height: 30px;
+        padding-left: 5px;
+        padding-right: 5px;
+        font-size: 12px;
+    }
+
+    .tabla-contenedor .aseo-horarios input:first-child {
+        grid-row: 1;
+    }
+
+    .tabla-contenedor .aseo-horarios input:last-child {
+        grid-row: 2;
+    }
+
+    /* El resto sigue usando su celda completa sin alterar funcionalidad. */
+    .tabla-contenedor .estado-reserva-con-checkin,
+    .tabla-contenedor .estado-reserva-con-checkin > select,
+    .tabla-contenedor > table td:nth-child(4) input[type="time"],
+    .tabla-contenedor .nota-cabana,
+    .tabla-contenedor .servicio-resumen-wrap,
+    .tabla-contenedor .servicio-resumen-wrap input,
+    .tabla-contenedor .estado-final-contenido,
+    .tabla-contenedor .estado-final-select {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+}
