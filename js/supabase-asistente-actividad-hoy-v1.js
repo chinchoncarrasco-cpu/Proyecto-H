@@ -91,15 +91,29 @@
         return Number.isInteger(n) && n > 0 ? n : null;
     }
 
-    function totalConIva(neto) {
+    function ivaDesdeNeto(neto, noches = 1) {
         const n = numeroEnteroPositivo(neto);
-        return n ? Math.round(n * 1.19) : null;
+        const cantidad = numeroEnteroPositivo(noches);
+        if (!n || !cantidad) return null;
+
+        // Cloudbeds redondea el impuesto a nivel de noche/línea. Como este
+        // resumen sólo entrega el neto acumulado y la cantidad de noches,
+        // reconstruimos esas líneas de forma determinística repartiendo el
+        // neto en enteros y sumando el IVA redondeado de cada una.
+        const base = Math.floor(n / cantidad);
+        const resto = n - (base * cantidad);
+        let iva = 0;
+        for (let i = 0; i < cantidad; i++) {
+            const netoNoche = base + (i < resto ? 1 : 0);
+            iva += Math.round(netoNoche * 0.19);
+        }
+        return iva;
     }
 
-    function ivaDesdeNeto(neto) {
+    function totalConIva(neto, noches = 1) {
         const n = numeroEnteroPositivo(neto);
-        const total = totalConIva(neto);
-        return n && total ? total - n : null;
+        const iva = ivaDesdeNeto(neto, noches);
+        return n && Number.isInteger(iva) ? n + iva : null;
     }
 
     function tarifasDesdeTotal(total, fechaIngreso, noches) {
@@ -198,11 +212,11 @@
             const noches = numeroEnteroPositivo(fila?.noches);
             const fechaIngreso = fechaValida(fila?.fecha_llegada) ? texto(fila.fecha_llegada) : null;
             const cabana = numeroEnteroPositivo(fila?.cabana);
-            const total = neto ? totalConIva(neto) : null;
+            const total = neto && noches ? totalConIva(neto, noches) : null;
             return {
                 titular_nombre: texto(fila?.titular_nombre) || null,
                 ingreso_sin_iva: neto,
-                iva: neto ? ivaDesdeNeto(neto) : null,
+                iva: neto && noches ? ivaDesdeNeto(neto, noches) : null,
                 monto_total: total,
                 fecha_llegada: fechaIngreso,
                 noches,
