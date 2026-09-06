@@ -23,6 +23,7 @@
     let fechaPendiente = "";
     let canal = null;
     let timer = null;
+    let timerSegundaPasada = null;
 
     function fechaActual() {
         try {
@@ -35,6 +36,21 @@
     function programar(ms = 80, fecha = "") {
         clearTimeout(timer);
         timer = setTimeout(() => refrescar(fecha), ms);
+    }
+
+    function programarDoble(fecha = "") {
+        const objetivo = String(fecha || fechaActual()).slice(0, 10);
+        if (!objetivo) return;
+
+        programar(100, objetivo);
+
+        // supabase-operacion-resumen-fix-v1 hace una segunda hidratación
+        // alrededor de 420 ms. Reaplicamos después para que SALE/BLOQ. sea
+        // el estado visual definitivo y el rojo no vuelva a ser reemplazado.
+        clearTimeout(timerSegundaPasada);
+        timerSegundaPasada = setTimeout(() => {
+            if (fechaActual() === objetivo) refrescar(objetivo);
+        }, 560);
     }
 
     function asegurarOpcionSaleBloq(selector) {
@@ -215,12 +231,12 @@
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "bloqueos_cabana" },
-                () => programar(90, fechaActual())
+                () => programarDoble(fechaActual())
             )
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "reserva_estadias" },
-                () => programar(90, fechaActual())
+                () => programarDoble(fechaActual())
             );
 
         canal.subscribe();
@@ -230,7 +246,7 @@
     // y el estado visual derivado. No bloqueamos ni sustituimos ningún handler.
     document.addEventListener("change", evento => {
         if (evento.target?.closest?.("#seccion-resumen [data-cabana]")) {
-            programar(40, fechaActual());
+            programarDoble(fechaActual());
         }
     });
 
@@ -241,29 +257,29 @@
             evento.target?.closest?.(".haiku-bloqueo-liberar-confirmar") ||
             evento.target?.closest?.("#confirmar-bloqueo-calendario")
         ) {
-            programar(120, fechaActual());
+            programarDoble(fechaActual());
         }
     }, true);
 
     window.addEventListener("haiku:auth-ready", () => {
         setTimeout(() => {
             instalarRealtime();
-            refrescar(fechaActual());
+            programarDoble(fechaActual());
         }, 140);
     });
 
     window.addEventListener("pageshow", () => {
-        setTimeout(() => refrescar(fechaActual()), 140);
+        setTimeout(() => programarDoble(fechaActual()), 140);
     });
 
     window.addEventListener("focus", () => {
-        setTimeout(() => refrescar(fechaActual()), 120);
+        setTimeout(() => programarDoble(fechaActual()), 120);
     });
 
     setTimeout(() => {
         if (window.haikuSesion) {
             instalarRealtime();
-            refrescar(fechaActual());
+            programarDoble(fechaActual());
         }
     }, 260);
 
