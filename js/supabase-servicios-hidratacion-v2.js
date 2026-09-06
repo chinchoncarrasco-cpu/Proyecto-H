@@ -14,6 +14,26 @@
 
     let sincronizando = null;
     let timer = null;
+    let primeraHidratacionLista = false;
+
+    function marcarCargaInicial() {
+        if (primeraHidratacionLista) return;
+
+        const contador = document.getElementById("servicios-contador-hoy");
+        if (!contador) return;
+
+        contador.textContent = "…";
+        contador.dataset.haikuServiciosCargando = "1";
+        contador.setAttribute("aria-label", "Cargando servicios desde Supabase");
+    }
+
+    function limpiarMarcaCargaInicial() {
+        const contador = document.getElementById("servicios-contador-hoy");
+        if (!contador) return;
+
+        delete contador.dataset.haikuServiciosCargando;
+        contador.removeAttribute("aria-label");
+    }
 
     function horaCorta(valor) {
         const texto = String(valor || "");
@@ -223,11 +243,18 @@
     async function sincronizar() {
         if (sincronizando) return sincronizando;
 
+        if (!primeraHidratacionLista) {
+            marcarCargaInicial();
+        }
+
         sincronizando = (async () => {
             try {
                 const lista = await traerServiciosSupabase();
                 reemplazarCache(lista);
                 refrescarResumenServicios(lista);
+
+                primeraHidratacionLista = true;
+                limpiarMarcaCargaInicial();
 
                 try { await window.haikuSincronizarFinanzasServicios?.(); } catch {}
 
@@ -238,6 +265,15 @@
                 return lista;
             } catch (error) {
                 console.error("HAIKU · No fue posible hidratar Servicios V2:", error);
+
+                // Si la primera lectura real falla, no dejamos el contador en
+                // estado de carga permanente: recuperamos el valor local que ya
+                // existía y permitimos que un próximo intento vuelva a consultar.
+                if (!primeraHidratacionLista) {
+                    try { renderizarAgendaServicios?.(); } catch {}
+                    limpiarMarcaCargaInicial();
+                }
+
                 return null;
             } finally {
                 sincronizando = null;
@@ -249,8 +285,18 @@
 
     function programar(delay = 80) {
         clearTimeout(timer);
+
+        if (!primeraHidratacionLista) {
+            marcarCargaInicial();
+        }
+
         timer = setTimeout(sincronizar, delay);
     }
+
+    // El valor del localStorage puede pertenecer a una sesión/dispositivo
+    // anterior. Hasta completar la primera lectura real no lo presentamos
+    // como un total definitivo.
+    marcarCargaInicial();
 
     window.addEventListener("haiku:auth-ready", () => programar(20));
 
