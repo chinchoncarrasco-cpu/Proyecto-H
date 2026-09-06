@@ -1,8 +1,8 @@
 // ========================================
 // HAKU · LISTADO DE RESERVAS CLOUDBEDS V2
-// Combina, cuando el operador adjunta ambas, la vista de ID/fechas y la vista
-// de ocupación/contacto de Cloudbeds. Precio Total ya incluye IVA.
-// Depósito y Saldo Pendiente son informativos: este flujo registra 0 pagos.
+// Lee listados configurables de Cloudbeds. El ID Cloudbeds es opcional.
+// Check-in/Check-Out, habitación, ocupación y Precio Total son prioritarios.
+// Precio Total ya incluye IVA. Depósito/Saldo son informativos: 0 pagos.
 // ========================================
 (() => {
     "use strict";
@@ -67,7 +67,8 @@
     }
     function diasEntre(desde, hasta) {
         if (!fechaValida(desde) || !fechaValida(hasta)) return null;
-        return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000);
+        const dias = Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000);
+        return Number.isInteger(dias) && dias > 0 ? dias : null;
     }
     function cabanaDesdeCodigo(codigo) {
         const raw = texto(codigo).replace(/\s+/g, "");
@@ -143,7 +144,7 @@
     function esCandidato(preview, mensaje) {
         const entradas = entradasPreview(preview);
         if (entradas.length >= 2) return true;
-        return /\b(cloudbeds|reservas|listado|precio total|habitaci[oó]n|adultos|niños)\b/i.test(texto(mensaje));
+        return /\b(cloudbeds|reservas|listado|precio total|habitaci[oó]n|adultos|niños|check.?in|check.?out)\b/i.test(texto(mensaje));
     }
 
     async function analizarListado(mensaje, imagenes) {
@@ -157,10 +158,13 @@
 
     function normalizarLectura(lectura) {
         return (Array.isArray(lectura?.reservas) ? lectura.reservas : []).slice(0, 11).map(fila => {
-            const tipo = tipoDesdeCategoria(fila?.categoria_habitacion);
+            const categoria = texto(fila?.categoria_habitacion) || null;
+            const tipo = tipoDesdeCategoria(categoria);
+            const tipoAsumido = !categoria && tipo === "alojamiento";
             const checkIn = fechaValida(fila?.check_in) ? texto(fila.check_in) : null;
             const checkOut = fechaValida(fila?.check_out) ? texto(fila.check_out) : null;
-            const noches = enteroPositivo(fila?.noches);
+            const nochesVisibles = enteroPositivo(fila?.noches);
+            const noches = nochesVisibles || (checkIn && checkOut ? diasEntre(checkIn, checkOut) : null);
             const total = enteroPositivo(fila?.precio_total);
             const adultos = enteroNoNegativo(fila?.adultos);
             const ninos = enteroNoNegativo(fila?.ninos);
@@ -181,8 +185,9 @@
                 fecha_reserva: fechaValida(fila?.fecha_reserva) ? texto(fila.fecha_reserva) : null,
                 habitacion_codigo: texto(fila?.habitacion_codigo) || null,
                 cabana,
-                categoria_habitacion: texto(fila?.categoria_habitacion) || null,
+                categoria_habitacion: categoria,
                 tipo_estadia: tipo,
+                tipo_asumido: tipoAsumido,
                 check_in: checkIn,
                 check_out_cloudbeds: checkOut,
                 fecha_salida_sistema: salidaSistema,
@@ -199,7 +204,7 @@
                 deposito: enteroNoNegativo(fila?.deposito),
                 saldo_pendiente: enteroNoNegativo(fila?.saldo_pendiente),
                 tarifas,
-                faltantes: Array.isArray(fila?.faltantes) ? fila.faltantes.map(texto).filter(Boolean) : [],
+                faltantes: Array.isArray(fila?.faltantes) ? fila.faltantes.map(texto).filter(Boolean).filter(x => !/id cloudbeds/i.test(x)) : [],
                 advertencias: Array.isArray(fila?.advertencias) ? fila.advertencias.map(texto).filter(Boolean) : []
             };
         });
@@ -213,18 +218,17 @@
 
         filas.forEach((f, i) => {
             const p = filas.length > 1 ? `Reserva ${i + 1}: ` : "";
-            if (!f.cloudbeds_id) problemas.push(`${p}falta ID Cloudbeds; adjunta la vista que muestra la columna Reserva.`);
             if (f.cloudbeds_id && ids.has(f.cloudbeds_id)) problemas.push(`${p}ID Cloudbeds repetido.`);
             if (f.cloudbeds_id) ids.add(f.cloudbeds_id);
             if (!f.titular_nombre) problemas.push(`${p}falta titular.`);
-            if (!f.cabana) problemas.push(`${p}no pude obtener la cabaña desde Núm. Habitación.`);
-            if (!f.check_in) problemas.push(`${p}falta Check-in; adjunta la vista de fechas.`);
+            if (!f.cabana) problemas.push(`${p}no pude obtener la cabaña desde Número de Habitación.`);
+            if (!f.check_in) problemas.push(`${p}falta Check-in.`);
             if (!f.precio_total) problemas.push(`${p}falta Precio Total.`);
             if (!f.estado_reserva) problemas.push(`${p}estado Cloudbeds no admitido automáticamente.`);
 
             if (f.tipo_estadia === "alojamiento") {
-                if (!f.check_out_cloudbeds) problemas.push(`${p}falta Check-Out; adjunta la vista de fechas.`);
-                if (!f.noches) problemas.push(`${p}falta Noches.`);
+                if (!f.check_out_cloudbeds) problemas.push(`${p}falta Check-Out.`);
+                if (!f.noches) problemas.push(`${p}no pude determinar Noches desde la columna o desde Check-in/Check-Out.`);
                 if (f.check_in && f.check_out_cloudbeds && f.noches && diasEntre(f.check_in, f.check_out_cloudbeds) !== f.noches) {
                     problemas.push(`${p}Check-in, Check-Out y Noches no coinciden.`);
                 }
@@ -276,7 +280,9 @@
         if (filas.some(f => f.estado_reserva === "confirmada") && window.haikuTienePermiso?.("reservas.editar") !== true) {
             throw new Error("Tu usuario necesita permiso para importar reservas confirmadas.");
         }
-        const { data, error } = await cliente.rpc("haiku_crear_lote_listado_cloudbeds_asistente_v2", { p_reservas: filas.map(payloadRpc) });
+        const { data, error } = await cliente.rpc("haiku_crear_lote_listado_cloudbeds_asistente_v2", {
+            p_reservas: filas.map(payloadRpc)
+        });
         if (error) throw error;
         return data;
     }
@@ -296,6 +302,7 @@
         const tieneCrear = window.haikuTienePermiso?.("reservas.crear") === true;
         const tieneEditar = !necesitaEditar || window.haikuTienePermiso?.("reservas.editar") === true;
         const puedeCrear = problemas.length === 0 && tieneCrear && tieneEditar;
+        const tiposAsumidos = filas.filter(f => f.tipo_asumido);
 
         const card = document.createElement("article");
         card.className = "haiku-asistente-preview";
@@ -303,7 +310,7 @@
 
         const cabecera = document.createElement("div"); cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
-        const marca = document.createElement("span"); marca.textContent = filas.length > 1 ? "LISTADO CLOUDBEDS V2 · LOTE · NADA GUARDADO" : "LISTADO CLOUDBEDS V2 · NADA GUARDADO";
+        const marca = document.createElement("span"); marca.textContent = filas.length > 1 ? "LISTADO CLOUDBEDS · LOTE · NADA GUARDADO" : "LISTADO CLOUDBEDS · NADA GUARDADO";
         const nombre = document.createElement("strong"); nombre.textContent = filas.length > 1 ? `${filas.length} reservas detectadas` : (filas[0]?.titular_nombre || "Reserva por revisar");
         titulo.append(marca, nombre);
         const confianza = document.createElement("span"); confianza.className = `haiku-asistente-confianza haiku-asistente-confianza--${lectura?.confianza || "baja"}`; confianza.textContent = `Confianza ${lectura?.confianza || "baja"}`;
@@ -317,7 +324,7 @@
             const titular = document.createElement("p"); titular.textContent = `${f.titular_nombre || "Titular por revisar"}${f.cabana ? ` · CAB ${f.cabana}` : ""}`;
             bloque.append(etiqueta, titular);
             const grid = document.createElement("div"); grid.className = "haiku-asistente-preview-grid";
-            agregarDato(grid, "ID Cloudbeds", f.cloudbeds_id);
+            agregarDato(grid, "ID Cloudbeds", f.cloudbeds_id || "No visible · opcional");
             agregarDato(grid, "Habitación", f.habitacion_codigo);
             agregarDato(grid, "Check-in", fechaVisible(f.check_in));
             agregarDato(grid, "Check-Out", fechaVisible(f.check_out_cloudbeds));
@@ -327,7 +334,7 @@
             agregarDato(grid, "Niños", f.ninos ?? "0 · predeterminado");
             agregarDato(grid, "Mascotas", "0 · no visible en este listado");
             agregarDato(grid, "Estado", f.estado_cloudbeds);
-            agregarDato(grid, "Tipo", f.tipo_estadia === "fullday" ? "Full Day" : "Alojamiento");
+            agregarDato(grid, "Tipo", f.tipo_estadia === "fullday" ? "Full Day" : (f.tipo_asumido ? "Alojamiento · categoría no visible" : "Alojamiento"));
             agregarDato(grid, "Fuente", f.fuente);
             agregarDato(grid, "Correo visible", f.correo_contacto);
             agregarDato(grid, "Teléfono visible", f.telefono_contacto);
@@ -342,14 +349,13 @@
 
         const regla = document.createElement("div"); regla.className = "haiku-asistente-preview-observacion";
         const rl = document.createElement("span"); rl.textContent = "REGLAS DE IMPORTACIÓN";
-        const rp = document.createElement("p"); rp.textContent = "Precio Total ya incluye IVA. Depósito y Saldo Pendiente son sólo informativos y no crean pagos. Los contactos enmascarados no se guardan. Mascotas no aparece en estas vistas y se crea como 0.";
+        const rp = document.createElement("p"); rp.textContent = "El ID Cloudbeds es opcional. Precio Total ya incluye IVA. Depósito y Saldo Pendiente son sólo informativos y no crean pagos. Los contactos enmascarados no se guardan.";
         regla.append(rl, rp); card.appendChild(regla);
 
-        const faltaVistaFechas = filas.some(f => !f.cloudbeds_id || !f.check_in || (f.tipo_estadia === "alojamiento" && !f.check_out_cloudbeds));
-        if (faltaVistaFechas) {
+        if (tiposAsumidos.length) {
             const aviso = document.createElement("div"); aviso.className = "haiku-asistente-preview-lista haiku-asistente-preview-lista--alerta";
-            const strong = document.createElement("strong"); strong.textContent = "Falta la vista de identificación/fechas";
-            const p = document.createElement("p"); p.textContent = "Esta captura aporta Adultos, Niños y datos de contacto, pero no muestra ID de Reserva ni Check-in/Check-Out. Adjunta también la vista anterior de Cloudbeds; Haku combinará ambas por huésped + habitación + precio.";
+            const strong = document.createElement("strong"); strong.textContent = "Categoría no visible";
+            const p = document.createElement("p"); p.textContent = "Estas filas se prepararon como Alojamiento porque esta vista no muestra la categoría. Si alguna es Full Day, indícalo en el mensaje a Haku (por ejemplo: “Javiera Full Day”) o adjunta una vista que muestre Categoría de Habitación.";
             aviso.append(strong, p); card.appendChild(aviso);
         }
         if (problemas.length) agregarLista(card, "Antes de crear", problemas, true);
@@ -364,13 +370,14 @@
 
         boton.addEventListener("click", async () => {
             if (guardando || boton.disabled) return;
-            const ocupacion = filas.map(f => `${f.titular_nombre}: ${f.adultos ?? 1} ADL · ${f.ninos ?? 0} NIÑ`).join("\n");
-            if (!window.confirm(`¿Confirmas importar ${filas.length} reserva${filas.length === 1 ? "" : "s"} con 0 pagos?\n\n${ocupacion}`)) return;
-            guardando = true; boton.disabled = true; boton.textContent = "Creando reservas…"; estado.textContent = "Validando IDs, disponibilidad y guardando el lote…";
+            const ocupacion = filas.map(f => `${f.titular_nombre}: ${f.adultos ?? 1} ADL · ${f.ninos ?? 0} NIÑ${f.tipo_estadia === "fullday" ? " · FULL DAY" : ""}`).join("\n");
+            const notaTipo = tiposAsumidos.length ? `\n\n⚠️ ${tiposAsumidos.length} reserva(s) quedaron como Alojamiento porque la categoría no está visible.` : "";
+            if (!window.confirm(`¿Confirmas importar ${filas.length} reserva${filas.length === 1 ? "" : "s"} con 0 pagos?\n\n${ocupacion}${notaTipo}`)) return;
+            guardando = true; boton.disabled = true; boton.textContent = "Creando reservas…"; estado.textContent = "Validando disponibilidad y guardando el lote…";
             try {
                 const resultado = await crearListado(filas);
                 await refrescar();
-                marca.textContent = filas.length > 1 ? "LOTE CLOUDBEDS V2 CREADO" : "RESERVA CLOUDBEDS V2 CREADA";
+                marca.textContent = filas.length > 1 ? "LOTE CLOUDBEDS CREADO" : "RESERVA CLOUDBEDS CREADA";
                 estado.textContent = `✅ ${filas.length} reserva${filas.length === 1 ? "" : "s"} creada${filas.length === 1 ? "" : "s"} · 0 pagos.`;
                 boton.textContent = "Importación completada"; boton.disabled = true;
                 console.info("HAKU · Listado Cloudbeds V2 creado:", resultado);
@@ -438,5 +445,5 @@
     window.HAIKU_ASISTENTE_LISTADO_CLOUDBEDS_V2 = Object.freeze({
         cabanaDesdeCodigo, tipoDesdeCategoria, estadoDesdeCloudbeds, tarifasDesdeTotal, problemasFilas
     });
-    console.info("HAKU · Listado Cloudbeds V2 preparado.");
+    console.info("HAKU · Listado Cloudbeds V2 preparado · ID opcional.");
 })();
