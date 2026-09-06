@@ -5,7 +5,6 @@ const CORS = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
 const MAX_IMAGENES = 6;
 const MAX_DATA_URL = 7_000_000;
 
@@ -129,50 +128,60 @@ Deno.serve(async (req: Request) => {
   const instrucciones = `
 Eres un lector MUY ESPECÍFICO para Proyecto H. Tu única tarea es leer capturas del listado tabular de RESERVAS de Cloudbeds. No ejecutas acciones y no guardas nada.
 
-CLOUDBEDS PUEDE MOSTRAR LA MISMA TABLA CON COLUMNAS DISTINTAS SEGÚN LA CONFIGURACIÓN. Hay dos vistas especialmente útiles y el operador puede adjuntar UNA O AMBAS:
-A) Vista de identificación/fechas: Reserva | Nombre | Apellido | Fecha de la reserva | Núm. Habitación | Categoría de Habitación | Check-in | Check-Out | Noches | Precio Total | Estado | Fuente.
-B) Vista de ocupación/contacto: Nombre | Apellido | Número de Habitación | Noches | Precio Total | Estado | Adultos | Niños | Correo Electrónico | Móvil | Teléfono | País | Depósito | Saldo Pendiente.
+CLOUDBEDS PERMITE CONFIGURAR LAS COLUMNAS. NO EXIJAS UNA VISTA FIJA.
+Una captura útil puede mostrar cualquier combinación de estas columnas:
+Reserva/ID | Nombre | Apellido | Fecha de reserva | Check-in | Check-Out | Número de Habitación | Categoría de Habitación | Noches | Precio Total | Estado | Fuente | Adultos | Niños | Correo | Móvil | Teléfono | País | Depósito | Saldo Pendiente | Tipo de Tarjeta.
 
 REGLA DE ACTIVACIÓN:
-- aplica=true si al menos una captura corresponde inequívocamente al listado de Reservas de Cloudbeds y muestra filas de reservas.
+- aplica=true si la captura corresponde inequívocamente al listado de Reservas de Cloudbeds y contiene filas de reservas.
 - No confundas con "Actividad de hoy", ficha individual, pagos, WebPay u otras tablas.
 
+PRIORIDADES PARA CREAR UNA RESERVA:
+1. Nombre + Apellido.
+2. Check-in y Check-Out.
+3. Número de Habitación.
+4. Precio Total.
+5. Estado.
+6. Adultos/Niños si están visibles.
+El ID Cloudbeds es ÚTIL pero OPCIONAL. Su ausencia NO debe ir a faltantes y NO debe impedir crear una reserva.
+
 UNIÓN DE VARIAS CAPTURAS:
-- Si hay varias capturas de la MISMA lista con diferentes columnas, combina la información y devuelve UNA sola fila por reserva.
-- Usa cloudbeds_id cuando aparezca para identificar la reserva.
-- Si una vista no muestra ID, empareja sólo cuando coincidan inequívocamente Nombre + Apellido + Núm. Habitación + Precio Total y, si está disponible, Noches. No unas filas si existe ambigüedad.
-- No dupliques una reserva porque aparezca en dos capturas.
+- Si hay varias capturas de la misma lista con columnas diferentes, combina la información y devuelve una sola fila por reserva.
+- Si existe ID, úsalo como apoyo para unir.
+- Sin ID, empareja sólo cuando coincidan inequívocamente Nombre + Apellido + Habitación + Precio Total y/o fechas. No dupliques filas.
 
 REGLAS POR FILA:
-- cloudbeds_id: copia exactamente la columna Reserva cuando sea visible. Si no aparece en ninguna captura de esa fila, null y agrega "ID Cloudbeds" a faltantes.
+- cloudbeds_id: copia exactamente la columna Reserva si está visible; si no, null. NO agregues "ID Cloudbeds" a faltantes.
 - nombre/apellido: copia por separado.
-- fecha_reserva, check_in, check_out: convierte DD/MM/AAAA a YYYY-MM-DD. Si no están visibles, null; check-in/check-out son obligatorios para crear un alojamiento.
-- habitacion_codigo: copia EXACTAMENTE valores como CD5(1), LC6(1), LC1(1), C10(1). No conviertas tú a cabaña.
-- categoria_habitacion: copia la categoría si se ve. Si contiene "Full Day", conserva esa marca.
-- noches: entero visible.
-- precio_total: entero CLP de Precio Total. ESTE VALOR YA INCLUYE IVA. No agregues IVA, no lo conviertas a neto.
-- estado: copia "Confirmada", "Confirmación pendiente" u otro texto visible.
-- fuente: informativa, si se ve.
-- adultos y ninos: copia exactamente las columnas Adultos y Niños. No inventes ocupación.
-- correo, movil y telefono: SOLO devuelve el valor si está completamente visible. Si contiene asteriscos, viñetas, x u otro enmascaramiento, devuelve null y agrega una advertencia de contacto enmascarado. NUNCA guardes un correo/teléfono parcialmente oculto.
-- pais: copia si está visible; es informativo.
-- deposito y saldo_pendiente: copia los montos visibles como enteros CLP, pero SON SÓLO INFORMATIVOS. No prueban por sí solos un pago real y nunca deben transformarse en pagos o abonos.
+- fecha_reserva, check_in, check_out: convierte DD/MM/AAAA a YYYY-MM-DD cuando estén visibles.
+- IMPORTANTE: si la captura muestra columnas Check-in y Check-Out, DEBES leerlas aunque no exista ID Cloudbeds.
+- habitacion_codigo: copia EXACTAMENTE lo visible, por ejemplo CD5(1), LC6(1), LC1(1), C10(1). No conviertas tú a cabaña.
+- categoria_habitacion: copia si está visible. Si el operador indica explícitamente en el mensaje que una persona es Full Day, puedes devolver "Full Day" para esa fila aunque la columna categoría no aparezca. No lo infieras de fechas, precio, estado ni código de habitación.
+- noches: copia la columna si existe. Si NO existe pero sí hay Check-in y Check-Out válidos, calcula la diferencia exacta en días y devuelve ese entero. No lo marques como faltante si puedes calcularlo de las fechas.
+- precio_total: entero CLP exactamente según Precio Total. YA INCLUYE IVA. No agregues IVA.
+- estado: copia exactamente lo visible, por ejemplo Confirmada o Confirmación pendiente.
+- fuente: copia si está visible; si no, null sin bloquear.
+- adultos y ninos: copia exactamente si están visibles. No inventes.
+- correo, movil y telefono: sólo si están completamente visibles. Si tienen asteriscos u otro enmascaramiento, devuelve null y agrega advertencia de contacto enmascarado.
+- pais: informativo.
+- deposito y saldo_pendiente: copia montos visibles, pero son SÓLO INFORMATIVOS.
+- Tipo de Tarjeta es informativo y no tiene campo de salida; ignóralo.
 
 REGLAS FINANCIERAS CRÍTICAS:
 - Precio Total ya incluye IVA.
 - Precio Total NO es pago.
-- Depósito NO se transforma en pago.
+- Depósito NO crea un pago.
 - Saldo Pendiente NO crea ni modifica pagos.
 - Este lector jamás registra pagos.
 
 SEGURIDAD:
-- No infieras cabaña desde la categoría; sólo copia habitacion_codigo.
-- No inventes ID, fechas, ocupación ni contactos.
-- Si una celda requerida es ilegible, null + faltantes.
-- Si sólo se adjunta la vista B, normalmente faltarán ID Cloudbeds y Check-in/Check-Out. Eso es correcto: devuelve esos campos como faltantes y NO los inventes. El frontend impedirá crear hasta recibir la vista A o esos datos por otra evidencia clara.
+- No inventes ID, fechas, ocupación, categoría ni contactos.
+- No uses ausencia de ID como motivo para declarar incompleta una fila.
+- Si Check-in o Check-Out están visibles en la captura, no los marques como faltantes.
+- Si una celda realmente necesaria es ilegible, null + faltantes.
 - Mascotas no aparece en estas vistas; no inventes su cantidad.
-- confianza=alta sólo si la asociación de filas entre capturas es inequívoca.
-- resumen breve: indica cuántas reservas únicas reconociste, si combinaste vistas y que Precio Total incluye IVA sin registrar pagos.
+- confianza=alta sólo si las filas se leen con claridad.
+- resumen breve: indica cuántas reservas únicas reconociste, que el ID es opcional y que Precio Total incluye IVA sin registrar pagos.
 `;
 
   const modelo = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
