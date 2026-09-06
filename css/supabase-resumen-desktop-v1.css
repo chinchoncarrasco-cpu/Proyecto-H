@@ -151,26 +151,30 @@
 }
 
 /* =====================================================
-   ESCRITORIO ANGOSTO · 769–1000 px
-   Pensado para monitores/ventanas pequeñas de trabajo.
-   Desde 1001 px hacia arriba no modifica el diseño normal.
+   ADAPTACIÓN POR ANCHO REAL DEL RESUMEN
+   No depende del monitor, zoom ni ancho del sidebar.
 ===================================================== */
-@media (min-width: 769px) and (max-width: 1000px) {
+.tabla-contenedor {
+    container-type: inline-size;
+    container-name: haiku-resumen-tabla;
+}
 
+@container haiku-resumen-tabla (max-width: 920px) {
+
+    /* La tabla conserva suficiente ancho para que los controles sigan
+       siendo legibles. Si hace falta, el contenedor ya tiene scroll horizontal. */
     .tabla-contenedor > table {
         table-layout: fixed;
         width: 100%;
-        min-width: 800px;
+        min-width: 900px;
     }
 
-    /* Recuperamos espacio horizontal sin reducir la legibilidad. */
     .tabla-contenedor > table th,
     .tabla-contenedor > table td {
         padding-left: 6px;
         padding-right: 6px;
     }
 
-    /* Reparto específico para este ancho. */
     .tabla-contenedor > table th:nth-child(1),
     .tabla-contenedor > table td:nth-child(1) { width: 21%; }
 
@@ -192,8 +196,7 @@
     .tabla-contenedor > table th:nth-child(7),
     .tabla-contenedor > table td:nth-child(7) { width: 11%; }
 
-    /* Aseo: encargado arriba y horarios IN / OUT apilados.
-       Así cada input dispone del ancho completo de la columna. */
+    /* ASEO: encargado arriba y horarios apilados. */
     .tabla-contenedor .campo-encargado-aseo {
         width: 100%;
         min-width: 0;
@@ -202,7 +205,7 @@
     .tabla-contenedor .aseo-horarios {
         width: 100%;
         display: grid;
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: 1fr;
         grid-template-rows: auto auto;
         gap: 4px;
         align-items: stretch;
@@ -216,10 +219,10 @@
     .tabla-contenedor .aseo-horarios input:last-child {
         grid-column: 1;
         width: 100%;
-        min-width: 0;
+        min-width: 96px;
         min-height: 30px;
-        padding-left: 5px;
-        padding-right: 5px;
+        padding-left: 6px;
+        padding-right: 6px;
         font-size: 12px;
     }
 
@@ -231,7 +234,6 @@
         grid-row: 2;
     }
 
-    /* El resto sigue usando su celda completa sin alterar funcionalidad. */
     .tabla-contenedor .estado-reserva-con-checkin,
     .tabla-contenedor .estado-reserva-con-checkin > select,
     .tabla-contenedor > table td:nth-child(4) input[type="time"],
