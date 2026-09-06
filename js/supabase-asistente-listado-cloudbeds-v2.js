@@ -3,6 +3,8 @@
 // Lee listados configurables de Cloudbeds. El ID Cloudbeds es opcional.
 // Check-in/Check-Out, habitación, ocupación y Precio Total son prioritarios.
 // Precio Total ya incluye IVA. Depósito/Saldo son informativos: 0 pagos.
+// Teléfono y Móvil se tratan como un mismo dato y se conserva el valor
+// enmascarado tal como aparece para poder buscar por sus últimos dígitos.
 // ========================================
 (() => {
     "use strict";
@@ -87,10 +89,14 @@
         if (k === "confirmada" || k === "confirmado" || k === "confirmed") return "confirmada";
         return null;
     }
-    function contactoSeguro(valor) {
+    function correoSeguro(valor) {
         const s = texto(valor);
         if (!s || /[*•●xX]{2,}/.test(s)) return null;
         return s;
+    }
+    function telefonoParaBusqueda(valor) {
+        const s = texto(valor);
+        return s || null;
     }
     function tarifasDesdeTotal(total, fechaIngreso, noches) {
         const monto = enteroPositivo(total);
@@ -175,9 +181,9 @@
             const tarifas = tipo === "fullday"
                 ? (checkIn && total ? { [checkIn]: total } : {})
                 : tarifasDesdeTotal(total, checkIn, noches);
-            const correo = contactoSeguro(fila?.correo);
-            const movil = contactoSeguro(fila?.movil);
-            const telefono = contactoSeguro(fila?.telefono);
+            const correo = correoSeguro(fila?.correo);
+            const movil = telefonoParaBusqueda(fila?.movil);
+            const telefono = telefonoParaBusqueda(fila?.telefono);
 
             return {
                 cloudbeds_id: texto(fila?.cloudbeds_id) || null,
@@ -204,8 +210,12 @@
                 deposito: enteroNoNegativo(fila?.deposito),
                 saldo_pendiente: enteroNoNegativo(fila?.saldo_pendiente),
                 tarifas,
-                faltantes: Array.isArray(fila?.faltantes) ? fila.faltantes.map(texto).filter(Boolean).filter(x => !/id cloudbeds/i.test(x)) : [],
-                advertencias: Array.isArray(fila?.advertencias) ? fila.advertencias.map(texto).filter(Boolean) : []
+                faltantes: Array.isArray(fila?.faltantes)
+                    ? fila.faltantes.map(texto).filter(Boolean).filter(x => !/id cloudbeds/i.test(x))
+                    : [],
+                advertencias: Array.isArray(fila?.advertencias)
+                    ? fila.advertencias.map(texto).filter(Boolean).filter(x => !/(tel[eé]fono|m[oó]vil).*enmascarad|enmascarad.*(tel[eé]fono|m[oó]vil)/i.test(x))
+                    : []
             };
         });
     }
@@ -337,7 +347,7 @@
             agregarDato(grid, "Tipo", f.tipo_estadia === "fullday" ? "Full Day" : (f.tipo_asumido ? "Alojamiento · categoría no visible" : "Alojamiento"));
             agregarDato(grid, "Fuente", f.fuente);
             agregarDato(grid, "Correo visible", f.correo_contacto);
-            agregarDato(grid, "Teléfono visible", f.telefono_contacto);
+            agregarDato(grid, "Teléfono/Móvil", f.telefono_contacto);
             agregarDato(grid, "País", f.pais);
             agregarDato(grid, "Depósito · informativo", f.deposito !== null ? moneda(f.deposito) : null);
             agregarDato(grid, "Saldo pendiente · informativo", f.saldo_pendiente !== null ? moneda(f.saldo_pendiente) : null);
@@ -349,7 +359,7 @@
 
         const regla = document.createElement("div"); regla.className = "haiku-asistente-preview-observacion";
         const rl = document.createElement("span"); rl.textContent = "REGLAS DE IMPORTACIÓN";
-        const rp = document.createElement("p"); rp.textContent = "El ID Cloudbeds es opcional. Precio Total ya incluye IVA. Depósito y Saldo Pendiente son sólo informativos y no crean pagos. Los contactos enmascarados no se guardan.";
+        const rp = document.createElement("p"); rp.textContent = "El ID Cloudbeds es opcional. Precio Total ya incluye IVA. Depósito y Saldo Pendiente son sólo informativos y no crean pagos. Teléfono y Móvil se consideran el mismo dato; el número enmascarado se conserva tal como aparece para permitir búsquedas por sus últimos dígitos. Los correos enmascarados no se guardan.";
         regla.append(rl, rp); card.appendChild(regla);
 
         if (tiposAsumidos.length) {
@@ -445,5 +455,5 @@
     window.HAIKU_ASISTENTE_LISTADO_CLOUDBEDS_V2 = Object.freeze({
         cabanaDesdeCodigo, tipoDesdeCategoria, estadoDesdeCloudbeds, tarifasDesdeTotal, problemasFilas
     });
-    console.info("HAKU · Listado Cloudbeds V2 preparado · ID opcional.");
+    console.info("HAKU · Listado Cloudbeds V2 preparado · ID opcional · teléfono enmascarado conservado.");
 })();
