@@ -1,22 +1,15 @@
 // ========================================
-// HAIKU · BLOQUEOS UI FIX V1
-// Interacción fiable de barras + titular BLOQUEADA en Resumen.
-// No modifica la lógica financiera, reservas ni el rango del bloqueo.
+// HAIKU · BLOQUEOS UI FIX V2
+// Sólo mantiene la interacción de las barras de bloqueo del Calendario.
+//
+// Importante:
+// - NO modifica estado, titular ni color del Resumen.
+// - NO usa MutationObserver global.
+// - NO usa polling ni setInterval.
+// - El estado visual del Resumen queda en Operación Resumen Fix V4.
 // ========================================
-
 (() => {
     "use strict";
-
-    let raf = 0;
-    let observer = null;
-
-    function fechaActual() {
-        try {
-            return String(fechaSeleccionada || "").slice(0, 10);
-        } catch (_) {
-            return "";
-        }
-    }
 
     function datosLegacy() {
         try {
@@ -36,78 +29,24 @@
         const numero = String(barra.dataset?.cabana || "");
         if (!numero) return "";
 
+        // El bloqueo es metadata independiente del estado operativo visible.
+        // No exigimos cabana.estado === "bloqueada" para encontrarlo.
         const datos = datosLegacy();
         for (const dia of Object.values(datos)) {
             const cabana = dia?.cabanas?.[numero];
-            if (
-                String(cabana?.estado || "").toLowerCase() === "bloqueada" &&
-                cabana?.bloqueoSupabaseId
-            ) {
-                return String(cabana.bloqueoSupabaseId);
-            }
+            const id = String(cabana?.bloqueoSupabaseId || "");
+            if (id) return id;
         }
 
         return "";
     }
 
-    function activarBarrasBloqueo() {
+    function etiquetarBarras() {
         document
             .querySelectorAll(".calendario-bloqueo-barra")
             .forEach(barra => {
-                barra.style.setProperty("pointer-events", "auto", "important");
-                barra.style.setProperty("cursor", "pointer", "important");
-                barra.style.setProperty("z-index", "25", "important");
                 barra.setAttribute("aria-label", "Abrir opciones del bloqueo");
             });
-    }
-
-    function aplicarBloqueadasResumen() {
-        const fecha = fechaActual();
-        if (!fecha) return;
-
-        const cabanas = datosLegacy()?.[fecha]?.cabanas || {};
-
-        Object.entries(cabanas).forEach(([numero, cabana]) => {
-            if (String(cabana?.estado || "").toLowerCase() !== "bloqueada") {
-                return;
-            }
-
-            const fila = document.querySelector(
-                `#seccion-resumen [data-cabana="${CSS.escape(String(numero))}"]`
-            );
-            if (!fila) return;
-
-            const titular = fila.querySelector(
-                `[data-titular-cabana="${CSS.escape(String(numero))}"]`
-            );
-            if (titular && titular.textContent !== "BLOQUEADA") {
-                titular.textContent = "BLOQUEADA";
-            }
-
-            const estado = fila.querySelector('[data-campo="estado"]');
-            if (estado && estado.value !== "bloqueada") {
-                estado.value = "bloqueada";
-            }
-
-            fila.classList.remove(
-                "cabana-checkout",
-                "cabana-checkin",
-                "cabana-libre",
-                "cabana-ingresa"
-            );
-            fila.classList.add("cabana-bloqueada");
-
-            const motivo = String(cabana?.bloqueoMotivo || "").trim();
-            if (motivo) fila.title = `Bloqueada · ${motivo}`;
-        });
-    }
-
-    function actualizarUI() {
-        cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => {
-            activarBarrasBloqueo();
-            aplicarBloqueadasResumen();
-        });
     }
 
     function interceptarClickBloqueo(evento) {
@@ -128,14 +67,15 @@
     }
 
     function instalar() {
-        if (document.documentElement.dataset.haikuBloqueosUiFixV1 === "1") {
-            actualizarUI();
+        if (document.documentElement.dataset.haikuBloqueosUiFixV2 === "1") {
+            etiquetarBarras();
             return;
         }
 
-        document.documentElement.dataset.haikuBloqueosUiFixV1 = "1";
+        document.documentElement.dataset.haikuBloqueosUiFixV2 = "1";
 
         const style = document.createElement("style");
+        style.id = "haiku-bloqueos-ui-fix-v2-style";
         style.textContent = `
             #seccion-calendario .calendario-bloqueo-barra {
                 pointer-events: auto !important;
@@ -146,41 +86,30 @@
         `;
         document.head.appendChild(style);
 
-        // Captura antes que los handlers legacy del calendario.
+        // Delegación de click: funciona también si generarCalendario recrea la barra.
         document.addEventListener("click", interceptarClickBloqueo, true);
-
-        observer = new MutationObserver(actualizarUI);
-        observer.observe(document.body, {
-            subtree: true,
-            childList: true,
-            characterData: true
-        });
-
-        document.addEventListener("change", evento => {
-            if (evento.target?.matches?.('#seccion-resumen [data-campo="estado"]')) {
-                setTimeout(actualizarUI, 0);
-            }
-        }, true);
 
         document.addEventListener("click", evento => {
             if (
-                evento.target?.closest?.(".dia-calendario") ||
-                evento.target?.closest?.('[data-seccion="resumen"]') ||
-                evento.target?.closest?.('[data-seccion="calendario"]')
+                evento.target?.closest?.('[data-seccion="calendario"]') ||
+                evento.target?.closest?.("#mes-anterior") ||
+                evento.target?.closest?.("#mes-siguiente") ||
+                evento.target?.closest?.(".dia-calendario")
             ) {
-                setTimeout(actualizarUI, 0);
-                setTimeout(actualizarUI, 160);
+                requestAnimationFrame(etiquetarBarras);
             }
-        }, true);
-
-        window.addEventListener("haiku:auth-ready", () => {
-            setTimeout(actualizarUI, 80);
-            setTimeout(actualizarUI, 260);
         });
 
-        window.addEventListener("pageshow", () => setTimeout(actualizarUI, 80));
+        window.addEventListener("haiku:auth-ready", () => {
+            requestAnimationFrame(etiquetarBarras);
+        });
 
-        actualizarUI();
+        window.addEventListener("pageshow", () => {
+            requestAnimationFrame(etiquetarBarras);
+        });
+
+        etiquetarBarras();
+        console.info("HAIKU · Bloqueos UI Fix V2 preparado sin observer global.");
     }
 
     if (document.readyState === "loading") {
