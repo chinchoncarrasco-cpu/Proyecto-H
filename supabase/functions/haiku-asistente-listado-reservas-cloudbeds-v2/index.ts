@@ -18,6 +18,7 @@ const esquemaFila = {
     fecha_reserva: { type: ["string", "null"] },
     habitacion_codigo: { type: ["string", "null"] },
     categoria_habitacion: { type: ["string", "null"] },
+    nombre_plan_tarifa_interno: { type: ["string", "null"] },
     check_in: { type: ["string", "null"] },
     check_out: { type: ["string", "null"] },
     noches: { type: ["integer", "null"], minimum: 0 },
@@ -37,7 +38,7 @@ const esquemaFila = {
   },
   required: [
     "cloudbeds_id","nombre","apellido","fecha_reserva","habitacion_codigo",
-    "categoria_habitacion","check_in","check_out","noches","precio_total",
+    "categoria_habitacion","nombre_plan_tarifa_interno","check_in","check_out","noches","precio_total",
     "estado","fuente","adultos","ninos","correo","movil","telefono","pais",
     "deposito","saldo_pendiente","faltantes","advertencias"
   ],
@@ -157,14 +158,11 @@ REGLAS POR FILA:
 - fecha_reserva, check_in, check_out: convierte DD/MM/AAAA a YYYY-MM-DD cuando estén visibles.
 - IMPORTANTE: si la captura muestra columnas Check-in y Check-Out, DEBES leerlas aunque no exista ID Cloudbeds.
 - habitacion_codigo: copia EXACTAMENTE lo visible, por ejemplo CD5(1), LC6(1), LC1(1), C10(1). No conviertas tú a cabaña.
-- categoria_habitacion es además la señal normalizada que usa Proyecto H para distinguir Alojamiento de Full Day:
-  1) Si Categoría de Habitación está visible, cópiala.
-  2) Si Categoría no está visible pero sí aparece "Nombre del Plan de Tarifas (Interno)", usa ese plan como evidencia de tipo.
-  3) Normaliza el texto del plan a minúsculas, sin tildes y con espacios compactados únicamente para decidir el tipo.
-  4) Si el plan contiene una variante inequívoca de FULL DAY, por ejemplo "FULL DAY", "FULLDAY" o el nombre real usado aquí "FULL DAYY", devuelve categoria_habitacion="Full Day · plan tarifario".
-  5) Cualquier otro plan tarifario visible, incluidos "Standard Rate", "(genius) Standard Rate" y demás tarifas normales, corresponde a ALOJAMIENTO; devuelve categoria_habitacion="Alojamiento · plan tarifario".
-  6) Si el operador indica explícitamente en el mensaje que una persona es Full Day, también puedes devolver "Full Day" para esa fila.
-  7) NO infieras Full Day por fechas, precio, estado, habitación, saldo ni depósito.
+- categoria_habitacion: copia EXACTAMENTE la columna Categoría de Habitación si está visible; si no, null. No copies ni sintetices aquí el plan tarifario.
+- nombre_plan_tarifa_interno: copia EXACTAMENTE la columna "Nombre del Plan de Tarifas (Interno)" si está visible; si no, null. Conserva variantes reales como "FULL DAY", "FULLDAY", "FULL DAYY", "Standard Rate" o "(genius) Standard Rate".
+- Proyecto H decidirá de forma determinística entre Full Day y Alojamiento usando categoria_habitacion y nombre_plan_tarifa_interno. Tu tarea es extraer ambos textos fielmente, no reinterpretarlos.
+- Si el operador indica explícitamente en el mensaje que una persona es Full Day y ninguna de esas dos columnas lo muestra, puedes devolver categoria_habitacion="Full Day · instrucción del operador" para esa fila.
+- NO infieras Full Day por fechas, precio, estado, habitación, saldo ni depósito.
 - noches: copia la columna si existe. Si NO existe pero sí hay Check-in y Check-Out válidos, calcula la diferencia exacta en días y devuelve ese entero. No lo marques como faltante si puedes calcularlo de las fechas.
 - precio_total: entero CLP exactamente según Precio Total. YA INCLUYE IVA. No agregues IVA.
 - estado: copia exactamente lo visible, por ejemplo Confirmada o Confirmación pendiente.

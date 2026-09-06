@@ -80,8 +80,24 @@
         const n = m ? Number(m[1]) : NaN;
         return Number.isInteger(n) && n >= 1 && n <= 11 ? n : null;
     }
-    function tipoDesdeCategoria(categoria) {
-        return /\bfull\s*day\b/i.test(texto(categoria)) ? "fullday" : "alojamiento";
+    function normalizarTipoTexto(valor) {
+        return String(valor ?? "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+    function tipoDesdeCategoriaOPlan(categoria, plan) {
+        const categoriaNormalizada = normalizarTipoTexto(categoria);
+        const planNormalizado = normalizarTipoTexto(plan);
+        const esFullDay = valor =>
+            /\bfull\s*day+\b/.test(valor) ||
+            valor.includes("fullday");
+
+        return esFullDay(categoriaNormalizada) || esFullDay(planNormalizado)
+            ? "fullday"
+            : "alojamiento";
     }
     function estadoDesdeCloudbeds(estado) {
         const k = texto(estado).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -165,8 +181,9 @@
     function normalizarLectura(lectura) {
         return (Array.isArray(lectura?.reservas) ? lectura.reservas : []).slice(0, 11).map(fila => {
             const categoria = texto(fila?.categoria_habitacion) || null;
-            const tipo = tipoDesdeCategoria(categoria);
-            const tipoAsumido = !categoria && tipo === "alojamiento";
+            const planTarifario = texto(fila?.nombre_plan_tarifa_interno) || null;
+            const tipo = tipoDesdeCategoriaOPlan(categoria, planTarifario);
+            const tipoAsumido = !categoria && !planTarifario && tipo === "alojamiento";
             const checkIn = fechaValida(fila?.check_in) ? texto(fila.check_in) : null;
             const checkOut = fechaValida(fila?.check_out) ? texto(fila.check_out) : null;
             const nochesVisibles = enteroPositivo(fila?.noches);
@@ -192,6 +209,7 @@
                 habitacion_codigo: texto(fila?.habitacion_codigo) || null,
                 cabana,
                 categoria_habitacion: categoria,
+                nombre_plan_tarifa_interno: planTarifario,
                 tipo_estadia: tipo,
                 tipo_asumido: tipoAsumido,
                 check_in: checkIn,
