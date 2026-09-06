@@ -161,12 +161,13 @@
 
 @container haiku-resumen-tabla (max-width: 920px) {
 
-    /* La tabla conserva suficiente ancho para que los controles sigan
-       siendo legibles. Si hace falta, el contenedor ya tiene scroll horizontal. */
+    /* En escritorio estrecho preservamos la forma original del Aseo.
+       Preferimos un poco de scroll horizontal antes que apilar o aplastar
+       los dos horarios. */
     .tabla-contenedor > table {
         table-layout: fixed;
         width: 100%;
-        min-width: 900px;
+        min-width: 980px;
     }
 
     .tabla-contenedor > table th,
@@ -182,13 +183,13 @@
     .tabla-contenedor > table td:nth-child(2) { width: 9%; }
 
     .tabla-contenedor > table th:nth-child(3),
-    .tabla-contenedor > table td:nth-child(3) { width: 18%; }
+    .tabla-contenedor > table td:nth-child(3) { width: 19%; }
 
     .tabla-contenedor > table th:nth-child(4),
     .tabla-contenedor > table td:nth-child(4) { width: 9%; }
 
     .tabla-contenedor > table th:nth-child(5),
-    .tabla-contenedor > table td:nth-child(5) { width: 13%; }
+    .tabla-contenedor > table td:nth-child(5) { width: 12%; }
 
     .tabla-contenedor > table th:nth-child(6),
     .tabla-contenedor > table td:nth-child(6) { width: 19%; }
@@ -196,7 +197,9 @@
     .tabla-contenedor > table th:nth-child(7),
     .tabla-contenedor > table td:nth-child(7) { width: 11%; }
 
-    /* ASEO: encargado arriba y horarios apilados. */
+    /* ASEO conserva dos líneas totales:
+       1) encargado
+       2) [hora IN] → [hora OUT] */
     .tabla-contenedor .campo-encargado-aseo {
         width: 100%;
         min-width: 0;
@@ -205,33 +208,38 @@
     .tabla-contenedor .aseo-horarios {
         width: 100%;
         display: grid;
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto;
+        grid-template-columns: minmax(72px, 1fr) auto minmax(72px, 1fr);
+        grid-template-rows: auto;
         gap: 4px;
-        align-items: stretch;
+        align-items: center;
     }
 
     .tabla-contenedor .aseo-horarios::after {
-        display: none;
-    }
-
-    .tabla-contenedor .aseo-horarios input:first-child,
-    .tabla-contenedor .aseo-horarios input:last-child {
-        grid-column: 1;
-        width: 100%;
-        min-width: 96px;
-        min-height: 30px;
-        padding-left: 6px;
-        padding-right: 6px;
-        font-size: 12px;
+        display: block;
+        grid-column: 2;
+        grid-row: 1;
+        order: initial;
     }
 
     .tabla-contenedor .aseo-horarios input:first-child {
+        grid-column: 1;
         grid-row: 1;
+        order: initial;
     }
 
     .tabla-contenedor .aseo-horarios input:last-child {
-        grid-row: 2;
+        grid-column: 3;
+        grid-row: 1;
+        order: initial;
+    }
+
+    .tabla-contenedor .aseo-horarios input[type="time"] {
+        width: 100%;
+        min-width: 72px;
+        min-height: 30px;
+        padding-left: 5px;
+        padding-right: 5px;
+        font-size: 12px;
     }
 
     .tabla-contenedor .estado-reserva-con-checkin,
