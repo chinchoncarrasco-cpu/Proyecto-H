@@ -1,10 +1,16 @@
 // ========================================
-// HAIKU · OPERACIÓN RESUMEN FIX V3
-// Rehidrata estados del Resumen desde Supabase después de bloqueos/liberaciones
-// y cada vez que cambia la fecha seleccionada.
-// Los colores quedan exclusivamente a cargo del CSS/lógica visual original.
+// HAIKU · OPERACIÓN RESUMEN FIX V4
+// Supabase = autoridad para la operación diaria.
+//
+// Objetivos:
+// - BLOQUEO + SALIDA se muestra como SALE / BLOQ. sin perder ninguna verdad.
+// - El bloqueo sigue guardado como BLOQUEADA en el cache para que el Calendario
+//   legacy conserve su barra roja de forma estable.
+// - El contador SALEN se calcula desde las salidas reales de Supabase.
+// - Los colores del resto de filas quedan a cargo de Checkout/Resumen V2.
+// - BLOQUEADA y SALE / BLOQ. tienen prioridad visual roja.
+// - Sin setInterval, polling, MutationObserver ni parches globales.
 // ========================================
-
 (() => {
     "use strict";
 
@@ -12,11 +18,9 @@
     if (!cliente) return;
 
     let sincronizando = false;
+    let fechaPendiente = "";
     let canal = null;
     let timer = null;
-    let timerSegundaPasada = null;
-    let ultimaFechaVista = "";
-    let fechaPendiente = "";
 
     function fechaActual() {
         try {
@@ -26,8 +30,16 @@
         }
     }
 
+    function esSaleBloq(fila) {
+        return Boolean(fila?.bloqueo_id && fila?.salida_estadia_id);
+    }
+
     function titularPrincipal(fila) {
-        switch (fila?.estado_operativo) {
+        if (esSaleBloq(fila)) {
+            return fila?.salida_titular || "Sin titular";
+        }
+
+        switch (String(fila?.estado_operativo || "")) {
             case "sale-ingresa":
             case "libre-ingresa":
                 return fila.ingreso_titular || "Sin titular";
@@ -81,50 +93,116 @@
         } catch (_) {}
     }
 
+    function asegurarOpcionSaleBloq(selector) {
+        if (!selector) return;
+
+        const existente = Array.from(selector.options || [])
+            .find(opcion => opcion.value === "sale-bloqueada");
+
+        if (existente) return;
+
+        const opcion = document.createElement("option");
+        opcion.value = "sale-bloqueada";
+        opcion.textContent = "SALE / BLOQ.";
+        opcion.disabled = true;
+
+        const bloqueada = Array.from(selector.options || [])
+            .find(item => item.value === "bloqueada");
+
+        if (bloqueada?.nextSibling) {
+            selector.insertBefore(opcion, bloqueada.nextSibling);
+        } else {
+            selector.appendChild(opcion);
+        }
+    }
+
+    function limpiarColorFila(fila) {
+        fila?.classList.remove(
+            "cabana-checkout",
+            "cabana-checkin",
+            "cabana-libre",
+            "cabana-ingresa",
+            "cabana-sale-libre",
+            "cabana-bloqueada"
+        );
+    }
+
+    function aplicarRojo(fila, motivo = "") {
+        if (!fila) return;
+        limpiarColorFila(fila);
+        fila.classList.add("cabana-bloqueada");
+        if (motivo) fila.title = `Bloqueada · ${motivo}`;
+    }
+
     function aplicarFilaVisual(fila) {
         const numero = String(fila?.numero || "");
         if (!numero) return;
 
         const tr = document.querySelector(
-            `#seccion-resumen [data-cabana="${numero}"]`
+            `#seccion-resumen tr[data-cabana="${CSS.escape(numero)}"]`
         );
         if (!tr) return;
 
-        const estadoReal = fila.estado_operativo || "libre-libre";
+        const saleBloq = esSaleBloq(fila);
+        const estadoReal = String(fila?.estado_operativo || "libre-libre");
+        const estadoVisual = saleBloq ? "sale-bloqueada" : estadoReal;
         const selector = tr.querySelector('[data-campo="estado"]');
 
         if (selector) {
-            const existe = Array.from(selector.options || []).some(
-                opcion => opcion.value === estadoReal
-            );
+            if (saleBloq) asegurarOpcionSaleBloq(selector);
 
-            if (existe) {
-                selector.value = estadoReal;
-            }
+            const existe = Array.from(selector.options || [])
+                .some(opcion => opcion.value === estadoVisual);
+
+            if (existe) selector.value = estadoVisual;
         }
 
         const titular = tr.querySelector(
-            `[data-titular-cabana="${numero}"]`
+            `[data-titular-cabana="${CSS.escape(numero)}"]`
         );
+        if (titular) titular.textContent = titularPrincipal(fila);
 
-        if (titular) {
-            titular.textContent = titularPrincipal(fila);
+        if (fila?.bloqueo_id) {
+            tr.dataset.haikuBloqueoActivo = "1";
+            tr.dataset.haikuSaleBloq = saleBloq ? "1" : "0";
+            aplicarRojo(tr, String(fila?.bloqueo_motivo || "").trim());
+        } else {
+            delete tr.dataset.haikuBloqueoActivo;
+            delete tr.dataset.haikuSaleBloq;
+            if (tr.title?.startsWith("Bloqueada ·")) tr.removeAttribute("title");
         }
+    }
 
-        // IMPORTANTE:
-        // No agregar/quitar clases de color aquí.
-        // El diseño original de HAIKU ya pinta cada fila según el valor
-        // del selector y según check-in/check-out. Este puente solo hidrata
-        // datos desde Supabase y no debe competir con esa lógica visual.
+    function actualizarContadorSalidas(filas) {
+        const contador = document.getElementById("contador-salen");
+        if (!contador) return;
+
+        const cantidad = (filas || []).filter(fila =>
+            Boolean(fila?.salida_estadia_id || fila?.fullday_estadia_id)
+        ).length;
+
+        contador.textContent = String(cantidad);
+    }
+
+    function estabilizarColores(filas, fecha) {
+        // Primero dejamos que la autoridad existente resuelva Checkout vs Hospedado
+        // para las filas normales. Después el bloqueo vuelve a imponer rojo.
+        try {
+            window.HAIKU_CHECKOUT_RESUMEN_V2?.aplicarColores?.(fecha);
+        } catch (_) {}
+
+        (filas || [])
+            .filter(fila => Boolean(fila?.bloqueo_id))
+            .forEach(aplicarFilaVisual);
     }
 
     async function refrescar(fechaForzada = "") {
         const fecha = String(fechaForzada || fechaActual()).slice(0, 10);
-        if (!fecha || !window.haikuSesion) return;
+        if (!fecha || !window.haikuSesion) return false;
 
         if (sincronizando) {
             fechaPendiente = fecha;
-            return;
+            return false;
         }
 
         sincronizando = true;
@@ -134,7 +212,6 @@
                 "haiku_operacion_dia",
                 { p_fecha: fecha }
             );
-
             if (error) throw error;
 
             const filas = Array.isArray(data) ? data : [];
@@ -142,13 +219,16 @@
             const dia = asegurarDia(cache, fecha);
 
             filas.forEach(fila => {
-                const numero = String(fila.numero || "");
+                const numero = String(fila?.numero || "");
                 if (!numero) return;
 
                 const anterior = dia.cabanas[numero] || {};
-                const estadoReal = fila.estado_operativo || "libre-libre";
+                const estadoReal = String(fila?.estado_operativo || "libre-libre");
                 const titular = titularPrincipal(fila);
 
+                // El cache conserva BLOQUEADA porque calendario.js legacy todavía
+                // materializa la barra desde ese estado. En SALE/BLOQ sí conservamos
+                // el titular saliente para no perder la información operativa.
                 dia.cabanas[numero] = {
                     ...anterior,
                     estado: estadoReal,
@@ -157,132 +237,111 @@
                             ? ""
                             : titular
                 };
-
-                if (fechaActual() === fecha) {
-                    aplicarFilaVisual(fila);
-                }
             });
 
             guardarCache(cache);
-            ultimaFechaVista = fecha;
+
+            if (fechaActual() === fecha) {
+                filas.forEach(aplicarFilaVisual);
+                actualizarContadorSalidas(filas);
+                estabilizarColores(filas, fecha);
+            }
 
             console.info(
-                "HAIKU · Estados del Resumen rehidratados desde Supabase:",
+                "HAIKU · Operación Resumen V4:",
                 fecha,
-                filas.length,
-                "cabañas"
+                "· salidas",
+                filas.filter(f => f?.salida_estadia_id || f?.fullday_estadia_id).length,
+                "· SALE/BLOQ",
+                filas.filter(esSaleBloq).length
             );
+
+            return true;
         } catch (error) {
-            console.warn(
-                "HAIKU · No fue posible rehidratar estados del Resumen:",
-                error
-            );
+            console.warn("HAIKU · No fue posible hidratar la operación diaria:", error);
+            return false;
         } finally {
             sincronizando = false;
 
             const pendiente = fechaPendiente;
             fechaPendiente = "";
-
             if (pendiente && pendiente !== fecha) {
-                setTimeout(() => refrescar(pendiente), 30);
+                programar(30, pendiente);
             }
         }
     }
 
-    function programar(ms = 120, fechaForzada = "") {
+    function programar(ms = 90, fecha = "") {
         clearTimeout(timer);
-        timer = setTimeout(() => refrescar(fechaForzada), ms);
-    }
-
-    function programarCambioFecha(fecha) {
-        if (!fecha) return;
-
-        programar(80, fecha);
-
-        clearTimeout(timerSegundaPasada);
-        timerSegundaPasada = setTimeout(() => {
-            if (fechaActual() === fecha) {
-                refrescar(fecha);
-            }
-        }, 420);
-    }
-
-    function revisarCambioFecha() {
-        const fecha = fechaActual();
-        if (!fecha || fecha === ultimaFechaVista) return;
-
-        ultimaFechaVista = fecha;
-        programarCambioFecha(fecha);
+        timer = setTimeout(() => refrescar(fecha || fechaActual()), ms);
     }
 
     function instalarRealtime() {
         if (canal || !window.haikuSesion) return;
 
         canal = cliente
-            .channel("haiku-operacion-resumen-fix-v3")
+            .channel("haiku-operacion-resumen-v4")
             .on(
                 "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "bloqueos_cabana"
-                },
-                () => programarCambioFecha(fechaActual())
-            );
-
-        canal.subscribe();
+                { event: "*", schema: "public", table: "bloqueos_cabana" },
+                () => programar(90, fechaActual())
+            )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "reserva_estadias" },
+                () => programar(90, fechaActual())
+            )
+            .subscribe();
     }
 
-    document.addEventListener(
-        "click",
-        evento => {
-            if (evento.target?.closest?.(".dia-calendario")) {
-                setTimeout(revisarCambioFecha, 20);
-                setTimeout(revisarCambioFecha, 120);
-                return;
-            }
+    document.addEventListener("click", evento => {
+        if (evento.target?.closest?.(".dia-calendario")) {
+            // El handler legacy cambia fechaSeleccionada durante el mismo click.
+            setTimeout(() => programar(20, fechaActual()), 0);
+            return;
+        }
 
-            if (
-                evento.target?.closest?.('[data-seccion="resumen"]') ||
-                evento.target?.closest?.(".haiku-bloqueo-liberar-confirmar")
-            ) {
-                programarCambioFecha(fechaActual());
-            }
-        },
-        true
-    );
+        if (
+            evento.target?.closest?.('[data-seccion="resumen"]') ||
+            evento.target?.closest?.("#confirmar-bloqueo-calendario") ||
+            evento.target?.closest?.(".haiku-bloqueo-liberar-confirmar")
+        ) {
+            programar(80, fechaActual());
+        }
+    }, true);
+
+    document.addEventListener("change", evento => {
+        if (evento.target?.closest?.("#seccion-resumen tr[data-cabana]")) {
+            programar(60, fechaActual());
+        }
+    });
 
     window.addEventListener("haiku:auth-ready", () => {
         setTimeout(() => {
             instalarRealtime();
-            ultimaFechaVista = "";
-            revisarCambioFecha();
-        }, 100);
-    });
-
-    window.addEventListener("pageshow", () => {
-        setTimeout(() => {
-            ultimaFechaVista = "";
-            revisarCambioFecha();
+            refrescar(fechaActual());
         }, 120);
     });
 
-    window.addEventListener("focus", () => {
-        setTimeout(() => programarCambioFecha(fechaActual()), 120);
+    window.addEventListener("pageshow", () => {
+        setTimeout(() => refrescar(fechaActual()), 120);
     });
 
-    setInterval(revisarCambioFecha, 250);
+    window.addEventListener("focus", () => {
+        setTimeout(() => refrescar(fechaActual()), 120);
+    });
 
     setTimeout(() => {
         if (window.haikuSesion) {
             instalarRealtime();
-            ultimaFechaVista = "";
-            revisarCambioFecha();
+            refrescar(fechaActual());
         }
     }, 220);
 
     window.HAIKU_OPERACION_RESUMEN_FIX_V1 = Object.freeze({
         refrescar,
-        revisarCambioFecha
+        esSaleBloq
     });
+
+    console.info("HAIKU · Operación Resumen Fix V4 preparado.");
 })();
