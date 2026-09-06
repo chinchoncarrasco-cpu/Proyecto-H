@@ -356,3 +356,97 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ========================================
+   PC · TARJETAS ASEO COMPACTAS
+   Mantiene intacto el HTML/JS y la vista móvil.
+   Busca la misma densidad visual de Cabañas:
+   cabecera breve + una franja operativa compacta.
+======================================== */
+@media (min-width: 901px) {
+    #seccion-aseo .aseo-resumen {
+        gap: 12px;
+        padding: 12px 18px 18px;
+    }
+
+    #seccion-aseo .aseo-resumen-cabana {
+        padding: 12px 13px 13px 16px;
+        border-radius: 16px;
+    }
+
+    #seccion-aseo .aseo-resumen-cabecera {
+        gap: 10px;
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+    }
+
+    #seccion-aseo .aseo-resumen-numero {
+        font-size: 12px;
+        line-height: 1.2;
+    }
+
+    #seccion-aseo .aseo-estado-select {
+        min-height: 28px;
+        padding: 4px 27px 4px 9px;
+        font-size: 8px;
+    }
+
+    /* Personal y horarios comparten la misma línea operativa. */
+    #seccion-aseo .aseo-resumen-datos {
+        display: grid;
+        grid-template-columns: minmax(0, 1.65fr) minmax(190px, .95fr);
+        gap: 8px;
+        align-items: end;
+    }
+
+    #seccion-aseo .aseo-resumen-personal,
+    #seccion-aseo .aseo-resumen-horario {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+        align-items: end;
+    }
+
+    #seccion-aseo .aseo-resumen-encargado > span,
+    #seccion-aseo .aseo-resumen-revision > span,
+    #seccion-aseo .aseo-resumen-horario > div > span {
+        margin-bottom: 3px;
+        font-size: 7px;
+    }
+
+    #seccion-aseo .aseo-encargado-input,
+    #seccion-aseo .aseo-revision-input {
+        min-height: 32px;
+        padding: 6px 8px;
+        border-radius: 9px;
+        font-size: 10px;
+    }
+
+    #seccion-aseo .aseo-resumen-horario > div {
+        padding: 5px 7px;
+        border-radius: 9px;
+    }
+
+    #seccion-aseo .aseo-hora-input {
+        min-height: 24px;
+        padding: 1px 0;
+        font-size: 10px;
+    }
+
+    /* Solicitudes/notas sólo agregan altura cuando realmente existen. */
+    #seccion-aseo .aseo-resumen-nota,
+    #seccion-aseo .aseo-resumen-solicita {
+        margin-top: 8px;
+        padding: 7px 9px;
+        border-radius: 9px;
+        font-size: 9px;
+        line-height: 1.3;
+    }
+
+    #seccion-aseo .aseo-solicita-eliminar {
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        font-size: 13px;
+    }
+}
