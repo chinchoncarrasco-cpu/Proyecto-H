@@ -130,7 +130,7 @@ Eres un lector MUY ESPECÍFICO para Proyecto H. Tu única tarea es leer capturas
 
 CLOUDBEDS PERMITE CONFIGURAR LAS COLUMNAS. NO EXIJAS UNA VISTA FIJA.
 Una captura útil puede mostrar cualquier combinación de estas columnas:
-Reserva/ID | Nombre | Apellido | Fecha de reserva | Check-in | Check-Out | Número de Habitación | Categoría de Habitación | Noches | Precio Total | Estado | Fuente | Adultos | Niños | Correo | Móvil | Teléfono | País | Depósito | Saldo Pendiente | Tipo de Tarjeta.
+Reserva/ID | Nombre del Plan de Tarifas (Interno) | Nombre | Apellido | Fecha de reserva | Check-in | Check-Out | Número de Habitación | Categoría de Habitación | Noches | Precio Total | Estado | Fuente | Adultos | Niños | Correo | Móvil | Teléfono | País | Depósito | Saldo Pendiente | Tipo de Tarjeta.
 
 REGLA DE ACTIVACIÓN:
 - aplica=true si la captura corresponde inequívocamente al listado de Reservas de Cloudbeds y contiene filas de reservas.
@@ -143,6 +143,7 @@ PRIORIDADES PARA CREAR UNA RESERVA:
 4. Precio Total.
 5. Estado.
 6. Adultos/Niños si están visibles.
+7. Categoría de Habitación o Nombre del Plan de Tarifas (Interno) para reconocer Full Day cuando estén visibles.
 El ID Cloudbeds es ÚTIL pero OPCIONAL. Su ausencia NO debe ir a faltantes y NO debe impedir crear una reserva.
 
 UNIÓN DE VARIAS CAPTURAS:
@@ -156,7 +157,14 @@ REGLAS POR FILA:
 - fecha_reserva, check_in, check_out: convierte DD/MM/AAAA a YYYY-MM-DD cuando estén visibles.
 - IMPORTANTE: si la captura muestra columnas Check-in y Check-Out, DEBES leerlas aunque no exista ID Cloudbeds.
 - habitacion_codigo: copia EXACTAMENTE lo visible, por ejemplo CD5(1), LC6(1), LC1(1), C10(1). No conviertas tú a cabaña.
-- categoria_habitacion: copia si está visible. Si el operador indica explícitamente en el mensaje que una persona es Full Day, puedes devolver "Full Day" para esa fila aunque la columna categoría no aparezca. No lo infieras de fechas, precio, estado ni código de habitación.
+- categoria_habitacion es además la señal normalizada que usa Proyecto H para distinguir Alojamiento de Full Day:
+  1) Si Categoría de Habitación está visible, cópiala.
+  2) Si Categoría no está visible pero sí aparece "Nombre del Plan de Tarifas (Interno)", usa ese plan como evidencia de tipo.
+  3) Normaliza el texto del plan a minúsculas, sin tildes y con espacios compactados únicamente para decidir el tipo.
+  4) Si el plan contiene una variante inequívoca de FULL DAY, por ejemplo "FULL DAY", "FULLDAY" o el nombre real usado aquí "FULL DAYY", devuelve categoria_habitacion="Full Day · plan tarifario".
+  5) Cualquier otro plan tarifario visible, incluidos "Standard Rate", "(genius) Standard Rate" y demás tarifas normales, corresponde a ALOJAMIENTO; devuelve categoria_habitacion="Alojamiento · plan tarifario".
+  6) Si el operador indica explícitamente en el mensaje que una persona es Full Day, también puedes devolver "Full Day" para esa fila.
+  7) NO infieras Full Day por fechas, precio, estado, habitación, saldo ni depósito.
 - noches: copia la columna si existe. Si NO existe pero sí hay Check-in y Check-Out válidos, calcula la diferencia exacta en días y devuelve ese entero. No lo marques como faltante si puedes calcularlo de las fechas.
 - precio_total: entero CLP exactamente según Precio Total. YA INCLUYE IVA. No agregues IVA.
 - estado: copia exactamente lo visible, por ejemplo Confirmada o Confirmación pendiente.
@@ -177,13 +185,14 @@ REGLAS FINANCIERAS CRÍTICAS:
 - Este lector jamás registra pagos.
 
 SEGURIDAD:
-- No inventes ID, fechas, ocupación, categoría, correo ni dígitos telefónicos ocultos.
+- No inventes ID, fechas, ocupación, correo ni dígitos telefónicos ocultos.
+- La clasificación por plan tarifario está permitida únicamente según la regla explícita anterior: variantes Full Day => Full Day; cualquier otro plan visible => Alojamiento.
 - No uses ausencia de ID como motivo para declarar incompleta una fila.
 - Si Check-in o Check-Out están visibles en la captura, no los marques como faltantes.
 - Si una celda realmente necesaria es ilegible, null + faltantes.
 - Mascotas no aparece en estas vistas; no inventes su cantidad.
 - confianza=alta sólo si las filas se leen con claridad.
-- resumen breve: indica cuántas reservas únicas reconociste, que el ID es opcional, que el teléfono/móvil enmascarado se conserva tal cual y que Precio Total incluye IVA sin registrar pagos.
+- resumen breve: indica cuántas reservas únicas reconociste, que el ID es opcional, que Full Day puede reconocerse por Categoría o Plan de Tarifas Interno, que el teléfono/móvil enmascarado se conserva tal cual y que Precio Total incluye IVA sin registrar pagos.
 `;
 
   const modelo = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
