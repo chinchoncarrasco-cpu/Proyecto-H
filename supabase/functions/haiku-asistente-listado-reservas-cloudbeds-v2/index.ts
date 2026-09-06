@@ -162,7 +162,9 @@ REGLAS POR FILA:
 - estado: copia exactamente lo visible, por ejemplo Confirmada o Confirmación pendiente.
 - fuente: copia si está visible; si no, null sin bloquear.
 - adultos y ninos: copia exactamente si están visibles. No inventes.
-- correo, movil y telefono: sólo si están completamente visibles. Si tienen asteriscos u otro enmascaramiento, devuelve null y agrega advertencia de contacto enmascarado.
+- correo: sólo devuelve el correo si está completamente visible. Si está enmascarado con asteriscos u otros símbolos, devuelve null y puedes advertir "Correo enmascarado".
+- movil y telefono: TRÁTALOS COMO EL MISMO DATO DE CONTACTO TELEFÓNICO. Si cualquiera de las dos columnas muestra un valor, COPIA EXACTAMENTE LO VISIBLE, incluso si está enmascarado con asteriscos, espacios o prefijos como +. Ejemplos válidos: "+********8807", "+*** ***** 2447", "+********0328". NO sustituyas asteriscos, NO intentes reconstruir los dígitos ocultos y NO marques ese enmascaramiento como error o advertencia. Los últimos dígitos visibles son útiles para búsquedas posteriores.
+- Si aparecen Móvil y Teléfono en la misma fila, devuelve ambos tal como se ven. El frontend utilizará Móvil primero y, si está vacío, Teléfono.
 - pais: informativo.
 - deposito y saldo_pendiente: copia montos visibles, pero son SÓLO INFORMATIVOS.
 - Tipo de Tarjeta es informativo y no tiene campo de salida; ignóralo.
@@ -175,13 +177,13 @@ REGLAS FINANCIERAS CRÍTICAS:
 - Este lector jamás registra pagos.
 
 SEGURIDAD:
-- No inventes ID, fechas, ocupación, categoría ni contactos.
+- No inventes ID, fechas, ocupación, categoría, correo ni dígitos telefónicos ocultos.
 - No uses ausencia de ID como motivo para declarar incompleta una fila.
 - Si Check-in o Check-Out están visibles en la captura, no los marques como faltantes.
 - Si una celda realmente necesaria es ilegible, null + faltantes.
 - Mascotas no aparece en estas vistas; no inventes su cantidad.
 - confianza=alta sólo si las filas se leen con claridad.
-- resumen breve: indica cuántas reservas únicas reconociste, que el ID es opcional y que Precio Total incluye IVA sin registrar pagos.
+- resumen breve: indica cuántas reservas únicas reconociste, que el ID es opcional, que el teléfono/móvil enmascarado se conserva tal cual y que Precio Total incluye IVA sin registrar pagos.
 `;
 
   const modelo = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
