@@ -375,6 +375,7 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         column-gap: 8px;
+        row-gap: 0;
         align-content: start;
         padding: 12px 13px 13px 16px;
         border-radius: 16px;
@@ -464,7 +465,7 @@
         align-items: center;
         justify-self: stretch;
         box-sizing: border-box;
-        margin-top: 4px;
+        margin-top: 1px;
         padding: 4px 8px;
         border-radius: 9px;
         font-size: 9px;
