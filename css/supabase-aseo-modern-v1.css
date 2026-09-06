@@ -455,7 +455,11 @@
     /* Nota/Solicita aparecen sólo cuando existen: no se reserva espacio vacío. */
     #seccion-aseo .aseo-resumen-nota,
     #seccion-aseo .aseo-resumen-solicita {
+        width: 100%;
+        max-width: none;
         min-width: 0;
+        justify-self: stretch;
+        box-sizing: border-box;
         margin-top: 8px;
         padding: 7px 9px;
         border-radius: 9px;
