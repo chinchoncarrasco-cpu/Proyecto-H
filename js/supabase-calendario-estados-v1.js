@@ -289,6 +289,17 @@
         }
     });
 
+    // El botón +N detiene la propagación de su clic. Escuchamos en captura
+    // sólo ese botón y, cuando su handler termine de crear el panel, aplicamos
+    // el mismo estado canónico que ya usa el Calendario grande.
+    document.addEventListener("click", evento => {
+        if (!evento.target?.closest?.(".calendario-mas-reservas")) return;
+
+        requestAnimationFrame(() => {
+            aplicarEstadosDOM();
+        });
+    }, true);
+
     // El loader puede ejecutar este módulo después de que la sesión ya esté lista.
     if (window.haikuSesion) {
         refrescar({ sincronizarCache: false, redibujar: true });
