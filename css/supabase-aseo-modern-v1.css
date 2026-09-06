@@ -452,39 +452,41 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* Nota/Solicita aparecen sólo cuando existen: no se reserva espacio vacío. */
+    /* Nota y Solicita ocupan todo el ancho. Si existen ambas, Nota va primero. */
     #seccion-aseo .aseo-resumen-nota,
     #seccion-aseo .aseo-resumen-solicita {
+        grid-column: 1 / -1;
         width: 100%;
         max-width: none;
         min-width: 0;
+        min-height: 28px;
+        display: flex;
+        align-items: center;
         justify-self: stretch;
         box-sizing: border-box;
         margin-top: 8px;
-        padding: 7px 9px;
+        padding: 4px 8px;
         border-radius: 9px;
         font-size: 9px;
-        line-height: 1.3;
+        line-height: 1.2;
         overflow-wrap: anywhere;
     }
 
     #seccion-aseo .aseo-resumen-nota {
-        grid-column: 1;
+        order: 1;
     }
 
     #seccion-aseo .aseo-resumen-solicita {
-        grid-column: 2;
-    }
-
-    #seccion-aseo .aseo-resumen-cabana:not(:has(.aseo-resumen-solicita)) > .aseo-resumen-nota,
-    #seccion-aseo .aseo-resumen-cabana:not(:has(.aseo-resumen-nota)) > .aseo-resumen-solicita {
-        grid-column: 1 / -1;
+        order: 2;
+        justify-content: space-between;
+        gap: 8px;
     }
 
     #seccion-aseo .aseo-solicita-eliminar {
-        width: 24px;
-        height: 24px;
-        border-radius: 7px;
-        font-size: 13px;
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        border-radius: 6px;
+        font-size: 11px;
     }
 }
