@@ -365,6 +365,9 @@
 ======================================== */
 @media (min-width: 901px) {
     #seccion-aseo .aseo-resumen {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
         gap: 12px;
         padding: 12px 18px 18px;
     }
