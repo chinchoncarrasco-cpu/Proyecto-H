@@ -239,7 +239,19 @@
         0: "000000", 1: "FFFFFF", 2: "FF0000", 3: "00FF00",
         4: "0000FF", 5: "FFFF00", 6: "FF00FF", 7: "00FFFF",
         8: "000000", 9: "FFFFFF", 10: "FF0000", 11: "00FF00",
-        12: "0000FF", 13: "FFFF00", 14: "FF00FF", 15: "00FFFF"
+        12: "0000FF", 13: "FFFF00", 14: "FF00FF", 15: "00FFFF",
+        16: "800000", 17: "008000", 18: "000080", 19: "808000",
+        20: "800080", 21: "008080", 22: "C0C0C0", 23: "808080",
+        24: "9999FF", 25: "993366", 26: "FFFFCC", 27: "CCFFFF",
+        28: "660066", 29: "FF8080", 30: "0066CC", 31: "CCCCCC",
+        32: "000080", 33: "FF00FF", 34: "FFFF00", 35: "00FFFF",
+        36: "800080", 37: "800000", 38: "008080", 39: "0000FF",
+        40: "00CCFF", 41: "CCFFFF", 42: "CCFFCC", 43: "FFFF99",
+        44: "99CCFF", 45: "FF99CC", 46: "CC99FF", 47: "FFCC99",
+        48: "3366FF", 49: "33CCCC", 50: "99CC00", 51: "FFCC00",
+        52: "FF9900", 53: "FF6600", 54: "666699", 55: "969696",
+        56: "003366", 57: "339966", 58: "003300", 59: "333300",
+        60: "993300", 61: "993366", 62: "333399", 63: "333333"
     };
 
     const COLORES_TEMA = {
@@ -305,6 +317,20 @@
         return `${ancho} ${tipo} ${colorCss(borde.color) || "#cfcfcf"}`;
     }
 
+    function aplicarFuente(elemento, font) {
+        if (!font) return;
+        const color = colorCss(font.color);
+        if (color) elemento.style.color = color;
+        if (font.name) elemento.style.fontFamily = `"${String(font.name).replaceAll('"', "")}", Arial, sans-serif`;
+        if (Number.isFinite(font.sz)) elemento.style.fontSize = `${Math.max(6, font.sz)}pt`;
+        if (Object.prototype.hasOwnProperty.call(font, "bold")) elemento.style.fontWeight = font.bold ? "700" : "400";
+        if (Object.prototype.hasOwnProperty.call(font, "italic")) elemento.style.fontStyle = font.italic ? "italic" : "normal";
+        const decoraciones = [];
+        if (font.underline) decoraciones.push("underline");
+        if (font.strike) decoraciones.push("line-through");
+        if (decoraciones.length) elemento.style.textDecoration = decoraciones.join(" ");
+    }
+
     function aplicarEstiloCelda(elemento, estilo) {
         if (!estilo) return;
 
@@ -315,19 +341,7 @@
             if (fondo && patron !== "none") elemento.style.backgroundColor = fondo;
         }
 
-        const font = estilo.font;
-        if (font) {
-            const color = colorCss(font.color);
-            if (color) elemento.style.color = color;
-            if (font.name) elemento.style.fontFamily = `"${String(font.name).replaceAll('"', "")}", Arial, sans-serif`;
-            if (Number.isFinite(font.sz)) elemento.style.fontSize = `${Math.max(6, font.sz)}pt`;
-            if (font.bold) elemento.style.fontWeight = "700";
-            if (font.italic) elemento.style.fontStyle = "italic";
-            const decoraciones = [];
-            if (font.underline) decoraciones.push("underline");
-            if (font.strike) decoraciones.push("line-through");
-            if (decoraciones.length) elemento.style.textDecoration = decoraciones.join(" ");
-        }
+        aplicarFuente(elemento, estilo.font);
 
         const alineacion = estilo.alignment;
         if (alineacion) {
@@ -355,6 +369,27 @@
                 if (valor) elemento.style[`border${lado[0].toUpperCase()}${lado.slice(1)}`] = valor;
             });
         }
+    }
+
+    function dibujarContenidoCelda(elemento, datos) {
+        const runs = Array.isArray(datos?.runs) ? datos.runs : [];
+        if (!runs.length) {
+            elemento.textContent = datos?.valor || "";
+            return;
+        }
+
+        let agregados = 0;
+        runs.forEach((run) => {
+            const texto = String(run?.texto ?? "");
+            if (!texto) return;
+            const span = document.createElement("span");
+            span.textContent = texto;
+            aplicarFuente(span, run?.font || null);
+            elemento.appendChild(span);
+            agregados += 1;
+        });
+
+        if (!agregados) elemento.textContent = datos?.valor || "";
     }
 
     function anchoColumnaPx(columna) {
@@ -444,9 +479,10 @@
                 if (omitidas.has(clave)) continue;
 
                 const celda = document.createElement("td");
+                const datos = celdaCargada(fila, columna);
                 celda.dataset.fila = String(fila);
                 celda.dataset.columna = String(columna);
-                celda.textContent = valorCelda(fila, columna);
+                dibujarContenidoCelda(celda, datos);
                 aplicarEstiloCelda(celda, estiloCelda(fila, columna));
 
                 const union = inicios.get(clave);
@@ -486,7 +522,11 @@
 
             hojaCargada = new Map((resultado.celdas || []).map((celda) => [
                 `${celda.r}:${celda.c}`,
-                { valor: celda.valor || "", estiloId: Number(celda.estiloId) }
+                {
+                    valor: celda.valor || "",
+                    estiloId: Number(celda.estiloId),
+                    runs: Array.isArray(celda.runs) ? celda.runs : null
+                }
             ]));
             estilosCargados = resultado.estilos || [];
             columnasCargadas = resultado.columnas || [];
@@ -550,8 +590,8 @@
         if (!$("seccion-libro-reserva") || window.HAIKU_LIBRO_RESERVA_V1) return;
         asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
-            version: "1.1.0",
-            modo: "archivo-local-solo-lectura-estilo-xlsx",
+            version: "1.2.0",
+            modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
             limpiar: limpiarMemoria
         });
 
