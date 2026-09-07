@@ -1,0 +1,248 @@
+#seccion-libro-reserva {
+    --libro-verde: #1f7654;
+    --libro-verde-oscuro: #164b39;
+    --libro-borde: #d9e3dd;
+    --libro-fondo: #f5f8f6;
+    color: #203129;
+}
+
+#seccion-libro-reserva .libro-reserva-cabecera {
+    align-items: flex-start;
+    gap: 16px;
+}
+
+#seccion-libro-reserva .libro-reserva-seguridad {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 10px;
+    padding: 7px 11px;
+    border: 1px solid #cce2d5;
+    border-radius: 999px;
+    background: #edf8f1;
+    color: var(--libro-verde-oscuro);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+#seccion-libro-reserva .libro-reserva-panel {
+    overflow: hidden;
+}
+
+#seccion-libro-reserva .libro-reserva-herramientas {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 18px;
+    border-bottom: 1px solid var(--libro-borde);
+    background: rgba(255, 255, 255, 0.94);
+}
+
+#seccion-libro-reserva .libro-reserva-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+#seccion-libro-reserva .libro-reserva-boton {
+    min-height: 40px;
+    padding: 9px 14px;
+    border: 1px solid var(--libro-verde);
+    border-radius: 10px;
+    background: var(--libro-verde);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#seccion-libro-reserva .libro-reserva-boton:hover:not(:disabled) {
+    background: var(--libro-verde-oscuro);
+}
+
+#seccion-libro-reserva .libro-reserva-boton.secundario {
+    border-color: #cfd9d3;
+    background: #fff;
+    color: #294337;
+}
+
+#seccion-libro-reserva .libro-reserva-boton.peligro {
+    border-color: #e0c9c5;
+    color: #7e4037;
+}
+
+#seccion-libro-reserva .libro-reserva-boton:disabled {
+    border-color: #dfe5e1;
+    background: #edf1ee;
+    color: #89958e;
+    cursor: not-allowed;
+}
+
+#seccion-libro-reserva .libro-reserva-estado {
+    min-width: 210px;
+    text-align: right;
+    color: #65756d;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+#seccion-libro-reserva .libro-reserva-estado strong {
+    display: block;
+    color: #2e4339;
+    font-size: 13px;
+}
+
+#seccion-libro-reserva .libro-reserva-control-hoja {
+    display: grid;
+    grid-template-columns: minmax(230px, 360px) 1fr;
+    align-items: end;
+    gap: 16px;
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--libro-borde);
+    background: var(--libro-fondo);
+}
+
+#seccion-libro-reserva .libro-reserva-control-hoja label {
+    display: grid;
+    gap: 6px;
+    color: #53635b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+#seccion-libro-reserva #libro-reserva-hoja {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 34px 8px 11px;
+    border: 1px solid #cdd9d2;
+    border-radius: 9px;
+    background: #fff;
+    color: #23362d;
+    font: inherit;
+}
+
+#seccion-libro-reserva .libro-reserva-meta {
+    color: #66766e;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+#seccion-libro-reserva .libro-reserva-visor {
+    position: relative;
+    min-height: 360px;
+    max-height: calc(100vh - 325px);
+    overflow: auto;
+    background: #fff;
+    overscroll-behavior: contain;
+}
+
+#seccion-libro-reserva .libro-reserva-vacio {
+    display: grid;
+    place-items: center;
+    min-height: 360px;
+    padding: 34px;
+    text-align: center;
+    color: #65766d;
+}
+
+#seccion-libro-reserva .libro-reserva-vacio div {
+    max-width: 540px;
+}
+
+#seccion-libro-reserva .libro-reserva-vacio strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #274137;
+    font-size: 18px;
+}
+
+#seccion-libro-reserva .libro-reserva-tabla {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    color: #26372f;
+    font-size: 12px;
+}
+
+#seccion-libro-reserva .libro-reserva-tabla th,
+#seccion-libro-reserva .libro-reserva-tabla td {
+    min-width: 96px;
+    max-width: 320px;
+    padding: 8px 10px;
+    border-right: 1px solid #e2e8e4;
+    border-bottom: 1px solid #e2e8e4;
+    background: #fff;
+    text-align: left;
+    vertical-align: top;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+#seccion-libro-reserva .libro-reserva-tabla th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    min-width: 48px;
+    background: #eaf3ee;
+    color: #214a38;
+    font-weight: 800;
+    text-align: center;
+}
+
+#seccion-libro-reserva .libro-reserva-tabla tbody tr:nth-child(even) td {
+    background: #fbfcfb;
+}
+
+#seccion-libro-reserva .libro-reserva-nota {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 12px 18px;
+    border-top: 1px solid var(--libro-borde);
+    background: #f8faf9;
+    color: #617168;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+#seccion-libro-reserva .libro-reserva-cargando {
+    display: grid;
+    place-items: center;
+    min-height: 360px;
+    color: var(--libro-verde-oscuro);
+    font-weight: 700;
+}
+
+@media (max-width: 760px) {
+    #seccion-libro-reserva .libro-reserva-cabecera {
+        display: block;
+    }
+
+    #seccion-libro-reserva .libro-reserva-herramientas,
+    #seccion-libro-reserva .libro-reserva-control-hoja {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    #seccion-libro-reserva .libro-reserva-acciones {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    #seccion-libro-reserva .libro-reserva-estado {
+        min-width: 0;
+        text-align: left;
+    }
+
+    #seccion-libro-reserva .libro-reserva-visor,
+    #seccion-libro-reserva .libro-reserva-vacio,
+    #seccion-libro-reserva .libro-reserva-cargando {
+        min-height: 300px;
+        max-height: 62vh;
+    }
+}

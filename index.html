@@ -186,6 +186,10 @@
             🗂 Reservas
         </button>
 
+        <button class="menu-item" data-seccion="libro-reserva">
+            📖 Libro de Reserva
+        </button>
+
     </nav>
 
 </aside>
@@ -6992,6 +6996,83 @@ Terraza:
             <button type="button" id="reservas-columnas-listo" class="reservas-boton-principal">Listo</button>
         </footer>
     </aside>
+</section>
+
+
+<!-- ========================================
+     SECCIÓN LIBRO DE RESERVA · ARCHIVO LOCAL
+======================================== -->
+
+<section id="seccion-libro-reserva" class="seccion-app">
+
+    <header class="cabecera libro-reserva-cabecera">
+        <div>
+            <p class="subtitulo">OPERACIÓN · SÓLO LECTURA</p>
+            <h2>Libro de Reserva</h2>
+            <p class="texto-secundario">
+                Consulta una copia XLSX del libro sin abrirlo ni conectarlo dentro de Proyecto H.
+            </p>
+            <span class="libro-reserva-seguridad">🔒 Archivo local · Sólo lectura</span>
+        </div>
+    </header>
+
+    <section class="panel libro-reserva-panel">
+        <div class="libro-reserva-herramientas">
+            <div class="libro-reserva-acciones">
+                <button type="button" id="libro-reserva-descargar" class="libro-reserva-boton" disabled>
+                    Descarga pendiente de enlace
+                </button>
+                <button type="button" id="libro-reserva-cargar" class="libro-reserva-boton secundario">
+                    📂 Cargar XLSX descargado
+                </button>
+                <input
+                    type="file"
+                    id="libro-reserva-archivo"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    hidden
+                >
+                <button type="button" id="libro-reserva-quitar" class="libro-reserva-boton secundario peligro" disabled>
+                    Quitar libro de memoria
+                </button>
+            </div>
+
+            <div class="libro-reserva-estado" aria-live="polite">
+                <strong id="libro-reserva-estado-titulo">Sin archivo cargado</strong>
+                <span id="libro-reserva-estado-detalle">Nada queda guardado en el navegador ni en Supabase.</span>
+            </div>
+        </div>
+
+        <div class="libro-reserva-control-hoja">
+            <label>
+                Hoja del libro
+                <select id="libro-reserva-hoja" disabled aria-label="Seleccionar hoja del libro"></select>
+            </label>
+            <div id="libro-reserva-meta" class="libro-reserva-meta">
+                Selecciona un XLSX para detectar sus hojas reales.
+            </div>
+        </div>
+
+        <div id="libro-reserva-visor" class="libro-reserva-visor">
+            <div class="libro-reserva-vacio">
+                <div>
+                    <strong>El libro se abrirá aquí, sólo para lectura</strong>
+                    <p>
+                        Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene
+                        únicamente en la memoria temporal de esta pestaña.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="libro-reserva-nota">
+            <span>🛡️</span>
+            <span>
+                Esta versión no inicia sesión en Google, no abre el documento compartido, no escribe en Drive,
+                no guarda el XLSX en Supabase y todavía no envía sus datos a Haku.
+            </span>
+        </div>
+    </section>
+
 </section>
 
 </main>
