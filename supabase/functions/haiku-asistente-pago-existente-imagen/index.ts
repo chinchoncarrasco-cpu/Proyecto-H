@@ -173,11 +173,22 @@ Reglas de intención y destino:
 - La salida reservas es un arreglo: un elemento por reserva destino distinta. Máximo 11.
 - Para cada destino extrae titular_nombre y cabana cuando estén sustentados por la captura o el texto.
 - Usa cloudbeds_id sólo si el operador lo identifica explícitamente como ID Cloudbeds o si una pantalla de DETALLE DE RESERVA lo muestra inequívocamente como ese identificador.
+- cloudbeds_id es SIEMPRE opcional en este flujo. Su ausencia nunca es un faltante, advertencia ni motivo para bajar confianza.
 - En tablas/listados de pagos de Cloudbeds, una columna genérica "ID DE RESERVA" NO debe copiarse automáticamente a cloudbeds_id; muchas reservas antiguas de Proyecto H pueden no tener ese dato almacenado y se buscarán por titular + CAB.
-- La fecha junto al pago es FECHA DEL PAGO, no fecha de estadía. No la copies a fecha_llegada/salida.
+- La fecha junto al pago es FECHA DEL PAGO, no fecha de estadía. No la copies a fecha_llegada/salida salvo que una tabla de RESERVAS muestre explícitamente columnas Check-In y Check-Out.
 - "cab2/1noche" o LC2(1) identifican CAB 2, pero no revelan fechas de estadía.
 - No inventes correo, teléfono, documento, huéspedes, tarifas ni fechas de estadía.
 - Si no puedes saber con seguridad a qué reserva pertenece un pago, agrega advertencia y no mezcles destinos.
+
+REGLA ESPECIAL · TABLA "RESERVAS · VISTA ACTUAL" DE HAIKU:
+- Esta imagen NO representa una solicitud de crear reservas. Todas las filas de esa tabla son reservas que YA EXISTEN en Proyecto H.
+- Úsala únicamente como contexto para identificar el destino de los pagos escritos por el operador.
+- De cada fila puedes leer: titular, CAB, Check-In, Check-Out, Precio Total, Depósito/Abono, Saldo Pendiente y teléfono si aparecen.
+- Si Check-In y Check-Out están visibles, cópialos a fecha_llegada y fecha_salida para ayudar a desambiguar la reserva existente.
+- Plan tarifario, Full Day, Estado, Fuente, País, correo, RUT, categoría e ID Cloudbeds NO son requisitos para registrar un pago.
+- NO generes faltantes ni advertencias por "categoría no visible", "estado Cloudbeds", "ID Cloudbeds", "plan tarifario" ni datos vacíos de esa tabla.
+- Si el texto del operador dice "Agrega estos pagos" y enumera pagos para Rocío/Guillermo/Ignacio, agrupa cada movimiento bajo la fila de la reserva correspondiente por titular + CAB. Mantén movimientos separados.
+- Los detalles del pago escritos por el operador (monto, medio, CodAut, Folio, BOVTAR, glosa y fecha) son la fuente principal para el pago. La tabla HAIKU sirve para localizar la reserva y comprobar total/saldo, no para inventar referencias de pago.
 
 Lectura de capturas de pagos:
 - Puede aparecer una tabla con columnas como FECHA DEL SERVICIO, ID DE RESERVA, FECHA/HORA, NOMBRE, HABITACIÓN, CATEGORÍA, NOTAS, CANTIDAD, DÉBITO y CRÉDITO.
@@ -209,7 +220,7 @@ Ejemplo de captura/listado:
 Fila visible: FECHA DEL SERVICIO 01/09/2026; NOMBRE Alejandro Ramos Donaire; HABITACIÓN LC2(1); CATEGORÍA Webpay - Pago Registrada; NOTAS "01-09-2026 Alejandro Ramos // webpay x confirmar aut 208468 // credito // CO cab2/1noche $160.000"; CRÉDITO $160.000.
 => titular_nombre="Alejandro Ramos Donaire", cabana=2, cloudbeds_id=null, un pago: monto=160000, moneda="CLP", medio="WebPay Crédito", fecha="2026-09-01", codaut="208468".
 
-Confianza alta sólo si destino (titular + CAB o ID Cloudbeds) y campos obligatorios del pago están claros. Si falta referencia obligatoria, usa null, agrégala a faltantes y baja confianza.
+Confianza alta si cada destino puede identificarse por titular + CAB (y, cuando esté visible, Check-In/Check-Out) y los campos obligatorios de cada pago están claros. No bajes confianza por ausencia de categoría, estado o ID Cloudbeds.
 `;
 
   const modelo = Deno.env.get("OPENAI_MODEL") || "gpt-5.4-mini";
