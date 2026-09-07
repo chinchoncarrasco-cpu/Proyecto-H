@@ -182,6 +182,10 @@
             ↶ Historial
         </button>
 
+        <button class="menu-item" data-seccion="reservas">
+            🗂 Reservas
+        </button>
+
     </nav>
 
 </aside>
@@ -6797,6 +6801,197 @@ Terraza:
 
     </section>
 
+</section>
+
+
+<!-- ========================================
+     SECCIÓN RESERVAS · SOLO LECTURA
+======================================== -->
+
+<section id="seccion-reservas" class="seccion-app">
+
+    <header class="cabecera reservas-cabecera">
+        <div>
+            <p class="subtitulo">OPERACIÓN</p>
+            <h2>Reservas</h2>
+            <p class="texto-secundario">
+                Consulta paginada de las reservas registradas en Proyecto H.
+            </p>
+        </div>
+
+        <button type="button" id="reservas-recargar" class="reservas-boton-secundario">
+            ↻ Actualizar
+        </button>
+    </header>
+
+    <section class="panel reservas-panel">
+        <div class="reservas-barra-superior">
+            <label class="reservas-busqueda">
+                <span class="sr-only">Buscar reservas</span>
+                <input
+                    type="search"
+                    id="reservas-buscar"
+                    placeholder="Buscar por nombre, correo, teléfono, documento o cabaña..."
+                    autocomplete="off"
+                >
+            </label>
+
+            <button type="button" id="reservas-abrir-filtros" class="reservas-boton-icono" aria-expanded="false">
+                ☷ <span>Filtros</span>
+            </button>
+
+            <strong id="reservas-contador" class="reservas-contador">0 reservas</strong>
+
+            <button
+                type="button"
+                class="reservas-accion-masiva"
+                disabled
+                title="Las acciones masivas se habilitarán en una etapa posterior"
+            >
+                Acción masiva
+            </button>
+
+            <button type="button" id="reservas-configurar-columnas" class="reservas-boton-icono reservas-columnas-boton" aria-expanded="false">
+                ▥ <span>Columnas</span>
+            </button>
+        </div>
+
+        <div id="reservas-chips" class="reservas-chips" hidden></div>
+
+        <div id="reservas-estado" class="reservas-estado" role="status" aria-live="polite"></div>
+
+        <div class="reservas-tabla-scroll">
+            <table class="reservas-tabla">
+                <thead id="reservas-tabla-cabecera"></thead>
+                <tbody id="reservas-tabla-cuerpo"></tbody>
+            </table>
+        </div>
+
+        <div id="reservas-vacio" class="reservas-vacio" hidden>
+            No se encontraron reservas con los filtros seleccionados.
+        </div>
+
+        <footer class="reservas-paginacion">
+            <span id="reservas-rango">0–0 de 0</span>
+
+            <label>
+                Ver
+                <select id="reservas-por-pagina">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                </select>
+            </label>
+
+            <button type="button" id="reservas-pagina-anterior" aria-label="Página anterior">‹</button>
+            <strong id="reservas-pagina-actual">1</strong>
+            <button type="button" id="reservas-pagina-siguiente" aria-label="Página siguiente">›</button>
+        </footer>
+    </section>
+
+    <aside id="reservas-panel-filtros" class="reservas-panel-lateral" hidden aria-labelledby="reservas-filtros-titulo">
+        <header>
+            <div>
+                <span>FILTRAR POR</span>
+                <h3 id="reservas-filtros-titulo">Filtros de reservas</h3>
+            </div>
+            <button type="button" id="reservas-cerrar-filtros" aria-label="Cerrar filtros">×</button>
+        </header>
+
+        <p>Activa los criterios que quieras aplicar.</p>
+
+        <div class="reservas-filtros-atajos">
+            <button type="button" id="reservas-filtros-elegir-todo">Elegir todo</button>
+            <button type="button" id="reservas-filtros-desmarcar-todo">Desmarcar todo</button>
+        </div>
+
+        <div class="reservas-filtros-lista">
+            <div class="reservas-filtro" data-filtro="fecha_reserva">
+                <label><input type="checkbox" data-filtro-activa="fecha_reserva"> Fecha de la reserva</label>
+                <div class="reservas-rango-fechas">
+                    <input type="date" id="reservas-fecha-reserva-desde" aria-label="Fecha de reserva desde">
+                    <input type="date" id="reservas-fecha-reserva-hasta" aria-label="Fecha de reserva hasta">
+                </div>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="checkin">
+                <label><input type="checkbox" data-filtro-activa="checkin"> Fecha de llegada / Check-In</label>
+                <div class="reservas-rango-fechas">
+                    <input type="date" id="reservas-checkin-desde" aria-label="Check-In desde">
+                    <input type="date" id="reservas-checkin-hasta" aria-label="Check-In hasta">
+                </div>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="checkout">
+                <label><input type="checkbox" data-filtro-activa="checkout"> Salida / Check-Out</label>
+                <div class="reservas-rango-fechas">
+                    <input type="date" id="reservas-checkout-desde" aria-label="Check-Out desde">
+                    <input type="date" id="reservas-checkout-hasta" aria-label="Check-Out hasta">
+                </div>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="estadia">
+                <label><input type="checkbox" data-filtro-activa="estadia"> Fechas de estadía</label>
+                <div class="reservas-rango-fechas">
+                    <input type="date" id="reservas-estadia-desde" aria-label="Estadía desde">
+                    <input type="date" id="reservas-estadia-hasta" aria-label="Estadía hasta">
+                </div>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="estado">
+                <label><input type="checkbox" data-filtro-activa="estado"> Estado</label>
+                <select id="reservas-filtro-estado"><option value="">Todos</option></select>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="categoria">
+                <label><input type="checkbox" data-filtro-activa="categoria"> Categoría de habitación</label>
+                <select id="reservas-filtro-categoria"><option value="">Todas</option></select>
+            </div>
+
+            <div class="reservas-filtro reservas-filtro--sin-dato">
+                <label><input type="checkbox" disabled> Fuente</label>
+                <select disabled><option>Sin datos registrados</option></select>
+            </div>
+
+            <div class="reservas-filtro" data-filtro="adultos">
+                <label><input type="checkbox" data-filtro-activa="adultos"> Número de adultos</label>
+                <input type="number" id="reservas-filtro-adultos" min="0" max="20" step="1" placeholder="Cantidad exacta">
+            </div>
+
+            <div class="reservas-filtro" data-filtro="ninos">
+                <label><input type="checkbox" data-filtro-activa="ninos"> Número de niños</label>
+                <input type="number" id="reservas-filtro-ninos" min="0" max="20" step="1" placeholder="Cantidad exacta">
+            </div>
+        </div>
+
+        <div class="reservas-filtros-nota">
+            Plan de comidas y Etiquetas no aparecen porque Proyecto H todavía no almacena esos datos.
+        </div>
+
+        <footer>
+            <button type="button" id="reservas-quitar-filtros" class="reservas-boton-secundario">Quitar filtros</button>
+            <button type="button" id="reservas-aplicar-filtros" class="reservas-boton-principal">Aplicar filtros</button>
+        </footer>
+    </aside>
+
+    <aside id="reservas-panel-columnas" class="reservas-panel-columnas" hidden aria-labelledby="reservas-columnas-titulo">
+        <header>
+            <div>
+                <span>VISTA DE TABLA</span>
+                <h3 id="reservas-columnas-titulo">Orden de columnas</h3>
+            </div>
+            <button type="button" id="reservas-cerrar-columnas" aria-label="Cerrar columnas">×</button>
+        </header>
+
+        <p>Activa, oculta o mueve cada columna. La preferencia queda guardada en este dispositivo.</p>
+
+        <div id="reservas-columnas-lista" class="reservas-columnas-lista"></div>
+
+        <footer>
+            <button type="button" id="reservas-columnas-restablecer" class="reservas-boton-secundario">Restablecer</button>
+            <button type="button" id="reservas-columnas-listo" class="reservas-boton-principal">Listo</button>
+        </footer>
+    </aside>
 </section>
 
 </main>
