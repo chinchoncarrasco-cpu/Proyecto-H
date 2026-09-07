@@ -113,9 +113,30 @@
             return true;
         }
 
+        // CONTINÚA sin Check-In conserva el mismo naranjo del ingreso original.
+        // El legacy ya aplicaba esta regla; este módulo no debe degradarla a blanco.
+        if (estado === "continua") {
+            let estadoIngreso = String(cabana.estadoIngresoReserva || "").toLowerCase();
+
+            if (!estadoIngreso && typeof window.obtenerEstadoIngresoReserva === "function") {
+                try {
+                    estadoIngreso = String(
+                        window.obtenerEstadoIngresoReserva(cabana.reservaId) || ""
+                    ).toLowerCase();
+                } catch (_) {}
+            }
+
+            if (estadoIngreso === "libre-ingresa" || estadoIngreso === "sale-ingresa") {
+                fila.classList.add("cabana-ingresa");
+                return true;
+            }
+
+            fila.classList.add("cabana-libre");
+            return true;
+        }
+
         if (
             estado === "libre-libre" ||
-            estado === "continua" ||
             estado === "fullday"
         ) {
             fila.classList.add("cabana-libre");
