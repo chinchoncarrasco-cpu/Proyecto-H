@@ -165,6 +165,31 @@ function parsearEstilosXml(xml) {
     });
 }
 
+function textoDeTagsT(contenido) {
+    return bloques(contenido, "t")
+        .map((tag) => decodificarXml(tag.inner))
+        .join("");
+}
+
+function parsearTextoEnriquecido(contenido) {
+    const runs = bloques(contenido, "r");
+    if (!runs.length) return [];
+
+    return runs.map((run) => {
+        const rPr = primerTag(run.inner, "rPr");
+        return {
+            texto: textoDeTagsT(run.inner),
+            font: rPr ? parsearFuente(rPr.inner) : null
+        };
+    }).filter((run) => run.texto !== "");
+}
+
+async function leerTextosCompartidos(zip) {
+    const xml = await zip.file("xl/sharedStrings.xml")?.async("text");
+    if (!xml) return [];
+    return bloques(xml, "si").map((si) => parsearTextoEnriquecido(si.inner));
+}
+
 function rutaNormalizada(base, target) {
     let ruta = String(target || "").replace(/^\/+/, "");
     if (ruta.startsWith("xl/")) return ruta;
@@ -231,7 +256,7 @@ function parsearDimensionesHoja(xml) {
     return { columnas, filas };
 }
 
-function parsearCeldasXml(xml) {
+function parsearCeldasXml(xml, textosCompartidos = []) {
     const mapa = new Map();
     for (const celda of bloques(xml, "c")) {
         const direccion = celda.attrs.r;
@@ -239,10 +264,22 @@ function parsearCeldasXml(xml) {
         const pos = posicionDesdeDireccion(direccion);
         if (!pos) continue;
         const estiloId = celda.attrs.s != null ? Number(celda.attrs.s) : 0;
+        const tipo = String(celda.attrs.t || "");
+        let runs = [];
+
+        if (tipo === "s") {
+            const indice = Number((primerTag(celda.inner, "v")?.inner || "").trim());
+            if (Number.isInteger(indice) && indice >= 0) runs = textosCompartidos[indice] || [];
+        } else if (tipo === "inlineStr") {
+            const inline = primerTag(celda.inner, "is");
+            if (inline) runs = parsearTextoEnriquecido(inline.inner);
+        }
+
         mapa.set(direccion, {
             r: pos.r,
             c: pos.c,
-            estiloId: Number.isInteger(estiloId) ? estiloId : 0
+            estiloId: Number.isInteger(estiloId) ? estiloId : 0,
+            runs: runs.length ? runs : null
         });
     }
     return mapa;
@@ -264,8 +301,8 @@ async function leerHoja(buffer, nombreHoja) {
     asegurarLector();
     asegurarZip();
 
-    // SheetJS sigue resolviendo valores, fórmulas, formato visible, merges y rango.
-    // OOXML se usa como fuente de verdad para estilo, dimensiones y bordes.
+    // SheetJS resuelve valores, fórmulas, formato visible, merges y rango.
+    // OOXML se usa como fuente de verdad para estilos, dimensiones y texto enriquecido.
     const libro = self.XLSX.read(buffer, {
         type: "array",
         sheets: [nombreHoja],
@@ -289,13 +326,14 @@ async function leerHoja(buffer, nombreHoja) {
         const zip = await self.JSZip.loadAsync(buffer);
         const estilosXml = await zip.file("xl/styles.xml")?.async("text");
         estilos = parsearEstilosXml(estilosXml || "");
+        const textosCompartidos = await leerTextosCompartidos(zip);
         const rutaHoja = await rutaHojaDesdeNombre(zip, nombreHoja);
         const hojaXml = rutaHoja ? await zip.file(rutaHoja)?.async("text") : null;
         if (hojaXml) {
             const dimensiones = parsearDimensionesHoja(hojaXml);
             columnas = dimensiones.columnas;
             filas = dimensiones.filas;
-            celdasXml = parsearCeldasXml(hojaXml);
+            celdasXml = parsearCeldasXml(hojaXml, textosCompartidos);
         }
     } catch (error) {
         // Si el complemento OOXML no estuviera disponible, mantenemos la lectura
@@ -310,13 +348,15 @@ async function leerHoja(buffer, nombreHoja) {
         if (!celda) return;
         const posicion = self.XLSX.utils.decode_cell(direccion);
         const valor = celda.w != null ? String(celda.w) : (celda.v == null ? "" : String(celda.v));
-        const estiloId = celdasXml.get(direccion)?.estiloId;
+        const infoXml = celdasXml.get(direccion);
+        const estiloId = infoXml?.estiloId;
         if (!valor && estiloId == null && celda.f == null && celda.t !== "z") return;
         porDireccion.set(direccion, {
             r: posicion.r,
             c: posicion.c,
             valor,
-            estiloId: Number.isInteger(estiloId) ? estiloId : -1
+            estiloId: Number.isInteger(estiloId) ? estiloId : -1,
+            runs: infoXml?.runs || null
         });
     });
 
@@ -328,7 +368,8 @@ async function leerHoja(buffer, nombreHoja) {
             r: info.r,
             c: info.c,
             valor: "",
-            estiloId: info.estiloId
+            estiloId: info.estiloId,
+            runs: null
         });
     });
 
