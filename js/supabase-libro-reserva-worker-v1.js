@@ -1,11 +1,251 @@
 "use strict";
 
 const XLSX_CDN = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
 
 function asegurarLector() {
-    if (self.XLSX?.read) return;
-    importScripts(XLSX_CDN);
+    if (!self.XLSX?.read) importScripts(XLSX_CDN);
     if (!self.XLSX?.read) throw new Error("El lector XLSX no quedó disponible");
+}
+
+function asegurarZip() {
+    if (!self.JSZip?.loadAsync) importScripts(JSZIP_CDN);
+    if (!self.JSZip?.loadAsync) throw new Error("El lector OOXML no quedó disponible");
+}
+
+function numeroFinito(valor) {
+    const n = Number(valor);
+    return Number.isFinite(n) ? n : null;
+}
+
+function booleanoXml(valor) {
+    if (valor == null) return false;
+    const t = String(valor).toLowerCase();
+    return t === "1" || t === "true";
+}
+
+function decodificarXml(valor) {
+    return String(valor ?? "")
+        .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+        .replace(/&#([0-9]+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&");
+}
+
+function atributosXml(texto) {
+    const salida = {};
+    String(texto || "").replace(/([:\w.-]+)\s*=\s*("([^"]*)"|'([^']*)')/g, (_, nombre, __, doble, simple) => {
+        salida[nombre] = decodificarXml(doble != null ? doble : simple);
+        return "";
+    });
+    return salida;
+}
+
+function primerTag(contenido, nombre) {
+    const re = new RegExp(`<${nombre}\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/${nombre}>)`, "i");
+    const m = String(contenido || "").match(re);
+    return m ? { attrs: atributosXml(m[1]), inner: m[2] || "" } : null;
+}
+
+function bloques(contenido, nombre) {
+    const salida = [];
+    const re = new RegExp(`<${nombre}\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/${nombre}>)`, "gi");
+    let m;
+    while ((m = re.exec(String(contenido || "")))) {
+        salida.push({ attrs: atributosXml(m[1]), inner: m[2] || "" });
+    }
+    return salida;
+}
+
+function colorDesdeAttrs(attrs) {
+    if (!attrs) return null;
+    const salida = {};
+    if (attrs.rgb != null) salida.rgb = String(attrs.rgb);
+    if (attrs.indexed != null) salida.indexed = numeroFinito(attrs.indexed);
+    if (attrs.theme != null) salida.theme = numeroFinito(attrs.theme);
+    if (attrs.tint != null) salida.tint = numeroFinito(attrs.tint);
+    if (attrs.auto != null) salida.auto = booleanoXml(attrs.auto);
+    return Object.keys(salida).length ? salida : null;
+}
+
+function colorDeTag(contenido, nombre) {
+    const tag = primerTag(contenido, nombre);
+    return tag ? colorDesdeAttrs(tag.attrs) : null;
+}
+
+function parsearFuente(inner) {
+    const salida = {};
+    const name = primerTag(inner, "name") || primerTag(inner, "rFont");
+    const sz = primerTag(inner, "sz");
+    const color = colorDeTag(inner, "color");
+    const b = primerTag(inner, "b");
+    const i = primerTag(inner, "i");
+    const u = primerTag(inner, "u");
+    const strike = primerTag(inner, "strike");
+    if (name?.attrs?.val) salida.name = name.attrs.val;
+    if (sz?.attrs?.val != null) salida.sz = numeroFinito(sz.attrs.val);
+    if (color) salida.color = color;
+    if (b) salida.bold = b.attrs.val == null ? true : booleanoXml(b.attrs.val);
+    if (i) salida.italic = i.attrs.val == null ? true : booleanoXml(i.attrs.val);
+    if (u) salida.underline = u.attrs.val || true;
+    if (strike) salida.strike = strike.attrs.val == null ? true : booleanoXml(strike.attrs.val);
+    return Object.keys(salida).length ? salida : null;
+}
+
+function parsearFill(inner) {
+    const pattern = primerTag(inner, "patternFill");
+    if (!pattern) return null;
+    const salida = {};
+    if (pattern.attrs.patternType) salida.patternType = pattern.attrs.patternType;
+    const fg = colorDeTag(pattern.inner, "fgColor");
+    const bg = colorDeTag(pattern.inner, "bgColor");
+    if (fg) salida.fgColor = fg;
+    if (bg) salida.bgColor = bg;
+    return Object.keys(salida).length ? salida : null;
+}
+
+function parsearLadoBorde(inner, lado) {
+    const tag = primerTag(inner, lado);
+    if (!tag) return null;
+    const salida = {};
+    if (tag.attrs.style) salida.style = tag.attrs.style;
+    const color = colorDeTag(tag.inner, "color");
+    if (color) salida.color = color;
+    return Object.keys(salida).length ? salida : null;
+}
+
+function parsearBorde(inner) {
+    const salida = {};
+    ["left", "right", "top", "bottom"].forEach((lado) => {
+        const valor = parsearLadoBorde(inner, lado);
+        if (valor) salida[lado] = valor;
+    });
+    return Object.keys(salida).length ? salida : null;
+}
+
+function parsearAlineacion(inner) {
+    const tag = primerTag(inner, "alignment");
+    if (!tag) return null;
+    const a = tag.attrs;
+    const salida = {};
+    if (a.horizontal) salida.horizontal = a.horizontal;
+    if (a.vertical) salida.vertical = a.vertical;
+    if (a.wrapText != null) salida.wrapText = booleanoXml(a.wrapText);
+    if (a.shrinkToFit != null) salida.shrinkToFit = booleanoXml(a.shrinkToFit);
+    if (a.textRotation != null) salida.textRotation = numeroFinito(a.textRotation);
+    if (a.indent != null) salida.indent = numeroFinito(a.indent);
+    return Object.keys(salida).length ? salida : null;
+}
+
+function parsearEstilosXml(xml) {
+    if (!xml) return [];
+    const fontsCont = primerTag(xml, "fonts")?.inner || "";
+    const fillsCont = primerTag(xml, "fills")?.inner || "";
+    const bordersCont = primerTag(xml, "borders")?.inner || "";
+    const xfsCont = primerTag(xml, "cellXfs")?.inner || "";
+
+    const fonts = bloques(fontsCont, "font").map((b) => parsearFuente(b.inner));
+    const fills = bloques(fillsCont, "fill").map((b) => parsearFill(b.inner));
+    const borders = bloques(bordersCont, "border").map((b) => parsearBorde(b.inner));
+
+    return bloques(xfsCont, "xf").map((xf) => {
+        const salida = {};
+        const fontId = Number(xf.attrs.fontId || 0);
+        const fillId = Number(xf.attrs.fillId || 0);
+        const borderId = Number(xf.attrs.borderId || 0);
+        if (fonts[fontId]) salida.font = fonts[fontId];
+        if (fills[fillId]) salida.fill = fills[fillId];
+        if (borders[borderId]) salida.border = borders[borderId];
+        const alineacion = parsearAlineacion(xf.inner);
+        if (alineacion) salida.alignment = alineacion;
+        return Object.keys(salida).length ? salida : null;
+    });
+}
+
+function rutaNormalizada(base, target) {
+    let ruta = String(target || "").replace(/^\/+/, "");
+    if (ruta.startsWith("xl/")) return ruta;
+    if (ruta.startsWith("../")) {
+        ruta = ruta.replace(/^\.\.\//, "");
+        return ruta;
+    }
+    return `${base}/${ruta}`.replace(/\/\.\//g, "/");
+}
+
+async function rutaHojaDesdeNombre(zip, nombreHoja) {
+    const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
+    const relsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("text");
+    if (!workbookXml || !relsXml) return null;
+
+    let rid = null;
+    for (const sheet of bloques(workbookXml, "sheet")) {
+        if (sheet.attrs.name === nombreHoja) {
+            rid = sheet.attrs["r:id"] || sheet.attrs.id || null;
+            break;
+        }
+    }
+    if (!rid) return null;
+
+    for (const rel of bloques(relsXml, "Relationship")) {
+        if (rel.attrs.Id === rid) return rutaNormalizada("xl", rel.attrs.Target);
+    }
+    return null;
+}
+
+function indiceColumnaDesdeLetras(letras) {
+    let n = 0;
+    for (const ch of String(letras || "").toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+    return n - 1;
+}
+
+function posicionDesdeDireccion(direccion) {
+    const m = String(direccion || "").match(/^([A-Z]+)(\d+)$/i);
+    if (!m) return null;
+    return { r: Number(m[2]) - 1, c: indiceColumnaDesdeLetras(m[1]) };
+}
+
+function parsearDimensionesHoja(xml) {
+    const columnas = [];
+    for (const col of bloques(primerTag(xml, "cols")?.inner || "", "col")) {
+        const min = Math.max(1, Number(col.attrs.min || 1));
+        const max = Math.max(min, Number(col.attrs.max || min));
+        const dato = {
+            width: numeroFinito(col.attrs.width),
+            hidden: booleanoXml(col.attrs.hidden)
+        };
+        for (let i = min - 1; i <= max - 1; i += 1) columnas[i] = dato;
+    }
+
+    const filas = [];
+    for (const row of bloques(xml, "row")) {
+        const indice = Number(row.attrs.r || 0) - 1;
+        if (indice < 0) continue;
+        filas[indice] = {
+            hpt: numeroFinito(row.attrs.ht),
+            hidden: booleanoXml(row.attrs.hidden)
+        };
+    }
+    return { columnas, filas };
+}
+
+function parsearCeldasXml(xml) {
+    const mapa = new Map();
+    for (const celda of bloques(xml, "c")) {
+        const direccion = celda.attrs.r;
+        if (!direccion) continue;
+        const pos = posicionDesdeDireccion(direccion);
+        if (!pos) continue;
+        const estiloId = celda.attrs.s != null ? Number(celda.attrs.s) : 0;
+        mapa.set(direccion, {
+            r: pos.r,
+            c: pos.c,
+            estiloId: Number.isInteger(estiloId) ? estiloId : 0
+        });
+    }
+    return mapa;
 }
 
 function indiceLibro(buffer) {
@@ -20,105 +260,12 @@ function indiceLibro(buffer) {
     };
 }
 
-function numeroFinito(valor) {
-    const n = Number(valor);
-    return Number.isFinite(n) ? n : null;
-}
+async function leerHoja(buffer, nombreHoja) {
+    asegurarLector();
+    asegurarZip();
 
-function colorSeguro(color) {
-    if (!color || typeof color !== "object") return null;
-    const salida = {};
-    if (color.rgb != null) salida.rgb = String(color.rgb);
-    if (color.indexed != null) salida.indexed = numeroFinito(color.indexed);
-    if (color.theme != null) salida.theme = numeroFinito(color.theme);
-    if (color.tint != null) salida.tint = numeroFinito(color.tint);
-    if (color.auto != null) salida.auto = !!color.auto;
-    return Object.keys(salida).length ? salida : null;
-}
-
-function bordeSeguro(borde) {
-    if (!borde || typeof borde !== "object") return null;
-    const salida = {};
-    ["left", "right", "top", "bottom"].forEach((lado) => {
-        const item = borde[lado];
-        if (!item || typeof item !== "object") return;
-        const limpio = {};
-        if (item.style) limpio.style = String(item.style);
-        const color = colorSeguro(item.color);
-        if (color) limpio.color = color;
-        if (Object.keys(limpio).length) salida[lado] = limpio;
-    });
-    return Object.keys(salida).length ? salida : null;
-}
-
-function estiloSeguro(estilo) {
-    if (!estilo || typeof estilo !== "object") return null;
-
-    // Algunas versiones de SheetJS exponen fill/font/alignment/border como
-    // objetos anidados y otras dejan las propiedades de fill en la raíz.
-    const fillOriginal = estilo.fill && typeof estilo.fill === "object"
-        ? estilo.fill
-        : estilo;
-    const fill = {};
-    if (fillOriginal.patternType) fill.patternType = String(fillOriginal.patternType);
-    const fg = colorSeguro(fillOriginal.fgColor);
-    const bg = colorSeguro(fillOriginal.bgColor);
-    if (fg) fill.fgColor = fg;
-    if (bg) fill.bgColor = bg;
-
-    const fontOriginal = estilo.font && typeof estilo.font === "object" ? estilo.font : null;
-    const font = {};
-    if (fontOriginal) {
-        if (fontOriginal.name) font.name = String(fontOriginal.name);
-        if (fontOriginal.sz != null) font.sz = numeroFinito(fontOriginal.sz);
-        if (fontOriginal.bold != null) font.bold = !!fontOriginal.bold;
-        if (fontOriginal.italic != null) font.italic = !!fontOriginal.italic;
-        if (fontOriginal.underline != null) font.underline = fontOriginal.underline;
-        if (fontOriginal.strike != null) font.strike = !!fontOriginal.strike;
-        const color = colorSeguro(fontOriginal.color);
-        if (color) font.color = color;
-    }
-
-    const alineacionOriginal = estilo.alignment && typeof estilo.alignment === "object"
-        ? estilo.alignment
-        : null;
-    const alignment = {};
-    if (alineacionOriginal) {
-        if (alineacionOriginal.horizontal) alignment.horizontal = String(alineacionOriginal.horizontal);
-        if (alineacionOriginal.vertical) alignment.vertical = String(alineacionOriginal.vertical);
-        if (alineacionOriginal.wrapText != null) alignment.wrapText = !!alineacionOriginal.wrapText;
-        if (alineacionOriginal.shrinkToFit != null) alignment.shrinkToFit = !!alineacionOriginal.shrinkToFit;
-        if (alineacionOriginal.textRotation != null) alignment.textRotation = numeroFinito(alineacionOriginal.textRotation);
-        if (alineacionOriginal.indent != null) alignment.indent = numeroFinito(alineacionOriginal.indent);
-    }
-
-    const border = bordeSeguro(estilo.border);
-    const salida = {};
-    if (Object.keys(fill).length) salida.fill = fill;
-    if (Object.keys(font).length) salida.font = font;
-    if (Object.keys(alignment).length) salida.alignment = alignment;
-    if (border) salida.border = border;
-    return Object.keys(salida).length ? salida : null;
-}
-
-function dimensionesColumnas(hoja) {
-    return (hoja["!cols"] || []).map((columna) => ({
-        wpx: numeroFinito(columna?.wpx),
-        wch: numeroFinito(columna?.wch),
-        width: numeroFinito(columna?.width),
-        hidden: !!columna?.hidden
-    }));
-}
-
-function dimensionesFilas(hoja) {
-    return (hoja["!rows"] || []).map((fila) => ({
-        hpx: numeroFinito(fila?.hpx),
-        hpt: numeroFinito(fila?.hpt),
-        hidden: !!fila?.hidden
-    }));
-}
-
-function leerHoja(buffer, nombreHoja) {
+    // SheetJS sigue resolviendo valores, fórmulas, formato visible, merges y rango.
+    // OOXML se usa como fuente de verdad para estilo, dimensiones y bordes.
     const libro = self.XLSX.read(buffer, {
         type: "array",
         sheets: [nombreHoja],
@@ -126,80 +273,85 @@ function leerHoja(buffer, nombreHoja) {
         cellStyles: true,
         cellNF: true,
         cellFormula: true,
-        cellHTML: true,
         sheetStubs: true
     });
     const hoja = libro.Sheets[nombreHoja];
     if (!hoja?.["!ref"]) {
-        return {
-            rango: null,
-            celdas: [],
-            estilos: [],
-            combinaciones: [],
-            columnas: [],
-            filas: []
-        };
+        return { rango: null, celdas: [], estilos: [], combinaciones: [], columnas: [], filas: [] };
     }
 
-    const estilos = [];
-    const estilosPorClave = new Map();
+    let estilos = [];
+    let columnas = [];
+    let filas = [];
+    let celdasXml = new Map();
 
-    function idEstilo(estilo) {
-        const limpio = estiloSeguro(estilo);
-        if (!limpio) return -1;
-        const clave = JSON.stringify(limpio);
-        let id = estilosPorClave.get(clave);
-        if (id != null) return id;
-        id = estilos.length;
-        estilosPorClave.set(clave, id);
-        estilos.push(limpio);
-        return id;
+    try {
+        const zip = await self.JSZip.loadAsync(buffer);
+        const estilosXml = await zip.file("xl/styles.xml")?.async("text");
+        estilos = parsearEstilosXml(estilosXml || "");
+        const rutaHoja = await rutaHojaDesdeNombre(zip, nombreHoja);
+        const hojaXml = rutaHoja ? await zip.file(rutaHoja)?.async("text") : null;
+        if (hojaXml) {
+            const dimensiones = parsearDimensionesHoja(hojaXml);
+            columnas = dimensiones.columnas;
+            filas = dimensiones.filas;
+            celdasXml = parsearCeldasXml(hojaXml);
+        }
+    } catch (error) {
+        // Si el complemento OOXML no estuviera disponible, mantenemos la lectura
+        // funcional de valores. La vista simplemente cae al estilo básico.
+        console.warn("LIBRO RESERVA · Fidelidad OOXML parcial:", error?.message || error);
     }
 
-    const celdas = [];
+    const porDireccion = new Map();
     Object.keys(hoja).forEach((direccion) => {
         if (direccion.startsWith("!")) return;
         const celda = hoja[direccion];
         if (!celda) return;
-
         const posicion = self.XLSX.utils.decode_cell(direccion);
-        const valor = celda.w != null
-            ? String(celda.w)
-            : (celda.v == null ? "" : String(celda.v));
-        const estiloId = idEstilo(celda.s);
-
-        // Conservamos también celdas vacías con estilo. Son fundamentales para
-        // recrear bandas de color y la distribución visual del Libro original.
-        if (!valor && estiloId < 0 && celda.f == null && celda.t !== "z") return;
-
-        celdas.push({
+        const valor = celda.w != null ? String(celda.w) : (celda.v == null ? "" : String(celda.v));
+        const estiloId = celdasXml.get(direccion)?.estiloId;
+        if (!valor && estiloId == null && celda.f == null && celda.t !== "z") return;
+        porDireccion.set(direccion, {
             r: posicion.r,
             c: posicion.c,
             valor,
-            estiloId
+            estiloId: Number.isInteger(estiloId) ? estiloId : -1
+        });
+    });
+
+    // Celdas vacías con estilo son parte del diseño (bandas, separadores, bordes).
+    celdasXml.forEach((info, direccion) => {
+        if (porDireccion.has(direccion)) return;
+        if (!info.estiloId) return;
+        porDireccion.set(direccion, {
+            r: info.r,
+            c: info.c,
+            valor: "",
+            estiloId: info.estiloId
         });
     });
 
     return {
         rango: self.XLSX.utils.decode_range(hoja["!ref"]),
-        celdas,
+        celdas: [...porDireccion.values()],
         estilos,
         combinaciones: (hoja["!merges"] || []).map((rango) => ({
             s: { r: rango.s.r, c: rango.s.c },
             e: { r: rango.e.r, c: rango.e.c }
         })),
-        columnas: dimensionesColumnas(hoja),
-        filas: dimensionesFilas(hoja)
+        columnas,
+        filas
     };
 }
 
-self.addEventListener("message", (evento) => {
+self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, buffer } = evento.data || {};
     try {
         asegurarLector();
         const resultado = tipo === "indice"
             ? indiceLibro(buffer)
-            : leerHoja(buffer, nombreHoja);
+            : await leerHoja(buffer, nombreHoja);
         self.postMessage({ id, ok: true, resultado });
     } catch (error) {
         self.postMessage({
