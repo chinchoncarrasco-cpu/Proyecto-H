@@ -537,8 +537,18 @@
         }
     }
 
+    function asegurarCssFidelidad() {
+        if (document.getElementById("haiku-libro-reserva-fidelidad-v1")) return;
+        const link = document.createElement("link");
+        link.id = "haiku-libro-reserva-fidelidad-v1";
+        link.rel = "stylesheet";
+        link.href = `css/supabase-libro-reserva-fidelidad-v1.css${VERSION_QUERY}`;
+        document.head.appendChild(link);
+    }
+
     function iniciar() {
         if (!$("seccion-libro-reserva") || window.HAIKU_LIBRO_RESERVA_V1) return;
+        asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
             version: "1.1.0",
             modo: "archivo-local-solo-lectura-estilo-xlsx",
