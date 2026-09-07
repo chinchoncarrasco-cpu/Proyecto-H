@@ -162,6 +162,7 @@
 
     function esReservaValida(r) {
         if (!r?.titular || !r?.fecha_checkin || !r?.fecha_checkout || !cabanaNumero(r?.cabana)) return false;
+        if (![r.fecha_checkin, r.fecha_checkout].every(d => /^\d{4}-\d{2}-\d{2}$/.test(d) && S.iso(...d.split("-")) === d) || r.fecha_checkout < r.fecha_checkin) return false;
         const n = S.normalizar(r.titular);
         return !/^(x hacer|por hacer|cliente frecuente|sin titular|libre|full day|cancelad)/.test(n);
     }
@@ -202,6 +203,20 @@
         return normalizarId(v).replace(/^0+/, "");
     }
 
+    function identidad(a, b) {
+        const docA = documentoCanon(a.rut_documento), docB = documentoCanon(b.rut_documento);
+        const correoA = S.normalizar(a.correo), correoB = S.normalizar(b.correo);
+        const telA = telefonoCanon(a.telefono), telB = telefonoCanon(b.telefono);
+        const conflicto = Boolean(docA && docB && docA !== docB);
+        const fuerte = Boolean((docA && docA === docB) || (correoA && correoA === correoB) ||
+            (telA.length >= 9 && telB.length >= 9 && telA === telB));
+        const nombre = Boolean(S.normalizar(a.titular) && S.normalizar(a.titular) === S.normalizar(b.titular));
+        return { compatible: !conflicto && (fuerte || nombre), fuerte: fuerte && !conflicto, conflicto };
+    }
+
+    const mismasFechas = (a, b) => a.fecha_checkin === b.fecha_checkin && a.fecha_checkout === b.fecha_checkout &&
+        (a.fecha_checkin === a.fecha_checkout) === (b.fecha_checkin === b.fecha_checkout);
+
     function asociarConservador(reserva, candidatas) {
         const scores = candidatas.map(s => {
             const nombre = S.mismaPersona(reserva.titular, s.titular);
@@ -210,18 +225,35 @@
             const telefono = Boolean(reserva.telefono && s.telefono && telefonoCompatible(reserva.telefono, s.telefono));
             const fechas = reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
             const cab = Number(reserva.cabana) === Number(s.cabana);
-            const identidad = nombre || doc || correo || telefono;
+            const persona = identidad(reserva, s);
+            const identidadCompatible = persona.compatible;
             return {
                 s,
-                segura: !reserva.advertencias?.length && cab && fechas && identidad,
-                posible: (cab && fechas) || identidad
+                segura: !reserva.advertencias?.length && cab && fechas && identidadCompatible && !/cancelad|no.?show/.test(S.normalizar(s.estado_reserva) + S.normalizar(s.estado_operativo)),
+                posible: (cab && fechas) || identidadCompatible || nombre || doc || correo || telefono
             };
         });
         const seguros = scores.filter(x => x.segura);
-        if (seguros.length === 1) return { estado: "asociada", sistema: seguros[0].s };
+        if (seguros.length === 1) return { estado: "asociada", sistema: seguros[0].s, categoria: "coincide", confianza: "alta" };
+        const posibles = scores.filter(x => x.posible).map(x => x.s);
+        let categoria = "reserva_faltante", confianza = "alta", pregunta = null;
+        if (posibles.length || reserva.advertencias?.length) {
+            categoria = "ambiguo"; confianza = "baja";
+            if (posibles.length === 1 && !reserva.advertencias?.length) {
+                const s = posibles[0];
+                categoria = !identidad(reserva, s).compatible ? "modificacion_titular" :
+                    mismasFechas(reserva, s) ? "posible_cambio_cabana" : "modificacion_fechas_o_independiente";
+                confianza = "media";
+            }
+            pregunta = categoria === "posible_cambio_cabana" ? "¿Se cambió de cabaña o es una estadía adicional?" :
+                categoria === "modificacion_titular" ? "¿Cambió el titular o son reservas independientes?" :
+                categoria === "modificacion_fechas_o_independiente" ? "¿Se modificaron las fechas o es una reserva independiente?" :
+                "¿Cuál de los candidatos corresponde, o es una reserva independiente?";
+        }
         return {
-            estado: scores.some(x => x.posible) ? "ambigua" : "sin_coincidencia",
-            candidatos: scores.filter(x => x.posible).map(x => x.s.id)
+            estado: categoria === "reserva_faltante" ? "sin_coincidencia" : "ambigua",
+            categoria, confianza, pregunta, candidatosDetalle: posibles,
+            candidatos: posibles.map(x => x.id)
         };
     }
 
@@ -234,20 +266,28 @@
     }
 
     function agruparComparacion(resultados) {
-        const mapa = new Map();
+        const mapa = [];
         for (const c of resultados) {
-            const k = claveReserva(c.libro);
-            if (!mapa.has(k)) mapa.set(k, { clave: k, items: [] });
-            mapa.get(k).items.push(c);
+            // Complete-link grouping prevents a shared contact from bridging conflicting identities.
+            const compatibles = mapa.filter(g => g.items.every(x => mismasFechas(x.libro, c.libro) &&
+                identidad(x.libro, c.libro).compatible && Number(x.libro.cabana) !== Number(c.libro.cabana)));
+            if (compatibles.length === 1) compatibles[0].items.push(c);
+            else mapa.push({ clave: claveReserva(c.libro), items: [c] });
         }
-        return [...mapa.values()].map(g => {
+        return mapa.map(g => {
             const principal = g.items[0].libro;
             const estados = g.items.map(x => x.estado);
-            const estado = estados.includes("asociada") ? "asociada" : estados.includes("ambigua") ? "ambigua" : "sin_coincidencia";
+            const ids = new Set(g.items.filter(x => x.sistema).map(x => x.sistema.reserva_id));
+            const estado = estados.every(x => x === "asociada") && ids.size === 1 ? "asociada" :
+                estados.every(x => x === "sin_coincidencia") ? "sin_coincidencia" : "ambigua";
+            const parcial = ids.size === 1 && estados.includes("asociada") && estados.some(x => x !== "asociada");
             return {
                 ...g,
                 estado,
                 principal,
+                categoria: parcial ? "estadia_faltante" : g.items.length > 1 && estado === "ambigua" ? "ambiguo" : g.items[0].categoria,
+                confianza: g.items.length === 1 ? g.items[0].confianza : estado === "ambigua" ? (parcial ? "media" : "baja") : "alta",
+                pregunta: parcial ? "La reserva ya existe: ¿añadir la cabaña indicada o corregir una asignación?" : g.items.find(x => x.pregunta)?.pregunta || (estado === "ambigua" ? "¿Son reservas independientes o un solo grupo?" : null),
                 cabanas: [...new Set(g.items.map(x => Number(x.libro.cabana)).filter(Boolean))].sort((a, b) => a - b),
                 diferencias: [...new Set(g.items.flatMap(x => x.diferencias || []))],
                 pagos: g.items.flatMap(x => x.pagosComparacion || []),
@@ -269,7 +309,7 @@
     }
 
     function pagoTieneIdentificadorFuerte(p) {
-        return Boolean(p?.codigo_autorizacion || (p?.folio && p?.bovtar) || p?.bove);
+        return Boolean(normalizarId(p?.codigo_autorizacion) || (normalizarId(p?.folio) && normalizarId(p?.bovtar)) || normalizarId(p?.bove));
     }
 
     function pagoCoincide(p, x) {
@@ -291,9 +331,7 @@
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
 
         const raw = await paginas(() => cliente.from("reserva_estadias")
-            .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,cabanas(numero),reservas(id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva)")
-            .lte("fecha_ingreso", S.sumarDias(hasta, 31))
-            .gte("fecha_salida", S.sumarDias(desde, -31)));
+            .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,cabanas(numero),reservas(id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva)"));
 
         const system = raw.map(e => ({
             id: e.id,
@@ -345,13 +383,22 @@
             serviciosComparacion: []
         }));
 
+        // One system stay cannot satisfy two different source rows silently.
+        const usos = new Map();
+        for (const r of resultados.filter(x => x.sistema)) usos.set(r.sistema.id, (usos.get(r.sistema.id) || 0) + 1);
+        for (const r of resultados.filter(x => x.sistema && usos.get(x.sistema.id) > 1)) {
+            r.estado = "ambigua"; r.categoria = "ambiguo"; r.confianza = "baja";
+            r.pregunta = "Dos filas del Libro apuntan a la misma estadía: ¿son un duplicado o reservas independientes?";
+            r.candidatosDetalle = [r.sistema]; delete r.sistema;
+        }
+
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
-        const pagos = [], servicios = [];
+        // Global identifier check: a payment on another reservation is a conflict, never new.
+        const pagos = await paginas(() => cliente.from("pagos")
+            .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen"));
+        const servicios = [];
         for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
-            pagos.push(...await paginas(() => cliente.from("pagos")
-                .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen")
-                .in("reserva_id", grupo)));
             servicios.push(...await paginas(() => cliente.from("servicios")
                 .select("id,reserva_id,fecha_servicio,total,estado_servicio,catalogo_servicios(nombre)")
                 .in("reserva_id", grupo)));
@@ -361,7 +408,7 @@
             const r = result.libro;
 
             if (result.estado !== "asociada") {
-                const estadoPago = result.estado === "sin_coincidencia" ? "con_reserva_faltante" : "revisar";
+                const estadoPago = "revisar";
                 result.pagosComparacion.push(...r.pagos.map(p => ({ estado: estadoPago, pago: p, reserva: r })));
                 result.pagosComparacion.push(...r.pagos_sin_asociacion.map(p => ({ estado: "revisar", pago: p, reserva: r })));
                 result.serviciosComparacion.push(...r.servicios.map(s => ({ estado: result.estado === "sin_coincidencia" ? "con_reserva_faltante" : "revisar", servicio: s, reserva: r })));
@@ -388,21 +435,21 @@
             }
 
             for (const p of r.pagos) {
-                const candidatos = pagos.filter(x => x.reserva_id === s.reserva_id && pagoCoincide(p, x));
-                if (candidatos.length === 1) {
+                const candidatos = pagos.filter(x => pagoCoincide(p, x));
+                if (candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id) {
                     const x = candidatos[0];
                     const diferenciasPago = [];
                     if (p.monto !== null && (Number(x.monto) !== p.monto || (p.moneda && x.moneda && x.moneda !== p.moneda))) {
                         diferenciasPago.push("monto/moneda diferente");
-                        result.diferencias.push(`Monto/moneda diferente en ${source(p.origen)}.`);
+                        result.diferencias.push("Monto/moneda diferente en un pago del Libro.");
                     }
                     if (p.bove && String(x.bove || "") !== p.bove) {
                         diferenciasPago.push("BOVE diferente");
-                        result.diferencias.push(`BOVE diferente en ${source(p.origen)}.`);
+                        result.diferencias.push("BOVE diferente en un pago del Libro.");
                     }
                     result.pagosComparacion.push({ estado: diferenciasPago.length ? "diferente" : "en_sistema", pago: p, sistema: x, reserva: r, diferencias: diferenciasPago });
-                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0) {
-                    result.pagosComparacion.push({ estado: "faltante_probable", pago: p, reserva: r });
+                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad") {
+                    result.pagosComparacion.push({ estado: "nuevo_seguro", pago: p, reserva: r });
                 } else {
                     result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
                 }
@@ -420,9 +467,14 @@
         }
 
         const grupos = agruparComparacion(resultados);
+        const movimientos = resultados.flatMap(r => r.pagosComparacion);
+        for (const x of movimientos) {
+            if (x.estado === "nuevo_seguro" && movimientos.some(y => y !== x && pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }))) x.estado = "revisar";
+            if (x.estado === "nuevo_seguro" && grupos.some(g => g.estado !== "asociada" && g.items.some(i => i.libro === x.reserva))) x.estado = "revisar";
+        }
         const pagosUnicos = new Map();
         for (const x of resultados.flatMap(r => r.pagosComparacion)) {
-            const key = `${source(x.pago?.origen)}|${x.estado}`;
+            const key = `${x.reserva.id || claveReserva(x.reserva)}|${source(x.pago?.origen)}|${JSON.stringify(x.pago)}|${x.estado}`;
             if (!pagosUnicos.has(key)) pagosUnicos.set(key, x);
         }
         const serviciosUnicos = new Map();
@@ -435,14 +487,15 @@
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = [...serviciosUnicos.values()];
         resultados.meta = {
-            libro: validas.length,
+            libro: grupos.length,
+            estadias_libro: validas.length,
             libro_detectadas: detectadasLibro,
             proyecto: reservasSistema.size,
-            asociadas: resultados.filter(g => g.estado === "asociada").length,
-            faltantes: resultados.filter(g => g.estado === "sin_coincidencia").length,
-            ambiguas: resultados.filter(g => g.estado === "ambigua").length,
+            asociadas: grupos.filter(g => g.estado === "asociada").length,
+            faltantes: grupos.filter(g => g.estado === "sin_coincidencia").length,
+            ambiguas: grupos.filter(g => g.estado === "ambigua").length,
             con_diferencias: resultados.filter(g => g.estado === "asociada" && g.diferencias.length).length,
-            pagos_faltantes: [...pagosUnicos.values()].filter(x => x.estado === "faltante_probable" || x.estado === "con_reserva_faltante").length,
+            pagos_faltantes: [...pagosUnicos.values()].filter(x => x.estado === "nuevo_seguro").length,
             pagos_revisar: [...pagosUnicos.values()].filter(x => x.estado === "revisar" || x.estado === "diferente").length,
             servicios_revisar: [...serviciosUnicos.values()].filter(x => x.estado !== "en_sistema").length
         };
@@ -528,7 +581,7 @@
         const faltantes = grupos.filter(g => g.estado === "sin_coincidencia");
         const ambiguas = grupos.filter(g => g.estado === "ambigua");
         const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
-        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "faltante_probable" || x.estado === "con_reserva_faltante");
+        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
         const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
         const lines = [
             `COMPARACIÓN LIBRO ↔ PROYECTO H · ${result.q.desde} al ${result.q.hasta}`,
@@ -539,11 +592,11 @@
         if (!meta.libro && meta.libro_detectadas) lines.push(`El lector detectó ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural; revisar formato antes de concluir que el Libro está vacío.`);
         if (faltantes.length) {
             lines.push("\nRESERVAS QUE FALTAN");
-            faltantes.forEach(g => lines.push(`• ${descripcionGrupo(g)} · ${source(g.principal.coordenadas_origen)}`));
+            faltantes.forEach(g => lines.push(`• ${descripcionGrupo(g)} · confianza ${g.confianza}`));
         } else lines.push("\nNo encontré reservas claramente faltantes con el matching actual.");
         if (pagosFaltan.length) {
-            lines.push("\nPAGOS PROBABLEMENTE FALTANTES / LIGADOS A RESERVAS FALTANTES");
-            pagosFaltan.forEach(x => lines.push(`• ${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)} · ${source(x.pago.origen)}`));
+            lines.push("\nPAGOS NUEVOS SEGUROS EN ESTA CONSULTA");
+            pagosFaltan.forEach(x => lines.push(`• ${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`));
         }
         if (diferencias.length) {
             lines.push("\nRESERVAS CON DIFERENCIAS");
@@ -551,7 +604,7 @@
         }
         if (ambiguas.length) {
             lines.push("\nASOCIACIONES AMBIGUAS");
-            ambiguas.forEach(g => lines.push(`• ${descripcionGrupo(g)} · no la cuento como faltante hasta revisar.`));
+            ambiguas.forEach(g => lines.push(`• ${descripcionGrupo(g)} · ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`));
         }
         if (pagosRevisar.length) lines.push(`\n${pagosRevisar.length} movimientos de pago requieren revisión; no los declaro faltantes automáticamente.`);
         lines.push("\nSólo lectura: esta comparación no modificó el Libro ni Proyecto H.");
@@ -694,7 +747,7 @@
         const faltantes = grupos.filter(g => g.estado === "sin_coincidencia");
         const ambiguas = grupos.filter(g => g.estado === "ambigua");
         const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
-        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "faltante_probable" || x.estado === "con_reserva_faltante");
+        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
         const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
         const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
 
@@ -711,7 +764,7 @@
         out.append(cabecera);
 
         const resumen = elemento("p", "haiku-asistente-preview-resumen");
-        resumen.textContent = `Periodo ${result.q.desde} al ${result.q.hasta}. Encontré ${meta.libro ?? 0} reservas válidas en el Libro y ${meta.proyecto ?? 0} reservas visibles en Proyecto H. ${meta.faltantes ?? 0} faltan claramente; ${meta.ambiguas ?? 0} no las cuento como faltantes porque requieren asociación manual.`;
+        resumen.textContent = `Periodo ${result.q.desde} al ${result.q.hasta}. Encontré ${meta.libro ?? 0} reservas lógicas (${meta.estadias_libro ?? 0} estadías) en el Libro y ${meta.proyecto ?? 0} reservas visibles en Proyecto H. ${meta.faltantes ?? 0} faltan claramente; ${meta.ambiguas ?? 0} requieren una decisión. La comparación considera los registros accesibles con tu sesión.`;
         out.append(resumen);
 
         const grid = elemento("div", "haiku-asistente-preview-grid");
@@ -719,7 +772,7 @@
         agregarDato(grid, "Proyecto H", `${meta.proyecto ?? 0} reservas`);
         agregarDato(grid, "Faltan", `${meta.faltantes ?? 0}`);
         agregarDato(grid, "Coinciden", `${meta.asociadas ?? 0}`);
-        agregarDato(grid, "Ambiguas", `${meta.ambiguas ?? 0}`);
+        agregarDato(grid, "Por decidir", `${meta.ambiguas ?? 0}`);
         agregarDato(grid, "Pagos a revisar", `${(meta.pagos_faltantes ?? 0) + (meta.pagos_revisar ?? 0)}`);
         out.append(grid);
 
@@ -730,15 +783,15 @@
         agregarLista(
             out,
             `Reservas que faltan (${faltantes.length})`,
-            faltantes.map(g => `${descripcionGrupo(g)} · ${source(g.principal.coordenadas_origen)}`),
+            faltantes.map(g => `${descripcionGrupo(g)} · confianza ${g.confianza}`),
             { alerta: true, vacio: "No encontré reservas claramente faltantes." }
         );
 
         if (pagosFaltan.length) {
             agregarLista(
                 out,
-                `Pagos probablemente faltantes / ligados a reserva faltante (${pagosFaltan.length})`,
-                pagosFaltan.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)} · ${source(x.pago.origen)}`),
+                `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
+                pagosFaltan.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`),
                 { alerta: true }
             );
         }
@@ -750,19 +803,67 @@
         );
         agregarDetalles(
             out,
-            "Asociaciones ambiguas",
-            ambiguas.map(g => `${descripcionGrupo(g)} — no se marca como faltante automáticamente.`)
+            "Posibles faltantes / modificaciones",
+            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`)
         );
         agregarDetalles(
             out,
             "Pagos que requieren revisión",
-            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)} · ${source(x.pago.origen)}`)
+            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`)
         );
         agregarDetalles(
             out,
             "Servicios que requieren revisión",
             serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`)
         );
+
+        agregarDetalles(out, "Grupos / multicabaña", grupos.filter(g => g.cabanas.length > 1).map(g =>
+            descripcionGrupo(g) + " · " + g.categoria.replaceAll("_", " ") + " · confianza " + g.confianza));
+        agregarDetalles(out, "Detalles técnicos XLSX", grupos.flatMap(g => g.items.flatMap(x => [
+            x.libro.titular + " · " + source(x.libro.coordenadas_origen),
+            ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
+        ])));
+        const decisiones = new Map();
+        if (ambiguas.length) {
+            const preguntas = elemento("div", "haiku-asistente-preview-lista");
+            preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
+            ambiguas.forEach(g => {
+                const label = elemento("label", "", descripcionGrupo(g) + ". " + g.pregunta);
+                label.style.display = "block";
+                const select = elemento("select");
+                select.append(new Option("Pendiente: no incorporar", ""), new Option("Es una reserva independiente", "independiente"));
+                const candidatos = new Map(g.items.flatMap(x => [x.sistema, ...(x.candidatosDetalle || [])]).filter(Boolean).map(x => [x.id, x]));
+                candidatos.forEach(x => {
+                    const detalle = x.titular + " · CAB " + x.cabana + " · " + x.fecha_checkin + " → " + x.fecha_checkout;
+                    select.append(new Option("Modificar: " + detalle, "modificar:" + x.id), new Option("Añadir estadía a: " + detalle, "estadia:" + x.id));
+                });
+                select.addEventListener("change", () => decisiones.set(g.clave, select.options[select.selectedIndex].text));
+                label.append(select); preguntas.append(label);
+            });
+            out.append(preguntas);
+        }
+        const preparar = elemento("button", "libro-reserva-boton secundario", "Preparar vista previa");
+        preparar.type = "button";
+        const vista = elemento("div");
+        preparar.addEventListener("click", () => {
+            vista.replaceChildren();
+            agregarLista(vista, "Propuestas para revisión · escritura deshabilitada", [
+                ...faltantes.map(g => "Nueva reserva propuesta: " + descripcionGrupo(g)),
+                ...ambiguas.map(g => descripcionGrupo(g) + " · " + (decisiones.get(g.clave) || "Pendiente: no incorporar")),
+                ...pagosFaltan.map(x => "Pago propuesto: " + x.reserva.titular + " · " + money(x.pago.monto))
+            ]);
+            vista.append(elemento("p", "", "Estas decisiones no autorizan escrituras. Antes de una futura incorporación será obligatorio consultar de nuevo Proyecto H, resolver conflictos y revalidar identificadores de pagos."));
+        });
+        out.append(preparar, vista);
+        const refrescar = elemento("button", "libro-reserva-boton secundario", "Revalidar contra Proyecto H");
+        refrescar.type = "button";
+        refrescar.addEventListener("click", async () => {
+            refrescar.disabled = true; preparar.disabled = true;
+            vista.replaceChildren(elemento("p", "", "Revalidando; las decisiones anteriores se descartan."));
+            try { renderizarComparacion(out, await consultar(result.q.texto)); }
+            catch (error) { vista.replaceChildren(elemento("p", "", error.message)); refrescar.disabled = false; }
+        });
+        out.append(refrescar);
 
         const pie = elemento("div", "haiku-asistente-preview-pie");
         pie.append(elemento("span", "", "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
