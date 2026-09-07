@@ -19,6 +19,7 @@
     let arrastrando = false;
     let framePendiente = 0;
     let ultimoX = null;
+    let pointerIdActivo = null;
 
     function esEscritorio() {
         return window.innerWidth >= DESKTOP_MIN;
@@ -155,14 +156,16 @@
 
     function mover(evento) {
         if (!arrastrando) return;
+        if (pointerIdActivo !== null && evento.pointerId !== pointerIdActivo) return;
         ultimoX = evento.clientX;
         if (!framePendiente) {
             framePendiente = requestAnimationFrame(procesarMovimiento);
         }
+        evento.preventDefault();
     }
 
-    function terminar(evento) {
-        if (!arrastrando) return;
+    function limpiarEstadoArrastre({ guardar = true, liberarCaptura = true } = {}) {
+        const estabaArrastrando = arrastrando;
         arrastrando = false;
 
         if (framePendiente) {
@@ -170,24 +173,53 @@
             framePendiente = 0;
         }
 
-        if (ultimoX !== null) {
+        if (guardar && estabaArrastrando && ultimoX !== null) {
             aplicarAncho(ultimoX, { guardar: true });
         }
-        ultimoX = null;
 
         document.body?.classList.remove("haiku-sidebar-redimensionando");
 
         const handle = document.getElementById(HANDLE_ID);
-        if (handle && evento?.pointerId !== undefined) {
-            try { handle.releasePointerCapture(evento.pointerId); } catch (_) {}
+        if (liberarCaptura && handle && pointerIdActivo !== null) {
+            try {
+                if (handle.hasPointerCapture(pointerIdActivo)) {
+                    handle.releasePointerCapture(pointerIdActivo);
+                }
+            } catch (_) {}
         }
+
+        pointerIdActivo = null;
+        ultimoX = null;
+    }
+
+    function terminar(evento) {
+        if (!arrastrando) {
+            // Limpieza defensiva: si el navegador perdió el pointerup anterior,
+            // nunca dejamos el cursor global atrapado en modo resize.
+            document.body?.classList.remove("haiku-sidebar-redimensionando");
+            return;
+        }
+        if (pointerIdActivo !== null && evento?.pointerId !== undefined && evento.pointerId !== pointerIdActivo) return;
+        if (evento?.clientX !== undefined) ultimoX = evento.clientX;
+        limpiarEstadoArrastre({ guardar: true, liberarCaptura: true });
+    }
+
+    function cancelarArrastre() {
+        if (!arrastrando && !document.body?.classList.contains("haiku-sidebar-redimensionando")) return;
+        limpiarEstadoArrastre({ guardar: true, liberarCaptura: true });
     }
 
     function iniciarArrastre(evento) {
         if (!esEscritorio()) return;
         if (evento.pointerType === "mouse" && evento.button !== 0) return;
 
+        // Si hubiera quedado un estado anterior incompleto, lo limpiamos primero.
+        if (arrastrando || document.body?.classList.contains("haiku-sidebar-redimensionando")) {
+            limpiarEstadoArrastre({ guardar: false, liberarCaptura: true });
+        }
+
         arrastrando = true;
+        pointerIdActivo = evento.pointerId;
         ultimoX = evento.clientX;
         document.body?.classList.add("haiku-sidebar-redimensionando");
 
@@ -196,6 +228,7 @@
     }
 
     function restablecer() {
+        cancelarArrastre();
         anchoPreferido = DEFAULT_WIDTH;
         guardarPreferencia(DEFAULT_WIDTH);
         aplicarAncho(DEFAULT_WIDTH, { guardar: false });
@@ -218,10 +251,12 @@
         handle.setAttribute("aria-valuemax", String(maximoActual()));
         handle.title = "Arrastra para cambiar el ancho · doble clic para restablecer";
 
+        // El inicio sigue perteneciendo al handle. El movimiento y el final se
+        // escuchan en window para que soltar fuera del borde también termine bien.
         handle.addEventListener("pointerdown", iniciarArrastre);
-        handle.addEventListener("pointermove", mover);
-        handle.addEventListener("pointerup", terminar);
-        handle.addEventListener("pointercancel", terminar);
+        handle.addEventListener("lostpointercapture", () => {
+            if (arrastrando) cancelarArrastre();
+        });
         handle.addEventListener("dblclick", evento => {
             evento.preventDefault();
             restablecer();
@@ -252,14 +287,30 @@
     }
 
     function ajustarAlViewport() {
-        if (!esEscritorio()) return;
+        if (!esEscritorio()) {
+            cancelarArrastre();
+            return;
+        }
         aplicarAncho(anchoPreferido, { guardar: false });
+    }
+
+    function instalarRescateGlobal() {
+        // Listeners únicos, pasivos mientras no hay arrastre. Evitan que el gesto
+        // quede pegado cuando el puntero sale del handle o la ventana pierde foco.
+        window.addEventListener("pointermove", mover, { passive: false });
+        window.addEventListener("pointerup", terminar);
+        window.addEventListener("pointercancel", terminar);
+        window.addEventListener("blur", cancelarArrastre);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) cancelarArrastre();
+        });
     }
 
     function iniciar() {
         instalarEstilos();
         anchoPreferido = leerPreferencia();
         aplicarAncho(anchoPreferido, { guardar: false });
+        document.body?.classList.remove("haiku-sidebar-redimensionando");
 
         if (!instalarHandle()) {
             document.addEventListener("DOMContentLoaded", () => {
@@ -268,6 +319,7 @@
             }, { once: true });
         }
 
+        instalarRescateGlobal();
         window.addEventListener("resize", ajustarAlViewport);
 
         window.HAIKU_SIDEBAR_RESIZE_V1 = Object.freeze({
