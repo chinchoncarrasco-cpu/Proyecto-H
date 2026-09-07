@@ -99,10 +99,24 @@
         return items.filter(a => filas.has(a.origen.fila));
     }
 
+    function rangoReserva(r) {
+        const ocupadas = Array.isArray(r?.fechas_ocupadas) ? r.fechas_ocupadas.filter(Boolean) : [];
+        const checkin = r?.fecha_checkin || ocupadas[0] || null;
+        let checkout = r?.fecha_checkout || null;
+        if (!checkout && checkin) {
+            if (r?.tipo_estadia === "full_day") checkout = checkin;
+            else if (ocupadas.length) checkout = S.sumarDias(ocupadas.at(-1), 1);
+        }
+        return { checkin, checkout, ocupadas };
+    }
+
     function filtrar(r, q) {
-        return (!q.cabana || r.cabana === q.cabana) &&
-            (!q.nombre || S.normalizar(r.titular).includes(q.nombre)) &&
-            (!q.desde || r.fechas_ocupadas.some(d => d >= q.desde && d <= q.hasta));
+        if (q.cabana && Number(r?.cabana) !== Number(q.cabana)) return false;
+        if (q.nombre && !S.normalizar(r?.titular).includes(q.nombre)) return false;
+        if (!q.desde) return true;
+        const rango = rangoReserva(r);
+        if (rango.ocupadas.some(d => d >= q.desde && d <= q.hasta)) return true;
+        return Boolean(rango.checkin && rango.checkout && rango.checkin <= q.hasta && rango.checkout >= q.desde);
     }
 
     function tituloRealReserva(r) {
@@ -121,8 +135,33 @@
         return candidato ? { ...r, titular: candidato } : r;
     }
 
+    function cabanaNumero(v) {
+        if (Number.isFinite(Number(v)) && Number(v) > 0) return Number(v);
+        const m = String(v || "").match(/\b(\d{1,2})\b/);
+        return m ? Number(m[1]) : null;
+    }
+
+    function normalizarReservaComparacion(r) {
+        const base = tituloRealReserva(r || {});
+        const rango = rangoReserva(base);
+        const ocupadas = rango.ocupadas.length
+            ? rango.ocupadas
+            : (rango.checkin ? [rango.checkin] : []);
+        return {
+            ...base,
+            cabana: cabanaNumero(base.cabana),
+            fecha_checkin: rango.checkin,
+            fecha_checkout: rango.checkout,
+            fechas_ocupadas: ocupadas,
+            pagos: Array.isArray(base.pagos) ? base.pagos : [],
+            pagos_sin_asociacion: Array.isArray(base.pagos_sin_asociacion) ? base.pagos_sin_asociacion : [],
+            servicios: Array.isArray(base.servicios) ? base.servicios : [],
+            advertencias: Array.isArray(base.advertencias) ? base.advertencias : []
+        };
+    }
+
     function esReservaValida(r) {
-        if (!r?.titular || !r?.fecha_checkin || !r?.fecha_checkout || !Number(r?.cabana)) return false;
+        if (!r?.titular || !r?.fecha_checkin || !r?.fecha_checkout || !cabanaNumero(r?.cabana)) return false;
         const n = S.normalizar(r.titular);
         return !/^(x hacer|por hacer|cliente frecuente|sin titular|libre|full day|cancelad)/.test(n);
     }
@@ -245,16 +284,12 @@
         const { data: sesion, error } = await cliente.auth.getSession();
         if (error || !sesion?.session) throw new Error("Inicia sesión en Proyecto H para comparar.");
 
-        const validas = reservas.map(tituloRealReserva).filter(esReservaValida);
-        if (!validas.length) {
-            const vacio = [];
-            vacio.meta = { libro: 0, proyecto: 0, asociadas: 0, faltantes: 0, ambiguas: 0, con_diferencias: 0, pagos_faltantes: 0, pagos_revisar: 0, servicios_revisar: 0 };
-            vacio.grupos = [];
-            return vacio;
-        }
+        const detectadasLibro = Array.isArray(reservas) ? reservas.length : 0;
+        const validas = (reservas || []).map(normalizarReservaComparacion).filter(esReservaValida);
+        const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
+        const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
+        if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
 
-        const desde = q.desde || validas.map(r => r.fecha_checkin).sort()[0];
-        const hasta = q.hasta || validas.map(r => r.fecha_checkout).sort().at(-1);
         const raw = await paginas(() => cliente.from("reserva_estadias")
             .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,cabanas(numero),reservas(id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva)")
             .lte("fecha_ingreso", S.sumarDias(hasta, 31))
@@ -281,6 +316,26 @@
             !/cancelad|no.?show/.test(S.normalizar(s.estado_reserva))
         );
         const reservasSistema = new Set(visiblesRango.map(s => s.reserva_id).filter(Boolean));
+
+        if (!validas.length) {
+            const vacio = [];
+            vacio.meta = {
+                libro: 0,
+                libro_detectadas: detectadasLibro,
+                proyecto: reservasSistema.size,
+                asociadas: 0,
+                faltantes: 0,
+                ambiguas: 0,
+                con_diferencias: 0,
+                pagos_faltantes: 0,
+                pagos_revisar: 0,
+                servicios_revisar: 0
+            };
+            vacio.grupos = [];
+            vacio.pagosDetalle = [];
+            vacio.serviciosDetalle = [];
+            return vacio;
+        }
 
         const resultados = validas.map(r => ({
             libro: r,
@@ -381,6 +436,7 @@
         resultados.serviciosDetalle = [...serviciosUnicos.values()];
         resultados.meta = {
             libro: validas.length,
+            libro_detectadas: detectadasLibro,
             proyecto: reservasSistema.size,
             asociadas: resultados.filter(g => g.estado === "asociada").length,
             faltantes: resultados.filter(g => g.estado === "sin_coincidencia").length,
@@ -420,11 +476,22 @@
 
         for (const h of q.hojas) {
             const data = await libro.consultarHoja(h);
-            resultado.advertencias.push(...data.advertencias);
-            resultado.reservas.push(...data.reservas.filter(r => filtrar(r, q)));
-            resultado.aseos.push(...data.aseos.filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
-            resultado.espacios.push(...data.espacios.filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
-            if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones, q.nombre));
+            resultado.advertencias.push(...(data.advertencias || []));
+            const reservasHoja = Array.isArray(data.reservas) ? data.reservas : [];
+            let seleccionadas = reservasHoja.filter(r => filtrar(r, q));
+            if (q.comparar && !seleccionadas.length && reservasHoja.length) {
+                seleccionadas = reservasHoja.filter(r => {
+                    const rr = normalizarReservaComparacion(r);
+                    if (q.cabana && Number(rr.cabana) !== Number(q.cabana)) return false;
+                    if (q.nombre && !S.normalizar(rr.titular).includes(q.nombre)) return false;
+                    return !q.desde || (rr.fecha_checkin && rr.fecha_checkout && rr.fecha_checkin <= q.hasta && rr.fecha_checkout >= q.desde);
+                });
+                if (seleccionadas.length) resultado.advertencias.push("Se usó el rango Check-In/Check-Out como respaldo porque la lista de fechas ocupadas no estaba disponible en todas las filas.");
+            }
+            resultado.reservas.push(...seleccionadas);
+            resultado.aseos.push(...(data.aseos || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
+            resultado.espacios.push(...(data.espacios || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
+            if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
             if (q.versiones) {
                 const old = await libro.consultarHoja(h, "anterior");
                 resultado.cambios.push(...S.compararVersiones(old, data).filter(c =>
@@ -438,7 +505,7 @@
         if (q.nombre) {
             for (const h of hojas.filter(h => /reagendar|reembolso/i.test(h))) {
                 const data = await libro.consultarHoja(h);
-                resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones, q.nombre));
+                resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
             }
         }
 
@@ -469,6 +536,7 @@
             `Faltan claramente: ${meta.faltantes ?? 0} · Coinciden: ${meta.asociadas ?? 0} · Requieren asociación manual: ${meta.ambiguas ?? 0}.`,
             `Pagos a incorporar/revisar: ${meta.pagos_faltantes ?? 0} probables faltantes · ${meta.pagos_revisar ?? 0} requieren revisión.`
         ];
+        if (!meta.libro && meta.libro_detectadas) lines.push(`El lector detectó ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural; revisar formato antes de concluir que el Libro está vacío.`);
         if (faltantes.length) {
             lines.push("\nRESERVAS QUE FALTAN");
             faltantes.forEach(g => lines.push(`• ${descripcionGrupo(g)} · ${source(g.principal.coordenadas_origen)}`));
@@ -654,6 +722,10 @@
         agregarDato(grid, "Ambiguas", `${meta.ambiguas ?? 0}`);
         agregarDato(grid, "Pagos a revisar", `${(meta.pagos_faltantes ?? 0) + (meta.pagos_revisar ?? 0)}`);
         out.append(grid);
+
+        if (!meta.libro && meta.libro_detectadas) {
+            agregarLista(out, "Revisar lectura del Libro", [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
+        }
 
         agregarLista(
             out,
