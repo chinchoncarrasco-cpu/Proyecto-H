@@ -421,7 +421,7 @@
     boton.className = "reservas-boton-icono reservas-copiar-tabla";
     boton.title = "Copiar la página actual de Reservas como imagen PNG";
     boton.setAttribute("aria-label", "Copiar tabla de reservas como imagen PNG");
-    boton.innerHTML = "▧ <span>Copiar imagen</span>";
+    boton.innerHTML = "⧉ <span>Copiar tabla</span>";
 
     botonColumnas.insertAdjacentElement("afterend", boton);
 
