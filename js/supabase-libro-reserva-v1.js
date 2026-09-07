@@ -3,7 +3,7 @@
 
     const FILAS_POR_PAGINA = 120;
     const MAX_COLUMNAS_VISOR = 250;
-    const DESCARGA_LIBRO_URL = "";
+    const DESCARGA_LIBRO_URL = "https://docs.google.com/spreadsheets/d/1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk/export?format=xlsx";
     const VERSION_QUERY = (() => {
         try {
             return new URL(document.currentScript?.src || location.href).search;
