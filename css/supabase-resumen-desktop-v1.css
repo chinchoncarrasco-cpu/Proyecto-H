@@ -148,6 +148,14 @@
     .tabla-contenedor .estado-final-select {
         max-width: none;
     }
+
+    /* El Resumen sigue el ancho real disponible cuando cambia el sidebar.
+       La .contenido base conserva max-width:1500px, así que el bloque debe
+       calcularse contra el viewport para aprovechar el espacio liberado. */
+    #seccion-resumen {
+        width: calc(100vw - var(--haiku-sidebar-ancho, 240px) - 80px);
+        max-width: none;
+    }
 }
 
 /* =====================================================
