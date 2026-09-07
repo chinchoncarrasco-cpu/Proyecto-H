@@ -9,6 +9,7 @@
 // - Un bloqueo activo siempre domina visualmente en rojo.
 // - Al terminar una rehidratación comercial del Calendario, los bloqueos se
 //   materializan de nuevo desde Supabase antes del render final.
+// - El detalle de SALEN usa la misma verdad que el contador para incluir SALE/BLOQ.
 // - Sin polling, setInterval ni MutationObserver global.
 // ========================================
 (() => {
@@ -32,6 +33,11 @@
     const generarCalendarioLegacy =
         typeof window.generarCalendario === "function"
             ? window.generarCalendario
+            : null;
+
+    const resumenRapidoLineasLegacy =
+        typeof window.obtenerLineasResumenRapido === "function"
+            ? window.obtenerLineasResumenRapido
             : null;
 
     const operacionPorFecha = new Map();
@@ -220,6 +226,67 @@
         contador.dataset.haikuValor = String(cantidad);
     }
 
+    function crearLineaSalidaBloqueada(fila, fecha) {
+        const numero = String(fila?.numero || "");
+        if (!numero) return "";
+
+        const titular = String(fila?.salida_titular || "Sin titular").trim() || "Sin titular";
+        let noches = 0;
+
+        try {
+            if (typeof window.obtenerReservaQueSale === "function") {
+                const reserva = window.obtenerReservaQueSale(numero, fecha);
+                noches = Number(reserva?.noches || 0);
+            }
+        } catch (_) {}
+
+        if (!noches) {
+            const valorNoches = document.querySelector(
+                `#seccion-resumen tr[data-cabana="${CSS.escape(numero)}"] [data-valor-noches="${CSS.escape(numero)}"]`
+            );
+            const numeroVisual = Number(String(valorNoches?.textContent || "").replace(/[^0-9]/g, ""));
+            if (numeroVisual > 0) noches = numeroVisual;
+        }
+
+        return `CAB ${numero} · ${titular} · ${noches > 0 ? `${noches}N` : "Salida"}`;
+    }
+
+    function completarDetalleSalen(lineasOriginales, fecha) {
+        const resultado = Array.isArray(lineasOriginales)
+            ? [...lineasOriginales]
+            : [];
+
+        const mapa = operacionPorFecha.get(fecha);
+        if (!mapa) return resultado;
+
+        const cabanasPresentes = new Set();
+        resultado.forEach(linea => {
+            const match = String(linea || "").match(/^CAB\s+(\d+)\b/i);
+            if (match?.[1]) cabanasPresentes.add(String(Number(match[1])));
+        });
+
+        mapa.forEach(fila => {
+            if (!esSaleBloq(fila)) return;
+
+            const numero = String(Number(fila?.numero || 0));
+            if (!numero || numero === "0" || cabanasPresentes.has(numero)) return;
+
+            const linea = crearLineaSalidaBloqueada(fila, fecha);
+            if (linea) {
+                resultado.push(linea);
+                cabanasPresentes.add(numero);
+            }
+        });
+
+        resultado.sort((a, b) => {
+            const numeroA = Number(String(a).match(/^CAB\s+(\d+)/i)?.[1] || 999);
+            const numeroB = Number(String(b).match(/^CAB\s+(\d+)/i)?.[1] || 999);
+            return numeroA - numeroB;
+        });
+
+        return resultado;
+    }
+
     async function consultarOperacion(fechaForzada = "") {
         const fecha = String(fechaForzada || fechaActual()).slice(0, 10);
         if (!fecha || !window.haikuSesion) return [];
@@ -325,6 +392,14 @@
             fijarContadorSalen(clave);
             if (clave === fechaActual()) aplicarFilasFecha(clave);
             return resultado;
+        };
+    }
+
+    if (resumenRapidoLineasLegacy) {
+        window.obtenerLineasResumenRapido = function (tipo) {
+            const lineas = resumenRapidoLineasLegacy(tipo);
+            if (tipo !== "salen") return lineas;
+            return completarDetalleSalen(lineas, fechaActual());
         };
     }
 
