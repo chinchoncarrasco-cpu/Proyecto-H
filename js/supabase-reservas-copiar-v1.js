@@ -17,6 +17,34 @@
 
     if (!seccion || !botonColumnas || !tabla) return;
 
+    const style = document.createElement("style");
+    style.id = "reservas-copiar-tabla-v1-style";
+    style.textContent = `
+        #seccion-reservas .reservas-copiar-tabla[data-estado="copiado"] {
+            border-color: #9fcbb4;
+            background: #eaf5ef;
+            color: #13553a;
+        }
+
+        @media (min-width: 1051px) {
+            #seccion-reservas .reservas-barra-superior {
+                grid-template-columns: minmax(240px, 1fr) auto auto auto auto auto;
+            }
+        }
+
+        @media (min-width: 769px) and (max-width: 1050px) {
+            #seccion-reservas .reservas-barra-superior {
+                grid-template-columns: 1fr auto auto auto;
+            }
+
+            #seccion-reservas .reservas-copiar-tabla {
+                grid-column: 4;
+                grid-row: 2;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
     function limpiarTexto(valor) {
         return String(valor ?? "")
             .replace(/[\t\r\n]+/g, " ")
