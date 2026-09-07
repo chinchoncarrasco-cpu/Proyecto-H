@@ -131,6 +131,37 @@
     line-height: 1.5;
 }
 
+#seccion-libro-reserva .libro-reserva-paginacion {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+#seccion-libro-reserva .libro-reserva-paginacion button {
+    width: 34px;
+    height: 34px;
+    border: 1px solid #cdd9d2;
+    border-radius: 8px;
+    background: #fff;
+    color: #294337;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+#seccion-libro-reserva .libro-reserva-paginacion button:disabled {
+    color: #aab4ae;
+    cursor: not-allowed;
+}
+
+#seccion-libro-reserva #libro-reserva-pagina-estado {
+    min-width: 170px;
+    color: #53635b;
+    font-size: 12px;
+    text-align: center;
+}
+
 #seccion-libro-reserva .libro-reserva-visor {
     position: relative;
     min-height: 360px;
@@ -232,6 +263,10 @@
     #seccion-libro-reserva .libro-reserva-acciones {
         display: grid;
         grid-template-columns: 1fr;
+    }
+
+    #seccion-libro-reserva .libro-reserva-paginacion {
+        justify-content: flex-start;
     }
 
     #seccion-libro-reserva .libro-reserva-estado {

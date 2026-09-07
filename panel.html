@@ -47,8 +47,7 @@
                     `<script src="js/supabase-auth.js?v=${version}"><` + '/script>',
                     `<script src="js/supabase-edicion-pre.js?v=${version}"><` + '/script>',
                     `<script src="js/supabase-nueva-reserva-fullday-v1.js?v=${version}"><` + '/script>',
-                    `<script src="js/supabase-data.js?v=${version}"><` + '/script>',
-                    `<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"><` + '/script>'
+                    `<script src="js/supabase-data.js?v=${version}"><` + '/script>'
                 ].join("\n");
                 html = html.replace(marca, `${marca}\n${scriptsSupabaseBase}`);
                 const scriptsSupabaseV2 = [

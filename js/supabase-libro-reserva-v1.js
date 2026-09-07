@@ -1,14 +1,29 @@
 (function () {
     "use strict";
 
-    const MAX_CELDAS_VISOR = 120000;
+    const FILAS_POR_PAGINA = 120;
+    const MAX_COLUMNAS_VISOR = 250;
     const DESCARGA_LIBRO_URL = "";
+    const VERSION_QUERY = (() => {
+        try {
+            return new URL(document.currentScript?.src || location.href).search;
+        } catch (_) {
+            return "";
+        }
+    })();
 
     let archivoBuffer = null;
     let archivoNombre = "";
     let libroIndice = null;
     let hojaActual = "";
+    let hojaCargada = null;
+    let combinacionesCargadas = [];
+    let rangoCargado = null;
+    let paginaActual = 0;
     let renderId = 0;
+    let lectorWorker = null;
+    let solicitudId = 0;
+    const solicitudes = new Map();
 
     const $ = (id) => document.getElementById(id);
 
@@ -76,12 +91,55 @@
         });
     }
 
+    function destruirLector() {
+        if (lectorWorker) lectorWorker.terminate();
+        lectorWorker = null;
+        solicitudes.forEach(({ reject }) => reject(new Error("LECTURA_CANCELADA")));
+        solicitudes.clear();
+    }
+
+    function obtenerLector() {
+        if (lectorWorker) return lectorWorker;
+        lectorWorker = new Worker(`js/supabase-libro-reserva-worker-v1.js${VERSION_QUERY}`);
+        lectorWorker.addEventListener("message", (evento) => {
+            const respuesta = evento.data || {};
+            const pendiente = solicitudes.get(respuesta.id);
+            if (!pendiente) return;
+            solicitudes.delete(respuesta.id);
+            if (respuesta.ok) pendiente.resolve(respuesta.resultado);
+            else pendiente.reject(new Error(respuesta.error || "No fue posible leer el XLSX"));
+        });
+        lectorWorker.addEventListener("error", (evento) => {
+            const error = new Error(evento.message || "No fue posible iniciar el lector XLSX");
+            solicitudes.forEach(({ reject }) => reject(error));
+            solicitudes.clear();
+            lectorWorker?.terminate();
+            lectorWorker = null;
+        });
+        return lectorWorker;
+    }
+
+    function leerEnSegundoPlano(tipo, nombreHoja = "") {
+        if (!archivoBuffer) return Promise.reject(new Error("No hay archivo cargado"));
+        const id = ++solicitudId;
+        const copia = archivoBuffer.slice(0);
+        return new Promise((resolve, reject) => {
+            solicitudes.set(id, { resolve, reject });
+            obtenerLector().postMessage({ id, tipo, nombreHoja, buffer: copia }, [copia]);
+        });
+    }
+
     function limpiarMemoria() {
         renderId += 1;
+        destruirLector();
         archivoBuffer = null;
         archivoNombre = "";
         libroIndice = null;
         hojaActual = "";
+        hojaCargada = null;
+        combinacionesCargadas = [];
+        rangoCargado = null;
+        paginaActual = 0;
 
         const entrada = $("libro-reserva-archivo");
         const selector = $("libro-reserva-hoja");
@@ -92,6 +150,7 @@
             selector.disabled = true;
         }
         if (quitar) quitar.disabled = true;
+        actualizarPaginacion();
         actualizarEstado("Sin archivo cargado", "Nada queda guardado en el navegador ni en Supabase.");
         const meta = $("libro-reserva-meta");
         if (meta) meta.textContent = "Selecciona un XLSX para detectar sus hojas reales.";
@@ -140,18 +199,14 @@
         selector.value = hojaActual;
     }
 
-    function valorCelda(hoja, fila, columna) {
-        const celda = hoja[XLSX.utils.encode_cell({ r: fila, c: columna })];
-        if (!celda) return "";
-        if (celda.w != null) return String(celda.w);
-        if (celda.v == null) return "";
-        return String(celda.v);
+    function valorCelda(fila, columna) {
+        return hojaCargada?.get(`${fila}:${columna}`) || "";
     }
 
-    function mapaCombinaciones(hoja) {
+    function mapaCombinaciones() {
         const inicios = new Map();
         const omitidas = new Set();
-        (hoja["!merges"] || []).forEach((rango) => {
+        combinacionesCargadas.forEach((rango) => {
             inicios.set(`${rango.s.r}:${rango.s.c}`, {
                 rowSpan: rango.e.r - rango.s.r + 1,
                 colSpan: rango.e.c - rango.s.c + 1
@@ -165,101 +220,119 @@
         return { inicios, omitidas };
     }
 
-    function renderizarHoja(nombre) {
-        if (!archivoBuffer || !nombre || !window.XLSX) return;
+    function actualizarPaginacion() {
+        const anterior = $("libro-reserva-pagina-anterior");
+        const siguiente = $("libro-reserva-pagina-siguiente");
+        const estado = $("libro-reserva-pagina-estado");
+        if (!rangoCargado) {
+            if (anterior) anterior.disabled = true;
+            if (siguiente) siguiente.disabled = true;
+            if (estado) estado.textContent = "";
+            return;
+        }
+        const filas = rangoCargado.e.r - rangoCargado.s.r + 1;
+        const paginas = Math.max(1, Math.ceil(filas / FILAS_POR_PAGINA));
+        paginaActual = Math.min(Math.max(0, paginaActual), paginas - 1);
+        const filaInicio = rangoCargado.s.r + paginaActual * FILAS_POR_PAGINA + 1;
+        const filaFin = Math.min(rangoCargado.e.r + 1, filaInicio + FILAS_POR_PAGINA - 1);
+        if (anterior) anterior.disabled = paginaActual === 0;
+        if (siguiente) siguiente.disabled = paginaActual >= paginas - 1;
+        if (estado) estado.textContent = `Filas ${filaInicio.toLocaleString("es-CL")}–${filaFin.toLocaleString("es-CL")} de ${(rangoCargado.e.r + 1).toLocaleString("es-CL")}`;
+    }
+
+    function dibujarPagina() {
+        if (!hojaCargada || !rangoCargado) return;
+        const rango = rangoCargado;
+        const columnas = rango.e.c - rango.s.c + 1;
+        const filas = rango.e.r - rango.s.r + 1;
+        if (columnas > MAX_COLUMNAS_VISOR) {
+            mostrarVacio(
+                "Hoja demasiado ancha para una vista segura",
+                `“${hojaActual}” contiene ${columnas.toLocaleString("es-CL")} columnas. No se dibujó para evitar congelar el equipo.`
+            );
+            return;
+        }
+
+        actualizarPaginacion();
+        const filaInicio = rango.s.r + paginaActual * FILAS_POR_PAGINA;
+        const filaFin = Math.min(rango.e.r, filaInicio + FILAS_POR_PAGINA - 1);
+        const { inicios, omitidas } = mapaCombinaciones();
+        const tabla = document.createElement("table");
+        tabla.className = "libro-reserva-tabla";
+        tabla.setAttribute("aria-label", `Hoja ${hojaActual}`);
+        const cuerpo = document.createElement("tbody");
+
+        for (let fila = filaInicio; fila <= filaFin; fila += 1) {
+            const tr = document.createElement("tr");
+            for (let columna = rango.s.c; columna <= rango.e.c; columna += 1) {
+                const clave = `${fila}:${columna}`;
+                if (omitidas.has(clave)) continue;
+                const celda = fila === rango.s.r ? document.createElement("th") : document.createElement("td");
+                celda.textContent = valorCelda(fila, columna);
+                const union = inicios.get(clave);
+                if (union) {
+                    if (union.rowSpan > 1) celda.rowSpan = Math.min(union.rowSpan, filaFin - fila + 1);
+                    if (union.colSpan > 1) celda.colSpan = union.colSpan;
+                }
+                tr.appendChild(celda);
+            }
+            cuerpo.appendChild(tr);
+        }
+
+        tabla.appendChild(cuerpo);
+        const visor = $("libro-reserva-visor");
+        if (!visor) return;
+        visor.replaceChildren(tabla);
+        visor.scrollTo({ top: 0, left: 0 });
+        const meta = $("libro-reserva-meta");
+        if (meta) {
+            meta.textContent = `${libroIndice.SheetNames.length} hojas detectadas · “${hojaActual}” · ${filas.toLocaleString("es-CL")} filas × ${columnas.toLocaleString("es-CL")} columnas`;
+        }
+    }
+
+    async function renderizarHoja(nombre) {
+        if (!archivoBuffer || !nombre) return;
         const miRender = ++renderId;
         hojaActual = nombre;
         mostrarCargando(`Abriendo “${nombre}”…`);
 
-        window.requestAnimationFrame(() => {
+        try {
+            const resultado = await leerEnSegundoPlano("hoja", nombre);
             if (miRender !== renderId || !archivoBuffer) return;
-            try {
-                const libro = XLSX.read(archivoBuffer, {
-                    type: "array",
-                    sheets: [nombre],
-                    cellDates: true,
-                    cellStyles: false,
-                    cellFormula: true
-                });
-                const hoja = libro.Sheets[nombre];
-                if (!hoja || !hoja["!ref"]) {
-                    mostrarVacio("Hoja vacía", `“${nombre}” no contiene celdas visibles.`);
-                    return;
-                }
-
-                const rango = XLSX.utils.decode_range(hoja["!ref"]);
-                const filas = rango.e.r - rango.s.r + 1;
-                const columnas = rango.e.c - rango.s.c + 1;
-                const totalCeldas = filas * columnas;
-                if (totalCeldas > MAX_CELDAS_VISOR) {
-                    mostrarVacio(
-                        "Hoja demasiado grande para una vista segura",
-                        `“${nombre}” contiene ${filas.toLocaleString("es-CL")} filas por ${columnas.toLocaleString("es-CL")} columnas. No se dibujó para evitar congelar el equipo.`
-                    );
-                    return;
-                }
-
-                const { inicios, omitidas } = mapaCombinaciones(hoja);
-                const tabla = document.createElement("table");
-                tabla.className = "libro-reserva-tabla";
-                tabla.setAttribute("aria-label", `Hoja ${nombre}`);
-                const cuerpo = document.createElement("tbody");
-
-                for (let fila = rango.s.r; fila <= rango.e.r; fila += 1) {
-                    const tr = document.createElement("tr");
-                    for (let columna = rango.s.c; columna <= rango.e.c; columna += 1) {
-                        const clave = `${fila}:${columna}`;
-                        if (omitidas.has(clave)) continue;
-                        const celda = fila === rango.s.r ? document.createElement("th") : document.createElement("td");
-                        celda.textContent = valorCelda(hoja, fila, columna);
-                        const union = inicios.get(clave);
-                        if (union) {
-                            if (union.rowSpan > 1) celda.rowSpan = union.rowSpan;
-                            if (union.colSpan > 1) celda.colSpan = union.colSpan;
-                        }
-                        tr.appendChild(celda);
-                    }
-                    cuerpo.appendChild(tr);
-                }
-
-                tabla.appendChild(cuerpo);
-                if (miRender !== renderId) return;
-                const visor = $("libro-reserva-visor");
-                if (!visor) return;
-                visor.replaceChildren(tabla);
-                visor.scrollTo({ top: 0, left: 0 });
-                const meta = $("libro-reserva-meta");
-                if (meta) {
-                    meta.textContent = `${libroIndice.SheetNames.length} hojas detectadas · “${nombre}” · ${filas.toLocaleString("es-CL")} filas × ${columnas.toLocaleString("es-CL")} columnas`;
-                }
-            } catch (error) {
-                console.error("LIBRO RESERVA · No fue posible abrir la hoja:", error);
-                mostrarVacio("No fue posible mostrar esta hoja", "El archivo puede estar protegido, dañado o usar una característica no compatible.");
+            if (!resultado?.rango) {
+                mostrarVacio("Hoja vacía", `“${nombre}” no contiene celdas visibles.`);
+                return;
             }
-        }, 0);
+            hojaCargada = new Map((resultado.celdas || []).map((celda) => [`${celda.r}:${celda.c}`, celda.valor]));
+            combinacionesCargadas = resultado.combinaciones || [];
+            rangoCargado = resultado.rango;
+            paginaActual = 0;
+            dibujarPagina();
+        } catch (error) {
+            if (miRender !== renderId) return;
+            console.error("LIBRO RESERVA · No fue posible abrir la hoja:", error);
+            mostrarVacio("No fue posible mostrar esta hoja", "El archivo puede estar protegido, dañado o usar una característica no compatible.");
+        }
     }
 
     async function cargarArchivo(archivo) {
         if (!archivo) return;
-        if (!window.XLSX || typeof window.XLSX.read !== "function") {
-            mostrarVacio("Falta el lector XLSX", "Recarga la página con conexión a internet e inténtalo nuevamente.");
-            return;
-        }
         if (!/\.xlsx$/i.test(archivo.name)) {
             mostrarVacio("Formato no compatible", "Selecciona una copia descargada en formato .xlsx.");
             return;
         }
 
         limpiarMemoria();
+        const cargaId = renderId;
         mostrarCargando("Leyendo la copia local del libro…");
         try {
             archivoBuffer = await archivo.arrayBuffer();
             archivoNombre = archivo.name;
-            libroIndice = XLSX.read(archivoBuffer, {
-                type: "array",
-                bookSheets: true,
-                bookProps: true
-            });
+            const indice = await leerEnSegundoPlano("indice");
+            libroIndice = {
+                SheetNames: indice.nombres || [],
+                Workbook: { Sheets: indice.hojas || [] }
+            };
             if (!libroIndice.SheetNames?.length) throw new Error("El archivo no contiene hojas");
             poblarSelector();
             const quitar = $("libro-reserva-quitar");
@@ -270,6 +343,7 @@
             );
             renderizarHoja(hojaActual);
         } catch (error) {
+            if (cargaId !== renderId) return;
             console.error("LIBRO RESERVA · Archivo no válido:", error);
             limpiarMemoria();
             mostrarVacio("No fue posible leer el archivo", "Verifica que sea la copia XLSX correcta e inténtalo otra vez.");
@@ -291,11 +365,25 @@
         const entrada = $("libro-reserva-archivo");
         const selector = $("libro-reserva-hoja");
         const quitar = $("libro-reserva-quitar");
+        const anterior = $("libro-reserva-pagina-anterior");
+        const siguiente = $("libro-reserva-pagina-siguiente");
 
         cargar?.addEventListener("click", () => entrada?.click());
         entrada?.addEventListener("change", () => cargarArchivo(entrada.files?.[0]));
         selector?.addEventListener("change", () => renderizarHoja(selector.value));
         quitar?.addEventListener("click", limpiarMemoria);
+        anterior?.addEventListener("click", () => {
+            if (paginaActual <= 0) return;
+            paginaActual -= 1;
+            dibujarPagina();
+        });
+        siguiente?.addEventListener("click", () => {
+            if (!rangoCargado) return;
+            const paginas = Math.ceil((rangoCargado.e.r - rangoCargado.s.r + 1) / FILAS_POR_PAGINA);
+            if (paginaActual >= paginas - 1) return;
+            paginaActual += 1;
+            dibujarPagina();
+        });
     }
 
     if (document.readyState === "loading") {

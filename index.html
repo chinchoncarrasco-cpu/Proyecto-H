@@ -7047,8 +7047,15 @@ Terraza:
                 Hoja del libro
                 <select id="libro-reserva-hoja" disabled aria-label="Seleccionar hoja del libro"></select>
             </label>
-            <div id="libro-reserva-meta" class="libro-reserva-meta">
-                Selecciona un XLSX para detectar sus hojas reales.
+            <div>
+                <div id="libro-reserva-meta" class="libro-reserva-meta">
+                    Selecciona un XLSX para detectar sus hojas reales.
+                </div>
+                <div class="libro-reserva-paginacion" aria-label="Navegación por filas">
+                    <button type="button" id="libro-reserva-pagina-anterior" disabled aria-label="Filas anteriores">←</button>
+                    <span id="libro-reserva-pagina-estado"></span>
+                    <button type="button" id="libro-reserva-pagina-siguiente" disabled aria-label="Filas siguientes">→</button>
+                </div>
             </div>
         </div>
 
