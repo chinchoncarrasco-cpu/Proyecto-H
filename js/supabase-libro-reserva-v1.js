@@ -16,6 +16,10 @@
     const persistenciaPC = window.matchMedia("(min-width: 901px)").matches;
     let operacionLibro = 0;
     let colaLocal = Promise.resolve();
+    let cargaLista = Promise.resolve();
+    let persistenciaConfirmada = false;
+    let colaConsulta = Promise.resolve();
+    const cacheConsultas = new Map();
 
     function copiaLocal(accion, registro) {
         const tarea = colaLocal.then(() => new Promise((resolve, reject) => {
@@ -35,10 +39,19 @@
                 if (terminada) { db.close(); return; }
                 db.onversionchange = () => db.close();
                 try {
-                    const tx = db.transaction("libro", accion === "leer" ? "readonly" : "readwrite");
+                    const tx = db.transaction("libro", accion.startsWith("leer") ? "readonly" : "readwrite");
                     const almacen = tx.objectStore("libro");
-                    const solicitud = accion === "leer" ? almacen.get("actual")
-                        : accion === "borrar" ? almacen.delete("actual") : almacen.put(registro, "actual");
+                    const solicitud = accion.startsWith("leer") ? almacen.get(accion === "leer_anterior" ? "anterior" : "actual")
+                        : accion === "borrar" ? almacen.clear() : almacen.get("actual");
+                    if (accion === "guardar") solicitud.onsuccess = () => {
+                        const anterior = solicitud.result;
+                        const a = anterior?.buffer ? new Uint8Array(anterior.buffer) : null;
+                        const b = new Uint8Array(registro.buffer);
+                        const identico = a && a.length === b.length && a.every((valor, i) => valor === b[i]);
+                        if (identico) return; // Re-uploading the same bytes must not discard the previous version.
+                        if (anterior) almacen.put(anterior, "anterior");
+                        almacen.put(registro, "actual");
+                    };
                     // A request's success alone does not guarantee that the write committed.
                     tx.oncomplete = () => { db.close(); resolve(solicitud.result); };
                     tx.onabort = () => { db.close(); reject(tx.error || new Error("Operación local cancelada")); };
@@ -57,7 +70,7 @@
         actualizarEstado("Quitando libro…", "Borrando la copia de este navegador.");
         try {
             await copiaLocal("borrar");
-            if (id === operacionLibro) actualizarEstado("Sin archivo cargado", "Libro eliminado de la memoria y de este navegador.");
+            if (id === operacionLibro) actualizarEstado("Sin archivo cargado", "Libro actual y anterior eliminados de la memoria y de este navegador.");
         } catch (_) {
             if (id !== operacionLibro) return;
             actualizarEstado("No se pudo borrar la copia local", "Vuelve a pulsar Quitar libro de memoria antes de recargar.");
@@ -203,6 +216,9 @@
     }
 
     function limpiarMemoria() {
+        persistenciaConfirmada = false;
+        cacheConsultas.clear();
+        window.dispatchEvent(new CustomEvent("haiku:libro-cambio"));
         renderId += 1;
         destruirLector();
         archivoBuffer = null;
@@ -637,21 +653,18 @@
             if (!libroIndice.SheetNames?.length) throw new Error("El archivo no contiene hojas");
             let estadoLocal = "";
             if (persistenciaPC) {
+                persistenciaConfirmada = restaurado;
                 estadoLocal = " · copia local restaurada";
                 if (!restaurado) {
                     actualizarEstado(archivoNombre, "Guardando copia en este navegador…");
                     try {
-                        await copiaLocal("guardar", { nombre: archivoNombre, buffer });
+                        await copiaLocal("guardar", { nombre: archivoNombre, buffer, guardado_en: new Date().toISOString() });
+                        if (cargaId === operacionLibro) persistenciaConfirmada = true;
                         estadoLocal = " · guardado en este navegador";
                     } catch (_) {
                         if (cargaId !== operacionLibro) return;
-                        // Do not leave an older book to silently reappear after a failed replacement.
-                        try {
-                            await copiaLocal("borrar");
-                            estadoLocal = " · NO guardado: vuelve a cargarlo antes de recargar la página";
-                        } catch (_) {
-                            estadoLocal = " · NO guardado: puede quedar una copia anterior; pulsa Quitar libro de memoria";
-                        }
+                        // A failed transaction leaves both previous snapshots intact.
+                        estadoLocal = " · NO guardado: al recargar volverá la copia previamente guardada. Libera espacio y vuelve a cargar el XLSX";
                     }
                     if (cargaId !== operacionLibro) return;
                 }
@@ -685,13 +698,54 @@
         document.head.appendChild(link);
     }
 
+    function consultarHoja(nombre, version = "actual", tipo = "semantica") {
+        if (!["semantica", "buscar"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
+        if (!["actual", "anterior"].includes(version)) return Promise.reject(new Error("Versión no válida"));
+        const consulta = colaConsulta.then(async () => {
+            await cargaLista;
+            const id = operacionLibro;
+            if (!archivoBuffer || !libroIndice) throw new Error("Carga primero un XLSX en Libro de Reserva.");
+            if (version === "anterior" && !persistenciaConfirmada) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
+            const key = `${id}:${version}:${tipo}:${nombre}`;
+            if (cacheConsultas.has(key)) return structuredClone(cacheConsultas.get(key));
+            const registro = version === "anterior" && persistenciaPC ? await copiaLocal("leer_anterior") : null;
+            if (version === "anterior" && !registro?.buffer) throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
+            if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
+            const copia = (version === "anterior" ? registro.buffer : archivoBuffer).slice(0);
+            const worker = new Worker(`js/supabase-libro-reserva-worker-v1.js${VERSION_QUERY}`);
+            const resultado = await new Promise((resolve, reject) => {
+                const cancelar = () => terminar(new Error("El Libro cambió durante la consulta. Vuelve a preguntar."));
+                const timer = setTimeout(() => terminar(new Error("La lectura tardó demasiado. Intenta una hoja más pequeña.")), 90000);
+                function terminar(error, value) {
+                    clearTimeout(timer); window.removeEventListener("haiku:libro-cambio", cancelar); worker.terminate();
+                    if (error) reject(error); else resolve(value);
+                }
+                window.addEventListener("haiku:libro-cambio", cancelar, { once: true });
+                worker.onmessage = event => event.data?.ok ? terminar(null, event.data.resultado) : terminar(new Error(event.data?.error || "No se pudo interpretar la hoja."));
+                worker.onerror = () => terminar(new Error("No se pudo iniciar el lector del Libro."));
+                worker.postMessage({ id: 1, tipo, nombreHoja: nombre, buffer: copia }, [copia]);
+            });
+            if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta.");
+            if (cacheConsultas.size >= 3) cacheConsultas.delete(cacheConsultas.keys().next().value);
+            cacheConsultas.set(key, resultado);
+            return structuredClone(resultado);
+        });
+        colaConsulta = consulta.catch(() => {});
+        return consulta;
+    }
+
     function iniciar() {
         if (!$("seccion-libro-reserva") || window.HAIKU_LIBRO_RESERVA_V1) return;
         asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
-            version: "1.3.0",
+            version: "1.4.0",
             modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
-            limpiar: quitarLibro
+            limpiar: quitarLibro,
+            listo: () => cargaLista,
+            listarHojas: () => [...(libroIndice?.SheetNames || [])],
+            consultarHoja,
+            buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
+            estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, cargado: !!libroIndice })
         });
 
         configurarDescarga();
@@ -705,10 +759,10 @@
         const siguiente = $("libro-reserva-pagina-siguiente");
 
         cargar?.addEventListener("click", () => entrada?.click());
-        entrada?.addEventListener("change", () => cargarArchivo(entrada.files?.[0]));
+        entrada?.addEventListener("change", () => { cargaLista = cargarArchivo(entrada.files?.[0]); });
         selector?.addEventListener("change", () => renderizarHoja(selector.value));
         quitar?.addEventListener("click", quitarLibro);
-        if (persistenciaPC) restaurarLibro();
+        if (persistenciaPC) cargaLista = restaurarLibro();
         anterior?.addEventListener("click", () => {
             if (paginaActual <= 0) return;
             paginaActual -= 1;

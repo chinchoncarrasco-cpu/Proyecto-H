@@ -355,6 +355,8 @@ async function leerHoja(buffer, nombreHoja) {
             r: posicion.r,
             c: posicion.c,
             valor,
+            valorNumero: celda.t === "n" && Number.isFinite(celda.v) ? celda.v : null,
+            fechaISO: celda.t === "d" && celda.v instanceof Date && Number.isFinite(celda.v.getTime()) ? celda.v.toISOString().slice(0, 10) : null,
             estiloId: Number.isInteger(estiloId) ? estiloId : -1,
             runs: infoXml?.runs || null
         });
@@ -386,13 +388,39 @@ async function leerHoja(buffer, nombreHoja) {
     };
 }
 
+async function buscarHojas(buffer, nombre) {
+    asegurarZip();
+    const n = v => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    if (nombre.length < 3) throw new Error("Escribe al menos tres letras del titular.");
+    const zip = await self.JSZip.loadAsync(buffer);
+    const xml = await zip.file("xl/sharedStrings.xml")?.async("text") || "";
+    const indices = new Set();
+    bloques(xml, "si").forEach((si, i) => { if (n(textoDeTagsT(si.inner)).includes(n(nombre))) indices.add(i); });
+    const nombres = indiceLibro(buffer).nombres;
+    const hojas = [];
+    for (const hoja of nombres) {
+        const ruta = await rutaHojaDesdeNombre(zip, hoja);
+        const contenido = ruta && await zip.file(ruta)?.async("text");
+        if (!contenido) continue;
+        const coincide = bloques(contenido, "c").some(c => c.attrs.t === "s"
+            ? indices.has(Number(primerTag(c.inner, "v")?.inner))
+            : c.attrs.t === "inlineStr" && n(textoDeTagsT(c.inner)).includes(n(nombre)));
+        if (coincide) hojas.push(hoja);
+    }
+    return { hojas };
+}
+
 self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, buffer } = evento.data || {};
     try {
         asegurarLector();
-        const resultado = tipo === "indice"
+        let resultado = tipo === "buscar" ? await buscarHojas(buffer, nombreHoja) : tipo === "indice"
             ? indiceLibro(buffer)
             : await leerHoja(buffer, nombreHoja);
+        if (tipo === "semantica") {
+            if (!self.HAIKU_LIBRO_SEMANTICA) importScripts(`haiku-libro-semantica-v1.js${self.location.search}`);
+            resultado = self.HAIKU_LIBRO_SEMANTICA.normalizarHoja(resultado, nombreHoja);
+        }
         self.postMessage({ id, ok: true, resultado });
     } catch (error) {
         self.postMessage({
