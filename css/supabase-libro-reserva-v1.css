@@ -249,6 +249,15 @@
     font-weight: 700;
 }
 
+/* En PC el Libro usa todo el ancho que libera el sidebar redimensionable.
+   Conserva 40 px de margen visual a cada lado del contenido. */
+@media (min-width: 901px) {
+    #seccion-libro-reserva {
+        width: calc(100vw - var(--haiku-sidebar-ancho, 240px) - 80px);
+        max-width: none;
+    }
+}
+
 @media (max-width: 760px) {
     #seccion-libro-reserva .libro-reserva-cabecera {
         display: block;
