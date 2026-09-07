@@ -47,9 +47,21 @@
 
     #seccion-reservas .reservas-tabla td[data-columna="plan_tarifario"],
     #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="plan_tarifario"]) {
-        width: 95px;
-        min-width: 95px;
-        max-width: 95px;
+        width: 48px;
+        min-width: 48px;
+        max-width: 48px;
+    }
+
+    /* En la tabla mostramos el nombre corto "Plan" para no desperdiciar
+       ancho. El nombre completo sigue existiendo en la configuración de columnas. */
+    #seccion-reservas .reservas-tabla th button[data-reservas-orden="plan_tarifario"] {
+        font-size: 0;
+    }
+
+    #seccion-reservas .reservas-tabla th button[data-reservas-orden="plan_tarifario"]::before {
+        content: "Plan";
+        font-size: 8.7px;
+        line-height: 1.08;
     }
 
     #seccion-reservas .reservas-tabla td[data-columna="cabanas"],
