@@ -4,10 +4,19 @@
    No cambia datos, filtros, orden ni paginación.
 ======================================== */
 
+/* En Proyecto H el campo Nombre ya contiene nombre + apellido del titular.
+   Ocultamos la columna Apellido redundante tanto en la tabla como en el
+   configurador. Copiar tabla también la omite porque sólo toma columnas visibles. */
+#seccion-reservas .reservas-tabla td[data-columna="apellido"],
+#seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="apellido"]),
+#seccion-reservas .reservas-columna-config:has(input[data-columna-visible="apellido"]) {
+    display: none !important;
+}
+
 @media (min-width: 901px) {
     #seccion-reservas .reservas-tabla {
         width: 100%;
-        min-width: 1280px;
+        min-width: 1215px;
         font-size: 9.5px;
     }
 
@@ -78,13 +87,6 @@
         width: 135px;
         min-width: 135px;
         max-width: 135px;
-    }
-
-    #seccion-reservas .reservas-tabla td[data-columna="apellido"],
-    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="apellido"]) {
-        width: 65px;
-        min-width: 65px;
-        max-width: 65px;
     }
 
     #seccion-reservas .reservas-tabla td[data-columna="check_in"],
