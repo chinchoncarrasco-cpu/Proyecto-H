@@ -12,6 +12,76 @@
         }
     })();
 
+    // Desktop-only, binary storage scoped to this site's browser profile.
+    const persistenciaPC = window.matchMedia("(min-width: 901px)").matches;
+    let operacionLibro = 0;
+    let colaLocal = Promise.resolve();
+
+    function copiaLocal(accion, registro) {
+        const tarea = colaLocal.then(() => new Promise((resolve, reject) => {
+            if (!window.indexedDB) return reject(new Error("Almacenamiento local no disponible"));
+            const apertura = window.indexedDB.open("haiku-libro-reserva-local", 1);
+            let terminada = false;
+            apertura.onupgradeneeded = () => {
+                if (!apertura.result.objectStoreNames.contains("libro")) apertura.result.createObjectStore("libro");
+            };
+            apertura.onerror = () => reject(apertura.error);
+            apertura.onblocked = () => {
+                terminada = true;
+                reject(new Error("Almacenamiento bloqueado por otra pestaña"));
+            };
+            apertura.onsuccess = () => {
+                const db = apertura.result;
+                if (terminada) { db.close(); return; }
+                db.onversionchange = () => db.close();
+                try {
+                    const tx = db.transaction("libro", accion === "leer" ? "readonly" : "readwrite");
+                    const almacen = tx.objectStore("libro");
+                    const solicitud = accion === "leer" ? almacen.get("actual")
+                        : accion === "borrar" ? almacen.delete("actual") : almacen.put(registro, "actual");
+                    // A request's success alone does not guarantee that the write committed.
+                    tx.oncomplete = () => { db.close(); resolve(solicitud.result); };
+                    tx.onabort = () => { db.close(); reject(tx.error || new Error("Operación local cancelada")); };
+                    tx.onerror = () => {};
+                } catch (error) { db.close(); reject(error); }
+            };
+        }));
+        colaLocal = tarea.catch(() => {});
+        return tarea;
+    }
+
+    async function quitarLibro() {
+        const id = ++operacionLibro;
+        limpiarMemoria();
+        if (!persistenciaPC) return;
+        actualizarEstado("Quitando libro…", "Borrando la copia de este navegador.");
+        try {
+            await copiaLocal("borrar");
+            if (id === operacionLibro) actualizarEstado("Sin archivo cargado", "Libro eliminado de la memoria y de este navegador.");
+        } catch (_) {
+            if (id !== operacionLibro) return;
+            actualizarEstado("No se pudo borrar la copia local", "Vuelve a pulsar Quitar libro de memoria antes de recargar.");
+            $("libro-reserva-quitar").disabled = false;
+        }
+    }
+
+    async function restaurarLibro() {
+        const id = operacionLibro;
+        try {
+            const registro = await copiaLocal("leer");
+            if (id !== operacionLibro || !registro) return;
+            if (!(registro.buffer instanceof ArrayBuffer) || !registro.buffer.byteLength || !/\.xlsx$/i.test(registro.nombre)) {
+                throw new Error("Copia local inválida");
+            }
+            await cargarArchivo({ name: registro.nombre, size: registro.buffer.byteLength,
+                arrayBuffer: async () => registro.buffer }, true);
+        } catch (_) {
+            if (id !== operacionLibro) return;
+            actualizarEstado("No se pudo recuperar el libro", "Carga el XLSX otra vez o pulsa Quitar libro de memoria para borrar la copia local.");
+            $("libro-reserva-quitar").disabled = false;
+        }
+    }
+
     let archivoBuffer = null;
     let archivoNombre = "";
     let libroIndice = null;
@@ -157,12 +227,12 @@
         }
         if (quitar) quitar.disabled = true;
         actualizarPaginacion();
-        actualizarEstado("Sin archivo cargado", "Nada queda guardado en el navegador ni en Supabase.");
+        actualizarEstado("Sin archivo cargado", persistenciaPC ? "La copia se guarda sólo en este navegador; nunca en Supabase." : "Nada queda guardado en el navegador ni en Supabase.");
         const meta = $("libro-reserva-meta");
         if (meta) meta.textContent = "Selecciona un XLSX para detectar sus hojas reales.";
         mostrarVacio(
             "El libro se abrirá aquí, sólo para lectura",
-            "Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene únicamente en la memoria temporal de esta pestaña."
+            persistenciaPC ? "Carga un XLSX: seguirá disponible tras recargar hasta que pulses Quitar libro de memoria. Borrar los datos del sitio o usar navegación privada puede eliminar la copia." : "Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene únicamente en la memoria temporal de esta pestaña."
         );
     }
 
@@ -542,7 +612,7 @@
         }
     }
 
-    async function cargarArchivo(archivo) {
+    async function cargarArchivo(archivo, restaurado = false) {
         if (!archivo) return;
         if (!/\.xlsx$/i.test(archivo.name)) {
             mostrarVacio("Formato no compatible", "Selecciona una copia descargada en formato .xlsx.");
@@ -550,30 +620,59 @@
         }
 
         limpiarMemoria();
-        const cargaId = renderId;
+        const cargaId = ++operacionLibro;
+        $("libro-reserva-quitar").disabled = false;
         mostrarCargando("Leyendo la copia local del libro…");
         try {
-            archivoBuffer = await archivo.arrayBuffer();
+            const buffer = await archivo.arrayBuffer();
+            if (cargaId !== operacionLibro) return;
+            archivoBuffer = buffer;
             archivoNombre = archivo.name;
             const indice = await leerEnSegundoPlano("indice");
+            if (cargaId !== operacionLibro) return;
             libroIndice = {
                 SheetNames: indice.nombres || [],
                 Workbook: { Sheets: indice.hojas || [] }
             };
             if (!libroIndice.SheetNames?.length) throw new Error("El archivo no contiene hojas");
+            let estadoLocal = "";
+            if (persistenciaPC) {
+                estadoLocal = " · copia local restaurada";
+                if (!restaurado) {
+                    actualizarEstado(archivoNombre, "Guardando copia en este navegador…");
+                    try {
+                        await copiaLocal("guardar", { nombre: archivoNombre, buffer });
+                        estadoLocal = " · guardado en este navegador";
+                    } catch (_) {
+                        if (cargaId !== operacionLibro) return;
+                        // Do not leave an older book to silently reappear after a failed replacement.
+                        try {
+                            await copiaLocal("borrar");
+                            estadoLocal = " · NO guardado: vuelve a cargarlo antes de recargar la página";
+                        } catch (_) {
+                            estadoLocal = " · NO guardado: puede quedar una copia anterior; pulsa Quitar libro de memoria";
+                        }
+                    }
+                    if (cargaId !== operacionLibro) return;
+                }
+            }
             poblarSelector();
             const quitar = $("libro-reserva-quitar");
             if (quitar) quitar.disabled = false;
             actualizarEstado(
                 archivoNombre,
-                `${bytesLegibles(archivo.size)} · leído localmente ${fechaHoraActual()}`
+                `${bytesLegibles(archivo.size)} · leído localmente ${fechaHoraActual()}${estadoLocal}`
             );
             renderizarHoja(hojaActual);
         } catch (error) {
-            if (cargaId !== renderId) return;
+            if (cargaId !== operacionLibro) return;
             console.error("LIBRO RESERVA · Archivo no válido:", error);
             limpiarMemoria();
             mostrarVacio("No fue posible leer el archivo", "Verifica que sea la copia XLSX correcta e inténtalo otra vez.");
+            if (persistenciaPC) {
+                actualizarEstado("No fue posible leer el archivo", "La copia guardada anteriormente no se reemplazó. Puedes quitarla con el botón.");
+                $("libro-reserva-quitar").disabled = false;
+            }
         }
     }
 
@@ -590,9 +689,9 @@
         if (!$("seccion-libro-reserva") || window.HAIKU_LIBRO_RESERVA_V1) return;
         asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
-            version: "1.2.0",
+            version: "1.3.0",
             modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
-            limpiar: limpiarMemoria
+            limpiar: quitarLibro
         });
 
         configurarDescarga();
@@ -608,7 +707,8 @@
         cargar?.addEventListener("click", () => entrada?.click());
         entrada?.addEventListener("change", () => cargarArchivo(entrada.files?.[0]));
         selector?.addEventListener("change", () => renderizarHoja(selector.value));
-        quitar?.addEventListener("click", limpiarMemoria);
+        quitar?.addEventListener("click", quitarLibro);
+        if (persistenciaPC) restaurarLibro();
         anterior?.addEventListener("click", () => {
             if (paginaActual <= 0) return;
             paginaActual -= 1;
