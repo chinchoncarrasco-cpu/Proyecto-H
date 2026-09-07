@@ -116,6 +116,52 @@
                 cursor: wait;
             }
 
+            /* En escritorio, la cabecera del sidebar queda fija y sólo
+               el listado de secciones se desplaza. Así el menú puede crecer
+               con Reservas y futuras secciones sin ocultar Cuenta. */
+            @media (min-width: 769px) {
+                .sidebar {
+                    overflow: hidden;
+                }
+
+                .sidebar-superior {
+                    flex: 0 0 auto;
+                }
+
+                nav.menu {
+                    flex: 1 1 auto;
+                    min-height: 0;
+                    overflow-y: auto;
+                    overflow-x: hidden;
+                    padding-right: 5px;
+                    padding-bottom: 12px;
+                    overscroll-behavior: contain;
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(255,255,255,.24) transparent;
+                }
+
+                nav.menu .menu-item {
+                    flex: 0 0 auto;
+                }
+
+                nav.menu::-webkit-scrollbar {
+                    width: 6px;
+                }
+
+                nav.menu::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+
+                nav.menu::-webkit-scrollbar-thumb {
+                    background: rgba(255,255,255,.22);
+                    border-radius: 999px;
+                }
+
+                nav.menu::-webkit-scrollbar-thumb:hover {
+                    background: rgba(255,255,255,.34);
+                }
+            }
+
             @media (max-width: 768px) {
                 .haiku-cuenta-menu-panel {
                     width: min(300px, calc(100vw - 20px));
