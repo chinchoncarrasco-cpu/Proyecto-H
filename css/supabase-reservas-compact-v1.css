@@ -71,9 +71,16 @@
         max-width: 75px;
     }
 
+    /* Nombre recibe más espacio porque aquí se muestra el nombre completo
+       del titular y debe poder leerse sin truncarse en la mayoría de casos. */
     #seccion-reservas .reservas-tabla td[data-columna="nombre"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="nombre"]) {
+        width: 135px;
+        min-width: 135px;
+        max-width: 135px;
+    }
+
     #seccion-reservas .reservas-tabla td[data-columna="apellido"],
-    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="nombre"]),
     #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="apellido"]) {
         width: 65px;
         min-width: 65px;
