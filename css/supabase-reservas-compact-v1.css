@@ -1,0 +1,165 @@
+/* ========================================
+   RESERVAS · COLUMNAS COMPACTAS V1
+   Ajuste exclusivamente visual para escritorio.
+   No cambia datos, filtros, orden ni paginación.
+======================================== */
+
+@media (min-width: 901px) {
+    #seccion-reservas .reservas-tabla {
+        width: 100%;
+        min-width: 1280px;
+        font-size: 9.5px;
+    }
+
+    #seccion-reservas .reservas-tabla th {
+        white-space: normal;
+        vertical-align: middle;
+    }
+
+    #seccion-reservas .reservas-tabla th button {
+        min-height: 38px;
+        gap: 3px;
+        padding: 4px 5px;
+        font-size: 8.7px;
+        line-height: 1.08;
+    }
+
+    #seccion-reservas .reservas-orden {
+        flex: 0 0 auto;
+        font-size: 8px;
+    }
+
+    #seccion-reservas .reservas-tabla td {
+        min-width: 0;
+        max-width: 110px;
+        padding: 7px 5px;
+        font-size: 9.5px;
+        line-height: 1.2;
+    }
+
+    /* Anchos mínimos por columna. Se mantienen compactos y el contenido
+       completo sigue disponible mediante el title existente de cada celda. */
+    #seccion-reservas .reservas-tabla td[data-columna="fecha_reserva"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="fecha_reserva"]) {
+        width: 72px;
+        max-width: 72px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="plan_tarifario"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="plan_tarifario"]) {
+        width: 95px;
+        min-width: 95px;
+        max-width: 95px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="cabanas"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="cabanas"]) {
+        width: 75px;
+        min-width: 75px;
+        max-width: 75px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="nombre"],
+    #seccion-reservas .reservas-tabla td[data-columna="apellido"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="nombre"]),
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="apellido"]) {
+        width: 65px;
+        min-width: 65px;
+        max-width: 65px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="check_in"],
+    #seccion-reservas .reservas-tabla td[data-columna="check_out"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="check_in"]),
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="check_out"]) {
+        width: 68px;
+        min-width: 68px;
+        max-width: 68px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="adultos"],
+    #seccion-reservas .reservas-tabla td[data-columna="ninos"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="adultos"]),
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="ninos"]) {
+        width: 38px;
+        min-width: 38px;
+        max-width: 38px;
+        text-align: center;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="precio_total"],
+    #seccion-reservas .reservas-tabla td[data-columna="abono"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="precio_total"]),
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="abono"]) {
+        width: 72px;
+        min-width: 72px;
+        max-width: 72px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="saldo_pendiente"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="saldo_pendiente"]) {
+        width: 76px;
+        min-width: 76px;
+        max-width: 76px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="estado"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="estado"]) {
+        width: 78px;
+        min-width: 78px;
+        max-width: 78px;
+    }
+
+    #seccion-reservas .reservas-estado-badge {
+        min-height: 22px;
+        gap: 4px;
+        padding: 1px 6px;
+        font-size: 8.5px;
+    }
+
+    #seccion-reservas .reservas-estado-badge::before {
+        width: 5px;
+        height: 5px;
+    }
+
+    #seccion-reservas .reservas-plan-fullday {
+        min-height: 21px;
+        padding: 1px 6px;
+        font-size: 8.5px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="correo"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="correo"]) {
+        width: 92px;
+        min-width: 92px;
+        max-width: 92px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="telefono"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="telefono"]) {
+        width: 82px;
+        min-width: 82px;
+        max-width: 82px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="documento"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="documento"]) {
+        width: 88px;
+        min-width: 88px;
+        max-width: 88px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="fuente"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="fuente"]) {
+        width: 90px;
+        min-width: 90px;
+        max-width: 90px;
+    }
+
+    #seccion-reservas .reservas-tabla td[data-columna="pais"],
+    #seccion-reservas .reservas-tabla th:has(button[data-reservas-orden="pais"]) {
+        width: 48px;
+        min-width: 48px;
+        max-width: 48px;
+    }
+}
