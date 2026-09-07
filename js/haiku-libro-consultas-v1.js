@@ -159,12 +159,39 @@
         return String(v || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     }
 
+    function documentoCanon(v) {
+        return normalizarId(v).replace(/^0+/, "");
+    }
+
+    function asociarConservador(reserva, candidatas) {
+        const scores = candidatas.map(s => {
+            const nombre = S.mismaPersona(reserva.titular, s.titular);
+            const doc = Boolean(reserva.rut_documento && s.rut_documento && documentoCanon(reserva.rut_documento) === documentoCanon(s.rut_documento));
+            const correo = Boolean(reserva.correo && s.correo && S.normalizar(reserva.correo) === S.normalizar(s.correo));
+            const telefono = Boolean(reserva.telefono && s.telefono && telefonoCompatible(reserva.telefono, s.telefono));
+            const fechas = reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
+            const cab = Number(reserva.cabana) === Number(s.cabana);
+            const identidad = nombre || doc || correo || telefono;
+            return {
+                s,
+                segura: !reserva.advertencias?.length && cab && fechas && identidad,
+                posible: (cab && fechas) || identidad
+            };
+        });
+        const seguros = scores.filter(x => x.segura);
+        if (seguros.length === 1) return { estado: "asociada", sistema: seguros[0].s };
+        return {
+            estado: scores.some(x => x.posible) ? "ambigua" : "sin_coincidencia",
+            candidatos: scores.filter(x => x.posible).map(x => x.s.id)
+        };
+    }
+
     function claveReserva(r) {
         const doc = normalizarId(r.rut_documento);
         const correo = S.normalizar(r.correo);
         const tel = telefonoCanon(r.telefono).slice(-8);
         const identidad = doc || correo || `${S.normalizar(r.titular)}|${tel}`;
-        return `${identidad}|${r.fecha_checkin}|${r.fecha_checkout}|${r.tipo_estadia || ""}`;
+        return `${identidad}|${r.fecha_checkin}|${r.fecha_checkout}|${r.tipo_estadia || ""}|cab${r.cabana}`;
     }
 
     function agruparComparacion(resultados) {
@@ -257,7 +284,7 @@
 
         const resultados = validas.map(r => ({
             libro: r,
-            ...S.asociar(r, system),
+            ...asociarConservador(r, system),
             diferencias: [],
             pagosComparacion: [],
             serviciosComparacion: []
@@ -291,6 +318,9 @@
                 const a = key === "cabana" ? Number(r[key]) : S.normalizar(r[key]);
                 const b = key === "cabana" ? Number(s[key]) : S.normalizar(s[key]);
                 if (r[key] && s[key] && a !== b) result.diferencias.push(`${key}: Libro «${r[key]}» / Proyecto H «${s[key]}»`);
+            }
+            if (r.rut_documento && s.rut_documento && documentoCanon(r.rut_documento) !== documentoCanon(s.rut_documento)) {
+                result.diferencias.push(`RUT/documento: Libro «${r.rut_documento}» / Proyecto H «${s.rut_documento}»`);
             }
             if (r.telefono && s.telefono && !telefonoCompatible(r.telefono, s.telefono)) {
                 result.diferencias.push(`telefono: Libro «${r.telefono}» / Proyecto H «${s.telefono}»`);
@@ -350,12 +380,12 @@
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = [...serviciosUnicos.values()];
         resultados.meta = {
-            libro: grupos.length,
+            libro: validas.length,
             proyecto: reservasSistema.size,
-            asociadas: grupos.filter(g => g.estado === "asociada").length,
-            faltantes: grupos.filter(g => g.estado === "sin_coincidencia").length,
-            ambiguas: grupos.filter(g => g.estado === "ambigua").length,
-            con_diferencias: grupos.filter(g => g.estado === "asociada" && g.diferencias.length).length,
+            asociadas: resultados.filter(g => g.estado === "asociada").length,
+            faltantes: resultados.filter(g => g.estado === "sin_coincidencia").length,
+            ambiguas: resultados.filter(g => g.estado === "ambigua").length,
+            con_diferencias: resultados.filter(g => g.estado === "asociada" && g.diferencias.length).length,
             pagos_faltantes: [...pagosUnicos.values()].filter(x => x.estado === "faltante_probable" || x.estado === "con_reserva_faltante").length,
             pagos_revisar: [...pagosUnicos.values()].filter(x => x.estado === "revisar" || x.estado === "diferente").length,
             servicios_revisar: [...serviciosUnicos.values()].filter(x => x.estado !== "en_sistema").length
