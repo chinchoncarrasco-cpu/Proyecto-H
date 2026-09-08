@@ -1,21 +1,27 @@
-// HAKU · guardas de confirmación e importación de servicios/notas del Libro
-// Corrige dos casos de borde del flujo V2 sin relajar la seguridad:
-// 1) una falla de guardado no debe habilitar checkboxes de "Requieren revisión";
-// 2) antes de guardar, resuelve la estadía real por reserva + CAB + fechas,
-//    evitando que un id de reserva confundido con estadía bloquee una importación válida.
+// HAKU · guardas seguras para importar servicios/notas del Libro
+// V3: sin MutationObserver. Evita el bucle de atributos que podía congelar la página.
 (function (root) {
     "use strict";
-    if (!root.document || root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2) return;
+    if (!root.document || root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V3) return;
 
     const confirmarNativo = root.confirm.bind(root);
-    const consultasPorCard = new WeakMap();
     let ultimoTextoServicios = "";
-    let corrigiendoChecks = false;
 
     function esConfirmacionLibro(texto) {
         const t = String(texto || "");
         return /^Se incorporarán\s+\d+\s+servicio(?:s)?\s+y\s+\d+\s+nota(?:s)?\s+desde el Libro\./i.test(t)
             && /operación será atómica/i.test(t);
+    }
+
+    function bloquearRevision(scope = document) {
+        scope.querySelectorAll?.(
+            ".haku-libro-servicios__item--revisar input[type='checkbox']," +
+            ".haku-libro-servicios__item--existente input[type='checkbox']"
+        ).forEach(check => {
+            check.checked = false;
+            check.disabled = true;
+            check.setAttribute("aria-disabled", "true");
+        });
     }
 
     function reactivarBotonLibro() {
@@ -69,43 +75,8 @@
             }
             nodo = nodo.previousElementSibling;
         }
-        return "";
+        return ultimoTextoServicios;
     }
-
-    function bloquearRevision(scope = document) {
-        if (corrigiendoChecks) return;
-        corrigiendoChecks = true;
-        try {
-            scope.querySelectorAll?.(
-                ".haku-libro-servicios__item--revisar input[type='checkbox']," +
-                ".haku-libro-servicios__item--existente input[type='checkbox']"
-            ).forEach(check => {
-                const cambio = check.checked || !check.disabled;
-                check.checked = false;
-                check.disabled = true;
-                check.setAttribute("aria-disabled", "true");
-                if (cambio) check.dispatchEvent(new Event("change", { bubbles: true }));
-            });
-        } finally {
-            corrigiendoChecks = false;
-        }
-    }
-
-    function registrarCards() {
-        document.querySelectorAll(".haku-libro-servicios").forEach(card => {
-            if (!consultasPorCard.has(card)) {
-                const texto = textoAnteriorDelCard(card) || ultimoTextoServicios;
-                if (texto) consultasPorCard.set(card, texto);
-            }
-            bloquearRevision(card);
-        });
-    }
-
-    const observer = new MutationObserver(() => {
-        queueMicrotask(registrarCards);
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "checked"] });
-    registrarCards();
 
     function itemsSeleccionados(card, resultado) {
         const listosServicios = resultado.items.filter(x => x.estado === "listo" && x.kind === "servicio");
@@ -153,6 +124,7 @@
             })();
             cache.set(clave, promesa);
         }
+
         payload.estadia_id = await promesa;
         return payload;
     }
@@ -169,6 +141,7 @@
         estados.forEach(({ el, disabled }) => {
             if (el.isConnected) el.disabled = disabled;
         });
+        bloquearRevision(document);
     }
 
     function mostrarError(card, texto) {
@@ -237,7 +210,6 @@
             mostrarExito(card, data);
         } catch (error) {
             restaurarControles(estados);
-            bloquearRevision(card);
             throw error;
         }
     }
@@ -263,7 +235,7 @@
 
         event.preventDefault();
         event.stopImmediatePropagation();
-        const texto = consultasPorCard.get(card) || textoAnteriorDelCard(card) || ultimoTextoServicios;
+        const texto = textoAnteriorDelCard(card);
         boton.disabled = true;
         importarSeguro(card, texto).catch(error => {
             mostrarError(card, error?.message || "No se pudo completar la incorporación.");
@@ -272,10 +244,17 @@
         });
     }, true);
 
-    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1 = Object.freeze({
-        version: "2.0.0",
+    // No observamos atributos ni el DOM completo. Las tarjetas nuevas ya nacen con
+    // revisión manual deshabilitada en el módulo V2; este parche sólo refuerza en
+    // interacción y recuperación de errores.
+    bloquearRevision(document);
+
+    const api = Object.freeze({
+        version: "3.0.0",
         reactivar: reactivarBotonLibro,
         bloquearRevision
     });
-    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2 = root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1;
+    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1 = api;
+    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2 = api;
+    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V3 = api;
 })(typeof window !== "undefined" ? window : globalThis);
