@@ -30,6 +30,24 @@
     const MAX_CHARS = 900000;
     const CLAVE = `haiku_asistente_historial_v1::${location.pathname}`;
 
+    // Estos dos parches son puramente de interfaz. Se cargan desde aquí porque
+    // el módulo de historial ya está presente siempre que Haku conserva el chat:
+    // 1) vuelve a aplicar el diseño a tarjetas restauradas (el sanitizador elimina <style>);
+    // 2) reactiva el botón si una confirmación del Libro se cancela o el navegador la descarta.
+    function cargarParche(nombre) {
+        const id = `haiku-carga-${nombre}`;
+        if (document.getElementById(id)) return;
+        const script = document.createElement("script");
+        script.id = id;
+        script.src = `js/${nombre}.js?v=${Date.now()}`;
+        script.async = false;
+        script.onerror = () => console.warn(`HAKU · No pude cargar ${nombre}.`);
+        document.head.appendChild(script);
+    }
+
+    cargarParche("haiku-libro-historial-ui-fix-v1");
+    cargarParche("haiku-libro-confirm-cancel-fix-v1");
+
     function quitarAtributosPeligrosos(elemento) {
         [...elemento.attributes].forEach(attr => {
             const nombre = String(attr.name || "").toLowerCase();
