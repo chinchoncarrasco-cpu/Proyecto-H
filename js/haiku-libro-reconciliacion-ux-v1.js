@@ -2,6 +2,9 @@
     "use strict";
     if (!root.document) return;
 
+    const STORAGE_KEY = "haiku-libro-reconciliacion-decisiones-v1";
+    const MAX_DECISIONES = 80;
+
     function textoDirecto(label) {
         return Array.from(label.childNodes)
             .filter(n => n.nodeType === Node.TEXT_NODE)
@@ -9,6 +12,73 @@
             .join(" ")
             .replace(/\s+/g, " ")
             .trim();
+    }
+
+    function normalizarHuella(valor) {
+        return String(valor || "").replace(/\s+/g, " ").trim();
+    }
+
+    function hashHuella(texto) {
+        let h = 2166136261;
+        for (const ch of String(texto || "")) {
+            h ^= ch.codePointAt(0);
+            h = Math.imul(h, 16777619);
+        }
+        return (h >>> 0).toString(36);
+    }
+
+    function huellaDecision(label, select, rawDirecto = "") {
+        const textos = [rawDirecto || textoDirecto(label)];
+        label.querySelectorAll("p, th, td").forEach(el => textos.push(el.textContent || ""));
+        Array.from(select.options).forEach(o => textos.push(`${o.value}=>${o.textContent || ""}`));
+        return `d:${hashHuella(textos.map(normalizarHuella).join("||"))}`;
+    }
+
+    function leerDecisiones() {
+        try {
+            const data = JSON.parse(root.localStorage?.getItem(STORAGE_KEY) || "{}");
+            return data && typeof data === "object" && !Array.isArray(data) ? data : {};
+        } catch (_) {
+            return {};
+        }
+    }
+
+    function guardarDecision(clave, valor) {
+        if (!clave) return;
+        try {
+            const data = leerDecisiones();
+            if (valor) data[clave] = { valor, guardado_en: Date.now() };
+            else delete data[clave];
+            const entradas = Object.entries(data).sort((a, b) => Number(b[1]?.guardado_en || 0) - Number(a[1]?.guardado_en || 0)).slice(0, MAX_DECISIONES);
+            root.localStorage?.setItem(STORAGE_KEY, JSON.stringify(Object.fromEntries(entradas)));
+        } catch (_) {}
+    }
+
+    function marcarRecordada(label) {
+        if (label.querySelector(":scope > .haiku-reconciliacion-recordada")) return;
+        const aviso = document.createElement("div");
+        aviso.className = "haiku-reconciliacion-recordada";
+        aviso.textContent = "Decisión recordada · se reutilizó porque la comparación es idéntica a la que ya confirmaste.";
+        aviso.style.margin = "7px 0 0";
+        aviso.style.padding = "6px 8px";
+        aviso.style.borderRadius = "8px";
+        aviso.style.background = "#eef7f1";
+        aviso.style.color = "#356047";
+        aviso.style.fontSize = ".62rem";
+        aviso.style.fontWeight = "700";
+        label.append(aviso);
+    }
+
+    function restaurarDecision(label, select) {
+        const clave = label.dataset.haikuDecisionKey;
+        if (!clave || select.value) return;
+        const guardada = leerDecisiones()[clave]?.valor;
+        if (!guardada || !Array.from(select.options).some(o => o.value === guardada)) return;
+        select.value = guardada;
+        marcarRecordada(label);
+        // El listener original de Haku actualiza su Map de decisiones. No se escribe
+        // nada en Proyecto H: sólo se recupera la selección para esta vista previa.
+        select.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     function clasificarPregunta(texto) {
@@ -34,6 +104,7 @@
         if (!select) return;
 
         const raw = textoDirecto(label);
+        label.dataset.haikuDecisionKey = huellaDecision(label, select, raw);
         const corte = raw.search(/\.\s*¿/);
         const titulo = corte >= 0 ? raw.slice(0, corte).trim() : raw;
         const pregunta = corte >= 0 ? raw.slice(corte + 1).trim() : "Revisa esta posible asociación antes de continuar.";
@@ -64,6 +135,7 @@
         select.setAttribute("aria-label", `${titulo}. ${pregunta}`);
         label.dataset.haikuReconciliacionUx = "1";
         label.classList.toggle("haiku-reconciliacion-resuelta", Boolean(select.value));
+        restaurarDecision(label, select);
     }
 
     function actualizarMeta(bloque) {
@@ -161,7 +233,13 @@
         if (!select) return;
         const label = select.closest("label");
         const bloque = bloqueDesde(select);
-        if (label) label.classList.toggle("haiku-reconciliacion-resuelta", Boolean(select.value));
+        if (label) {
+            label.classList.toggle("haiku-reconciliacion-resuelta", Boolean(select.value));
+            const clave = label.dataset.haikuDecisionKey || huellaDecision(label, select);
+            label.dataset.haikuDecisionKey = clave;
+            guardarDecision(clave, select.value);
+            if (!select.value) label.querySelector(":scope > .haiku-reconciliacion-recordada")?.remove();
+        }
         actualizarMeta(bloque);
     });
 })(typeof window !== "undefined" ? window : globalThis);
