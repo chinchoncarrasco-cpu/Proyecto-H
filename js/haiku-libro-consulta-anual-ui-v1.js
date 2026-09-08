@@ -11,9 +11,12 @@
         const style = DOC.createElement("style");
         style.id = STYLE_ID;
         style.textContent = `
-            .haiku-anual-compacto {
+            .haiku-asistente-mensaje.haiku-anual-compacto {
+                flex: 0 0 auto !important;
+                height: auto !important;
+                max-height: none !important;
                 padding: 10px 12px !important;
-                overflow: hidden;
+                overflow: visible !important;
             }
             .haiku-anual-cabecera {
                 display: flex;
