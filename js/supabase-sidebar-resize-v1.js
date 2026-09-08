@@ -139,6 +139,32 @@
                 }
             }
 
+            /* Igual que Resumen y Libro de Reserva: en PC el Calendario
+               ocupa en vivo todo el ancho que deja libre el sidebar. */
+            @media (min-width: 901px) {
+                #seccion-calendario {
+                    width: calc(100vw - var(--haiku-sidebar-ancho, ${DEFAULT_WIDTH}px) - 80px) !important;
+                    max-width: none !important;
+                    min-width: 0;
+                }
+
+                #seccion-calendario .calendario-cabecera-principal,
+                #seccion-calendario .calendario-panel,
+                #seccion-calendario .calendario-cabecera,
+                #seccion-calendario .dias-semana,
+                #seccion-calendario .calendario-grid {
+                    width: 100%;
+                    min-width: 0;
+                    max-width: none;
+                }
+
+                #seccion-calendario .dias-semana,
+                #seccion-calendario .calendario-grid,
+                #seccion-calendario .calendario-reservas-capa {
+                    grid-template-columns: repeat(7, minmax(0, 1fr));
+                }
+            }
+
             @media (max-width: ${DESKTOP_MIN - 1}px) {
                 .haiku-sidebar-resize-v1-handle {
                     display: none !important;
