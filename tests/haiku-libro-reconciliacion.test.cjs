@@ -55,8 +55,8 @@ test('safe new payment, existing payment and identifier attached elsewhere',asyn
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'r1'}])).pagosDetalle[0].estado,'en_sistema');
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'other'}])).pagosDetalle[0].estado,'revisar');
 });
-test('repeated book identifier, weak identifiers, penalties and missing reservation payments require review',async()=>{
- const c=await compare([book({pagos:[pay(),pay({origen:{hoja:'Sep26',celda:'Z30'}})]})],[stay()]);assert.ok(c.pagosDetalle.every(p=>p.estado==='revisar'));
+test('conflicting repeated book identifier, weak identifiers, penalties and missing reservation payments require review',async()=>{
+ const c=await compare([book({pagos:[pay(),pay({monto:200000,origen:{hoja:'Sep26',celda:'Z30'}})]})],[stay()]);assert.ok(c.pagosDetalle.every(p=>p.estado==='revisar'));
  for(const p of [pay({codigo_autorizacion:null}),pay({tipo_movimiento:'penalidad'}),pay({monto:null})]) assert.equal((await compare([book({pagos:[p]})],[stay()])).pagosDetalle[0].estado,'revisar');
  assert.equal((await compare([book({pagos:[pay()]})])).pagosDetalle[0].estado,'revisar');
 });
@@ -319,11 +319,35 @@ test('partial multicabin adds only missing cabin',async()=>{
  const p=await prepare(rs,[stay()],[],new Map([[c.grupos[0].clave,{valor:'estadia:e1'}]]));
  assert.deepEqual(p.items[0].payload.estadias.map(s=>s.cabana_numero),[2]);assert.equal(p.items[0].payload.reserva_id,'r1');
 });
-test('same association and amount are omitted conservatively, repeated book IDs are not prepared twice',async()=>{
- const r=readyBook({pagos:[readyPay()]}),p=await prepare([r],[stay()],[{reserva_id:'r1',monto:100000,moneda:'CLP'}]);
- assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'omitidos');
- const repeated=await prepare([readyBook({pagos:[readyPay(),readyPay({origen:{hoja:'Sep26',celda:'Z30'}})]})]);
- assert.ok(repeated.items.filter(i=>i.categoria==='pagos').length<=1);
+test('same amount without strong identifiers requires review and is never discarded silently',async()=>{
+ const weakA=readyPay({codigo_autorizacion:null,origen:{hoja:'Sep26',celda:'A1'}}),weakB=readyPay({codigo_autorizacion:null,origen:{hoja:'Sep26',celda:'A2'}});
+ const sameExisting=await prepare([readyBook({pagos:[weakA]})],[stay()],[{reserva_id:'r1',monto:100000,moneda:'CLP'}]);
+ assert.equal(sameExisting.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
+ const pair=await prepare([readyBook({pagos:[weakA,weakB]})]);
+ assert.equal(pair.items.filter(i=>i.categoria==='dudosos').length,2);assert.equal(pair.items.filter(i=>i.categoria==='omitidos').length,0);
+});
+test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
+ const folio=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});
+ const codaut=readyPay({monto:147930,codigo_autorizacion:'685775',folio:null,bovtar:null,origen:{hoja:'Sep26',celda:'A2'}});
+ const plan=await prepare([readyBook({titular:'Angelo Villegas',pagos:[folio,codaut]})],[stay(readyBook({titular:'Angelo Villegas'}))]);
+ assert.equal(plan.items.filter(i=>i.categoria==='pagos').length,2);assert.equal(plan.items.filter(i=>i.categoria==='omitidos').length,0);
+});
+test('same CodAut or same Folio plus BOVTAR is one payment and one omitted duplicate',async()=>{
+ for(const base of [
+  {codigo_autorizacion:'685775',folio:null,bovtar:null},
+  {codigo_autorizacion:null,folio:'000506',bovtar:'626327'}
+ ]) {
+  const a=readyPay({...base,origen:{hoja:'Sep26',celda:'A1'}}),b=readyPay({...base,origen:{hoja:'Sep26',celda:'A2'}});
+  const plan=await prepare([readyBook({pagos:[a,b]})]);
+  assert.equal(plan.items.filter(i=>i.categoria==='pagos').length,1);assert.equal(plan.items.filter(i=>i.categoria==='omitidos').length,1);
+ }
+});
+test('new reservation keeps equal-amount payments with different strong IDs on the same reserva_ref',async()=>{
+ const a=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});
+ const b=readyPay({monto:147930,codigo_autorizacion:'685775',folio:null,bovtar:null,origen:{hoja:'Sep26',celda:'A2'}});
+ const plan=await prepare([readyBook({titular:'Angelo Villegas',pagos:[a,b]})]);
+ const reserva=plan.items.find(i=>i.categoria==='nuevas'),pagos=plan.items.filter(i=>i.categoria==='pagos');
+ assert.equal(pagos.length,2);assert.ok(pagos.every(p=>p.payload.reserva_ref===reserva.id));
 });
 test('wrong checkin block, pending money and unknown webpay subtype stay blocked',async()=>{
  for(const extra of [{fecha_bloque:'2026-09-18'},{pago_recibido:null,estado_pago:'pendiente'},{medio_pago:'webpay'}]) {
@@ -410,6 +434,13 @@ test('atomic RPC migration has durable idempotency, database revalidation, exact
  for(const permission of ['reservas.crear','reservas.editar','pagos.registrar']) assert.match(sql,new RegExp(permission.replace('.','\\.')));
  assert.match(sql,/grant execute[\s\S]*to authenticated/i);assert.match(sql,/revoke all[\s\S]*from public, anon/i);
  assert.match(sql,/p_etapa_operativa => 'abono'/);assert.match(sql,/codigo_autorizacion/);assert.match(sql,/datos_origen ->> 'bovtar'/);
+});
+test('payment RPC fix never deduplicates by amount and reservation when strong identifiers differ',()=>{
+ const sql=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260908132000_haku_pagos_identificadores_fuertes.sql'),'utf8');
+ assert.doesNotMatch(sql,/p\.reserva_id\s*=\s*v_reserva_id\s+and\s+p\.monto\s*=\s*v_monto/i);
+ assert.match(sql,/datos_origen\s*->>\s*'item_id'[^\n]*=\s*v_item_id/i);
+ assert.match(sql,/v_codaut is not null[\s\S]*v_folio is not null and v_bovtar is not null/);
+ assert.match(sql,/grant execute[\s\S]*to authenticated/i);assert.match(sql,/revoke all[\s\S]*from public, anon/i);
 });
 test('source writes only through the atomic RPC and keeps global polling disabled',()=>{
  const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');

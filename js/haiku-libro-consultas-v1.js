@@ -527,7 +527,10 @@
         const grupos = agruparComparacion(resultados);
         const movimientos = resultados.flatMap(r => r.pagosComparacion);
         for (const x of movimientos) {
-            if (x.estado === "nuevo_seguro" && movimientos.some(y => y !== x && pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }))) x.estado = "revisar";
+            const conflicto = movimientos.some(y => y !== x &&
+                pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }) &&
+                (Number(x.pago.monto) !== Number(y.pago.monto) || x.pago.moneda !== y.pago.moneda || claveReserva(x.reserva) !== claveReserva(y.reserva)));
+            if (x.estado === "nuevo_seguro" && conflicto) x.estado = "revisar";
         }
         const pagosUnicos = new Map();
         for (const x of resultados.flatMap(r => r.pagosComparacion)) {
@@ -637,18 +640,22 @@
             const id = 'pago:' + claveReserva(r) + ':' + source(p.origen) + ':' + JSON.stringify(p);
             if (plan.items.some(i => i.id === id)) continue;
             const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
-            const duplicado = snapshot.pagos.find(v => pagoCoincide(p,v));
+            const fuerte = pagoTieneIdentificadorFuerte(p);
+            const duplicado = fuerte ? snapshot.pagos.find(v => pagoCoincide(p,v)) : null;
             if (duplicado) { add('omitidos', id, texto + ' · Ya existe un pago con este identificador (reserva ' + duplicado.reserva_id + ').'); continue; }
-            const mismoMonto = snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda));
-            const repetido = vistos.some(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } }) || (v.destino === (destino?.reserva_id || destino?.reserva_ref) && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda));
-            if (repetido) {
-                for (const previo of vistos.filter(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } }))) {
-                    if (previo.pago.monto !== p.monto || previo.destino !== (destino?.reserva_id || destino?.reserva_ref)) {
+            const importado = snapshot.pagos.find(v => v.datos_origen?.item_id === id);
+            if (importado) { add('omitidos', id, texto + ' · Este mismo movimiento del Libro ya fue incorporado por Haku.'); continue; }
+            const destinoActual = destino?.reserva_id || destino?.reserva_ref;
+            const repetidosIdentificador = fuerte ? vistos.filter(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } })) : [];
+            const conflictoIdentificador = repetidosIdentificador.some(v => Number(v.pago.monto) !== Number(p.monto) || v.pago.moneda !== p.moneda || v.destino !== destinoActual);
+            if (conflictoIdentificador) {
+                for (const previo of repetidosIdentificador) {
+                    if (Number(previo.pago.monto) !== Number(p.monto) || previo.pago.moneda !== p.moneda || previo.destino !== destinoActual) {
                         previo.item.categoria = 'dudosos'; previo.item.seleccionado = false; previo.item.motivos.push('Identificador repetido con monto o reserva diferente.'); previo.item.aprobable = false;
                     }
                 }
             }
-            if (mismoMonto || repetido) { add('omitidos', id, texto + ' · Omitido por posible duplicado de asociación/monto o identificador; revisar manualmente.'); continue; }
+            if (repetidosIdentificador.length && !conflictoIdentificador) { add('omitidos', id, texto + ' · Omitido porque repite el mismo identificador fuerte.'); continue; }
             const motivos = [];
             if (!destino || destino.bloqueado) motivos.push('Primero resuelve los datos y la asociación de la reserva.');
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
@@ -661,6 +668,12 @@
             const asociadoLibro = r.pagos.includes(p);
             const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) && (x.estado === 'nuevo_seguro' || destino?.reserva_ref);
             const manual = aprobados.has(id);
+            const mismoMontoSinIdentificador = !fuerte && (
+                snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda)) ||
+                vistos.some(v => v.destino === destinoActual && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda)
+            );
+            if (mismoMontoSinIdentificador && !manual) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
+            if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');
             if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             const payload = { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: p.texto_original || null,
@@ -669,8 +682,9 @@
                 datos_origen: { bovtar: p.bovtar || null, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual };
             if (!p.fecha_comprobante) motivos.push('Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.');
             const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
-            item.aprobable = motivos.length === 1 && motivos[0] === 'Requiere aprobación manual de la asociación y el pago.';
-            vistos.push({ pago:p, item, destino: destino?.reserva_id || destino?.reserva_ref });
+            const motivosAprobables = new Set(['Requiere aprobación manual de la asociación y el pago.', 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.']);
+            item.aprobable = motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
+            vistos.push({ pago:p, item, destino: destinoActual, manual });
         }
         plan.permisos = [...new Set(plan.items.flatMap(i => i.permisos))];
         return plan;
