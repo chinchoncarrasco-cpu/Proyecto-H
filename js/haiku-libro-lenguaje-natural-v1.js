@@ -13,9 +13,16 @@
     function pareceConsultaLibro(original, normalizado) {
         const raw = String(original || "");
         return /\b(?:haku|libro)\b/i.test(raw) &&
-            /\b(?:reserva|hu[eé]sped|titular)\b/i.test(raw) &&
-            /\b(?:revisa|revisar|compara|comparar|agr[eé]ga(?:r|lo|la|los|las)?|incorpora(?:r|lo|la|los|las)?|actualiza(?:r|lo|la|los|las)?|actualice(?:lo|la|los|las)?|registra(?:r|lo|la|los|las)?|modifica(?:r|lo|la|los|las)?)\b/i.test(raw) &&
-            /\b(?:reserva|huesped|titular)\b/.test(normalizado);
+            /\b(?:reserva(?:s)?|hu[eé]sped(?:es)?|titular(?:es)?|pago(?:s)?)\b/i.test(raw) &&
+            /\b(?:revisa|revisar|busca|buscar|encuentra|encontrar|verifica|verificar|compara|comparar|agr[eé]ga(?:r|lo|la|los|las)?|incorpora(?:r|lo|la|los|las)?|actualiza(?:r|lo|la|los|las)?|actualice(?:lo|la|los|las)?|registra(?:r|lo|la|los|las)?|modifica(?:r|lo|la|los|las)?)\b/i.test(raw) &&
+            /\b(?:reserva(?:s)?|huesped(?:es)?|titular(?:es)?|pago(?:s)?)\b/.test(normalizado);
+    }
+
+    function canonizarBusquedaTitular(texto) {
+        return texto.replace(
+            /\b(?:busca|buscar|encuentra|encontrar|revisa|revisar|verifica|verificar)\s+(?:la\s+reserva\s+de\s+|(?:al?|el)\s+titular\s+|a\s+)([\p{L}][\p{L}\s.'’()-]*?)(?=\s*[,;:.]|\s+(?:y|e|si|que|para|con|revisa|revisar|verifica|verificar|compara|comparar|agrega[a-z]*|incorpora[a-z]*|actualiza[a-z]*|actualice[a-z]*|registra[a-z]*|modifica[a-z]*)\b|$)/gu,
+            (_, nombre) => `titular ${nombre.trim()}. `
+        );
     }
 
     function separarTitular(texto) {
@@ -50,6 +57,7 @@
     function normalizarConsulta(valor) {
         let texto = normalizarBase(valor);
         if (!pareceConsultaLibro(valor, texto)) return texto;
+        texto = canonizarBusquedaTitular(texto);
         texto = separarTitular(texto);
         texto = canonizarAcciones(texto);
         return canonizarPeriodo(texto);
