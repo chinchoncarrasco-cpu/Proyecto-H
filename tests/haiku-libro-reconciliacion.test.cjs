@@ -84,7 +84,7 @@ test('visual report retains cards, confines coordinates to technical details and
  }
  const document={createElement:t=>new Element(t),querySelector:()=>null};
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document,addEventListener(){},Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
- const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarComparacion })');
+ const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, renderizarComparacion })');
  vm.runInNewContext(source,context);
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
  context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,{q,comparacion:c});
@@ -95,8 +95,8 @@ test('visual report retains cards, confines coordinates to technical details and
  const normal=e=>e===technical?[]:[e.textContent,...e.children.flatMap(normal)];
  assert.doesNotMatch(normal(out).join(' '),/Sep26!/);
  const select=nodes.find(e=>e.tag==='select');select.selectedIndex=1;select.events.change();
- nodes.find(e=>e.textContent==='Preparar vista previa').events.click();
- assert.match(normal(out).join(' '),/Son reservas independientes/);assert.match(normal(out).join(' '),/escritura deshabilitada/);
+ assert.ok(nodes.find(e=>e.textContent==='Preparar incorporación'));
+ assert.match(normal(out).join(' '),/Son reservas independientes/);assert.match(normal(out).join(' '),/Sólo lectura/);
 });
 
 test('test/demo and cancelled/no-show candidates are excluded before every matching path',async()=>{
@@ -151,7 +151,7 @@ test('payment on a securely matched stay stays safe while another cabin awaits a
  assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
 });
 
-function renderHarness(reconsultar) {
+function renderHarness(reconsultar, db) {
  const fs=require('node:fs'),vm=require('node:vm');
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
@@ -163,9 +163,9 @@ function renderHarness(reconsultar) {
   querySelector(selector){return this.querySelectorAll(selector)[0]||null}
  }
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
-  reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
+  haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
-  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarComparacion })')
+  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, renderizarComparacion })')
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
@@ -199,9 +199,7 @@ test('revalidation keeps open sections, reports persistent results and clears st
  finish({q,comparacion:c});await pending;
  assert.equal(h.out.querySelector('details').open,true);assert.ok(h.out.querySelector('.haiku-reconciliacion-abierto'));
  assert.match(h.texts(),/Revalidación completada/);assert.doesNotMatch(h.texts(),/Revalidando;/);
- h.button('Preparar vista previa').events.click();
- const proposal=h.out.querySelectorAll('li').map(e=>e.textContent).join(' ');
- assert.match(proposal,/Dejar pendiente/);assert.doesNotMatch(proposal,/Son reservas independientes/);
+ assert.equal(h.out.querySelector('select').selectedIndex,0);
 });
 
 test('failed revalidation stays visible, prevents stale preparation and permits retry',async()=>{
@@ -209,7 +207,7 @@ test('failed revalidation stays visible, prevents stale preparation and permits 
  await h.button('Revalidar contra Proyecto H').events.click();
  assert.match(h.texts(),/No se pudo revalidar: Sin conexión/);
  assert.equal(h.button('Revalidar contra Proyecto H').disabled,false);
- assert.equal(h.button('Preparar vista previa').disabled,true);
+ assert.equal(h.button('Preparar incorporación').disabled,true);
 });
 
 test('Yann and Alejandro: field comparison explains document conflict and preview association only',async()=>{
@@ -225,8 +223,8 @@ test('Yann and Alejandro: field comparison explains document conflict and previe
   assert.equal(row('Teléfono')[3],'— sin dato');assert.match(h.texts(),/RUT\/documento difiere/);
   assert.doesNotMatch(h.texts(),/¿Cambió el titular|Modificar:/);
   const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','asociar:e1','independiente']);
-  select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
-  assert.match(h.texts(),/Misma reserva \/ asociada/);assert.match(h.texts(),/sin aprobar pagos automáticamente/);
+  select.selectedIndex=1;select.events.change();
+  assert.match(h.texts(),/sin aprobar pagos automáticamente/);
   assert.equal(JSON.stringify(c),before);assert.equal(c.meta.pagos_faltantes,0);
  }
 });
@@ -237,10 +235,10 @@ test('Macarena extension preserves the existing full day and offers only additiv
  const c=await compare([a],[stay(b)]),h=renderHarness();h.render({q,comparacion:c});
  const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','estadia:e10','independiente']);
  assert.match(h.texts(),/conservaría la reserva actual/);assert.doesNotMatch(h.texts(),/Modificar:/);
- select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
- assert.match(h.texts(),/Estadía a añadir/);assert.match(h.texts(),/CAB 10/);
+ select.selectedIndex=1;select.events.change();h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/CAB 10/);
  select.selectedIndex=2;select.events.change();assert.match(h.texts(),/Decisión actualizada/);
- h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Reservas independientes/);
+ assert.match(h.texts(),/Son reservas independientes/);
 });
 
 test('Angelo without candidate displays the blocking warning and only new or pending choices',async()=>{
@@ -248,8 +246,8 @@ test('Angelo without candidate displays the blocking warning and only new or pen
  h.render({q,comparacion:c});const select=h.out.querySelector('select');
  assert.deepEqual(select.options.map(o=>o.value),['','nueva']);assert.match(h.texts(),/Check-Out deducido; revisar fecha/);
  assert.match(h.texts(),/No hay candidato real/);assert.doesNotMatch(h.texts(),/Modificar:|Añadir esta estadía/);
- h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Dejar pendiente — no se incorpora/);
- select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
+ assert.match(h.texts(),/Dejar pendiente — no se incorpora/);
+ select.selectedIndex=1;select.events.change();h.button('Preparar incorporación').events.click();
  assert.match(h.texts(),/Tratar como reserva nueva — propondría crear una nueva reserva/);
  assert.equal(c.meta.faltantes,0);
 });
@@ -258,8 +256,7 @@ test('eleven clear missing reservations remain unchanged alongside all preview d
  const missing=Array.from({length:11},(_,i)=>book({id:'new'+i,titular:'Persona '+i,rut_documento:'doc'+i}));
  const c=await compare(missing),before=JSON.stringify(c),h=renderHarness();h.render({q,comparacion:c});
  assert.equal(c.meta.faltantes,11);assert.equal(h.out.querySelectorAll('select').length,0);
- h.button('Preparar vista previa').events.click();
- for(const title of ['Misma reserva / asociada','Reserva nueva','Estadía a añadir','Reservas independientes','Pendientes','Pagos seguros']) assert.ok(h.texts().includes(title));
+ assert.ok(h.button('Preparar incorporación'));
  assert.equal(JSON.stringify(c),before);
  const technical=h.out.querySelectorAll('details').find(e=>e.children[0].textContent.startsWith('Detalles técnicos XLSX'));
  assert.ok(technical);assert.ok(!technical.open);
@@ -268,5 +265,107 @@ test('eleven clear missing reservations remain unchanged alongside all preview d
 test('partial multicabin offers missing stay addition while retaining safe payments',async()=>{
  const a=book({pagos:[pay()]}),b=book({id:'b2',cabana:2}),c=await compare([a,b],[stay(a)]),h=renderHarness();
  h.render({q,comparacion:c});assert.ok(h.out.querySelectorAll('option').some(o=>o.value==='estadia:e1'));
- assert.equal(c.meta.pagos_faltantes,1);h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Pagos seguros/);
+ assert.equal(c.meta.pagos_faltantes,1);assert.match(h.texts(),/Pagos nuevos seguros/);
+});
+
+const readyBook=(extra={})=>book({adultos:2,ninos:0,mascotas:0,...extra});
+const readyPay=(extra={})=>pay({medio_pago:'efectivo',fecha_bloque:'2026-09-17',fecha_comprobante:'2026-09-10',pago_recibido:true,estado_pago:'registrado_en_libro',...extra});
+const prepare=async(rs,rows=[],ps=[],dec=new Map(),approved=new Set())=>{
+ const db=client(rows,ps),comparacion=await Q.compararSistema(rs,db,q);
+ return Q.prepararIncorporacion({reservas:rs,q,comparacion},dec,approved,db);
+};
+test('preparation is idempotent, read only, preserves known data and groups multiple cabins',async()=>{
+ const rs=[readyBook({correo:'guest@example.test'}),readyBook({id:'b2',cabana:2})];
+ const a=await prepare(rs),b=await prepare(rs);assert.deepEqual(a,b);assert.equal(a.escrituraHabilitada,false);
+ assert.equal(a.items.length,1);assert.equal(a.items[0].payload.estadias.length,2);
+ assert.equal(a.items[0].payload.reserva.correo_contacto,'guest@example.test');assert.equal(a.items[0].payload.reserva.telefono_contacto,null);
+ assert.deepEqual(a.permisos,['reservas.crear']);
+});
+test('fresh revalidation omits a reservation inserted after comparison',async()=>{
+ const r=readyBook(),rows=[],db=client(rows),comparacion=await Q.compararSistema([r],db,q);
+ rows.push(stay(r));const p=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+ assert.equal(p.items[0].categoria,'omitidos');assert.equal(p.items.filter(i=>i.categoria==='nuevas').length,0);
+});
+test('all strong global identifiers omit payments on any reservation',async()=>{
+ for(const fields of [{codigo_autorizacion:'AUTH-123'},{codigo_autorizacion:null,folio:'123',bovtar:'45'},{codigo_autorizacion:null,bove:'800'}]) {
+ const p=readyPay(fields),r=readyBook({pagos:[p]}),plan=await prepare([r],[],[{...p,reserva_id:'another',datos_origen:{bovtar:p.bovtar}}]);
+ assert.equal(plan.items.find(i=>i.id.startsWith('pago:')).categoria,'omitidos');
+ }
+});
+test('Full Day remains same-day fullday with zero nights',async()=>{
+ const p=await prepare([readyBook({tipo_estadia:'full_day',fecha_checkout:'2026-09-17'})]);
+ const s=p.items[0].payload.estadias[0];assert.equal(s.datos.tipo_estadia,'fullday');assert.equal(s.noches,0);assert.equal(s.datos.fecha_ingreso,s.datos.fecha_salida);
+});
+test('payment for a new reservation carries a dependency and symbolic reference, never a fake ID',async()=>{
+ const p=await prepare([readyBook({pagos:[readyPay()]})]);const r=p.items.find(i=>i.categoria==='nuevas'),pay=p.items.find(i=>i.categoria==='pagos');
+ assert.ok(pay);assert.equal(pay.payload.reserva_ref,r.id);assert.equal(pay.payload.argumentos.p_reserva_id,null);assert.deepEqual(pay.dependeDe,[r.id]);
+ assert.ok(p.permisos.includes('pagos.registrar'));
+});
+test('missing essentials block reservation and its payment, invalid rows are not silently lost',async()=>{
+ const p=await prepare([readyBook({adultos:null,pagos:[readyPay()]})]);assert.equal(p.items[0].seleccionado,false);assert.match(p.items[0].motivos.join(' '),/adultos/);
+ assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
+ const invalid=await prepare([readyBook({titular:null})]);assert.equal(invalid.items[0].categoria,'pendientes');
+});
+test('pending, new, association and additional-stay decisions are honored',async()=>{
+ const r=readyBook({cabana:2}),c=await compare([r],[stay()]),key=c.grupos[0].clave;
+ for(const [valor,cat] of [['','pendientes'],['independiente','nuevas'],['estadia:e1','estadias']]) {
+ const p=await prepare([r],[stay()],[],new Map([[key,{valor}]]));assert.equal(p.items[0].categoria,cat);
+ }
+ const mismatch=readyBook({rut_documento:'99999999-1'}),cc=await compare([mismatch],[stay()]);
+ const p=await prepare([mismatch],[stay()],[],new Map([[cc.grupos[0].clave,{valor:'asociar:e1'}]]));assert.equal(p.items[0].categoria,'asociadas');
+});
+test('partial multicabin adds only missing cabin',async()=>{
+ const rs=[readyBook(),readyBook({id:'b2',cabana:2})],c=await compare(rs,[stay()]);
+ const p=await prepare(rs,[stay()],[],new Map([[c.grupos[0].clave,{valor:'estadia:e1'}]]));
+ assert.deepEqual(p.items[0].payload.estadias.map(s=>s.cabana_numero),[2]);assert.equal(p.items[0].payload.reserva_id,'r1');
+});
+test('same association and amount are omitted conservatively, repeated book IDs are not prepared twice',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),p=await prepare([r],[stay()],[{reserva_id:'r1',monto:100000,moneda:'CLP'}]);
+ assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'omitidos');
+ const repeated=await prepare([readyBook({pagos:[readyPay(),readyPay({origen:{hoja:'Sep26',celda:'Z30'}})]})]);
+ assert.ok(repeated.items.filter(i=>i.categoria==='pagos').length<=1);
+});
+test('wrong checkin block, pending money and unknown webpay subtype stay blocked',async()=>{
+ for(const extra of [{fecha_bloque:'2026-09-18'},{pago_recibido:null,estado_pago:'pendiente'},{medio_pago:'webpay'}]) {
+ const p=await prepare([readyBook({pagos:[readyPay(extra)]})]);assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
+ }
+});
+test('manual approval allows a weak identifier only after explicit review and cannot bypass missing data',async()=>{
+ const rs=[readyBook({pagos:[readyPay({codigo_autorizacion:null})]})],p=await prepare(rs),item=p.items.find(i=>i.categoria==='dudosos');assert.equal(item.aprobable,true);
+ const approved=await prepare(rs,[],[],new Map(),new Set([item.id]));assert.equal(approved.items.find(i=>i.id===item.id).categoria,'pagos');
+});
+test('second screen revalidates, shows all categories, enforces dependencies and disables confirmation',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
+ h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/Escritura real deshabilitada en modo de prueba/);
+ for(const t of ['Reservas nuevas claras','Estadías/cabañas a añadir','Mismas reservas ya asociadas','Pagos nuevos seguros','Pagos dudosos','Casos pendientes','Ya existe / omitido']) assert.ok(h.texts().includes(t));
+ assert.equal(h.button('Confirmar incorporación').disabled,true);assert.equal(h.button('Confirmar incorporación').events.click,undefined);
+ const checks=h.out.querySelectorAll('input'),first=checks[0];first.checked=false;first.events.change();
+ assert.equal(checks[1].disabled,true);assert.equal(checks[1].checked,false);
+ assert.equal(db.calls.filter(x=>x==='pagos').length,2);
+});
+test('failed preparation never displays an actionable stale plan',async()=>{
+ const r=readyBook(),c=await compare([r]),db=client();db.auth.getSession=async()=>{throw new Error('offline')};
+ const h=renderHarness(null,db);h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/No se pudo preparar: offline/);assert.equal(h.button('Confirmar incorporación'),undefined);
+});
+
+test('payment inserted meanwhile is omitted after preparing, not merely after comparison',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),payments=[],db=client([stay()],payments),comparacion=await Q.compararSistema([r],db,q);
+ payments.push({...readyPay(),reserva_id:'r1'});
+ const p=await Q.prepararIncorporacion({q,reservas:[r],comparacion},new Map(),new Set(),db);
+ assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'omitidos');
+});
+test('conflicting repeated identifier blocks the first payment too',async()=>{
+ const p=await prepare([readyBook({pagos:[readyPay(),readyPay({monto:200000,origen:{hoja:'Sep26',celda:'Z1'}})]})]);
+ assert.equal(p.items.filter(i=>i.categoria==='pagos').length,0);
+});
+test('grouped existing reservations retain payment destination per original reservation',async()=>{
+ const a=readyBook({pagos:[readyPay()]}),b=readyBook({id:'b2',cabana:2});
+ const rows=[stay(a,{reserva_id:'r1',reservas:{...stay(a).reservas,grupo_reserva_id:'g'}}),stay(b,{reserva_id:'r2',reservas:{...stay(b).reservas,grupo_reserva_id:'g'}})];
+ const p=await prepare([a,b],rows);assert.equal(p.items[0].categoria,'asociadas');assert.equal(p.items.find(i=>i.categoria==='pagos').payload.argumentos.p_reserva_id,'r1');
+});
+test('source has no database mutators, global polling or enabled confirmation handler',()=>{
+ const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
+ assert.doesNotMatch(s,/\.\s*(insert|update|upsert|rpc)\s*\(|setInterval\s*\(|new MutationObserver/);
 });

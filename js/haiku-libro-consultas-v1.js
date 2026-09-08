@@ -83,7 +83,7 @@
             cabana: Number(t.match(/\b(?:cab|cabana)\s*(\d{1,2})\b/)?.[1]) || null,
             listar,
             versiones: /cambio|cambios|version|anterior/.test(t),
-            comparar: /compara|sistema|supabase|proyecto h|calendario/.test(t),
+            comparar: /compara|sistema|supabase|proyecto h|calendario|incorpor|agreg|registr/.test(t),
             escribir: /\b(agrega|agregar|crea|crear|registra|registrar|incorpora|incorporar|modifica|modificar|borra|borrar|elimina|eliminar)\b/.test(t),
             aseo: /aseo|reviso|revision|camarero/.test(t),
             libres: /vender|libres|disponib/.test(t),
@@ -540,6 +540,7 @@
             if (!serviciosUnicos.has(key)) serviciosUnicos.set(key, x);
         }
 
+        resultados.snapshot = { estadias: system, pagos };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = [...serviciosUnicos.values()];
@@ -558,6 +559,130 @@
         };
         return resultados;
     }
+
+    // Pure plan data, never an executor. References are resolved only by the future transaction.
+    const ESCRITURA_LIBRO = false;
+    function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null) {
+        const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
+        const snapshot = comp.snapshot || { estadias: [], pagos: [] };
+        const add = (categoria, id, texto, payload = null, motivos = [], dependeDe = [], permisos = []) => {
+            const item = { categoria, id, texto, payload, motivos, dependeDe, permisos, seleccionado: !motivos.length && ['nuevas','estadias','pagos'].includes(categoria) };
+            plan.items.push(item); return item;
+        };
+        const destinos = new Map();
+        const usados = new Set();
+        for (const g of comp.grupos || []) {
+            const d = decisiones.get(g.clave);
+            if (d && !d.valor) { add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null, ['Dejar pendiente: no se incorpora.']); continue; }
+            const previa = anterior?.grupos?.find(x => x.clave === g.clave);
+            let categoria = g.estado === 'asociada' ? 'asociadas' : g.estado === 'sin_coincidencia' ? 'nuevas' : 'pendientes';
+            let destino = null;
+            if (g.estado !== 'asociada' && d) {
+                const opcion = preguntaPresentacion(g).opciones.find(o => o.valor === d.valor);
+                if (opcion) {
+                    categoria = opcion.categoria === 'independientes' ? 'nuevas' : opcion.categoria;
+                    if (/^(asociar|estadia):/.test(opcion.valor)) destino = snapshot.estadias.find(s => String(s.id) === opcion.valor.slice(opcion.valor.indexOf(':') + 1));
+                } else categoria = 'pendientes';
+            }
+            const id = 'reserva:' + g.clave;
+            const titulo = descripcionGrupo(g);
+            if (categoria === 'pendientes') { add(categoria, id, titulo, null, ['Elige cómo tratar esta reserva en la comparación.']); continue; }
+            const existentes = g.items.filter(i => i.sistema).map(i => i.sistema.reserva_id);
+            const reservaId = destino?.reserva_id || (new Set(existentes).size === 1 ? existentes[0] : null);
+            if (categoria === 'asociadas') {
+                if (!reservaId && g.estado !== 'asociada') { add('pendientes', id, titulo, null, ['No hay una reserva destino única.']); continue; }
+                add(g.estado === 'asociada' && previa && previa.estado !== 'asociada' ? 'omitidos' : 'asociadas', id, titulo + ' · Ya existe; se conserva la reserva.', { reserva_id: reservaId, reserva_ids: [...new Set(existentes)] });
+                g.items.forEach(i => destinos.set(claveReserva(i.libro), { reserva_id: destino?.reserva_id || i.sistema?.reserva_id || reservaId, dependeDe: [] }));
+                continue;
+            }
+            const motivos = [];
+            const estadias = [];
+            for (const i of g.items) {
+                const r = i.libro;
+                if (categoria === 'estadias' && snapshot.estadias.some(s => s.reserva_id === reservaId && mismasFechas(r,s) && Number(r.cabana) === Number(s.cabana))) continue;
+                const key = claveReserva(r);
+                if (usados.has(key)) motivos.push('La misma estadía ya está preparada en otro elemento.');
+                usados.add(key);
+                if (!esReservaValida(r)) motivos.push('Faltan titular, CAB o fechas válidas.');
+                if (!['alojamiento','full_day'].includes(r.tipo_estadia) || (r.tipo_estadia === 'full_day') !== (r.fecha_checkin === r.fecha_checkout)) motivos.push('Revisa el tipo de estadía y las fechas.');
+                if (!Number.isInteger(r.adultos) || r.adultos < 1) motivos.push('Falta una cantidad válida de adultos.');
+                for (const k of ['ninos','mascotas']) if (r[k] != null && (!Number.isInteger(r[k]) || r[k] < 0)) motivos.push('Cantidad inválida: ' + k);
+                estadias.push({ cabana_numero: r.cabana, datos: { fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout,
+                    tipo_estadia: r.tipo_estadia === 'full_day' ? 'fullday' : 'alojamiento', adultos: r.adultos ?? null,
+                    ninos: r.ninos ?? null, mascotas: r.mascotas ?? null, estado_estadia: 'pendiente' }, noches: r.tipo_estadia === 'full_day' ? 0 : (Date.parse(r.fecha_checkout)-Date.parse(r.fecha_checkin))/86400000,
+                    estado_libro: r.estado_operativo || null, notas: r.notas_importantes || [], solicitudes: r.servicios || [] });
+            }
+            if (categoria === 'estadias' && !reservaId) motivos.push('Falta la reserva destino.');
+            if (!estadias.length) { add('omitidos', id, titulo + ' · Las estadías ya existen.'); continue; }
+            const r = g.principal;
+            for (const k of ['rut_documento','correo','telefono']) {
+                const valores = new Set(g.items.map(i => i.libro[k]).filter(Boolean));
+                if (valores.size > 1) motivos.push('El grupo contiene datos diferentes en ' + k + '.');
+            }
+            const conocido = k => g.items.map(i => i.libro[k]).find(v => v != null && v !== '') ?? null;
+            const payload = { contrato: 'reservas + reserva_estadias; requiere futura RPC transaccional', reserva_id: categoria === 'estadias' ? reservaId : null,
+                reserva_ref: categoria === 'nuevas' ? id : null,
+                reserva: categoria === 'nuevas' ? { titular_nombre: r.titular, titular_numero_documento: conocido('rut_documento'), titular_tipo_documento: null,
+                    correo_contacto: conocido('correo'), telefono_contacto: conocido('telefono'), estado_reserva: 'pendiente',
+                    observaciones: [...new Set(g.items.flatMap(i => [i.libro.texto_original, ...(i.libro.notas_importantes || [])]).filter(Boolean))].join('\n') || null } : null,
+                estadias, estado_confirmacion_libro: r.estado_confirmacion || null };
+            const item = add(categoria, id, titulo + (reservaId ? ' · Añadir a reserva ' + reservaId : ' · Crear una reserva con ' + estadias.length + ' estadía(s)') + ' · Estado inicial propuesto: pendiente', payload, [...new Set(motivos)], [], [categoria === 'nuevas' ? 'reservas.crear' : 'reservas.editar']);
+            g.items.forEach(i => destinos.set(claveReserva(i.libro), { reserva_id: categoria === 'estadias' ? reservaId : null, reserva_ref: categoria === 'nuevas' ? id : null, dependeDe: [id], bloqueado: !!item.motivos.length }));
+        }
+        for (const r of reservas.map(normalizarReservaComparacion).filter(r => !esReservaValida(r))) add('pendientes', 'invalida:' + claveReserva(r), (r.titular || 'Sin titular') + ' · CAB ' + (r.cabana || 'sin dato'), null, ['Faltan titular, cabaña o fechas válidas.']);
+        const vistos = [];
+        for (const x of comp.pagosDetalle || []) {
+            const p = x.pago, r = x.reserva, destino = destinos.get(claveReserva(r));
+            const id = 'pago:' + claveReserva(r) + ':' + source(p.origen) + ':' + JSON.stringify(p);
+            if (plan.items.some(i => i.id === id)) continue;
+            const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
+            const duplicado = snapshot.pagos.find(v => pagoCoincide(p,v));
+            if (duplicado) { add('omitidos', id, texto + ' · Ya existe un pago con este identificador (reserva ' + duplicado.reserva_id + ').'); continue; }
+            const mismoMonto = snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda));
+            const repetido = vistos.some(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } }) || (v.destino === (destino?.reserva_id || destino?.reserva_ref) && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda));
+            if (repetido) {
+                for (const previo of vistos.filter(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } }))) {
+                    if (previo.pago.monto !== p.monto || previo.destino !== (destino?.reserva_id || destino?.reserva_ref)) {
+                        previo.item.categoria = 'dudosos'; previo.item.seleccionado = false; previo.item.motivos.push('Identificador repetido con monto o reserva diferente.'); previo.item.aprobable = false;
+                    }
+                }
+            }
+            if (mismoMonto || repetido) { add('omitidos', id, texto + ' · Omitido por posible duplicado de asociación/monto o identificador; revisar manualmente.'); continue; }
+            const motivos = [];
+            if (!destino || destino.bloqueado) motivos.push('Primero resuelve los datos y la asociación de la reserva.');
+            if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
+            if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
+            if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
+            if (p.tipo_movimiento !== 'alojamiento') motivos.push('El concepto requiere una aplicación manual.');
+            if (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro') motivos.push('El Libro no confirma un pago recibido.');
+            const medio = { transferencia:'transferencia',debito:'tarjeta_debito',credito:'tarjeta_credito',efectivo:'efectivo' }[p.medio_pago];
+            if (!medio) motivos.push('Falta precisar el medio de pago (Webpay crédito o débito, si corresponde).');
+            const asociadoLibro = r.pagos.includes(p);
+            const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) && (x.estado === 'nuevo_seguro' || destino?.reserva_ref);
+            const manual = aprobados.has(id);
+            if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
+            const payload = { contrato: 'haiku_registrar_pago', pendiente_contrato: ['Resolver etapa operativa sin inferir abono/saldo; conservar datos_origen en la futura transacción'], reserva_ref: destino?.reserva_ref || null,
+                argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: null, p_referencia_externa: p.texto_original || null,
+                    p_fecha_pago: p.fecha_comprobante || null, p_folio: p.folio || null, p_codigo_autorizacion: p.codigo_autorizacion || null,
+                    p_bove: p.bove || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
+                datos_origen: { bovtar: p.bovtar || null, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual };
+            if (!p.fecha_comprobante) motivos.push('Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.');
+            const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
+            item.aprobable = motivos.length === 1 && motivos[0] === 'Requiere aprobación manual de la asociación y el pago.';
+            vistos.push({ pago:p, item, destino: destino?.reserva_id || destino?.reserva_ref });
+        }
+        plan.permisos = [...new Set(plan.items.flatMap(i => i.permisos))];
+        return plan;
+    }
+
+    async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
+        const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
+        if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+        const comparacion = await compararSistema(result.reservas, cliente, result.q);
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+        return crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion);
+    }
+
 
     async function consultar(texto, libro = root.HAIKU_LIBRO_RESERVA_V1, cliente = root.haikuSupabase) {
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
@@ -735,7 +860,7 @@
         return lines.join("\n");
     }
 
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta });
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 
@@ -885,7 +1010,8 @@
             x.libro.titular + " · " + source(x.libro.coordenadas_origen),
             ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
         ])));
-        const decisiones = new Map();
+        const decisiones = ui.decisiones || new Map();
+        const aprobados = ui.aprobados || new Set();
         if (ambiguas.length) {
             const preguntas = elemento("div", "haiku-asistente-preview-lista" + (ui.preguntasAbiertas ? " haiku-reconciliacion-abierto" : ""));
             preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
@@ -917,34 +1043,43 @@
                     select.append(new Option(texto, o.valor));
                     label.append(elemento("p", "", texto));
                 });
+                select.selectedIndex = Math.max(0, modelo.opciones.findIndex(o => o.valor === decisiones.get(g.clave)?.valor));
                 select.addEventListener("change", () => {
                     decisiones.set(g.clave, modelo.opciones[select.selectedIndex]);
-                    vista.replaceChildren(elemento("p", "", "Decisión actualizada. Pulsa Preparar vista previa para actualizar el resumen."));
+                    vista.replaceChildren(elemento("p", "", "Decisión actualizada. Pulsa Preparar incorporación para actualizar el resumen."));
                 });
                 label.append(select); preguntas.append(label);
             });
             out.append(preguntas);
         }
-        const preparar = elemento("button", "libro-reserva-boton secundario", "Preparar vista previa");
+        const preparar = elemento("button", "libro-reserva-boton secundario", "Preparar incorporación");
         preparar.type = "button";
         const vista = elemento("div");
-        preparar.addEventListener("click", () => {
-            vista.replaceChildren();
-            const categorias = {
-                asociadas: grupos.filter(g => g.estado === "asociada").map(descripcionGrupo),
-                nuevas: faltantes.map(descripcionGrupo), estadias: [], independientes: [], pendientes: []
-            };
-            ambiguas.forEach(g => {
-                const decision = decisiones.get(g.clave) || preguntaPresentacion(g).opciones[0];
-                categorias[decision.categoria].push(descripcionGrupo(g) + " · " + decision.texto +
-                    (decision.destino ? " · " + decision.destino : "") + " — " + decision.efecto);
-            });
-            vista.append(elemento("p", "", "Propuestas para revisión · escritura deshabilitada"));
-            [["asociadas", "Misma reserva / asociada"], ["nuevas", "Reserva nueva"], ["estadias", "Estadía a añadir"],
-                ["independientes", "Reservas independientes"], ["pendientes", "Pendientes"]].forEach(([k, titulo]) =>
-                agregarLista(vista, titulo, categorias[k]));
-            agregarLista(vista, "Pagos seguros", pagosFaltan.map(x => x.reserva.titular + " · " + money(x.pago.monto)));
-            vista.append(elemento("p", "", "Estas decisiones no autorizan escrituras. Antes de una futura incorporación será obligatorio consultar de nuevo Proyecto H, resolver conflictos y revalidar identificadores de pagos."));
+        preparar.addEventListener("click", async () => {
+            preparar.disabled = true; refrescar.disabled = true;
+            out.querySelectorAll("select").forEach(s => s.disabled = true);
+            vista.replaceChildren(elemento("p", "", "Revalidando reservas y pagos contra Proyecto H…"));
+            try {
+                const plan = await prepararIncorporacion(result, decisiones, aprobados);
+                if (!out.isConnected && out.isConnected !== undefined) return;
+                const volver = () => renderizarComparacion(out, result, { decisiones, aprobados });
+                const aprobar = async id => {
+                    aprobados.add(id);
+                    out.replaceChildren(elemento('p', '', 'Revalidando el pago aprobado…'));
+                    try {
+                        const nuevo = await prepararIncorporacion(result, decisiones, aprobados);
+                        renderizarIncorporacion(out, nuevo, volver, aprobar);
+                    } catch (e) {
+                        aprobados.delete(id); volver();
+                        out.append(elemento('p', '', 'No se pudo revalidar: ' + e.message));
+                    }
+                };
+                renderizarIncorporacion(out, plan, volver, aprobar);
+            } catch (error) {
+                vista.replaceChildren(elemento("p", "", "No se pudo preparar: " + error.message + ". Reintenta; no hay una propuesta actualizada."));
+                preparar.disabled = false; refrescar.disabled = false;
+                out.querySelectorAll("select").forEach(s => s.disabled = false);
+            }
         });
         out.append(preparar, vista);
         const refrescar = elemento("button", "libro-reserva-boton secundario", "Revalidar contra Proyecto H");
@@ -971,6 +1106,53 @@
         const pie = elemento("div", "haiku-asistente-preview-pie");
         pie.append(elemento("span", "", "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
         out.append(pie);
+    }
+
+    function renderizarIncorporacion(out, plan, volver, aprobar) {
+        out.replaceChildren(elemento("strong", "", "Preparar incorporación · simulación"));
+        out.append(elemento("p", "", "Escritura real deshabilitada en modo de prueba"));
+        const resumen = elemento("p", "haiku-asistente-preview-resumen");
+        out.append(resumen);
+        const controles = new Map();
+        const actualizar = () => {
+            for (const i of plan.items) {
+                const c = controles.get(i.id); if (!c) continue;
+                const dependencia = i.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
+                c.disabled = !!i.motivos.length || dependencia || !['nuevas','estadias','pagos'].includes(i.categoria);
+                if (c.disabled) { c.checked = false; i.seleccionado = false; }
+            }
+            const n = k => plan.items.filter(i => i.categoria === k && i.seleccionado).length;
+            resumen.textContent = n('nuevas') + ' reservas nuevas · ' + n('estadias') + ' elementos de estadías a añadir · ' + n('pagos') + ' pagos seguros/aprobados · ' + plan.items.filter(i=>i.categoria==='dudosos').length + ' pagos dudosos · ' + plan.items.filter(i=>i.categoria==='pendientes'||i.motivos.length && i.categoria!=='dudosos').length + ' pendientes';
+        };
+        for (const [k,titulo] of [['nuevas','Reservas nuevas claras'],['estadias','Estadías/cabañas a añadir'],['asociadas','Mismas reservas ya asociadas'],['pagos','Pagos nuevos seguros o aprobados'],['dudosos','Pagos dudosos/manuales'],['pendientes','Casos pendientes'],['omitidos','Ya existe / omitido']]) {
+            const items = plan.items.filter(i => i.categoria === k);
+            const seccion = elemento('details'); seccion.open = ['nuevas','estadias','pagos'].includes(k);
+            seccion.append(elemento('summary','',titulo + ' (' + items.length + ')'));
+            for (const i of items) {
+                const fila = elemento('div'), label = elemento('label'), check = elemento('input');
+                check.type = 'checkbox'; check.checked = i.seleccionado;
+                controles.set(i.id,check);
+                check.addEventListener('change',()=> { i.seleccionado=check.checked; actualizar(); });
+                label.append(check,elemento('span','',i.texto)); fila.append(label);
+                if (i.motivos.length) fila.append(elemento('p','',i.motivos.join(' ')));
+                if (i.payload?.estadias) {
+                    const r=i.payload.reserva;
+                    if(r) fila.append(elemento('p','',[r.titular_nombre,'Documento: '+(r.titular_numero_documento || 'sin dato'),'Correo: '+(r.correo_contacto || 'sin dato'),'Teléfono: '+(r.telefono_contacto || 'sin dato')].join(' · ')));
+                    i.payload.estadias.forEach(e=>fila.append(elemento('p','','CAB '+e.cabana_numero+' · '+e.datos.fecha_ingreso+' → '+e.datos.fecha_salida+' · '+(e.datos.tipo_estadia==='fullday'?'Full Day':e.noches+' noches')+' · Adultos: '+(e.datos.adultos??'sin dato')+' · Niños: '+(e.datos.ninos??'sin dato')+' · Mascotas: '+(e.datos.mascotas??'sin dato'))));
+                    if(r?.observaciones) agregarDetalles(fila,'Notas y solicitudes',[r.observaciones]);
+                }
+                if (i.aprobable && aprobar) { const b=elemento('button','libro-reserva-boton secundario','Aprobar este pago para la simulación'); b.type='button'; b.addEventListener('click',()=>{ b.disabled=true; aprobar(i.id); }); fila.append(b); }
+                seccion.append(fila);
+            }
+            out.append(seccion);
+        }
+        actualizar();
+        agregarDetalles(out,'Permisos necesarios (sin cambios)',plan.permisos.map(p=>p+' · '+(root.haikuTienePermiso?.(p)===true?'disponible en la sesión':'por verificar/no disponible')));
+        out.append(elemento('p','',plan.alcance + '. Los pagos se revisan en el bloque del día de Check-In. Los datos desconocidos permanecen sin dato.'));
+        const confirmar=elemento('button','libro-reserva-boton','Confirmar incorporación'); confirmar.type='button'; confirmar.disabled=true;
+        confirmar.title='Escritura real deshabilitada en modo de prueba';
+        const atras=elemento('button','libro-reserva-boton secundario','Volver a la comparación'); atras.type='button'; atras.addEventListener('click',volver);
+        out.append(atras,confirmar);
     }
 
     async function enviar(texto) {
