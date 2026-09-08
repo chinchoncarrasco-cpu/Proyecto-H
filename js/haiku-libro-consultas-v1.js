@@ -560,8 +560,9 @@
         return resultados;
     }
 
-    // Pure plan data, never an executor. References are resolved only by the future transaction.
-    const ESCRITURA_LIBRO = false;
+    // La preparacion sigue siendo pura. La escritura ocurre solo por la RPC atomica
+    // y despues de una segunda revalidacion iniciada por el boton de confirmacion.
+    const ESCRITURA_LIBRO = true;
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
@@ -620,7 +621,7 @@
                 if (valores.size > 1) motivos.push('El grupo contiene datos diferentes en ' + k + '.');
             }
             const conocido = k => g.items.map(i => i.libro[k]).find(v => v != null && v !== '') ?? null;
-            const payload = { contrato: 'reservas + reserva_estadias; requiere futura RPC transaccional', reserva_id: categoria === 'estadias' ? reservaId : null,
+            const payload = { contrato: 'haiku_incorporar_libro_v1', reserva_id: categoria === 'estadias' ? reservaId : null,
                 reserva_ref: categoria === 'nuevas' ? id : null,
                 reserva: categoria === 'nuevas' ? { titular_nombre: r.titular, titular_numero_documento: conocido('rut_documento'), titular_tipo_documento: null,
                     correo_contacto: conocido('correo'), telefono_contacto: conocido('telefono'), estado_reserva: 'pendiente',
@@ -661,8 +662,8 @@
             const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) && (x.estado === 'nuevo_seguro' || destino?.reserva_ref);
             const manual = aprobados.has(id);
             if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
-            const payload = { contrato: 'haiku_registrar_pago', pendiente_contrato: ['Resolver etapa operativa sin inferir abono/saldo; conservar datos_origen en la futura transacción'], reserva_ref: destino?.reserva_ref || null,
-                argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: null, p_referencia_externa: p.texto_original || null,
+            const payload = { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
+                argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: p.texto_original || null,
                     p_fecha_pago: p.fecha_comprobante || null, p_folio: p.folio || null, p_codigo_autorizacion: p.codigo_autorizacion || null,
                     p_bove: p.bove || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
                 datos_origen: { bovtar: p.bovtar || null, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual };
@@ -681,6 +682,66 @@
         const comparacion = await compararSistema(result.reservas, cliente, result.q);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         return crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion);
+    }
+
+    function crearIdOperacion() {
+        if (root.crypto?.randomUUID) return root.crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+        });
+    }
+
+    function serializarIncorporacion(plan) {
+        const elegidos = new Set(plan.items.filter(i => i.seleccionado && !i.motivos.length).map(i => i.id));
+        return plan.items.filter(item => elegidos.has(item.id) && item.dependeDe.every(id => elegidos.has(id))).map(item => {
+            if (item.categoria === 'nuevas') return {
+                tipo: 'reserva_nueva', item_id: item.id,
+                reserva: item.payload.reserva, estadias: item.payload.estadias
+            };
+            if (item.categoria === 'estadias') return {
+                tipo: 'estadia', item_id: item.id,
+                reserva_id: item.payload.reserva_id, estadias: item.payload.estadias
+            };
+            if (item.categoria === 'pagos') return {
+                tipo: 'pago', item_id: item.id,
+                reserva_id: item.payload.argumentos.p_reserva_id,
+                reserva_ref: item.payload.reserva_ref,
+                argumentos: item.payload.argumentos,
+                datos_origen: item.payload.datos_origen,
+                aprobado_manualmente: item.payload.aprobado_manualmente === true
+            };
+            return null;
+        }).filter(Boolean);
+    }
+
+    async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
+        if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        let solicitud = plan.solicitudPendiente;
+        let omitidosAlRevalidar = 0;
+        if (!solicitud) {
+            const seleccionados = new Set(plan.items.filter(i => i.seleccionado).map(i => i.id));
+            if (!seleccionados.size) throw new Error('Selecciona al menos una reserva, estadía o pago.');
+            const actualizado = await prepararIncorporacion(result, decisiones, aprobados, cliente);
+            for (const item of actualizado.items) {
+                item.seleccionado = seleccionados.has(item.id) && !item.motivos.length && ['nuevas','estadias','pagos'].includes(item.categoria);
+            }
+            const vigentes = new Set(actualizado.items.filter(i => i.seleccionado).map(i => i.id));
+            omitidosAlRevalidar = [...seleccionados].filter(id => !vigentes.has(id)).length;
+            const items = serializarIncorporacion(actualizado);
+            if (!items.length) throw new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.');
+            solicitud = { operacionId: crearIdOperacion(), items, omitidosAlRevalidar };
+            // Se conserva la misma solicitud para que un reintento de red sea idempotente.
+            plan.solicitudPendiente = solicitud;
+        } else omitidosAlRevalidar = solicitud.omitidosAlRevalidar || 0;
+
+        const { data, error } = await cliente.rpc('haiku_incorporar_libro_v1', {
+            p_operacion_id: solicitud.operacionId,
+            p_items: solicitud.items
+        });
+        if (error) throw error;
+        if (!data?.ok) throw new Error('Proyecto H no confirmó la incorporación.');
+        return { resultado: data, omitidosAlRevalidar };
     }
 
 
@@ -860,7 +921,7 @@
         return lines.join("\n");
     }
 
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion });
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 
@@ -1063,18 +1124,20 @@
                 const plan = await prepararIncorporacion(result, decisiones, aprobados);
                 if (!out.isConnected && out.isConnected !== undefined) return;
                 const volver = () => renderizarComparacion(out, result, { decisiones, aprobados });
+                let incorporar;
                 const aprobar = async id => {
                     aprobados.add(id);
                     out.replaceChildren(elemento('p', '', 'Revalidando el pago aprobado…'));
                     try {
                         const nuevo = await prepararIncorporacion(result, decisiones, aprobados);
-                        renderizarIncorporacion(out, nuevo, volver, aprobar);
+                        renderizarIncorporacion(out, nuevo, volver, aprobar, incorporar);
                     } catch (e) {
                         aprobados.delete(id); volver();
                         out.append(elemento('p', '', 'No se pudo revalidar: ' + e.message));
                     }
                 };
-                renderizarIncorporacion(out, plan, volver, aprobar);
+                incorporar = planActual => confirmarIncorporacion(result, decisiones, aprobados, planActual);
+                renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
             } catch (error) {
                 vista.replaceChildren(elemento("p", "", "No se pudo preparar: " + error.message + ". Reintenta; no hay una propuesta actualizada."));
                 preparar.disabled = false; refrescar.disabled = false;
@@ -1138,7 +1201,7 @@
         if (item.categoria === "nuevas") detalle = `Se propone una sola reserva con ${estadias.length} estadía${estadias.length === 1 ? "" : "s"}. Estado inicial: pendiente.`;
         if (item.categoria === "estadias") detalle = `Se propone añadir ${estadias.length} estadía${estadias.length === 1 ? "" : "s"} a la reserva existente.`;
         if (item.categoria === "asociadas") detalle = "La reserva ya está asociada. No se creará otra.";
-        if (item.categoria === "pagos") detalle = item.payload?.reserva_ref ? "Se asociará cuando se cree la reserva seleccionada." : "Pago listo para la simulación.";
+        if (item.categoria === "pagos") detalle = item.payload?.reserva_ref ? "Se asociará cuando se cree la reserva seleccionada." : "Pago listo para incorporar.";
         if (item.categoria === "dudosos") detalle = "Este movimiento necesita revisión antes de poder prepararse.";
         if (item.categoria === "pendientes") detalle = "No se incorporará mientras siga pendiente.";
         if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
@@ -1212,7 +1275,7 @@
             fila.append(notas);
         }
         if (item.aprobable && aprobar) {
-            const boton = elemento("button", "haiku-incorporacion-aprobar", "Aprobar para la simulación");
+            const boton = elemento("button", "haiku-incorporacion-aprobar", "Aprobar este pago");
             boton.type = "button";
             boton.addEventListener("click", () => { boton.disabled = true; aprobar(item.id); });
             fila.append(boton);
@@ -1220,13 +1283,42 @@
         return fila;
     }
 
-    function renderizarIncorporacion(out, plan, volver, aprobar) {
+    function renderizarResultadoIncorporacion(out, ejecucion, volver) {
+        const r = ejecucion.resultado;
         out.className = "haiku-asistente-preview haiku-incorporacion";
         const cabecera = elemento("div", "haiku-incorporacion-cabecera");
         const titulo = elemento("div");
-        titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", "Preparar incorporación"));
-        cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", "Modo de prueba"));
-        const aviso = elemento("p", "haiku-incorporacion-aviso", "Escritura real deshabilitada en modo de prueba. Revisa y selecciona; todavía no se guardará nada.");
+        titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", "Incorporación completada"));
+        cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", "Guardado"));
+        const mensaje = elemento("p", "haiku-incorporacion-aviso", "Proyecto H confirmó la operación completa. El Libro original no fue modificado.");
+        const resumen = elemento("div", "haiku-incorporacion-resumen");
+        for (const [cantidad, etiqueta] of [
+            [r.reservas_creadas || 0, "Reservas"],
+            [r.estadias_agregadas || 0, "Estadías"],
+            [r.pagos_creados || 0, "Pagos"],
+            [(r.omitidos || 0) + (ejecucion.omitidosAlRevalidar || 0), "Omitidos"]
+        ]) {
+            const tarjeta = elemento("div", "haiku-incorporacion-indicador");
+            tarjeta.append(elemento("strong", "", String(cantidad)), elemento("span", "", etiqueta));
+            resumen.append(tarjeta);
+        }
+        out.replaceChildren(cabecera, mensaje, resumen);
+        if (r.reintento) out.append(elemento("p", "haiku-incorporacion-propuesta", "La confirmación ya se había completado; se recuperó el mismo resultado sin duplicar datos."));
+        if ((r.omitidos || 0) + (ejecucion.omitidosAlRevalidar || 0) > 0) out.append(elemento("p", "haiku-incorporacion-propuesta", "Los elementos que aparecieron entretanto o coincidían con datos existentes fueron omitidos."));
+        const acciones = elemento("div", "haiku-incorporacion-acciones");
+        const boton = elemento("button", "libro-reserva-boton secundario", "Volver a la comparación");
+        boton.type = "button";
+        boton.addEventListener("click", volver);
+        acciones.append(boton); out.append(acciones);
+    }
+
+    function renderizarIncorporacion(out, plan, volver, aprobar, incorporar) {
+        out.className = "haiku-asistente-preview haiku-incorporacion";
+        const cabecera = elemento("div", "haiku-incorporacion-cabecera");
+        const titulo = elemento("div");
+        titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", "Confirmar incorporación"));
+        cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", "Escritura habilitada"));
+        const aviso = elemento("p", "haiku-incorporacion-aviso", "Revisa la selección. Al confirmar, Haku comprobará nuevamente Proyecto H y guardará todo en una sola operación segura.");
         const resumen = elemento("div", "haiku-incorporacion-resumen");
         out.replaceChildren(cabecera, aviso, resumen);
 
@@ -1239,19 +1331,22 @@
         }
 
         const controles = new Map();
+        let confirmar = null, guardando = false;
         const actualizar = () => {
             for (const item of plan.items) {
                 const control = controles.get(item.id);
                 if (!control) continue;
                 const dependencia = item.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
-                control.disabled = !!item.motivos.length || dependencia || !["nuevas", "estadias", "pagos"].includes(item.categoria);
-                if (control.disabled) { control.checked = false; item.seleccionado = false; }
+                const noElegible = !!item.motivos.length || dependencia || !["nuevas", "estadias", "pagos"].includes(item.categoria);
+                control.disabled = guardando || noElegible;
+                if (noElegible) { control.checked = false; item.seleccionado = false; }
             }
             indicadores.nuevas.textContent = plan.items.filter(i => i.categoria === "nuevas" && i.seleccionado).length;
             indicadores.estadias.textContent = plan.items.filter(i => i.categoria === "estadias" && i.seleccionado).reduce((n, i) => n + (i.payload?.estadias?.length || 0), 0);
             indicadores.pagos.textContent = plan.items.filter(i => i.categoria === "pagos" && i.seleccionado).length;
             indicadores.dudosos.textContent = plan.items.filter(i => i.categoria === "dudosos").length;
             indicadores.pendientes.textContent = plan.items.filter(i => i.categoria === "pendientes" || i.motivos.length && i.categoria !== "dudosos").length;
+            if (confirmar) confirmar.disabled = guardando || !plan.items.some(i => i.seleccionado && !i.motivos.length && ["nuevas", "estadias", "pagos"].includes(i.categoria));
         };
 
         for (const [categoria, tituloSeccion] of [["nuevas", "Reservas nuevas"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]]) {
@@ -1270,7 +1365,7 @@
 
         const ayuda = elemento("details", "haiku-incorporacion-ayuda");
         const permisos = plan.permisos.map(p => p + " · " + (root.haikuTienePermiso?.(p) === true ? "disponible" : "por verificar"));
-        ayuda.append(elemento("summary", "", "Información de la simulación"));
+        ayuda.append(elemento("summary", "", "Información de la incorporación"));
         const listaAyuda = elemento("ul");
         listaAyuda.append(elemento("li", "", "Los pagos se revisan bajo el bloque del día de Check-In."));
         listaAyuda.append(elemento("li", "", "Los datos desconocidos permanecen como “sin dato”."));
@@ -1282,10 +1377,35 @@
         const atras = elemento("button", "libro-reserva-boton secundario", "Volver");
         atras.type = "button";
         atras.addEventListener("click", volver);
-        const confirmar = elemento("button", "libro-reserva-boton", "Confirmar incorporación");
+        confirmar = elemento("button", "libro-reserva-boton", "Confirmar incorporación");
         confirmar.type = "button";
-        confirmar.disabled = true;
-        confirmar.title = "Escritura real deshabilitada en modo de prueba";
+        confirmar.addEventListener("click", async () => {
+            const seleccion = plan.items.filter(i => i.seleccionado && !i.motivos.length && ["nuevas", "estadias", "pagos"].includes(i.categoria));
+            const nuevas = seleccion.filter(i => i.categoria === "nuevas").length;
+            const estadias = seleccion.filter(i => i.categoria === "estadias").reduce((n, i) => n + (i.payload?.estadias?.length || 0), 0);
+            const pagos = seleccion.filter(i => i.categoria === "pagos").length;
+            if (!seleccion.length) return;
+            const texto = `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s). Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
+            if (typeof root.confirm === "function" && !root.confirm(texto)) return;
+            guardando = true; atras.disabled = true; actualizar();
+            confirmar.textContent = "Revalidando y guardando…";
+            aviso.textContent = "Comprobando cambios recientes y ejecutando la incorporación completa…";
+            try {
+                const ejecucion = await incorporar(plan);
+                await Promise.allSettled([
+                    Promise.resolve().then(() => root.haikuSincronizarReservasSupabase?.()),
+                    Promise.resolve().then(() => root.haikuCargarAbonosSupabase?.()),
+                    Promise.resolve().then(() => root.haikuCargarSaldosCheckinSupabase?.())
+                ]);
+                renderizarResultadoIncorporacion(out, ejecucion, volver);
+            } catch (error) {
+                guardando = false; atras.disabled = false;
+                confirmar.textContent = "Reintentar confirmación";
+                aviso.textContent = "No se pudo confirmar: " + (error.message || "error desconocido") + ". No cierres esta vista; el reintento usa la misma operación para evitar duplicados.";
+                actualizar();
+            }
+        });
+        actualizar();
         acciones.append(atras, confirmar);
         out.append(acciones);
     }

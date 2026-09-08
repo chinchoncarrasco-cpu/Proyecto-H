@@ -15,7 +15,7 @@ function client(rows=[], payments=[]) {
   calls.push(table);let data={reserva_estadias:rows,pagos:payments,servicios:[]}[table];
   const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};
   return b;
- }};
+ },rpc(name,args){calls.push(name);return Promise.resolve({data:{ok:true,operacion_id:args.p_operacion_id,reservas_creadas:0,estadias_agregadas:0,pagos_creados:0,omitidos:0},error:null})}};
 }
 const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
 test('September 2026: two cabins in one reservation count as one complete logical group',async()=>{
@@ -84,7 +84,7 @@ test('visual report retains cards, confines coordinates to technical details and
  }
  const document={createElement:t=>new Element(t),querySelector:()=>null};
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document,addEventListener(){},Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
- const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, renderizarComparacion })');
+ const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion })');
  vm.runInNewContext(source,context);
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
  context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,{q,comparacion:c});
@@ -165,7 +165,7 @@ function renderHarness(reconsultar, db) {
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
-  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, renderizarComparacion })')
+  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion })')
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
@@ -276,7 +276,7 @@ const prepare=async(rs,rows=[],ps=[],dec=new Map(),approved=new Set())=>{
 };
 test('preparation is idempotent, read only, preserves known data and groups multiple cabins',async()=>{
  const rs=[readyBook({correo:'guest@example.test'}),readyBook({id:'b2',cabana:2})];
- const a=await prepare(rs),b=await prepare(rs);assert.deepEqual(a,b);assert.equal(a.escrituraHabilitada,false);
+ const a=await prepare(rs),b=await prepare(rs);assert.deepEqual(a,b);assert.equal(a.escrituraHabilitada,true);
  assert.equal(a.items.length,1);assert.equal(a.items[0].payload.estadias.length,2);
  assert.equal(a.items[0].payload.reserva.correo_contacto,'guest@example.test');assert.equal(a.items[0].payload.reserva.telefono_contacto,null);
  assert.deepEqual(a.permisos,['reservas.crear']);
@@ -334,20 +334,27 @@ test('manual approval allows a weak identifier only after explicit review and ca
  const rs=[readyBook({pagos:[readyPay({codigo_autorizacion:null})]})],p=await prepare(rs),item=p.items.find(i=>i.categoria==='dudosos');assert.equal(item.aprobable,true);
  const approved=await prepare(rs,[],[],new Map(),new Set([item.id]));assert.equal(approved.items.find(i=>i.id===item.id).categoria,'pagos');
 });
-test('second screen revalidates, shows all categories, enforces dependencies and disables confirmation',async()=>{
+test('second screen revalidates, shows all categories, enforces dependencies and enables guarded confirmation',async()=>{
  const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
  h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
- assert.match(h.texts(),/Escritura real deshabilitada en modo de prueba/);
+ assert.match(h.texts(),/Escritura habilitada/);assert.match(h.texts(),/una sola operación segura/);
  for(const t of ['Reservas nuevas','Estadías a añadir','Reservas ya asociadas','Pagos preparados','Pagos para revisar','Casos pendientes','Ya existe / omitido']) assert.ok(h.texts().includes(t));
  assert.ok(h.out.querySelector('.haiku-incorporacion-resumen'));
  assert.ok(h.out.querySelector('.haiku-incorporacion-item'));
  assert.equal(h.out.querySelectorAll('details').some(d=>d.open),false);
  assert.doesNotMatch(h.texts(),/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
  assert.match(h.texts(),/Documento.*Correo.*Teléfono/);
- assert.equal(h.button('Confirmar incorporación').disabled,true);assert.equal(h.button('Confirmar incorporación').events.click,undefined);
+ assert.equal(h.button('Confirmar incorporación').disabled,false);assert.equal(typeof h.button('Confirmar incorporación').events.click,'function');
  const checks=h.out.querySelectorAll('input'),first=checks[0];first.checked=false;first.events.change();
  assert.equal(checks[1].disabled,true);assert.equal(checks[1].checked,false);
  assert.equal(db.calls.filter(x=>x==='pagos').length,2);
+});
+test('confirmation button executes the atomic RPC and shows the saved result',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
+ h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
+ await h.button('Confirmar incorporación').events.click();
+ assert.match(h.texts(),/Incorporación completada/);assert.match(h.texts(),/El Libro original no fue modificado/);
+ assert.equal(db.calls.filter(x=>x==='haiku_incorporar_libro_v1').length,1);
 });
 test('failed preparation never displays an actionable stale plan',async()=>{
  const r=readyBook(),c=await compare([r]),db=client();db.auth.getSession=async()=>{throw new Error('offline')};
@@ -370,7 +377,29 @@ test('grouped existing reservations retain payment destination per original rese
  const rows=[stay(a,{reserva_id:'r1',reservas:{...stay(a).reservas,grupo_reserva_id:'g'}}),stay(b,{reserva_id:'r2',reservas:{...stay(b).reservas,grupo_reserva_id:'g'}})];
  const p=await prepare([a,b],rows);assert.equal(p.items[0].categoria,'asociadas');assert.equal(p.items.find(i=>i.categoria==='pagos').payload.argumentos.p_reserva_id,'r1');
 });
-test('source has no database mutators, global polling or enabled confirmation handler',()=>{
+test('confirmation revalidates and retries the same atomic operation without rebuilding its payload',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),db=client(),comparacion=await Q.compararSistema([r],db,q);
+ const plan=await Q.prepararIncorporacion({q,reservas:[r],comparacion},new Map(),new Set(),db),requests=[];
+ db.rpc=async(name,args)=>{requests.push({name,args});return requests.length===1?{data:null,error:new Error('red incierta')}:{data:{ok:true,operacion_id:args.p_operacion_id,reservas_creadas:1,estadias_agregadas:0,pagos_creados:1,omitidos:0},error:null}};
+ await assert.rejects(Q.confirmarIncorporacion({q,reservas:[r],comparacion},new Map(),new Set(),plan,db),/red incierta/);
+ const before=db.calls.filter(x=>x==='pagos').length;
+ const done=await Q.confirmarIncorporacion({q,reservas:[r],comparacion},new Map(),new Set(),plan,db);
+ assert.equal(done.resultado.ok,true);assert.equal(requests.length,2);assert.equal(requests[0].name,'haiku_incorporar_libro_v1');
+ assert.equal(requests[0].args.p_operacion_id,requests[1].args.p_operacion_id);assert.deepEqual(requests[0].args.p_items,requests[1].args.p_items);
+ assert.equal(db.calls.filter(x=>x==='pagos').length,before);
+ const payment=requests[0].args.p_items.find(i=>i.tipo==='pago');assert.equal(payment.argumentos.p_etapa_operativa,'abono');
+ assert.equal(payment.reserva_ref,requests[0].args.p_items.find(i=>i.tipo==='reserva_nueva').item_id);
+});
+test('atomic RPC migration has durable idempotency, database revalidation, exact permissions and no anonymous access',()=>{
+ const fs=require('node:fs'),sql=fs.readFileSync(require.resolve('../supabase/migrations/20260908113000_haku_incorporar_libro_v1.sql'),'utf8');
+ assert.match(sql,/private\.haiku_libro_incorporaciones/);assert.match(sql,/security definer/i);
+ assert.match(sql,/lock table public\.reserva_estadias/i);assert.match(sql,/lock table public\.pagos/i);
+ for(const permission of ['reservas.crear','reservas.editar','pagos.registrar']) assert.match(sql,new RegExp(permission.replace('.','\\.')));
+ assert.match(sql,/grant execute[\s\S]*to authenticated/i);assert.match(sql,/revoke all[\s\S]*from public, anon/i);
+ assert.match(sql,/p_etapa_operativa => 'abono'/);assert.match(sql,/codigo_autorizacion/);assert.match(sql,/datos_origen ->> 'bovtar'/);
+});
+test('source writes only through the atomic RPC and keeps global polling disabled',()=>{
  const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
- assert.doesNotMatch(s,/\.\s*(insert|update|upsert|rpc)\s*\(|setInterval\s*\(|new MutationObserver/);
+ assert.doesNotMatch(s,/\.\s*(insert|update|upsert)\s*\(|setInterval\s*\(|new MutationObserver/);
+ assert.equal((s.match(/\.rpc\('haiku_incorporar_libro_v1'/g)||[]).length,1);
 });
