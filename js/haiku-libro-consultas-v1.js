@@ -936,7 +936,7 @@
     }
 
     const categoriasVersion = { nueva: 'Nuevas', modificada: 'Modificadas', ya_no_aparece: 'Ya no aparecen', sin_cambios: 'Sin cambios', requiere_revision: 'Requieren revisión' };
-    const estadoVersion = { nueva: 'Reserva nueva', modificada: 'Reserva modificada', ya_no_aparece: 'Ya no aparece', sin_cambios: 'Sin cambios', requiere_revision: 'Requiere revisión' };
+    const estadoVersion = { nueva: 'Reserva nueva', modificada: 'Cambio detectado', ya_no_aparece: 'Ya no aparece', sin_cambios: 'Sin cambios', requiere_revision: 'Requiere revisión' };
     function tituloVersiones(q) {
         const inicio = q.desde, fin = q.hasta;
         const mes = d => `${nombresMes[Number(d.slice(5, 7)) - 1].replace(/^./, x => x.toUpperCase())} ${d.slice(0, 4)}`;
@@ -950,7 +950,15 @@
         if (d.tipo === 'cabana_eliminada') return `Se quitó CAB ${d.cabana}`;
         if (d.tipo === 'pago_agregado') return `Se agregó pago ${money(d.pago.monto)}`;
         if (d.tipo === 'pago_eliminado') return `Se eliminó pago ${money(d.pago.monto)}`;
-        if (d.tipo === 'pago_modificado') return `Pago modificado/requiere revisión: ${money(d.anterior.monto)} → ${money(d.actual.monto)}`;
+        if (d.tipo === 'pago_modificado') {
+            const campos = { monto: 'monto', moneda: 'moneda', concepto: 'concepto', tipo_movimiento: 'tipo de movimiento', medio_pago: 'medio de pago',
+                codigo_autorizacion: 'CodAut', folio: 'Folio', bovtar: 'Bovtar', bove: 'BOVE', texto_original: 'glosa', estado_pago: 'estado',
+                fecha_comprobante: 'fecha del comprobante', bove_pendiente: 'BOVE pendiente', manager_pendiente: 'Manager pendiente',
+                saldo_por_pagar: 'saldo pendiente', monto_penalidad: 'penalidad', penalidad_porcentaje: 'porcentaje de penalidad' };
+            const cambios = Object.entries(campos).filter(([k]) => S.normalizar(d.anterior[k]) !== S.normalizar(d.actual[k])).map(([k, label]) =>
+                k === 'monto' ? `${label}: ${money(d.anterior[k])} → ${money(d.actual[k])}` : `${label}: ${String(d.anterior[k] ?? 'sin dato').replaceAll('_', ' ')} → ${String(d.actual[k] ?? 'sin dato').replaceAll('_', ' ')}`);
+            return `Pago modificado · ${cambios.join('; ') || 'Cambió un dato del pago'}`;
+        }
         if (d.detalle) return d.detalle;
         const campos = { fecha_checkin: 'Check-In', fecha_checkout: 'Check-Out', tipo_estadia: 'tipo de estadía', rut_documento: 'documento', correo: 'correo', telefono: 'teléfono', adultos: 'adultos', ninos: 'niños', mascotas: 'mascotas', estado_confirmacion: 'confirmación', estado_operativo: 'estado de la estadía', notas_importantes: 'notas importantes', pagos_pendientes: 'pagos pendientes', servicios: 'servicios', operador: 'operador', fecha_ingreso_libro: 'fecha de ingreso al Libro', notas: 'notas' };
         const valor = v => v === null || v === undefined || v === '' ? 'sin dato' : Array.isArray(v) ? v.map(valor).join('; ') || 'sin dato' :
@@ -964,6 +972,7 @@
             lines.push(r ? `${r.titular} · ${descripcionVersion(r)} · ${estadoVersion[c.tipo]}` : c.detalle);
             if (c.detalle && r) lines.push(c.detalle);
             lines.push(...(c.diferencias || []).map(detalleVersion));
+            for (const p of c.pagos_sin_cambios || []) lines.push(p.detalle, p.nota);
         }
         lines.push(...new Set(result.advertencias || []), 'Sólo lectura. “Ya no aparece” no confirma una cancelación.');
         return lines.join('\n');
@@ -988,6 +997,9 @@
                 const r = c.actual || c.anterior, tarjeta = elemento('article', `haiku-versiones-tarjeta haiku-versiones--${tipo}`);
                 tarjeta.append(elemento('strong', 'haiku-versiones-titular', r.titular), elemento('span', 'haiku-versiones-estado', estadoVersion[tipo]), elemento('p', 'haiku-versiones-meta', descripcionVersion(r)));
                 if (c.detalle) tarjeta.append(elemento('p', '', c.detalle));
+                for (const p of c.pagos_sin_cambios || []) {
+                    tarjeta.append(elemento('p', 'haiku-versiones-pago-sin-cambios', p.detalle), elemento('small', 'haiku-versiones-nota', p.nota));
+                }
                 const lista = elemento('ul');
                 (c.diferencias || []).forEach(d => {
                     const li = elemento('li', '', detalleVersion(d));
