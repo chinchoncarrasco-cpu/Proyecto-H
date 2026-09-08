@@ -1,8 +1,9 @@
 // HAKU · guardas seguras para importar servicios/notas del Libro
-// V3: sin MutationObserver. Evita el bucle de atributos que podía congelar la página.
+// V4: mantiene visible el detalle de la revisión después de guardar y permite
+// volver a consultar sin perder la confirmación de incorporación.
 (function (root) {
     "use strict";
-    if (!root.document || root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V3) return;
+    if (!root.document || root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4) return;
 
     const confirmarNativo = root.confirm.bind(root);
     let ultimoTextoServicios = "";
@@ -152,7 +153,38 @@
         card.append(aviso);
     }
 
-    function mostrarExito(card, data) {
+    function prepararDetalleAnterior(card) {
+        const copia = card.cloneNode(true);
+        copia.querySelectorAll(".haku-libro-servicios__acciones,.haku-libro-servicios__error-guard").forEach(x => x.remove());
+        copia.querySelectorAll("button,input,select,textarea").forEach(control => {
+            control.disabled = true;
+            control.setAttribute("aria-disabled", "true");
+        });
+        const wrap = document.createElement("div");
+        wrap.className = "haku-libro-servicios__revision-anterior";
+        [...copia.children].forEach(child => wrap.append(child));
+        return wrap;
+    }
+
+    function botonSecundario(texto) {
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.textContent = texto;
+        Object.assign(boton.style, {
+            border: "1px solid #b9d4c3",
+            borderRadius: "9px",
+            padding: "8px 11px",
+            background: "#f7fbf8",
+            color: "#285a40",
+            font: "inherit",
+            fontSize: "10px",
+            fontWeight: "800",
+            cursor: "pointer"
+        });
+        return boton;
+    }
+
+    function mostrarExito(card, data, textoOriginal, detalleAnterior) {
         card.replaceChildren();
         const head = document.createElement("div"); head.className = "haku-libro-servicios__head";
         const left = document.createElement("div");
@@ -165,6 +197,46 @@
         const omitidos = Number(data?.servicios_omitidos || 0) + Number(data?.notas_omitidas || 0);
         resumen.textContent = `Proyecto H confirmó ${Number(data?.servicios_creados || 0)} servicio${Number(data?.servicios_creados || 0) === 1 ? "" : "s"} y ${Number(data?.notas_creadas || 0)} nota${Number(data?.notas_creadas || 0) === 1 ? "" : "s"}. Se omitieron ${omitidos} elementos que ya existían. El Libro original no fue modificado.`;
         card.append(head, resumen);
+
+        if (detalleAnterior) {
+            const detalle = document.createElement("details");
+            detalle.style.border = "1px solid #dfe8e2";
+            detalle.style.borderRadius = "10px";
+            detalle.style.background = "#fff";
+            detalle.style.overflow = "hidden";
+            const summary = document.createElement("summary");
+            summary.textContent = "Ver detalle de la revisión anterior";
+            Object.assign(summary.style, {
+                cursor: "pointer",
+                padding: "9px 10px",
+                fontSize: "10px",
+                fontWeight: "800",
+                color: "#32483a"
+            });
+            detalleAnterior.style.padding = "0 8px 8px";
+            detalle.append(summary, detalleAnterior);
+            card.append(detalle);
+        }
+
+        const acciones = document.createElement("div");
+        acciones.style.display = "flex";
+        acciones.style.gap = "7px";
+        acciones.style.flexWrap = "wrap";
+        const revisar = botonSecundario("Revisar de nuevo");
+        revisar.addEventListener("click", () => {
+            const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
+            if (!api?.procesar || !textoOriginal) return;
+            revisar.disabled = true;
+            revisar.style.opacity = ".5";
+            Promise.resolve(api.procesar(textoOriginal)).finally(() => {
+                if (revisar.isConnected) {
+                    revisar.disabled = false;
+                    revisar.style.opacity = "1";
+                }
+            });
+        });
+        acciones.append(revisar);
+        card.append(acciones);
     }
 
     function uuid() {
@@ -197,6 +269,7 @@
         const confirmar = root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
         if (!confirmar) return;
 
+        const detalleAnterior = prepararDetalleAnterior(card);
         const estados = guardarEstadosControles(card);
         deshabilitarControles(estados);
         try {
@@ -207,7 +280,7 @@
             });
             if (error) throw error;
             if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
-            mostrarExito(card, data);
+            mostrarExito(card, data, textoOriginal, detalleAnterior);
         } catch (error) {
             restaurarControles(estados);
             throw error;
@@ -250,11 +323,12 @@
     bloquearRevision(document);
 
     const api = Object.freeze({
-        version: "3.0.0",
+        version: "4.0.0",
         reactivar: reactivarBotonLibro,
         bloquearRevision
     });
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1 = api;
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2 = api;
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V3 = api;
+    root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4 = api;
 })(typeof window !== "undefined" ? window : globalThis);
