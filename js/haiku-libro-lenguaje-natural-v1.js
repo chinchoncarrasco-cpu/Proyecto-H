@@ -64,4 +64,70 @@
     }
 
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ ...base, normalizar: normalizarConsulta });
+
+    // Compatibilidad de pagos del Libro real:
+    // - una fila del bloque de pagos con monto representa un pago recibido;
+    // - "Webpay por confirmar" es un pendiente administrativo, no una deuda del huésped;
+    // - si la glosa dice débito/crédito, ese dato específico tiene prioridad sobre "Webpay".
+    function ajustarPagoLibro(pago) {
+        if (!pago || typeof pago !== "object") return pago;
+        const texto = normalizarBase(pago.texto_original || "");
+        const pendienteCliente = /(?:\bpor\b|\bx\b)\s*pagar\b|saldo\s+pendiente/.test(texto);
+        const webpayPorConfirmar = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(texto);
+        const copia = { ...pago, webpay_por_confirmar: webpayPorConfirmar };
+
+        if (/\bdebito\b/.test(texto)) copia.medio_pago = "debito";
+        else if (/\bcredito\b/.test(texto)) copia.medio_pago = "credito";
+        else if (/transf/.test(texto)) copia.medio_pago = "transferencia";
+        else if (/efectivo/.test(texto)) copia.medio_pago = "efectivo";
+        else if (/web\s*pay/.test(texto)) copia.medio_pago = "webpay";
+
+        const montoValido = Number.isFinite(Number(copia.monto)) && Number(copia.monto) > 0;
+        if (copia.tipo_movimiento !== "penalidad" && montoValido && !pendienteCliente) {
+            copia.estado_pago = "registrado_en_libro";
+            copia.pago_recibido = true;
+        } else if (pendienteCliente) {
+            copia.estado_pago = "pendiente";
+            copia.pago_recibido = null;
+        }
+        return copia;
+    }
+
+    function ajustarResultadoPagos(data) {
+        if (!data || typeof data !== "object") return data;
+        const cache = new Map();
+        const ajustar = pago => {
+            if (!pago || typeof pago !== "object") return pago;
+            if (!cache.has(pago)) cache.set(pago, ajustarPagoLibro(pago));
+            return cache.get(pago);
+        };
+        return {
+            ...data,
+            pagos: Array.isArray(data.pagos) ? data.pagos.map(ajustar) : data.pagos,
+            reservas: Array.isArray(data.reservas) ? data.reservas.map(reserva => ({
+                ...reserva,
+                pagos: Array.isArray(reserva.pagos) ? reserva.pagos.map(ajustar) : reserva.pagos,
+                pagos_sin_asociacion: Array.isArray(reserva.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion.map(ajustar) : reserva.pagos_sin_asociacion
+            })) : data.reservas
+        };
+    }
+
+    function instalarCompatibilidadPagos() {
+        const libro = root.HAIKU_LIBRO_RESERVA_V1;
+        if (!libro || libro.__haikuPagosCompatV1 || typeof libro.consultarHoja !== "function") return;
+        const consultarHojaBase = libro.consultarHoja.bind(libro);
+        root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
+            ...libro,
+            __haikuPagosCompatV1: true,
+            consultarHoja: async (...args) => {
+                const resultado = await consultarHojaBase(...args);
+                return args[2] === "buscar" ? resultado : ajustarResultadoPagos(resultado);
+            }
+        });
+    }
+
+    instalarCompatibilidadPagos();
+    if (!root.HAIKU_LIBRO_RESERVA_V1 && root.document?.readyState === "loading") {
+        root.document.addEventListener("DOMContentLoaded", instalarCompatibilidadPagos, { once: true });
+    }
 })(typeof window !== "undefined" ? window : globalThis);
