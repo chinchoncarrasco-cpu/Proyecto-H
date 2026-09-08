@@ -10,6 +10,97 @@
         noviembre: 11, diciembre: 12
     };
 
+    const ETIQUETA_FRECUENTE = /^(?:huesped|cliente)\s+frecuente(?:\s+trato\s+especial)?$/;
+    const ETIQUETA_NO_TITULAR = /^(?:(?:huesped|cliente)\s+frecuente(?:\s+trato\s+especial)?|trato\s+especial|late\s*check\s*out|full\s*day|x\s+hacer|por\s+hacer|pendiente|sin\s+titular)$/;
+
+    function partesReservaLibro(texto) {
+        return String(texto || "")
+            .split(/\s*\/\/\s*|\n/)
+            .map(x => x.trim())
+            .filter(Boolean);
+    }
+
+    function esNombrePersonaLibro(texto) {
+        const limpio = String(texto || "").trim();
+        const normal = normalizarBase(limpio);
+        if (!limpio || ETIQUETA_NO_TITULAR.test(normal)) return false;
+        if (/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normal)) return false;
+        if (/\b(?:adult|adl\b|nino|nin\b|mascota|noche|rut\b|correo|telefono|cortesia|tinaja|jacuzzi|masaje|check\s*out|check\s*in)\b/.test(normal)) return false;
+        if (!/^[\p{L}][\p{L}\s.'’()-]+$/u.test(limpio)) return false;
+        const palabras = limpio.split(/\s+/).filter(Boolean).length;
+        return palabras >= 2 && palabras <= 7;
+    }
+
+    function notasFrecuenteDesdeTexto(texto) {
+        return partesReservaLibro(texto).filter(parte => ETIQUETA_FRECUENTE.test(normalizarBase(parte)));
+    }
+
+    function repararTitularYNotas(reserva) {
+        if (!reserva || typeof reserva !== "object") return reserva;
+        const partes = partesReservaLibro(reserva.texto_original);
+        const actual = normalizarBase(reserva.titular);
+        let titular = reserva.titular;
+
+        if (ETIQUETA_NO_TITULAR.test(actual)) {
+            const candidato = partes.find(esNombrePersonaLibro);
+            if (candidato) titular = candidato;
+        }
+
+        const notasSemanticas = notasFrecuenteDesdeTexto(reserva.texto_original);
+        const notasImportantes = [...new Set([
+            ...(Array.isArray(reserva.notas_importantes) ? reserva.notas_importantes : []),
+            ...notasSemanticas
+        ])];
+
+        return {
+            ...reserva,
+            titular,
+            notas_importantes: notasImportantes
+        };
+    }
+
+    function marcaOperativaDesdeReserva(reserva) {
+        const t = normalizarBase(reserva?.titular);
+        if (!/^(?:late\s*check\s*out|full\s*day)$/.test(t)) return null;
+        const esLate = /^late\s*check\s*out$/.test(t);
+        const rojo = String(reserva?.formato?.fondo || "").toUpperCase() === "FF0000";
+        return {
+            fecha: reserva.fecha_checkin,
+            cabana: reserva.cabana,
+            estado: rojo ? "bloqueo_operativo" : "bloque_o_marca",
+            subtipo: esLate ? "late_check_out" : "full_day_marca",
+            bloquea_venta: rojo,
+            texto_original: reserva.texto_original,
+            origen: reserva.coordenadas_origen,
+            motivo: esLate
+                ? "Marca operativa LATE CHECK OUT del Libro; no corresponde al nombre de un huésped ni a una reserva nueva."
+                : "Marca operativa FULLDAY del Libro; no corresponde al nombre de un huésped."
+        };
+    }
+
+    function ajustarEspacioLibro(espacio) {
+        if (!espacio || typeof espacio !== "object") return espacio;
+        const t = normalizarBase(espacio.texto_original);
+        if (!/^full\s*day$/.test(t)) return espacio;
+
+        const fechaFullDay = espacio.fecha && typeof base.sumarDias === "function"
+            ? base.sumarDias(espacio.fecha, 1)
+            : null;
+
+        return {
+            ...espacio,
+            estado: "bloqueo_previo_fullday",
+            subtipo: "fullday_dia_siguiente",
+            fecha_fullday: fechaFullDay,
+            bloquea_alojamiento_nocturno: true,
+            horario_fullday: { ingreso: "09:30", salida: "21:30" },
+            checkout_alojamiento_estandar: "12:00",
+            motivo: fechaFullDay
+                ? `Día bloqueado por convención del Libro: el ${fechaFullDay} hay FULLDAY de 09:30 a 21:30. Una estadía nocturna iniciada este día saldría a las 12:00 del día siguiente y se superpondría con el FULLDAY.`
+                : "Día bloqueado por convención del Libro porque al día siguiente hay FULLDAY de 09:30 a 21:30; una salida normal a las 12:00 se superpondría."
+        };
+    }
+
     function pareceConsultaLibro(original, normalizado) {
         const raw = String(original || "");
         return /\b(?:haku|libro)\b/i.test(raw) &&
@@ -101,14 +192,51 @@
             if (!cache.has(pago)) cache.set(pago, ajustarPagoLibro(pago));
             return cache.get(pago);
         };
-        return {
-            ...data,
-            pagos: Array.isArray(data.pagos) ? data.pagos.map(ajustar) : data.pagos,
-            reservas: Array.isArray(data.reservas) ? data.reservas.map(reserva => ({
+
+        const reservas = [];
+        const espaciosExtra = [];
+        const anotacionesExtra = [];
+
+        for (const original of Array.isArray(data.reservas) ? data.reservas : []) {
+            const reserva = repararTitularYNotas(original);
+            const marca = marcaOperativaDesdeReserva(reserva);
+            if (marca) {
+                espaciosExtra.push(marca);
+                continue;
+            }
+
+            if (ETIQUETA_FRECUENTE.test(normalizarBase(reserva?.titular))) {
+                anotacionesExtra.push({
+                    texto_original: reserva.texto_original,
+                    origen: reserva.coordenadas_origen,
+                    fecha: reserva.fecha_checkin,
+                    cabana: reserva.cabana,
+                    tipo: "nota_huesped_frecuente_sin_titular"
+                });
+                continue;
+            }
+
+            reservas.push({
                 ...reserva,
                 pagos: Array.isArray(reserva.pagos) ? reserva.pagos.map(ajustar) : reserva.pagos,
                 pagos_sin_asociacion: Array.isArray(reserva.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion.map(ajustar) : reserva.pagos_sin_asociacion
-            })) : data.reservas
+            });
+        }
+
+        const espacios = [
+            ...(Array.isArray(data.espacios) ? data.espacios.map(ajustarEspacioLibro) : []),
+            ...espaciosExtra
+        ];
+
+        return {
+            ...data,
+            pagos: Array.isArray(data.pagos) ? data.pagos.map(ajustar) : data.pagos,
+            reservas,
+            espacios,
+            anotaciones: [
+                ...(Array.isArray(data.anotaciones) ? data.anotaciones : []),
+                ...anotacionesExtra
+            ]
         };
     }
 
