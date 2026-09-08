@@ -210,7 +210,7 @@
         const conflicto = Boolean(docA && docB && docA !== docB);
         const fuerte = Boolean((docA && docA === docB) || (correoA && correoA === correoB) ||
             (telA.length >= 9 && telB.length >= 9 && telA === telB));
-        const nombre = Boolean(S.normalizar(a.titular) && S.normalizar(a.titular) === S.normalizar(b.titular));
+        const nombre = S.mismaPersona(a.titular, b.titular);
         return { compatible: !conflicto && (fuerte || nombre), fuerte: fuerte && !conflicto, conflicto };
     }
 
@@ -218,19 +218,15 @@
         (a.fecha_checkin === a.fecha_checkout) === (b.fecha_checkin === b.fecha_checkout);
 
     function asociarConservador(reserva, candidatas) {
-        const scores = candidatas.map(s => {
-            const nombre = S.mismaPersona(reserva.titular, s.titular);
-            const doc = Boolean(reserva.rut_documento && s.rut_documento && documentoCanon(reserva.rut_documento) === documentoCanon(s.rut_documento));
-            const correo = Boolean(reserva.correo && s.correo && S.normalizar(reserva.correo) === S.normalizar(s.correo));
-            const telefono = Boolean(reserva.telefono && s.telefono && telefonoCompatible(reserva.telefono, s.telefono));
+        const scores = candidatas.filter(candidatoElegible).map(s => {
             const fechas = reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
             const cab = Number(reserva.cabana) === Number(s.cabana);
             const persona = identidad(reserva, s);
             const identidadCompatible = persona.compatible;
             return {
                 s,
-                segura: !reserva.advertencias?.length && cab && fechas && identidadCompatible && !/cancelad|no.?show/.test(S.normalizar(s.estado_reserva) + S.normalizar(s.estado_operativo)),
-                posible: (cab && fechas) || identidadCompatible || nombre || doc || correo || telefono
+                segura: !reserva.advertencias?.length && cab && fechas && identidadCompatible,
+                posible: (cab && fechas) || identidadCompatible
             };
         });
         const seguros = scores.filter(x => x.segura);
@@ -257,6 +253,13 @@
         };
     }
 
+    function candidatoElegible(s) {
+        const estado = S.normalizar(`${s.estado_reserva || ""} ${s.estado_operativo || ""}`);
+        const titular = S.normalizar(s.titular).replace(/_/g, " ");
+        return !/cancelad|cancelled|canceled|no[\s_-]*show/.test(estado) &&
+            !/\b(pruebas?|demo|test|testing)\b/.test(titular);
+    }
+
     function claveReserva(r) {
         const doc = normalizarId(r.rut_documento);
         const correo = S.normalizar(r.correo);
@@ -277,7 +280,8 @@
         return mapa.map(g => {
             const principal = g.items[0].libro;
             const estados = g.items.map(x => x.estado);
-            const ids = new Set(g.items.filter(x => x.sistema).map(x => x.sistema.reserva_id));
+            const ids = new Set(g.items.filter(x => x.sistema).map(x =>
+                x.sistema.grupo_reserva_id ? `grupo:${x.sistema.grupo_reserva_id}` : `reserva:${x.sistema.reserva_id}`));
             const estado = estados.every(x => x === "asociada") && ids.size === 1 ? "asociada" :
                 estados.every(x => x === "sin_coincidencia") ? "sin_coincidencia" : "ambigua";
             const parcial = ids.size === 1 && estados.includes("asociada") && estados.some(x => x !== "asociada");
@@ -331,11 +335,12 @@
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
 
         const raw = await paginas(() => cliente.from("reserva_estadias")
-            .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,cabanas(numero),reservas(id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva)"));
+            .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva)"));
 
         const system = raw.map(e => ({
             id: e.id,
             reserva_id: e.reserva_id,
+            grupo_reserva_id: e.reservas?.grupo_reserva_id,
             cabana: e.cabanas?.numero,
             titular: e.reservas?.titular_nombre,
             rut_documento: e.reservas?.titular_numero_documento,
@@ -346,7 +351,7 @@
             estado_operativo: e.estado_estadia,
             estado_reserva: e.reservas?.estado_reserva,
             tipo_estadia: e.tipo_estadia
-        }));
+        })).filter(candidatoElegible);
 
         const visiblesRango = system.filter(s =>
             s.fecha_checkin <= hasta && s.fecha_checkout >= desde &&
@@ -470,7 +475,6 @@
         const movimientos = resultados.flatMap(r => r.pagosComparacion);
         for (const x of movimientos) {
             if (x.estado === "nuevo_seguro" && movimientos.some(y => y !== x && pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }))) x.estado = "revisar";
-            if (x.estado === "nuevo_seguro" && grupos.some(g => g.estado !== "asociada" && g.items.some(i => i.libro === x.reserva))) x.estado = "revisar";
         }
         const pagosUnicos = new Map();
         for (const x of resultados.flatMap(r => r.pagosComparacion)) {
@@ -740,7 +744,7 @@
         contenedor.append(details);
     }
 
-    function renderizarComparacion(out, result) {
+    function renderizarComparacion(out, result, ui = {}) {
         const comp = result.comparacion;
         const meta = comp.meta || {};
         const grupos = comp.grupos || [];
@@ -766,6 +770,11 @@
         const resumen = elemento("p", "haiku-asistente-preview-resumen");
         resumen.textContent = `Periodo ${result.q.desde} al ${result.q.hasta}. Encontré ${meta.libro ?? 0} reservas lógicas (${meta.estadias_libro ?? 0} estadías) en el Libro y ${meta.proyecto ?? 0} reservas visibles en Proyecto H. ${meta.faltantes ?? 0} faltan claramente; ${meta.ambiguas ?? 0} requieren una decisión. La comparación considera los registros accesibles con tu sesión.`;
         out.append(resumen);
+        if (ui.revalidado) {
+            const estado = elemento("p", "haiku-asistente-preview-resumen", `Revalidación completada · ${ui.revalidado}. ${meta.asociadas ?? 0} reservas asociadas; ${meta.pagos_faltantes ?? 0} pagos nuevos seguros; ${meta.ambiguas ?? 0} por decidir. Las decisiones anteriores se descartaron. Sólo vista previa.`);
+            estado.setAttribute("role", "status");
+            out.append(estado);
+        }
 
         const grid = elemento("div", "haiku-asistente-preview-grid");
         agregarDato(grid, "Libro", `${meta.libro ?? 0} reservas`);
@@ -825,7 +834,7 @@
         ])));
         const decisiones = new Map();
         if (ambiguas.length) {
-            const preguntas = elemento("div", "haiku-asistente-preview-lista");
+            const preguntas = elemento("div", "haiku-asistente-preview-lista" + (ui.preguntasAbiertas ? " haiku-reconciliacion-abierto" : ""));
             preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
             ambiguas.forEach(g => {
                 const label = elemento("label", "", descripcionGrupo(g) + ". " + g.pregunta);
@@ -835,7 +844,15 @@
                 const candidatos = new Map(g.items.flatMap(x => [x.sistema, ...(x.candidatosDetalle || [])]).filter(Boolean).map(x => [x.id, x]));
                 candidatos.forEach(x => {
                     const detalle = x.titular + " · CAB " + x.cabana + " · " + x.fecha_checkin + " → " + x.fecha_checkout;
-                    select.append(new Option("Modificar: " + detalle, "modificar:" + x.id), new Option("Añadir estadía a: " + detalle, "estadia:" + x.id));
+                    const pendientes = g.items.filter(i => i.estado !== "asociada" && i.candidatosDetalle?.some(c => c.id === x.id));
+                    if (pendientes.some(i => mismasFechas(i.libro, x) && Number(i.libro.cabana) === Number(x.cabana) && identidad(i.libro, x).compatible)) {
+                        select.append(new Option("Revisar asociación existente: " + detalle, "asociar:" + x.id));
+                        return;
+                    }
+                    if (pendientes.length) select.append(new Option("Modificar: " + detalle, "modificar:" + x.id));
+                    const faltanEstadias = pendientes.filter(i => identidad(i.libro, x).compatible &&
+                        !g.items.some(j => j.sistema && j.sistema.reserva_id === x.reserva_id && mismasFechas(i.libro, j.sistema) && Number(i.libro.cabana) === Number(j.sistema.cabana)));
+                    if (faltanEstadias.length) select.append(new Option("Añadir estadía a: " + detalle, "estadia:" + x.id));
                 });
                 select.addEventListener("change", () => decisiones.set(g.clave, select.options[select.selectedIndex].text));
                 label.append(select); preguntas.append(label);
@@ -858,10 +875,21 @@
         const refrescar = elemento("button", "libro-reserva-boton secundario", "Revalidar contra Proyecto H");
         refrescar.type = "button";
         refrescar.addEventListener("click", async () => {
+            const abiertos = Array.from(out.querySelectorAll("details[open]")).map(d => d.querySelector("summary")?.textContent.replace(/ \(\d+\)$/, ""));
+            const preguntasAbiertas = Boolean(out.querySelector(".haiku-reconciliacion-abierto"));
             refrescar.disabled = true; preparar.disabled = true;
             vista.replaceChildren(elemento("p", "", "Revalidando; las decisiones anteriores se descartan."));
-            try { renderizarComparacion(out, await consultar(result.q.texto)); }
-            catch (error) { vista.replaceChildren(elemento("p", "", error.message)); refrescar.disabled = false; }
+            try {
+                const nuevo = await consultar(result.q.texto);
+                renderizarComparacion(out, nuevo, { preguntasAbiertas, revalidado: new Date().toLocaleTimeString("es-CL") });
+                out.querySelectorAll("details").forEach(d => {
+                    d.open = abiertos.includes(d.querySelector("summary")?.textContent.replace(/ \(\d+\)$/, ""));
+                });
+            }
+            catch (error) {
+                vista.replaceChildren(elemento("p", "", "No se pudo revalidar: " + error.message + ". El resultado anterior no está actualizado. Reintenta la revalidación."));
+                refrescar.disabled = false;
+            }
         });
         out.append(refrescar);
 

@@ -43,10 +43,10 @@ test('conflicting documents never merge or auto-associate even with same name',a
  const c=await compare([book(),book({id:'b2',cabana:2,rut_documento:'99999999-1'})],[stay()]);
  assert.equal(c.meta.libro,2);const d=await compare([book({rut_documento:'99999999-1'})],[stay()]);assert.equal(d[0].estado,'ambigua');
 });
-test('two candidates, duplicate book rows and cancelled reservations stay ambiguous',async()=>{
+test('two candidates and duplicate book rows stay ambiguous; cancelled stays are excluded',async()=>{
  assert.equal((await compare([book()],[stay(),stay(book(),{id:'e9',reserva_id:'r9'})]))[0].estado,'ambigua');
  assert.equal((await compare([book(),book({id:'copy'})],[stay()])).meta.asociadas,0);
- assert.equal((await compare([book()],[stay(book(),{estado_estadia:'cancelada'})]))[0].estado,'ambigua');
+ assert.equal((await compare([book()],[stay(book(),{estado_estadia:'cancelada'})]))[0].estado,'sin_coincidencia');
 });
 const pay=(extra={})=>({codigo_autorizacion:'AUTH-123',monto:100000,moneda:'CLP',tipo_movimiento:'alojamiento',origen:{hoja:'Sep26',celda:'O27:R27'},...extra});
 test('safe new payment, existing payment and identifier attached elsewhere',async()=>{
@@ -79,6 +79,7 @@ test('visual report retains cards, confines coordinates to technical details and
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
   append(...xs){this.children.push(...xs)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
+  setAttribute(k,v){this[k]=v}
   get options(){return this.children} get text(){return this.textContent}
  }
  const document={createElement:t=>new Element(t),querySelector:()=>null};
@@ -96,4 +97,117 @@ test('visual report retains cards, confines coordinates to technical details and
  const select=nodes.find(e=>e.tag==='select');select.selectedIndex=1;select.events.change();
  nodes.find(e=>e.textContent==='Preparar vista previa').events.click();
  assert.match(normal(out).join(' '),/Es una reserva independiente/);assert.match(normal(out).join(' '),/escritura deshabilitada/);
+});
+
+test('test/demo and cancelled/no-show candidates are excluded before every matching path',async()=>{
+ for(const name of ['PRUEBA FULLDAY','TEST_FULLDAY','Reserva demo','Testing']) {
+  const r=book({titular:name});
+  const c=await compare([r],[stay(r)]);
+  assert.equal(c[0].estado,'sin_coincidencia');assert.deepEqual(c[0].candidatos,[]);assert.equal(c.meta.proyecto,0);
+ }
+ for(const estado of ['cancelada','cancelado','cancelled','canceled','no-show','no_show','NO SHOW','noshow']) {
+  for(const s of [stay(book(),{estado_estadia:estado}),stay(book(),{reservas:{...stay().reservas,estado_reserva:estado}})]) {
+   const c=await compare([book()],[s]);assert.deepEqual(c[0].candidatos,[]);assert.equal(c.meta.asociadas,0);
+  }
+ }
+ for(const titular of ['Sara Bertrand','Glenyfer Luque',"Yann O’Connell",'Vanessa Conoman','Dayana Luna','Hernán Guzmán','Michel Querales','Matías Fernández']) {
+  const r=book({titular,rut_documento:null,fecha_checkin:'2026-09-01',fecha_checkout:'2026-09-02'});
+  const fake=book({titular:'PRUEBA FULLDAY',fecha_checkin:'2026-09-09',fecha_checkout:'2026-09-09'});
+  const c=await compare([r],[stay(fake,{estado_estadia:'cancelada'})]);
+  assert.equal(c[0].estado,'sin_coincidencia');assert.deepEqual(c[0].candidatos,[]);
+ }
+});
+
+test('same cabin and weak or masked phone never create unrelated-date candidates',async()=>{
+ for(const telefono of ['sin teléfono','****1234','1234','+56 **** 1234']) {
+  const r=book({titular:'Sara Bertrand',rut_documento:null,telefono,fecha_checkin:'2026-09-01',fecha_checkout:'2026-09-02'});
+  const s=stay(book(),{reservas:{...stay().reservas,telefono_contacto:telefono}});
+  const c=await compare([r],[s]);assert.equal(c[0].estado,'sin_coincidencia');assert.deepEqual(c[0].candidatos,[]);
+ }
+});
+
+test('exact holder, dates and cabin associate without documents and despite excluded decoys',async()=>{
+ for(const titular of ['Marco Iturrieta Rojas','Alejandro Ramos Donaire','Laura Mayorga Ocampo',"Yann O'Connell"]) {
+  const r=book({titular,rut_documento:null,pagos:[pay()]});
+  const s=stay(r,{reservas:{...stay(r).reservas,titular_nombre:titular.replace("'",'')}});
+  const c=await compare([r],[s,stay(book({titular:'PRUEBA FULLDAY'}),{id:'test'})]);
+  assert.equal(c[0].estado,'asociada');assert.equal(c.meta.asociadas,1);assert.equal(c.meta.ambiguas,0);
+  assert.equal(c.meta.pagos_faltantes,1);assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
+ }
+});
+
+test('complete multicabin reservation group links explicit sibling reservations and retains missing payments',async()=>{
+ const a=book({titular:'Marco Iturrieta Rojas',pagos:[pay()]}),b=book({titular:a.titular,id:'b2',cabana:2});
+ const rows=[stay(a,{reservas:{...stay(a).reservas,grupo_reserva_id:'g1'}}),stay(b,{reserva_id:'r2',reservas:{...stay(b).reservas,grupo_reserva_id:'g1'}})];
+ const c=await compare([a,b],rows);
+ assert.equal(c.meta.asociadas,1);assert.equal(c.meta.ambiguas,0);assert.equal(c.meta.pagos_faltantes,1);
+ assert.equal(c.grupos[0].pregunta,null);assert.equal(c.meta.faltantes,0);
+});
+
+test('payment on a securely matched stay stays safe while another cabin awaits a decision',async()=>{
+ const a=book({pagos:[pay()]}),b=book({id:'b2',cabana:2});
+ const c=await compare([a,b],[stay(a)]);
+ assert.equal(c.grupos[0].estado,'ambigua');assert.equal(c.meta.pagos_faltantes,1);
+ assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
+});
+
+function renderHarness(reconsultar) {
+ const fs=require('node:fs'),vm=require('node:vm');
+ class Element {
+  constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
+  append(...xs){this.children.push(...xs)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
+  setAttribute(k,v){this[k]=v} get options(){return this.children} get text(){return this.textContent}
+  querySelectorAll(selector){return this.children.flatMap(e=>[e,...e.querySelectorAll('*')]).filter(e=>
+   selector==='*'||selector===e.tag||selector==='details[open]'&&e.tag==='details'&&e.open||
+   selector.startsWith('.')&&(e.className||'').split(' ').includes(selector.slice(1)));}
+  querySelector(selector){return this.querySelectorAll(selector)[0]||null}
+ }
+ const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
+  reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
+ const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
+  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarComparacion })')
+  .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
+ vm.runInNewContext(source,context);
+ const out=new Element('div');
+ return {out,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
+  texts:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' '),button:t=>out.querySelectorAll('button').find(e=>e.textContent===t)};
+}
+
+test('exact ambiguous stay offers association review, never modify or duplicate stay',async()=>{
+ const r=book(),c=await compare([r,book({id:'copy'})],[stay(r)]),h=renderHarness();
+ h.render({q,comparacion:c});
+ const options=h.out.querySelectorAll('option').map(e=>e.textContent).join(' ');
+ assert.match(options,/Revisar asociación existente/);assert.doesNotMatch(options,/Modificar:|Añadir estadía a:/);
+ const exact=await compare([r],[stay(r)]);h.render({q,comparacion:exact});
+ assert.equal(h.out.querySelectorAll('select').length,0);
+});
+
+test('holder-only change never offers adding the already occupied stay',async()=>{
+ const c=await compare([book({titular:'Otra Persona',rut_documento:'99999999-1'})],[stay()]),h=renderHarness();
+ h.render({q,comparacion:c});assert.match(h.texts(),/Modificar:/);assert.doesNotMatch(h.texts(),/Añadir estadía a:/);
+});
+
+test('revalidation keeps open sections, reports persistent results and clears stale decisions',async()=>{
+ const r=book({cabana:2}),c=await compare([r],[stay()]);let finish;
+ const h=renderHarness(()=>new Promise(resolve=>finish=resolve));h.render({q:{...q,texto:'Libro: septiembre 2026 compara'},comparacion:c});
+ const detail=h.out.querySelector('details');detail.open=true;
+ const questions=h.out.querySelectorAll('div').find(e=>e.children.some(c=>c.tag==='label'));
+ questions.className+=' haiku-reconciliacion-abierto';
+ const select=h.out.querySelector('select');select.selectedIndex=1;select.events.change();
+ const pending=h.button('Revalidar contra Proyecto H').events.click();
+ assert.match(h.texts(),/Revalidando/);assert.equal(detail.open,true);
+ finish({q,comparacion:c});await pending;
+ assert.equal(h.out.querySelector('details').open,true);assert.ok(h.out.querySelector('.haiku-reconciliacion-abierto'));
+ assert.match(h.texts(),/Revalidación completada/);assert.doesNotMatch(h.texts(),/Revalidando;/);
+ h.button('Preparar vista previa').events.click();
+ const proposal=h.out.querySelectorAll('li').map(e=>e.textContent).join(' ');
+ assert.match(proposal,/Pendiente: no incorporar/);assert.doesNotMatch(proposal,/Es una reserva independiente/);
+});
+
+test('failed revalidation stays visible, prevents stale preparation and permits retry',async()=>{
+ const c=await compare([book()],[stay()]);const h=renderHarness(async()=>{throw new Error('Sin conexión')});h.render({q,comparacion:c});
+ await h.button('Revalidar contra Proyecto H').events.click();
+ assert.match(h.texts(),/No se pudo revalidar: Sin conexión/);
+ assert.equal(h.button('Revalidar contra Proyecto H').disabled,false);
+ assert.equal(h.button('Preparar vista previa').disabled,true);
 });
