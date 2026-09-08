@@ -4,6 +4,11 @@
     if (!base || typeof base.normalizar !== "function") return;
 
     const normalizarBase = base.normalizar.bind(base);
+    const meses = {
+        enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+        julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+        noviembre: 11, diciembre: 12
+    };
 
     function pareceConsultaLibro(original, normalizado) {
         const raw = String(original || "");
@@ -30,11 +35,24 @@
             .replace(/\bmodifica(?:r)?(?:lo|la|los|las)?\b/g, "modifica");
     }
 
+    function canonizarPeriodo(texto) {
+        return texto.replace(
+            /\b(?:mes\s+(?:de\s+)?|en\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(20\d{2})\b/g,
+            (_, nombreMes, year) => {
+                const mes = meses[nombreMes];
+                const mm = String(mes).padStart(2, "0");
+                const ultimo = new Date(Date.UTC(Number(year), mes, 0)).getUTCDate();
+                return `01-${mm}-${year} ${String(ultimo).padStart(2, "0")}-${mm}-${year}`;
+            }
+        );
+    }
+
     function normalizarConsulta(valor) {
         let texto = normalizarBase(valor);
         if (!pareceConsultaLibro(valor, texto)) return texto;
         texto = separarTitular(texto);
-        return canonizarAcciones(texto);
+        texto = canonizarAcciones(texto);
+        return canonizarPeriodo(texto);
     }
 
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ ...base, normalizar: normalizarConsulta });
