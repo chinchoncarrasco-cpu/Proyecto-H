@@ -7,7 +7,7 @@ const book = (extra={}) => ({id:'b1',titular:'Marco Iturrieta',rut_documento:'12
  fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',tipo_estadia:'alojamiento',noches:3,
  pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],coordenadas_origen:{hoja:'Sep26',celda:'C3'},...extra});
 function stay(r=book(), extra={}) {return {id:'e'+r.cabana,reserva_id:'r1',cabanas:{numero:r.cabana},
- fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'confirmada',tipo_estadia:r.tipo_estadia,
+ adultos:r.adultos,ninos:r.ninos,mascotas:r.mascotas,fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'confirmada',tipo_estadia:r.tipo_estadia,
  reservas:{titular_nombre:r.titular,titular_numero_documento:r.rut_documento,estado_reserva:'confirmada'},...extra};}
 function client(rows=[], payments=[]) {
  const calls=[];
@@ -84,7 +84,7 @@ test('visual report retains cards, confines coordinates to technical details and
  }
  const document={createElement:t=>new Element(t),querySelector:()=>null};
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document,addEventListener(){},Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
- const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion })');
+ const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion })');
  vm.runInNewContext(source,context);
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
  context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,{q,comparacion:c});
@@ -165,11 +165,11 @@ function renderHarness(reconsultar, db) {
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
-  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion })')
+  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion })')
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
- return {out,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
+ return {out,Q:context.HAIKU_LIBRO_CONSULTAS,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
   texts:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' '),button:t=>out.querySelectorAll('button').find(e=>e.textContent===t)};
 }
 
@@ -210,7 +210,7 @@ test('failed revalidation stays visible, prevents stale preparation and permits 
  assert.equal(h.button('Preparar incorporación').disabled,true);
 });
 
-test('Yann and Alejandro: field comparison explains document conflict and preview association only',async()=>{
+test('Yann and Alejandro: field comparison explains document conflict and proposes confirmed Libro updates',async()=>{
  for(const titular of ["Yann O'Connell",'Alejandro Ramos']) {
   const r=book({titular,correo:'a@example.test',telefono:'+56 9 1234 5678',pagos:[pay()]});
   const s=stay(r,{reservas:{...stay(r).reservas,titular_numero_documento:'99999999-1',correo_contacto:'b@example.test'}});
@@ -224,16 +224,16 @@ test('Yann and Alejandro: field comparison explains document conflict and previe
   assert.doesNotMatch(h.texts(),/¿Cambió el titular|Modificar:/);
   const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','asociar:e1','independiente']);
   select.selectedIndex=1;select.events.change();
-  assert.match(h.texts(),/sin aprobar pagos automáticamente/);
+  assert.match(h.texts(),/después de revisar y confirmar/);
   assert.equal(JSON.stringify(c),before);assert.equal(c.meta.pagos_faltantes,0);
  }
 });
 
-test('Macarena extension preserves the existing full day and offers only additive or independent decisions',async()=>{
+test('Macarena extension preserves the existing full day and offers explicit correction in addition to additive and independent decisions',async()=>{
  const a=book({titular:'Macarena Hurtado',cabana:5,fecha_checkin:'2026-09-03',fecha_checkout:'2026-09-04'});
  const b=book({...a,cabana:10,fecha_checkin:'2026-09-04',tipo_estadia:'full_day'});
  const c=await compare([a],[stay(b)]),h=renderHarness();h.render({q,comparacion:c});
- const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','estadia:e10','independiente']);
+ const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','estadia:e10','actualizar:e10','independiente']);
  assert.match(h.texts(),/conservaría la reserva actual/);assert.doesNotMatch(h.texts(),/Modificar:/);
  select.selectedIndex=1;select.events.change();h.button('Preparar incorporación').events.click();
  assert.match(h.texts(),/CAB 10/);
@@ -286,10 +286,10 @@ test('fresh revalidation omits a reservation inserted after comparison',async()=
  rows.push(stay(r));const p=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
  assert.equal(p.items[0].categoria,'omitidos');assert.equal(p.items.filter(i=>i.categoria==='nuevas').length,0);
 });
-test('all strong global identifiers omit payments on any reservation',async()=>{
+test('strong identifiers on another reservation require review without moving money',async()=>{
  for(const fields of [{codigo_autorizacion:'AUTH-123'},{codigo_autorizacion:null,folio:'123',bovtar:'45'},{codigo_autorizacion:null,bove:'800'}]) {
  const p=readyPay(fields),r=readyBook({pagos:[p]}),plan=await prepare([r],[],[{...p,reserva_id:'another',datos_origen:{bovtar:p.bovtar}}]);
- assert.equal(plan.items.find(i=>i.id.startsWith('pago:')).categoria,'omitidos');
+ assert.equal(plan.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
  }
 });
 test('Full Day remains same-day fullday with zero nights',async()=>{
@@ -312,7 +312,7 @@ test('pending, new, association and additional-stay decisions are honored',async
  const p=await prepare([r],[stay()],[],new Map([[key,{valor}]]));assert.equal(p.items[0].categoria,cat);
  }
  const mismatch=readyBook({rut_documento:'99999999-1'}),cc=await compare([mismatch],[stay()]);
- const p=await prepare([mismatch],[stay()],[],new Map([[cc.grupos[0].clave,{valor:'asociar:e1'}]]));assert.equal(p.items[0].categoria,'asociadas');
+ const p=await prepare([mismatch],[stay()],[],new Map([[cc.grupos[0].clave,{valor:'asociar:e1'}]]));assert.equal(p.items[0].categoria,'actualizaciones');
 });
 test('partial multicabin adds only missing cabin',async()=>{
  const rs=[readyBook(),readyBook({id:'b2',cabana:2})],c=await compare(rs,[stay()]);
@@ -446,4 +446,116 @@ test('source writes only through the atomic RPC and keeps global polling disable
  const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
  assert.doesNotMatch(s,/\.\s*(insert|update|upsert)\s*\(|setInterval\s*\(|new MutationObserver/);
  assert.equal((s.match(/\.rpc\('haiku_incorporar_libro_v1'/g)||[]).length,1);
+});
+
+// Source-priority regressions. Fixtures never use a live guest record.
+const correctedStay = (r,extra={}) => stay(r,{reservas:{...stay(r).reservas,titular_tipo_documento:'pasaporte',
+ correo_contacto:r.correo,telefono_contacto:r.telefono,...extra}});
+const applyPreview = (rows,payments,items) => {
+ for(const item of items) {
+  if(item.tipo==='reserva_actualizar') {
+   const e=rows.find(e=>e.id===item.estadia_id); Object.assign(e.reservas,item.reserva.despues);
+   const patch={...item.estadia.despues}; if(patch.cabana_numero){e.cabanas.numero=patch.cabana_numero;delete patch.cabana_numero;} Object.assign(e,patch);
+  }
+  if(item.tipo==='pago_actualizar') {
+   const p=payments.find(p=>p.id===item.pago_id),patch={...item.pago.despues};
+   p.datos_origen={...p.datos_origen};for(const k of ['bovtar','concepto_libro'])if(k in patch){p.datos_origen[k]=patch[k];delete patch[k];}
+   Object.assign(p,patch);
+  }
+ }
+};
+
+test('Yann: selecting same reservation proposes complete passport and contact, saves only on confirmation and then stays matched',async()=>{
+ const r=readyBook({titular:"Yann O'Connell",rut_documento:'PV8951597',correo:'yann@example.test',telefono:'+5981103897747'});
+ const rows=[correctedStay(r,{titular_numero_documento:'951597',titular_tipo_documento:'rut',correo_contacto:'old@example.test'})],db=client(rows);
+ const comparacion=await Q.compararSistema([r],db,q),result={reservas:[r],q,comparacion};
+ assert.equal(comparacion[0].estado,'ambigua');
+ const decisiones=new Map([[comparacion.grupos[0].clave,{valor:'asociar:e1'}]]);
+ const plan=await Q.prepararIncorporacion(result,decisiones,new Set(),db),item=plan.items.find(i=>i.categoria==='actualizaciones');
+ assert.equal(item.payload.reserva.despues.titular_numero_documento,'PV8951597');
+ assert.equal(item.payload.reserva.despues.titular_tipo_documento,'pasaporte');
+ assert.equal(item.payload.reserva.despues.correo_contacto,'yann@example.test');
+ assert.equal(rows[0].reservas.titular_numero_documento,'951597');assert.ok(!db.calls.includes('haiku_incorporar_libro_v1'));
+ db.rpc=async(name,args)=>{assert.equal(name,'haiku_incorporar_libro_v1');applyPreview(rows,[],args.p_items);return{data:{ok:true,actualizaciones:args.p_items.length}}};
+ await Q.confirmarIncorporacion(result,decisiones,new Set(),plan,db);
+ const again=await Q.compararSistema([r],db,q);assert.equal(again[0].estado,'asociada');assert.equal(again.meta.ambiguas,0);
+ const repeat=await Q.prepararIncorporacion({...result,comparacion:again},new Map(),new Set(),db);
+ assert.ok(!repeat.items.some(i=>i.categoria==='actualizaciones'));assert.equal(rows.length,1);
+});
+
+test('matched reservation also prioritizes known Libro occupation and notes; unknown contact never clears system values',async()=>{
+ const r=readyBook({correo:null,telefono:null,texto_original:'Marco Iturrieta // llega tarde',notas_importantes:['Factura'],adultos:3});
+ const rows=[stay(r,{adultos:1,reservas:{...stay(r).reservas,correo_contacto:'keep@example.test',telefono_contacto:'+56912345678',observaciones:'Nota operativa'}})];
+ const plan=await prepare([r],rows),item=plan.items.find(i=>i.categoria==='actualizaciones');
+ assert.equal(item.payload.estadia.despues.adultos,3);assert.ok(!('correo_contacto' in item.payload.reserva.despues));
+ assert.match(item.payload.reserva.despues.observaciones,/Nota operativa/);assert.match(item.payload.reserva.despues.observaciones,/llega tarde/);
+ applyPreview(rows,[],Q.serializarIncorporacion(plan));
+ const again=await prepare([r],rows);assert.ok(!again.items.some(i=>i.categoria==='actualizaciones'));
+});
+
+test('strong payment already present is updated from Libro instead of omitted; repeat has no update or duplicate',async()=>{
+ const p=readyPay({monto:273651,folio:'000211',bovtar:'033752',codigo_autorizacion:null,medio_pago:'debito',concepto:'CAB 1'}),r=readyBook({pagos:[p]});
+ const rows=[stay(r)],payments=[{id:'p-existing',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:200000,moneda:'CLP',medio_pago:'tarjeta_debito',
+  folio:'000211',datos_origen:{bovtar:'033752'},fecha_pago:'2026-09-10T12:00:00Z'}];
+ const plan=await prepare([r],rows,payments),item=plan.items.find(i=>i.payload?.tipo==='pago_actualizar');
+ assert.equal(item.payload.pago.despues.monto,273651);assert.equal(item.payload.pago_id,'p-existing');assert.equal(item.seleccionado,true);
+ applyPreview(rows,payments,Q.serializarIncorporacion(plan));
+ assert.equal(payments.length,1);const again=await prepare([r],rows,payments);
+ assert.ok(!again.items.some(i=>['pagos','actualizaciones'].includes(i.categoria)));
+});
+
+test('an existing payment conflicting across Libro rows cannot be updated or manually bypassed',async()=>{
+ const p=readyPay(),r=readyBook({pagos:[p,{...p,monto:p.monto+1,origen:{hoja:'Sep26',celda:'F99'}}]});
+ const ps=[{id:'p1',reserva_id:'r1',...p,fecha_pago:'2026-09-10T12:00:00Z',datos_origen:{}}];
+ const plan=await prepare([r],[stay(r)],ps);assert.ok(plan.items.filter(i=>i.payload?.tipo==='pago_actualizar').every(i=>i.motivos.length&&!i.seleccionado));
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago_actualizar'));
+});
+
+test('stale update preview cannot silently overwrite a change made after user review',async()=>{
+ const r=readyBook({correo:'new@example.test'}),rows=[correctedStay(r,{correo_contacto:'before@example.test'})],db=client(rows);
+ const result={reservas:[r],q,comparacion:await Q.compararSistema([r],db,q)};
+ const plan=await Q.prepararIncorporacion(result,new Map(),new Set(),db);
+ rows[0].reservas.correo_contacto='changed-after-review@example.test';
+ await assert.rejects(Q.confirmarIncorporacion(result,new Map(),new Set(),plan,db),/cambió desde la vista previa/);
+ assert.ok(!db.calls.includes('haiku_incorporar_libro_v1'));
+});
+
+test('explicit stay correction changes target dates and cabin while additive choice still adds a stay',async()=>{
+ const r=readyBook({cabana:2,fecha_checkin:'2026-09-18'}),s=stay(readyBook());
+ const c=await compare([r],[s]),key=c.grupos[0].clave;
+ const update=await prepare([r],[s],[],new Map([[key,{valor:'actualizar:e1'}]]));
+ assert.equal(update.items[0].payload.estadia.despues.cabana_numero,2);
+ assert.equal(update.items[0].payload.estadia.despues.fecha_ingreso,'2026-09-18');
+ assert.equal(update.items[0].payload.estadia_id,'e1');
+ const add=await prepare([r],[s],[],new Map([[key,{valor:'estadia:e1'}]]));assert.ok(add.items.some(i=>i.categoria==='estadias'));
+});
+
+test('update preview shows old and Libro values and remains behind explicit confirmation',async()=>{
+ const r=readyBook({rut_documento:'PV8951597'}),s=stay(r,{reservas:{...stay(r).reservas,titular_numero_documento:'951597'}});
+ const c=await compare([r],[s]),plan=await prepare([r],[s],[],new Map([[c.grupos[0].clave,{valor:'asociar:e1'}]]));
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{throw Error('Must not save without confirmation')});
+ assert.match(h.texts(),/Actualizar Proyecto H con el Libro/);assert.match(h.texts(),/951597 → PV8951597/);
+ assert.match(h.texts(),/El Libro de Reservas tiene prioridad/);
+});
+
+test('shared reservation notes combine both cabins without repeated conflicting patches',async()=>{
+ const a=readyBook({texto_original:'Marco Iturrieta // CAB 1 // Factura'}),b=readyBook({id:'b2',cabana:2,texto_original:'Marco Iturrieta // CAB 2 // Llegada tarde'});
+ const shared={...stay(a).reservas,observaciones:'Nota operativa'},rows=[stay(a,{reservas:shared}),stay(b,{reservas:shared})];
+ const plan=await prepare([a,b],rows),updates=plan.items.filter(i=>i.categoria==='actualizaciones');
+ assert.equal(updates.length,2);assert.equal(updates[0].payload.reserva.despues.observaciones,updates[1].payload.reserva.despues.observaciones);
+ applyPreview(rows,[],Q.serializarIncorporacion(plan));
+ const repeat=await prepare([a,b],rows);assert.ok(!repeat.items.some(i=>i.categoria==='actualizaciones'));
+});
+
+test('new reservation keeps the Libro state in the confirmation payload',async()=>{
+ for(const [datos,estado] of [[{estado_confirmacion:'confirmada_por_color'},'confirmada'],[{estado_operativo:'hospedada'},'hospedada'],[{estado_operativo:'checked_out'},'checked_out']]) {
+  const plan=await prepare([readyBook(datos)]);assert.equal(Q.serializarIncorporacion(plan)[0].estadias[0].datos.estado_estadia,estado);
+ }
+});
+
+test('unknown occupation does not become zero, and explicitly invalid occupation is blocked',async()=>{
+ const r=book({correo:'new@example.test'}),s=stay(r,{adultos:0,ninos:0,mascotas:0,reservas:{...stay(r).reservas,correo_contacto:'old@example.test'}});
+ const plan=await prepare([r],[s]);assert.ok(plan.items.some(i=>i.categoria==='actualizaciones'&&i.seleccionado));
+ assert.ok(!('adultos' in plan.items[0].payload.estadia.despues));
+ const invalid=await prepare([{...r,adultos:-1}],[s]);assert.ok(!Q.serializarIncorporacion(invalid).length);
 });

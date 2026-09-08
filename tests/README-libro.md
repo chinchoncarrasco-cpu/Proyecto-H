@@ -43,3 +43,32 @@ Ejecutar todas las pruebas: `node --test tests/*.test.cjs`.
 - `operacion_id` queda registrado en `private.haiku_libro_incorporaciones`. Un reintento con la misma selección devuelve el resultado guardado. La función sólo puede ejecutarla una sesión autenticada.
 
 No subir XLSX ni datos personales al repositorio.
+
+## Prioridad del Libro al confirmar (septiembre 2026)
+
+Esta sección reemplaza el comportamiento anterior de “Es la misma reserva” que sólo asociaba en la vista previa.
+
+- **Es la misma reserva** prepara una actualización real de esa reserva: documento completo (incluidas letras del pasaporte), nombre, contacto, ocupación, estado y notas disponibles en el Libro. La categoría **Actualizar Proyecto H con el Libro** muestra valores anteriores y propuestos; sólo se escriben tras la confirmación final.
+- Cuando CAB o fechas difieren, **Es la misma estadía: corregir CAB/fechas y datos con el Libro** reemplaza los datos de la estadía seleccionada. **Añadir esta estadía** continúa siendo una alternativa distinta. La disponibilidad y los bloqueos se validan en la transacción.
+- Los pagos ya identificados inequívocamente en la reserva se actualizan con el monto, medio, fecha, identificadores y concepto conocidos del Libro. Un identificador de otra reserva o repetido con datos incompatibles permanece en revisión. Un pago débil no se sobrescribe por tener el mismo monto.
+- El Libro tiene prioridad para los campos presentes. Un dato ausente no borra datos existentes ni se convierte en cero. Las notas de varias cabañas se combinan sin reemplazarse entre sí. Los detalles no estructurados y las solicitudes se conservan en observaciones; no se inventan importes o fechas para crear cargos de servicios.
+- Nuevas reservas y estadías toman el estado conocido del Libro; si no está determinado, comienzan pendientes. Los pasaportes se guardan íntegros con un tipo de documento válido.
+- Al volver de la pantalla de guardado se consulta nuevamente Proyecto H. Las actualizaciones ya aplicadas dejan de proponerse. Si los valores cambian después de revisar la propuesta, se exige prepararla de nuevo antes de sobrescribirlos.
+
+### Validación con Yann y septiembre
+
+1. Recargar el panel sin caché y cargar el Libro actualizado.
+2. Pedir `Libro: compara septiembre 2026 con Proyecto H y prepara la incorporación de reservas y pagos faltantes`.
+3. Para Yann, elegir **Es la misma reserva** sobre la referencia correcta. Pulsar **Preparar incorporación**.
+4. Revisar **Actualizar Proyecto H con el Libro**: el pasaporte debe conservar todas sus letras y números; comprobar los cambios de correo y demás campos. Los cambios largos de notas comienzan plegados.
+5. Confirmar únicamente la selección revisada. Comprobar el documento y los detalles en la ficha, y volver a comparar septiembre: los datos ya corregidos no deben volver a prepararse como actualización.
+6. Con datos de prueba, un pago existente con identificador fuerte y monto distinto debe actualizar el mismo pago, sin crear uno nuevo. La reducción de monto ajusta su distribución entre cargos y deja historial. No permite reducir por debajo de devoluciones confirmadas.
+7. Si se corrigen fechas, la vista explica que las noches nuevas usan tarifa de catálogo y que los pagos aplicados a noches retiradas quedan como saldo disponible. Se conservan los registros de pago y se guarda el historial de las aplicaciones ajustadas.
+
+### Verificación realizada
+
+`node --test tests/*.test.cjs`: 112 pruebas aprobadas. Incluye Libro anterior ↔ actual, preparación/confirmación, pasaporte y contacto, datos desconocidos, pagos existentes, conflictos, revalidación, notas multicabaña y estados iniciales.
+
+`tests/haiku-libro-prioridad.integration.sql`: prueba transaccional con identidades y referencias únicas de prueba. Comprueba persistencia, reintentos, rechazo de propuestas obsoletas, reversión completa ante errores, autenticación, reducción de pagos y aplicaciones, fechas/cargos, ocupación desconocida y creación con pasaporte y estado del Libro. Termina en `ROLLBACK`; no conserva registros de prueba.
+
+Migraciones aplicadas: `20260908162301_haku_libro_prioridad_confirmada.sql`, `20260908164059_haku_libro_estado_confirmado.sql` y `20260908164318_haku_libro_validar_campos_conocidos.sql`. La RPC conserva autenticación, permisos existentes e idempotencia. Los dos auxiliares nuevos son privados y no ejecutables directamente por `anon` ni `authenticated`.
