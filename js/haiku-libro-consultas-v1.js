@@ -1125,14 +1125,15 @@
                 if (!out.isConnected && out.isConnected !== undefined) return;
                 const volver = () => renderizarComparacion(out, result, { decisiones, aprobados });
                 let incorporar;
-                const aprobar = async id => {
-                    aprobados.add(id);
-                    out.replaceChildren(elemento('p', '', 'Revalidando el pago aprobado…'));
+                const aprobar = async ids => {
+                    const lista = Array.isArray(ids) ? ids : [ids];
+                    lista.forEach(id => aprobados.add(id));
+                    out.replaceChildren(elemento('p', '', lista.length > 1 ? 'Revalidando los pagos aprobados…' : 'Revalidando el pago aprobado…'));
                     try {
                         const nuevo = await prepararIncorporacion(result, decisiones, aprobados);
                         renderizarIncorporacion(out, nuevo, volver, aprobar, incorporar);
                     } catch (e) {
-                        aprobados.delete(id); volver();
+                        lista.forEach(id => aprobados.delete(id)); volver();
                         out.append(elemento('p', '', 'No se pudo revalidar: ' + e.message));
                     }
                 };
@@ -1277,7 +1278,7 @@
         if (item.aprobable && aprobar) {
             const boton = elemento("button", "haiku-incorporacion-aprobar", "Aprobar este pago");
             boton.type = "button";
-            boton.addEventListener("click", () => { boton.disabled = true; aprobar(item.id); });
+            boton.addEventListener("click", async () => { boton.disabled = true; await aprobar(item.id); });
             fila.append(boton);
         }
         return fila;
@@ -1332,6 +1333,9 @@
 
         const controles = new Map();
         let confirmar = null, guardando = false;
+        const esElegible = item => !item.motivos.length && ["nuevas", "estadias", "pagos"].includes(item.categoria) &&
+            item.dependeDe.every(id => plan.items.find(x => x.id === id)?.seleccionado);
+        const seleccionados = () => plan.items.filter(item => item.seleccionado && esElegible(item));
         const actualizar = () => {
             for (const item of plan.items) {
                 const control = controles.get(item.id);
@@ -1346,7 +1350,11 @@
             indicadores.pagos.textContent = plan.items.filter(i => i.categoria === "pagos" && i.seleccionado).length;
             indicadores.dudosos.textContent = plan.items.filter(i => i.categoria === "dudosos").length;
             indicadores.pendientes.textContent = plan.items.filter(i => i.categoria === "pendientes" || i.motivos.length && i.categoria !== "dudosos").length;
-            if (confirmar) confirmar.disabled = guardando || !plan.items.some(i => i.seleccionado && !i.motivos.length && ["nuevas", "estadias", "pagos"].includes(i.categoria));
+            if (confirmar) {
+                const cantidad = seleccionados().length;
+                confirmar.disabled = guardando || cantidad === 0;
+                if (!guardando) confirmar.textContent = cantidad ? `Continuar con ${cantidad} elemento${cantidad === 1 ? "" : "s"} listo${cantidad === 1 ? "" : "s"}` : "Selecciona al menos un elemento listo";
+            }
         };
 
         for (const [categoria, tituloSeccion] of [["nuevas", "Reservas nuevas"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]]) {
@@ -1373,14 +1381,40 @@
         ayuda.append(listaAyuda);
         out.append(ayuda);
 
+        const elegiblesAhora = plan.items.filter(item => !item.motivos.length && ["nuevas", "estadias", "pagos"].includes(item.categoria));
+        const aprobables = plan.items.filter(item => item.categoria === "dudosos" && item.aprobable);
+        const pendientes = plan.items.filter(item => item.categoria === "pendientes" || item.motivos.length && item.categoria !== "dudosos");
+        const atajos = elemento("div", "haiku-incorporacion-atajos");
+        if (elegiblesAhora.length) {
+            const seleccionar = elemento("button", "haiku-incorporacion-atajo", "Seleccionar todo lo listo");
+            seleccionar.type = "button";
+            seleccionar.addEventListener("click", () => {
+                elegiblesAhora.forEach(item => { item.seleccionado = true; });
+                actualizar();
+            });
+            atajos.append(seleccionar);
+        }
+        if (aprobables.length && aprobar) {
+            const aprobarTodos = elemento("button", "haiku-incorporacion-atajo haiku-incorporacion-atajo--aprobar", `Aprobar ${aprobables.length} pago${aprobables.length === 1 ? "" : "s"} revisable${aprobables.length === 1 ? "" : "s"}`);
+            aprobarTodos.type = "button";
+            aprobarTodos.title = "Incluye sólo pagos cuyo único requisito pendiente es tu aprobación manual.";
+            aprobarTodos.addEventListener("click", async () => {
+                aprobarTodos.disabled = true;
+                await aprobar(aprobables.map(item => item.id));
+            });
+            atajos.append(aprobarTodos);
+        }
+        if (atajos.children.length) out.append(atajos);
+        if (pendientes.length) out.append(elemento("p", "haiku-incorporacion-continuar", `${pendientes.length} caso${pendientes.length === 1 ? "" : "s"} pendiente${pendientes.length === 1 ? "" : "s"} quedará${pendientes.length === 1 ? "" : "n"} fuera. Puedes continuar con los elementos listos.`));
+
         const acciones = elemento("div", "haiku-incorporacion-acciones");
         const atras = elemento("button", "libro-reserva-boton secundario", "Volver");
         atras.type = "button";
         atras.addEventListener("click", volver);
-        confirmar = elemento("button", "libro-reserva-boton", "Confirmar incorporación");
+        confirmar = elemento("button", "libro-reserva-boton", "Continuar con los elementos listos");
         confirmar.type = "button";
         confirmar.addEventListener("click", async () => {
-            const seleccion = plan.items.filter(i => i.seleccionado && !i.motivos.length && ["nuevas", "estadias", "pagos"].includes(i.categoria));
+            const seleccion = seleccionados();
             const nuevas = seleccion.filter(i => i.categoria === "nuevas").length;
             const estadias = seleccion.filter(i => i.categoria === "estadias").reduce((n, i) => n + (i.payload?.estadias?.length || 0), 0);
             const pagos = seleccion.filter(i => i.categoria === "pagos").length;

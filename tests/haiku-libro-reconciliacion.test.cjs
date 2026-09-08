@@ -344,7 +344,8 @@ test('second screen revalidates, shows all categories, enforces dependencies and
  assert.equal(h.out.querySelectorAll('details').some(d=>d.open),false);
  assert.doesNotMatch(h.texts(),/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
  assert.match(h.texts(),/Documento.*Correo.*Teléfono/);
- assert.equal(h.button('Confirmar incorporación').disabled,false);assert.equal(typeof h.button('Confirmar incorporación').events.click,'function');
+ const confirmar=h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con '));
+ assert.equal(confirmar.disabled,false);assert.equal(typeof confirmar.events.click,'function');
  const checks=h.out.querySelectorAll('input'),first=checks[0];first.checked=false;first.events.change();
  assert.equal(checks[1].disabled,true);assert.equal(checks[1].checked,false);
  assert.equal(db.calls.filter(x=>x==='pagos').length,2);
@@ -352,9 +353,21 @@ test('second screen revalidates, shows all categories, enforces dependencies and
 test('confirmation button executes the atomic RPC and shows the saved result',async()=>{
  const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
  h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
- await h.button('Confirmar incorporación').events.click();
+ await h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con ')).events.click();
  assert.match(h.texts(),/Incorporación completada/);assert.match(h.texts(),/El Libro original no fue modificado/);
  assert.equal(db.calls.filter(x=>x==='haiku_incorporar_libro_v1').length,1);
+});
+test('one bulk action approves every eligible manual payment and pending cases do not block ready items',async()=>{
+ const weak=readyPay({codigo_autorizacion:null}),ready=readyBook({pagos:[weak]}),invalid=readyBook({id:'invalid',titular:null,cabana:10});
+ const db=client(),c=await Q.compararSistema([ready,invalid],db,q),h=renderHarness(null,db);
+ h.render({q,reservas:[ready,invalid],comparacion:c});await h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/Puedes continuar con los elementos listos/);
+ const antes=h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con '));
+ assert.equal(antes.disabled,false);
+ const aprobar=h.button('Aprobar 1 pago revisable');assert.ok(aprobar);await aprobar.events.click();
+ assert.match(h.texts(),/Pago preparado/);
+ const despues=h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con '));
+ assert.equal(despues.disabled,false);assert.match(despues.textContent,/2 elementos listos/);
 });
 test('failed preparation never displays an actionable stale plan',async()=>{
  const r=readyBook(),c=await compare([r]),db=client();db.auth.getSession=async()=>{throw new Error('offline')};

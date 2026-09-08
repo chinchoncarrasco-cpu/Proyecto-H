@@ -853,6 +853,43 @@
     line-height: 1.4;
 }
 
+.haiku-incorporacion-atajos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.haiku-incorporacion-atajo {
+    min-height: 30px;
+    padding: 6px 10px;
+    border: 1px solid #bfd1c6;
+    border-radius: 8px;
+    background: #f7faf8;
+    color: #315844;
+    font: inherit;
+    font-size: .59rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.haiku-incorporacion-atajo--aprobar {
+    border-color: #d7bd72;
+    background: #fff8e8;
+    color: #76550b;
+}
+
+.haiku-incorporacion-continuar {
+    margin: 7px 0 0;
+    padding: 7px 9px;
+    border-left: 3px solid #7fa58e;
+    border-radius: 6px;
+    background: #f3f8f5;
+    color: #405d4c;
+    font-size: .59rem;
+    line-height: 1.35;
+}
+
 .haiku-incorporacion-acciones {
     display: grid;
     grid-template-columns: minmax(90px, .7fr) minmax(160px, 1.3fr);
