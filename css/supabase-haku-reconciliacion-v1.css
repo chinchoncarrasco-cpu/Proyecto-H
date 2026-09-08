@@ -524,3 +524,361 @@
         width: 100%;
     }
 }
+
+/* Segunda pantalla: información compacta y ordenada por item. */
+.haiku-incorporacion {
+    padding: 12px;
+    color: var(--rec-texto);
+    font-size: .72rem;
+    line-height: 1.35;
+    white-space: normal;
+}
+
+.haiku-incorporacion-cabecera {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--rec-borde);
+}
+
+.haiku-incorporacion-cabecera > div > span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--rec-verde);
+    font-size: .52rem;
+    font-weight: 850;
+    letter-spacing: .08em;
+}
+
+.haiku-incorporacion-cabecera > div > strong {
+    display: block;
+    color: #17251d;
+    font-size: .9rem;
+    line-height: 1.2;
+}
+
+.haiku-incorporacion-modo,
+.haiku-incorporacion-estado {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    font-size: .52rem;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.haiku-incorporacion-modo {
+    padding: 4px 7px;
+    background: #edf3ef;
+    color: #4c6357;
+}
+
+.haiku-incorporacion-aviso {
+    margin: 9px 0;
+    padding: 8px 10px;
+    border: 1px solid #ead6aa;
+    border-radius: 9px;
+    background: var(--rec-ambar-bg);
+    color: #705720;
+    font-size: .63rem;
+    line-height: 1.35;
+}
+
+.haiku-incorporacion-resumen {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+    margin-bottom: 9px;
+}
+
+.haiku-incorporacion-indicador {
+    min-width: 0;
+    padding: 6px 4px;
+    border: 1px solid #e1e8e3;
+    border-radius: 8px;
+    background: #f8faf9;
+    text-align: center;
+}
+
+.haiku-incorporacion-indicador strong,
+.haiku-incorporacion-indicador span {
+    display: block;
+}
+
+.haiku-incorporacion-indicador strong {
+    color: #244334;
+    font-size: .82rem;
+    line-height: 1;
+}
+
+.haiku-incorporacion-indicador span {
+    margin-top: 3px;
+    overflow: hidden;
+    color: #748078;
+    font-size: .52rem;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.haiku-incorporacion .haiku-incorporacion-seccion {
+    margin-top: 6px !important;
+    border-radius: 9px;
+}
+
+.haiku-incorporacion .haiku-incorporacion-seccion > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 7px 34px 7px 10px;
+    cursor: pointer;
+    font-size: .66rem;
+    font-weight: 800;
+}
+
+.haiku-incorporacion .haiku-incorporacion-seccion > summary > span {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.haiku-incorporacion .haiku-incorporacion-seccion > summary > strong {
+    display: grid;
+    width: 21px;
+    height: 21px;
+    place-items: center;
+    border-radius: 999px;
+    background: #e9f1ec;
+    color: #315844;
+    font-size: .58rem;
+}
+
+.haiku-incorporacion-lista {
+    display: grid;
+    gap: 7px;
+    padding: 7px;
+    border-top: 1px solid #edf1ee;
+    background: #f7f9f8;
+}
+
+.haiku-incorporacion-item {
+    min-width: 0;
+    padding: 9px;
+    border: 1px solid #dfe6e1;
+    border-left: 3px solid #9dbfac;
+    border-radius: 9px;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(25, 54, 38, .035);
+}
+
+.haiku-incorporacion-item--dudosos,
+.haiku-incorporacion-item--pendientes { border-left-color: #d1a33d; }
+.haiku-incorporacion-item--omitidos { border-left-color: #a7b0aa; background: #fafbfa; }
+.haiku-incorporacion-item--pagos { border-left-color: #4b9b70; }
+
+.haiku-incorporacion-item-cabecera {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.haiku-incorporacion-seleccion {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: flex-start;
+    gap: 7px;
+    cursor: pointer;
+}
+
+.haiku-incorporacion-seleccion input {
+    width: 15px;
+    height: 15px;
+    flex: 0 0 auto;
+    margin: 1px 0 0;
+    accent-color: var(--rec-verde);
+}
+
+.haiku-incorporacion-seleccion input:disabled { opacity: .45; cursor: not-allowed; }
+
+.haiku-incorporacion-identidad {
+    min-width: 0;
+    display: block;
+}
+
+.haiku-incorporacion-identidad strong,
+.haiku-incorporacion-identidad small {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.haiku-incorporacion-identidad strong {
+    color: #203128;
+    font-size: .75rem;
+    line-height: 1.25;
+}
+
+.haiku-incorporacion-identidad small {
+    margin-top: 2px;
+    color: #748078;
+    font-size: .61rem;
+    line-height: 1.25;
+}
+
+.haiku-incorporacion-estado { padding: 3px 6px; background: #eaf4ee; color: #2c6748; }
+.haiku-incorporacion-estado--dudosos,
+.haiku-incorporacion-estado--pendientes { background: #fff2d8; color: #815c12; }
+.haiku-incorporacion-estado--omitidos,
+.haiku-incorporacion-estado--asociadas { background: #eef1ef; color: #647068; }
+
+.haiku-incorporacion-estadias,
+.haiku-incorporacion-contacto,
+.haiku-incorporacion-meta-item {
+    display: grid;
+    gap: 5px;
+    margin-top: 7px;
+}
+
+.haiku-incorporacion-estadia {
+    display: grid;
+    grid-template-columns: .7fr 1.35fr .8fr 1.25fr;
+    gap: 5px;
+    padding: 6px;
+    border-radius: 7px;
+    background: #f5f8f6;
+}
+
+.haiku-incorporacion-contacto { grid-template-columns: .9fr 1.5fr 1fr; }
+.haiku-incorporacion-meta-item { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.haiku-incorporacion-dato {
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 6px;
+    background: #f6f8f7;
+}
+
+.haiku-incorporacion-dato span,
+.haiku-incorporacion-dato strong { display: block; }
+.haiku-incorporacion-dato span {
+    margin-bottom: 2px;
+    color: #7c8881;
+    font-size: .5rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+.haiku-incorporacion-dato strong {
+    overflow-wrap: anywhere;
+    color: #37443d;
+    font-size: .63rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.haiku-incorporacion-propuesta {
+    margin: 7px 0 0;
+    color: #536158;
+    font-size: .64rem;
+    line-height: 1.35;
+}
+
+.haiku-incorporacion-avisos {
+    display: grid;
+    gap: 3px;
+    margin: 7px 0 0;
+    padding: 7px 8px 7px 23px;
+    border-radius: 7px;
+    background: var(--rec-ambar-bg);
+    color: #75581c;
+    font-size: .62rem;
+    line-height: 1.35;
+}
+
+.haiku-incorporacion .haiku-incorporacion-notas {
+    margin-top: 7px !important;
+    border-radius: 7px;
+}
+.haiku-incorporacion .haiku-incorporacion-notas > summary {
+    padding: 6px 30px 6px 8px;
+    font-size: .57rem;
+    font-weight: 750;
+}
+.haiku-incorporacion-notas > p {
+    max-height: 130px;
+    margin: 0;
+    overflow-y: auto;
+    padding: 7px 9px;
+    border-top: 1px solid #edf1ee;
+    color: #626e67;
+    font-size: .57rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+}
+
+.haiku-incorporacion-aprobar {
+    min-height: 29px;
+    margin-top: 7px;
+    padding: 5px 9px;
+    border: 1px solid #bfd4c6;
+    border-radius: 7px;
+    background: #f2f8f4;
+    color: #2c6548;
+    font: inherit;
+    font-size: .58rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.haiku-incorporacion-vacio {
+    margin: 0;
+    padding: 5px;
+    color: #87918b;
+    font-size: .59rem;
+    text-align: center;
+}
+
+.haiku-incorporacion .haiku-incorporacion-ayuda { margin-top: 8px !important; }
+.haiku-incorporacion .haiku-incorporacion-ayuda > summary { font-size: .6rem; font-weight: 750; }
+.haiku-incorporacion-ayuda > ul {
+    margin: 0;
+    padding: 8px 12px 8px 26px;
+    color: #67736c;
+    font-size: .58rem;
+    line-height: 1.4;
+}
+
+.haiku-incorporacion-acciones {
+    display: grid;
+    grid-template-columns: minmax(90px, .7fr) minmax(160px, 1.3fr);
+    gap: 7px;
+    margin-top: 9px;
+}
+
+.haiku-incorporacion-acciones .libro-reserva-boton {
+    min-height: 34px;
+    padding: 7px 9px;
+    border: 1px solid #bfd1c6;
+    border-radius: 8px;
+    background: var(--rec-verde);
+    color: #fff;
+    font: inherit;
+    font-size: .62rem;
+    font-weight: 800;
+}
+.haiku-incorporacion-acciones .libro-reserva-boton.secundario { background: #f7faf8; color: #315844; cursor: pointer; }
+.haiku-incorporacion-acciones .libro-reserva-boton:disabled { border-color: #d9dfdb; background: #eef1ef; color: #8a938d; cursor: not-allowed; }
+
+@media (max-width: 700px) {
+    .haiku-asistente-preview .haiku-asistente-preview-grid,
+    .haiku-reconciliacion-resumen-acciones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .haiku-incorporacion-resumen { grid-template-columns: repeat(5, minmax(48px, 1fr)); overflow-x: auto; }
+    .haiku-incorporacion-estadia { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .haiku-incorporacion-contacto,
+    .haiku-incorporacion-meta-item { grid-template-columns: 1fr; }
+}

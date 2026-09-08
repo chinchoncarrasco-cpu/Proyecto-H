@@ -338,7 +338,12 @@ test('second screen revalidates, shows all categories, enforces dependencies and
  const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
  h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
  assert.match(h.texts(),/Escritura real deshabilitada en modo de prueba/);
- for(const t of ['Reservas nuevas claras','Estadías/cabañas a añadir','Mismas reservas ya asociadas','Pagos nuevos seguros','Pagos dudosos','Casos pendientes','Ya existe / omitido']) assert.ok(h.texts().includes(t));
+ for(const t of ['Reservas nuevas','Estadías a añadir','Reservas ya asociadas','Pagos preparados','Pagos para revisar','Casos pendientes','Ya existe / omitido']) assert.ok(h.texts().includes(t));
+ assert.ok(h.out.querySelector('.haiku-incorporacion-resumen'));
+ assert.ok(h.out.querySelector('.haiku-incorporacion-item'));
+ assert.equal(h.out.querySelectorAll('details').some(d=>d.open),false);
+ assert.doesNotMatch(h.texts(),/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+ assert.match(h.texts(),/Documento.*Correo.*Teléfono/);
  assert.equal(h.button('Confirmar incorporación').disabled,true);assert.equal(h.button('Confirmar incorporación').events.click,undefined);
  const checks=h.out.querySelectorAll('input'),first=checks[0];first.checked=false;first.events.change();
  assert.equal(checks[1].disabled,true);assert.equal(checks[1].checked,false);

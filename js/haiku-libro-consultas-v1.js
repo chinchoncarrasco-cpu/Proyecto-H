@@ -1108,51 +1108,186 @@
         out.append(pie);
     }
 
+    function fechaBreve(fecha) {
+        const m = String(fecha || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : (fecha || "sin dato");
+    }
+
+    function datoIncorporacion(etiqueta, valor) {
+        const dato = elemento("div", "haiku-incorporacion-dato");
+        dato.append(elemento("span", "", etiqueta), elemento("strong", "", valor ?? "sin dato"));
+        return dato;
+    }
+
+    function presentacionIncorporacion(item) {
+        const partes = String(item.texto || "").split(" · ");
+        const esReserva = /^CAB\s/i.test(partes[0] || "");
+        const estadias = item.payload?.estadias || [];
+        const reserva = item.payload?.reserva;
+        const titular = reserva?.titular_nombre || (esReserva ? partes[1] : partes[0]) || "Sin titular";
+        const cabana = esReserva ? partes[0] : partes.find(p => /^CAB\s/i.test(p));
+        const monto = !esReserva ? partes.find(p => /^\$|monto no determinado/i.test(p)) : null;
+        const concepto = !esReserva ? partes[3] : null;
+        const periodo = esReserva && partes[2] ? partes[2].replace(/\d{4}-\d{2}-\d{2}/g, fechaBreve) : null;
+        const tipo = esReserva ? partes[3] : null;
+        const etiquetasEstado = {
+            nuevas: "Crear reserva", estadias: "Añadir estadía", asociadas: "Ya asociada",
+            pagos: "Pago preparado", dudosos: "Revisar pago", pendientes: "Pendiente", omitidos: "Omitido"
+        };
+        let detalle = "";
+        if (item.categoria === "nuevas") detalle = `Se propone una sola reserva con ${estadias.length} estadía${estadias.length === 1 ? "" : "s"}. Estado inicial: pendiente.`;
+        if (item.categoria === "estadias") detalle = `Se propone añadir ${estadias.length} estadía${estadias.length === 1 ? "" : "s"} a la reserva existente.`;
+        if (item.categoria === "asociadas") detalle = "La reserva ya está asociada. No se creará otra.";
+        if (item.categoria === "pagos") detalle = item.payload?.reserva_ref ? "Se asociará cuando se cree la reserva seleccionada." : "Pago listo para la simulación.";
+        if (item.categoria === "dudosos") detalle = "Este movimiento necesita revisión antes de poder prepararse.";
+        if (item.categoria === "pendientes") detalle = "No se incorporará mientras siga pendiente.";
+        if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
+            /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
+        return { titular, cabana, monto, concepto, periodo, tipo, estado: etiquetasEstado[item.categoria] || "Revisar", detalle, estadias, reserva };
+    }
+
+    function renderizarItemIncorporacion(item, controles, actualizar, aprobar) {
+        const vista = presentacionIncorporacion(item);
+        const fila = elemento("article", `haiku-incorporacion-item haiku-incorporacion-item--${item.categoria}`);
+        const cabecera = elemento("div", "haiku-incorporacion-item-cabecera");
+        const label = elemento("label", "haiku-incorporacion-seleccion");
+        const check = elemento("input");
+        check.type = "checkbox";
+        check.checked = item.seleccionado;
+        check.setAttribute("aria-label", `Seleccionar ${vista.titular}`);
+        controles.set(item.id, check);
+        check.addEventListener("change", () => { item.seleccionado = check.checked; actualizar(); });
+        const identidad = elemento("span", "haiku-incorporacion-identidad");
+        identidad.append(elemento("strong", "", vista.titular), elemento("small", "", [vista.cabana, vista.monto].filter(Boolean).join(" · ")));
+        label.append(check, identidad);
+        cabecera.append(label, elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
+        fila.append(cabecera);
+
+        if (vista.estadias.length) {
+            const lista = elemento("div", "haiku-incorporacion-estadias");
+            for (const estadia of vista.estadias) {
+                const periodo = `${fechaBreve(estadia.datos.fecha_ingreso)} → ${fechaBreve(estadia.datos.fecha_salida)}`;
+                const tipo = estadia.datos.tipo_estadia === "fullday" ? "Full Day" : `${estadia.noches} noche${estadia.noches === 1 ? "" : "s"}`;
+                const tarjeta = elemento("div", "haiku-incorporacion-estadia");
+                tarjeta.append(
+                    datoIncorporacion("Cabaña", `CAB ${estadia.cabana_numero}`),
+                    datoIncorporacion("Fechas", periodo),
+                    datoIncorporacion("Tipo", tipo),
+                    datoIncorporacion("Huéspedes", `${estadia.datos.adultos ?? "?"} ad. · ${estadia.datos.ninos ?? "?"} niñ. · ${estadia.datos.mascotas ?? "?"} masc.`)
+                );
+                lista.append(tarjeta);
+            }
+            fila.append(lista);
+        } else if (vista.monto || vista.cabana) {
+            const meta = elemento("div", "haiku-incorporacion-meta-item");
+            if (vista.monto) meta.append(datoIncorporacion("Monto", vista.monto));
+            if (vista.concepto) meta.append(datoIncorporacion("Concepto", vista.concepto));
+            if (!vista.monto && vista.cabana) meta.append(datoIncorporacion("Cabaña", vista.cabana));
+            if (vista.periodo) meta.append(datoIncorporacion("Fechas", vista.periodo));
+            if (vista.tipo) meta.append(datoIncorporacion("Tipo", vista.tipo));
+            const bloque = item.payload?.datos_origen?.fecha_bloque;
+            if (bloque) meta.append(datoIncorporacion("Bloque Check-In", fechaBreve(bloque)));
+            fila.append(meta);
+        }
+
+        if (vista.reserva) {
+            const contacto = elemento("div", "haiku-incorporacion-contacto");
+            contacto.append(
+                datoIncorporacion("Documento", vista.reserva.titular_numero_documento || "sin dato"),
+                datoIncorporacion("Correo", vista.reserva.correo_contacto || "sin dato"),
+                datoIncorporacion("Teléfono", vista.reserva.telefono_contacto || "sin dato")
+            );
+            fila.append(contacto);
+        }
+
+        fila.append(elemento("p", "haiku-incorporacion-propuesta", vista.detalle));
+        if (item.motivos.length) {
+            const avisos = elemento("ul", "haiku-incorporacion-avisos");
+            item.motivos.forEach(motivo => avisos.append(elemento("li", "", motivo)));
+            fila.append(avisos);
+        }
+        if (vista.reserva?.observaciones) {
+            const notas = elemento("details", "haiku-incorporacion-notas");
+            notas.append(elemento("summary", "", "Ver notas y solicitudes"), elemento("p", "", vista.reserva.observaciones));
+            fila.append(notas);
+        }
+        if (item.aprobable && aprobar) {
+            const boton = elemento("button", "haiku-incorporacion-aprobar", "Aprobar para la simulación");
+            boton.type = "button";
+            boton.addEventListener("click", () => { boton.disabled = true; aprobar(item.id); });
+            fila.append(boton);
+        }
+        return fila;
+    }
+
     function renderizarIncorporacion(out, plan, volver, aprobar) {
-        out.replaceChildren(elemento("strong", "", "Preparar incorporación · simulación"));
-        out.append(elemento("p", "", "Escritura real deshabilitada en modo de prueba"));
-        const resumen = elemento("p", "haiku-asistente-preview-resumen");
-        out.append(resumen);
+        out.className = "haiku-asistente-preview haiku-incorporacion";
+        const cabecera = elemento("div", "haiku-incorporacion-cabecera");
+        const titulo = elemento("div");
+        titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", "Preparar incorporación"));
+        cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", "Modo de prueba"));
+        const aviso = elemento("p", "haiku-incorporacion-aviso", "Escritura real deshabilitada en modo de prueba. Revisa y selecciona; todavía no se guardará nada.");
+        const resumen = elemento("div", "haiku-incorporacion-resumen");
+        out.replaceChildren(cabecera, aviso, resumen);
+
+        const indicadores = {};
+        for (const [clave, etiqueta] of [["nuevas", "Reservas"], ["estadias", "Estadías"], ["pagos", "Pagos"], ["dudosos", "Dudosos"], ["pendientes", "Pendientes"]]) {
+            const tarjeta = elemento("div", "haiku-incorporacion-indicador");
+            indicadores[clave] = elemento("strong", "", "0");
+            tarjeta.append(indicadores[clave], elemento("span", "", etiqueta));
+            resumen.append(tarjeta);
+        }
+
         const controles = new Map();
         const actualizar = () => {
-            for (const i of plan.items) {
-                const c = controles.get(i.id); if (!c) continue;
-                const dependencia = i.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
-                c.disabled = !!i.motivos.length || dependencia || !['nuevas','estadias','pagos'].includes(i.categoria);
-                if (c.disabled) { c.checked = false; i.seleccionado = false; }
+            for (const item of plan.items) {
+                const control = controles.get(item.id);
+                if (!control) continue;
+                const dependencia = item.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
+                control.disabled = !!item.motivos.length || dependencia || !["nuevas", "estadias", "pagos"].includes(item.categoria);
+                if (control.disabled) { control.checked = false; item.seleccionado = false; }
             }
-            const n = k => plan.items.filter(i => i.categoria === k && i.seleccionado).length;
-            resumen.textContent = n('nuevas') + ' reservas nuevas · ' + n('estadias') + ' elementos de estadías a añadir · ' + n('pagos') + ' pagos seguros/aprobados · ' + plan.items.filter(i=>i.categoria==='dudosos').length + ' pagos dudosos · ' + plan.items.filter(i=>i.categoria==='pendientes'||i.motivos.length && i.categoria!=='dudosos').length + ' pendientes';
+            indicadores.nuevas.textContent = plan.items.filter(i => i.categoria === "nuevas" && i.seleccionado).length;
+            indicadores.estadias.textContent = plan.items.filter(i => i.categoria === "estadias" && i.seleccionado).reduce((n, i) => n + (i.payload?.estadias?.length || 0), 0);
+            indicadores.pagos.textContent = plan.items.filter(i => i.categoria === "pagos" && i.seleccionado).length;
+            indicadores.dudosos.textContent = plan.items.filter(i => i.categoria === "dudosos").length;
+            indicadores.pendientes.textContent = plan.items.filter(i => i.categoria === "pendientes" || i.motivos.length && i.categoria !== "dudosos").length;
         };
-        for (const [k,titulo] of [['nuevas','Reservas nuevas claras'],['estadias','Estadías/cabañas a añadir'],['asociadas','Mismas reservas ya asociadas'],['pagos','Pagos nuevos seguros o aprobados'],['dudosos','Pagos dudosos/manuales'],['pendientes','Casos pendientes'],['omitidos','Ya existe / omitido']]) {
-            const items = plan.items.filter(i => i.categoria === k);
-            const seccion = elemento('details'); seccion.open = ['nuevas','estadias','pagos'].includes(k);
-            seccion.append(elemento('summary','',titulo + ' (' + items.length + ')'));
-            for (const i of items) {
-                const fila = elemento('div'), label = elemento('label'), check = elemento('input');
-                check.type = 'checkbox'; check.checked = i.seleccionado;
-                controles.set(i.id,check);
-                check.addEventListener('change',()=> { i.seleccionado=check.checked; actualizar(); });
-                label.append(check,elemento('span','',i.texto)); fila.append(label);
-                if (i.motivos.length) fila.append(elemento('p','',i.motivos.join(' ')));
-                if (i.payload?.estadias) {
-                    const r=i.payload.reserva;
-                    if(r) fila.append(elemento('p','',[r.titular_nombre,'Documento: '+(r.titular_numero_documento || 'sin dato'),'Correo: '+(r.correo_contacto || 'sin dato'),'Teléfono: '+(r.telefono_contacto || 'sin dato')].join(' · ')));
-                    i.payload.estadias.forEach(e=>fila.append(elemento('p','','CAB '+e.cabana_numero+' · '+e.datos.fecha_ingreso+' → '+e.datos.fecha_salida+' · '+(e.datos.tipo_estadia==='fullday'?'Full Day':e.noches+' noches')+' · Adultos: '+(e.datos.adultos??'sin dato')+' · Niños: '+(e.datos.ninos??'sin dato')+' · Mascotas: '+(e.datos.mascotas??'sin dato'))));
-                    if(r?.observaciones) agregarDetalles(fila,'Notas y solicitudes',[r.observaciones]);
-                }
-                if (i.aprobable && aprobar) { const b=elemento('button','libro-reserva-boton secundario','Aprobar este pago para la simulación'); b.type='button'; b.addEventListener('click',()=>{ b.disabled=true; aprobar(i.id); }); fila.append(b); }
-                seccion.append(fila);
-            }
+
+        for (const [categoria, tituloSeccion] of [["nuevas", "Reservas nuevas"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]]) {
+            const items = plan.items.filter(i => i.categoria === categoria);
+            const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria}`);
+            const summary = elemento("summary");
+            summary.append(elemento("span", "", tituloSeccion), elemento("strong", "", String(items.length)));
+            seccion.append(summary);
+            const contenido = elemento("div", "haiku-incorporacion-lista");
+            if (!items.length) contenido.append(elemento("p", "haiku-incorporacion-vacio", "Sin elementos en esta categoría."));
+            else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar)));
+            seccion.append(contenido);
             out.append(seccion);
         }
         actualizar();
-        agregarDetalles(out,'Permisos necesarios (sin cambios)',plan.permisos.map(p=>p+' · '+(root.haikuTienePermiso?.(p)===true?'disponible en la sesión':'por verificar/no disponible')));
-        out.append(elemento('p','',plan.alcance + '. Los pagos se revisan en el bloque del día de Check-In. Los datos desconocidos permanecen sin dato.'));
-        const confirmar=elemento('button','libro-reserva-boton','Confirmar incorporación'); confirmar.type='button'; confirmar.disabled=true;
-        confirmar.title='Escritura real deshabilitada en modo de prueba';
-        const atras=elemento('button','libro-reserva-boton secundario','Volver a la comparación'); atras.type='button'; atras.addEventListener('click',volver);
-        out.append(atras,confirmar);
+
+        const ayuda = elemento("details", "haiku-incorporacion-ayuda");
+        const permisos = plan.permisos.map(p => p + " · " + (root.haikuTienePermiso?.(p) === true ? "disponible" : "por verificar"));
+        ayuda.append(elemento("summary", "", "Información de la simulación"));
+        const listaAyuda = elemento("ul");
+        listaAyuda.append(elemento("li", "", "Los pagos se revisan bajo el bloque del día de Check-In."));
+        listaAyuda.append(elemento("li", "", "Los datos desconocidos permanecen como “sin dato”."));
+        permisos.forEach(p => listaAyuda.append(elemento("li", "", `Permiso ${p}`)));
+        ayuda.append(listaAyuda);
+        out.append(ayuda);
+
+        const acciones = elemento("div", "haiku-incorporacion-acciones");
+        const atras = elemento("button", "libro-reserva-boton secundario", "Volver");
+        atras.type = "button";
+        atras.addEventListener("click", volver);
+        const confirmar = elemento("button", "libro-reserva-boton", "Confirmar incorporación");
+        confirmar.type = "button";
+        confirmar.disabled = true;
+        confirmar.title = "Escritura real deshabilitada en modo de prueba";
+        acciones.append(atras, confirmar);
+        out.append(acciones);
     }
 
     async function enviar(texto) {
