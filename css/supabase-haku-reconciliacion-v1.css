@@ -3,28 +3,57 @@
 
 @media (min-width: 901px) {
     body:has(.haiku-asistente-preview) .haiku-asistente-panel {
-        width: min(570px, calc(100vw - 40px));
+        width: min(690px, calc(100vw - 48px));
     }
 }
 
 .haiku-asistente-preview {
     --rec-verde: #1f6e4c;
+    --rec-verde-2: #2f7d5a;
     --rec-verde-suave: #eef7f2;
+    --rec-verde-muy-suave: #f7fbf8;
     --rec-borde: #dce6df;
+    --rec-borde-fuerte: #c9d8cf;
     --rec-texto: #243129;
     --rec-muted: #718078;
     --rec-ambar: #9a6908;
     --rec-ambar-bg: #fff8e7;
     --rec-rojo: #93483e;
     --rec-rojo-bg: #fff1ef;
+    --rec-gris-bg: #f6f8f7;
+    color: var(--rec-texto);
+}
+
+/* Cabecera de la vista de simulación */
+.haiku-asistente-preview > strong:first-child {
+    display: block;
+    margin: 2px 0 8px;
+    color: #1f3329;
+    font-size: .88rem;
+    line-height: 1.3;
+}
+
+.haiku-asistente-preview > strong:first-child + p {
+    margin: 0 0 10px;
+    padding: 9px 11px;
+    border: 1px solid #ead8a7;
+    border-radius: 10px;
+    background: #fffaf0;
+    color: #72551b;
+    font-size: .64rem;
+    font-weight: 800;
 }
 
 .haiku-asistente-preview .haiku-asistente-preview-resumen {
     margin: 12px 0;
-    padding: 10px 11px;
-    border-radius: 10px;
+    padding: 11px 12px;
+    border: 1px solid #dfe8e2;
+    border-radius: 11px;
     background: #f6f9f7;
     color: #445249;
+    font-size: .66rem;
+    font-weight: 700;
+    line-height: 1.45;
 }
 
 .haiku-asistente-preview .haiku-asistente-preview-grid {
@@ -38,39 +67,242 @@
     background: #fbfcfb;
 }
 
-.haiku-asistente-preview details {
-    margin-top: 8px !important;
+/* Secciones principales */
+.haiku-asistente-preview > details {
+    margin-top: 10px !important;
     padding: 0 !important;
     border: 1px solid var(--rec-borde) !important;
-    border-radius: 10px;
+    border-radius: 12px;
     background: #fff;
     overflow: hidden;
+    box-shadow: 0 2px 8px rgba(30, 55, 41, .035);
 }
 
-.haiku-asistente-preview details > summary {
+.haiku-asistente-preview > details > summary {
     position: relative;
-    padding: 9px 34px 9px 11px;
+    min-height: 39px;
+    box-sizing: border-box;
+    padding: 11px 38px 10px 16px;
     list-style: none;
-    color: #39483f !important;
+    border-left: 4px solid #9eaaa3;
     background: #f8faf8;
+    color: #314239 !important;
+    font-size: .68rem !important;
+    font-weight: 850 !important;
+    letter-spacing: .005em;
     user-select: none;
 }
 
-.haiku-asistente-preview details > summary::-webkit-details-marker { display: none; }
-.haiku-asistente-preview details > summary::after {
+.haiku-asistente-preview > details > summary::-webkit-details-marker { display: none; }
+.haiku-asistente-preview > details > summary::after {
     content: "›";
     position: absolute;
-    right: 12px;
+    right: 13px;
     top: 50%;
     transform: translateY(-50%) rotate(90deg);
     color: #688074;
-    font-size: 1rem;
+    font-size: 1.05rem;
     transition: transform .14s ease;
 }
-.haiku-asistente-preview details[open] > summary::after {
+.haiku-asistente-preview > details[open] > summary::after {
     transform: translateY(-50%) rotate(-90deg);
 }
-.haiku-asistente-preview details > ul {
+
+/* Acentos por bloque de la simulación. El orden coincide con renderizarIncorporacion. */
+.haiku-asistente-preview > details:nth-of-type(1) > summary,
+.haiku-asistente-preview > details:nth-of-type(4) > summary {
+    border-left-color: #4e8b6c;
+    background: #f2f8f4;
+    color: #28523d !important;
+}
+
+.haiku-asistente-preview > details:nth-of-type(2) > summary {
+    border-left-color: #708c7c;
+    background: #f4f7f5;
+}
+
+.haiku-asistente-preview > details:nth-of-type(3) > summary {
+    border-left-color: #9ba9a0;
+    background: #f7f8f7;
+    color: #536159 !important;
+}
+
+.haiku-asistente-preview > details:nth-of-type(5) > summary {
+    border-left-color: #c18a24;
+    background: #fff9ed;
+    color: #6f531a !important;
+}
+
+.haiku-asistente-preview > details:nth-of-type(6) > summary {
+    border-left-color: #b66a5b;
+    background: #fff5f2;
+    color: #75483f !important;
+}
+
+.haiku-asistente-preview > details:nth-of-type(7) > summary {
+    border-left-color: #a7afaa;
+    background: #f7f8f7;
+    color: #69736d !important;
+}
+
+/* Cada ítem de una sección se muestra como tarjeta legible. */
+.haiku-asistente-preview > details > div {
+    margin: 9px 9px 0;
+    padding: 10px 11px;
+    border: 1px solid #e2e9e4;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 1px 5px rgba(26, 52, 37, .035);
+}
+
+.haiku-asistente-preview > details > div:last-child {
+    margin-bottom: 9px;
+}
+
+.haiku-asistente-preview > details > div > label {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.haiku-asistente-preview > details > div > label > input[type="checkbox"] {
+    width: 17px;
+    height: 17px;
+    margin: 1px 0 0;
+    accent-color: var(--rec-verde-2);
+    cursor: pointer;
+}
+
+.haiku-asistente-preview > details > div > label > input[type="checkbox"]:disabled {
+    cursor: default;
+    opacity: .55;
+}
+
+.haiku-asistente-preview > details > div > label > span {
+    min-width: 0;
+    color: #26352d;
+    font-size: .69rem;
+    font-weight: 760;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.haiku-asistente-preview > details > div > p {
+    margin: 7px 0 0 30px;
+    color: #65746b;
+    font-size: .63rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+/* Las razones de revisión quedan destacadas sin competir con el encabezado. */
+.haiku-asistente-preview > details:nth-of-type(5) > div > p,
+.haiku-asistente-preview > details:nth-of-type(6) > div > p {
+    padding: 7px 9px;
+    border-radius: 8px;
+    background: #fffaf0;
+    color: #70571f;
+}
+
+.haiku-asistente-preview > details:nth-of-type(6) > div > p {
+    background: #fff5f2;
+    color: #794d43;
+}
+
+/* Ya existe / omitido: deliberadamente más compacto y secundario. */
+.haiku-asistente-preview > details:nth-of-type(7) > div {
+    margin-top: 6px;
+    padding: 8px 9px;
+    border-style: dashed;
+    background: #fafbfa;
+    box-shadow: none;
+}
+
+.haiku-asistente-preview > details:nth-of-type(7) > div > label > span {
+    color: #68736d;
+    font-size: .62rem;
+    font-weight: 700;
+}
+
+.haiku-asistente-preview > details:nth-of-type(7) > div > p {
+    margin-top: 5px;
+    color: #7c8680;
+    font-size: .58rem;
+}
+
+/* Botón de aprobación de pagos dudosos. */
+.haiku-asistente-preview > details > div > button.libro-reserva-boton {
+    display: block;
+    width: calc(100% - 30px);
+    min-height: 34px;
+    margin: 9px 0 0 30px;
+    padding: 8px 10px;
+    border: 1px solid #a9c3b4;
+    border-radius: 8px;
+    background: #f4faf6;
+    color: #2e6649;
+    font: inherit;
+    font-size: .61rem;
+    font-weight: 850;
+    cursor: pointer;
+}
+
+.haiku-asistente-preview > details > div > button.libro-reserva-boton:hover:not(:disabled) {
+    border-color: #79a58c;
+    background: #ebf6ef;
+}
+
+.haiku-asistente-preview > details > div > button.libro-reserva-boton:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+/* Detalles internos, como Notas y solicitudes. */
+.haiku-asistente-preview > details > div details {
+    margin: 8px 0 0 30px !important;
+    padding: 0 !important;
+    border: 1px solid #e2e9e4 !important;
+    border-radius: 8px;
+    background: #fafcfb;
+    overflow: hidden;
+}
+
+.haiku-asistente-preview > details > div details > summary {
+    position: relative;
+    padding: 7px 30px 7px 9px !important;
+    list-style: none;
+    background: #f7faf8;
+    color: #53645a !important;
+    font-size: .58rem !important;
+    font-weight: 800 !important;
+    cursor: pointer;
+}
+
+.haiku-asistente-preview > details > div details > summary::-webkit-details-marker { display: none; }
+.haiku-asistente-preview > details > div details > summary::after {
+    content: "⌄";
+    position: absolute;
+    right: 9px;
+    top: 50%;
+    transform: translateY(-54%);
+    color: #75847b;
+}
+
+.haiku-asistente-preview > details > div details > ul {
+    margin: 0 !important;
+    padding: 8px 11px 9px 25px !important;
+    border-top: 1px solid #edf1ee;
+    background: #fff;
+    color: #5f6f66;
+    font-size: .59rem;
+    line-height: 1.45;
+}
+
+/* Details genéricos usados fuera de las tarjetas (permisos y comparación). */
+.haiku-asistente-preview > details > ul {
     margin: 0 !important;
     padding: 9px 12px 10px 27px !important;
     border-top: 1px solid #edf1ee;
@@ -94,7 +326,7 @@
     justify-content: space-between;
     gap: 10px;
     margin: 0;
-    padding: 11px 38px 11px 12px;
+    padding: 11px 46px 11px 12px;
     color: #284537;
     background: #f0f7f3;
     cursor: pointer;
@@ -230,25 +462,65 @@
     font-size: .82rem;
 }
 
+/* Acciones finales de la vista */
 .haiku-asistente-preview > button.libro-reserva-boton {
-    min-height: 35px;
+    min-height: 36px;
     margin-top: 10px;
-    padding: 8px 11px;
+    padding: 8px 12px;
     border: 1px solid #bfd1c6;
     border-radius: 9px;
     background: #f7faf8;
     color: #315844;
     font: inherit;
-    font-size: .65rem;
-    font-weight: 800;
+    font-size: .64rem;
+    font-weight: 850;
     cursor: pointer;
 }
-.haiku-asistente-preview > button.libro-reserva-boton:hover {
+
+.haiku-asistente-preview > button.libro-reserva-boton + button.libro-reserva-boton {
+    margin-left: 6px;
+}
+
+.haiku-asistente-preview > button.libro-reserva-boton:hover:not(:disabled) {
     border-color: #7fa991;
     background: #eef6f1;
 }
 
+.haiku-asistente-preview > button.libro-reserva-boton:disabled {
+    border-color: #d9dfdb;
+    background: #f3f4f3;
+    color: #99a29c;
+    cursor: not-allowed;
+}
+
+/* El texto de alcance al final queda claramente secundario. */
+.haiku-asistente-preview > details + p,
+.haiku-asistente-preview > details ~ p:last-of-type {
+    color: #748078;
+    font-size: .59rem;
+    line-height: 1.45;
+}
+
 @media (max-width: 700px) {
     .haiku-asistente-preview .haiku-asistente-preview-grid,
-    .haiku-reconciliacion-resumen-acciones { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .haiku-reconciliacion-resumen-acciones {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .haiku-asistente-preview > details > div {
+        margin-left: 7px;
+        margin-right: 7px;
+        padding: 9px;
+    }
+
+    .haiku-asistente-preview > details > div > label > span {
+        font-size: .66rem;
+    }
+
+    .haiku-asistente-preview > details > div > p,
+    .haiku-asistente-preview > details > div details,
+    .haiku-asistente-preview > details > div > button.libro-reserva-boton {
+        margin-left: 0 !important;
+        width: 100%;
+    }
 }
