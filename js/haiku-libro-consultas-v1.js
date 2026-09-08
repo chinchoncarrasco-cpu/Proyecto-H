@@ -241,9 +241,9 @@
                     mismasFechas(reserva, s) ? "posible_cambio_cabana" : "modificacion_fechas_o_independiente";
                 confianza = "media";
             }
-            pregunta = categoria === "posible_cambio_cabana" ? "¿Se cambió de cabaña o es una estadía adicional?" :
-                categoria === "modificacion_titular" ? "¿Cambió el titular o son reservas independientes?" :
-                categoria === "modificacion_fechas_o_independiente" ? "¿Se modificaron las fechas o es una reserva independiente?" :
+            pregunta = categoria === "posible_cambio_cabana" ? "¿Es una estadía adicional o una reserva independiente? Hay identidad compatible y distinta CAB." :
+                categoria === "modificacion_titular" ? "¿Es la misma reserva? Coinciden CAB y fechas, pero hay datos de identidad en conflicto; revisa la comparación por campos." :
+                categoria === "modificacion_fechas_o_independiente" ? "¿Es una estadía adicional o una reserva independiente? Hay identidad compatible y fechas diferentes." :
                 "¿Cuál de los candidatos corresponde, o es una reserva independiente?";
         }
         return {
@@ -258,6 +258,59 @@
         const titular = S.normalizar(s.titular).replace(/_/g, " ");
         return !/cancelad|cancelled|canceled|no[\s_-]*show/.test(estado) &&
             !/\b(pruebas?|demo|test|testing)\b/.test(titular);
+    }
+
+    // Presentation only: these decisions never change matching or payment safety.
+    function preguntaPresentacion(g) {
+        const pendientes = g.items.filter(i => i.estado !== "asociada");
+        const candidatos = [...new Map(g.items.flatMap(i => [i.sistema, ...(i.candidatosDetalle || [])])
+            .filter(Boolean).map(c => [c.id, c])).values()];
+        const avisos = [...new Set(pendientes.flatMap(i => i.libro.advertencias || []))];
+        const comparaciones = [];
+        const opciones = [{ valor: "", categoria: "pendientes", texto: "Dejar pendiente", efecto: "no se incorpora" }];
+        for (const c of candidatos) {
+            const relevantes = pendientes.filter(i => i.candidatosDetalle?.some(x => x.id === c.id) ||
+                (g.categoria === "estadia_faltante" && identidad(i.libro, c).compatible));
+            for (const i of relevantes) {
+                const r = i.libro;
+                const campos = [
+                    ["Nombre", r.titular, c.titular, S.mismaPersona],
+                    ["CAB", r.cabana, c.cabana, (a, b) => Number(a) === Number(b)],
+                    ["Check-In", r.fecha_checkin, c.fecha_checkin],
+                    ["Check-Out", r.fecha_checkout, c.fecha_checkout],
+                    ["RUT/documento", r.rut_documento, c.rut_documento, (a, b) => documentoCanon(a) === documentoCanon(b)],
+                    ["Correo", r.correo, c.correo, (a, b) => S.normalizar(a) === S.normalizar(b)],
+                    ["Teléfono", r.telefono, c.telefono, (a, b) => telefonoCanon(a) === telefonoCanon(b)]
+                ].map(([campo, libro, proyecto, igual = (a, b) => a === b]) => ({ campo, libro, proyecto,
+                    estado: !String(libro ?? "").trim() || !String(proyecto ?? "").trim() ? "— sin dato" :
+                        igual(libro, proyecto) ? "✅ coincide" : "⚠️ difiere" }));
+                const exacta = mismasFechas(r, c) && Number(r.cabana) === Number(c.cabana);
+                const conflicto = identidad(r, c).conflicto;
+                const razon = exacta ? conflicto ? "Coinciden CAB y fechas, pero el RUT/documento difiere. Esto impide la asociación automática." :
+                    !identidad(r, c).compatible ? "Coinciden CAB y fechas, pero no hay identidad compatible suficiente para asociar automáticamente." :
+                    r.advertencias?.length ? "Coinciden identidad, CAB y fechas, pero las advertencias del Libro indicadas arriba impiden asociar automáticamente." :
+                    candidatos.length > 1 ? "Coinciden identidad, CAB y fechas, pero hay varios candidatos posibles. Elige la referencia correcta." :
+                    g.pregunta || "La asociación no es única dentro del grupo; requiere revisión." :
+                    "Hay identidad compatible, pero CAB o fechas diferentes: podría ser una extensión o segunda estadía. Se conservaría la estadía existente.";
+                comparaciones.push({ candidato: c, campos, razon });
+                const categoria = exacta ? "asociadas" : "estadias";
+                const valor = `${exacta ? "asociar" : "estadia"}:${c.id}`;
+                const yaRepresentada = g.items.some(j => j.sistema && j.sistema.reserva_id === c.reserva_id &&
+                    mismasFechas(r, j.sistema) && Number(r.cabana) === Number(j.sistema.cabana));
+                if ((exacta || (identidad(r, c).compatible && !yaRepresentada)) && !opciones.some(o => o.valor === valor)) opciones.push({ valor, categoria,
+                    texto: exacta ? "Es la misma reserva" : "Añadir esta estadía a la reserva existente",
+                    efecto: exacta ? "no crea otra; sólo asocia en la vista previa para comparar pagos/servicios, sin aprobar pagos automáticamente" :
+                        "conservaría la reserva actual y propondría sumar CAB/fechas, sin reemplazar la estadía existente",
+                    destino: `${c.titular} · CAB ${c.cabana} · ${c.fecha_checkin} → ${c.fecha_checkout} · referencia ${c.id}` });
+            }
+        }
+        opciones.push(candidatos.length ? { valor: "independiente", categoria: "independientes",
+            texto: opciones.some(o => o.categoria === "estadias") ? "Son reservas independientes" : "Son reservas distintas",
+            efecto: "no asocia con la existente; propondría una reserva separada para la estadía del Libro" } :
+            { valor: "nueva", categoria: "nuevas", texto: "Tratar como reserva nueva", efecto: "propondría crear una nueva reserva" });
+        return { comparaciones, opciones, razon: candidatos.length ?
+            "Revisa Libro vs Proyecto H y elige cómo tratar esta reserva en la vista previa." :
+            "No hay candidato real en Proyecto H. No se marcó automáticamente como faltante porque el Libro tiene advertencias.", avisos };
     }
 
     function claveReserva(r) {
@@ -837,24 +890,37 @@
             const preguntas = elemento("div", "haiku-asistente-preview-lista" + (ui.preguntasAbiertas ? " haiku-reconciliacion-abierto" : ""));
             preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
             ambiguas.forEach(g => {
-                const label = elemento("label", "", descripcionGrupo(g) + ". " + g.pregunta);
+                const modelo = preguntaPresentacion(g);
+                const label = elemento("label", "", descripcionGrupo(g) + ". ¿Cómo quieres tratar esta reserva?");
                 label.style.display = "block";
-                const select = elemento("select");
-                select.append(new Option("Pendiente: no incorporar", ""), new Option("Es una reserva independiente", "independiente"));
-                const candidatos = new Map(g.items.flatMap(x => [x.sistema, ...(x.candidatosDetalle || [])]).filter(Boolean).map(x => [x.id, x]));
-                candidatos.forEach(x => {
-                    const detalle = x.titular + " · CAB " + x.cabana + " · " + x.fecha_checkin + " → " + x.fecha_checkout;
-                    const pendientes = g.items.filter(i => i.estado !== "asociada" && i.candidatosDetalle?.some(c => c.id === x.id));
-                    if (pendientes.some(i => mismasFechas(i.libro, x) && Number(i.libro.cabana) === Number(x.cabana) && identidad(i.libro, x).compatible)) {
-                        select.append(new Option("Revisar asociación existente: " + detalle, "asociar:" + x.id));
-                        return;
-                    }
-                    if (pendientes.length) select.append(new Option("Modificar: " + detalle, "modificar:" + x.id));
-                    const faltanEstadias = pendientes.filter(i => identidad(i.libro, x).compatible &&
-                        !g.items.some(j => j.sistema && j.sistema.reserva_id === x.reserva_id && mismasFechas(i.libro, j.sistema) && Number(i.libro.cabana) === Number(j.sistema.cabana)));
-                    if (faltanEstadias.length) select.append(new Option("Añadir estadía a: " + detalle, "estadia:" + x.id));
+                label.append(elemento("p", "", modelo.razon));
+                modelo.avisos.forEach(a => label.append(elemento("p", "", "⚠️ Advertencia del Libro: " + a)));
+                modelo.comparaciones.forEach(c => {
+                    label.append(elemento("p", "", c.razon));
+                    const tabla = elemento("table");
+                    tabla.setAttribute("aria-label", "Comparación Libro vs Proyecto H");
+                    const cabecera = elemento("tr");
+                    ["Campo", "Libro", "Proyecto H", "Resultado"].forEach(t => cabecera.append(elemento("th", "", t)));
+                    tabla.append(cabecera);
+                    c.campos.forEach(f => {
+                        const fila = elemento("tr");
+                        [f.campo, f.libro || "—", f.proyecto || "—", f.estado].forEach(t => fila.append(elemento("td", "", String(t))));
+                        tabla.append(fila);
+                    });
+                    const scroll = elemento("div");
+                    scroll.style.overflowX = "auto";
+                    scroll.append(tabla); label.append(scroll);
                 });
-                select.addEventListener("change", () => decisiones.set(g.clave, select.options[select.selectedIndex].text));
+                const select = elemento("select");
+                modelo.opciones.forEach(o => {
+                    const texto = o.texto + (o.destino ? " · " + o.destino : "") + " — " + o.efecto;
+                    select.append(new Option(texto, o.valor));
+                    label.append(elemento("p", "", texto));
+                });
+                select.addEventListener("change", () => {
+                    decisiones.set(g.clave, modelo.opciones[select.selectedIndex]);
+                    vista.replaceChildren(elemento("p", "", "Decisión actualizada. Pulsa Preparar vista previa para actualizar el resumen."));
+                });
                 label.append(select); preguntas.append(label);
             });
             out.append(preguntas);
@@ -864,11 +930,20 @@
         const vista = elemento("div");
         preparar.addEventListener("click", () => {
             vista.replaceChildren();
-            agregarLista(vista, "Propuestas para revisión · escritura deshabilitada", [
-                ...faltantes.map(g => "Nueva reserva propuesta: " + descripcionGrupo(g)),
-                ...ambiguas.map(g => descripcionGrupo(g) + " · " + (decisiones.get(g.clave) || "Pendiente: no incorporar")),
-                ...pagosFaltan.map(x => "Pago propuesto: " + x.reserva.titular + " · " + money(x.pago.monto))
-            ]);
+            const categorias = {
+                asociadas: grupos.filter(g => g.estado === "asociada").map(descripcionGrupo),
+                nuevas: faltantes.map(descripcionGrupo), estadias: [], independientes: [], pendientes: []
+            };
+            ambiguas.forEach(g => {
+                const decision = decisiones.get(g.clave) || preguntaPresentacion(g).opciones[0];
+                categorias[decision.categoria].push(descripcionGrupo(g) + " · " + decision.texto +
+                    (decision.destino ? " · " + decision.destino : "") + " — " + decision.efecto);
+            });
+            vista.append(elemento("p", "", "Propuestas para revisión · escritura deshabilitada"));
+            [["asociadas", "Misma reserva / asociada"], ["nuevas", "Reserva nueva"], ["estadias", "Estadía a añadir"],
+                ["independientes", "Reservas independientes"], ["pendientes", "Pendientes"]].forEach(([k, titulo]) =>
+                agregarLista(vista, titulo, categorias[k]));
+            agregarLista(vista, "Pagos seguros", pagosFaltan.map(x => x.reserva.titular + " · " + money(x.pago.monto)));
             vista.append(elemento("p", "", "Estas decisiones no autorizan escrituras. Antes de una futura incorporación será obligatorio consultar de nuevo Proyecto H, resolver conflictos y revalidar identificadores de pagos."));
         });
         out.append(preparar, vista);

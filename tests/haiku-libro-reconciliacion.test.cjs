@@ -96,7 +96,7 @@ test('visual report retains cards, confines coordinates to technical details and
  assert.doesNotMatch(normal(out).join(' '),/Sep26!/);
  const select=nodes.find(e=>e.tag==='select');select.selectedIndex=1;select.events.change();
  nodes.find(e=>e.textContent==='Preparar vista previa').events.click();
- assert.match(normal(out).join(' '),/Es una reserva independiente/);assert.match(normal(out).join(' '),/escritura deshabilitada/);
+ assert.match(normal(out).join(' '),/Son reservas independientes/);assert.match(normal(out).join(' '),/escritura deshabilitada/);
 });
 
 test('test/demo and cancelled/no-show candidates are excluded before every matching path',async()=>{
@@ -177,14 +177,14 @@ test('exact ambiguous stay offers association review, never modify or duplicate 
  const r=book(),c=await compare([r,book({id:'copy'})],[stay(r)]),h=renderHarness();
  h.render({q,comparacion:c});
  const options=h.out.querySelectorAll('option').map(e=>e.textContent).join(' ');
- assert.match(options,/Revisar asociación existente/);assert.doesNotMatch(options,/Modificar:|Añadir estadía a:/);
+ assert.match(options,/Es la misma reserva/);assert.doesNotMatch(options,/Modificar:|Añadir estadía a:/);
  const exact=await compare([r],[stay(r)]);h.render({q,comparacion:exact});
  assert.equal(h.out.querySelectorAll('select').length,0);
 });
 
 test('holder-only change never offers adding the already occupied stay',async()=>{
  const c=await compare([book({titular:'Otra Persona',rut_documento:'99999999-1'})],[stay()]),h=renderHarness();
- h.render({q,comparacion:c});assert.match(h.texts(),/Modificar:/);assert.doesNotMatch(h.texts(),/Añadir estadía a:/);
+ h.render({q,comparacion:c});assert.match(h.texts(),/Es la misma reserva/);assert.doesNotMatch(h.texts(),/Modificar:/);assert.doesNotMatch(h.texts(),/Añadir estadía a:/);
 });
 
 test('revalidation keeps open sections, reports persistent results and clears stale decisions',async()=>{
@@ -201,7 +201,7 @@ test('revalidation keeps open sections, reports persistent results and clears st
  assert.match(h.texts(),/Revalidación completada/);assert.doesNotMatch(h.texts(),/Revalidando;/);
  h.button('Preparar vista previa').events.click();
  const proposal=h.out.querySelectorAll('li').map(e=>e.textContent).join(' ');
- assert.match(proposal,/Pendiente: no incorporar/);assert.doesNotMatch(proposal,/Es una reserva independiente/);
+ assert.match(proposal,/Dejar pendiente/);assert.doesNotMatch(proposal,/Son reservas independientes/);
 });
 
 test('failed revalidation stays visible, prevents stale preparation and permits retry',async()=>{
@@ -210,4 +210,63 @@ test('failed revalidation stays visible, prevents stale preparation and permits 
  assert.match(h.texts(),/No se pudo revalidar: Sin conexión/);
  assert.equal(h.button('Revalidar contra Proyecto H').disabled,false);
  assert.equal(h.button('Preparar vista previa').disabled,true);
+});
+
+test('Yann and Alejandro: field comparison explains document conflict and preview association only',async()=>{
+ for(const titular of ["Yann O'Connell",'Alejandro Ramos']) {
+  const r=book({titular,correo:'a@example.test',telefono:'+56 9 1234 5678',pagos:[pay()]});
+  const s=stay(r,{reservas:{...stay(r).reservas,titular_numero_documento:'99999999-1',correo_contacto:'b@example.test'}});
+  const c=await compare([r],[s]),before=JSON.stringify(c),h=renderHarness();h.render({q,comparacion:c});
+  const rows=h.out.querySelectorAll('tr');
+  const row=name=>rows.find(e=>e.children[0].textContent===name).children.map(e=>e.textContent);
+  assert.equal(row('Nombre')[3],'✅ coincide');assert.equal(row('CAB')[3],'✅ coincide');
+  assert.equal(row('Check-In')[3],'✅ coincide');assert.equal(row('Check-Out')[3],'✅ coincide');
+  assert.equal(row('RUT/documento')[3],'⚠️ difiere');assert.equal(row('Correo')[3],'⚠️ difiere');
+  assert.equal(row('Teléfono')[3],'— sin dato');assert.match(h.texts(),/RUT\/documento difiere/);
+  assert.doesNotMatch(h.texts(),/¿Cambió el titular|Modificar:/);
+  const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','asociar:e1','independiente']);
+  select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
+  assert.match(h.texts(),/Misma reserva \/ asociada/);assert.match(h.texts(),/sin aprobar pagos automáticamente/);
+  assert.equal(JSON.stringify(c),before);assert.equal(c.meta.pagos_faltantes,0);
+ }
+});
+
+test('Macarena extension preserves the existing full day and offers only additive or independent decisions',async()=>{
+ const a=book({titular:'Macarena Hurtado',cabana:5,fecha_checkin:'2026-09-03',fecha_checkout:'2026-09-04'});
+ const b=book({...a,cabana:10,fecha_checkin:'2026-09-04',tipo_estadia:'full_day'});
+ const c=await compare([a],[stay(b)]),h=renderHarness();h.render({q,comparacion:c});
+ const select=h.out.querySelector('select');assert.deepEqual(select.options.map(o=>o.value),['','estadia:e10','independiente']);
+ assert.match(h.texts(),/conservaría la reserva actual/);assert.doesNotMatch(h.texts(),/Modificar:/);
+ select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
+ assert.match(h.texts(),/Estadía a añadir/);assert.match(h.texts(),/CAB 10/);
+ select.selectedIndex=2;select.events.change();assert.match(h.texts(),/Decisión actualizada/);
+ h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Reservas independientes/);
+});
+
+test('Angelo without candidate displays the blocking warning and only new or pending choices',async()=>{
+ const c=await compare([book({titular:'Angelo Villegas',advertencias:['Check-Out deducido; revisar fecha.']})]),h=renderHarness();
+ h.render({q,comparacion:c});const select=h.out.querySelector('select');
+ assert.deepEqual(select.options.map(o=>o.value),['','nueva']);assert.match(h.texts(),/Check-Out deducido; revisar fecha/);
+ assert.match(h.texts(),/No hay candidato real/);assert.doesNotMatch(h.texts(),/Modificar:|Añadir esta estadía/);
+ h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Dejar pendiente — no se incorpora/);
+ select.selectedIndex=1;select.events.change();h.button('Preparar vista previa').events.click();
+ assert.match(h.texts(),/Tratar como reserva nueva — propondría crear una nueva reserva/);
+ assert.equal(c.meta.faltantes,0);
+});
+
+test('eleven clear missing reservations remain unchanged alongside all preview decision categories',async()=>{
+ const missing=Array.from({length:11},(_,i)=>book({id:'new'+i,titular:'Persona '+i,rut_documento:'doc'+i}));
+ const c=await compare(missing),before=JSON.stringify(c),h=renderHarness();h.render({q,comparacion:c});
+ assert.equal(c.meta.faltantes,11);assert.equal(h.out.querySelectorAll('select').length,0);
+ h.button('Preparar vista previa').events.click();
+ for(const title of ['Misma reserva / asociada','Reserva nueva','Estadía a añadir','Reservas independientes','Pendientes','Pagos seguros']) assert.ok(h.texts().includes(title));
+ assert.equal(JSON.stringify(c),before);
+ const technical=h.out.querySelectorAll('details').find(e=>e.children[0].textContent.startsWith('Detalles técnicos XLSX'));
+ assert.ok(technical);assert.ok(!technical.open);
+});
+
+test('partial multicabin offers missing stay addition while retaining safe payments',async()=>{
+ const a=book({pagos:[pay()]}),b=book({id:'b2',cabana:2}),c=await compare([a,b],[stay(a)]),h=renderHarness();
+ h.render({q,comparacion:c});assert.ok(h.out.querySelectorAll('option').some(o=>o.value==='estadia:e1'));
+ assert.equal(c.meta.pagos_faltantes,1);h.button('Preparar vista previa').events.click();assert.match(h.texts(),/Pagos seguros/);
 });
