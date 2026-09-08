@@ -955,9 +955,9 @@
                 codigo_autorizacion: 'CodAut', folio: 'Folio', bovtar: 'Bovtar', bove: 'BOVE', texto_original: 'glosa', estado_pago: 'estado',
                 fecha_comprobante: 'fecha del comprobante', bove_pendiente: 'BOVE pendiente', manager_pendiente: 'Manager pendiente',
                 saldo_por_pagar: 'saldo pendiente', monto_penalidad: 'penalidad', penalidad_porcentaje: 'porcentaje de penalidad' };
-            const cambios = Object.entries(campos).filter(([k]) => S.normalizar(d.anterior[k]) !== S.normalizar(d.actual[k])).map(([k, label]) =>
+            const cambios = Object.entries(campos).filter(([k]) => d.campos_cambiados ? d.campos_cambiados.includes(k) : S.normalizar(d.anterior[k]) !== S.normalizar(d.actual[k])).map(([k, label]) =>
                 k === 'monto' ? `${label}: ${money(d.anterior[k])} → ${money(d.actual[k])}` : `${label}: ${String(d.anterior[k] ?? 'sin dato').replaceAll('_', ' ')} → ${String(d.actual[k] ?? 'sin dato').replaceAll('_', ' ')}`);
-            return `Pago modificado · ${cambios.join('; ') || 'Cambió un dato del pago'}`;
+            return `${d.confianza === 'alta' ? 'Pago identificado, pero cambió' : 'Pago modificado ·'} ${cambios.join('; ') || 'un dato del pago'}`;
         }
         if (d.detalle) return d.detalle;
         const campos = { fecha_checkin: 'Check-In', fecha_checkout: 'Check-Out', tipo_estadia: 'tipo de estadía', rut_documento: 'documento', correo: 'correo', telefono: 'teléfono', adultos: 'adultos', ninos: 'niños', mascotas: 'mascotas', estado_confirmacion: 'confirmación', estado_operativo: 'estado de la estadía', notas_importantes: 'notas importantes', pagos_pendientes: 'pagos pendientes', servicios: 'servicios', operador: 'operador', fecha_ingreso_libro: 'fecha de ingreso al Libro', notas: 'notas' };
@@ -971,8 +971,9 @@
             const r = c.actual || c.anterior;
             lines.push(r ? `${r.titular} · ${descripcionVersion(r)} · ${estadoVersion[c.tipo]}` : c.detalle);
             if (c.detalle && r) lines.push(c.detalle);
-            lines.push(...(c.diferencias || []).map(detalleVersion));
-            for (const p of c.pagos_sin_cambios || []) lines.push(p.detalle, p.nota);
+            if (c.resumen_pagos) lines.push(c.resumen_pagos);
+            for (const d of c.diferencias || []) lines.push(detalleVersion(d), ...[d.verificacion].filter(Boolean));
+            for (const p of c.pagos_sin_cambios || []) lines.push(...[p.detalle, p.verificacion, p.nota].filter(Boolean));
         }
         lines.push(...new Set(result.advertencias || []), 'Sólo lectura. “Ya no aparece” no confirma una cancelación.');
         return lines.join('\n');
@@ -997,12 +998,16 @@
                 const r = c.actual || c.anterior, tarjeta = elemento('article', `haiku-versiones-tarjeta haiku-versiones--${tipo}`);
                 tarjeta.append(elemento('strong', 'haiku-versiones-titular', r.titular), elemento('span', 'haiku-versiones-estado', estadoVersion[tipo]), elemento('p', 'haiku-versiones-meta', descripcionVersion(r)));
                 if (c.detalle) tarjeta.append(elemento('p', '', c.detalle));
+                if (c.resumen_pagos) tarjeta.append(elemento('p', 'haiku-versiones-resumen-pagos', c.resumen_pagos));
                 for (const p of c.pagos_sin_cambios || []) {
-                    tarjeta.append(elemento('p', 'haiku-versiones-pago-sin-cambios', p.detalle), elemento('small', 'haiku-versiones-nota', p.nota));
+                    tarjeta.append(elemento('p', 'haiku-versiones-pago-sin-cambios', p.detalle));
+                    if (p.verificacion) tarjeta.append(elemento('p', 'haiku-versiones-nota', p.verificacion));
+                    if (p.nota) tarjeta.append(elemento('small', 'haiku-versiones-nota', p.nota));
                 }
                 const lista = elemento('ul');
                 (c.diferencias || []).forEach(d => {
                     const li = elemento('li', '', detalleVersion(d));
+                    if (d.verificacion) li.append(elemento('small', 'haiku-versiones-nota', ' · ' + d.verificacion));
                     if (d.campo === 'notas') {
                         const notas = elemento('details');
                         notas.append(elemento('summary', '', 'Ver cambios en las notas'), elemento('p', '', `Anterior: ${d.anterior || 'sin dato'}`), elemento('p', '', `Actual: ${d.actual || 'sin dato'}`));
@@ -1022,7 +1027,10 @@
                 for (const [label, g] of [['Anterior', c.anterior], ['Actual', c.actual], ...(c.candidatos || []).map(g => ['Candidata', g])]) if (g) {
                     tecnico.append(elemento('p', '', `${label}: ${(g.origenes || []).map(source).join(' · ')}`));
                     for (const fila of g.filas || []) tecnico.append(elemento('p', '', fila.texto_original || ''));
-                    for (const p of [...(g.pagos || []), ...(g.pagos_sin_asociacion || [])]) tecnico.append(elemento('p', '', `${source(p.origen)} · CodAut: ${p.codigo_autorizacion || '—'} · Folio: ${p.folio || '—'} · Bovtar: ${p.bovtar || '—'} · BOVE: ${p.bove || '—'}`));
+                    for (const p of [...(g.pagos || []), ...(g.pagos_sin_asociacion || [])]) {
+                        tecnico.append(elemento('p', '', `${source(p.origen)} · CodAut: ${p.codigo_autorizacion || '—'} · Folio: ${p.folio || '—'} · Bovtar: ${p.bovtar || '—'} · BOVE: ${p.bove || '—'}`));
+                        if (p.texto_original) tecnico.append(elemento('p', '', p.texto_original));
+                    }
                 }
                 tarjeta.append(tecnico); seccion.append(tarjeta);
             }

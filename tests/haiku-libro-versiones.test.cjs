@@ -187,8 +187,8 @@ test('strong identifiers take priority over identical weak content for all three
   assert.equal(changedIdentity.tipo,'requiere_revision');assert.equal(changedIdentity.pagos_sin_cambios.length,0);
  }
 });
-test('strong payment relevant glosa and secondary identifier changes are observable',()=>{
- for(const extra of [{texto_original:'Nuevo concepto relevante'},{bove:'999'}])
+test('strong payment concept and secondary identifier changes are observable',()=>{
+ for(const extra of [{concepto:'Jacuzzi',texto_original:'Nuevo concepto relevante'},{bove:'999'}])
   assert.equal(comparePayments([pay()],[pay(extra)]).diferencias[0].tipo,'pago_modificado');
 });
 test('visual and textual payment reports separate unchanged, detected change and review with collapsed technical details',async()=>{
@@ -206,4 +206,105 @@ test('visual and textual payment reports separate unchanged, detected change and
   if(label.startsWith('Sin cambios'))assert.ok(nodes.some(e=>e.tag==='small'&&e.textContent.startsWith('Identificación débil:')));
   if(payments[0].texto_original==='Otra glosa relevante')assert.match(visible(out),/glosa:.*Otra glosa relevante/);
  }
+});
+
+// Synthetic reproduction of the user-provided Alejandra case; no XLSX is stored.
+const alejandra = extra => row({titular:'Alejandra Calderon Arrigoni',cabana:11,
+ fecha_checkin:'2026-09-14',fecha_checkout:'2026-09-17',rut_documento:null,correo:null,telefono:null,...extra});
+const abonoAlejandra = extra => pay({codigo_autorizacion:null,folio:'000211',bovtar:'033752',
+ monto:273651,concepto:'CAB 11',medio_pago:'debito',titular:alejandra().titular,
+ fecha_bloque:'2026-09-14',cabana:11,texto_original:'Alejandra Calderon Arrigoni // Folio: 000211 // BOVTAR: 033752',...extra});
+
+test('Alejandra: same Folio+BOVTAR and amount verifies unchanged despite incidental wording and coordinates',()=>{
+ const p=abonoAlejandra(), q=abonoAlejandra({texto_original:'Abono Alejandra // BOVTAR 033752 // Folio 000211',origen:{hoja:'Sep26',celda:'Z90'}});
+ const c=compare(freeze([alejandra({pagos:[p]})]),freeze([alejandra({pagos:[q]})]))[0];
+ assert.equal(c.tipo,'sin_cambios');assert.deepEqual(c.diferencias,[]);
+ assert.equal(c.pagos_sin_cambios[0].tipo,'pago_sin_cambios');
+ assert.equal(c.pagos_sin_cambios[0].confianza,'alta');
+ assert.equal(c.pagos_sin_cambios[0].verificacion,'Verificado por Folio+BOVTAR');
+ assert.equal(c.pagos_sin_cambios[0].detalle,'Pago verificado sin cambios · $273.651 · Folio 000211 · BOVTAR 033752');
+ assert.equal(c.resumen_pagos,'1 pago verificado sin cambios');
+});
+
+test('Alejandra: shared strong identity detects the exact amount, concept, method or currency change',async()=>{
+ for(const [campo,valor,label] of [['monto',280000,'monto: \\$273.651 CLP → \\$280.000 CLP'],['concepto','Jacuzzi','concepto: CAB 11 → Jacuzzi'],['medio_pago','credito','medio de pago: debito → credito'],['moneda','USD','moneda: CLP → USD']]) {
+  const p=abonoAlejandra(),q=abonoAlejandra({[campo]:valor,texto_original:'Texto reordenado'});
+  const result=await Q.consultar('Libro cambios septiembre 2026',book([alejandra({pagos:[p]})],[alejandra({pagos:[q]})]));
+  const c=result.cambios[0],d=c.diferencias[0];
+  assert.equal(c.tipo,'modificada');assert.equal(d.tipo,'pago_modificado');assert.equal(d.confianza,'alta');
+  assert.deepEqual(d.campos_cambiados,[campo]);
+  assert.match(Q.respuesta(result),new RegExp('Pago identificado, pero cambió '+label));
+  assert.doesNotMatch(Q.respuesta(result),/glosa:/);
+ }
+});
+
+test('partial comparison reports two verified payments and one unresolved observation',()=>{
+ const p=abonoAlejandra(),q=pay({codigo_autorizacion:'SECOND'}),unknown=weak({titular:null});
+ const c=compare([alejandra({pagos:[p,q]})],[alejandra({pagos:[q,p],pagos_sin_asociacion:[unknown]})])[0];
+ assert.equal(c.tipo,'requiere_revision');assert.equal(c.pagos_sin_cambios.length,2);
+ assert.equal(c.resumen_pagos,'2 pagos verificados sin cambios · 1 requiere revisión');
+ assert.ok(c.diferencias.every(d=>!d.detalle.includes('No se pudieron verificar')));
+});
+
+test('zero matches reports the precise number of unmatched observations across both books',()=>{
+ const c=comparePayments([weak({titular:null})],[weak({titular:null,monto:200000})]);
+ assert.equal(c.resumen_pagos,'Haku encontró 2 movimientos de pago, pero no pudo emparejarlos de forma inequívoca entre ambas versiones.');
+ assert.equal(c.tipo,'requiere_revision');assert.equal(c.pagos_sin_cambios.length,0);
+});
+
+test('all three strong identifiers expose their verification method with unchanged incidental text',()=>{
+ for(const [id,label] of [[{codigo_autorizacion:'AUTH1'},'CodAut'],[{codigo_autorizacion:null,folio:'000211',bovtar:'033752'},'Folio+BOVTAR'],[{codigo_autorizacion:null,bove:'000345'},'BOVE']]) {
+  const c=comparePayments([pay(id)],[pay({...id,texto_original:'Nota administrativa'})]);
+  assert.equal(c.tipo,'sin_cambios');assert.equal(c.pagos_sin_cambios[0].verificacion,'Verificado por '+label);
+ }
+});
+
+test('strong candidate payments can verify across books without mutating incorporation associations',()=>{
+ const p=abonoAlejandra({titular:null}),q={...p,texto_original:'Nota administrativa'};
+ const a=freeze([alejandra({pagos_sin_asociacion:[p]})]),b=freeze([alejandra({pagos_sin_asociacion:[q]})]);
+ const c=compare(a,b)[0];assert.equal(c.tipo,'sin_cambios');assert.equal(c.pagos_sin_cambios.length,1);
+ assert.equal(a[0].pagos.length,0);assert.equal(b[0].pagos_sin_asociacion.length,1);
+ const other=row({titular:'Otra Persona',cabana:12,pagos_sin_asociacion:[p]});
+ assert.ok(compare([...a,other],[...b,other]).every(c=>c.tipo==='requiere_revision'));
+});
+
+test('verified payments remain visible with incomplete coverage; missing financial data never asserts unchanged',()=>{
+ const p=abonoAlejandra();
+ const c=compare([alejandra({pagos:[p],cobertura_pagos:false})],[alejandra({pagos:[p]})])[0];
+ assert.equal(c.pagos_sin_cambios.length,1);assert.equal(c.tipo,'requiere_revision');
+ assert.match(c.resumen_pagos,/1 pago verificado sin cambios/);
+ assert.ok(c.diferencias.some(d=>d.cobertura&&d.detalle.includes('lectura de pagos')));
+ for(const extra of [{monto:null},{concepto:null}]) {
+  const c=comparePayments([pay(extra)],[pay(extra)]);
+  assert.equal(c.tipo,'requiere_revision');assert.equal(c.pagos_sin_cambios.length,0);
+ }
+});
+
+test('Alejandra text and card expose verification, keep technical details collapsed and never access the database',async()=>{
+ const ctx={HAIKU_LIBRO_SEMANTICA:S,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),ctx);
+ const forbidden=new Proxy({},{get(){throw Error('No database access permitted')}}),p=abonoAlejandra();
+ const result=await Q.consultar('Libro cambios de la reserva de Alejandra Calderon Arrigoni',book([alejandra({pagos:[p]})],[alejandra({pagos:[p]})]),forbidden);
+ const out=new Element('div');ctx.HAIKU_LIBRO_CONSULTAS.renderizarVersiones(out,result);
+ const all=e=>[e,...e.children.flatMap(all)],nodes=all(out);
+ const visible=e=>e.tag==='details'&&!e.open?e.children[0]?.textContent||'':e.textContent+' '+e.children.map(visible).join(' ');
+ for(const text of [visible(out),Q.respuesta(result)]) {
+  assert.match(text,/Pago verificado sin cambios · \$273\.651 · Folio 000211 · BOVTAR 033752/);
+  assert.match(text,/Verificado por Folio\+BOVTAR/);assert.doesNotMatch(text,/No se pudieron verificar|BO30|Sep26!/);
+ }
+ assert.ok(nodes.filter(e=>e.className==='haiku-versiones-tecnico').every(e=>!e.open));
+ assert.equal(nodes.filter(e=>e.tag==='button').length,0);
+});
+
+test('Alejandra workbook interpretation preserves leading-zero identifiers before comparison',()=>{
+ const cell=(r,c,valor,extra={})=>({r,c,valor,...extra});
+ const raw={celdas:[cell(0,1,'14/09/26',{fechaISO:'2026-09-14'}),cell(0,5,'15/09/26',{fechaISO:'2026-09-15'}),cell(0,9,'16/09/26',{fechaISO:'2026-09-16'}),
+  cell(2,0,'Cabaña 11'),cell(2,1,'Alejandra Calderon Arrigoni'),cell(4,1,'Pagos de arriendos de hoy'),cell(5,0,'Cabaña 11'),
+  cell(5,2,'Alejandra Calderon Arrigoni // Folio: 000211 // BOVTAR: 033752'),cell(5,3,'CAB 11'),cell(5,4,'$273.651')],
+  combinaciones:[{s:{r:2,c:1},e:{r:2,c:12}},{s:{r:5,c:0},e:{r:6,c:0}}]};
+ const before=S.normalizarHoja(raw,'Sep26'),after=S.normalizarHoja(structuredClone(raw),'Sep26');
+ assert.equal(before.reservas[0].fecha_checkout,'2026-09-17');
+ assert.equal(before.pagos[0].folio,'000211');assert.equal(before.pagos[0].bovtar,'033752');
+ const c=S.compararVersiones(before,after)[0];
+ assert.equal(c.tipo,'sin_cambios');assert.equal(c.pagos_sin_cambios[0].tipo,'pago_sin_cambios');
 });

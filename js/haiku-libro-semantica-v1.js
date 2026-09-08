@@ -252,18 +252,43 @@
         p.saldo_por_pagar ?? null, p.monto_penalidad ?? null, p.penalidad_porcentaje ?? null, idsPagoVersion(p),
         normalizar(p.texto_original), canonIdVersion(p.folio), canonIdVersion(p.bovtar)]);
     function compararPagosVersion(a, b, idsConflictivos) {
-        const diferencias = [], todos = [...a.pagos.map(p => ({ p, lado: 0 })), ...b.pagos.map(p => ({ p, lado: 1 }))].filter(x => idsPagoVersion(x.p).length);
+        // Candidate movements remain read-only: strong identity can verify them
+        // across books, but never changes their association for incorporation.
+        const pool = g => [...new Set([...g.pagos, ...g.pagos_sin_asociacion])];
+        const diferencias = [], resueltos = new Set(), todos = [...pool(a).map(p => ({ p, lado: 0 })), ...pool(b).map(p => ({ p, lado: 1 }))].filter(x => idsPagoVersion(x.p).length);
         const componentes = componentesVersion(todos, (x, y) => idsPagoVersion(x.p).some(id => idsPagoVersion(y.p).includes(id)));
         for (const grupo of componentes) {
+            const movimientos = new Set(grupo.map(x => x.lado + ':' + pagoVersion(x.p))).size;
             const prev = grupo.filter(x => x.lado === 0), next = grupo.filter(x => x.lado === 1);
             const p = (next[0] || prev[0]).p;
             const ids = idsPagoVersion(p);
             const conflicto = grupo.some(x => idsPagoVersion(x.p).some(id => idsConflictivos.has(id))) ||
                 [prev, next].some(xs => new Set(xs.map(x => pagoVersion(x.p))).size > 1);
             if (!ids.length || conflicto) {
-                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'No se puede asociar de forma inequívoca entre versiones: identificador compartido o conflictivo.', pago: p });
+                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', movimientos, detalle: 'No se puede asociar de forma inequívoca entre versiones: identificador compartido o conflictivo.', pago: p });
             } else if (prev.length && next.length) {
-                if (pagoVersion(prev[0].p) !== pagoVersion(next[0].p)) diferencias.push({ campo: 'pagos', tipo: 'pago_modificado', detalle: 'Pago modificado.', anterior: prev[0].p, actual: next[0].p, pago: p });
+                const anterior = prev[0].p, actual = next[0].p;
+                const id = idsPagoVersion(anterior).find(id => idsPagoVersion(actual).includes(id));
+                if (!id) {
+                    diferencias.push({ campo: 'pagos', tipo: 'pago_revision', movimientos, detalle: 'Los identificadores no permiten una coincidencia directa única.', pago: p });
+                    continue;
+                }
+                grupo.forEach(x => resueltos.add(x.p));
+                const verificacion = 'Verificado por ' + ({ aut: 'CodAut', folio: 'Folio+BOVTAR', bove: 'BOVE' })[id.split(':')[0]];
+                const campos = ['monto', 'moneda', 'concepto', 'tipo_movimiento', 'medio_pago', 'estado_pago', 'fecha_comprobante',
+                    'bove_pendiente', 'manager_pendiente', 'saldo_por_pagar', 'monto_penalidad', 'penalidad_porcentaje',
+                    'codigo_autorizacion', 'folio', 'bovtar', 'bove'];
+                const valor = (p, k) => ['codigo_autorizacion', 'folio', 'bovtar', 'bove'].includes(k) ? canonIdVersion(p[k]) :
+                    k === 'moneda' ? normalizar(p[k] || 'CLP') : k.endsWith('_pendiente') ? !!p[k] : normalizar(p[k]);
+                const campos_cambiados = campos.filter(k => valor(anterior, k) !== valor(actual, k));
+                const completo = [anterior, actual].every(p => Number.isFinite(p.monto) && normalizar(p.concepto));
+                const referencias = id.startsWith('folio:') ? `Folio ${actual.folio} · BOVTAR ${actual.bovtar}` :
+                    id.startsWith('aut:') ? `CodAut ${actual.codigo_autorizacion}` : `BOVE ${actual.bove}`;
+                diferencias.push({ campo: 'pagos', tipo: campos_cambiados.length ? 'pago_modificado' : completo ? 'pago_sin_cambios' : 'pago_revision',
+                    detalle: campos_cambiados.length ? 'Pago identificado, pero cambió ' + campos_cambiados.join(', ') : completo ?
+                        `Pago verificado sin cambios · ${actual.moneda && actual.moneda !== 'CLP' ? actual.moneda + ' ' : '$'}${actual.monto.toLocaleString('es-CL')} · ${referencias}` :
+                        'Pago identificado; falta monto o concepto para verificar si cambió.',
+                    verificacion, confianza: 'alta', campos_cambiados, anterior, actual, pago: actual });
             } else if (!a.cobertura_pagos || !b.cobertura_pagos || a.pagos_sin_asociacion.length || b.pagos_sin_asociacion.length) {
                 diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'La cobertura o asociación de pagos es incompleta; requiere revisión.', pago: p });
             } else diferencias.push({ campo: 'pagos', tipo: next.length ? 'pago_agregado' : 'pago_eliminado', pago: p });
@@ -285,7 +310,7 @@
         for (const p of debilesA) {
             const q = mejor(p, debilesB);
             if (!q || mejor(q, debilesA) !== p) {
-                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'No se puede asociar de forma inequívoca entre versiones', pago: p });
+                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'No se puede asociar de forma inequívoca entre versiones', verificacion: 'Coincidencia débil', lado: 0, pago: p });
                 continue;
             }
             usados.add(q);
@@ -294,14 +319,38 @@
             diferencias.push({ campo: 'pagos', tipo: igual && completo ? 'sin_cambios_aparentes' : igual ? 'pago_revision' : 'pago_modificado',
                 detalle: igual && completo ? 'Sin cambios aparentes en el pago' : igual ? 'No se puede asociar de forma inequívoca entre versiones' : 'Pago modificado.',
                 nota: igual && completo ? 'Identificación débil: no posee CodAut/Folio+Bovtar/BOVE para validación inequívoca.' : undefined,
-                anterior: p, actual: q, pago: q });
+                verificacion: 'Coincidencia débil', anterior: p, actual: q, pago: q });
         }
         for (const p of debilesB.filter(p => !usados.has(p))) diferencias.push({ campo: 'pagos', tipo: 'pago_revision',
-            detalle: 'No se puede asociar de forma inequívoca entre versiones', pago: p });
-        if (a.pagos_sin_asociacion.length || b.pagos_sin_asociacion.length || !a.cobertura_pagos || !b.cobertura_pagos) {
-            diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'No se pudieron verificar todos los pagos asociados a esta reserva.' });
+            detalle: 'No se puede asociar de forma inequívoca entre versiones', verificacion: 'Coincidencia débil', lado: 1, pago: p });
+        for (const [lado, g] of [[0, a], [1, b]]) for (const p of g.pagos_sin_asociacion.filter(p => !resueltos.has(p) && !idsPagoVersion(p).length)) {
+            diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'Movimiento sin asociación inequívoca con la reserva.', verificacion: 'Coincidencia débil', lado, pago: p });
+        }
+        if (!a.cobertura_pagos || !b.cobertura_pagos) {
+            diferencias.push({ campo: 'pagos', tipo: 'pago_revision', cobertura: true, detalle: 'La lectura de pagos está incompleta en una de las versiones; revisar la cobertura.' });
         }
         return diferencias;
+    }
+    function resumenPagosVersion(resultados) {
+        const pagos = resultados.filter(d => d.campo === 'pagos');
+        const verificados = pagos.filter(d => d.tipo === 'pago_sin_cambios').length;
+        const modificados = pagos.filter(d => d.tipo === 'pago_modificado' && d.confianza === 'alta').length;
+        const debiles = pagos.filter(d => d.verificacion === 'Coincidencia débil' && d.anterior && d.actual && d.tipo !== 'pago_revision').length;
+        const revision = pagos.filter(d => d.tipo === 'pago_revision' && !d.cobertura);
+        // Unmatched observations on each side are counted separately: no implied pairing.
+        const pendientes = revision.length;
+        const partes = [];
+        if (verificados) partes.push(`${verificados} ${verificados === 1 ? 'pago verificado' : 'pagos verificados'} sin cambios`);
+        if (modificados) partes.push(`${modificados} ${modificados === 1 ? 'pago identificado' : 'pagos identificados'} con cambios`);
+        if (debiles) partes.push(`${debiles} ${debiles === 1 ? 'coincidencia débil' : 'coincidencias débiles'}`);
+        if (pendientes) partes.push(`${pendientes} ${pendientes === 1 ? 'requiere' : 'requieren'} revisión`);
+        if (pagos.some(d => d.cobertura)) partes.push('cobertura de lectura incompleta');
+        const asociados = pagos.some(d => d.anterior && d.actual);
+        if (!asociados && pagos.some(d => d.pago)) {
+            const movimientos = pagos.filter(d => d.pago).reduce((n, d) => n + (d.movimientos || 1), 0);
+            return `Haku encontró ${movimientos} movimientos de pago, pero no pudo emparejarlos de forma inequívoca entre ambas versiones.`;
+        }
+        return partes.join(' · ');
     }
     function diferenciasVersion(a, b, idsConflictivos) {
         const dif = [];
@@ -370,10 +419,11 @@
             for (const [a, b] of pares) {
                 pendientesA.delete(a); pendientesB.delete(b); progreso = true;
                 const resultados = diferenciasVersion(a, b, idsConflictivos);
-                const pagos_sin_cambios = resultados.filter(d => d.tipo === 'sin_cambios_aparentes');
-                const diferencias = resultados.filter(d => d.tipo !== 'sin_cambios_aparentes');
+                const sinCambios = d => ['sin_cambios_aparentes', 'pago_sin_cambios'].includes(d.tipo);
+                const pagos_sin_cambios = resultados.filter(sinCambios);
+                const diferencias = resultados.filter(d => !sinCambios(d));
                 const revision = diferencias.some(d => d.tipo === 'pago_revision');
-                cambios.push({ tipo: revision ? 'requiere_revision' : diferencias.length ? 'modificada' : 'sin_cambios', anterior: a, actual: b, diferencias, pagos_sin_cambios, campos: [...new Set(diferencias.map(d => d.campo))] });
+                cambios.push({ tipo: revision ? 'requiere_revision' : diferencias.length ? 'modificada' : 'sin_cambios', anterior: a, actual: b, diferencias, pagos_sin_cambios, resumen_pagos: resumenPagosVersion(resultados), campos: [...new Set(diferencias.map(d => d.campo))] });
             }
         } while (progreso);
         const pendientes = [...pendientesA].map(r => ({ r, lado: 'anterior' })).concat([...pendientesB].map(r => ({ r, lado: 'actual' })));

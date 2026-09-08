@@ -33,3 +33,15 @@ La glosa se compara normalizando mayúsculas, tildes y espacios, sin inferir equ
 Con copias de prueba, cambiar sólo el monto o una glosa relevante: debe aparecer **Cambio detectado**, **Pago modificado** y los valores anteriores y actuales. Con dos candidatos indistinguibles debe aparecer **Requiere revisión** y **No se puede asociar de forma inequívoca entre versiones**. **Detalles técnicos** debe comenzar plegado en todos los casos. Si hay cambios ajenos al pago, la tarjeta conserva esos cambios y muestra por separado el pago sin cambios aparentes.
 
 Las regresiones usan transferencias sintéticas de $160.000; la validación con los XLSX reales debe hacerse en el navegador donde están cargados.
+
+## Validación de Alejandra · verificación de pagos entre Libros
+
+1. Recargar Proyecto H sin caché y cargar primero el Libro anterior y después el actual.
+2. Consultar `Libro: cambios de la reserva de Alejandra Calderon Arrigoni`.
+3. Revisar **CAB 11 · 14/09/26 → 17/09/26**. Si Folio `000211`, BOVTAR `033752`, monto y campos relevantes coinciden, debe aparecer **Pago verificado sin cambios · $273.651 · Folio 000211 · BOVTAR 033752**, con **Verificado por Folio+BOVTAR**. Una glosa reordenada no modifica el pago identificado; el texto original sigue disponible para inspección.
+4. En una copia de prueba, cambiar sólo el monto: debe aparecer **Pago identificado, pero cambió monto**, mostrando el anterior y el actual. Lo mismo aplica a concepto, moneda y medio de pago, además de los otros campos estructurados observables. La incorporación real no participa en esta comparación.
+5. Con dos pagos fuertes coincidentes y un movimiento adicional no asociable, comprobar **2 pagos verificados sin cambios · 1 requiere revisión**. Si hay observaciones no emparejadas en ambos archivos, se cuentan por separado, sin asumir que son un mismo pago.
+6. Si no existe ninguna asociación, comprobar **Haku encontró X movimientos de pago, pero no pudo emparejarlos de forma inequívoca entre ambas versiones.** Una lectura incompleta se informa por separado y conserva los pagos que sí se verificaron.
+7. **Detalles técnicos** empieza cerrado. CodAut, Folio+BOVTAR y BOVE se muestran como métodos de verificación; los pagos sin identificador fuerte mantienen **Coincidencia débil** y el criterio conservador de Sebastian.
+
+Los movimientos candidatos con identificador fuerte sólo pueden verificarse dentro de una reserva emparejada y sin identificadores compartidos entre reservas ni duplicados conflictivos. Esto no modifica `pagos` ni `pagos_sin_asociacion` del lector ni autoriza incorporaciones. Las regresiones usan datos sintéticos basados en el caso descrito; la confirmación final con las dos copias reales requiere el navegador donde están cargadas.
