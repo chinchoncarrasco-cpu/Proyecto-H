@@ -1,6 +1,30 @@
 /* HAIKU · Libro ↔ Proyecto H · UX de reconciliación
    Sólo presentación. No altera matching, datos ni escrituras. */
 
+/* The between-book report stays inside the existing scrollable Haku panel. */
+.haiku-versiones { width: 100%; min-width: 0; white-space: normal; }
+.haiku-versiones-titulo { margin: 0 0 8px; font-size: 1rem; color: #23563e; line-height: 1.5; }
+.haiku-versiones-aviso { font-size: .78rem; color: #53675b; line-height: 1.5; }
+.haiku-versiones-totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 7px; margin: 15px 0; }
+.haiku-versiones-totales > div { padding: 10px 6px; background: #eef7f2; border: 1px solid #dce6df; border-radius: 10px; text-align: center; }
+.haiku-versiones-totales strong, .haiku-versiones-totales span { display: block; }
+.haiku-versiones-totales strong { font-size: 1.3rem; color: #23563e; }
+.haiku-versiones-totales span { font-size: .72rem; margin-top: 4px; }
+.haiku-versiones-seccion { margin: 10px 0; }
+.haiku-versiones summary { cursor: pointer; padding: 9px 3px; font-weight: 600; }
+.haiku-versiones summary:focus-visible { outline: 2px solid #1f6e4c; outline-offset: 3px; }
+.haiku-versiones-tarjeta { margin: 8px 0; padding: 14px; border: 1px solid #dce6df; border-left: 4px solid #418667; border-radius: 12px; background: #fff; overflow-wrap: anywhere; line-height: 1.55; }
+.haiku-versiones--requiere_revision { border-left-color: #a77111; background: #fffbf1; }
+.haiku-versiones--ya_no_aparece { border-left-color: #a66458; }
+.haiku-versiones--modificada { border-left-color: #4f77a3; }
+.haiku-versiones-titular { display: block; font-size: .95rem; }
+.haiku-versiones-estado { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 6px; background: #f0f4f1; font-size: .72rem; font-weight: 600; }
+.haiku-versiones-meta { margin: 8px 0; font-size: .83rem; color: #475d50; }
+.haiku-versiones-tarjeta ul { padding-left: 20px; margin: 8px 0; font-size: .84rem; }
+.haiku-versiones-tarjeta li + li { margin-top: 5px; }
+.haiku-versiones-tecnico { margin-top: 10px; border-top: 1px solid #e2e8e4; font-size: .74rem; color: #53675b; }
+.haiku-versiones-tecnico p { white-space: pre-wrap; }
+
 @media (min-width: 901px) {
     body:has(.haiku-asistente-preview) .haiku-asistente-panel {
         width: min(690px, calc(100vw - 48px));

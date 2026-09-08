@@ -32,7 +32,7 @@ test('unknown geometry cannot assert missing reservations',()=>{
  const x=S.normalizarHoja({celdas:[{r:0,c:0,valor:'Ana Pérez'}]},'REEMBOLSOS');assert.equal(x.cobertura.geometria,false);assert.equal(x.reservas.length,0);assert.equal(x.anotaciones[0].origen.celda,'A1');
 });
 test('disappearance does not become confirmed cancellation',()=>{
- const diff=S.compararVersiones({cobertura:{geometria:true},reservas:[reserva]},{cobertura:{geometria:true},reservas:[]});assert.equal(diff[0].tipo,'ya_no_aparece_o_modificada');
+ const diff=S.compararVersiones({cobertura:{geometria:true},reservas:[reserva]},{cobertura:{geometria:true},reservas:[]});assert.equal(diff[0].tipo,'ya_no_aparece');
 });
 test('comparison uses only authenticated SELECT methods; ambiguous payments not assigned',async()=>{
  const calls=[]; const db={reserva_estadias:[{id:'e1',reserva_id:'r1',cabanas:{numero:6},fecha_ingreso:'2026-09-04',fecha_salida:'2026-09-06',estado_estadia:'hospedada',reservas:{titular_nombre:'Ana Pérez'}}],pagos:[],servicios:[]};

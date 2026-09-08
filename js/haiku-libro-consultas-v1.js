@@ -111,7 +111,7 @@
     }
 
     function filtrar(r, q) {
-        if (q.cabana && Number(r?.cabana) !== Number(q.cabana)) return false;
+        if (q.cabana && !(r?.cabanas || [r?.cabana]).some(c => Number(c) === Number(q.cabana))) return false;
         if (q.nombre && !S.normalizar(r?.titular).includes(q.nombre)) return false;
         if (!q.desde) return true;
         const rango = rangoReserva(r);
@@ -765,6 +765,8 @@
         const estado = libro.estado(), hojas = libro.listarHojas();
         if (!estado.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
         const q = interpretar(texto, hojas);
+        // Between-book queries never enter the system reconciliation/write flow.
+        if (q.versiones) q.comparar = false;
         if (q.listar) return { q, archivo: estado.nombre, hojas, reservas: [], aseos: [], espacios: [], anotaciones: [], cambios: [], comparacion: [] };
 
         const resultado = {
@@ -779,11 +781,12 @@
             advertencias: [...q.warnings]
         };
 
-        if (q.nombre && !q.desde && libro.buscarHojas) {
+        if (q.nombre && !q.desde && libro.buscarHojas && !q.versiones) {
             const matches = await libro.buscarHojas(q.nombre);
             q.hojas = q.hojas.filter(h => matches.hojas.includes(h));
         }
 
+        const versionesAnterior = [], versionesActual = [];
         for (const h of q.hojas) {
             const data = await libro.consultarHoja(h);
             resultado.advertencias.push(...(data.advertencias || []));
@@ -804,15 +807,17 @@
             if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
             if (q.versiones) {
                 const old = await libro.consultarHoja(h, "anterior");
-                resultado.cambios.push(...S.compararVersiones(old, data).filter(c =>
-                    (!c.actual && !c.anterior) ||
-                    (c.actual && filtrar(c.actual, q)) ||
-                    (c.anterior && filtrar(c.anterior, q))
-                ));
+                versionesAnterior.push(old); versionesActual.push(data);
             }
         }
 
-        if (q.nombre) {
+        if (q.versiones) {
+            const unir = versiones => ({ cobertura: { geometria: versiones.length > 0 && versiones.every(v => v?.cobertura?.geometria) }, reservas: versiones.flatMap(v => v?.reservas || []) });
+            resultado.cambios = S.compararVersiones(unir(versionesAnterior), unir(versionesActual)).filter(c =>
+                (!c.actual && !c.anterior) || (c.actual && filtrar(c.actual, q)) || (c.anterior && filtrar(c.anterior, q)) || c.candidatos?.some(r => filtrar(r, q)));
+        }
+
+        if (q.nombre && !q.versiones) {
             for (const h of hojas.filter(h => /reagendar|reembolso/i.test(h))) {
                 const data = await libro.consultarHoja(h);
                 resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
@@ -871,6 +876,7 @@
     function respuesta(result) {
         const q = result.q;
         if (q.listar) return `Libro ${result.archivo}: ${result.hojas.join(", ")}.`;
+        if (q.versiones) return respuestaVersiones(result);
         if (q.comparar) return respuestaComparacion(result);
 
         const lines = [
@@ -879,13 +885,7 @@
         ];
         if (q.escribir) lines.push("Esta etapa sólo lee y compara. No crearé reservas, pagos ni servicios desde el Libro; primero debemos validar su interpretación.");
 
-        if (q.versiones) {
-            lines.push(`${result.cambios.length} diferencias detectadas en el intervalo.`);
-            for (const c of result.cambios) {
-                lines.push(`${c.tipo}: ${c.actual?.titular || c.anterior?.titular || c.detalle} · ${(c.campos || []).join(", ")} · ${source(c.actual?.coordenadas_origen || c.anterior?.coordenadas_origen)}`);
-            }
-            lines.push("Que una reserva ya no aparezca no prueba una cancelación: puede haberse movido o cambiado de titular.");
-        } else if (q.libres) {
+        if (q.libres) {
             const libres = result.espacios.filter(x => x.estado === "libre_explicito");
             lines.push(`${libres.length} marcas explícitas de LIBRE:`);
             for (const x of libres) lines.push(`${x.fecha} · CAB ${x.cabana} · ${source(x.origen)}`);
@@ -935,7 +935,97 @@
         return lines.join("\n");
     }
 
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
+    const categoriasVersion = { nueva: 'Nuevas', modificada: 'Modificadas', ya_no_aparece: 'Ya no aparecen', sin_cambios: 'Sin cambios', requiere_revision: 'Requieren revisión' };
+    const estadoVersion = { nueva: 'Reserva nueva', modificada: 'Reserva modificada', ya_no_aparece: 'Ya no aparece', sin_cambios: 'Sin cambios', requiere_revision: 'Requiere revisión' };
+    function tituloVersiones(q) {
+        const inicio = q.desde, fin = q.hasta;
+        const mes = d => `${nombresMes[Number(d.slice(5, 7)) - 1].replace(/^./, x => x.toUpperCase())} ${d.slice(0, 4)}`;
+        return 'CAMBIOS ENTRE LIBROS' + (inicio ? ` · ${mes(inicio)}${fin && fin.slice(0, 7) !== inicio.slice(0, 7) ? ' – ' + mes(fin) : ''}` : ' · Por titular');
+    }
+    function descripcionVersion(r) {
+        return `${(r.cabanas || [r.cabana]).map(c => 'CAB ' + c).join(' + ')} · ${fechaBreve(r.fecha_checkin)} → ${fechaBreve(r.fecha_checkout)}`;
+    }
+    function detalleVersion(d) {
+        if (d.tipo === 'cabana_agregada') return `Se agregó CAB ${d.cabana}`;
+        if (d.tipo === 'cabana_eliminada') return `Se quitó CAB ${d.cabana}`;
+        if (d.tipo === 'pago_agregado') return `Se agregó pago ${money(d.pago.monto)}`;
+        if (d.tipo === 'pago_eliminado') return `Se eliminó pago ${money(d.pago.monto)}`;
+        if (d.tipo === 'pago_modificado') return `Pago modificado/requiere revisión: ${money(d.anterior.monto)} → ${money(d.actual.monto)}`;
+        if (d.detalle) return d.detalle;
+        const campos = { fecha_checkin: 'Check-In', fecha_checkout: 'Check-Out', tipo_estadia: 'tipo de estadía', rut_documento: 'documento', correo: 'correo', telefono: 'teléfono', adultos: 'adultos', ninos: 'niños', mascotas: 'mascotas', estado_confirmacion: 'confirmación', estado_operativo: 'estado de la estadía', notas_importantes: 'notas importantes', pagos_pendientes: 'pagos pendientes', servicios: 'servicios', operador: 'operador', fecha_ingreso_libro: 'fecha de ingreso al Libro', notas: 'notas' };
+        const valor = v => v === null || v === undefined || v === '' ? 'sin dato' : Array.isArray(v) ? v.map(valor).join('; ') || 'sin dato' :
+            typeof v === 'object' ? v.texto_original || v.concepto || 'servicio' : etiquetas[v] || (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? fechaBreve(v) : String(v).replaceAll('_', ' '));
+        return `Cambió ${campos[d.campo] || d.campo}: ${valor(d.anterior)} → ${valor(d.actual)}`;
+    }
+    function respuestaVersiones(result) {
+        const lines = [tituloVersiones(result.q), Object.entries(categoriasVersion).map(([tipo, label]) => `${label}: ${result.cambios.filter(c => c.tipo === tipo).length}`).join(' · ')];
+        for (const c of result.cambios) {
+            const r = c.actual || c.anterior;
+            lines.push(r ? `${r.titular} · ${descripcionVersion(r)} · ${estadoVersion[c.tipo]}` : c.detalle);
+            if (c.detalle && r) lines.push(c.detalle);
+            lines.push(...(c.diferencias || []).map(detalleVersion));
+        }
+        lines.push(...new Set(result.advertencias || []), 'Sólo lectura. “Ya no aparece” no confirma una cancelación.');
+        return lines.join('\n');
+    }
+    function renderizarVersiones(out, result) {
+        out.className = 'haiku-asistente-preview haiku-versiones';
+        out.replaceChildren(elemento('h3', 'haiku-versiones-titulo', tituloVersiones(result.q)), elemento('p', 'haiku-versiones-aviso', 'Sólo lectura · Libro anterior ↔ Libro actual'));
+        const resumen = elemento('div', 'haiku-versiones-totales');
+        for (const [tipo, label] of Object.entries(categoriasVersion)) {
+            const indicador = elemento('div');
+            indicador.append(elemento('strong', '', result.cambios.filter(c => c.tipo === tipo).length), elemento('span', '', label));
+            resumen.append(indicador);
+        }
+        out.append(resumen);
+        for (const tipo of ['requiere_revision', 'modificada', 'nueva', 'ya_no_aparece', 'sin_cambios']) {
+            const items = result.cambios.filter(c => c.tipo === tipo);
+            if (!items.length) continue;
+            const seccion = elemento('details', 'haiku-versiones-seccion');
+            seccion.open = tipo !== 'sin_cambios' || result.cambios.length <= 8;
+            seccion.append(elemento('summary', '', `${categoriasVersion[tipo]} · ${items.length}`));
+            for (const c of items) {
+                const r = c.actual || c.anterior, tarjeta = elemento('article', `haiku-versiones-tarjeta haiku-versiones--${tipo}`);
+                tarjeta.append(elemento('strong', 'haiku-versiones-titular', r.titular), elemento('span', 'haiku-versiones-estado', estadoVersion[tipo]), elemento('p', 'haiku-versiones-meta', descripcionVersion(r)));
+                if (c.detalle) tarjeta.append(elemento('p', '', c.detalle));
+                const lista = elemento('ul');
+                (c.diferencias || []).forEach(d => {
+                    const li = elemento('li', '', detalleVersion(d));
+                    if (d.campo === 'notas') {
+                        const notas = elemento('details');
+                        notas.append(elemento('summary', '', 'Ver cambios en las notas'), elemento('p', '', `Anterior: ${d.anterior || 'sin dato'}`), elemento('p', '', `Actual: ${d.actual || 'sin dato'}`));
+                        li.append(notas);
+                    }
+                    lista.append(li);
+                });
+                if (lista.children.length) tarjeta.append(lista);
+                if (c.candidatos?.length) {
+                    const candidatos = elemento('details');
+                    candidatos.append(elemento('summary', '', 'Ver reservas candidatas'));
+                    c.candidatos.forEach(x => candidatos.append(elemento('p', '', `${x.titular} · ${descripcionVersion(x)}`)));
+                    tarjeta.append(candidatos);
+                }
+                const tecnico = elemento('details', 'haiku-versiones-tecnico');
+                tecnico.append(elemento('summary', '', 'Detalles técnicos'));
+                for (const [label, g] of [['Anterior', c.anterior], ['Actual', c.actual], ...(c.candidatos || []).map(g => ['Candidata', g])]) if (g) {
+                    tecnico.append(elemento('p', '', `${label}: ${(g.origenes || []).map(source).join(' · ')}`));
+                    for (const fila of g.filas || []) tecnico.append(elemento('p', '', fila.texto_original || ''));
+                    for (const p of [...(g.pagos || []), ...(g.pagos_sin_asociacion || [])]) tecnico.append(elemento('p', '', `${source(p.origen)} · CodAut: ${p.codigo_autorizacion || '—'} · Folio: ${p.folio || '—'} · Bovtar: ${p.bovtar || '—'} · BOVE: ${p.bove || '—'}`));
+                }
+                tarjeta.append(tecnico); seccion.append(tarjeta);
+            }
+            out.append(seccion);
+        }
+        for (const c of result.cambios.filter(c => c.tipo === 'no_comparable')) out.append(elemento('p', 'haiku-versiones-aviso', c.detalle));
+        if (result.advertencias?.length) {
+            const tecnico = elemento('details', 'haiku-versiones-tecnico');
+            tecnico.append(elemento('summary', '', 'Detalles técnicos de la lectura'));
+            [...new Set(result.advertencias)].forEach(a => tecnico.append(elemento('p', '', a))); out.append(tecnico);
+        }
+        out.append(elemento('p', 'haiku-versiones-aviso', '“Ya no aparece” no confirma una cancelación. No se modificaron el Libro ni Proyecto H.'));
+    }
+
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 
@@ -1468,7 +1558,8 @@
         const out = mensaje("asistente", "Leyendo la estructura del Libro local…");
         try {
             const result = await consultar(texto);
-            if (result.q.comparar) renderizarComparacion(out, result);
+            if (result.q.versiones) renderizarVersiones(out, result);
+            else if (result.q.comparar) renderizarComparacion(out, result);
             else out.textContent = respuesta(result);
         } catch (error) {
             out.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente";

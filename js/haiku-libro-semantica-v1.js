@@ -203,19 +203,155 @@
         const seguros = scores.filter(x => x.segura);
         return seguros.length === 1 ? { estado: "asociada", sistema: seguros[0].s } : { estado: scores.some(x => x.posible) ? "ambigua" : "sin_coincidencia", candidatos: scores.filter(x => x.posible).map(x => x.s.id) };
     }
-    function compararVersiones(anterior, actual) {
-        if (!anterior.cobertura.geometria || !actual.cobertura.geometria) return [{ tipo: "no_comparable", detalle: "No se reconoció la geometría en ambas versiones." }];
-        const cambios = [], usados = new Set();
-        for (const r of actual.reservas) {
-            let candidates = anterior.reservas.filter(a => mismaPersona(a.titular, r.titular) && (a.fecha_checkin === r.fecha_checkin || a.cabana === r.cabana));
-            if (candidates.length !== 1) { cambios.push({ tipo: candidates.length ? "asociacion_ambigua" : "reserva_agregada_o_modificada", actual: r }); continue; }
-            const a = candidates[0];
-            if (usados.has(a.id)) { cambios.push({ tipo: "asociacion_ambigua", actual: r }); continue; }
-            usados.add(a.id);
-            const campos = ["cabana", "fecha_checkin", "fecha_checkout", "estado_confirmacion", "estado_operativo", "texto_original", "pagos", "pagos_sin_asociacion"].filter(k => JSON.stringify(a[k]) !== JSON.stringify(r[k]));
-            if (campos.length) cambios.push({ tipo: "modificada", campos, anterior: a, actual: r });
+    // Version comparison is pure. Coordinates are provenance, never identity.
+    const canonIdVersion = v => normalizar(v).replace(/[^a-z0-9]/g, "");
+    const senalesVersion = r => [canonIdVersion(r.rut_documento), normalizar(r.correo), digitos(r.telefono)];
+    const fechasVersion = (a, b) => a.fecha_checkin === b.fecha_checkin && a.fecha_checkout === b.fecha_checkout && a.tipo_estadia === b.tipo_estadia;
+    function identidadVersion(a, b) {
+        const x = senalesVersion(a), y = senalesVersion(b);
+        return { nombre: mismaPersona(a.titular, b.titular),
+            documentoConflictivo: !!(x[0] && y[0] && x[0] !== y[0]),
+            conflicto: x.some((v, i) => v && y[i] && v !== y[i]),
+            fuerte: x.some((v, i) => v && v === y[i] && (i !== 2 || v.length >= 9)) };
+    }
+    function componentesVersion(items, relacionados) {
+        const pendientes = new Set(items), grupos = [];
+        while (pendientes.size) {
+            const cola = [pendientes.values().next().value]; pendientes.delete(cola[0]);
+            for (let i = 0; i < cola.length; i++) for (const r of pendientes) {
+                if (relacionados(cola[i], r)) { pendientes.delete(r); cola.push(r); }
+            }
+            grupos.push(cola);
         }
-        for (const a of anterior.reservas) if (!usados.has(a.id)) cambios.push({ tipo: "ya_no_aparece_o_modificada", anterior: a });
+        return grupos;
+    }
+    function agruparVersion(reservas) {
+        const compatibles = (a, b) => {
+            const i = identidadVersion(a, b), docA = senalesVersion(a)[0], docB = senalesVersion(b)[0];
+            return i.nombre && fechasVersion(a, b) && !i.documentoConflictivo && (!i.conflicto || (docA && docA === docB));
+        };
+        return componentesVersion(reservas || [], compatibles).map(filas => {
+            const cabanas = [...new Set(filas.map(r => Number(r.cabana)))].sort((a, b) => a - b);
+            const revision = cabanas.length !== filas.length || filas.some(r => !r.titular || !r.fecha_checkin || !r.fecha_checkout || !Number(r.cabana) || r.advertencias?.length) ||
+                filas.some(a => filas.some(b => !compatibles(a, b)));
+            return { ...filas[0], filas, cabanas, revision,
+                pagos: filas.flatMap(r => r.pagos || []), pagos_sin_asociacion: filas.flatMap(r => r.pagos_sin_asociacion || []),
+                cobertura_pagos: filas.every(r => r.cobertura_pagos === true),
+                origenes: filas.map(r => r.coordenadas_origen).filter(Boolean) };
+        });
+    }
+    function idsPagoVersion(p) {
+        const ids = [];
+        if (canonIdVersion(p.codigo_autorizacion)) ids.push('aut:' + canonIdVersion(p.codigo_autorizacion));
+        if (canonIdVersion(p.folio) && canonIdVersion(p.bovtar)) ids.push('folio:' + canonIdVersion(p.folio) + ':' + canonIdVersion(p.bovtar));
+        if (canonIdVersion(p.bove)) ids.push('bove:' + canonIdVersion(p.bove));
+        return ids;
+    }
+    const pagoVersion = p => JSON.stringify([p.monto ?? null, p.moneda || 'CLP', normalizar(p.concepto), p.tipo_movimiento || null,
+        p.estado_pago || null, p.medio_pago || null, p.fecha_comprobante || null, !!p.bove_pendiente, !!p.manager_pendiente,
+        p.saldo_por_pagar ?? null, p.monto_penalidad ?? null, p.penalidad_porcentaje ?? null, idsPagoVersion(p)]);
+    function compararPagosVersion(a, b, idsConflictivos) {
+        const diferencias = [], todos = [...a.pagos.map(p => ({ p, lado: 0 })), ...b.pagos.map(p => ({ p, lado: 1 }))];
+        const componentes = componentesVersion(todos, (x, y) => idsPagoVersion(x.p).some(id => idsPagoVersion(y.p).includes(id)));
+        for (const grupo of componentes) {
+            const prev = grupo.filter(x => x.lado === 0), next = grupo.filter(x => x.lado === 1);
+            const p = (next[0] || prev[0]).p;
+            const ids = idsPagoVersion(p);
+            const conflicto = grupo.some(x => idsPagoVersion(x.p).some(id => idsConflictivos.has(id))) ||
+                [prev, next].some(xs => new Set(xs.map(x => pagoVersion(x.p))).size > 1);
+            if (!ids.length || conflicto) {
+                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'Pago modificado/requiere revisión: identificador ausente, compartido o conflictivo.', pago: p });
+            } else if (prev.length && next.length) {
+                if (pagoVersion(prev[0].p) !== pagoVersion(next[0].p)) diferencias.push({ campo: 'pagos', tipo: 'pago_modificado', detalle: 'Pago modificado/requiere revisión.', anterior: prev[0].p, actual: next[0].p, pago: p });
+            } else if (!a.cobertura_pagos || !b.cobertura_pagos || a.pagos_sin_asociacion.length || b.pagos_sin_asociacion.length) {
+                diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'La cobertura o asociación de pagos es incompleta; requiere revisión.', pago: p });
+            } else diferencias.push({ campo: 'pagos', tipo: next.length ? 'pago_agregado' : 'pago_eliminado', pago: p });
+        }
+        if (a.pagos_sin_asociacion.length || b.pagos_sin_asociacion.length || !a.cobertura_pagos || !b.cobertura_pagos) {
+            diferencias.push({ campo: 'pagos', tipo: 'pago_revision', detalle: 'No se pudieron verificar todos los pagos asociados a esta reserva.' });
+        }
+        return diferencias;
+    }
+    function diferenciasVersion(a, b, idsConflictivos) {
+        const dif = [];
+        for (const cab of b.cabanas.filter(c => !a.cabanas.includes(c))) dif.push({ campo: 'cabanas', tipo: 'cabana_agregada', cabana: cab });
+        for (const cab of a.cabanas.filter(c => !b.cabanas.includes(c))) dif.push({ campo: 'cabanas', tipo: 'cabana_eliminada', cabana: cab });
+        const canon = (k, v) => k === 'rut_documento' ? canonIdVersion(v) : k === 'telefono' ? digitos(v) :
+            Array.isArray(v) ? [...new Set(v.map(x => typeof x === 'object' ? JSON.stringify(x) : normalizar(x)))].sort() : typeof v === 'string' ? normalizar(v) : v ?? null;
+        for (const campo of ['fecha_checkin', 'fecha_checkout', 'tipo_estadia', 'rut_documento', 'correo', 'telefono', 'adultos', 'ninos', 'mascotas',
+            'estado_confirmacion', 'estado_operativo', 'notas_importantes', 'pagos_pendientes', 'servicios', 'operador', 'fecha_ingreso_libro']) {
+            const pares = a.cabanas.filter(c => b.cabanas.includes(c)).map(c => [a.filas.find(r => Number(r.cabana) === c), b.filas.find(r => Number(r.cabana) === c)]);
+            // If all cabins changed, compare the distinct values without inventing a row pairing.
+            if (!pares.length) {
+                const valores = g => [...new Set(g.filas.map(r => JSON.stringify(canon(campo, r[campo]))))].sort();
+                if (JSON.stringify(valores(a)) !== JSON.stringify(valores(b))) dif.push({ campo, anterior: a.filas.map(r => r[campo]), actual: b.filas.map(r => r[campo]) });
+            } else for (const [x, y] of pares) if (JSON.stringify(canon(campo, x[campo])) !== JSON.stringify(canon(campo, y[campo]))) {
+                const existente = dif.find(d => d.campo === campo && JSON.stringify(d.anterior) === JSON.stringify(x[campo]) && JSON.stringify(d.actual) === JSON.stringify(y[campo]));
+                if (!existente) dif.push({ campo, anterior: x[campo], actual: y[campo], cabana: x.cabana });
+            }
+        }
+        // Text may contain an unparsed note even when another structured field also changes.
+        {
+            const comunes = a.cabanas.filter(c => b.cabanas.includes(c));
+            for (const cab of comunes) {
+                const x = a.filas.find(r => Number(r.cabana) === cab), y = b.filas.find(r => Number(r.cabana) === cab);
+                if (normalizar(x.texto_original) !== normalizar(y.texto_original)) dif.push({ campo: 'notas', anterior: x.texto_original, actual: y.texto_original, cabana: cab,
+                    detalle: 'Cambió el texto de la reserva; revisa las notas anteriores y actuales.' });
+            }
+        }
+        return dif.concat(compararPagosVersion(a, b, idsConflictivos));
+    }
+    function compararVersiones(anterior, actual) {
+        if (!anterior?.cobertura?.geometria || !actual?.cobertura?.geometria) return [{ tipo: 'no_comparable', detalle: 'No se reconoció la geometría en ambas versiones.' }];
+        const prev = agruparVersion(anterior.reservas), next = agruparVersion(actual.reservas), cambios = [];
+        const idsConflictivos = new Set();
+        for (const grupos of [prev, next]) {
+            const dueños = new Map();
+            for (const g of grupos) for (const p of [...g.pagos, ...g.pagos_sin_asociacion]) for (const id of idsPagoVersion(p)) {
+                if (dueños.has(id) && dueños.get(id) !== g) idsConflictivos.add(id);
+                dueños.set(id, g);
+            }
+        }
+        const pendientesA = new Set(prev), pendientesB = new Set(next);
+        const relacion = (a, b) => a.filas.some(x => b.filas.some(y => { const i = identidadVersion(x, y); return i.nombre || i.fuerte; }));
+        const puntaje = (a, b) => {
+            if (a.revision || b.revision) return 0;
+            const pares = a.filas.flatMap(x => b.filas.map(y => identidadVersion(x, y)));
+            if (pares.some(i => i.documentoConflictivo)) return 0;
+            const fuerte = pares.some(i => i.fuerte), nombre = pares.every(i => i.nombre);
+            const fechas = fechasVersion(a, b), cab = a.cabanas.some(c => b.cabanas.includes(c));
+            if (!nombre && !fuerte) return 0;
+            if (!fuerte && pares.some(i => i.conflicto) && !(fechas && cab && pares.every(i => !i.documentoConflictivo) &&
+                // A single contact change is a modification; two conflicting contacts are identity uncertainty.
+                a.filas.every(x => b.filas.every(y => senalesVersion(x).filter((v, i) => v && senalesVersion(y)[i] && v !== senalesVersion(y)[i]).length <= 1)))) return 0;
+            return fuerte ? 10 + Number(fechas) * 2 + Number(cab) : nombre && (fechas || cab) ? 1 + Number(fechas) * 2 + Number(cab) : 0;
+        };
+        // Mutual unique best matches, resolved in rounds: no greedy row consumption.
+        const mejor = (r, pool, reverse) => {
+            const scores = [...pool].map(x => ({ x, n: reverse ? puntaje(x, r) : puntaje(r, x) }));
+            const max = Math.max(0, ...scores.map(x => x.n)), best = scores.filter(x => x.n === max && max > 0);
+            return best.length === 1 ? best[0].x : null;
+        };
+        let progreso;
+        do {
+            progreso = false;
+            const pares = [...pendientesA].map(a => [a, mejor(a, pendientesB, false)]).filter(([a, b]) => b && mejor(b, pendientesA, true) === a);
+            for (const [a, b] of pares) {
+                pendientesA.delete(a); pendientesB.delete(b); progreso = true;
+                const diferencias = diferenciasVersion(a, b, idsConflictivos);
+                const revision = diferencias.some(d => d.tipo === 'pago_revision' || d.tipo === 'pago_modificado');
+                cambios.push({ tipo: revision ? 'requiere_revision' : diferencias.length ? 'modificada' : 'sin_cambios', anterior: a, actual: b, diferencias, campos: [...new Set(diferencias.map(d => d.campo))] });
+            }
+        } while (progreso);
+        const pendientes = [...pendientesA].map(r => ({ r, lado: 'anterior' })).concat([...pendientesB].map(r => ({ r, lado: 'actual' })));
+        // One review case retains both sides without pretending they were matched.
+        for (const componente of componentesVersion(pendientes, (x, y) => x.lado !== y.lado && relacion(x.r, y.r))) {
+            const a = componente.find(x => x.lado === 'anterior')?.r, b = componente.find(x => x.lado === 'actual')?.r;
+            const candidatos = [...new Set(componente.flatMap(x => (x.lado === 'anterior' ? next : prev).filter(y => relacion(x.r, y))))];
+            const revision = componente.some(x => x.r.revision) || candidatos.length > 0;
+            cambios.push({ tipo: revision ? 'requiere_revision' : a ? 'ya_no_aparece' : 'nueva', anterior: a, actual: b,
+                candidatos, detalle: revision ? 'La identidad no permite una asociación única y segura. Revisa las reservas candidatas.' : undefined, diferencias: [] });
+        }
         return cambios;
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto });
