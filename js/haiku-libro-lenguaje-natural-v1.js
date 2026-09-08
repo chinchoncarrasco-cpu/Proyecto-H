@@ -184,6 +184,27 @@
         return copia;
     }
 
+    function esNotaAdministrativaFinanciera(pago) {
+        if (!pago || typeof pago !== "object") return false;
+        const monto = Number(pago.monto);
+        if (Number.isFinite(monto) && monto > 0) return false;
+        const texto = normalizarBase(pago.texto_original || "");
+        if (!texto) return false;
+        return /\b(?:bove|manager|boleta)\b/.test(texto) ||
+            /\bpend(?:iente)?\b[^\n]{0,40}\b\d+\s*%/.test(texto);
+    }
+
+    function notaFinancieraDesdePago(pago) {
+        return {
+            texto_original: pago?.texto_original || "",
+            origen: pago?.origen || null,
+            fecha: pago?.fecha_bloque || null,
+            cabana: pago?.cabana || null,
+            tipo: "nota_financiera_administrativa",
+            motivo: "Pendiente administrativo de BOVE, Manager o boleta. No corresponde a un pago independiente."
+        };
+    }
+
     function ajustarResultadoPagos(data) {
         if (!data || typeof data !== "object") return data;
         const cache = new Map();
@@ -196,6 +217,24 @@
         const reservas = [];
         const espaciosExtra = [];
         const anotacionesExtra = [];
+        const notasFinancierasVistas = new Set();
+
+        const depurarPagos = lista => {
+            if (!Array.isArray(lista)) return lista;
+            const salida = [];
+            for (const pago of lista) {
+                if (esNotaAdministrativaFinanciera(pago)) {
+                    const clave = `${pago?.origen?.hoja || ""}|${pago?.origen?.celda || ""}|${pago?.texto_original || ""}`;
+                    if (!notasFinancierasVistas.has(clave)) {
+                        notasFinancierasVistas.add(clave);
+                        anotacionesExtra.push(notaFinancieraDesdePago(pago));
+                    }
+                    continue;
+                }
+                salida.push(ajustar(pago));
+            }
+            return salida;
+        };
 
         for (const original of Array.isArray(data.reservas) ? data.reservas : []) {
             const reserva = repararTitularYNotas(original);
@@ -218,8 +257,8 @@
 
             reservas.push({
                 ...reserva,
-                pagos: Array.isArray(reserva.pagos) ? reserva.pagos.map(ajustar) : reserva.pagos,
-                pagos_sin_asociacion: Array.isArray(reserva.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion.map(ajustar) : reserva.pagos_sin_asociacion
+                pagos: depurarPagos(reserva.pagos),
+                pagos_sin_asociacion: depurarPagos(reserva.pagos_sin_asociacion)
             });
         }
 
@@ -230,7 +269,7 @@
 
         return {
             ...data,
-            pagos: Array.isArray(data.pagos) ? data.pagos.map(ajustar) : data.pagos,
+            pagos: depurarPagos(data.pagos),
             reservas,
             espacios,
             anotaciones: [
