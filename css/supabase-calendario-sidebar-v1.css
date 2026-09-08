@@ -1,0 +1,34 @@
+/* =====================================================
+   HAIKU · CALENDARIO · ANCHO SEGÚN SIDEBAR
+   Sólo escritorio. Replica el comportamiento que ya usan
+   Resumen y Libro de Reserva con el menú redimensionable.
+===================================================== */
+
+@media (min-width: 901px) {
+    /* .contenido conserva un max-width base de 1500 px. El calendario debe
+       calcular su ancho contra el viewport para ganar o ceder exactamente
+       el espacio que libera/ocupa el sidebar mientras se arrastra. */
+    #seccion-calendario {
+        width: calc(100vw - var(--haiku-sidebar-ancho, 240px) - 80px);
+        max-width: none;
+        min-width: 0;
+    }
+
+    #seccion-calendario .calendario-cabecera-principal,
+    #seccion-calendario .calendario-panel,
+    #seccion-calendario .calendario-cabecera,
+    #seccion-calendario .dias-semana,
+    #seccion-calendario .calendario-grid {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    /* Las siete columnas y la capa de reservas permanecen proporcionales al
+       ancho real del calendario durante todo el arrastre del sidebar. */
+    #seccion-calendario .dias-semana,
+    #seccion-calendario .calendario-grid,
+    #seccion-calendario .calendario-reservas-capa {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+}
