@@ -41,6 +41,221 @@
 
         let ocupado = false;
 
+        function instalarEstilos() {
+            if (document.getElementById("haku-ingresos-fecha-estilos-v1")) return;
+
+            const style = document.createElement("style");
+            style.id = "haku-ingresos-fecha-estilos-v1";
+            style.textContent = `
+                .haku-ingresos-card {
+                    border: 1px solid #c9ddd0;
+                    border-radius: 16px;
+                    background: linear-gradient(180deg, #fbfdfb 0%, #f7faf8 100%);
+                    padding: 14px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    box-shadow: 0 5px 16px rgba(28, 69, 47, .055);
+                }
+
+                .haku-ingresos-head {
+                    display: flex;
+                    align-items: flex-start;
+                    justify-content: space-between;
+                    gap: 12px;
+                    padding-bottom: 9px;
+                    border-bottom: 1px solid #deebe2;
+                }
+
+                .haku-ingresos-kicker {
+                    margin: 0 0 2px;
+                    font-size: 10px;
+                    line-height: 1.2;
+                    font-weight: 800;
+                    letter-spacing: .09em;
+                    text-transform: uppercase;
+                    color: #397352;
+                }
+
+                .haku-ingresos-title {
+                    margin: 0;
+                    font-size: 19px;
+                    line-height: 1.15;
+                    font-weight: 800;
+                    color: #17251c;
+                }
+
+                .haku-ingresos-fecha {
+                    flex: 0 0 auto;
+                    display: inline-flex;
+                    align-items: center;
+                    min-height: 26px;
+                    padding: 4px 9px;
+                    border: 1px solid #d3e5d9;
+                    border-radius: 999px;
+                    background: #edf7f0;
+                    color: #2e6346;
+                    font-size: 11px;
+                    line-height: 1;
+                    font-weight: 800;
+                    white-space: nowrap;
+                }
+
+                .haku-ingresos-resumen {
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    min-height: 42px;
+                    padding: 8px 11px;
+                    border: 1px solid #dbe8df;
+                    border-radius: 12px;
+                    background: rgba(255,255,255,.82);
+                    color: #344039;
+                    font-size: 12px;
+                }
+
+                .haku-ingresos-cantidad {
+                    flex: 0 0 auto;
+                    display: grid;
+                    place-items: center;
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 9px;
+                    background: #1f7650;
+                    color: #fff;
+                    font-size: 13px;
+                    font-weight: 900;
+                    box-shadow: 0 3px 8px rgba(31, 118, 80, .16);
+                }
+
+                .haku-ingresos-listado-wrap {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    min-height: 0;
+                }
+
+                .haku-ingresos-listado-titulo {
+                    margin: 0 1px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    color: #3f5848;
+                }
+
+                .haku-ingresos-lista {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 5px;
+                    max-height: 235px;
+                    overflow-y: auto;
+                    padding-right: 2px;
+                    scrollbar-width: thin;
+                }
+
+                .haku-ingresos-item {
+                    display: grid;
+                    grid-template-columns: auto minmax(0, 1fr) auto;
+                    align-items: center;
+                    gap: 9px;
+                    min-height: 43px;
+                    padding: 6px 8px;
+                    border: 1px solid #e0e9e3;
+                    border-radius: 11px;
+                    background: #fff;
+                }
+
+                .haku-ingresos-cab {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 48px;
+                    min-height: 25px;
+                    padding: 3px 7px;
+                    border-radius: 8px;
+                    background: #edf7f0;
+                    color: #2d6847;
+                    font-size: 10px;
+                    font-weight: 900;
+                    white-space: nowrap;
+                }
+
+                .haku-ingresos-main {
+                    min-width: 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1px;
+                }
+
+                .haku-ingresos-titular {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-size: 12px;
+                    line-height: 1.25;
+                    font-weight: 800;
+                    color: #222f27;
+                }
+
+                .haku-ingresos-meta {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    font-size: 10px;
+                    line-height: 1.25;
+                    color: #78847b;
+                }
+
+                .haku-ingresos-estado {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 23px;
+                    padding: 3px 8px;
+                    border: 1px solid #d7e7dc;
+                    border-radius: 999px;
+                    background: #f0f8f2;
+                    color: #397052;
+                    font-size: 9px;
+                    font-weight: 800;
+                    white-space: nowrap;
+                }
+
+                .haku-ingresos-aviso {
+                    padding: 7px 9px;
+                    border: 1px solid #ecdcb8;
+                    border-radius: 10px;
+                    background: #fff8e9;
+                    color: #765f2c;
+                    font-size: 10px;
+                    line-height: 1.35;
+                }
+
+                .haku-ingresos-pie {
+                    padding-top: 7px;
+                    border-top: 1px solid #e0e9e3;
+                    color: #758078;
+                    font-size: 10px;
+                    line-height: 1.25;
+                }
+
+                @media (max-width: 620px) {
+                    .haku-ingresos-card { padding: 11px; gap: 8px; }
+                    .haku-ingresos-title { font-size: 17px; }
+                    .haku-ingresos-item {
+                        grid-template-columns: auto minmax(0, 1fr);
+                        gap: 7px;
+                    }
+                    .haku-ingresos-estado {
+                        grid-column: 2;
+                        justify-self: start;
+                    }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        instalarEstilos();
+
         function quitarHaku(valor) {
             const fn = window.haikuQuitarVocativoAsistente;
             if (typeof fn === "function") return fn(valor);
@@ -171,57 +386,92 @@
 
         function renderizar(fecha, filas, descartadas) {
             const card = document.createElement("div");
-            card.className = "haiku-asistente-preview";
+            card.className = "haiku-asistente-preview haku-ingresos-card";
 
             const cabecera = document.createElement("div");
-            cabecera.className = "haiku-asistente-preview-cabecera";
+            cabecera.className = "haku-ingresos-head";
+
             const izq = document.createElement("div");
-            const etiqueta = document.createElement("small");
-            etiqueta.textContent = "CONSULTA · SÓLO LECTURA";
+            const etiqueta = document.createElement("div");
+            etiqueta.className = "haku-ingresos-kicker";
+            etiqueta.textContent = "Consulta · sólo lectura";
             const titulo = document.createElement("h3");
+            titulo.className = "haku-ingresos-title";
             titulo.textContent = "Ingresos del día";
             izq.append(etiqueta, titulo);
+
             const fechaChip = document.createElement("span");
-            fechaChip.className = "haiku-asistente-confianza";
+            fechaChip.className = "haku-ingresos-fecha";
             fechaChip.textContent = fechaVisible(fecha);
             cabecera.append(izq, fechaChip);
             card.append(cabecera);
 
-            const resumen = document.createElement("p");
-            resumen.className = "haiku-asistente-preview-resumen";
-            resumen.textContent = `${filas.length} reserva${filas.length === 1 ? "" : "s"} ingresa${filas.length === 1 ? "" : "n"} el ${fechaVisible(fecha)}.`;
+            const resumen = document.createElement("div");
+            resumen.className = "haku-ingresos-resumen";
+            const cantidad = document.createElement("span");
+            cantidad.className = "haku-ingresos-cantidad";
+            cantidad.textContent = String(filas.length);
+            const resumenTexto = document.createElement("span");
+            resumenTexto.textContent = `${filas.length === 1 ? "reserva ingresa" : "reservas ingresan"} el ${fechaVisible(fecha)}.`;
+            resumen.append(cantidad, resumenTexto);
             card.append(resumen);
 
             if (filas.length) {
                 const bloque = document.createElement("div");
-                bloque.className = "haiku-asistente-preview-lista";
-                const strong = document.createElement("strong");
-                strong.textContent = filas.length === 1 ? "Reserva que ingresa" : "Reservas que ingresan";
-                const ul = document.createElement("ul");
+                bloque.className = "haku-ingresos-listado-wrap";
+
+                const tituloBloque = document.createElement("div");
+                tituloBloque.className = "haku-ingresos-listado-titulo";
+                tituloBloque.textContent = filas.length === 1 ? "Reserva que ingresa" : "Reservas que ingresan";
+                bloque.appendChild(tituloBloque);
+
+                const lista = document.createElement("div");
+                lista.className = "haku-ingresos-lista";
+
                 filas
                     .slice()
                     .sort((a, b) => Number(a?.cabana_numero || 99) - Number(b?.cabana_numero || 99))
                     .forEach(fila => {
-                        const li = document.createElement("li");
-                        const cab = fila?.cabana_numero ? `CAB ${fila.cabana_numero}` : "CAB —";
-                        const titular = fila?.titular_nombre || "Sin titular";
-                        const salida = fila?.fecha_salida ? ` · sale ${fechaVisible(fila.fecha_salida)}` : "";
-                        li.textContent = `${cab} · ${titular}${salida} · ${estadoVisible(fila)}`;
-                        ul.appendChild(li);
+                        const item = document.createElement("div");
+                        item.className = "haku-ingresos-item";
+
+                        const cab = document.createElement("span");
+                        cab.className = "haku-ingresos-cab";
+                        cab.textContent = fila?.cabana_numero ? `CAB ${fila.cabana_numero}` : "CAB —";
+
+                        const main = document.createElement("div");
+                        main.className = "haku-ingresos-main";
+                        const titular = document.createElement("div");
+                        titular.className = "haku-ingresos-titular";
+                        titular.textContent = fila?.titular_nombre || "Sin titular";
+                        const meta = document.createElement("div");
+                        meta.className = "haku-ingresos-meta";
+                        meta.textContent = fila?.fecha_salida
+                            ? `Salida ${fechaVisible(fila.fecha_salida)}`
+                            : "Sin fecha de salida";
+                        main.append(titular, meta);
+
+                        const estado = document.createElement("span");
+                        estado.className = "haku-ingresos-estado";
+                        estado.textContent = estadoVisible(fila);
+
+                        item.append(cab, main, estado);
+                        lista.appendChild(item);
                     });
-                bloque.append(strong, ul);
-                card.append(bloque);
+
+                bloque.appendChild(lista);
+                card.appendChild(bloque);
             }
 
             if (descartadas > 0) {
-                const nota = document.createElement("p");
-                nota.className = "haiku-asistente-preview-resumen";
+                const nota = document.createElement("div");
+                nota.className = "haku-ingresos-aviso";
                 nota.textContent = `${descartadas} registro${descartadas === 1 ? "" : "s"} cancelado${descartadas === 1 ? "" : "s"}/No Show se omitió${descartadas === 1 ? "" : "eron"} del conteo.`;
-                card.append(nota);
+                card.appendChild(nota);
             }
 
             const pie = document.createElement("div");
-            pie.className = "haiku-asistente-preview-nota";
+            pie.className = "haku-ingresos-pie";
             pie.textContent = "Sólo lectura · esta consulta no modificó ninguna reserva.";
             card.append(pie);
 
