@@ -293,8 +293,162 @@
         });
     }
 
+    // Consulta anual por uno o varios titulares. Se maneja aquí antes del
+    // intérprete general porque éste limita los intervalos amplios por seguridad.
+    // Esta ruta es estrictamente de sólo lectura y sólo recorre las 12 hojas
+    // mensuales del año pedido.
+    let consultaAnualOcupada = false;
+
+    function extraerConsultaAnualTitulares(texto) {
+        const raw = String(texto || "").trim();
+        const normal = normalizarBase(raw);
+        if (!/\blibro\b/.test(normal) || !/\breservas?\b/.test(normal)) return null;
+        if (/\b(?:compara|comparar|proyecto h|supabase|agrega|agregar|incorpora|incorporar|actualiza|actualizar|registra|registrar)\b/.test(normal)) return null;
+
+        const year = Number(normal.match(/\b(?:dentro\s+del|durante\s+el|en\s+el|todo\s+el|del)?\s*ano\s+(20\d{2})\b/)?.[1]);
+        if (!Number.isInteger(year)) return null;
+
+        const tramo = raw.match(/\ba\s+nombre\s+de\s+(.+?)(?=\s+(?:dentro\s+del|durante\s+el|en\s+el|todo\s+el|del)\s+a[nñ]o\s+20\d{2}\b|[.;]|$)/iu)?.[1]?.trim();
+        if (!tramo) return null;
+
+        const nombres = tramo
+            .split(/\s+(?:y|e)\s+|\s*,\s*/iu)
+            .map(x => x.trim())
+            .filter(Boolean)
+            .filter(esNombrePersonaLibro);
+        if (!nombres.length) return null;
+
+        return { year, nombres };
+    }
+
+    function hojaPerteneceAno(nombreHoja, year) {
+        const n = normalizarBase(nombreHoja).replace(/\s/g, "");
+        const yy = String(year).slice(-2);
+        return /^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\d{2}$/.test(n) && n.endsWith(yy);
+    }
+
+    function coincideTitularAnual(titular, nombres) {
+        const t = normalizarBase(titular);
+        return nombres.some(nombre => {
+            const n = normalizarBase(nombre);
+            return (typeof base.mismaPersona === "function" && base.mismaPersona(titular, nombre)) || t === n || t.includes(n);
+        });
+    }
+
+    function mensajeAnual(tipo, texto) {
+        const wrap = root.document?.getElementById("haiku-asistente-mensajes");
+        if (!wrap) return null;
+        const el = root.document.createElement("div");
+        el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`;
+        el.dataset.haikuLibroRespuesta = "1";
+        el.textContent = texto;
+        wrap.append(el);
+        return el;
+    }
+
+    function textoResultadoAnual(consulta, reservas, hojas) {
+        const inicio = `${consulta.year}-01-01`;
+        const fin = `${consulta.year}-12-31`;
+        const lineas = [
+            `LIBRO · CONSULTA ANUAL · ${inicio} al ${fin}`,
+            `Titulares buscados: ${consulta.nombres.join(" · ")}.`,
+            `Revisé ${hojas.length} hoja${hojas.length === 1 ? "" : "s"} mensual${hojas.length === 1 ? "" : "es"} y encontré ${reservas.length} reserva${reservas.length === 1 ? "" : "s"}.`
+        ];
+
+        for (const nombre of consulta.nombres) {
+            const propias = reservas.filter(r => coincideTitularAnual(r.titular, [nombre]));
+            lineas.push(`\n${nombre} · ${propias.length} reserva${propias.length === 1 ? "" : "s"}`);
+            if (!propias.length) {
+                lineas.push("• No encontré reservas con ese titular en el año indicado.");
+                continue;
+            }
+            for (const r of propias) {
+                const tipo = r.tipo_estadia === "full_day" ? "Full Day" : `${r.noches ?? "?"} noche${r.noches === 1 ? "" : "s"}`;
+                lineas.push(`• CAB ${r.cabana} · ${r.titular} · ${r.fecha_checkin} → ${r.fecha_checkout} · ${tipo}`);
+            }
+        }
+        lineas.push("\nSólo lectura: esta consulta no modificó el Libro ni Proyecto H.");
+        return lineas.join("\n");
+    }
+
+    async function ejecutarConsultaAnual(texto, consulta) {
+        consultaAnualOcupada = true;
+        const campo = root.document?.getElementById("haiku-asistente-texto");
+        const boton = root.document?.getElementById("haiku-asistente-enviar");
+        if (campo) {
+            campo.disabled = true;
+            campo.value = "";
+        }
+        if (boton) boton.disabled = true;
+        mensajeAnual("usuario", texto);
+        const out = mensajeAnual("asistente", "Revisando enero a diciembre del año indicado…");
+
+        try {
+            const libro = root.HAIKU_LIBRO_RESERVA_V1;
+            if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
+            await libro.listo();
+            const estado = libro.estado();
+            if (!estado?.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
+
+            const hojas = libro.listarHojas().filter(h => hojaPerteneceAno(h, consulta.year));
+            if (!hojas.length) throw new Error(`No encontré hojas mensuales correspondientes al año ${consulta.year}.`);
+
+            const reservas = [];
+            const vistos = new Set();
+            for (const hoja of hojas) {
+                const data = await libro.consultarHoja(hoja);
+                for (const reserva of Array.isArray(data?.reservas) ? data.reservas : []) {
+                    if (!coincideTitularAnual(reserva?.titular, consulta.nombres)) continue;
+                    const clave = `${reserva.id || ""}|${reserva.titular || ""}|${reserva.cabana || ""}|${reserva.fecha_checkin || ""}|${reserva.fecha_checkout || ""}`;
+                    if (vistos.has(clave)) continue;
+                    vistos.add(clave);
+                    reservas.push(reserva);
+                }
+            }
+            reservas.sort((a, b) => String(a.fecha_checkin || "").localeCompare(String(b.fecha_checkin || "")) || Number(a.cabana || 0) - Number(b.cabana || 0));
+            if (out) out.textContent = textoResultadoAnual(consulta, reservas, hojas);
+        } catch (error) {
+            if (out) out.textContent = error?.message || "No pude completar la consulta anual del Libro.";
+        } finally {
+            consultaAnualOcupada = false;
+            if (campo) {
+                campo.disabled = false;
+                campo.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            if (boton) boton.disabled = false;
+            out?.scrollIntoView?.({ block: "nearest" });
+        }
+    }
+
+    function interceptarConsultaAnual(event) {
+        const target = event.type === "click"
+            ? event.target?.closest?.("#haiku-asistente-enviar")
+            : event.target?.id === "haiku-asistente-texto" && (event.ctrlKey || event.metaKey) && event.key === "Enter";
+        if (!target) return;
+        const campo = root.document?.getElementById("haiku-asistente-texto");
+        const texto = campo?.value?.trim() || "";
+        const consulta = extraerConsultaAnualTitulares(texto);
+        if (!consulta) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (consultaAnualOcupada) return;
+        if (root.document?.querySelector("#haiku-asistente-adjuntos .haiku-asistente-adjunto")) {
+            mensajeAnual("asistente", "Para consultar el Libro, retira las capturas adjuntas. Usaré el XLSX cargado en Libro de Reserva.");
+            return;
+        }
+        ejecutarConsultaAnual(texto, consulta);
+    }
+
     instalarCompatibilidadPagos();
     if (!root.HAIKU_LIBRO_RESERVA_V1 && root.document?.readyState === "loading") {
         root.document.addEventListener("DOMContentLoaded", instalarCompatibilidadPagos, { once: true });
+    }
+
+    // Se registra antes de haiku-libro-consultas-v1.js para que las consultas
+    // anuales por titular no caigan en el límite general de 62 días.
+    if (root.addEventListener) {
+        root.addEventListener("click", interceptarConsultaAnual, true);
+        root.addEventListener("keydown", interceptarConsultaAnual, true);
     }
 })(typeof window !== "undefined" ? window : globalThis);
