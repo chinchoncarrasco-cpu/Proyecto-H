@@ -1,8 +1,10 @@
 // ========================================
-// HAKU · CONSULTA DE INGRESOS POR FECHA V1
-// Preguntas de solo lectura como:
-// "Haku cuantas reservas ingresan el jueves 17 de septiembre?"
-// Consulta Proyecto H directamente y no crea/modifica registros.
+// HAKU · OPERACIÓN POR FECHA V2
+// Consultas de solo lectura para ingresos, salidas y continuaciones.
+// Ejemplos:
+// - "Haku cuántas reservas ingresan el 17 de septiembre?"
+// - "Haku cuántas reservas salen el 17 de septiembre?"
+// - "Haku cuántas reservas continúan el 17 de septiembre?"
 // ========================================
 (() => {
     "use strict";
@@ -26,8 +28,32 @@
         diciembre: 12
     });
 
+    const CONFIG = Object.freeze({
+        ingresan: {
+            titulo: "Ingresos del día",
+            etiquetaUno: "Reserva que ingresa",
+            etiquetaVarios: "Reservas que ingresan",
+            resumenUno: "reserva ingresa",
+            resumenVarios: "reservas ingresan"
+        },
+        salen: {
+            titulo: "Salidas del día",
+            etiquetaUno: "Reserva que sale",
+            etiquetaVarios: "Reservas que salen",
+            resumenUno: "reserva sale",
+            resumenVarios: "reservas salen"
+        },
+        continuan: {
+            titulo: "Continúan en estadía",
+            etiquetaUno: "Reserva que continúa",
+            etiquetaVarios: "Reservas que continúan",
+            resumenUno: "reserva continúa",
+            resumenVarios: "reservas continúan"
+        }
+    });
+
     function instalar() {
-        if (window.HAIKU_ASISTENTE_CONSULTA_INGRESOS_V1) return true;
+        if (window.HAIKU_ASISTENTE_CONSULTA_OPERACION_FECHA_V1) return true;
 
         const cliente = window.haikuSupabase;
         const campo = document.getElementById("haiku-asistente-texto");
@@ -35,20 +61,21 @@
         const mensajes = document.getElementById("haiku-asistente-mensajes");
         const adjuntosWrap = document.getElementById("haiku-asistente-adjuntos");
 
-        // El panel arma Haku de forma dinámica. Si aún no existe, el bootstrap
-        // permanece esperando sólo hasta que aparezca el asistente.
         if (!cliente || !campo || !enviar || !mensajes) return false;
 
         let ocupado = false;
 
         function instalarEstilos() {
-            if (document.getElementById("haku-ingresos-fecha-estilos-v1")) return;
+            if (document.getElementById("haku-operacion-fecha-estilos-v2")) return;
 
             const style = document.createElement("style");
-            style.id = "haku-ingresos-fecha-estilos-v1";
+            style.id = "haku-operacion-fecha-estilos-v2";
             style.textContent = `
-                .haku-ingresos-card {
-                    border: 1px solid #c9ddd0;
+                .haku-operacion-card {
+                    --haku-op-accent: #1f7650;
+                    --haku-op-soft: #edf7f0;
+                    --haku-op-border: #c9ddd0;
+                    border: 1px solid var(--haku-op-border);
                     border-radius: 16px;
                     background: linear-gradient(180deg, #fbfdfb 0%, #f7faf8 100%);
                     padding: 14px;
@@ -58,7 +85,19 @@
                     box-shadow: 0 5px 16px rgba(28, 69, 47, .055);
                 }
 
-                .haku-ingresos-head {
+                .haku-operacion-card--salen {
+                    --haku-op-accent: #a24f46;
+                    --haku-op-soft: #fbefed;
+                    --haku-op-border: #e4c9c5;
+                }
+
+                .haku-operacion-card--continuan {
+                    --haku-op-accent: #397082;
+                    --haku-op-soft: #edf5f7;
+                    --haku-op-border: #c9dde2;
+                }
+
+                .haku-operacion-head {
                     display: flex;
                     align-items: flex-start;
                     justify-content: space-between;
@@ -67,17 +106,17 @@
                     border-bottom: 1px solid #deebe2;
                 }
 
-                .haku-ingresos-kicker {
+                .haku-operacion-kicker {
                     margin: 0 0 2px;
                     font-size: 10px;
                     line-height: 1.2;
                     font-weight: 800;
                     letter-spacing: .09em;
                     text-transform: uppercase;
-                    color: #397352;
+                    color: var(--haku-op-accent);
                 }
 
-                .haku-ingresos-title {
+                .haku-operacion-title {
                     margin: 0;
                     font-size: 19px;
                     line-height: 1.15;
@@ -85,23 +124,23 @@
                     color: #17251c;
                 }
 
-                .haku-ingresos-fecha {
+                .haku-operacion-fecha {
                     flex: 0 0 auto;
                     display: inline-flex;
                     align-items: center;
                     min-height: 26px;
                     padding: 4px 9px;
-                    border: 1px solid #d3e5d9;
+                    border: 1px solid var(--haku-op-border);
                     border-radius: 999px;
-                    background: #edf7f0;
-                    color: #2e6346;
+                    background: var(--haku-op-soft);
+                    color: var(--haku-op-accent);
                     font-size: 11px;
                     line-height: 1;
                     font-weight: 800;
                     white-space: nowrap;
                 }
 
-                .haku-ingresos-resumen {
+                .haku-operacion-resumen {
                     display: flex;
                     align-items: center;
                     gap: 9px;
@@ -109,40 +148,40 @@
                     padding: 8px 11px;
                     border: 1px solid #dbe8df;
                     border-radius: 12px;
-                    background: rgba(255,255,255,.82);
+                    background: rgba(255,255,255,.84);
                     color: #344039;
                     font-size: 12px;
                 }
 
-                .haku-ingresos-cantidad {
+                .haku-operacion-cantidad {
                     flex: 0 0 auto;
                     display: grid;
                     place-items: center;
                     width: 28px;
                     height: 28px;
                     border-radius: 9px;
-                    background: #1f7650;
+                    background: var(--haku-op-accent);
                     color: #fff;
                     font-size: 13px;
                     font-weight: 900;
-                    box-shadow: 0 3px 8px rgba(31, 118, 80, .16);
+                    box-shadow: 0 3px 8px rgba(31, 80, 55, .14);
                 }
 
-                .haku-ingresos-listado-wrap {
+                .haku-operacion-listado-wrap {
                     display: flex;
                     flex-direction: column;
                     gap: 6px;
                     min-height: 0;
                 }
 
-                .haku-ingresos-listado-titulo {
+                .haku-operacion-listado-titulo {
                     margin: 0 1px;
                     font-size: 11px;
                     font-weight: 800;
                     color: #3f5848;
                 }
 
-                .haku-ingresos-lista {
+                .haku-operacion-lista {
                     display: flex;
                     flex-direction: column;
                     gap: 5px;
@@ -152,7 +191,7 @@
                     scrollbar-width: thin;
                 }
 
-                .haku-ingresos-item {
+                .haku-operacion-item {
                     display: grid;
                     grid-template-columns: auto minmax(0, 1fr) auto;
                     align-items: center;
@@ -164,7 +203,7 @@
                     background: #fff;
                 }
 
-                .haku-ingresos-cab {
+                .haku-operacion-cab {
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
@@ -172,21 +211,21 @@
                     min-height: 25px;
                     padding: 3px 7px;
                     border-radius: 8px;
-                    background: #edf7f0;
-                    color: #2d6847;
+                    background: var(--haku-op-soft);
+                    color: var(--haku-op-accent);
                     font-size: 10px;
                     font-weight: 900;
                     white-space: nowrap;
                 }
 
-                .haku-ingresos-main {
+                .haku-operacion-main {
                     min-width: 0;
                     display: flex;
                     flex-direction: column;
                     gap: 1px;
                 }
 
-                .haku-ingresos-titular {
+                .haku-operacion-titular {
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
@@ -196,7 +235,7 @@
                     color: #222f27;
                 }
 
-                .haku-ingresos-meta {
+                .haku-operacion-meta {
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
@@ -205,7 +244,7 @@
                     color: #78847b;
                 }
 
-                .haku-ingresos-estado {
+                .haku-operacion-estado {
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
@@ -213,24 +252,23 @@
                     padding: 3px 8px;
                     border: 1px solid #d7e7dc;
                     border-radius: 999px;
-                    background: #f0f8f2;
-                    color: #397052;
+                    background: #f3f7f4;
+                    color: #476254;
                     font-size: 9px;
                     font-weight: 800;
                     white-space: nowrap;
                 }
 
-                .haku-ingresos-aviso {
-                    padding: 7px 9px;
-                    border: 1px solid #ecdcb8;
+                .haku-operacion-vacio {
+                    padding: 8px 10px;
+                    border: 1px dashed var(--haku-op-border);
                     border-radius: 10px;
-                    background: #fff8e9;
-                    color: #765f2c;
-                    font-size: 10px;
-                    line-height: 1.35;
+                    background: var(--haku-op-soft);
+                    color: #627068;
+                    font-size: 11px;
                 }
 
-                .haku-ingresos-pie {
+                .haku-operacion-pie {
                     padding-top: 7px;
                     border-top: 1px solid #e0e9e3;
                     color: #758078;
@@ -239,13 +277,13 @@
                 }
 
                 @media (max-width: 620px) {
-                    .haku-ingresos-card { padding: 11px; gap: 8px; }
-                    .haku-ingresos-title { font-size: 17px; }
-                    .haku-ingresos-item {
+                    .haku-operacion-card { padding: 11px; gap: 8px; }
+                    .haku-operacion-title { font-size: 17px; }
+                    .haku-operacion-item {
                         grid-template-columns: auto minmax(0, 1fr);
                         gap: 7px;
                     }
-                    .haku-ingresos-estado {
+                    .haku-operacion-estado {
                         grid-column: 2;
                         justify-self: start;
                     }
@@ -324,37 +362,34 @@
             return null;
         }
 
-        function esConsultaIngresos(valor) {
+        function tipoConsulta(valor) {
             const t = normalizar(valor);
-            if (!t) return false;
+            if (!t) return null;
 
-            // Las órdenes de escritura siguen siendo responsabilidad de los
-            // módulos de cambio de estado / reservas.
-            if (/\b(?:marca|marcar|cambia|cambiar|pon|poner|pasa|pasar|crea|crear|agrega|agregar|registra|registrar|elimina|eliminar|borra|borrar)\b/.test(t)) return false;
+            // No interceptar instrucciones que pretenden escribir o cambiar datos.
+            if (/\b(?:marca|marcar|cambia|cambiar|pon|poner|pasa|pasar|crea|crear|agrega|agregar|registra|registrar|elimina|eliminar|borra|borrar)\b/.test(t)) return null;
 
             const pregunta = /\b(?:cuant[ao]s?|que|cuales|quienes|lista|listar|muestra|mostrar|dime|revisa|revisar|consulta|consultar)\b/.test(t);
             const reserva = /\b(?:reservas?|huespedes?|cabanas?)\b/.test(t);
-            const ingreso = /\b(?:ingresa|ingresan|ingresara|ingresaran|ingreso|ingresos|llega|llegan|llegada|llegadas|check[ -]?in|check[ -]?ins)\b/.test(t);
 
-            return ingreso && (reserva || pregunta);
-        }
+            let tipo = null;
+            if (/\b(?:continua|continuan|continuara|continuaran|siguen|seguiran|se\s+quedan|permanecen)\b/.test(t)) {
+                tipo = "continuan";
+            } else if (/\b(?:sale|salen|salida|salidas|egresa|egresan|checkout|check[ -]?out|checkouts|check[ -]?outs)\b/.test(t)) {
+                tipo = "salen";
+            } else if (/\b(?:ingresa|ingresan|ingresara|ingresaran|ingreso|ingresos|llega|llegan|llegada|llegadas|check[ -]?in|check[ -]?ins)\b/.test(t)) {
+                tipo = "ingresan";
+            }
 
-        function estadoNormal(fila) {
-            return normalizar(`${fila?.estado_reserva || ""} ${fila?.estado_estadia || ""}`);
-        }
-
-        function esIngresoActivo(fila) {
-            const estado = estadoNormal(fila);
-            return !/\bcancelad[ao]s?\b|\bno[ _-]?show\b|\bcancelled\b|\bcanceled\b/.test(estado);
+            return tipo && (reserva || pregunta) ? tipo : null;
         }
 
         function estadoVisible(fila) {
             const e = normalizar(fila?.estado_estadia || fila?.estado_reserva || "");
-            if (/hospedad/.test(e)) return "Hospedado";
+            if (/checked.?out|checkout/.test(e) || fila?.checkout_realizado_en) return "Checked Out";
+            if (/hospedad/.test(e) || fila?.checkin_realizado_en) return "Hospedado";
             if (/confirm/.test(e)) return "Confirmada";
             if (/pendiente/.test(e)) return "Pendiente";
-            if (/checked.?out|checkout/.test(e)) return "Checked Out";
-            if (/full.?day|fullday/.test(e)) return "Full Day";
             return String(fila?.estado_estadia || fila?.estado_reserva || "Reserva");
         }
 
@@ -378,81 +413,99 @@
             });
         }
 
-        async function buscar(fecha) {
-            const { data, error } = await cliente.rpc("haiku_buscar_checkins_fecha_asistente", { p_fecha: fecha });
+        async function buscar(fecha, tipo) {
+            const { data, error } = await cliente.rpc("haiku_buscar_operacion_fecha_asistente", {
+                p_fecha: fecha,
+                p_tipo: tipo
+            });
             if (error) throw error;
             return Array.isArray(data) ? data : [];
         }
 
-        function renderizar(fecha, filas, descartadas) {
+        function metaFila(tipo, fila) {
+            if (tipo === "salen") {
+                return fila?.fecha_ingreso
+                    ? `Ingreso ${fechaVisible(fila.fecha_ingreso)}`
+                    : "Sin fecha de ingreso";
+            }
+            if (tipo === "continuan") {
+                const ingreso = fila?.fecha_ingreso ? `Ingreso ${fechaVisible(fila.fecha_ingreso)}` : "Ingreso —";
+                const salida = fila?.fecha_salida ? `salida ${fechaVisible(fila.fecha_salida)}` : "salida —";
+                return `${ingreso} · ${salida}`;
+            }
+            return fila?.fecha_salida
+                ? `Salida ${fechaVisible(fila.fecha_salida)}`
+                : "Sin fecha de salida";
+        }
+
+        function renderizar(fecha, tipo, filas) {
+            const config = CONFIG[tipo] || CONFIG.ingresan;
             const card = document.createElement("div");
-            card.className = "haiku-asistente-preview haku-ingresos-card";
+            card.className = `haiku-asistente-preview haku-operacion-card haku-operacion-card--${tipo}`;
 
             const cabecera = document.createElement("div");
-            cabecera.className = "haku-ingresos-head";
+            cabecera.className = "haku-operacion-head";
 
             const izq = document.createElement("div");
             const etiqueta = document.createElement("div");
-            etiqueta.className = "haku-ingresos-kicker";
+            etiqueta.className = "haku-operacion-kicker";
             etiqueta.textContent = "Consulta · sólo lectura";
             const titulo = document.createElement("h3");
-            titulo.className = "haku-ingresos-title";
-            titulo.textContent = "Ingresos del día";
+            titulo.className = "haku-operacion-title";
+            titulo.textContent = config.titulo;
             izq.append(etiqueta, titulo);
 
             const fechaChip = document.createElement("span");
-            fechaChip.className = "haku-ingresos-fecha";
+            fechaChip.className = "haku-operacion-fecha";
             fechaChip.textContent = fechaVisible(fecha);
             cabecera.append(izq, fechaChip);
-            card.append(cabecera);
+            card.appendChild(cabecera);
 
             const resumen = document.createElement("div");
-            resumen.className = "haku-ingresos-resumen";
+            resumen.className = "haku-operacion-resumen";
             const cantidad = document.createElement("span");
-            cantidad.className = "haku-ingresos-cantidad";
+            cantidad.className = "haku-operacion-cantidad";
             cantidad.textContent = String(filas.length);
             const resumenTexto = document.createElement("span");
-            resumenTexto.textContent = `${filas.length === 1 ? "reserva ingresa" : "reservas ingresan"} el ${fechaVisible(fecha)}.`;
+            resumenTexto.textContent = `${filas.length === 1 ? config.resumenUno : config.resumenVarios} el ${fechaVisible(fecha)}.`;
             resumen.append(cantidad, resumenTexto);
-            card.append(resumen);
+            card.appendChild(resumen);
 
             if (filas.length) {
                 const bloque = document.createElement("div");
-                bloque.className = "haku-ingresos-listado-wrap";
+                bloque.className = "haku-operacion-listado-wrap";
 
                 const tituloBloque = document.createElement("div");
-                tituloBloque.className = "haku-ingresos-listado-titulo";
-                tituloBloque.textContent = filas.length === 1 ? "Reserva que ingresa" : "Reservas que ingresan";
+                tituloBloque.className = "haku-operacion-listado-titulo";
+                tituloBloque.textContent = filas.length === 1 ? config.etiquetaUno : config.etiquetaVarios;
                 bloque.appendChild(tituloBloque);
 
                 const lista = document.createElement("div");
-                lista.className = "haku-ingresos-lista";
+                lista.className = "haku-operacion-lista";
 
                 filas
                     .slice()
                     .sort((a, b) => Number(a?.cabana_numero || 99) - Number(b?.cabana_numero || 99))
                     .forEach(fila => {
                         const item = document.createElement("div");
-                        item.className = "haku-ingresos-item";
+                        item.className = "haku-operacion-item";
 
                         const cab = document.createElement("span");
-                        cab.className = "haku-ingresos-cab";
+                        cab.className = "haku-operacion-cab";
                         cab.textContent = fila?.cabana_numero ? `CAB ${fila.cabana_numero}` : "CAB —";
 
                         const main = document.createElement("div");
-                        main.className = "haku-ingresos-main";
+                        main.className = "haku-operacion-main";
                         const titular = document.createElement("div");
-                        titular.className = "haku-ingresos-titular";
+                        titular.className = "haku-operacion-titular";
                         titular.textContent = fila?.titular_nombre || "Sin titular";
                         const meta = document.createElement("div");
-                        meta.className = "haku-ingresos-meta";
-                        meta.textContent = fila?.fecha_salida
-                            ? `Salida ${fechaVisible(fila.fecha_salida)}`
-                            : "Sin fecha de salida";
+                        meta.className = "haku-operacion-meta";
+                        meta.textContent = metaFila(tipo, fila);
                         main.append(titular, meta);
 
                         const estado = document.createElement("span");
-                        estado.className = "haku-ingresos-estado";
+                        estado.className = "haku-operacion-estado";
                         estado.textContent = estadoVisible(fila);
 
                         item.append(cab, main, estado);
@@ -461,19 +514,17 @@
 
                 bloque.appendChild(lista);
                 card.appendChild(bloque);
-            }
-
-            if (descartadas > 0) {
-                const nota = document.createElement("div");
-                nota.className = "haku-ingresos-aviso";
-                nota.textContent = `${descartadas} registro${descartadas === 1 ? "" : "s"} cancelado${descartadas === 1 ? "" : "s"}/No Show se omitió${descartadas === 1 ? "" : "eron"} del conteo.`;
-                card.appendChild(nota);
+            } else {
+                const vacio = document.createElement("div");
+                vacio.className = "haku-operacion-vacio";
+                vacio.textContent = `No encontré reservas que ${tipo === "salen" ? "salgan" : tipo === "continuan" ? "continúen" : "ingresen"} en esa fecha.`;
+                card.appendChild(vacio);
             }
 
             const pie = document.createElement("div");
-            pie.className = "haku-ingresos-pie";
+            pie.className = "haku-operacion-pie";
             pie.textContent = "Sólo lectura · esta consulta no modificó ninguna reserva.";
-            card.append(pie);
+            card.appendChild(pie);
 
             mensajes.appendChild(card);
             requestAnimationFrame(() => { mensajes.scrollTop = mensajes.scrollHeight; });
@@ -481,6 +532,9 @@
 
         async function procesar(textoOriginal) {
             if (ocupado) return;
+
+            const tipo = tipoConsulta(textoOriginal);
+            if (!tipo) return;
 
             const fecha = fechaDesdeTexto(textoOriginal);
             campo.value = "";
@@ -493,15 +547,16 @@
             }
 
             ocupado = true;
-            const espera = agregarMensaje("asistente", `Buscando ingresos del ${fechaVisible(fecha)}…`);
+            const config = CONFIG[tipo] || CONFIG.ingresan;
+            const espera = agregarMensaje("asistente", `Revisando ${config.titulo.toLowerCase()} del ${fechaVisible(fecha)}…`);
+
             try {
-                const encontradas = await buscar(fecha);
-                const activas = encontradas.filter(esIngresoActivo);
+                const filas = await buscar(fecha, tipo);
                 espera.remove();
-                renderizar(fecha, activas, encontradas.length - activas.length);
+                renderizar(fecha, tipo, filas);
             } catch (error) {
-                console.error("HAIKU · Consulta de ingresos por fecha:", error);
-                espera.textContent = error?.message || "No pude consultar los ingresos de esa fecha.";
+                console.error("HAIKU · Consulta operativa por fecha:", error);
+                espera.textContent = error?.message || "No pude consultar las reservas de esa fecha.";
             } finally {
                 ocupado = false;
                 campo.dispatchEvent(new Event("input", { bubbles: true }));
@@ -510,7 +565,7 @@
 
         function interceptarClick(evento) {
             const texto = String(campo.value || "").trim();
-            if (!esConsultaIngresos(texto)) return;
+            if (!tipoConsulta(texto)) return;
             evento.preventDefault();
             evento.stopImmediatePropagation();
             procesar(texto);
@@ -519,7 +574,7 @@
         function interceptarTeclado(evento) {
             if (evento.key !== "Enter" || evento.shiftKey) return;
             const texto = String(campo.value || "").trim();
-            if (!esConsultaIngresos(texto)) return;
+            if (!tipoConsulta(texto)) return;
             evento.preventDefault();
             evento.stopImmediatePropagation();
             procesar(texto);
@@ -528,20 +583,24 @@
         enviar.addEventListener("click", interceptarClick, true);
         campo.addEventListener("keydown", interceptarTeclado, true);
 
-        window.HAIKU_ASISTENTE_CONSULTA_INGRESOS_V1 = Object.freeze({
-            esConsultaIngresos,
+        const api = Object.freeze({
+            tipoConsulta,
             fechaDesdeTexto,
-            procesar
+            procesar,
+            esConsultaIngresos: valor => tipoConsulta(valor) === "ingresan",
+            esConsultaSalidas: valor => tipoConsulta(valor) === "salen",
+            esConsultaContinuaciones: valor => tipoConsulta(valor) === "continuan"
         });
 
-        console.info("HAIKU · Consulta de ingresos por fecha V1 preparada.");
+        window.HAIKU_ASISTENTE_CONSULTA_OPERACION_FECHA_V1 = api;
+        window.HAIKU_ASISTENTE_CONSULTA_INGRESOS_V1 = api;
+
+        console.info("HAIKU · Consulta operativa por fecha V2 preparada.");
         return true;
     }
 
     if (instalar()) return;
 
-    // Haku puede crearse después de este archivo. Esperamos su aparición sin
-    // polling y desconectamos el observer inmediatamente al instalar.
     const observador = new MutationObserver(() => {
         if (!instalar()) return;
         observador.disconnect();
