@@ -55,6 +55,33 @@ test('safe new payment, existing payment and identifier attached elsewhere',asyn
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'r1'}])).pagosDetalle[0].estado,'en_sistema');
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'other'}])).pagosDetalle[0].estado,'revisar');
 });
+test('September existing vouchers stored with legacy authorization in pagos.bove are never new seguros',async()=>{
+ const casos=[
+  ['Ignacio Figueroa',123896,'000243','101502','2026-09-05'],
+  ['Ignacio Figueroa',23539,'000245','129732','2026-09-05'],
+  ['Aneti Dupont',147794,'000234','719223','2026-09-02'],
+  ['Macarena Hurtado',20000,'000242','750453','2026-09-04']
+ ];
+ for(const [titular,monto,folio,bovtar,fecha] of casos){
+  const p=pay({codigo_autorizacion:null,monto,folio,bovtar,medio_pago:'credito',fecha_comprobante:fecha});
+  const r=book({titular,pagos:[p]});
+  const existente={id:'p-real',reserva_id:'r1',monto,moneda:'CLP',medio_pago:'tarjeta_credito',folio,bove:bovtar,
+   codigo_autorizacion:null,fecha_pago:fecha+'T16:00:00Z',datos_origen:{contexto:'asistente_pago_reserva_existente'}};
+  const c=await compare([r],[stay(r)],[existente]);
+  assert.equal(c.pagosDetalle[0].estado,'en_sistema',titular+' '+monto);
+  assert.equal(c.meta.pagos_faltantes,0,titular+' '+monto);
+ }
+});
+test('one-to-one historical transfer without persisted glosa is recognized by reservation amount medium and date',async()=>{
+ const p=pay({codigo_autorizacion:null,monto:180000,medio_pago:'transferencia',fecha_comprobante:'2026-09-02'});
+ const r=book({titular:'Maria Jose Montes',pagos:[p]});
+ const existente={id:'transfer-real',reserva_id:'r1',monto:180000,moneda:'CLP',medio_pago:'transferencia',
+  fecha_pago:'2026-09-02T01:31:43Z',referencia_externa:null,observaciones:null,datos_origen:{verificacion_migrada:true}};
+ const c=await compare([r],[stay(r)],[existente]);
+ assert.equal(c.pagosDetalle[0].estado,'en_sistema');
+ assert.equal(c.pagosDetalle[0].coincidencia_debil,true);
+ assert.equal(c.meta.pagos_faltantes,0);
+});
 test('conflicting repeated book identifier, weak identifiers, penalties and missing reservation payments require review',async()=>{
  const c=await compare([book({pagos:[pay(),pay({monto:200000,origen:{hoja:'Sep26',celda:'Z30'}})]})],[stay()]);assert.ok(c.pagosDetalle.every(p=>p.estado==='revisar'));
  for(const p of [pay({codigo_autorizacion:null}),pay({tipo_movimiento:'penalidad'}),pay({monto:null})]) assert.equal((await compare([book({pagos:[p]})],[stay()])).pagosDetalle[0].estado,'revisar');
@@ -336,6 +363,29 @@ test('Diosnara: one exact weak transfer already in Proyecto H is omitted, ambigu
  assert.ok(unique.items.some(i=>i.categoria==='omitidos'&&/transferencia ya existe/i.test(i.texto)));
  const ambiguous=await prepare([r],[stay(r)],[existing,{...existing,id:'p2'}]);
  assert.ok(ambiguous.items.some(i=>i.categoria==='dudosos'));
+});
+test('Maria Loreto and Maria Jose keep the existing transfer out and only prepare the identified debit',async()=>{
+ const casos=[
+  {titular:'María Loreto González',monto:160000,debito:{codigo_autorizacion:null,folio:'000240',bovtar:'000654'}},
+  {titular:'Maria Jose Montes',monto:180000,debito:{codigo_autorizacion:'DEBITO-MJ-1',folio:null,bovtar:null}}
+ ];
+ for(const caso of casos){
+  const transferencia=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:caso.monto,
+   fecha_comprobante:'2026-09-02',texto_original:'Transferencia '+caso.titular+' '+caso.monto});
+  const debito=readyPay({...caso.debito,medio_pago:'debito',monto:caso.monto,fecha_comprobante:'2026-09-03',
+   origen:{hoja:'Sep26',celda:'D20'},texto_original:'Débito '+caso.titular+' '+caso.monto});
+  const r=readyBook({titular:caso.titular,pagos:[transferencia,debito]});
+  const existente={id:'transfer-real',reserva_id:'r1',monto:caso.monto,moneda:'CLP',medio_pago:'transferencia',
+   fecha_pago:'2026-09-02T01:00:00Z',referencia_externa:null,observaciones:null,datos_origen:{verificacion_migrada:true}};
+  const db=client([stay(r)],[existente]),comparacion=await Q.compararSistema([r],db,q);
+  assert.equal(comparacion.pagosDetalle.filter(x=>x.estado==='en_sistema').length,1,caso.titular);
+  assert.equal(comparacion.pagosDetalle.filter(x=>x.estado==='nuevo_seguro').length,1,caso.titular);
+  const texto=Q.respuesta({q:{...q,comparar:true},comparacion});
+  assert.match(texto,/Tarjeta Débito/);assert.doesNotMatch(texto,/Transferencia · alojamiento · \$(?:160\.000|180\.000) CLP/);
+  const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+  assert.equal(plan.items.filter(i=>i.categoria==='omitidos'&&/ya existe/i.test(i.texto)).length,1,caso.titular);
+  assert.equal(plan.items.filter(i=>i.categoria==='pagos').length,1,caso.titular);
+ }
 });
 test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
  const folio=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});

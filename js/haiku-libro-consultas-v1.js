@@ -199,6 +199,23 @@
         return String(v || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     }
 
+    function medioLibro(p) {
+        return ({
+            transferencia: 'transferencia', debito: 'tarjeta_debito', credito: 'tarjeta_credito',
+            webpay_debito: 'webpay_debito', webpay_credito: 'webpay_credito', tarjeta_debito: 'tarjeta_debito',
+            tarjeta_credito: 'tarjeta_credito', efectivo: 'efectivo'
+        })[p?.medio_pago];
+    }
+
+    function medioSistema(p) {
+        const medio = String(p?.medio_pago || '').toLowerCase().replace(/[\s-]+/g, '_');
+        return ({
+            transferencia: 'transferencia', debito: 'tarjeta_debito', credito: 'tarjeta_credito',
+            webpay_debito: 'webpay_debito', webpay_credito: 'webpay_credito', tarjeta_debito: 'tarjeta_debito',
+            tarjeta_credito: 'tarjeta_credito', efectivo: 'efectivo'
+        })[medio] || medio || null;
+    }
+
     function documentoCanon(v) {
         return normalizarId(v).replace(/^0+/, "");
     }
@@ -373,9 +390,19 @@
         return Boolean(normalizarId(p?.codigo_autorizacion) || (normalizarId(p?.folio) && normalizarId(p?.bovtar)));
     }
 
+    function bovtarSistemaCoincide(p, x) {
+        const esperado = normalizarId(p?.bovtar);
+        if (!esperado) return false;
+        // Los pagos históricos guardaron la autorización/BOVTAR en `pagos.bove`.
+        // Sólo se usa ese campo junto con un Folio del Libro; un BOVE aislado
+        // continúa siendo administrativo y nunca identifica un pago.
+        return [x?.datos_origen?.bovtar, x?.datos_origen?.autorizacion, x?.bovtar, x?.bove]
+            .some(valor => normalizarId(valor) === esperado);
+    }
+
     function pagoCoincide(p, x) {
-        if (p.codigo_autorizacion && normalizarId(x.codigo_autorizacion) === normalizarId(p.codigo_autorizacion)) return true;
-        if (p.folio && p.bovtar && normalizarId(x.folio) === normalizarId(p.folio) && normalizarId(x.datos_origen?.bovtar) === normalizarId(p.bovtar)) return true;
+        if (normalizarId(p?.codigo_autorizacion) && normalizarId(x?.codigo_autorizacion) === normalizarId(p.codigo_autorizacion)) return true;
+        if (normalizarId(p?.folio) && normalizarId(p?.bovtar) && normalizarId(x?.folio) === normalizarId(p.folio) && bovtarSistemaCoincide(p, x)) return true;
         return false;
     }
 
@@ -387,6 +414,45 @@
         if (origenLibro && p.origen && source(origenLibro) === source(p.origen)) return true;
         const libro = S.normalizar(p.texto_original), sistema = S.normalizar(existente.referencia_externa || existente.observaciones);
         return Boolean(libro && sistema && libro.length >= 12 && libro === sistema);
+    }
+
+    function transferenciasDebilesExistentes(resultados, pagos) {
+        const grupos = new Map();
+        const asignadas = new Map();
+        for (const result of resultados) {
+            if (result.estado !== 'asociada') continue;
+            for (const p of result.libro.pagos || []) {
+                if (pagoTieneIdentificadorFuerte(p) || medioLibro(p) !== 'transferencia' ||
+                    !Number.isSafeInteger(Number(p.monto)) || !p.fecha_comprobante) continue;
+                const key = [result.sistema.reserva_id, Number(p.monto), String(p.fecha_comprobante).slice(0, 10), 'transferencia'].join('|');
+                if (!grupos.has(key)) grupos.set(key, []);
+                grupos.get(key).push({ p, reservaId: result.sistema.reserva_id });
+            }
+        }
+        for (const [key, libro] of grupos) {
+            const [reservaId, monto, fecha] = key.split('|');
+            const sistema = pagos.filter(p => p.reserva_id === reservaId && Number(p.monto) === Number(monto) &&
+                medioSistema(p) === 'transferencia' && String(p.fecha_pago || '').slice(0, 10) === fecha);
+            const usados = new Set();
+            for (const item of libro) {
+                const exactos = sistema.filter(p => !usados.has(p.id) && pagoDebilYaExiste(item.p, p, item.reservaId));
+                if (exactos.length === 1) {
+                    usados.add(exactos[0].id);
+                    asignadas.set(item.p, exactos[0]);
+                }
+            }
+            const restantesLibro = libro.filter(item => !asignadas.has(item.p));
+            const restantesSistema = sistema.filter(p => !usados.has(p.id) &&
+                !S.normalizar(p.referencia_externa || p.observaciones) &&
+                !(p.datos_origen?.origen_libro || p.datos_origen?.origen));
+            // Compatibilidad histórica: algunos pagos antiguos no conservaron
+            // glosa/origen. Sólo se aceptan si reserva+monto+medio+fecha permiten
+            // cubrir uno a uno todos los movimientos restantes del Libro.
+            if (restantesLibro.length && restantesSistema.length === restantesLibro.length) {
+                restantesLibro.forEach((item, indice) => asignadas.set(item.p, restantesSistema[indice]));
+            }
+        }
+        return asignadas;
     }
 
     async function compararSistema(reservas, cliente, q = {}) {
@@ -469,6 +535,7 @@
         // Global identifier check: a payment on another reservation is a conflict, never new.
         const pagos = await paginas(() => cliente.from("pagos")
             .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
+        const transferenciasExistentes = transferenciasDebilesExistentes(resultados, pagos);
         const servicios = [];
         for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
@@ -516,11 +583,17 @@
                         diferenciasPago.push("monto/moneda diferente");
                         result.diferencias.push("Monto/moneda diferente en un pago del Libro.");
                     }
-                    if (p.bove && String(x.bove || "") !== p.bove) {
-                        diferenciasPago.push("BOVE diferente");
-                        result.diferencias.push("BOVE diferente en un pago del Libro.");
+                    if (medioLibro(p) && medioSistema(x) && medioLibro(p) !== medioSistema(x)) {
+                        diferenciasPago.push("medio de pago diferente");
+                        result.diferencias.push("Medio diferente en un pago del Libro.");
+                    }
+                    if (p.fecha_comprobante && x.fecha_pago && String(x.fecha_pago).slice(0, 10) !== String(p.fecha_comprobante).slice(0, 10)) {
+                        diferenciasPago.push("fecha de pago diferente");
+                        result.diferencias.push("Fecha diferente en un pago del Libro.");
                     }
                     result.pagosComparacion.push({ estado: diferenciasPago.length ? "diferente" : "en_sistema", pago: p, sistema: x, reserva: r, diferencias: diferenciasPago });
+                } else if (transferenciasExistentes.has(p)) {
+                    result.pagosComparacion.push({ estado: "en_sistema", pago: p, sistema: transferenciasExistentes.get(p), reserva: r, coincidencia_debil: true, diferencias: [] });
                 } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad") {
                     result.pagosComparacion.push({ estado: "nuevo_seguro", pago: p, reserva: r });
                 } else {
@@ -582,9 +655,6 @@
     // y despues de una segunda revalidacion iniciada por el boton de confirmacion.
     const ESCRITURA_LIBRO = true;
     const CATEGORIAS_GUARDABLES = ['nuevas', 'estadias', 'pagos', 'actualizaciones'];
-    const medioLibro = p => ({ transferencia:'transferencia', debito:'tarjeta_debito', credito:'tarjeta_credito',
-        webpay_debito:'webpay_debito', webpay_credito:'webpay_credito', tarjeta_debito:'tarjeta_debito',
-        tarjeta_credito:'tarjeta_credito', efectivo:'efectivo' })[p.medio_pago];
     const estadoLibro = r => ['hospedada','checked_out'].includes(r.estado_operativo) ? r.estado_operativo :
         r.estado_confirmacion === 'confirmada_por_color' ? 'confirmada' : r.estado_confirmacion === 'pendiente_por_color' ? 'pendiente' :
         r.estado_operativo === 'sin_checkin' ? 'confirmada' : undefined;
@@ -823,6 +893,12 @@
             if (plan.items.some(i => i.id === id)) continue;
             const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
             const fuerte = pagoTieneIdentificadorFuerte(p);
+            if (x.estado === 'en_sistema' && x.sistema) {
+                add('omitidos', id, texto + (medioLibro(p) === 'transferencia' ?
+                    ' · La transferencia ya existe en Proyecto H y no se incorporará nuevamente.' :
+                    ' · El pago ya existe en Proyecto H y no se incorporará nuevamente.'));
+                continue;
+            }
             const coincidencias = fuerte ? snapshot.pagos.filter(v => pagoCoincide(p,v)) : [];
             const duplicado = coincidencias[0];
             if (duplicado) {
@@ -1067,6 +1143,18 @@
         return `${cab} · ${r.titular} · ${r.fecha_checkin} → ${r.fecha_checkout} · ${estadia}`;
     }
 
+    function descripcionPagoNuevoSeguro(item) {
+        const p = item.pago || {};
+        const medio = ({
+            transferencia: 'Transferencia', debito: 'Tarjeta Débito', credito: 'Tarjeta Crédito',
+            tarjeta_debito: 'Tarjeta Débito', tarjeta_credito: 'Tarjeta Crédito',
+            webpay_debito: 'WebPay Débito', webpay_credito: 'WebPay Crédito', efectivo: 'Efectivo'
+        })[p.medio_pago] || String(p.medio_pago || 'Medio sin precisar').replaceAll('_', ' ');
+        const identificador = normalizarId(p.codigo_autorizacion) ? `CodAut ${p.codigo_autorizacion}` :
+            normalizarId(p.folio) && normalizarId(p.bovtar) ? `Folio ${p.folio} · Autorización ${p.bovtar}` : 'Sin identificador fuerte';
+        return `${item.reserva.titular} · ${medio} · ${p.tipo_movimiento} · ${money(p.monto)} · ${identificador}`;
+    }
+
     function respuestaComparacion(result) {
         const comp = result.comparacion;
         const meta = comp.meta || {};
@@ -1089,7 +1177,7 @@
         } else lines.push("\nNo encontré reservas claramente faltantes con el matching actual.");
         if (pagosFaltan.length) {
             lines.push("\nPAGOS NUEVOS SEGUROS EN ESTA CONSULTA");
-            pagosFaltan.forEach(x => lines.push(`• ${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`));
+            pagosFaltan.forEach(x => lines.push(`• ${descripcionPagoNuevoSeguro(x)}`));
         }
         if (diferencias.length) {
             lines.push("\nRESERVAS CON DIFERENCIAS");
@@ -1394,7 +1482,7 @@
             agregarLista(
                 out,
                 `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
-                pagosFaltan.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`),
+                pagosFaltan.map(descripcionPagoNuevoSeguro),
                 { alerta: true }
             );
         }
