@@ -13,6 +13,15 @@
     let programado = false;
     let aplicando = false;
 
+    function asegurarEstadoConfirmacion() {
+        if (document.getElementById("haiku-libro-confirmacion-estado-v1-script")) return;
+        const script = document.createElement("script");
+        script.id = "haiku-libro-confirmacion-estado-v1-script";
+        script.src = "js/haiku-libro-confirmacion-estado-v1.js?v=1";
+        script.defer = true;
+        document.head.appendChild(script);
+    }
+
     function normalizar(valor) {
         return String(valor || "")
             .normalize("NFD")
@@ -135,6 +144,7 @@
         document.querySelectorAll(".haiku-pago-omitido-sesion").forEach(el => el.classList.remove("haiku-pago-omitido-sesion"));
     });
 
+    asegurarEstadoConfirmacion();
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar, { once: true });
     else iniciar();
 })(typeof window !== "undefined" ? window : globalThis);
