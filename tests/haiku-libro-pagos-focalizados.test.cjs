@@ -30,7 +30,10 @@ function cargarModulo(datosLibro = { reservas: [] }) {
             listeners.get(tipo).push(handler);
         }
     };
-    const context = { window, document, MutationObserver, structuredClone, console, Date: FechaPrueba, Math };
+    const context = {
+        window, document, MutationObserver, structuredClone, console, Date: FechaPrueba, Math,
+        setInterval: () => 1, clearInterval() {}, Event: class Event {}
+    };
     vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-pagos-focalizados-v1.js'), 'utf8'), context);
     return {
         api: window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1,
