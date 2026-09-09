@@ -1,0 +1,218 @@
+/* HAKU · Libro ↔ Proyecto H · decisiones y advertencias visuales V1
+   Sólo presentación. No altera matching, decisiones ni escrituras. */
+
+.haiku-reconciliacion-alerta,
+.haiku-reconciliacion-ayuda-decision {
+    min-width: 0;
+    box-sizing: border-box;
+    border-radius: 11px;
+    line-height: 1.42;
+}
+
+/* Advertencias del Libro */
+.haiku-reconciliacion-alerta {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 9px;
+    margin: 2px 0 3px;
+    padding: 9px 10px;
+    border: 1px solid #ead7a6;
+    background: #fffaf0;
+    color: #5f4b20;
+}
+
+.haiku-reconciliacion-alerta-icono {
+    display: grid;
+    width: 27px;
+    height: 27px;
+    place-items: center;
+    align-self: start;
+    border: 1px solid #e6cf91;
+    border-radius: 999px;
+    background: #fff0bf;
+    color: #805f0e;
+    font-size: .72rem;
+    font-weight: 900;
+}
+
+.haiku-reconciliacion-alerta-contenido {
+    min-width: 0;
+}
+
+.haiku-reconciliacion-alerta-cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.haiku-reconciliacion-alerta-titulo {
+    color: #5d4819;
+    font-size: .66rem;
+    font-weight: 900;
+}
+
+.haiku-reconciliacion-alerta-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 18px;
+    padding: 1px 7px;
+    border: 1px solid #ead7a6;
+    border-radius: 999px;
+    background: #fff5d8;
+    color: #826315;
+    font-size: .50rem;
+    font-weight: 850;
+    white-space: nowrap;
+}
+
+.haiku-reconciliacion-alerta-texto {
+    margin: 0;
+    color: #675528;
+    font-size: .62rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.haiku-reconciliacion-alerta-nota {
+    display: block;
+    margin-top: 5px;
+    color: #806d40;
+    font-size: .55rem;
+    font-weight: 700;
+}
+
+/* Contexto del matching que Haku explica antes de la tabla. */
+.haiku-reconciliacion-explicacion {
+    margin: 1px 0 2px !important;
+    padding: 8px 10px;
+    border: 1px solid #dce7e0;
+    border-radius: 10px;
+    background: #f8fbf9;
+    color: #52635a !important;
+    font-size: .61rem !important;
+    line-height: 1.45 !important;
+}
+
+/* Selector: sólo títulos cortos; la explicación vive en la tarjeta inferior. */
+.haiku-asistente-preview-lista:has(> label) select.haiku-reconciliacion-select-limpio {
+    min-height: 37px;
+    margin-top: 2px;
+    padding: 8px 34px 8px 10px;
+    border-color: #bccfc3;
+    background: #fff;
+    color: #293d32;
+    font-size: .66rem;
+    font-weight: 760;
+}
+
+/* Tarjeta explicativa de la decisión seleccionada */
+.haiku-reconciliacion-ayuda-decision {
+    margin-top: 1px;
+    padding: 10px 11px;
+    border: 1px solid #d6e4dc;
+    background: #f7fbf8;
+    color: #32483b;
+}
+
+.haiku-reconciliacion-ayuda-decision[data-tipo="pendiente"] {
+    border-color: #e2e6e3;
+    background: #fafbfa;
+}
+
+.haiku-reconciliacion-ayuda-decision[data-tipo="misma"] {
+    border-color: #b9d7c6;
+    background: #f3faf6;
+}
+
+.haiku-reconciliacion-ayuda-decision[data-tipo="estadia"] {
+    border-color: #cbd9e8;
+    background: #f6f9fc;
+}
+
+.haiku-reconciliacion-ayuda-decision[data-tipo="independiente"] {
+    border-color: #ead6aa;
+    background: #fffaf0;
+}
+
+.haiku-reconciliacion-ayuda-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 9px;
+}
+
+.haiku-reconciliacion-ayuda-titulo {
+    color: #20362a;
+    font-size: .68rem;
+    font-weight: 900;
+}
+
+.haiku-reconciliacion-ayuda-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 19px;
+    max-width: 100%;
+    padding: 2px 7px;
+    border: 1px solid #d4e2da;
+    border-radius: 999px;
+    background: #edf5f0;
+    color: #476354;
+    font-size: .51rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.haiku-reconciliacion-ayuda-efecto {
+    margin: 6px 0 0;
+    color: #506259;
+    font-size: .61rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.haiku-reconciliacion-ayuda-lista {
+    margin: 7px 0 0;
+    padding: 7px 0 0 17px;
+    border-top: 1px solid rgba(111, 142, 124, .18);
+    color: #607168;
+    font-size: .57rem;
+    line-height: 1.45;
+}
+
+.haiku-reconciliacion-ayuda-lista li + li {
+    margin-top: 3px;
+}
+
+/* La UX antigua imprimía debajo del select una copia completa de cada opción.
+   Una vez convertidas a la tarjeta dinámica, esas copias quedan ocultas. */
+.haiku-reconciliacion-opcion-antigua {
+    display: none !important;
+}
+
+@media (max-width: 700px) {
+    .haiku-reconciliacion-alerta {
+        grid-template-columns: 24px minmax(0, 1fr);
+        padding: 8px;
+    }
+
+    .haiku-reconciliacion-alerta-icono {
+        width: 23px;
+        height: 23px;
+        font-size: .62rem;
+    }
+
+    .haiku-reconciliacion-ayuda-top {
+        align-items: flex-start;
+    }
+
+    .haiku-reconciliacion-ayuda-chip {
+        width: 100%;
+        box-sizing: border-box;
+        white-space: normal;
+    }
+}
