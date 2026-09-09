@@ -1,7 +1,8 @@
 // ========================================
 // HAKU · LIBRO · ESTADO DE CONFIRMACIÓN V1
 // Hace visible junto al botón final el progreso/error de la revalidación.
-// No modifica la selección, el matching ni escribe en Proyecto H.
+// Evita iniciar una revalidación costosa si falta aprobar una parte de un
+// comprobante distribuido. No modifica matching ni escribe en Proyecto H.
 // ========================================
 (function (root) {
     "use strict";
@@ -44,6 +45,27 @@
             acciones.insertAdjacentElement("afterend", estado);
         }
         return estado;
+    }
+
+    function parteDistribuidaPendiente(card) {
+        return [...card.querySelectorAll(".haiku-incorporacion-item")].find(item => {
+            const compartido = /Comprobante compartido:/i.test(String(item.textContent || ""));
+            const aprobar = item.querySelector("button.haiku-incorporacion-aprobar");
+            return compartido && aprobar && !aprobar.disabled;
+        }) || null;
+    }
+
+    function bloquearSiDistribucionIncompleta(card, acciones) {
+        const pendiente = parteDistribuidaPendiente(card);
+        if (!pendiente) return false;
+
+        const estado = obtenerEstado(card, acciones);
+        estado.className = "haiku-confirmacion-estado-v1 haiku-confirmacion-estado-v1--error";
+        estado.textContent = "Este comprobante compartido todavía tiene una parte sin aprobar. Aprueba también la otra parte del comprobante (por ejemplo Early Check-In) antes de continuar. Haku no iniciará la revalidación hasta que ambas partes estén preparadas.";
+
+        const aprobar = pendiente.querySelector("button.haiku-incorporacion-aprobar");
+        aprobar?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+        return true;
     }
 
     function vigilar(card, boton, acciones) {
@@ -96,8 +118,19 @@
         const card = boton.closest(".haiku-asistente-preview.haiku-incorporacion");
         const acciones = boton.closest(".haiku-incorporacion-acciones");
         if (!card || !acciones || /Incorporación completada/i.test(card.textContent || "")) return;
+
+        // Un comprobante distribuido (por ejemplo alojamiento + Early Check-In)
+        // debe tener todas sus partes aprobadas antes de hacer la comparación
+        // completa contra Proyecto H. Antes esta validación ocurría después de
+        // reconsultar Supabase y podía dejar al operador esperando innecesariamente.
+        if (bloquearSiDistribucionIncompleta(card, acciones)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+        }
+
         vigilar(card, boton, acciones);
     }, true);
 
-    root.HAIKU_LIBRO_CONFIRMACION_ESTADO_V1 = Object.freeze({ version: "1.0.0" });
+    root.HAIKU_LIBRO_CONFIRMACION_ESTADO_V1 = Object.freeze({ version: "1.1.0" });
 })(typeof window !== "undefined" ? window : globalThis);
