@@ -208,6 +208,12 @@
             small.append(document.createTextNode(` · Check-in ${info.bloqueVisual}`));
             small.classList.add("haiku-pago-checkin-cabecera");
         }
+
+        // La capa de deduplicación usa este origen sólo para comparar, nunca para escribir.
+        // Hoja + celda permanecen estables aunque cambie la representación semántica del pago.
+        card.dataset.haikuPagoOrigenHoja = pago?.origen?.hoja || "";
+        card.dataset.haikuPagoOrigenCelda = pago?.origen?.celda || "";
+        card.dataset.haikuPagoLibroTexto = pago?.texto_original || "";
         card.dataset.haikuPagoUiV1 = "1";
     }
 
