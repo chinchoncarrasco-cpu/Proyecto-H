@@ -84,6 +84,12 @@
         return Boolean(scope?.fecha && scope?.objetivos?.length === 1 && !scope.objetivos[0]?.cabana);
     }
 
+    function fechaEsExacta(scope) {
+        if (!esConsultaIndividual(scope)) return false;
+        const texto = normalizar(scope?.texto);
+        return !/\btodos\s+(?:los\s+)?pagos\b|\btodos\s+sus\s+pagos\b|\btodos\s+(?:los\s+)?movimientos\b/.test(texto);
+    }
+
     function pagoDelDiaYTitular(pago, scope) {
         if (!mismaPersona(pago?.titular, scope.objetivos[0].nombre)) return false;
         return fechaPagoObservada(pago) === scope.fecha;
@@ -105,44 +111,60 @@
         return copia;
     }
 
+    function filtrarFechaSolicitada(data, scope) {
+        if (!fechaEsExacta(scope)) return data;
+        return {
+            ...data,
+            reservas: (data.reservas || []).map(r => ({
+                ...r,
+                pagos: (r.pagos || []).filter(p => fechaPagoObservada(p) === scope.fecha),
+                pagos_sin_asociacion: (r.pagos_sin_asociacion || []).filter(p => fechaPagoObservada(p) === scope.fecha)
+            }))
+        };
+    }
+
     function enriquecer(data) {
         const scope = window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1?.estado?.();
         if (!esConsultaIndividual(scope) || !Array.isArray(data?.reservas) || !Array.isArray(data?.pagos)) return data;
 
         const reservas = data.reservas.filter(r => mismaPersona(r?.titular, scope.objetivos[0].nombre));
-        if (!reservas.length) return data;
+        if (!reservas.length) return filtrarFechaSolicitada(data, scope);
 
         // La fecha de la pregunta identifica la estadía objetivo. Sólo si hay una
         // única estadía compatible podemos adjuntar movimientos huérfanos sin adivinar.
         const destinos = reservas.filter(r => fechaDentroReserva(r, scope.fecha));
-        if (destinos.length !== 1) return data;
-        const destino = destinos[0];
+        let salida = data;
 
-        const recuperados = data.pagos
-            .filter(p => pagoDelDiaYTitular(p, scope))
-            .filter(p => !pagoYaPresente(reservas, p))
-            .map(normalizarMovimiento);
+        if (destinos.length === 1) {
+            const destino = destinos[0];
+            const recuperados = data.pagos
+                .filter(p => pagoDelDiaYTitular(p, scope))
+                .filter(p => !pagoYaPresente(reservas, p))
+                .map(normalizarMovimiento);
 
-        if (!recuperados.length) return data;
+            if (recuperados.length) {
+                const nuevasReservas = data.reservas.map(r => {
+                    if (r !== destino) return r;
+                    return {
+                        ...r,
+                        pagos_sin_asociacion: [...(r.pagos_sin_asociacion || []), ...recuperados.map(p => ({
+                            ...p,
+                            relacion_focal: {
+                                motivo: "Titular y fecha de comprobante coinciden con la consulta; CAB/concepto no bastan para asociarlo automáticamente.",
+                                confianza: "revision"
+                            }
+                        }))]
+                    };
+                });
 
-        const nuevasReservas = data.reservas.map(r => {
-            if (r !== destino) return r;
-            return {
-                ...r,
-                pagos_sin_asociacion: [...(r.pagos_sin_asociacion || []), ...recuperados.map(p => ({
-                    ...p,
-                    relacion_focal: {
-                        motivo: "Titular y fecha de comprobante coinciden con la consulta; CAB/concepto no bastan para asociarlo automáticamente.",
-                        confianza: "revision"
-                    }
-                }))]
-            };
-        });
+                console.info("HAKU · Pagos relacionados recuperados para revisión:",
+                    scope.objetivos[0].nombre, scope.fecha, recuperados.map(p => ({ monto: p.monto, concepto: p.concepto, fecha: p.fecha_comprobante, origen: p.origen })));
 
-        console.info("HAKU · Pagos relacionados recuperados para revisión:",
-            scope.objetivos[0].nombre, scope.fecha, recuperados.map(p => ({ monto: p.monto, concepto: p.concepto, fecha: p.fecha_comprobante, origen: p.origen })));
+                salida = { ...data, reservas: nuevasReservas };
+            }
+        }
 
-        return { ...data, reservas: nuevasReservas };
+        return filtrarFechaSolicitada(salida, scope);
     }
 
     function instalar() {
@@ -160,7 +182,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_RELACIONADOS_V1 = Object.freeze({
-        version: "1.0.1",
+        version: "1.1.0",
         instalar,
         enriquecer
     });
