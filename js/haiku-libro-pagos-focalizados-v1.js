@@ -1,6 +1,6 @@
 // ========================================
 // HAKU · PAGOS FOCALIZADOS V1
-// Cuando el operador pide revisar pagos de varias reservas concretas,
+// Cuando el operador pide revisar pagos de una o varias reservas concretas,
 // limita la lectura del Libro a esos objetivos y a la fecha indicada.
 // Esta capa NO escribe por sí sola: reutiliza la reconciliación segura
 // existente y, en la preparación, deja seleccionables sólo pagos nuevos.
@@ -97,6 +97,21 @@
         return objetivos;
     }
 
+    function objetivoIndividualDesdeTexto(texto) {
+        const raw = String(texto || "").replace(/\s+/g, " ").trim();
+        const nombresDias = "(?:lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)";
+        const nombresMeses = "(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)";
+        const fechaEscrita = `\\s+(?:(?:el|del)\\s+)?(?:${nombresDias}\\s+)?\\d{1,2}\\s+de\\s+${nombresMeses}\\b`;
+        const patron = new RegExp(`\\bpagos?\\s+(?:asociad[oa]s?\\s+)?(?:a|de)\\s+(.+?)(?=${fechaEscrita}|\\s+para\\b|[.;,]|$)`, "i");
+        const encontrado = raw.match(patron);
+        if (!encontrado) return null;
+
+        const cabana = Number(raw.match(/\bCAB(?:AÑA)?\s*(\d{1,2})\b/i)?.[1]) || null;
+        const nombre = limpiarNombre(encontrado[1].replace(/\bCAB(?:AÑA)?\s*\d{1,2}\b/gi, ""));
+        if (!pareceNombre(nombre)) return null;
+        return { cabana, nombre, clave: `${cabana || "*"}|${normalizar(nombre)}` };
+    }
+
     function nombreCoincide(a, b) {
         const na = normalizar(a), nb = normalizar(b);
         if (!na || !nb) return false;
@@ -126,9 +141,12 @@
     function detectarScope(texto) {
         const t = normalizar(texto);
         if (!/\bpagos?\b/.test(t) || !/\blibro\b/.test(t)) return null;
-        const objetivos = objetivosDesdeTexto(texto);
+        const objetivosListado = objetivosDesdeTexto(texto);
+        const objetivoIndividual = objetivoIndividualDesdeTexto(texto);
+        const objetivos = objetivosListado.length >= 2 ? objetivosListado :
+            objetivoIndividual ? [objetivoIndividual] : objetivosListado;
         const fecha = fechaDesdeTexto(texto);
-        if (objetivos.length < 2 || !fecha) return null;
+        if (!objetivos.length || !fecha) return null;
         return {
             token: `pagos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             texto: String(texto || ""),
@@ -141,7 +159,7 @@
 
     function reservaObjetivo(reserva, scope) {
         const cab = Number(reserva?.cabana || reserva?.cabanas?.[0]);
-        return scope.objetivos.some(obj => Number(obj.cabana) === cab && nombreCoincide(reserva?.titular, obj.nombre));
+        return scope.objetivos.some(obj => (!obj.cabana || Number(obj.cabana) === cab) && nombreCoincide(reserva?.titular, obj.nombre));
     }
 
     function sanitizarReserva(reserva, scope) {
@@ -223,7 +241,8 @@
         estado.esperandoSalida = Boolean(scope);
         if (scope) {
             instalarProxyLibro();
-            console.info("HAKU · Pagos focalizados:", scope.fecha, scope.objetivos.map(x => `CAB ${x.cabana} ${x.nombre}`));
+            console.info("HAKU · Pagos focalizados:", scope.fecha,
+                scope.objetivos.map(x => [x.cabana ? `CAB ${x.cabana}` : null, x.nombre].filter(Boolean).join(" ")));
         }
     }
 
@@ -235,7 +254,7 @@
     function crearAvisoScope(scope) {
         const aviso = document.createElement("div");
         aviso.className = "haku-pagos-focalizados-aviso";
-        const lista = scope.objetivos.map(x => `CAB ${x.cabana} · ${x.nombre}`).join(" · ");
+        const lista = scope.objetivos.map(x => [x.cabana ? `CAB ${x.cabana}` : null, x.nombre].filter(Boolean).join(" · ")).join(" · ");
         aviso.innerHTML = `<strong>Consulta focalizada en pagos</strong><span>${etiquetaFecha(scope.fecha)} · ${lista}</span><small>Haku compara únicamente estos objetivos y descarta pagos de otras fechas. Las reservas y servicios no forman parte de esta incorporación.</small>`;
         return aviso;
     }
@@ -465,7 +484,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
-        version: "1.0.3",
+        version: "1.0.4",
         detectar: detectarScope,
         estado: () => estado.scope ? structuredClone(estado.scope) : null
     });
