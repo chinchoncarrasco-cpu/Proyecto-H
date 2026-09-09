@@ -86,10 +86,15 @@
         } catch (_) {}
     }
 
-    function esEspecial(elemento) {
+    function esBloqueo(elemento) {
         return (
             elemento.classList.contains("calendario-bloqueo-barra") ||
-            elemento.classList.contains("cal-reserva-bloqueada") ||
+            elemento.classList.contains("cal-reserva-bloqueada")
+        );
+    }
+
+    function esFullDay(elemento) {
+        return (
             elemento.classList.contains("cal-reserva-fullday") ||
             elemento.dataset.haikuFullday === "1"
         );
@@ -102,17 +107,35 @@
                 ".calendario-panel-reserva[data-reserva-id]"
             )
             .forEach(elemento => {
-                if (esEspecial(elemento)) return;
+                // Los bloqueos conservan siempre su apariencia propia.
+                if (esBloqueo(elemento)) return;
 
                 const reservaId = String(elemento.dataset.reservaId || "");
                 const estado = estados.get(reservaId) || "";
-                const clase = claseParaEstado(estado);
+                const estadoNormalizado = normalizarEstado(estado);
+                const clase = claseParaEstado(estadoNormalizado);
 
                 if (!clase) return;
 
+                const fullDay = esFullDay(elemento);
+
+                // Un Full Day futuro/confirmado conserva el color especial FULLDAY.
+                // Cuando ya está hospedado o checked out, manda el estado operativo
+                // igual que en cualquier otra estadía.
+                if (
+                    fullDay &&
+                    !["hospedada", "checked_out"].includes(estadoNormalizado)
+                ) {
+                    CLASES_COLOR.forEach(nombre => elemento.classList.remove(nombre));
+                    elemento.classList.add("cal-reserva-fullday");
+                    elemento.dataset.haikuEstadoCanonico = estadoNormalizado;
+                    return;
+                }
+
                 CLASES_COLOR.forEach(nombre => elemento.classList.remove(nombre));
+                if (fullDay) elemento.classList.remove("cal-reserva-fullday");
                 elemento.classList.add(clase);
-                elemento.dataset.haikuEstadoCanonico = estado;
+                elemento.dataset.haikuEstadoCanonico = estadoNormalizado;
             });
     }
 
