@@ -138,6 +138,13 @@
             .some(x => x === fecha);
     }
 
+    function conservarMovimientosRelacionados(scope) {
+        // En una consulta individual sin CAB, la fecha identifica la reserva,
+        // no necesariamente la fecha de cada abono. Se conservan todos sus
+        // movimientos para que las tarjetas asociadas no pierdan información.
+        return scope?.objetivos?.length === 1 && !scope.objetivos[0]?.cabana;
+    }
+
     function detectarScope(texto) {
         const t = normalizar(texto);
         if (!/\bpagos?\b/.test(t) || !/\blibro\b/.test(t)) return null;
@@ -163,8 +170,11 @@
     }
 
     function sanitizarReserva(reserva, scope) {
-        const pagos = (Array.isArray(reserva?.pagos) ? reserva.pagos : []).filter(p => pagoDeFecha(p, scope.fecha));
-        const pagosSin = (Array.isArray(reserva?.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion : []).filter(p => pagoDeFecha(p, scope.fecha));
+        const todosPagos = Array.isArray(reserva?.pagos) ? reserva.pagos : [];
+        const todosPagosSin = Array.isArray(reserva?.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion : [];
+        const conservarTodos = conservarMovimientosRelacionados(scope);
+        const pagos = conservarTodos ? todosPagos : todosPagos.filter(p => pagoDeFecha(p, scope.fecha));
+        const pagosSin = conservarTodos ? todosPagosSin : todosPagosSin.filter(p => pagoDeFecha(p, scope.fecha));
         const cab = Number(reserva?.cabana || reserva?.cabanas?.[0]);
         const bypass = Number(scope.cabanaFiltroOriginal);
 
@@ -255,7 +265,10 @@
         const aviso = document.createElement("div");
         aviso.className = "haku-pagos-focalizados-aviso";
         const lista = scope.objetivos.map(x => [x.cabana ? `CAB ${x.cabana}` : null, x.nombre].filter(Boolean).join(" · ")).join(" · ");
-        aviso.innerHTML = `<strong>Consulta focalizada en pagos</strong><span>${etiquetaFecha(scope.fecha)} · ${lista}</span><small>Haku compara únicamente estos objetivos y descarta pagos de otras fechas. Las reservas y servicios no forman parte de esta incorporación.</small>`;
+        const alcance = conservarMovimientosRelacionados(scope)
+            ? "Haku compara únicamente esta persona y conserva los movimientos financieros relacionados con sus estadías."
+            : "Haku compara únicamente estos objetivos y descarta pagos de otras fechas.";
+        aviso.innerHTML = `<strong>Consulta focalizada en pagos</strong><span>${etiquetaFecha(scope.fecha)} · ${lista}</span><small>${alcance} Las reservas y servicios no forman parte de esta incorporación.</small>`;
         return aviso;
     }
 
@@ -274,9 +287,12 @@
     function focalizarComparacion(out, scope) {
         asegurarAviso(out, scope);
         const resumen = out.querySelector(":scope > .haiku-asistente-preview-resumen");
+        const alcanceIndividual = conservarMovimientosRelacionados(scope)
+            ? `Alcance solicitado: ${scope.objetivos[0].nombre} · reserva identificada por ${etiquetaFecha(scope.fecha)}. Se conservan sus movimientos financieros relacionados y las demás personas del mes quedan fuera.`
+            : `Alcance solicitado: ${scope.objetivos.length} reservas objetivo · pagos del ${etiquetaFecha(scope.fecha)}. Proyecto H se usa sólo para comprobar esas reservas y evitar duplicar pagos ya registrados; las demás reservas del mes quedan fuera de esta tarea.`;
         asignarTextoSiCambia(
             resumen,
-            `Alcance solicitado: ${scope.objetivos.length} reservas objetivo · pagos del ${etiquetaFecha(scope.fecha)}. Proyecto H se usa sólo para comprobar esas reservas y evitar duplicar pagos ya registrados; las demás reservas del mes quedan fuera de esta tarea.`
+            alcanceIndividual
         );
 
         const tarjetas = [...out.querySelectorAll(":scope > .haiku-asistente-preview-grid > div")];
@@ -310,9 +326,12 @@
         asegurarAviso(out, scope);
 
         asignarTextoSiCambia(out.querySelector(".haiku-incorporacion-modo"), "Sólo pagos");
+        const aviso = conservarMovimientosRelacionados(scope)
+            ? "Esta preparación conserva los movimientos financieros relacionados con la persona y reserva solicitadas. Los datos de reserva, estadía y servicios no se reemplazarán desde este modo."
+            : "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo.";
         asignarTextoSiCambia(
             out.querySelector(":scope > .haiku-incorporacion-aviso"),
-            "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo."
+            aviso
         );
 
         ["nuevas", "estadias", "actualizaciones"].forEach(categoria => {
@@ -484,7 +503,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
-        version: "1.0.4",
+        version: "1.0.5",
         detectar: detectarScope,
         estado: () => estado.scope ? structuredClone(estado.scope) : null
     });
