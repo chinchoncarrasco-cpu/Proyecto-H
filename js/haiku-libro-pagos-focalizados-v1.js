@@ -195,13 +195,11 @@
                 const scope = estado.scope;
                 if (!scope || args[1] === "anterior" || !Array.isArray(data?.reservas)) return data;
 
-                const filtradas = data.reservas
-                    .filter(r => reservaObjetivo(r, scope))
-                    .map(r => sanitizarReserva(r, scope));
-
                 return {
                     ...data,
-                    reservas: filtradas
+                    reservas: data.reservas
+                        .filter(r => reservaObjetivo(r, scope))
+                        .map(r => sanitizarReserva(r, scope))
                 };
             }
         };
@@ -243,54 +241,68 @@
     }
 
     function asegurarAviso(out, scope) {
-        if (!out.querySelector(":scope > .haku-pagos-focalizados-aviso")) {
-            const cabecera = out.querySelector(":scope > .haiku-asistente-preview-cabecera, :scope > .haiku-incorporacion-cabecera");
-            const aviso = crearAvisoScope(scope);
-            cabecera?.after(aviso) || out.prepend(aviso);
-        }
+        if (out.querySelector(":scope > .haku-pagos-focalizados-aviso")) return;
+        const cabecera = out.querySelector(":scope > .haiku-asistente-preview-cabecera, :scope > .haiku-incorporacion-cabecera");
+        const aviso = crearAvisoScope(scope);
+        if (cabecera) cabecera.after(aviso);
+        else out.prepend(aviso);
+    }
+
+    function asignarTextoSiCambia(elemento, texto) {
+        if (elemento && elemento.textContent !== texto) elemento.textContent = texto;
     }
 
     function focalizarComparacion(out, scope) {
         asegurarAviso(out, scope);
         const resumen = out.querySelector(":scope > .haiku-asistente-preview-resumen");
-        if (resumen) {
-            resumen.textContent = `Alcance solicitado: ${scope.objetivos.length} reservas objetivo · pagos del ${etiquetaFecha(scope.fecha)}. Proyecto H se usa sólo para comprobar esas reservas y evitar duplicar pagos ya registrados; las demás reservas del mes quedan fuera de esta tarea.`;
-        }
+        asignarTextoSiCambia(
+            resumen,
+            `Alcance solicitado: ${scope.objetivos.length} reservas objetivo · pagos del ${etiquetaFecha(scope.fecha)}. Proyecto H se usa sólo para comprobar esas reservas y evitar duplicar pagos ya registrados; las demás reservas del mes quedan fuera de esta tarea.`
+        );
 
         const tarjetas = [...out.querySelectorAll(":scope > .haiku-asistente-preview-grid > div")];
         for (const tarjeta of tarjetas) {
             const label = normalizar(tarjeta.querySelector("span")?.textContent);
             const strong = tarjeta.querySelector("strong");
-            if (label === "proyecto h" && strong) strong.textContent = `${scope.objetivos.length} objetivos`;
+            if (label === "proyecto h") asignarTextoSiCambia(strong, `${scope.objetivos.length} objetivos`);
         }
 
         const pie = out.querySelector(":scope > .haiku-asistente-preview-pie span");
-        if (pie) pie.textContent = "Modo focalizado: sólo se prepararán pagos de los objetivos indicados. Ninguna reserva, estadía ni servicio se incorporará desde esta consulta.";
+        asignarTextoSiCambia(
+            pie,
+            "Modo focalizado: sólo se prepararán pagos de los objetivos indicados. Ninguna reserva, estadía ni servicio se incorporará desde esta consulta."
+        );
     }
 
-    function deseleccionarSeccion(seccion) {
-        seccion.querySelectorAll('input[type="checkbox"]').forEach(check => {
-            check.checked = false;
-            check.dispatchEvent(new Event("change", { bubbles: true }));
-        });
-        seccion.hidden = true;
+    function deseleccionarSeccion(seccion, scope) {
+        if (seccion.dataset.hakuFocalBloqueada !== scope.token) {
+            seccion.querySelectorAll('input[type="checkbox"]').forEach(check => {
+                if (check.checked) {
+                    check.checked = false;
+                    check.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            });
+            seccion.dataset.hakuFocalBloqueada = scope.token;
+        }
+        if (!seccion.hidden) seccion.hidden = true;
     }
 
     function focalizarIncorporacion(out, scope) {
         asegurarAviso(out, scope);
 
-        const badge = out.querySelector(".haiku-incorporacion-modo");
-        if (badge) badge.textContent = "Sólo pagos";
-        const aviso = out.querySelector(":scope > .haiku-incorporacion-aviso");
-        if (aviso) aviso.textContent = "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo.";
+        asignarTextoSiCambia(out.querySelector(".haiku-incorporacion-modo"), "Sólo pagos");
+        asignarTextoSiCambia(
+            out.querySelector(":scope > .haiku-incorporacion-aviso"),
+            "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo."
+        );
 
         ["nuevas", "estadias", "actualizaciones"].forEach(categoria => {
-            out.querySelectorAll(`.haiku-incorporacion-seccion--${categoria}`).forEach(deseleccionarSeccion);
+            out.querySelectorAll(`.haiku-incorporacion-seccion--${categoria}`).forEach(seccion => deseleccionarSeccion(seccion, scope));
         });
 
         // Evita que el atajo general vuelva a seleccionar categorías ocultas.
         out.querySelectorAll(".haiku-incorporacion-atajo").forEach(boton => {
-            if (/seleccionar todo lo listo/i.test(boton.textContent || "")) boton.hidden = true;
+            if (/seleccionar todo lo listo/i.test(boton.textContent || "") && !boton.hidden) boton.hidden = true;
         });
     }
 
@@ -317,10 +329,11 @@
                 }
 
                 if (nodo.dataset?.hakuPagosFocalizados === scope.token) procesarSalida(nodo);
-                nodo.querySelectorAll?.(`[data-haku-pagos-focalizados="${scope.token}"]`).forEach(procesarSalida);
             }
 
-            const target = mut.target instanceof Element ? mut.target.closest?.(`[data-haku-pagos-focalizados="${scope.token}"]`) : null;
+            const target = mut.target instanceof Element
+                ? mut.target.closest?.(`[data-haku-pagos-focalizados="${scope.token}"]`)
+                : mut.target?.parentElement?.closest?.(`[data-haku-pagos-focalizados="${scope.token}"]`);
             if (target) procesarSalida(target);
         }
     });
@@ -345,7 +358,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
-        version: "1.0.0",
+        version: "1.0.1",
         detectar: detectarScope,
         estado: () => estado.scope ? structuredClone(estado.scope) : null
     });
