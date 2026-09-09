@@ -167,11 +167,14 @@
         const webpayPorConfirmar = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(texto);
         const copia = { ...pago, webpay_por_confirmar: webpayPorConfirmar };
 
-        if (/\bdebito\b/.test(texto)) copia.medio_pago = "debito";
+        const webpay = /web\s*pay/.test(texto);
+        if (webpay && /\bdebito\b/.test(texto)) copia.medio_pago = "webpay_debito";
+        else if (webpay && /\bcredito\b/.test(texto)) copia.medio_pago = "webpay_credito";
+        else if (/\bdebito\b/.test(texto)) copia.medio_pago = "debito";
         else if (/\bcredito\b/.test(texto)) copia.medio_pago = "credito";
         else if (/transf/.test(texto)) copia.medio_pago = "transferencia";
         else if (/efectivo/.test(texto)) copia.medio_pago = "efectivo";
-        else if (/web\s*pay/.test(texto)) copia.medio_pago = "webpay";
+        else if (webpay) copia.medio_pago = "webpay";
 
         const montoValido = Number.isFinite(Number(copia.monto)) && Number(copia.monto) > 0;
         if (copia.tipo_movimiento !== "penalidad" && montoValido && !pendienteCliente) {

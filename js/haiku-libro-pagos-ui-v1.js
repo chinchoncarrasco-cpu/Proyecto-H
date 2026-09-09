@@ -16,7 +16,7 @@
         const link = document.createElement("link");
         link.id = "haiku-libro-pagos-ui-v1-css";
         link.rel = "stylesheet";
-        link.href = "css/haiku-libro-pagos-ui-v1.css?v=1";
+        link.href = "css/haiku-libro-pagos-ui-v1.css?v=2";
         document.head.appendChild(link);
     }
 

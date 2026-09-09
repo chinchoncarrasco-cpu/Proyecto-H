@@ -77,12 +77,14 @@ test('payment elimination and changed amount are explicit and safe',()=>{
  const c=compare([row({pagos:[pay()]})],[row({pagos:[pay({monto:200000})]})])[0];
  assert.equal(c.tipo,'modificada');assert.equal(c.diferencias[0].tipo,'pago_modificado');
 });
-test('Folio+Bovtar and BOVE are strong; Folio alone is not',()=>{
- for(const p of [pay({codigo_autorizacion:null,folio:'21',bovtar:'45'}),pay({codigo_autorizacion:null,bove:'902'})]) assert.equal(compare([row()],[row({pagos:[p]})])[0].diferencias[0].tipo,'pago_agregado');
- assert.equal(compare([row()],[row({pagos:[pay({codigo_autorizacion:null,folio:'21'})]})])[0].tipo,'requiere_revision');
+test('Folio+Bovtar is strong; BOVE and Folio alone require review',()=>{
+ const voucher=pay({codigo_autorizacion:null,folio:'21',bovtar:'45'});
+ assert.equal(compare([row()],[row({pagos:[voucher]})])[0].diferencias[0].tipo,'pago_agregado');
+ for(const p of [pay({codigo_autorizacion:null,bove:'902'}),pay({codigo_autorizacion:null,folio:'21'})])
+  assert.equal(compare([row()],[row({pagos:[p]})])[0].tipo,'requiere_revision');
 });
 test('conflicting duplicate payments and lower-priority identifier collisions require review',()=>{
- for(const payments of [[pay(),pay({monto:2})],[pay({bove:'3'}),pay({codigo_autorizacion:'AUTH2',bove:'3'})]]){
+ for(const payments of [[pay(),pay({monto:2})],[pay({codigo_autorizacion:null,folio:'7',bovtar:'3'}),pay({codigo_autorizacion:'AUTH2',folio:'7',bovtar:'3'})]]){
   const c=compare([row()],[row({pagos:payments})]);assert.equal(c[0].tipo,'requiere_revision');assert.ok(!c[0].diferencias.some(d=>d.tipo==='pago_agregado'));
  }
 });
@@ -177,8 +179,8 @@ test('missing context, different blocks, different cabins and incomplete coverag
  assert.equal(comparePayments([weak({monto:null})],[weak({monto:null})]).tipo,'requiere_revision');
  assert.equal(compare([row({pagos:[weak()],cobertura_pagos:false})],[row({pagos:[weak()]})])[0].tipo,'requiere_revision');
 });
-test('strong identifiers take priority over identical weak content for all three identifier forms',()=>{
- for(const id of [{codigo_autorizacion:'AUTH1'},{folio:'12',bovtar:'34'},{bove:'56'}]) {
+test('strong identifiers take priority over identical weak content for both supported forms',()=>{
+ for(const id of [{codigo_autorizacion:'AUTH1'},{folio:'12',bovtar:'34'}]) {
   const p=weak(), strong=weak(id);
   const c=comparePayments([p,strong],[{...strong,monto:180000},p]);
   assert.equal(c.tipo,'modificada');assert.equal(c.pagos_sin_cambios.length,1);
@@ -252,8 +254,8 @@ test('zero matches reports the precise number of unmatched observations across b
  assert.equal(c.tipo,'requiere_revision');assert.equal(c.pagos_sin_cambios.length,0);
 });
 
-test('all three strong identifiers expose their verification method with unchanged incidental text',()=>{
- for(const [id,label] of [[{codigo_autorizacion:'AUTH1'},'CodAut'],[{codigo_autorizacion:null,folio:'000211',bovtar:'033752'},'Folio+BOVTAR'],[{codigo_autorizacion:null,bove:'000345'},'BOVE']]) {
+test('both strong identifiers expose their verification method with unchanged incidental text',()=>{
+ for(const [id,label] of [[{codigo_autorizacion:'AUTH1'},'CodAut'],[{codigo_autorizacion:null,folio:'000211',bovtar:'033752'},'Folio+BOVTAR']]) {
   const c=comparePayments([pay(id)],[pay({...id,texto_original:'Nota administrativa'})]);
   assert.equal(c.tipo,'sin_cambios');assert.equal(c.pagos_sin_cambios[0].verificacion,'Verificado por '+label);
  }

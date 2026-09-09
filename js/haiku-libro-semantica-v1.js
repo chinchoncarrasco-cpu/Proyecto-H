@@ -244,7 +244,6 @@
         const ids = [];
         if (canonIdVersion(p.codigo_autorizacion)) ids.push('aut:' + canonIdVersion(p.codigo_autorizacion));
         if (canonIdVersion(p.folio) && canonIdVersion(p.bovtar)) ids.push('folio:' + canonIdVersion(p.folio) + ':' + canonIdVersion(p.bovtar));
-        if (canonIdVersion(p.bove)) ids.push('bove:' + canonIdVersion(p.bove));
         return ids;
     }
     const pagoVersion = p => JSON.stringify([p.monto ?? null, p.moneda || 'CLP', normalizar(p.concepto), p.tipo_movimiento || null,
@@ -274,7 +273,7 @@
                     continue;
                 }
                 grupo.forEach(x => resueltos.add(x.p));
-                const verificacion = 'Verificado por ' + ({ aut: 'CodAut', folio: 'Folio+BOVTAR', bove: 'BOVE' })[id.split(':')[0]];
+                const verificacion = 'Verificado por ' + ({ aut: 'CodAut', folio: 'Folio+BOVTAR' })[id.split(':')[0]];
                 const campos = ['monto', 'moneda', 'concepto', 'tipo_movimiento', 'medio_pago', 'estado_pago', 'fecha_comprobante',
                     'bove_pendiente', 'manager_pendiente', 'saldo_por_pagar', 'monto_penalidad', 'penalidad_porcentaje',
                     'codigo_autorizacion', 'folio', 'bovtar', 'bove'];
@@ -282,8 +281,7 @@
                     k === 'moneda' ? normalizar(p[k] || 'CLP') : k.endsWith('_pendiente') ? !!p[k] : normalizar(p[k]);
                 const campos_cambiados = campos.filter(k => valor(anterior, k) !== valor(actual, k));
                 const completo = [anterior, actual].every(p => Number.isFinite(p.monto) && normalizar(p.concepto));
-                const referencias = id.startsWith('folio:') ? `Folio ${actual.folio} · BOVTAR ${actual.bovtar}` :
-                    id.startsWith('aut:') ? `CodAut ${actual.codigo_autorizacion}` : `BOVE ${actual.bove}`;
+                const referencias = id.startsWith('folio:') ? `Folio ${actual.folio} · BOVTAR ${actual.bovtar}` : `CodAut ${actual.codigo_autorizacion}`;
                 diferencias.push({ campo: 'pagos', tipo: campos_cambiados.length ? 'pago_modificado' : completo ? 'pago_sin_cambios' : 'pago_revision',
                     detalle: campos_cambiados.length ? 'Pago identificado, pero cambió ' + campos_cambiados.join(', ') : completo ?
                         `Pago verificado sin cambios · ${actual.moneda && actual.moneda !== 'CLP' ? actual.moneda + ' ' : '$'}${actual.monto.toLocaleString('es-CL')} · ${referencias}` :

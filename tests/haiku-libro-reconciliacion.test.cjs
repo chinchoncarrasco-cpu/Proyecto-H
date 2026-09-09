@@ -326,6 +326,17 @@ test('same amount without strong identifiers requires review and is never discar
  const pair=await prepare([readyBook({pagos:[weakA,weakB]})]);
  assert.equal(pair.items.filter(i=>i.categoria==='dudosos').length,2);assert.equal(pair.items.filter(i=>i.categoria==='omitidos').length,0);
 });
+
+test('Diosnara: one exact weak transfer already in Proyecto H is omitted, ambiguity still requires review',async()=>{
+ const p=readyPay({codigo_autorizacion:null,medio_pago:'transferencia',monto:270000,texto_original:'Transferencia Diosnara Ortega 270000'});
+ const r=readyBook({titular:'Diosnara Ortega',pagos:[p]});
+ const existing={id:'p1',reserva_id:'r1',monto:270000,medio_pago:'transferencia',fecha_pago:'2026-09-10T12:00:00Z',
+  referencia_externa:p.texto_original,datos_origen:{}};
+ const unique=await prepare([r],[stay(r)],[existing]);
+ assert.ok(unique.items.some(i=>i.categoria==='omitidos'&&/transferencia ya existe/i.test(i.texto)));
+ const ambiguous=await prepare([r],[stay(r)],[existing,{...existing,id:'p2'}]);
+ assert.ok(ambiguous.items.some(i=>i.categoria==='dudosos'));
+});
 test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
  const folio=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});
  const codaut=readyPay({monto:147930,codigo_autorizacion:'685775',folio:null,bovtar:null,origen:{hoja:'Sep26',celda:'A2'}});
@@ -426,6 +437,17 @@ test('confirmation revalidates and retries the same atomic operation without reb
  assert.equal(db.calls.filter(x=>x==='pagos').length,before);
  const payment=requests[0].args.p_items.find(i=>i.tipo==='pago');assert.equal(payment.argumentos.p_etapa_operativa,'abono');
  assert.equal(payment.reserva_ref,requests[0].args.p_items.find(i=>i.tipo==='reserva_nueva').item_id);
+});
+test('a data conflict abandons the stale operation instead of retrying it forever',async()=>{
+ const r=readyBook(),db=client(),comparacion=await Q.compararSistema([r],db,q),result={q,reservas:[r],comparacion};
+ const plan=await Q.prepararIncorporacion(result,new Map(),new Set(),db),requests=[];
+ db.rpc=async(name,args)=>{requests.push(args);return requests.length===1
+  ?{data:null,error:new Error('Proyecto H cambió en observaciones. Vuelve a preparar y confirmar los valores nuevos.')}
+  :{data:{ok:true,operacion_id:args.p_operacion_id},error:null}};
+ const error=await Q.confirmarIncorporacion(result,new Map(),new Set(),plan,db).catch(e=>e);
+ assert.equal(error.haikuConflictoDatos,true);assert.equal(plan.solicitudPendiente,null);
+ await Q.confirmarIncorporacion(result,new Map(),new Set(),plan,db);
+ assert.notEqual(requests[0].p_operacion_id,requests[1].p_operacion_id);
 });
 test('atomic RPC migration has durable idempotency, database revalidation, exact permissions and no anonymous access',()=>{
  const fs=require('node:fs'),sql=fs.readFileSync(require.resolve('../supabase/migrations/20260908113000_haku_incorporar_libro_v1.sql'),'utf8');
@@ -538,13 +560,38 @@ test('update preview shows old and Libro values and remains behind explicit conf
  assert.match(h.texts(),/El Libro de Reservas tiene prioridad/);
 });
 
+test('payment update preview identifies the transaction before showing proposed changes',async()=>{
+ const p=readyPay({monto:190000,medio_pago:'webpay_credito',texto_original:'WEBPAY CREDITO // CodAut 285466',codigo_autorizacion:'285466'});
+ const r=readyBook({titular:'Paulina Varas',pagos:[p]});
+ const existing={id:'p-existing',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:190000,moneda:'CLP',
+  medio_pago:'webpay_debito',codigo_autorizacion:'285466',fecha_pago:'2026-09-10T12:00:00Z',datos_origen:{}};
+ const plan=await prepare([r],[stay(r)],[existing]);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const text=h.texts();
+ assert.match(text,/Paulina Varas/);assert.match(text,/WebPay Crédito/);assert.match(text,/CodAut/);assert.match(text,/285466/);
+ assert.match(text,/Fecha pago/);assert.match(text,/Cambios propuestos por el Libro/);
+ assert.ok(text.indexOf('WebPay Crédito')<text.indexOf('Cambios propuestos por el Libro'));
+ assert.doesNotMatch(text,/190000 → 160000/);
+});
+
 test('shared reservation notes combine both cabins without repeated conflicting patches',async()=>{
  const a=readyBook({texto_original:'Marco Iturrieta // CAB 1 // Factura'}),b=readyBook({id:'b2',cabana:2,texto_original:'Marco Iturrieta // CAB 2 // Llegada tarde'});
  const shared={...stay(a).reservas,observaciones:'Nota operativa'},rows=[stay(a,{reservas:shared}),stay(b,{reservas:shared})];
  const plan=await prepare([a,b],rows),updates=plan.items.filter(i=>i.categoria==='actualizaciones');
- assert.equal(updates.length,2);assert.equal(updates[0].payload.reserva.despues.observaciones,updates[1].payload.reserva.despues.observaciones);
+ assert.equal(updates.length,1);assert.match(updates[0].payload.reserva.despues.observaciones,/CAB 1/);assert.match(updates[0].payload.reserva.despues.observaciones,/CAB 2/);
  applyPreview(rows,[],Q.serializarIncorporacion(plan));
  const repeat=await prepare([a,b],rows);assert.ok(!repeat.items.some(i=>i.categoria==='actualizaciones'));
+});
+
+test('different Libro groups targeting one reservation produce one consolidated reservation patch',async()=>{
+ const a=readyBook({texto_original:'Marco Iturrieta // Factura'});
+ const b=readyBook({id:'b2',cabana:2,fecha_checkin:'2026-09-20',fecha_checkout:'2026-09-21',texto_original:'Marco Iturrieta // Llegada tarde'});
+ const shared={...stay(a).reservas,observaciones:'Nota operativa'};
+ const rows=[stay(a,{id:'e1',reservas:shared}),stay(b,{id:'e2',reservas:shared})];
+ const plan=await prepare([a,b],rows),serialized=Q.serializarIncorporacion(plan);
+ assert.equal(serialized.filter(i=>i.tipo==='reserva_actualizar').length,1);
+ const notes=serialized[0].reserva.despues.observaciones;
+ assert.match(notes,/Nota operativa/);assert.match(notes,/Factura/);assert.match(notes,/Llegada tarde/);
 });
 
 test('new reservation keeps the Libro state in the confirmation payload',async()=>{
