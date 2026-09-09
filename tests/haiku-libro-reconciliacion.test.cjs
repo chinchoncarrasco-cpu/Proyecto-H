@@ -19,6 +19,97 @@ function client(rows=[], payments=[]) {
 }
 const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
 
+async function prepararMacarena(approved=new Set(), payments=[], extraStays=[]) {
+ const rs=global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(require('./fixtures/libro-pagos-sep26.cjs')(),'Sep26').reservas;
+ rs.forEach(r=>{r.texto_original='';});
+ const fourth={id:'debit04',reserva_id:'r10',folio:'000242',bove:'750453',monto:20000,moneda:'CLP',medio_pago:'tarjeta_debito',fecha_pago:'2026-09-04'};
+ const db=client([...rs.map(r=>stay(r,{reserva_id:'r'+r.cabana})),...extraStays],[fourth,...payments]);
+ const comp=await Q.compararSistema(rs,db,q);
+ return {plan:Q.crearPlanIncorporacion(rs,comp,new Map(),approved),rs,comp,db};
+}
+
+test('each shared-voucher card requires its own approval; one approval never approves the other or permits partial incorporation',async()=>{
+ const {plan}=await prepararMacarena();
+ const parts=plan.items.filter(i=>i.distribucionManual);
+ assert.equal(parts.length,2); assert.ok(parts.every(i=>i.categoria==='dudosos'&&i.aprobable&&!i.seleccionado));
+ const h=renderHarness();const clicked=[];
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},id=>clicked.push(id),async()=>{});
+ const botones=h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago');
+ assert.ok(botones.length>=2);await botones[0].events.click();assert.equal(clicked.length,1);
+ const first=parts.find(i=>i.pagoLibro.monto===153000),second=parts.find(i=>i.pagoLibro.monto===40000);
+ const one=(await prepararMacarena(new Set([first.id]))).plan;
+ assert.ok(one.items.find(i=>i.id===first.id).seleccionado);
+ assert.equal(one.items.find(i=>i.id===second.id).categoria,'dudosos');
+ assert.throws(()=>Q.serializarIncorporacion(one),/ambas partes/);
+ const serviceOnly=(await prepararMacarena(new Set([second.id]))).plan;
+ assert.ok(serviceOnly.items.find(i=>i.id===second.id).seleccionado);
+ assert.equal(serviceOnly.items.find(i=>i.id===first.id).categoria,'dudosos');
+ const both=(await prepararMacarena(new Set(parts.map(i=>i.id)))).plan;
+ const prepared=both.items.filter(i=>i.distribucionManual);
+ assert.ok(prepared.every(i=>i.categoria==='pagos'&&i.seleccionado));
+ assert.equal(prepared.find(i=>i.id===second.id).pagoLibro.tipo_movimiento,'servicio');
+ const serialized=Q.serializarIncorporacion(both);
+ assert.equal(serialized.length,1);assert.equal(serialized[0].argumentos.p_monto,193000);
+ assert.equal(serialized[0].argumentos.p_modo_aplicacion,'ninguno');
+ assert.deepEqual(serialized[0].datos_origen.distribucion_manual.componentes.map(c=>[c.monto,c.concepto,c.folio,c.bovtar]),
+  [[153000,'cab1/1noche','000235','173121'],[40000,'early check in','000235','173121']]);
+ assert.equal(serialized[0].reserva_id,'r5');assert.ok(serialized.every(i=>i.tipo==='pago'));
+});
+
+test('shared voucher with existing ID, real ambiguity, or a duplicate application stays blocked',async()=>{
+ const existing={id:'existing',reserva_id:'r5',folio:'000235',bove:'173121',monto:193000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-03'};
+ const {plan}=await prepararMacarena(new Set(),[existing]);
+ assert.ok(plan.items.filter(i=>i.pagoLibro?.folio==='000235').every(i=>!i.aprobable&&!i.seleccionado));
+ const {rs}=await prepararMacarena();
+ const extra=stay(rs[0],{id:'other',reserva_id:'other',cabanas:{numero:6}});
+ const ambiguous=(await prepararMacarena(new Set(),[],[extra])).plan;
+ assert.equal(ambiguous.items.filter(i=>i.distribucionManual).length,0);
+ const r=rs[0]; r.pagos_sin_asociacion.push({...r.pagos_sin_asociacion[0],origen:{hoja:'Sep26',celda:'K48:N48'}});
+ const comp=await compare([r],[stay(r)]);
+ const duplicate=Q.crearPlanIncorporacion([r],comp);
+ assert.equal(duplicate.items.filter(i=>i.distribucionManual).length,0);
+ assert.equal(Q.serializarIncorporacion(duplicate).length,0);
+});
+
+test('a recorded distribution is omitted as one existing receipt; September 04 is unchanged by approvals',async()=>{
+ const initial=(await prepararMacarena()).plan;
+ const parts=initial.items.filter(i=>i.distribucionManual);
+ const approved=new Set(parts.map(i=>i.id));
+ const complete=(await prepararMacarena(approved)).plan;
+ const serialized=Q.serializarIncorporacion(complete)[0];
+ const existing={id:'recorded',reserva_id:'r5',folio:'000235',bove:'173121',monto:193000,datos_origen:serialized.datos_origen};
+ const repeat=(await prepararMacarena(approved,[existing])).plan;
+ assert.ok(repeat.items.filter(i=>i.pagoLibro?.folio==='000235').every(i=>i.categoria==='omitidos'&&!i.aprobable));
+ assert.equal(Q.serializarIncorporacion(repeat).length,0);
+ const fourth=p=>p.items.filter(i=>i.pagoLibro?.fecha_bloque==='2026-09-04');
+ assert.deepEqual(fourth(initial),fourth(complete));
+});
+
+test('distribution confirmation refuses an old backend and revalidates before sending one receipt',async()=>{
+ const state=await prepararMacarena();
+ const approved=new Set(state.plan.items.filter(i=>i.distribucionManual).map(i=>i.id));
+ const {plan,rs,comp,db}=await prepararMacarena(approved);
+ const result={reservas:rs,comparacion:comp,q};
+ const calls=[];
+ db.rpc=async(name,args)=>{calls.push({name,args});return {error:{message:'missing function'}};};
+ await assert.rejects(()=>Q.confirmarIncorporacion(result,new Map(),approved,plan,db),/Falta instalar/);
+ assert.ok(calls.every(c=>c.name==='haiku_libro_distribucion_capacidad_v1'));
+ assert.equal(plan.solicitudPendiente,undefined);
+ db.rpc=async(name,args)=>{calls.push({name,args});return name==='haiku_libro_distribucion_capacidad_v1'
+  ? {data:{version:1}} : {data:{ok:true,pagos_creados:1,omitidos:0}};};
+ await Q.confirmarIncorporacion(result,new Map(),approved,plan,db);
+ const writes=calls.filter(c=>c.name==='haiku_incorporar_libro_v1');assert.equal(writes.length,1);
+ assert.equal(writes[0].args.p_items.length,1);assert.equal(writes[0].args.p_items[0].argumentos.p_monto,193000);
+});
+
+test('conflicting declared transaction totals do not enable split approval',async()=>{
+ const {rs}=await prepararMacarena();const r=rs[0];
+ r.pagos_sin_asociacion[0].texto_original+=' // Monto: $153.000';
+ const comp=await compare([r],[stay(r)]),plan=Q.crearPlanIncorporacion([r],comp);
+ assert.equal(plan.items.filter(i=>i.distribucionManual).length,0);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+});
+
 test('real Sep26 geometry: both dates reach associated cards with review, service concept and duplicate protection',async()=>{
  const raw=require('./fixtures/libro-pagos-sep26.cjs')();
  const rs=global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(raw,'Sep26').reservas;

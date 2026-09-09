@@ -803,6 +803,50 @@
         }
         return plan;
     }
+    function idMovimientoIncorporacion(x) {
+        return 'pago:' + claveReserva(x.reserva) + ':' + source(x.pago.origen) + ':' + JSON.stringify(x.pago);
+    }
+
+    // Sólo preparación: no altera la lectura ni las asociaciones del Libro.
+    // Un alojamiento y un Early Check-In pueden ser partes del mismo comprobante.
+    // El operador debe aprobar cada parte; ningún conflicto genérico se flexibiliza.
+    function distribucionesManuales(comp, destinos) {
+        const salida = new Map(), movimientos = comp.pagosDetalle || [];
+        for (const x of movimientos) {
+            if (salida.has(x) || !pagoTieneIdentificadorFuerte(x.pago)) continue;
+            const grupo = movimientos.filter(y => pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }));
+            if (grupo.length !== 2) continue;
+            const r = x.reserva, destino = destinos.get(claveReserva(r));
+            if (!destino?.reserva_id || destino.bloqueado) continue;
+            const compatibles = (comp.snapshot?.estadias || []).filter(s => candidatoElegible(s) &&
+                S.mismaPersona(s.titular, r.titular) && s.fecha_checkin === r.fecha_checkin);
+            if (compatibles.length !== 1 || compatibles[0].reserva_id !== destino.reserva_id) continue;
+            const tipos = grupo.map(y => y.pago.tipo_movimiento).sort().join('|');
+            if (tipos !== 'alojamiento|servicio') continue;
+            if (!grupo.every(y => claveReserva(y.reserva) === claveReserva(r) &&
+                S.mismaPersona(y.pago.titular, r.titular) && y.pago.fecha_bloque === r.fecha_checkin &&
+                y.pago.fecha_comprobante === x.pago.fecha_comprobante && !!y.pago.fecha_comprobante &&
+                ['folio','bovtar','codigo_autorizacion'].every(k => normalizarId(y.pago[k]) === normalizarId(x.pago[k])) &&
+                Number(y.pago.cabana) === Number(r.cabana) && y.pago.moneda === 'CLP' &&
+                medioLibro(y.pago) && medioLibro(y.pago) === medioLibro(x.pago) &&
+                Number.isSafeInteger(y.pago.monto) && y.pago.monto > 0 &&
+                y.pago.pago_recibido === true && y.pago.estado_pago === 'registrado_en_libro' &&
+                (y.pago.tipo_movimiento === 'alojamiento' || /^early\s*(check\s*)?in$/i.test(y.pago.concepto?.trim())) &&
+                y.pago.origen?.hoja && y.pago.origen?.celda)) continue;
+            if (grupo[0].pago.origen.hoja !== grupo[1].pago.origen.hoja || source(grupo[0].pago.origen) === source(grupo[1].pago.origen)) continue;
+            const total = grupo.reduce((n,y) => n + y.pago.monto, 0);
+            if (!Number.isSafeInteger(total)) continue;
+            const declarados = grupo.map(y => String(y.pago.texto_original || '').match(/\bmonto\b\s*:?[ \t]*\$?[ \t]*([\d.]+)/i)?.[1])
+                .filter(Boolean).map(v => Number(v.replace(/\./g,'')));
+            if (declarados.some(v => v !== total)) continue;
+            const ids = grupo.map(idMovimientoIncorporacion).sort();
+            const distribucion = { id: 'distribucion:' + ids.join('|'), ids, total, estadia_id: compatibles[0].id,
+                titular: r.titular, cabana: r.cabana, componentes: grupo.map(y => ({ item_id: idMovimientoIncorporacion(y), ...y.pago })) };
+            grupo.forEach(y => salida.set(y, distribucion));
+        }
+        return salida;
+    }
+
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
@@ -900,10 +944,11 @@
             g.items.forEach(i => destinos.set(claveReserva(i.libro), { reserva_id: categoria === 'estadias' ? reservaId : null, reserva_ref: categoria === 'nuevas' ? id : null, dependeDe: [id], bloqueado: !!item.motivos.length }));
         }
         for (const r of reservas.map(normalizarReservaComparacion).filter(r => !esReservaValida(r))) add('pendientes', 'invalida:' + claveReserva(r), (r.titular || 'Sin titular') + ' · CAB ' + (r.cabana || 'sin dato'), null, ['Faltan titular, cabaña o fechas válidas.']);
+        const distribuciones = distribucionesManuales(comp, destinos);
         const vistos = [];
         for (const x of comp.pagosDetalle || []) {
             const p = x.pago, r = x.reserva, destino = destinos.get(claveReserva(r));
-            const id = 'pago:' + claveReserva(r) + ':' + source(p.origen) + ':' + JSON.stringify(p);
+            const id = idMovimientoIncorporacion(x);
             if (plan.items.some(i => i.id === id)) continue;
             const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
             const fuerte = pagoTieneIdentificadorFuerte(p);
@@ -915,6 +960,31 @@
             }
             const coincidencias = fuerte ? snapshot.pagos.filter(v => pagoCoincide(p,v)) : [];
             const duplicado = coincidencias[0];
+            const distribucion = distribuciones.get(x);
+            if (distribucion) {
+                if (duplicado) {
+                    const yaDistribuido = coincidencias.length === 1 && duplicado.reserva_id === destino.reserva_id &&
+                        Number(duplicado.monto) === distribucion.total &&
+                        duplicado.datos_origen?.distribucion_manual?.id === distribucion.id;
+                    add(yaDistribuido ? 'omitidos' : 'dudosos', id, texto + (yaDistribuido ? ' · Ya existe en Proyecto H.' : ''), null,
+                        yaDistribuido ? [] : ['El comprobante ya existe en Proyecto H; revisa su distribución sin registrarlo nuevamente.']);
+                    continue;
+                }
+                const manual = aprobados.has(id);
+                const item = add(manual ? 'pagos' : 'dudosos', id, texto,
+                    { contrato: 'haiku_incorporar_libro_v1', reserva_ref: null,
+                        argumentos: { p_reserva_id: destino.reserva_id, p_monto: p.monto, p_medio_pago: medioLibro(p),
+                            p_etapa_operativa: 'abono', p_fecha_pago: p.fecha_comprobante, p_folio: p.folio,
+                            p_codigo_autorizacion: p.codigo_autorizacion, p_bove: p.bove || null,
+                            p_referencia_externa: p.texto_original, p_observaciones: p.texto_original,
+                            p_aplicaciones: [], p_modo_aplicacion: 'ninguno' },
+                        datos_origen: { bovtar: p.bovtar, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual },
+                    manual ? [] : ['Requiere aprobación manual de esta parte del comprobante y su asociación.'], [], ['pagos.registrar']);
+                item.aprobable = !manual;
+                item.distribucionManual = distribucion;
+                item.aviso = `Comprobante compartido: ${money(distribucion.total)} en total. Aprueba y selecciona ambas partes para confirmar una sola transacción. Early Check-In conserva su concepto; si no hay un cargo de ese servicio, su importe queda sin aplicar hasta regularizarlo.`;
+                continue;
+            }
             if (duplicado) {
                 const patch = actualizacionPagoLibro(p,duplicado);
                 if (coincidencias.length !== 1 || duplicado.reserva_id !== destino?.reserva_id) {
@@ -1022,7 +1092,23 @@
 
     function serializarIncorporacion(plan) {
         const elegidos = new Set(plan.items.filter(i => i.seleccionado && !i.motivos.length).map(i => i.id));
+        const distribuidos = new Set();
         return plan.items.filter(item => elegidos.has(item.id) && item.dependeDe.every(id => elegidos.has(id))).map(item => {
+            if (item.distribucionManual) {
+                const d = item.distribucionManual;
+                if (!d.ids.every(id => elegidos.has(id) && plan.items.find(i => i.id === id)?.payload?.aprobado_manualmente)) {
+                    throw new Error('Aprueba y selecciona ambas partes del comprobante compartido antes de confirmar.');
+                }
+                if (distribuidos.has(d.id)) return null;
+                distribuidos.add(d.id);
+                return { tipo: 'pago', item_id: d.id, reserva_id: item.payload.argumentos.p_reserva_id,
+                    argumentos: { ...item.payload.argumentos, p_monto: d.total,
+                        p_referencia_externa: d.componentes.map(c => c.texto_original).join('\n'),
+                        p_observaciones: d.componentes.map(c => c.texto_original).join('\n') },
+                    datos_origen: { ...item.payload.datos_origen, distribucion_manual: {
+                        ...d, componentes: d.componentes.map(c => ({ ...c, aprobado_manualmente: true })) } },
+                    aprobado_manualmente: true };
+            }
             if (item.categoria === 'actualizaciones') return { ...item.payload, item_id:item.id };
             if (item.categoria === 'nuevas') return {
                 tipo: 'reserva_nueva', item_id: item.id,
@@ -1046,6 +1132,13 @@
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        if (plan.items.some(i => i.seleccionado && i.distribucionManual) ||
+            plan.solicitudPendiente?.items.some(i => i.datos_origen?.distribucion_manual)) {
+            const capacidad = await cliente.rpc('haiku_libro_distribucion_capacidad_v1', {});
+            if (capacidad.error || capacidad.data?.version !== 1) {
+                throw new Error('Falta instalar el soporte de comprobantes distribuidos en Proyecto H. Las aprobaciones se conservan; no se registró este comprobante.');
+            }
+        }
         let solicitud = plan.solicitudPendiente;
         let omitidosAlRevalidar = 0;
         if (!solicitud) {
@@ -1952,7 +2045,7 @@
         out.append(ayuda);
 
         const elegiblesAhora = plan.items.filter(item => !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria));
-        const aprobables = plan.items.filter(item => item.categoria === "dudosos" && item.aprobable);
+        const aprobables = plan.items.filter(item => item.categoria === "dudosos" && item.aprobable && !item.distribucionManual);
         const pendientes = plan.items.filter(item => item.categoria === "pendientes" || item.motivos.length && item.categoria !== "dudosos");
         const atajos = elemento("div", "haiku-incorporacion-atajos");
         if (elegiblesAhora.length) {
