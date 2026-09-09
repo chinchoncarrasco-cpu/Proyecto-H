@@ -103,5 +103,15 @@
         document.head.appendChild(script);
     }
 
-    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.2.0" });
+    // El borrador del compositor también forma parte de la experiencia local
+    // de Haku. Se carga aquí porque este módulo acompaña siempre al historial.
+    if (!root.HAIKU_ASISTENTE_BORRADOR_V1 && !document.querySelector('script[data-haiku-borrador]')) {
+        const script = document.createElement("script");
+        script.src = `js/supabase-asistente-borrador-v1.js?v=${Date.now()}`;
+        script.async = false;
+        script.dataset.haikuBorrador = "1";
+        document.head.appendChild(script);
+    }
+
+    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.3.0" });
 })(typeof window !== "undefined" ? window : globalThis);
