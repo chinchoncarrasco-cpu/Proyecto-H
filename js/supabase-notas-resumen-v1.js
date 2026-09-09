@@ -363,3 +363,16 @@
 
     if (window.haikuSesion) iniciar();
 })();
+
+// Carga desacoplada de la consulta natural "tinajas por coordinar".
+// Se mantiene fuera del panel para no tocar el orden de los módulos existentes.
+(() => {
+    "use strict";
+    if (window.HAIKU_TINAJAS_PENDIENTES_LOADER_V1) return;
+    window.HAIKU_TINAJAS_PENDIENTES_LOADER_V1 = true;
+    const script = document.createElement("script");
+    script.src = `js/supabase-asistente-tinajas-pendientes-v1.js?v=${Date.now()}`;
+    script.async = false;
+    script.onerror = () => console.warn("HAKU · No fue posible cargar la consulta de tinajas pendientes.");
+    document.head.appendChild(script);
+})();
