@@ -18,6 +18,37 @@ function client(rows=[], payments=[]) {
  },rpc(name,args){calls.push(name);return Promise.resolve({data:{ok:true,operacion_id:args.p_operacion_id,reservas_creadas:0,estadias_agregadas:0,pagos_creados:0,omitidos:0},error:null})}};
 }
 const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
+
+test('real Sep26 geometry: both dates reach associated cards with review, service concept and duplicate protection',async()=>{
+ const raw=require('./fixtures/libro-pagos-sep26.cjs')();
+ const rs=global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(raw,'Sep26').reservas;
+ rs.forEach(r=>{r.texto_original='';}); // El modo focalizado omite cambios de notas.
+ const ss=rs.map(r=>stay(r,{reserva_id:'r'+r.cabana}));
+ const existing={id:'p-existing',reserva_id:'r10',monto:20000,moneda:'CLP',medio_pago:'tarjeta_debito',
+  folio:'000242',bove:'750453',fecha_pago:'2026-09-04T12:00:00Z'};
+ const comp=await compare(rs,ss,[existing]);
+ assert.deepEqual(comp.pagosDetalle.map(x=>x.estado),['revisar','revisar','revisar','en_sistema']);
+ const plan=Q.crearPlanIncorporacion(rs,comp);
+ assert.equal(plan.items.filter(i=>i.categoria==='asociadas').length,2);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+ const h=renderHarness(); h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const text=h.texts();
+ for(const re of [/153[.]000/,/40[.]000/,/100[.]000/,/20[.]000/,/early check in/,/cab1\/1noche/,/CAB 1.*CAB 5/,/000235/,/173121/,/Ya existe en Proyecto H/]) assert.match(text,re);
+ assert.doesNotMatch(text,/Sin movimientos financieros/);
+});
+
+test('a recovered movement whose strong ID already exists stays omitted and cannot be proposed again',async()=>{
+ const r=global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(require('./fixtures/libro-pagos-sep26.cjs')(),'Sep26').reservas[0];
+ r.texto_original='';
+ const existing={id:'p-recovered',reserva_id:'r1',monto:153000,moneda:'CLP',medio_pago:'tarjeta_credito',
+  folio:'000235',bove:'173121',fecha_pago:'2026-09-03T12:00:00Z'};
+ const comp=await compare([r],[stay(r)],[existing]);
+ assert.equal(comp.pagosDetalle[0].estado,'en_sistema');
+ assert.equal(comp.pagosDetalle[1].estado,'revisar');
+ const plan=Q.crearPlanIncorporacion([r],comp);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+ assert.ok(plan.items.some(i=>i.categoria==='omitidos'&&i.pagoLibro?.monto===153000));
+});
 test('September 2026: two cabins in one reservation count as one complete logical group',async()=>{
  const a=book(),b=book({id:'b2',cabana:2}); const c=await compare([a,b],[stay(a),stay(b)]);
  assert.equal(c.meta.libro,1);assert.equal(c.meta.estadias_libro,2);assert.equal(c.meta.asociadas,1);assert.equal(c.meta.faltantes,0);

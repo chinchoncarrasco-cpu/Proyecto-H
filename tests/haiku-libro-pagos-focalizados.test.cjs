@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function cargarModulo(datosLibro = { reservas: [] }) {
+function cargarModulo(datosLibro = { reservas: [] }, capas = false) {
     const listeners = new Map();
     const campo = { value: '' };
     class FechaPrueba extends Date {
@@ -34,9 +34,16 @@ function cargarModulo(datosLibro = { reservas: [] }) {
         window, document, MutationObserver, structuredClone, console, Date: FechaPrueba, Math,
         setInterval: () => 1, clearInterval() {}, Event: class Event {}
     };
+    if (capas) {
+        window.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
+        for (const nombre of ['haiku-libro-pagos-canon-v1', 'haiku-libro-lenguaje-natural-v1']) {
+            vm.runInNewContext(fs.readFileSync(require.resolve('../js/' + nombre + '.js'), 'utf8'), context);
+        }
+    }
     vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-pagos-focalizados-v1.js'), 'utf8'), context);
     return {
         api: window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1,
+        textoEnrutado: () => campo.value,
         consultarHoja: (...args) => window.HAIKU_LIBRO_RESERVA_V1.consultarHoja(...args),
         disparar(texto) {
             campo.value = texto;
@@ -88,4 +95,20 @@ test('the existing multi-CAB focused syntax remains supported', () => {
         [4, 'Pascual Abarca'],
         [10, 'Macarena Hurtado']
     ]);
+});
+
+test('exact request without Libro routes through all payment layers and retains both September stays', async () => {
+    const S = require('../js/haiku-libro-semantica-v1.js');
+    const raw = require('./fixtures/libro-pagos-sep26.cjs')();
+    const h = cargarModulo(S.normalizarHoja(raw, 'Sep26'), true);
+    const texto = 'Haku revisa los pagos de Macarena Hurtado del 03 de septiembre para agregarlos a Proyecto H';
+    h.disparar(texto);
+    assert.equal(h.textoEnrutado(), 'Libro: ' + texto);
+    const out = await h.consultarHoja('Sep26');
+    assert.equal(out.reservas.length, 2);
+    const cinco = out.reservas.find(r => r.cabana === 5);
+    assert.deepEqual(Array.from(cinco.pagos_sin_asociacion, p => p.monto), [153000, 40000]);
+    assert.equal(cinco.pagos.length, 0);
+    assert.equal(cinco.pagos_sin_asociacion[1].tipo_movimiento, 'servicio');
+    assert.deepEqual(Array.from(out.reservas.find(r => r.cabana === 10).pagos, p => p.monto), [100000, 20000]);
 });

@@ -147,7 +147,8 @@
 
     function detectarScope(texto) {
         const t = normalizar(texto);
-        if (!/\bpagos?\b/.test(t) || !/\blibro\b/.test(t)) return null;
+        if (!/\bpagos?\b/.test(t) || (!/\blibro\b/.test(t) &&
+            !(/\bhaku\b/.test(t) && /\brevisa(?:r)?\b/.test(t)))) return null;
         const objetivosListado = objetivosDesdeTexto(texto);
         const objetivoIndividual = objetivoIndividualDesdeTexto(texto);
         const objetivos = objetivosListado.length >= 2 ? objetivosListado :
@@ -250,6 +251,9 @@
         estado.scope = scope;
         estado.esperandoSalida = Boolean(scope);
         if (scope) {
+            // Esta petición explícita de revisión de pagos usa el lector del Libro,
+            // también cuando el operador omite la palabra «Libro».
+            if (!/\blibro\b/i.test(texto)) campo.value = 'Libro: ' + texto;
             instalarProxyLibro();
             console.info("HAKU · Pagos focalizados:", scope.fecha,
                 scope.objetivos.map(x => [x.cabana ? `CAB ${x.cabana}` : null, x.nombre].filter(Boolean).join(" ")));

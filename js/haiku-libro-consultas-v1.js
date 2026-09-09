@@ -602,7 +602,14 @@
             }
 
             for (const p of r.pagos_sin_asociacion) {
-                result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
+                const candidatos = pagos.filter(x => pagoCoincide(p, x));
+                const existente = p.advertencias?.length && S.mismaPersona(p.titular, r.titular) &&
+                    candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id &&
+                    candidatos[0].moneda === p.moneda &&
+                    Number(candidatos[0].monto) === p.monto && medioSistema(candidatos[0]) === medioLibro(p) &&
+                    String(candidatos[0].fecha_pago || '').slice(0, 10) === p.fecha_comprobante ? candidatos[0] : null;
+                result.pagosComparacion.push({ estado: existente ? 'en_sistema' : 'revisar', pago: p, reserva: r,
+                    ...(existente ? { sistema: existente } : {}), diferencias: p.advertencias || [] });
             }
 
             for (const service of r.servicios) {
@@ -1688,6 +1695,9 @@
                 datoIncorporacion('Fecha pago', datos.fecha)
             );
             tarjeta.append(cabecera, meta);
+            if (pago.concepto && datos.segundo[0] !== 'Concepto') {
+                tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-concepto', 'Concepto: ' + pago.concepto));
+            }
             if (movimiento.diferencias?.length) {
                 tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-diferencias', movimiento.diferencias.join(' · ')));
             }

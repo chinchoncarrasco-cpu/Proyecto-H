@@ -150,7 +150,12 @@
                 const h = headers[i];
                 // Financial blocks are explicitly labelled and consist of date, detail, concept, amount.
                 const mark = marker.find(m => m.c === h.c);
-                if (!mark || (headers[i + 1] && headers[i + 1].c - h.c !== 4)) continue;
+                // Algunos días conservan la banda combinada, pero borraron su título.
+                // Recuperar sólo dentro de la geometría financiera conocida; nunca
+                // tratar una región cualquiera o un título distinto como pagos.
+                const bandaSinTitulo = res.cobertura.pagos && !at(financialRow, h.c)?.valor?.trim() &&
+                    merges.some(m => m.s.r === financialRow && m.e.r === financialRow && m.s.c === h.c && m.e.c === h.c + 3);
+                if ((!mark && !bandaSinTitulo) || (headers[i + 1] && headers[i + 1].c - h.c !== 4)) continue;
                 for (let r = cab.r; r <= end; r++) {
                     const detail = at(r, h.c + 1), concept = at(r, h.c + 2), amount = at(r, h.c + 3);
                     if (!detail?.valor.trim() && !concept?.valor.trim() && !amount?.valor.trim()) continue;
@@ -160,6 +165,11 @@
                     const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor).length || /masaj|lena|carbon|desayuno/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
+                    if (!mark && (!at(r, h.c)?.fechaISO || !titular(detail?.valor) || !(money > 0) || !c)) continue;
+                    const cabanaConcepto = Number(c.match(/^cab\s*(\d+)\b/)?.[1]) || null;
+                    const advertencias = [];
+                    if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
+                    if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
                     const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titular(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         codigo_autorizacion: ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
@@ -168,7 +178,8 @@
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
                         monto_penalidad: /penalidad/.test(t) ? monto(t.match(/([\d.,]+)\s+de penalidad/)?.[1]) : null,
                         saldo_por_pagar: monto(t.match(/por pagar\s*\$\s*([\d.,]+)/)?.[1]),
-                        concepto: concept?.valor || null, tipo_movimiento: kind, estado_pago: pending,
+                        concepto: concept?.valor || null, tipo_movimiento: /early\s*(check\s*)?in/.test(c) ? 'servicio' : kind, estado_pago: pending,
+                        ...(advertencias.length ? { advertencias } : {}),
                         pago_recibido: money !== null && pending === "registrado_en_libro" && kind !== "penalidad" ? true : null,
                         texto_original: [at(r, h.c)?.valor, text, amount?.valor].filter(Boolean).join(" // "), origen: { hoja, celda: `${direccion(r, h.c)}:${direccion(r, h.c + 3)}` } };
                     res.pagos.push(p);
@@ -180,7 +191,7 @@
             const others = res.reservas.filter(x => x.cabana === r.cabana && x.fecha_checkin === r.fecha_checkin);
             r.cobertura_pagos = res.cobertura.pagos && marker.some(m => headers.find(h => h.fechaISO === r.fecha_checkin)?.c === m.c);
             for (const p of candidates) {
-                if (others.length === 1 && mismaPersona(r.titular, p.titular) && !r.advertencias.length) r.pagos.push(p);
+                if (others.length === 1 && mismaPersona(r.titular, p.titular) && !r.advertencias.length && !p.advertencias?.length) r.pagos.push(p);
                 else r.pagos_sin_asociacion.push(p);
             }
         }
