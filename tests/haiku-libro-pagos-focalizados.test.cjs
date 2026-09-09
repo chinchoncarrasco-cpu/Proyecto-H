@@ -57,7 +57,7 @@ test('one holder and one written date activate the focused payment scope without
     assert.equal(scope.objetivos[0].cabana, null);
 });
 
-test('the exact Macarena request excludes other holders and payments from other dates', async () => {
+test('the exact Macarena request excludes other holders but preserves every related multi-stay movement', async () => {
     const h = cargarModulo({ reservas: [
         { titular: 'Macarena Hurtado', cabana: 5, pagos: [
             { monto: 160000, fecha_comprobante: '2026-09-03' },
@@ -74,8 +74,8 @@ test('the exact Macarena request excludes other holders and payments from other 
     const resultado = await h.consultarHoja('Sep26');
     assert.equal(resultado.reservas.length, 2);
     assert.ok(resultado.reservas.every(r => r.titular === 'Macarena Hurtado'));
-    assert.deepEqual(resultado.reservas.find(r => r.cabana === 5).pagos.map(p => p.monto), [160000]);
-    assert.equal(resultado.reservas.find(r => r.cabana === 10).pagos.length, 0);
+    assert.deepEqual(resultado.reservas.find(r => r.cabana === 5).pagos.map(p => p.monto), [160000, 20000]);
+    assert.deepEqual(resultado.reservas.find(r => r.cabana === 10).pagos.map(p => p.monto), [20000]);
     assert.ok(resultado.reservas.every(r => r.servicios.length === 0));
 });
 
