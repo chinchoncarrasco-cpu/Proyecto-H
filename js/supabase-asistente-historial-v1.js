@@ -10,6 +10,8 @@
 // - Las vistas previas restauradas son SOLO HISTORIAL: sus botones quedan
 //   deshabilitados para impedir ejecutar operaciones antiguas.
 // - No persiste blobs/imágenes adjuntas; el texto del mensaje sí permanece.
+// - "Borrar historial" limpia sólo esta conversación local de Haku. No toca
+//   reservas, pagos, auditoría ni el Historial operativo de Proyecto H.
 // ========================================
 (() => {
     "use strict";
@@ -29,6 +31,9 @@
     const MAX_ITEMS = 120;
     const MAX_CHARS = 900000;
     const CLAVE = `haiku_asistente_historial_v1::${location.pathname}`;
+    // Al instalarse, el panel contiene el saludo limpio de Haku, antes de restaurar
+    // cualquier conversación previa. Ese estado se reutiliza al borrar el chat.
+    const HTML_INICIAL = mensajes.innerHTML;
 
     // Estos dos parches son puramente de interfaz. Se cargan desde aquí porque
     // el módulo de historial ya está presente siempre que Haku conserva el chat:
@@ -47,6 +52,50 @@
 
     cargarParche("haiku-libro-historial-ui-fix-v1");
     cargarParche("haiku-libro-confirm-cancel-fix-v1");
+
+    function asegurarEstilosBorrar() {
+        if (document.getElementById("haiku-historial-borrar-v1-css")) return;
+        const style = document.createElement("style");
+        style.id = "haiku-historial-borrar-v1-css";
+        style.textContent = `
+            .haiku-asistente-cabecera-acciones {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex: 0 0 auto;
+            }
+            .haiku-asistente-borrar-historial {
+                min-height: 31px;
+                padding: 6px 9px;
+                border: 1px solid #d9e0dc;
+                border-radius: 9px;
+                background: #fff;
+                color: #6b5149;
+                cursor: pointer;
+                font: inherit;
+                font-size: .65rem;
+                font-weight: 750;
+                white-space: nowrap;
+            }
+            .haiku-asistente-borrar-historial:hover {
+                border-color: #d7b9af;
+                background: #fff8f6;
+                color: #8a4638;
+            }
+            .haiku-asistente-borrar-historial:focus-visible {
+                outline: 3px solid rgba(138, 70, 56, .16);
+                outline-offset: 2px;
+            }
+            @media (max-width: 480px) {
+                .haiku-asistente-borrar-historial {
+                    max-width: 82px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
 
     function quitarAtributosPeligrosos(elemento) {
         [...elemento.attributes].forEach(attr => {
@@ -163,7 +212,60 @@
         }
     }
 
+    function borrar({ confirmar = true } = {}) {
+        if (window.HAIKU_ASISTENTE?.procesando?.()) {
+            window.alert("Haku todavía está procesando una solicitud. Espera a que termine antes de borrar la conversación.");
+            return false;
+        }
+
+        if (confirmar) {
+            const aceptado = window.confirm(
+                "¿Borrar el historial de esta conversación con Haku?\n\n" +
+                "Esto sólo limpia los mensajes de este chat en esta pestaña. No borra reservas, pagos, servicios ni el Historial operativo de Proyecto H."
+            );
+            if (!aceptado) return false;
+        }
+
+        try {
+            sessionStorage.removeItem(CLAVE);
+        } catch (error) {
+            console.warn("HAKU · No pude quitar el historial de sessionStorage:", error);
+        }
+
+        mensajes.innerHTML = HTML_INICIAL;
+        delete mensajes.dataset.haikuHistorialRestaurado;
+        mensajes.scrollTop = 0;
+        return true;
+    }
+
+    function instalarBotonBorrar() {
+        if (!cerrar || document.getElementById("haiku-asistente-borrar-historial")) return;
+        asegurarEstilosBorrar();
+
+        const cabecera = cerrar.closest(".haiku-asistente-cabecera");
+        if (!cabecera) return;
+
+        let acciones = cabecera.querySelector(".haiku-asistente-cabecera-acciones");
+        if (!acciones) {
+            acciones = document.createElement("div");
+            acciones.className = "haiku-asistente-cabecera-acciones";
+            cabecera.insertBefore(acciones, cerrar);
+            acciones.appendChild(cerrar);
+        }
+
+        const borrarBtn = document.createElement("button");
+        borrarBtn.type = "button";
+        borrarBtn.id = "haiku-asistente-borrar-historial";
+        borrarBtn.className = "haiku-asistente-borrar-historial";
+        borrarBtn.textContent = "Borrar historial";
+        borrarBtn.title = "Borrar sólo la conversación local de Haku";
+        borrarBtn.setAttribute("aria-label", "Borrar historial de conversación de Haku");
+        borrarBtn.addEventListener("click", () => borrar({ confirmar: true }));
+        acciones.insertBefore(borrarBtn, cerrar);
+    }
+
     const restaurado = restaurar();
+    instalarBotonBorrar();
 
     // Eventos naturales del navegador: sin observers ni temporizadores.
     window.addEventListener("pagehide", guardar);
@@ -180,6 +282,7 @@
     window.HAIKU_ASISTENTE_HISTORIAL_V1 = Object.freeze({
         guardar,
         restaurar,
+        borrar,
         clave: CLAVE,
         restaurado
     });
