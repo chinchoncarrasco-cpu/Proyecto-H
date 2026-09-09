@@ -81,7 +81,7 @@
         if (/\b(?:disponibilidad|disponible|horarios?|horas? libres?)\b/.test(t)) return false;
 
         const pendiente =
-            /\b(?:por\s+coordinar|coordinar|por\s+confirmar|x\s*confirmar|x\s*coordinar|cortesia|pendiente|pendientes)\b/.test(t);
+            /\b(?:por\s+coordinar|coordinar|por\s+confirmar|a\s+confirmar|x\s*confirmar|x\s*coordinar|cortesia|pendiente|pendientes)\b/.test(t);
         const pregunta = /\b(?:que|cuales|cuantas|dime|muestra|lista|revisa|hay|tienen|tiene)\b/.test(t);
         return pendiente && pregunta;
     }
@@ -95,18 +95,24 @@
         const t = norm(texto);
         if (!/\btinajas?\b/.test(t) || notaResuelta(t)) return null;
 
-        const coordinar = /\b(?:por\s+coordinar|coordinar|x\s*coordinar|por\s+confirmar|x\s*confirmar|confirmar)\b/.test(t);
+        const coordinar = /\b(?:por\s+coordinar|coordinar|x\s*coordinar|por\s+confirmar|a\s+confirmar|x\s*confirmar|confirmar)\b/.test(t);
         const cortesia = /\bcortesia\b/.test(t);
         const tipoEspecificado = /\b(?:jacuzzi|tonel(?:\s+de\s+madera)?|tonel\s+madera)\b/.test(t);
+        const indicioServicio =
+            /\b(?:\d+\s*(?:hora|horas|hr|hrs)|a\s+las\s+\d{1,2}|dejar\s+batas|batas|pagad[ao]|por\s+pagar|x\s*pagar|tinaja\s+caliente|servicio\s+de\s+tinaja)\b/.test(t) ||
+            /\b\d{1,2}[:.]\d{2}\b/.test(t);
+        const notaGenericaBreve = !tipoEspecificado && (indicioServicio || t.length <= 55);
 
         // Regla operativa acordada:
         // 1) si dice coordinar/confirmar => pendiente;
         // 2) si es cortesía => requiere seguimiento operativo;
-        // 3) si sólo dice "tinaja" y NO identifica Jacuzzi/Tonel => quedó como nota
-        //    precisamente porque Haku no debía inventar el tipo.
+        // 3) si es una nota breve/operativa de tinaja y NO identifica Jacuzzi/Tonel,
+        //    Haku la muestra como "Tipo por definir" en vez de inventar el servicio.
+        // Un comentario largo que sólo habla del sistema de tinajas (consulta del huésped,
+        // explicación comercial, etc.) no se considera automáticamente una tinaja pendiente.
         if (coordinar) return "Por coordinar";
         if (cortesia) return "Cortesía";
-        if (!tipoEspecificado) return "Tipo por definir";
+        if (notaGenericaBreve) return "Tipo por definir";
         return null;
     }
 
