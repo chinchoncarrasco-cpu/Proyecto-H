@@ -32,6 +32,13 @@
             seleccion.defer = true;
             document.head.appendChild(seleccion);
         }
+        if (!document.getElementById("haiku-libro-pagos-duplicados-v1-script")) {
+            const duplicados = document.createElement("script");
+            duplicados.id = "haiku-libro-pagos-duplicados-v1-script";
+            duplicados.src = "js/haiku-libro-pagos-duplicados-v1.js?v=1";
+            duplicados.defer = true;
+            document.head.appendChild(duplicados);
+        }
     }
 
     function normalizarTexto(valor) {
