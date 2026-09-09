@@ -338,6 +338,96 @@
         }
     });
 
+    // Al restaurar el XLSX después de F5, el visor base selecciona la primera
+    // hoja visible (por ejemplo Jun20). Esta capa corrige sólo la selección
+    // inicial de cada carga y abre automáticamente la hoja del mes vigente en
+    // Chile si existe (Sep26 en septiembre de 2026). No interfiere con cambios
+    // manuales posteriores del selector.
+    let generacionMesAplicada = null;
+    let timerMesActual = null;
+
+    const nombresMesHoja = [
+        ["ene", "jan", "enero", "january"],
+        ["feb", "febrero", "february"],
+        ["mar", "marzo", "march"],
+        ["abr", "apr", "abril", "april"],
+        ["may", "mayo"],
+        ["jun", "junio", "june"],
+        ["jul", "julio", "july"],
+        ["ago", "aug", "agosto", "august"],
+        ["sep", "sept", "set", "septiembre", "setiembre", "september"],
+        ["oct", "octubre", "october"],
+        ["nov", "noviembre", "november"],
+        ["dic", "dec", "diciembre", "december"]
+    ];
+
+    function canonHoja(valor) {
+        return String(valor || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+    }
+
+    function fechaChileActual() {
+        try {
+            const partes = new Intl.DateTimeFormat("en-CA", {
+                timeZone: "America/Santiago",
+                year: "numeric",
+                month: "2-digit"
+            }).formatToParts(new Date());
+            const valor = tipo => Number(partes.find(p => p.type === tipo)?.value);
+            return { year: valor("year"), month: valor("month") };
+        } catch (_) {
+            const ahora = new Date();
+            return { year: ahora.getFullYear(), month: ahora.getMonth() + 1 };
+        }
+    }
+
+    function encontrarHojaMesActual(selector) {
+        const { year, month } = fechaChileActual();
+        if (!year || !month) return null;
+        const yy = String(year).slice(-2);
+        const yyyy = String(year);
+        const prefijos = nombresMesHoja[month - 1] || [];
+        const opciones = [...selector.options];
+        const coincide = opcion => {
+            const nombre = canonHoja(opcion.value || opcion.textContent);
+            return prefijos.some(prefijo => nombre === `${prefijo}${yy}` || nombre === `${prefijo}${yyyy}`);
+        };
+        return opciones.find(opcion => /hojas visibles/i.test(opcion.parentElement?.label || "") && coincide(opcion))
+            || opciones.find(coincide)
+            || null;
+    }
+
+    function intentarMesActual() {
+        const api = window.HAIKU_LIBRO_RESERVA_V1;
+        const selector = document.getElementById("libro-reserva-hoja");
+        const info = api?.estado?.();
+        if (!api || !info?.cargado || !selector || selector.disabled || !selector.options.length) return false;
+        if (generacionMesAplicada === info.generacion) return true;
+
+        const opcion = encontrarHojaMesActual(selector);
+        generacionMesAplicada = info.generacion;
+        if (!opcion || selector.value === opcion.value) return true;
+
+        selector.value = opcion.value;
+        selector.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+    }
+
+    function programarMesActual() {
+        if (timerMesActual) clearInterval(timerMesActual);
+        let intentos = 0;
+        timerMesActual = setInterval(() => {
+            intentos += 1;
+            if (intentarMesActual() || intentos >= 150) {
+                clearInterval(timerMesActual);
+                timerMesActual = null;
+            }
+        }, 100);
+    }
+
     function iniciar() {
         // Los listeners se registran inmediatamente porque este archivo se carga
         // justo antes de haiku-libro-consultas-v1.js. Así el alcance focalizado
@@ -354,6 +444,15 @@
             document.addEventListener("DOMContentLoaded", instalarProxyLibro, { once: true });
         }
 
+        // Cada carga/restauración del Libro incrementa su generación. La primera
+        // vez que el selector queda poblado para esa generación elegimos el mes
+        // actual; luego respetamos cualquier selección manual del operador.
+        window.addEventListener("haiku:libro-cambio", () => {
+            generacionMesAplicada = null;
+            programarMesActual();
+        });
+        programarMesActual();
+
         const style = document.createElement("style");
         style.id = "haku-pagos-focalizados-v1-style";
         style.textContent = `
@@ -366,7 +465,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
-        version: "1.0.2",
+        version: "1.0.3",
         detectar: detectarScope,
         estado: () => estado.scope ? structuredClone(estado.scope) : null
     });
