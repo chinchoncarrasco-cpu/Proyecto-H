@@ -654,6 +654,44 @@ test('associated reservation cards show their related Libro movements with the e
  assert.match(texto,/WebPay Crédito/);assert.match(texto,/Folio \/ Autorización/);assert.match(texto,/Fecha pago/);
 });
 
+test('Pascual same-amount transfer stays an approvable additional payment and never becomes the old WebPay card',async()=>{
+ const webpay=readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'561984',fecha_bloque:'2026-09-04',
+  fecha_comprobante:'2026-09-03',concepto:'cab4/2noches',texto_original:'WEBPAY CREDITO // CodAut 561984'});
+ const transferencia=readyPay({monto:160000,medio_pago:'transferencia',codigo_autorizacion:null,folio:null,bovtar:null,
+  fecha_bloque:'2026-09-04',fecha_comprobante:'2026-09-04',concepto:'cab4/2noches',
+  texto_original:'Pascual Abarca // 0133687416 Transf. Pascual Erasmo Abarca Abarca // CO // BOVE 16984 // cab4/2noches'});
+ const reserva=readyBook({titular:'Pascual Abarca',rut_documento:'13368741-6',cabana:4,fecha_checkin:'2026-09-04',
+  fecha_checkout:'2026-09-06',noches:2,pagos:[webpay,transferencia]});
+ const estadias=[stay(reserva,{id:'estadia-pascual',reserva_id:'reserva-pascual'})];
+ const pagos=[{id:'pago-webpay-pascual',reserva_id:'reserva-pascual',tipo_movimiento:'pago',estado:'confirmado',monto:160000,
+  moneda:'CLP',medio_pago:'webpay_credito',codigo_autorizacion:'561984',fecha_pago:'2026-09-03T12:00:00Z',datos_origen:{}}];
+ const plan=await prepare([reserva],estadias,pagos);
+ const omitido=plan.items.find(i=>i.categoria==='omitidos'&&i.pagoLibro?.codigo_autorizacion==='561984');
+ const revisar=plan.items.find(i=>i.categoria==='dudosos'&&i.pagoLibro?.medio_pago==='transferencia');
+ assert.ok(omitido);assert.ok(revisar);assert.equal(revisar.aprobable,true);
+
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const textoTarjeta=tarjeta=>tarjeta.querySelectorAll('*').map(e=>e.textContent).join(' ');
+ const tarjetaOmitida=h.out.querySelectorAll('.haiku-incorporacion-item--omitidos').find(t=>textoTarjeta(t).includes('Pascual Abarca'));
+ const tarjetaRevision=h.out.querySelectorAll('.haiku-incorporacion-item--dudosos').find(t=>textoTarjeta(t).includes('Pascual Abarca'));
+ assert.equal(tarjetaOmitida.dataset.haikuPagoUiV1,'1');assert.match(textoTarjeta(tarjetaOmitida),/WebPay Crédito/);
+ assert.match(textoTarjeta(tarjetaOmitida),/CodAut/);assert.match(textoTarjeta(tarjetaOmitida),/561984/);
+ assert.equal(tarjetaRevision.dataset.haikuPagoUiV1,'1');assert.match(textoTarjeta(tarjetaRevision),/Transferencia/);
+ assert.match(textoTarjeta(tarjetaRevision),/Glosa/);assert.match(textoTarjeta(tarjetaRevision),/Transf\. Pascual Erasmo/);
+ assert.match(textoTarjeta(tarjetaRevision),/04\/09\/26/);assert.doesNotMatch(textoTarjeta(tarjetaRevision),/WebPay Crédito|CodAut 561984/);
+ assert.ok(tarjetaRevision.querySelectorAll('button').some(b=>b.textContent==='Aprobar este pago'));
+
+ const aprobado=await prepare([reserva],estadias,pagos,new Map(),new Set([revisar.id]));
+ const preparado=aprobado.items.find(i=>i.id===revisar.id);
+ assert.equal(preparado.categoria,'pagos');assert.equal(preparado.seleccionado,true);
+ const operaciones=Q.serializarIncorporacion(aprobado);
+ assert.equal(operaciones.length,1);assert.equal(operaciones[0].tipo,'pago');
+ assert.equal(operaciones[0].argumentos.p_reserva_id,'reserva-pascual');
+ assert.equal(operaciones[0].argumentos.p_medio_pago,'transferencia');
+ assert.equal(operaciones[0].argumentos.p_fecha_pago,'2026-09-04');
+ assert.equal(operaciones[0].argumentos.p_monto,160000);
+});
+
 test('shared reservation notes combine both cabins without repeated conflicting patches',async()=>{
  const a=readyBook({texto_original:'Marco Iturrieta // CAB 1 // Factura'}),b=readyBook({id:'b2',cabana:2,texto_original:'Marco Iturrieta // CAB 2 // Llegada tarde'});
  const shared={...stay(a).reservas,observaciones:'Nota operativa'},rows=[stay(a,{reservas:shared}),stay(b,{reservas:shared})];
