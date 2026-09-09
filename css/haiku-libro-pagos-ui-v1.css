@@ -1,14 +1,6 @@
 /* HAKU · Libro ↔ Proyecto H · detalle visual de pagos V1
    Sólo presentación. No modifica la lógica de incorporación ni los datos. */
 
-.haiku-incorporacion-item--pagos .haiku-incorporacion-identidad small,
-.haiku-incorporacion-item--dudosos .haiku-incorporacion-identidad small {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px 5px;
-    align-items: center;
-}
-
 .haiku-incorporacion-meta-item.haiku-incorporacion-meta-item--pago-detalle {
     grid-template-columns: minmax(105px, .85fr) minmax(150px, 1.45fr) minmax(105px, .85fr);
     align-items: stretch;
@@ -31,12 +23,6 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
     line-height: 1.35;
-}
-
-.haiku-pago-checkin-cabecera {
-    color: #66756c;
-    font-weight: 700;
-    white-space: nowrap;
 }
 
 @media (max-width: 700px) {
