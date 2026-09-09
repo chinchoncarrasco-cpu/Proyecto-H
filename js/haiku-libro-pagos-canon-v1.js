@@ -14,11 +14,7 @@
 (function (root) {
     "use strict";
 
-    const api = root.HAIKU_LIBRO_RESERVA_V1;
-    if (!api || api.__haikuPagosCanonV1) return;
-
-    const consultarOriginal = api.consultarHoja?.bind(api);
-    if (typeof consultarOriginal !== "function") return;
+    let instalado = false;
 
     function normalizarTexto(valor) {
         return String(valor || "")
@@ -50,11 +46,11 @@
         const bovtar = canonId(pago.bovtar);
         const boveAdministrativo = pago.bove || null;
 
-        // Conservamos el BOVE únicamente como dato de procedencia. La lógica
-        // histórica de conciliación usa `bove` como identificador fuerte; por
-        // eso aquí sólo colocamos BOVTAR en ese canal cuando BOVTAR realmente
-        // existe. Un BOVE sin BOVTAR nunca convierte un movimiento en pago
-        // "nuevo seguro".
+        // Proyecto H histórico guarda el identificador mostrado como BOVTAR en
+        // `pagos.bove` para varios pagos de tarjeta. La conciliación antigua
+        // compara ese campo, así que exponemos BOVTAR por ese canal únicamente
+        // cuando el Libro realmente trae BOVTAR. Un BOVE administrativo sin
+        // BOVTAR nunca convierte un movimiento en "nuevo seguro".
         copia.bove_administrativo = boveAdministrativo;
         copia.bove = bovtar ? pago.bovtar : null;
         copia.medio_pago = medioDesdeTexto(pago);
@@ -87,19 +83,48 @@
         return copia;
     }
 
-    const envuelto = {
-        ...api,
-        __haikuPagosCanonV1: true,
-        version: `${api.version || "1"}+pagos-canon-v1`,
-        consultarHoja: async (...args) => corregirResultado(await consultarOriginal(...args))
-    };
+    function instalar() {
+        if (instalado) return true;
+        const api = root.HAIKU_LIBRO_RESERVA_V1;
+        if (!api) return false;
+        if (api.__haikuPagosCanonV1) {
+            instalado = true;
+            return true;
+        }
 
-    root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(envuelto);
-    root.HAIKU_LIBRO_PAGOS_CANON_V1 = Object.freeze({
-        corregirPago,
-        corregirResultado,
-        medioDesdeTexto
-    });
+        const consultarOriginal = api.consultarHoja?.bind(api);
+        if (typeof consultarOriginal !== "function") return false;
 
-    console.info("HAKU · Canon de pagos del Libro V1 preparado.");
+        const envuelto = {
+            ...api,
+            __haikuPagosCanonV1: true,
+            version: `${api.version || "1"}+pagos-canon-v1`,
+            consultarHoja: async (...args) => corregirResultado(await consultarOriginal(...args))
+        };
+
+        root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(envuelto);
+        root.HAIKU_LIBRO_PAGOS_CANON_V1 = Object.freeze({
+            corregirPago,
+            corregirResultado,
+            medioDesdeTexto
+        });
+        instalado = true;
+        console.info("HAKU · Canon de pagos del Libro V1 preparado.");
+        return true;
+    }
+
+    // `supabase-libro-reserva-v1.js` puede crear su API recién en
+    // DOMContentLoaded. Este módulo se carga inmediatamente después; por eso no
+    // debe rendirse si la API todavía no existe. Se instala en cuanto el Libro
+    // termina de inicializarse y deja un retry corto como defensa adicional.
+    if (!instalar()) {
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", instalar, { once: true });
+        }
+        let intentos = 0;
+        const timer = setInterval(() => {
+            intentos += 1;
+            if (instalar() || intentos >= 40) clearInterval(timer);
+        }, 50);
+    }
 })(typeof window !== "undefined" ? window : globalThis);
