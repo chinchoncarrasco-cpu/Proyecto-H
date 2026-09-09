@@ -53,7 +53,10 @@
         const estado = card?.querySelector?.(".haiku-incorporacion-estado");
         if (!estado) return;
         if (!estado.dataset.haikuEstadoOriginal) estado.dataset.haikuEstadoOriginal = estado.textContent || "";
-        estado.textContent = omitido ? "No se incorporará" : estado.dataset.haikuEstadoOriginal;
+        const textoDeseado = omitido ? "No se incorporará" : estado.dataset.haikuEstadoOriginal;
+        // No reescribir el mismo textContent: hacerlo dispara childList y puede
+        // alimentar al MutationObserver indefinidamente cuando hay muchos pagos.
+        if (estado.textContent !== textoDeseado) estado.textContent = textoDeseado;
     }
 
     function restaurar() {
@@ -109,10 +112,17 @@
         marcarEstadoVisual(card, check);
     }, true);
 
-    // Aprobar/revalidar un pago reconstruye el DOM. El observador sólo agenda
-    // una pasada; no modifica atributos continuamente ni puede formar un bucle.
+    function nodoAgregaTarjetaPago(nodo) {
+        if (!(nodo instanceof Element)) return false;
+        const selector = ".haiku-incorporacion-item--pagos, .haiku-incorporacion-item--dudosos";
+        return nodo.matches?.(selector) || Boolean(nodo.querySelector?.(selector));
+    }
+
+    // Aprobar/revalidar un pago reconstruye el DOM. Sólo reaccionamos cuando
+    // aparecen tarjetas de pago reales; cambios de texto/estado no deben volver
+    // a programar otra pasada.
     const observer = new MutationObserver(mutations => {
-        if (mutations.some(m => m.addedNodes?.length)) programar();
+        if (mutations.some(m => Array.from(m.addedNodes || []).some(nodoAgregaTarjetaPago))) programar();
     });
 
     function iniciar() {
