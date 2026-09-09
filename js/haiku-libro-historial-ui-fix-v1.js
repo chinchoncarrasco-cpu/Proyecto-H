@@ -1,6 +1,6 @@
-// HAKU · diseño persistente para tarjetas del Libro restauradas desde historial
+// HAKU · diseño persistente para tarjetas restauradas desde historial
 // El historial elimina <style> por seguridad; estas reglas se cargan siempre
-// desde panel.html para que las respuestas antiguas no vuelvan a verse crudas.
+// para que las respuestas antiguas no vuelvan a verse crudas al recargar.
 (function (root) {
     "use strict";
     if (!root.document || root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1) return;
@@ -8,6 +8,9 @@
     const style = document.createElement("style");
     style.id = "haiku-libro-historial-ui-fix-v1";
     style.textContent = `
+      /* ==========================================================
+         LIBRO · SERVICIOS / NOTAS
+         ========================================================== */
       .haiku-asistente-preview.haku-libro-servicios{
         border:1px solid #bdd9c8;border-radius:16px;background:#fbfdfb;
         padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0;
@@ -41,10 +44,50 @@
       .haku-libro-servicios__pie{font-size:9px;color:#738078;padding-top:7px;border-top:1px solid #e2e9e4}
       [data-haiku-historial-restaurado="1"].haku-libro-servicios .haku-libro-servicios__acciones{display:none!important}
       [data-haiku-historial-restaurado="1"].haku-libro-servicios{opacity:.96}
+
+      /* ==========================================================
+         HAKU · TINAJAS POR COORDINAR
+         Estas reglas son persistentes porque el historial elimina
+         el <style> dinámico que crea la consulta al ejecutarse.
+         ========================================================== */
+      .haku-tinajas-card{
+        --ac:#6d6230;--soft:#fff9e9;--bd:#e7dcae;
+        border:1px solid var(--bd);border-radius:16px;
+        background:linear-gradient(180deg,#fffef9,#fbfaf4);
+        padding:14px;display:flex;flex-direction:column;gap:10px;
+        box-shadow:0 5px 16px rgba(71,61,26,.055);
+        box-sizing:border-box;min-width:0
+      }
+      .haku-tinajas-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-bottom:9px;border-bottom:1px solid #ece6cf}
+      .haku-tinajas-kicker{font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--ac)}
+      .haku-tinajas-title{margin:2px 0 0;font-size:18px;line-height:1.15;color:#25261d}
+      .haku-tinajas-badge{flex:0 0 auto;padding:5px 9px;border:1px solid var(--bd);border-radius:999px;background:var(--soft);color:var(--ac);font-size:9px;font-weight:900}
+      .haku-tinajas-rango{display:flex;gap:6px;flex-wrap:wrap}
+      .haku-tinajas-chip{display:inline-flex;align-items:center;padding:5px 8px;border-radius:8px;background:var(--soft);color:var(--ac);font-size:10px;font-weight:850}
+      .haku-tinajas-resumen{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #ebe5d0;border-radius:12px;background:#fff;color:#444333;font-size:11px}
+      .haku-tinajas-cantidad{display:grid;place-items:center;min-width:32px;height:32px;border-radius:9px;background:var(--ac);color:#fff;font-size:14px;font-weight:900}
+      .haku-tinajas-lista{display:flex;flex-direction:column;gap:7px;max-height:330px;overflow:auto;padding-right:2px}
+      .haku-tinajas-item{padding:9px 10px;border:1px solid #e7e3d5;border-radius:11px;background:#fff;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:start}
+      .haku-tinajas-cab{padding:4px 7px;border-radius:8px;background:var(--soft);color:var(--ac);font-size:10px;font-weight:900;white-space:nowrap}
+      .haku-tinajas-main{min-width:0}
+      .haku-tinajas-main strong{display:block;color:#343329;font-size:11px;margin-bottom:3px}
+      .haku-tinajas-main p{margin:0;color:#5f5e51;font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+      .haku-tinajas-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+      .haku-tinajas-meta span{font-size:8px;font-weight:850;padding:3px 6px;border-radius:999px;background:#f6f4eb;color:#706c57}
+      .haku-tinajas-fecha{font-size:9px;font-weight:850;color:#766e49;white-space:nowrap;padding-top:3px}
+      .haku-tinajas-vacio{padding:10px;border:1px dashed var(--bd);border-radius:10px;background:var(--soft);color:#68634d;font-size:11px}
+      .haku-tinajas-pie{padding-top:7px;border-top:1px solid #ece6cf;color:#7b7869;font-size:9px;line-height:1.4}
+
       @media(max-width:720px){
         .haku-libro-servicios__stats{grid-template-columns:repeat(2,minmax(0,1fr))}
         .haiku-asistente-preview.haku-libro-servicios{padding:11px}
         .haku-libro-servicios__title{font-size:16px}
+      }
+      @media(max-width:620px){
+        .haku-tinajas-card{padding:11px}
+        .haku-tinajas-item{grid-template-columns:auto minmax(0,1fr)}
+        .haku-tinajas-fecha{grid-column:2}
+        .haku-tinajas-title{font-size:16px}
       }
     `;
     document.head.appendChild(style);
@@ -60,5 +103,5 @@
         document.head.appendChild(script);
     }
 
-    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.1.0" });
+    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.2.0" });
 })(typeof window !== "undefined" ? window : globalThis);
