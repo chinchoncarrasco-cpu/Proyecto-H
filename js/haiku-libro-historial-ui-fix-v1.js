@@ -49,5 +49,16 @@
     `;
     document.head.appendChild(style);
 
-    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.0.0" });
+    // Carga el complemento que distingue visualmente en Historial las acciones
+    // ejecutadas por Haku. Se hace desde este módulo, que ya está incluido en el
+    // panel, para no duplicar scripts en panel.html.
+    if (!root.HAIKU_HISTORIAL_AUTOR_V1 && !document.querySelector('script[data-haiku-historial-autor]')) {
+        const script = document.createElement("script");
+        script.src = "js/haiku-historial-autor-v1.js?v=1";
+        script.async = false;
+        script.dataset.haikuHistorialAutor = "1";
+        document.head.appendChild(script);
+    }
+
+    root.HAIKU_LIBRO_HISTORIAL_UI_FIX_V1 = Object.freeze({ version: "1.1.0" });
 })(typeof window !== "undefined" ? window : globalThis);
