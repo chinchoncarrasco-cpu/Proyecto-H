@@ -1,0 +1,355 @@
+// ========================================
+// HAKU · PAGOS FOCALIZADOS V1
+// Cuando el operador pide revisar pagos de varias reservas concretas,
+// limita la lectura del Libro a esos objetivos y a la fecha indicada.
+// Esta capa NO escribe por sí sola: reutiliza la reconciliación segura
+// existente y, en la preparación, deja seleccionables sólo pagos nuevos.
+// ========================================
+(() => {
+    "use strict";
+
+    if (window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1) return;
+
+    const estado = {
+        scope: null,
+        esperandoSalida: false
+    };
+
+    const meses = {
+        enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+        julio: 7, agosto: 8, septiembre: 9, setiembre: 9,
+        octubre: 10, noviembre: 11, diciembre: 12
+    };
+
+    function normalizar(valor) {
+        return String(valor || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .trim();
+    }
+
+    function iso(y, m, d) {
+        const year = Number(y), month = Number(m), day = Number(d);
+        const fecha = new Date(Date.UTC(year, month - 1, day));
+        if (fecha.getUTCFullYear() !== year || fecha.getUTCMonth() !== month - 1 || fecha.getUTCDate() !== day) return null;
+        return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+
+    function fechaDesdeTexto(texto) {
+        const raw = String(texto || "");
+        const numerica = raw.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/);
+        if (numerica) {
+            const year = Number(numerica[3]) < 100 ? 2000 + Number(numerica[3]) : Number(numerica[3]);
+            return iso(year, Number(numerica[2]), Number(numerica[1]));
+        }
+
+        const t = normalizar(raw);
+        const m = t.match(/\b(?:(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+)?(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(20\d{2}))?\b/);
+        if (!m) return null;
+        const year = Number(m[3] || new Date().getFullYear());
+        return iso(year, meses[m[2]], Number(m[1]));
+    }
+
+    function limpiarNombre(valor) {
+        return String(valor || "")
+            .replace(/^[\s·•*\-–—:;,.]+/, "")
+            .replace(/[\s·•*\-–—:;,.]+$/, "")
+            .trim();
+    }
+
+    function pareceNombre(valor) {
+        const n = normalizar(valor);
+        if (!n || n.length < 3) return false;
+        if (/^(pago|pagos|agrega|agregar|revisa|revisar|pendiente|pendientes|libro|proyecto|fecha|viernes|jueves|miercoles|martes|lunes|sabado|domingo)\b/.test(n)) return false;
+        return /[a-z]/.test(n);
+    }
+
+    function objetivosDesdeTexto(texto) {
+        const lineas = String(texto || "").split(/\r?\n/);
+        const objetivos = [];
+
+        for (let i = 0; i < lineas.length; i++) {
+            const linea = lineas[i];
+            const m = linea.match(/\bCAB(?:AÑA)?\s*(\d{1,2})\b/i);
+            if (!m) continue;
+
+            const cabana = Number(m[1]);
+            let nombre = limpiarNombre(linea.slice((m.index || 0) + m[0].length));
+
+            if (!pareceNombre(nombre)) {
+                for (let j = i + 1; j < lineas.length; j++) {
+                    if (/\bCAB(?:AÑA)?\s*\d{1,2}\b/i.test(lineas[j])) break;
+                    const candidato = limpiarNombre(lineas[j]);
+                    if (pareceNombre(candidato)) {
+                        nombre = candidato;
+                        break;
+                    }
+                }
+            }
+
+            if (!pareceNombre(nombre)) continue;
+            const clave = `${cabana}|${normalizar(nombre)}`;
+            if (!objetivos.some(x => x.clave === clave)) objetivos.push({ cabana, nombre, clave });
+        }
+
+        return objetivos;
+    }
+
+    function nombreCoincide(a, b) {
+        const na = normalizar(a), nb = normalizar(b);
+        if (!na || !nb) return false;
+        if (na === nb || na.includes(nb) || nb.includes(na)) return true;
+        const ta = new Set(na.split(" ").filter(x => x.length > 1));
+        const tb = nb.split(" ").filter(x => x.length > 1);
+        return tb.length >= 2 && tb.every(x => ta.has(x));
+    }
+
+    function fechaCanon(valor) {
+        const s = String(valor || "").trim();
+        const isoMatch = s.match(/^(20\d{2})-(\d{2})-(\d{2})/);
+        if (isoMatch) return iso(isoMatch[1], isoMatch[2], isoMatch[3]);
+        const local = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})/);
+        if (!local) return null;
+        const year = Number(local[3]) < 100 ? 2000 + Number(local[3]) : Number(local[3]);
+        return iso(year, local[2], local[1]);
+    }
+
+    function pagoDeFecha(pago, fecha) {
+        if (!fecha) return true;
+        return [pago?.fecha_comprobante, pago?.fecha_pago, pago?.fecha_bloque]
+            .map(fechaCanon)
+            .some(x => x === fecha);
+    }
+
+    function detectarScope(texto) {
+        const t = normalizar(texto);
+        if (!/\bpagos?\b/.test(t) || !/\blibro\b/.test(t)) return null;
+        const objetivos = objetivosDesdeTexto(texto);
+        const fecha = fechaDesdeTexto(texto);
+        if (objetivos.length < 2 || !fecha) return null;
+        return {
+            token: `pagos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            texto: String(texto || ""),
+            fecha,
+            objetivos,
+            cabanaFiltroOriginal: objetivos[0].cabana,
+            creado: Date.now()
+        };
+    }
+
+    function reservaObjetivo(reserva, scope) {
+        const cab = Number(reserva?.cabana || reserva?.cabanas?.[0]);
+        return scope.objetivos.some(obj => Number(obj.cabana) === cab && nombreCoincide(reserva?.titular, obj.nombre));
+    }
+
+    function sanitizarReserva(reserva, scope) {
+        const pagos = (Array.isArray(reserva?.pagos) ? reserva.pagos : []).filter(p => pagoDeFecha(p, scope.fecha));
+        const pagosSin = (Array.isArray(reserva?.pagos_sin_asociacion) ? reserva.pagos_sin_asociacion : []).filter(p => pagoDeFecha(p, scope.fecha));
+        const cab = Number(reserva?.cabana || reserva?.cabanas?.[0]);
+        const bypass = Number(scope.cabanaFiltroOriginal);
+
+        return {
+            ...reserva,
+            // El parser general detecta el primer CAB escrito en la pregunta.
+            // Esta lista permite que también pasen los demás CAB explícitamente
+            // solicitados, sin alterar la cabaña real usada para el matching.
+            cabanas: [...new Set([...(Array.isArray(reserva?.cabanas) ? reserva.cabanas : []), cab, bypass].filter(Boolean))],
+
+            // Modo focalizado = pagos. Se omiten datos que podrían generar una
+            // propuesta de modificación de la reserva o de servicios.
+            rut_documento: null,
+            correo: null,
+            telefono: null,
+            adultos: null,
+            ninos: null,
+            mascotas: null,
+            estado_confirmacion: "no_determinado",
+            estado_operativo: "no_determinado",
+            tipo_estadia: null,
+            notas_importantes: [],
+            pagos_pendientes: [],
+            servicios: [],
+            texto_original: "",
+            operador: null,
+            fecha_ingreso_libro: null,
+
+            pagos,
+            pagos_sin_asociacion: pagosSin
+        };
+    }
+
+    function instalarProxyLibro() {
+        const original = window.HAIKU_LIBRO_RESERVA_V1;
+        if (!original || original.__pagosFocalizadosProxy) return Boolean(original);
+
+        const consultarOriginal = original.consultarHoja;
+        if (typeof consultarOriginal !== "function") return false;
+
+        const proxy = {
+            ...original,
+            __pagosFocalizadosProxy: true,
+            consultarHoja: async (...args) => {
+                const data = await consultarOriginal(...args);
+                const scope = estado.scope;
+                if (!scope || args[1] === "anterior" || !Array.isArray(data?.reservas)) return data;
+
+                const filtradas = data.reservas
+                    .filter(r => reservaObjetivo(r, scope))
+                    .map(r => sanitizarReserva(r, scope));
+
+                return {
+                    ...data,
+                    reservas: filtradas
+                };
+            }
+        };
+
+        window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(proxy);
+        return true;
+    }
+
+    function esDisparoHaku(evento) {
+        if (evento.type === "click") return Boolean(evento.target?.closest?.("#haiku-asistente-enviar"));
+        return evento.type === "keydown" && evento.target?.id === "haiku-asistente-texto" &&
+            (evento.ctrlKey || evento.metaKey) && evento.key === "Enter";
+    }
+
+    function prepararScopeAntesDeHaku(evento) {
+        if (!esDisparoHaku(evento)) return;
+        const campo = document.getElementById("haiku-asistente-texto");
+        const texto = campo?.value?.trim() || "";
+        const scope = detectarScope(texto);
+        estado.scope = scope;
+        estado.esperandoSalida = Boolean(scope);
+        if (scope) {
+            instalarProxyLibro();
+            console.info("HAKU · Pagos focalizados:", scope.fecha, scope.objetivos.map(x => `CAB ${x.cabana} ${x.nombre}`));
+        }
+    }
+
+    function etiquetaFecha(fecha) {
+        const m = String(fecha || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return m ? `${m[3]}-${m[2]}-${m[1]}` : fecha;
+    }
+
+    function crearAvisoScope(scope) {
+        const aviso = document.createElement("div");
+        aviso.className = "haku-pagos-focalizados-aviso";
+        const lista = scope.objetivos.map(x => `CAB ${x.cabana} · ${x.nombre}`).join(" · ");
+        aviso.innerHTML = `<strong>Consulta focalizada en pagos</strong><span>${etiquetaFecha(scope.fecha)} · ${lista}</span><small>Haku compara únicamente estos objetivos y descarta pagos de otras fechas. Las reservas y servicios no forman parte de esta incorporación.</small>`;
+        return aviso;
+    }
+
+    function asegurarAviso(out, scope) {
+        if (!out.querySelector(":scope > .haku-pagos-focalizados-aviso")) {
+            const cabecera = out.querySelector(":scope > .haiku-asistente-preview-cabecera, :scope > .haiku-incorporacion-cabecera");
+            const aviso = crearAvisoScope(scope);
+            cabecera?.after(aviso) || out.prepend(aviso);
+        }
+    }
+
+    function focalizarComparacion(out, scope) {
+        asegurarAviso(out, scope);
+        const resumen = out.querySelector(":scope > .haiku-asistente-preview-resumen");
+        if (resumen) {
+            resumen.textContent = `Alcance solicitado: ${scope.objetivos.length} reservas objetivo · pagos del ${etiquetaFecha(scope.fecha)}. Proyecto H se usa sólo para comprobar esas reservas y evitar duplicar pagos ya registrados; las demás reservas del mes quedan fuera de esta tarea.`;
+        }
+
+        const tarjetas = [...out.querySelectorAll(":scope > .haiku-asistente-preview-grid > div")];
+        for (const tarjeta of tarjetas) {
+            const label = normalizar(tarjeta.querySelector("span")?.textContent);
+            const strong = tarjeta.querySelector("strong");
+            if (label === "proyecto h" && strong) strong.textContent = `${scope.objetivos.length} objetivos`;
+        }
+
+        const pie = out.querySelector(":scope > .haiku-asistente-preview-pie span");
+        if (pie) pie.textContent = "Modo focalizado: sólo se prepararán pagos de los objetivos indicados. Ninguna reserva, estadía ni servicio se incorporará desde esta consulta.";
+    }
+
+    function deseleccionarSeccion(seccion) {
+        seccion.querySelectorAll('input[type="checkbox"]').forEach(check => {
+            check.checked = false;
+            check.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        seccion.hidden = true;
+    }
+
+    function focalizarIncorporacion(out, scope) {
+        asegurarAviso(out, scope);
+
+        const badge = out.querySelector(".haiku-incorporacion-modo");
+        if (badge) badge.textContent = "Sólo pagos";
+        const aviso = out.querySelector(":scope > .haiku-incorporacion-aviso");
+        if (aviso) aviso.textContent = "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo.";
+
+        ["nuevas", "estadias", "actualizaciones"].forEach(categoria => {
+            out.querySelectorAll(`.haiku-incorporacion-seccion--${categoria}`).forEach(deseleccionarSeccion);
+        });
+
+        // Evita que el atajo general vuelva a seleccionar categorías ocultas.
+        out.querySelectorAll(".haiku-incorporacion-atajo").forEach(boton => {
+            if (/seleccionar todo lo listo/i.test(boton.textContent || "")) boton.hidden = true;
+        });
+    }
+
+    function procesarSalida(out) {
+        const scope = estado.scope;
+        if (!scope || !out?.isConnected) return;
+        if (out.dataset.hakuPagosFocalizados !== scope.token) return;
+
+        if (out.classList.contains("haiku-incorporacion")) focalizarIncorporacion(out, scope);
+        else if (out.classList.contains("haiku-asistente-preview")) focalizarComparacion(out, scope);
+    }
+
+    const observador = new MutationObserver(mutations => {
+        const scope = estado.scope;
+        if (!scope) return;
+
+        for (const mut of mutations) {
+            for (const nodo of mut.addedNodes || []) {
+                if (!(nodo instanceof Element)) continue;
+
+                if (estado.esperandoSalida && nodo.matches?.(".haiku-asistente-mensaje--asistente") && /leyendo la estructura del libro local/i.test(nodo.textContent || "")) {
+                    nodo.dataset.hakuPagosFocalizados = scope.token;
+                    estado.esperandoSalida = false;
+                }
+
+                if (nodo.dataset?.hakuPagosFocalizados === scope.token) procesarSalida(nodo);
+                nodo.querySelectorAll?.(`[data-haku-pagos-focalizados="${scope.token}"]`).forEach(procesarSalida);
+            }
+
+            const target = mut.target instanceof Element ? mut.target.closest?.(`[data-haku-pagos-focalizados="${scope.token}"]`) : null;
+            if (target) procesarSalida(target);
+        }
+    });
+
+    function iniciar() {
+        instalarProxyLibro();
+        // Se registra antes de haiku-libro-consultas-v1.js para que el alcance
+        // quede preparado antes de que el módulo general intercepte Enviar.
+        window.addEventListener("click", prepararScopeAntesDeHaku, true);
+        window.addEventListener("keydown", prepararScopeAntesDeHaku, true);
+        observador.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+        const style = document.createElement("style");
+        style.id = "haku-pagos-focalizados-v1-style";
+        style.textContent = `
+          .haku-pagos-focalizados-aviso{margin:10px 0;padding:10px 12px;border:1px solid #b9d9c7;border-radius:12px;background:#f3faf6;color:#234334;display:flex;flex-direction:column;gap:3px}
+          .haku-pagos-focalizados-aviso strong{font-size:.73rem;letter-spacing:.06em;text-transform:uppercase;color:#1f6d49}
+          .haku-pagos-focalizados-aviso span{font-size:.72rem;font-weight:800;line-height:1.4}
+          .haku-pagos-focalizados-aviso small{font-size:.65rem;line-height:1.4;color:#607267}
+        `;
+        document.head.appendChild(style);
+    }
+
+    window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
+        version: "1.0.0",
+        detectar: detectarScope,
+        estado: () => estado.scope ? structuredClone(estado.scope) : null
+    });
+
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar, { once: true });
+    else iniciar();
+})();
