@@ -38,6 +38,16 @@
         return `${String(y).padStart(4, "0")}-${String(Number(mLocal[2])).padStart(2, "0")}-${String(Number(mLocal[1])).padStart(2, "0")}`;
     }
 
+    function fechaPagoObservada(pago) {
+        return fechaCanon(pago?.fecha_comprobante) ||
+            fechaCanon(pago?.fecha_pago) ||
+            // El parser conserva la celda de fecha visible al comienzo del texto_original.
+            // Esto cubre libros donde Excel guardó 3-9-2026 como texto y no como fecha tipada.
+            fechaCanon(pago?.texto_original) ||
+            fechaCanon(pago?.fecha_bloque) ||
+            null;
+    }
+
     function clavePago(pago) {
         const origen = pago?.origen || {};
         if (origen.hoja && origen.celda) return `src:${origen.hoja}|${origen.celda}`;
@@ -49,7 +59,7 @@
         return `weak:${[
             normalizar(pago?.titular),
             Number(pago?.monto) || 0,
-            fechaCanon(pago?.fecha_comprobante) || "",
+            fechaPagoObservada(pago) || "",
             normalizar(pago?.concepto),
             normalizar(pago?.texto_original)
         ].join("|")}`;
@@ -76,15 +86,17 @@
 
     function pagoDelDiaYTitular(pago, scope) {
         if (!mismaPersona(pago?.titular, scope.objetivos[0].nombre)) return false;
-        const fechaComprobante = fechaCanon(pago?.fecha_comprobante);
-        // La fecha escrita en la fila financiera es la evidencia principal. Si no
-        // existe, usamos fecha_bloque como respaldo; nunca usamos la fecha de otra reserva.
-        const fecha = fechaComprobante || fechaCanon(pago?.fecha_pago) || fechaCanon(pago?.fecha_bloque);
-        return fecha === scope.fecha;
+        return fechaPagoObservada(pago) === scope.fecha;
     }
 
     function normalizarMovimiento(pago) {
         const copia = { ...pago };
+        // Si la fecha visible estaba guardada como texto por Excel, la promovemos
+        // a fecha_comprobante para que la UI y la conciliación muestren la fecha real.
+        if (!fechaCanon(copia.fecha_comprobante)) {
+            const observada = fechaCanon(copia.texto_original);
+            if (observada) copia.fecha_comprobante = observada;
+        }
         const concepto = normalizar(copia.concepto);
         if (/\bearly\s*check\s*in\b|\bearly\s*checkin\b/.test(concepto)) {
             copia.tipo_movimiento = "servicio";
@@ -128,7 +140,7 @@
         });
 
         console.info("HAKU · Pagos relacionados recuperados para revisión:",
-            scope.objetivos[0].nombre, scope.fecha, recuperados.map(p => ({ monto: p.monto, concepto: p.concepto, origen: p.origen })));
+            scope.objetivos[0].nombre, scope.fecha, recuperados.map(p => ({ monto: p.monto, concepto: p.concepto, fecha: p.fecha_comprobante, origen: p.origen })));
 
         return { ...data, reservas: nuevasReservas };
     }
@@ -148,7 +160,7 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_RELACIONADOS_V1 = Object.freeze({
-        version: "1.0.0",
+        version: "1.0.1",
         instalar,
         enriquecer
     });
