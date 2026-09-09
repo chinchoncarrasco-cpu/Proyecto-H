@@ -43,6 +43,25 @@ test('recupera pagos del titular y fecha aunque el bloque financiero tenga otra 
   assert.equal(cab5.pagos_sin_asociacion.find(p => p.monto === 40000).servicio_tipo, 'early_checkin');
 });
 
+test('recupera fecha visible cuando Excel la guardó como texto y no como fecha tipada', async () => {
+  const api = cargar({
+    reservas: [
+      { titular: 'Macarena Hurtado', cabana: 5, fecha_checkin: '2026-09-03', fecha_checkout: '2026-09-04', fechas_ocupadas: ['2026-09-03'], pagos: [], pagos_sin_asociacion: [] },
+      { titular: 'Macarena Hurtado', cabana: 10, fecha_checkin: '2026-09-04', fecha_checkout: '2026-09-04', fechas_ocupadas: ['2026-09-04'], pagos: [], pagos_sin_asociacion: [] }
+    ],
+    pagos: [
+      { titular: 'Macarena Hurtado', cabana: 1, monto: 153000, concepto: 'cab1/1noche', tipo_movimiento: 'alojamiento', fecha_comprobante: null, fecha_bloque: '2026-09-04', texto_original: '3-9-2026 // Macarena Hurtado // Luigi Martínez // Bovtar: 173121-Folio: 000235 // CREDITO // DG // cab1/1noche // 153000', origen: { hoja: 'Sep26', celda: 'AA10:AD10' } },
+      { titular: 'Macarena Hurtado', cabana: 1, monto: 40000, concepto: 'early check in', tipo_movimiento: 'otro', fecha_comprobante: null, fecha_bloque: '2026-09-04', texto_original: '3-9-2026 // Macarena Hurtado // Luigi Martínez // Bovtar: 173121-Folio: 000235 // CREDITO // DG // early check in // 40000', origen: { hoja: 'Sep26', celda: 'AA11:AD11' } }
+    ]
+  }, scopeMacarena);
+
+  const data = await api.consultarHoja('Sep26');
+  const cab5 = data.reservas.find(r => r.cabana === 5);
+  assert.deepEqual(cab5.pagos_sin_asociacion.map(p => p.monto), [153000, 40000]);
+  assert.ok(cab5.pagos_sin_asociacion.every(p => p.fecha_comprobante === '2026-09-03'));
+  assert.equal(cab5.pagos_sin_asociacion.find(p => p.monto === 40000).servicio_tipo, 'early_checkin');
+});
+
 test('no duplica un movimiento que ya estaba asociado a la reserva', async () => {
   const pago = { titular: 'Macarena Hurtado', cabana: 1, monto: 153000, concepto: 'cab1/1noche', fecha_comprobante: '2026-09-03', origen: { hoja: 'Sep26', celda: 'AA10:AD10' } };
   const api = cargar({
