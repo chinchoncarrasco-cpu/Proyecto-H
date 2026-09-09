@@ -805,6 +805,89 @@
     line-height: 1.25;
 }
 
+.haiku-incorporacion-movimientos-libro {
+    margin-top: 9px;
+    padding-top: 8px;
+    border-top: 1px solid #dfe8e2;
+}
+
+.haiku-incorporacion-movimientos-titulo {
+    display: block;
+    color: #38644d;
+    font-size: .54rem;
+    font-weight: 850;
+    letter-spacing: .055em;
+}
+
+.haiku-incorporacion-movimientos-lista {
+    display: grid;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.haiku-incorporacion-movimiento {
+    min-width: 0;
+    padding: 7px;
+    border: 1px solid #e0e8e3;
+    border-left: 3px solid #7aa68c;
+    border-radius: 7px;
+    background: #fbfdfc;
+}
+
+.haiku-incorporacion-movimiento--revisar,
+.haiku-incorporacion-movimiento--diferente { border-left-color: #d1a33d; }
+.haiku-incorporacion-movimiento--nuevo_seguro { border-left-color: #2e865c; }
+.haiku-incorporacion-movimiento--en_sistema { border-left-color: #98a59d; }
+
+.haiku-incorporacion-movimiento-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.haiku-incorporacion-movimiento-monto {
+    color: #263a2f;
+    font-size: .69rem;
+}
+
+.haiku-incorporacion-movimiento-estado {
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: #edf3ef;
+    color: #4d6657;
+    font-size: .5rem;
+    font-weight: 800;
+    line-height: 1.25;
+    text-align: right;
+}
+
+.haiku-incorporacion-movimiento--revisar .haiku-incorporacion-movimiento-estado,
+.haiku-incorporacion-movimiento--diferente .haiku-incorporacion-movimiento-estado {
+    background: #fff2d8;
+    color: #815c12;
+}
+
+.haiku-incorporacion-movimiento--nuevo_seguro .haiku-incorporacion-movimiento-estado {
+    background: #e8f5ed;
+    color: #246746;
+}
+
+.haiku-incorporacion-meta-item--movimiento-libro { margin-top: 5px; }
+
+.haiku-incorporacion-movimiento-diferencias {
+    margin: 5px 1px 0;
+    color: #75581c;
+    font-size: .57rem;
+    line-height: 1.35;
+}
+
+.haiku-incorporacion-movimientos-vacio {
+    margin: 0;
+    color: #77837c;
+    font-size: .58rem;
+}
+
 .haiku-incorporacion-propuesta {
     margin: 7px 0 0;
     color: #536158;
