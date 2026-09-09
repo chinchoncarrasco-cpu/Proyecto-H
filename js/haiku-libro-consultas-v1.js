@@ -848,7 +848,14 @@
                     }
                     destinos.set(claveReserva(i.libro), { reserva_id:s.reserva_id, dependeDe, bloqueado:!!motivos.length });
                 }
-                if (!cambios) add(g.estado === 'asociada' && previa && previa.estado !== 'asociada' ? 'omitidos' : 'asociadas', id, titulo + ' · Ya coincide con el Libro.', { reserva_id: reservaId, reserva_ids: [...new Set(existentes)] });
+                if (!cambios) {
+                    const categoriaCoincidente = g.estado === 'asociada' && previa && previa.estado !== 'asociada' ? 'omitidos' : 'asociadas';
+                    const item = add(categoriaCoincidente, id, titulo + ' · Ya coincide con el Libro.', { reserva_id: reservaId, reserva_ids: [...new Set(existentes)] });
+                    if (categoriaCoincidente === 'asociadas') {
+                        const clavesGrupo = new Set(g.items.map(i => claveReserva(i.libro)));
+                        item.movimientosLibro = (comp.pagosDetalle || []).filter(x => clavesGrupo.has(claveReserva(x.reserva)));
+                    }
+                }
                 continue;
             }
             const motivos = [];
@@ -1645,6 +1652,44 @@
             fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10)) };
     }
 
+    function movimientosLibroIncorporacion(movimientos) {
+        const estados = {
+            en_sistema: 'Ya existe en Proyecto H',
+            nuevo_seguro: 'Pago nuevo seguro',
+            revisar: 'Requiere revisión',
+            diferente: 'Con diferencias'
+        };
+        const seccion = elemento('section', 'haiku-incorporacion-movimientos-libro');
+        seccion.append(elemento('strong', 'haiku-incorporacion-movimientos-titulo', 'MOVIMIENTOS DEL LIBRO RELACIONADOS'));
+        const lista = elemento('div', 'haiku-incorporacion-movimientos-lista');
+        for (const movimiento of movimientos || []) {
+            const pago = movimiento.pago || {};
+            const datos = datosPagoIncorporacion(pago);
+            const tarjeta = elemento('div', `haiku-incorporacion-movimiento haiku-incorporacion-movimiento--${movimiento.estado || 'revisar'}`);
+            const cabecera = elemento('div', 'haiku-incorporacion-movimiento-cabecera');
+            cabecera.append(
+                elemento('strong', 'haiku-incorporacion-movimiento-monto', money(pago.monto)),
+                elemento('span', 'haiku-incorporacion-movimiento-estado', estados[movimiento.estado] || 'Requiere revisión')
+            );
+            const meta = elemento('div', 'haiku-incorporacion-meta-item haiku-incorporacion-meta-item--movimiento-libro');
+            meta.append(
+                datoIncorporacion('Medio', datos.medio),
+                datoIncorporacion(datos.segundo[0], datos.segundo[1]),
+                datoIncorporacion('Fecha pago', datos.fecha)
+            );
+            tarjeta.append(cabecera, meta);
+            if (movimiento.diferencias?.length) {
+                tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-diferencias', movimiento.diferencias.join(' · ')));
+            }
+            lista.append(tarjeta);
+        }
+        if (!lista.children.length) {
+            lista.append(elemento('p', 'haiku-incorporacion-movimientos-vacio', 'Sin movimientos financieros relacionados en esta consulta.'));
+        }
+        seccion.append(lista);
+        return seccion;
+    }
+
     function listaCambiosIncorporacion(item, titulo = null) {
         if (!item.cambios?.length) return null;
         const contenedor = elemento('div', titulo ? 'haiku-incorporacion-cambios-propuestos' : '');
@@ -1753,6 +1798,10 @@
                 datoIncorporacion("Teléfono", vista.reserva.telefono_contacto || "sin dato")
             );
             fila.append(contacto);
+        }
+
+        if (item.categoria === 'asociadas' && Array.isArray(item.movimientosLibro)) {
+            fila.append(movimientosLibroIncorporacion(item.movimientosLibro));
         }
 
         fila.append(elemento("p", "haiku-incorporacion-propuesta", vista.detalle));
