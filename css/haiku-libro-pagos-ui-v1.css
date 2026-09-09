@@ -1,6 +1,36 @@
 /* HAKU · Libro ↔ Proyecto H · detalle visual de pagos V1
    Sólo presentación. No modifica la lógica de incorporación ni los datos. */
 
+/* Los pagos seleccionables deben conservar siempre su checkbox visible. */
+.haiku-incorporacion-item--pagos .haiku-incorporacion-seleccion input[type="checkbox"],
+.haiku-incorporacion-item--dudosos .haiku-incorporacion-seleccion input[type="checkbox"] {
+    display: block !important;
+    visibility: visible !important;
+    width: 15px !important;
+    height: 15px !important;
+    min-width: 15px;
+    flex: 0 0 15px;
+    margin: 1px 0 0 !important;
+    opacity: 1;
+}
+
+.haiku-incorporacion-item--pagos .haiku-incorporacion-seleccion input[type="checkbox"]:disabled,
+.haiku-incorporacion-item--dudosos .haiku-incorporacion-seleccion input[type="checkbox"]:disabled {
+    opacity: .45;
+}
+
+/* Cuando el usuario lo deja fuera, se nota visualmente pero sigue legible. */
+.haiku-incorporacion-item--pagos.haiku-pago-omitido-sesion,
+.haiku-incorporacion-item--dudosos.haiku-pago-omitido-sesion {
+    border-color: #dfe5e1;
+    background: #fafbfa;
+}
+
+.haiku-incorporacion-item--pagos.haiku-pago-omitido-sesion .haiku-incorporacion-estado,
+.haiku-incorporacion-item--dudosos.haiku-pago-omitido-sesion .haiku-incorporacion-estado {
+    opacity: .65;
+}
+
 .haiku-incorporacion-meta-item.haiku-incorporacion-meta-item--pago-detalle {
     grid-template-columns: minmax(105px, .85fr) minmax(150px, 1.45fr) minmax(105px, .85fr);
     align-items: stretch;
