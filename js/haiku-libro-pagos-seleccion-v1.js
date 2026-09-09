@@ -48,7 +48,12 @@
     }
 
     function marcarEstadoVisual(card, check) {
-        card?.classList?.toggle("haiku-pago-omitido-sesion", Boolean(check && !check.checked && !check.disabled));
+        const omitido = Boolean(check && !check.checked && !check.disabled);
+        card?.classList?.toggle("haiku-pago-omitido-sesion", omitido);
+        const estado = card?.querySelector?.(".haiku-incorporacion-estado");
+        if (!estado) return;
+        if (!estado.dataset.haikuEstadoOriginal) estado.dataset.haikuEstadoOriginal = estado.textContent || "";
+        estado.textContent = omitido ? "No se incorporará" : estado.dataset.haikuEstadoOriginal;
     }
 
     function restaurar() {
