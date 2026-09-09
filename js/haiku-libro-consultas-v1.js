@@ -982,6 +982,16 @@
             item.aprobable = motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
             vistos.push({ pago:p, item, destino: destinoActual, manual });
         }
+        // Conserva en cada tarjeta el movimiento exacto del Libro que originó el ítem.
+        // No se debe reconstruir por titular, cabaña y monto: dos pagos distintos pueden
+        // compartir esos tres datos (por ejemplo, un WebPay previo y una transferencia adicional).
+        for (const x of comp.pagosDetalle || []) {
+            const id = 'pago:' + claveReserva(x.reserva) + ':' + source(x.pago.origen) + ':' + JSON.stringify(x.pago);
+            const item = plan.items.find(i => i.id === id);
+            if (!item) continue;
+            item.pagoLibro = x.pago;
+            item.pagoSistema = x.sistema || null;
+        }
         consolidarActualizacionesReserva(plan);
         plan.permisos = [...new Set(plan.items.flatMap(i => i.permisos))];
         return plan;
@@ -1739,7 +1749,14 @@
     function renderizarItemIncorporacion(item, controles, actualizar, aprobar) {
         const vista = presentacionIncorporacion(item);
         const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
+        const esPagoLibro = Boolean(item.pagoLibro);
         const fila = elemento("article", `haiku-incorporacion-item haiku-incorporacion-item--${item.categoria}`);
+        if (esPagoLibro) {
+            fila.dataset.haikuPagoOrigenHoja = item.pagoLibro?.origen?.hoja || "";
+            fila.dataset.haikuPagoOrigenCelda = item.pagoLibro?.origen?.celda || "";
+            fila.dataset.haikuPagoLibroTexto = item.pagoLibro?.texto_original || "";
+            fila.dataset.haikuPagoUiV1 = "1";
+        }
         const cabecera = elemento("div", "haiku-incorporacion-item-cabecera");
         const label = elemento("label", "haiku-incorporacion-seleccion");
         const check = elemento("input");
@@ -1750,19 +1767,19 @@
         check.addEventListener("change", () => { item.seleccionado = check.checked; actualizar(); });
         const identidad = elemento("span", "haiku-incorporacion-identidad");
         identidad.append(elemento("strong", "", vista.titular), elemento("small", "", [vista.cabana, vista.monto,
-            esPagoActualizacion && item.pagoLibro?.fecha_bloque ? `Check-in ${fechaBreve(item.pagoLibro.fecha_bloque)}` : null].filter(Boolean).join(" · ")));
+            esPagoLibro && item.pagoLibro?.fecha_bloque ? `Check-in ${fechaBreve(item.pagoLibro.fecha_bloque)}` : null].filter(Boolean).join(" · ")));
         label.append(check, identidad);
         cabecera.append(label, elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
         fila.append(cabecera);
         if (item.aviso) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
         if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item));
 
-        if (esPagoActualizacion) {
+        if (esPagoLibro) {
             const datos = datosPagoIncorporacion(item.pagoLibro);
             const meta = elemento("div", "haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle");
             meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
             fila.append(meta);
-            fila.append(listaCambiosIncorporacion(item, 'Cambios propuestos por el Libro'));
+            if (esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, 'Cambios propuestos por el Libro'));
         } else if (vista.estadias.length) {
             const lista = elemento("div", "haiku-incorporacion-estadias");
             for (const estadia of vista.estadias) {
