@@ -339,12 +339,20 @@
     });
 
     function iniciar() {
-        instalarProxyLibro();
-        // Se registra antes de haiku-libro-consultas-v1.js para que el alcance
-        // quede preparado antes de que el módulo general intercepte Enviar.
+        // Los listeners se registran inmediatamente porque este archivo se carga
+        // justo antes de haiku-libro-consultas-v1.js. Así el alcance focalizado
+        // se prepara antes que el interceptor general de Haku.
         window.addEventListener("click", prepararScopeAntesDeHaku, true);
         window.addEventListener("keydown", prepararScopeAntesDeHaku, true);
         observador.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+
+        instalarProxyLibro();
+        // El API del Libro se crea en DOMContentLoaded. Si aún no existe, este
+        // segundo intento lo envuelve después de que supabase-libro-reserva-v1
+        // haya terminado su propia inicialización.
+        if (!window.HAIKU_LIBRO_RESERVA_V1) {
+            document.addEventListener("DOMContentLoaded", instalarProxyLibro, { once: true });
+        }
 
         const style = document.createElement("style");
         style.id = "haku-pagos-focalizados-v1-style";
@@ -358,11 +366,10 @@
     }
 
     window.HAIKU_LIBRO_PAGOS_FOCALIZADOS_V1 = Object.freeze({
-        version: "1.0.1",
+        version: "1.0.2",
         detectar: detectarScope,
         estado: () => estado.scope ? structuredClone(estado.scope) : null
     });
 
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar, { once: true });
-    else iniciar();
+    iniciar();
 })();
