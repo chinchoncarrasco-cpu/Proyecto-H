@@ -1,6 +1,6 @@
 // ========================================
 // HAIKU · EARLY CHECK-IN V1
-// Añade Early Check-In al catálogo legacy y adapta la UI para:
+// Añade Early Check-In al catálogo legacy y adapta ambas UI de servicios para:
 // - precio manual por hora
 // - cantidad = horas (1 unidad = 1 hora)
 // - fecha y hora obligatorias
@@ -41,6 +41,7 @@
         return true;
     }
 
+    // Formulario principal de la sección Servicios.
     function elementos() {
         return {
             select: document.getElementById("servicios-producto"),
@@ -54,8 +55,27 @@
         };
     }
 
+    // Modal rápido que se abre desde el botón + de cada cabaña.
+    function elementosResumen() {
+        return {
+            modal: document.getElementById("resumen-servicio-modal"),
+            select: document.getElementById("resumen-servicio-producto"),
+            cantidad: document.getElementById("resumen-servicio-cantidad"),
+            precio: document.getElementById("resumen-servicio-precio-manual"),
+            precioWrap: document.getElementById("resumen-servicio-precio-manual-wrap"),
+            precioTexto: document.getElementById("resumen-servicio-total"),
+            programacion: document.getElementById("resumen-servicio-programacion"),
+            fecha: document.getElementById("resumen-servicio-fecha"),
+            hora: document.getElementById("resumen-servicio-hora")
+        };
+    }
+
     function esEarly() {
         return elementos().select?.value === CODIGO;
+    }
+
+    function esEarlyResumen() {
+        return elementosResumen().select?.value === CODIGO;
     }
 
     function ordenarOpcion() {
@@ -82,8 +102,19 @@
         return Number.isFinite(valor) && valor > 0 ? valor : 0;
     }
 
+    function precioManualResumenActual() {
+        const { precio } = elementosResumen();
+        const valor = Number(precio?.value || 0);
+        return Number.isFinite(valor) && valor > 0 ? valor : 0;
+    }
+
     function cantidadActual() {
         const { cantidad } = elementos();
+        return Math.max(1, Math.trunc(Number(cantidad?.value || 1)) || 1);
+    }
+
+    function cantidadResumenActual() {
+        const { cantidad } = elementosResumen();
         return Math.max(1, Math.trunc(Number(cantidad?.value || 1)) || 1);
     }
 
@@ -91,6 +122,13 @@
         const { precioTexto } = elementos();
         if (!precioTexto || !esEarly()) return;
         const total = precioManualActual() * cantidadActual();
+        precioTexto.textContent = `$${Number(total || 0).toLocaleString("es-CL")}`;
+    }
+
+    function actualizarPrecioVisualResumen() {
+        const { precioTexto } = elementosResumen();
+        if (!precioTexto || !esEarlyResumen()) return;
+        const total = precioManualResumenActual() * cantidadResumenActual();
         precioTexto.textContent = `$${Number(total || 0).toLocaleString("es-CL")}`;
     }
 
@@ -123,6 +161,54 @@
         actualizarPrecioVisual();
     }
 
+    function ajustarUIResumen() {
+        const {
+            select,
+            cantidad,
+            precio,
+            precioWrap,
+            programacion,
+            fecha
+        } = elementosResumen();
+
+        if (!select || !cantidad || !precio || !precioWrap) return;
+
+        const etiqueta = precioWrap.querySelector("label");
+
+        // Al volver a Jacuzzi restauramos la etiqueta original y dejamos
+        // que su lógica legacy siga funcionando exactamente como antes.
+        if (select.value === "tinajaJacuzzi") {
+            if (etiqueta) etiqueta.textContent = "Precio Jacuzzi";
+            precio.placeholder = "Valor total";
+            return;
+        }
+
+        if (select.value !== CODIGO) return;
+
+        cantidad.min = "1";
+        cantidad.step = "1";
+        if (!Number(cantidad.value) || Number(cantidad.value) < 1) cantidad.value = "1";
+        cantidad.title = "1 unidad = 1 hora de Early Check-In";
+
+        // El modal rápido originalmente sólo enseñaba este bloque para Jacuzzi.
+        // Early Check-In reutiliza el mismo input sin cambiar otros servicios.
+        precioWrap.hidden = false;
+        if (etiqueta) etiqueta.textContent = "Precio por hora";
+        precio.placeholder = "Ej: 10000";
+        precio.min = "0";
+        precio.step = "1000";
+
+        // Early Check-In también necesita fecha y hora.
+        if (programacion) programacion.hidden = false;
+        if (fecha && !fecha.value) {
+            try {
+                fecha.value = String(fechaSeleccionada || "").slice(0, 10);
+            } catch (_) {}
+        }
+
+        actualizarPrecioVisualResumen();
+    }
+
     function instalarWrapperRegistro() {
         if (window.HAIKU_SERVICIOS_EARLY_CHECKIN_WRAPPER_V1) return true;
         if (typeof window.registrarServicio !== "function") return false;
@@ -134,17 +220,41 @@
                 return registrarAnterior.apply(this, arguments);
             }
 
-            const { fecha, hora } = elementos();
-            const cantidad = Math.max(1, Math.trunc(Number(datos?.cantidad || cantidadActual())) || 1);
-            const precioManual = precioManualActual();
+            const principal = elementos();
+            const resumen = elementosResumen();
+            const usarResumen =
+                resumen.select?.value === CODIGO &&
+                (!resumen.modal || resumen.modal.hidden === false);
+
+            const cantidad = Math.max(
+                1,
+                Math.trunc(Number(datos?.cantidad || (usarResumen ? cantidadResumenActual() : cantidadActual()))) || 1
+            );
+
+            const precioDesdeDatos = Number(datos?.precioManual || 0);
+            const precioManual =
+                Number.isFinite(precioDesdeDatos) && precioDesdeDatos > 0
+                    ? precioDesdeDatos
+                    : usarResumen
+                        ? precioManualResumenActual()
+                        : precioManualActual();
 
             if (precioManual <= 0) {
                 alert("Ingresa el precio por hora del Early Check-In.");
                 return null;
             }
 
-            const fechaServicio = String(datos?.fechaServicio || fecha?.value || "").slice(0, 10);
-            const horaServicio = String(datos?.hora || hora?.value || "").slice(0, 5);
+            const fechaServicio = String(
+                datos?.fechaServicio ||
+                (usarResumen ? resumen.fecha?.value : principal.fecha?.value) ||
+                ""
+            ).slice(0, 10);
+
+            const horaServicio = String(
+                datos?.hora ||
+                (usarResumen ? resumen.hora?.value : principal.hora?.value) ||
+                ""
+            ).slice(0, 5);
 
             if (!fechaServicio || !horaServicio) {
                 alert("El Early Check-In requiere fecha y hora.");
@@ -164,7 +274,7 @@
             const nuevo = registrarAnterior.call(this, datosEarly);
 
             // El servicio legacy sólo aplicaba precio manual al Jacuzzi.
-            // Ajustamos la copia local inmediatamente; Supabase ya recibe
+            // Ajustamos la copia local inmediatamente; Supabase recibe
             // precioManual y calcula el total correcto por hora.
             if (nuevo) {
                 nuevo.precioManual = precioManual;
@@ -207,10 +317,11 @@
             actualizarPrecioVisual();
         }, true);
 
-        precio.addEventListener("input", () => {
+        precio.addEventListener("input", evento => {
             if (!esEarly()) return;
-            setTimeout(actualizarPrecioVisual, 0);
-        });
+            evento.stopImmediatePropagation();
+            actualizarPrecioVisual();
+        }, true);
 
         if (btnNuevo) {
             btnNuevo.addEventListener("click", () => {
@@ -226,14 +337,51 @@
         return true;
     }
 
+    function instalarEventosResumen() {
+        if (window.HAIKU_SERVICIOS_EARLY_CHECKIN_RESUMEN_EVENTOS_V1) return true;
+        const { select, cantidad, precio } = elementosResumen();
+        if (!select || !cantidad || !precio) return false;
+
+        window.HAIKU_SERVICIOS_EARLY_CHECKIN_RESUMEN_EVENTOS_V1 = true;
+
+        // Dejamos que el cambio legacy limpie su estado anterior y, al terminar,
+        // volvemos a mostrar los controles específicos de Early Check-In.
+        select.addEventListener("change", () => {
+            setTimeout(ajustarUIResumen, 0);
+        });
+
+        // En Early Check-In la lógica legacy trataría el precio como no editable,
+        // lo ocultaría y vaciaría. Se interceptan sólo estos dos inputs.
+        cantidad.addEventListener("input", evento => {
+            if (!esEarlyResumen()) return;
+            evento.stopImmediatePropagation();
+            actualizarPrecioVisualResumen();
+        }, true);
+
+        precio.addEventListener("input", evento => {
+            if (!esEarlyResumen()) return;
+            evento.stopImmediatePropagation();
+            actualizarPrecioVisualResumen();
+        }, true);
+
+        document.addEventListener("click", evento => {
+            if (!evento.target.closest("[data-agregar-servicio]")) return;
+            setTimeout(ajustarUIResumen, 0);
+        });
+
+        return true;
+    }
+
     function instalar() {
         const catalogoListo = registrarEnCatalogo();
         const eventosListos = instalarEventos();
+        const eventosResumenListos = instalarEventosResumen();
         const wrapperListo = instalarWrapperRegistro();
 
-        if (catalogoListo && eventosListos && wrapperListo) {
+        if (catalogoListo && eventosListos && eventosResumenListos && wrapperListo) {
             ajustarUI();
-            console.info("HAIKU · Early Check-In V1 preparado: precio manual por hora.");
+            ajustarUIResumen();
+            console.info("HAIKU · Early Check-In V1 preparado: precio manual por hora en Servicios y Cabañas.");
             return true;
         }
         return false;
