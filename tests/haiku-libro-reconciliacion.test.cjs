@@ -624,6 +624,36 @@ test('payment update preview identifies the transaction before showing proposed 
  assert.doesNotMatch(text,/190000 → 160000/);
 });
 
+test('associated reservation cards show their related Libro movements with the existing classification and no payment controls',async()=>{
+ const casos=[
+  {titular:'Pascual Abarca',rut_documento:'11111111-1',cabana:4,pago:readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'AUTH-PASCUAL',fecha_comprobante:'2026-09-04',texto_original:'WebPay crédito Pascual'})},
+  {titular:'Yenny Acuña Berrios',rut_documento:'22222222-2',cabana:6,pago:readyPay({monto:123896,medio_pago:'tarjeta_debito',codigo_autorizacion:null,folio:'000243',bovtar:'101502',fecha_comprobante:'2026-09-04',texto_original:'Tarjeta débito Yenny'})},
+  {titular:'Macarena Hurtado',rut_documento:'33333333-3',cabana:10,pago:readyPay({monto:20000,medio_pago:'tarjeta_credito',codigo_autorizacion:null,folio:'000242',bovtar:'750453',fecha_comprobante:'2026-09-04',texto_original:'Tarjeta crédito Macarena'})}
+ ];
+ const reservas=casos.map((caso,i)=>readyBook({id:'libro-'+i,titular:caso.titular,rut_documento:caso.rut_documento,cabana:caso.cabana,pagos:[caso.pago]}));
+ const estadias=reservas.map(r=>stay(r,{id:'estadia-'+r.cabana,reserva_id:'reserva-'+r.cabana}));
+ const existente={id:'pago-macarena',reserva_id:'reserva-10',monto:20000,moneda:'CLP',medio_pago:'tarjeta_credito',folio:'000242',bove:'750453',
+  codigo_autorizacion:null,fecha_pago:'2026-09-04T16:00:00Z',datos_origen:{contexto:'asistente_pago_reserva_existente'}};
+ const plan=await prepare(reservas,estadias,[existente]);
+ const asociadas=plan.items.filter(i=>i.categoria==='asociadas');
+ assert.equal(asociadas.length,3);assert.ok(asociadas.every(i=>i.movimientosLibro.length===1));
+ assert.deepEqual(asociadas.map(i=>i.movimientosLibro[0].estado).sort(),['en_sistema','nuevo_seguro','nuevo_seguro']);
+ const serializado=Q.serializarIncorporacion(plan);
+ assert.equal(serializado.filter(i=>i.tipo==='pago').length,2);assert.ok(serializado.every(i=>!('movimientosLibro' in i)));
+
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const tarjetas=h.out.querySelectorAll('.haiku-incorporacion-item--asociadas');
+ assert.equal(tarjetas.length,3);
+ for(const tarjeta of tarjetas) {
+  assert.equal(tarjeta.querySelectorAll('.haiku-incorporacion-movimientos-libro').length,1);
+  assert.equal(tarjeta.querySelectorAll('.haiku-incorporacion-movimiento').length,1);
+  assert.equal(tarjeta.querySelectorAll('button').length,0);
+ }
+ const texto=h.texts();
+ assert.match(texto,/MOVIMIENTOS DEL LIBRO RELACIONADOS/);assert.match(texto,/Pago nuevo seguro/);assert.match(texto,/Ya existe en Proyecto H/);
+ assert.match(texto,/WebPay Crédito/);assert.match(texto,/Folio \/ Autorización/);assert.match(texto,/Fecha pago/);
+});
+
 test('shared reservation notes combine both cabins without repeated conflicting patches',async()=>{
  const a=readyBook({texto_original:'Marco Iturrieta // CAB 1 // Factura'}),b=readyBook({id:'b2',cabana:2,texto_original:'Marco Iturrieta // CAB 2 // Llegada tarde'});
  const shared={...stay(a).reservas,observaciones:'Nota operativa'},rows=[stay(a,{reservas:shared}),stay(b,{reservas:shared})];
