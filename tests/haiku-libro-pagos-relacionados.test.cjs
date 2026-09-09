@@ -19,6 +19,7 @@ function cargar(datos, scope) {
 
 const scopeMacarena = {
   fecha: '2026-09-03',
+  texto: 'haku revisa el libro los pagos asociados a Macarena Hurtado el jueves 03 de septiembre para agregarlos al proyecto H',
   objetivos: [{ cabana: null, nombre: 'Macarena Hurtado' }]
 };
 
@@ -60,6 +61,25 @@ test('recupera fecha visible cuando Excel la guardó como texto y no como fecha 
   assert.deepEqual(cab5.pagos_sin_asociacion.map(p => p.monto), [153000, 40000]);
   assert.ok(cab5.pagos_sin_asociacion.every(p => p.fecha_comprobante === '2026-09-03'));
   assert.equal(cab5.pagos_sin_asociacion.find(p => p.monto === 40000).servicio_tipo, 'early_checkin');
+});
+
+test('consulta individual con fecha exacta elimina pagos de otros días', async () => {
+  const api = cargar({
+    reservas: [
+      { titular: 'Macarena Hurtado', cabana: 5, fecha_checkin: '2026-09-03', fecha_checkout: '2026-09-04', fechas_ocupadas: ['2026-09-03'], pagos: [], pagos_sin_asociacion: [] },
+      { titular: 'Macarena Hurtado', cabana: 10, fecha_checkin: '2026-09-04', fecha_checkout: '2026-09-04', fechas_ocupadas: ['2026-09-04'], pagos: [
+        { titular: 'Macarena Hurtado', monto: 100000, concepto: 'cab10/fullday', fecha_comprobante: '2026-09-04', origen: { hoja: 'Sep26', celda: 'AE20:AH20' } },
+        { titular: 'Macarena Hurtado', monto: 20000, concepto: 'cab10/fullday', fecha_comprobante: '2026-09-04', origen: { hoja: 'Sep26', celda: 'AE21:AH21' } }
+      ], pagos_sin_asociacion: [] }
+    ],
+    pagos: [
+      { titular: 'Macarena Hurtado', cabana: 1, monto: 153000, concepto: 'cab1/1noche', fecha_comprobante: '2026-09-03', origen: { hoja: 'Sep26', celda: 'AA10:AD10' } }
+    ]
+  }, scopeMacarena);
+
+  const data = await api.consultarHoja('Sep26');
+  assert.deepEqual(data.reservas.find(r => r.cabana === 5).pagos_sin_asociacion.map(p => p.monto), [153000]);
+  assert.equal(data.reservas.find(r => r.cabana === 10).pagos.length, 0);
 });
 
 test('no duplica un movimiento que ya estaba asociado a la reserva', async () => {
