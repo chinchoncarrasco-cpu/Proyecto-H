@@ -16,6 +16,15 @@
 
     let instalado = false;
 
+    function asegurarUiPagos() {
+        if (!root.document || document.getElementById("haiku-libro-pagos-ui-v1-script")) return;
+        const script = document.createElement("script");
+        script.id = "haiku-libro-pagos-ui-v1-script";
+        script.src = "js/haiku-libro-pagos-ui-v1.js?v=1";
+        script.defer = true;
+        document.head.appendChild(script);
+    }
+
     function normalizarTexto(valor) {
         return String(valor || "")
             .normalize("NFD")
@@ -89,6 +98,7 @@
         if (!api) return false;
         if (api.__haikuPagosCanonV1) {
             instalado = true;
+            asegurarUiPagos();
             return true;
         }
 
@@ -109,6 +119,7 @@
             medioDesdeTexto
         });
         instalado = true;
+        asegurarUiPagos();
         console.info("HAKU · Canon de pagos del Libro V1 preparado.");
         return true;
     }
