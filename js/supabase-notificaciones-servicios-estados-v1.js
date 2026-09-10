@@ -2,6 +2,7 @@
 // HAIKU · NOTIFICACIONES · SERVICIOS DEL DÍA V1
 // Hace visible en la campana la dinámica completa:
 // Actual / Próxima / Pendiente / Completada / Cancelada.
+// + Acceso directo al servicio y cierre rápido de tinajas finalizadas.
 // ========================================
 (() => {
     "use strict";
@@ -54,26 +55,232 @@
         return { clave: "pendiente", etiqueta: "Pendiente" };
     }
 
-    function abrirFichaServicio(item) {
-        const numeroCabana = item?.dataset?.cabana || "";
-        const fechaServicio = item?.dataset?.fecha || "";
-        if (!numeroCabana) return;
+    function relojChile() {
+        const partes = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "America/Santiago",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23"
+        }).formatToParts(new Date());
 
-        let fechaAnterior = "";
-        try { fechaAnterior = fechaSeleccionada; } catch {}
+        const datos = Object.fromEntries(partes.map(parte => [parte.type, parte.value]));
+        return {
+            fecha: `${datos.year}-${datos.month}-${datos.day}`,
+            minutos: Number(datos.hour || 0) * 60 + Number(datos.minute || 0)
+        };
+    }
 
-        try {
-            if (fechaServicio) fechaSeleccionada = fechaServicio;
-            const botonCabana = document.querySelector(
-                `[data-ficha-cabana="${CSS.escape(String(numeroCabana))}"]`
-            );
-            if (botonCabana) {
-                try { cerrarPanelNotificaciones?.(); } catch {}
-                botonCabana.click();
-            }
-        } finally {
-            try { fechaSeleccionada = fechaAnterior; } catch {}
+    function minutosHora(hora) {
+        const [h, m] = String(hora || "").slice(0, 5).split(":").map(Number);
+        if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+        return h * 60 + m;
+    }
+
+    function duracionTinaja(servicio) {
+        const inicio = minutosHora(servicio?.hora);
+        const fin = minutosHora(servicio?.horaFin);
+        if (inicio !== null && fin !== null && fin > inicio) return fin - inicio;
+
+        const directa = Number(servicio?.duracionMinutos || 0);
+        if (directa > 0) return directa;
+
+        return Math.max(1, Number(servicio?.cantidad || 1)) * 60;
+    }
+
+    function tinajaFinalizada(servicio) {
+        if (String(servicio?.categoria || "").toLowerCase() !== "tinaja") return false;
+
+        const estadoDb = String(servicio?.estadoServicioDb || servicio?.estadoServicio || "").toLowerCase();
+        if (["cancelado", "cancelada", "no_show", "realizado", "completada"].includes(estadoDb)) {
+            return false;
         }
+
+        const fecha = String(servicio?.fechaServicio || servicio?.fecha || "").slice(0, 10);
+        const inicio = minutosHora(servicio?.hora);
+        if (!fecha || inicio === null) return false;
+
+        const reloj = relojChile();
+        if (fecha < reloj.fecha) return true;
+        if (fecha > reloj.fecha) return false;
+
+        return reloj.minutos >= inicio + duracionTinaja(servicio);
+    }
+
+    function buscarServicioPorId(id) {
+        return listaServicios().find(servicio => String(servicio?.id || "") === String(id || "")) || null;
+    }
+
+    function cerrarNotificaciones() {
+        try {
+            if (typeof cerrarPanelNotificaciones === "function") {
+                cerrarPanelNotificaciones();
+                return;
+            }
+        } catch {}
+
+        const panel = document.getElementById("panel-notificaciones");
+        if (panel) panel.hidden = true;
+    }
+
+    function buscarTarjetaAgenda(servicioId) {
+        return [...document.querySelectorAll("#servicios-agenda [data-haiku-servicio-id]")]
+            .find(elemento => String(elemento.dataset.haikuServicioId || "") === String(servicioId || "")) || null;
+    }
+
+    function enfocarTarjetaAgenda(servicioId, intento = 0) {
+        const tarjeta = buscarTarjetaAgenda(servicioId);
+        if (!tarjeta) {
+            if (intento < 14) {
+                setTimeout(() => enfocarTarjetaAgenda(servicioId, intento + 1), 90);
+            }
+            return;
+        }
+
+        tarjeta.scrollIntoView({ behavior: "smooth", block: "center" });
+        tarjeta.classList.add("haiku-servicio-enfocado-desde-notificacion");
+        setTimeout(() => tarjeta.classList.remove("haiku-servicio-enfocado-desde-notificacion"), 2600);
+    }
+
+    function abrirServicioEnAgenda(item) {
+        const servicioId = item?.dataset?.servicioId || "";
+        if (!servicioId) return;
+
+        cerrarNotificaciones();
+
+        const botonServicios = document.querySelector('.menu-item[data-seccion="servicios"]');
+        botonServicios?.click();
+
+        try { window.renderizarAgendaServicios?.(); } catch {}
+        setTimeout(() => enfocarTarjetaAgenda(servicioId), 60);
+    }
+
+    function inyectarEstilosAcciones() {
+        if (document.getElementById("haiku-notif-servicios-acciones-style")) return;
+
+        const estilo = document.createElement("style");
+        estilo.id = "haiku-notif-servicios-acciones-style";
+        estilo.textContent = `
+            #notificaciones-contenido .haiku-notif-servicio-acciones {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 12px;
+                margin: 2px 7px 8px;
+                padding: 0 2px;
+                line-height: 1.2;
+            }
+
+            #notificaciones-contenido .haiku-notif-servicio-accion {
+                appearance: none;
+                border: 0;
+                background: transparent;
+                padding: 2px 0;
+                font: inherit;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: .01em;
+                cursor: pointer;
+                opacity: .84;
+            }
+
+            #notificaciones-contenido .haiku-notif-servicio-accion:hover,
+            #notificaciones-contenido .haiku-notif-servicio-accion:focus-visible {
+                opacity: 1;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+            }
+
+            #notificaciones-contenido .haiku-notif-servicio-realizado {
+                color: #2f7350;
+            }
+
+            #notificaciones-contenido .haiku-notif-servicio-cancelar {
+                color: #8b5a5a;
+            }
+
+            #notificaciones-contenido .haiku-notif-servicio-finalizado .haiku-notif-servicio-etiqueta {
+                color: #765a20;
+                font-weight: 700;
+            }
+
+            #servicios-agenda .haiku-servicio-enfocado-desde-notificacion {
+                outline: 2px solid rgba(47, 115, 80, .42);
+                outline-offset: 3px;
+                box-shadow: 0 0 0 5px rgba(47, 115, 80, .08);
+                transition: outline-color .2s ease, box-shadow .2s ease;
+            }
+        `;
+        document.head.appendChild(estilo);
+    }
+
+    function decorarAccionesFinalizadas() {
+        const contenedor = document.getElementById("notificaciones-contenido");
+        if (!contenedor) return;
+
+        const lista = listaServicios();
+        const porId = new Map(lista.map(servicio => [String(servicio?.id || ""), servicio]));
+
+        contenedor.querySelectorAll(".haiku-notif-servicio-acciones").forEach(fila => {
+            const item = fila.previousElementSibling;
+            if (!item?.matches?.(".notificacion-reserva.haiku-notif-servicio-estado")) {
+                fila.remove();
+                return;
+            }
+
+            if (String(item.dataset.servicioId || "") !== String(fila.dataset.servicioId || "")) {
+                fila.remove();
+            }
+        });
+
+        contenedor
+            .querySelectorAll(".notificacion-reserva.haiku-notif-servicio-estado")
+            .forEach(item => {
+                const id = String(item.dataset.servicioId || "");
+                const servicio = porId.get(id);
+                if (!servicio) return;
+
+                const listaDia = lista.filter(s =>
+                    String(s?.fechaServicio || s?.fecha || "").slice(0, 10) ===
+                    String(servicio?.fechaServicio || servicio?.fecha || "").slice(0, 10)
+                );
+                const est = estado(servicio, listaDia);
+                const finalizo = tinajaFinalizada(servicio) && est.clave === "pendiente";
+                const etiqueta = item.querySelector(".haiku-notif-servicio-etiqueta");
+                let fila = item.nextElementSibling;
+                if (!fila?.classList?.contains("haiku-notif-servicio-acciones")) fila = null;
+
+                if (!finalizo) {
+                    item.classList.remove("haiku-notif-servicio-finalizado");
+                    if (etiqueta && etiqueta.dataset.haikuFinalizado === "1") {
+                        etiqueta.textContent = est.etiqueta;
+                        delete etiqueta.dataset.haikuFinalizado;
+                    }
+                    fila?.remove();
+                    return;
+                }
+
+                item.classList.add("haiku-notif-servicio-finalizado");
+                if (etiqueta) {
+                    etiqueta.textContent = "Finalizó";
+                    etiqueta.dataset.haikuFinalizado = "1";
+                }
+
+                if (!fila) {
+                    fila = document.createElement("div");
+                    fila.className = "haiku-notif-servicio-acciones";
+                    fila.dataset.servicioId = id;
+                    fila.innerHTML = `
+                        <button type="button" class="haiku-notif-servicio-accion haiku-notif-servicio-realizado"
+                            data-haiku-notif-realizar="${esc(id)}">✓ Realizado</button>
+                        <button type="button" class="haiku-notif-servicio-accion haiku-notif-servicio-cancelar"
+                            data-haiku-notif-cancelar="${esc(id)}">Cancelar</button>
+                    `;
+                    item.insertAdjacentElement("afterend", fila);
+                }
+            });
     }
 
     function crearSeccion(contenedor) {
@@ -133,7 +340,7 @@
 
         detalle.addEventListener("click", evento => {
             const item = evento.target.closest(".notificacion-reserva");
-            if (item) abrirFichaServicio(item);
+            if (item) abrirServicioEnAgenda(item);
         });
 
         const titulo = seccion.querySelector(".notificaciones-seccion-titulo");
@@ -165,7 +372,7 @@
         }
 
         const estados = listaDia.map(s => estado(s, listaDia));
-        const firma = `${fecha}|${listaDia.map((s, i) => `${s.id}:${estados[i].clave}`).join("|")}`;
+        const firma = `${fecha}|${listaDia.map((s, i) => `${s.id}:${estados[i].clave}:${tinajaFinalizada(s) ? "fin" : "curso"}`).join("|")}`;
 
         let seccion = crearSeccion(contenedor);
         let bloque = buscarBloqueServicio(seccion);
@@ -180,6 +387,7 @@
             contenedor.dataset.haikuFirmaServiciosDia === firma &&
             bloqueCompleto
         ) {
+            decorarAccionesFinalizadas();
             return;
         }
 
@@ -215,9 +423,8 @@
             bloque.detalle.appendChild(item);
         });
 
-        // Si reutilizamos el bloque legacy, conserva sus listeners originales.
-        // Si fue creado aquí, sus listeners ya fueron instalados en crearBloque().
         contenedor.dataset.haikuFirmaServiciosDia = firma;
+        decorarAccionesFinalizadas();
     }
 
     function programar(delay = 20) {
@@ -225,12 +432,63 @@
         timer = setTimeout(renderizar, delay);
     }
 
+    inyectarEstilosAcciones();
+
     const contenedor = document.getElementById("notificaciones-contenido");
     if (contenedor) {
         new MutationObserver(() => programar(0)).observe(contenedor, {
             childList: true,
             subtree: true
         });
+
+        contenedor.addEventListener("click", async evento => {
+            const realizar = evento.target.closest?.("[data-haiku-notif-realizar]");
+            if (realizar) {
+                evento.preventDefault();
+                evento.stopPropagation();
+
+                const id = realizar.dataset.haikuNotifRealizar || "";
+                const servicio = buscarServicioPorId(id);
+                if (!servicio || !tinajaFinalizada(servicio)) return;
+
+                realizar.disabled = true;
+                try {
+                    await Promise.resolve(window.marcarServicioRealizado?.(id));
+                } finally {
+                    setTimeout(() => {
+                        programar(0);
+                        try { window.renderizarAgendaServicios?.(); } catch {}
+                    }, 120);
+                }
+                return;
+            }
+
+            const cancelar = evento.target.closest?.("[data-haiku-notif-cancelar]");
+            if (cancelar) {
+                evento.preventDefault();
+                evento.stopPropagation();
+
+                const id = cancelar.dataset.haikuNotifCancelar || "";
+                const servicio = buscarServicioPorId(id);
+                if (!servicio || !tinajaFinalizada(servicio)) return;
+
+                cancelar.disabled = true;
+                try {
+                    await Promise.resolve(window.haikuCancelarServicio?.(id));
+                } finally {
+                    cancelar.disabled = false;
+                    setTimeout(() => programar(0), 120);
+                }
+                return;
+            }
+
+            const item = evento.target.closest?.(".notificacion-reserva.haiku-notif-servicio-estado");
+            if (item) {
+                evento.preventDefault();
+                evento.stopPropagation();
+                abrirServicioEnAgenda(item);
+            }
+        }, true);
     }
 
     document.addEventListener("haiku:servicios-hidratados", () => programar(20));
@@ -242,7 +500,7 @@
     setInterval(() => {
         const panel = document.getElementById("panel-notificaciones");
         if (panel && !panel.hidden) programar(0);
-    }, 30000);
+    }, 15000);
 
     window.haikuRenderNotificacionesServiciosDia = renderizar;
 
