@@ -1,17 +1,19 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const S=require('../js/haiku-libro-semantica-v1.js');
 const bove=fs.readFileSync('js/supabase-asistente-bove-consultas-v1.js','utf8');
+const preparacion=fs.readFileSync('js/supabase-asistente-bove-escritura-v1.js','utf8');
 const general=fs.readFileSync('js/haiku-libro-consultas-v1.js','utf8');
 
 function entorno(conBove=true,timeoutCorto=false){
  const listeners=[],nodos=new Map();
- const elemento=()=>({dataset:{},children:[],value:'',textContent:'',innerHTML:'',append(...xs){this.children.push(...xs);},appendChild(x){this.append(x);},dispatchEvent(){},scrollIntoView(){},querySelector(){return null;}});
+ const elemento=()=>({dataset:{},children:[],value:'',textContent:'',innerHTML:'',append(...xs){this.children.push(...xs);},appendChild(x){this.append(x);},addEventListener(){},dispatchEvent(){},scrollIntoView(){},querySelector(){return null;}});
  const doc={readyState:'loading',head:elemento(),createElement:elemento,getElementById:id=>nodos.get(id),querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){throw Error('El routing no debe esperar al DOM');}};
  const w={document:doc,HAIKU_LIBRO_SEMANTICA:S,__generalCalls:0,__boveCalls:[],addEventListener:(tipo,fn,capture)=>listeners.push({tipo,fn,capture}),Event:class{},
   HAIKU_LIBRO_RESERVA_V1:{listo:async()=>{},estado:()=>({generacion:1,cargado:true,nombre:'fixture'}),listarHojas:()=>['Sep26'],buscarHojasBove:async()=>({hojas:['Sep26']}),buscarHojas:async()=>({hojas:['Sep26']}),consultarHoja:async()=>({reservas:[],pagos:[],aseos:[],espacios:[],anotaciones:[],advertencias:[],evidencias_bove:[{numero:'16968',estado:'registrado',origen:{hoja:'Sep26',celda:'L27'}}]})},
   haikuSupabase:{from(){const q={select(){return q;},order(){return q;},eq(){return q;},gte(){return q;},lte(){return q;},or(){return q;},range:async()=>({data:[]})};return q;}}};
  const contexto=vm.createContext({window:w,document:doc,Event:w.Event,Intl,console,setTimeout:timeoutCorto?(fn,ms)=>setTimeout(fn,ms===20000?10:ms):setTimeout,clearTimeout});
  // Instrumentación sólo de observación: ejecuta los dos handlers reales.
+ vm.runInContext(preparacion,contexto);
  if(conBove)vm.runInContext(bove.replace('const q=interpretar(texto,dia);','const q=interpretar(texto,dia);root.__boveCalls.push(q);'),contexto);
  vm.runInContext(general.replace(/(async function consultar\(texto,[^\n]+\{)/,'$1 root.__generalCalls++;'),contexto);
  // La UI aparece DESPUÉS de registrar ambos módulos, como el script async real.
@@ -56,4 +58,18 @@ test('UI termina la espera y libera el envío después del timeout',async()=>{
  assert.match(respuesta.textContent,/superó el tiempo de espera/);assert.equal(e.w.__generalCalls,0);
  await e.enviar('busca en Proyecto H el BOVE 16968');
  assert.equal(e.mensajes.children.filter(x=>x.className.endsWith('--asistente')).length,2);
+});
+
+for(const tipo of ['click','keydown'])test('preparación BOVE se consume una vez antes del Libro: '+tipo,async()=>{
+ const e=entorno();const event=await e.enviar('Haku, ponle BOVE 16989 a CAB 6',tipo);
+ assert.equal(event.prevented,true);assert.equal(e.w.__generalCalls,0);assert.equal(e.w.__boveCalls.length,0);
+ const respuestas=e.mensajes.children.filter(x=>x.className.endsWith('--asistente'));
+ assert.equal(respuestas.length,1);assert.match(respuestas[0].innerHTML,/haku-bove-preparacion/);
+ assert.match(respuestas[0].innerHTML,/pagos.verificar/);
+});
+
+test('orden de panel registra preparación antes del parser general',()=>{
+ const panel=fs.readFileSync('panel.html','utf8');
+ assert.ok(panel.indexOf("'supabase-asistente-bove-escritura-v1'")<panel.indexOf("'supabase-asistente-bove-consultas-v1'"));
+ assert.ok(panel.indexOf("'supabase-asistente-bove-consultas-v1'")<panel.indexOf("'haiku-libro-consultas-v1'"));
 });
