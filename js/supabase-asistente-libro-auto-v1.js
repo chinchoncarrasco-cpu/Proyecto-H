@@ -27,6 +27,7 @@
         } else texto=`Detecté ${total} ${total===1?'cambio':'cambios'} en la última actualización: ${n} nuevas · ${m} modificadas · ${b} ${b===1?'ya no aparece':'ya no aparecen'}.`;
         if (total && a) texto+=` ${a} ${a===1?'caso requiere':'casos requieren'} revisión.`;
         if (avisos) texto+=` Además, hay ${avisos} ${avisos===1?'advertencia':'advertencias'} de interpretación.`;
+        if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) texto+=' '+root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.resumen(r);
         return {texto,revision};
     }
     function crearControlador({generacion,obtener,mostrar,limpiar}) {

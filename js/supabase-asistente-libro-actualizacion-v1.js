@@ -64,6 +64,10 @@
         }
         html += '<div class="haku-libro-contadores">' + [['nuevas','Nuevas'],['modificadas','Modificadas'],['ya_no_aparecen','Ya no aparecen'],['ambiguas','Por revisar']].map(([k,t])=>`<div><strong>${lista(r[k]).length}</strong><span>${t}</span></div>`).join('') + '</div>';
         const seccion = (titulo, items) => { if(items.length) html += `<section><h4>${titulo}</h4>${items.join('')}</section>`; };
+        if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) {
+            const prioridad = root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.renderizar(r);
+            html = html.replace('</header>', '</header>' + prioridad);
+        }
         seccion('Nuevas',lista(r.nuevas).map(x=>`<div class="haku-libro-item"><small>NUEVA</small>${reserva(x.actual)}</div>`));
         seccion('Modificadas',lista(r.modificadas).map(x=>`<div class="haku-libro-item"><small>MODIFICADA · CAB ${escapar(x.actual?.cabana ?? '—')}</small><strong>${escapar(x.actual?.titular || 'Titular no determinado')}</strong><dl>${lista(x.cambios).map(c=>`<dt>${escapar(etiquetas[c.campo] || 'Otro campo')}</dt><dd>${['rut_documento','telefono','correo'].includes(c.campo) ? 'Dato actualizado; valores personales ocultos.' : `${escapar(valor(c.antes,c.campo))} → ${escapar(valor(c.ahora,c.campo))}`}</dd>`).join('')}</dl></div>`));
         seccion('Ya no aparecen',lista(r.ya_no_aparecen).map(x=>`<div class="haku-libro-item"><small>YA NO APARECE</small>${reserva(x.anterior)}<p>Esta reserva estaba en la versión anterior y no aparece en la actual.</p></div>`));
