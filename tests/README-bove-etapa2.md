@@ -34,14 +34,36 @@ esta resolución secundaria. No hay lecturas adicionales ni cambios en pagos.
 - `Haku, ¿qué BOVE existe en el Libro que no esté en Proyecto H?`
 - `Haku, ¿cuál es el último BOVE registrado?`
 
-Pendientes usa hoy en America/Santiago, los check-in de hoy y la hoja mensual
-inequívoca de ese mes. No incluye reservas futuras o canceladas. Alojamiento
-requiere cargos activos positivos; servicios exige al menos un servicio cobrable,
-no cancelado, con cargos activos pagados, igual que el indicador existente.
-Pago pendiente y BOVE pendiente se mantienen separados.
+ETAPA 2B admite listas de hasta 20 números con coma, `y` o `/`, incluyendo
+`busca los BOVE 16968, 16981 y 16982`, `revisa los BOVE 19888 y 327` y
+`busca 16968, 16981 y 16982 en el Libro`. Una consulta individual conserva
+`q.numero`; todas usan `q.numeros`. Se deduplican números normalizados y hojas.
+El worker abre un ZIP por lote, no por número. Proyecto H recibe un único filtro
+por todos los números (con paginación si hiciera falta). Cada número se evalúa
+separadamente en `por_numero`, para aislar inexistentes y ambiguos.
+
+Pendientes exige un rango máximo de 31 días: `hoy`, `ayer`, `esta semana`
+(lunes a hoy), `del 1 al 10 de septiembre`, `entre el 05-09-26 y el 10-09-26`
+o `desde el 8 hasta hoy`. Fechas sin año usan el año actual; el último ejemplo
+usa el mes actual. El rango completo se muestra en la respuesta. Sin rango,
+con fechas inválidas/invertidas o más de 31 días, no se consulta ninguna fuente.
+Hoy se calcula en America/Santiago. Se recorta el extremo futuro antes de leer.
+Sólo se leen hojas mensuales inequívocas del intervalo, incluso si cruza de mes.
+
+Una estadía requiere BOVE pendiente sólo si ingresó dentro del rango y hasta hoy,
+tiene estado propio `hospedada`/`checked_out` o timestamp de check-in/check-out,
+y le falta el BOVE correspondiente. `confirmada`/`pendiente` sin esos timestamps
+no acreditan ingreso: no se muestran como atrasadas, aunque su fecha sea pasada.
+`cancelada`/`no_show` de reserva o estadía se excluyen aun con timestamps. No se
+hereda estado del padre para acreditar check-in de otro segmento.
+Alojamiento exige cargos activos positivos; servicios requiere al menos un
+servicio cobrable no cancelado con cargos pagados. Nunca basta `bove_checkout`
+vacío. Pago pendiente y BOVE pendiente se mantienen separados. Sólo una
+asociación existente inequívoca permite afirmar pendiente en ambas fuentes o
+número del Libro ausente en Proyecto H; CAB+fecha secundaria se muestra posible.
 
 Búsquedas por número filtran Proyecto H y seleccionan hojas del Libro mediante
-`buscarHojasBove(numero)`: una lectura OOXML que admite puntos/comas de miles,
+`buscarHojasBove(numeroONumeros)`: una lectura OOXML que admite puntos/comas de miles,
 sin SheetJS ni semántica global. Sólo las hojas candidatas pasan a semántica.
 La selección por número y la lectura semántica se guardan
 sólo en memoria por generación; Proyecto H se vuelve a consultar. Comparaciones
@@ -54,6 +76,8 @@ consulta. No declara inexistencia. Una lectura de worker ya iniciada mantiene el
 límite de vida del lector existente; su resultado tardío no modifica la respuesta.
 Medición local con `(9)`: selección de `16968` → sólo `Sep26`, 1,26 s. Es la
 selección de candidatos, no la latencia total de la tarjeta en el navegador.
+ETAPA 2B: selección conjunta de 16968, 16981 y 16982 en `(9)` → sólo Sep26,
+1,32 s y una apertura ZIP en la medición local.
 
 ## Límites deliberados
 

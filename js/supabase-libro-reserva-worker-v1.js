@@ -390,11 +390,13 @@ async function leerHoja(buffer, nombreHoja) {
 
 // Búsqueda exacta de candidatos OOXML, sin SheetJS ni semántica global.
 async function buscarHojasBove(buffer, numero) {
-    if (!/^\d+$/.test(String(numero))) throw new Error('Número BOVE no válido.');
+    const numeros=[...new Set(Array.isArray(numero)?numero:[numero])];
+    if (!numeros.length||numeros.length>20||numeros.some(n=>!/^\d+$/.test(String(n)))) throw new Error('Números BOVE no válidos (máximo 20).');
     asegurarZip();
     const zip=await self.JSZip.loadAsync(buffer);
     const leer=async p=>await zip.file(p)?.async('text') || '';
-    const coincide=texto=>/\bbove\b/i.test(texto) && new RegExp(`(^|\\D)${numero}(?!\\d)`).test(texto.replace(/(\d)[.,](?=\d)/g,'$1'));
+    const patron=new RegExp(`(^|\\D)(?:${numeros.join('|')})(?!\\d)`);
+    const coincide=texto=>/\bbove\b/i.test(texto) && patron.test(texto.replace(/(\d)[.,](?=\d)/g,'$1'));
     const indices=new Set();
     bloques(await leer('xl/sharedStrings.xml'),'si').forEach((s,i)=>{if(coincide(textoDeTagsT(s.inner)))indices.add(String(i));});
     const relaciones=bloques(await leer('xl/_rels/workbook.xml.rels'),'Relationship');

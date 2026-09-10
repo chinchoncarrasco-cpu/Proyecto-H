@@ -19,6 +19,9 @@ test('worker exacto: variantes, inline/rich text, sin BOVTAR ni subnúmeros',asy
  assert.deepEqual(await buscar(['BOVE 16968','BOVE: 16.968','BOVE: 16,968','BOVTAR 16968','BOVE: 116968','BOVE: 169680','PEND BOVE']),['Hoja0','Hoja1','Hoja2','Inline']);
 });
 test('worker inexistente no produce candidatos',async()=>assert.deepEqual(await buscar(['BOVE: 16968'],'99999'),[]));
+test('worker múltiple reúne candidatos en una apertura ZIP y sin semántica',async()=>{
+ assert.deepEqual(await buscar(['BOVE 16968','BOVE 16981','BOVE 16982','BOVE 99999'],['16968','16981','16982']),['Hoja0','Hoja1','Hoja2','Inline']);
+});
 test('63 hojas: sólo candidato exacto pasa a semántica; caché evita repetir búsqueda',async()=>{
  const leidas=[],busquedas=[];
  const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>Array.from({length:63},(_,i)=>'Hoja'+i),buscarHojas(){throw Error('Prohibida búsqueda genérica');},buscarHojasBove:async n=>{busquedas.push(n);return {hojas:['Sep26']};},consultarHoja:async h=>{leidas.push(h);return {evidencias_bove:[{numero:'16968',estado:'registrado',origen:{hoja:h,celda:'L27'}}]};}};

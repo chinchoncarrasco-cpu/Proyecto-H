@@ -1,9 +1,9 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const B=require('../js/supabase-asistente-bove-consultas-v1.js');
-const reserva=(extra={})=>({id:'r1',titular_nombre:'Persona Prueba',bove_cierre:'19888',bove_checkout:null,estadias:[{fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-11',cabanas:{numero:6}}],...extra});
+const reserva=(extra={})=>({id:'r1',titular_nombre:'Persona Prueba',bove_cierre:'19888',bove_checkout:null,estadias:[{estado_estadia:'hospedada',fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-11',cabanas:{numero:6}}],...extra});
 const pro=()=>B.desdeProyecto([reserva()])[0];
 const lib=(extra={})=>({...pro(),fuente:'libro',origen:{hoja:'Sep26',celda:'L27'},...extra});
-function cliente(rows,cargos=[],servicios=[]){const calls=[];return {calls,from(tabla){calls.push(tabla);let data=tabla==='reservas'?rows:tabla==='servicios'?servicios:cargos;const q={select(s){calls.push(s);return q;},order(){return q;},eq(){return q;},or(){return q;},async range(a,b){return {data:data.slice(a,b+1)};}};return q;}};}
+function cliente(rows,cargos=[],servicios=[]){const calls=[];return {calls,from(tabla){calls.push(tabla);let data=tabla==='reservas'?rows:tabla==='servicios'?servicios:cargos;const q={select(s){calls.push(s);return q;},order(){return q;},eq(){return q;},gte(){return q;},lte(){return q;},or(){return q;},async range(a,b){return {data:data.slice(a,b+1)};}};return q;}};}
 const libro=items=>({listo:async()=>{},estado:()=>({generacion:1,cargado:true}),listarHojas:()=>['Sep26'],buscarHojasBove:async()=>({hojas:['Sep26']}),buscarHojas:async()=>({hojas:['Sep26']}),consultarHoja:async()=>({evidencias_bove:items,reservas:[]})});
 for(const [texto,fuente] of [['Haku, busca el BOVE 19888','ambas'],['busca el BOVE 19888 en el Libro','libro'],['busca en Proyecto H el BOVE 19888','proyecto_h']])test(texto,async()=>{
  const c=cliente([reserva()]);const r=await B.consultar(texto,{cliente:c,libro:libro([{numero:'19888',estado:'registrado',origen:{hoja:'Sep26',celda:'L27'},texto_original:'BOVE:19888'}])});
@@ -73,7 +73,7 @@ test('pendientes usa sólo hoja de hoy y relación real, sin recorrer historia',
  assert.deepEqual(leidas,['Sep26']);assert.ok(c.calls.some(x=>x.includes('estadias:reserva_estadias!inner')));
 });
 test('Full Day de hoy conserva pendiente; una estadía adicional no duplica BOVE de reserva',async()=>{
- const r=reserva({bove_cierre:null,estadias:[{fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-10',tipo_estadia:'full_day',cabanas:{numero:6}},{fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-11',cabanas:{numero:7}}]});
+ const r=reserva({bove_cierre:null,estadias:[{estado_estadia:'hospedada',fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-10',tipo_estadia:'full_day',cabanas:{numero:6}},{estado_estadia:'hospedada',fecha_ingreso:'2026-09-10',fecha_salida:'2026-09-11',cabanas:{numero:7}}]});
  const p=await B.pendientes([r],cliente([],[{tipo_cargo:'alojamiento',monto:20}]),'2026-09-10');assert.equal(p.length,1);assert.equal(p[0].segmentos.length,2);
 });
 test('el interceptor se instala antes del parser general aun durante carga DOM',()=>{

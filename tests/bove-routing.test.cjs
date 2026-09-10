@@ -9,10 +9,10 @@ function entorno(conBove=true,timeoutCorto=false){
  const doc={readyState:'loading',head:elemento(),createElement:elemento,getElementById:id=>nodos.get(id),querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){throw Error('El routing no debe esperar al DOM');}};
  const w={document:doc,HAIKU_LIBRO_SEMANTICA:S,__generalCalls:0,__boveCalls:[],addEventListener:(tipo,fn,capture)=>listeners.push({tipo,fn,capture}),Event:class{},
   HAIKU_LIBRO_RESERVA_V1:{listo:async()=>{},estado:()=>({generacion:1,cargado:true,nombre:'fixture'}),listarHojas:()=>['Sep26'],buscarHojasBove:async()=>({hojas:['Sep26']}),buscarHojas:async()=>({hojas:['Sep26']}),consultarHoja:async()=>({reservas:[],pagos:[],aseos:[],espacios:[],anotaciones:[],advertencias:[],evidencias_bove:[{numero:'16968',estado:'registrado',origen:{hoja:'Sep26',celda:'L27'}}]})},
-  haikuSupabase:{from(){const q={select(){return q;},order(){return q;},eq(){return q;},or(){return q;},range:async()=>({data:[]})};return q;}}};
+  haikuSupabase:{from(){const q={select(){return q;},order(){return q;},eq(){return q;},gte(){return q;},lte(){return q;},or(){return q;},range:async()=>({data:[]})};return q;}}};
  const contexto=vm.createContext({window:w,document:doc,Event:w.Event,Intl,console,setTimeout:timeoutCorto?(fn,ms)=>setTimeout(fn,ms===20000?10:ms):setTimeout,clearTimeout});
  // Instrumentación sólo de observación: ejecuta los dos handlers reales.
- if(conBove)vm.runInContext(bove.replace('const q=interpretar(texto);','const q=interpretar(texto);root.__boveCalls.push(q);'),contexto);
+ if(conBove)vm.runInContext(bove.replace('const q=interpretar(texto,dia);','const q=interpretar(texto,dia);root.__boveCalls.push(q);'),contexto);
  vm.runInContext(general.replace(/(async function consultar\(texto,[^\n]+\{)/,'$1 root.__generalCalls++;'),contexto);
  // La UI aparece DESPUÉS de registrar ambos módulos, como el script async real.
  const campo=elemento(),mensajes=elemento(),boton=elemento();
@@ -28,6 +28,8 @@ function entorno(conBove=true,timeoutCorto=false){
 for(const tipo of ['click','keydown'])for(const [texto,fuente,accion] of [
  ['Haku, busca el BOVE 16968 en el Libro por favor','libro','buscar'],
  ['busca BOVE 16968','ambas','buscar'],
+ ['Haku, busca los BOVE 16968 y 16981','ambas','buscar'],
+ ['Haku, busca 16968, 16981 y 16982 en el Libro','libro','buscar'],
  ['Haku, busca en Proyecto H el BOVE 16968','proyecto_h','buscar'],
  ['Haku, qué BOVE está pendiente completar para hoy','ambas','pendientes'],
  ['Haku, qué BOVE existe en Proyecto H que no esté en el Libro','ambas','comparar'],
