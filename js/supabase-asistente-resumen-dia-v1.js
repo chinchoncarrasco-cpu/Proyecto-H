@@ -4,6 +4,7 @@
 // - "Haku, ¿cuál es el resumen del día?"
 // - "Haku, dame el resumen de mañana"
 // - "Haku, resumen del 17 de septiembre"
+// - "Haku, resumen del viernes 11 próximo"
 //
 // Fuente de verdad:
 // - haiku_operacion_dia para ingresos/salidas/continuaciones.
@@ -23,6 +24,15 @@
         enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
         julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
         noviembre: 11, diciembre: 12
+    });
+    const DIAS_SEMANA = Object.freeze({
+        domingo: 0,
+        lunes: 1,
+        martes: 2,
+        miercoles: 3,
+        jueves: 4,
+        viernes: 5,
+        sabado: 6
     });
 
     function instalar() {
@@ -86,6 +96,64 @@
             return iso(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
         }
 
+        function diaSemanaIso(fecha) {
+            const [y, m, d] = String(fecha).split("-").map(Number);
+            return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+        }
+
+        function proximoDiaSemana(hoy, diaObjetivo) {
+            const actual = diaSemanaIso(hoy);
+            let diferencia = (diaObjetivo - actual + 7) % 7;
+            if (diferencia === 0) diferencia = 7;
+            return desplazar(hoy, diferencia);
+        }
+
+        function fechaPorDiaSemanaYNumero(hoy, diaObjetivo, numeroDia) {
+            const dia = Number(numeroDia);
+            if (!Number.isInteger(dia) || dia < 1 || dia > 31) return null;
+
+            const [y, m] = hoy.split("-").map(Number);
+            for (let saltoMes = 0; saltoMes <= 12; saltoMes++) {
+                const base = new Date(Date.UTC(y, m - 1 + saltoMes, 1));
+                const candidata = iso(
+                    base.getUTCFullYear(),
+                    base.getUTCMonth() + 1,
+                    dia
+                );
+                if (!candidata || candidata < hoy) continue;
+                if (diaSemanaIso(candidata) === diaObjetivo) return candidata;
+            }
+            return null;
+        }
+
+        function fechaNaturalDiaSemana(t, hoy) {
+            const dias = Object.keys(DIAS_SEMANA).join("|");
+
+            const conNumero = t.match(
+                new RegExp(`\\b(?:el\\s+)?(?:proximo\\s+|este\\s+)?(${dias})\\s+(?:dia\\s+)?(\\d{1,2})(?:\\s+(?:proximo|siguiente))?\\b`)
+            ) || t.match(
+                new RegExp(`\\b(?:el\\s+)?(\\d{1,2})\\s+(?:proximo\\s+)?(${dias})\\b`)
+            );
+
+            if (conNumero) {
+                const primerEsDia = Object.prototype.hasOwnProperty.call(DIAS_SEMANA, conNumero[1]);
+                const nombreDia = primerEsDia ? conNumero[1] : conNumero[2];
+                const numeroDia = primerEsDia ? conNumero[2] : conNumero[1];
+                return fechaPorDiaSemanaYNumero(
+                    hoy,
+                    DIAS_SEMANA[nombreDia],
+                    Number(numeroDia)
+                );
+            }
+
+            const soloDia = t.match(
+                new RegExp(`\\b(?:el\\s+)?(?:proximo\\s+|este\\s+)?(${dias})(?:\\s+proximo)?\\b`)
+            );
+            if (!soloDia) return null;
+
+            return proximoDiaSemana(hoy, DIAS_SEMANA[soloDia[1]]);
+        }
+
         function fechaDesdeTexto(valor) {
             const t = normalizar(valor);
             const hoy = fechaChileHoy();
@@ -103,6 +171,10 @@
             const meses = Object.keys(MESES).join("|");
             const escrita = t.match(new RegExp(`\\b(\\d{1,2})\\s+(?:de\\s+)?(${meses})(?:\\s+(?:de\\s+)?(20\\d{2}))?\\b`));
             if (escrita) return iso(escrita[3] ? Number(escrita[3]) : anioActual, MESES[escrita[2]], Number(escrita[1]));
+
+            const natural = fechaNaturalDiaSemana(t, hoy);
+            if (natural) return natural;
+
             return hoy;
         }
 
