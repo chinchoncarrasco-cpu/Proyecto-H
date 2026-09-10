@@ -1481,7 +1481,32 @@
         out.append(elemento('p', 'haiku-versiones-aviso', '“Ya no aparece” no confirma una cancelación. No se modificaron el Libro ni Proyecto H.'));
     }
 
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
+    const ENTRADA_ESTRUCTURADA = Symbol('entrada-estructurada-libro');
+    async function revalidarEntradaEstructurada(result) {
+        const vigente = () => {
+            if (result.generacion === undefined || result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) {
+                throw new Error('El Libro cambió desde este informe. Genera el informe nuevamente antes de preparar cambios en Proyecto H.');
+            }
+        };
+        vigente();
+        const comparacion = await compararSistema(result.reservas, root.haikuSupabase, result.q);
+        vigente();
+        return {...result, comparacion};
+    }
+    async function abrirComparacionEstructurada(out, {reservas, generacion}) {
+        if (!Array.isArray(reservas) || !reservas.length) throw new Error('No hay registros actuales para preparar.');
+        const registros = structuredClone(reservas);
+        const normalizadas = registros.map(normalizarReservaComparacion);
+        const result = await revalidarEntradaEstructurada({
+            [ENTRADA_ESTRUCTURADA]:true, reservas:registros, generacion,
+            q:{desde:normalizadas.map(r=>r.fecha_checkin).filter(Boolean).sort()[0],
+                hasta:normalizadas.map(r=>r.fecha_checkout).filter(Boolean).sort().at(-1)}
+        });
+        renderizarComparacion(out, result);
+        return result;
+    }
+    const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas, abrirComparacionEstructurada});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 
@@ -1719,8 +1744,13 @@
             refrescar.disabled = true; preparar.disabled = true;
             vista.replaceChildren(elemento("p", "", "Revalidando; las decisiones anteriores se descartan."));
             try {
-                const nuevo = await consultar(result.q.texto);
-                renderizarComparacion(out, nuevo, { preguntasAbiertas, revalidado: new Date().toLocaleTimeString("es-CL") });
+                let actualizado;
+                if (result[ENTRADA_ESTRUCTURADA]) actualizado = await revalidarEntradaEstructurada(result);
+                else {
+                    const nuevo = await consultar(result.q.texto);
+                    actualizado = nuevo;
+                }
+                renderizarComparacion(out, actualizado, { preguntasAbiertas, revalidado: new Date().toLocaleTimeString("es-CL") });
                 out.querySelectorAll("details").forEach(d => {
                     d.open = abiertos.includes(d.querySelector("summary")?.textContent.replace(/ \(\d+\)$/, ""));
                 });

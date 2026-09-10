@@ -2,6 +2,7 @@
 (function(root) {
     'use strict';
     if (root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1) return;
+    const generacionesResultado = new WeakMap();
     const normalizar = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
         .replace(/^\s*haku\b[\s,;:!¡¿?—-]*/,'').replace(/[¿?¡!.,;:]/g,'').replace(/\s+/g,' ').trim();
     function esConsulta(texto) {
@@ -101,6 +102,7 @@
                 pendienteGeneracion = g; pendienteRevision = rev;
                 pendiente = Promise.resolve().then(comparar).then(resultado => {
                     if (rev !== revision || g !== generacion()) throw new Error('El Libro cambió durante la comparación. Solicita nuevamente el informe.');
+                    generacionesResultado.set(resultado, g);
                     if (g != null && ['ok','sin_cambios','sin_linea_base','parcial'].includes(resultado.estado)) cache = {generacion:g,resultado};
                     return resultado;
                 });
@@ -137,6 +139,7 @@
         insertarResultado = resultado => {
             const el = mensaje('asistente','');
             el.innerHTML = renderizar(resultado);
+            root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1?.adjuntar(el, resultado, generacionesResultado.get(resultado));
             mensajes.scrollTop = mensajes.scrollHeight;
             return el;
         };
@@ -151,6 +154,7 @@
                 espera = mensaje('asistente','Comparando la última actualización del Libro…');
                 const resultado = await obtenerResultado();
                 espera.innerHTML = renderizar(resultado);
+                root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1?.adjuntar(espera, resultado, generacionesResultado.get(resultado));
                 mensajes.scrollTop = mensajes.scrollHeight;
             } catch (e) {
                 if (espera) espera.textContent = e?.message || 'No pude comparar el Libro. Puedes volver a intentarlo.';
