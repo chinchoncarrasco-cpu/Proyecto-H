@@ -410,9 +410,146 @@ async function buscarHojas(buffer, nombre) {
     return { hojas };
 }
 
+// Proyección canónica de celdas; no interpreta reservas ni ejecuta fórmulas.
+function prepararCanonHuellas(styles, shared, theme) {
+    const tabla = (container, tag) => bloques(primerTag(styles, container)?.inner || '', tag);
+    const fonts = tabla('fonts','font'), fills = tabla('fills','fill'), xfs = tabla('cellXfs','xf');
+    const formatos = new Map(tabla('numFmts','numFmt').map(f => [Number(f.attrs.numFmtId), f.attrs.formatCode]));
+    const strings = bloques(shared,'si'), textos = new Map(), estilos = new Map();
+    const normalizar = s => String(s ?? '').normalize('NFC').replace(/\r\n?/g,'\n').split('\n').map(l => l.replace(/[\t ]+/g,' ').trim()).join('\n').trim();
+    const temas = ['lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink'].map(k => {
+        const inner = primerTag(theme,`a:${k}`)?.inner;
+        return primerTag(inner,'a:srgbClr')?.attrs.val || primerTag(inner,'a:sysClr')?.attrs.lastClr;
+    });
+    function color(c) {
+        if (!c) return null;
+        const rgb = c.rgb || (c.theme != null ? temas[c.theme] : null);
+        return [rgb ? String(rgb).slice(-6).toUpperCase() : c.indexed != null ? `indexed:${c.indexed}` : c.theme != null ? `theme:${c.theme}` : 'auto', Number(c.tint || 0)];
+    }
+    function textoRico(inner) {
+        return {texto: normalizar(textoDeTagsT(inner)), runs: bloques(inner,'r').map(r => ({texto:textoDeTagsT(r.inner), color:color(colorDeTag(primerTag(r.inner,'rPr')?.inner,'color'))}))};
+    }
+    function estilo(id) {
+        if (estilos.has(id)) return estilos.get(id);
+        const xf = xfs[id];
+        if (!xf && (xfs.length || id !== 0)) throw new Error('Estilo de celda no disponible.');
+        const font = fonts[Number(xf?.attrs.fontId || 0)], fill = fills[Number(xf?.attrs.fillId || 0)];
+        const formato = Number(xf?.attrs.numFmtId || 0);
+        const p = primerTag(fill?.inner,'patternFill');
+        const value = {color:color(colorDeTag(font?.inner,'color')),
+            fondo:color(colorDeTag(p?.inner,'fgColor')), formato:formatos.get(formato) ?? formato};
+        estilos.set(id,value); return value;
+    }
+    return {normalizar,color,estilo,textoRico,compartido(id) {
+        if (!strings[id]) throw new Error('Texto compartido no disponible.');
+        if (!textos.has(id)) textos.set(id,textoRico(strings[id].inner));
+        return textos.get(id);
+    }};
+}
+
+function canonHojaHuellas(xml, ctx, fecha1904) {
+    const partes = {valores:[], formulas:[], rich_text:[], colores_semanticos:[], estructura:[]};
+    const cells = [];
+    // Las exportaciones incluyen miles de celdas vacías con estilo. Evitar incluso
+    // decodificar sus atributos; sólo el contenido y las fórmulas entran al canon.
+    for (const m of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi)) {
+        if (!m[2] || !/<(?:v|is|f)\b/.test(m[2])) continue;
+        cells.push({attrs:atributosXml(m[1]),inner:m[2]});
+    }
+    cells.sort((a,b) => a.attrs.r < b.attrs.r ? -1 : a.attrs.r > b.attrs.r ? 1 : 0);
+    const sharedFormulas = new Map();
+    for (const c of cells) {
+        const f = primerTag(c.inner,'f');
+        if (f?.attrs.t === 'shared' && f.inner) sharedFormulas.set(f.attrs.si,{origen:c.attrs.r,formula:decodificarXml(f.inner)});
+    }
+    for (const c of cells) {
+        const coord = c.attrs.r, tipo = c.attrs.t || 'n', raw = primerTag(c.inner,'v')?.inner;
+        const formula = primerTag(c.inner,'f');
+        let rico = null, valor;
+        if (tipo === 's') rico = ctx.compartido(Number(raw));
+        else if (tipo === 'inlineStr') rico = ctx.textoRico(primerTag(c.inner,'is')?.inner || '');
+        if (rico) valor = rico.texto;
+        else if (raw !== undefined && tipo === 'n' && Number.isFinite(Number(raw))) valor = Number(raw);
+        else valor = ctx.normalizar(decodificarXml(raw ?? ''));
+        // Los estilos de celdas vacías no determinan estados ni contenido.
+        if (valor === '' && !formula) continue;
+        if (!coord) throw new Error('Celda con contenido sin coordenada.');
+        const st = ctx.estilo(Number(c.attrs.s || 0));
+        partes.valores.push([coord,rico || tipo === 'str' ? 'texto' : tipo,valor]);
+        if (formula) {
+            const f = formula.attrs.t === 'shared' ? sharedFormulas.get(formula.attrs.si) : {formula:decodificarXml(formula.inner)};
+            if (!f) throw new Error('Fórmula compartida no disponible.');
+            partes.formulas.push([coord,f]);
+        }
+        partes.colores_semanticos.push([coord,st.color,st.fondo]);
+        if (typeof valor === 'number') partes.estructura.push([coord,st.formato]);
+        if (rico) {
+            const spans = [];
+            for (const run of rico.runs.length ? rico.runs : [{texto:rico.texto,color:null}]) {
+                const color = run.color || st.color;
+                if (spans.length && JSON.stringify(spans.at(-1)[1]) === JSON.stringify(color)) spans.at(-1)[0] += run.texto;
+                else spans.push([run.texto,color]);
+            }
+            partes.rich_text.push([coord,spans.map(([t,c]) => [ctx.normalizar(t),c]).filter(([t])=>t)]);
+        }
+    }
+    partes.estructura.push(['fecha1904',fecha1904],['combinaciones',bloques(xml,'mergeCell').map(m=>m.attrs.ref).sort()]);
+    return partes;
+}
+
+// Huella de contenido OOXML: no SheetJS ni interpretación semántica.
+// Resuelve sólo las dependencias utilizadas para que agregar un shared string o
+// estilo ajeno no invalide todas las hojas del libro.
+async function huellasLibro(buffer, nombresHojas) {
+    asegurarZip();
+    const zip = await self.JSZip.loadAsync(buffer);
+    const leer = async path => await zip.file(path)?.async('text') || '';
+    const workbook = await leer('xl/workbook.xml');
+    const relaciones = bloques(await leer('xl/_rels/workbook.xml.rels'), 'Relationship');
+    const todas = bloques(workbook, 'sheet');
+    if (!todas.length) throw new Error('No se pudo obtener el índice OOXML para las huellas.');
+    const seleccion = nombresHojas === undefined ? null : new Set(nombresHojas);
+    const sheets = todas.filter(s => !seleccion || seleccion.has(s.attrs.name));
+    if (!sheets.length) return {version_huella:2, nombres:[], huellas:{}};
+    const canon = prepararCanonHuellas(await leer('xl/styles.xml'),await leer('xl/sharedStrings.xml'),await leer('xl/theme/theme1.xml'));
+    const fecha1904 = booleanoXml(primerTag(workbook,'workbookPr')?.attrs.date1904);
+    const hash = async value => {
+        const digest = await self.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
+        return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,'0')).join('');
+    };
+    const huellas = {};
+    for (const sheet of sheets) {
+        const name = sheet.attrs.name;
+        try {
+            const rel = relaciones.find(r => r.attrs.Id === sheet.attrs['r:id']);
+            if (!rel || rel.attrs.TargetMode === 'External') throw new Error('Relación de hoja no disponible.');
+            const xml = await leer(rutaNormalizada('xl', rel.attrs.Target));
+            if (!xml) throw new Error('XML de hoja no disponible.');
+            const partes = canonHojaHuellas(xml,canon,fecha1904), componentes = {};
+            for (const [tipo, contenido] of Object.entries(partes)) componentes[tipo] = await hash(contenido);
+            huellas[name] = {sha256:await hash(componentes),componentes};
+        } catch (error) { huellas[name] = {error: String(error.message || error)}; }
+    }
+    return {version_huella: 2, nombres: sheets.map(s => s.attrs.name), huellas};
+}
+
 self.addEventListener("message", async (evento) => {
-    const { id, tipo, nombreHoja, buffer } = evento.data || {};
+    const { id, tipo, nombreHoja, nombresHojas, buffer } = evento.data || {};
     try {
+        if (tipo === 'indice_nombres') {
+            asegurarZip();
+            const zip = await self.JSZip.loadAsync(buffer);
+            const xml = await zip.file('xl/workbook.xml')?.async('text');
+            const nombres = bloques(xml, 'sheet').map(s => s.attrs.name);
+            if (!nombres.length) throw new Error('Índice de nombres no disponible.');
+            self.postMessage({id, ok:true, resultado:{nombres}});
+            return;
+        }
+        if (tipo === 'huellas') {
+            if (!Array.isArray(nombresHojas)) throw new Error('Se requiere una selección explícita de hojas para calcular huellas.');
+            self.postMessage({id, ok: true, resultado: await huellasLibro(buffer, nombresHojas)});
+            return;
+        }
         asegurarLector();
         let resultado = tipo === "buscar" ? await buscarHojas(buffer, nombreHoja) : tipo === "indice"
             ? indiceLibro(buffer)

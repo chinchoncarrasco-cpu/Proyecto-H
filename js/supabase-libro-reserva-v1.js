@@ -699,18 +699,22 @@
     }
 
     function consultarHoja(nombre, version = "actual", tipo = "semantica") {
-        if (!["semantica", "buscar"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
+        if (!["semantica", "buscar", "indice", "indice_nombres", "huellas"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
         if (!["actual", "anterior"].includes(version)) return Promise.reject(new Error("Versión no válida"));
         const consulta = colaConsulta.then(async () => {
             await cargaLista;
             const id = operacionLibro;
             if (!archivoBuffer || !libroIndice) throw new Error("Carga primero un XLSX en Libro de Reserva.");
+            if (version === "anterior" && ["indice", "indice_nombres", "huellas"].includes(tipo) && !persistenciaPC) return null;
             if (version === "anterior" && !persistenciaConfirmada) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
-            const key = `${id}:${version}:${tipo}:${nombre}`;
+            const key = `${id}:${version}:${tipo}:${JSON.stringify(nombre)}`;
             if (cacheConsultas.has(key)) return structuredClone(cacheConsultas.get(key));
             const registro = version === "anterior" && persistenciaPC ? await copiaLocal("leer_anterior") : null;
-            if (version === "anterior" && !registro?.buffer) throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
             if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
+            if (version === "anterior" && !registro?.buffer) {
+                if (["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
+                throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
+            }
             const copia = (version === "anterior" ? registro.buffer : archivoBuffer).slice(0);
             const worker = new Worker(`js/supabase-libro-reserva-worker-v1.js${VERSION_QUERY}`);
             const resultado = await new Promise((resolve, reject) => {
@@ -723,7 +727,7 @@
                 window.addEventListener("haiku:libro-cambio", cancelar, { once: true });
                 worker.onmessage = event => event.data?.ok ? terminar(null, event.data.resultado) : terminar(new Error(event.data?.error || "No se pudo interpretar la hoja."));
                 worker.onerror = () => terminar(new Error("No se pudo iniciar el lector del Libro."));
-                worker.postMessage({ id: 1, tipo, nombreHoja: nombre, buffer: copia }, [copia]);
+                worker.postMessage({ id: 1, tipo, nombreHoja: nombre, nombresHojas: tipo === "huellas" ? nombre : undefined, buffer: copia }, [copia]);
             });
             if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta.");
             if (cacheConsultas.size >= 3) cacheConsultas.delete(cacheConsultas.keys().next().value);
@@ -743,6 +747,8 @@
             limpiar: quitarLibro,
             listo: () => cargaLista,
             listarHojas: () => [...(libroIndice?.SheetNames || [])],
+            consultarIndice: (version = "actual") => consultarHoja("", version, "indice_nombres"),
+            consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),
             consultarHoja,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
             estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, cargado: !!libroIndice })
