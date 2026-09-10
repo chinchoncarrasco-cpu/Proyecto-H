@@ -1,4 +1,68 @@
 // ========================================
+// FECHA ACTUAL EN CABECERAS PRINCIPALES
+// ========================================
+
+(function mostrarFechaActualEnSecciones() {
+
+    "use strict";
+
+    const ahora = new Date();
+
+    const formateadorFecha =
+        new Intl.DateTimeFormat("es-CL", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+        });
+
+    let textoFecha =
+        formateadorFecha.format(ahora);
+
+    textoFecha =
+        textoFecha.charAt(0).toUpperCase() +
+        textoFecha.slice(1);
+
+    document
+        .querySelectorAll(".seccion-app > .cabecera")
+        .forEach(cabecera => {
+
+            // Resumen ya tiene su fecha propia.
+            if (
+                cabecera.closest("#seccion-resumen")
+            ) {
+                return;
+            }
+
+            const titulo =
+                cabecera.querySelector("h1, h2");
+
+            if (!titulo) {
+                return;
+            }
+
+            let fecha =
+                cabecera.querySelector(
+                    ".fecha-seccion-actual"
+                );
+
+            if (!fecha) {
+                fecha = document.createElement("p");
+                fecha.className =
+                    "texto-secundario fecha-seccion-actual";
+
+                titulo.insertAdjacentElement(
+                    "afterend",
+                    fecha
+                );
+            }
+
+            fecha.textContent = textoFecha;
+        });
+
+})();
+
+// ========================================
 // HAIKU · HISTORIAL GENERAL Y DE RESERVA
 // ========================================
 
