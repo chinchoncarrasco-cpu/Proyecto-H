@@ -712,7 +712,7 @@
     }
 
     function consultarHoja(nombre, version = "actual", tipo = "semantica") {
-        if (!["semantica", "buscar", "indice", "indice_nombres", "huellas"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
+        if (!["semantica", "buscar", "buscar_bove", "indice", "indice_nombres", "huellas"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
         if (!["actual", "anterior"].includes(version)) return Promise.reject(new Error("Versión no válida"));
         const consulta = colaConsulta.then(async () => {
             await cargaLista;
@@ -764,6 +764,7 @@
             consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),
             consultarHoja,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
+            buscarHojasBove: numero => consultarHoja(numero, "actual", "buscar_bove"),
             estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, cargado: !!libroIndice })
         });
 

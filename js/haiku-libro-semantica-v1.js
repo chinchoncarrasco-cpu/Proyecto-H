@@ -71,13 +71,26 @@
             hora_inicio: horas ? `${horas[1].padStart(2, "0")}:${horas[2]}` : null, hora_fin: horas ? `${horas[3].padStart(2, "0")}:${horas[4]}` : null,
             ingreso: dato(/\bIN\s+([^/\n]+)/i), revisado_por: dato(/\bCheck\s+(?!out\b)([^/\n]+)/i), texto_original: cell.valor, origen };
     }
+    // Evidencia administrativa independiente: nunca alimenta reservas ni pagos.
+    function evidenciasBove(data, hoja) {
+        return (data.celdas || []).flatMap(c => {
+            const texto = String(c.valor || '');
+            if (!/\bbove\b/i.test(texto)) return [];
+            const origen = {hoja, celda: direccion(c.r,c.c), fila:c.r+1, columna:c.c+1};
+            const base = {texto_original:texto, origen, tipo:'no_determinado', fuente:'libro'};
+            const pendiente = /\bpend(?:iente)?\b[^/\n]{0,35}\bbove\b|\bbove\b\s*[:.-]?\s*pend(?:iente)?\b/i.test(texto);
+            const numeros = [...texto.matchAll(/\bbove\b\s*(?:(?:no\s+)?afect[ao]\s*)?:?\s*(\d+(?:[.,]\d{3})*)(?![\d.,%a-z])/gi)].map(m=>m[1].replace(/[.,]/g,''));
+            if (pendiente) return [{...base,numero:null,estado:'pendiente'}];
+            return numeros.length ? [...new Set(numeros)].map(numero=>({...base,numero,estado:'registrado'})) : [{...base,numero:null,estado:'no_determinado'}];
+        });
+    }
     function normalizarHoja(data, hoja) {
         const cells = data.celdas || [], estilos = data.estilos || [], merges = data.combinaciones || [];
         const map = new Map(cells.map(c => [`${c.r}:${c.c}`, c]));
         const at = (r, c) => map.get(`${r}:${c}`);
         const origen = c => ({ hoja, celda: direccion(c.r, c.c), fila: c.r + 1, columna: c.c + 1,
             merge: merges.find(m => m.s.r === c.r && m.s.c === c.c) || null });
-        const res = { hoja, reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
+        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
         const cabCells = cells.filter(c => /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(c.valor)));
         const marker = cells.filter(c => /pagos de arriendos de hoy/.test(normalizar(c.valor)));
         const financialRow = marker.length ? Math.min(...marker.map(c => c.r)) : Infinity;
@@ -99,6 +112,12 @@
         res.fechas = headers.map(c => c.fechaISO);
         res.cobertura.geometria = true;
         const paymentCabs = cabCells.filter(c => c.r > financialRow).sort((a, b) => a.r - b.r);
+        for (const e of res.evidencias_bove) {
+            const fila=e.origen.fila-1,columna=e.origen.columna-1;
+            const hs=headers.filter(h=>columna>=h.c&&columna<=h.c+3);
+            const cs=paymentCabs.filter(c=>merges.some(m=>m.s.r===c.r&&m.s.c===c.c&&fila>=m.s.r&&fila<=m.e.r));
+            if(hs.length===1&&cs.length===1){e.fecha_bloque=hs[0].fechaISO;e.cabana_contexto=Number(cs[0].valor.match(/\d+/)[0]);}
+        }
         res.cobertura.pagos = paymentCabs.length === cabRows.length;
         for (const cab of cabRows) {
             const cabana = Number(cab.valor.match(/\d+/)[0]);

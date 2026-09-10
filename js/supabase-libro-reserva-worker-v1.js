@@ -388,6 +388,31 @@ async function leerHoja(buffer, nombreHoja) {
     };
 }
 
+// Búsqueda exacta de candidatos OOXML, sin SheetJS ni semántica global.
+async function buscarHojasBove(buffer, numero) {
+    if (!/^\d+$/.test(String(numero))) throw new Error('Número BOVE no válido.');
+    asegurarZip();
+    const zip=await self.JSZip.loadAsync(buffer);
+    const leer=async p=>await zip.file(p)?.async('text') || '';
+    const coincide=texto=>/\bbove\b/i.test(texto) && new RegExp(`(^|\\D)${numero}(?!\\d)`).test(texto.replace(/(\d)[.,](?=\d)/g,'$1'));
+    const indices=new Set();
+    bloques(await leer('xl/sharedStrings.xml'),'si').forEach((s,i)=>{if(coincide(textoDeTagsT(s.inner)))indices.add(String(i));});
+    const relaciones=bloques(await leer('xl/_rels/workbook.xml.rels'),'Relationship');
+    const hojas=[];
+    for(const hoja of bloques(await leer('xl/workbook.xml'),'sheet')) {
+        const rel=relaciones.find(r=>r.attrs.Id===hoja.attrs['r:id']);
+        if(!rel||rel.attrs.TargetMode==='External')throw new Error('No se pudo revisar una hoja del Libro.');
+        const xml=await leer(rutaNormalizada('xl',rel.attrs.Target));
+        if(!xml)throw new Error('Hoja no disponible durante búsqueda BOVE.');
+        const re=/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi;let m;
+        while((m=re.exec(xml))){
+            const tipo=m[1].match(/\bt\s*=\s*["']([^"']+)["']/)?.[1],contenido=m[2]||'';
+            if(tipo==='s'?indices.has(contenido.match(/<v\b[^>]*>\s*(\d+)\s*<\/v>/)?.[1]):tipo==='inlineStr'&&coincide(textoDeTagsT(contenido))){hojas.push(hoja.attrs.name);break;}
+        }
+    }
+    return {hojas};
+}
+
 async function buscarHojas(buffer, nombre) {
     asegurarZip();
     const n = v => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -536,6 +561,10 @@ async function huellasLibro(buffer, nombresHojas) {
 self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, nombresHojas, buffer } = evento.data || {};
     try {
+        if(tipo==='buscar_bove') {
+            self.postMessage({id,ok:true,resultado:await buscarHojasBove(buffer,nombreHoja)});
+            return;
+        }
         if (tipo === 'indice_nombres') {
             asegurarZip();
             const zip = await self.JSZip.loadAsync(buffer);
