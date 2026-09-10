@@ -82,13 +82,19 @@
         return html + '</article>';
     }
     function crearCache(comparar, generacion) {
-        let cache, pendiente, revision = 0;
+        let cache, pendiente, pendienteGeneracion, pendienteRevision, revision = 0;
         return {
             invalidar() { revision++; cache = undefined; },
             async obtener() {
-                if (pendiente) return pendiente;
                 const g = generacion(), rev = revision;
+                if (pendiente) {
+                    if (pendienteGeneracion === g && pendienteRevision === rev) return pendiente;
+                    // Una generación nueva espera la anterior, pero nunca reutiliza su resultado.
+                    try { await pendiente; } catch (_) {}
+                    return this.obtener();
+                }
                 if (g != null && cache?.generacion === g) return cache.resultado;
+                pendienteGeneracion = g; pendienteRevision = rev;
                 pendiente = Promise.resolve().then(comparar).then(resultado => {
                     if (rev !== revision || g !== generacion()) throw new Error('El Libro cambió durante la comparación. Solicita nuevamente el informe.');
                     if (g != null && ['ok','sin_cambios','sin_linea_base','parcial'].includes(resultado.estado)) cache = {generacion:g,resultado};
@@ -98,7 +104,15 @@
             }
         };
     }
-    let instalado = false;
+    let instalado = false, cacheCompartida, insertarResultado;
+    function obtenerResultado() {
+        if (!instalar()) return Promise.reject(new Error('Haku todavía no está disponible.'));
+        return cacheCompartida.obtener();
+    }
+    function mostrarResultado(resultado) {
+        if (!instalar()) throw new Error('Haku todavía no está disponible.');
+        return insertarResultado(resultado);
+    }
     function instalar() {
         if (instalado || !root.document) return instalado;
         const doc = root.document, campo = doc.getElementById('haiku-asistente-texto'), enviar = doc.getElementById('haiku-asistente-enviar'), mensajes = doc.getElementById('haiku-asistente-mensajes');
@@ -108,6 +122,7 @@
             if (!root.HAIKU_LIBRO_DIFERENCIAS_V1) throw new Error('El comparador del Libro todavía no está disponible.');
             return root.HAIKU_LIBRO_DIFERENCIAS_V1.compararUltimasVersiones();
         },()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion);
+        cacheCompartida = cache;
         root.addEventListener('haiku:libro-cambio',()=>cache.invalidar());
         const style = doc.createElement('style');
         style.textContent = `.haku-libro-actualizacion{border:1px solid #cadfd1;border-radius:16px;background:#f7faf8;padding:14px;color:#26342c;overflow-wrap:anywhere}.haku-libro-actualizacion h3{font-size:19px;margin:0}.haku-libro-actualizacion p{margin:5px 0;font-size:12px;line-height:1.5}.haku-libro-actualizacion h4{font-size:12px;margin:16px 0 7px}.haku-libro-contadores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:12px 0}.haku-libro-contadores>div{background:white;border:1px solid #dfe9e2;border-radius:10px;padding:8px;text-align:center}.haku-libro-contadores strong,.haku-libro-contadores span{display:block}.haku-libro-contadores span{font-size:10px}.haku-libro-item{border:1px solid #dfe9e2;border-radius:10px;padding:10px;background:white;margin:6px 0}.haku-libro-item>strong,.haku-libro-item>small{display:block}.haku-libro-item small{font-size:10px;color:#1f7650;margin-bottom:5px}.haku-libro-item dl{font-size:12px;margin-bottom:0}.haku-libro-item dt{font-weight:700;margin-top:7px}.haku-libro-item dd{margin:3px 0;white-space:pre-wrap}.haku-libro-item summary{cursor:pointer;font-size:12px;margin:7px 0}.haku-libro-aviso{background:#fffaf1;border:1px solid #ead8bc;padding:9px;border-radius:10px}@media(max-width:420px){.haku-libro-contadores{grid-template-columns:repeat(2,minmax(0,1fr))}}`;
@@ -115,6 +130,12 @@
         function mensaje(tipo,texto) {
             const el = doc.createElement('div'); el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`; el.textContent = texto; mensajes.appendChild(el); mensajes.scrollTop = mensajes.scrollHeight; return el;
         }
+        insertarResultado = resultado => {
+            const el = mensaje('asistente','');
+            el.innerHTML = renderizar(resultado);
+            mensajes.scrollTop = mensajes.scrollHeight;
+            return el;
+        };
         let ocupado = false;
         async function procesar(texto) {
             if (ocupado) return;
@@ -124,7 +145,7 @@
                 campo.value = ''; campo.dispatchEvent(new root.Event('input',{bubbles:true}));
                 mensaje('usuario',texto);
                 espera = mensaje('asistente','Comparando la última actualización del Libro…');
-                const resultado = await cache.obtener();
+                const resultado = await obtenerResultado();
                 espera.innerHTML = renderizar(resultado);
                 mensajes.scrollTop = mensajes.scrollHeight;
             } catch (e) {
@@ -144,7 +165,7 @@
         root.addEventListener('keydown',interceptar,true);
         return true;
     }
-    const api = Object.freeze({esConsulta,renderizar,crearCache,instalar});
+    const api = Object.freeze({esConsulta,renderizar,crearCache,instalar,obtenerResultado,mostrarResultado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
     if (root.document && !instalar()) {

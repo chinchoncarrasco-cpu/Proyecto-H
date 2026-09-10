@@ -43,17 +43,19 @@
                     const almacen = tx.objectStore("libro");
                     const solicitud = accion.startsWith("leer") ? almacen.get(accion === "leer_anterior" ? "anterior" : "actual")
                         : accion === "borrar" ? almacen.clear() : almacen.get("actual");
+                    let actualizacion = false;
                     if (accion === "guardar") solicitud.onsuccess = () => {
                         const anterior = solicitud.result;
                         const a = anterior?.buffer ? new Uint8Array(anterior.buffer) : null;
                         const b = new Uint8Array(registro.buffer);
                         const identico = a && a.length === b.length && a.every((valor, i) => valor === b[i]);
                         if (identico) return; // Re-uploading the same bytes must not discard the previous version.
+                        actualizacion = Boolean(anterior?.buffer);
                         if (anterior) almacen.put(anterior, "anterior");
                         almacen.put(registro, "actual");
                     };
                     // A request's success alone does not guarantee that the write committed.
-                    tx.oncomplete = () => { db.close(); resolve(solicitud.result); };
+                    tx.oncomplete = () => { db.close(); resolve(accion === "guardar" ? {actualizacion} : solicitud.result); };
                     tx.onabort = () => { db.close(); reject(tx.error || new Error("Operación local cancelada")); };
                     tx.onerror = () => {};
                 } catch (error) { db.close(); reject(error); }
@@ -652,13 +654,15 @@
             };
             if (!libroIndice.SheetNames?.length) throw new Error("El archivo no contiene hojas");
             let estadoLocal = "";
+            let actualizacion = false;
             if (persistenciaPC) {
                 persistenciaConfirmada = restaurado;
                 estadoLocal = " · copia local restaurada";
                 if (!restaurado) {
                     actualizarEstado(archivoNombre, "Guardando copia en este navegador…");
                     try {
-                        await copiaLocal("guardar", { nombre: archivoNombre, buffer, guardado_en: new Date().toISOString() });
+                        const guardado = await copiaLocal("guardar", { nombre: archivoNombre, buffer, guardado_en: new Date().toISOString() });
+                        actualizacion = guardado.actualizacion;
                         if (cargaId === operacionLibro) persistenciaConfirmada = true;
                         estadoLocal = " · guardado en este navegador";
                     } catch (_) {
@@ -677,6 +681,15 @@
                 `${bytesLegibles(archivo.size)} · leído localmente ${fechaHoraActual()}${estadoLocal}`
             );
             renderizarHoja(hojaActual);
+            if (!restaurado && actualizacion && persistenciaConfirmada) {
+                const detalle = {generacion:cargaId, nombre:archivoNombre, tenia_anterior:true, carga_manual:true};
+                // Siguiente tarea: cargarArchivo y listo() pueden finalizar antes del consumidor.
+                setTimeout(() => {
+                    if (cargaId === operacionLibro && persistenciaConfirmada && libroIndice) {
+                        window.dispatchEvent(new CustomEvent("haiku:libro-version-cargada", {detail:detalle}));
+                    }
+                }, 0);
+            }
         } catch (error) {
             if (cargaId !== operacionLibro) return;
             console.error("LIBRO RESERVA · Archivo no válido:", error);
