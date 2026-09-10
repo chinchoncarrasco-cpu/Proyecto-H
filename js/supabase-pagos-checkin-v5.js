@@ -636,6 +636,7 @@
             });
             if (error) throw error;
             console.info("HAIKU · BOVE alojamiento V5 registrado:", data);
+            window.dispatchEvent(new CustomEvent('haiku:bove-actualizado', {detail:{reservaId,tipo:'alojamiento'}}));
             await cargarSaldosCheckinMixto();
             await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1
                 ?.refrescar(fechaActual());

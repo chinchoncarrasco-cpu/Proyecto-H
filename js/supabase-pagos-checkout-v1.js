@@ -712,6 +712,7 @@
             );
 
             if (error) throw error;
+            window.dispatchEvent(new CustomEvent('haiku:bove-actualizado', {detail:{reservaId,tipo:'checkout'}}));
             await cargarCheckoutSupabase();
         } catch (error) {
             console.error("HAIKU · No fue posible registrar BOVE Check-out:", error);

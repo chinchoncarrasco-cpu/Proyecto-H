@@ -10,6 +10,58 @@
     if (!cliente) return;
 
     let cargando = false;
+    let revisionBove = 0;
+    const CAMPOS_BOVE = 'bove_cierre,bove_checkout';
+    async function leerBoves(reservaId, reserva) {
+        if (reserva && ['bove_cierre','bove_checkout'].every(k=>Object.hasOwn(reserva,k))) return reserva;
+        const {data,error} = await cliente.from('reservas').select(CAMPOS_BOVE).eq('id',reservaId).single();
+        if (error) throw error;
+        return data || {};
+    }
+    function pintarBoves(reserva, error = false) {
+        const cabecera = document.querySelector('#ficha-reserva-modal .ficha-reserva-cabecera > div');
+        if (!cabecera) return;
+        let bloque = document.getElementById('ficha-reserva-boves');
+        if (!bloque) {
+            bloque = document.createElement('aside'); bloque.id = 'ficha-reserva-boves';
+            bloque.className = 'ficha-reserva-boves'; bloque.setAttribute('aria-label','BOVE registrados');
+            bloque.setAttribute('aria-live','polite'); cabecera.appendChild(bloque);
+        }
+        bloque.replaceChildren();
+        const numeros = new Map();
+        for (const [campo,alcance] of [['bove_cierre','Alojamiento'],['bove_checkout','Servicios']]) {
+            const valor = reserva?.[campo];
+            const numero = typeof valor === 'string' || typeof valor === 'number' ? String(valor).trim() : '';
+            if (numero) numeros.set(numero,[...(numeros.get(numero)||[]),alcance]);
+        }
+        bloque.hidden = !error && !numeros.size;
+        if (error) { bloque.textContent = 'BOVE · No se pudo actualizar la lectura.'; return; }
+        if (!numeros.size) return;
+        const titulo = document.createElement('span'); titulo.className='ficha-bove-titulo'; titulo.textContent='BOVE'; bloque.appendChild(titulo);
+        for (const [numero,alcances] of numeros) {
+            const chip=document.createElement('span');chip.className='ficha-bove-chip';
+            const etiqueta=document.createElement('span');etiqueta.textContent=alcances.join(' / ');
+            const valor=document.createElement('strong');valor.textContent=numero;
+            chip.append(etiqueta,valor);
+            if (alcances.length===2) chip.title='El mismo número figura en los campos de alojamiento y servicios; no se infiere una boleta combinada.';
+            bloque.appendChild(chip);
+        }
+    }
+    window.addEventListener('haiku:bove-actualizado',async evento=>{
+        const modal=document.getElementById('ficha-reserva-modal');
+        const id=evento.detail?.reservaId;
+        if (!id || !modal || modal.hidden || String(modal.dataset.reservaId)!==String(id)) return;
+        const revision=++revisionBove;
+        try {
+            const boves=await leerBoves(id);
+            if (revision===revisionBove && !modal.hidden && String(modal.dataset.reservaId)===String(id)) pintarBoves(boves);
+        } catch (_) {
+            if (revision===revisionBove && !modal.hidden && String(modal.dataset.reservaId)===String(id)) pintarBoves({},true);
+        }
+    });
+    const estiloBove=document.createElement('style');
+    estiloBove.textContent='#ficha-reserva-modal .ficha-reserva-boves{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:9px;font:11px/1.4 system-ui;color:#405c49}#ficha-reserva-modal .ficha-reserva-boves[hidden]{display:none}#ficha-reserva-modal .ficha-bove-titulo{font-size:10px;font-weight:750;letter-spacing:.05em;margin-right:2px}#ficha-reserva-modal .ficha-bove-chip{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;padding:4px 8px;border:1px solid #d4e3d8;border-radius:8px;background:#f1f7f3;overflow-wrap:anywhere;max-width:100%}#ficha-reserva-modal .ficha-bove-chip strong{color:#245338;font-variant-numeric:tabular-nums}';
+    document.head.appendChild(estiloBove);
 
     function fechaActual() {
         try { return String(fechaSeleccionada || "").slice(0,10); }
@@ -58,7 +110,7 @@
         if (errorCore) throw errorCore;
         if (!core?.reserva) return null;
 
-        const [serviciosR, cargosR, notasR, solicitudesR, pagosR] = await Promise.all([
+        const [serviciosR, cargosR, notasR, solicitudesR, pagosR, bovesR] = await Promise.all([
             cliente
                 .from("servicios")
                 .select("id,fecha_servicio,hora_inicio,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
@@ -82,7 +134,8 @@
                 .from("pagos")
                 .select("id,monto,tipo_movimiento,etapa_operativa,medio_pago,estado,fecha_pago")
                 .eq("reserva_id", reservaId)
-                .order("fecha_pago", { ascending: true })
+                .order("fecha_pago", { ascending: true }),
+            leerBoves(reservaId,core.reserva).then(data=>({data})).catch(error=>({error}))
         ]);
 
         [serviciosR,cargosR,notasR,solicitudesR,pagosR].forEach(r => {
@@ -91,6 +144,8 @@
 
         return {
             ...core,
+            boves: bovesR.data || {},
+            errorBoves: Boolean(bovesR.error),
             servicios: serviciosR.data || [],
             cargos: cargosR.data || [],
             notas: notasR.data || [],
@@ -356,6 +411,7 @@
 
         const modal = document.getElementById("ficha-reserva-modal");
         if (modal) {
+            revisionBove++;
             modal.dataset.reservaId = reserva.id;
             modal.dataset.numeroCabana = String(estadia.cabana_numero);
             modal.dataset.reservaCancelada = reserva.estado_reserva === "cancelada" ? "true" : "false";
@@ -413,6 +469,7 @@
         }
 
         pintarEstado(ficha);
+        pintarBoves(ficha.boves, ficha.errorBoves);
         pintarServicios(ficha);
         pintarPagos(ficha);
         pintarSolicitudes(ficha);
