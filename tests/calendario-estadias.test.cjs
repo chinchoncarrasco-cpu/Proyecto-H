@@ -85,6 +85,26 @@ function harness(rows = [], cache = {}) {
 const stay = (id, estado, extra = {}) => ({id, reserva_id: 'R1', estado_estadia: estado, reservas: {id: 'R1', titular_nombre: 'Macarena Hurtado', estado_reserva: 'checked_out'}, ...extra});
 const visual = (id, fullDay = false) => ({estadiaId: id, reservaId: 'R1', estado: fullDay ? 'fullday' : 'reservada', tipoEstadia: fullDay ? 'fullday' : 'alojamiento', noches: fullDay ? 0 : 1, titular: 'Macarena Hurtado', nombre: 'Macarena Hurtado'});
 
+for (const [name, estado, checkin, checkout, expected, clase] of [
+    ['histórico Bruno/Paulette: checkout sin timestamp no retrocede a hospedada', 'checked_out', '2026-09-05T14:00:00Z', null, 'checked_out', 'checkout'],
+    ['hospedada con checkin mantiene hospedada', 'hospedada', '2026-09-05T14:00:00Z', null, 'hospedada', 'checkin'],
+    ['checked_out con timestamp mantiene checkout', 'checked_out', '2026-09-05T14:00:00Z', '2026-09-06T12:00:00Z', 'checked_out', 'checkout'],
+    ['confirmada sin timestamps no hereda checkout del padre', 'confirmada', null, null, 'confirmada', 'confirmada'],
+    ['cancelada queda fuera aunque tenga timestamps', 'cancelada', '2026-09-05T14:00:00Z', '2026-09-06T12:00:00Z', '', null],
+    ['no_show queda fuera aunque tenga checkin', 'no_show', '2026-09-05T14:00:00Z', null, '', null]
+]) {
+    test(`prioridad de estado: ${name}`, async () => {
+        const h = harness([stay('E1', estado, {checkin_realizado_en: checkin, checkout_realizado_en: checkout})]);
+        const elements = [h.element('E1'), h.element('E1', false, true)];
+        h.load('supabase-calendario-estados-v1.js'); await h.refresh();
+        assert.equal(h.context.HAIKU_CALENDARIO_ESTADOS_V1.estado('R1', 'E1'), expected);
+        for (const e of elements) {
+            if (clase) assert.ok(e.classList.contains(`cal-reserva-${clase}`));
+            else assert.equal(e.dataset.haikuEstadoCanonico, undefined);
+        }
+    });
+}
+
 test('Macarena: ambas estadías checked_out pintan barras y panel por ID propio', async () => {
     const h = harness([stay('E1', 'checked_out'), stay('E2', 'checked_out')]);
     const elements = [h.element('E1'), h.element('E2', true), h.element('E1', false, true), h.element('E2', true, true)];

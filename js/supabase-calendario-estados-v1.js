@@ -45,10 +45,11 @@
     }
 
     function resolverEstado(estadia) {
-        if (estadia.checkout_realizado_en) return 'checked_out';
-        if (estadia.checkin_realizado_en) return 'hospedada';
         const propio = normalizarEstado(estadia.estado_estadia);
         if (propio === 'cancelada' || propio === 'no_show') return '';
+        // Los históricos pueden estar cerrados sin timestamp de checkout.
+        if (propio === 'checked_out' || estadia.checkout_realizado_en) return 'checked_out';
+        if (propio === 'hospedada' || estadia.checkin_realizado_en) return 'hospedada';
         if (Object.prototype.hasOwnProperty.call(PRIORIDAD, propio)) return propio;
         const padre = normalizarEstado(estadia.reservas?.estado_reserva);
         return Object.prototype.hasOwnProperty.call(PRIORIDAD, padre) ? padre : '';
