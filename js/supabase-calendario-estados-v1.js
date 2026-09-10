@@ -29,7 +29,9 @@
     };
 
     let estados = new Map();
+    let estadosPorReserva = new Map();
     let refrescando = false;
+    let refrescoPendiente = false;
     let refrescoProgramado = false;
     let wrapperInstalado = false;
     let canalRealtime = null;
@@ -42,15 +44,29 @@
             .replaceAll(" ", "_");
     }
 
-    function resolverEstado(estadoReserva, estadoEstadia) {
-        const candidatos = [
-            normalizarEstado(estadoReserva),
-            normalizarEstado(estadoEstadia)
-        ].filter(estado => Object.prototype.hasOwnProperty.call(PRIORIDAD, estado));
+    function resolverEstado(estadia) {
+        if (estadia.checkout_realizado_en) return 'checked_out';
+        if (estadia.checkin_realizado_en) return 'hospedada';
+        const propio = normalizarEstado(estadia.estado_estadia);
+        if (propio === 'cancelada' || propio === 'no_show') return '';
+        if (Object.prototype.hasOwnProperty.call(PRIORIDAD, propio)) return propio;
+        const padre = normalizarEstado(estadia.reservas?.estado_reserva);
+        return Object.prototype.hasOwnProperty.call(PRIORIDAD, padre) ? padre : '';
+    }
 
-        if (candidatos.length === 0) return "";
+    function indexarReservas() {
+        // Un elemento legacy sin estadia_id sólo recibe un estado por reserva
+        // cuando todas sus estadías coinciden; nunca hereda el máximo de otra.
+        estadosPorReserva = new Map();
+        for (const dato of estados.values()) {
+            if (!dato.reservaId) continue;
+            if (!estadosPorReserva.has(dato.reservaId)) estadosPorReserva.set(dato.reservaId, dato.estado);
+            else if (estadosPorReserva.get(dato.reservaId) !== dato.estado) estadosPorReserva.set(dato.reservaId, '');
+        }
+    }
 
-        return candidatos.sort((a, b) => PRIORIDAD[b] - PRIORIDAD[a])[0];
+    function estadoElemento(reservaId, estadiaId) {
+        return estadiaId ? estados.get(String(estadiaId))?.estado || '' : estadosPorReserva.get(String(reservaId)) || '';
     }
 
     function claseParaEstado(estado) {
@@ -71,7 +87,9 @@
     function cargarCacheLocal() {
         try {
             const guardado = JSON.parse(localStorage.getItem(CLAVE_CACHE) || "{}");
-            estados = new Map(Object.entries(guardado));
+            // El formato anterior sólo tenía reserva_id y podía mezclar estadías.
+            estados = new Map(guardado.version === 2 ? Object.entries(guardado.estadias || {}) : []);
+            indexarReservas();
         } catch {
             estados = new Map();
         }
@@ -81,7 +99,7 @@
         try {
             localStorage.setItem(
                 CLAVE_CACHE,
-                JSON.stringify(Object.fromEntries(estados.entries()))
+                JSON.stringify({ version: 2, estadias: Object.fromEntries(estados.entries()) })
             );
         } catch (_) {}
     }
@@ -111,13 +129,18 @@
                 if (esBloqueo(elemento)) return;
 
                 const reservaId = String(elemento.dataset.reservaId || "");
-                const estado = estados.get(reservaId) || "";
+                const estadiaId = String(elemento.dataset.estadiaId || '');
+                const estado = estadoElemento(reservaId, estadiaId);
                 const estadoNormalizado = normalizarEstado(estado);
                 const clase = claseParaEstado(estadoNormalizado);
 
-                if (!clase) return;
-
                 const fullDay = esFullDay(elemento);
+                if (fullDay) elemento.dataset.haikuFullday = '1';
+                if (!clase) {
+                    CLASES_COLOR.forEach(nombre => elemento.classList.remove(nombre));
+                    delete elemento.dataset.haikuEstadoCanonico;
+                    return;
+                }
 
                 // Un Full Day futuro/confirmado conserva el color especial FULLDAY.
                 // Cuando ya está hospedado o checked out, manda el estado operativo
@@ -143,7 +166,7 @@
         const { data, error } = await cliente
             .from("reserva_estadias")
             .select(`
-                reserva_id,
+                id,reserva_id,
                 estado_estadia,
                 checkin_realizado_en,
                 checkout_realizado_en,
@@ -156,28 +179,12 @@
 
         (data || []).forEach(estadia => {
             const reservaId = String(estadia.reserva_id || estadia.reservas?.id || "");
-            if (!reservaId) return;
-
-            let estado = resolverEstado(
-                estadia.reservas?.estado_reserva,
-                estadia.estado_estadia
-            );
-
-            // Las marcas temporales son una comprobación adicional, nunca una
-            // sustitución del estado canónico. Si existe checkout real, manda.
-            if (estadia.checkout_realizado_en) {
-                estado = "checked_out";
-            } else if (estadia.checkin_realizado_en && estado !== "checked_out") {
-                estado = "hospedada";
-            }
-
-            const anterior = nuevoMapa.get(reservaId) || "";
-            if (!anterior || (PRIORIDAD[estado] || 0) > (PRIORIDAD[anterior] || 0)) {
-                nuevoMapa.set(reservaId, estado);
-            }
+            if (!reservaId || !estadia.id) return;
+            nuevoMapa.set(String(estadia.id), { reservaId, estado: resolverEstado(estadia) });
         });
 
         estados = nuevoMapa;
+        indexarReservas();
         guardarCacheLocal();
         return estados;
     }
@@ -196,7 +203,7 @@
     }
 
     async function refrescar({ sincronizarCache = true, redibujar = true } = {}) {
-        if (refrescando) return;
+        if (refrescando) { refrescoPendiente = true; return; }
         refrescando = true;
 
         try {
@@ -233,6 +240,10 @@
             aplicarEstadosDOM();
         } finally {
             refrescando = false;
+            if (refrescoPendiente) {
+                refrescoPendiente = false;
+                programarRefresco();
+            }
         }
     }
 
@@ -312,16 +323,7 @@
         }
     });
 
-    // El botón +N detiene la propagación de su clic. Escuchamos en captura
-    // sólo ese botón y, cuando su handler termine de crear el panel, aplicamos
-    // el mismo estado canónico que ya usa el Calendario grande.
-    document.addEventListener("click", evento => {
-        if (!evento.target?.closest?.(".calendario-mas-reservas")) return;
-
-        requestAnimationFrame(() => {
-            aplicarEstadosDOM();
-        });
-    }, true);
+    // calendario.js aplica el estado sincrónicamente al crear el panel +N.
 
     // El loader puede ejecutar este módulo después de que la sesión ya esté lista.
     if (window.haikuSesion) {
@@ -331,7 +333,7 @@
     window.HAIKU_CALENDARIO_ESTADOS_V1 = Object.freeze({
         refrescar,
         aplicar: aplicarEstadosDOM,
-        estado: reservaId => estados.get(String(reservaId || "")) || ""
+        estado: (reservaId, estadiaId = '') => estadoElemento(reservaId, estadiaId)
     });
 
     console.info("HAIKU · Calendario por estado canónico V1 preparado.");

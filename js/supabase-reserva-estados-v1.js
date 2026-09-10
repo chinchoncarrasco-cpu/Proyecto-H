@@ -226,6 +226,11 @@
     }
 
     function decorarFullDaysCalendario() {
+        // La autoridad por estadía decide también el color operativo del Full Day.
+        if (window.HAIKU_CALENDARIO_ESTADOS_V1) {
+            window.HAIKU_CALENDARIO_ESTADOS_V1.aplicar();
+            return;
+        }
         const fullDays = mapaFullDaysActivos();
         if (fullDays.size === 0) return;
 
@@ -237,6 +242,7 @@
             .forEach(elemento => {
                 const id = String(elemento.dataset.reservaId || "");
                 if (!fullDays.has(id)) return;
+                if (elemento.dataset.estadiaId && elemento.dataset.haikuFullday !== '1') return;
 
                 CLASES_COLOR_CALENDARIO.forEach(clase => elemento.classList.remove(clase));
                 elemento.classList.add("cal-reserva-fullday");

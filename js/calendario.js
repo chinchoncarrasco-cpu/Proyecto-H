@@ -346,19 +346,17 @@ calendarioGrid.appendChild(
                     }
 
 
-                    if (
-                        reservasUnicas.has(
-                            cabana.reservaId
-                        )
-                    ) {
+                    const claveVisual = cabana.estadiaId ||
+                        `${cabana.reservaId}|${numeroCabana}|${cabana.fechaOrigenReserva || fecha}|${cabana.tipoEstadia || cabana.estado}`;
+                    if (reservasUnicas.has(claveVisual)) {
                         return;
                     }
 
 
-                    const noches =
-                        Number(
-                            cabana.noches
-                        ) || 0;
+                    const esFullDay = cabana.tipoEstadia === 'fullday' || cabana.estado === 'fullday';
+                    if (esFullDay && cabana.fulldayLiberadoEn) return;
+                    // Ocupa una celda visual; las noches reales del cache siguen en cero.
+                    const noches = esFullDay ? 1 : Number(cabana.noches) || 0;
 
 
                     if (noches < 1) {
@@ -367,8 +365,11 @@ calendarioGrid.appendChild(
 
 
                     reservasUnicas.set(
-                        cabana.reservaId,
+                        claveVisual,
                         {
+                            claveVisual,
+                            estadiaId: cabana.estadiaId || '',
+                            esFullDay,
                             reservaId:
                                 cabana.reservaId,
 
@@ -392,64 +393,8 @@ calendarioGrid.appendChild(
         }
     );
 
-    // ========================================
-// ESTADO VISUAL REAL DE CADA RESERVA
-// ========================================
-
-const fichasReservas =
-    JSON.parse(
-        localStorage.getItem("haikuFichaReservas") || "{}"
-    );
-
-reservasUnicas.forEach(reserva => {
-
-    let tieneCheckin = false;
-let tieneCheckout = false;
-let tieneAbonoConfirmado = false;
-
-const fichaReserva =
-    fichasReservas[reserva.reservaId] || {};
-
-if (fichaReserva.checkoutRealizado === true) {
-    tieneCheckout = true;
-}
-
-    Object.values(datosCalendario).forEach(datosDia => {
-
-        if (!datosDia?.cabanas) {
-            return;
-        }
-
-        Object.values(datosDia.cabanas).forEach(cabana => {
-
-            if (
-                String(cabana?.reservaId || "") !==
-                String(reserva.reservaId)
-            ) {
-                return;
-            }
-
-            if (cabana.checkinRealizado === true) {
-                tieneCheckin = true;
-            }
-
-            if (cabana.checkout === true) {
-                tieneCheckout = true;
-            }
-
-            if (
-    cabana.abonoVerificado === true &&
-    Number(cabana.abono || 0) > 0
-) {
-    tieneAbonoConfirmado = true;
-}
-        });
-    });
-
-    reserva.tieneCheckin = tieneCheckin;
-    reserva.tieneCheckout = tieneCheckout;
-    reserva.tieneAbonoConfirmado = tieneAbonoConfirmado;
-});
+// Los estados visuales los aplica HAIKU_CALENDARIO_ESTADOS_V1 desde Supabase.
+// La ficha y los abonos locales no deciden el estado de una estadía.
 
  // ========================================
 // DIBUJAR RESERVAS COMO BARRAS REALES
@@ -553,7 +498,7 @@ reservasOrdenadas.forEach(reserva => {
 
 
     filasReserva.set(
-        reserva.reservaId,
+        reserva.claveVisual || reserva.reservaId,
         filaEncontrada
     );
 });
@@ -594,7 +539,7 @@ reservasOrdenadas.forEach(reserva => {
 
     const filaReserva =
         filasReserva.get(
-            reserva.reservaId
+            reserva.claveVisual || reserva.reservaId
         );
 
     // Filas 0, 1 y 2 se muestran normalmente.
@@ -662,7 +607,7 @@ reservasOrdenadas.forEach(reserva => {
 
     const filaReserva =
     filasReserva.get(
-        reserva.reservaId
+        reserva.claveVisual || reserva.reservaId
     );
 
 // Las reservas desde la cuarta fila
@@ -806,37 +751,8 @@ if (filaReserva >= MAX_FILAS_VISIBLES) {
                 );
             }
 
-let claseColor = "";
-
-// 1️⃣ CHECK-OUT tiene máxima prioridad
-if (reserva.tieneCheckout) {
-
-    claseColor = "cal-reserva-checkout";
-
-// 2️⃣ Luego CHECK-IN / HOSPEDADO
-} else if (reserva.tieneCheckin) {
-
-    claseColor = "cal-reserva-checkin";
-
-// 3️⃣ BLOQUEO siempre conserva su rojo
-} else if (reserva.estado === "bloqueada") {
-
-    claseColor = "cal-reserva-bloqueada";
-
-// 4️⃣ Reserva con abono confirmado
-} else if (reserva.tieneAbonoConfirmado) {
-
-    claseColor = "cal-reserva-confirmada";
-
-// 5️⃣ Reserva todavía sin confirmación
-} else {
-
-    claseColor = "cal-reserva-confirmacion-pendiente";
-}
-
-if (claseColor) {
-    barra.classList.add(claseColor);
-}
+if (reserva.esBloqueo) barra.classList.add('cal-reserva-bloqueada');
+if (reserva.esFullDay) barra.dataset.haikuFullday = '1';
 
 
             barra.style.gridColumn =
@@ -865,6 +781,7 @@ if (claseColor) {
 
             barra.dataset.reservaId =
                 reserva.reservaId || "";
+            barra.dataset.estadiaId = reserva.estadiaId || '';
 
 
             barra.addEventListener(
@@ -1029,43 +946,15 @@ function abrirPanelReservasDia(fecha) {
             );
         }
 
-let claseColor = "";
-
-// 1️⃣ CHECK-OUT máxima prioridad
-if (reserva.tieneCheckout) {
-
-    claseColor = "cal-reserva-checkout";
-
-// 2️⃣ CHECK-IN / HOSPEDADO
-} else if (reserva.tieneCheckin) {
-
-    claseColor = "cal-reserva-checkin";
-
-// 3️⃣ BLOQUEADA
-} else if (reserva.estado === "bloqueada") {
-
-    claseColor = "cal-reserva-bloqueada";
-
-// 4️⃣ CONFIRMADA
-} else if (reserva.tieneAbonoConfirmado) {
-
-    claseColor = "cal-reserva-confirmada";
-
-// 5️⃣ CONFIRMACIÓN PENDIENTE
-} else {
-
-    claseColor = "cal-reserva-confirmacion-pendiente";
-}
-
-if (claseColor) {
-    item.classList.add(claseColor);
-}
+if (reserva.esBloqueo) item.classList.add('cal-reserva-bloqueada');
+if (reserva.esFullDay) item.dataset.haikuFullday = '1';
 
         item.textContent =
             `CAB ${reserva.numeroCabana} · ${reserva.titular}`;
 
         item.dataset.reservaId =
             reserva.reservaId;
+        item.dataset.estadiaId = reserva.estadiaId || '';
 
         item.dataset.cabana =
             reserva.numeroCabana;
@@ -1128,6 +1017,7 @@ if (claseColor) {
     document.body.appendChild(
         panel
     );
+    window.HAIKU_CALENDARIO_ESTADOS_V1?.aplicar();
 
     // El botón +N detiene la propagación del clic, así que la capa de
     // vínculos no puede depender del listener global para detectar este panel.

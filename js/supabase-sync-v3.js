@@ -242,6 +242,7 @@
         const base = {
             haikuFuente: "supabase",
             reservaId: reserva.id,
+            estadiaId: estadia.id,
             codigoHaiku: reserva.codigo_haiku || "",
             titular: reserva.titular_nombre || "",
             adultos: Number(estadia.adultos || 0),
