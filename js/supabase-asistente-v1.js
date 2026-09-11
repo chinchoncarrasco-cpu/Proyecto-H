@@ -56,10 +56,10 @@
                 </div>
 
                 <div class="haiku-asistente-aviso">
-                    Vista previa segura: puedes adjuntar imágenes o pegar capturas con Ctrl+V. Una reserva sólo se crea después de pulsar “Confirmar” y aceptar la confirmación final.
+                    Adjunta imágenes o pega capturas con Ctrl+V. PDF Cloudbeds: informe de sólo lectura. Una reserva sólo se crea después de pulsar “Confirmar” y aceptar la confirmación final.
                 </div>
 
-                <input id="haiku-asistente-archivos" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+                <input id="haiku-asistente-archivos" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>
             </div>
         </section>
 
@@ -132,8 +132,10 @@
             const item = document.createElement("div");
             item.className = "haiku-asistente-adjunto";
 
-            const img = document.createElement("img");
-            img.src = adjunto.url;
+            const esPDF = adjunto.file.type === "application/pdf";
+            const img = document.createElement(esPDF ? "span" : "img");
+            if (esPDF) img.textContent = `PDF · ${adjunto.file.name} · sólo lectura`;
+            else img.src = adjunto.url;
             img.alt = adjunto.file.name || `Imagen ${indice + 1}`;
 
             const quitar = document.createElement("button");
@@ -183,12 +185,12 @@
                 return;
             }
 
-            if (!/^image\/(png|jpeg|webp)$/i.test(file.type || "")) {
+            if (!/^(?:image\/(png|jpeg|webp)|application\/pdf)$/i.test(file.type || "")) {
                 omitidos++;
                 return;
             }
 
-            if (file.size > MAX_ARCHIVO_BYTES || bytesAdjuntos() + file.size > MAX_TOTAL_BYTES) {
+            if (file.size > (file.type === "application/pdf" ? MAX_TOTAL_BYTES : MAX_ARCHIVO_BYTES) || bytesAdjuntos() + file.size > MAX_TOTAL_BYTES) {
                 omitidos++;
                 return;
             }
@@ -206,7 +208,7 @@
         if (omitidos) {
             agregarMensaje(
                 "asistente",
-                `No adjunté ${omitidos} ${omitidos === 1 ? "imagen" : "imágenes"}. Se admiten hasta 6 capturas PNG/JPG/WEBP, máximo 5 MB por archivo y 12 MB en total.`
+                `No adjunté ${omitidos} archivos. Se admiten PNG/JPG/WEBP (5 MB por imagen) y un PDF Cloudbeds de sólo lectura (12 MB). Máximo 12 MB en total.`
             );
         }
     }
@@ -1412,6 +1414,28 @@
 
         const cantidad = adjuntos.length;
         const archivosActuales = adjuntos.map(item => item.file);
+        if (archivosActuales.some(file => file.type === "application/pdf")) {
+            if (archivosActuales.length !== 1) {
+                agregarMensaje("asistente", "Para revisar Cloudbeds, deja sólo un PDF adjunto, sin imágenes.");
+                return;
+            }
+            const lector = window.HAIKU_CLOUDBEDS_PDF_V1;
+            if (!lector) { agregarMensaje("asistente", "No se cargó el lector local de PDF. Recarga el panel."); return; }
+            procesando = true; actualizarEnviar();
+            agregarMensaje("usuario", texto || "Revisar PDF Cloudbeds");
+            const estadoPDF = agregarMensaje("asistente", "Leyendo PDF Cloudbeds localmente…");
+            campo.value = ""; limpiarAdjuntos();
+            let limite;
+            try {
+                const entradas = await Promise.race([(async () => lector.leerPDF(await archivosActuales[0].arrayBuffer()))(), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La lectura del PDF tardó demasiado.")), 45000); })]);
+                clearTimeout(limite);
+                estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";
+                const informe = await Promise.race([lector.consultar(entradas, cliente), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La consulta tardó demasiado. Vuelve a intentarlo.")), 30000); })]);
+                estadoPDF.innerHTML = lector.renderizar(informe);
+            } catch (error) { estadoPDF.textContent = `No pude completar el informe: ${error?.message || "PDF no soportado"}`; }
+            finally { clearTimeout(limite); procesando = false; actualizarEnviar(); scrollFinal(); }
+            return;
+        }
         const instruccion = texto || "Analiza estas capturas y prepara una vista previa de la reserva.";
 
         procesando = true;
@@ -1488,6 +1512,15 @@
         }
     });
     enviar.addEventListener("click", enviarMensaje);
+    // Reclamar PDF antes de los interceptores de imágenes y de cualquier writer.
+    function interceptarPDF(evento) {
+        const accion = evento.type === "click" ? evento.target?.closest?.("#haiku-asistente-enviar") : evento.target === campo && (evento.ctrlKey || evento.metaKey) && evento.key === "Enter";
+        if (!accion || !adjuntos.some(a => a.file.type === "application/pdf")) return;
+        evento.preventDefault(); evento.stopImmediatePropagation();
+        void enviarMensaje();
+    }
+    window.addEventListener("click", interceptarPDF, true);
+    window.addEventListener("keydown", interceptarPDF, true);
 
     window.addEventListener("haiku:auth-ready", () => {
         mostrarSiCorresponde();
