@@ -42,6 +42,7 @@
 
         if (
             valor === "CON DETALLES" ||
+            valor === "CON-DETALLES" ||
             valor === "DET." ||
             valor === "DET"
         ) {
@@ -69,10 +70,14 @@
         const fila = document.querySelector(
             `#seccion-resumen [data-cabana="${String(numero)}"]`
         );
-        const selector = fila?.querySelector('[data-campo="estadoFinal"]');
+        const selector = fila?.querySelector(
+            '[data-campo="estadoFinal"], [data-campo="estadoRevision"]'
+        );
 
         if (selector) {
-            selector.value = estadoFinal(valorRevision);
+            selector.value = selector.dataset.campo === "estadoRevision"
+                ? valorRevision
+                : estadoFinal(valorRevision);
         }
     }
 
@@ -362,7 +367,7 @@
             "change",
             evento => {
                 const selector = evento.target?.closest?.(
-                    '[data-campo="estadoFinal"]'
+                    '[data-campo="estadoFinal"], [data-campo="estadoRevision"]'
                 );
 
                 if (!selector) return;
