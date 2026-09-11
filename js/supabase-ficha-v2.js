@@ -291,7 +291,7 @@
         );
 
         const valores = {
-            "ficha-pago-total": alojamiento.reduce((s,c) => s + Number(c.monto || 0), 0),
+            "ficha-pago-total": alojamiento.reduce((s,c) => s + Number(c.aplicado_neto || 0) + Number(c.saldo_cargo || 0), 0),
             "ficha-pago-abono": alojamiento.reduce((s,c) => s + Number(c.aplicado_neto || 0), 0),
             "ficha-pago-saldo": alojamiento.reduce((s,c) => s + Number(c.saldo_cargo || 0), 0),
             "ficha-pago-servicios": servicios.reduce((s,c) => s + Number(c.saldo_cargo || 0), 0)
@@ -524,5 +524,15 @@
     }, true);
 
     window.haikuAbrirFichaSupabaseV2 = abrirFicha;
+    // Refresco por identidad: no resolver nuevamente por CAB/fecha tras guardar.
+    window.haikuRefrescarFichaSupabaseV2 = async reservaId => {
+        const modal = document.getElementById('ficha-reserva-modal');
+        if (!reservaId || !modal || modal.hidden || modal.dataset.reservaId !== reservaId) return;
+        const ficha = await cargarFicha(reservaId);
+        if (ficha && !modal.hidden && modal.dataset.reservaId === reservaId) {
+            prepararCacheEdicion(ficha);
+            pintarFicha(ficha);
+        }
+    };
     console.info("HAIKU · Ficha Supabase V2 preparada.");
 })();
