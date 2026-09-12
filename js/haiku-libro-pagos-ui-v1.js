@@ -10,6 +10,7 @@
     const CACHE = new Map();
     let programado = false;
     let procesando = false;
+    let restauracionScrollPendiente = null;
 
     function asegurarCss() {
         if (document.getElementById("haiku-libro-pagos-ui-v1-css")) return;
@@ -67,6 +68,43 @@
         const checkin = fechaIsoDesdeBreve(bloqueVisual);
         const concepto = textoDato(card, "Concepto");
         return { card, titular, cab, monto, bloqueVisual, checkin, concepto };
+    }
+
+    function capturarScroll(origen) {
+        const estados = [];
+        for (let nodo = origen?.parentElement; nodo; nodo = nodo.parentElement) {
+            if (nodo.scrollHeight > nodo.clientHeight + 1 || nodo.scrollWidth > nodo.clientWidth + 1) {
+                estados.push({ nodo, top: nodo.scrollTop, left: nodo.scrollLeft });
+            }
+        }
+        const ventana = { x: root.scrollX || 0, y: root.scrollY || 0 };
+        return () => {
+            for (const estado of estados) {
+                if (!estado.nodo?.isConnected) continue;
+                estado.nodo.scrollTop = estado.top;
+                estado.nodo.scrollLeft = estado.left;
+            }
+            root.scrollTo?.(ventana.x, ventana.y);
+        };
+    }
+
+    function prepararFeedbackAprobacion(boton) {
+        restauracionScrollPendiente = capturarScroll(boton);
+        boton.setAttribute("aria-busy", "true");
+        boton.textContent = boton.classList.contains("haiku-incorporacion-atajo--aprobar")
+            ? "Aprobando pagos… ⏳"
+            : "Aprobando… ⏳";
+    }
+
+    function restaurarScrollSiCorresponde() {
+        if (!restauracionScrollPendiente) return;
+        const vistaCompleta = document.querySelector(
+            ".haiku-asistente-preview.haiku-incorporacion .haiku-incorporacion-seccion"
+        );
+        if (!vistaCompleta) return;
+        const restaurar = restauracionScrollPendiente;
+        restauracionScrollPendiente = null;
+        requestAnimationFrame(() => requestAnimationFrame(restaurar));
     }
 
     const prefijosMes = [
@@ -264,14 +302,24 @@
 
     asegurarCss();
     document.addEventListener("click", event => {
+        const botonAprobar = event.target?.closest?.(
+            ".haiku-incorporacion-aprobar, .haiku-incorporacion-atajo--aprobar"
+        );
+        if (botonAprobar) prepararFeedbackAprobacion(botonAprobar);
         if (event.target?.closest?.("button.libro-reserva-boton, .haiku-asistente-preview details > summary")) {
             setTimeout(programar, 0);
         }
     }, true);
-    window.addEventListener("haiku:libro-cambio", () => CACHE.clear());
+    window.addEventListener("haiku:libro-cambio", () => {
+        CACHE.clear();
+        restauracionScrollPendiente = null;
+    });
 
     const observer = new MutationObserver(mutations => {
-        if (mutations.some(m => m.addedNodes?.length)) programar();
+        if (mutations.some(m => m.addedNodes?.length)) {
+            programar();
+            restaurarScrollSiCorresponde();
+        }
     });
     const iniciar = () => {
         observer.observe(document.body, { childList: true, subtree: true });
