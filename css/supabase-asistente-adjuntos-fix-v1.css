@@ -1,20 +1,26 @@
-/* HAIKU · FIX ADJUNTOS V2
-   Mantiene visibles/clicables las capturas y evita que el compositor oculte
-   los botones Adjuntar/Enviar en ventanas de poca altura. Solo presentacion. */
+/* HAIKU · FIX ADJUNTOS V3
+   Mantiene visibles/clicables las capturas, conserva Adjuntar/Enviar y hace
+   que Haku aproveche casi todo el alto de la ventana. Solo presentacion. */
 
-/* El panel puede aprovechar mejor la altura disponible, pero nunca salir
-   de la ventana. */
+/* En escritorio Haku se comporta como un panel lateral alto: deja un margen
+   pequeño arriba/abajo y usa todo el espacio vertical restante. */
 .haiku-asistente-panel {
-    max-height: min(720px, calc(100dvh - 90px)) !important;
+    position: fixed !important;
+    top: 12px !important;
+    right: 18px !important;
+    bottom: 12px !important;
+    width: min(430px, calc(100vw - 36px)) !important;
+    height: auto !important;
+    max-height: none !important;
 }
 
-/* La conversación es la zona flexible: puede encogerse antes que el
-   compositor. Así los controles de envío siempre quedan visibles. */
+/* La conversación ocupa todo el espacio libre entre cabecera y compositor. */
 .haiku-asistente-panel .haiku-asistente-mensajes {
-    flex: 1 1 120px !important;
-    min-height: 80px !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
 }
 
+/* El compositor nunca se encoge ni desaparece. */
 .haiku-asistente-panel .haiku-asistente-compositor {
     flex: 0 0 auto !important;
     min-height: 0;
@@ -86,11 +92,17 @@
 
 @media (max-width: 700px) {
     .haiku-asistente-panel {
-        max-height: calc(100dvh - 82px) !important;
+        top: 8px !important;
+        right: 8px !important;
+        bottom: 8px !important;
+        left: 8px !important;
+        width: auto !important;
+        height: auto !important;
+        max-height: none !important;
     }
 
     .haiku-asistente-panel .haiku-asistente-mensajes {
-        min-height: 70px !important;
+        min-height: 0 !important;
     }
 
     .haiku-asistente-panel .haiku-asistente-adjuntos {
