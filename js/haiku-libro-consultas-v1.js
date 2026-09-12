@@ -952,7 +952,7 @@
             if (plan.items.some(i => i.id === id)) continue;
             const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
             const fuerte = pagoTieneIdentificadorFuerte(p);
-            if (x.estado === 'en_sistema' && x.sistema) {
+            if (x.estado === 'en_sistema' && x.sistema?.id) {
                 add('omitidos', id, texto + (medioLibro(p) === 'transferencia' ?
                     ' · La transferencia ya existe en Proyecto H y no se incorporará nuevamente.' :
                     ' · El pago ya existe en Proyecto H y no se incorporará nuevamente.'));
@@ -1533,6 +1533,70 @@
         const box = elemento("div", "haiku-asistente-preview-dato");
         box.append(elemento("span", "", label), elemento("strong", "", valor));
         grid.append(box);
+    }
+
+    function renderizarConsultaLibro(out, result) {
+        const q = result.q;
+        if (q.listar || q.libres) { out.textContent = respuesta(result); return; }
+        const rs = result.reservas.filter(r =>
+            (!q.checkedout || r.estado_operativo === 'checked_out') &&
+            (!q.pendientes || q.cabana || r.pagos_pendientes.length || [...r.pagos, ...r.pagos_sin_asociacion].some(p => p.bove_pendiente || p.manager_pendiente || p.estado_pago !== 'registrado_en_libro')) &&
+            (!q.alertas || q.cabana || r.notas_importantes.length));
+        out.replaceChildren();
+        out.className = 'haiku-asistente-mensaje haiku-asistente-mensaje--asistente haku-libro-consulta';
+        const linea = (parent, text, clase = '') => parent.append(elemento('p', clase, text));
+        out.append(elemento('span', 'haku-libro-consulta-sello', 'LIBRO · SÓLO LECTURA'));
+        linea(out, result.archivo, 'haku-libro-consulta-fuente');
+        linea(out, q.desde ? `Consulta: ${q.desde} al ${q.hasta}${q.cabana ? ` · CAB ${q.cabana}` : ''}` : 'Búsqueda por titular.');
+        linea(out, `${rs.length} reserva${rs.length === 1 ? '' : 's'} identificada${rs.length === 1 ? '' : 's'}. Los datos describen la copia cargada, no una actualización en vivo.`);
+        if (q.escribir) linea(out, 'Esta etapa sólo lee y compara. No crearé reservas, pagos ni servicios desde el Libro; primero debemos validar su interpretación.');
+        for (const r of rs) {
+            const card = elemento('article', 'haku-libro-consulta-tarjeta');
+            const head = elemento('header', 'haku-libro-consulta-cabecera');
+            head.append(elemento('strong', '', r.titular), elemento('span', 'haku-libro-consulta-sello', `CAB ${r.cabana}`));
+            card.append(head);
+            const chips = elemento('div', 'haku-libro-consulta-chips');
+            for (const value of [`${r.fecha_checkin} → ${r.fecha_checkout}`, r.tipo_estadia === 'full_day' ? 'Full Day' : `${r.noches} noche${r.noches === 1 ? '' : 's'}`,
+                etiquetas[r.estado_confirmacion] || r.estado_confirmacion, etiquetas[r.estado_operativo] || r.estado_operativo]) chips.append(elemento('span', '', value));
+            card.append(chips);
+            const details = elemento('details', 'haku-libro-consulta-detalles');
+            details.open = rs.length === 1;
+            details.append(elemento('summary', '', 'Ver detalles'));
+            const section = title => { const node = elemento('section', 'haku-libro-consulta-seccion'); node.append(elemento('h4', '', title)); details.append(node); return node; };
+            const guest = section('Datos del huésped'), grid = elemento('div', 'haku-libro-consulta-grid');
+            for (const [label, value] of [['RUT / documento', r.rut_documento], ['Correo', r.correo], ['Teléfono', r.telefono],
+                ['Adultos', r.adultos], ['Niños', r.ninos], ['Mascotas', r.mascotas]]) agregarDato(grid, label, value ?? 'Sin dato');
+            guest.append(grid);
+            const reserva = section('Reserva');
+            linea(reserva, `Ingreso al Libro: ${r.fecha_ingreso_libro || 'sin fecha'} · operador ${r.operador || 'sin dato'}.`);
+            r.notas_importantes.forEach(n => linea(reserva, `Nota roja: ${n}`));
+            r.pagos_pendientes.forEach(n => linea(reserva, `Pendiente mencionado: ${n}`));
+            const pagos = section('Pagos');
+            linea(pagos, `Se revisó el bloque del Check-In ${r.fecha_checkin}.`);
+            for (const [items, seguro] of [[r.pagos, true], [r.pagos_sin_asociacion, false]]) for (const p of items) {
+                const movimiento = elemento('div', 'haku-libro-consulta-movimiento');
+                linea(movimiento, `${seguro ? 'Pago asociado' : 'Movimiento del bloque SIN asociación segura al titular'}: ${p.tipo_movimiento} · ${money(p.monto)} · ${p.estado_pago} · ${source(p.origen)}`);
+                linea(movimiento, p.texto_original);
+                if (p.bove_pendiente || p.manager_pendiente) linea(movimiento, `Trámite administrativo pendiente: ${p.bove_pendiente ? 'BOVE ' : ''}${p.manager_pendiente ? 'Manager' : ''}. No equivale a deuda del cliente.${r.estado_operativo === 'checked_out' ? ' La reserva figura Checked Out: revisar posible atraso.' : ''}`);
+                if (p.tipo_movimiento === 'penalidad') linea(movimiento, `Penalidad ${p.penalidad_porcentaje ?? '?'}% · ${money(p.monto_penalidad)}; saldo indicado: ${money(p.saldo_por_pagar)}. No se suma como pago.`);
+                pagos.append(movimiento);
+            }
+            if (!r.pagos.length && !r.pagos_sin_asociacion.length) linea(pagos, r.cobertura_pagos ? 'El bloque revisado no registra movimientos; no es una certificación de deuda.' : 'No pude verificar el bloque financiero; no puedo concluir que no tenga abonos.');
+            if (r.servicios.length) { const servicios = section('Servicios'); r.servicios.forEach(s => linea(servicios, `Servicio: ${s.concepto} · ${s.texto_original}`)); }
+            if (r.advertencias.length) { const avisos = section('Advertencias'); r.advertencias.forEach(w => linea(avisos, `Revisar: ${w}`)); }
+            card.append(details);
+            linea(card, `Fuente: ${source(r.coordenadas_origen)}`, 'haku-libro-consulta-fuente');
+            out.append(card);
+        }
+        if (q.aseo || q.cabana) {
+            const aseos = elemento('details', 'haku-libro-consulta-detalles');
+            aseos.append(elemento('summary', '', 'Aseo del intervalo consultado'));
+            for (const a of result.aseos) linea(aseos, `${a.fecha} · CAB ${a.cabana} · ${source(a.origen)}: salida ${a.checkout_por || 'no registrada'}; aseo ${a.camarero || 'no registrado'}; ${a.hora_inicio || '?'}–${a.hora_fin || '?'}; IN ${a.ingreso || 'no registrado'}; revisó ${a.revisado_por || 'no registrado'}.`);
+            if (!result.aseos.length) linea(aseos, 'No encontré un registro de aseo para esas fechas; no inferí quién lo hizo.');
+            out.append(aseos);
+        }
+        for (const a of result.anotaciones) linea(out, `Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
+        [...new Set(result.advertencias || [])].forEach(w => linea(out, w));
     }
 
     function agregarLista(contenedor, titulo, items, { alerta = false, vacio = "Sin elementos." } = {}) {
@@ -2158,7 +2222,7 @@
             const result = await consultar(texto);
             if (result.q.versiones) renderizarVersiones(out, result);
             else if (result.q.comparar) renderizarComparacion(out, result);
-            else out.textContent = respuesta(result);
+            else renderizarConsultaLibro(out, result);
         } catch (error) {
             out.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente";
             out.textContent = error.message || "No pude completar la lectura del Libro.";

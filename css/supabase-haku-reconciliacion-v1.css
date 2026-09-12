@@ -1176,3 +1176,26 @@
     .haku-4b-preparar.libro-reserva-boton,
     .haku-4b-zona .libro-reserva-boton { transition: none; }
 }
+
+/* Sólo consultas de reservas del Libro; no comparación ni incorporación. */
+.haku-libro-consulta { white-space: normal; min-width: 0; }
+.haku-libro-consulta p { margin: 6px 0; overflow-wrap: anywhere; }
+.haku-libro-consulta .haku-libro-consulta-tarjeta { margin-top: 12px; padding: 14px; border: 1px solid #dce7df; border-left: 3px solid #92b8a0; border-radius: 14px; background: #fff; color: #293d32; }
+.haku-libro-consulta .haku-libro-consulta-cabecera { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.haku-libro-consulta .haku-libro-consulta-cabecera strong { font-size: .92rem; overflow-wrap: anywhere; min-width: 0; }
+.haku-libro-consulta .haku-libro-consulta-sello { display: inline-block; flex-shrink: 0; border-radius: 20px; padding: 4px 9px; background: #eaf2ed; color: #355541; font-size: .65rem; font-weight: 750; }
+.haku-libro-consulta .haku-libro-consulta-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0; }
+.haku-libro-consulta .haku-libro-consulta-chips span { padding: 4px 7px; border-radius: 6px; background: #f2f5f3; font-size: .7rem; }
+.haku-libro-consulta .haku-libro-consulta-detalles { margin-top: 10px; border-top: 1px solid #e5ebe7; padding-top: 9px; }
+.haku-libro-consulta .haku-libro-consulta-detalles summary { cursor: pointer; color: #42654e; font-size: .75rem; font-weight: 700; padding: 3px 0; }
+.haku-libro-consulta .haku-libro-consulta-detalles summary:focus-visible { outline: 2px solid #42654e; outline-offset: 3px; }
+.haku-libro-consulta .haku-libro-consulta-seccion { margin-top: 14px; font-size: .75rem; line-height: 1.5; }
+.haku-libro-consulta .haku-libro-consulta-seccion h4 { margin: 0 0 7px; font-size: .65rem; text-transform: uppercase; letter-spacing: .07em; color: #4b6b57; }
+.haku-libro-consulta .haku-libro-consulta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.haku-libro-consulta .haku-libro-consulta-grid .haiku-asistente-preview-dato { min-width: 0; overflow-wrap: anywhere; }
+.haku-libro-consulta .haku-libro-consulta-movimiento { padding: 8px 10px; background: #f5f7f5; border-radius: 8px; margin-top: 7px; white-space: pre-wrap; }
+.haku-libro-consulta .haku-libro-consulta-fuente { color: #68796e; font-size: .65rem; margin-top: 9px; }
+@media (max-width: 480px) {
+ .haku-libro-consulta .haku-libro-consulta-tarjeta { padding: 11px; }
+ .haku-libro-consulta .haku-libro-consulta-grid { grid-template-columns: minmax(0, 1fr); }
+}

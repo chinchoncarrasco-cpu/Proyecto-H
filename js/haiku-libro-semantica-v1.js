@@ -37,6 +37,12 @@
     }
     function titular(texto) {
         const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
+        const etiqueta = /^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|late check out|x hacer|por hacer|pendiente|sin titular)\b/;
+        return partes.find(x => !etiqueta.test(normalizar(x)) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
+    }
+    // La recuperación de titulares financieros conserva su contrato previo.
+    function titularPago(texto) {
+        const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
         const candidato = partes.find(x => !/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normalizar(x)));
         return candidato && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(candidato) && candidato.split(/\s+/).length >= 2 ? candidato : null;
     }
@@ -84,6 +90,16 @@
             return numeros.length ? [...new Set(numeros)].map(numero=>({...base,numero,estado:'registrado'})) : [{...base,numero:null,estado:'no_determinado'}];
         });
     }
+    function anclaReservaDia(at, merges, fila, header, siguiente) {
+        const directa = at(fila, header.c);
+        // La columna inmediatamente anterior al siguiente header es de checkout.
+        const fin = siguiente ? siguiente.c - 2 : header.c + 2;
+        const candidatas = merges.filter(m => m.s.r === fila && m.e.r === fila &&
+            m.s.c > header.c && m.s.c <= fin && m.e.c > m.s.c)
+            .map(m => at(fila, m.s.c)).filter(c => c && titular(c.valor));
+        if (titular(directa?.valor)) candidatas.unshift(directa);
+        return candidatas.length === 1 ? candidatas[0] : directa;
+    }
     function normalizarHoja(data, hoja) {
         const cells = data.celdas || [], estilos = data.estilos || [], merges = data.combinaciones || [];
         const map = new Map(cells.map(c => [`${c.r}:${c.c}`, c]));
@@ -122,7 +138,7 @@
         for (const cab of cabRows) {
             const cabana = Number(cab.valor.match(/\d+/)[0]);
             for (let i = 0; i < headers.length; i++) {
-                const h = headers[i], cell = at(cab.r, h.c), cleaning = at(cab.r, h.c - 1);
+                const h = headers[i], cell = anclaReservaDia(at, merges, cab.r, h, headers[i + 1]), cleaning = at(cab.r, h.c - 1);
                 if (cleaning?.valor && /check\s*out/i.test(cleaning.valor)) res.aseos.push(aseo(cleaning, h.fechaISO, cabana, origen(cleaning)));
                 if (!cell?.valor.trim()) {
                     const ocupado = merges.some(m => m.s.r === cab.r && m.s.c < h.c && m.e.c >= h.c && at(m.s.r, m.s.c)?.valor.trim());
@@ -184,12 +200,12 @@
                     const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor).length || /masaj|lena|carbon|desayuno/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
-                    if (!mark && (!at(r, h.c)?.fechaISO || !titular(detail?.valor) || !(money > 0) || !c)) continue;
+                    if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
                     const cabanaConcepto = Number(c.match(/^cab\s*(\d+)\b/)?.[1]) || null;
                     const advertencias = [];
                     if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
-                    const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titular(detail?.valor),
+                    const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         codigo_autorizacion: ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/bove\s*:\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,

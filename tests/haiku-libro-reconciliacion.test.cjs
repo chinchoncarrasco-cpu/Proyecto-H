@@ -419,6 +419,43 @@ test('partial multicabin offers missing stay addition while retaining safe payme
 
 const readyBook=(extra={})=>book({adultos:2,ninos:0,mascotas:0,...extra});
 const readyPay=(extra={})=>pay({medio_pago:'efectivo',fecha_bloque:'2026-09-17',fecha_comprobante:'2026-09-10',pago_recibido:true,estado_pago:'registrado_en_libro',...extra});
+
+test('only a confirmed existing payment with a real system ID bypasses approval',async()=>{
+ const p=readyPay({codigo_autorizacion:null}),r=readyBook({pagos:[p]});
+ const comp=await compare([r],[stay(r)]);
+ for(const sistema of [null,{}, {id:''}, {id:'existing-payment'}]) {
+  comp.pagosDetalle[0].estado='en_sistema';comp.pagosDetalle[0].sistema=sistema;
+  const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
+  assert.ok(item);
+  if(!sistema?.id) { assert.equal(item.categoria,'dudosos');continue; }
+  for(const approved of [new Set(),new Set([item.id])]) {
+   const again=Q.crearPlanIncorporacion([r],comp,new Map(),approved);
+   const omitted=again.items.find(i=>i.id===item.id);
+   assert.equal(omitted.categoria,'omitidos');assert.notEqual(omitted.aprobable,true);
+   assert.equal(omitted.seleccionado,false);assert.equal(omitted.payload,null);
+   assert.equal(Q.serializarIncorporacion(again).length,0);
+   const h=renderHarness();h.Q.renderizarIncorporacion(h.out,again,()=>{},()=>{},async()=>{});
+   assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+  }
+ }
+});
+
+test('comparison decisions preserve existing, different, review and genuinely new payment paths',async()=>{
+ for(const scenario of ['existing','different','review','new']) {
+  const p=readyPay(scenario==='review'?{codigo_autorizacion:null}:{}),r=readyBook({pagos:[p]});
+  const existing={...p,id:'real-payment',reserva_id:'r1',fecha_pago:p.fecha_comprobante,
+   monto:scenario==='different'?p.monto+1000:p.monto};
+  const comp=await compare([r],[stay(r)],scenario==='new'?[]:[existing]);
+  assert.equal(comp.pagosDetalle[0].estado,{existing:'en_sistema',different:'diferente',review:'revisar',new:'nuevo_seguro'}[scenario]);
+  const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
+  assert.equal(item.categoria,{existing:'omitidos',different:'actualizaciones',review:'dudosos',new:'pagos'}[scenario]);
+  if(scenario==='existing') {
+   assert.notEqual(item.aprobable,true);assert.equal(item.seleccionado,false);assert.equal(item.payload,null);
+  }
+  if(scenario==='different') assert.equal(item.payload.tipo,'pago_actualizar');
+  if(scenario==='new') assert.equal(item.seleccionado,true);
+ }
+});
 const prepare=async(rs,rows=[],ps=[],dec=new Map(),approved=new Set())=>{
  const db=client(rows,ps),comparacion=await Q.compararSistema(rs,db,q);
  return Q.prepararIncorporacion({reservas:rs,q,comparacion},dec,approved,db);
@@ -501,12 +538,16 @@ test('Maria Loreto and Maria Jose keep the existing transfer out and only prepar
    fecha_pago:'2026-09-02T01:00:00Z',referencia_externa:null,observaciones:null,datos_origen:{verificacion_migrada:true}};
   const db=client([stay(r)],[existente]),comparacion=await Q.compararSistema([r],db,q);
   assert.equal(comparacion.pagosDetalle.filter(x=>x.estado==='en_sistema').length,1,caso.titular);
+  assert.equal(comparacion.pagosDetalle.find(x=>x.estado==='en_sistema').coincidencia_debil,true);
   assert.equal(comparacion.pagosDetalle.filter(x=>x.estado==='nuevo_seguro').length,1,caso.titular);
   const texto=Q.respuesta({q:{...q,comparar:true},comparacion});
   assert.match(texto,/Tarjeta Débito/);assert.doesNotMatch(texto,/Transferencia · alojamiento · \$(?:160\.000|180\.000) CLP/);
   const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
   assert.equal(plan.items.filter(i=>i.categoria==='omitidos'&&/ya existe/i.test(i.texto)).length,1,caso.titular);
   assert.equal(plan.items.filter(i=>i.categoria==='pagos').length,1,caso.titular);
+  const omitido=plan.items.find(i=>i.pagoLibro===transferencia);
+  assert.equal(omitido.categoria,'omitidos');assert.notEqual(omitido.aprobable,true);
+  assert.equal(omitido.seleccionado,false);assert.equal(omitido.payload,null);
  }
 });
 test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
