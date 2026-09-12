@@ -1199,3 +1199,66 @@
  .haku-libro-consulta .haku-libro-consulta-tarjeta { padding: 11px; }
  .haku-libro-consulta .haku-libro-consulta-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Haku compacto: sólo espaciado dentro del panel. Conserva dimensiones,
+   scroll, estados de details y las protecciones del fix de adjuntos.
+   El prefijo del panel prevalece también frente a CSS cargado dinámicamente. */
+.haiku-asistente-panel .haiku-asistente-cabecera { padding:11px 14px 10px; gap:10px; }
+.haiku-asistente-panel .haiku-asistente-titulo span { margin-top:2px; }
+.haiku-asistente-panel .haiku-asistente-mensajes { padding:11px; gap:7px; }
+.haiku-asistente-panel .haiku-asistente-mensaje { padding:7px 10px; border-radius:11px; font-size:.75rem; line-height:1.38; }
+.haiku-asistente-panel .haiku-asistente-mensaje--procesando { padding-left:30px; }
+.haiku-asistente-panel .haiku-asistente-preview { padding:9px; border-radius:11px; }
+.haiku-asistente-panel .haiku-asistente-preview-cabecera { padding-bottom:7px; gap:7px; }
+.haiku-asistente-panel .haiku-asistente-preview-resumen { margin:7px 0; padding:7px 9px; line-height:1.38; }
+.haiku-asistente-panel .haiku-asistente-preview-grid { gap:5px; }
+.haiku-asistente-panel .haiku-asistente-preview-dato { padding:5px 7px; }
+.haiku-asistente-panel .haiku-asistente-preview :is(.haiku-asistente-preview-lista,.haiku-asistente-preview-observacion) { margin-top:6px; padding-top:6px; }
+.haiku-asistente-panel .haiku-asistente-preview-lista ul { gap:3px; }
+.haiku-asistente-panel .haiku-asistente-preview > details { margin-top:7px !important; }
+.haiku-asistente-panel .haiku-asistente-preview > details > summary { min-height:32px; padding:7px 34px 7px 11px; }
+.haiku-asistente-panel .haiku-asistente-preview > details > div { margin:6px; padding:7px; }
+.haiku-asistente-panel .haiku-asistente-preview > details > div:last-child { margin-bottom:6px; }
+.haiku-asistente-panel .haiku-asistente-preview-pie { gap:5px; margin-top:7px; padding-top:7px; }
+.haiku-asistente-panel .haiku-versiones-totales { gap:5px; margin:9px 0; }
+.haiku-asistente-panel .haiku-versiones-totales > div { padding:7px 5px; }
+.haiku-asistente-panel .haiku-versiones-totales strong { font-size:1.15rem; }
+.haiku-asistente-panel .haiku-versiones-tarjeta { margin:6px 0; padding:10px; line-height:1.4; }
+.haiku-asistente-panel :is(.haiku-versiones-meta,.haiku-versiones-tarjeta ul) { margin:5px 0; }
+.haiku-asistente-panel .haiku-versiones summary { padding:6px 3px; }
+.haiku-asistente-panel :is(.haiku-reconciliacion-alerta,.haiku-reconciliacion-ayuda-decision) { padding:7px 8px; line-height:1.35; }
+.haiku-asistente-panel .haiku-incorporacion-resumen { margin-bottom:6px; gap:4px; }
+.haiku-asistente-panel .haiku-incorporacion-indicador { padding:4px; }
+.haiku-asistente-panel .haiku-incorporacion-lista { padding:5px; gap:5px; }
+.haiku-asistente-panel .haiku-incorporacion-item { padding:7px; }
+.haiku-asistente-panel .haiku-incorporacion .haiku-incorporacion-seccion > summary { min-height:30px; padding:5px 32px 5px 9px; }
+.haiku-asistente-panel .haiku-incorporacion-aviso { margin:6px 0; padding:6px 8px; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-tarjeta { margin-top:8px; padding:10px; border-radius:11px; }
+.haiku-asistente-panel .haku-libro-consulta p { margin:4px 0; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-chips { margin:6px 0; gap:4px; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-chips span { padding:2px 6px; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-detalles { margin-top:7px; padding-top:6px; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-seccion { margin-top:9px; line-height:1.4; }
+.haiku-asistente-panel .haku-libro-consulta .haku-libro-consulta-movimiento { padding:6px 8px; margin-top:5px; }
+.haiku-asistente-panel .haiku-cancelacion-titulo { margin:12px 0 7px; gap:4px; font-size:.85rem; }
+.haiku-asistente-panel .haiku-cancelacion-card { margin-bottom:7px; padding:10px; border-radius:10px; font-size:.79rem; line-height:1.35; }
+.haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-nombre { margin:6px 0; font-size:.93rem; line-height:1.3; }
+.haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-chips { margin-bottom:7px; gap:4px; }
+.haiku-asistente-panel .haiku-cancelacion-card :is(.haiku-cancelacion-chip,.haiku-cancelacion-badge) { padding:2px 6px; }
+.haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-secundario { margin:6px 0 1px; }
+.haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-accion { margin:2px 0 5px; }
+.haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-boton { min-height:34px; padding:6px 11px; margin-top:8px; }
+.haiku-asistente-panel .haiku-cancelacion-status { margin-top:8px; padding:8px; }
+.haiku-asistente-panel .haiku-asistente-compositor { padding:8px 11px 10px; }
+/* !important sólo para sustituir las medidas del fix; nunca su flex/overflow. */
+.haiku-asistente-panel .haiku-asistente-compositor .haiku-asistente-texto { min-height:50px !important; padding:8px 10px; }
+.haiku-asistente-panel .haiku-asistente-acciones { margin-top:6px; gap:7px; }
+.haiku-asistente-panel :is(.haiku-asistente-adjuntar,.haiku-asistente-enviar) { min-height:34px; padding:6px 10px; }
+.haiku-asistente-panel .haiku-asistente-aviso { margin-top:5px; }
+/* :not(:empty) aumenta especificidad sobre el fix sin alterar su estado vacío.
+   Se conservan thumbnail 68×58 y X de 24×24, con espacio para la scrollbar. */
+.haiku-asistente-panel .haiku-asistente-adjuntos:not(:empty) { min-height:74px !important; max-height:74px !important; padding:6px 11px 10px !important; gap:6px; }
+@media (pointer:coarse) {
+    .haiku-asistente-panel :is(.haiku-asistente-adjuntar,.haiku-asistente-enviar,.haiku-asistente-cerrar),
+    .haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-boton { min-height:40px; }
+}
