@@ -13,10 +13,7 @@
     const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
     const POLL_MS = 60_000;
     const MODIFIED_KEY = "haikuLibroGoogleModifiedTimeV1";
-
-    // El OAuth Client ID es público (no es un secreto). Se configurará una sola vez
-    // en el frontend después de crear el cliente Web en Google Cloud.
-    const CLIENT_ID = String(root.HAIKU_GOOGLE_DRIVE_CLIENT_ID || "").trim();
+    const CLIENT_ID = "197003685258-9ui24grgj560t2itpknbmcva0rip8129.apps.googleusercontent.com";
 
     let accessToken = "";
     let tokenExpiraEn = 0;
@@ -149,6 +146,7 @@
         tokenClient = root.google.accounts.oauth2.initTokenClient({
             client_id: CLIENT_ID,
             scope: DRIVE_SCOPE,
+            include_granted_scopes: false,
             callback: () => {}
         });
         return tokenClient;
@@ -183,6 +181,9 @@
 
     async function driveFetch(url) {
         if (!accessToken || (tokenExpiraEn && Date.now() >= tokenExpiraEn)) {
+            accessToken = "";
+            tokenExpiraEn = 0;
+            detenerPolling();
             throw new Error("La sesión de Google expiró. Vuelve a conectar.");
         }
         const respuesta = await fetch(url, {
@@ -332,7 +333,7 @@
     }
 
     root.HAIKU_LIBRO_GOOGLE_V1 = Object.freeze({
-        version: "1.0.0",
+        version: "1.0.1",
         modo: "google-drive-readonly",
         fileId: FILE_ID,
         scope: DRIVE_SCOPE,
