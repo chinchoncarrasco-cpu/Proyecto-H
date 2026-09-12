@@ -56,7 +56,7 @@
     };
 })();
 
-// Rama de prueba: carga aislada del Libro online sin tocar el cargador principal.
+// Carga aislada del Libro online sin tocar el cargador principal.
 (() => {
     "use strict";
 
@@ -67,4 +67,17 @@
     script.async = true;
     script.dataset.haikuLibroGoogleV1 = "1";
     document.head.appendChild(script);
+})();
+
+// Fix visual aislado: evita que las miniaturas adjuntas de Haku se compriman.
+(() => {
+    "use strict";
+
+    if (document.querySelector('link[data-haiku-asistente-adjuntos-fix-v1]')) return;
+
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = `css/supabase-asistente-adjuntos-fix-v1.css?v=${Date.now()}`;
+    link.dataset.haikuAsistenteAdjuntosFixV1 = "1";
+    document.head.appendChild(link);
 })();
