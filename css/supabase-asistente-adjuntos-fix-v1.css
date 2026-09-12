@@ -1,0 +1,64 @@
+/* HAIKU · FIX ADJUNTOS V1
+   Evita que la franja de capturas se aplaste dentro del panel y mantiene
+   siempre visible/clicable el boton de quitar. Solo presentacion. */
+
+.haiku-asistente-panel .haiku-asistente-adjuntos {
+    flex: 0 0 auto !important;
+    min-height: 78px !important;
+    max-height: 78px !important;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 9px 14px 10px !important;
+    background: #fff;
+    scrollbar-width: thin;
+}
+
+.haiku-asistente-panel .haiku-asistente-adjuntos:empty {
+    display: none !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    padding: 0 !important;
+}
+
+.haiku-asistente-panel .haiku-asistente-adjunto {
+    position: relative;
+    flex: 0 0 68px !important;
+    width: 68px !important;
+    min-width: 68px !important;
+    height: 58px !important;
+    min-height: 58px !important;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.haiku-asistente-panel .haiku-asistente-adjunto img {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+}
+
+.haiku-asistente-panel .haiku-asistente-quitar {
+    top: 3px !important;
+    right: 3px !important;
+    z-index: 3;
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px;
+    min-height: 24px;
+    line-height: 1;
+    font-size: 15px !important;
+    box-shadow: 0 1px 5px rgba(0,0,0,.28);
+}
+
+@media (max-width: 700px) {
+    .haiku-asistente-panel .haiku-asistente-adjuntos {
+        min-height: 76px !important;
+        max-height: 76px !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+}
