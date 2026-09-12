@@ -9,6 +9,14 @@
  function monto(v){const t=String(v).replace(/^(?:CLP\s*\$?|\$)\s*/i,'');if(!/^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(t))return null;const n=Number(t.replace(/\./g,''));return Number.isSafeInteger(n)&&n>0?n:null;}
  function interpretar(texto){
   let t=String(texto).trim().replace(/^haku[ ,:]*/i,'');
+  // La variante reserva primero se traduce al formato existente; no cambia la resolución.
+  const reservaPrimero=t.match(/^reserva\s+(.+?)\s+(cambia|modifica|fija)\s+(?:el\s+)?total\s+a\s+((?:CLP\s*\$?\s*|\$\s*)?[\d.]+)$/i);
+  if(reservaPrimero){
+   const cabFinal=reservaPrimero[1].match(/^(.+?)\s+(?:cab|cabaña)\s+(\d+)$/i);
+   const nombre=(cabFinal?cabFinal[1]:reservaPrimero[1]).trim();
+   if(/\b(?:cab|cabaña|cambia|modifica|fija|total)\b/i.test(nombre))return {error:'Indica una sola reserva con titular completo y CAB inequívoca.'};
+   t=`${reservaPrimero[2]} total ${cabFinal?'CAB '+cabFinal[2]+' ':''}${nombre} a ${reservaPrimero[3]}`;
+  }
   if(!/^(?:cambia|modifica|fija)\s+(?:el\s+|los\s+)?(?:precio\s+)?total(?:es)?\b/i.test(t))return null;
   t=t.replace(/^(?:cambia|modifica|fija)\s+(?:el\s+|los\s+)?(?:precio\s+)?total(?:es)?\s*/i,'');
   const partes=t.split(/\s+y\s+|,\s*|\r?\n+/i).map(x=>x.trim()).filter(Boolean);

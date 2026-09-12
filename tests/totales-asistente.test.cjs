@@ -2,6 +2,36 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const api=require('../js/supabase-asistente-totales-v1.js');
 const r=(id='r1',nombre='Bruno Borge',cab=5)=>({id,titular_nombre:nombre,estado_reserva:'checked_out',grupo_reserva_id:null,estadias:[{id:'e'+id,cabanas:{numero:cab},fecha_ingreso:'2026-09-04',fecha_salida:'2026-09-07',tipo_estadia:'alojamiento',estado_estadia:'checked_out',noches:['04','05','06'].map(d=>({fecha:'2026-09-'+d,tarifa:150000}))}]});
 const frase='Haku cambia el precio total reserva Bruno Borge a 459.000';
+const frasesOrdenNatural=[
+ 'Haku reserva Edgardo Andres Galvez Miranda Cab 6 cambia total a 145.141',
+ 'Haku reserva Edgardo Andres Galvez Miranda CAB 6 cambia el total a $145.141',
+ 'Haku reserva Edgardo Andres Galvez Miranda cabaña 6 modifica total a CLP $145.141',
+ 'Haku reserva Edgardo Andres Galvez Miranda cab 6 fija el total a 145141',
+ 'Haku cambia el total de CAB 6 Edgardo Andres Galvez Miranda a $145.141',
+ 'Haku modifica total CAB 6 Edgardo Andres Galvez Miranda a 145.141'
+];
+for(const texto of frasesOrdenNatural)test('orden natural conserva entrada exacta: '+texto,()=>{
+ assert.deepEqual(api.interpretar(texto),{entradas:[{titular:'Edgardo Andres Galvez Miranda',cabana:6,total_objetivo:145141,origen:'chat'}]});
+});
+test('reserva primero rechaza instrucciones incompletas, ambiguas y montos inválidos',()=>{
+ for(const texto of [
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 6 cambia total',
+  'Haku reserva Cab 6 cambia total a 145.141',
+  'Haku Edgardo Andres Galvez Miranda 145.141',
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 0 cambia total a 145.141',
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 6 CAB 7 cambia total a 145.141',
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 6 cambia total a 145.14',
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 6 cambia total a 0',
+  'Haku reserva Edgardo Andres Galvez Miranda Cab 6 cambia total a 145141 y fija total a 200000'
+ ])assert.ok(!api.interpretar(texto)?.entradas,texto);
+});
+test('orden natural mantiene titular exacto, CAB segura y no escribe durante preparación',async()=>{
+ const e=entorno([r('r1','Edgardo Andres Galvez Miranda',6)]);
+ assert.equal((await e.preparar(frasesOrdenNatural[0])).estado,'propuesta');
+ assert.equal((await e.preparar(frasesOrdenNatural[0].replace('Galvez','Galves'))).estado,'bloqueada');
+ assert.equal((await e.preparar(frasesOrdenNatural[0].replace('Cab 6','Cab 7'))).estado,'bloqueada');
+ assert.equal(e.calls.length,0);
+});
 for(const version of ['total1_financiero_v3','total1_financiero_v31'])test('capacidad '+version+' usa la misma confirmación y RPC de lote',async()=>{const e=entorno(),rpc=e.cliente.rpc.bind(e.cliente);e.cliente.rpc=(n,p)=>n==='haiku_capacidad_totales_v1'?Promise.resolve({data:{version,writer_disponible:true}}):rpc(n,p);const propuesta=await e.preparar();assert.equal(propuesta.estado,'propuesta');assert.equal(e.calls.length,0);assert.equal((await api.confirmar(propuesta)).estado,'completada');assert.equal(e.calls.length,1);assert.equal(e.calls[0].n,'haiku_cambiar_totales_lote_v1');});
 test('V3 no disponible sigue bloqueando escritura',async()=>{const e=entorno();e.cliente.rpc=async()=>({data:{version:'total1_financiero_v3',writer_disponible:false}});const p=await e.preparar();assert.equal(p.estado,'previsualizacion');assert.equal((await api.confirmar(p)).estado,'bloqueada');assert.equal(e.calls.length,0);});
 function entorno(rs=[r()]){
