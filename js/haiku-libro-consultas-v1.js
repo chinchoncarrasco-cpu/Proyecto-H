@@ -1235,11 +1235,15 @@
             resultado.reservas.push(...seleccionadas);
             if (q.comparar && data.cancelaciones?.length) {
                 try {
-                    if (!root.HAIKU_LIBRO_DIFERENCIAS_V1?.comparar) throw new Error('Motor de diferencias no disponible');
-                    const old = await libro.consultarHoja(h, 'anterior', 'semantica');
-                    const diferencias = root.HAIKU_LIBRO_DIFERENCIAS_V1.comparar([old], [data]);
-                    const cancelaciones = (diferencias.cancelaciones_confirmadas || []).filter(c => filtrar(c.anterior, q));
-                    if (cancelaciones.length) (resultado.cancelaciones_confirmadas ||= []).push(...cancelaciones);
+                    if (!root.HAIKU_LIBRO_CANCELACIONES_V1?.detectarActual) throw new Error('Motor de cancelaciones no disponible');
+                    const cancelaciones = await root.HAIKU_LIBRO_CANCELACIONES_V1.detectarActual(data, cliente);
+                    for (const key of ['cancelaciones_confirmadas', 'cancelaciones_ya_coinciden']) {
+                        const casos = cancelaciones[key].filter(c => (!q.nombre || S.normalizar(c.actual.titular).includes(q.nombre)) &&
+                            (!q.cabana || Number(c.actual.cabana) === Number(q.cabana)) &&
+                            (!q.desde || c.actual.fecha_checkin >= q.desde && c.actual.fecha_checkin <= q.hasta));
+                        if (casos.length) (resultado[key] ||= []).push(...casos);
+                    }
+                    if (cancelaciones.cancelaciones_revision.length) (resultado.cancelaciones_revision ||= []).push(...cancelaciones.cancelaciones_revision);
                 } catch (error) {
                     const aviso = `${h}: no se pudieron verificar las cancelaciones; requieren revisión manual. ${error.message}`;
                     resultado.advertencias.push(aviso);
@@ -1694,7 +1698,8 @@
         out.append(grid);
 
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
-        if (result.cancelaciones_revision?.length) agregarLista(out, 'Cancelaciones por verificar', result.cancelaciones_revision, { alerta: true });
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(out, result);
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(out, result);
 
         if (!meta.libro && meta.libro_detectadas) {
             agregarLista(out, "Revisar lectura del Libro", [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });

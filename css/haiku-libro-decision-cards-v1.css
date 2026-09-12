@@ -1,6 +1,40 @@
 /* HAKU · Libro ↔ Proyecto H · decisiones y advertencias visuales V1
    Sólo presentación. No altera matching, decisiones ni escrituras. */
 
+/* Cancelaciones: estilos acotados a sus tarjetas; comparten la paleta de reconciliación. */
+.haiku-cancelacion-titulo { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:20px 0 10px; font-size:.88rem; color:#33483d; }
+.haiku-cancelacion-cantidad { border-radius:999px; padding:2px 8px; background:#edf2ee; font-size:.72rem; font-weight:700; }
+.haiku-cancelacion-card { box-sizing:border-box; min-width:0; width:100%; max-width:560px; margin:0 0 10px; padding:15px; border:1px solid #dce5df; border-radius:13px; background:#fff; color:#33483d; font-size:.82rem; line-height:1.5; overflow-wrap:anywhere; }
+.haiku-cancelacion-card .haiku-cancelacion-top { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px; }
+.haiku-cancelacion-card .haiku-cancelacion-badge { display:inline-block; border-radius:999px; padding:3px 9px; background:#eff3f0; color:#496352; font-size:.7rem; font-weight:700; }
+.haiku-cancelacion-card .haiku-cancelacion-cab { font-size:.76rem; font-weight:750; }
+.haiku-cancelacion-card .haiku-cancelacion-nombre { margin:10px 0 8px; color:inherit; font-size:.98rem; line-height:1.35; font-weight:750; }
+.haiku-cancelacion-card .haiku-cancelacion-chips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 12px; }
+.haiku-cancelacion-card .haiku-cancelacion-chip { min-width:0; border:1px solid #e3e9e5; border-radius:7px; padding:3px 7px; background:#f7f9f7; font-size:.73rem; }
+.haiku-cancelacion-card .haiku-cancelacion-secundario { margin:10px 0 2px; color:#637368; font-size:.75rem; }
+.haiku-cancelacion-card .haiku-cancelacion-origen,
+.haiku-cancelacion-card .haiku-cancelacion-nota { margin:3px 0; font-size:.8rem; color:inherit; }
+.haiku-cancelacion-card .haiku-cancelacion-accion { margin:2px 0 8px; color:inherit; font-size:.82rem; font-weight:700; }
+.haiku-cancelacion-card .haiku-cancelacion-boton { box-sizing:border-box; display:inline-flex; justify-content:center; align-items:center; min-height:40px; max-width:100%; margin:12px 0 0; padding:9px 14px; border:1px solid #496b56; border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
+.haiku-cancelacion-card .haiku-cancelacion-boton:hover:not(:disabled) { background:#385742; }
+.haiku-cancelacion-card .haiku-cancelacion-boton--confirmar { background:#fff5f2; border-color:#cf9b8e; color:#813e30; }
+.haiku-cancelacion-card .haiku-cancelacion-boton--confirmar:hover:not(:disabled) { background:#f9e8e2; }
+.haiku-cancelacion-card .haiku-cancelacion-boton:focus-visible { outline:3px solid #b6cbbd; outline-offset:3px; }
+.haiku-cancelacion-card .haiku-cancelacion-boton:disabled { opacity:.55; cursor:default; }
+.haiku-cancelacion-status:empty { display:none; }
+.haiku-cancelacion-status { margin-top:12px; padding:11px; border:1px solid #e6d8b5; border-radius:9px; background:#fffaf0; font-size:.8rem; }
+.haiku-cancelacion-preview { background:#f5f7f5; border-color:#dce5df; }
+.haiku-cancelacion-etiqueta { font-size:.68rem; letter-spacing:.035em; color:#526457; }
+.haiku-cancelacion-card--resuelta { background:#f5faf6; border-color:#d3e4d7; }
+.haiku-cancelacion-card--resuelta .haiku-cancelacion-badge,
+.haiku-cancelacion-status--resuelto { background:#eaf5ed; color:#326343; border-color:#cce0d2; }
+.haiku-cancelacion-card--revision { background:#fffaf0; border-color:#ead7a6; color:#5f4b20; }
+.haiku-cancelacion-card--revision .haiku-cancelacion-badge { background:#fff0cc; color:#785b1a; }
+@media (max-width:480px) {
+    .haiku-cancelacion-card { padding:12px; }
+    .haiku-cancelacion-card .haiku-cancelacion-boton { width:100%; }
+}
+
 .haiku-reconciliacion-alerta,
 .haiku-reconciliacion-ayuda-decision {
     min-width: 0;
