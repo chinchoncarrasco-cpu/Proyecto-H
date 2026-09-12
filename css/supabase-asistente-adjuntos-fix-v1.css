@@ -1,7 +1,37 @@
-/* HAIKU · FIX ADJUNTOS V1
-   Evita que la franja de capturas se aplaste dentro del panel y mantiene
-   siempre visible/clicable el boton de quitar. Solo presentacion. */
+/* HAIKU · FIX ADJUNTOS V2
+   Mantiene visibles/clicables las capturas y evita que el compositor oculte
+   los botones Adjuntar/Enviar en ventanas de poca altura. Solo presentacion. */
 
+/* El panel puede aprovechar mejor la altura disponible, pero nunca salir
+   de la ventana. */
+.haiku-asistente-panel {
+    max-height: min(720px, calc(100dvh - 90px)) !important;
+}
+
+/* La conversación es la zona flexible: puede encogerse antes que el
+   compositor. Así los controles de envío siempre quedan visibles. */
+.haiku-asistente-panel .haiku-asistente-mensajes {
+    flex: 1 1 120px !important;
+    min-height: 80px !important;
+}
+
+.haiku-asistente-panel .haiku-asistente-compositor {
+    flex: 0 0 auto !important;
+    min-height: 0;
+    box-sizing: border-box;
+}
+
+.haiku-asistente-panel .haiku-asistente-acciones {
+    flex: 0 0 auto;
+}
+
+/* Evita que un textarea redimensionado empuje Adjuntar/Enviar fuera del panel. */
+.haiku-asistente-panel .haiku-asistente-texto {
+    min-height: 64px !important;
+    max-height: 110px !important;
+}
+
+/* Franja de capturas: conserva su altura y el boton X. */
 .haiku-asistente-panel .haiku-asistente-adjuntos {
     flex: 0 0 auto !important;
     min-height: 78px !important;
@@ -55,6 +85,14 @@
 }
 
 @media (max-width: 700px) {
+    .haiku-asistente-panel {
+        max-height: calc(100dvh - 82px) !important;
+    }
+
+    .haiku-asistente-panel .haiku-asistente-mensajes {
+        min-height: 70px !important;
+    }
+
     .haiku-asistente-panel .haiku-asistente-adjuntos {
         min-height: 76px !important;
         max-height: 76px !important;
