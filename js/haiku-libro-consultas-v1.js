@@ -1079,7 +1079,13 @@
         if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         const comparacion = await compararSistema(result.reservas, cliente, result.q);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        return crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion);
+        const plan = crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion);
+        // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
+        if (result.cancelaciones_confirmadas?.length) {
+            plan.cancelaciones_confirmadas = result.cancelaciones_confirmadas;
+            plan.generacion = result.generacion;
+        }
+        return plan;
     }
 
     function crearIdOperacion() {
@@ -1195,6 +1201,7 @@
 
         const resultado = {
             q,
+            generacion: estado.generacion,
             archivo: estado.nombre,
             reservas: [],
             aseos: [],
@@ -1226,6 +1233,19 @@
                 if (seleccionadas.length) resultado.advertencias.push("Se usó el rango Check-In/Check-Out como respaldo porque la lista de fechas ocupadas no estaba disponible en todas las filas.");
             }
             resultado.reservas.push(...seleccionadas);
+            if (q.comparar && data.cancelaciones?.length) {
+                try {
+                    if (!root.HAIKU_LIBRO_DIFERENCIAS_V1?.comparar) throw new Error('Motor de diferencias no disponible');
+                    const old = await libro.consultarHoja(h, 'anterior', 'semantica');
+                    const diferencias = root.HAIKU_LIBRO_DIFERENCIAS_V1.comparar([old], [data]);
+                    const cancelaciones = (diferencias.cancelaciones_confirmadas || []).filter(c => filtrar(c.anterior, q));
+                    if (cancelaciones.length) (resultado.cancelaciones_confirmadas ||= []).push(...cancelaciones);
+                } catch (error) {
+                    const aviso = `${h}: no se pudieron verificar las cancelaciones; requieren revisión manual. ${error.message}`;
+                    resultado.advertencias.push(aviso);
+                    (resultado.cancelaciones_revision ||= []).push(aviso);
+                }
+            }
             resultado.aseos.push(...(data.aseos || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
             resultado.espacios.push(...(data.espacios || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
             if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
@@ -1673,6 +1693,9 @@
         agregarDato(grid, "Pagos a revisar", `${(meta.pagos_faltantes ?? 0) + (meta.pagos_revisar ?? 0)}`);
         out.append(grid);
 
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
+        if (result.cancelaciones_revision?.length) agregarLista(out, 'Cancelaciones por verificar', result.cancelaciones_revision, { alerta: true });
+
         if (!meta.libro && meta.libro_detectadas) {
             agregarLista(out, "Revisar lectura del Libro", [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
         }
@@ -2077,6 +2100,8 @@
         const aviso = elemento("p", "haiku-incorporacion-aviso", "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
         const resumen = elemento("div", "haiku-incorporacion-resumen");
         out.replaceChildren(cabecera, aviso, resumen);
+
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, plan, plan.generacion);
 
         const indicadores = {};
         for (const [clave, etiqueta] of [["nuevas", "Reservas"], ["estadias", "Estadías"], ["actualizaciones", "Actualizaciones"], ["pagos", "Pagos"], ["dudosos", "Dudosos"], ["pendientes", "Pendientes"]]) {

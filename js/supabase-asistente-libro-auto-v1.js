@@ -6,7 +6,8 @@
     const fecha = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '') ? x.split('-').reverse().join('-') : 'Fecha no determinada';
     function resumir(r) {
         const n=lista(r.nuevas).length,m=lista(r.modificadas).length,b=lista(r.ya_no_aparecen).length,a=lista(r.ambiguas).length;
-        const total=n+m+b, avisos=lista(r.advertencias).length;
+        const c=lista(r.cancelaciones_confirmadas).length;
+        const total=n+m+b+c, avisos=lista(r.advertencias).length;
         let texto, revision=a>0 || avisos>0;
         if (['parcial','no_comparable'].includes(r.estado)) {
             texto='Comparé la actualización, pero una parte requiere revisión.'; revision=true;
@@ -14,6 +15,7 @@
             return {texto:'No pude completar el informe de esta actualización. Puedes solicitarlo en Haku.',revision:true};
         } else if (!total && a) texto=`La actualización contiene ${a} ${a===1?'caso que requiere':'casos que requieren'} revisión.`;
         else if (!total) texto='Libro actualizado. No detecté cambios operacionales.';
+        else if (total===1 && c===1) texto=`${r.cancelaciones_confirmadas[0].anterior?.titular || 'Una reserva'} aparece en CANCELACIONES del Libro.`;
         else if (total===1 && n===1) {
             const x=r.nuevas[0].actual || {};
             texto=`Detecté una reserva nueva: ${x.titular || 'Titular no determinado'} · CAB ${x.cabana ?? '—'} · ${fecha(x.fecha_checkin)} → ${fecha(x.fecha_checkout)}.`;
@@ -26,6 +28,7 @@
             texto=`Detecté un cambio en una reserva: ${x.actual?.titular || 'Titular no determinado'} · CAB ${x.actual?.cabana ?? '—'}. ${cambios.length?cambios.join(' · '):'Consulta los campos modificados en el informe.'}`;
         } else texto=`Detecté ${total} ${total===1?'cambio':'cambios'} en la última actualización: ${n} nuevas · ${m} modificadas · ${b} ${b===1?'ya no aparece':'ya no aparecen'}.`;
         if (total && a) texto+=` ${a} ${a===1?'caso requiere':'casos requieren'} revisión.`;
+        if (c) texto+=` ${c} cancelación${c===1?'':'es'} confirmada${c===1?'':'s'} en el Libro; pendiente${c===1?'':'s'} de revisión y confirmación en Proyecto H.`;
         if (avisos) texto+=` Además, hay ${avisos} ${avisos===1?'advertencia':'advertencias'} de interpretación.`;
         if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) texto+=' '+root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.resumen(r);
         return {texto,revision};

@@ -33,6 +33,17 @@
         if (r.estado === 'ok' && !Object.values(r.resumen).some(Boolean)) r.estado = r.no_comparables.length ? 'no_comparable' : 'sin_cambios';
         return r;
     }
+    function evidenciaCancelacion(reserva, evidencia) {
+        if (evidencia?.bloque !== 'CANCELACIONES' || !nombre(reserva.titular) || nombre(reserva.titular) !== nombre(evidencia.titular) ||
+            !reserva.fecha_checkin || reserva.fecha_checkin !== evidencia.fecha_checkin) return false;
+        let respaldo = false;
+        for (const campo of ['noches','rut_documento','correo','telefono']) {
+            if (!conocido(reserva[campo]) || !conocido(evidencia[campo])) continue;
+            if (canon(campo,reserva[campo]) !== canon(campo,evidencia[campo])) return false;
+            respaldo = true;
+        }
+        return respaldo;
+    }
     function senales(r) {
         return {nombre: nombre(r.titular), documento: documento(r.rut_documento), correo: texto(r.correo), telefono: telefono(r.telefono)};
     }
@@ -190,6 +201,15 @@
         }
         for (const i of pendientesA) componente('a',i);
         for (const i of pendientesB) componente('b',i);
+        const evidencias = actual.filter(h=>h?.cobertura?.geometria).flatMap(h=>h.cancelaciones || []);
+        const confirmadas = [];
+        out.ya_no_aparecen = out.ya_no_aparecen.filter(x => {
+            const candidatos = evidencias.filter(e=>evidenciaCancelacion(x.anterior,e));
+            if (candidatos.length !== 1 || prev.filter(r=>evidenciaCancelacion(r,candidatos[0])).length !== 1 ||
+                next.some(r=>nombre(r.titular)===nombre(x.anterior.titular)&&r.fecha_checkin===x.anterior.fecha_checkin)) return true;
+            confirmadas.push({tipo:'cancelacion_confirmada',anterior:x.anterior,evidencia:copia(candidatos[0])}); return false;
+        });
+        if (confirmadas.length) { out.cancelaciones_confirmadas=confirmadas; out.resumen.cancelaciones_confirmadas=confirmadas.length; }
         return finalizar(out);
     }
     function mesHoja(hoja) {
@@ -283,7 +303,7 @@
             return {...resultado, generado_en, diagnostico};
         } catch (e) { return error(String(e.message || e)); }
     }
-    const api = Object.freeze({comparar, compararUltimasVersiones, validarSegmento, planificarHojas, seleccionarHojas, mesHoja, HOJAS_ESPECIALES_VIGILADAS});
+    const api = Object.freeze({comparar, compararUltimasVersiones, validarSegmento, planificarHojas, seleccionarHojas, mesHoja, HOJAS_ESPECIALES_VIGILADAS, evidenciaCancelacion});
     root.HAIKU_LIBRO_DIFERENCIAS_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

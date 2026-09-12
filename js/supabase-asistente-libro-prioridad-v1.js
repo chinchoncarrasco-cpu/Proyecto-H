@@ -6,7 +6,7 @@
     const dia=f=>typeof f==='string' && /^\d{4}-\d{2}-\d{2}$/.test(f) && Number.isFinite(Date.parse(f)) && new Date(f).toISOString().slice(0,10)===f ? Date.parse(f)/86400000 : null;
     const grupos=['hoy','manana','proximos','informativos'];
     const nombres=['🔴 Hoy','🟠 Mañana','🟡 Próximos días','🟢 Informativos'];
-    const tipos={nueva:'Reserva nueva',modificada:'Reserva modificada',ausencia:'Ya no aparece',ambigua:'Requiere revisión',advertencia:'Advertencia',cobertura:'Cobertura no comparable'};
+    const tipos={nueva:'Reserva nueva',modificada:'Reserva modificada',ausencia:'Ya no aparece',cancelacion:'Cancelación confirmada en Libro',ambigua:'Requiere revisión',advertencia:'Advertencia',cobertura:'Cobertura no comparable'};
     function clasificar(resultado,{fechaActual=hoy()}={}) {
         const base=dia(fechaActual);if(base===null)throw Error('Fecha de referencia no válida.');
         const salida={fechaActual,horizonte:'2–7 días',grupos:Object.fromEntries(grupos.map(k=>[k,[]]))};
@@ -39,6 +39,7 @@
         for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']]);
         for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']]);
         for(const x of lista(resultado.ya_no_aparecen))agregar('ausencia',[[x.anterior,'Anterior']]);
+        for(const x of lista(resultado.cancelaciones_confirmadas))agregar('cancelacion',[[x.anterior,'Anterior']]);
         for(const x of lista(resultado.ambiguas))agregar('ambigua',[...lista(x.anteriores).map(s=>[s,'Candidato anterior']),...lista(x.actuales).map(s=>[s,'Candidato actual'])]);
         for(const [campo,tipo] of [['advertencias','advertencia'],['no_comparables','cobertura']])for(const x of lista(resultado[campo])) {
             const partes=[];

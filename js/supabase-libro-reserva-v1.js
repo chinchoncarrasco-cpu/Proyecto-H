@@ -3,6 +3,29 @@
 
     const FILAS_POR_PAGINA = 120;
     const MAX_COLUMNAS_VISOR = 250;
+    let zoomLibro = 100;
+    const visoresConZoom = new WeakSet();
+    function instalarZoomLibro(visor, tabla) {
+        tabla.style.zoom = String(zoomLibro / 100);
+        if (visoresConZoom.has(visor)) return;
+        visoresConZoom.add(visor);
+        const barra = document.createElement('div');
+        barra.className = 'libro-reserva-zoom';
+        barra.setAttribute('aria-label', 'Zoom del Libro');
+        const menos = document.createElement('button'), indicador = document.createElement('button'), mas = document.createElement('button');
+        menos.textContent = '−'; mas.textContent = '+'; indicador.textContent = `${zoomLibro}%`;
+        for (const b of [menos, indicador, mas]) { b.type = 'button'; b.className = 'libro-reserva-boton secundario'; }
+        menos.setAttribute('aria-label','Alejar Libro'); mas.setAttribute('aria-label','Acercar Libro'); indicador.setAttribute('aria-label','Restablecer zoom al 100%');
+        function ajustar(valor) {
+            zoomLibro = Math.max(60, Math.min(160, valor));
+            const actual = visor.querySelector('table');
+            if (actual) actual.style.zoom = String(zoomLibro / 100);
+            indicador.textContent = `${zoomLibro}%`; menos.disabled = zoomLibro === 60; mas.disabled = zoomLibro === 160;
+        }
+        menos.addEventListener('click',()=>ajustar(zoomLibro-10)); mas.addEventListener('click',()=>ajustar(zoomLibro+10)); indicador.addEventListener('click',()=>ajustar(100));
+        visor.addEventListener('wheel',e=>{ if (!e.ctrlKey || !e.deltaY) return; e.preventDefault(); ajustar(zoomLibro+(e.deltaY<0?10:-10)); },{passive:false});
+        barra.append(menos,indicador,mas); visor.before(barra);
+    }
     const DESCARGA_LIBRO_URL = "https://docs.google.com/spreadsheets/d/1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk/export?format=xlsx";
     const VERSION_QUERY = (() => {
         try {
@@ -572,6 +595,10 @@
                 celda.dataset.columna = String(columna);
                 dibujarContenidoCelda(celda, datos);
                 aplicarEstiloCelda(celda, estiloCelda(fila, columna));
+                if (columna === rango.s.c) {
+                    celda.classList.add('libro-reserva-primaria-fija');
+                    if (!celda.style.backgroundColor || celda.style.backgroundColor === 'transparent') celda.style.backgroundColor = '#fff';
+                }
 
                 const union = inicios.get(clave);
                 if (union) {
@@ -587,6 +614,7 @@
         const visor = $("libro-reserva-visor");
         if (!visor) return;
         visor.replaceChildren(tabla);
+        instalarZoomLibro(visor, tabla);
         visor.scrollTo({ top: 0, left: 0 });
         const meta = $("libro-reserva-meta");
         if (meta) {

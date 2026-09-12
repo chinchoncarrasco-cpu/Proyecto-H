@@ -106,7 +106,7 @@
         const at = (r, c) => map.get(`${r}:${c}`);
         const origen = c => ({ hoja, celda: direccion(c.r, c.c), fila: c.r + 1, columna: c.c + 1,
             merge: merges.find(m => m.s.r === c.r && m.s.c === c.c) || null });
-        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
+        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
         const cabCells = cells.filter(c => /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(c.valor)));
         const marker = cells.filter(c => /pagos de arriendos de hoy/.test(normalizar(c.valor)));
         const financialRow = marker.length ? Math.min(...marker.map(c => c.r)) : Infinity;
@@ -127,6 +127,24 @@
         }
         res.fechas = headers.map(c => c.fechaISO);
         res.cobertura.geometria = true;
+        // Evidencia administrativa independiente: sólo dentro del bloque rotulado.
+        const columnaPrimaria = Math.min(...cabRows.map(c => c.c));
+        for (const label of cells.filter(c => c.c === columnaPrimaria && normalizar(c.valor) === 'cancelaciones' && c.r > Math.max(...cabRows.map(c => c.r)) && c.r < financialRow)) {
+            const siguiente = cells.filter(c => c.r > label.r && ((c.c === columnaPrimaria && c.valor?.trim()) || /pagos de arriendos de hoy/.test(normalizar(c.valor)))).sort((a,b)=>a.r-b.r)[0];
+            if (!siguiente) continue;
+            for (const cell of cells.filter(c => c.r >= label.r && c.r < siguiente.r && c.c > columnaPrimaria && c.valor?.includes('//'))) {
+                const contenido = cell.valor.split('//').filter(t => !/^(?:cancelad[ao]s?\b|cancelacion\b)/.test(normalizar(t))).join('//');
+                const nombre = titular(contenido);
+                const hs = headers.filter((h,i) => cell.c >= h.c && cell.c < (headers[i+1]?.c ?? h.c+4));
+                if (!nombre || hs.length !== 1) continue;
+                const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
+                res.cancelaciones.push({titular:nombre,fecha_checkin:hs[0].fechaISO,noches:noches?Number(noches[1]):null,
+                    rut_documento:contenido.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null,
+                    correo:contenido.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null,
+                    telefono:contenido.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null,
+                    texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label)});
+            }
+        }
         const paymentCabs = cabCells.filter(c => c.r > financialRow).sort((a, b) => a.r - b.r);
         for (const e of res.evidencias_bove) {
             const fila=e.origen.fila-1,columna=e.origen.columna-1;

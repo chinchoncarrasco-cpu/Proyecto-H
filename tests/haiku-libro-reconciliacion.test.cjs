@@ -304,7 +304,7 @@ function renderHarness(reconsultar, db) {
  const fs=require('node:fs'),vm=require('node:vm');
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
-  append(...xs){this.children.push(...xs)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
+  append(...xs){this.children.push(...xs)} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
   setAttribute(k,v){this[k]=v} get options(){return this.children} get text(){return this.textContent}
   querySelectorAll(selector){return this.children.flatMap(e=>[e,...e.querySelectorAll('*')]).filter(e=>
    selector==='*'||selector===e.tag||selector==='details[open]'&&e.tag==='details'&&e.open||
@@ -318,7 +318,7 @@ function renderHarness(reconsultar, db) {
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
- return {out,Q:context.HAIKU_LIBRO_CONSULTAS,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
+ return {context,out,Q:context.HAIKU_LIBRO_CONSULTAS,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
   texts:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' '),button:t=>out.querySelectorAll('button').find(e=>e.textContent===t)};
 }
 
@@ -886,4 +886,47 @@ test('unknown occupation does not become zero, and explicitly invalid occupation
  const plan=await prepare([r],[s]);assert.ok(plan.items.some(i=>i.categoria==='actualizaciones'&&i.seleccionado));
  assert.ok(!('adultos' in plan.items[0].payload.estadia.despues));
  const invalid=await prepare([{...r,adultos:-1}],[s]);assert.ok(!Q.serializarIncorporacion(invalid).length);
+});
+
+test('confirmed cancellations travel from monthly query to preparation and their separate visible preview',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm');
+ const carol=book({hoja:'Sep26',titular:'Carol Vega Ruiz',correo:'carol@example.test'});
+ const angelo=book({id:'angelo',hoja:'Sep26',titular:'Angelo Villegas',cabana:2,rut_documento:'98765432-1',fecha_checkin:'2026-09-21',fecha_checkout:'2026-09-24'});
+ const evidencia={bloque:'CANCELACIONES',titular:carol.titular,fecha_checkin:carol.fecha_checkin,noches:3,correo:carol.correo,origen:{hoja:'Sep26',celda:'C16'}};
+ const sheet=(reservas,cancelaciones=[])=>({hoja:'Sep26',fechas:['2026-09-17'],cobertura:{geometria:true},reservas,cancelaciones});
+ const actual=sheet([angelo],[evidencia]),anterior=sheet([carol,angelo]);
+ const db=client([stay(carol),stay(angelo,{id:'a1',reserva_id:'a1'}),stay(angelo,{id:'a2',reserva_id:'a2'})]);
+ const h=renderHarness(null,db),reads=[];let generation=7;
+ const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:generation}),listarHojas:()=>['Sep26'],consultarHoja:async(hoja,version)=>{reads.push([hoja,version]);return version==='anterior'?anterior:actual;}};
+ Object.assign(h.context,{HAIKU_LIBRO_RESERVA_V1:libro,HAIKU_LIBRO_DIFERENCIAS_V1:require('../js/haiku-libro-diferencias-v1.js')});
+ vm.runInNewContext(fs.readFileSync('js/haiku-libro-cancelaciones-v1.js','utf8'),h.context);
+ const before=JSON.stringify(actual);
+ const result=await h.Q.consultar('Libro: compara septiembre 2026',libro,db);
+ assert.equal(result.cancelaciones_confirmadas.length,1);
+ assert.equal(result.cancelaciones_confirmadas[0].anterior.titular,carol.titular);
+ assert.equal(result.comparacion.grupos.filter(g=>g.estado==='ambigua'&&g.principal.titular===angelo.titular).length,1);
+ const baseline=await h.Q.compararSistema([angelo],db,result.q);
+ assert.deepEqual(result.comparacion.pagosDetalle,baseline.pagosDetalle);
+ h.render(result);assert.match(h.texts(),/Cancelaciones confirmadas \(1\)/);assert.match(h.texts(),/Carol Vega Ruiz/);assert.match(h.texts(),/CANCELACIONES de Sep26/);
+ const plan=await h.Q.prepararIncorporacion(result,new Map(),new Set(),db);
+ assert.equal(plan.cancelaciones_confirmadas,result.cancelaciones_confirmadas);
+ assert.ok(!plan.items.some(i=>i.reserva?.titular===carol.titular));
+ assert.ok(!h.Q.serializarIncorporacion(plan).some(i=>i.tipo==='cancelacion'));
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},()=>{});
+ assert.match(h.texts(),/Cancelaciones confirmadas \(1\)/);assert.ok(h.button('Preparar cancelación · Carol Vega Ruiz'));
+ assert.equal(JSON.stringify(actual),before);assert.ok(!db.calls.some(c=>c.startsWith('haiku_')));
+ assert.equal(reads.filter(x=>x[1]==='anterior').length,1);
+ generation++;await assert.rejects(h.Q.prepararIncorporacion(result,new Map(),new Set(),db),/Libro cambió/);
+});
+
+test('monthly query without a previous Libro never invents a confirmed cancellation',async()=>{
+ const db=client(),h=renderHarness(null,db);
+ h.context.HAIKU_LIBRO_DIFERENCIAS_V1=require('../js/haiku-libro-diferencias-v1.js');
+ const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Sep26'],consultarHoja:async(h,v)=>{
+  if(v==='anterior')throw Error('Sin Libro anterior');return {reservas:[],cancelaciones:[{titular:'Carol Vega Ruiz'}]};
+ }};
+ const result=await h.Q.consultar('Libro: compara septiembre 2026',libro,db);
+ assert.equal(result.cancelaciones_confirmadas,undefined);
+ assert.match(result.advertencias.join(' '),/cancelaciones; requieren revisión manual/);
+ assert.ok(!db.calls.some(c=>c.startsWith('haiku_')));
 });

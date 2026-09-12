@@ -151,7 +151,7 @@
         } catch (_) {}
     }
 
-    async function cancelarReservaSupabase(reservaId) {
+    async function cancelarReservaSupabase(reservaId, opciones = {}) {
         if (!reservaId || cancelando) return;
 
         const confirmar = window.confirm(
@@ -165,6 +165,8 @@
         cerrarMenuEstado();
 
         try {
+            // El puente del Libro revalida después de la confirmación nativa.
+            if (opciones.antesDeCancelar && await opciones.antesDeCancelar() === false) return {estado:'sin_cambios'};
             const { data, error } = await cliente.rpc(
                 "haiku_cancelar_reserva",
                 { p_reserva_id: reservaId }
@@ -183,7 +185,9 @@
             refrescarFuentesSupabase().catch(errorRefresco => {
                 console.warn("HAIKU · Refresco posterior a cancelación:", errorRefresco);
             });
+            return {estado:'cancelada',data};
         } catch (error) {
+            if (opciones.antesDeCancelar) throw error;
             console.error("HAIKU · No fue posible cancelar la reserva:", error);
             alert(error?.message || "No fue posible cancelar la reserva.");
         } finally {

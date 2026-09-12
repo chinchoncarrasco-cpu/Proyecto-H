@@ -37,6 +37,7 @@
         return {entrada,result};
     }
     function adjuntar(contenedor,resultado,generacion) {
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(contenedor,resultado,generacion);
         const entrada=adaptar(resultado,generacion);
         if(!entrada.reservas.length)return;
         const doc=root.document;

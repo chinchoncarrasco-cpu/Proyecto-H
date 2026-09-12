@@ -55,3 +55,8 @@
         font-size: 9pt;
     }
 }
+
+/* Fijación y escala exclusivamente visual del visor local. */
+.libro-reserva-tabla--fiel td.libro-reserva-primaria-fija { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 3px #0002; }
+.libro-reserva-zoom { display: flex; align-items: center; gap: 6px; padding: 8px 0; }
+.libro-reserva-zoom button { min-width: 36px; padding: 5px 10px; }
