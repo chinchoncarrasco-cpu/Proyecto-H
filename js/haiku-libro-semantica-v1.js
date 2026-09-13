@@ -47,24 +47,31 @@
         return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
     }
     // Señales de lenguaje, sólo para titular: no altera bloqueos ni cancelaciones.
-    function notaDeTitular(texto) {
+    function notaDeTitular(texto, posteriorADatos = false) {
         // Una aclaración entre paréntesis no convierte el nombre precedente en nota.
         const t = normalizar(texto).replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
-        const accion = /^(?:solicita(?:n)?|pide(?:n)?|requiere(?:n)?|dejar|coordinar|agregar|preparar|enviar|revisar|esperar|llamar|avisar|llegara(?:n)?|llega(?:n)?|llegada|sale(?:n)?|salida)\b/;
+        const accion = /^(?:(?:no|se(?:\s+les?)?)\s+)?(?:pedir|solicitar|mover|prestar|vender|tener|entregar|reponer|solicita(?:n)?|pide(?:n)?|requiere(?:n)?|presta(?:n)?|vendio|vende(?:n)?|tiene(?:n)?|dejar|coordinar|agregar|preparar|enviar|revisar|esperar|llamar|avisar|llegara(?:n)?|llega(?:n)?|llegada|sale(?:n)?|salida)\b/;
         const estado = /\b(?:pendientes?|por pagar|pagad[oa]s?|confirmar|confirmad[oa]s?)\b/;
         const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
-        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t);
+        const objetos = /^(?:cortesia|articulos?|art\.?|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
+        // Tras datos de la estadía, las frases preposicionales son contexto operativo.
+        // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
+        const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || contextoPosterior;
     }
     function clasificarFragmentos(texto) {
+        let humanoPrevio=false, datosPosteriores=false;
         return String(texto || '').split(/\s*\/\/\s*|\r?\n/).map(x=>x.trim()).filter(Boolean).map(texto=>{
             const t=normalizar(texto);
             let tipo='otro';
-            if (/^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) tipo='etiqueta';
-            else if (notaDeTitular(texto)) tipo='nota_operativa';
+            if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) tipo='etiqueta';
+            else if (notaDeTitular(texto, datosPosteriores)) tipo='nota_operativa';
             else if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
                 /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) tipo='dato_estructurado';
             else if (/^[\p{L}][\p{L}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2) tipo='posible_titular';
+            if (tipo==='posible_titular') humanoPrevio=true;
+            if (humanoPrevio && (tipo==='dato_estructurado' || /^(?:confirmad[oa]|pagad[oa]|reservad[oa])\b/.test(t))) datosPosteriores=true;
             return {texto,tipo};
         });
     }

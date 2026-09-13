@@ -5,6 +5,26 @@ function hoja(texto,desplazada=false){return {celdas:[
  {r:2,c:0,valor:'cabaña 2'},{r:2,c:desplazada?3:2,valor:texto},
  {r:24,c:2,valor:'Pagos de arriendos de hoy'}],combinaciones:[{s:{r:2,c:desplazada?3:2},e:{r:2,c:4}}]};}
 const normalizar=t=>S.normalizarHoja(hoja(t),'Sep26');
+test('reported operational notes preserve all thirteen guest blocks',()=>{
+ const casos=[['Yerko Baeza','articulos de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Yuly Barbieri T.','cenicero y art de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Paulina Varas','solicitar rut'],['Katherine Rubiños','CENICERO Y ART DE ASADO'],['Bruno Borge','tienen llave de caja fuerte // tienen tenazas y sacacorcho'],['Yenny Acuña Berrios','se le presta articulos de asado'],['Edgardo Andrés Gálvez Miranda','pedir rut'],['Aneti Dupont','pedir rut // reserva booking'],['Matias Fernandez','CORTESÍA CHOCOLATES Y ESPUMANTE'],['Macarena Hurtado','se le vendio full day'],['Alejandra Calderon Arrigoni','pedir rut']];
+ for(const [nombre,nota] of casos){
+  for(const texto of [`${nombre} // ${nota} // 1 NOCHE`,`${nombre} // contacto@example.test // 1 NOCHE // ${nota}`,`${nota} // ${nombre} // 1 NOCHE`]){
+   const res=normalizar(texto);assert.equal(res.reservas.length,1,texto);assert.equal(res.reservas[0].titular,nombre);assert.equal(res.reservas[0].texto_original,texto);
+  }
+ }
+});
+test('general actions and objects work beyond the reported literal phrases',()=>{
+ for(const nota of ['NO ENTREGAR LLAVES','se les presta una sombrilla','reponer suministros','vender desayuno','solicitar documento','CHOCOLATES DE BIENVENIDA','ARTICULOS PARA PARRILLA','reserva airbnb']){
+  assert.equal(normalizar(`${nota} // Ana Pérez // 1 NOCHE`).reservas[0]?.titular,'Ana Pérez',nota);
+  assert.equal(normalizar(nota).reservas.length,0,nota);
+ }
+});
+test('post-data context excludes a trailing instruction without resolving two actual humans by order',()=>{
+ const r=normalizar('Ana Pérez // 1 NOCHE // para recepción');assert.equal(r.reservas[0]?.titular,'Ana Pérez');
+ for(const texto of ['Ana Pérez // Juan Soto // 1 NOCHE','Ana Pérez // 1 NOCHE // Juan Soto','Ana Pérez // contacto@example.test // juan soto']){
+  const r=normalizar(texto);assert.equal(r.reservas.length,0);assert.match(r.advertencias.join(' '),/varios posibles titulares/);
+ }
+});
 test('operational language does not expel a guest or become a reservation on its own',()=>{
  for(const nota of ['Llegará tarde','Solicita leña','Manager pendiente','Llegada tarde','Sin azúcar','Cena por pagar','AGREGAR ESTACIONAMIENTO','Enviar instrucciones','Preparar bienvenida','Camas juntas','Confirmado por recepción']){
   for(const texto of [`Ana Pérez // ${nota} // 1 NOCHE`,`${nota}\nAna Pérez\n1 NOCHE`]){
