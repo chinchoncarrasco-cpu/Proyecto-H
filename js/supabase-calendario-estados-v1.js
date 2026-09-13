@@ -67,7 +67,19 @@
     }
 
     function estadoElemento(reservaId, estadiaId) {
-        return estadiaId ? estados.get(String(estadiaId))?.estado || '' : estadosPorReserva.get(String(reservaId)) || '';
+        if (estadiaId) {
+            const estadoEstadia =
+                estados.get(String(estadiaId))?.estado || '';
+
+            if (estadoEstadia) {
+                return estadoEstadia;
+            }
+        }
+
+        // Fallback seguro:
+        // sólo usa el estado de la reserva cuando todas sus estadías
+        // comparten exactamente el mismo estado canónico.
+        return estadosPorReserva.get(String(reservaId)) || '';
     }
 
     function claseParaEstado(estado) {
