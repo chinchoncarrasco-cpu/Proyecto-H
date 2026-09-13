@@ -35,10 +35,43 @@
             notas: fragmentos.filter(x => x.color === "FF0000" && x.texto.trim()).map(x => x.texto.trim()),
             pendientes: fragmentos.filter(x => x.color === "FFFF00" && x.texto.trim()).map(x => x.texto.trim()) };
     }
-    function titular(texto) {
+    function notaOperativa(texto) {
+        const t = normalizar(texto);
+        return /^(?:(?:posible|posiblemente|aviso|nota|urgente)\s*[:.-]?\s+)?(?:late\s*check\s*out|mantencion|mantenimiento|no vender|bloquead[oa]|reparacion|reparar|fumigacion|pintura|trabajos?|fuera de servicio)\b/.test(t) ||
+            /^(?:x|por|pendiente de|se debe|se requiere)\s+(?:coordinar|revisar|reparar|confirmar|habilitar)\b/.test(t);
+    }
+    // Conserva el criterio previo de las evidencias de cancelación y bloqueo.
+    function titularContexto(texto) {
         const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
         const etiqueta = /^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|late check out|x hacer|por hacer|pendiente|sin titular)\b/;
-        return partes.find(x => !etiqueta.test(normalizar(x)) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
+        return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
+    }
+    // Señales de lenguaje, sólo para titular: no altera bloqueos ni cancelaciones.
+    function notaDeTitular(texto) {
+        // Una aclaración entre paréntesis no convierte el nombre precedente en nota.
+        const t = normalizar(texto).replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+        const accion = /^(?:solicita(?:n)?|pide(?:n)?|requiere(?:n)?|dejar|coordinar|agregar|preparar|enviar|revisar|esperar|llamar|avisar|llegara(?:n)?|llega(?:n)?|llegada|sale(?:n)?|salida)\b/;
+        const estado = /\b(?:pendientes?|por pagar|pagad[oa]s?|confirmar|confirmad[oa]s?)\b/;
+        const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
+        const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t);
+    }
+    function clasificarFragmentos(texto) {
+        return String(texto || '').split(/\s*\/\/\s*|\r?\n/).map(x=>x.trim()).filter(Boolean).map(texto=>{
+            const t=normalizar(texto);
+            let tipo='otro';
+            if (/^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) tipo='etiqueta';
+            else if (notaDeTitular(texto)) tipo='nota_operativa';
+            else if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
+                /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) tipo='dato_estructurado';
+            else if (/^[\p{L}][\p{L}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2) tipo='posible_titular';
+            return {texto,tipo};
+        });
+    }
+    function candidatosTitular(texto) { return clasificarFragmentos(texto).filter(x=>x.tipo==='posible_titular'); }
+    function titular(texto) {
+        const candidatos=candidatosTitular(texto);
+        return candidatos.length===1?candidatos[0].texto:null;
     }
     // La recuperación de titulares financieros conserva su contrato previo.
     function titularPago(texto) {
@@ -96,8 +129,8 @@
         const fin = siguiente ? siguiente.c - 2 : header.c + 2;
         const candidatas = merges.filter(m => m.s.r === fila && m.e.r === fila &&
             m.s.c > header.c && m.s.c <= fin && m.e.c > m.s.c)
-            .map(m => at(fila, m.s.c)).filter(c => c && titular(c.valor));
-        if (titular(directa?.valor)) candidatas.unshift(directa);
+            .map(m => at(fila, m.s.c)).filter(c => c && candidatosTitular(c.valor).length);
+        if (candidatosTitular(directa?.valor).length) candidatas.unshift(directa);
         return candidatas.length === 1 ? candidatas[0] : directa;
     }
     function normalizarHoja(data, hoja) {
@@ -106,7 +139,7 @@
         const at = (r, c) => map.get(`${r}:${c}`);
         const origen = c => ({ hoja, celda: direccion(c.r, c.c), fila: c.r + 1, columna: c.c + 1,
             merge: merges.find(m => m.s.r === c.r && m.s.c === c.c) || null });
-        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
+        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], bloqueos: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
         const cabCells = cells.filter(c => /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(c.valor)));
         const marker = cells.filter(c => /pagos de arriendos de hoy/.test(normalizar(c.valor)));
         const financialRow = marker.length ? Math.min(...marker.map(c => c.r)) : Infinity;
@@ -134,7 +167,7 @@
             if (!siguiente) continue;
             for (const cell of cells.filter(c => c.r >= label.r && c.r < siguiente.r && c.c > columnaPrimaria && c.valor?.includes('//'))) {
                 const contenido = cell.valor.split('//').filter(t => !/^(?:cancelad[ao]s?\b|cancelacion\b)/.test(normalizar(t))).join('//');
-                const nombre = titular(contenido);
+                const nombre = titularContexto(contenido);
                 const hs = headers.filter((h,i) => cell.c >= h.c && cell.c < (headers[i+1]?.c ?? h.c+4));
                 if (!nombre || hs.length !== 1) continue;
                 const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
@@ -155,20 +188,52 @@
         res.cobertura.pagos = paymentCabs.length === cabRows.length;
         for (const cab of cabRows) {
             const cabana = Number(cab.valor.match(/\d+/)[0]);
+            const celdasBloqueadas = new Set(), diasBloqueados = new Set();
+            const rojo = c => {
+                const fill = estilos[c?.estiloId]?.fill;
+                return fill?.patternType === 'solid' && ['FF0000','C00000','CC0000','E60000'].includes(color(fill.fgColor));
+            };
+            for (const cell of cells.filter(c => c.r === cab.r && c.valor?.trim() && rojo(c))) {
+                const src = origen(cell), merge = src.merge;
+                const h = headers.find((d,i) => cell.c >= d.c && cell.c <= d.c + 1 && cell.c < (headers[i+1]?.c ?? d.c+4));
+                if (!h || merge && (merge.e.r !== cab.r || merge.s.r !== cab.r)) continue;
+                const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));
+                const ultimo = headers.find(d => d.fechaISO === dias.at(-1)?.fechaISO);
+                const ancho = headers[1] ? headers[1].c - headers[0].c : 4;
+                if (![1,4].includes(ancho) || headers.some((d,i)=>i && d.c-headers[i-1].c!==ancho)) continue;
+                const completo = merge ? merge.e.c >= ultimo.c + Math.max(0,ancho-2) && merge.e.c <= ultimo.c+ancho-1 :
+                    cell.c === h.c && Array.from({length:Math.max(1,ancho-1)},(_,i)=>at(cab.r,h.c+i)).every(c=>rojo(c)&&(!c.valor?.trim()||c===cell));
+                const estructuraReserva = /\b(?:\d+\s*(?:noches?|adlt|adultos?|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[a-z]{2,3}\d{5,}\b/.test(cell.valor.toLowerCase());
+                if (!completo || titularContexto(cell.valor) || estructuraReserva || !notaOperativa(cell.valor) ||
+                    cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=ultimo.c+Math.max(0,ancho-2)&&c.valor?.trim()) ||
+                    dias.some((d,i)=>i && d.fechaISO !== sumarDias(dias[i-1].fechaISO,1))) continue;
+                // Fin exclusivo, igual que las estadías y el bloqueo de calendario existente.
+                const fechas = dias.map(d=>d.fechaISO);
+                res.bloqueos.push({id:`${hoja}!${src.celda}`,cabana,fecha_inicio:h.fechaISO,fecha_fin:sumarDias(fechas.at(-1),1),
+                    nota:cell.valor,hoja,origen:{...src,rango:merge?`${src.celda}:${direccion(merge.e.r,merge.e.c)}`:src.celda},
+                    evidencia:{fondo:color(estilos[cell.estiloId].fill.fgColor),estilo_id:cell.estiloId,geometria:'disponibilidad_completa'}});
+                celdasBloqueadas.add(`${cell.r}:${cell.c}`);fechas.forEach(d=>diasBloqueados.add(d));
+            }
             for (let i = 0; i < headers.length; i++) {
                 const h = headers[i], cell = anclaReservaDia(at, merges, cab.r, h, headers[i + 1]), cleaning = at(cab.r, h.c - 1);
                 if (cleaning?.valor && /check\s*out/i.test(cleaning.valor)) res.aseos.push(aseo(cleaning, h.fechaISO, cabana, origen(cleaning)));
+                if (diasBloqueados.has(h.fechaISO) || cell && celdasBloqueadas.has(`${cell.r}:${cell.c}`)) continue;
                 if (!cell?.valor.trim()) {
                     const ocupado = merges.some(m => m.s.r === cab.r && m.s.c < h.c && m.e.c >= h.c && at(m.s.r, m.s.c)?.valor.trim());
                     if (!ocupado) res.espacios.push({ fecha: h.fechaISO, cabana, estado: "sin_dato", origen: { hoja, celda: direccion(cab.r, h.c) } });
                     continue;
                 }
                 const t = normalizar(cell.valor);
-                if (/^(libre|full\s*day)$/.test(t) || /mantencion|mantenimiento|bloquead/.test(t)) {
+                const nombre = titular(cell.valor);
+                if (/^(libre|full\s*day)$/.test(t) || !nombre && /mantencion|mantenimiento|bloquead/.test(t)) {
                     res.espacios.push({ fecha: h.fechaISO, cabana, estado: t === "libre" ? "libre_explicito" : "bloque_o_marca", texto_original: cell.valor, origen: origen(cell) }); continue;
                 }
-                const nombre = titular(cell.valor);
-                if (!nombre) { res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana }); continue; }
+                if (!nombre) {
+                    const ambigua=candidatosTitular(cell.valor).length>1;
+                    if(ambigua)res.advertencias.push(`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`);
+                    res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
+                        ...(ambigua?{advertencias:['Varios posibles titulares; no se eligió uno arbitrariamente.']}: {}) }); continue;
+                }
                 const src = origen(cell), merge = src.merge;
                 const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c)).map(d => d.fechaISO);
                 const fd = /full\s*day/.test(t);

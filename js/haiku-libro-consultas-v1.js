@@ -1204,6 +1204,7 @@
             generacion: estado.generacion,
             archivo: estado.nombre,
             reservas: [],
+            bloqueos: [],
             aseos: [],
             espacios: [],
             anotaciones: [],
@@ -1222,6 +1223,10 @@
             const data = await libro.consultarHoja(h);
             resultado.advertencias.push(...(data.advertencias || []));
             const reservasHoja = Array.isArray(data.reservas) ? data.reservas : [];
+            resultado.bloqueos.push(...(data.bloqueos || []).filter(b =>
+                (!q.cabana || b.cabana === Number(q.cabana)) &&
+                (!q.nombre || S.normalizar(b.nota).includes(q.nombre)) &&
+                (!q.desde || b.fecha_inicio <= q.hasta && b.fecha_fin > q.desde)));
             let seleccionadas = reservasHoja.filter(r => filtrar(r, q));
             if (q.comparar && !seleccionadas.length && reservasHoja.length) {
                 seleccionadas = reservasHoja.filter(r => {
@@ -1273,6 +1278,10 @@
         }
 
         if (q.comparar) resultado.comparacion = await compararSistema(resultado.reservas, cliente, q);
+        if (q.comparar && resultado.bloqueos.length) {
+            if (!root.HAIKU_LIBRO_BLOQUEOS_V1) throw new Error('No está disponible el visor de bloqueos del Libro. Recarga la página.');
+            resultado.bloqueos_comparacion = await root.HAIKU_LIBRO_BLOQUEOS_V1.comparar(resultado.bloqueos, cliente);
+        }
         if (libro.estado().generacion !== estado.generacion) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
         return resultado;
     }
@@ -1698,6 +1707,7 @@
         out.append(grid);
 
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
+        root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(out, result.bloqueos_comparacion, result.generacion);
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(out, result);
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(out, result);
 

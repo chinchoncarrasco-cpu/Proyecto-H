@@ -1,6 +1,8 @@
 /* HAKU · Libro ↔ Proyecto H · decisiones y advertencias visuales V1
    Sólo presentación. No altera matching, decisiones ni escrituras. */
 
+.haiku-bloqueo-nota { white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* Cancelaciones: estilos acotados a sus tarjetas; comparten la paleta de reconciliación. */
 .haiku-cancelacion-titulo { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:20px 0 10px; font-size:.88rem; color:#33483d; }
 .haiku-cancelacion-cantidad { border-radius:999px; padding:2px 8px; background:#edf2ee; font-size:.72rem; font-weight:700; }
