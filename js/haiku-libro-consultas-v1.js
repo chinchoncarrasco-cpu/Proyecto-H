@@ -5,6 +5,7 @@
 
     const money = v => v === null || v === undefined ? "monto no determinado" : `$${Number(v).toLocaleString("es-CL")} CLP`;
     const source = x => `${x?.hoja || ""}!${x?.celda || ""}`;
+    const contextoVisualPlanes = new WeakMap();
     const nombresMes = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
     const etiquetas = {
         sin_checkin: "Sin Check-In según texto negro",
@@ -422,37 +423,54 @@
     function transferenciasDebilesExistentes(resultados, pagos) {
         const grupos = new Map();
         const asignadas = new Map();
+        const moneda = p => String(p.moneda || 'CLP').trim().toUpperCase();
+        const texto = v => S.normalizar(v).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+        const evidencia = (item, existente) => {
+            const p=item.p, origen=existente.datos_origen?.origen_libro || existente.datos_origen?.origen;
+            if (origen?.hoja && origen?.celda && p.origen?.hoja && p.origen?.celda && source(origen)===source(p.origen)) return true;
+            const libro=texto(p.texto_original), nombre=new Set(texto(item.titular).split(' '));
+            return [existente.referencia_externa, existente.observaciones].some(v => {
+                const glosa=texto(v);
+                if (glosa.length<12 || !libro || !(` ${libro} `.includes(` ${glosa} `) || ` ${glosa} `.includes(` ${libro} `))) return false;
+                const comun=glosa.length<libro.length?glosa:libro;
+                // Un código bancario específico o texto descriptivo; nombre y monto no bastan.
+                const monto=String(Number(p.monto));
+                const codigo=comun.split(' ').some(t=>/^\d{6,}$/.test(t) && String(Number(t))!==monto);
+                const palabras=new Set(comun.split(' ').filter(t=>t.length>=4 && !/\d/.test(t) && !nombre.has(t) &&
+                    !/^(transferencia|transf|pago|abono|reserva|pesos|monto|pendiente|manager|bove|noche|noches)$/.test(t)));
+                return codigo || palabras.size>=3;
+            });
+        };
+        const fuertesUsados = new Set(resultados.flatMap(r => (r.libro.pagos || []).filter(pagoTieneIdentificadorFuerte)
+            .flatMap(p => pagos.filter(x=>pagoCoincide(p,x)).map(x=>x.id))));
         for (const result of resultados) {
             if (result.estado !== 'asociada') continue;
             for (const p of result.libro.pagos || []) {
                 if (pagoTieneIdentificadorFuerte(p) || medioLibro(p) !== 'transferencia' ||
-                    !Number.isSafeInteger(Number(p.monto)) || !p.fecha_comprobante) continue;
-                const key = [result.sistema.reserva_id, Number(p.monto), String(p.fecha_comprobante).slice(0, 10), 'transferencia'].join('|');
+                    !Number.isSafeInteger(Number(p.monto)) || Number(p.monto)<=0 || !p.fecha_comprobante) continue;
+                const key = [result.sistema.reserva_id, Number(p.monto), String(p.fecha_comprobante).slice(0, 10), moneda(p)].join('|');
                 if (!grupos.has(key)) grupos.set(key, []);
-                grupos.get(key).push({ p, reservaId: result.sistema.reserva_id });
+                grupos.get(key).push({ p, reservaId: result.sistema.reserva_id, titular: result.libro.titular });
             }
         }
         for (const [key, libro] of grupos) {
-            const [reservaId, monto, fecha] = key.split('|');
-            const sistema = pagos.filter(p => p.reserva_id === reservaId && Number(p.monto) === Number(monto) &&
+            const [reservaId, monto, fecha, divisa] = key.split('|');
+            const sistema = pagos.filter(p => p.id && !fuertesUsados.has(p.id) && p.reserva_id === reservaId && moneda(p)===divisa && Number(p.monto) === Number(monto) &&
                 medioSistema(p) === 'transferencia' && String(p.fecha_pago || '').slice(0, 10) === fecha);
             const usados = new Set();
             for (const item of libro) {
-                const exactos = sistema.filter(p => !usados.has(p.id) && pagoDebilYaExiste(item.p, p, item.reservaId));
-                if (exactos.length === 1) {
+                const exactos = sistema.filter(p => evidencia(item,p));
+                if (exactos.length === 1 && libro.filter(x=>evidencia(x,exactos[0])).length===1) {
                     usados.add(exactos[0].id);
                     asignadas.set(item.p, exactos[0]);
                 }
             }
             const restantesLibro = libro.filter(item => !asignadas.has(item.p));
-            const restantesSistema = sistema.filter(p => !usados.has(p.id) &&
-                !S.normalizar(p.referencia_externa || p.observaciones) &&
-                !(p.datos_origen?.origen_libro || p.datos_origen?.origen));
+            const restantesSistema = sistema.filter(p => !usados.has(p.id));
             // Compatibilidad histórica: algunos pagos antiguos no conservaron
-            // glosa/origen. Sólo se aceptan si reserva+monto+medio+fecha permiten
-            // cubrir uno a uno todos los movimientos restantes del Libro.
-            if (restantesLibro.length && restantesSistema.length === restantesLibro.length) {
-                restantesLibro.forEach((item, indice) => asignadas.set(item.p, restantesSistema[indice]));
+            // identidad textual. Sólo un remanente 1 ↔ 1, nunca emparejar por orden.
+            if (restantesLibro.length === 1 && restantesSistema.length === 1) {
+                asignadas.set(restantesLibro[0].p, restantesSistema[0]);
             }
         }
         return asignadas;
@@ -1074,6 +1092,7 @@
         }
         consolidarActualizacionesReserva(plan);
         plan.permisos = [...new Set(plan.items.flatMap(i => i.permisos))];
+        contextoVisualPlanes.set(plan, comp);
         return plan;
     }
 
@@ -1676,6 +1695,27 @@
         contenedor.append(details);
     }
 
+    function franjaDiferenciaPago(x, comp) {
+        if (!x || !['revisar','diferente'].includes(x.estado) || medioLibro(x.pago)!=='transferencia') return null;
+        const p=x.pago, fila=comp?.find(r=>r.libro===x.reserva && r.estado==='asociada');
+        if (!fila?.sistema?.reserva_id) return null;
+        const candidatos=x.sistema ? [x.sistema] : (comp.snapshot?.pagos || []).filter(s=>
+            s.reserva_id===fila.sistema.reserva_id && Number(s.monto)===Number(p.monto) &&
+            String(s.moneda || 'CLP').toUpperCase()===String(p.moneda || 'CLP').toUpperCase() && medioSistema(s)==='transferencia');
+        if (candidatos.length!==1 || candidatos[0].reserva_id!==fila.sistema.reserva_id) return null;
+        const s=candidatos[0], diferencias=[];
+        if (p.fecha_comprobante && s.fecha_pago && p.fecha_comprobante.slice(0,10)!==s.fecha_pago.slice(0,10)) diferencias.push(`Fecha distinta · Libro ${fechaBreve(p.fecha_comprobante)} · Proyecto H ${fechaBreve(s.fecha_pago.slice(0,10))}`);
+        if (p.monto!=null && s.monto!=null && Number(p.monto)!==Number(s.monto)) diferencias.push(`Monto distinto · Libro ${money(p.monto)} · Proyecto H ${money(s.monto)}`);
+        if (p.moneda && s.moneda && p.moneda!==s.moneda) diferencias.push(`Moneda distinta · Libro ${p.moneda} · Proyecto H ${s.moneda}`);
+        if (medioSistema(s) && medioSistema(s)!==medioLibro(p)) diferencias.push(`Medio distinto · Libro transferencia · Proyecto H ${medioSistema(s).replaceAll('_',' ')}`);
+        if (!diferencias.length) return null;
+        const franja=elemento('div','haiku-pago-diferencia-compacta');
+        franja.append(elemento('span','',`⚠ ${diferencias.join(' · ')}`));
+        franja.append(elemento('small','',diferencias.length===1 && diferencias[0].startsWith('Fecha') ?
+            'Misma reserva, monto y medio. Revisar.' : 'Revisar diferencias antes de aprobar.'));
+        return franja;
+    }
+
     function gruposVistaPagos(comp) {
         const items = comp.pagosDetalle || [];
         const existentes = items.filter(x => x.estado === 'en_sistema' && x.sistema?.id);
@@ -1722,8 +1762,10 @@
                 }
                 card.append(datos, elemento('span','haiku-versiones-estado', x.estado==='en_sistema' && x.sistema?.id ? 'Ya existe / omitido' :
                     x.estado==='nuevo_seguro' ? 'Nuevo seguro' : x.estado==='diferente' ? 'Con diferencias' : 'Requiere revisión'));
-                for (const d of x.diferencias || []) card.append(elemento('p','haiku-versiones-meta',d));
-                if (x.estado==='diferente' && x.sistema) card.append(elemento('p','haiku-versiones-meta',
+                const franja=franjaDiferenciaPago(x,result.comparacion);
+                if (franja) card.append(franja);
+                for (const d of x.diferencias || []) if (!franja || !/^(monto\/moneda|medio de pago|fecha de pago) diferente$/.test(d)) card.append(elemento('p','haiku-versiones-meta',d));
+                if (!franja && x.estado==='diferente' && x.sistema) card.append(elemento('p','haiku-versiones-meta',
                     `Proyecto H: ${money(x.sistema.monto)} · ${x.sistema.medio_pago || 'Medio sin dato'} · ${x.sistema.fecha_pago || 'Fecha sin dato'}`));
                 if (x.estado==='en_sistema' && x.sistema?.id) card.append(elemento('p','haiku-versiones-aviso','No se volverá a incorporar. No requiere aprobación.'));
                 if (titulo==='Sin asociación segura') card.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
@@ -2053,7 +2095,7 @@
         return { titular, cabana, monto, concepto, periodo, tipo, estado: etiquetasEstado[item.categoria] || "Revisar", detalle, estadias, reserva };
     }
 
-    function renderizarItemIncorporacion(item, controles, actualizar, aprobar) {
+    function renderizarItemIncorporacion(item, controles, actualizar, aprobar, comparacion) {
         const vista = presentacionIncorporacion(item);
         const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
         const esPagoLibro = Boolean(item.pagoLibro);
@@ -2129,9 +2171,15 @@
         }
 
         fila.append(elemento("p", "haiku-incorporacion-propuesta", vista.detalle));
+        const movimiento=comparacion?.pagosDetalle?.find(x=>x.pago===item.pagoLibro);
+        const franja=franjaDiferenciaPago(movimiento,comparacion);
+        if (franja) fila.append(franja);
         if (item.motivos.length) {
             const avisos = elemento("ul", "haiku-incorporacion-avisos");
-            item.motivos.forEach(motivo => avisos.append(elemento("li", "", motivo)));
+            item.motivos.forEach(motivo => {
+                if (franja && motivo==='Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.') return;
+                avisos.append(elemento("li", "", motivo));
+            });
             fila.append(avisos);
         }
         if (vista.reserva?.observaciones) {
@@ -2234,7 +2282,7 @@
             seccion.append(summary);
             const contenido = elemento("div", "haiku-incorporacion-lista");
             if (!items.length) contenido.append(elemento("p", "haiku-incorporacion-vacio", "Sin elementos en esta categoría."));
-            else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar)));
+            else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar, contextoVisualPlanes.get(plan))));
             seccion.append(contenido);
             out.append(seccion);
         }

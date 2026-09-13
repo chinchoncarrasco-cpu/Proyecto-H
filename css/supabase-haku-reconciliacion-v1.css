@@ -1,6 +1,10 @@
 /* HAIKU · Libro ↔ Proyecto H · UX de reconciliación
    Sólo presentación. No altera matching, datos ni escrituras. */
 
+.haiku-pago-diferencia-compacta { margin: 5px 0; padding: 5px 7px; border-radius: 6px; background: #fff8e7; color: #79571f; font-size: .72rem; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+.haiku-pago-diferencia-compacta > span, .haiku-pago-diferencia-compacta > small { display: block; }
+.haiku-pago-diferencia-compacta > small { font-size: inherit; }
+
 /* The between-book report stays inside the existing scrollable Haku panel. */
 .haiku-versiones { width: 100%; min-width: 0; white-space: normal; }
 .haiku-versiones-titulo { margin: 0 0 8px; font-size: 1rem; color: #23563e; line-height: 1.5; }

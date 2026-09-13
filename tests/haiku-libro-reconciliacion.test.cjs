@@ -19,6 +19,67 @@ function client(rows=[], payments=[]) {
 }
 const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
 
+test('compact date explanation is visual only and preserves the existing approval button',async()=>{
+ const p=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:160000,fecha_comprobante:'2026-09-07'});
+ const r=readyBook({titular:'Sebastian Martin',pagos:[p]});
+ const s={id:'existing',reserva_id:'r1',moneda:'CLP',monto:160000,medio_pago:'transferencia',fecha_pago:'2026-09-05'};
+ const comp=await compare([r],[stay(r)],[s]);const h=renderHarness();
+ const plan=h.Q.crearPlanIncorporacion([r],comp);const before=JSON.stringify(plan);let clicks=0;
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>clicks++,()=>{});
+ assert.match(h.texts(),/Fecha distinta · Libro 07\/09\/26 · Proyecto H 05\/09\/26/);
+ assert.match(h.texts(),/Requiere aprobación manual de la asociación y el pago/);
+ assert.doesNotMatch(h.texts(),/Hay otro pago con la misma reserva y monto/);
+ assert.equal(h.out.querySelectorAll('.haiku-pago-diferencia-compacta').length,1);
+ assert.equal(comp.pagosDetalle[0].estado,'revisar');assert.equal(JSON.stringify(plan),before);
+ await h.button('Aprobar este pago').events.click();assert.equal(clicks,1);
+ h.render({q:{...q,solo_pagos:true},comparacion:comp});assert.match(h.texts(),/Fecha distinta/);
+ for(const estado of ['en_sistema','nuevo_seguro']){
+  const c=await compare([r],[stay(r)],[s]);c.pagosDetalle[0].estado=estado;c.pagosDetalle[0].sistema=s;
+  h.render({q:{...q,solo_pagos:true},comparacion:c});assert.equal(h.out.querySelectorAll('.haiku-pago-diferencia-compacta').length,0);
+ }
+ const ambiguous=await compare([r],[stay(r)],[s,{...s,id:'another'}]);h.render({q:{...q,solo_pagos:true},comparacion:ambiguous});assert.equal(h.out.querySelectorAll('.haiku-pago-diferencia-compacta').length,0);
+ const tarjeta={...r,pagos:[{...p,medio_pago:'credito'}]};const cc=await compare([tarjeta],[stay(tarjeta)],[s]);h.render({q:{...q,solo_pagos:true},comparacion:cc});assert.equal(h.out.querySelectorAll('.haiku-pago-diferencia-compacta').length,0);
+});
+
+test('Sebastian real date discrepancy stays in review; controlled same-date transfer is omitted without a payload',async()=>{
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,monto:160000,medio_pago:'transferencia',fecha_comprobante:'2026-09-07',
+  texto_original:'7-9-2026 // Sebastian Martin // 0183394320 Transf. MARTIN DIAZ SEBASTIAN ALONSO // DO // pend: BOVE Y MANAGER // CAB1 // 1noche // $160,000'});
+ const r=book({titular:'Sebastian Martin',cabana:1,fecha_checkin:'2026-09-13',fecha_checkout:'2026-09-14',noches:1,pagos:[p]});
+ const s={id:'transfer-real',reserva_id:'r1',monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-05T16:00:00Z',
+  referencia_externa:'0183394320 Transf. MARTIN DIAZ SEBASTIAN ALONSO // DO// pend: BOVE Y MANAGER CAB1// 1noche $160.000',
+  observaciones:'Abono confirmado desde asistente HAIKU sobre reserva existente',datos_origen:{contexto:'asistente_pago_reserva_existente',indice_abono:1,manager_revisado:true,saldo_a_favor_generado:0}};
+ assert.equal((await compare([r],[stay(r)],[s])).pagosDetalle[0].estado,'revisar');
+ const c=await compare([r],[stay(r)],[{...s,fecha_pago:'2026-09-07T16:00:00Z'}]);
+ assert.equal(c.pagosDetalle[0].estado,'en_sistema');
+ const plan=Q.crearPlanIncorporacion([r],c);const item=plan.items.find(i=>i.pagoLibro?.monto===160000);
+ assert.equal(item.categoria,'omitidos');assert.notEqual(item.aprobable,true);assert.equal(item.payload,null);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+});
+
+test('weak transfers require the full financial signature and unique correspondence in both directions',async()=>{
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,monto:160000,medio_pago:'transferencia',fecha_comprobante:'2026-09-07',texto_original:''});
+ const r=book({pagos:[p]});const s={id:'p1',reserva_id:'r1',monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-07'};
+ assert.equal((await compare([r],[stay(r)],[s])).pagosDetalle[0].estado,'en_sistema');
+ for(const [ps,ss] of [[[p],[s,{...s,id:'p2'}]],[[p,{...p,origen:{hoja:'Sep26',celda:'Q99'}}],[s]],[[p,{...p,origen:{hoja:'Sep26',celda:'Q99'}}],[s,{...s,id:'p2'}]],
+  [[p],[{...s,fecha_pago:'2026-09-08'}]],[[p],[{...s,reserva_id:'otra'}]],[[p],[{...s,moneda:'USD'}]],[[p],[{...s,medio_pago:'webpay_credito'}]]]){
+  const rr={...r,pagos:ps};assert.ok((await compare([rr],[stay(rr)],ss)).pagosDetalle.every(x=>x.estado==='revisar'));
+ }
+});
+
+test('specific gloss or exact source can disambiguate 2 by 2; shared names and amounts cannot',async()=>{
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,monto:160000,medio_pago:'transferencia',fecha_comprobante:'2026-09-07',texto_original:'Sebastian Martin // 0183394320 Transf comprobante bancario'});
+ const p2={...p,texto_original:'Sebastian Martin // 0183394321 Transf comprobante bancario',origen:{hoja:'Sep26',celda:'R99'}};
+ const r=book({titular:'Sebastian Martin',pagos:[p,p2]});
+ const s={id:'p1',reserva_id:'r1',monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-07',referencia_externa:'otra referencia',observaciones:'0183394320 TRANSF. COMPROBANTE BANCARIO'};
+ const s2={...s,id:'p2',observaciones:'0183394321 TRANSF. COMPROBANTE BANCARIO'};
+ const c=await compare([r],[stay(r)],[s2,s]);assert.deepEqual(c.pagosDetalle.map(x=>x.sistema.id),['p1','p2']);
+ const src=await compare([r],[stay(r)],[{...s,observaciones:null,datos_origen:{origen_libro:p.origen}},{...s2,observaciones:null,datos_origen:{origen:p2.origen}}]);
+ assert.ok(src.pagosDetalle.every(x=>x.estado==='en_sistema'));
+ const same={...p,texto_original:'Sebastian Martin 160000'};const rr={...r,pagos:[same,{...same,origen:p2.origen}]};
+ const ambiguous=await compare([rr],[stay(rr)],[{...s,observaciones:same.texto_original},{...s2,observaciones:same.texto_original}]);
+ assert.ok(ambiguous.pagosDetalle.every(x=>x.estado==='revisar'));
+});
+
 test('payments-only intent requires a direct comparison request, not incidental payment text',()=>{
  for(const texto of ['Libro: compara pagos del mes de septiembre 2026 con Proyecto H','Libro: compara pagos de septiembre 2026 con Proyecto H','Libro: compara solo pagos de septiembre 2026 con Proyecto H','Libro: revisa los pagos de septiembre 2026 contra Proyecto H','Libro: pagos de septiembre 2026 vs Proyecto H']){
   const parsed=Q.interpretar(texto,['Sep26']);assert.equal(parsed.solo_pagos,true,texto);assert.equal(parsed.comparar,true);assert.equal(parsed.desde,q.desde);
