@@ -78,8 +78,11 @@
             throw new Error("Indica una fecha completa, un mes con año o un titular. Ejemplo: «Libro: CAB 6 el 05-09-26».");
         }
 
+        const soloPagos = /\b(?:proyecto h|sistema|supabase)\b/.test(t) &&
+            /^(?:(?:haku[, :]*)?\s*libro\s*:\s*)?(?:(?:compara|revisa)\s+(?:(?:solo|solamente|exclusivamente|los)\s+)*pagos?\b|pagos?\b.*\b(?:vs|contra|con)\b)/.test(t);
         return {
             texto, desde, hasta, hojas: seleccion, nombre,
+            solo_pagos: soloPagos,
             cabana: Number(t.match(/\b(?:cab|cabana)\s*(\d{1,2})\b/)?.[1]) || null,
             listar,
             versiones: /cambio|cambios|version|anterior/.test(t),
@@ -1306,6 +1309,14 @@
     }
 
     function respuestaComparacion(result) {
+        if (result.q.solo_pagos) {
+            const pagos = gruposVistaPagos(result.comparacion);
+            return ['LIBRO · PAGOS', 'Pagos del Libro ↔ Proyecto H', `${result.q.desde} al ${result.q.hasta}`,
+                ...pagos.contadores.map(([nombre, n]) => `${nombre}: ${n}`),
+                ...pagos.secciones.flatMap(([titulo, items]) => items.length ? [titulo, ...items.map(x =>
+                    `${x.reserva?.titular || 'Titular no determinado'} · ${money(x.pago?.monto)} · ${x.estado}${x.diferencias?.length ? ' · ' + x.diferencias.join('; ') : ''}`)] : []),
+                'Sólo lectura. Los pagos ya existentes no se volverán a incorporar.'].join('\n');
+        }
         const comp = result.comparacion;
         const meta = comp.meta || {};
         const grupos = comp.grupos || agruparComparacion(comp);
@@ -1665,6 +1676,64 @@
         contenedor.append(details);
     }
 
+    function gruposVistaPagos(comp) {
+        const items = comp.pagosDetalle || [];
+        const existentes = items.filter(x => x.estado === 'en_sistema' && x.sistema?.id);
+        const nuevos = items.filter(x => x.estado === 'nuevo_seguro');
+        const diferentes = items.filter(x => x.estado === 'diferente');
+        const sin = items.filter(x => x.estado === 'revisar' &&
+            (x.reserva?.pagos_sin_asociacion?.includes(x.pago) || comp.some(r => r.libro === x.reserva && r.estado !== 'asociada')));
+        const revisar = items.filter(x => !existentes.includes(x) && !nuevos.includes(x) && !diferentes.includes(x) && !sin.includes(x));
+        return {
+            contadores: [['Movimientos del Libro', items.length], ['Ya existen', existentes.length], ['Nuevos seguros', nuevos.length],
+                ['Requieren revisión', items.filter(x => x.estado === 'revisar').length], ['Con diferencias', diferentes.length], ['Sin asociación segura', sin.length]],
+            secciones: [['Pagos nuevos seguros', nuevos], ['Pagos que requieren revisión', revisar], ['Con diferencias', diferentes],
+                ['Sin asociación segura', sin], ['Ya existe en Proyecto H', existentes]]
+        };
+    }
+
+    function renderizarSoloPagos(out, result) {
+        const modelo = gruposVistaPagos(result.comparacion);
+        out.className = 'haiku-asistente-preview haiku-versiones';
+        out.replaceChildren();
+        const header = elemento('div', 'haiku-asistente-preview-cabecera');
+        const titulo = elemento('div');
+        titulo.append(elemento('span', '', 'LIBRO · PAGOS'), elemento('strong', '', 'Pagos del Libro ↔ Proyecto H'));
+        header.append(titulo, elemento('span', 'haiku-asistente-confianza', 'Sólo lectura')); out.append(header);
+        const fecha = result.q.desde;
+        out.append(elemento('p', 'haiku-versiones-meta', fecha ? `${nombresMes[Number(fecha.slice(5,7))-1]} ${fecha.slice(0,4)} · ${fecha} al ${result.q.hasta}` : 'Periodo de la consulta'));
+        const grid = elemento('div', 'haiku-versiones-totales');
+        modelo.contadores.forEach(([nombre, n]) => { const dato=elemento('div'); dato.append(elemento('strong', '', String(n)), elemento('span', '', nombre)); grid.append(dato); });
+        out.append(grid, elemento('p', 'haiku-versiones-aviso', 'Sin asociación segura es un subconjunto de los movimientos que requieren revisión.'));
+        for (const [titulo, items] of modelo.secciones) {
+            if (!items.length) continue;
+            const section = elemento('details', 'haiku-versiones-seccion');
+            section.open = titulo !== 'Ya existe en Proyecto H';
+            section.append(elemento('summary', '', `${titulo} (${items.length})`));
+            for (const x of items) {
+                const p=x.pago || {}, r=x.reserva || {};
+                const card=elemento('article', 'haiku-versiones-tarjeta' + (['revisar','diferente'].includes(x.estado) ? ' haiku-versiones--requiere_revision' : ''));
+                card.append(elemento('strong', 'haiku-versiones-titular', `${r.titular || 'Titular no determinado'} · CAB ${r.cabana ?? 'sin dato'}`));
+                const datos=elemento('div', 'haiku-asistente-preview-grid');
+                for (const [etiqueta, valor] of [['Monto',money(p.monto)], ['Medio',p.medio_pago?.replaceAll('_',' ')], ['Check-in',r.fecha_checkin],
+                    ['Fecha comprobante',p.fecha_comprobante], ['Fecha del bloque',p.fecha_bloque], ['Concepto / tipo',p.concepto || p.tipo_movimiento],
+                    ['Folio',p.folio], ['Autorización',p.bovtar], ['CodAut',p.codigo_autorizacion], ['Origen XLSX',p.origen ? source(p.origen) : null]]) {
+                    if (valor !== null && valor !== undefined && valor !== '') agregarDato(datos, etiqueta, String(valor));
+                }
+                card.append(datos, elemento('span','haiku-versiones-estado', x.estado==='en_sistema' && x.sistema?.id ? 'Ya existe / omitido' :
+                    x.estado==='nuevo_seguro' ? 'Nuevo seguro' : x.estado==='diferente' ? 'Con diferencias' : 'Requiere revisión'));
+                for (const d of x.diferencias || []) card.append(elemento('p','haiku-versiones-meta',d));
+                if (x.estado==='diferente' && x.sistema) card.append(elemento('p','haiku-versiones-meta',
+                    `Proyecto H: ${money(x.sistema.monto)} · ${x.sistema.medio_pago || 'Medio sin dato'} · ${x.sistema.fecha_pago || 'Fecha sin dato'}`));
+                if (x.estado==='en_sistema' && x.sistema?.id) card.append(elemento('p','haiku-versiones-aviso','No se volverá a incorporar. No requiere aprobación.'));
+                if (titulo==='Sin asociación segura') card.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
+                section.append(card);
+            }
+            out.append(section);
+        }
+        out.append(elemento('p', 'haiku-versiones-aviso', 'Preparar incorporación abre el flujo seguro existente. Allí se muestran también las dependencias de reservas necesarias para los pagos.'));
+    }
+
     function renderizarComparacion(out, result, ui = {}) {
         const comp = result.comparacion;
         const meta = comp.meta || {};
@@ -1676,6 +1745,8 @@
         const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
         const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
 
+        if (result.q.solo_pagos) renderizarSoloPagos(out, result);
+        else {
         out.className = "haiku-asistente-preview";
         out.replaceChildren();
 
@@ -1758,9 +1829,10 @@
             x.libro.titular + " · " + source(x.libro.coordenadas_origen),
             ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
         ])));
+        }
         const decisiones = ui.decisiones || new Map();
         const aprobados = ui.aprobados || new Set();
-        if (ambiguas.length) {
+        if (ambiguas.length && !result.q.solo_pagos) {
             const preguntas = elemento("div", "haiku-asistente-preview-lista" + (ui.preguntasAbiertas ? " haiku-reconciliacion-abierto" : ""));
             preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
             ambiguas.forEach(g => {

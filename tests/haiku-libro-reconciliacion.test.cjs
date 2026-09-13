@@ -19,6 +19,46 @@ function client(rows=[], payments=[]) {
 }
 const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
 
+test('payments-only intent requires a direct comparison request, not incidental payment text',()=>{
+ for(const texto of ['Libro: compara pagos del mes de septiembre 2026 con Proyecto H','Libro: compara pagos de septiembre 2026 con Proyecto H','Libro: compara solo pagos de septiembre 2026 con Proyecto H','Libro: revisa los pagos de septiembre 2026 contra Proyecto H','Libro: pagos de septiembre 2026 vs Proyecto H']){
+  const parsed=Q.interpretar(texto,['Sep26']);assert.equal(parsed.solo_pagos,true,texto);assert.equal(parsed.comparar,true);assert.equal(parsed.desde,q.desde);
+ }
+ for(const texto of ['Libro: compara las reservas de septiembre 2026 con Proyecto H','Libro: reserva Juan Pérez, tiene un pago pendiente','Libro: compara reservas de septiembre 2026 con Proyecto H y revisa pagos']) assert.equal(Q.interpretar(texto,['Sep26']).solo_pagos,false,texto);
+});
+
+test('payment-only presentation uses identical comparison states and the existing preparation without writes',async()=>{
+ const payment=(id,extra={})=>({monto:10000,moneda:'CLP',medio_pago:'credito',tipo_movimiento:'alojamiento',codigo_autorizacion:id,fecha_comprobante:'2026-09-17',fecha_bloque:'2026-09-17',origen:{hoja:'Sep26',celda:id},...extra});
+ const pagos=[payment('EXISTE'),payment('NUEVO'),payment(null,{medio_pago:'efectivo'}),payment('DIFIERE')];
+ const sin=payment('SIN',{advertencias:['Sin asociación inequívoca']});
+ const r=book({pagos,pagos_sin_asociacion:[sin],servicios:[],hoja:'Sep26'});
+ const existentes=['EXISTE','DIFIERE'].map(c=>({id:c,reserva_id:'r1',codigo_autorizacion:c,monto:c==='EXISTE'?10000:20000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-17'}));
+ const db=client([stay(r)],existentes),h=renderHarness(null,db);
+ const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Sep26'],consultarHoja:async()=>({reservas:[r]})};
+ h.context.HAIKU_LIBRO_RESERVA_V1=libro;
+ const general=await h.Q.consultar('Libro: compara las reservas de septiembre 2026 con Proyecto H',libro,db);
+ const only=await h.Q.consultar('Libro: compara pagos de septiembre 2026 con Proyecto H',libro,db);
+ assert.deepEqual(only.comparacion.pagosDetalle,general.comparacion.pagosDetalle);
+ const counts=result=>Object.fromEntries(['en_sistema','nuevo_seguro','revisar','diferente'].map(s=>[s,result.comparacion.pagosDetalle.filter(p=>p.estado===s).length]));
+ assert.deepEqual(counts(only),{en_sistema:1,nuevo_seguro:1,revisar:2,diferente:1});
+ const original=JSON.stringify(only.comparacion.pagosDetalle);
+ h.render(only);
+ assert.match(h.texts(),/LIBRO · PAGOS/);assert.match(h.texts(),/Pagos nuevos seguros \(1\)/);assert.match(h.texts(),/Con diferencias \(1\)/);assert.match(h.texts(),/monto\/moneda diferente/);
+ assert.match(h.texts(),/Sin asociación segura \(1\)/);
+ assert.doesNotMatch(h.texts(),/Reservas que faltan|Reservas con diferencias|Preguntas necesarias|Servicios que requieren|Cancelaciones confirmadas|Bloqueos|Grupos \/ multicabaña/);
+ const existing=h.out.querySelectorAll('details').find(d=>d.children[0]?.textContent==='Ya existe en Proyecto H (1)');
+ assert.equal(existing.open,false);assert.equal(existing.querySelectorAll('button').length,0);
+ assert.equal(JSON.stringify(only.comparacion.pagosDetalle),original);
+ assert.doesNotMatch(h.Q.respuesta(only),/RESERVAS QUE FALTAN/);
+ assert.match(h.Q.respuesta(general),/COMPARACIÓN LIBRO/);
+ const plainPlan=await h.Q.prepararIncorporacion(general,new Map(),new Set(),db);
+ const onlyPlan=await h.Q.prepararIncorporacion(only,new Map(),new Set(),db);
+ assert.deepEqual(onlyPlan,plainPlan);
+ assert.ok(onlyPlan.items.filter(i=>i.pagoLibro?.codigo_autorizacion==='EXISTE').every(i=>!i.aprobable));
+ await h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/Confirmar incorporación/);assert.ok(!db.calls.some(c=>c.startsWith('haiku_')));
+ h.render(general);assert.match(h.texts(),/Reservas que faltan/);
+});
+
 async function prepararMacarena(approved=new Set(), payments=[], extraStays=[]) {
  const rs=global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(require('./fixtures/libro-pagos-sep26.cjs')(),'Sep26').reservas;
  rs.forEach(r=>{r.texto_original='';});
