@@ -103,7 +103,21 @@
             return true;
         }
 
-        if (cabana.checkinRealizado === true) {
+        const estadoCanonico = String(
+            window.HAIKU_CALENDARIO_ESTADOS_V1?.estado?.(
+                cabana.reservaId || "",
+                cabana.estadiaId || ""
+            ) || ""
+        ).toLowerCase();
+
+        const continuaHospedada =
+            estado === "continua" &&
+            estadoCanonico === "hospedada";
+
+        if (
+            cabana.checkinRealizado === true ||
+            continuaHospedada
+        ) {
             fila.classList.add("cabana-checkin");
             return true;
         }
