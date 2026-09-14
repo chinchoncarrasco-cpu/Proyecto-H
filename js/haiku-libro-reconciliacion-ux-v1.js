@@ -175,7 +175,7 @@
     function actualizarAyudaDecision(label, select) {
         const opciones = OPCIONES_META.get(select) || [];
         const meta = opciones.find(o => o.valor === select.value) || opciones[select.selectedIndex];
-        let ayuda = label.querySelector(":scope > .haiku-reconciliacion-ayuda-decision");
+        let ayuda = label.querySelector(".haiku-reconciliacion-ayuda-decision");
         if (!ayuda) {
             ayuda = document.createElement("div");
             ayuda.className = "haiku-reconciliacion-ayuda-decision";
@@ -259,6 +259,57 @@
         });
     }
 
+    function compactarCaso(label, top) {
+        if (!label.closest(".haku-comparacion-compacta")) return;
+        label.querySelectorAll("table").forEach(tabla => {
+            const filas = Array.from(tabla.querySelectorAll("tr")).filter(f => f.querySelector("td"));
+            const coinciden = filas.filter(f => f.lastElementChild.textContent === "✅ coincide");
+            const diferentes = filas.filter(f => f.lastElementChild.textContent === "⚠️ difiere");
+            const sinDato = filas.length - coinciden.length - diferentes.length;
+            const resumen = document.createElement("p");
+            resumen.className = "haku-pregunta-conteo";
+            resumen.textContent = [`${coinciden.length} campos coinciden`, `${diferentes.length} campos difieren`,
+                ...(sinDato ? [`${sinDato} campos sin dato`] : [])].join(" · ");
+            const detalle = document.createElement("details");
+            detalle.className = "haku-pregunta-campos";
+            const titulo = document.createElement("summary");
+            titulo.textContent = `Ver comparación de datos (${filas.length})`;
+            detalle.append(titulo);
+            const wrapper = tabla.parentElement;
+            wrapper.before(resumen, detalle);
+            if (diferentes.length) {
+                const aviso = document.createElement("p");
+                aviso.className = "haku-pregunta-diferencias";
+                aviso.textContent = "Revisar: " + diferentes.map(f => f.firstElementChild.textContent).join(" · ");
+                detalle.before(aviso);
+            }
+            wrapper.style.overflowX = "visible";
+            detalle.append(wrapper);
+            filas.forEach(f => {
+                f.classList.toggle("haku-campo-diferente", diferentes.includes(f));
+                Array.from(f.children).forEach((celda, i) => celda.setAttribute("data-etiqueta", ["Campo", "Libro", "Proyecto H", "Resultado"][i]));
+            });
+        });
+        const caso = document.createElement("details");
+        caso.className = "haku-pregunta-caso";
+        const summary = document.createElement("summary");
+        const titulo = top.querySelector(".haiku-reconciliacion-decision-titulo");
+        const partes = titulo.textContent.split(" · ");
+        if (partes.length > 2) {
+            titulo.textContent = partes.splice(0, 2).join(" · ");
+            const fechas = document.createElement("span");
+            fechas.className = "haku-pregunta-fechas";
+            fechas.textContent = partes.join(" · ");
+            titulo.append(fechas);
+        }
+        summary.append(top);
+        const contenido = document.createElement("div");
+        contenido.className = "haku-pregunta-contenido";
+        contenido.append(...Array.from(label.childNodes));
+        caso.append(summary, contenido);
+        label.append(caso);
+    }
+
     function mejorarLabel(label) {
         if (!label || label.dataset.haikuReconciliacionUx === "1") return;
         const select = label.querySelector("select");
@@ -304,6 +355,7 @@
         actualizarAyudaDecision(label, select);
         restaurarDecision(label, select);
         actualizarAyudaDecision(label, select);
+        compactarCaso(label, top);
     }
 
     function actualizarMeta(bloque) {

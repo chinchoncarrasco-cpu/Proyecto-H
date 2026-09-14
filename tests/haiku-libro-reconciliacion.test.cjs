@@ -339,7 +339,7 @@ test('visual report retains cards, confines coordinates to technical details and
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
  context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,{q,comparacion:c});
  const all=e=>[e,...e.children.flatMap(all)],nodes=all(out);
- assert.equal(out.className,'haiku-asistente-preview');assert.ok(nodes.some(e=>e.className==='haiku-asistente-preview-grid'));
+ assert.equal(out.className,'haiku-asistente-preview haku-comparacion-compacta');assert.ok(nodes.some(e=>e.className==='haiku-asistente-preview-grid'));
  const technical=nodes.find(e=>e.tag==='details'&&e.children[0].textContent.startsWith('Detalles técnicos'));
  assert.ok(all(technical).some(e=>e.textContent.includes('Sep26!')));
  const normal=e=>e===technical?[]:[e.textContent,...e.children.flatMap(normal)];
@@ -510,6 +510,35 @@ test('eleven clear missing reservations remain unchanged alongside all preview d
  assert.equal(JSON.stringify(c),before);
  const technical=h.out.querySelectorAll('details').find(e=>e.children[0].textContent.startsWith('Detalles técnicos XLSX'));
  assert.ok(technical);assert.ok(!technical.open);
+});
+
+test('compact comparison preserves data and actions while ordering existing sections by priority',async()=>{
+ const a=book(),c=await compare([a]),h=renderHarness();
+ // Fixture presentation categories reuse the same renderer; no backend actions.
+ c.grupos.push({...c.grupos[0],estado:'ambigua',categoria:'revision',pregunta:'Revisar identidad'});
+ c.grupos.push({...c.grupos[0],estado:'asociada',diferencias:['Fecha distinta']});
+ c.pagosDetalle=[{estado:'nuevo_seguro',reserva:a,pago:pay()},{estado:'revisar',reserva:a,pago:pay()}];
+ c.serviciosDetalle=[{estado:'revisar',reserva:a,servicio:{concepto:'Servicio',texto_original:'Revisar'}}];
+ const section=(out,title)=>{const d=h.context.document.createElement('details'),s=h.context.document.createElement('summary');s.textContent=title;d.append(s);out.append(d);};
+ h.context.HAIKU_LIBRO_CANCELACIONES_V1={adjuntar(){},adjuntarRevision:o=>section(o,'Cancelaciones por verificar (1)'),adjuntarResueltas:o=>section(o,'Cancelaciones · Ya coincide (1)')};
+ h.context.HAIKU_LIBRO_BLOQUEOS_V1={renderizar:o=>{section(o,'Bloqueos del Libro (1)');section(o,'Bloqueos sólo en Proyecto H (1)');}};
+ const before=JSON.stringify(c);h.render({q,comparacion:c});
+ assert.equal(JSON.stringify(c),before);
+ const titles=h.out.querySelectorAll('summary').map(s=>s.textContent.replace(/ \(\d+\)$/,''));
+ assert.deepEqual(titles,['Reservas que faltan','Posibles faltantes / modificaciones','Cancelaciones por verificar','Bloqueos del Libro','Bloqueos sólo en Proyecto H','Reservas con diferencias','Pagos nuevos seguros en esta consulta','Pagos que requieren revisión','Servicios que requieren revisión','Cancelaciones · Ya coincide','Detalles técnicos XLSX']);
+ assert.equal(h.out.querySelectorAll('.haiku-asistente-preview-dato').length,6);
+ const filas=h.out.querySelectorAll('.haku-comparacion-fila');
+ assert.ok(filas.length>=6);
+ assert.ok(filas.some(f=>f.querySelector('.haku-fila-titulo')?.textContent==='CAB 1 · Marco Iturrieta'));
+ assert.ok(filas.some(f=>f.querySelector('.haku-fila-detalle')?.textContent==='Fecha distinta'));
+ const servicio=filas.find(f=>f.querySelector('.haku-fila-datos')?.textContent==='Servicio');
+ assert.equal(servicio.querySelector('.haku-fila-titulo').textContent,a.titular);
+ assert.equal(servicio.querySelector('.haku-fila-detalle').textContent,'Revisar');
+ assert.ok(h.button('Preparar incorporación'));assert.ok(h.button('Revalidar contra Proyecto H'));
+ assert.ok(h.out.querySelectorAll('details').every(d=>!d.open));
+ h.render({q:{...q,solo_pagos:true},comparacion:c});
+ assert.ok(!h.out.className.includes('haku-comparacion-compacta'));
+ assert.equal(JSON.stringify(c),before);
 });
 
 test('partial multicabin offers missing stay addition while retaining safe payments',async()=>{

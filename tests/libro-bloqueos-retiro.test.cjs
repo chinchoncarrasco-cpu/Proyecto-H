@@ -60,7 +60,7 @@ test('backend conflict after frontend read is surfaced without retries, and tamp
  await assert.rejects(x.api.confirmar(p),/cambió/);assert.equal(x.row.estado,'activo');await assert.rejects(x.api.confirmar(p),/Propuesta no válida/);assert.equal(x.writes().length,1);
 });
 test('SQL checks expected version and identity after locking, without replacing the calendar function',()=>{
- const sql=fs.readFileSync('supabase/migrations/20260914155231_liberar_bloqueo_libro_seguro.sql','utf8');
+ const sql=fs.readFileSync('supabase/migrations/20260914161145_liberar_bloqueo_libro_seguro.sql','utf8');
  assert.ok(sql.indexOf('for update of b, c')<sql.indexOf('v_bloqueo.actualizado_en is distinct from p_actualizado_en'));
  assert.ok(sql.indexOf('v_bloqueo.actualizado_en is distinct from p_actualizado_en')<sql.indexOf('update public.bloqueos_cabana'));
  assert.doesNotMatch(sql,/create(?: or replace)? function public.haiku_liberar_bloqueo_calendario/i);assert.doesNotMatch(sql,/delete from/i);

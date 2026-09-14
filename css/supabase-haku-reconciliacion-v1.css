@@ -1271,3 +1271,224 @@
     .haiku-asistente-panel :is(.haiku-asistente-adjuntar,.haiku-asistente-enviar,.haiku-asistente-cerrar),
     .haiku-asistente-panel .haiku-cancelacion-card .haiku-cancelacion-boton { min-height:40px; }
 }
+
+/* Comparación Libro → Proyecto H: bandas continuas dentro del panel existente.
+   La clase sólo se aplica al informe general, no a consultas ni a sólo-pagos. */
+.haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-comparacion-compacta) {
+    width: 100%; max-width: none; padding: 0; border-radius: 4px;
+    box-sizing: border-box; background: #fff;
+}
+.haiku-asistente-panel .haku-comparacion-compacta {
+    width: 100%; max-width: none; min-width: 0; padding: 0;
+    border: 0; border-radius: 0; box-shadow: none; box-sizing: border-box; white-space: normal;
+    overflow-wrap: anywhere;
+}
+/* El render sustituye la burbuja por esta respuesta. Compensar sólo aquí
+   los 11px del historial; los demás mensajes conservan su ancho y padding. */
+.haiku-asistente-panel .haiku-asistente-mensajes > .haku-comparacion-compacta {
+    width: calc(100% + 18px); margin-inline: -9px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-cabecera {
+    margin: 0; padding: 9px 10px; flex-wrap: wrap;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-resumen {
+    margin: 0; padding: 9px 10px; border: 0; border-block: 1px solid var(--rec-borde);
+    border-radius: 0; background: #eaf3ee; font-size: .75rem; font-weight: 400;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid > .haiku-asistente-preview-dato {
+    min-width: 0; margin: 0; padding: 8px 10px; border: 0;
+    border-right: 1px solid var(--rec-borde); border-bottom: 1px solid var(--rec-borde);
+    border-radius: 0; background: #f8fbf9;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .haiku-asistente-preview-grid > :nth-child(3n) { border-right: 0; }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-dato > span { font-size: .62rem; }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-dato > strong { font-size: 1rem; line-height: 1.3; }
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haiku-bloqueos-grupo,.haiku-cancelaciones-grupo) {
+    margin: 0; padding: 0; width: 100%; min-width: 0;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon {
+    --franja-fondo: #e2efe8; --franja-acento: #428165;
+    width: 100%; min-width: 0; margin: 5px 0 0 !important; padding: 0 !important;
+    border: 0 !important; border-bottom: 1px solid var(--rec-borde) !important;
+    border-radius: 0; box-shadow: none; box-sizing: border-box;
+}
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haku-franja--revision,.haiku-comparacion-acordeon--revision) {
+    --franja-fondo: #fbefd9; --franja-acento: #bd8730;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haku-franja--faltante {
+    --franja-fondo: #f8e4e4; --franja-acento: #b96969;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haku-franja--neutro {
+    --franja-fondo: #f0f3f2; --franja-acento: #92a29a;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary {
+    min-height: 34px; padding: 5px 38px 5px 44px; line-height: 1.45;
+    border-left: 3px solid var(--franja-acento); background: var(--franja-fondo);
+    color: #293f35 !important; font-family: system-ui, sans-serif; font-size: .84rem !important; font-weight: 600 !important;
+    cursor: pointer; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary:focus-visible {
+    outline: 2px solid var(--rec-verde); outline-offset: -3px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > ul {
+    margin: 0 !important; padding: 0 !important; list-style: none; font-size: .73rem !important;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > ul > li {
+    margin: 0; padding: 8px 10px; border-top: 1px solid #e6ece8; line-height: 1.45;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card {
+    width: 100%; max-width: none; min-width: 0; margin: 0; padding: 9px 10px;
+    border: 0; border-top: 1px solid var(--rec-borde); border-radius: 0;
+    box-shadow: none; box-sizing: border-box;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > .haiku-cancelacion-card {
+    width: 100%; margin: 0; padding: 9px 10px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > :is(.haiku-asistente-preview-lista,.haiku-asistente-preview-pie) {
+    margin: 0; padding: 9px 10px; border-radius: 0; box-sizing: border-box;
+}
+.haiku-asistente-panel .haku-comparacion-compacta > .libro-reserva-boton {
+    margin: 8px 4px; max-width: calc(100% - 8px); white-space: normal;
+}
+.haiku-asistente-panel .haku-comparacion-compacta :is(button,select) { max-width: 100%; }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > ul > .haku-comparacion-fila,
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon .haiku-cancelacion-card {
+    position: relative; padding: 9px 10px 9px 27px; line-height: 1.45;
+    border-top-color: #e6ece8;
+}
+.haku-comparacion-compacta :is(.haku-comparacion-fila,.haiku-cancelacion-card)::before {
+    content: ""; position: absolute; left: 11px; top: 15px;
+    width: 6px; height: 6px; border-radius: 50%; background: var(--franja-acento);
+}
+.haku-comparacion-compacta .haku-comparacion-fila > :is(strong,span) { display: block; }
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haku-fila-titulo,.haiku-cancelacion-nombre) {
+    font-size: .78rem; font-weight: 700; color: #253f33; line-height: 1.45; margin: 0;
+}
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haku-fila-datos,.haiku-cancelacion-chip,.haiku-cancelacion-cab) {
+    font-size: .73rem; color: #405c4e;
+}
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haku-fila-detalle,.haiku-cancelacion-origen,.haiku-cancelacion-nota,.haiku-cancelacion-secundario) {
+    font-size: .69rem; color: #5b6c63; margin: 2px 0 0;
+}
+/* Listas operativas: mantener todos los nodos, controles y feedback existentes. */
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card {
+    display: flex; flex-direction: column; align-items: stretch; font-size: .73rem;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card > .haiku-cancelacion-badge {
+    float: none; align-self: flex-start; margin: 3px 0 2px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card > .haiku-cancelacion-nombre {
+    order: -1; text-align: left;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-top {
+    margin: 3px 0 2px; gap: 6px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-chips {
+    margin: 2px 0; gap: 4px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelacion-card .haiku-cancelacion-boton {
+    display: flex; width: auto; margin: 7px 0 0 auto; min-height: 34px; font-size: .72rem;
+}
+
+/* Iconos decorativos de línea: el texto accesible y el chevron siguen intactos. */
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary::before {
+    content: ""; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    width: 21px; height: 21px; background: currentColor; pointer-events: none;
+    mask: var(--haku-icono, url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M14%202H6v20h12V6zM14%202v5h5M9%2012h6M9%2016h6%22%2F%3E%3C%2Fsvg%3E")) center / contain no-repeat;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--alerta { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%203%2010%2018H2zM12%209v5M12%2017v1%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--intercambio { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%207h18m-5-5%205%205-5%205M21%2017H3m5-5-5%205%205%205%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--pago { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2220%22%20height%3D%2216%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M2%209h20M6%2015h4%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--servicio { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2010a7%207%200%200%201%2014%200v6l2%202H3l2-2zM9%2021h6%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--grupo { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%229%22%20cy%3D%227%22%20r%3D%224%22%2F%3E%3Cpath%20d%3D%22M2%2021v-3a7%207%200%200%201%2014%200v3M17%203a4%204%200%200%201%200%208M19%2014a5%205%200%200%201%203%204v3%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-bloqueos-grupo > .haiku-comparacion-acordeon { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%205v16M12%205C8%202%204%203%202%204v16c4-2%207-1%2010%201%203-2%206-3%2010-1V4c-2-1-6-2-10%201z%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-bloqueos-grupo > .haiku-comparacion-acordeon--revision { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%222%22%20y%3D%224%22%20width%3D%2220%22%20height%3D%2216%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M2%209h20M6%2015h4%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta :is(.haku-icono--calendario,.haiku-cancelaciones-grupo > .haiku-comparacion-acordeon) { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Crect%20x%3D%223%22%20y%3D%225%22%20width%3D%2218%22%20height%3D%2216%22%20rx%3D%222%22%2F%3E%3Cpath%20d%3D%22M7%202v6M17%202v6M3%2011h18m-14%205%203%203%205-5%22%2F%3E%3C%2Fsvg%3E"); }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-cancelaciones-grupo > .haiku-comparacion-acordeon--revision { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m12%203%2010%2018H2zM12%209v5M12%2017v1%22%2F%3E%3C%2Fsvg%3E"); }
+
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon > summary::after {
+    content: ""; width: 8px; height: 8px; right: 16px;
+    border: solid currentColor; border-width: 0 1.8px 1.8px 0;
+    transform: translateY(-70%) rotate(45deg);
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon[open] > summary::after { transform: translateY(-20%) rotate(225deg); }
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-lista:has(> label) > strong {
+    position: relative; padding-left: 34px;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-lista:has(> label) > strong::before {
+    content: ""; position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+    width: 21px; height: 21px; background: currentColor; mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M4%203h16v13H9l-5%205z%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
+}
+/* Preguntas: mismos controles, comparación apilada dentro de cada caso. */
+.haiku-asistente-panel .haku-comparacion-compacta .haiku-asistente-preview-lista.haiku-reconciliacion-abierto > label {
+    margin: 5px 0 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; gap: 0; min-width: 0;
+}
+.haku-comparacion-compacta .haku-pregunta-caso { min-width: 0; border-bottom: 1px solid #dce6df; }
+.haku-comparacion-compacta .haku-pregunta-caso > summary { position: relative; list-style: none; cursor: pointer; padding: 8px 30px 8px 10px; background: #eaf3ee; }
+.haku-comparacion-compacta .haku-pregunta-caso > summary::-webkit-details-marker { display: none; }
+.haku-comparacion-compacta .haku-pregunta-caso > summary::after {
+    content: ""; position: absolute; right: 12px; top: 50%; width: 7px; height: 7px;
+    border: solid #617369; border-width: 0 1.5px 1.5px 0; transform: translateY(-70%) rotate(45deg);
+}
+.haku-comparacion-compacta .haku-pregunta-caso[open] > summary::after { transform: translateY(-20%) rotate(225deg); }
+.haku-comparacion-compacta .haku-pregunta-caso .haiku-reconciliacion-decision-top { display: flex; gap: 6px; }
+.haku-comparacion-compacta .haku-pregunta-caso .haiku-reconciliacion-decision-titulo { font-size: .78rem; font-weight: 700; }
+.haku-comparacion-compacta .haku-pregunta-fechas { display: block; font-size: .73rem; font-weight: 400; margin-top: 2px; }
+.haku-comparacion-compacta .haku-pregunta-contenido { padding: 8px 10px; min-width: 0; overflow-wrap: anywhere; }
+.haku-comparacion-compacta :is(.haku-pregunta-conteo,.haku-pregunta-diferencias) { font-size: .7rem; margin: 6px 0; }
+.haku-comparacion-compacta .haku-pregunta-diferencias { padding: 5px 7px; background: #fbefd9; color: #79551f; }
+.haku-comparacion-compacta .haku-pregunta-campos { margin: 7px 0; border-block: 1px solid #dce6df; }
+.haku-comparacion-compacta .haku-pregunta-campos > summary { padding: 7px 0; font-size: .73rem; cursor: pointer; }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-campos :is(table,tbody,tr,td) {
+    display: block; width: auto; min-width: 0; max-width: 100%; box-sizing: border-box; white-space: normal;
+}
+.haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-campos tr:has(th) { display: none; }
+.haku-comparacion-compacta .haku-pregunta-campos tr { padding: 6px 0; border-bottom: 1px solid #dce6df; }
+.haku-comparacion-compacta .haku-pregunta-campos td { padding: 3px 6px; border: 0; font-size: .7rem; overflow-wrap: anywhere; }
+.haku-comparacion-compacta .haku-pregunta-campos td:first-child { font-weight: 700; font-size: .73rem; }
+.haku-comparacion-compacta .haku-pregunta-campos td:not(:first-child)::before { content: attr(data-etiqueta) " · "; color: #617369; }
+.haku-comparacion-compacta .haku-campo-diferente { background: #fcf1df; }
+.haiku-asistente-panel .haku-comparacion-compacta .haku-pregunta-contenido :is(.haiku-reconciliacion-alerta,.haiku-reconciliacion-ayuda-decision) {
+    padding: 6px 8px; border-radius: 2px; box-shadow: none; margin: 6px 0; font-size: .69rem;
+}
+.haku-comparacion-compacta .haku-pregunta-contenido select { min-width: 0; max-width: 100%; }
+/* Confirmación: usa la misma base de cabecera, métricas, franjas e iconos. */
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-indicador { display: flex; flex-direction: column; text-align: left; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-indicador > span { order: -1; white-space: normal; overflow: visible; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-seccion > summary { display: block; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-seccion > summary > strong {
+    display: inline; width: auto; height: auto; margin-left: 5px; border-radius: 0; background: none; color: inherit; font: inherit;
+}
+.haku-incorporacion-compacta .haiku-incorporacion-seccion > summary > strong::before { content: "("; }
+.haku-incorporacion-compacta .haiku-incorporacion-seccion > summary > strong::after { content: ")"; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-seccion > .haiku-incorporacion-lista {
+    display: block; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-item {
+    margin: 0; padding: 9px 10px; border: 0; border-top: 1px solid #e6ece8; border-radius: 0; box-shadow: none;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-identidad strong { font-size: .78rem; line-height: 1.45; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-identidad span { font-size: .73rem; }
+.haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-estadia,.haiku-incorporacion-meta-item,.haiku-incorporacion-contacto) {
+    grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; margin: 6px 0; padding: 0; border: 0; border-radius: 0;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-propuesta,.haiku-incorporacion-avisos) { font-size: .69rem; line-height: 1.45; margin-block: 6px; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-movimiento { margin: 0; padding: 7px 0; border: 0; border-bottom: 1px solid #e6ece8; border-radius: 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-atajos,.haiku-incorporacion-acciones) {
+    display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 9px 10px; border-radius: 0;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-continuar { margin: 0; padding: 8px 10px; border-radius: 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-acciones > button { flex: 1 1 120px; white-space: normal; }
+.haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-cabecera,.haiku-incorporacion-item-cabecera) { flex-wrap: wrap; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios { list-style: none; padding: 0; margin: 6px 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios > li { border-top: 1px solid #e6ece8; padding: 6px 0; font-size: .73rem; overflow-wrap: anywhere; }
+
+.haiku-asistente-panel .haku-comparacion-compacta .haku-icono--nuevo { --haku-icono: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.7%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%229%22%2F%3E%3Cpath%20d%3D%22M12%207v10M7%2012h10%22%2F%3E%3C%2Fsvg%3E"); }
+.haku-incorporacion-compacta .haku-cambio-campo { display: block; margin-bottom: 4px; }
+.haku-incorporacion-compacta :is(.haku-cambio-actual,.haku-cambio-libro) { display: block; overflow-wrap: anywhere; }
+.haku-incorporacion-compacta .haku-cambio-actual::before { content: "Proyecto H: "; color: #617369; }
+.haku-incorporacion-compacta .haku-cambio-libro::before { content: "Libro: "; color: #617369; }
+.haku-incorporacion-compacta .haku-cambio-flecha { display: block; color: #617369; line-height: 1; }

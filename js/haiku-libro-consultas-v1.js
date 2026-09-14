@@ -1678,20 +1678,56 @@
         [...new Set(result.advertencias || [])].forEach(w => linea(out, w));
     }
 
-    function agregarLista(contenedor, titulo, items, { alerta = false, vacio = "Sin elementos." } = {}) {
-        const bloque = elemento("div", `haiku-asistente-preview-lista${alerta ? " haiku-asistente-preview-lista--alerta" : ""}`);
-        bloque.append(elemento("strong", "", titulo));
+    // Sólo divide las descripciones ya calculadas para darles jerarquía visual.
+    function filaComparacion(texto, formato) {
+        if (!formato) return elemento("li", "", texto);
+        const fila = elemento("li", "haku-comparacion-fila");
+        const partes = String(texto).split(" · ");
+        const titulo = partes.splice(0, formato === "reserva" ? 2 : 1).join(" · ");
+        let datos, detalle;
+        if (formato === "reserva") {
+            const resto = partes.join(" · ").split(" — ");
+            datos = resto.shift(); detalle = resto.join(" — ");
+        } else if (formato === "servicio") {
+            datos = partes.shift(); detalle = partes.join(" · ");
+        } else {
+            datos = partes.splice(0, 3).join(" · "); detalle = partes.join(" · ");
+        }
+        fila.append(elemento("strong", "haku-fila-titulo", titulo));
+        if (datos) fila.append(elemento("span", "haku-fila-datos", datos));
+        if (detalle) fila.append(elemento("span", "haku-fila-detalle", detalle));
+        return fila;
+    }
+
+    function claseIconoSeccion(titulo) {
+        const iconos = {
+            "Reservas que faltan": "alerta", "Posibles faltantes / modificaciones": "archivo",
+            "Reservas con diferencias": "intercambio", "Pagos nuevos seguros en esta consulta": "pago",
+            "Pagos que requieren revisión": "pago", "Servicios que requieren revisión": "servicio",
+            "Grupos / multicabaña": "grupo", "Detalles técnicos XLSX": "archivo"
+        };
+        return ` haku-icono--${iconos[titulo.replace(/ \(\d+\)$/, "")] || "archivo"}`;
+    }
+
+    function agregarLista(contenedor, titulo, items, { alerta = false, vacio = "Sin elementos.", tono = "", formato = "" } = {}) {
+        const bloque = tono
+            ? elemento("details", `haiku-comparacion-acordeon haku-franja--${tono}`)
+            : elemento("div", `haiku-asistente-preview-lista${alerta ? " haiku-asistente-preview-lista--alerta" : ""}`);
+        bloque.append(elemento(tono ? "summary" : "strong", "", titulo));
+        if (tono) bloque.className += claseIconoSeccion(titulo);
         const ul = document.createElement("ul");
         if (!items.length) ul.append(elemento("li", "", vacio));
-        else items.forEach(item => ul.append(elemento("li", "", item)));
+        else items.forEach(item => ul.append(filaComparacion(item, formato)));
         bloque.append(ul);
         contenedor.append(bloque);
         return bloque;
     }
 
-    function agregarDetalles(contenedor, titulo, items) {
+    function agregarDetalles(contenedor, titulo, items, tono = "", formato = "") {
         if (!items.length) return;
         const details = document.createElement("details");
+        if (tono) details.className = `haiku-comparacion-acordeon haku-franja--${tono}`;
+        if (tono) details.className += claseIconoSeccion(titulo);
         details.style.marginTop = "9px";
         details.style.paddingTop = "8px";
         details.style.borderTop = "1px solid #e5ebe7";
@@ -1706,7 +1742,7 @@
         ul.style.paddingLeft = "18px";
         ul.style.fontSize = ".67rem";
         ul.style.lineHeight = "1.45";
-        items.forEach(item => ul.append(elemento("li", "", item)));
+        items.forEach(item => ul.append(filaComparacion(item, formato)));
         details.append(ul);
         contenedor.append(details);
     }
@@ -1805,7 +1841,7 @@
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
         else {
-        out.className = "haiku-asistente-preview";
+        out.className = "haiku-asistente-preview haku-comparacion-compacta";
         out.replaceChildren();
 
         const cabecera = elemento("div", "haiku-asistente-preview-cabecera");
@@ -1836,9 +1872,6 @@
         out.append(grid);
 
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
-        root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(out, result.bloqueos_comparacion, result.generacion);
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(out, result);
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(out, result);
 
         if (!meta.libro && meta.libro_detectadas) {
             agregarLista(out, "Revisar lectura del Libro", [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
@@ -1848,7 +1881,22 @@
             out,
             `Reservas que faltan (${faltantes.length})`,
             faltantes.map(g => `${descripcionGrupo(g)} · confianza ${g.confianza}`),
-            { alerta: true, vacio: "No encontré reservas claramente faltantes." }
+            { alerta: true, vacio: "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" }
+        );
+
+        agregarDetalles(
+            out,
+            "Posibles faltantes / modificaciones",
+            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`),
+            "revision", "reserva"
+        );
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(out, result);
+        root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(out, result.bloqueos_comparacion, result.generacion);
+        agregarDetalles(
+            out,
+            "Reservas con diferencias",
+            diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`),
+            "normal", "reserva"
         );
 
         if (pagosFaltan.length) {
@@ -1856,37 +1904,30 @@
                 out,
                 `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
                 pagosFaltan.map(descripcionPagoNuevoSeguro),
-                { alerta: true }
+                { alerta: true, tono: "normal", formato: "pago" }
             );
         }
 
         agregarDetalles(
             out,
-            "Reservas con diferencias",
-            diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`)
-        );
-        agregarDetalles(
-            out,
-            "Posibles faltantes / modificaciones",
-            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`)
-        );
-        agregarDetalles(
-            out,
             "Pagos que requieren revisión",
-            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`)
+            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`),
+            "revision", "pago"
         );
         agregarDetalles(
             out,
             "Servicios que requieren revisión",
-            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`)
+            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`),
+            "revision", "servicio"
         );
 
         agregarDetalles(out, "Grupos / multicabaña", grupos.filter(g => g.cabanas.length > 1).map(g =>
-            descripcionGrupo(g) + " · " + g.categoria.replaceAll("_", " ") + " · confianza " + g.confianza));
+            descripcionGrupo(g) + " · " + g.categoria.replaceAll("_", " ") + " · confianza " + g.confianza), "revision", "reserva");
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(out, result);
         agregarDetalles(out, "Detalles técnicos XLSX", grupos.flatMap(g => g.items.flatMap(x => [
             x.libro.titular + " · " + source(x.libro.coordenadas_origen),
             ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
-        ])));
+        ])), "neutro");
         }
         const decisiones = ui.decisiones || new Map();
         const aprobados = ui.aprobados || new Set();
@@ -2076,7 +2117,12 @@
                 const notas = elemento('details');
                 notas.append(elemento('summary','',c.campo),elemento('p','',`Proyecto H: ${c.anterior ?? 'sin dato'}`),elemento('p','',`Libro: ${c.libro}`));
                 fila.append(notas);
-            } else fila.textContent = `${c.campo}: ${c.anterior ?? 'sin dato'} → ${c.libro}`;
+            } else {
+                fila.append(elemento('strong','haku-cambio-campo',c.campo + ':'),
+                    elemento('span','haku-cambio-actual',String(c.anterior ?? 'sin dato')),
+                    elemento('span','haku-cambio-flecha','→'),
+                    elemento('span','haku-cambio-libro',String(c.libro)));
+            }
             cambios.append(fila);
         }
         contenedor.append(cambios);
@@ -2243,20 +2289,20 @@
     }
 
     function renderizarIncorporacion(out, plan, volver, aprobar, incorporar) {
-        out.className = "haiku-asistente-preview haiku-incorporacion";
-        const cabecera = elemento("div", "haiku-incorporacion-cabecera");
+        out.className = "haiku-asistente-preview haiku-incorporacion haku-comparacion-compacta haku-incorporacion-compacta";
+        const cabecera = elemento("div", "haiku-incorporacion-cabecera haiku-asistente-preview-cabecera");
         const titulo = elemento("div");
         titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", "Confirmar incorporación"));
         cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", "Escritura habilitada"));
-        const aviso = elemento("p", "haiku-incorporacion-aviso", "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
-        const resumen = elemento("div", "haiku-incorporacion-resumen");
+        const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
+        const resumen = elemento("div", "haiku-incorporacion-resumen haiku-asistente-preview-grid");
         out.replaceChildren(cabecera, aviso, resumen);
 
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, plan, plan.generacion);
 
         const indicadores = {};
         for (const [clave, etiqueta] of [["nuevas", "Reservas"], ["estadias", "Estadías"], ["actualizaciones", "Actualizaciones"], ["pagos", "Pagos"], ["dudosos", "Dudosos"], ["pendientes", "Pendientes"]]) {
-            const tarjeta = elemento("div", "haiku-incorporacion-indicador");
+            const tarjeta = elemento("div", "haiku-incorporacion-indicador haiku-asistente-preview-dato");
             indicadores[clave] = elemento("strong", "", "0");
             tarjeta.append(indicadores[clave], elemento("span", "", etiqueta));
             resumen.append(tarjeta);
@@ -2292,7 +2338,8 @@
 
         for (const [categoria, tituloSeccion] of [["nuevas", "Reservas nuevas"], ["actualizaciones", "Actualizar Proyecto H con el Libro"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]]) {
             const items = plan.items.filter(i => i.categoria === categoria);
-            const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria}`);
+            const estilo = {nuevas:"normal haku-icono--nuevo",actualizaciones:"normal haku-icono--intercambio",estadias:"normal haku-icono--calendario",asociadas:"normal haku-icono--calendario",pagos:"normal haku-icono--pago",dudosos:"faltante haku-icono--pago",pendientes:"revision haku-icono--alerta",omitidos:"neutro haku-icono--archivo"}[categoria];
+            const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria} haiku-comparacion-acordeon haku-franja--${estilo}`);
             const summary = elemento("summary");
             summary.append(elemento("span", "", tituloSeccion), elemento("strong", "", String(items.length)));
             seccion.append(summary);
@@ -2304,7 +2351,7 @@
         }
         actualizar();
 
-        const ayuda = elemento("details", "haiku-incorporacion-ayuda");
+        const ayuda = elemento("details", "haiku-incorporacion-ayuda haiku-comparacion-acordeon haku-franja--neutro haku-icono--archivo");
         const permisos = plan.permisos.map(p => p + " · " + (root.haikuTienePermiso?.(p) === true ? "disponible" : "por verificar"));
         ayuda.append(elemento("summary", "", "Información de la incorporación"));
         const listaAyuda = elemento("ul");
