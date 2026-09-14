@@ -15,7 +15,7 @@
         julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
         noviembre: 11, diciembre: 12
     });
-    const DIAS = Object.freeze({ domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 });
+    const DIAS = Object.freeze({ domingo: 0, dom: 0, lunes: 1, lun: 1, martes: 2, mar: 2, miercoles: 3, mie: 3, jueves: 4, jue: 4, viernes: 5, vie: 5, sabado: 6, sab: 6 });
     const PREFIJOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
     let ocupado = false;
 
@@ -233,14 +233,18 @@
     }
 
     function fechaExplicita(texto, reserva) {
-        const t = normalizar(texto);
+        // Sólo para fechas: una hora explícita como "a las 22.15" no es dd.mm.
+        const t = normalizar(texto)
+            .replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, "-")
+            .replace(/\ba\s+las?\s+(?:[01]?\d|2[0-3])[:.,][0-5]\d\b/g, " ");
         const completa = t.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/);
         if (completa) {
             let y = Number(completa[3]); if (y < 100) y += 2000;
             return iso(y, Number(completa[2]), Number(completa[1]));
         }
         const parcial = t.match(/\b(\d{1,2})[-/.](\d{1,2})(?![-/.]\d)\b/);
-        if (parcial) return iso(Number(String(reserva.fecha_checkin).slice(0, 4)), Number(parcial[2]), Number(parcial[1]));
+        if (parcial) return /^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkin || "")
+            ? iso(Number(reserva.fecha_checkin.slice(0, 4)), Number(parcial[2]), Number(parcial[1])) : null;
         const dia = Object.keys(DIAS).find(nombre => new RegExp(`\\b${nombre}\\b`).test(t));
         if (!dia || !reserva.fecha_checkin || !reserva.fecha_checkout) return null;
         const candidatas = [];
