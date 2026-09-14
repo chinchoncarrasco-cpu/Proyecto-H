@@ -200,25 +200,37 @@
                 const fill = estilos[c?.estiloId]?.fill;
                 return fill?.patternType === 'solid' && ['FF0000','C00000','CC0000','E60000'].includes(color(fill.fgColor));
             };
-            for (const cell of cells.filter(c => c.r === cab.r && c.valor?.trim() && rojo(c))) {
+            const marcadorFullDay = c => /^full\s*day$/.test(normalizar(c?.valor));
+            for (const cell of cells.filter(c => (rojo(c) || marcadorFullDay(c)) && (c.r === cab.r || merges.some(m=>m.s.r===c.r && m.s.c===c.c && m.s.r<=cab.r && m.e.r>=cab.r)))) {
+                if (merges.some(m=>cell.r>=m.s.r && cell.r<=m.e.r && cell.c>=m.s.c && cell.c<=m.e.c && (cell.r!==m.s.r || cell.c!==m.s.c))) continue;
                 const src = origen(cell), merge = src.merge;
+                const fullDay = marcadorFullDay(cell);
+                const paso = headers[1] ? headers[1].c - headers[0].c : 4;
+                const afectados = headers.filter(d => (merge?.e.c ?? cell.c)>=d.c && cell.c<=d.c+Math.max(0,paso-2));
+                if (!afectados.length) continue; // Fuera de disponibilidad: no clasificar rojo financiero ni administrativo.
+                celdasBloqueadas.add(`${cell.r}:${cell.c}`);
+                afectados.forEach(d=>diasBloqueados.add(d.fechaISO));
+                const revision = motivo => {
+                    res.advertencias.push(`${hoja} · ${src.celda}: ${fullDay?'marcador FULL DAY':'rojo'} de disponibilidad ${motivo}; requiere revisión manual.`);
+                    res.anotaciones.push({texto_original:cell.valor,origen:src,cabana,advertencias:[motivo]});
+                };
                 const h = headers.find((d,i) => cell.c >= d.c && cell.c <= d.c + 1 && cell.c < (headers[i+1]?.c ?? d.c+4));
-                if (!h || merge && (merge.e.r !== cab.r || merge.s.r !== cab.r)) continue;
+                if (!h || merge && (merge.e.r !== cab.r || merge.s.r !== cab.r)) { revision('con geometría parcial o entre filas'); continue; }
                 const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));
                 const ultimo = headers.find(d => d.fechaISO === dias.at(-1)?.fechaISO);
                 const ancho = headers[1] ? headers[1].c - headers[0].c : 4;
-                if (![1,4].includes(ancho) || headers.some((d,i)=>i && d.c-headers[i-1].c!==ancho)) continue;
+                if (![1,4].includes(ancho) || headers.some((d,i)=>i && d.c-headers[i-1].c!==ancho) || cabRows.filter(c=>c.r===cab.r).length!==1) { revision('con calendario o cabaña no inequívocos'); continue; }
                 const completo = merge ? merge.e.c >= ultimo.c + Math.max(0,ancho-2) && merge.e.c <= ultimo.c+ancho-1 :
-                    cell.c === h.c && Array.from({length:Math.max(1,ancho-1)},(_,i)=>at(cab.r,h.c+i)).every(c=>rojo(c)&&(!c.valor?.trim()||c===cell));
-                const estructuraReserva = /\b(?:\d+\s*(?:noches?|adlt|adultos?|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[a-z]{2,3}\d{5,}\b/.test(cell.valor.toLowerCase());
-                if (!completo || titularContexto(cell.valor) || estructuraReserva || !notaOperativa(cell.valor) ||
+                    fullDay || cell.c === h.c && Array.from({length:Math.max(1,ancho-1)},(_,i)=>at(cab.r,h.c+i)).every(c=>rojo(c)&&(!c.valor?.trim()||c===cell));
+                const estructuraReserva = !fullDay && /\b(?:\d+\s*(?:noches?|adl|adlt|adultos?|pax|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{9}\b|\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[a-z]{2,3}\d{5,}\b/.test(String(cell.valor || '').toLowerCase());
+                if (!completo || fullDay && dias.length!==1 || estructuraReserva ||
                     cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=ultimo.c+Math.max(0,ancho-2)&&c.valor?.trim()) ||
-                    dias.some((d,i)=>i && d.fechaISO !== sumarDias(dias[i-1].fechaISO,1))) continue;
+                    dias.some((d,i)=>i && d.fechaISO !== sumarDias(dias[i-1].fechaISO,1))) { revision(estructuraReserva?'con datos contradictorios de reserva':'con cobertura incompleta, huecos o contenido adicional'); continue; }
                 // Fin exclusivo, igual que las estadías y el bloqueo de calendario existente.
                 const fechas = dias.map(d=>d.fechaISO);
                 res.bloqueos.push({id:`${hoja}!${src.celda}`,cabana,fecha_inicio:h.fechaISO,fecha_fin:sumarDias(fechas.at(-1),1),
                     nota:cell.valor,hoja,origen:{...src,rango:merge?`${src.celda}:${direccion(merge.e.r,merge.e.c)}`:src.celda},
-                    evidencia:{fondo:color(estilos[cell.estiloId].fill.fgColor),estilo_id:cell.estiloId,geometria:'disponibilidad_completa'}});
+                    evidencia:{fondo:color(estilos[cell.estiloId]?.fill?.fgColor),estilo_id:cell.estiloId,geometria:'disponibilidad_completa',...(fullDay?{tipo:'marcador_full_day'}:{})}});
                 celdasBloqueadas.add(`${cell.r}:${cell.c}`);fechas.forEach(d=>diasBloqueados.add(d));
             }
             for (let i = 0; i < headers.length; i++) {

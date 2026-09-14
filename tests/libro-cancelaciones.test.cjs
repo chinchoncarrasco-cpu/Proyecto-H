@@ -56,6 +56,9 @@ test('resolved and manual-review cards preserve all cases and have no cancellati
  const result=await x.api.detectarActual(sheet([],[e()]),x.cliente);
  result.cancelaciones_revision=['Daniela Ubierna Yáñez · Sep26: La reserva no se identifica de forma única.','Aviso sin estructura: conservar todos los detalles.'];
  x.api.adjuntarResueltas(x.out,result);x.api.adjuntarRevision(x.out,result);
+ const sections=x.nodes().filter(n=>n.tag==='details');assert.equal(sections.length,2);assert.ok(sections.every(n=>n.open===false&&n.children[0].tag==='summary'));
+ assert.equal(sections[0].children[0].textContent,'Cancelaciones · Ya coincide (1)');assert.equal(sections[1].children[0].textContent,'Cancelaciones por verificar (2)');
+ assert.ok(x.out.children.every(n=>n.tag!=='details'),'existing positional accordion colors keep their positions');
  assert.equal(x.nodes().filter(n=>n.tag==='section').length,3);assert.equal(x.nodes().filter(n=>n.tag==='button').length,0);
  for(const text of ['✓ Ya coincide','Proyecto H: Cancelada','No se requiere ninguna escritura.','CANCELACIONES · Sep26 · D16','Daniela Ubierna Yáñez','La reserva no se identifica de forma única.','Aviso sin estructura: conservar todos los detalles.','Sin acción automática.'])assert.ok(x.text().includes(text),text);
 });

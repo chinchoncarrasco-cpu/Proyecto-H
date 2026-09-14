@@ -96,7 +96,8 @@
 }
 
 /* Secciones principales */
-.haiku-asistente-preview > details {
+.haiku-asistente-preview > details,
+.haiku-comparacion-acordeon {
     margin-top: 10px !important;
     padding: 0 !important;
     border: 1px solid var(--rec-borde) !important;
@@ -106,7 +107,8 @@
     box-shadow: 0 2px 8px rgba(30, 55, 41, .035);
 }
 
-.haiku-asistente-preview > details > summary {
+.haiku-asistente-preview > details > summary,
+.haiku-comparacion-acordeon > summary {
     position: relative;
     min-height: 39px;
     box-sizing: border-box;
@@ -121,8 +123,10 @@
     user-select: none;
 }
 
-.haiku-asistente-preview > details > summary::-webkit-details-marker { display: none; }
-.haiku-asistente-preview > details > summary::after {
+.haiku-asistente-preview > details > summary::-webkit-details-marker,
+.haiku-comparacion-acordeon > summary::-webkit-details-marker { display: none; }
+.haiku-asistente-preview > details > summary::after,
+.haiku-comparacion-acordeon > summary::after {
     content: "›";
     position: absolute;
     right: 13px;
@@ -132,7 +136,8 @@
     font-size: 1.05rem;
     transition: transform .14s ease;
 }
-.haiku-asistente-preview > details[open] > summary::after {
+.haiku-asistente-preview > details[open] > summary::after,
+.haiku-comparacion-acordeon[open] > summary::after {
     transform: translateY(-50%) rotate(-90deg);
 }
 

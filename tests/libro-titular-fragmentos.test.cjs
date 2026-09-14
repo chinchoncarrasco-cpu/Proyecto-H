@@ -73,5 +73,5 @@ test('cancellation context and operational-block classification retain their sep
  const h=S.normalizarHoja(d,'Sep26');assert.equal(h.cancelaciones.length,1);assert.equal(h.cancelaciones[0].titular,'Carol Vega Ruiz');
  const rojo=hoja('POSIBLE LATE CHECK OUT (X COORDINAR)');rojo.celdas.find(c=>c.r===2&&c.c===0).valor='cabaña 10';rojo.celdas.find(c=>c.r===2&&c.c===2).estiloId=0;rojo.estilos=[{fill:{patternType:'solid',fgColor:{rgb:'FFFF0000'}}}];
  const b=S.normalizarHoja(rojo,'Sep26');assert.equal(b.reservas.length,0);assert.equal(b.bloqueos.length,1);assert.equal(b.bloqueos[0].cabana,10);
- rojo.celdas.find(c=>c.r===2&&c.c===2).valor+=' // Ana Pérez // Juan Soto';const conflict=S.normalizarHoja(rojo,'Sep26');assert.equal(conflict.reservas.length,0);assert.equal(conflict.bloqueos.length,0);
+ rojo.celdas.find(c=>c.r===2&&c.c===2).valor+=' // Ana Pérez // Juan Soto';const conflict=S.normalizarHoja(rojo,'Sep26');assert.equal(conflict.reservas.length,0);assert.equal(conflict.bloqueos.length,1); // Nombres aislados no vencen el rojo estructural.
 });

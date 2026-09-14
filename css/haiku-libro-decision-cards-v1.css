@@ -2,6 +2,16 @@
    Sólo presentación. No altera matching, decisiones ni escrituras. */
 
 .haiku-bloqueo-nota { white-space: pre-wrap; overflow-wrap: anywhere; }
+.haiku-bloqueos-grupo { min-width:0; max-width:100%; }
+.haiku-comparacion-acordeon > summary { cursor:pointer; }
+.haiku-comparacion-acordeon > summary:focus-visible { outline:2px solid #1f6e4c; outline-offset:-2px; }
+.haiku-comparacion-acordeon.haiku-comparacion-acordeon--revision > summary { background:#fffaf0; border-left-color:#c5a264; }
+.haiku-comparacion-acordeon > :not(summary) { margin:8px 10px; }
+.haiku-comparacion-acordeon > .haiku-cancelacion-card { width:calc(100% - 20px); }
+.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton { box-sizing:border-box; max-width:100%; min-height:36px; padding:7px 11px; border:1px solid #496b56; border-radius:9px; background:#496b56; color:#fff; font:inherit; font-size:.8rem; font-weight:700; white-space:normal; overflow-wrap:anywhere; cursor:pointer; }
+.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:hover:not(:disabled) { background:#385742; }
+.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:focus-visible { outline:3px solid #b6cbbd; outline-offset:3px; }
+.haiku-bloqueos-grupo > .haiku-comparacion-acordeon > button.haiku-cancelacion-boton:disabled { opacity:.55; cursor:default; }
 
 /* Cancelaciones: estilos acotados a sus tarjetas; comparten la paleta de reconciliación. */
 .haiku-cancelacion-titulo { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:20px 0 10px; font-size:.88rem; color:#33483d; }

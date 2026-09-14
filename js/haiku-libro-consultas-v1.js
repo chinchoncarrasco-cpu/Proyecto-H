@@ -1227,6 +1227,8 @@
             archivo: estado.nombre,
             reservas: [],
             bloqueos: [],
+            bloqueos_lectura_segura: true,
+            bloqueos_cabanas_revision: [],
             aseos: [],
             espacios: [],
             anotaciones: [],
@@ -1241,8 +1243,17 @@
         }
 
         const versionesAnterior = [], versionesActual = [];
+        resultado.bloqueos_lectura_segura = q.hojas.length > 0;
         for (const h of q.hojas) {
             const data = await libro.consultarHoja(h);
+            resultado.bloqueos_lectura_segura &&= data.cobertura?.geometria===true;
+            // Una advertencia localizada no invalida la lectura inversa de otras cabañas.
+            // Sin contexto seguro, conservar el bloqueo global de las afirmaciones de ausencia.
+            for (const aviso of (data.advertencias||[]).filter(a=>/rojo de disponibilidad|marcador FULL DAY de disponibilidad/.test(a))) {
+                const contextos=(data.anotaciones||[]).filter(a=>a.origen?.hoja===h && a.origen?.celda && aviso.startsWith(`${h} · ${a.origen.celda}:`));
+                if (!contextos.length || contextos.some(a=>!Number.isInteger(a.cabana)||a.cabana<=0)) resultado.bloqueos_lectura_segura=false;
+                else for (const a of contextos) if (!resultado.bloqueos_cabanas_revision.includes(a.cabana)) resultado.bloqueos_cabanas_revision.push(a.cabana);
+            }
             resultado.advertencias.push(...(data.advertencias || []));
             const reservasHoja = Array.isArray(data.reservas) ? data.reservas : [];
             resultado.bloqueos.push(...(data.bloqueos || []).filter(b =>
@@ -1300,10 +1311,15 @@
         }
 
         if (q.comparar) resultado.comparacion = await compararSistema(resultado.reservas, cliente, q);
-        if (q.comparar && resultado.bloqueos.length) {
-            if (!root.HAIKU_LIBRO_BLOQUEOS_V1) throw new Error('No está disponible el visor de bloqueos del Libro. Recarga la página.');
-            resultado.bloqueos_comparacion = await root.HAIKU_LIBRO_BLOQUEOS_V1.comparar(resultado.bloqueos, cliente);
+        if (q.comparar && (resultado.bloqueos.length || resultado.bloqueos_lectura_segura)) {
+            if (!root.HAIKU_LIBRO_BLOQUEOS_V1) {
+                if (resultado.bloqueos.length) throw new Error('No está disponible el visor de bloqueos del Libro. Recarga la página.');
+                resultado.advertencias.push('Comparación inversa de bloqueos no disponible. Recarga la página.');
+            } else {
+                resultado.bloqueos_comparacion = await root.HAIKU_LIBRO_BLOQUEOS_V1.comparar(resultado.bloqueos, cliente, resultado.bloqueos_lectura_segura?{...q,cabanas_revision:resultado.bloqueos_cabanas_revision}:undefined);
+            }
         }
+        if (q.comparar && q.desde && !resultado.bloqueos_lectura_segura) resultado.advertencias.push('Comparación inversa de bloqueos no realizada: la lectura del Libro tiene cobertura incompleta o advertencias sin cabaña identificable.');
         if (libro.estado().generacion !== estado.generacion) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
         return resultado;
     }

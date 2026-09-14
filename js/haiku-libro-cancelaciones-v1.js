@@ -132,11 +132,15 @@
  }
  function adjuntarResueltas(out,resultado){
   const casos=resultado.cancelaciones_ya_coinciden||[];if(!casos.length)return;
-  cabecera(out,'Cancelaciones · Ya coincide',casos.length);for(const caso of casos)out.append(tarjeta(caso,true));
+  out=desplegable(out,'Cancelaciones · Ya coincide',casos.length);for(const caso of casos)out.append(tarjeta(caso,true));
+ }
+ function desplegable(out,titulo,n,revision=false){
+  const grupo=elemento('div','haiku-cancelaciones-grupo'),seccion=elemento('details','haiku-comparacion-acordeon'+(revision?' haiku-comparacion-acordeon--revision':''));
+  seccion.open=false;seccion.append(elemento('summary','',`${titulo} (${n})`));grupo.append(seccion);out.append(grupo);return seccion;
  }
  function adjuntarRevision(out,resultado){
   const casos=resultado.cancelaciones_revision||[];if(!casos.length)return;
-  cabecera(out,'Cancelaciones por verificar',casos.length);
+  out=desplegable(out,'Cancelaciones por verificar',casos.length,true);
   for(const texto of casos){
    const box=elemento('section','haiku-cancelacion-card haiku-cancelacion-card--revision');
    box.append(elemento('span','haiku-cancelacion-badge','Revisión necesaria'));
