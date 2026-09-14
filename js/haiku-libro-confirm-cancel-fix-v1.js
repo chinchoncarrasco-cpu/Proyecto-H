@@ -28,6 +28,7 @@
     function reactivarBotonLibro() {
         queueMicrotask(() => {
             document.querySelectorAll(".haku-libro-servicios__boton").forEach(boton => {
+                if (boton.dataset.hakuAccion !== 'incorporar') return;
                 if (!boton.isConnected) return;
                 const card = boton.closest(".haku-libro-servicios");
                 if (!card || /Incorporación completada/i.test(card.textContent || "")) return;
@@ -80,6 +81,16 @@
     }
 
     function itemsSeleccionados(card, resultado) {
+        const checksConId = [...card.querySelectorAll('input[data-haku-item-id]')];
+        if (checksConId.length) {
+            const porId = new Map(resultado.items.map(item => [item.item_id, item]));
+            return checksConId.filter(check => check.checked && !check.disabled).flatMap(check => {
+                const item = porId.get(check.dataset.hakuItemId);
+                if (item?.estado === 'existente') return [];
+                if (!item || item.estado !== 'listo') throw new Error('Uno o más elementos cambiaron desde la vista previa. Vuelve a revisar antes de guardar.');
+                return [item];
+            });
+        }
         const listosServicios = resultado.items.filter(x => x.estado === "listo" && x.kind === "servicio");
         const listosNotas = resultado.items.filter(x => x.estado === "listo" && x.kind === "nota");
         const details = [...card.querySelectorAll(":scope > details")];
@@ -253,7 +264,7 @@
         if (!textoOriginal) throw new Error("No pude recuperar la consulta original. Vuelve a pedir la revisión del Libro.");
 
         bloquearRevision(card);
-        const actual = await api.construir(textoOriginal);
+        const actual = await (api.revalidarVista ? api.revalidarVista(card, textoOriginal) : api.construir(textoOriginal));
         const elegidos = itemsSeleccionados(card, actual);
         if (!elegidos.length) throw new Error("No hay servicios ni notas listos seleccionados para incorporar.");
 
@@ -302,7 +313,7 @@
         }
 
         const boton = event.target?.closest?.(".haku-libro-servicios__boton");
-        if (!boton || boton.disabled) return;
+        if (!boton || boton.disabled || boton.dataset.hakuAccion !== 'incorporar') return;
         const card = boton.closest(".haku-libro-servicios");
         if (!card || card.dataset.haikuHistorialRestaurado === "1" || /Incorporación completada/i.test(card.textContent || "")) return;
 
