@@ -147,3 +147,16 @@ test('detalle de advertencia escapa HTML y admite código sin explicación adici
     assert.match(html,/revision de origen/);assert.match(html,/&lt;script&gt;/);
     assert.doesNotMatch(html,/<img|<script/);
 });
+
+test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',()=>{
+    const r=resultado({modificadas:[{actual:reserva,cambios:[{campo:'notas_importantes',antes:['Nota extensa'],ahora:[]}]}],advertencias:[{hoja:'Sep26',motivo:'Revisar origen'},{hoja:'Sep26',motivo:'Revisar origen'}],no_comparables:[{hoja:'Oct26',motivo:'Cobertura parcial'}]});
+    const antes=JSON.stringify(r),html=A.renderizar(r);
+    assert.equal(JSON.stringify(r),antes);
+    assert.match(html,/<summary>Modificadas \(1\)<\/summary>/);
+    assert.match(html,/class="haku-libro-item haku-pregunta-caso"/);
+    assert.match(html,/Nota extensa → Ninguno/);
+    assert.match(html,/<summary>Advertencias de interpretación \/ cobertura \(3\)<\/summary>/);
+    assert.equal((html.match(/Revisar origen/g)||[]).length,2);
+    assert.match(html,/Cobertura parcial/);
+    assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
+});

@@ -1492,3 +1492,45 @@
 .haku-incorporacion-compacta .haku-cambio-actual::before { content: "Proyecto H: "; color: #617369; }
 .haku-incorporacion-compacta .haku-cambio-libro::before { content: "Libro: "; color: #617369; }
 .haku-incorporacion-compacta .haku-cambio-flecha { display: block; color: #617369; line-height: 1; }
+/* Informe de actualización: reutiliza la geometría de reconciliación. */
+.haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) {
+    width: calc(100% + 18px); max-width: none; margin-inline: -9px; padding: 0; border: 0; border-radius: 0;
+}
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-contadores {
+    display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; margin: 0;
+}
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-contadores > div {
+    display: flex; flex-direction: column; min-width: 0; padding: 8px 10px; text-align: left;
+    border: 0; border-right: 1px solid #dce6df; border-bottom: 1px solid #dce6df; border-radius: 0; background: #f8fbf9;
+}
+.haku-actualizacion-compacta .haku-libro-contadores > div:nth-child(2n) { border-right: 0; }
+.haku-actualizacion-compacta .haku-libro-contadores span { order: -1; font-size: .62rem; text-transform: uppercase; color: #617369; }
+.haku-actualizacion-compacta .haku-libro-contadores strong { font-size: 1rem; line-height: 1.3; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item {
+    margin: 0; padding: 9px 10px; border: 0; border-bottom: 1px solid #e6ece8; border-radius: 0; box-shadow: none;
+}
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item > strong,
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item > summary > strong { display: block; font-size: .78rem; line-height: 1.45; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-item > p { font-size: .73rem; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-pregunta-caso { margin-top: 5px; padding: 0; }
+.haku-actualizacion-compacta .haku-pregunta-caso small { display: block; font-size: .62rem; font-weight: 400; }
+.haku-actualizacion-compacta .haku-pregunta-caso dl { padding: 0 10px 9px; margin: 0; }
+.haku-actualizacion-compacta .haku-pregunta-caso dt { font-size: .73rem; padding-top: 7px; border-top: 1px solid #e6ece8; }
+.haku-actualizacion-compacta .haku-pregunta-caso dd { font-size: .69rem; color: #5b6c63; overflow-wrap: anywhere; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-aviso { margin: 0; padding: 8px 10px; border-radius: 0; border: 0; background: #fbefd9; }
+.haiku-asistente-panel .haku-actualizacion-compacta > .haiku-comparacion-acordeon > p { margin: 0; padding: 8px 10px; border-bottom: 1px solid #e6ece8; font-size: .69rem; }
+.haku-actualizacion-compacta .haku-libro-prioridad { background: #eaf3ee; padding: 8px 10px 0; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-prioridad h4 { margin: 0 0 5px; font-size: .78rem; }
+.haiku-asistente-panel .haku-actualizacion-compacta .haku-libro-prioridad > p { font-size: .69rem; margin: 4px 0; }
+.haku-actualizacion-compacta .haku-prioridad-fila { border-bottom: 1px solid #d5e3da; }
+.haku-actualizacion-compacta .haku-prioridad-fila > summary {
+    position: relative; display: flex; gap: 6px; align-items: center; min-height: 32px; padding: 3px 0 3px 16px; cursor: pointer; font-size: .73rem; list-style: none;
+}
+.haku-actualizacion-compacta .haku-prioridad-fila > summary::-webkit-details-marker { display: none; }
+.haku-actualizacion-compacta .haku-prioridad-fila > summary strong { margin-left: auto; }
+.haku-actualizacion-compacta .haku-prioridad-fila > summary::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #598c74; position: absolute; left: 0; }
+.haku-actualizacion-compacta .haku-prioridad--hoy > summary::before { background: #b96969; }
+.haku-actualizacion-compacta .haku-prioridad--manana > summary::before { background: #bd8730; }
+.haku-actualizacion-compacta .haku-prioridad--proximos > summary::before { background: #a39535; }
+.haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) > .haku-4b-preparar { margin: 9px 10px; width: calc(100% - 20px); }
+.haku-libro-auto.haku-libro-auto { border-radius: 5px; padding: 10px 12px; }

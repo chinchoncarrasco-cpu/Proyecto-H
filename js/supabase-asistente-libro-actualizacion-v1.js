@@ -51,7 +51,7 @@
         return [contexto.join(' · '), detalles.join(' · ')].filter(Boolean).join(': ') || 'Sin detalle disponible.';
     }
     function renderizar(r) {
-        let html = '<article class="haku-libro-actualizacion"><header><h3>Actualización del Libro</h3><p>Comparación de sólo lectura</p></header>';
+        let html = '<article class="haku-libro-actualizacion haiku-asistente-preview haku-comparacion-compacta haku-actualizacion-compacta"><header class="haiku-asistente-preview-cabecera"><div><span>LIBRO · ACTUALIZACIÓN</span><strong>Actualización del Libro</strong></div><span class="haiku-asistente-confianza haiku-asistente-confianza--alta">Comparación de sólo lectura</span></header>';
         const aviso = text => {html += `<p class="haku-libro-aviso">${escapar(text)}</p>`;};
         if (r.estado === 'sin_linea_base') {
             aviso('Esta es la primera versión del Libro que tengo como referencia. Carga una actualización posterior para que pueda comparar los cambios.');
@@ -64,16 +64,20 @@
             return html + '</article>';
         }
         html += '<div class="haku-libro-contadores">' + [['nuevas','Nuevas'],['modificadas','Modificadas'],['ya_no_aparecen','Ya no aparecen'],['ambiguas','Por revisar']].map(([k,t])=>`<div><strong>${lista(r[k]).length}</strong><span>${t}</span></div>`).join('') + '</div>';
-        const seccion = (titulo, items) => { if(items.length) html += `<section><h4>${titulo}</h4>${items.join('')}</section>`; };
+        const seccion = (titulo, items) => {
+            const estilo = {'Nuevas':'normal haku-icono--nuevo','Modificadas':'normal haku-icono--intercambio','Ya no aparecen':'faltante haku-icono--alerta','Requiere revisión':'revision haku-icono--alerta','Cancelaciones confirmadas en Libro':'revision haku-icono--calendario'}[titulo];
+            if(items.length) html += `<details class="haiku-comparacion-acordeon haku-franja--${estilo}"><summary>${titulo} (${items.length})</summary>${items.join('')}</details>`;
+        };
         if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) {
             const prioridad = root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.renderizar(r);
             html = html.replace('</header>', '</header>' + prioridad);
         }
         seccion('Nuevas',lista(r.nuevas).map(x=>`<div class="haku-libro-item"><small>NUEVA</small>${reserva(x.actual)}</div>`));
-        seccion('Modificadas',lista(r.modificadas).map(x=>`<div class="haku-libro-item"><small>MODIFICADA · CAB ${escapar(x.actual?.cabana ?? '—')}</small><strong>${escapar(x.actual?.titular || 'Titular no determinado')}</strong><dl>${lista(x.cambios).map(c=>`<dt>${escapar(etiquetas[c.campo] || 'Otro campo')}</dt><dd>${['rut_documento','telefono','correo'].includes(c.campo) ? 'Dato actualizado; valores personales ocultos.' : `${escapar(valor(c.antes,c.campo))} → ${escapar(valor(c.ahora,c.campo))}`}</dd>`).join('')}</dl></div>`));
+        seccion('Modificadas',lista(r.modificadas).map(x=>`<details class="haku-libro-item haku-pregunta-caso"><summary><small>MODIFICADA · CAB ${escapar(x.actual?.cabana ?? '—')}</small><strong>${escapar(x.actual?.titular || 'Titular no determinado')}</strong></summary><dl>${lista(x.cambios).map(c=>`<dt>${escapar(etiquetas[c.campo] || 'Otro campo')}</dt><dd>${['rut_documento','telefono','correo'].includes(c.campo) ? 'Dato actualizado; valores personales ocultos.' : `${escapar(valor(c.antes,c.campo))} → ${escapar(valor(c.ahora,c.campo))}`}</dd>`).join('')}</dl></details>`));
         seccion('Ya no aparecen',lista(r.ya_no_aparecen).map(x=>`<div class="haku-libro-item"><small>YA NO APARECE</small>${reserva(x.anterior)}<p>Esta reserva estaba en la versión anterior y no aparece en la actual.</p></div>`));
         seccion('Cancelaciones confirmadas en Libro',lista(r.cancelaciones_confirmadas).map(x=>`<div class="haku-libro-item"><small>CANCELACIÓN CONFIRMADA EN LIBRO</small>${reserva(x.anterior)}<p>${escapar(x.anterior?.titular)} aparece en el bloque CANCELACIONES de ${escapar(x.evidencia?.origen?.hoja)} · ${escapar(x.evidencia?.origen?.celda)}. Requiere preparación, revalidación y confirmación antes de cancelar en Proyecto H.</p></div>`));
         seccion('Requiere revisión',lista(r.ambiguas).map(x=>`<div class="haku-libro-item"><strong>Requiere revisión</strong><p>${escapar(x.motivo || 'No hay evidencia suficiente para decidir una coincidencia.')}</p>${[['anteriores','Versión anterior'],['actuales','Versión actual']].map(([k,t])=>`<details><summary>${t} · ${lista(x[k]).length} candidatos</summary>${lista(x[k]).map(reserva).join('')}</details>`).join('')}</div>`));
+        const inicioAvisos = html.length;
         const especiales = new Set([...lista(r.diagnostico?.hojas_especiales_modificadas),...lista(r.advertencias).filter(a=>a.tipo === 'hoja_especial_modificada').map(a=>a.hoja)]);
         for (const hoja of especiales) aviso(`También detecté cambios en ${hoja}. Esa hoja todavía no tiene interpretación automática detallada.`);
         const otras = lista(r.advertencias).filter(a=>a.tipo !== 'hoja_especial_modificada');
@@ -85,6 +89,8 @@
             aviso('Hay hojas o cobertura que no permiten concluir altas o desapariciones con seguridad.');
             for (const item of r.no_comparables) html += `<p>${escapar(detalleAviso(item))}</p>`;
         }
+        const cantidadAvisos = especiales.size + otras.length + lista(r.no_comparables).length;
+        if (cantidadAvisos) html = html.slice(0,inicioAvisos) + `<details class="haiku-comparacion-acordeon haku-franja--revision haku-icono--alerta"><summary>Advertencias de interpretación / cobertura (${cantidadAvisos})</summary>${html.slice(inicioAvisos)}</details>`;
         return html + '</article>';
     }
     function crearCache(comparar, generacion) {
