@@ -440,6 +440,112 @@
         return !estado || estado === "confirmado";
     }
 
+    function pagoEfectivoLibroAplicable(pago, reserva, sistema) {
+        return !pagoTieneIdentificadorFuerte(pago) && pago?.clasificacion_financiera !== "dudoso" &&
+            medioLibro(pago) === "efectivo" && pago.tipo_movimiento === "alojamiento" &&
+            pago.pago_recibido === true && pago.estado_pago === "registrado_en_libro" &&
+            Number.isSafeInteger(Number(pago.monto)) && Number(pago.monto) > 0 &&
+            String(pago.moneda || "CLP").toUpperCase() === "CLP" &&
+            Number(pago.cabana) === Number(reserva.cabana) && Number(reserva.cabana) === Number(sistema.cabana) &&
+            pago.fecha_bloque === reserva.fecha_checkin && reserva.fecha_checkin === sistema.fecha_checkin &&
+            reserva.fecha_checkout === sistema.fecha_checkout;
+    }
+
+    function cargoAlojamientoCompatible(cargo, reserva, sistema) {
+        if (cargo?.reserva_id !== sistema.reserva_id || cargo?.estadia_id !== sistema.id ||
+            cargo?.tipo_cargo !== "alojamiento" || S.normalizar(cargo.estado) !== "activo" ||
+            !(Number(cargo.monto_ajustado ?? cargo.monto) > 0)) return false;
+        const concepto = S.normalizar(cargo.concepto);
+        const fecha = S.fechaTexto(cargo.concepto);
+        const fullDay = reserva.tipo_estadia === "full_day" || reserva.fecha_checkin === reserva.fecha_checkout;
+        if (fullDay) return /\bfull\s*day\b/.test(concepto) && fecha === reserva.fecha_checkin;
+        return !/\bfull\s*day\b/.test(concepto) && Boolean(fecha) &&
+            fecha >= reserva.fecha_checkin && fecha < reserva.fecha_checkout;
+    }
+
+    async function reconciliarEfectivosAplicados(resultados, pagos, cliente) {
+        const movimientos = resultados.flatMap(resultado => resultado.pagosComparacion
+            .filter(item => item.estado === "revisar" && resultado.estado === "asociada" &&
+                pagoEfectivoLibroAplicable(item.pago, resultado.libro, resultado.sistema))
+            .map(item => ({ item, resultado })));
+        if (!movimientos.length) return null;
+
+        const moneda = pago => String(pago?.moneda || "CLP").trim().toUpperCase();
+        const candidatosSistema = movimiento => pagos.filter(pago => pago?.id &&
+            S.normalizar(pago.estado) === "confirmado" && pago.reserva_id === movimiento.resultado.sistema.reserva_id &&
+            S.normalizar(pago.tipo_movimiento) === "pago" &&
+            medioSistema(pago) === "efectivo" && Number(pago.monto) === Number(movimiento.item.pago.monto) &&
+            moneda(pago) === moneda(movimiento.item.pago));
+        const candidatosUnicos = movimientos.map(movimiento => ({
+            ...movimiento,
+            pagos: candidatosSistema(movimiento)
+        })).filter(movimiento => movimiento.pagos.length === 1);
+        if (!candidatosUnicos.length) return null;
+
+        const reservaIds = [...new Set(candidatosUnicos.map(x => x.resultado.sistema.reserva_id))];
+        const pagoIds = [...new Set(candidatosUnicos.map(x => x.pagos[0].id))];
+        let cargos, aplicacionesPago, aplicacionesCargo;
+        try {
+            cargos = await paginas(() => cliente.from("vista_estado_cargos")
+                .select("cargo_id,reserva_id,estadia_id,tipo_cargo,concepto,monto,monto_ajustado,estado,estado_pago")
+                .in("reserva_id", reservaIds).eq("tipo_cargo", "alojamiento").order("cargo_id"));
+            const cargoIdsLectura = cargos.filter(cargo => cargo.tipo_cargo === "alojamiento" && reservaIds.includes(cargo.reserva_id))
+                .map(cargo => cargo.cargo_id).filter(Boolean);
+            [aplicacionesPago, aplicacionesCargo] = await Promise.all([
+                paginas(() => cliente.from("pago_aplicaciones")
+                    .select("id,pago_id,cargo_id,monto_aplicado").in("pago_id", pagoIds).order("id")),
+                cargoIdsLectura.length ? paginas(() => cliente.from("pago_aplicaciones")
+                    .select("id,pago_id,cargo_id,monto_aplicado").in("cargo_id", cargoIdsLectura).order("id")) : []
+            ]);
+        } catch (err) {
+            return { disponible: false, cargos: [], aplicaciones: [], error: `No fue posible leer las aplicaciones de alojamiento: ${err?.message || err}` };
+        }
+
+        const cargosAlojamiento = cargos.filter(cargo => cargo.tipo_cargo === "alojamiento" && reservaIds.includes(cargo.reserva_id));
+        const cargoIds = new Set(cargosAlojamiento.map(cargo => cargo.cargo_id).filter(Boolean));
+        const aplicaciones = [...new Map([...aplicacionesPago, ...aplicacionesCargo]
+            .map(aplicacion => [aplicacion.id || `${aplicacion.pago_id}|${aplicacion.cargo_id}`, aplicacion])).values()];
+        const propuestas = [];
+        for (const movimiento of candidatosUnicos) {
+            const pagoLibro = movimiento.item.pago;
+            const pagoSistema = movimiento.pagos[0];
+            const libroCompatibles = movimientos.filter(otro =>
+                otro.resultado.sistema.reserva_id === movimiento.resultado.sistema.reserva_id &&
+                Number(otro.item.pago.monto) === Number(pagoLibro.monto) &&
+                moneda(otro.item.pago) === moneda(pagoLibro) && medioLibro(otro.item.pago) === "efectivo" &&
+                Number(otro.item.pago.cabana) === Number(pagoLibro.cabana) &&
+                otro.item.pago.fecha_bloque === pagoLibro.fecha_bloque);
+            if (libroCompatibles.length !== 1) continue;
+
+            const cargosCompatibles = cargosAlojamiento.filter(cargo =>
+                cargoAlojamientoCompatible(cargo, movimiento.resultado.libro, movimiento.resultado.sistema));
+            if (cargosCompatibles.length !== 1) continue;
+            const cargo = cargosCompatibles[0];
+            const aplicacionesDelPago = aplicaciones.filter(aplicacion => aplicacion.pago_id === pagoSistema.id);
+            const exactas = aplicacionesDelPago.filter(aplicacion => aplicacion.cargo_id === cargo.cargo_id &&
+                Number(aplicacion.monto_aplicado) === Number(pagoLibro.monto));
+            if (exactas.length !== 1 || aplicacionesDelPago.length !== 1 || !cargoIds.has(exactas[0].cargo_id)) continue;
+            propuestas.push({ ...movimiento, pagoSistema, cargo, aplicacion: exactas[0] });
+        }
+
+        const pagosRepetidos = new Set(propuestas.filter((x, i, a) => a.some((y, j) => j !== i && y.pagoSistema.id === x.pagoSistema.id))
+            .map(x => x.pagoSistema.id));
+        const aplicacionesRepetidas = new Set(propuestas.filter((x, i, a) => a.some((y, j) => j !== i && y.aplicacion.id === x.aplicacion.id))
+            .map(x => x.aplicacion.id));
+        for (const propuesta of propuestas) {
+            if (pagosRepetidos.has(propuesta.pagoSistema.id) || aplicacionesRepetidas.has(propuesta.aplicacion.id)) continue;
+            Object.assign(propuesta.item, {
+                estado: "en_sistema",
+                sistema: propuesta.pagoSistema,
+                coincidencia_aplicacion_alojamiento: true,
+                cargo_sistema: propuesta.cargo,
+                aplicacion_sistema: propuesta.aplicacion,
+                diferencias: []
+            });
+        }
+        return { disponible: true, cargos: cargosAlojamiento, aplicaciones };
+    }
+
     function pagoDebilYaExiste(p, existente, reservaId) {
         if (!reservaId || existente?.reserva_id !== reservaId || medioLibro(p) !== 'transferencia') return false;
         if (String(existente.medio_pago || '').toLowerCase() !== 'transferencia') return false;
@@ -860,6 +966,8 @@
             }
         }
 
+        const snapshotEfectivoAplicado = await reconciliarEfectivosAplicados(resultados, pagos, cliente);
+
         const grupos = agruparComparacion(resultados);
         const movimientos = resultados.flatMap(r => r.pagosComparacion);
         for (const x of movimientos) {
@@ -896,7 +1004,8 @@
             }
         }
 
-        resultados.snapshot = { estadias: system, pagos: pagosVigentes, finanzas: snapshotFinanciero };
+        resultados.snapshot = { estadias: system, pagos: pagosVigentes, finanzas: snapshotFinanciero,
+            efectivo_aplicado: snapshotEfectivoAplicado };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = serviciosUnicos;
