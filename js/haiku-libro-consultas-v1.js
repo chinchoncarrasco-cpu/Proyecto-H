@@ -2479,46 +2479,63 @@
 
     function renderizarSoloPagos(out, result) {
         const modelo = gruposVistaPagos(result.comparacion);
-        out.className = 'haiku-asistente-preview haiku-versiones';
+        out.className = 'haiku-asistente-preview haku-comparacion-compacta haku-pagos-compactos';
         out.replaceChildren();
         const header = elemento('div', 'haiku-asistente-preview-cabecera');
         const titulo = elemento('div');
         titulo.append(elemento('span', '', 'LIBRO · PAGOS'), elemento('strong', '', 'Pagos del Libro ↔ Proyecto H'));
-        header.append(titulo, elemento('span', 'haiku-asistente-confianza', 'Sólo lectura')); out.append(header);
+        header.append(titulo, elemento('span', 'haiku-asistente-confianza haiku-asistente-confianza--alta', 'Sólo lectura')); out.append(header);
         const fecha = result.q.desde;
-        out.append(elemento('p', 'haiku-versiones-meta', fecha ? `${nombresMes[Number(fecha.slice(5,7))-1]} ${fecha.slice(0,4)} · ${fecha} al ${result.q.hasta}` : 'Periodo de la consulta'));
-        const grid = elemento('div', 'haiku-versiones-totales');
-        modelo.contadores.forEach(([nombre, n]) => { const dato=elemento('div'); dato.append(elemento('strong', '', String(n)), elemento('span', '', nombre)); grid.append(dato); });
-        out.append(grid, elemento('p', 'haiku-versiones-aviso', 'Sin asociación segura es un subconjunto de los movimientos que requieren revisión.'));
+        out.append(elemento('p', 'haiku-asistente-preview-resumen haku-pagos-periodo', fecha ? `${nombresMes[Number(fecha.slice(5,7))-1]} ${fecha.slice(0,4)} · ${fecha} al ${result.q.hasta}` : 'Periodo de la consulta'));
+        const grid = elemento('div', 'haiku-asistente-preview-grid haku-pagos-metricas');
+        modelo.contadores.forEach(([nombre, n]) => agregarDato(grid, nombre, String(n)));
+        out.append(grid, elemento('p', 'haku-pagos-nota', 'Sin asociación segura es un subconjunto de los movimientos que requieren revisión.'));
+        const aspectoSeccion = {
+            'Pagos nuevos seguros': ['normal', 'pago'],
+            'Pagos que requieren revisión': ['revision', 'pago'],
+            'Con diferencias': ['faltante', 'intercambio'],
+            'Sin asociación segura': ['revision', 'alerta'],
+            'Ya existe en Proyecto H': ['normal', 'pago']
+        };
         for (const [titulo, items] of modelo.secciones) {
             if (!items.length) continue;
-            const section = elemento('details', 'haiku-versiones-seccion');
-            section.open = titulo !== 'Ya existe en Proyecto H';
+            const [tono, icono] = aspectoSeccion[titulo] || ['neutro', 'archivo'];
+            const section = elemento('details', `haiku-comparacion-acordeon haku-pagos-seccion haku-franja--${tono} haku-icono--${icono}`);
             section.append(elemento('summary', '', `${titulo} (${items.length})`));
             for (const x of items) {
                 const p=x.pago || {}, r=x.reserva || {};
-                const card=elemento('article', 'haiku-versiones-tarjeta' + (['revisar','diferente'].includes(x.estado) ? ' haiku-versiones--requiere_revision' : ''));
-                card.append(elemento('strong', 'haiku-versiones-titular', `${r.titular || 'Titular no determinado'} · CAB ${r.cabana ?? 'sin dato'}`));
-                const datos=elemento('div', 'haiku-asistente-preview-grid');
+                const fila=elemento('details', `haku-pago-fila haku-pago-fila--${x.estado || 'revision'}`);
+                const resumen=elemento('summary', 'haku-pago-fila-resumen');
+                const principal=elemento('span', 'haku-pago-fila-principal');
+                principal.append(
+                    elemento('strong', 'haku-pago-fila-titular', r.titular || 'Titular no determinado'),
+                    elemento('span', 'haku-pago-fila-datos', `CAB ${r.cabana ?? 'sin dato'} · ${money(p.monto)} · ${p.medio_pago?.replaceAll('_',' ') || 'Medio sin dato'}`)
+                );
+                const estado=x.estado==='en_sistema' && x.sistema?.id ? 'Ya existe / omitido' :
+                    x.estado==='nuevo_seguro' ? 'Nuevo seguro' : x.estado==='diferente' ? 'Con diferencias' : 'Requiere revisión';
+                resumen.append(principal, elemento('span','haiku-versiones-estado haku-pago-fila-estado', estado));
+                fila.append(resumen);
+                const detalle=elemento('div', 'haku-pago-fila-detalle');
+                const datos=elemento('div', 'haiku-asistente-preview-grid haku-pago-detalle-grid');
                 for (const [etiqueta, valor] of [['Monto',money(p.monto)], ['Medio',p.medio_pago?.replaceAll('_',' ')], ['Check-in',r.fecha_checkin],
                     ['Fecha comprobante',p.fecha_comprobante], ['Fecha del bloque',p.fecha_bloque], ['Concepto / tipo',p.concepto || p.tipo_movimiento],
                     ['Folio',p.folio], ['Autorización',p.bovtar], ['CodAut',p.codigo_autorizacion], ['Origen XLSX',p.origen ? source(p.origen) : null]]) {
                     if (valor !== null && valor !== undefined && valor !== '') agregarDato(datos, etiqueta, String(valor));
                 }
-                card.append(datos, elemento('span','haiku-versiones-estado', x.estado==='en_sistema' && x.sistema?.id ? 'Ya existe / omitido' :
-                    x.estado==='nuevo_seguro' ? 'Nuevo seguro' : x.estado==='diferente' ? 'Con diferencias' : 'Requiere revisión'));
+                detalle.append(datos);
                 const franja=franjaDiferenciaPago(x,result.comparacion);
-                if (franja) card.append(franja);
-                for (const d of x.diferencias || []) if (!franja || !/^(monto\/moneda|medio de pago|fecha de pago) diferente$/.test(d)) card.append(elemento('p','haiku-versiones-meta',d));
-                if (!franja && x.estado==='diferente' && x.sistema) card.append(elemento('p','haiku-versiones-meta',
+                if (franja) detalle.append(franja);
+                for (const d of x.diferencias || []) if (!franja || !/^(monto\/moneda|medio de pago|fecha de pago) diferente$/.test(d)) detalle.append(elemento('p','haiku-versiones-meta',d));
+                if (!franja && x.estado==='diferente' && x.sistema) detalle.append(elemento('p','haiku-versiones-meta',
                     `Proyecto H: ${money(x.sistema.monto)} · ${x.sistema.medio_pago || 'Medio sin dato'} · ${x.sistema.fecha_pago || 'Fecha sin dato'}`));
-                if (x.estado==='en_sistema' && x.sistema?.id) card.append(elemento('p','haiku-versiones-aviso','No se volverá a incorporar. No requiere aprobación.'));
-                if (titulo==='Sin asociación segura') card.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
-                section.append(card);
+                if (x.estado==='en_sistema' && x.sistema?.id) detalle.append(elemento('p','haiku-versiones-aviso','No se volverá a incorporar. No requiere aprobación.'));
+                if (titulo==='Sin asociación segura') detalle.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
+                fila.append(detalle);
+                section.append(fila);
             }
             out.append(section);
         }
-        out.append(elemento('p', 'haiku-versiones-aviso', 'Preparar incorporación abre el flujo seguro existente. Allí se muestran también las dependencias de reservas necesarias para los pagos.'));
+        out.append(elemento('p', 'haku-pagos-nota haku-pagos-nota--final', 'Preparar incorporación abre el flujo seguro existente. Allí se muestran también las dependencias de reservas necesarias para los pagos.'));
     }
 
     function renderizarComparacion(out, result, ui = {}) {

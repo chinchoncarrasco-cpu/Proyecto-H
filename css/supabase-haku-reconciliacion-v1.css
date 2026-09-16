@@ -1534,3 +1534,105 @@
 .haku-actualizacion-compacta .haku-prioridad--proximos > summary::before { background: #a39535; }
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) > .haku-4b-preparar { margin: 9px 10px; width: calc(100% - 20px); }
 .haku-libro-auto.haku-libro-auto { border-radius: 5px; padding: 10px 12px; }
+
+/* Comparar pagos: misma geometría compacta, acotada a esta vista. */
+.haiku-asistente-panel .haku-pagos-compactos {
+    min-width: 0; max-width: 100%; overflow-x: hidden;
+}
+.haiku-asistente-panel .haku-pagos-compactos > .haku-pagos-periodo {
+    text-transform: none;
+}
+.haiku-asistente-panel .haku-pagos-compactos > .haku-pagos-nota {
+    margin: 0; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--rec-borde);
+    border-radius: 0; background: #f8fbf9; color: #5b6c63; font-size: .69rem; line-height: 1.45;
+}
+.haiku-asistente-panel .haku-pagos-compactos > .haku-pagos-nota--final {
+    margin-top: 5px; border-top: 1px solid var(--rec-borde);
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pagos-seccion {
+    min-width: 0; overflow: hidden;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila {
+    position: relative; width: 100%; min-width: 0; margin: 0; padding: 0;
+    border: 0; border-top: 1px solid #e6ece8; border-radius: 0; background: #fff;
+    box-shadow: none; box-sizing: border-box; overflow: hidden;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary {
+    position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center;
+    gap: 8px; min-width: 0; min-height: 43px; padding: 7px 34px 7px 27px;
+    list-style: none; cursor: pointer; color: #293f35; box-sizing: border-box;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary::-webkit-details-marker { display: none; }
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary::before {
+    content: ""; position: absolute; left: 11px; top: 15px; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--franja-acento);
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary::after {
+    content: ""; position: absolute; right: 13px; top: 50%; width: 7px; height: 7px;
+    border: solid #617369; border-width: 0 1.5px 1.5px 0;
+    transform: translateY(-70%) rotate(45deg);
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila[open] > summary::after {
+    transform: translateY(-20%) rotate(225deg);
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary:focus-visible {
+    outline: 2px solid var(--rec-verde); outline-offset: -3px;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-principal {
+    display: block; min-width: 0; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-titular {
+    display: block; margin: 0; color: #253f33; font-size: .78rem; font-weight: 700; line-height: 1.4;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-datos {
+    display: block; margin-top: 1px; color: #405c4e; font-size: .71rem; line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-estado {
+    align-self: center; max-width: 112px; margin: 0; white-space: normal; text-align: center;
+    color: #405c4e; background: #edf4f0; font-size: .62rem; line-height: 1.3;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila--revisar .haku-pago-fila-estado {
+    color: #79551f; background: #fbefd9;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila--diferente .haku-pago-fila-estado {
+    color: #8a4545; background: #f8e4e4;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-detalle {
+    min-width: 0; padding: 0 10px 9px 27px; border-top: 1px solid #edf1ee;
+    background: #fcfdfc; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid {
+    display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; margin: 0;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid > .haiku-asistente-preview-dato {
+    min-width: 0; margin: 0; padding: 7px 8px; border: 0; border-bottom: 1px solid #e6ece8;
+    border-radius: 0; background: transparent; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid > .haiku-asistente-preview-dato:nth-child(odd) {
+    border-right: 1px solid #e6ece8;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid .haiku-asistente-preview-dato > span {
+    display: block; color: #617369; font-size: .61rem;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid .haiku-asistente-preview-dato > strong {
+    display: block; color: #293f35; font-size: .72rem; line-height: 1.4; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-detalle :is(.haiku-versiones-meta,.haiku-versiones-aviso,.haiku-pago-diferencia-compacta) {
+    margin: 6px 0 0; font-size: .69rem; overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+    .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila > summary {
+        grid-template-columns: minmax(0,1fr); gap: 4px;
+    }
+    .haiku-asistente-panel .haku-pagos-compactos .haku-pago-fila-estado {
+        justify-self: start; max-width: none;
+    }
+    .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid {
+        grid-template-columns: minmax(0,1fr);
+    }
+    .haiku-asistente-panel .haku-pagos-compactos .haku-pago-detalle-grid > .haiku-asistente-preview-dato:nth-child(odd) {
+        border-right: 0;
+    }
+}
