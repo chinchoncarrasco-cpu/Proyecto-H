@@ -401,10 +401,10 @@
         });
     }
 
-    async function paginas(build) {
+    async function paginas(build, campoOrden = "id") {
         const rows = [];
         for (let start = 0; start < 5000; start += 500) {
-            const { data, error } = await build().order("id").range(start, start + 499);
+            const { data, error } = await build().order(campoOrden).range(start, start + 499);
             if (error) throw new Error("No se pudo consultar Proyecto H con tu sesión. No se concluye que falten registros.");
             if (!Array.isArray(data)) throw new Error("Respuesta incompleta de Proyecto H.");
             rows.push(...data);
@@ -488,14 +488,14 @@
         try {
             cargos = await paginas(() => cliente.from("vista_estado_cargos")
                 .select("cargo_id,reserva_id,estadia_id,tipo_cargo,concepto,monto,monto_ajustado,estado,estado_pago")
-                .in("reserva_id", reservaIds).eq("tipo_cargo", "alojamiento").order("cargo_id"));
+                .in("reserva_id", reservaIds).eq("tipo_cargo", "alojamiento"), "cargo_id");
             const cargoIdsLectura = cargos.filter(cargo => cargo.tipo_cargo === "alojamiento" && reservaIds.includes(cargo.reserva_id))
                 .map(cargo => cargo.cargo_id).filter(Boolean);
             [aplicacionesPago, aplicacionesCargo] = await Promise.all([
                 paginas(() => cliente.from("pago_aplicaciones")
-                    .select("id,pago_id,cargo_id,monto_aplicado").in("pago_id", pagoIds).order("id")),
+                    .select("id,pago_id,cargo_id,monto_aplicado").in("pago_id", pagoIds)),
                 cargoIdsLectura.length ? paginas(() => cliente.from("pago_aplicaciones")
-                    .select("id,pago_id,cargo_id,monto_aplicado").in("cargo_id", cargoIdsLectura).order("id")) : []
+                    .select("id,pago_id,cargo_id,monto_aplicado").in("cargo_id", cargoIdsLectura)) : []
             ]);
         } catch (err) {
             return { disponible: false, cargos: [], aplicaciones: [], error: `No fue posible leer las aplicaciones de alojamiento: ${err?.message || err}` };

@@ -25,15 +25,18 @@ const cargo = { cargo_id: 'c1', reserva_id: 'r1', servicio_id: 's1', tipo_cargo:
     monto: 30000, monto_ajustado: 30000, aplicado_neto: 0, saldo_cargo: 30000, estado: 'activo', estado_pago: 'pendiente' };
 
 function cliente(tablas, fallarFinanzas = false) {
-    const calls = [];
-    return { calls, auth: { getSession: async () => ({ data: { session: { user: { id: 'test' } } } }) },
+    const calls = [], ordenes = [];
+    return { calls, ordenes, auth: { getSession: async () => ({ data: { session: { user: { id: 'test' } } } }) },
         from(tabla) {
             calls.push(tabla);
+            const ordenBuilder = [];
             const builder = {
                 select() { return builder; }, in() { return builder; }, eq() { return builder; },
-                lte() { return builder; }, gte() { return builder; }, order() { return builder; },
+                lte() { return builder; }, gte() { return builder; },
+                order(campo) { ordenBuilder.push(campo); ordenes.push([tabla, campo]); return builder; },
                 async range(desde, hasta) {
                     if (fallarFinanzas && tabla === 'vista_estado_cargos') return { error: { message: 'denied' } };
+                    if (tabla === 'vista_estado_cargos' && ordenBuilder.includes('id')) return { error: { message: 'column vista_estado_cargos.id does not exist' } };
                     return { data: (tablas[tabla] || []).slice(desde, hasta + 1), error: null };
                 }
             };
@@ -139,6 +142,27 @@ test('efectivo confirmado aplicado inequívocamente al Full Day queda en_sistema
     assert.equal(Q.serializarIncorporacion(plan).some(x => x.tipo === 'pago'), false);
     assert.equal(db.calls.includes('vista_estado_cargos'), true);
     assert.equal(db.calls.includes('pago_aplicaciones'), true);
+    assert.equal(db.ordenes.some(([tabla, campo]) => tabla === 'vista_estado_cargos' && campo === 'id'), false);
+    assert.equal(db.ordenes.some(([tabla, campo]) => tabla === 'vista_estado_cargos' && campo === 'cargo_id'), true);
+});
+
+test('objeto real Sep26 O71:R71 conserva CAB 10 y reconcilia con orden válido de la vista', async () => {
+    const hoja = global.HAIKU_LIBRO_SEMANTICA.normalizarHoja(require('./fixtures/libro-pagos-sep26.cjs')(), 'Sep26');
+    const libro = hoja.reservas.find(r => r.titular === 'Macarena Hurtado' && r.cabana === 10);
+    const movimiento = libro.pagos.find(p => p.monto === 100000 && p.medio_pago === 'efectivo');
+    assert.deepEqual({ cabana: movimiento.cabana, fecha_bloque: movimiento.fecha_bloque,
+        tipo_movimiento: movimiento.tipo_movimiento, estado_pago: movimiento.estado_pago,
+        pago_recibido: movimiento.pago_recibido, concepto: movimiento.concepto }, {
+        cabana: 10, fecha_bloque: '2026-09-04', tipo_movimiento: 'alojamiento',
+        estado_pago: 'registrado_en_libro', pago_recibido: true, concepto: 'cab10/fullday'
+    });
+    const caso = casoEfectivoMacarena();
+    const db = cliente(caso.tablas);
+    const comp = await Q.compararSistema([{ ...libro, pagos: [movimiento], pagos_sin_asociacion: [] }], db, q);
+    const detalle = comp.pagosDetalle.find(x => x.pago === movimiento);
+    assert.equal(detalle.estado, 'en_sistema');
+    assert.equal(detalle.coincidencia_aplicacion_alojamiento, true);
+    assert.deepEqual(db.ordenes.filter(([tabla]) => tabla === 'vista_estado_cargos'), [['vista_estado_cargos', 'cargo_id']]);
 });
 
 const revisaEfectivo = async cambios => assert.equal((await compararEfectivo(cambios)).detalle.estado, 'revisar');
