@@ -1,6 +1,6 @@
 // Prueba manual sobre PostgreSQL local desechable con DOS conexiones reales.
-// No se ejecuta en la suite JS. Requiere explÃ­citamente:
-//   HAKU_4C_TEST_DATABASE_URL=postgres://... (base local vacÃ­a y desechable)
+// No se ejecuta en la suite JS. Requiere explícitamente:
+//   HAKU_4C_TEST_DATABASE_URL=postgres://... (base local vacía y desechable)
 //   HAKU_4C_ALLOW_DISPOSABLE_DB=YES
 //   node tests/haiku-libro-pagos-servicios-concurrencia-postgres.cjs
 const assert=require('node:assert/strict');
@@ -9,11 +9,11 @@ const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 
 if(process.env.HAKU_4C_ALLOW_DISPOSABLE_DB!=='YES'||!process.env.HAKU_4C_TEST_DATABASE_URL){
- throw new Error('Esta prueba sÃ³lo acepta una base PostgreSQL local desechable autorizada con HAKU_4C_ALLOW_DISPOSABLE_DB=YES.');
+ throw new Error('Esta prueba sólo acepta una base PostgreSQL local desechable autorizada con HAKU_4C_ALLOW_DISPOSABLE_DB=YES.');
 }
 let Client;
 try{({Client}=require('pg'));}
-catch{throw new Error('Falta el paquete pg. No instalarlo automÃ¡ticamente; deja pendiente esta prueba concurrente.');}
+catch{throw new Error('Falta el paquete pg. No instalarlo automáticamente; deja pendiente esta prueba concurrente.');}
 
 const root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
@@ -58,29 +58,29 @@ const b=new Client({connectionString:url});
  assert.equal(otra,true);
  await b.query('rollback');
 
- // Misma reserva: el helper de la segunda conexiÃ³n espera hasta que termina la primera.
+ // Misma reserva: el helper de la segunda conexión espera hasta que termina la primera.
  await b.query('begin');let termino=false;
  const segunda=b.query("select pg_advisory_xact_lock(private.haiku_libro_lock_key_v1('reserva_finanzas',$1))",[reservaA]).then(()=>{termino=true;});
- await wait(150);assert.equal(termino,false,'la segunda operaciÃ³n no debe atravesar el lock de la misma reserva');
+ await wait(150);assert.equal(termino,false,'la segunda operación no debe atravesar el lock de la misma reserva');
  await a.query('rollback');await segunda;assert.equal(termino,true);await b.query('rollback');
 
  // Writer iniciado mientras el helper posee la reserva: falla cerrado, sin esperar/deadlock.
  await a.query('begin');
  await a.query("select pg_advisory_xact_lock(private.haiku_libro_lock_key_v1('reserva_finanzas',$1))",[reservaA]);
  await b.query('begin');const inicio=Date.now();
- await assert.rejects(()=>b.query('update servicios set total=31000 where id=$1',[servicioA]),/otra operaciÃ³n financiera en curso/i);
+ await assert.rejects(()=>b.query('update servicios set total=31000 where id=$1',[servicioA]),/otra operación financiera en curso/i);
  assert.ok(Date.now()-inicio<2000,'el trigger debe abortar sin quedar esperando un advisory lock');
  await b.query('rollback');
 
  // Un candidato compatible tampoco puede aparecer durante la ventana protegida.
  const servicioFantasma=randomUUID();
  await b.query('begin');
- await assert.rejects(()=>b.query("insert into servicios(id,reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,estado_servicio,total,tipo_cobro) values($1,$2,$3,$4,'2026-09-01','pendiente',30000,'normal')",[servicioFantasma,reservaA,estadiaA,catalogo]),/otra operaciÃ³n financiera en curso/i);
+ await assert.rejects(()=>b.query("insert into servicios(id,reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,estado_servicio,total,tipo_cobro) values($1,$2,$3,$4,'2026-09-01','pendiente',30000,'normal')",[servicioFantasma,reservaA,estadiaA,catalogo]),/otra operación financiera en curso/i);
  await b.query('rollback');await a.query('rollback');
 
- // Terminada la primera operaciÃ³n, el candidato sÃ­ puede entrar; una preview nueva debe verlo.
+ // Terminada la primera operación, el candidato sí puede entrar; una preview nueva debe verlo.
  await b.query("insert into servicios(id,reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,estado_servicio,total,tipo_cobro) values($1,$2,$3,$4,'2026-09-01','pendiente',30000,'normal')",[servicioFantasma,reservaA,estadiaA,catalogo]);
  assert.equal(Number((await b.query('select count(*) n from servicios where reserva_id=$1',[reservaA])).rows[0].n),2);
 
- console.log('PASS concurrencia PostgreSQL: reservas distintas, serializaciÃ³n por reserva, sin espera fila/advisory y phantom bloqueado.');
+ console.log('PASS concurrencia PostgreSQL: reservas distintas, serialización por reserva, sin espera fila/advisory y phantom bloqueado.');
 })().finally(async()=>{await Promise.allSettled([a.end(),b.end(),setup.end()]);}).catch(e=>{console.error(e);process.exitCode=1;});

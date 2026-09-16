@@ -78,7 +78,7 @@ const Q=require('../js/haiku-libro-consultas-v1.js');
   const s=randomUUID(),c=randomUUID();
   await db.query("insert into servicios(id,reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,estado_servicio,total,tipo_cobro) values($1,$2,$3,$4,'2026-09-03','pendiente',20000,'normal')",[s,reserva,estadia,catalogLate]);
   await db.query("insert into cargos(id,reserva_id,estadia_id,servicio_id,tipo_cargo,estado,monto) values($1,$2,$3,$4,'servicio','activo',20000)",[c,reserva,estadia,s]);
- },/destino dejÃ³ de ser Ãºnico/i);
+ },/destino dejó de ser único/i);
  await rejectDb(async()=>{
   const p=randomUUID();await db.query("insert into pagos(id,reserva_id,monto,moneda,tipo_movimiento,medio_pago,estado,fecha_pago) values($1,$2,1000,'CLP','pago','efectivo','confirmado',now())",[p,reserva]);
   await db.query('insert into pago_aplicaciones values($1,$2,1000)',[p,cargoLate]);
@@ -90,7 +90,7 @@ const Q=require('../js/haiku-libro-consultas-v1.js');
  await rejectDb(async()=>{
   await db.query("insert into pagos(reserva_id,monto,moneda,tipo_movimiento,medio_pago,estado,fecha_pago,codigo_autorizacion) values($1,50000,'CLP','pago','tarjeta_debito','confirmado',now(),'622979')",[reserva]);
   await db.query("insert into pagos(reserva_id,monto,moneda,tipo_movimiento,medio_pago,estado,fecha_pago,codigo_autorizacion) values($1,50000,'CLP','pago','tarjeta_debito','confirmado',now(),'622979')",[reserva]);
- },/mÃºltiples pagos confirmados/i);
+ },/múltiples pagos confirmados/i);
  await rejectDb(()=>db.query("insert into pagos(reserva_id,monto,moneda,tipo_movimiento,medio_pago,estado,fecha_pago,codigo_autorizacion) values($1,50000,'CLP','pago','tarjeta_debito','confirmado',now(),'622979')",[otherReserva]),/otra reserva/i);
  await rejectItem(i=>{i.datos_origen.aplicaciones_servicio_v1.aplicaciones[1].monto=29999;},/suma de aplicaciones/i);
  await rejectItem(i=>{i.datos_origen.aplicaciones_servicio_v1.aplicaciones[1].cargo_id=cargoLate;},/reutilizar el mismo cargo/i);
