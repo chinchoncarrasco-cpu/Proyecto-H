@@ -1,0 +1,60 @@
+﻿name: Haku 4C PostgreSQL
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix-haku-pagos-reconciliacion-v2
+    paths:
+      - "supabase/migrations/20260915233506_haku_libro_aplicaciones_servicio_seguras.sql"
+      - "tests/haiku-libro-pagos-servicios-backend.test.cjs"
+      - "tests/haiku-libro-pagos-servicios-postgres.cjs"
+      - "tests/haiku-libro-pagos-servicios-concurrencia-postgres.cjs"
+      - ".github/workflows/haku-4c-postgres.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-4c:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: haku_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d haku_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependencias sólo para pruebas
+        run: npm install --no-save --package-lock=false pg @electric-sql/pglite
+
+      - name: Contrato backend FASE 4C
+        run: node --test tests/haiku-libro-pagos-servicios-backend.test.cjs
+
+      - name: PostgreSQL efímero / contrato normal
+        run: node tests/haiku-libro-pagos-servicios-postgres.cjs
+
+      - name: PostgreSQL real / concurrencia de dos conexiones
+        env:
+          HAKU_4C_ALLOW_DISPOSABLE_DB: "YES"
+          HAKU_4C_TEST_DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/haku_test"
+        run: node tests/haiku-libro-pagos-servicios-concurrencia-postgres.cjs
