@@ -131,7 +131,7 @@ test('la suma debe ser exacta y una aplicación incompleta revierte toda la llam
  assert.equal(handlers.length,2,'los únicos handlers convierten cast inválido en aborto explícito');
 });
 
-test('el handshake es read-only, autenticado y no habilita el frontend',()=>{
+test('el handshake es read-only, autenticado y el frontend exige su contrato exacto',()=>{
  const capacidad=sql.slice(sql.indexOf('create or replace function public.haiku_libro_aplicaciones_servicio_capacidad_v1()'));
  assert.match(capacidad,/auth\.uid\(\) is null/);
  assert.doesNotMatch(capacidad,/\b(?:insert|update|delete)\b/i);
@@ -139,8 +139,10 @@ test('el handshake es read-only, autenticado y no habilita el frontend',()=>{
  assert.match(capacidad,/grant execute[\s\S]+to authenticated;/);
  assert.match(capacidad,/'rpc','haiku_incorporar_pago_servicios_libro_v1'/);
  assert.match(capacidad,/'efectivo_sin_identificador',false/);
- for(const archivo of ['js/haiku-libro-consultas-v1.js','js/haiku-libro-pagos-ui-v1.js']){
-  const fuente=fs.readFileSync(archivo,'utf8');
-  assert.doesNotMatch(fuente,/aplicaciones_servicio_v1|haiku_libro_aplicaciones_servicio_capacidad_v1/);
- }
+ const consultas=fs.readFileSync('js/haiku-libro-consultas-v1.js','utf8');
+ assert.match(consultas,/haiku_libro_aplicaciones_servicio_capacidad_v1/);
+ assert.match(consultas,/haiku_incorporar_pago_servicios_libro_v1/);
+ assert.match(consultas,/aplicaciones_servicio_v1/);
+ const ui=fs.readFileSync('js/haiku-libro-pagos-ui-v1.js','utf8');
+ assert.doesNotMatch(ui,/haiku_incorporar_pago_servicios_libro_v1|haiku_registrar_pago/);
 });

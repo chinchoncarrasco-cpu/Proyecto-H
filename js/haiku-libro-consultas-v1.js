@@ -953,16 +953,105 @@
         return salida;
     }
 
-    function motivosDestinoFinanciero(resolucion) {
+    const CAPACIDAD_PAGOS_SERVICIO_4C = Object.freeze({
+        version: 1,
+        contrato: 'aplicaciones_servicio_v1',
+        rpc: 'haiku_incorporar_pago_servicios_libro_v1'
+    });
+
+    function capacidadPagosServicioValida(data) {
+        return data?.version === CAPACIDAD_PAGOS_SERVICIO_4C.version &&
+            data?.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato &&
+            data?.rpc === CAPACIDAD_PAGOS_SERVICIO_4C.rpc &&
+            data?.efectivo_sin_identificador === false;
+    }
+
+    async function consultarCapacidadPagosServicio(cliente) {
+        if (!cliente?.rpc) return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
+        try {
+            const { data, error } = await cliente.rpc('haiku_libro_aplicaciones_servicio_capacidad_v1', {});
+            if (error || !capacidadPagosServicioValida(data)) {
+                return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
+            }
+            return { disponible: true, ...CAPACIDAD_PAGOS_SERVICIO_4C, efectivo_sin_identificador: false };
+        } catch (_) {
+            return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
+        }
+    }
+
+    function motivosDestinoFinanciero(resolucion, capacidad) {
         if (!resolucion) return ['No fue posible comprobar el destino financiero del pago de servicio.'];
         if (resolucion.estado === 'destino_unico') {
-            return ['Destino financiero único comprobado. El guardado permanece bloqueado porque el writer actual no admite aplicaciones explícitas generales a cargos de servicio.'];
+            return capacidad?.disponible ? [] : [capacidad?.motivo || 'El pago tiene un destino financiero seguro, pero la escritura protegida de servicios todavía no está disponible.'];
         }
         const detalles = [...new Set((resolucion.aplicaciones || []).map(aplicacion => aplicacion.motivo).filter(Boolean))];
         return detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.'];
     }
 
-    function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null) {
+    function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente) {
+        if (!destino?.reserva_id || resolucion?.estado !== 'destino_unico') return null;
+        const pagos = new Map((snapshotFinanciero?.pagos || []).map(item => [item.id, item]));
+        const aplicaciones = (resolucion.aplicaciones || []).map(aplicacion => {
+            const cargo = aplicacion.cargo || {};
+            const servicio = cargo.servicio || {};
+            const cantidad = (snapshotFinanciero?.aplicaciones || []).filter(item => item.cargo_id === aplicacion.cargo_id && pagos.get(item.pago_id)?.estado === 'confirmado').length;
+            return {
+                cargo_id: aplicacion.cargo_id,
+                servicio_id: cargo.servicio_id || servicio.id || null,
+                concepto_canon: aplicacion.concepto_canon || null,
+                monto: Number(aplicacion.monto),
+                saldo_esperado: Number(cargo.saldo_cargo),
+                aplicado_esperado: Number(cargo.aplicado_neto || 0),
+                cantidad_aplicaciones_esperada: cantidad,
+                fecha_contexto: aplicacion.fecha || null,
+                fecha_servicio_esperada: servicio.fecha_servicio || null
+            };
+        });
+        const total = aplicaciones.reduce((suma, aplicacion) => suma + aplicacion.monto, 0);
+        const validas = aplicaciones.length > 0 && aplicaciones.every(aplicacion =>
+            aplicacion.cargo_id && aplicacion.servicio_id && aplicacion.concepto_canon &&
+            Number.isSafeInteger(aplicacion.monto) && aplicacion.monto > 0 &&
+            Number.isSafeInteger(aplicacion.saldo_esperado) && aplicacion.saldo_esperado > 0 &&
+            Number.isSafeInteger(aplicacion.aplicado_esperado) && aplicacion.aplicado_esperado >= 0 &&
+            Number.isSafeInteger(aplicacion.cantidad_aplicaciones_esperada) && aplicacion.cantidad_aplicaciones_esperada >= 0 &&
+            aplicacion.fecha_servicio_esperada);
+        const bovtar = pago.bovtar || null;
+        const idFuerte = normalizarId(pago.codigo_autorizacion) || (normalizarId(pago.folio) && normalizarId(bovtar));
+        if (!validas || total !== Number(pago.monto) || pago.moneda !== 'CLP' || !idFuerte || !medioLibro(pago) || !pago.fecha_comprobante) return null;
+        return {
+            contrato: CAPACIDAD_PAGOS_SERVICIO_4C.contrato,
+            reserva_ref: null,
+            argumentos: {
+                p_reserva_id: destino.reserva_id,
+                p_monto: Number(pago.monto),
+                p_medio_pago: medioLibro(pago),
+                p_etapa_operativa: 'abono',
+                p_fecha_pago: pago.fecha_comprobante,
+                p_folio: pago.folio || null,
+                p_codigo_autorizacion: pago.codigo_autorizacion || null,
+                p_bove: bovtar,
+                p_referencia_externa: pago.texto_original || null,
+                p_observaciones: pago.texto_original || null,
+                p_aplicaciones: [],
+                p_modo_aplicacion: 'ninguno'
+            },
+            datos_origen: {
+                bovtar,
+                fecha_bloque: pago.fecha_bloque,
+                origen: pago.origen,
+                aplicaciones_servicio_v1: {
+                    version: CAPACIDAD_PAGOS_SERVICIO_4C.version,
+                    reserva_id: destino.reserva_id,
+                    monto_total: Number(pago.monto),
+                    moneda: pago.moneda,
+                    aplicaciones
+                }
+            },
+            aprobado_manualmente: aprobadoManualmente === true
+        };
+    }
+
+    function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
         const add = (categoria, id, texto, payload = null, motivos = [], dependeDe = [], permisos = []) => {
@@ -1149,13 +1238,15 @@
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
             if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
             if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
-            if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero));
+            const servicio4C = x.destinoFinanciero?.estado === 'destino_unico';
+            if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero, capacidadServicios));
             if (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro') motivos.push('El Libro no confirma un pago recibido.');
             const medio = medioLibro(p);
             if (!medio) motivos.push('Falta precisar el medio de pago (Webpay crédito o débito, si corresponde).');
             const asociadoLibro = r.pagos.includes(p);
             const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) && (x.estado === 'nuevo_seguro' || destino?.reserva_ref);
             const manual = aprobados.has(id);
+            if (servicio4C && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             const mismoMontoSinIdentificador = !fuerte && (
                 snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda)) ||
                 vistos.some(v => v.destino === destinoActual && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda)
@@ -1163,7 +1254,10 @@
             if (mismoMontoSinIdentificador && !manual) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
             if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');
             if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
-            const payload = { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
+            const payloadServicio = servicio4C ?
+                payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas, manual) : null;
+            if (servicio4C && !payloadServicio) motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
+            const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: p.texto_original || null,
                     p_fecha_pago: p.fecha_comprobante || null, p_folio: p.folio || null, p_codigo_autorizacion: p.codigo_autorizacion || null,
                     p_bove: p.bove || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
@@ -1174,6 +1268,7 @@
             item.aprobable = motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
             item.destinoFinanciero = x.destinoFinanciero || null;
             item.aprobableFinancieramente = x.destinoFinanciero?.estado === 'destino_unico';
+            item.backendServiciosDisponible = capacidadServicios?.disponible === true;
             vistos.push({ pago:p, item, destino: destinoActual, manual });
         }
         // Conserva en cada tarjeta el movimiento exacto del Libro que originó el ítem.
@@ -1197,7 +1292,10 @@
         if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         const comparacion = await compararSistema(result.reservas, cliente, result.q);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        const plan = crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion);
+        const requiereBackendServicios = (comparacion.pagosDetalle || []).some(item => item.destinoFinanciero?.estado === 'destino_unico');
+        const capacidadServicios = requiereBackendServicios ? await consultarCapacidadPagosServicio(cliente) : null;
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+        const plan = crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
             plan.cancelaciones_confirmadas = result.cancelaciones_confirmadas;
@@ -1243,7 +1341,7 @@
                 reserva_id: item.payload.reserva_id, estadias: item.payload.estadias
             };
             if (item.categoria === 'pagos') return {
-                tipo: 'pago', item_id: item.id,
+                tipo: item.payload.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato ? 'pago_servicios_4c' : 'pago', item_id: item.id,
                 reserva_id: item.payload.argumentos.p_reserva_id,
                 reserva_ref: item.payload.reserva_ref,
                 argumentos: item.payload.argumentos,
@@ -1256,6 +1354,14 @@
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        const usaServicios4C = plan.items.some(i => i.seleccionado && i.payload?.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato) ||
+            (plan.solicitudPendiente?.servicios || []).length > 0;
+        if (usaServicios4C) {
+            const capacidadServicios = await consultarCapacidadPagosServicio(cliente);
+            if (!capacidadServicios.disponible) {
+                throw new Error('El pago tiene un destino financiero seguro, pero la escritura protegida de servicios todavía no está disponible.');
+            }
+        }
         if (plan.items.some(i => i.seleccionado && i.distribucionManual) ||
             plan.solicitudPendiente?.items.some(i => i.datos_origen?.distribucion_manual)) {
             const capacidad = await cliente.rpc('haiku_libro_distribucion_capacidad_v1', {});
@@ -1278,20 +1384,22 @@
             }
             const vigentes = new Set(actualizado.items.filter(i => i.seleccionado).map(i => i.id));
             omitidosAlRevalidar = [...seleccionados].filter(id => !vigentes.has(id)).length;
-            const items = serializarIncorporacion(actualizado);
-            if (!items.length) throw new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.');
-            solicitud = { operacionId: crearIdOperacion(), items, omitidosAlRevalidar };
+            const serializados = serializarIncorporacion(actualizado);
+            if (!serializados.length) throw new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.');
+            const servicios = serializados.filter(item => item.tipo === 'pago_servicios_4c')
+                .map(item => ({ operacionId: crearIdOperacion(), item, resultado: null }));
+            const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c');
+            if (servicios.length > 1 || (servicios.length && items.length)) {
+                throw new Error('Confirma cada pago protegido de servicios por separado para conservar una única operación atómica.');
+            }
+            solicitud = { operacionId: crearIdOperacion(), items, servicios, omitidosAlRevalidar };
             // Se conserva la misma solicitud para que un reintento de red sea idempotente.
             plan.solicitudPendiente = solicitud;
         } else omitidosAlRevalidar = solicitud.omitidosAlRevalidar || 0;
 
-        const { data, error } = await cliente.rpc('haiku_incorporar_libro_v1', {
-            p_operacion_id: solicitud.operacionId,
-            p_items: solicitud.items
-        });
-        if (error) {
+        const conflictoDatos = error => {
             const mensaje = String(error.message || error.details || error);
-            if (/Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone/i.test(mensaje)) {
+            if (/Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Un conflicto de datos no es un retry de red: el payload y su
                 // snapshot ya no son vigentes. El siguiente paso vuelve a la
                 // comparación y conserva decisiones humanas compatibles.
@@ -1301,8 +1409,32 @@
                 throw conflicto;
             }
             throw error;
+        };
+        for (const servicio of solicitud.servicios || []) {
+            if (servicio.resultado) continue;
+            const { data, error } = await cliente.rpc(CAPACIDAD_PAGOS_SERVICIO_4C.rpc, {
+                p_operacion_id: servicio.operacionId,
+                p_item: servicio.item
+            });
+            if (error) conflictoDatos(error);
+            if (!data?.ok) throw new Error('Proyecto H no confirmó el pago de servicios.');
+            servicio.resultado = data;
+        }
+
+        let data = { ok: true, reservas_creadas: 0, estadias_agregadas: 0, pagos_creados: 0, actualizaciones: 0, omitidos: 0 };
+        if (solicitud.items.length) {
+            const respuesta = await cliente.rpc('haiku_incorporar_libro_v1', {
+                p_operacion_id: solicitud.operacionId,
+                p_items: solicitud.items
+            });
+            if (respuesta.error) conflictoDatos(respuesta.error);
+            data = respuesta.data;
         }
         if (!data?.ok) throw new Error('Proyecto H no confirmó la incorporación.');
+        for (const servicio of solicitud.servicios || []) {
+            data.pagos_creados = Number(data.pagos_creados || 0) + Number(servicio.resultado?.pagos_creados || 0);
+            data.omitidos = Number(data.omitidos || 0) + Number(servicio.resultado?.omitidos || 0);
+        }
         return { resultado: data, omitidosAlRevalidar };
     }
 

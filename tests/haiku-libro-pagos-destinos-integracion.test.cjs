@@ -55,7 +55,7 @@ test('comparación adjunta destino único, pero el plan bloquea escritura por co
     assert.equal(item.aprobableFinancieramente, true);
     assert.equal(item.aprobable, false);
     assert.equal(item.seleccionado, false);
-    assert.match(item.motivos.join(' '), /writer actual no admite aplicaciones explícitas/i);
+    assert.match(item.motivos.join(' '), /escritura protegida.+todavía no está disponible/i);
     assert.equal(Q.serializarIncorporacion(plan).some(x => x.tipo === 'pago'), false);
     assert.equal(db.calls.includes('vista_estado_cargos'), true);
 });
