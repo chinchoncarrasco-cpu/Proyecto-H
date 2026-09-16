@@ -482,6 +482,8 @@
         const compatibles = item => pagos.filter(p => p.id && !fuertesUsados.has(p.id) && !consumidos.has(p.id) &&
             p.reserva_id===item.reservaId && moneda(p)===moneda(item.p) && Number(p.monto)===Number(item.p.monto) &&
             medioSistema(p)===medioLibro(item.p));
+        const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
+            normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
 
         // Evidencia exacta conservada por Haku: misma reserva, monto y medio,
         // más origen XLSX o glosa completa. La fecha puede haber sido corregida.
@@ -492,6 +494,25 @@
             const libroCompatible=items.filter(otro=>!asignadas.has(otro.p) && otro.reservaId===item.reservaId &&
                 moneda(otro.p)===moneda(item.p) && Number(otro.p.monto)===Number(item.p.monto) &&
                 medioLibro(otro.p)===medioLibro(item.p) && (origenExacto(otro,existente) || referenciaExacta(otro,existente)));
+            if (libroCompatible.length!==1) continue;
+            asignadas.set(item.p,existente);
+            consumidos.add(existente.id);
+        }
+
+        // Una transferencia migrada puede haber conservado la fecha de registro
+        // en vez de la fecha del comprobante. Sólo se admite sin comparar fechas
+        // cuando queda una correspondencia financiera única en ambos sentidos.
+        for (const item of items.filter(x=>!asignadas.has(x.p) && medioLibro(x.p)==='transferencia' &&
+            x.p.tipo_movimiento==='alojamiento' && x.p.pago_recibido===true &&
+            x.p.estado_pago==='registrado_en_libro' && x.p.fecha_comprobante)) {
+            const candidatos=compatibles(item);
+            if (candidatos.length!==1) continue;
+            const existente=candidatos[0];
+            if (S.normalizar(existente.estado)!=='confirmado' || existente.datos_origen?.verificacion_migrada!==true ||
+                identificadorFuerteSistema(existente) || !existente.fecha_pago) continue;
+            const libroCompatible=items.filter(otro=>!asignadas.has(otro.p) && otro.reservaId===item.reservaId &&
+                medioLibro(otro.p)==='transferencia' && otro.p.tipo_movimiento==='alojamiento' &&
+                moneda(otro.p)===moneda(item.p) && Number(otro.p.monto)===Number(item.p.monto));
             if (libroCompatible.length!==1) continue;
             asignadas.set(item.p,existente);
             consumidos.add(existente.id);

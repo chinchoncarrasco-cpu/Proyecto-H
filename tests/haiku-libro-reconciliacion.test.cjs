@@ -769,6 +769,42 @@ test('Maria Loreto and Maria Jose keep the existing transfer out and only prepar
   assert.equal(omitido.seleccionado,false);assert.equal(omitido.payload,null);
  }
 });
+test('Maria Loreto migrated transfer tolerates only a unique 1-to-1 historical date difference',async()=>{
+ const texto='5-8-2026 // María Loreto González // 0160954116 Transf. MARIA LORETO GONZALEZ ESPINOZA // CO // cab1/2noches // $160,000';
+ const transferencia=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:160000,
+  fecha_comprobante:'2026-08-05',texto_original:texto});
+ const debito=readyPay({codigo_autorizacion:null,folio:'000240',bovtar:'000654',medio_pago:'debito',monto:160000,
+  fecha_comprobante:'2026-09-04',origen:{hoja:'Sep26',celda:'D20'},texto_original:'Débito María Loreto González'});
+ const r=readyBook({titular:'María Loreto González',cabana:1,fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-06',pagos:[transferencia,debito]});
+ const historico={id:'transfer-historica',reserva_id:'r1',estado:'confirmado',monto:160000,moneda:'CLP',medio_pago:'transferencia',
+  fecha_pago:'2026-09-02T01:00:00Z',referencia_externa:null,observaciones:'Abono registrado desde HAIKU · CAB 1',datos_origen:{verificacion_migrada:true}};
+ const comparar=async (libro=[transferencia],sistema=[historico])=>{
+  const reserva={...r,pagos:libro};return Q.compararSistema([reserva],client([stay(reserva)],sistema),q);
+ };
+ const c=await comparar();
+ assert.equal(c.pagosDetalle[0].estado,'en_sistema');assert.equal(c.pagosDetalle[0].sistema.id,'transfer-historica');
+ assert.equal(c.pagosDetalle[0].coincidencia_debil,true);assert.equal(c.meta.pagos_faltantes,0);assert.equal(c.meta.pagos_revisar,0);
+ const plan=Q.crearPlanIncorporacion([r],c),omitido=plan.items.find(i=>i.pagoLibro===transferencia);
+ assert.equal(omitido.categoria,'omitidos');assert.equal(omitido.payload,null);assert.notEqual(omitido.aprobable,true);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+
+ const revisar=async (libro,sistema)=>assert.equal((await comparar(libro,sistema)).pagosDetalle[0].estado,'revisar');
+ await revisar([transferencia],[historico,{...historico,id:'segundo'}]);
+ const dosLibro=await comparar([transferencia,{...transferencia,origen:{hoja:'Sep26',celda:'OTRA'}}],[historico]);
+ assert.ok(dosLibro.pagosDetalle.every(x=>x.estado==='revisar'));
+ await revisar([transferencia],[{...historico,reserva_id:'otra'}]);
+ await revisar([transferencia],[{...historico,monto:159000}]);
+ await revisar([transferencia],[{...historico,moneda:'USD'}]);
+ await revisar([transferencia],[{...historico,medio_pago:'efectivo'}]);
+ await revisar([transferencia],[{...historico,datos_origen:{}}]);
+ await revisar([transferencia],[{...historico,estado:'anulado'}]);
+ await revisar([transferencia],[{...historico,codigo_autorizacion:'ID-FUERTE'}]);
+
+ const exacta=await comparar([transferencia],[{...historico,fecha_pago:'2026-08-05T01:00:00Z',estado:undefined,datos_origen:{}}]);
+ assert.equal(exacta.pagosDetalle[0].estado,'en_sistema');
+ const ambos=await comparar([transferencia,debito],[historico,{...debito,id:'debito-real',reserva_id:'r1',estado:'confirmado',medio_pago:'tarjeta_debito',bove:'000654'}]);
+ assert.deepEqual(ambos.pagosDetalle.map(x=>x.estado),['en_sistema','en_sistema']);
+});
 test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
  const folio=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});
  const codaut=readyPay({monto:147930,codigo_autorizacion:'685775',folio:null,bovtar:null,origen:{hoja:'Sep26',celda:'A2'}});
