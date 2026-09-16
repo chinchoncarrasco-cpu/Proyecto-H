@@ -318,6 +318,11 @@
                         concepto: concept?.valor || null, tipo_movimiento: /early\s*(check\s*)?in/.test(c) ? 'servicio' : kind, estado_pago: pending,
                         ...(advertencias.length ? { advertencias } : {}),
                         pago_recibido: money !== null && pending === "registrado_en_libro" && kind !== "penalidad" ? true : null,
+                        evidencia_financiera: {
+                            sector: "pagos", estructura_fila: "fecha_detalle_concepto_monto",
+                            columnas_ocupadas: { fecha: !!at(r,h.c)?.valor?.trim(), detalle: !!detail?.valor?.trim(), concepto: !!concept?.valor?.trim(), monto: !!amount?.valor?.trim() },
+                            colores: { detalle: color(estilos[detail?.estiloId]?.fill?.fgColor), concepto: color(estilos[concept?.estiloId]?.fill?.fgColor), monto: color(estilos[amount?.estiloId]?.fill?.fgColor) }
+                        },
                         texto_original: [at(r, h.c)?.valor, text, amount?.valor].filter(Boolean).join(" // "), origen: { hoja, celda: `${direccion(r, h.c)}:${direccion(r, h.c + 3)}` } };
                     res.pagos.push(p);
                 }

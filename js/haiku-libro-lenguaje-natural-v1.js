@@ -187,24 +187,45 @@
         return copia;
     }
 
-    function esNotaAdministrativaFinanciera(pago) {
-        if (!pago || typeof pago !== "object") return false;
-        const monto = Number(pago.monto);
-        if (Number.isFinite(monto) && monto > 0) return false;
+    function clasificarMovimientoFinanciero(pago) {
+        if (!pago || typeof pago !== "object") return "dudoso";
         const texto = normalizarBase(pago.texto_original || "");
-        if (!texto) return false;
-        return /\b(?:bove|manager|boleta)\b/.test(texto) ||
-            /\bpend(?:iente)?\b[^\n]{0,40}\b\d+\s*%/.test(texto);
+        const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
+        const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
+        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","efectivo"].includes(pago.medio_pago);
+        const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar) || /\b\d{6,}\s*transf\b/.test(texto);
+        const fila = pago.evidencia_financiera?.columnas_ocupadas;
+        const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
+        const reembolso = /\b(?:reembolso|reembolsar|devolucion|nota\s+de\s+credito)\b|\bnc\s*\d+\b/.test(texto);
+        const obligacion = /\bpenalidad\b|\b(?:por|x)\s+pagar\b|\bsaldo\s+(?:restante|pendiente)\b|\bpor\s+gestionar\b/.test(texto);
+        const notaAdministrativa = /\b(?:observacion|instruccion|informativo)\b/.test(texto) ||
+            (!montoValido && /\b(?:bove|manager|boleta)\b/.test(texto));
+        const evidenciaIngresoCompleta = montoValido && fechaValida && (medioValido || identificadorFuerte) && estructuraCoherente;
+
+        // Reembolsos y obligaciones por pagar describen dinero, pero no acreditan
+        // por sí mismos un ingreso recibido. Si mezclan señales de ingreso quedan
+        // en revisión; sin ellas se conservan sólo como nota financiera.
+        if (reembolso || obligacion || notaAdministrativa) {
+            return evidenciaIngresoCompleta ? "dudoso" : "nota_financiera";
+        }
+        if (pago.estado_pago === "por_confirmar" || pago.estado_pago === "pendiente") return "dudoso";
+        if (evidenciaIngresoCompleta) return "pago_real";
+        return "dudoso";
     }
 
-    function notaFinancieraDesdePago(pago) {
+    function notaFinancieraDesdePago(pago, reserva) {
         return {
             texto_original: pago?.texto_original || "",
             origen: pago?.origen || null,
             fecha: pago?.fecha_bloque || null,
             cabana: pago?.cabana || null,
-            tipo: "nota_financiera_administrativa",
-            motivo: "Pendiente administrativo de BOVE, Manager o boleta. No corresponde a un pago independiente."
+            titular: reserva?.titular || pago?.titular || null,
+            reserva_id: reserva?.id || null,
+            monto_referencial: pago?.monto ?? null,
+            concepto: pago?.concepto || null,
+            tipo: "nota_financiera",
+            clasificacion_financiera: "nota_financiera",
+            motivo: "Texto administrativo relacionado con dinero; no acredita un ingreso recibido."
         };
     }
 
@@ -213,7 +234,10 @@
         const cache = new Map();
         const ajustar = pago => {
             if (!pago || typeof pago !== "object") return pago;
-            if (!cache.has(pago)) cache.set(pago, ajustarPagoLibro(pago));
+            if (!cache.has(pago)) {
+                const ajustado = ajustarPagoLibro(pago);
+                cache.set(pago, { ...ajustado, clasificacion_financiera: clasificarMovimientoFinanciero(ajustado) });
+            }
             return cache.get(pago);
         };
 
@@ -222,19 +246,20 @@
         const anotacionesExtra = [];
         const notasFinancierasVistas = new Set();
 
-        const depurarPagos = lista => {
+        const depurarPagos = (lista, reserva = null) => {
             if (!Array.isArray(lista)) return lista;
             const salida = [];
             for (const pago of lista) {
-                if (esNotaAdministrativaFinanciera(pago)) {
+                const ajustado = ajustar(pago);
+                if (ajustado.clasificacion_financiera === "nota_financiera") {
                     const clave = `${pago?.origen?.hoja || ""}|${pago?.origen?.celda || ""}|${pago?.texto_original || ""}`;
                     if (!notasFinancierasVistas.has(clave)) {
                         notasFinancierasVistas.add(clave);
-                        anotacionesExtra.push(notaFinancieraDesdePago(pago));
+                        anotacionesExtra.push(notaFinancieraDesdePago(ajustado, reserva));
                     }
                     continue;
                 }
-                salida.push(ajustar(pago));
+                salida.push(ajustado);
             }
             return salida;
         };
@@ -260,8 +285,8 @@
 
             reservas.push({
                 ...reserva,
-                pagos: depurarPagos(reserva.pagos),
-                pagos_sin_asociacion: depurarPagos(reserva.pagos_sin_asociacion)
+                pagos: depurarPagos(reserva.pagos, reserva),
+                pagos_sin_asociacion: depurarPagos(reserva.pagos_sin_asociacion, reserva)
             });
         }
 

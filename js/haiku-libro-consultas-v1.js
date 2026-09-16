@@ -650,6 +650,10 @@
             }
 
             for (const p of r.pagos) {
+                if (p.clasificacion_financiera === "dudoso") {
+                    result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
+                    continue;
+                }
                 const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));
                 const candidatosNoVigentes = pagosNoVigentes.filter(x => pagoCoincide(p, x));
                 if (candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id) {
@@ -678,6 +682,10 @@
             }
 
             for (const p of r.pagos_sin_asociacion) {
+                if (p.clasificacion_financiera === "dudoso") {
+                    result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
+                    continue;
+                }
                 const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));
                 const existente = p.advertencias?.length && S.mismaPersona(p.titular, r.titular) &&
                     candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id &&

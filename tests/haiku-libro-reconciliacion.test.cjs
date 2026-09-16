@@ -381,6 +381,12 @@ test('conflicting repeated book identifier, weak identifiers, penalties and miss
  for(const p of [pay({codigo_autorizacion:null}),pay({tipo_movimiento:'penalidad'}),pay({monto:null})]) assert.equal((await compare([book({pagos:[p]})],[stay()])).pagosDetalle[0].estado,'revisar');
  assert.equal((await compare([book({pagos:[pay()]})])).pagosDetalle[0].estado,'revisar');
 });
+test('a financially doubtful movement cannot become a new safe payment even with a strong identifier',async()=>{
+ const p=pay({clasificacion_financiera:'dudoso'}),r=book({pagos:[p]});
+ const c=await compare([r],[stay(r)],[]);
+ assert.equal(c.pagosDetalle[0].estado,'revisar');
+ assert.equal(c.meta.pagos_faltantes,0);
+});
 test('revalidation detects newly inserted payment using fresh read-only queries',async()=>{
  const payments=[],db=client([stay()],payments),r=book({pagos:[pay()]});
  assert.equal((await Q.compararSistema([r],db,q)).meta.pagos_faltantes,1);
