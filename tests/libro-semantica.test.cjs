@@ -38,7 +38,7 @@ test('explicit numeric extension reconciles the structured base duration with ca
  const angelo=S.normalizarHoja(hojaDosNoches(texto),'Sep26').reservas[0];
  assert.equal(angelo.noches,2);assert.equal(angelo.noches_texto,1);
  assert.equal(angelo.noches_extension_texto,1);assert.equal(angelo.noches_extension_ambigua,false);assert.equal(angelo.noches_texto_efectivas,2);
- assert.deepEqual(angelo.advertencias,[]);
+ assert.deepEqual(angelo.advertencias,[]);assert.deepEqual(angelo.servicios,[]);
  assert.equal(S.asociar(angelo,[{...angelo,id:'proyecto-h'}]).estado,'asociada');
 
  for(const nota of ['extendió 1 noche','agregó 1 noche','solicitó agregar 1 noche']){
@@ -66,6 +66,32 @@ test('multiple explicit extensions require review even when the base duration ma
  assert.equal(r.noches_extension_ambigua,true);assert.equal(r.noches_texto_efectivas,2);
  assert.match(r.advertencias.join(' '),/noches escritas no coinciden/i);
  assert.equal(S.asociar(r,[{...r,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+});
+test('informational or unconfirmed service questions do not become services',()=>{
+ for(const nota of [
+  'Consultó cómo era el sistema de tinajas.',
+  'Se le explicó cómo funciona la tinaja, no confirmó.',
+  'Preguntó por jacuzzi pero no reservó.',
+  'Consultó valor de masaje, no hubo respuesta.',
+  'Consultó por tinaja, pendiente respuesta.'
+ ]){
+  const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
+  assert.ok(r,nota);assert.deepEqual(r.servicios,[],nota);
+ }
+});
+test('structured and explicit service evidence remains operational for every existing concept',()=>{
+ const casos=[
+  ['Tinaja 20:00','tinaja'],['Tinaja x pagar','tinaja'],['Tinaja pendiente de pago','tinaja'],['Tinaja pendiente pagar','tinaja'],
+  ['Reservó tinaja','tinaja'],['Pidió tinaja','tinaja'],['Agendar tinaja','tinaja'],
+  ['Jacuzzi 21:00','jacuzzi'],['Masaje 18:00','masaje'],['Tonel 19:15','tonel'],['Cuna confirmada','cuna'],
+  ['Cama adicional x pagar','cama_adicional'],['Late out 13:00','lateout'],['Consultó por tinaja y reservó para las 20:00','tinaja']
+ ];
+ for(const [nota,concepto] of casos){
+  const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
+  assert.ok(r,nota);assert.equal(r.servicios.length,1,nota);assert.equal(r.servicios[0].concepto,concepto,nota);
+ }
+ const pendiente=S.normalizarHoja(hojaDosNoches('Persona Prueba // 2 noches // Tinaja x pagar'),'Sep26').reservas[0].servicios[0];
+ assert.equal(pendiente.pendiente,true);
 });
 test('valid dates, range, month and unknown dates',()=>{
  const q=Q.interpretar('Libro CAB 6 del 11 al 13 de septiembre de 2026',['Sep26']);assert.equal(q.desde,'2026-09-11');assert.equal(q.hasta,'2026-09-13');assert.equal(q.cabana,6);

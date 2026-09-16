@@ -50,7 +50,7 @@
     function notaDeTitular(texto, posteriorADatos = false) {
         // Una aclaración entre paréntesis no convierte el nombre precedente en nota.
         const t = normalizar(texto).replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
-        const accion = /^(?:(?:no|se(?:\s+les?)?)\s+)?(?:pedir|solicitar|mover|prestar|vender|tener|entregar|reponer|solicita(?:n)?|pide(?:n)?|requiere(?:n)?|presta(?:n)?|vendio|vende(?:n)?|tiene(?:n)?|dejar|coordinar|agregar|preparar|enviar|revisar|esperar|llamar|avisar|llegara(?:n)?|llega(?:n)?|llegada|sale(?:n)?|salida)\b/;
+        const accion = /^(?:(?:no|se(?:\s+les?)?)\s+)?(?:pedir|pidio|solicitar|mover|prestar|vender|tener|entregar|reponer|solicita(?:n)?|pide(?:n)?|requiere(?:n)?|presta(?:n)?|vendio|vende(?:n)?|tiene(?:n)?|dejar|coordinar|agregar|agendar|agendo|reservar|reservo|contratar|contrato|confirmo|consultar|consulto|preguntar|pregunto|explicar|explico|indicar|indico|informar|informo|preparar|enviar|revisar|esperar|llamar|avisar|llegara(?:n)?|llega(?:n)?|llegada|sale(?:n)?|salida)\b/;
         const estado = /\b(?:pendientes?|por pagar|pagad[oa]s?|confirmar|confirmad[oa]s?)\b/;
         const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
@@ -111,10 +111,21 @@
         if (/^\d{1,3}([.,]\d{3})+$/.test(t)) t = t.replace(/[.,]/g, "");
         return /^\d+$/.test(t) ? Number(t) : null;
     }
+    function mencionInformativaServicio(t) {
+        const informativa = /\b(?:consulto|pregunto|averiguo|cotizo|consulta(?:ndo)?|pregunta(?:ndo)?|se le (?:explico|indico|informo)|como (?:era|funciona|funcionaba))\b/.test(t);
+        if (!informativa) return false;
+        const evidenciaEstructurada = /\b[0-2]?\d[:.,][0-5]\d\b|(?:\$|\bclp\b)\s*\d|\bx pagar\b|\bpor pagar\b|\bpendiente\s+(?:de\s+)?(?:pago|pagar)\b|\bcortesia\b|\bregalo\b/.test(t);
+        if (evidenciaEstructurada) return false;
+        const noConfirmada = /\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b|\bsin confirmar\b|\bno hubo respuesta\b|\bsin respuesta\b/.test(t);
+        if (noConfirmada) return true;
+        const sinNegaciones = t.replace(/\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b/g, '');
+        return !/\b(?:reservo|pidio|solicito|agendo|agendar|contrato|confirmo|reservada?|confirmada?|usar|uso)\b/.test(sinNegaciones);
+    }
     function servicios(texto) {
         const salida = [];
         for (const parte of String(texto || "").split(/\/\/|\n|;/)) {
             const t = normalizar(parte);
+            if (mencionInformativaServicio(t)) continue;
             for (const [tipo, re] of [["jacuzzi", /jacuzzi/], ["tonel", /tonel/], ["tinaja", /tinaja/], ["lateout", /late\s*(check\s*)?out/], ["cama_adicional", /cama.*adicional/], ["cuna", /\bcuna\b/], ["masaje", /masaj/]]) {
                 if (!re.test(t)) continue;
                 const hora = t.match(/\b([0-2]?\d)[:.,]([0-5]\d)\b/);
