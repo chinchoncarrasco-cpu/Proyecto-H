@@ -10,7 +10,7 @@ function hojaDosNoches(texto){return {celdas:[
  {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
 ],combinaciones:[{s:{r:2,c:2},e:{r:2,c:8}}]};}
 test('rich text separates operational state, red notes and yellow debt',()=>{
- const c={valor:'Ana / factura / jacuzzi',estiloId:0,runs:[{texto:'Ana',font:{color:{rgb:'FFFFFFFF'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}}]};
+ const c={valor:'Ana / factura / jacuzzi',estiloId:0,runs:[{texto:'Ana',font:{color:{rgb:'FFFFFFFF'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}}]};
  const f=S.fuente(c,[{font:{color:{rgb:'FF000000'}},fill:{fgColor:{rgb:'FFB4A7D6'}}}]);
  assert.equal(f.estado,'hospedada');assert.deepEqual(f.notas,['factura']);assert.deepEqual(f.pendientes,['jacuzzi']);
  c.runs.push({texto:'other',font:{color:{rgb:'FF0000FF'}}});assert.equal(S.fuente(c,[]).estado,'no_determinado');
@@ -110,6 +110,8 @@ test('structured and explicit service evidence remains operational for every exi
  }
  const pendiente=S.normalizarHoja(hojaDosNoches('Persona Prueba // 2 noches // Tinaja x pagar'),'Sep26').reservas[0].servicios[0];
  assert.equal(pendiente.pendiente,true);
+ const repetido=S.normalizarHoja(hojaDosNoches('Persona Prueba // 2 noches // CAMA ADICIONAL; CAMA ADICIONAL'),'Sep26').reservas[0];
+ assert.equal(repetido.servicios.length,1);
 });
 test('valid dates, range, month and unknown dates',()=>{
  const q=Q.interpretar('Libro CAB 6 del 11 al 13 de septiembre de 2026',['Sep26']);assert.equal(q.desde,'2026-09-11');assert.equal(q.hasta,'2026-09-13');assert.equal(q.cabana,6);

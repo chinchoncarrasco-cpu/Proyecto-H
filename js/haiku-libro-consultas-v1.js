@@ -347,6 +347,28 @@
         return `${identidad}|${r.fecha_checkin}|${r.fecha_checkout}|${r.tipo_estadia || ""}|cab${r.cabana}`;
     }
 
+    function claveEvidenciaServicio(item) {
+        const servicio=item.servicio || {},reserva=item.reserva || {};
+        const origen=servicio.origen || reserva.coordenadas_origen;
+        const procedencia=origen?.hoja && origen?.celda ? source(origen) : `reserva:${reserva.id || claveReserva(reserva)}`;
+        return [procedencia,S.normalizar(servicio.concepto),S.normalizar(servicio.texto_original),servicio.hora || '',
+            servicio.monto ?? '',Boolean(servicio.pendiente),Boolean(servicio.cortesia),item.estado || ''].join('|');
+    }
+
+    function serviciosComparacionUnicos(items) {
+        const unicos=new Map();
+        for (const item of items) {
+            const key=claveEvidenciaServicio(item);
+            if (!unicos.has(key)) unicos.set(key,item);
+        }
+        return [...unicos.values()];
+    }
+
+    function serviciosReservaUnicos(reservas) {
+        return serviciosComparacionUnicos(reservas.flatMap(reserva =>
+            (reserva.servicios || []).map(servicio => ({servicio,reserva})))).map(item=>item.servicio);
+    }
+
     function agruparComparacion(resultados) {
         const mapa = [];
         for (const c of resultados) {
@@ -374,7 +396,7 @@
                 cabanas: [...new Set(g.items.map(x => Number(x.libro.cabana)).filter(Boolean))].sort((a, b) => a - b),
                 diferencias: [...new Set(g.items.flatMap(x => x.diferencias || []))],
                 pagos: g.items.flatMap(x => x.pagosComparacion || []),
-                servicios: g.items.flatMap(x => x.serviciosComparacion || [])
+                servicios: serviciosComparacionUnicos(g.items.flatMap(x => x.serviciosComparacion || []))
             };
         });
     }
@@ -851,11 +873,7 @@
             const key = `${x.reserva.id || claveReserva(x.reserva)}|${source(x.pago?.origen)}|${JSON.stringify(x.pago)}|${x.estado}`;
             if (!pagosUnicos.has(key)) pagosUnicos.set(key, x);
         }
-        const serviciosUnicos = new Map();
-        for (const x of resultados.flatMap(r => r.serviciosComparacion)) {
-            const key = `${x.reserva?.id}|${x.servicio?.concepto}|${x.servicio?.texto_original}`;
-            if (!serviciosUnicos.has(key)) serviciosUnicos.set(key, x);
-        }
+        const serviciosUnicos = serviciosComparacionUnicos(resultados.flatMap(r => r.serviciosComparacion));
 
         let snapshotFinanciero = null;
         if (D) {
@@ -881,7 +899,7 @@
         resultados.snapshot = { estadias: system, pagos: pagosVigentes, finanzas: snapshotFinanciero };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
-        resultados.serviciosDetalle = [...serviciosUnicos.values()];
+        resultados.serviciosDetalle = serviciosUnicos;
         resultados.meta = {
             libro: grupos.length,
             estadias_libro: validas.length,
@@ -893,7 +911,7 @@
             con_diferencias: resultados.filter(g => g.estado === "asociada" && g.diferencias.length).length,
             pagos_faltantes: [...pagosUnicos.values()].filter(x => x.estado === "nuevo_seguro").length,
             pagos_revisar: [...pagosUnicos.values()].filter(x => x.estado === "revisar" || x.estado === "diferente").length,
-            servicios_revisar: [...serviciosUnicos.values()].filter(x => x.estado !== "en_sistema").length
+            servicios_revisar: serviciosUnicos.filter(x => x.estado !== "en_sistema").length
         };
         return resultados;
     }
@@ -1221,7 +1239,7 @@
                     const hermanas = g.items.filter(j => (j.sistema || destino)?.reserva_id === s.reserva_id).map(j => j.libro);
                     const compartido = { ...i.libro, texto_original:[...new Set(hermanas.map(r => r.texto_original).filter(Boolean))].join('\n'),
                         notas_importantes:[...new Set(hermanas.flatMap(r => r.notas_importantes || []))],
-                        pagos_pendientes:[...new Set(hermanas.flatMap(r => r.pagos_pendientes || []))], servicios:hermanas.flatMap(r => r.servicios || []) };
+                        pagos_pendientes:[...new Set(hermanas.flatMap(r => r.pagos_pendientes || []))], servicios:serviciosReservaUnicos(hermanas) };
                     const payload = actualizacionReservaLibro(compartido,s), updateId = 'actualizar:' + (i.libro.id || claveReserva(i.libro)) + ':' + s.id;
                     const motivos = g.items.length > 1 && destino && !i.sistema ? ['Elige por separado la estadía destino de cada cabaña.'] : [];
                     for (const k of ['adultos','ninos','mascotas']) if (i.libro[k] != null && (!Number.isInteger(i.libro[k]) || i.libro[k] < (k === 'adultos' ? 1 : 0))) motivos.push('El Libro contiene una cantidad inválida de '+k+'.');

@@ -483,6 +483,41 @@ test('complete multicabin reservation group links explicit sibling reservations 
  assert.equal(c.grupos[0].pregunta,null);assert.equal(c.meta.faltantes,0);
 });
 
+test('service evidence deduplicates by source inside a multicabin group and preserves distinct facts',async()=>{
+ const servicio=(texto='CAMA ADICIONAL',hora=null)=>({concepto:'cama_adicional',texto_original:texto,hora,pendiente:false,cortesia:false,monto:null});
+ const escenario=async(origenA,origenB,servicioA=servicio(),servicioB=servicio())=>{
+  const base={titular:'Marco Iturrieta Rojas',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+  const a=readyBook({...base,cabana:1,coordenadas_origen:origenA,servicios:[servicioA]});
+  const b=readyBook({...base,id:'marco-cab2',cabana:2,coordenadas_origen:origenB,servicios:[servicioB]});
+  const rows=[
+   stay(a,{id:'e-cab1',reserva_id:'r-cab1',reservas:{...stay(a).reservas,grupo_reserva_id:'grupo-marco'}}),
+   stay(b,{id:'e-cab2',reserva_id:'r-cab2',reservas:{...stay(b).reservas,grupo_reserva_id:'grupo-marco'}})
+  ];
+  return compare([a,b],rows);
+ };
+ const misma={hoja:'Sep26',celda:'BO3'};
+ const heredada=await escenario(misma,misma);
+ assert.equal(heredada.serviciosDetalle.length,1);
+ assert.equal(heredada.grupos[0].servicios.length,1);
+
+ const marcoReal=await escenario({hoja:'Sep26',celda:'BO3'},{hoja:'Sep26',celda:'BO4'});
+ assert.equal(marcoReal.serviciosDetalle.length,2);
+ assert.equal(marcoReal.grupos[0].servicios.length,2);
+
+ const horas=await escenario(misma,misma,servicio('Tinaja 20:00','20:00'),servicio('Tinaja 21:00','21:00'));
+ assert.equal(horas.serviciosDetalle.length,2);
+});
+
+test('equal notes from different reservation cells retain both source facts',async()=>{
+ const base={titular:'Marco Iturrieta Rojas',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',notas_importantes:['CAMA ADICIONAL']};
+ const a=readyBook({...base,cabana:1,coordenadas_origen:{hoja:'Sep26',celda:'BO3'}});
+ const b=readyBook({...base,id:'marco-cab2',cabana:2,coordenadas_origen:{hoja:'Sep26',celda:'BO4'}});
+ const comp=await compare([a,b],[]),plan=Q.crearPlanIncorporacion([a,b],comp);
+ const item=plan.items.find(x=>x.categoria==='nuevas');
+ assert.equal(item.payload.estadias.length,2);
+ assert.equal(item.payload.estadias.filter(x=>x.notas.includes('CAMA ADICIONAL')).length,2);
+});
+
 function marcoMulticabanaPagos() {
  const movimiento=(cabana,monto,fecha,origen)=>readyPay({codigo_autorizacion:null,folio:null,bovtar:null,titular:'Karina Andrea Cruz',
   medio_pago:'transferencia',monto,fecha_bloque:'2026-09-17',fecha_comprobante:fecha,cabana,

@@ -29,11 +29,12 @@
         const estilo = estilos[cell?.estiloId] || {};
         const runs = cell?.runs?.length ? cell.runs : [{ texto: cell?.valor || "", font: estilo.font }];
         const fragmentos = runs.map(run => ({ texto: run.texto, color: color(run.font?.color || estilo.font?.color) }));
+        const textosUnicos = valores => [...new Map(valores.map(valor => [normalizar(valor), valor])).values()];
         const principales = new Set(fragmentos.filter(x => /\S/.test(x.texto) && ["000000", "FFFFFF", "0000FF"].includes(x.color)).map(x => x.color));
         const estado = principales.size === 1 ? ({ "000000": "sin_checkin", "FFFFFF": "hospedada", "0000FF": "checked_out" })[[...principales][0]] : "no_determinado";
         return { estado, fondo: color(estilo.fill?.fgColor), fragmentos,
-            notas: fragmentos.filter(x => x.color === "FF0000" && x.texto.trim()).map(x => x.texto.trim()),
-            pendientes: fragmentos.filter(x => x.color === "FFFF00" && x.texto.trim()).map(x => x.texto.trim()) };
+            notas: textosUnicos(fragmentos.filter(x => x.color === "FF0000" && x.texto.trim()).map(x => x.texto.trim())),
+            pendientes: textosUnicos(fragmentos.filter(x => x.color === "FFFF00" && x.texto.trim()).map(x => x.texto.trim())) };
     }
     function notaOperativa(texto) {
         const t = normalizar(texto);
@@ -133,7 +134,8 @@
                     cortesia: /cortesia|regalo/.test(t), hora: hora ? `${hora[1].padStart(2, "0")}:${hora[2]}` : null, monto: null });
             }
         }
-        return salida;
+        return [...new Map(salida.map(servicio => [[servicio.concepto, normalizar(servicio.texto_original), servicio.hora || '',
+            servicio.pendiente, servicio.cortesia, servicio.monto ?? ''].join('|'), servicio])).values()];
     }
     function aseo(cell, fecha, cabana, origen) {
         const partes = cell.valor.split(/\/\/|\n/).map(x => x.trim()).filter(Boolean);
