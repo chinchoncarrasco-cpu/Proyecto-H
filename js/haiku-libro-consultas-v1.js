@@ -1,6 +1,7 @@
 (function (root) {
     "use strict";
     const S = root.HAIKU_LIBRO_SEMANTICA;
+    const D = root.HAIKU_LIBRO_PAGOS_DESTINOS_V1;
     if (!S) return;
 
     const money = v => v === null || v === undefined ? "monto no determinado" : `$${Number(v).toLocaleString("es-CL")} CLP`;
@@ -722,7 +723,28 @@
             if (!serviciosUnicos.has(key)) serviciosUnicos.set(key, x);
         }
 
-        resultados.snapshot = { estadias: system, pagos: pagosVigentes };
+        let snapshotFinanciero = null;
+        if (D) {
+            const reservaSistemaPorLibro = new Map(resultados
+                .filter(resultado => resultado.estado === "asociada" && resultado.sistema?.reserva_id)
+                .map(resultado => [claveReserva(resultado.libro), resultado.sistema.reserva_id]));
+            const candidatosDestino = [...pagosUnicos.values()].filter(item =>
+                item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
+            const idsDestino = [...new Set(candidatosDestino
+                .map(item => reservaSistemaPorLibro.get(claveReserva(item.reserva))).filter(Boolean))];
+            try {
+                snapshotFinanciero = await D.leerSnapshot(cliente, idsDestino);
+            } catch (err) {
+                snapshotFinanciero = { disponible: false, cargos: [], servicios: [], aplicaciones: [], pagos: [],
+                    error: `No fue posible leer el destino financiero: ${err?.message || err}` };
+            }
+            for (const item of candidatosDestino) {
+                item.reserva_sistema_id = reservaSistemaPorLibro.get(claveReserva(item.reserva)) || null;
+                item.destinoFinanciero = D.resolverTransaccion(item.pago, item.reserva_sistema_id, snapshotFinanciero, item.sistema || null);
+            }
+        }
+
+        resultados.snapshot = { estadias: system, pagos: pagosVigentes, finanzas: snapshotFinanciero };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = [...serviciosUnicos.values()];
@@ -931,6 +953,15 @@
         return salida;
     }
 
+    function motivosDestinoFinanciero(resolucion) {
+        if (!resolucion) return ['No fue posible comprobar el destino financiero del pago de servicio.'];
+        if (resolucion.estado === 'destino_unico') {
+            return ['Destino financiero único comprobado. El guardado permanece bloqueado porque el writer actual no admite aplicaciones explícitas generales a cargos de servicio.'];
+        }
+        const detalles = [...new Set((resolucion.aplicaciones || []).map(aplicacion => aplicacion.motivo).filter(Boolean))];
+        return detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.'];
+    }
+
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
@@ -1118,7 +1149,7 @@
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
             if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
             if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
-            if (p.tipo_movimiento !== 'alojamiento') motivos.push('El concepto requiere una aplicación manual.');
+            if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero));
             if (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro') motivos.push('El Libro no confirma un pago recibido.');
             const medio = medioLibro(p);
             if (!medio) motivos.push('Falta precisar el medio de pago (Webpay crédito o débito, si corresponde).');
@@ -1141,6 +1172,8 @@
             const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
             const motivosAprobables = new Set(['Requiere aprobación manual de la asociación y el pago.', 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.']);
             item.aprobable = motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
+            item.destinoFinanciero = x.destinoFinanciero || null;
+            item.aprobableFinancieramente = x.destinoFinanciero?.estado === 'destino_unico';
             vistos.push({ pago:p, item, destino: destinoActual, manual });
         }
         // Conserva en cada tarjeta el movimiento exacto del Libro que originó el ítem.
