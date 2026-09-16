@@ -442,7 +442,7 @@
 
     function pagoEfectivoLibroAplicable(pago, reserva, sistema) {
         return !pagoTieneIdentificadorFuerte(pago) && pago?.clasificacion_financiera !== "dudoso" &&
-            medioLibro(pago) === "efectivo" && pago.tipo_movimiento === "alojamiento" &&
+            medioLibro(pago) === "efectivo" && ["alojamiento", "servicio"].includes(pago.tipo_movimiento) &&
             pago.pago_recibido === true && pago.estado_pago === "registrado_en_libro" &&
             Number.isSafeInteger(Number(pago.monto)) && Number(pago.monto) > 0 &&
             String(pago.moneda || "CLP").toUpperCase() === "CLP" &&
@@ -463,7 +463,23 @@
             fecha >= reserva.fecha_checkin && fecha < reserva.fecha_checkout;
     }
 
-    async function reconciliarEfectivosAplicados(resultados, pagos, cliente) {
+    function cargoServicioCompatible(cargo, servicio, pago, reserva, sistema) {
+        if (!D?.conceptoCanon || cargo?.reserva_id !== sistema.reserva_id || cargo?.estadia_id !== sistema.id ||
+            cargo?.servicio_id !== servicio?.id || cargo?.tipo_cargo !== "servicio" ||
+            S.normalizar(cargo.estado) !== "activo" || servicio?.reserva_id !== sistema.reserva_id ||
+            servicio?.estadia_id !== sistema.id || /cancelad|no.?show/.test(S.normalizar(servicio?.estado_servicio)) ||
+            !(Number(cargo.monto_ajustado ?? cargo.monto) > 0) || !(Number(servicio?.total) > 0)) return false;
+        const conceptoLibro = D.conceptoCanon(pago.concepto);
+        const catalogo = servicio.catalogo_servicios || {};
+        const conceptoSistema = D.conceptoCanon([cargo.concepto, catalogo.codigo, catalogo.nombre, catalogo.categoria]
+            .filter(Boolean).join(" "));
+        if (!conceptoLibro || conceptoLibro !== conceptoSistema) return false;
+        const fechaLibro = pago.fecha_comprobante || pago.fecha_bloque || null;
+        return !(fechaLibro && servicio.fecha_servicio && fechaLibro !== servicio.fecha_servicio) &&
+            Number(reserva.cabana) === Number(sistema.cabana);
+    }
+
+    async function reconciliarEfectivosAplicados(resultados, pagos, servicios, cliente) {
         const movimientos = resultados.flatMap(resultado => resultado.pagosComparacion
             .filter(item => item.estado === "revisar" && resultado.estado === "asociada" &&
                 pagoEfectivoLibroAplicable(item.pago, resultado.libro, resultado.sistema))
@@ -487,9 +503,9 @@
         let cargos, aplicacionesPago, aplicacionesCargo;
         try {
             cargos = await paginas(() => cliente.from("vista_estado_cargos")
-                .select("cargo_id,reserva_id,estadia_id,tipo_cargo,concepto,monto,monto_ajustado,estado,estado_pago")
-                .in("reserva_id", reservaIds).eq("tipo_cargo", "alojamiento"), "cargo_id");
-            const cargoIdsLectura = cargos.filter(cargo => cargo.tipo_cargo === "alojamiento" && reservaIds.includes(cargo.reserva_id))
+                .select("cargo_id,reserva_id,estadia_id,servicio_id,tipo_cargo,concepto,monto,monto_ajustado,estado,estado_pago")
+                .in("reserva_id", reservaIds), "cargo_id");
+            const cargoIdsLectura = cargos.filter(cargo => ["alojamiento", "servicio"].includes(cargo.tipo_cargo) && reservaIds.includes(cargo.reserva_id))
                 .map(cargo => cargo.cargo_id).filter(Boolean);
             [aplicacionesPago, aplicacionesCargo] = await Promise.all([
                 paginas(() => cliente.from("pago_aplicaciones")
@@ -498,11 +514,12 @@
                     .select("id,pago_id,cargo_id,monto_aplicado").in("cargo_id", cargoIdsLectura)) : []
             ]);
         } catch (err) {
-            return { disponible: false, cargos: [], aplicaciones: [], error: `No fue posible leer las aplicaciones de alojamiento: ${err?.message || err}` };
+            return { disponible: false, cargos: [], aplicaciones: [], error: `No fue posible leer las aplicaciones de efectivo: ${err?.message || err}` };
         }
 
-        const cargosAlojamiento = cargos.filter(cargo => cargo.tipo_cargo === "alojamiento" && reservaIds.includes(cargo.reserva_id));
-        const cargoIds = new Set(cargosAlojamiento.map(cargo => cargo.cargo_id).filter(Boolean));
+        const cargosFinancieros = cargos.filter(cargo => ["alojamiento", "servicio"].includes(cargo.tipo_cargo) && reservaIds.includes(cargo.reserva_id));
+        const serviciosPorId = new Map(servicios.map(servicio => [servicio.id, servicio]));
+        const cargoIds = new Set(cargosFinancieros.map(cargo => cargo.cargo_id).filter(Boolean));
         const aplicaciones = [...new Map([...aplicacionesPago, ...aplicacionesCargo]
             .map(aplicacion => [aplicacion.id || `${aplicacion.pago_id}|${aplicacion.cargo_id}`, aplicacion])).values()];
         const propuestas = [];
@@ -513,19 +530,34 @@
                 otro.resultado.sistema.reserva_id === movimiento.resultado.sistema.reserva_id &&
                 Number(otro.item.pago.monto) === Number(pagoLibro.monto) &&
                 moneda(otro.item.pago) === moneda(pagoLibro) && medioLibro(otro.item.pago) === "efectivo" &&
+                otro.item.pago.tipo_movimiento === pagoLibro.tipo_movimiento &&
+                (pagoLibro.tipo_movimiento !== "servicio" ||
+                    D?.conceptoCanon(otro.item.pago.concepto) === D?.conceptoCanon(pagoLibro.concepto)) &&
                 Number(otro.item.pago.cabana) === Number(pagoLibro.cabana) &&
                 otro.item.pago.fecha_bloque === pagoLibro.fecha_bloque);
             if (libroCompatibles.length !== 1) continue;
 
-            const cargosCompatibles = cargosAlojamiento.filter(cargo =>
-                cargoAlojamientoCompatible(cargo, movimiento.resultado.libro, movimiento.resultado.sistema));
-            if (cargosCompatibles.length !== 1) continue;
-            const cargo = cargosCompatibles[0];
             const aplicacionesDelPago = aplicaciones.filter(aplicacion => aplicacion.pago_id === pagoSistema.id);
-            const exactas = aplicacionesDelPago.filter(aplicacion => aplicacion.cargo_id === cargo.cargo_id &&
-                Number(aplicacion.monto_aplicado) === Number(pagoLibro.monto));
+            let cargo, exactas;
+            if (pagoLibro.tipo_movimiento === "alojamiento") {
+                const cargosCompatibles = cargosFinancieros.filter(candidato =>
+                    cargoAlojamientoCompatible(candidato, movimiento.resultado.libro, movimiento.resultado.sistema));
+                if (cargosCompatibles.length !== 1) continue;
+                cargo = cargosCompatibles[0];
+                exactas = aplicacionesDelPago.filter(aplicacion => aplicacion.cargo_id === cargo.cargo_id &&
+                    Number(aplicacion.monto_aplicado) === Number(pagoLibro.monto));
+            } else {
+                exactas = aplicacionesDelPago.filter(aplicacion => {
+                    const candidato = cargosFinancieros.find(cargoSistema => cargoSistema.cargo_id === aplicacion.cargo_id);
+                    return Number(aplicacion.monto_aplicado) === Number(pagoLibro.monto) && candidato &&
+                        cargoServicioCompatible(candidato, serviciosPorId.get(candidato.servicio_id), pagoLibro,
+                            movimiento.resultado.libro, movimiento.resultado.sistema);
+                });
+                if (exactas.length === 1) cargo = cargosFinancieros.find(candidato => candidato.cargo_id === exactas[0].cargo_id);
+            }
             if (exactas.length !== 1 || aplicacionesDelPago.length !== 1 || !cargoIds.has(exactas[0].cargo_id)) continue;
-            propuestas.push({ ...movimiento, pagoSistema, cargo, aplicacion: exactas[0] });
+            propuestas.push({ ...movimiento, pagoSistema, cargo, aplicacion: exactas[0],
+                tipoCoincidencia: pagoLibro.tipo_movimiento === "servicio" ? "servicio" : "alojamiento" });
         }
 
         const pagosRepetidos = new Set(propuestas.filter((x, i, a) => a.some((y, j) => j !== i && y.pagoSistema.id === x.pagoSistema.id))
@@ -537,13 +569,13 @@
             Object.assign(propuesta.item, {
                 estado: "en_sistema",
                 sistema: propuesta.pagoSistema,
-                coincidencia_aplicacion_alojamiento: true,
+                [propuesta.tipoCoincidencia === "servicio" ? "coincidencia_aplicacion_servicio" : "coincidencia_aplicacion_alojamiento"]: true,
                 cargo_sistema: propuesta.cargo,
                 aplicacion_sistema: propuesta.aplicacion,
                 diferencias: []
             });
         }
-        return { disponible: true, cargos: cargosAlojamiento, aplicaciones };
+        return { disponible: true, cargos: cargosFinancieros, aplicaciones };
     }
 
     function pagoDebilYaExiste(p, existente, reservaId) {
@@ -873,7 +905,7 @@
         for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
             servicios.push(...await paginas(() => cliente.from("servicios")
-                .select("id,reserva_id,fecha_servicio,total,estado_servicio,catalogo_servicios(nombre)")
+                .select("id,reserva_id,estadia_id,fecha_servicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
                 .in("reserva_id", grupo)));
         }
 
@@ -966,7 +998,7 @@
             }
         }
 
-        const snapshotEfectivoAplicado = await reconciliarEfectivosAplicados(resultados, pagos, cliente);
+        const snapshotEfectivoAplicado = await reconciliarEfectivosAplicados(resultados, pagos, servicios, cliente);
 
         const grupos = agruparComparacion(resultados);
         const movimientos = resultados.flatMap(r => r.pagosComparacion);

@@ -196,7 +196,7 @@ test('fallo al leer aplicaciones de alojamiento conserva revisión sin inferir a
     const { comp, detalle } = await compararEfectivo({ fallarFinanzas: true });
     assert.equal(detalle.estado, 'revisar');
     assert.equal(comp.snapshot.efectivo_aplicado.disponible, false);
-    assert.match(comp.snapshot.efectivo_aplicado.error, /No fue posible leer las aplicaciones de alojamiento/);
+    assert.match(comp.snapshot.efectivo_aplicado.error, /No fue posible leer las aplicaciones de efectivo/);
 });
 
 test('dos movimientos Libro no pueden reutilizar la misma aplicación', async () => revisaEfectivo({
@@ -204,3 +204,121 @@ test('dos movimientos Libro no pueden reutilizar la misma aplicación', async ()
         medio_pago: 'efectivo', fecha_comprobante: '2026-09-04', fecha_bloque: '2026-09-04', cabana: 10,
         pago_recibido: true, estado_pago: 'registrado_en_libro', texto_original: 'Segundo efectivo', origen: { hoja: 'Sep26', celda: 'M27' } }] }
 }));
+
+function casoEfectivoPascual(cambios = {}) {
+    const movimiento = { tipo_movimiento: 'servicio', concepto: 'LATEOUT', monto: 20000, moneda: 'CLP',
+        medio_pago: 'efectivo', codigo_autorizacion: null, folio: null, bovtar: null,
+        fecha_comprobante: '2026-09-06', fecha_bloque: '2026-09-04', cabana: 4,
+        pago_recibido: true, estado_pago: 'registrado_en_libro',
+        texto_original: 'Pascual Abarca // efectivo // $20.000 // LATEOUT',
+        origen: { hoja: 'Sep26', celda: 'BC45:BF45' }, ...(cambios.movimiento || {}) };
+    const evidenciaServicio = { concepto: 'lateout', texto_original: 'late check out hasta las 14:00 x pagar',
+        pendiente: true, cortesia: false, hora: '14:00', monto: null };
+    const libro = { id: 'libro-pascual', titular: 'Pascual Abarca', rut_documento: '13368741-6', cabana: 4,
+        fecha_checkin: '2026-09-04', fecha_checkout: '2026-09-06', tipo_estadia: 'alojamiento', noches: 2,
+        adultos: 2, ninos: 0, mascotas: 0, pagos: [movimiento], pagos_sin_asociacion: [],
+        servicios: [evidenciaServicio], advertencias: [], coordenadas_origen: { hoja: 'Sep26', celda: 'BC8' },
+        ...(cambios.libro || {}) };
+    const estadiaSistema = { id: 'e-pascual', reserva_id: 'r-pascual', fecha_ingreso: '2026-09-04', fecha_salida: '2026-09-06',
+        estado_estadia: 'confirmada', tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0,
+        cabanas: { numero: 4 }, reservas: { id: 'r-pascual', titular_nombre: 'Pascual Abarca',
+            titular_numero_documento: '13368741-6', estado_reserva: 'confirmada' }, ...(cambios.estadia || {}) };
+    const efectivo = { id: 'p-efectivo-lateout', reserva_id: 'r-pascual', monto: 20000, moneda: 'CLP', estado: 'confirmado',
+        medio_pago: 'efectivo', fecha_pago: '2026-09-06', tipo_movimiento: 'pago', ...(cambios.pago || {}) };
+    const servicioAplicado = { id: 's-lateout-06', reserva_id: 'r-pascual', estadia_id: 'e-pascual',
+        fecha_servicio: '2026-09-06', total: 20000, estado_servicio: 'programado',
+        catalogo_servicios: { codigo: 'lateCheckout', nombre: 'Late Check-out', categoria: 'servicio' },
+        ...(cambios.servicio || {}) };
+    const servicioExtra = { id: 's-lateout-04', reserva_id: 'r-pascual', estadia_id: 'e-pascual',
+        fecha_servicio: '2026-09-04', total: 20000, estado_servicio: 'programado',
+        catalogo_servicios: { codigo: 'lateCheckout', nombre: 'Late Check-out', categoria: 'servicio' } };
+    const cargoAplicado = { cargo_id: 'c-lateout-06', reserva_id: 'r-pascual', estadia_id: 'e-pascual',
+        servicio_id: 's-lateout-06', tipo_cargo: 'servicio', concepto: 'Late Check-out', monto: 20000,
+        monto_ajustado: 20000, estado: 'activo', estado_pago: 'pagado', ...(cambios.cargo || {}) };
+    const cargoExtra = { cargo_id: 'c-lateout-04', reserva_id: 'r-pascual', estadia_id: 'e-pascual',
+        servicio_id: 's-lateout-04', tipo_cargo: 'servicio', concepto: 'Late Check-out', monto: 20000,
+        monto_ajustado: 20000, estado: 'activo', estado_pago: 'pendiente' };
+    const aplicacion = { id: 'pa-lateout', pago_id: 'p-efectivo-lateout', cargo_id: 'c-lateout-06', monto_aplicado: 20000,
+        ...(cambios.aplicacion || {}) };
+    const tablas = { reserva_estadias: [estadiaSistema], pagos: [efectivo], servicios: [servicioAplicado, servicioExtra],
+        vista_estado_cargos: [cargoAplicado, cargoExtra], pago_aplicaciones: [aplicacion] };
+    if (cambios.tablas) cambios.tablas(tablas, { movimiento, libro, estadiaSistema, efectivo, servicioAplicado,
+        servicioExtra, cargoAplicado, cargoExtra, aplicacion });
+    return { movimiento, libro, tablas };
+}
+
+async function compararEfectivoPascual(cambios) {
+    const caso = casoEfectivoPascual(cambios);
+    const db = cliente(caso.tablas, Boolean(cambios?.fallarFinanzas));
+    const comp = await Q.compararSistema([caso.libro], db, q);
+    return { ...caso, db, comp, detalle: comp.pagosDetalle.find(x => x.pago === caso.movimiento) };
+}
+
+test('Pascual: efectivo aplicado al Late Check-out queda omitido aunque exista otro cargo igual sin aplicación', async () => {
+    const { libro, movimiento, comp, detalle } = await compararEfectivoPascual();
+    assert.equal(detalle.estado, 'en_sistema');
+    assert.equal(detalle.sistema.id, 'p-efectivo-lateout');
+    assert.equal(detalle.coincidencia_aplicacion_servicio, true);
+    assert.equal(detalle.cargo_sistema.cargo_id, 'c-lateout-06');
+    assert.equal(comp.snapshot.efectivo_aplicado.cargos.filter(x => x.tipo_cargo === 'servicio').length, 2);
+    assert.equal(comp.serviciosDetalle[0].estado, 'revisar');
+    assert.equal(comp.meta.pagos_revisar, 0);
+    assert.equal(comp.meta.servicios_revisar, 1);
+    const item = Q.crearPlanIncorporacion([libro], comp).items.find(x => x.pagoLibro === movimiento || x.texto.includes('$20.000'));
+    assert.equal(item.categoria, 'omitidos');
+    assert.equal(item.payload, null);
+    assert.notEqual(item.aprobable, true);
+    assert.equal(Q.serializarIncorporacion(Q.crearPlanIncorporacion([libro], comp)).some(x => x.tipo === 'pago'), false);
+});
+
+const revisaEfectivoPascual = async cambios => assert.equal((await compararEfectivoPascual(cambios)).detalle.estado, 'revisar');
+
+test('Pascual permanece en revisión con dos pagos efectivo candidatos', async () => revisaEfectivoPascual({
+    tablas(tablas) { tablas.pagos.push({ ...tablas.pagos[0], id: 'p-efectivo-lateout-2' }); }
+}));
+
+test('Pascual permanece en revisión con dos aplicaciones compatibles del pago', async () => revisaEfectivoPascual({
+    tablas(tablas) { tablas.pago_aplicaciones.push({ ...tablas.pago_aplicaciones[0], id: 'pa-lateout-2' }); }
+}));
+
+test('Pascual permanece en revisión sin aplicación', async () => revisaEfectivoPascual({
+    tablas(tablas) { tablas.pago_aplicaciones = []; }
+}));
+
+test('Pascual permanece en revisión con monto aplicado distinto', async () => revisaEfectivoPascual({
+    aplicacion: { monto_aplicado: 19000 }
+}));
+
+test('Pascual permanece en revisión con cargo anulado', async () => revisaEfectivoPascual({
+    cargo: { estado: 'anulado' }
+}));
+
+test('Pascual permanece en revisión con cargo de otro concepto', async () => revisaEfectivoPascual({
+    cargo: { concepto: 'Tinaja' }, servicio: { catalogo_servicios: { codigo: 'tinaja', nombre: 'Tinaja', categoria: 'servicio' } }
+}));
+
+test('Pascual permanece en revisión cuando servicio y estadía se contradicen', async () => revisaEfectivoPascual({
+    servicio: { estadia_id: 'e-otra' }
+}));
+
+test('Pascual permanece en revisión cuando el cargo pertenece a otra reserva', async () => revisaEfectivoPascual({
+    cargo: { reserva_id: 'r-otra' }
+}));
+
+test('Pascual permanece en revisión con pago anulado', async () => revisaEfectivoPascual({
+    pago: { estado: 'anulado' }
+}));
+
+test('dos movimientos de servicio del Libro no reutilizan la aplicación de Pascual', async () => revisaEfectivoPascual({
+    libro: { pagos_sin_asociacion: [{ tipo_movimiento: 'servicio', concepto: 'LATEOUT', monto: 20000, moneda: 'CLP',
+        medio_pago: 'efectivo', fecha_comprobante: '2026-09-06', fecha_bloque: '2026-09-04', cabana: 4,
+        pago_recibido: true, estado_pago: 'registrado_en_libro', texto_original: 'Segundo efectivo Late Out',
+        origen: { hoja: 'Sep26', celda: 'BC46:BF46' } }] }
+}));
+
+test('fallo al leer aplicaciones de servicio conserva Pascual en revisión', async () => {
+    const { comp, detalle } = await compararEfectivoPascual({ fallarFinanzas: true });
+    assert.equal(detalle.estado, 'revisar');
+    assert.equal(comp.snapshot.efectivo_aplicado.disponible, false);
+    assert.match(comp.snapshot.efectivo_aplicado.error, /No fue posible leer las aplicaciones de efectivo/);
+});
