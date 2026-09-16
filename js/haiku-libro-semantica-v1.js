@@ -87,6 +87,14 @@
         }
         return null;
     }
+    function extensionNochesReserva(texto) {
+        const extensiones = [];
+        const patron = /\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar))\s+(\d+)\s*noches?\b/g;
+        for (const fragmento of String(texto || '').split(/\s*\/\/\s*|\r?\n/)) {
+            for (const match of normalizar(fragmento).matchAll(patron)) extensiones.push(Number(match[1]));
+        }
+        return { cantidad: extensiones.length === 1 ? extensiones[0] : null, ambigua: extensiones.length > 1 };
+    }
     // La recuperación de titulares financieros conserva su contrato previo.
     function titularPago(texto) {
         const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
@@ -267,9 +275,12 @@
                 // ocupar un fragmento completo. Conceptos financieros como
                 // "cab6/1noche" no describen la duracion total de la estadia.
                 const nochesTexto = declaracionNochesReserva(cell.valor);
+                const extensionTexto = nochesTexto === null ? {cantidad:null,ambigua:false} : extensionNochesReserva(cell.valor);
+                const nochesExtensionTexto = extensionTexto.cantidad;
+                const nochesTextoEfectivas = nochesTexto === null ? null : nochesTexto + (nochesExtensionTexto ?? 0);
                 const noches = fd ? 0 : dias.length;
                 const dudas = [];
-                if (nochesTexto !== null && nochesTexto !== noches) dudas.push("Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.");
+                if (extensionTexto.ambigua || nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) dudas.push("Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.");
                 const colors = fuente(cell, estilos);
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
@@ -280,6 +291,7 @@
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: h.fechaISO,
                     fecha_checkout: fd ? h.fechaISO : sumarDias(dias.at(-1), 1), fechas_ocupadas: dias, noches, noches_texto: nochesTexto,
+                    noches_extension_texto: nochesExtensionTexto, noches_extension_ambigua: extensionTexto.ambigua, noches_texto_efectivas: nochesTextoEfectivas,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,

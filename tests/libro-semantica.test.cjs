@@ -33,6 +33,40 @@ test('payment concept nights do not contradict reservation geometry, while a res
  assert.match(conflicto.advertencias.join(' '),/noches escritas no coinciden/i);
  assert.equal(S.asociar(conflicto,[{...conflicto,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
 });
+test('explicit numeric extension reconciles the structured base duration with calendar geometry',()=>{
+ const texto='BOOKING // Angelo Villegas // 1 Noche // 2 ADL // FC // 06.06.26 // Consultó por booking como era el sistema de tinajas, se le indicó pero no hubo respuesta. // pidió extender 1 noche, de forma directa, se respeta la tarifa booking';
+ const angelo=S.normalizarHoja(hojaDosNoches(texto),'Sep26').reservas[0];
+ assert.equal(angelo.noches,2);assert.equal(angelo.noches_texto,1);
+ assert.equal(angelo.noches_extension_texto,1);assert.equal(angelo.noches_extension_ambigua,false);assert.equal(angelo.noches_texto_efectivas,2);
+ assert.deepEqual(angelo.advertencias,[]);
+ assert.equal(S.asociar(angelo,[{...angelo,id:'proyecto-h'}]).estado,'asociada');
+
+ for(const nota of ['extendió 1 noche','agregó 1 noche','solicitó agregar 1 noche']){
+  const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 1 noche // ${nota}`),'Sep26').reservas[0];
+  assert.equal(r.noches_texto_efectivas,2,nota);assert.deepEqual(r.advertencias,[],nota);
+ }
+});
+test('night extensions remain conservative when absent, incompatible, ambiguous or financial',()=>{
+ for(const [texto,extension,ambigua] of [
+  ['Angelo Villegas // 1 noche',null,false],
+  ['Angelo Villegas // 1 noche // pidió extender 2 noches',2,false],
+  ['Angelo Villegas // 1 noche // consultó por una noche adicional, sin confirmar',null,false],
+  ['Angelo Villegas // 1 noche // pidió extender 1 noche // agregó 1 noche',null,true]
+ ]){
+  const r=S.normalizarHoja(hojaDosNoches(texto),'Sep26').reservas[0];
+  assert.equal(r.noches_extension_texto,extension,texto);assert.equal(r.noches_extension_ambigua,ambigua,texto);
+  assert.match(r.advertencias.join(' '),/noches escritas no coinciden/i,texto);
+ }
+ const concepto=S.normalizarHoja(hojaDosNoches('Angelo Villegas // cab6/1noche'),'Sep26').reservas[0];
+ assert.equal(concepto.noches_texto,null);assert.equal(concepto.noches_extension_texto,null);assert.deepEqual(concepto.advertencias,[]);
+});
+test('multiple explicit extensions require review even when the base duration matches geometry',()=>{
+ const r=S.normalizarHoja(hojaDosNoches('Angelo Villegas // 2 noches // pidió extender 1 noche // agregó 1 noche'),'Sep26').reservas[0];
+ assert.equal(r.noches,2);assert.equal(r.noches_texto,2);assert.equal(r.noches_extension_texto,null);
+ assert.equal(r.noches_extension_ambigua,true);assert.equal(r.noches_texto_efectivas,2);
+ assert.match(r.advertencias.join(' '),/noches escritas no coinciden/i);
+ assert.equal(S.asociar(r,[{...r,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+});
 test('valid dates, range, month and unknown dates',()=>{
  const q=Q.interpretar('Libro CAB 6 del 11 al 13 de septiembre de 2026',['Sep26']);assert.equal(q.desde,'2026-09-11');assert.equal(q.hasta,'2026-09-13');assert.equal(q.cabana,6);
  assert.throws(()=>Q.interpretar('Libro el 31-09-26',['Sep26']),/válido/);
