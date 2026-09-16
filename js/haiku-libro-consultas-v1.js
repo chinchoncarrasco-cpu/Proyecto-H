@@ -586,6 +586,75 @@
                 consumidos.add(existente.id);
             }
         }
+
+        // En grupos multicabaña, un movimiento puede conservar como titular a
+        // quien hizo la transferencia y quedar fuera de la asociación semántica.
+        // Sólo se recupera si el grupo y cada reserva hija ya están asociados,
+        // y CAB + fechas + firma financiera dejan una correspondencia 1 ↔ 1.
+        const gruposMulticabana=new Map();
+        for (const result of resultados.filter(x=>x.estado==='asociada' && x.sistema?.grupo_reserva_id)) {
+            const id=result.sistema.grupo_reserva_id;
+            if (!gruposMulticabana.has(id)) gruposMulticabana.set(id,[]);
+            gruposMulticabana.get(id).push(result);
+        }
+        const movimientoGrupoElegible = (p,r) => !pagoTieneIdentificadorFuerte(p) &&
+            !p.advertencias?.length && medioLibro(p)==='transferencia' &&
+            p.tipo_movimiento==='alojamiento' && p.pago_recibido===true &&
+            p.estado_pago==='registrado_en_libro' && Boolean(p.fecha_comprobante) &&
+            p.fecha_bloque===r.fecha_checkin && Number(p.cabana)===Number(r.cabana) &&
+            Number.isSafeInteger(Number(p.monto)) && Number(p.monto)>0;
+        for (const miembros of gruposMulticabana.values()) {
+            if (miembros.length<2) continue;
+            const reservasHijas=new Set(miembros.map(x=>x.sistema.reserva_id));
+            const cabanas=new Set(miembros.map(x=>Number(x.libro.cabana)));
+            const periodos=new Set(miembros.map(x=>`${x.libro.fecha_checkin}|${x.libro.fecha_checkout}`));
+            const grupoSeguro=reservasHijas.size===miembros.length && cabanas.size===miembros.length &&
+                periodos.size===1 && miembros.every(x=>x.sistema.reserva_id &&
+                    x.sistema.grupo_reserva_id===miembros[0].sistema.grupo_reserva_id &&
+                    Number(x.sistema.cabana)===Number(x.libro.cabana) &&
+                    x.sistema.fecha_checkin===x.libro.fecha_checkin &&
+                    x.sistema.fecha_checkout===x.libro.fecha_checkout);
+            if (!grupoSeguro) continue;
+            for (const result of miembros) {
+                const r=result.libro;
+                const movimientos=[...(r.pagos || []),...(r.pagos_sin_asociacion || [])]
+                    .filter(p=>movimientoGrupoElegible(p,r));
+                const firmas=new Map();
+                for (const p of movimientos) {
+                    const firma=[Number(p.monto),moneda(p),medioLibro(p),String(p.fecha_comprobante).slice(0,10)].join('|');
+                    if (!firmas.has(firma)) firmas.set(firma,[]);
+                    firmas.get(firma).push(p);
+                }
+                for (const [firma,movimientosLibro] of firmas) {
+                    // Dos movimientos equivalentes para la misma hija son
+                    // ambiguos incluso si una pasada anterior había asociado uno.
+                    if (movimientosLibro.length!==1) {
+                        for (const p of movimientosLibro) {
+                            const previa=asignadas.get(p);
+                            if (previa?.id) consumidos.delete(previa.id);
+                            asignadas.delete(p);
+                        }
+                        continue;
+                    }
+                    const p=movimientosLibro[0], previa=asignadas.get(p);
+                    const [monto,divisa,medio,fecha]=firma.split('|');
+                    const candidatosFinancieros=pagos.filter(x=>x.id && x.reserva_id===result.sistema.reserva_id &&
+                        S.normalizar(x.estado)==='confirmado' &&
+                        moneda(x)===divisa && Number(x.monto)===Number(monto) && medioSistema(x)===medio &&
+                        String(x.fecha_pago || '').slice(0,10)===fecha);
+                    const candidatos=candidatosFinancieros.filter(x=>!identificadorFuerteSistema(x) && !fuertesUsados.has(x.id));
+                    if (candidatosFinancieros.length!==1 || candidatos.length!==1 ||
+                        consumidos.has(candidatos[0].id) && previa?.id!==candidatos[0].id) {
+                        if (previa?.id) consumidos.delete(previa.id);
+                        asignadas.delete(p);
+                        continue;
+                    }
+                    if (previa?.id && previa.id!==candidatos[0].id) consumidos.delete(previa.id);
+                    asignadas.set(p,candidatos[0]);
+                    consumidos.add(candidatos[0].id);
+                }
+            }
+        }
         return asignadas;
     }
 

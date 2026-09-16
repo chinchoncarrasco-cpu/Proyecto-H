@@ -483,6 +483,82 @@ test('complete multicabin reservation group links explicit sibling reservations 
  assert.equal(c.grupos[0].pregunta,null);assert.equal(c.meta.faltantes,0);
 });
 
+function marcoMulticabanaPagos() {
+ const movimiento=(cabana,monto,fecha,origen)=>readyPay({codigo_autorizacion:null,folio:null,bovtar:null,titular:'Karina Andrea Cruz',
+  medio_pago:'transferencia',monto,fecha_bloque:'2026-09-17',fecha_comprobante:fecha,cabana,
+  origen:{hoja:'Sep26',celda:origen},texto_original:`${fecha} // Marco Iturrieta Rojas // 0150681308 Transf de KARINA ANDREA CRUZ // CAB${cabana} // $${monto}`});
+ const cab1={p125:movimiento(1,125000,'2026-07-01','A1:D1'),p145:movimiento(1,145000,'2026-07-03','A2:D2')};
+ const cab2={p125:movimiento(2,125000,'2026-07-01','A3:D3'),p145:movimiento(2,145000,'2026-07-03','A4:D4')};
+ const base={titular:'Marco Iturrieta Rojas',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const reservas=[
+  readyBook({...base,cabana:1,pagos:[cab1.p125],pagos_sin_asociacion:[cab1.p145]}),
+  readyBook({...base,id:'marco-cab2',cabana:2,pagos:[cab2.p125],pagos_sin_asociacion:[cab2.p145]})
+ ];
+ const estadias=[
+  stay(reservas[0],{id:'e-cab1',reserva_id:'r-cab1',reservas:{...stay(reservas[0]).reservas,grupo_reserva_id:'grupo-marco'}}),
+  stay(reservas[1],{id:'e-cab2',reserva_id:'r-cab2',reservas:{...stay(reservas[1]).reservas,grupo_reserva_id:'grupo-marco'}})
+ ];
+ const existente=(id,reserva_id,monto,fecha,estado='confirmado')=>({id,reserva_id,estado,monto,moneda:'CLP',medio_pago:'transferencia',
+  fecha_pago:fecha+'T12:00:00Z',observaciones:'2/2 · Pago conjunto',datos_origen:{verificacion_migrada:true}});
+ const pagos=[
+  existente('p125-cab1','r-cab1',125000,'2026-07-01'),existente('p145-cab1','r-cab1',145000,'2026-07-03'),
+  existente('p125-cab2','r-cab2',125000,'2026-07-01'),existente('p145-cab2','r-cab2',145000,'2026-07-03'),
+  existente('anulado-cab1','r-cab1',62500,'2026-07-01','anulado'),existente('anulado-cab2','r-cab2',62500,'2026-07-01','anulado')
+ ];
+ return {reservas,estadias,pagos,existente};
+}
+
+test('Marco multicabin weak transfers reconcile by child reservation and cabin, never by group amount order',async()=>{
+ const {reservas,estadias,pagos}=marcoMulticabanaPagos();
+ const c=await compare(reservas,estadias,pagos);
+ assert.equal(c.grupos.length,1);assert.equal(c.grupos[0].estado,'asociada');
+ assert.deepEqual(c.pagosDetalle.map(x=>x.estado),['en_sistema','en_sistema','en_sistema','en_sistema']);
+ assert.deepEqual(c.pagosDetalle.map(x=>[x.pago.cabana,x.pago.monto,x.sistema.reserva_id]),[
+  [1,125000,'r-cab1'],[1,145000,'r-cab1'],[2,125000,'r-cab2'],[2,145000,'r-cab2']
+ ]);
+ const plan=Q.crearPlanIncorporacion(reservas,c);
+ assert.equal(plan.items.filter(i=>i.categoria==='omitidos'&&i.pagoLibro).length,4);
+ assert.equal(plan.items.filter(i=>i.categoria==='pagos'||i.categoria==='dudosos').length,0);
+ assert.ok(plan.items.filter(i=>i.pagoLibro).every(i=>i.payload===null&&i.aprobable!==true));
+});
+
+test('Marco multicabin payment rescue fails closed on every child-level ambiguity',async()=>{
+ {
+  const f=marcoMulticabanaPagos();
+  f.pagos.push({...f.pagos.find(p=>p.id==='p145-cab1'),id:'p145-cab1-duplicado'});
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.equal(c.pagosDetalle.find(x=>x.pago.cabana===1&&x.pago.monto===145000).estado,'revisar');
+ }
+ {
+  const f=marcoMulticabanaPagos(),duplicado={...f.reservas[0].pagos_sin_asociacion[0],origen:{hoja:'Sep26',celda:'A9:D9'}};
+  f.reservas[0].pagos_sin_asociacion.push(duplicado);
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.ok(c.pagosDetalle.filter(x=>x.pago.cabana===1&&x.pago.monto===145000).every(x=>x.estado==='revisar'));
+ }
+ {
+  const f=marcoMulticabanaPagos();
+  f.reservas[1].pagos_sin_asociacion=[];
+  f.pagos=f.pagos.filter(p=>p.id!=='p145-cab1');
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.equal(c.pagosDetalle.find(x=>x.pago.cabana===1&&x.pago.monto===145000).estado,'revisar');
+ }
+ {
+  const f=marcoMulticabanaPagos(),p=f.pagos.find(x=>x.id==='p145-cab1');p.estado='anulado';
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.equal(c.pagosDetalle.find(x=>x.pago.cabana===1&&x.pago.monto===145000).estado,'revisar');
+ }
+ {
+  const f=marcoMulticabanaPagos();f.estadias[1].reservas.grupo_reserva_id='otro-grupo';
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.ok(c.pagosDetalle.filter(x=>x.pago.monto===145000).every(x=>x.estado==='revisar'));
+ }
+ {
+  const f=marcoMulticabanaPagos();f.reservas[0].pagos_sin_asociacion[0].cabana=null;
+  const c=await compare(f.reservas,f.estadias,f.pagos);
+  assert.equal(c.pagosDetalle.find(x=>x.pago.monto===145000&&x.reserva.cabana===1).estado,'revisar');
+ }
+});
+
 test('payment on a securely matched stay stays safe while another cabin awaits a decision',async()=>{
  const a=book({pagos:[pay()]}),b=book({id:'b2',cabana:2});
  const c=await compare([a,b],[stay(a)]);
