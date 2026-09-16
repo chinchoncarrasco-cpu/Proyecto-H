@@ -280,7 +280,8 @@
                         ...(ambigua?{advertencias:['Varios posibles titulares; no se eligió uno arbitrariamente.']}: {}) }); continue;
                 }
                 const src = origen(cell), merge = src.merge;
-                const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c)).map(d => d.fechaISO);
+                const diasHoja = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));
+                const dias = diasHoja.map(d => d.fechaISO);
                 const fd = /full\s*day/.test(t);
                 // La duracion declarada es un campo propio de la reserva: debe
                 // ocupar un fragmento completo. Conceptos financieros como
@@ -291,7 +292,19 @@
                 const nochesTextoEfectivas = nochesTexto === null ? null : nochesTexto + (nochesExtensionTexto ?? 0);
                 const noches = fd ? 0 : dias.length;
                 const dudas = [];
-                if (extensionTexto.ambigua || nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) dudas.push("Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.");
+                const notasInterpretacion = [];
+                const paso = headers[1] ? headers[1].c - headers[0].c : null;
+                const calendarioRegular = Number.isInteger(paso) && paso > 0 && headers.every((d,i)=>!i||d.c-headers[i-1].c===paso);
+                const diasConsecutivos = dias.every((d,i)=>!i||d===sumarDias(dias[i-1],1));
+                const ultimoDia = diasHoja.at(-1);
+                const contenidoContradictorio = !!merge && cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=merge.e.c&&c.valor?.trim());
+                const mergeSeguro = !merge ? cell.r===cab.r && cell.c===h.c : calendarioRegular && merge.s.r===cab.r && merge.e.r===cab.r &&
+                    merge.s.c===cell.c && cell.c>=h.c && cell.c<=h.c+Math.max(0,paso-2) &&
+                    merge.e.c>=ultimoDia.c+Math.max(0,paso-2) && merge.e.c<=ultimoDia.c+paso-1 && !contenidoContradictorio;
+                const geometriaInequivoca = !!dias.length && calendarioRegular && diasConsecutivos && cabRows.filter(c=>c.r===cab.r).length===1 && mergeSeguro;
+                if (!geometriaInequivoca) dudas.push("La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.");
+                if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
+                else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
@@ -303,6 +316,7 @@
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: h.fechaISO,
                     fecha_checkout: fd ? h.fechaISO : sumarDias(dias.at(-1), 1), fechas_ocupadas: dias, noches, noches_texto: nochesTexto,
                     noches_extension_texto: nochesExtensionTexto, noches_extension_ambigua: extensionTexto.ambigua, noches_texto_efectivas: nochesTextoEfectivas,
+                    geometria_inequivoca: geometriaInequivoca, notas_interpretacion: notasInterpretacion,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,

@@ -1649,6 +1649,7 @@
                 );
                 if (r.rut_documento || r.correo || r.telefono) lines.push([r.rut_documento, r.correo, r.telefono].filter(Boolean).join(" · "));
                 if (r.operador || r.fecha_ingreso_libro) lines.push(`Ingreso al Libro: ${r.fecha_ingreso_libro || "sin fecha"} · operador ${r.operador || "sin dato"}.`);
+                for (const note of r.notas_interpretacion || []) lines.push(`Nota de interpretación: ${note}`);
                 for (const note of r.notas_importantes) lines.push(`Nota roja: ${note}`);
                 for (const pending of r.pagos_pendientes) lines.push(`Pendiente mencionado: ${pending}`);
                 for (const service of r.servicios) lines.push(`Servicio: ${service.concepto} · ${service.texto_original}`);
@@ -1876,6 +1877,7 @@
             guest.append(grid);
             const reserva = section('Reserva');
             linea(reserva, `Ingreso al Libro: ${r.fecha_ingreso_libro || 'sin fecha'} · operador ${r.operador || 'sin dato'}.`);
+            (r.notas_interpretacion || []).forEach(n => linea(reserva, `Nota de interpretación: ${n}`));
             r.notas_importantes.forEach(n => linea(reserva, `Nota roja: ${n}`));
             r.pagos_pendientes.forEach(n => linea(reserva, `Pendiente mencionado: ${n}`));
             const pagos = section('Pagos');

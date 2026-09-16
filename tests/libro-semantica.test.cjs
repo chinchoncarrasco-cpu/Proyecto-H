@@ -30,8 +30,8 @@ test('payment concept nights do not contradict reservation geometry, while a res
 
  const conflicto=S.normalizarHoja(hojaDosNoches('Angelo Villegas // 2 ADL // 1 noche'),'Sep26').reservas[0];
  assert.equal(conflicto.noches,2);assert.equal(conflicto.noches_texto,1);
- assert.match(conflicto.advertencias.join(' '),/noches escritas no coinciden/i);
- assert.equal(S.asociar(conflicto,[{...conflicto,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+ assert.deepEqual(conflicto.advertencias,[]);assert.match(conflicto.notas_interpretacion.join(' '),/texto del Libro indica 1 noche.*geometría abarca 2 noches/i);
+ assert.equal(S.asociar(conflicto,[{...conflicto,id:'proyecto-h'}]).estado,'asociada');
 });
 test('explicit numeric extension reconciles the structured base duration with calendar geometry',()=>{
  const texto='BOOKING // Angelo Villegas // 1 Noche // 2 ADL // FC // 06.06.26 // Consultó por booking como era el sistema de tinajas, se le indicó pero no hubo respuesta. // pidió extender 1 noche, de forma directa, se respeta la tarifa booking';
@@ -55,17 +55,35 @@ test('night extensions remain conservative when absent, incompatible, ambiguous 
  ]){
   const r=S.normalizarHoja(hojaDosNoches(texto),'Sep26').reservas[0];
   assert.equal(r.noches_extension_texto,extension,texto);assert.equal(r.noches_extension_ambigua,ambigua,texto);
-  assert.match(r.advertencias.join(' '),/noches escritas no coinciden/i,texto);
+  assert.deepEqual(r.advertencias,[],texto);assert.ok(r.notas_interpretacion.length,texto);
  }
  const concepto=S.normalizarHoja(hojaDosNoches('Angelo Villegas // cab6/1noche'),'Sep26').reservas[0];
  assert.equal(concepto.noches_texto,null);assert.equal(concepto.noches_extension_texto,null);assert.deepEqual(concepto.advertencias,[]);
 });
-test('multiple explicit extensions require review even when the base duration matches geometry',()=>{
+test('multiple explicit extensions remain informational when calendar geometry is safe',()=>{
  const r=S.normalizarHoja(hojaDosNoches('Angelo Villegas // 2 noches // pidió extender 1 noche // agregó 1 noche'),'Sep26').reservas[0];
  assert.equal(r.noches,2);assert.equal(r.noches_texto,2);assert.equal(r.noches_extension_texto,null);
  assert.equal(r.noches_extension_ambigua,true);assert.equal(r.noches_texto_efectivas,2);
- assert.match(r.advertencias.join(' '),/noches escritas no coinciden/i);
- assert.equal(S.asociar(r,[{...r,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+ assert.deepEqual(r.advertencias,[]);assert.match(r.notas_interpretacion.join(' '),/más de una extensión/i);
+ assert.equal(S.asociar(r,[{...r,id:'proyecto-h'}]).estado,'asociada');
+});
+test('Isabel associates by identity cabin and geometric dates despite stale written nights',()=>{
+ const texto='Isabel Soto Manriques // 12.345.678-5 // isabel@example.test // +56 9 1234 5678 // 1 Noche // 2 ADL';
+ const isabel=S.normalizarHoja(hojaDosNoches(texto),'Sep26').reservas[0];
+ assert.equal(isabel.fecha_checkin,'2026-09-21');assert.equal(isabel.fecha_checkout,'2026-09-23');assert.equal(isabel.noches,2);assert.equal(isabel.noches_texto,1);
+ assert.equal(isabel.geometria_inequivoca,true);assert.deepEqual(isabel.advertencias,[]);assert.equal(isabel.notas_interpretacion.length,1);
+ const sistema={...isabel,id:'proyecto-h',notas_interpretacion:[]};
+ assert.equal(S.asociar(isabel,[sistema]).estado,'asociada');
+});
+test('incomplete merge and nonconsecutive calendar remain blocking geometry warnings',()=>{
+ const incompleta=hojaDosNoches('Persona Prueba // 2 noches');incompleta.combinaciones[0].e.c=7;
+ const a=S.normalizarHoja(incompleta,'Sep26').reservas[0];
+ assert.equal(a.geometria_inequivoca,false);assert.match(a.advertencias.join(' '),/geometría.*incompleta o ambigua/i);
+ assert.equal(S.asociar(a,[{...a,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
+
+ const hueco=hojaDosNoches('Persona Prueba // 2 noches');hueco.celdas.find(c=>c.c===6).fechaISO='2026-09-23';hueco.celdas.find(c=>c.c===6).valor='23 sep';hueco.celdas.find(c=>c.c===10).fechaISO='2026-09-24';hueco.celdas.find(c=>c.c===10).valor='24 sep';
+ const b=S.normalizarHoja(hueco,'Sep26').reservas[0];
+ assert.equal(b.geometria_inequivoca,false);assert.match(b.advertencias.join(' '),/geometría.*incompleta o ambigua/i);
 });
 test('informational or unconfirmed service questions do not become services',()=>{
  for(const nota of [
