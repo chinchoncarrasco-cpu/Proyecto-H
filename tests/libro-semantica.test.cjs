@@ -5,6 +5,10 @@ global.HAIKU_LIBRO_SEMANTICA = S;
 const Q = require('../js/haiku-libro-consultas-v1.js');
 const origen = {hoja:'Sep26',celda:'C3'};
 const reserva = {id:'a',titular:'Ana Pérez',cabana:6,fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-06',advertencias:[],pagos:[],pagos_sin_asociacion:[],coordenadas_origen:origen};
+function hojaDosNoches(texto){return {celdas:[
+ {r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},{r:1,c:10,valor:'23 sep',fechaISO:'2026-09-23'},
+ {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
+],combinaciones:[{s:{r:2,c:2},e:{r:2,c:8}}]};}
 test('rich text separates operational state, red notes and yellow debt',()=>{
  const c={valor:'Ana / factura / jacuzzi',estiloId:0,runs:[{texto:'Ana',font:{color:{rgb:'FFFFFFFF'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}}]};
  const f=S.fuente(c,[{font:{color:{rgb:'FF000000'}},fill:{fgColor:{rgb:'FFB4A7D6'}}}]);
@@ -16,6 +20,18 @@ test('strict matching refuses duplicate identity and conflicting document',()=>{
  assert.equal(S.asociar(reserva,[{...reserva,id:'1'},{...reserva,id:'2'}]).estado,'ambigua');
  assert.equal(S.asociar({...reserva,rut_documento:'123-4'},[{...reserva,rut_documento:'999-9'}]).estado,'ambigua');
  assert.equal(S.asociar({...reserva,advertencias:['night conflict']},[reserva]).estado,'ambigua');
+});
+test('payment concept nights do not contradict reservation geometry, while a reservation duration still can',()=>{
+ const angelo=S.normalizarHoja(hojaDosNoches('Angelo Villegas // 2 ADL // cab6/1noche'),'Sep26').reservas[0];
+ assert.equal(angelo.noches,2);assert.equal(angelo.noches_texto,null);
+ assert.equal(angelo.fecha_checkin,'2026-09-21');assert.equal(angelo.fecha_checkout,'2026-09-23');
+ assert.deepEqual(angelo.advertencias,[]);
+ assert.equal(S.asociar(angelo,[{...angelo,id:'proyecto-h'}]).estado,'asociada');
+
+ const conflicto=S.normalizarHoja(hojaDosNoches('Angelo Villegas // 2 ADL // 1 noche'),'Sep26').reservas[0];
+ assert.equal(conflicto.noches,2);assert.equal(conflicto.noches_texto,1);
+ assert.match(conflicto.advertencias.join(' '),/noches escritas no coinciden/i);
+ assert.equal(S.asociar(conflicto,[{...conflicto,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
 });
 test('valid dates, range, month and unknown dates',()=>{
  const q=Q.interpretar('Libro CAB 6 del 11 al 13 de septiembre de 2026',['Sep26']);assert.equal(q.desde,'2026-09-11');assert.equal(q.hasta,'2026-09-13');assert.equal(q.cabana,6);

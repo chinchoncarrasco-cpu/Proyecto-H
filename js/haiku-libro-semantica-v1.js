@@ -80,6 +80,13 @@
         const candidatos=candidatosTitular(texto);
         return candidatos.length===1?candidatos[0].texto:null;
     }
+    function declaracionNochesReserva(texto) {
+        for (const fragmento of String(texto || '').split(/\s*\/\/\s*|\r?\n/)) {
+            const match = normalizar(fragmento).match(/^(\d+)\s*noches?$/);
+            if (match) return Number(match[1]);
+        }
+        return null;
+    }
     // La recuperación de titulares financieros conserva su contrato previo.
     function titularPago(texto) {
         const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
@@ -256,10 +263,13 @@
                 const src = origen(cell), merge = src.merge;
                 const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c)).map(d => d.fechaISO);
                 const fd = /full\s*day/.test(t);
-                const nochesTexto = t.match(/\b(\d+)\s*noches?\b/);
+                // La duracion declarada es un campo propio de la reserva: debe
+                // ocupar un fragmento completo. Conceptos financieros como
+                // "cab6/1noche" no describen la duracion total de la estadia.
+                const nochesTexto = declaracionNochesReserva(cell.valor);
                 const noches = fd ? 0 : dias.length;
                 const dudas = [];
-                if (nochesTexto && Number(nochesTexto[1]) !== noches) dudas.push("Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.");
+                if (nochesTexto !== null && nochesTexto !== noches) dudas.push("Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.");
                 const colors = fuente(cell, estilos);
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
@@ -269,7 +279,7 @@
                 const fechaRegistro = partes.map(fechaTexto).filter(Boolean).at(-1) || null;
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: h.fechaISO,
-                    fecha_checkout: fd ? h.fechaISO : sumarDias(dias.at(-1), 1), fechas_ocupadas: dias, noches, noches_texto: nochesTexto ? Number(nochesTexto[1]) : null,
+                    fecha_checkout: fd ? h.fechaISO : sumarDias(dias.at(-1), 1), fechas_ocupadas: dias, noches, noches_texto: nochesTexto,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,
