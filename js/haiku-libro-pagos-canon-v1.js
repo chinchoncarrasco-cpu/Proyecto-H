@@ -6,8 +6,8 @@
 // - BOVTAR sí identifica una transacción de tarjeta.
 // - BOVE es un dato administrativo/tributario y NO demuestra un pago nuevo.
 // - Conserva conjuntamente el canal WebPay y el tipo de tarjeta.
-// - Reconstruye una transacción distribuida sólo cuando sus aplicaciones suman
-//   exactamente el monto total declarado y comparten identificador fuerte.
+// - Reconstruye una transacción distribuida cuando sus aplicaciones comparten
+//   identidad fuerte y contexto inequívoco. Si hay total declarado, exige suma exacta.
 // - No inventa identidad para efectivo/transferencia sin referencia transaccional.
 //
 // Esta capa no escribe en Supabase ni modifica el XLSX. Sólo normaliza la
@@ -78,16 +78,32 @@
 
     function montoTotalDeclarado(pago) {
         const texto = String(pago?.texto_original || "");
-        const coincidencia = texto.match(/\bmonto\b\s*:?[ \t]*\$?[ \t]*([\d.]+)/i);
+        const coincidencia = texto.match(/\b(?:monto|total)\b\s*:?[ \t]*(?:clp)?[ \t]*\$?[ \t]*([\d.,]+)/i);
         if (!coincidencia) return null;
-        const numero = Number(coincidencia[1].replace(/\./g, ""));
+        const numero = Number(coincidencia[1].replace(/[.,]/g, ""));
         return Number.isSafeInteger(numero) && numero > 0 ? numero : null;
+    }
+
+    function notaFinanciera(pago) {
+        const texto = normalizarTexto(`${pago?.texto_original || ""} ${pago?.concepto || ""}`);
+        return pago?.clasificacion_financiera === "nota_financiera" || pago?.tipo_movimiento === "penalidad" ||
+            /\b(?:reembolso|reembolsar|devolucion|nota de credito)\b|\b(?:por|x) pagar\b|\bsaldo (?:restante|pendiente)\b|\bpor gestionar\b/.test(texto);
+    }
+
+    function pagoVigenteLibro(pago) {
+        const estado = normalizarTexto(pago?.estado || pago?.estado_pago);
+        return !/\b(?:anulado|cancelado|invalido)\b/.test(estado);
+    }
+
+    function conflicto(grupo, motivo, reemplazo) {
+        for (const { pago, indice } of grupo) reemplazo.set(indice, { ...pago, conflicto_distribucion: motivo });
     }
 
     function agruparTransaccionesDistribuidas(pagos) {
         if (!Array.isArray(pagos) || pagos.length < 2) return pagos || [];
         const porId = new Map();
         pagos.forEach((pago, indice) => {
+            if (!pagoVigenteLibro(pago) || notaFinanciera(pago)) return;
             const clave = claveTransaccionFuerte(pago);
             if (!clave) return;
             if (!porId.has(clave)) porId.set(clave, []);
@@ -97,29 +113,49 @@
         for (const grupo of porId.values()) {
             if (grupo.length < 2) continue;
             const declarados = [...new Set(grupo.map(x => montoTotalDeclarado(x.pago)).filter(Number.isSafeInteger))];
-            if (declarados.length !== 1) continue;
-            const total = declarados[0];
             const suma = grupo.reduce((n, x) => n + (Number.isSafeInteger(Number(x.pago.monto)) ? Number(x.pago.monto) : 0), 0);
-            const compatibles = ['titular','cabana','fecha_bloque','fecha_comprobante','moneda'].every(campo =>
-                new Set(grupo.map(x => normalizarTexto(x.pago[campo])).filter(Boolean)).size <= 1
-            );
-            if (!compatibles || suma !== total) continue;
+            const mismos = campo => {
+                const valores = grupo.map(x => normalizarTexto(x.pago[campo])).filter(Boolean);
+                return valores.length === grupo.length && new Set(valores).size === 1;
+            };
+            const conceptos = grupo.map(x => normalizarTexto(x.pago.concepto));
+            const origenes = grupo.map(x => `${x.pago.origen?.hoja || ""}!${x.pago.origen?.celda || ""}`);
+            const compatibles = ['titular','cabana','fecha_bloque','fecha_comprobante','moneda','medio_pago'].every(mismos) &&
+                grupo.every(x => Number.isSafeInteger(Number(x.pago.monto)) && Number(x.pago.monto) > 0 &&
+                    x.pago.pago_recibido === true && x.pago.estado_pago === 'registrado_en_libro' &&
+                    x.pago.origen?.hoja && x.pago.origen?.celda && normalizarTexto(x.pago.concepto)) &&
+                new Set(grupo.map(x => x.pago.origen.hoja)).size === 1 && new Set(origenes).size === grupo.length &&
+                new Set(conceptos).size === grupo.length;
+            if (!compatibles) { conflicto(grupo, 'Identificador compartido con contexto o aplicaciones incompatibles.', reemplazo); continue; }
+            if (declarados.length > 1 || declarados.length === 1 && declarados[0] !== suma) {
+                conflicto(grupo, 'La suma de aplicaciones no coincide con el total explícito del comprobante.', reemplazo); continue;
+            }
+            const total = declarados[0] || suma;
             const aplicaciones = grupo.map(({ pago }) => ({
                 monto: Number(pago.monto), concepto: pago.concepto || null,
                 tipo_movimiento: pago.tipo_movimiento || null, cabana: pago.cabana || null,
-                fecha_bloque: pago.fecha_bloque || null, origen: pago.origen || null
+                fecha_bloque: pago.fecha_bloque || null, fecha_comprobante:pago.fecha_comprobante || null,
+                origen: pago.origen || null, metadata_servicio: pago.servicio || pago.metadata_servicio || null
             }));
             const base = grupo[0].pago;
-            const conceptos = [...new Set(aplicaciones.map(x => x.concepto).filter(Boolean))];
+            const conceptosVisibles = [...new Set(aplicaciones.map(x => x.concepto).filter(Boolean))];
+            const clave = claveTransaccionFuerte(base);
             reemplazo.set(grupo[0].indice, {
                 ...base,
                 monto: total,
-                concepto: conceptos.length ? conceptos.join(' + ') : base.concepto,
-                tipo_movimiento: aplicaciones.every(x => x.tipo_movimiento === 'alojamiento') ? 'alojamiento' : 'distribuido',
+                monto_total: total,
+                total_declarado: declarados[0] || null,
+                total_inferido: declarados.length === 0,
+                concepto: conceptosVisibles.length ? conceptosVisibles.join(' + ') : base.concepto,
+                tipo_movimiento: 'distribuido',
                 texto_original: [...new Set(grupo.map(x => x.pago.texto_original).filter(Boolean))].join('\n'),
                 origenes: grupo.map(x => x.pago.origen).filter(Boolean),
                 aplicaciones_libro: aplicaciones,
-                transaccion_distribuida: true
+                transaccion_distribuida: true,
+                identificador_transaccion: clave,
+                evidencia_agrupacion: { identificador_fuerte:clave, misma_reserva_contextual:true, fecha_compatible:true,
+                    moneda_compatible:true, medio_compatible:true, origenes_distintos:true,
+                    total: declarados.length ? 'explicito_verificado' : 'suma_inferida_por_identidad_fuerte' }
             });
             grupo.slice(1).forEach(x => omitidos.add(x.indice));
         }

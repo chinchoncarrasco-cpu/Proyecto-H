@@ -107,8 +107,11 @@ test('exact request without Libro routes through all payment layers and retains 
     const out = await h.consultarHoja('Sep26');
     assert.equal(out.reservas.length, 2);
     const cinco = out.reservas.find(r => r.cabana === 5);
-    assert.deepEqual(Array.from(cinco.pagos_sin_asociacion, p => p.monto), [153000, 40000]);
+    assert.deepEqual(Array.from(cinco.pagos_sin_asociacion, p => p.monto), [193000]);
     assert.equal(cinco.pagos.length, 0);
-    assert.equal(cinco.pagos_sin_asociacion[1].tipo_movimiento, 'servicio');
+    assert.equal(cinco.pagos_sin_asociacion[0].tipo_movimiento, 'distribuido');
+    assert.equal(cinco.pagos_sin_asociacion[0].transaccion_distribuida, true);
+    assert.deepEqual(Array.from(cinco.pagos_sin_asociacion[0].aplicaciones_libro, p => p.monto), [153000, 40000]);
+    assert.equal(cinco.pagos_sin_asociacion[0].origenes.length, 2);
     assert.deepEqual(Array.from(out.reservas.find(r => r.cabana === 10).pagos, p => p.monto), [100000, 20000]);
 });

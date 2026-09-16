@@ -278,6 +278,18 @@ test('safe new payment, existing payment and identifier attached elsewhere',asyn
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'r1'}])).pagosDetalle[0].estado,'en_sistema');
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'other'}])).pagosDetalle[0].estado,'revisar');
 });
+test('Macarena canonical parent already in Proyecto H is one omitted transaction with audit applications',async()=>{
+ const p=pay({monto:193000,folio:'000235',bovtar:'173121',codigo_autorizacion:null,medio_pago:'credito',fecha_comprobante:'2026-09-03',
+  tipo_movimiento:'distribuido',transaccion_distribuida:true,monto_total:193000,origenes:[{hoja:'Sep26',celda:'K46:N46'},{hoja:'Sep26',celda:'K47:N47'}],
+  aplicaciones_libro:[{monto:153000,concepto:'cab1/1noche',origen:{hoja:'Sep26',celda:'K46:N46'}},{monto:40000,concepto:'early check in',origen:{hoja:'Sep26',celda:'K47:N47'}}]});
+ const r=book({titular:'Macarena Hurtado',pagos:[p]});
+ const existente={id:'macarena-193',reserva_id:'r1',estado:'confirmado',monto:193000,moneda:'CLP',medio_pago:'tarjeta_credito',folio:'000235',bove:'173121',fecha_pago:'2026-09-03'};
+ const c=await compare([r],[stay(r)],[existente]);
+ assert.equal(c.pagosDetalle.length,1);assert.equal(c.pagosDetalle[0].estado,'en_sistema');
+ const plan=Q.crearPlanIncorporacion([r],c),items=plan.items.filter(i=>i.pagoLibro===p);
+ assert.equal(items.length,1);assert.equal(items[0].categoria,'omitidos');assert.equal(items[0].payload,null);assert.notEqual(items[0].aprobable,true);
+ assert.equal(p.aplicaciones_libro.length,2);assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+});
 test('voided cancelled or invalid system payments never satisfy already exists',async()=>{
  const r=book({pagos:[pay()]});
  for(const estado of ['anulado','cancelado','invalido']){

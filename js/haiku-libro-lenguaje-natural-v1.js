@@ -189,6 +189,7 @@
 
     function clasificarMovimientoFinanciero(pago) {
         if (!pago || typeof pago !== "object") return "dudoso";
+        if (pago.conflicto_distribucion) return "dudoso";
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
