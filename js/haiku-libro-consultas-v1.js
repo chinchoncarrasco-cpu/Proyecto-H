@@ -484,6 +484,13 @@
             medioSistema(p)===medioLibro(item.p));
         const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
             normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
+        const tokensTitular = valor => [...new Set(texto(valor).split(' ').filter(t=>/^\p{L}+$/u.test(t) && t.length>=2))];
+        const titularVarianteCompatible = (a,b) => {
+            const ta=tokensTitular(a),tb=tokensTitular(b);
+            if (ta.length<2 || tb.length<2) return false;
+            const [corto,largo]=ta.length<=tb.length?[ta,new Set(tb)]:[tb,new Set(ta)];
+            return corto.every(t=>largo.has(t));
+        };
 
         // Evidencia exacta conservada por Haku: misma reserva, monto y medio,
         // más origen XLSX o glosa completa. La fecha puede haber sido corregida.
@@ -545,6 +552,38 @@
             if (restantesLibro.length === 1 && restantesSistema.length === 1) {
                 asignadas.set(restantesLibro[0].p, restantesSistema[0]);
                 consumidos.add(restantesSistema[0].id);
+            }
+        }
+
+        // Un titular financiero abreviado no modifica la asociación semántica.
+        // Sólo rescata la transferencia histórica si bloque, nombres y firma
+        // financiera dejan una única correspondencia posible en ambos lados.
+        for (const result of resultados.filter(x=>x.estado==='asociada' && !x.libro.advertencias?.length)) {
+            const r=result.libro;
+            const reservasBloque=resultados.filter(x=>Number(x.libro.cabana)===Number(r.cabana) &&
+                x.libro.fecha_checkin===r.fecha_checkin);
+            if (reservasBloque.length!==1) continue;
+            for (const p of r.pagos_sin_asociacion || []) {
+                if (pagoTieneIdentificadorFuerte(p) || p.advertencias?.length || medioLibro(p)!=='transferencia' ||
+                    p.tipo_movimiento!=='alojamiento' || p.pago_recibido!==true || p.estado_pago!=='registrado_en_libro' ||
+                    !p.fecha_comprobante || p.fecha_bloque!==r.fecha_checkin || Number(p.cabana)!==Number(r.cabana) ||
+                    !titularVarianteCompatible(r.titular,p.titular)) continue;
+                const movimientosCompatibles=(r.pagos_sin_asociacion || []).filter(otro=>
+                    !pagoTieneIdentificadorFuerte(otro) && medioLibro(otro)==='transferencia' &&
+                    otro.tipo_movimiento==='alojamiento' && otro.pago_recibido===true &&
+                    otro.estado_pago==='registrado_en_libro' && otro.fecha_bloque===r.fecha_checkin &&
+                    Number(otro.cabana)===Number(r.cabana) && moneda(otro)===moneda(p) &&
+                    Number(otro.monto)===Number(p.monto));
+                if (movimientosCompatibles.length!==1) continue;
+                const candidatos=pagos.filter(x=>x.id && !fuertesUsados.has(x.id) && !consumidos.has(x.id) &&
+                    x.reserva_id===result.sistema.reserva_id && moneda(x)===moneda(p) &&
+                    Number(x.monto)===Number(p.monto) && medioSistema(x)==='transferencia');
+                if (candidatos.length!==1) continue;
+                const existente=candidatos[0];
+                if (S.normalizar(existente.estado)!=='confirmado' || existente.datos_origen?.verificacion_migrada!==true ||
+                    identificadorFuerteSistema(existente) || !existente.fecha_pago) continue;
+                asignadas.set(p,existente);
+                consumidos.add(existente.id);
             }
         }
         return asignadas;
@@ -706,6 +745,11 @@
             for (const p of r.pagos_sin_asociacion) {
                 if (p.clasificacion_financiera === "dudoso") {
                     result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
+                    continue;
+                }
+                if (pagosExistentes.has(p)) {
+                    result.pagosComparacion.push({ estado: 'en_sistema', pago: p, sistema: pagosExistentes.get(p),
+                        reserva: r, coincidencia_debil: true, diferencias: [] });
                     continue;
                 }
                 const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));

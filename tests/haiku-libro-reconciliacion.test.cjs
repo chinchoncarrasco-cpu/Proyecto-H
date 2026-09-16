@@ -805,6 +805,40 @@ test('Maria Loreto migrated transfer tolerates only a unique 1-to-1 historical d
  const ambos=await comparar([transferencia,debito],[historico,{...debito,id:'debito-real',reserva_id:'r1',estado:'confirmado',medio_pago:'tarjeta_debito',bove:'000654'}]);
  assert.deepEqual(ambos.pagosDetalle.map(x=>x.estado),['en_sistema','en_sistema']);
 });
+test('Yuly abbreviated holder rescues only one migrated transfer from the exact financial block',async()=>{
+ const movimiento=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,bove:'16975',titular:'Yuly Barbieri',
+  medio_pago:'transferencia',monto:160000,fecha_bloque:'2026-09-04',fecha_comprobante:'2026-08-26',cabana:2,
+  texto_original:'26-8-2026 // Yuly Barbieri // 0160954116 Transf. Yuly Agnes Barbieri // CO // cab2/1noche // $160,000'});
+ const yuly=readyBook({titular:'Yuly Barbieri T.',rut_documento:'11111111-1',cabana:2,
+  fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-05',pagos:[],pagos_sin_asociacion:[movimiento]});
+ const historico={id:'yuly-transfer',reserva_id:'r-yuly',estado:'confirmado',monto:160000,moneda:'CLP',medio_pago:'transferencia',
+  fecha_pago:'2026-09-02T01:00:00Z',datos_origen:{verificacion_migrada:true}};
+ const estadia=stay(yuly,{id:'e-yuly',reserva_id:'r-yuly'});
+ const compararYuly=(reservas=[yuly],estadias=[estadia],pagos=[historico])=>Q.compararSistema(reservas,client(estadias,pagos),q);
+ const c=await compararYuly();
+ assert.equal(global.HAIKU_LIBRO_SEMANTICA.mismaPersona(yuly.titular,movimiento.titular),false);
+ assert.equal(c.pagosDetalle.length,1);assert.equal(c.pagosDetalle[0].estado,'en_sistema');
+ assert.equal(c.pagosDetalle[0].sistema.id,'yuly-transfer');assert.equal(c.pagosDetalle[0].coincidencia_debil,true);
+ assert.equal(c.meta.pagos_faltantes,0);assert.equal(c.meta.pagos_revisar,0);
+ const plan=Q.crearPlanIncorporacion([yuly],c),item=plan.items.find(i=>i.pagoLibro===movimiento);
+ assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);assert.notEqual(item.aprobable,true);
+ assert.equal(plan.items.filter(i=>i.categoria==='pagos'||i.categoria==='dudosos').length,0);
+
+ const estado=async (reserva=yuly,estadias=[estadia],pagos=[historico])=>(await compararYuly([reserva],estadias,pagos)).pagosDetalle[0].estado;
+ const conflictoNombre={...movimiento,titular:'Yuly Contreras'};
+ assert.equal(await estado({...yuly,pagos_sin_asociacion:[conflictoNombre]}),'revisar');
+ const dosMovimientos={...yuly,pagos_sin_asociacion:[movimiento,{...movimiento,origen:{hoja:'Sep26',celda:'OTRA'}}]};
+ assert.ok((await compararYuly([dosMovimientos],[stay(dosMovimientos,{id:'e-yuly',reserva_id:'r-yuly'})])).pagosDetalle.every(x=>x.estado==='revisar'));
+ assert.equal(await estado(yuly,[estadia],[historico,{...historico,id:'otro-pago'}]),'revisar');
+ assert.equal(await estado({...yuly,pagos_sin_asociacion:[{...movimiento,cabana:3}]}),'revisar');
+ assert.equal(await estado({...yuly,pagos_sin_asociacion:[{...movimiento,fecha_bloque:'2026-09-05'}]}),'revisar');
+ assert.equal(await estado(yuly,[estadia],[{...historico,datos_origen:{}}]),'revisar');
+
+ const otra=readyBook({id:'otra',titular:'Otra Persona',rut_documento:'22222222-2',cabana:2,
+  fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-05'});
+ const dosReservas=await compararYuly([yuly,otra],[estadia,stay(otra,{id:'e-otra',reserva_id:'r-otra'})]);
+ assert.equal(dosReservas.pagosDetalle.find(x=>x.pago===movimiento).estado,'revisar');
+});
 test('same reservation and amount with different strong identifiers prepares both Angelo payments',async()=>{
  const folio=readyPay({monto:147930,codigo_autorizacion:null,folio:'000506',bovtar:'626327',origen:{hoja:'Sep26',celda:'A1'}});
  const codaut=readyPay({monto:147930,codigo_autorizacion:'685775',folio:null,bovtar:null,origen:{hoja:'Sep26',celda:'A2'}});
