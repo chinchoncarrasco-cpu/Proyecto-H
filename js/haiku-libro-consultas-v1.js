@@ -433,6 +433,42 @@
         return false;
     }
 
+    function candidatoServicioAplicado(pagoLibro, reservaId, pagos) {
+        if (pagoLibro?.tipo_movimiento !== "servicio" || !pagoTieneIdentificadorFuerte(pagoLibro) ||
+            pagoLibro.pago_recibido !== true || pagoLibro.estado_pago !== "registrado_en_libro" ||
+            !Number.isSafeInteger(Number(pagoLibro.monto)) || Number(pagoLibro.monto) <= 0 || !reservaId) {
+            return { sospechoso: false, candidato: null };
+        }
+        const codigo = normalizarId(pagoLibro.codigo_autorizacion);
+        const folio = normalizarId(pagoLibro.folio);
+        const bovtar = normalizarId(pagoLibro.bovtar);
+        const autorizaciones = pago => [...new Set([pago?.codigo_autorizacion, pago?.datos_origen?.autorizacion,
+            pago?.datos_origen?.bovtar, pago?.bovtar, pago?.bove].map(normalizarId).filter(Boolean))];
+        const relacionado = pago => Boolean(codigo && normalizarId(pago?.codigo_autorizacion) === codigo ||
+            folio && normalizarId(pago?.folio) === folio || bovtar && autorizaciones(pago).includes(bovtar));
+        const identidadCompleta = pago => {
+            if (codigo) return normalizarId(pago?.codigo_autorizacion) === codigo &&
+                (!folio || normalizarId(pago?.folio) === folio);
+            if (!folio || !bovtar || normalizarId(pago?.folio) !== folio) return false;
+            const valores = autorizaciones(pago);
+            return valores.includes(bovtar) && valores.every(valor => valor === bovtar);
+        };
+        const relacionados = pagos.filter(pago => pago?.id && relacionado(pago));
+        if (new Set(relacionados.map(pago => pago.id)).size !== 1) {
+            return { sospechoso: relacionados.length > 0, candidato: null };
+        }
+        const candidato = relacionados[0];
+        const moneda = pago => String(pago?.moneda || "").trim().toUpperCase();
+        const monedaLibro = moneda(pagoLibro), monedaSistema = moneda(candidato);
+        const medioPagoLibro = medioLibro(pagoLibro), medioPagoSistema = medioSistema(candidato);
+        const compatible = identidadCompleta(candidato) && S.normalizar(candidato.estado) === "confirmado" &&
+            S.normalizar(candidato.tipo_movimiento) === "pago" && candidato.reserva_id === reservaId &&
+            Number.isSafeInteger(Number(candidato.monto)) && Number(candidato.monto) === Number(pagoLibro.monto) &&
+            Boolean(monedaLibro && monedaSistema && monedaLibro === monedaSistema) &&
+            Boolean(medioPagoLibro && medioPagoSistema && medioPagoLibro === medioPagoSistema);
+        return { sospechoso: true, candidato: compatible ? candidato : null };
+    }
+
     function pagoSistemaVigente(pago) {
         const estado = S.normalizar(pago?.estado);
         // Los registros históricos y los dobles de prueba pueden no traer estado.
@@ -1121,6 +1157,9 @@
             const reservaSistemaPorLibro = new Map(resultados
                 .filter(resultado => resultado.estado === "asociada" && resultado.sistema?.reserva_id)
                 .map(resultado => [claveReserva(resultado.libro), resultado.sistema.reserva_id]));
+            const estadiaSistemaPorLibro = new Map(resultados
+                .filter(resultado => resultado.estado === "asociada" && resultado.sistema?.id)
+                .map(resultado => [claveReserva(resultado.libro), resultado.sistema.id]));
             const candidatosDestino = [...pagosUnicos.values()].filter(item =>
                 item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
             const idsDestino = [...new Set(candidatosDestino
@@ -1131,9 +1170,39 @@
                 snapshotFinanciero = { disponible: false, cargos: [], servicios: [], aplicaciones: [], pagos: [],
                     error: `No fue posible leer el destino financiero: ${err?.message || err}` };
             }
+            const serviciosAplicados = [];
             for (const item of candidatosDestino) {
                 item.reserva_sistema_id = reservaSistemaPorLibro.get(claveReserva(item.reserva)) || null;
-                item.destinoFinanciero = D.resolverTransaccion(item.pago, item.reserva_sistema_id, snapshotFinanciero, item.sistema || null);
+                const coincidencia = candidatoServicioAplicado(item.pago, item.reserva_sistema_id, pagos);
+                if (coincidencia.sospechoso) item.estado = "revisar";
+                item.destinoFinanciero = D.resolverTransaccion(item.pago, item.reserva_sistema_id,
+                    snapshotFinanciero, item.sistema || coincidencia.candidato || null);
+                if (!coincidencia.candidato || item.destinoFinanciero?.estado !== "ya_aplicada") continue;
+                const aplicacionesLibro = D.aplicacionesLibro(item.pago);
+                const aplicacionesPago = (snapshotFinanciero?.aplicaciones || [])
+                    .filter(aplicacion => aplicacion.pago_id === coincidencia.candidato.id);
+                const aplicacionResuelta = item.destinoFinanciero.aplicaciones?.[0];
+                const aplicacionSistema = aplicacionesPago[0];
+                const cargo = (snapshotFinanciero?.cargos || []).find(x => x.cargo_id === aplicacionSistema?.cargo_id);
+                if (aplicacionesLibro.length !== 1 || aplicacionesPago.length !== 1 ||
+                    Number(aplicacionSistema?.monto_aplicado) !== Number(item.pago.monto) ||
+                    aplicacionResuelta?.estado !== "ya_aplicada" || aplicacionResuelta.cargo_id !== aplicacionSistema?.cargo_id ||
+                    cargo?.reserva_id !== item.reserva_sistema_id || cargo?.estadia_id !== estadiaSistemaPorLibro.get(claveReserva(item.reserva)) ||
+                    cargo?.tipo_cargo !== "servicio") continue;
+                serviciosAplicados.push({ item, pago: coincidencia.candidato });
+            }
+            const pagosReutilizados = new Set(serviciosAplicados.filter((propuesta, indice, todas) =>
+                todas.some((otra, otroIndice) => otroIndice !== indice && otra.pago.id === propuesta.pago.id))
+                .map(propuesta => propuesta.pago.id));
+            for (const propuesta of serviciosAplicados) {
+                if (pagosReutilizados.has(propuesta.pago.id)) continue;
+                Object.assign(propuesta.item, {
+                    estado: "en_sistema",
+                    sistema: propuesta.pago,
+                    coincidencia_aplicacion_servicio: true,
+                    diferencias: [...new Set([...(propuesta.item.diferencias || []),
+                        "Pago de servicio existente verificado por identificador y aplicación."])]
+                });
             }
         }
 

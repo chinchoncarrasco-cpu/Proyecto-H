@@ -77,6 +77,78 @@ test('deduplicación en_sistema ocurre antes del destino y no lee cargos financi
     assert.equal(item.payload, null);
 });
 
+function casoYenny(cambios = {}) {
+    const movimiento = pago({ fecha_comprobante: '2026-09-06', fecha_bloque: '2026-09-04', medio_pago: 'debito',
+        codigo_autorizacion: null, folio: '000249', bovtar: '004290', texto_original: 'Yenny Acuña // Bovtar:004290-Folio:000249 // Debito // TINAJA',
+        ...(cambios.movimiento || {}) });
+    const libro = { ...reserva(movimiento), titular: 'Yenny Acuña Berrios', rut_documento: '22222222-2', cabana: 6,
+        fecha_checkin: '2026-09-04', fecha_checkout: '2026-09-06', noches: 2 };
+    const estadiaSistema = estadia(libro);
+    Object.assign(estadiaSistema, { id: 'e-yenny', reserva_id: 'r-yenny',
+        reservas: { ...estadiaSistema.reservas, id: 'r-yenny', titular_nombre: libro.titular } });
+    const pagoSistema = { id: 'p-yenny-tinaja', reserva_id: 'r-yenny', monto: 30000, moneda: 'CLP', estado: 'confirmado',
+        tipo_movimiento: 'pago', medio_pago: 'tarjeta_debito', folio: '000249', codigo_autorizacion: '004290',
+        fecha_pago: '2026-09-07T02:39:54Z', datos_origen: {}, ...(cambios.pago || {}) };
+    const servicioSistema = { ...servicio, id: 's-yenny', reserva_id: 'r-yenny', estadia_id: 'e-yenny',
+        fecha_servicio: '2026-09-04', estado_servicio: 'realizado' };
+    const cargoSistema = { ...cargo, cargo_id: 'c-yenny-tinaja', reserva_id: 'r-yenny', estadia_id: 'e-yenny',
+        servicio_id: 's-yenny', monto: 30000, monto_ajustado: 30000, aplicado_neto: 30000, saldo_cargo: 0,
+        estado_pago: 'pagado', ...(cambios.cargo || {}) };
+    const aplicacion = { id: 'a-yenny-tinaja', pago_id: 'p-yenny-tinaja', cargo_id: 'c-yenny-tinaja',
+        monto_aplicado: 30000, ...(cambios.aplicacion || {}) };
+    const tablas = { reserva_estadias: [estadiaSistema], pagos: [pagoSistema, ...(cambios.pagos || [])],
+        servicios: [servicioSistema, ...(cambios.servicios || [])],
+        vista_estado_cargos: [cargoSistema, ...(cambios.cargos || [])],
+        pago_aplicaciones: cambios.sinAplicacion ? [] : [aplicacion, ...(cambios.aplicaciones || [])] };
+    if (cambios.tablas) cambios.tablas(tablas, { movimiento, libro, pagoSistema, cargoSistema, servicioSistema, aplicacion });
+    return { movimiento, libro, pagoSistema, tablas };
+}
+
+async function compararYenny(cambios = {}) {
+    const caso = casoYenny(cambios), db = cliente(caso.tablas);
+    const comp = await Q.compararSistema([caso.libro], db, q);
+    return { ...caso, db, comp, detalle: comp.pagosDetalle.find(item => item.pago === caso.movimiento) };
+}
+
+test('Yenny: Folio+BOVTAR del Libro reconoce el CodAut migrado sólo por su aplicación exacta al servicio', async () => {
+    const { libro, movimiento, comp, detalle } = await compararYenny();
+    assert.equal(detalle.estado, 'en_sistema');
+    assert.equal(detalle.sistema.id, 'p-yenny-tinaja');
+    assert.equal(detalle.coincidencia_aplicacion_servicio, true);
+    assert.equal(detalle.destinoFinanciero.estado, 'ya_aplicada');
+    assert.equal(detalle.destinoFinanciero.aplicaciones[0].cargo_id, 'c-yenny-tinaja');
+    assert.equal(comp.meta.pagos_faltantes, 0);assert.equal(comp.meta.pagos_revisar, 0);
+    const plan = Q.crearPlanIncorporacion([libro], comp), item = plan.items.find(x => x.pagoLibro === movimiento);
+    assert.equal(item.categoria, 'omitidos');assert.equal(item.payload, null);assert.notEqual(item.aprobable, true);
+    assert.equal(Q.serializarIncorporacion(plan).some(x => x.tipo === 'pago'), false);
+});
+
+test('Yenny queda en revisión ante identidad, destino o reutilización no inequívocos', async () => {
+    const base = casoYenny(), duplicadoLibro = { ...base.movimiento, origen: { hoja: 'Sep26', celda: 'K99' } };
+    const casos = [
+        ['mismo Folio global', { pagos: [{ ...base.pagoSistema, id: 'p-otro', codigo_autorizacion: 'OTRO' }] }],
+        ['CodAut contradictorio', { pago: { codigo_autorizacion: 'OTRO' } }],
+        ['otra reserva', { pago: { reserva_id: 'otra-reserva' } }],
+        ['otro monto', { pago: { monto: 31000 } }],
+        ['otra moneda', { pago: { moneda: 'USD' } }],
+        ['otro medio', { pago: { medio_pago: 'transferencia' } }],
+        ['sin aplicación', { sinAplicacion: true }],
+        ['aplicación a otro servicio', { aplicacion: { cargo_id: 'c-masaje' }, cargos: [{ ...base.tablas.vista_estado_cargos[0],
+            cargo_id: 'c-masaje', servicio_id: 's-masaje', concepto: 'Masaje' }], servicios: [{ ...base.tablas.servicios[0],
+            id: 's-masaje', catalogo_servicios: { codigo: 'MASAJE', nombre: 'Masaje', categoria: 'servicio' } }] }],
+        ['cargo de otra reserva', { cargo: { reserva_id: 'otra-reserva' } }],
+        ['dos movimientos Libro', { tablas(tablas, datos) { datos.libro.pagos.push(duplicadoLibro); } }],
+        ['pago anulado', { pago: { estado: 'anulado' } }],
+        ['sólo monto y fecha', { movimiento: { folio: null, bovtar: null, codigo_autorizacion: null } }]
+    ];
+    for (const [nombre, cambios] of casos) {
+        const { comp } = await compararYenny(cambios);
+        const items = comp.pagosDetalle.filter(item => item.pago.monto === 30000);
+        assert.ok(items.length >= 1, nombre);assert.ok(items.every(item => item.estado === 'revisar'), nombre);
+        assert.ok(items.every(item => item.estado !== 'en_sistema'), nombre);
+    }
+});
+
 test('fallo de lectura financiera queda en revisión y nunca se interpreta como ausencia', async () => {
     const p = pago(), r = reserva(p);
     const db = cliente({ reserva_estadias: [estadia(r)], pagos: [], servicios: [servicio], vista_estado_cargos: [cargo] }, true);
