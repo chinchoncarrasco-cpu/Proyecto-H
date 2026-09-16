@@ -410,6 +410,13 @@
         return false;
     }
 
+    function pagoSistemaVigente(pago) {
+        const estado = S.normalizar(pago?.estado);
+        // Los registros históricos y los dobles de prueba pueden no traer estado.
+        // Si existe un estado explícito, sólo "confirmado" representa dinero vigente.
+        return !estado || estado === "confirmado";
+    }
+
     function pagoDebilYaExiste(p, existente, reservaId) {
         if (!reservaId || existente?.reserva_id !== reservaId || medioLibro(p) !== 'transferencia') return false;
         if (String(existente.medio_pago || '').toLowerCase() !== 'transferencia') return false;
@@ -420,14 +427,34 @@
         return Boolean(libro && sistema && libro.length >= 12 && libro === sistema);
     }
 
-    function transferenciasDebilesExistentes(resultados, pagos) {
+    function pagosDebilesExistentes(resultados, pagos) {
         const grupos = new Map();
         const asignadas = new Map();
+        const consumidos = new Set();
         const moneda = p => String(p.moneda || 'CLP').trim().toUpperCase();
         const texto = v => S.normalizar(v).replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-        const evidencia = (item, existente) => {
-            const p=item.p, origen=existente.datos_origen?.origen_libro || existente.datos_origen?.origen;
-            if (origen?.hoja && origen?.celda && p.origen?.hoja && p.origen?.celda && source(origen)===source(p.origen)) return true;
+        const origenExacto = (item, existente) => {
+            const origen=existente.datos_origen?.origen_libro || existente.datos_origen?.origen;
+            return Boolean(origen?.hoja && origen?.celda && item.p.origen?.hoja && item.p.origen?.celda && source(origen)===source(item.p.origen));
+        };
+        const referenciaExacta = (item, existente) => {
+            const textoCompleto=texto(item.p.texto_original), segmentos=String(item.p.texto_original || '').split(/\s*\/{2,}\s*|\r?\n/).map(texto).filter(Boolean);
+            const titular=texto(item.titular), monto=String(Number(item.p.monto));
+            const referenciaEspecifica = valor => {
+                if (!valor || valor.length<12 || valor===titular) return false;
+                // Conserva la igualdad completa aceptada antes de segmentar glosas.
+                if (valor===textoCompleto) return true;
+                const tokens=valor.split(' ');
+                const codigo=tokens.some(t=>/^\d{6,}$/.test(t) && String(Number(t))!==monto);
+                const medio=/\b(?:transferencia|transf|debito|credito|webpay|efectivo)\b/.test(valor);
+                return segmentos.includes(valor) && codigo && medio;
+            };
+            return [existente.referencia_externa,existente.observaciones].map(texto)
+                .some(referenciaEspecifica);
+        };
+        const evidenciaDescriptiva = (item, existente) => {
+            const p=item.p;
+            if (origenExacto(item,existente) || referenciaExacta(item,existente)) return true;
             const libro=texto(p.texto_original), nombre=new Set(texto(item.titular).split(' '));
             return [existente.referencia_externa, existente.observaciones].some(v => {
                 const glosa=texto(v);
@@ -443,25 +470,49 @@
         };
         const fuertesUsados = new Set(resultados.flatMap(r => (r.libro.pagos || []).filter(pagoTieneIdentificadorFuerte)
             .flatMap(p => pagos.filter(x=>pagoCoincide(p,x)).map(x=>x.id))));
+        const items=[];
         for (const result of resultados) {
             if (result.estado !== 'asociada') continue;
             for (const p of result.libro.pagos || []) {
-                if (pagoTieneIdentificadorFuerte(p) || medioLibro(p) !== 'transferencia' ||
-                    !Number.isSafeInteger(Number(p.monto)) || Number(p.monto)<=0 || !p.fecha_comprobante) continue;
-                const key = [result.sistema.reserva_id, Number(p.monto), String(p.fecha_comprobante).slice(0, 10), moneda(p)].join('|');
-                if (!grupos.has(key)) grupos.set(key, []);
-                grupos.get(key).push({ p, reservaId: result.sistema.reserva_id, titular: result.libro.titular });
+                if (pagoTieneIdentificadorFuerte(p) || !Number.isSafeInteger(Number(p.monto)) || Number(p.monto)<=0) continue;
+                items.push({p,reservaId:result.sistema.reserva_id,titular:result.libro.titular});
             }
+        }
+        const compatibles = item => pagos.filter(p => p.id && !fuertesUsados.has(p.id) && !consumidos.has(p.id) &&
+            p.reserva_id===item.reservaId && moneda(p)===moneda(item.p) && Number(p.monto)===Number(item.p.monto) &&
+            medioSistema(p)===medioLibro(item.p));
+
+        // Evidencia exacta conservada por Haku: misma reserva, monto y medio,
+        // más origen XLSX o glosa completa. La fecha puede haber sido corregida.
+        for (const item of items) {
+            const exactos=compatibles(item).filter(p=>origenExacto(item,p) || referenciaExacta(item,p));
+            if (exactos.length!==1) continue;
+            const existente=exactos[0];
+            const libroCompatible=items.filter(otro=>!asignadas.has(otro.p) && otro.reservaId===item.reservaId &&
+                moneda(otro.p)===moneda(item.p) && Number(otro.p.monto)===Number(item.p.monto) &&
+                medioLibro(otro.p)===medioLibro(item.p) && (origenExacto(otro,existente) || referenciaExacta(otro,existente)));
+            if (libroCompatible.length!==1) continue;
+            asignadas.set(item.p,existente);
+            consumidos.add(existente.id);
+        }
+
+        // Transferencias históricas sin identidad persistida: sólo una
+        // correspondencia 1 ↔ 1 con reserva+monto+medio+fecha completos.
+        for (const item of items.filter(x=>!asignadas.has(x.p) && medioLibro(x.p)==='transferencia' && x.p.fecha_comprobante)) {
+            const key=[item.reservaId,Number(item.p.monto),String(item.p.fecha_comprobante).slice(0,10),moneda(item.p)].join('|');
+            if (!grupos.has(key)) grupos.set(key,[]);
+            grupos.get(key).push(item);
         }
         for (const [key, libro] of grupos) {
             const [reservaId, monto, fecha, divisa] = key.split('|');
-            const sistema = pagos.filter(p => p.id && !fuertesUsados.has(p.id) && p.reserva_id === reservaId && moneda(p)===divisa && Number(p.monto) === Number(monto) &&
+            const sistema = pagos.filter(p => p.id && !fuertesUsados.has(p.id) && !consumidos.has(p.id) && p.reserva_id === reservaId && moneda(p)===divisa && Number(p.monto) === Number(monto) &&
                 medioSistema(p) === 'transferencia' && String(p.fecha_pago || '').slice(0, 10) === fecha);
             const usados = new Set();
             for (const item of libro) {
-                const exactos = sistema.filter(p => evidencia(item,p));
-                if (exactos.length === 1 && libro.filter(x=>evidencia(x,exactos[0])).length===1) {
+                const exactos = sistema.filter(p => evidenciaDescriptiva(item,p));
+                if (exactos.length === 1 && libro.filter(x=>evidenciaDescriptiva(x,exactos[0])).length===1) {
                     usados.add(exactos[0].id);
+                    consumidos.add(exactos[0].id);
                     asignadas.set(item.p, exactos[0]);
                 }
             }
@@ -471,6 +522,7 @@
             // identidad textual. Sólo un remanente 1 ↔ 1, nunca emparejar por orden.
             if (restantesLibro.length === 1 && restantesSistema.length === 1) {
                 asignadas.set(restantesLibro[0].p, restantesSistema[0]);
+                consumidos.add(restantesSistema[0].id);
             }
         }
         return asignadas;
@@ -556,7 +608,9 @@
         // Global identifier check: a payment on another reservation is a conflict, never new.
         const pagos = await paginas(() => cliente.from("pagos")
             .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
-        const transferenciasExistentes = transferenciasDebilesExistentes(resultados, pagos);
+        const pagosVigentes = pagos.filter(pagoSistemaVigente);
+        const pagosNoVigentes = pagos.filter(p=>!pagoSistemaVigente(p));
+        const pagosExistentes = pagosDebilesExistentes(resultados, pagosVigentes);
         const servicios = [];
         for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
@@ -596,7 +650,8 @@
             }
 
             for (const p of r.pagos) {
-                const candidatos = pagos.filter(x => pagoCoincide(p, x));
+                const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));
+                const candidatosNoVigentes = pagosNoVigentes.filter(x => pagoCoincide(p, x));
                 if (candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id) {
                     const x = candidatos[0];
                     const diferenciasPago = [];
@@ -613,9 +668,9 @@
                         result.diferencias.push("Fecha diferente en un pago del Libro.");
                     }
                     result.pagosComparacion.push({ estado: diferenciasPago.length ? "diferente" : "en_sistema", pago: p, sistema: x, reserva: r, diferencias: diferenciasPago });
-                } else if (transferenciasExistentes.has(p)) {
-                    result.pagosComparacion.push({ estado: "en_sistema", pago: p, sistema: transferenciasExistentes.get(p), reserva: r, coincidencia_debil: true, diferencias: [] });
-                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad") {
+                } else if (pagosExistentes.has(p)) {
+                    result.pagosComparacion.push({ estado: "en_sistema", pago: p, sistema: pagosExistentes.get(p), reserva: r, coincidencia_debil: true, diferencias: [] });
+                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && candidatosNoVigentes.length === 0 && Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad") {
                     result.pagosComparacion.push({ estado: "nuevo_seguro", pago: p, reserva: r });
                 } else {
                     result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
@@ -623,7 +678,7 @@
             }
 
             for (const p of r.pagos_sin_asociacion) {
-                const candidatos = pagos.filter(x => pagoCoincide(p, x));
+                const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));
                 const existente = p.advertencias?.length && S.mismaPersona(p.titular, r.titular) &&
                     candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id &&
                     candidatos[0].moneda === p.moneda &&
@@ -659,7 +714,7 @@
             if (!serviciosUnicos.has(key)) serviciosUnicos.set(key, x);
         }
 
-        resultados.snapshot = { estadias: system, pagos };
+        resultados.snapshot = { estadias: system, pagos: pagosVigentes };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = [...serviciosUnicos.values()];

@@ -278,6 +278,77 @@ test('safe new payment, existing payment and identifier attached elsewhere',asyn
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'r1'}])).pagosDetalle[0].estado,'en_sistema');
  assert.equal((await compare([r],[stay()],[{...pay(),reserva_id:'other'}])).pagosDetalle[0].estado,'revisar');
 });
+test('voided cancelled or invalid system payments never satisfy already exists',async()=>{
+ const r=book({pagos:[pay()]});
+ for(const estado of ['anulado','cancelado','invalido']){
+  const c=await compare([r],[stay()],[{...pay(),id:'p-'+estado,reserva_id:'r1',estado}]);
+  assert.equal(c.pagosDetalle[0].estado,'revisar',estado);
+  assert.notEqual(c.pagosDetalle[0].estado,'en_sistema',estado);
+ }
+});
+test('strong identifier with another date is the same transaction with differences, never a new payment',async()=>{
+ const p=pay({fecha_comprobante:'2026-09-07'}),r=book({pagos:[p]});
+ const c=await compare([r],[stay(r)],[{...p,id:'strong',reserva_id:'r1',estado:'confirmado',fecha_pago:'2026-09-05'}]);
+ assert.equal(c.pagosDetalle[0].estado,'diferente');
+ assert.deepEqual(c.pagosDetalle[0].diferencias,['fecha de pago diferente']);
+ assert.equal(c.meta.pagos_faltantes,0);
+});
+test('previous full-text exact gloss still resolves a payment across a date correction',async()=>{
+ const glosa='TRANSFERENCIA DIEGO LIZAMA COMPROBANTE 0183394320';
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',fecha_comprobante:'2026-09-07',texto_original:glosa});
+ const r=book({titular:'Diego Lizama',pagos:[p]});
+ const existente={id:'diego',reserva_id:'r1',estado:'confirmado',monto:p.monto,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-05',referencia_externa:glosa};
+ const c=await compare([r],[stay(r)],[existente]);
+ assert.equal(c.pagosDetalle[0].estado,'en_sistema');assert.equal(c.pagosDetalle[0].sistema.id,'diego');
+ const plan=Q.crearPlanIncorporacion([r],c),item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'omitidos');assert.notEqual(item.aprobable,true);assert.equal(item.payload,null);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+});
+test('Diego bank reference as one complete // segment resolves across a date correction and is omitted',async()=>{
+ const referencia='0175175059 Transf.';
+ const textoOriginal='Diego Lizama // 0175175059 Transf. // CO // PEND BOVE Y MANAGER';
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,monto:160000,medio_pago:'transferencia',fecha_comprobante:'2026-09-01',texto_original:textoOriginal});
+ const r=book({titular:'Diego Lizama',cabana:6,pagos:[p]});
+ const existente={id:'diego-real',reserva_id:'r1',estado:'confirmado',monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-03',referencia_externa:referencia};
+ const c=await compare([r],[stay(r)],[existente]);
+ assert.equal(c.pagosDetalle[0].estado,'en_sistema');assert.equal(c.pagosDetalle[0].sistema.id,'diego-real');
+ const plan=Q.crearPlanIncorporacion([r],c),item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'omitidos');assert.notEqual(item.aprobable,true);assert.equal(item.payload,null);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+});
+test('segmented bank reference rejects partial, generic, duplicated, incompatible and invalid candidates',async()=>{
+ const textoOriginal='Diego Lizama // 0175175059 Transf. // 160000 // CO // PEND BOVE Y MANAGER';
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,monto:160000,medio_pago:'transferencia',fecha_comprobante:'2026-09-01',texto_original:textoOriginal});
+ const r=book({titular:'Diego Lizama',cabana:6,pagos:[p]});
+ const base={id:'base',reserva_id:'r1',estado:'confirmado',monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-03',referencia_externa:'0175175059 Transf.'};
+ const revisar=async pagos=>assert.equal((await compare([r],[stay(r)],pagos)).pagosDetalle[0].estado,'revisar');
+ await revisar([{...base,referencia_externa:'0175175059'}]);
+ await revisar([{...base,referencia_externa:'Diego Lizama'}]);
+ await revisar([{...base,referencia_externa:'160000'}]);
+ await revisar([{...base,referencia_externa:'Transf.'}]);
+ await revisar([base,{...base,id:'duplicado'}]);
+ await revisar([{...base,monto:159000}]);
+ await revisar([{...base,medio_pago:'efectivo'}]);
+ await revisar([{...base,reserva_id:'otra-reserva'}]);
+ await revisar([{...base,estado:'anulado'}]);
+});
+test('cash requires exact unique evidence; ambiguity and reservation balance never identify a receipt',async()=>{
+ const glosa='EFECTIVO FELIPE MACUER RECEPCION TURNO TARDE';
+ const p=pay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'efectivo',texto_original:glosa});
+ const r=book({titular:'Felipe Macuer',pagos:[p]});
+ const existente={id:'cash-1',reserva_id:'r1',estado:'confirmado',monto:p.monto,moneda:'CLP',medio_pago:'efectivo',fecha_pago:'2026-09-05',referencia_externa:glosa,saldo_reserva:0,saldo_cargo:0};
+ assert.equal((await compare([r],[stay(r)],[existente])).pagosDetalle[0].estado,'en_sistema');
+ const ambiguo=await compare([r],[stay(r)],[existente,{...existente,id:'cash-2'}]);
+ assert.equal(ambiguo.pagosDetalle[0].estado,'revisar');
+ const sinEvidencia=await compare([{...r,pagos:[{...p,texto_original:''}]}],[stay(r)],[existente]);
+ assert.equal(sinEvidencia.pagosDetalle[0].estado,'revisar');
+});
+test('the visual payment module has no second matching authority',()=>{
+ const source=require('node:fs').readFileSync(require.resolve('../js/haiku-libro-pagos-duplicados-v1.js'),'utf8');
+ assert.doesNotMatch(source,/haikuSupabase|\.from\s*\(|marcarYaExiste|Aprobar este pago/);
+ assert.match(source,/autoridad:\s*["']compararSistema["']/);
+ assert.match(source,/clasifica:\s*false/);
+});
 test('September existing vouchers stored with legacy authorization in pagos.bove are never new seguros',async()=>{
  const casos=[
   ['Ignacio Figueroa',123896,'000243','101502','2026-09-05'],
