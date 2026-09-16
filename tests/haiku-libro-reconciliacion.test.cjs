@@ -9,15 +9,15 @@ const book = (extra={}) => ({id:'b1',titular:'Marco Iturrieta',rut_documento:'12
 function stay(r=book(), extra={}) {return {id:'e'+r.cabana,reserva_id:'r1',cabanas:{numero:r.cabana},
  adultos:r.adultos,ninos:r.ninos,mascotas:r.mascotas,fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'confirmada',tipo_estadia:r.tipo_estadia,
  reservas:{titular_nombre:r.titular,titular_numero_documento:r.rut_documento,estado_reserva:'confirmada'},...extra};}
-function client(rows=[], payments=[]) {
+function client(rows=[], payments=[], extras={}) {
  const calls=[];
  return {calls,auth:{getSession:async()=>({data:{session:{user:{id:'test'}}}})},from(table){
-  calls.push(table);let data={reserva_estadias:rows,pagos:payments,servicios:[]}[table];
+  calls.push(table);let data={reserva_estadias:rows,pagos:payments,servicios:[],...extras}[table] || [];
   const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};
   return b;
  },rpc(name,args){calls.push(name);return Promise.resolve({data:{ok:true,operacion_id:args.p_operacion_id,reservas_creadas:0,estadias_agregadas:0,pagos_creados:0,omitidos:0},error:null})}};
 }
-const compare=(rs,ss=[],ps=[])=>Q.compararSistema(rs,client(ss,ps),q);
+const compare=(rs,ss=[],ps=[],extras={})=>Q.compararSistema(rs,client(ss,ps,extras),q);
 
 test('compact date explanation is visual only and preserves the existing approval button',async()=>{
  const p=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:160000,fecha_comprobante:'2026-09-07'});
@@ -749,6 +749,76 @@ test('partial multicabin offers missing stay addition while retaining safe payme
 
 const readyBook=(extra={})=>book({adultos:2,ninos:0,mascotas:0,...extra});
 const readyPay=(extra={})=>pay({medio_pago:'efectivo',fecha_bloque:'2026-09-17',fecha_comprobante:'2026-09-10',pago_recibido:true,estado_pago:'registrado_en_libro',...extra});
+
+function escenarioBruno(cambios={}) {
+ const pagoA=readyPay({monto:285429,medio_pago:'credito',fecha_bloque:'2026-09-04',fecha_comprobante:'2026-09-04',
+  codigo_autorizacion:null,folio:'000241',bovtar:'007850',concepto:'cab5/3noches',origen:{hoja:'Sep26',celda:'A1'}});
+ const pagoB=readyPay({monto:173571,medio_pago:'webpay_credito',fecha_bloque:'2026-09-04',fecha_comprobante:'2026-08-27',
+  codigo_autorizacion:'006308',folio:null,bovtar:null,concepto:'cab5/3noches',origen:{hoja:'Sep26',celda:'A2'}});
+ const libro=readyBook({titular:'Bruno Borge',cabana:5,fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-07',noches:3,
+  pagos:[pagoA,pagoB,...(cambios.pagosLibro || [])]});
+ const sistemaA={id:'pago-a',reserva_id:'reserva-bruno',monto:285429,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  medio_pago:'tarjeta_credito',fecha_pago:'2026-09-04',folio:'000241',bove:'007850',codigo_autorizacion:null,datos_origen:{}};
+ const sistemaB={id:'pago-b',reserva_id:'reserva-bruno',monto:173571,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  medio_pago:'webpay_debito',fecha_pago:'2026-09-02',folio:null,bove:null,codigo_autorizacion:null,
+  datos_origen:{verificacion_migrada:true},...(cambios.sistemaB || {})};
+ const cargo={cargo_id:'cargo-alojamiento',reserva_id:'reserva-bruno',estadia_id:'estadia-bruno',servicio_id:null,
+  tipo_cargo:'alojamiento',concepto:'Alojamiento',monto:459000,monto_ajustado:459000,aplicado_neto:459000,
+  saldo_cargo:0,estado:'activo',...(cambios.cargo || {})};
+ const aplicaciones=[
+  {id:'app-a',pago_id:'pago-a',cargo_id:'cargo-alojamiento',monto_aplicado:285429},
+  {id:'app-b',pago_id:'pago-b',cargo_id:'cargo-alojamiento',monto_aplicado:173571,...(cambios.aplicacionB || {})},
+  ...(cambios.aplicaciones || [])
+ ];
+ const pagos=[sistemaA,sistemaB,...(cambios.pagosSistema || [])];
+ const estadia=stay(libro,{id:'estadia-bruno',reserva_id:'reserva-bruno'});
+ return {libro,pagoA,pagoB,sistemaA,sistemaB,pagos,estadia,
+  extras:{vista_estado_cargos:[cargo,...(cambios.cargos || [])],pago_aplicaciones:aplicaciones}};
+}
+
+test('Bruno migrated historical WebPay is omitted only with unique residual and complete lodging accounting',async()=>{
+ const e=escenarioBruno(),comp=await compare([e.libro],[e.estadia],e.pagos,e.extras);
+ const a=comp.pagosDetalle.find(item=>item.pago===e.pagoA),b=comp.pagosDetalle.find(item=>item.pago===e.pagoB);
+ assert.equal(a.estado,'en_sistema');assert.equal(a.sistema.id,'pago-a');
+ assert.equal(b.estado,'en_sistema');assert.equal(b.sistema.id,'pago-b');assert.equal(b.coincidencia_historica_migrada,true);
+ assert.deepEqual(b.diferencias,['Coincidencia histórica migrada.','medio de pago diferente','fecha de pago diferente',
+  'identificador fuerte del Libro no conservado en Proyecto H']);
+ assert.equal(comp.meta.pagos_faltantes,0);assert.equal(comp.meta.pagos_revisar,0);
+ const plan=Q.crearPlanIncorporacion([e.libro],comp),items=plan.items.filter(item=>[e.pagoA,e.pagoB].includes(item.pagoLibro));
+ assert.equal(items.length,2);assert.ok(items.every(item=>item.categoria==='omitidos'&&item.payload===null&&item.aprobable!==true));
+ assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'));
+});
+
+test('Bruno historical reconciliation fails closed for every ambiguous or incomplete accounting condition',async()=>{
+ const base=escenarioBruno();
+ const clonLibro={...base.pagoB,origen:{hoja:'Sep26',celda:'A3'}};
+ const casos=[
+  ['dos históricos',{pagosSistema:[{...base.sistemaB,id:'pago-b-2'}]}],
+  ['sin verificación migrada',{sistemaB:{datos_origen:{verificacion_migrada:false}}}],
+  ['aplicación parcial',{aplicacionB:{monto_aplicado:173570}}],
+  ['pago anulado',{sistemaB:{estado:'anulado'}}],
+  ['otra reserva',{aplicacionB:{cargo_id:'cargo-otra'},cargos:[{...base.extras.vista_estado_cargos[0],cargo_id:'cargo-otra',reserva_id:'otra'}]}],
+  ['aplicación a servicio',{cargo:{tipo_cargo:'servicio',servicio_id:'servicio-1'}}],
+  ['CodAut global',{pagosSistema:[{id:'otro-codaut',reserva_id:'otra',monto:1,moneda:'CLP',estado:'confirmado',
+    tipo_movimiento:'pago',medio_pago:'webpay_credito',codigo_autorizacion:'006308'}]}],
+  ['identificador incompatible',{sistemaB:{codigo_autorizacion:'OTRO-CODAUT'}}],
+  ['dos movimientos Libro',{pagosLibro:[clonLibro]}],
+  ['remanentes múltiples',{pagosSistema:[{id:'remanente',reserva_id:'reserva-bruno',monto:1000,moneda:'CLP',estado:'confirmado',
+    tipo_movimiento:'pago',medio_pago:'efectivo'}]}],
+  ['total inconsistente',{cargo:{monto_ajustado:460000,saldo_cargo:1000}}],
+  ['devolución ambigua',{pagosSistema:[{id:'devolucion',reserva_id:'reserva-bruno',monto:1000,moneda:'CLP',estado:'confirmado',
+    tipo_movimiento:'devolucion',medio_pago:'transferencia'}]}]
+ ];
+ for(const [nombre,cambios] of casos){
+  const e=escenarioBruno(cambios),comp=await compare([e.libro],[e.estadia],e.pagos,e.extras);
+  const items=comp.pagosDetalle.filter(item=>item.pago.codigo_autorizacion==='006308');
+  assert.ok(items.length>=1,nombre);assert.ok(items.every(item=>item.estado==='revisar'),nombre);
+  assert.ok(items.every(item=>item.estado!=='en_sistema'),nombre);
+ }
+ const inseguro=escenarioBruno(),otra=stay(inseguro.libro,{id:'otra-estadia',reserva_id:'otra-reserva',cabanas:{numero:6}});
+ const comp=await compare([inseguro.libro],[otra],inseguro.pagos,inseguro.extras);
+ assert.ok(comp.pagosDetalle.filter(item=>item.pago===inseguro.pagoB).every(item=>item.estado==='revisar'));
+});
 
 test('only a confirmed existing payment with a real system ID bypasses approval',async()=>{
  const p=readyPay({codigo_autorizacion:null}),r=readyBook({pagos:[p]});

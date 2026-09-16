@@ -484,9 +484,30 @@
             .filter(item => item.estado === "revisar" && resultado.estado === "asociada" &&
                 pagoEfectivoLibroAplicable(item.pago, resultado.libro, resultado.sistema))
             .map(item => ({ item, resultado })));
-        if (!movimientos.length) return null;
-
         const moneda = pago => String(pago?.moneda || "CLP").trim().toUpperCase();
+        const medioWebpay = pago => ["webpay_credito", "webpay_debito"].includes(
+            typeof pago === "string" ? pago : medioSistema(pago));
+        const identificadorFuerteSistema = pago => Boolean(normalizarId(pago?.codigo_autorizacion) ||
+            normalizarId(pago?.folio) && [pago?.datos_origen?.bovtar, pago?.datos_origen?.autorizacion,
+                pago?.bovtar, pago?.bove].some(normalizarId));
+        const pagoHistoricoLibroAplicable = (pago, resultado) => resultado.estado === "asociada" &&
+            pagoTieneIdentificadorFuerte(pago) && pago?.tipo_movimiento === "alojamiento" &&
+            pago?.pago_recibido === true && pago?.estado_pago === "registrado_en_libro" &&
+            Number.isSafeInteger(Number(pago?.monto)) && Number(pago.monto) > 0 && Boolean(moneda(pago)) &&
+            medioWebpay(medioLibro(pago));
+        const mismoImporteReserva = (pago, movimiento) => pago?.id &&
+            pago.reserva_id === movimiento.resultado.sistema.reserva_id &&
+            Number(pago.monto) === Number(movimiento.item.pago.monto) &&
+            moneda(pago) === moneda(movimiento.item.pago);
+        const movimientosHistoricos = resultados.flatMap(resultado => resultado.pagosComparacion
+            .filter(item => !["en_sistema", "diferente"].includes(item.estado) &&
+                pagoHistoricoLibroAplicable(item.pago, resultado))
+            .map(item => ({ item, resultado })))
+            .filter(movimiento => pagos.some(pago => mismoImporteReserva(pago, movimiento)));
+        // Si existe dinero del mismo importe en la reserva, una coincidencia histórica
+        // que no pueda demostrarse nunca debe conservar la clasificación de pago nuevo.
+        for (const movimiento of movimientosHistoricos) movimiento.item.estado = "revisar";
+
         const candidatosSistema = movimiento => pagos.filter(pago => pago?.id &&
             S.normalizar(pago.estado) === "confirmado" && pago.reserva_id === movimiento.resultado.sistema.reserva_id &&
             S.normalizar(pago.tipo_movimiento) === "pago" &&
@@ -496,14 +517,26 @@
             ...movimiento,
             pagos: candidatosSistema(movimiento)
         })).filter(movimiento => movimiento.pagos.length === 1);
-        if (!candidatosUnicos.length) return null;
+        const candidatosHistoricos = movimientosHistoricos.map(movimiento => ({
+            ...movimiento,
+            pagos: pagos.filter(pago => mismoImporteReserva(pago, movimiento) &&
+                S.normalizar(pago.estado) === "confirmado" && S.normalizar(pago.tipo_movimiento) === "pago" &&
+                pago.datos_origen?.verificacion_migrada === true && medioWebpay(pago) &&
+                !identificadorFuerteSistema(pago))
+        })).filter(movimiento => movimiento.pagos.length === 1);
+        if (!candidatosUnicos.length && !candidatosHistoricos.length) return null;
 
-        const reservaIds = [...new Set(candidatosUnicos.map(x => x.resultado.sistema.reserva_id))];
-        const pagoIds = [...new Set(candidatosUnicos.map(x => x.pagos[0].id))];
+        const candidatosLectura = [...candidatosUnicos, ...candidatosHistoricos];
+        const reservaIds = [...new Set(candidatosLectura.map(x => x.resultado.sistema.reserva_id))];
+        const pagoIds = [...new Set([
+            ...candidatosLectura.map(x => x.pagos[0].id),
+            ...pagos.filter(pago => reservaIds.includes(pago.reserva_id) && S.normalizar(pago.estado) === "confirmado")
+                .map(pago => pago.id)
+        ])];
         let cargos, aplicacionesPago, aplicacionesCargo;
         try {
             cargos = await paginas(() => cliente.from("vista_estado_cargos")
-                .select("cargo_id,reserva_id,estadia_id,servicio_id,tipo_cargo,concepto,monto,monto_ajustado,estado,estado_pago")
+                .select("cargo_id,reserva_id,estadia_id,servicio_id,tipo_cargo,concepto,monto,monto_ajustado,aplicado_neto,saldo_cargo,estado,estado_pago")
                 .in("reserva_id", reservaIds), "cargo_id");
             const cargoIdsLectura = cargos.filter(cargo => ["alojamiento", "servicio"].includes(cargo.tipo_cargo) && reservaIds.includes(cargo.reserva_id))
                 .map(cargo => cargo.cargo_id).filter(Boolean);
@@ -573,6 +606,74 @@
                 cargo_sistema: propuesta.cargo,
                 aplicacion_sistema: propuesta.aplicacion,
                 diferencias: []
+            });
+        }
+
+        const cargoPorId = new Map(cargosFinancieros.map(cargo => [cargo.cargo_id, cargo]));
+        const pagosConfirmadosReserva = reservaId => pagos.filter(pago => pago?.id && pago.reserva_id === reservaId &&
+            S.normalizar(pago.estado) === "confirmado");
+        for (const movimiento of candidatosHistoricos) {
+            const pagoLibro = movimiento.item.pago;
+            const pagoSistema = movimiento.pagos[0];
+            const reservaId = movimiento.resultado.sistema.reserva_id;
+            // El identificador del Libro no puede pertenecer a ningún otro pago global.
+            if (pagos.some(pago => pago?.id !== pagoSistema.id && pagoSistemaVigente(pago) && pagoCoincide(pagoLibro, pago))) continue;
+
+            const movimientosReserva = movimiento.resultado.pagosComparacion.filter(item =>
+                item.pago?.tipo_movimiento === "alojamiento" && item.pago?.pago_recibido === true &&
+                item.pago?.estado_pago === "registrado_en_libro" && Number.isSafeInteger(Number(item.pago?.monto)) &&
+                Number(item.pago.monto) > 0 && Boolean(moneda(item.pago)));
+            const fuertes = movimientosReserva.filter(item => item.sistema?.id && pagoTieneIdentificadorFuerte(item.pago) &&
+                item.sistema.reserva_id === reservaId && pagoCoincide(item.pago, item.sistema));
+            const idsFuertes = new Set(fuertes.map(item => item.sistema.id));
+            const remanentesLibro = movimientosReserva.filter(item => !fuertes.includes(item));
+            const confirmados = pagosConfirmadosReserva(reservaId);
+            // Devoluciones, ajustes u otros movimientos impiden demostrar el saldo residual.
+            if (confirmados.some(pago => S.normalizar(pago.tipo_movimiento) !== "pago")) continue;
+            const remanentesSistema = confirmados.filter(pago => !idsFuertes.has(pago.id));
+            if (remanentesLibro.length !== 1 || remanentesLibro[0] !== movimiento.item ||
+                remanentesSistema.length !== 1 || remanentesSistema[0].id !== pagoSistema.id) continue;
+
+            const aplicacionesDelPago = aplicaciones.filter(aplicacion => aplicacion.pago_id === pagoSistema.id);
+            if (!aplicacionesDelPago.length || aplicacionesDelPago.some(aplicacion => {
+                const cargo = cargoPorId.get(aplicacion.cargo_id);
+                return !(Number(aplicacion.monto_aplicado) > 0) || !cargo || cargo.reserva_id !== reservaId ||
+                    cargo.tipo_cargo !== "alojamiento" || S.normalizar(cargo.estado) !== "activo";
+            }) || aplicacionesDelPago.reduce((suma, aplicacion) => suma + Number(aplicacion.monto_aplicado), 0) !==
+                Number(pagoSistema.monto)) continue;
+
+            const alojamiento = cargosFinancieros.filter(cargo => cargo.reserva_id === reservaId &&
+                cargo.tipo_cargo === "alojamiento" && S.normalizar(cargo.estado) === "activo");
+            const totalAlojamiento = alojamiento.reduce((suma, cargo) => suma + Number(cargo.monto_ajustado ?? cargo.monto), 0);
+            const aplicadoAlojamiento = alojamiento.reduce((suma, cargo) => suma + Number(cargo.aplicado_neto), 0);
+            const saldoAlojamiento = alojamiento.reduce((suma, cargo) => suma + Number(cargo.saldo_cargo), 0);
+            const idsAlojamiento = new Set(alojamiento.map(cargo => cargo.cargo_id));
+            const idsConfirmados = new Set(confirmados.map(pago => pago.id));
+            const aplicacionesConfirmadas = aplicaciones.filter(aplicacion => idsConfirmados.has(aplicacion.pago_id));
+            const aplicacionesContables = aplicaciones.filter(aplicacion => idsConfirmados.has(aplicacion.pago_id) &&
+                idsAlojamiento.has(aplicacion.cargo_id));
+            if (!(totalAlojamiento > 0) || aplicadoAlojamiento !== totalAlojamiento || saldoAlojamiento !== 0 ||
+                confirmados.reduce((suma, pago) => suma + Number(pago.monto), 0) !== totalAlojamiento ||
+                aplicacionesConfirmadas.some(aplicacion => {
+                    const cargo = cargoPorId.get(aplicacion.cargo_id);
+                    return !cargo || cargo.reserva_id !== reservaId || cargo.tipo_cargo !== "alojamiento" ||
+                        S.normalizar(cargo.estado) !== "activo";
+                }) || confirmados.some(pago => aplicacionesConfirmadas
+                    .filter(aplicacion => aplicacion.pago_id === pago.id)
+                    .reduce((suma, aplicacion) => suma + Number(aplicacion.monto_aplicado), 0) !== Number(pago.monto)) ||
+                aplicacionesContables.reduce((suma, aplicacion) => suma + Number(aplicacion.monto_aplicado), 0) !==
+                    totalAlojamiento) continue;
+
+            const diferencias = ["Coincidencia histórica migrada."];
+            if (medioLibro(pagoLibro) !== medioSistema(pagoSistema)) diferencias.push("medio de pago diferente");
+            if (String(pagoLibro.fecha_comprobante || "").slice(0, 10) !== String(pagoSistema.fecha_pago || "").slice(0, 10))
+                diferencias.push("fecha de pago diferente");
+            diferencias.push("identificador fuerte del Libro no conservado en Proyecto H");
+            Object.assign(movimiento.item, {
+                estado: "en_sistema",
+                sistema: pagoSistema,
+                coincidencia_historica_migrada: true,
+                diferencias
             });
         }
         return { disponible: true, cargos: cargosFinancieros, aplicaciones };
