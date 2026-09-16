@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
 const rutaBase='supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql';
-const rutaConjuntos='supabase/migrations/20260916154534_haku_libro_aplicaciones_servicio_conjunto_unico.sql';
+const rutaConjuntos='supabase/migrations/20260916191841_haku_libro_aplicaciones_servicio_conjunto_unico.sql';
 const base=fs.readFileSync(rutaBase,'utf8').replace(/\r/g,'');
 const actualizacion=fs.readFileSync(rutaConjuntos,'utf8').replace(/\r/g,'');
 const sql=base+'\n'+actualizacion;

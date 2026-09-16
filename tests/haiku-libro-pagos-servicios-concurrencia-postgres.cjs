@@ -41,7 +41,7 @@ const b=new Client({connectionString:url});
  await setup.query(read('tests/fixtures/registrar-pago-supabase.sql'));
  await setup.query(read('supabase/migrations/20260908164059_haku_libro_estado_confirmado.sql'));
  await setup.query(read('supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql'));
- await setup.query(read('supabase/migrations/20260916154534_haku_libro_aplicaciones_servicio_conjunto_unico.sql'));
+ await setup.query(read('supabase/migrations/20260916191841_haku_libro_aplicaciones_servicio_conjunto_unico.sql'));
 
  const reservaA=randomUUID(),reservaB=randomUUID(),estadiaA=randomUUID(),cabana=randomUUID(),catalogo=randomUUID();
  const servicioA=randomUUID(),cargoA=randomUUID();

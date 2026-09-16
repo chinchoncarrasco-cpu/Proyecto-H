@@ -25,7 +25,7 @@ const Q=require('../js/haiku-libro-consultas-v1.js');
  await db.exec(read('tests/fixtures/registrar-pago-supabase.sql'));
  await db.exec(read('supabase/migrations/20260908164059_haku_libro_estado_confirmado.sql'));
  await db.exec(read('supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql'));
- await db.exec(read('supabase/migrations/20260916154534_haku_libro_aplicaciones_servicio_conjunto_unico.sql'));
+ await db.exec(read('supabase/migrations/20260916191841_haku_libro_aplicaciones_servicio_conjunto_unico.sql'));
 
  const user=randomUUID(),reserva=randomUUID(),otherReserva=randomUUID(),saraReserva=randomUUID(),estadia=randomUUID(),saraEstadia=randomUUID(),cab=randomUUID();
  const catalogLate=randomUUID(),catalogJacuzzi=randomUUID(),serviceLate=randomUUID(),serviceJacuzzi=randomUUID();
