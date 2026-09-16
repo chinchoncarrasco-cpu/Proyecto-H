@@ -2,11 +2,14 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
-const ruta='supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql';
-const sql=fs.readFileSync(ruta,'utf8').replace(/\r/g,'');
-const helper=sql.slice(
- sql.indexOf('create or replace function private.haiku_libro_pago_servicios_v1('),
- sql.indexOf('revoke all on function private.haiku_libro_pago_servicios_v1(')
+const rutaBase='supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql';
+const rutaConjuntos='supabase/migrations/20260916154534_haku_libro_aplicaciones_servicio_conjunto_unico.sql';
+const base=fs.readFileSync(rutaBase,'utf8').replace(/\r/g,'');
+const actualizacion=fs.readFileSync(rutaConjuntos,'utf8').replace(/\r/g,'');
+const sql=base+'\n'+actualizacion;
+const helper=actualizacion.slice(
+ actualizacion.indexOf('create or replace function private.haiku_libro_pago_servicios_v1('),
+ actualizacion.indexOf('revoke all on function private.haiku_libro_pago_servicios_v1(')
 );
 
 test('FASE 4C agrega un helper privado y no reemplaza haiku_registrar_pago',()=>{
@@ -74,6 +77,35 @@ test('recalcula la unicidad y aborta si aparece otro cargo compatible',()=>{
  assert.match(helper,/if candidatos<>1 or elegido is distinct from true then[\s\S]+El destino dejó de ser único/);
 });
 
+test('la migración incremental conserva la RPC pública y revalida distribuciones por conjunto',()=>{
+ assert.doesNotMatch(actualizacion,/create or replace function public\.haiku_incorporar_pago_servicios_libro_v1/);
+ assert.match(actualizacion,/create or replace function private\.haiku_libro_pago_servicios_v1\(/);
+ assert.match(helper,/group by x->>'concepto_canon',nullif\(x->>'fecha_contexto',''\)::date/);
+ assert.match(helper,/with recursive posibles as \([\s\S]+combinaciones\(cargos,ultima_posicion,total,cantidad\)/);
+ assert.match(helper,/count\(s\.cargos\)::integer/);
+ assert.match(helper,/cantidad>0 and total=clase\.monto/);
+ assert.match(helper,/subconjuntos_validos<>1 or conjunto_elegido is distinct from true/);
+ assert.match(helper,/El conjunto de destinos dejó de ser único/);
+ assert.match(helper,/clase\.cantidad=1[\s\S]+if candidatos<>1 or elegido is distinct from true/);
+ assert.match(helper,/clase\.cubre_saldos is distinct from true/);
+ assert.match(helper,/l\.candidatos<=12/);
+ assert.match(helper,/c\.cantidad<12/);
+ assert.match(helper,/candidatos_clase>12/);
+ assert.match(helper,/Más de 12 destinos compatibles requieren revisión manual/);
+ assert.doesNotMatch(helper,/candidatos(?:_clase)?(?:<=|>)20/);
+});
+
+test('Sara representa un pago único de 95000 sobre dos masajes completos',()=>{
+ const sara={monto_total:95000,aplicaciones:[
+  {cargo_id:'00000000-0000-4000-8000-000000000050',monto:50000,saldo_esperado:50000,concepto_canon:'masaje',fecha_contexto:'2026-09-01'},
+  {cargo_id:'00000000-0000-4000-8000-000000000045',monto:45000,saldo_esperado:45000,concepto_canon:'masaje',fecha_contexto:'2026-09-01'}
+ ]};
+ assert.equal(sara.aplicaciones.reduce((n,a)=>n+a.monto,0),sara.monto_total);
+ assert.equal(new Set(sara.aplicaciones.map(a=>a.cargo_id)).size,2);
+ assert.ok(sara.aplicaciones.every(a=>a.monto===a.saldo_esperado));
+ assert.equal((helper.match(/public\.haiku_registrar_pago\(/g)||[]).length,1);
+});
+
 test('sólo confirmado demuestra existencia; los estados reales no vigentes quedan fuera',()=>{
  assert.match(helper,/from public\.pagos p[\s\S]+p\.tipo_movimiento='pago' and p\.estado='confirmado'/);
  assert.doesNotMatch(helper,/p\.estado<>\s*'anulado'/);
@@ -132,7 +164,7 @@ test('la suma debe ser exacta y una aplicación incompleta revierte toda la llam
 });
 
 test('el handshake es read-only, autenticado y el frontend exige su contrato exacto',()=>{
- const capacidad=sql.slice(sql.indexOf('create or replace function public.haiku_libro_aplicaciones_servicio_capacidad_v1()'));
+ const capacidad=base.slice(base.indexOf('create or replace function public.haiku_libro_aplicaciones_servicio_capacidad_v1()'));
  assert.match(capacidad,/auth\.uid\(\) is null/);
  assert.doesNotMatch(capacidad,/\b(?:insert|update|delete)\b/i);
  assert.match(capacidad,/revoke all[\s\S]+from public,anon;/);
