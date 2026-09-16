@@ -1,4 +1,4 @@
-﻿name: Haku 4C PostgreSQL
+name: Haku 4C PostgreSQL
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - fix-haku-pagos-reconciliacion-v2
     paths:
-      - "supabase/migrations/20260915233506_haku_libro_aplicaciones_servicio_seguras.sql"
+      - "supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql"
       - "tests/haiku-libro-pagos-servicios-backend.test.cjs"
       - "tests/haiku-libro-pagos-servicios-postgres.cjs"
       - "tests/haiku-libro-pagos-servicios-concurrencia-postgres.cjs"

@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
-const ruta='supabase/migrations/20260915233506_haku_libro_aplicaciones_servicio_seguras.sql';
+const ruta='supabase/migrations/20260916041430_haku_libro_aplicaciones_servicio_seguras.sql';
 const sql=fs.readFileSync(ruta,'utf8').replace(/\r/g,'');
 const helper=sql.slice(
  sql.indexOf('create or replace function private.haiku_libro_pago_servicios_v1('),
@@ -19,17 +19,17 @@ test('FASE 4C agrega un helper privado y no reemplaza haiku_registrar_pago',()=>
  assert.doesNotMatch(sql,/pg_get_functiondef|execute replace|do \$migration\$/i);
 });
 
-test('conserva auth y permiso; la RPC específica tiene idempotencia por operación y hash',()=>{
+test('conserva auth y permiso; la RPC especÃ­fica tiene idempotencia por operaciÃ³n y hash',()=>{
  assert.match(helper,/auth\.uid\(\) is null or not private\.haiku_tiene_permiso\('pagos\.registrar'\)/);
  assert.match(helper,/p_manual is distinct from true/);
  assert.match(sql,/create table if not exists private\.haiku_libro_pagos_servicio_operaciones/);
  assert.match(sql,/v_hash:=md5\(p_item::text\)/);
  assert.match(sql,/where operacion_id=p_operacion_id for update/);
- assert.match(sql,/La operación ya fue usada con otra propuesta/);
+ assert.match(sql,/La operaciÃ³n ya fue usada con otra propuesta/);
  assert.match(sql,/v_registro\.resultado\|\|jsonb_build_object\('reintento',true\)/);
 });
 
-test('usa locks acotados y un orden que no espera advisory después de bloquear filas',()=>{
+test('usa locks acotados y un orden que no espera advisory despuÃ©s de bloquear filas',()=>{
  assert.doesNotMatch(sql,/\block table\b/i);
  assert.match(helper,/from public\.reservas r where r\.id=p_reserva_id for update;/);
  for(const tabla of ['servicios','cargos','pagos']) assert.match(helper,new RegExp(`from public\\.${tabla} [a-z]+ where [^;]+ for update;`));
@@ -38,16 +38,16 @@ test('usa locks acotados y un orden que no espera advisory después de bloquear 
  assert.match(helper,/pg_advisory_xact_lock\(private\.haiku_libro_lock_key_v1\('pago_identificador'/);
  assert.ok(helper.indexOf("pg_advisory_xact_lock(private.haiku_libro_lock_key_v1('reserva_finanzas'")<helper.indexOf('from public.reservas r where r.id=p_reserva_id for update;'));
  assert.match(sql,/pg_try_advisory_xact_lock\(private\.haiku_libro_lock_key_v1\('reserva_finanzas'/);
- assert.match(sql,/La reserva tiene otra operación financiera en curso; vuelve a intentar/);
+ assert.match(sql,/La reserva tiene otra operaciÃ³n financiera en curso; vuelve a intentar/);
  assert.match(sql,/pg_try_advisory_xact_lock\(private\.haiku_libro_lock_key_v1\('pago_identificador'/);
  for(const tabla of ['servicios','cargos','pagos','pago_aplicaciones'])
   assert.match(sql,new RegExp(`create trigger trg_haiku_libro_lock_${tabla==='pago_aplicaciones'?'aplicaciones':tabla}_v1`));
 });
 
-test('el contrato exige snapshot explícito y rechaza cargos repetidos',()=>{
+test('el contrato exige snapshot explÃ­cito y rechaza cargos repetidos',()=>{
  for(const campo of ['cargo_id','servicio_id','monto','saldo_esperado','aplicado_esperado','cantidad_aplicaciones_esperada','concepto_canon','fecha_servicio_esperada'])
   assert.ok(helper.includes(`aplicacion->>'${campo}'`),campo);
- assert.match(helper,/count\(distinct x->>'cargo_id'\)[\s\S]+Una transacción no puede reutilizar el mismo cargo/);
+ assert.match(helper,/count\(distinct x->>'cargo_id'\)[\s\S]+Una transacciÃ³n no puede reutilizar el mismo cargo/);
  assert.match(helper,/d->>'moneda' is distinct from 'CLP'/);
  assert.match(helper,/d->>'reserva_id'[\s\S]+p_reserva_id/);
  assert.match(helper,/d->>'monto_total'[\s\S]+monto_total/);
@@ -71,16 +71,16 @@ test('revalida reserva, cargo, servicio, concepto, saldo y aplicaciones bajo loc
 test('recalcula la unicidad y aborta si aparece otro cargo compatible',()=>{
  assert.match(helper,/with posibles as \([\s\S]+compatibles as \([\s\S]+finales as \(/);
  assert.match(helper,/select count\(\*\),coalesce\(bool_or\(finales\.cargo_id=v_cargo_id\),false\)/);
- assert.match(helper,/if candidatos<>1 or elegido is distinct from true then[\s\S]+El destino dejó de ser único/);
+ assert.match(helper,/if candidatos<>1 or elegido is distinct from true then[\s\S]+El destino dejÃ³ de ser Ãºnico/);
 });
 
-test('sólo confirmado demuestra existencia; los estados reales no vigentes quedan fuera',()=>{
+test('sÃ³lo confirmado demuestra existencia; los estados reales no vigentes quedan fuera',()=>{
  assert.match(helper,/from public\.pagos p[\s\S]+p\.tipo_movimiento='pago' and p\.estado='confirmado'/);
  assert.doesNotMatch(helper,/p\.estado<>\s*'anulado'/);
  assert.match(helper,/pago_existente_reserva is distinct from p_reserva_id/);
  assert.match(helper,/jsonb_build_object\('ya_existe',true/);
  assert.match(helper,/count\(\*\)::integer,count\(distinct reserva_id\)::integer/);
- assert.match(helper,/pagos_existentes<>1[\s\S]+múltiples pagos confirmados/);
+ assert.match(helper,/pagos_existentes<>1[\s\S]+mÃºltiples pagos confirmados/);
  assert.match(helper,/codigo_autorizacion/);
  assert.match(helper,/datos_origen->>'bovtar'/);
  assert.match(sql,/El identificador fuerte ahora pertenece a otra reserva; vuelve a preparar/);
@@ -88,10 +88,10 @@ test('sólo confirmado demuestra existencia; los estados reales no vigentes qued
  assert.deepEqual(esquema.filter(estado=>estado==='confirmado'),['confirmado']);
 });
 
-test('BOVE administrativo no participa y efectivo sin ID fuerte queda bloqueado explícitamente',()=>{
- assert.match(helper,/p_bove sólo puede transportar el mismo BOVTAR del comprobante; un BOVE administrativo no identifica pagos/);
+test('BOVE administrativo no participa y efectivo sin ID fuerte queda bloqueado explÃ­citamente',()=>{
+ assert.match(helper,/p_bove sÃ³lo puede transportar el mismo BOVTAR del comprobante; un BOVE administrativo no identifica pagos/);
  assert.match(helper,/codaut_norm is null and \(folio_norm is null or bovtar_norm is null\)/);
- assert.match(helper,/Efectivo sin identificador transaccional fuerte no está habilitado en FASE 4C/);
+ assert.match(helper,/Efectivo sin identificador transaccional fuerte no estÃ¡ habilitado en FASE 4C/);
  assert.doesNotMatch(helper,/\(bove is not null|coalesce\(bove,bovtar\)/);
  assert.match(helper,/p_bove=>bovtar/);
  assert.match(helper,/codaut_norm:=nullif\(regexp_replace/);
@@ -99,7 +99,7 @@ test('BOVE administrativo no participa y efectivo sin ID fuerte queda bloqueado 
  assert.match(helper,/bovtar_norm:=nullif\(regexp_replace/);
 });
 
-test('Carlos usa un pago de 30000 y una sola aplicación explícita',()=>{
+test('Carlos usa un pago de 30000 y una sola aplicaciÃ³n explÃ­cita',()=>{
  const carlos={
   version:1,reserva_id:'37c22aec-2b90-466c-aed4-111653103311',monto_total:30000,moneda:'CLP',
   aplicaciones:[{cargo_id:'b93d7634-48d7-41a7-b120-5043b3da423f',servicio_id:'19950686-4ef0-43e3-8287-7a3027f23178',monto:30000,saldo_esperado:30000,aplicado_esperado:0,cantidad_aplicaciones_esperada:0,concepto_canon:'tinaja_tonel',fecha_contexto:'2026-09-12',fecha_servicio_esperada:'2026-09-12'}]
@@ -123,12 +123,12 @@ test('el contrato distribuido representa un pago de 50000 con dos aplicaciones',
  assert.equal((helper.match(/public\.haiku_registrar_pago\(/g)||[]).length,1);
 });
 
-test('la suma debe ser exacta y una aplicación incompleta revierte toda la llamada',()=>{
+test('la suma debe ser exacta y una aplicaciÃ³n incompleta revierte toda la llamada',()=>{
  assert.match(helper,/if suma is distinct from monto_total then[\s\S]+La suma de aplicaciones debe coincidir exactamente/);
  assert.match(helper,/if \(pago->>'aplicado'\)::bigint is distinct from monto_total/);
  assert.match(helper,/\(pago->>'sin_aplicar'\)::bigint is distinct from 0/);
  const handlers=[...helper.matchAll(/exception when others then\n\s+raise exception '[^']+';/g)];
- assert.equal(handlers.length,2,'los únicos handlers convierten cast inválido en aborto explícito');
+ assert.equal(handlers.length,2,'los Ãºnicos handlers convierten cast invÃ¡lido en aborto explÃ­cito');
 });
 
 test('el handshake es read-only, autenticado y el frontend exige su contrato exacto',()=>{
