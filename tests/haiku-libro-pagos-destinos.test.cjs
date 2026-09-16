@@ -56,6 +56,64 @@ test('Pascual: Late Out selecciona el cargo pendiente de la fecha exacta', () =>
     assert.deepEqual(out.aplicaciones_payload, [{ cargo_id: 'c1', monto: 20000 }]);
 });
 
+test('Sara: un pago de masaje usa el único conjunto exacto de dos cargos', () => {
+    const servicios = [
+        servicio('s1', 'r-sara', 'Masaje Descontracturante 60 min', '2026-09-01', 50000),
+        servicio('s2', 'r-sara', 'Masaje Terapéutico 60 min', '2026-09-01', 45000)
+    ];
+    const cargos = [
+        cargo('c1', 'r-sara', 's1', 'Masaje Descontracturante 60 min', 50000),
+        cargo('c2', 'r-sara', 's2', 'Masaje Terapéutico 60 min', 45000)
+    ];
+    const out = D.resolverTransaccion(pagoServicio('masajes', 95000, '2026-09-02'), 'r-sara', snapshot(servicios, cargos));
+    assert.equal(out.estado, 'destino_unico');
+    assert.equal(out.resoluble, true);
+    assert.deepEqual(out.aplicaciones_payload, [{ cargo_id: 'c1', monto: 50000 }, { cargo_id: 'c2', monto: 45000 }]);
+    assert.equal(out.aplicaciones.reduce((suma, aplicacion) => suma + aplicacion.monto, 0), 95000);
+});
+
+test('distribución por conjunto falla cerrada sin suma exacta o con dos combinaciones posibles', () => {
+    const base = [
+        servicio('s1', 'r1', 'Masaje Descontracturante 60 min', '2026-09-01', 50000),
+        servicio('s2', 'r1', 'Masaje Terapéutico 60 min', '2026-09-01', 40000)
+    ];
+    const sinSuma = D.resolverTransaccion(pagoServicio('masajes', 95000, '2026-09-02'), 'r1', snapshot(base, [
+        cargo('c1', 'r1', 's1', 'Masaje Descontracturante 60 min', 50000),
+        cargo('c2', 'r1', 's2', 'Masaje Terapéutico 60 min', 40000)
+    ]));
+    assert.equal(sinSuma.estado, 'revision');
+    assert.match(sinSuma.aplicaciones[0].motivo, /suma exacta/i);
+
+    const servicios = [
+        servicio('s1', 'r1', 'Masaje Descontracturante 60 min', '2026-09-01', 50000),
+        servicio('s2', 'r1', 'Masaje Terapéutico 60 min', '2026-09-01', 45000),
+        servicio('s3', 'r1', 'Masaje Relajación 60 min', '2026-09-01', 95000)];
+    const ambiguo = D.resolverTransaccion(pagoServicio('masajes', 95000, '2026-09-02'), 'r1', snapshot(servicios, [
+        cargo('c1', 'r1', 's1', 'Masaje Descontracturante 60 min', 50000),
+        cargo('c2', 'r1', 's2', 'Masaje Terapéutico 60 min', 45000),
+        cargo('c3', 'r1', 's3', 'Masaje Relajación 60 min', 95000)
+    ]));
+    assert.equal(ambiguo.estado, 'revision');
+    assert.match(ambiguo.aplicaciones[0].motivo, /más de una combinación/i);
+});
+
+test('distribución no usa cargos ajenos, anulados ni ya cubiertos', () => {
+    const servicios = [
+        servicio('s1', 'r1', 'Masaje Descontracturante 60 min', '2026-09-01', 50000),
+        servicio('s2', 'r1', 'Masaje Terapéutico 60 min', '2026-09-01', 45000),
+        servicio('s3', 'otra', 'Masaje Terapéutico 60 min', '2026-09-01', 45000)
+    ];
+    const base = [
+        cargo('c1', 'r1', 's1', 'Masaje Descontracturante 60 min', 50000),
+        cargo('c2', 'r1', 's2', 'Masaje Terapéutico 60 min', 45000),
+        cargo('c3', 'otra', 's3', 'Masaje Terapéutico 60 min', 45000)
+    ];
+    const pago = pagoServicio('masajes', 95000, '2026-09-02');
+    assert.equal(D.resolverTransaccion(pago, 'r1', snapshot(servicios, base)).estado, 'destino_unico');
+    assert.equal(D.resolverTransaccion(pago, 'r1', snapshot(servicios, [base[0], { ...base[1], estado: 'anulado' }, base[2]])).estado, 'revision');
+    assert.equal(D.resolverTransaccion(pago, 'r1', snapshot(servicios, [base[0], { ...base[1], saldo_cargo: 0, aplicado_neto: 45000 }, base[2]])).estado, 'revision');
+});
+
 test('Alejandro: comprobante distribuido conserva dos destinos distintos', () => {
     const servicios = [
         servicio('s1', 'r-alejandro', 'Late Check-out', '2026-09-06', 20000),

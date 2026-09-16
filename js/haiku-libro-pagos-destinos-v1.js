@@ -109,6 +109,24 @@
             servicio.tipo_cobro !== "cortesia" && Number(servicio.total || 0) > 0;
     }
 
+    function conjuntoSaldoExactoUnico(cargos, monto) {
+        if (!Number.isSafeInteger(monto) || monto <= 0 || cargos.length > 20) return { estado: "revision", conjuntos: [] };
+        const candidatos = cargos.map(cargo => ({ cargo, saldo: Number(cargo.saldo_cargo) }));
+        if (candidatos.some(item => !Number.isSafeInteger(item.saldo) || item.saldo <= 0)) return { estado: "revision", conjuntos: [] };
+        const conjuntos = [];
+        const buscar = (indice, suma, elegidos) => {
+            if (conjuntos.length > 1 || suma > monto) return;
+            if (suma === monto) { conjuntos.push([...elegidos]); return; }
+            for (let i = indice; i < candidatos.length && conjuntos.length <= 1; i += 1) {
+                elegidos.push(candidatos[i]);
+                buscar(i + 1, suma + candidatos[i].saldo, elegidos);
+                elegidos.pop();
+            }
+        };
+        buscar(0, 0, []);
+        return { estado: conjuntos.length === 1 ? "unico" : conjuntos.length > 1 ? "ambiguo" : "sin_suma", conjuntos };
+    }
+
     function resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema = null) {
         if (!aplicacion.concepto_canon || !Number.isSafeInteger(aplicacion.monto) || aplicacion.monto <= 0) {
             return { ...aplicacion, estado: "revision", motivo: "La aplicación no tiene concepto o monto financiero válido." };
@@ -138,7 +156,25 @@
             return { ...aplicacion, estado: "ya_aplicada", motivo: "El cargo compatible ya está pagado; no se puede aplicar nuevamente.", candidatos: compatibles };
         }
         if (pendientes.length > 1) {
-            return { ...aplicacion, estado: "multiples_destinos", motivo: "Existe más de un cargo pendiente compatible; no se elige por orden.", candidatos: pendientes };
+            const conjunto = conjuntoSaldoExactoUnico(pendientes, aplicacion.monto);
+            if (conjunto.estado !== "unico") return { ...aplicacion, estado: "multiples_destinos",
+                motivo: conjunto.estado === "ambiguo" ?
+                    "Existe más de una combinación de cargos compatible con el total; requiere revisión." :
+                    "Los cargos compatibles no forman un único conjunto con suma exacta; no se elige por orden.",
+                candidatos: pendientes };
+            const aplicacionesDistribuidas = conjunto.conjuntos[0].map(({ cargo, saldo }) => ({
+                ...aplicacion,
+                estado: "destino_unico",
+                cargo_id: cargo.cargo_id,
+                cargo,
+                monto: saldo,
+                aplicacion_parcial: false,
+                remanente_cargo: 0,
+                motivo: "Parte de una distribución única cuya suma coincide exactamente con el pago."
+            }));
+            return { ...aplicacion, estado: "destino_distribuido", aplicaciones_distribuidas: aplicacionesDistribuidas,
+                candidatos: conjunto.conjuntos[0].map(item => item.cargo),
+                motivo: "Existe un único conjunto de cargos compatibles cuya suma coincide exactamente con el pago." };
         }
 
         const cargo = pendientes[0];
@@ -164,7 +200,8 @@
             return { estado: "revision", resoluble: false, aplicaciones, motivo: "La suma de aplicaciones no coincide con el comprobante padre." };
         }
         const cargos = enriquecerCargos(snapshot, reservaId);
-        const resueltas = aplicaciones.map(aplicacion => resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema));
+        const resueltasBase = aplicaciones.map(aplicacion => resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema));
+        const resueltas = resueltasBase.flatMap(aplicacion => aplicacion.aplicaciones_distribuidas || [aplicacion]);
         const usados = new Map();
         for (const aplicacion of resueltas.filter(item => item.cargo_id && item.estado === "destino_unico")) {
             usados.set(aplicacion.cargo_id, (usados.get(aplicacion.cargo_id) || 0) + 1);

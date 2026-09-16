@@ -110,6 +110,59 @@ test('una transacción de 50000 produce un pago con dos aplicaciones explícitas
  assert.deepEqual(apps.map(a=>[a.cargo_id,a.monto]),[['c1',20000],['c2',30000]]);
 });
 
+test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masajes',async()=>{
+ const p=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',
+  fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01',texto_original:'Sara Bertrand // Débito // Folio 000232 // Aut. 002506 // masajes'});
+ const r=reserva(p);r.titular='Sara Bertrand';r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';
+ r.servicios=[{concepto:'tinaja',texto_original:'Tinaja mencionada',pendiente:true}];
+ const tablas=tablasCarlos(r,{servicios:[
+  servicio('s1','Masaje Descontracturante 60 min','2026-09-01',50000),
+  servicio('s2','Masaje Terapéutico 60 min','2026-09-01',45000)
+ ],vista_estado_cargos:[
+  cargo('c1','s1','Masaje Descontracturante 60 min',50000),
+  cargo('c2','s2','Masaje Terapéutico 60 min',45000)
+ ]});
+ const inicial=await prepararCarlos(CAP,new Set(),{pago:p,reserva:r,tablas});
+ assert.equal(inicial.item.aprobableFinancieramente,true);
+ assert.equal(inicial.item.aprobable,true);
+ assert.equal(inicial.item.motivos.length,1,'sólo conserva la aprobación manual normal del flujo de servicios');
+ const aprobado=await prepararCarlos(CAP,new Set([inicial.item.id]),{pago:p,reserva:r,tablas});
+ assert.equal(aprobado.item.categoria,'pagos');assert.equal(aprobado.item.seleccionado,true);
+ const serializados=Q.serializarIncorporacion(aprobado.plan),pagosServicio=serializados.filter(item=>item.tipo==='pago_servicios_4c');
+ assert.equal(pagosServicio.length,1);
+ const [out]=pagosServicio,apps=out.datos_origen.aplicaciones_servicio_v1.aplicaciones;
+ assert.equal(out.tipo,'pago_servicios_4c');assert.equal(out.argumentos.p_monto,95000);
+ assert.equal(apps.length,2);assert.equal(apps.reduce((suma,item)=>suma+item.monto,0),95000);
+ assert.deepEqual(apps.map(item=>[item.cargo_id,item.monto]),[['c1',50000],['c2',45000]]);
+ const comp=await Q.compararSistema([r],cliente(tablas,{capacidad:CAP}),q);
+ assert.equal(comp.serviciosDetalle.find(item=>item.servicio.concepto==='tinaja').estado,'revisar');
+});
+
+test('el pago fuerte de Sara ya existente se omite antes de distribuir cargos',async()=>{
+ const p=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const r=reserva(p);r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';
+ const existente={id:'p-sara',reserva_id:'r1',monto:95000,moneda:'CLP',estado:'confirmado',codigo_autorizacion:'002506',medio_pago:'tarjeta_debito',fecha_pago:'2026-09-02'};
+ const tablas=tablasCarlos(r,{pagos:[existente],servicios:[servicio('s1','Masaje Descontracturante 60 min','2026-09-01',50000),servicio('s2','Masaje Terapéutico 60 min','2026-09-01',45000)],
+  vista_estado_cargos:[cargo('c1','s1','Masaje Descontracturante 60 min',50000),cargo('c2','s2','Masaje Terapéutico 60 min',45000)]});
+ const db=cliente(tablas,{capacidad:CAP}),plan=await Q.prepararIncorporacion({reservas:[r],q},new Map(),new Set(),db);
+ const item=plan.items.find(x=>x.pagoLibro===p);
+ assert.equal(item.categoria,'omitidos');assert.notEqual(item.aprobable,true);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+ assert.equal(db.calls.some(call=>call.nombre==='haiku_libro_aplicaciones_servicio_capacidad_v1'),false);
+});
+
+test('dos movimientos Libro con el identificador fuerte de Sara quedan en revisión',async()=>{
+ const primero=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const segundo=pago({monto:50000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const r=reserva(primero);r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';r.pagos=[primero,segundo];
+ const tablas=tablasCarlos(r,{servicios:[servicio('s1','Masaje Descontracturante 60 min','2026-09-01',50000),servicio('s2','Masaje Terapéutico 60 min','2026-09-01',45000)],
+  vista_estado_cargos:[cargo('c1','s1','Masaje Descontracturante 60 min',50000),cargo('c2','s2','Masaje Terapéutico 60 min',45000)]});
+ const db=cliente(tablas,{capacidad:CAP}),plan=await Q.prepararIncorporacion({reservas:[r],q},new Map(),new Set(),db);
+ const items=plan.items.filter(item=>item.pagoLibro===primero||item.pagoLibro===segundo);
+ assert.equal(items.length,2);assert.ok(items.every(item=>item.categoria==='dudosos'&&item.aprobable===false));
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+});
+
 test('suma distinta, destinos ausentes, ya aplicados, reserva ambigua y nota financiera nunca se habilitan',async()=>{
  const casos=[];
  const distribuido=pago({monto:50000,transaccion_distribuida:true,aplicaciones_libro:[{concepto:'Tinaja',monto:30000}]});
