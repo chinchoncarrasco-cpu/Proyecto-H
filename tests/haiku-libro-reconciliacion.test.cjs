@@ -105,10 +105,37 @@ test('payment-only presentation uses identical comparison states and the existin
  h.render(only);
  assert.match(h.texts(),/LIBRO · PAGOS/);assert.match(h.texts(),/Pagos nuevos seguros \(1\)/);assert.match(h.texts(),/Con diferencias \(1\)/);assert.match(h.texts(),/monto\/moneda diferente/);
  assert.match(h.texts(),/Sin asociación segura \(1\)/);
+ assert.ok(h.out.className.includes('haku-comparacion-compacta'));assert.ok(h.out.className.includes('haku-pagos-compactos'));
+ assert.equal(h.out.querySelectorAll('.haiku-versiones-tarjeta').length,0);
+ const metrics=Object.fromEntries(h.out.querySelectorAll('.haku-pagos-metricas')[0].children.map(n=>[n.children[0].textContent,Number(n.children[1].textContent)]));
+ assert.deepEqual(metrics,{'Movimientos del Libro':5,'Ya existen':1,'Nuevos seguros':1,'Requieren revisión':2,'Con diferencias':1,'Sin asociación segura':1});
+ const sections=h.out.querySelectorAll('.haku-pagos-seccion');
+ assert.deepEqual(sections.map(s=>s.children[0].textContent),['Pagos nuevos seguros (1)','Pagos que requieren revisión (1)','Con diferencias (1)','Sin asociación segura (1)','Ya existe en Proyecto H (1)']);
+ assert.equal(h.out.querySelectorAll('.haku-pago-fila').length,5);
+ assert.equal(h.out.querySelectorAll('.haku-pago-detalle-grid').length,5);
+ assert.ok(h.out.querySelectorAll('.haku-pago-fila-datos').every(n=>/CAB .* · \$.* CLP · /.test(n.textContent)));
  assert.doesNotMatch(h.texts(),/Reservas que faltan|Reservas con diferencias|Preguntas necesarias|Servicios que requieren|Cancelaciones confirmadas|Bloqueos|Grupos \/ multicabaña/);
  const existing=h.out.querySelectorAll('details').find(d=>d.children[0]?.textContent==='Ya existe en Proyecto H (1)');
- assert.equal(existing.open,false);assert.equal(existing.querySelectorAll('button').length,0);
+ assert.equal(Boolean(existing.open),false);assert.equal(existing.querySelectorAll('button').length,0);
+ assert.ok(sections.every(s=>!s.open));
+ sections[0].open=true;assert.equal(sections[0].open,true);sections[0].open=false;
  assert.equal(JSON.stringify(only.comparacion.pagosDetalle),original);
+ const existingItem=only.comparacion.pagosDetalle.find(x=>x.estado==='en_sistema');
+ const newItem=only.comparacion.pagosDetalle.find(x=>x.estado==='nuevo_seguro');
+ const reviewItem=only.comparacion.pagosDetalle.find(x=>x.estado==='revisar'&&!x.reserva.pagos_sin_asociacion.includes(x.pago));
+ const unsafeItem=only.comparacion.pagosDetalle.find(x=>x.reserva.pagos_sin_asociacion.includes(x.pago));
+ const copies=(item,total,prefix,unsafe=false)=>Array.from({length:total},(_,i)=>{
+  const pago={...item.pago,origen:{hoja:'Sep26',celda:`${prefix}${i+1}`}};
+  const reserva={...item.reserva,pagos:unsafe?[]:[pago],pagos_sin_asociacion:unsafe?[pago]:[]};
+  return {...item,pago,reserva,sistema:item.sistema?{...item.sistema,id:`${prefix}-sistema-${i+1}`}:item.sistema};
+ });
+ const bulk=Object.assign([...only.comparacion],only.comparacion,{pagosDetalle:[...copies(existingItem,60,'E'),...copies(newItem,1,'N'),...copies(reviewItem,2,'R'),...copies(unsafeItem,22,'S',true)]});
+ h.render({q:only.q,comparacion:bulk});
+ const bulkMetrics=Object.fromEntries(h.out.querySelectorAll('.haku-pagos-metricas')[0].children.map(n=>[n.children[0].textContent,Number(n.children[1].textContent)]));
+ assert.deepEqual(bulkMetrics,{'Movimientos del Libro':85,'Ya existen':60,'Nuevos seguros':1,'Requieren revisión':24,'Con diferencias':0,'Sin asociación segura':22});
+ assert.equal(h.out.querySelectorAll('.haku-pago-fila').length,85);
+ assert.ok(h.out.querySelectorAll('.haku-pagos-seccion').every(s=>!s.open));
+ h.render(only);
  assert.doesNotMatch(h.Q.respuesta(only),/RESERVAS QUE FALTAN/);
  assert.match(h.Q.respuesta(general),/COMPARACIÓN LIBRO/);
  const plainPlan=await h.Q.prepararIncorporacion(general,new Map(),new Set(),db);
@@ -615,7 +642,7 @@ function renderHarness(reconsultar, db) {
  const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
-  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion })')
+  .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion, renderizarResultadoIncorporacion })')
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
@@ -737,7 +764,8 @@ test('compact comparison preserves data and actions while ordering existing sect
  assert.ok(h.button('Preparar incorporación'));assert.ok(h.button('Revalidar contra Proyecto H'));
  assert.ok(h.out.querySelectorAll('details').every(d=>!d.open));
  h.render({q:{...q,solo_pagos:true},comparacion:c});
- assert.ok(!h.out.className.includes('haku-comparacion-compacta'));
+ assert.ok(h.out.className.includes('haku-comparacion-compacta'));
+ assert.ok(h.out.className.includes('haku-pagos-compactos'));
  assert.equal(JSON.stringify(c),before);
 });
 
@@ -1074,6 +1102,28 @@ test('confirmation button executes the atomic RPC and shows the saved result',as
  await h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con ')).events.click();
  assert.match(h.texts(),/Incorporación completada/);assert.match(h.texts(),/El Libro original no fue modificado/);
  assert.equal(db.calls.filter(x=>x==='haiku_incorporar_libro_v1').length,1);
+});
+test('saved result uses the compact view without changing counters or the back callback',async()=>{
+ const h=renderHarness(),ejecucion={resultado:{reservas_creadas:0,estadias_agregadas:0,pagos_creados:1,actualizaciones:0,omitidos:0},omitidosAlRevalidar:0};
+ const before=JSON.stringify(ejecucion);let volver=0;
+ h.Q.renderizarResultadoIncorporacion(h.out,ejecucion,()=>{volver++});
+ assert.match(h.out.className,/haku-incorporacion-resultado/);
+ assert.doesNotMatch(h.out.className,/haku-comparacion-compacta|haku-pagos-compactos|haku-incorporacion-compacta/);
+ assert.equal(h.out.querySelector('.haiku-incorporacion-modo').textContent,'Guardado');
+ const metricas=Object.fromEntries(h.out.querySelectorAll('.haiku-incorporacion-indicador').map(x=>[x.children[1].textContent,x.children[0].textContent]));
+ assert.deepEqual(metricas,{Reservas:'0','Estadías':'0',Pagos:'1','Actualizaciones del Libro':'0',Omitidos:'0'});
+ assert.equal(JSON.stringify(ejecucion),before);
+ await h.button('Volver a la comparación').events.click();
+ assert.equal(volver,1);
+});
+test('confirmation errors keep the existing retry renderer instead of showing success',async()=>{
+ const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
+ h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();
+ db.rpc=async()=>({data:null,error:new Error('fallo controlado')});
+ await h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con ')).events.click();
+ assert.match(h.texts(),/No se pudo confirmar: fallo controlado/);
+ assert.ok(h.out.querySelectorAll('button').some(e=>e.textContent.startsWith('Continuar con ')));
+ assert.doesNotMatch(h.out.className,/haku-incorporacion-resultado/);
 });
 test('one bulk action approves every eligible manual payment and pending cases do not block ready items',async()=>{
  const weak=readyPay({codigo_autorizacion:null}),ready=readyBook({pagos:[weak]}),invalid=readyBook({id:'invalid',titular:null,cabana:10});
