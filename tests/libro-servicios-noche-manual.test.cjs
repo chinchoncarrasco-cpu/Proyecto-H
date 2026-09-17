@@ -147,6 +147,46 @@ test('rendered confirmation rebuilds the card into ready services without invoki
     assert.deepEqual(e.calls, []);
 });
 
+test('services and notes render as four compact sections closed after every render', async () => {
+    const e = entorno(), out = new e.Element('div');
+    const built = await e.api.construir(consulta), original = built.items.find(x => x.kind === 'servicio');
+    const ready = { ...copy(original), item_id: 'ready', estado: 'listo', razones: [], inferencias: [] };
+    const note = { ...copy(ready), item_id: 'note', kind: 'nota', texto: 'Dejar batas en recepción', payload: { reserva_id: 'r1', importante: true } };
+    const existing = { ...copy(ready), item_id: 'existing', estado: 'existente' };
+    const review = { ...copy(original), item_id: 'review', estado: 'revisar', razones: ['Requiere revisión manual.'] };
+    const result = { ...built, items: [ready, note, existing, review], quiereIncorporar: true };
+
+    e.api.renderizar(result, out, consulta);
+    let sections = out.querySelectorAll(':scope > details');
+    assert.equal(sections.length, 4);
+    assert.deepEqual(sections.map(x => x.children[0].children[0].textContent), [
+        'Servicios listos para incorporar',
+        'Notas operativas para el resumen',
+        'Ya existen en Proyecto H',
+        'Requieren revisión manual'
+    ]);
+    assert.deepEqual(sections.map(x => x.children[0].children[1].textContent), ['1', '1', '1', '1']);
+    assert.ok(sections.every(x => x.open === false));
+    assert.ok(sections.every(x => x.classList.contains('haku-libro-servicios__seccion')));
+    assert.ok(sections.every(x => x.classList.contains('haiku-comparacion-acordeon')));
+    for (const icon of ['haku-icono--servicio', 'haku-icono--archivo', 'haku-icono--calendario', 'haku-icono--alerta']) {
+        assert.ok(sections.some(x => x.classList.contains(icon)), icon);
+    }
+    assert.ok(out.classList.contains('haku-comparacion-compacta'));
+    assert.equal(out.querySelectorAll('input[type=checkbox]').length, 4);
+    assert.equal(out.querySelectorAll('input[type=checkbox]:not(:disabled)').length, 2);
+
+    sections[0].open = true;
+    e.api.renderizar(result, out, consulta);
+    sections = out.querySelectorAll(':scope > details');
+    assert.ok(sections.every(x => x.open === false));
+
+    const css = e.document.head.children.at(-1).textContent;
+    assert.match(css, /\.haiku-asistente-panel \.haku-libro-servicios\.haiku-asistente-preview>\.haku-libro-servicios__seccion>\.haku-libro-servicios__lista\{[^}]*width:100%;max-width:none;max-height:none;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible/);
+    assert.doesNotMatch(css, /max-height:250px|overflow:auto/);
+    assert.match(css, /\.haku-libro-servicios__item\{[^}]*border-bottom:1px solid #e3eae5;[^}]*border-radius:0/);
+});
+
 test('an invalidated confirmation stays invalid even when the old data reappears', async () => {
     const e = entorno(), { item, overrides } = await elegir(e);
     e.state.generacion++;
