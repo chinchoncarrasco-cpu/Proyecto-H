@@ -102,8 +102,9 @@
     }
 
     function claveServicio(reserva, servicio) {
-        const origen = reserva?.coordenadas_origen || {};
-        return `srv:${hashCorto(`${origen.hoja || reserva?.hoja || "libro"}:${origen.celda || reserva?.id || "fila"}:${servicio?.concepto || "servicio"}:${normalizar(servicio?.texto_original)}`)}`;
+        const identidadReserva = [reserva?.titular, reserva?.rut_documento, reserva?.cabana,
+            reserva?.fecha_checkin, reserva?.fecha_checkout].map(normalizar).join(":");
+        return `srv:${hashCorto(`${identidadReserva}:${servicio?.concepto || "servicio"}:${normalizar(servicio?.texto_original)}`)}`;
     }
 
     function claveNota(reserva, texto) {
@@ -326,9 +327,14 @@
 
     function mapearConcepto(servicio) {
         const t = normalizar(servicio?.texto_original), concepto = servicio?.concepto;
-        if (concepto === "jacuzzi" || /\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (concepto === "tonel" || /\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: false };
+        // El concepto ya segmentado manda. Un texto antiguo podía mencionar Jacuzzi y
+        // Late Check-out juntos; inferir por el texto antes que por el concepto mezcló
+        // el código de la tinaja con la fecha/hora del checkout.
         if (concepto === "lateout") return { codigo: "lateCheckout", nombre: "Late Check-out", requiereHorario: true, requierePersonas: false, permiteCortesia: false };
+        if (concepto === "jacuzzi") return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: false };
+        if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: false };
         if (concepto === "masaje") {
             const minutos = Number(t.match(/\b(30|60)\s*min/)?.[1]);
             if (/relajante/.test(t) && /descontracturante/.test(t)) return { motivo: "La misma nota contiene dos masajes distintos; deben separarse antes de incorporarlos." };
@@ -416,7 +422,7 @@
     async function cargarExistentes(cliente, reservaIds) {
         if (!reservaIds.length) return { servicios: [], notas: [] };
         const [sr, nr] = await Promise.all([
-            cliente.from("servicios").select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,estado_servicio,observaciones,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
+            cliente.from("servicios").select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
             cliente.from("notas").select("id,reserva_id,tipo,texto").in("reserva_id", reservaIds)
         ]);
         if (sr.error) throw sr.error;
@@ -428,16 +434,29 @@
         return Array.isArray(c) ? c[0]?.codigo || null : c?.codigo || null;
     }
 
-    function servicioYaExiste(item, existentes) {
+    function decisionServicioExistente(item, existentes) {
         const reservaId = item.payload?.reserva_id || (item.asociacion?.estado === 'asociada' ? item.asociacion.sistema.reserva_id : null);
-        if (!reservaId) return false;
+        if (!reservaId) return { estado: "revisar", motivo: "Falta la reserva destino para comprobar el servicio." };
+        const identidad = root.HAIKU_SERVICIOS_IDENTIDAD_V1;
+        if (identidad?.resolverServicio && item.payload) {
+            return identidad.resolverServicio({
+                ...item.payload,
+                total: item.servicio?.monto,
+                item_id: item.item_id
+            }, existentes);
+        }
         const hora = String(item.hora || "").slice(0, 5), marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`;
-        return existentes.some(x => {
+        const coincide = existentes.some(x => {
             if (x.reserva_id !== reservaId || /cancelad/i.test(String(x.estado_servicio || ""))) return false;
             if (String(x.observaciones || "").includes(marca)) return true;
             if (!item.payload) return false;
             return codigoExistente(x) === item.payload.codigo_servicio && x.fecha_servicio === item.payload.fecha_servicio && String(x.hora_inicio || "").slice(0, 5) === hora;
         });
+        return { estado: coincide ? "existente" : "nuevo", motivo: coincide ? "Coincidencia operativa exacta." : null };
+    }
+
+    function servicioYaExiste(item, existentes) {
+        return decisionServicioExistente(item, existentes).estado === "existente";
     }
 
     function notaYaExiste(item, existentes) {
@@ -481,8 +500,15 @@
         const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id || (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
         const existentes = await cargarExistentes(cliente, reservaIds);
         for (const item of items) {
-            const existe = item.kind === "nota" ? notaYaExiste(item, existentes.notas) : servicioYaExiste(item, existentes.servicios);
-            item.estado = existe ? "existente" : item.razones.length ? "revisar" : "listo";
+            if (item.kind === "nota") {
+                item.estado = notaYaExiste(item, existentes.notas) ? "existente" : item.razones.length ? "revisar" : "listo";
+                continue;
+            }
+            const decision = decisionServicioExistente(item, existentes.servicios);
+            item.decision_identidad = decision.estado;
+            if (decision.estado === "revisar") item.razones.push(decision.motivo);
+            item.razones = [...new Set(item.razones.filter(Boolean))];
+            item.estado = decision.estado === "existente" ? "existente" : item.razones.length ? "revisar" : "listo";
         }
         return { ...libro, items, quiereIncorporar: quiereIncorporar(texto) };
     }

@@ -65,11 +65,12 @@
         if (error) throw error;
 
         const lista = data || [];
-        const exacta = lista.find(item =>
+        const exactas = lista.filter(item =>
             Number(item?.cabanas?.numero) === Number(numeroCabana)
         );
-
-        return exacta?.id || lista[0]?.id || null;
+        if (exactas.length === 1) return exactas[0].id;
+        if (!numeroCabana && lista.length === 1) return lista[0].id;
+        return null;
     }
 
     async function buscarMigrado(reservaId, idLegacy) {
@@ -95,6 +96,47 @@
         return id;
     }
 
+    function guardarRelacion(idLegacy, servicioId) {
+        const mapa = leerMapa();
+        mapa[idLegacy] = servicioId;
+        guardarMapa(mapa);
+    }
+
+    function notificarRelacion(clave, servicioId, reservaId, reutilizado = false) {
+        document.dispatchEvent(
+            new CustomEvent("haiku:servicio-supabase-cambiado", {
+                detail: { legacyId: clave, servicioId, reservaId, reutilizado }
+            })
+        );
+    }
+
+    async function resolverServicioOperativo(servicio, reservaId, estadiaId) {
+        const identidad = window.HAIKU_SERVICIOS_IDENTIDAD_V1;
+        if (!identidad?.resolverServicio) {
+            throw new Error("No está disponible la comprobación segura de identidad de servicios.");
+        }
+        if (!estadiaId) {
+            throw new Error("No se pudo identificar una estadía única para el servicio.");
+        }
+
+        const { data, error } = await cliente
+            .from("servicios")
+            .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre)")
+            .eq("reserva_id", reservaId);
+        if (error) throw error;
+
+        return identidad.resolverServicio({
+            reserva_id: reservaId,
+            estadia_id: estadiaId,
+            codigo_servicio: String(servicio.tipoServicio || ""),
+            fecha_servicio: String(servicio.fechaServicio || servicio.fecha || "").slice(0, 10),
+            hora: servicio.hora || null,
+            total: servicio.total,
+            observaciones: servicio.observaciones || "",
+            legacy_id: String(servicio.id || "")
+        }, data || []);
+    }
+
     async function migrarServicio(servicio) {
         if (!servicio || !servicio.id) return null;
         if (esUuid(servicio.id)) return servicio.id;
@@ -116,6 +158,18 @@
                 reservaId,
                 servicio.numeroCabana
             );
+
+            const decision = await resolverServicioOperativo(servicio, reservaId, estadiaId);
+            if (decision.estado === "existente") {
+                const servicioId = decision.candidato?.id || null;
+                if (!servicioId) throw new Error("El servicio compatible no tiene un identificador válido.");
+                guardarRelacion(clave, servicioId);
+                notificarRelacion(clave, servicioId, reservaId, true);
+                return servicioId;
+            }
+            if (decision.estado === "revisar") {
+                throw new Error(decision.motivo || "El servicio coincide con más de un registro y requiere revisión.");
+            }
 
             const marca = marcador(clave);
             const observacionesBase = String(servicio.observaciones || "").trim();
@@ -158,9 +212,7 @@
             const servicioId = data?.servicio_id || null;
             if (!servicioId) throw new Error("Supabase no devolvió el ID del servicio.");
 
-            const mapa = leerMapa();
-            mapa[clave] = servicioId;
-            guardarMapa(mapa);
+            guardarRelacion(clave, servicioId);
 
             if (servicio.estadoServicio === "realizado") {
                 const { error: errorEstado } = await cliente
@@ -170,11 +222,7 @@
                 if (errorEstado) throw errorEstado;
             }
 
-            document.dispatchEvent(
-                new CustomEvent("haiku:servicio-supabase-cambiado", {
-                    detail: { legacyId: clave, servicioId, reservaId }
-                })
-            );
+            notificarRelacion(clave, servicioId, reservaId, false);
 
             console.info(
                 "HAIKU · Servicio migrado a Supabase:",

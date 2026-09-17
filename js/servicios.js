@@ -242,15 +242,26 @@ function actualizarServiciosReservaEditada(
 // GENERAR ID DE SERVICIO
 // =========================================
 
-function generarIdServicio() {
-
-    return (
-        "servicio-" +
-        Date.now() +
-        "-" +
-        Math.random().toString(36).slice(2, 8)
-    );
-
+function generarIdServicio(datos = {}) {
+    const identidad = globalThis.HAIKU_SERVICIOS_IDENTIDAD_V1;
+    if (identidad?.huellaServicio) {
+        return `servicio-${identidad.huellaServicio(datos).replace(":", "-")}`;
+    }
+    const base = [
+        datos.reservaId || "",
+        datos.estadiaId || "",
+        datos.numeroCabana || datos.cabana || "",
+        datos.tipoServicio || datos.codigo_servicio || "",
+        datos.fechaServicio || datos.fecha || "",
+        String(datos.hora || "").slice(0, 5),
+        datos.total == null ? "" : Number(datos.total)
+    ].join("|");
+    let hash = 2166136261;
+    for (const ch of base) {
+        hash ^= ch.codePointAt(0);
+        hash = Math.imul(hash, 16777619);
+    }
+    return `servicio-hecho-${(hash >>> 0).toString(36)}`;
 }
 
 function registrarHistorialServicio(
@@ -348,9 +359,23 @@ if (
     total = 0;
     }
 
+    const idServicio = generarIdServicio({
+        reservaId,
+        numeroCabana,
+        tipoServicio,
+        fechaServicio: fechaServicio || fecha,
+        hora,
+        total
+    });
+    const yaRegistrado = serviciosRegistrados.find(servicio =>
+        String(servicio?.id || "") === idServicio &&
+        !/cancelad|no_show/i.test(String(servicio?.estadoServicio || ""))
+    );
+    if (yaRegistrado) return yaRegistrado;
+
     const nuevoServicio = {
 
-        id: generarIdServicio(),
+        id: idServicio,
 
         fecha,
         numeroCabana,
