@@ -61,17 +61,17 @@
     position: absolute;
     right: 0;
     bottom: 72px;
-    width: min(430px, calc(100vw - 34px));
+    width: min(490px, calc(100vw - 36px));
     max-height: min(720px, calc(100vh - 116px));
     display: flex;
     flex-direction: column;
     overflow: hidden;
     box-sizing: border-box;
-    border: 1px solid #d8dfda;
-    border-radius: 20px;
-    background: #fbfcfb;
+    border: 1px solid #cfd8d2;
+    border-radius: 8px;
+    background: #f4f7f5;
     color: #172019;
-    box-shadow: 0 22px 58px rgba(0, 0, 0, .26);
+    box-shadow: 0 14px 36px rgba(15, 37, 26, .18);
     transform-origin: bottom right;
 }
 
@@ -84,38 +84,45 @@
     align-items: center;
     justify-content: space-between;
     gap: 14px;
-    padding: 17px 18px 14px;
-    border-bottom: 1px solid #e4e8e5;
-    background: #f7f9f7;
+    min-height: 54px;
+    padding: 11px 13px;
+    border-bottom: 1px solid #dbe3de;
+    background: #fbfcfb;
 }
 
 .haiku-asistente-titulo { min-width: 0; }
-.haiku-asistente-titulo strong { display: block; font-size: .98rem; line-height: 1.2; }
-.haiku-asistente-titulo span { display: block; margin-top: 3px; color: #718078; font-size: .71rem; }
+.haiku-asistente-titulo strong { display: block; color: #14271d; font-size: 1.1rem; line-height: 1.15; letter-spacing: .01em; }
+.haiku-asistente-titulo span { display: block; margin-top: 2px; color: #68776f; font-size: .67rem; }
 
 .haiku-asistente-cerrar {
-    width: 34px; height: 34px; flex: 0 0 auto;
-    border: 1px solid #d8dfda; border-radius: 50%; background: #fff; color: #37423b;
+    width: 32px; height: 32px; flex: 0 0 auto;
+    border: 1px solid #d8dfda; border-radius: 5px; background: #fff; color: #37423b;
     cursor: pointer; font: inherit; font-size: 1.15rem;
 }
 
 .haiku-asistente-mensajes {
-    min-height: 190px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px;
-    overflow-y: auto; padding: 16px; background: #f4f7f5;
+    min-height: 190px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto; padding: 14px 12px; background: #f1f5f2;
 }
 
 .haiku-asistente-mensaje {
-    max-width: 88%; padding: 10px 12px; border-radius: 14px; font-size: .78rem;
+    max-width: 82%; padding: 9px 11px; border-radius: 0; font-size: .78rem;
     line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+    box-shadow: 0 1px 3px rgba(25, 54, 38, .05);
 }
 
 .haiku-asistente-mensaje--asistente {
-    align-self: flex-start; border: 1px solid #dbe4de; border-bottom-left-radius: 5px;
+    align-self: flex-start; border: 1px solid #dbe4de;
     background: #fff; color: #334139;
 }
 
 .haiku-asistente-mensaje--usuario {
-    align-self: flex-end; border-bottom-right-radius: 5px; background: #1f6e4c; color: #fff;
+    align-self: flex-end; background: #286c4e; color: #fff;
+}
+
+.haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje--asistente,
+.haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje--usuario {
+    border-radius: 0;
 }
 
 .haiku-asistente-mensaje--procesando { position: relative; padding-left: 30px; color: #506158; }
@@ -201,20 +208,20 @@
     opacity: .76;
 }
 
-.haiku-asistente-adjuntos { display: flex; gap: 7px; overflow-x: auto; padding: 10px 14px 0; background: #fff; }
+.haiku-asistente-adjuntos { display: flex; gap: 7px; overflow-x: auto; padding: 10px 12px 0; background: #fff; }
 .haiku-asistente-adjuntos:empty { display: none; }
 .haiku-asistente-adjunto { position: relative; width: 66px; height: 58px; flex: 0 0 auto; overflow: hidden; border: 1px solid #d8dfda; border-radius: 10px; background: #eef2ef; }
 .haiku-asistente-adjunto img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .haiku-asistente-quitar { position: absolute; top: 3px; right: 3px; width: 21px; height: 21px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(17, 29, 22, .86); color: #fff; cursor: pointer; font: inherit; font-size: .75rem; }
 
-.haiku-asistente-compositor { padding: 12px 14px 14px; border-top: 1px solid #e3e8e4; background: #fff; }
-.haiku-asistente-texto { width: 100%; min-height: 74px; max-height: 150px; resize: vertical; box-sizing: border-box; padding: 11px 12px; border: 1px solid #d3dbd6; border-radius: 12px; outline: 0; background: #fbfcfb; color: #172019; font: inherit; font-size: .79rem; line-height: 1.42; }
+.haiku-asistente-compositor { padding: 10px 12px 12px; border-top: 0; background: #fff; }
+.haiku-asistente-texto { width: 100%; min-height: 66px; max-height: 150px; resize: vertical; box-sizing: border-box; padding: 11px 12px; border: 1px solid #d3dbd6; border-radius: 5px; outline: 0; background: #fff; color: #172019; font: inherit; font-size: .79rem; line-height: 1.42; }
 .haiku-asistente-texto:focus { border-color: #6f9c82; }
 .haiku-asistente-texto:disabled { background: #f3f5f3; color: #7e8882; }
 
 .haiku-asistente-acciones { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 9px; }
 .haiku-asistente-adjuntar,
-.haiku-asistente-enviar { min-height: 38px; padding: 8px 12px; border-radius: 10px; cursor: pointer; font: inherit; font-size: .75rem; font-weight: 700; }
+.haiku-asistente-enviar { min-height: 36px; padding: 8px 12px; border-radius: 5px; cursor: pointer; font: inherit; font-size: .75rem; font-weight: 700; }
 .haiku-asistente-adjuntar { border: 1px solid #d4dcd6; background: #fff; color: #3b4840; }
 .haiku-asistente-enviar { border: 1px solid #1f6e4c; background: #1f6e4c; color: #fff; }
 .haiku-asistente-adjuntar:disabled,
@@ -248,7 +255,202 @@
     .haiku-asistente-root { right: 12px; bottom: 12px; }
     .haiku-asistente-boton { width: 32px; height: 32px; }
     .haiku-asistente-boton::after { inset: -7px; }
-    .haiku-asistente-panel { right: 0; bottom: 45px; width: calc(100vw - 28px); max-height: calc(100vh - 102px); border-radius: 17px; }
+    .haiku-asistente-panel { right: 0; bottom: 45px; width: calc(100vw - 28px); max-height: calc(100vh - 102px); border-radius: 7px; }
     .haiku-asistente-mensajes { min-height: 150px; }
     .haiku-asistente-preview-grid { grid-template-columns: 1fr; }
+}
+
+/* ========================================
+   HAKU · SHELL OPERATIVO
+   Sólo reorganiza el marco del chat. Los bloques funcionales conservan
+   sus componentes, clases y estilos internos.
+   ======================================== */
+
+.haiku-asistente-panel .haiku-asistente-borrar-historial {
+    min-height: 30px;
+    padding: 5px 9px;
+    border-color: #d8e0db;
+    border-radius: 3px;
+    background: #fff;
+    color: #53635a;
+    font-size: .63rem;
+}
+
+.haiku-asistente-panel .haiku-asistente-cabecera-acciones {
+    gap: 7px;
+}
+
+.haiku-asistente-panel .haiku-asistente-mensajes {
+    gap: 10px;
+    padding: 14px;
+}
+
+/* Los resultados operativos se integran al flujo sin una burbuja exterior. */
+.haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-preview,
+.haiku-asistente-panel .haiku-asistente-mensajes > .haku-comparacion-compacta,
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente.haku-libro-consulta,
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente:has(> article[class*="haku-"]),
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente:has(> .haiku-asistente-preview) {
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente.haku-libro-consulta,
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente:has(> article[class*="haku-"]),
+.haiku-asistente-panel .haiku-asistente-mensaje--asistente:has(> .haiku-asistente-preview) {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    white-space: normal;
+}
+
+.haiku-asistente-rapidas {
+    flex: 0 0 auto;
+    border-top: 1px solid #d9e2dc;
+    border-bottom: 1px solid #dfe6e1;
+    background: #f8faf8;
+}
+
+.haiku-asistente-rapidas > summary {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-sizing: border-box;
+    padding: 7px 14px;
+    color: #2c4337;
+    cursor: pointer;
+    font-size: .72rem;
+    font-weight: 780;
+    list-style: none;
+    user-select: none;
+}
+
+.haiku-asistente-rapidas-titulo {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.haiku-asistente-rapidas-icono {
+    width: 17px;
+    height: 17px;
+    display: inline-grid;
+    flex: 0 0 17px;
+    place-items: center;
+    color: #4f6d5d;
+    font-size: .78rem;
+    line-height: 1;
+}
+
+.haiku-asistente-rapidas > summary::-webkit-details-marker {
+    display: none;
+}
+
+.haiku-asistente-rapidas > summary:focus-visible,
+.haiku-asistente-rapidas-lista button:focus-visible {
+    outline: 3px solid rgba(56, 138, 94, .22);
+    outline-offset: -3px;
+}
+
+.haiku-asistente-rapidas-flecha {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-right: 1.5px solid #567064;
+    border-bottom: 1.5px solid #567064;
+    transform: rotate(45deg) translate(-2px, -2px);
+    transition: transform .15s ease;
+}
+
+.haiku-asistente-rapidas[open] .haiku-asistente-rapidas-flecha {
+    transform: rotate(225deg) translate(-1px, -1px);
+}
+
+.haiku-asistente-rapidas-lista {
+    display: grid;
+    gap: 5px;
+    padding: 0 10px 10px;
+}
+
+.haiku-asistente-rapidas-lista button {
+    width: 100%;
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid #d8e1db;
+    border-radius: 4px;
+    background: #fff;
+    color: #294236;
+    cursor: pointer;
+    font: inherit;
+    font-size: .69rem;
+    font-weight: 700;
+    line-height: 1.3;
+    text-align: left;
+}
+
+.haiku-asistente-rapidas-lista button:hover {
+    border-color: #9ebbaa;
+    background: #edf5f0;
+}
+
+.haiku-asistente-rapidas-lista button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+.haiku-asistente-panel .haiku-asistente-compositor {
+    display: grid;
+    gap: 8px;
+    padding: 10px 14px 12px;
+}
+
+.haiku-asistente-panel .haiku-asistente-texto {
+    min-width: 0;
+    border-radius: 2px;
+}
+
+.haiku-asistente-panel .haiku-asistente-acciones {
+    margin-top: 0;
+}
+
+.haiku-asistente-panel .haiku-asistente-adjuntar,
+.haiku-asistente-panel .haiku-asistente-enviar {
+    min-height: 34px;
+    border-radius: 2px;
+}
+
+.haiku-asistente-panel .haiku-asistente-enviar {
+    min-width: 82px;
+}
+
+.haiku-asistente-panel .haiku-asistente-aviso {
+    margin-top: 0;
+    color: #89948e;
+    font-size: .61rem;
+    line-height: 1.35;
+}
+
+@media (max-width: 700px) {
+    .haiku-asistente-cabecera {
+        padding-inline: 11px;
+    }
+
+    .haiku-asistente-mensajes {
+        padding-inline: 10px;
+    }
+
+    .haiku-asistente-panel .haiku-asistente-compositor {
+        padding-inline: 10px;
+    }
+
+    .haiku-asistente-mensaje {
+        max-width: 88%;
+    }
 }

@@ -28,8 +28,8 @@
         <section class="haiku-asistente-panel" id="haiku-asistente-panel" hidden aria-label="Asistente operativo">
             <header class="haiku-asistente-cabecera">
                 <div class="haiku-asistente-titulo">
-                    <strong>Asistente operativo</strong>
-                    <span>Capturas, reservas y tareas</span>
+                    <strong>Haku</strong>
+                    <span>Asistente operativo · capturas, reservas y tareas</span>
                 </div>
                 <button type="button" class="haiku-asistente-cerrar" id="haiku-asistente-cerrar" aria-label="Cerrar asistente">×</button>
             </header>
@@ -41,6 +41,21 @@
             </div>
 
             <div class="haiku-asistente-adjuntos" id="haiku-asistente-adjuntos"></div>
+
+            <details class="haiku-asistente-rapidas" id="haiku-asistente-rapidas">
+                <summary>
+                    <span class="haiku-asistente-rapidas-titulo">
+                        <span class="haiku-asistente-rapidas-icono" aria-hidden="true">⚡</span>
+                        <span>Acciones rápidas</span>
+                    </span>
+                    <span class="haiku-asistente-rapidas-flecha" aria-hidden="true"></span>
+                </summary>
+                <div class="haiku-asistente-rapidas-lista" aria-label="Acciones rápidas de Haku">
+                    <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
+                    <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
+                    <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
+                </div>
+            </details>
 
             <div class="haiku-asistente-compositor">
                 <textarea
@@ -78,6 +93,8 @@
     const archivosInput = root.querySelector("#haiku-asistente-archivos");
     const adjuntosWrap = root.querySelector("#haiku-asistente-adjuntos");
     const enviar = root.querySelector("#haiku-asistente-enviar");
+    const rapidas = root.querySelector("#haiku-asistente-rapidas");
+    const botonesRapidos = [...root.querySelectorAll("[data-haiku-accion-rapida]")];
 
     function estaAutenticado() {
         return Boolean(window.haikuSesion?.auth || window.haikuSesion?.usuario);
@@ -168,7 +185,39 @@
         enviar.disabled = procesando || guardandoReserva || vacio;
         adjuntar.disabled = procesando || guardandoReserva;
         campo.disabled = procesando || guardandoReserva;
+        botonesRapidos.forEach(botonRapido => {
+            botonRapido.disabled = procesando || guardandoReserva;
+        });
         enviar.textContent = procesando ? "Analizando…" : "Enviar";
+    }
+
+    function periodoActualChile() {
+        const partes = new Intl.DateTimeFormat("es-CL", {
+            timeZone: "America/Santiago",
+            month: "long",
+            year: "numeric"
+        }).formatToParts(new Date());
+        const mes = partes.find(parte => parte.type === "month")?.value || "";
+        const anio = partes.find(parte => parte.type === "year")?.value || "";
+        return `${mes} ${anio}`.trim().toLocaleLowerCase("es-CL");
+    }
+
+    function textoAccionRapida(accion) {
+        if (accion === "actualizacion") return "Haku, informe de actualización";
+        const periodo = periodoActualChile();
+        if (accion === "libro") return `Libro: compara las reservas de ${periodo} con Proyecto H`;
+        if (accion === "servicios") return `Libro: compara servicios de ${periodo} con Proyecto H`;
+        return "";
+    }
+
+    function ejecutarAccionRapida(accion) {
+        if (procesando || guardandoReserva) return;
+        const texto = textoAccionRapida(accion);
+        if (!texto) return;
+        campo.value = texto;
+        campo.dispatchEvent(new Event("input", { bubbles: true }));
+        rapidas.open = false;
+        enviar.click();
     }
 
     function bytesAdjuntos() {
@@ -1491,6 +1540,9 @@
 
     boton.addEventListener("click", alternarPanel);
     cerrar.addEventListener("click", cerrarPanel);
+    botonesRapidos.forEach(botonRapido => {
+        botonRapido.addEventListener("click", () => ejecutarAccionRapida(botonRapido.dataset.haikuAccionRapida));
+    });
     adjuntar.addEventListener("click", () => {
         if (!procesando && !guardandoReserva) archivosInput.click();
     });

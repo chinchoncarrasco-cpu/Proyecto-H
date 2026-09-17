@@ -510,6 +510,27 @@ test('complete multicabin reservation group links explicit sibling reservations 
  assert.equal(c.grupos[0].pregunta,null);assert.equal(c.meta.faltantes,0);
 });
 
+test('exact multicabin stays are consumed before looser candidates are offered',async()=>{
+ const a=book({titular:'Marco Iturrieta Rojas'}),b=book({titular:a.titular,id:'b2',cabana:2});
+ const cab7=book({titular:a.titular,id:'b7',cabana:7});
+ const grupo={...stay(a).reservas,grupo_reserva_id:'grupo-marco'};
+ const rows=[
+  stay(b,{id:'ph-cab2',reserva_id:'r-cab2',reservas:grupo}),
+  stay(cab7,{id:'ph-cab7',reserva_id:'r-cab7',reservas:grupo})
+ ];
+ const c=await compare([a,b],rows),fila1=c.find(x=>x.libro.cabana===1),fila2=c.find(x=>x.libro.cabana===2);
+ assert.equal(fila2.estado,'asociada');assert.equal(fila2.sistema.id,'ph-cab2');
+ assert.deepEqual(fila1.candidatosDetalle.map(x=>x.id),['ph-cab7']);
+ assert.equal(fila1.candidatosDetalle.some(x=>x.id==='ph-cab2'),false);
+ const h=renderHarness();h.render({q,comparacion:c});
+ const pregunta=h.out.querySelectorAll('label').find(x=>/Marco Iturrieta Rojas/.test(x.textContent));
+ assert.match(pregunta.textContent,/^Marco Iturrieta Rojas · Libro: CAB 1 \+ 2 → Proyecto H: CAB 2 \+ 7/);
+ assert.match(pregunta.textContent,/Cambio por resolver: CAB 1 → CAB 7/);
+ const cabComparadas=h.out.querySelectorAll('table').flatMap(t=>t.querySelectorAll('tr'))
+  .filter(f=>f.children[0]?.textContent==='CAB').map(f=>[f.children[1].textContent,f.children[2].textContent]);
+ assert.deepEqual(cabComparadas,[['1','7']]);
+});
+
 test('service evidence deduplicates by source inside a multicabin group and preserves distinct facts',async()=>{
  const servicio=(texto='CAMA ADICIONAL',hora=null)=>({concepto:'cama_adicional',texto_original:texto,hora,pendiente:false,cortesia:false,monto:null});
  const escenario=async(origenA,origenB,servicioA=servicio(),servicioB=servicio())=>{
@@ -628,11 +649,19 @@ test('payment on a securely matched stay stays safe while another cabin awaits a
  assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
 });
 
-function renderHarness(reconsultar, db) {
+function renderHarness(reconsultar, db, {compactarPreguntas=false}={}) {
  const fs=require('node:fs'),vm=require('node:vm');
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
-  append(...xs){this.children.push(...xs)} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
+  append(...xs){for(const x of xs){
+   if(compactarPreguntas&&this.tag==='label'&&x?.tag==='div'&&x.querySelector?.('table')){
+    const filas=x.querySelectorAll('tr').filter(f=>f.querySelector('td')).length,detalle=new Element('details');
+    detalle.className='haku-pregunta-campos';detalle.append(new Element('summary',`Ver comparación de datos (${filas})`),x);this.children.push(detalle);
+   }else if(compactarPreguntas&&(this.className||'').includes('haiku-asistente-preview-lista')&&x?.tag==='label'){
+    const caso=new Element('details'),contenido=new Element('div');caso.className='haku-pregunta-caso';contenido.children=x.children;
+    caso.append(new Element('summary',x.textContent),contenido);x.children=[caso];this.children.push(x);
+   }else this.children.push(x);
+  }} appendChild(x){this.append(x)} replaceChildren(...xs){this.children=[];this.append(...xs)} addEventListener(k,f){this.events[k]=f}
   setAttribute(k,v){this[k]=v} get options(){return this.children} get text(){return this.textContent}
   querySelectorAll(selector){return this.children.flatMap(e=>[e,...e.querySelectorAll('*')]).filter(e=>
    selector==='*'||selector===e.tag||selector==='details[open]'&&e.tag==='details'&&e.open||
@@ -677,6 +706,19 @@ test('revalidation keeps open sections, reports persistent results and clears st
  assert.equal(h.out.querySelector('details').open,true);assert.ok(h.out.querySelector('.haiku-reconciliacion-abierto'));
  assert.match(h.texts(),/Revalidación completada/);assert.doesNotMatch(h.texts(),/Revalidando;/);
  assert.equal(h.out.querySelector('select').selectedIndex,0);
+});
+
+test('revalidation restores the main question case but always closes its field comparison',async()=>{
+ const r=book({cabana:2}),c=await compare([r],[stay()]);let finish;
+ const h=renderHarness(()=>new Promise(resolve=>finish=resolve),null,{compactarPreguntas:true});
+ h.render({q:{...q,texto:'Libro: septiembre 2026 compara'},comparacion:c});
+ const preguntas=h.out.querySelectorAll('div').find(e=>e.children.some(x=>x.tag==='label'));
+ preguntas.className+=' haiku-reconciliacion-abierto';
+ const caso=h.out.querySelector('.haku-pregunta-caso'),campos=h.out.querySelector('.haku-pregunta-campos');
+ caso.open=true;campos.open=true;
+ const pending=h.button('Revalidar contra Proyecto H').events.click();finish({q,comparacion:c});await pending;
+ assert.equal(h.out.querySelector('.haku-pregunta-caso').open,true);
+ assert.equal(h.out.querySelector('.haku-pregunta-campos').open,false);
 });
 
 test('failed revalidation stays visible, prevents stale preparation and permits retry',async()=>{

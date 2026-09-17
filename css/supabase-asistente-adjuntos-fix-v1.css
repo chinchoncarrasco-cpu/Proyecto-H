@@ -9,7 +9,7 @@
     top: 12px !important;
     right: 18px !important;
     bottom: 12px !important;
-    width: min(430px, calc(100vw - 36px)) !important;
+    width: min(490px, calc(100vw - 36px)) !important;
     height: auto !important;
     max-height: none !important;
 }

@@ -1311,7 +1311,7 @@
 }
 .haiku-asistente-panel .haku-comparacion-compacta .haiku-comparacion-acordeon {
     --franja-fondo: #e2efe8; --franja-acento: #428165;
-    width: 100%; min-width: 0; margin: 5px 0 0 !important; padding: 0 !important;
+    width: 100%; min-width: 0; margin: 3px 0 0 !important; padding: 0 !important;
     border: 0 !important; border-bottom: 1px solid var(--rec-borde) !important;
     border-radius: 0; box-shadow: none; box-sizing: border-box;
 }
