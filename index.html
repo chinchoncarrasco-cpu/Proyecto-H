@@ -206,19 +206,6 @@
 
 <section id="seccion-resumen" class="seccion-app activa">
 
-        <!-- CABECERA -->
-
-        <header class="cabecera">
-
-            <div>
-                <p class="subtitulo">Panel operativo</p>
-                <h2>Resumen del día</h2>
-                <p id="fecha-actual">Sábado 15 de agosto de 2026</p>
-            </div>
-
-        </header>
-
-
 <!-- =========================
      TARJETAS RESUMEN
 ========================== -->
@@ -274,11 +261,33 @@
 
 <section class="panel">
 
-    <div class="panel-titulo">
+    <div class="panel-titulo resumen-estado-cabecera">
         <div>
-            <h3>Estado de cabañas</h3>
+            <h2>Estado de cabañas</h2>
             <p>Operación general del día</p>
+            <p id="fecha-actual" class="resumen-fecha-actual">
+                Sábado 15 de agosto de 2026
+            </p>
         </div>
+
+        <nav class="resumen-navegacion-dias" aria-label="Navegación del día operativo">
+            <button
+                type="button"
+                id="resumen-dia-anterior"
+                class="resumen-dia-boton resumen-dia-boton--anterior"
+            >
+                <span aria-hidden="true">←</span>
+                Día anterior
+            </button>
+            <button
+                type="button"
+                id="resumen-dia-siguiente"
+                class="resumen-dia-boton resumen-dia-boton--siguiente"
+            >
+                Día siguiente
+                <span aria-hidden="true">→</span>
+            </button>
+        </nav>
     </div>
 
 
