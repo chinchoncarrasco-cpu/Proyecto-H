@@ -166,11 +166,13 @@ test('each shared-voucher card requires its own approval; one approval never app
  assert.ok(botones.length>=2);await botones[0].events.click();assert.equal(clicked.length,1);
  const first=parts.find(i=>i.pagoLibro.monto===153000),second=parts.find(i=>i.pagoLibro.monto===40000);
  const one=(await prepararMacarena(new Set([first.id]))).plan;
- assert.ok(one.items.find(i=>i.id===first.id).seleccionado);
+ assert.equal(one.items.find(i=>i.id===first.id).categoria,'pagos');
+ assert.equal(one.items.find(i=>i.id===first.id).seleccionado,false);
  assert.equal(one.items.find(i=>i.id===second.id).categoria,'dudosos');
- assert.throws(()=>Q.serializarIncorporacion(one),/ambas partes/);
+ assert.equal(Q.serializarIncorporacion(one).length,0);
  const serviceOnly=(await prepararMacarena(new Set([second.id]))).plan;
- assert.ok(serviceOnly.items.find(i=>i.id===second.id).seleccionado);
+ assert.equal(serviceOnly.items.find(i=>i.id===second.id).categoria,'pagos');
+ assert.equal(serviceOnly.items.find(i=>i.id===second.id).seleccionado,false);
  assert.equal(serviceOnly.items.find(i=>i.id===first.id).categoria,'dudosos');
  const both=(await prepararMacarena(new Set(parts.map(i=>i.id)))).plan;
  const prepared=both.items.filter(i=>i.distribucionManual);
@@ -1325,6 +1327,7 @@ test('group receipt migration keeps one protected payment and validates both sib
  const penalidad=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918182000_haku_libro_comprobante_grupo_penalidad.sql'),'utf8');
  const cargoAjustado=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918184500_pago_aplicacion_respeta_cargo_ajustado.sql'),'utf8');
  const alojamientoReserva=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918190000_pago_alojamiento_valida_total_reserva.sql'),'utf8');
+ const penalidadManual=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918203000_haku_libro_penalidad_manual_exacta.sql'),'utf8');
  const aplicaciones=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260903194500_saldo_a_favor_huesped.sql'),'utf8');
  assert.match(sql,/haiku_libro_pago_grupo_distribuido_v1/);
  assert.match(sql,/jsonb_array_length\(partes\) <> 2/);
@@ -1355,6 +1358,10 @@ test('group receipt migration keeps one protected payment and validates both sib
  assert.match(alojamientoReserva,/else[\s\S]*v_neto_cargo \+ new\.monto_aplicado > v_monto_cargo/);
  assert.match(aplicaciones,/if v_reserva_pago is distinct from v_reserva_cargo then/);
  assert.match(aplicaciones,/v_grupo_pago is null[\s\S]*v_grupo_pago is distinct from v_grupo_cargo/);
+ assert.match(penalidadManual,/clasificacion_manual_penalidad/);
+ assert.match(penalidadManual,/'version',4,'modos'.*'grupo_alojamiento_penalidad_manual'/s);
+ assert.match(penalidadManual,/security invoker/);
+ assert.match(penalidadManual,/revoke all[\s\S]*from public,anon/);
 });
 test('source writes only through the atomic RPC and keeps global polling disabled',()=>{
  const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
@@ -1529,8 +1536,8 @@ test('Karina shared card receipt includes the existing 10% penalty and serialize
  const cab7=readyBook({...datosLibro,id:'karina-cab7',cabana:7,pagos:[transferencia(7,125000,'2026-07-01','T3'),transferencia(7,145000,'2026-07-03','T4'),pago(7,270000,'A2'),penalidad,servicioNoPagado]});
  const datosProyecto={titular:'Marco Iturrieta Rojas',rut_documento:'14.252.507-0',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
  const grupo={...stay(readyBook(datosProyecto)).reservas,grupo_reserva_id:'grupo-marco'};
- const rows=[stay(readyBook({...datosProyecto,cabana:2}),{id:'estadia-cab2',reserva_id:'reserva-cab2',reservas:grupo}),
-  stay(readyBook({...datosProyecto,cabana:7}),{id:'estadia-cab7',reserva_id:'reserva-cab7',reservas:grupo})];
+ const rows=[stay(readyBook({...datosProyecto,cabana:2}),{id:'estadia-cab2',reserva_id:'reserva-cab2',reservas:grupo,adultos:3,estado_estadia:'hospedada'}),
+  stay(readyBook({...datosProyecto,cabana:7}),{id:'estadia-cab7',reserva_id:'reserva-cab7',reservas:grupo,adultos:5,estado_estadia:'hospedada'})];
  const existente=(id,reserva_id,monto,fecha)=>({id,reserva_id,estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
   monto,moneda:'CLP',medio_pago:'transferencia',fecha_pago:fecha+'T12:00:00Z',datos_origen:{verificacion_migrada:true}});
  const existentes=[existente('p125-cab2','reserva-cab2',125000,'2026-07-01'),existente('p145-cab2','reserva-cab2',145000,'2026-07-03'),
@@ -1569,7 +1576,9 @@ test('Karina shared card receipt includes the existing 10% penalty and serialize
  transicion.Q.renderizarIncorporacion(transicion.out,inicial,()=>{},()=>{},async()=>({resultado:{ok:true},siguientePlan:segundo}));
  await transicion.button('Actualizar titular y RUT').events.click();
  assert.match(transicion.texts(),/Paso 2 de 2 · Aprobar pagos/);
- assert.equal(segundo.etapa,undefined);assert.equal(segundo.items.filter(item=>item.payload?.tipo==='reserva_actualizar').length,0);
+ assert.equal(segundo.etapa,undefined);assert.equal(segundo.items.filter(item=>item.payload?.tipo==='reserva_actualizar').length,2);
+ assert.equal(segundo.focoPagos,true);
+ assert.ok(segundo.items.filter(item=>item.payload?.tipo==='reserva_actualizar').every(item=>!item.seleccionado));
  assert.equal(segundo.items.filter(item=>item.pagoLibro&&item.categoria==='omitidos').length,4);
  const aprobables=segundo.items.filter(item=>item.aprobable);
  assert.equal(aprobables.length,3);assert.ok(aprobables.every(item=>item.motivos.length===1&&/aprobación manual/.test(item.motivos[0])));
@@ -1577,6 +1586,8 @@ test('Karina shared card receipt includes the existing 10% penalty and serialize
  const aprobado=await Q.prepararIncorporacion(resultado,decisiones,idsAprobados,db);
  const preparadas=aprobado.items.filter(item=>item.distribucionManual);
  assert.equal(preparadas.length,3);assert.ok(preparadas.every(item=>item.categoria==='pagos'&&item.seleccionado));
+ assert.ok(preparadas.every(item=>item.dependeDe.length===0));
+ assert.ok(aprobado.items.filter(item=>item.payload?.tipo==='reserva_actualizar').every(item=>!item.seleccionado));
  assert.ok(preparadas.every(item=>item.distribucionManual.tipo==='grupo_alojamiento_penalidad'));
  const serializados=Q.serializarIncorporacion(aprobado),pagos=serializados.filter(item=>item.tipo==='pago');
  assert.equal(pagos.length,1);assert.equal(pagos[0].argumentos.p_monto,588000);
@@ -1589,6 +1600,49 @@ test('Karina shared card receipt includes the existing 10% penalty and serialize
  assert.ok(pagos[0].depende_de===undefined);
  await Q.confirmarIncorporacion(resultado,decisiones,idsAprobados,aprobado,db);
  assert.equal(lotes.length,2);assert.equal(lotes[1].length,1);assert.equal(lotes[1][0].tipo,'pago');assert.equal(lotes[1][0].argumentos.p_monto,588000);
+});
+
+test('an unlabeled third receipt part can be explicitly approved as the exact existing 10% penalty',async()=>{
+ const pago=(cabana,monto,celda,extra={})=>readyPay({codigo_autorizacion:null,folio:'000284',bovtar:'271708',medio_pago:'credito',
+  titular:'Marco Iturrieta Rojas',cabana,monto,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda},
+  texto_original:`17-09-2026 // Marco Iturrieta Rojas // Bovtar:271708-Folio:000284 // cargo // $${monto}`,...extra});
+ const adicional=pago(7,108000,'A3',{tipo_movimiento:'servicio',concepto:'cargo adicional',pago_recibido:null,estado_pago:'pendiente'});
+ const datos={titular:'Karina Cruz',rut_documento:'15068130-8',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const cab2=readyBook({...datos,id:'karina-cab2',cabana:2,pagos:[pago(2,210000,'A1')]});
+ const cab7=readyBook({...datos,id:'karina-cab7',cabana:7,pagos:[pago(7,270000,'A2'),adicional]});
+ const grupo={...stay(readyBook(datos)).reservas,grupo_reserva_id:'grupo-karina'};
+ const rows=[stay(readyBook({...datos,cabana:2}),{id:'estadia-cab2',reserva_id:'reserva-cab2',reservas:grupo}),
+  stay(readyBook({...datos,cabana:7}),{id:'estadia-cab7',reserva_id:'reserva-cab7',reservas:grupo})];
+ const db=client(rows),comparacion=await Q.compararSistema([cab2,cab7],db,q),resultado={reservas:[cab2,cab7],q,comparacion};
+ const previo=await Q.prepararIncorporacion(resultado,new Map(),new Set(),db);
+ const partes=previo.items.filter(item=>item.distribucionManual);
+ assert.equal(previo.focoPagos,true);assert.equal(partes.length,3);
+ assert.ok(partes.every(item=>item.distribucionManual.total===588000));
+ assert.ok(partes.every(item=>item.distribucionManual.penalidad_inferida===true));
+ const partePenalidad=partes.find(item=>item.pagoLibro===adicional);
+ assert.equal(partePenalidad.etiquetaAprobacion,'Asociar como penalidad 10%');
+ const h=renderHarness();let aprobadosDesdeBoton=[];
+ h.Q.renderizarIncorporacion(h.out,previo,()=>{},ids=>{aprobadosDesdeBoton=Array.isArray(ids)?ids:[ids]},async()=>{});
+ const boton=h.button('Aprobar comprobante completo · $588.000 CLP');assert.ok(boton);await boton.events.click();
+ assert.deepEqual(new Set(aprobadosDesdeBoton),new Set(partes.map(item=>item.id)));
+ const aprobados=new Set(partes.map(item=>item.id));
+ const listo=await Q.prepararIncorporacion(resultado,new Map(),aprobados,db);
+ const preparadas=listo.items.filter(item=>item.distribucionManual);
+ assert.ok(preparadas.every(item=>item.categoria==='pagos'&&item.seleccionado&&item.dependeDe.length===0));
+ const serializados=Q.serializarIncorporacion(listo),movimiento=serializados.find(item=>item.tipo==='pago');
+ assert.equal(movimiento.argumentos.p_monto,588000);
+ const componentePenalidad=movimiento.datos_origen.distribucion_manual.componentes.find(item=>item.monto===108000);
+ assert.equal(componentePenalidad.tipo_movimiento,'penalidad');assert.equal(componentePenalidad.tipo_movimiento_original,'servicio');
+ assert.equal(componentePenalidad.penalidad_porcentaje,10);assert.equal(componentePenalidad.monto_penalidad,108000);
+ assert.equal(componentePenalidad.clasificacion_manual_penalidad,true);
+ let version=3,llamadas=0;
+ db.rpc=async(name,args)=>{
+  if(name==='haiku_libro_distribucion_capacidad_v1') return {data:{version,modos:['estadia_partes','grupo_alojamiento','grupo_alojamiento_penalidad',...(version>=4?['grupo_alojamiento_penalidad_manual']:[])]},error:null};
+  llamadas++;return {data:{ok:true,reservas_creadas:0,estadias_agregadas:0,pagos_creados:1,actualizaciones:0,omitidos:0},error:null};
+ };
+ await assert.rejects(Q.confirmarIncorporacion(resultado,new Map(),aprobados,listo,db),/soporte de comprobantes distribuidos/);
+ assert.equal(llamadas,0);version=4;
+ await Q.confirmarIncorporacion(resultado,new Map(),aprobados,listo,db);assert.equal(llamadas,1);
 });
 
 test('decision-aware payment reconciliation fails closed when the chosen reservation has two possible transfers',async()=>{
