@@ -1744,6 +1744,100 @@ test('a real financial difference still updates the existing payment when Libro 
  assert.ok(!('concepto_libro' in item.payload.pago.despues));
 });
 
+async function escenarioLauraFecha({libro={},sistema={},pagosSistema=null}={}) {
+ const p=readyPay({titular:'Laura Mayorga Ocampo',cabana:5,monto:170000,moneda:'CLP',medio_pago:'webpay_credito',
+  codigo_autorizacion:'091559',folio:null,bovtar:null,fecha_bloque:'2026-09-18',fecha_comprobante:'2026-08-09',
+  concepto:'cab5/1noche',...libro});
+ const r=readyBook({titular:'Laura Mayorga Ocampo',cabana:5,fecha_checkin:'2026-09-18',fecha_checkout:'2026-09-19',
+  pagos:[],pagos_sin_asociacion:[p]});
+ const base={id:'p-laura',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:170000,moneda:'CLP',
+  medio_pago:'webpay_credito',codigo_autorizacion:'091559',folio:null,bove:null,
+  fecha_pago:'2026-09-03T04:25:45.41+00:00',datos_origen:{verificacion_migrada:true}};
+ const existing={...base,...sistema,datos_origen:{...base.datos_origen,...(sistema.datos_origen || {})}};
+ const payments=pagosSistema ? pagosSistema(existing) : [existing];
+ const comp=await compare([r],[stay(r)],payments),plan=Q.crearPlanIncorporacion([r],comp);
+ return {p,r,existing,payments,comp,plan,item:plan.items.find(i=>i.pagoLibro===p)};
+}
+
+test('Laura unique verified CodAut enables a date-only update of the same payment',async()=>{
+ const {item,plan}=await escenarioLauraFecha();
+ assert.equal(item.categoria,'actualizaciones');assert.equal(item.seleccionado,true);assert.deepEqual(item.motivos,[]);
+ assert.equal(item.payload.tipo,'pago_actualizar');assert.equal(item.payload.pago_id,'p-laura');
+ assert.deepEqual(item.payload.pago.despues,{fecha_pago:'2026-08-09T12:00:00Z'});
+ assert.deepEqual(item.payload.pago.cambios,[{campo:'Fecha de pago',anterior:'2026-09-03T04:25:45.41+00:00',libro:'2026-08-09T12:00:00Z'}]);
+ const serializados=Q.serializarIncorporacion(plan);
+ assert.equal(serializados.length,1);assert.equal(serializados[0].tipo,'pago_actualizar');assert.equal(serializados[0].pago_id,'p-laura');
+ assert.ok(!serializados.some(x=>x.tipo==='pago'));
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const habilitados=h.out.querySelectorAll('input').filter(input=>input.type==='checkbox'&&!input.disabled);
+ assert.equal(habilitados.length,1);assert.equal(habilitados[0].checked,true);
+ assert.match(h.texts(),/Actualizar con Libro/);assert.match(h.texts(),/Fecha de pago:\s*03\/09\/2026\s*→\s*09\/08\/2026/);
+ assert.doesNotMatch(h.texts(),/2026-09-03T04:25:45|2026-08-09T12:00:00Z/);
+});
+
+test('Laura date correction stays blocked when strong financial association is not unequivocal',async()=>{
+ const casos=[
+  ['mismo CodAut en dos pagos',{pagosSistema:existing=>[existing,{...existing,id:'p-laura-2'}]}],
+  ['CodAut en otra reserva',{sistema:{reserva_id:'otra-reserva'}}],
+  ['monto distinto',{sistema:{monto:160000},esperaAsociacion:true}],
+  ['medio distinto',{sistema:{medio_pago:'webpay_debito'},esperaAsociacion:true}],
+  ['pago sin verificación',{sistema:{datos_origen:{verificacion_migrada:false}},esperaAsociacion:true}],
+  ['sin identificador fuerte',{libro:{codigo_autorizacion:null},sistema:{codigo_autorizacion:null},sinActualizacion:true}]
+ ];
+ for(const [nombre,config] of casos){
+  const {item,plan}=await escenarioLauraFecha(config);
+  assert.ok(item,nombre);assert.notEqual(item.seleccionado,true,nombre);
+  assert.ok(item.categoria==='dudosos'||item.motivos.length>0,nombre);
+  if(config.esperaAsociacion) assert.ok(item.motivos.includes('Primero confirma la asociación del movimiento con la reserva.'),nombre);
+  const serializados=Q.serializarIncorporacion(plan);
+  assert.ok(!serializados.some(x=>x.tipo==='pago_actualizar'||x.tipo==='pago'),nombre);
+ }
+});
+
+const advertenciaGeometria='La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.';
+const bernardaLibro=(extra={})=>readyBook({titular:'Bernarda Pineda',rut_documento:'12569852-7',cabana:3,
+ fecha_checkin:'2026-09-25',fecha_checkout:'2026-09-26',fechas_ocupadas:['2026-09-25'],noches:1,
+ noches_texto:2,noches_texto_efectivas:2,noches_extension_texto:null,noches_extension_ambigua:false,
+ geometria_inequivoca:false,advertencias:[advertenciaGeometria],...extra});
+const estadiaBernarda=(r=bernardaLibro(),extra={})=>stay({...r,fecha_checkout:'2026-09-27',noches:2},
+ {id:'e-bernarda',reserva_id:'r-bernarda',fecha_ingreso:'2026-09-25',fecha_salida:'2026-09-27',...extra});
+
+test('Bernarda incomplete geometry becomes informative when explicit nights and one Proyecto H stay agree',async()=>{
+ const r=bernardaLibro(),original=structuredClone(r),comp=await compare([r],[estadiaBernarda(r)]);
+ assert.equal(comp[0].estado,'asociada');assert.equal(comp[0].sistema.id,'e-bernarda');
+ assert.equal(comp[0].libro.fecha_checkout,'2026-09-27');assert.equal(comp[0].libro.noches,2);
+ assert.deepEqual(comp[0].libro.advertencias,[]);assert.equal(comp[0].libro.geometria_resuelta_proyecto_h,true);
+ assert.match(comp[0].libro.advertencias_informativas[0],/geometría.*2 noches.*Proyecto H/i);
+ assert.deepEqual(r,original);assert.equal(comp.meta.ambiguas,0);assert.equal(comp.meta.asociadas,1);
+ const plan=Q.crearPlanIncorporacion([r],comp);
+ assert.ok(plan.items.some(i=>i.categoria==='asociadas'));
+ assert.ok(!plan.items.some(i=>i.categoria==='nuevas'||i.categoria==='pendientes'));
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+ const h=renderHarness();h.render({q,comparacion:comp});
+ assert.match(h.texts(),/Advertencias informativas/);assert.match(h.texts(),/se resolvió con seguridad como 2 noches/);
+ assert.doesNotMatch(h.texts(),/Preguntas necesarias|Revisión manual|Haku no asociará automáticamente/);
+ const incorporacion=renderHarness();incorporacion.Q.renderizarIncorporacion(incorporacion.out,plan,()=>{},()=>{},async()=>{});
+ assert.match(incorporacion.texts(),/Advertencia informativa.*2 noches/);
+});
+
+test('incomplete geometry stays blocking when nights, uniqueness or cabin evidence is insufficient',async()=>{
+ const casos=[
+  ['texto de 2 noches contradice estadía de 3',bernardaLibro(),[estadiaBernarda(bernardaLibro(),{fecha_salida:'2026-09-28'})]],
+  ['sin noches explícitas',bernardaLibro({noches_texto:null,noches_texto_efectivas:null}),[estadiaBernarda()]],
+  ['dos candidatas compatibles',bernardaLibro(),[estadiaBernarda(),estadiaBernarda(bernardaLibro(),{id:'e-bernarda-2',reserva_id:'r-bernarda-2'})]],
+  ['CAB diferente',bernardaLibro(),[estadiaBernarda(bernardaLibro(),{cabanas:{numero:4}})]]
+ ];
+ for(const [nombre,r,estadias] of casos){
+  const comp=await compare([r],estadias);
+  assert.equal(comp[0].estado,'ambigua',nombre);assert.equal(comp.meta.ambiguas,1,nombre);
+  assert.ok(comp[0].libro.advertencias.includes(advertenciaGeometria),nombre);
+  assert.equal(comp[0].libro.advertencias_informativas,undefined,nombre);
+  const plan=Q.crearPlanIncorporacion([r],comp);
+  assert.ok(plan.items.some(i=>i.categoria==='pendientes'),nombre);
+  assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='reserva'||i.tipo==='estadia'),nombre);
+ }
+});
+
 test('an existing payment conflicting across Libro rows cannot be updated or manually bypassed',async()=>{
  const p=readyPay(),r=readyBook({pagos:[p,{...p,monto:p.monto+1,origen:{hoja:'Sep26',celda:'F99'}}]});
  const ps=[{id:'p1',reserva_id:'r1',...p,fecha_pago:'2026-09-10T12:00:00Z',datos_origen:{}}];

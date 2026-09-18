@@ -270,6 +270,43 @@
         };
     }
 
+    const ADVERTENCIA_GEOMETRIA_INCOMPLETA = "La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.";
+
+    function resolverGeometriaConProyectoH(reserva, candidatas) {
+        // El parser conserva su advertencia de origen. Sólo esta copia de
+        // comparación puede completar el rango cuando Proyecto H aporta una
+        // única estadía que confirma texto, identidad, CAB y duración.
+        const advertencias = Array.isArray(reserva.advertencias) ? reserva.advertencias : [];
+        if (!advertencias.includes(ADVERTENCIA_GEOMETRIA_INCOMPLETA) || reserva.tipo_estadia === 'full_day') return reserva;
+
+        const nochesTexto = Number(reserva.noches_texto);
+        const nochesEfectivas = reserva.noches_texto_efectivas == null ? nochesTexto : Number(reserva.noches_texto_efectivas);
+        if (!Number.isInteger(nochesTexto) || nochesTexto <= 0 || nochesEfectivas !== nochesTexto ||
+            reserva.noches_extension_texto != null || reserva.noches_extension_ambigua === true ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkin || '')) return reserva;
+
+        const salidaEsperada = S.sumarDias(reserva.fecha_checkin, nochesTexto);
+        const compatibles = candidatas.filter(sistema => {
+            const duracion = (Date.parse(sistema.fecha_checkout) - Date.parse(sistema.fecha_checkin)) / 86400000;
+            return candidatoElegible(sistema) && identidad(reserva, sistema).compatible &&
+                Number(reserva.cabana) === Number(sistema.cabana) &&
+                sistema.fecha_checkin === reserva.fecha_checkin && sistema.fecha_checkout === salidaEsperada &&
+                Number.isInteger(duracion) && duracion === nochesTexto;
+        });
+        if (compatibles.length !== 1) return reserva;
+
+        const aviso = `La geometría de las celdas del Libro es inconsistente, pero la estadía se resolvió con seguridad como ${nochesTexto} noche${nochesTexto === 1 ? '' : 's'} usando el texto explícito y la coincidencia con Proyecto H.`;
+        return {
+            ...reserva,
+            fecha_checkout: salidaEsperada,
+            fechas_ocupadas: Array.from({length:nochesTexto}, (_, indice) => S.sumarDias(reserva.fecha_checkin, indice)),
+            noches: nochesTexto,
+            advertencias: advertencias.filter(x => x !== ADVERTENCIA_GEOMETRIA_INCOMPLETA),
+            advertencias_informativas: [...new Set([...(reserva.advertencias_informativas || []), aviso])],
+            geometria_resuelta_proyecto_h: true
+        };
+    }
+
     function asociarConservador(reserva, candidatas) {
         const scores = candidatas.filter(candidatoElegible).map(s => puntuarCandidato(reserva, s));
         const seguros = scores.filter(x => x.segura);
@@ -499,6 +536,26 @@
         // Los registros históricos y los dobles de prueba pueden no traer estado.
         // Si existe un estado explícito, sólo "confirmado" representa dinero vigente.
         return !estado || estado === "confirmado";
+    }
+
+    function pagoVerificadoSistema(pago) {
+        return Boolean(pago?.verificado_en || pago?.datos_origen?.verificacion_migrada === true ||
+            pago?.datos_origen?.verificacion_abono === true);
+    }
+
+    function asociacionFinancieraInequivoca(pagoLibro, pagoSistema, coincidencias, destino) {
+        const monedaLibro = String(pagoLibro?.moneda || '').trim().toUpperCase();
+        const monedaSistema = String(pagoSistema?.moneda || '').trim().toUpperCase();
+        const medioPagoLibro = medioLibro(pagoLibro), medioPagoSistema = medioSistema(pagoSistema);
+        return coincidencias?.length === 1 && coincidencias[0]?.id && coincidencias[0].id === pagoSistema?.id &&
+            destino?.bloqueado !== true && destino?.reserva_id && pagoSistema.reserva_id === destino.reserva_id &&
+            pagoTieneIdentificadorFuerte(pagoLibro) && pagoCoincide(pagoLibro, pagoSistema) &&
+            Number.isSafeInteger(Number(pagoLibro.monto)) && Number(pagoLibro.monto) > 0 &&
+            Number(pagoSistema.monto) === Number(pagoLibro.monto) &&
+            Boolean(monedaLibro && monedaSistema && monedaLibro === monedaSistema) &&
+            Boolean(medioPagoLibro && medioPagoSistema && medioPagoLibro === medioPagoSistema) &&
+            S.normalizar(pagoSistema.estado) === 'confirmado' &&
+            S.normalizar(pagoSistema.tipo_movimiento) === 'pago' && pagoVerificadoSistema(pagoSistema);
     }
 
     function pagoEfectivoLibroAplicable(pago, reserva, sistema) {
@@ -793,8 +850,6 @@
         };
         const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
             normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
-        const pagoVerificadoSistema = p => Boolean(p?.verificado_en || p?.datos_origen?.verificacion_migrada === true ||
-            p?.datos_origen?.verificacion_abono === true);
         const tokensTitular = valor => [...new Set(texto(valor).split(' ').filter(t=>/^\p{L}+$/u.test(t) && t.length>=2))];
         const titularVarianteCompatible = (a,b) => {
             const ta=tokensTitular(a),tb=tokensTitular(b);
@@ -1032,7 +1087,7 @@
         if (error || !sesion?.session) throw new Error("Inicia sesión en Proyecto H para comparar.");
 
         const detectadasLibro = Array.isArray(reservas) ? reservas.length : 0;
-        const validas = (reservas || []).map(normalizarReservaComparacion).filter(esReservaValida);
+        let validas = (reservas || []).map(normalizarReservaComparacion).filter(esReservaValida);
         const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
         const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
@@ -1057,6 +1112,8 @@
             adultos: e.adultos, ninos: e.ninos, mascotas: e.mascotas, observaciones: e.reservas?.observaciones,
             tipo_documento: e.reservas?.titular_tipo_documento
         })).filter(candidatoElegible);
+
+        validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
 
         const visiblesRango = system.filter(s =>
             s.fecha_checkin <= hasta && s.fecha_checkout >= desde &&
@@ -1758,6 +1815,7 @@
                     if (unicas) g.items.forEach((i,indice) => destinosExactosGrupo.set(i,asignaciones[indice][0]));
                 }
                 let cambios = 0;
+                const avisosInformativos = [...new Set(g.items.flatMap(i => i.libro.advertencias_informativas || []))];
                 for (const i of g.items) {
                     const s = i.sistema || destinosExactosGrupo.get(i) || destino;
                     if (!s) continue;
@@ -1787,8 +1845,9 @@
                     if (payload.cambios.length) {
                         const item = add('actualizaciones', updateId, descripcionGrupo({...g, principal:i.libro, cabanas:[i.libro.cabana]}) + ' · Usar los datos del Libro', payload, motivos, [], ['reservas.editar']);
                         item.cambios = payload.cambios; cambios++; dependeDe.push(updateId);
+                        if (avisosInformativos.length) item.aviso = `Advertencia informativa: ${avisosInformativos.join(' ')}`;
                         if (['fecha_ingreso','fecha_salida','tipo_estadia'].some(k => k in payload.estadia.despues)) {
-                            item.aviso = 'Se corregirán las noches y cargos de alojamiento. Las noches nuevas usarán la tarifa del catálogo; los pagos de noches retiradas quedarán como saldo disponible. Los importes de los pagos se conservan.';
+                            item.aviso = [item.aviso, 'Se corregirán las noches y cargos de alojamiento. Las noches nuevas usarán la tarifa del catálogo; los pagos de noches retiradas quedarán como saldo disponible. Los importes de los pagos se conservan.'].filter(Boolean).join(' ');
                             item.permisos.push('pagos.verificar');
                         }
                     }
@@ -1807,6 +1866,7 @@
                 if (!cambios) {
                     const categoriaCoincidente = g.estado === 'asociada' && previa && previa.estado !== 'asociada' ? 'omitidos' : 'asociadas';
                     const item = add(categoriaCoincidente, id, titulo + ' · Ya coincide con el Libro.', { reserva_id: reservaId, reserva_ids: [...new Set(existentes)] });
+                    if (avisosInformativos.length) item.aviso = `Advertencia informativa: ${avisosInformativos.join(' ')}`;
                     if (categoriaCoincidente === 'asociadas') {
                         const clavesGrupo = new Set(g.items.map(i => claveReserva(i.libro)));
                         item.movimientosLibro = (comp.pagosDetalle || []).filter(x => clavesGrupo.has(claveReserva(x.reserva)));
@@ -1932,7 +1992,8 @@
                 }
                 if (!patch.cambios.length) { add('omitidos',id,texto+' · El pago ya coincide con el Libro.'); continue; }
                 const motivos = [];
-                if (destino?.bloqueado || !r.pagos.includes(p)) motivos.push('Primero confirma la asociación del movimiento con la reserva.');
+                const asociacionFinancieraSegura = asociacionFinancieraInequivoca(p, duplicado, coincidencias, destino);
+                if ((destino?.bloqueado || !r.pagos.includes(p)) && !asociacionFinancieraSegura) motivos.push('Primero confirma la asociación del movimiento con la reserva.');
                 if (!Number.isSafeInteger(p.monto) || p.monto <= 0 || p.moneda !== 'CLP') motivos.push('El monto o la moneda requiere revisión.');
                 const aplicacionesDistribuidas = p.transaccion_distribuida && Array.isArray(p.aplicaciones_libro) &&
                     p.aplicaciones_libro.length > 1 && p.aplicaciones_libro.every(aplicacion =>
@@ -2915,6 +2976,9 @@
         const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
         const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
         const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
+        const advertenciasInformativas = (comp || []).flatMap(resultado =>
+            (resultado.libro.advertencias_informativas || []).map(aviso =>
+                `${resultado.libro.titular} · CAB ${resultado.libro.cabana}: ${aviso}`));
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
         else {
@@ -2947,6 +3011,9 @@
         agregarDato(grid, "Por decidir", `${meta.ambiguas ?? 0}`);
         agregarDato(grid, "Pagos a revisar", `${(meta.pagos_faltantes ?? 0) + (meta.pagos_revisar ?? 0)}`);
         out.append(grid);
+
+        if (advertenciasInformativas.length) agregarLista(out, "Advertencias informativas",
+            [...new Set(advertenciasInformativas)], { vacio: "" });
 
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
 
@@ -3250,6 +3317,12 @@
             }
             return bloque;
         };
+        const valorVisible = (campo, valor) => {
+            if (valor === null || valor === undefined || valor === '') return 'sin dato';
+            if (campo !== 'Fecha de pago') return String(valor);
+            const fecha = fechaCalendarioChile(valor), partes = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : String(valor);
+        };
         for (const c of item.cambios) {
             const fila = elemento('li');
             if (c.campo === 'Notas y detalles del Libro') {
@@ -3266,9 +3339,9 @@
                 fila.append(notas);
             } else {
                 fila.append(elemento('strong','haku-cambio-campo',c.campo + ':'),
-                    elemento('span','haku-cambio-actual',String(c.anterior ?? 'sin dato')),
+                    elemento('span','haku-cambio-actual',valorVisible(c.campo, c.anterior)),
                     elemento('span','haku-cambio-flecha','→'),
-                    elemento('span','haku-cambio-libro',String(c.libro)));
+                    elemento('span','haku-cambio-libro',valorVisible(c.campo, c.libro)));
             }
             cambios.append(fila);
         }
