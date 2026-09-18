@@ -649,7 +649,7 @@ test('payment on a securely matched stay stays safe while another cabin awaits a
  assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
 });
 
-function renderHarness(reconsultar, db, {compactarPreguntas=false}={}) {
+function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
  const fs=require('node:fs'),vm=require('node:vm');
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
@@ -668,7 +668,8 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false}={}) {
    selector.startsWith('.')&&(e.className||'').split(' ').includes(selector.slice(1)));}
   querySelector(selector){return this.querySelectorAll(selector)[0]||null}
  }
- const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
+ const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
+  document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
   .replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion, renderizarResultadoIncorporacion })')
@@ -867,8 +868,9 @@ test('verified Proyecto H payments without captured identifiers are omitted by e
  const reserva=readyBook({titular:'Alejandro Ramos Donaire',cabana:2,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-07',
   pagos:[credito,debito]});
  const pagos=[
+  // 02-sept UTC todavía es 01-sept en Chile: reproduce el abono real de Alejandro.
   {id:'h-credito',reserva_id:'r1',monto:160000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
-   medio_pago:'webpay_credito',fecha_pago:'2026-09-01T12:00:00Z',datos_origen:{verificacion_migrada:true}},
+   medio_pago:'webpay_credito',fecha_pago:'2026-09-02T01:20:44.117+00:00',datos_origen:{verificacion_migrada:true}},
   {id:'h-debito',reserva_id:'r1',monto:50000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
    medio_pago:'tarjeta_debito',fecha_pago:'2026-09-06T12:00:00Z',verificado_en:'2026-09-06T12:05:00Z',datos_origen:{}}
  ];
@@ -882,6 +884,35 @@ test('verified Proyecto H payments without captured identifiers are omitted by e
  assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'));
  const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
  assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+});
+
+test('Alejandro verified payment is recovered when the Libro keeps it in the unassociated block list',async()=>{
+ const movimiento=readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'208468',folio:null,bovtar:null,
+  titular:'Alejandro Ramos',cabana:2,fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-01',
+  texto_original:'1-9-2026 // Alejandro Ramos // WebPay Crédito // CodAut 208468 // $160.000'});
+ const reserva=readyBook({titular:'Alejandro Ramos Donaire',cabana:2,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-07',
+  pagos:[],pagos_sin_asociacion:[movimiento]});
+ const existente={id:'h-credito',reserva_id:'r1',monto:160000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  etapa_operativa:'abono',medio_pago:'webpay_credito',fecha_pago:'2026-09-02T01:20:44.117+00:00',
+  verificado_en:'2026-09-02T01:20:44.117+00:00',datos_origen:{verificacion_migrada:true}};
+ const comp=await compare([reserva],[stay(reserva)],[existente]);
+ assert.equal(comp.pagosDetalle.length,1);assert.equal(comp.pagosDetalle[0].estado,'en_sistema');
+ assert.equal(comp.pagosDetalle[0].sistema.id,'h-credito');assert.equal(comp.pagosDetalle[0].coincidencia_debil,true);
+ const plan=Q.crearPlanIncorporacion([reserva],comp),item=plan.items.find(i=>i.pagoLibro===movimiento);
+ assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);assert.notEqual(item.aprobable,true);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+
+ for(const cambio of [
+  {titular:'Otra Persona'},
+  {cabana:3},
+  {fecha_bloque:'2026-09-06'},
+  {advertencias:['El concepto del Libro indica CAB 3, mientras la estadía corresponde a CAB 2.']}
+ ]){
+  const inseguro={...movimiento,...cambio};
+  const libro={...reserva,pagos_sin_asociacion:[inseguro]};
+  assert.equal((await compare([libro],[stay(libro)],[existente])).pagosDetalle[0].estado,'revisar');
+ }
 });
 
 test('identifier-less Proyecto H fallback fails closed when verification or financial identity is not exact and unique',async()=>{
@@ -1288,10 +1319,58 @@ test('payment RPC fix never deduplicates by amount and reservation when strong i
  assert.match(sql,/v_codaut is not null[\s\S]*v_folio is not null and v_bovtar is not null/);
  assert.match(sql,/grant execute[\s\S]*to authenticated/i);assert.match(sql,/revoke all[\s\S]*from public, anon/i);
 });
+test('group receipt migration keeps one protected payment and validates both sibling destinations',()=>{
+ const sql=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918161000_haku_libro_comprobante_grupo_multicabana.sql'),'utf8');
+ const titular=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918164500_haku_libro_comprobante_grupo_titular_historico.sql'),'utf8');
+ const penalidad=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918182000_haku_libro_comprobante_grupo_penalidad.sql'),'utf8');
+ const cargoAjustado=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918184500_pago_aplicacion_respeta_cargo_ajustado.sql'),'utf8');
+ const alojamientoReserva=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260918190000_pago_alojamiento_valida_total_reserva.sql'),'utf8');
+ const aplicaciones=require('node:fs').readFileSync(require.resolve('../supabase/migrations/20260903194500_saldo_a_favor_huesped.sql'),'utf8');
+ assert.match(sql,/haiku_libro_pago_grupo_distribuido_v1/);
+ assert.match(sql,/jsonb_array_length\(partes\) <> 2/);
+ assert.match(sql,/count\(distinct x->>'reserva_id'\)[\s\S]*<> 2/);
+ assert.match(sql,/r\.grupo_reserva_id=grupo/);
+ assert.match(sql,/e\.id=estadia_parte and e\.reserva_id=reserva_parte/);
+ assert.match(sql,/p_aplicaciones=>aplicaciones,p_modo_aplicacion=>'ninguno'/);
+ assert.match(sql,/distribucion_manual.*aplicaciones_pendientes/s);
+ assert.match(sql,/'version',2,'modos'.*'grupo_alojamiento'/s);
+ assert.match(sql,/revoke all on function private\.haiku_libro_pago_grupo_distribuido_v1[\s\S]*authenticated/i);
+ assert.match(titular,/titular_reserva/);assert.match(titular,/titular_pago/);
+ assert.match(titular,/if position\(anterior in cuerpo\)=0 then/);
+ assert.match(penalidad,/grupo_alojamiento_penalidad/);
+ assert.match(penalidad,/ca\.tipo_ajuste='cargo_modificacion' and ca\.porcentaje=10/);
+ assert.match(penalidad,/saldo_grupo is distinct from total or saldo_grupo-aplicado is distinct from monto_penalidad/);
+ assert.match(penalidad,/monto_penalidad is distinct from \(d->>'penalidad_monto'\)::bigint/);
+ assert.match(penalidad,/sum\(\(x->>'monto'\)::bigint\)[\s\S]*group by \(x->>'cargo_id'\)::uuid/);
+ assert.match(penalidad,/p_aplicaciones=>aplicaciones,p_modo_aplicacion=>'ninguno'/);
+ assert.match(penalidad,/'version',3,'modos'.*'grupo_alojamiento_penalidad'/s);
+ assert.match(cargoAjustado,/select c\.reserva_id, c\.estado, ec\.monto_ajustado/);
+ assert.match(cargoAjustado,/join public\.vista_estado_cargos ec on ec\.cargo_id=c\.id/);
+ assert.doesNotMatch(cargoAjustado,/current_setting|set_config/);
+ assert.match(cargoAjustado,/v_neto_cargo \+ new\.monto_aplicado > v_monto_cargo/);
+ assert.match(alojamientoReserva,/v_tipo_cargo = 'alojamiento'/);
+ assert.match(alojamientoReserva,/sum\(ec\.monto_ajustado\)/);
+ assert.match(alojamientoReserva,/c\.reserva_id = v_reserva_cargo[\s\S]*c\.tipo_cargo = 'alojamiento'/);
+ assert.match(alojamientoReserva,/v_neto_cargo \+ new\.monto_aplicado > v_monto_alojamiento/);
+ assert.match(alojamientoReserva,/else[\s\S]*v_neto_cargo \+ new\.monto_aplicado > v_monto_cargo/);
+ assert.match(aplicaciones,/if v_reserva_pago is distinct from v_reserva_cargo then/);
+ assert.match(aplicaciones,/v_grupo_pago is null[\s\S]*v_grupo_pago is distinct from v_grupo_cargo/);
+});
 test('source writes only through the atomic RPC and keeps global polling disabled',()=>{
  const s=require('fs').readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
  assert.doesNotMatch(s,/\.\s*(insert|update|upsert)\s*\(|setInterval\s*\(|new MutationObserver/);
  assert.equal((s.match(/\.rpc\('haiku_incorporar_libro_v1'/g)||[]).length,1);
+});
+test('remembered reconciliation decisions hydrate the operational map before preparation is available',()=>{
+ const fs=require('node:fs');
+ const consultas=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
+ const ux=fs.readFileSync(require.resolve('../js/haiku-libro-reconciliacion-ux-v1.js'),'utf8');
+ assert.match(ux,/root\.HAIKU_LIBRO_RECONCILIACION_UX_V1\s*=\s*Object\.freeze\(\{\s*aplicar\s*\}\)/);
+ assert.match(ux,/select\.dispatchEvent\(new Event\("change",\s*\{\s*bubbles:\s*true\s*\}\)\)/);
+ const preguntas=consultas.indexOf('out.append(preguntas);');
+ const hidratacion=consultas.indexOf('root.HAIKU_LIBRO_RECONCILIACION_UX_V1?.aplicar?.(preguntas);',preguntas);
+ const preparar=consultas.indexOf('const preparar = elemento(',hidratacion);
+ assert.ok(preguntas>=0&&hidratacion>preguntas&&preparar>hidratacion);
 });
 
 // Source-priority regressions. Fixtures never use a live guest record.
@@ -1327,6 +1406,205 @@ test('Yann: selecting same reservation proposes complete passport and contact, s
  const again=await Q.compararSistema([r],db,q);assert.equal(again[0].estado,'asociada');assert.equal(again.meta.ambiguas,0);
  const repeat=await Q.prepararIncorporacion({...result,comparacion:again},new Map(),new Set(),db);
  assert.ok(!repeat.items.some(i=>i.categoria==='actualizaciones'));assert.equal(rows.length,1);
+});
+
+test('Karina: choosing the existing reservation updates the holder and reconciles its existing payments by reserva_id',async()=>{
+ const transfer=(monto,fecha,celda)=>readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto,
+  fecha_comprobante:fecha,titular:'Karina Andrea Cruz',origen:{hoja:'Sep26',celda},
+  texto_original:`${fecha} // Marco Iturrieta Rojas // 0150681308 Transf de KARINA ANDREA CRUZ // CAB2 // $${monto}`});
+ const tarjeta=(monto,folio,bovtar,celda)=>readyPay({codigo_autorizacion:null,folio,bovtar,medio_pago:'credito',monto,
+  fecha_comprobante:'2026-09-17',titular:'Karina Cruz',origen:{hoja:'Sep26',celda}});
+ const pagosLibro=[transfer(125000,'2026-07-01','A1:D1'),transfer(145000,'2026-07-03','A2:D2'),
+  tarjeta(210000,'000284','271708','A3:D3'),tarjeta(380000,'000271','08714','A4:D4')];
+ const libro=readyBook({titular:'Karina Cruz',rut_documento:null,cabana:2,pagos:pagosLibro,pagos_sin_asociacion:[]});
+ const estadia=stay(readyBook({titular:'Marco Iturrieta Rojas',cabana:2}),{id:'e-marco-cab2',reserva_id:'r-marco'});
+ const existenteTransfer=(id,monto,fecha,texto)=>({id,reserva_id:'r-marco',estado:'confirmado',tipo_movimiento:'pago',monto,moneda:'CLP',
+  medio_pago:'transferencia',fecha_pago:fecha+'T12:00:00Z',referencia_externa:texto,datos_origen:{verificacion_migrada:true}});
+ const pagosSistema=[
+  existenteTransfer('p125',125000,'2026-07-01',null),
+  existenteTransfer('p145',145000,'2026-07-03',null),
+  {id:'p210',reserva_id:'r-marco',estado:'confirmado',tipo_movimiento:'pago',monto:210000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-17T12:00:00Z',folio:'000284',datos_origen:{bovtar:'271708'}},
+  {id:'p380',reserva_id:'r-marco',estado:'confirmado',tipo_movimiento:'pago',monto:380000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-17T12:00:00Z',folio:'000271',datos_origen:{bovtar:'08714'}}
+ ];
+ const comparacion=await compare([libro],[estadia],pagosSistema);
+ assert.equal(comparacion[0].estado,'ambigua');
+ assert.ok(comparacion.pagosDetalle.some(item=>item.estado==='revisar'));
+ const decisiones=new Map([[comparacion.grupos[0].clave,{valor:'asociar:e-marco-cab2'}]]);
+ const plan=await prepare([libro],[estadia],pagosSistema,decisiones);
+ const actualizacion=plan.items.find(item=>item.payload?.tipo==='reserva_actualizar');
+ assert.equal(actualizacion.payload.reserva.despues.titular_nombre,'Karina Cruz');
+ assert.equal(actualizacion.seleccionado,true);
+ const pagosPlan=plan.items.filter(item=>item.pagoLibro);
+ assert.equal(pagosPlan.length,4);
+ assert.ok(pagosPlan.every(item=>item.categoria==='omitidos'&&item.payload===null&&item.aprobable!==true));
+ const preparados=Q.serializarIncorporacion(plan);
+ assert.equal(preparados.find(item=>item.tipo==='reserva_actualizar').reserva.despues.titular_nombre,'Karina Cruz');
+ assert.ok(!preparados.some(item=>item.tipo==='pago'||item.tipo==='pago_actualizar'));
+ applyPreview([estadia],pagosSistema,preparados);
+ const repeticion=await compare([libro],[estadia],pagosSistema);
+ assert.equal(repeticion[0].estado,'asociada');
+ assert.ok(repeticion.pagosDetalle.every(item=>item.estado==='en_sistema'));
+});
+
+test('Karina multicabin decision maps CAB 2 and CAB 7 to their exact sibling stays and updates both holders',async()=>{
+ const datosLibro={titular:'Karina Cruz',rut_documento:'15068130-8',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const movimiento=(cabana,monto,fecha,celda)=>readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',
+  titular:'Karina Andrea Cruz',cabana,monto,fecha_comprobante:fecha,origen:{hoja:'Sep26',celda},
+  texto_original:`${fecha} // Marco Iturrieta Rojas // 0150681308 Transf de KARINA ANDREA CRUZ // CAB${cabana} // $${monto}`});
+ const cab2=readyBook({...datosLibro,id:'karina-cab2',cabana:2,pagos:[movimiento(2,125000,'2026-07-01','A1'),movimiento(2,145000,'2026-07-03','A2')]});
+ const cab7=readyBook({...datosLibro,id:'karina-cab7',cabana:7,pagos:[movimiento(7,125000,'2026-07-01','A3'),movimiento(7,145000,'2026-07-03','A4')]});
+ const datosProyecto={titular:'Marco Iturrieta Rojas',rut_documento:'14.252.507-0',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const grupo={...stay(readyBook(datosProyecto)).reservas,grupo_reserva_id:'grupo-marco'};
+ const rows=[
+  stay(readyBook({...datosProyecto,cabana:2}),{id:'estadia-cab2',reserva_id:'reserva-cab2',reservas:grupo}),
+  stay(readyBook({...datosProyecto,cabana:7}),{id:'estadia-cab7',reserva_id:'reserva-cab7',reservas:grupo})
+ ];
+ const existente=(id,reserva_id,monto,fecha)=>({id,reserva_id,estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
+  monto,moneda:'CLP',medio_pago:'transferencia',fecha_pago:fecha+'T12:00:00Z',datos_origen:{verificacion_migrada:true}});
+ const pagos=[existente('p125-cab2','reserva-cab2',125000,'2026-07-01'),existente('p145-cab2','reserva-cab2',145000,'2026-07-03'),
+  existente('p125-cab7','reserva-cab7',125000,'2026-07-01'),existente('p145-cab7','reserva-cab7',145000,'2026-07-03')];
+ const comparacion=await compare([cab2,cab7],rows,pagos);
+ assert.equal(comparacion.grupos[0].estado,'ambigua');
+ const decisiones=new Map([[comparacion.grupos[0].clave,{valor:'asociar:estadia-cab2'}]]);
+ const plan=await prepare([cab2,cab7],rows,pagos,decisiones);
+ const cambios=plan.items.filter(item=>item.payload?.tipo==='reserva_actualizar');
+ assert.equal(cambios.length,2);
+ assert.deepEqual(cambios.map(item=>item.payload.estadia_id).sort(),['estadia-cab2','estadia-cab7']);
+ assert.ok(cambios.every(item=>item.seleccionado&&item.motivos.length===0));
+ assert.ok(cambios.every(item=>item.payload.reserva.despues.titular_nombre==='Karina Cruz'));
+ assert.ok(cambios.every(item=>item.payload.reserva.despues.titular_numero_documento==='15068130-8'));
+ const preparados=Q.serializarIncorporacion(plan).filter(item=>item.tipo==='reserva_actualizar');
+ assert.equal(preparados.length,2);
+ assert.deepEqual(preparados.map(item=>item.reserva_id).sort(),['reserva-cab2','reserva-cab7']);
+ const pagosPlan=plan.items.filter(item=>item.pagoLibro);
+ assert.equal(pagosPlan.length,4);assert.ok(pagosPlan.every(item=>item.categoria==='omitidos'&&item.aprobable!==true));
+});
+
+test('a remembered holder decision is hydrated before preparation and missing decisions cannot open a misleading payment plan',async()=>{
+ const movimiento=readyPay({codigo_autorizacion:'KARINA-NUEVO',folio:null,bovtar:null,medio_pago:'credito',monto:210000,
+  titular:'Karina Cruz',cabana:2,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda:'A3'}});
+ const libro=readyBook({titular:'Karina Cruz',rut_documento:'15068130-8',cabana:2,pagos:[movimiento]});
+ const sistema=stay(readyBook({titular:'Marco Iturrieta Rojas',rut_documento:'14.252.507-0',cabana:2}),
+  {id:'estadia-marco',reserva_id:'reserva-marco'});
+ const db=client([sistema]),comparacion=await Q.compararSistema([libro],db,q),resultado={reservas:[libro],q,comparacion};
+
+ const sinDecision=renderHarness(null,db);sinDecision.render(resultado);
+ await sinDecision.button('Preparar incorporación').events.click();
+ assert.match(sinDecision.texts(),/Paso 1: elige la reserva existente/);
+ assert.doesNotMatch(sinDecision.texts(),/Confirmar incorporación|Revisar pago/);
+
+ let aplicaciones=0;
+ const ux={aplicar(contenedor){
+  aplicaciones++;
+  const select=contenedor.querySelector('select');
+  const indice=select.options.findIndex(opcion=>opcion.value==='asociar:estadia-marco');
+  assert.ok(indice>0);select.selectedIndex=indice;select.events.change();
+ }};
+ const restaurada=renderHarness(null,db,{ux});restaurada.render(resultado);
+ assert.equal(aplicaciones,1);
+ await restaurada.button('Preparar incorporación').events.click();
+ assert.match(restaurada.texts(),/Paso 1 de 2 · Actualizar titular y RUT/);
+ assert.match(restaurada.texts(),/Karina Cruz/);
+ assert.equal(restaurada.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+});
+
+test('Karina shared card receipt includes the existing 10% penalty and serializes one grouped payment',async()=>{
+ const transferencia=(cabana,monto,fecha,celda)=>readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',
+  titular:'Karina Andrea Cruz',cabana,monto,fecha_comprobante:fecha,origen:{hoja:'Sep26',celda},
+  texto_original:`${fecha} // Marco Iturrieta Rojas // 0150681308 Transf de KARINA ANDREA CRUZ // CAB${cabana} // $${monto}`});
+ const pago=(cabana,monto,celda)=>readyPay({codigo_autorizacion:null,folio:'000284',bovtar:'271708',medio_pago:'credito',
+  titular:'Marco Iturrieta Rojas',cabana,monto,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda},
+  texto_original:`17-09-2026 // Marco Iturrieta Rojas // Bovtar:271708-Folio:000284 // credito // cab${cabana}/3noches // $${monto}`});
+ const penalidad=readyPay({codigo_autorizacion:null,folio:'000284',bovtar:'271708',medio_pago:'credito',
+  titular:'Marco Iturrieta Rojas',cabana:7,monto:108000,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda:'A3'},
+  tipo_movimiento:'penalidad',concepto:'PENALIDAD 10%',penalidad_porcentaje:10,monto_penalidad:108000,
+  pago_recibido:null,estado_pago:'pendiente',
+  texto_original:'17-09-2026 // Marco Iturrieta Rojas // Bovtar:271708-Folio:000284 // PENALIDAD 10% // $108.000'});
+ const servicioNoPagado=readyPay({codigo_autorizacion:null,folio:'000284',bovtar:'271708',medio_pago:'credito',
+  titular:'Marco Iturrieta Rojas',cabana:7,monto:5000,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda:'A4'},
+  tipo_movimiento:'servicio',concepto:'servicio sin pago confirmado',pago_recibido:false,estado_pago:'pendiente',
+  texto_original:'17-09-2026 // Marco Iturrieta Rojas // Bovtar:271708-Folio:000284 // servicio // $5.000'});
+ const datosLibro={titular:'Karina Cruz',rut_documento:'15068130-8',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const cab2=readyBook({...datosLibro,id:'karina-cab2',cabana:2,pagos:[transferencia(2,125000,'2026-07-01','T1'),transferencia(2,145000,'2026-07-03','T2'),pago(2,210000,'A1')]});
+ const cab7=readyBook({...datosLibro,id:'karina-cab7',cabana:7,pagos:[transferencia(7,125000,'2026-07-01','T3'),transferencia(7,145000,'2026-07-03','T4'),pago(7,270000,'A2'),penalidad,servicioNoPagado]});
+ const datosProyecto={titular:'Marco Iturrieta Rojas',rut_documento:'14.252.507-0',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20'};
+ const grupo={...stay(readyBook(datosProyecto)).reservas,grupo_reserva_id:'grupo-marco'};
+ const rows=[stay(readyBook({...datosProyecto,cabana:2}),{id:'estadia-cab2',reserva_id:'reserva-cab2',reservas:grupo}),
+  stay(readyBook({...datosProyecto,cabana:7}),{id:'estadia-cab7',reserva_id:'reserva-cab7',reservas:grupo})];
+ const existente=(id,reserva_id,monto,fecha)=>({id,reserva_id,estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
+  monto,moneda:'CLP',medio_pago:'transferencia',fecha_pago:fecha+'T12:00:00Z',datos_origen:{verificacion_migrada:true}});
+ const existentes=[existente('p125-cab2','reserva-cab2',125000,'2026-07-01'),existente('p145-cab2','reserva-cab2',145000,'2026-07-03'),
+  existente('p125-cab7','reserva-cab7',125000,'2026-07-01'),existente('p145-cab7','reserva-cab7',145000,'2026-07-03')];
+ const db=client(rows,existentes),comparacion=await Q.compararSistema([cab2,cab7],db,q);
+ const resultado={reservas:[cab2,cab7],q,comparacion},decisiones=new Map([[comparacion.grupos[0].clave,{valor:'asociar:estadia-cab2'}]]);
+ const inicial=await Q.prepararIncorporacion(resultado,decisiones,new Set(),db);
+ const partes=inicial.items.filter(item=>item.pagoLibro);
+ const bloqueado=partes.find(item=>item.pagoLibro===servicioNoPagado),paso2=partes.filter(item=>item.etapaSiguiente);
+ assert.equal(inicial.etapa,'actualizar_identidad');assert.equal(partes.length,8);assert.equal(paso2.length,3);
+ assert.equal(partes.filter(item=>item.categoria==='omitidos').length,4);
+ assert.ok(paso2.every(item=>item.categoria==='dudosos'&&!item.seleccionado&&!item.aprobable));
+ assert.ok(paso2.every(item=>item.motivos.length===1&&/Paso 2/.test(item.motivos[0])));
+ assert.equal(bloqueado.categoria,'dudosos');assert.notEqual(bloqueado.aprobable,true);assert.ok(bloqueado.motivos.length>1);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,inicial,()=>{},()=>{},async()=>{});
+ assert.match(h.texts(),/Paso 1 de 2 · Actualizar titular y RUT/);
+ assert.equal(h.out.querySelectorAll('button').filter(boton=>boton.textContent==='Aprobar este pago').length,0);
+ assert.match(h.texts(),/Comprobante compartido entre cabañas: \$588\.000 CLP/);
+ assert.match(h.texts(),/penalidad 10% de \$108\.000 CLP que ya existe en Proyecto H/);
+ const actualizaciones=Q.serializarIncorporacion(inicial);
+ assert.equal(actualizaciones.length,2);assert.ok(actualizaciones.every(item=>item.tipo==='reserva_actualizar'));
+ assert.ok(actualizaciones.every(item=>Object.keys(item.reserva.despues).every(campo=>['titular_nombre','titular_numero_documento','titular_tipo_documento'].includes(campo))));
+ assert.ok(actualizaciones.every(item=>Object.keys(item.estadia.despues).length===0));
+ const lotes=[];
+ db.rpc=async(name,args)=>{
+  if(name==='haiku_libro_distribucion_capacidad_v1') return {data:{version:3,modos:['estadia_partes','grupo_alojamiento','grupo_alojamiento_penalidad']},error:null};
+  assert.equal(name,'haiku_incorporar_libro_v1');lotes.push(args.p_items);
+  if(lotes.length===1) applyPreview(rows,existentes,args.p_items);
+  return {data:{ok:true,reservas_creadas:0,estadias_agregadas:0,pagos_creados:lotes.length===2?1:0,actualizaciones:lotes.length===1?2:0,omitidos:0},error:null};
+ };
+ await Q.confirmarIncorporacion(resultado,decisiones,new Set(),inicial,db);
+ assert.equal(lotes.length,1);assert.equal(lotes[0].length,2);assert.ok(lotes[0].every(item=>item.tipo==='reserva_actualizar'));
+ const segundo=await Q.prepararIncorporacion(resultado,decisiones,new Set(),db);
+ segundo.etapaAnteriorCompletada=true;
+ const transicion=renderHarness();
+ transicion.Q.renderizarIncorporacion(transicion.out,inicial,()=>{},()=>{},async()=>({resultado:{ok:true},siguientePlan:segundo}));
+ await transicion.button('Actualizar titular y RUT').events.click();
+ assert.match(transicion.texts(),/Paso 2 de 2 · Aprobar pagos/);
+ assert.equal(segundo.etapa,undefined);assert.equal(segundo.items.filter(item=>item.payload?.tipo==='reserva_actualizar').length,0);
+ assert.equal(segundo.items.filter(item=>item.pagoLibro&&item.categoria==='omitidos').length,4);
+ const aprobables=segundo.items.filter(item=>item.aprobable);
+ assert.equal(aprobables.length,3);assert.ok(aprobables.every(item=>item.motivos.length===1&&/aprobación manual/.test(item.motivos[0])));
+ const idsAprobados=new Set(aprobables.map(item=>item.id));
+ const aprobado=await Q.prepararIncorporacion(resultado,decisiones,idsAprobados,db);
+ const preparadas=aprobado.items.filter(item=>item.distribucionManual);
+ assert.equal(preparadas.length,3);assert.ok(preparadas.every(item=>item.categoria==='pagos'&&item.seleccionado));
+ assert.ok(preparadas.every(item=>item.distribucionManual.tipo==='grupo_alojamiento_penalidad'));
+ const serializados=Q.serializarIncorporacion(aprobado),pagos=serializados.filter(item=>item.tipo==='pago');
+ assert.equal(pagos.length,1);assert.equal(pagos[0].argumentos.p_monto,588000);
+ assert.equal(pagos[0].datos_origen.distribucion_manual.tipo,'grupo_alojamiento_penalidad');
+ assert.equal(pagos[0].datos_origen.distribucion_manual.penalidad_monto,108000);
+ assert.equal(pagos[0].datos_origen.distribucion_manual.titular,'Karina Cruz');
+ assert.ok(pagos[0].datos_origen.distribucion_manual.componentes.every(item=>item.titular_reserva==='Karina Cruz'));
+ assert.deepEqual(pagos[0].datos_origen.distribucion_manual.componentes.map(item=>[item.tipo_movimiento,item.cabana,item.monto,item.reserva_id]),
+  [['alojamiento',2,210000,'reserva-cab2'],['alojamiento',7,270000,'reserva-cab7'],['penalidad',7,108000,'reserva-cab7']]);
+ assert.ok(pagos[0].depende_de===undefined);
+ await Q.confirmarIncorporacion(resultado,decisiones,idsAprobados,aprobado,db);
+ assert.equal(lotes.length,2);assert.equal(lotes[1].length,1);assert.equal(lotes[1][0].tipo,'pago');assert.equal(lotes[1][0].argumentos.p_monto,588000);
+});
+
+test('decision-aware payment reconciliation fails closed when the chosen reservation has two possible transfers',async()=>{
+ const movimiento=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:125000,
+  fecha_comprobante:'2026-07-01',titular:'Karina Andrea Cruz',origen:{hoja:'Sep26',celda:'A1:D1'},
+  texto_original:'Marco Iturrieta Rojas // 0150681308 Transf de KARINA ANDREA CRUZ // CAB2 // $125000'});
+ const libro=readyBook({titular:'Karina Cruz',rut_documento:null,cabana:2,pagos:[movimiento]});
+ const estadia=stay(readyBook({titular:'Marco Iturrieta Rojas',cabana:2}),{id:'e-marco-cab2',reserva_id:'r-marco'});
+ const existente=id=>({id,reserva_id:'r-marco',estado:'confirmado',tipo_movimiento:'pago',monto:125000,moneda:'CLP',
+  medio_pago:'transferencia',fecha_pago:'2026-07-01T12:00:00Z',datos_origen:{verificacion_migrada:true}});
+ const comparacion=await compare([libro],[estadia],[existente('p1'),existente('p2')]);
+ const decisiones=new Map([[comparacion.grupos[0].clave,{valor:'asociar:e-marco-cab2'}]]);
+ const plan=await prepare([libro],[estadia],[existente('p1'),existente('p2')],decisiones);
+ const item=plan.items.find(x=>x.pagoLibro===movimiento);
+ assert.equal(item.categoria,'dudosos');assert.notEqual(item.seleccionado,true);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
 });
 
 test('matched reservation also prioritizes known Libro occupation and notes; unknown contact never clears system values',async()=>{

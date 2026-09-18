@@ -380,6 +380,17 @@
         actualizarMeta(bloque);
     }
 
+    function aplicar(contenedor = document) {
+        const bloques = [];
+        if (contenedor?.matches?.(".haiku-asistente-preview-lista") && contenedor.querySelector?.(":scope > label")) {
+            bloques.push(contenedor);
+        }
+        contenedor?.querySelectorAll?.(".haiku-asistente-preview-lista")?.forEach(bloque => {
+            if (bloque.querySelector(":scope > label")) bloques.push(bloque);
+        });
+        [...new Set(bloques)].forEach(mejorarBloque);
+    }
+
     function bloqueDesde(target) {
         const bloque = target?.closest?.(".haiku-asistente-preview-lista");
         if (!bloque || !bloque.querySelector(":scope > label")) return null;
@@ -433,6 +444,12 @@
     }
 
     asegurarCss();
+
+    // La comparación llama este método inmediatamente después de renderizar las
+    // preguntas. Así una decisión recordada actualiza el Map operativo antes de
+    // que el usuario pulse "Preparar incorporación"; ya no depende de abrir el
+    // acordeón de preguntas primero.
+    root.HAIKU_LIBRO_RECONCILIACION_UX_V1 = Object.freeze({ aplicar });
 
     document.addEventListener("click", event => {
         const strong = event.target?.closest?.(".haiku-asistente-preview-lista > strong");
