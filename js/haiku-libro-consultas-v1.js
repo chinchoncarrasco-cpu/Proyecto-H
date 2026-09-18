@@ -1384,7 +1384,7 @@
     }
     function actualizacionPagoLibro(p, s) {
         const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibro(p), folio:p.folio, bovtar:p.bovtar,
-            bove:p.bove, codigo_autorizacion:p.codigo_autorizacion, concepto_libro:p.concepto };
+            bove:p.bove, codigo_autorizacion:p.codigo_autorizacion };
         if (p.fecha_comprobante && !mismaFechaCalendario(s.fecha_pago,p.fecha_comprobante)) propuesta.fecha_pago = p.fecha_comprobante + 'T12:00:00Z';
         if (p.medio_pago === 'transferencia') propuesta.referencia_externa = p.texto_original;
         return parcheLibro({ ...s, bovtar:s.datos_origen?.bovtar, concepto_libro:s.datos_origen?.concepto_libro }, propuesta);

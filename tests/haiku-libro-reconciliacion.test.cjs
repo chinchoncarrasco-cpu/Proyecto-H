@@ -1712,6 +1712,38 @@ test('strong payment already present is updated from Libro instead of omitted; r
  assert.ok(!again.items.some(i=>['pagos','actualizaciones'].includes(i.categoria)));
 });
 
+test('Libro concept alone never updates an existing matching payment',async()=>{
+ const p=readyPay({titular:'Paola Ríos Contreras',cabana:3,monto:160000,medio_pago:'webpay_credito',
+  codigo_autorizacion:'095112',fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-03',concepto:'cab3/1noche'});
+ const r=readyBook({titular:'Paola Ríos Contreras',cabana:3,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-06',
+  pagos:[],pagos_sin_asociacion:[p]});
+ const existing={id:'p-paola',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:160000,moneda:'CLP',
+  medio_pago:'webpay_credito',codigo_autorizacion:'095112',fecha_pago:'2026-09-03T12:00:00Z',datos_origen:{}};
+ const comp=await compare([r],[stay(r)],[existing]);
+ assert.equal(comp.pagosDetalle[0].estado,'revisar');
+ const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);assert.equal(item.seleccionado,false);
+ assert.match(item.texto,/El pago ya coincide con el Libro/);
+ assert.ok(!plan.items.some(i=>i.payload?.tipo==='pago_actualizar'));
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ assert.doesNotMatch(h.texts(),/Concepto del Libro|Actualizar pago con el Libro/);
+});
+
+test('a real financial difference still updates the existing payment when Libro concept is ignored',async()=>{
+ const p=readyPay({titular:'Paola Ríos Contreras',cabana:3,monto:160000,medio_pago:'webpay_credito',
+  codigo_autorizacion:'095112',fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-03',concepto:'cab3/1noche'});
+ const r=readyBook({titular:'Paola Ríos Contreras',cabana:3,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-06',
+  pagos:[],pagos_sin_asociacion:[p]});
+ const existing={id:'p-paola',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:150000,moneda:'CLP',
+  medio_pago:'webpay_credito',codigo_autorizacion:'095112',fecha_pago:'2026-09-03T12:00:00Z',datos_origen:{}};
+ const plan=Q.crearPlanIncorporacion([r],await compare([r],[stay(r)],[existing]));
+ const item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'actualizaciones');assert.equal(item.payload.tipo,'pago_actualizar');
+ assert.deepEqual(item.payload.pago.despues,{monto:160000});
+ assert.deepEqual(item.payload.pago.cambios,[{campo:'Monto',anterior:150000,libro:160000}]);
+ assert.ok(!('concepto_libro' in item.payload.pago.despues));
+});
+
 test('an existing payment conflicting across Libro rows cannot be updated or manually bypassed',async()=>{
  const p=readyPay(),r=readyBook({pagos:[p,{...p,monto:p.monto+1,origen:{hoja:'Sep26',celda:'F99'}}]});
  const ps=[{id:'p1',reserva_id:'r1',...p,fecha_pago:'2026-09-10T12:00:00Z',datos_origen:{}}];
