@@ -72,7 +72,7 @@
             case "libre-ingresa":
                 return fila?.ingreso_titular || "Sin titular";
             case "sale-libre":
-                return fila?.salida_titular || "Sin titular";
+                return "Sin titular";
             case "continua":
                 return fila?.continua_titular || "Sin titular";
             case "fullday":
@@ -133,6 +133,12 @@
             return;
         }
 
+        const estado = String(fila?.estado_operativo || cabana?.estado || "");
+        if (estado === "sale-libre") {
+            tr.classList.add("cabana-libre");
+            return;
+        }
+
         if (fila?.salida_checkout_en || cabana?.checkoutRealizado === true || String(cabana?.checkout || "").trim()) {
             tr.classList.add("cabana-checkout");
             return;
@@ -143,10 +149,7 @@
             return;
         }
 
-        const estado = String(fila?.estado_operativo || cabana?.estado || "");
-        if (estado === "sale-libre") {
-            tr.classList.add("cabana-sale-libre");
-        } else if (estado === "libre-ingresa" || estado === "sale-ingresa") {
+        if (estado === "libre-ingresa" || estado === "sale-ingresa") {
             tr.classList.add("cabana-ingresa");
         } else {
             tr.classList.add("cabana-libre");

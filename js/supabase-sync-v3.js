@@ -108,6 +108,41 @@
         );
     }
 
+    function crearSalidaLibre(estadia, reserva, camposOperativos) {
+        const salida = {
+            haikuFuente: "supabase",
+            salidaReservaId: reserva.id,
+            salidaEstadiaId: estadia.id,
+            estado: tieneBloqueoOperativo(camposOperativos)
+                ? "bloqueada"
+                : "sale-libre"
+        };
+
+        // La hora sigue mostrándose en el contexto de Día anterior, pero la
+        // fila actual ya no conserva identidad ni detalles del huésped saliente.
+        if (String(camposOperativos?.checkout || "").trim()) {
+            salida.checkout = camposOperativos.checkout;
+        }
+
+        CAMPOS_OPERATIVOS
+            .filter(campo => campo.startsWith("bloqueo"))
+            .forEach(campo => {
+                if (Object.prototype.hasOwnProperty.call(camposOperativos || {}, campo)) {
+                    salida[campo] = camposOperativos[campo];
+                }
+            });
+
+        return salida;
+    }
+
+    function esIngresoDeOtraReserva(cabana, fecha, reservaId) {
+        return Boolean(
+            cabana?.reservaId &&
+            String(cabana.reservaId) !== String(reservaId) &&
+            String(cabana.fechaIngresoReserva || "").slice(0, 10) === fecha
+        );
+    }
+
     async function obtenerReservasActivas() {
         const { data, error } = await cliente
             .from("reserva_estadias")
@@ -264,8 +299,11 @@
             montoAbono: Number(infoAbono.total || 0),
             abonoVerificado: Number(infoAbono.total || 0) > 0,
             medioPago: medioUI(infoAbono.ultimoMedio),
+            estadoEstadia: String(estadia.estado_estadia || ""),
+            estadoReserva: String(reserva.estado_reserva || ""),
             checkinRealizado: Boolean(estadia.checkin_realizado_en),
             checkinManual: Boolean(estadia.checkin_realizado_en),
+            checkoutRealizado: Boolean(estadia.checkout_realizado_en),
             continuidadAutomatica: false
         };
 
@@ -291,15 +329,35 @@
                     const existente = dia.cabanas?.[numero];
                     const op = obtenerCamposOperativos(operativos, fecha, numero);
 
+                    if (i === cantidadNoches) {
+                        // El checkout no ocupa el día de salida. Si no entra
+                        // otra reserva, el tablero queda SALE / LIBRE y vacío.
+                        // La noche anterior conserva la identidad del huésped.
+                        if (esIngresoDeOtraReserva(existente, fecha, reserva.id)) {
+                            dia.cabanas[numero] = {
+                                ...existente,
+                                estado: tieneBloqueoOperativo(op)
+                                    ? "bloqueada"
+                                    : "sale-ingresa"
+                            };
+                        } else {
+                            dia.cabanas[numero] = crearSalidaLibre(
+                                estadia,
+                                reserva,
+                                op
+                            );
+                        }
+                        continue;
+                    }
+
                     let estado = "continua";
                     if (i === 0) estado = "libre-ingresa";
-                    if (i === cantidadNoches) estado = "sale-libre";
 
                     if (
                         i === 0 &&
-                        existente?.reservaId &&
-                        existente.reservaId !== reserva.id &&
-                        existente.estado === "sale-libre"
+                        existente?.salidaReservaId &&
+                        String(existente.salidaReservaId) !== String(reserva.id) &&
+                        ["sale-libre", "bloqueada"].includes(existente.estado)
                     ) {
                         estado = "sale-ingresa";
                     }
@@ -369,6 +427,24 @@
             try {
                 if (typeof guardarDatos === "function") guardarDatos();
             } catch {}
+
+            // El caché ya quedó reconstruido; refrescar también el día que está
+            // abierto para retirar de inmediato nombres y datos de salidas
+            // antiguas que aún permanecían pintados en el DOM.
+            try {
+                if (
+                    typeof cargarCabanasDia === "function" &&
+                    typeof fechaSeleccionada !== "undefined" &&
+                    fechaSeleccionada
+                ) {
+                    cargarCabanasDia(fechaSeleccionada);
+                }
+            } catch (error) {
+                console.warn(
+                    "HAIKU · El caché se limpió, pero no fue posible refrescar el resumen abierto:",
+                    error
+                );
+            }
 
             try {
                 if (typeof generarCalendario === "function") generarCalendario();

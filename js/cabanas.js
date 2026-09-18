@@ -343,7 +343,7 @@ function actualizarColorCabana(fila) {
     }
 
     // PRIORIDAD 2: CHECK-OUT REALIZADO → AZUL
-    if (datosCabana.checkout) {
+    if (datosCabana.checkout && datosCabana.reservaId) {
         fila.classList.add("cabana-checkout");
         return;
     }
@@ -523,6 +523,10 @@ const valorNoches = fila.querySelector(
 
 if (valorNoches) {
     valorNoches.textContent = datosCabana.noches || "";
+    const contenedorNoches = valorNoches.closest(".cabana-noches");
+    if (contenedorNoches) {
+        contenedorNoches.hidden = !String(datosCabana.noches ?? "").trim();
+    }
 }
 
         const campos =
@@ -3833,6 +3837,20 @@ function actualizarTextoOcupacionResumen(
 
     const usarDatosCabana =
     datosCabana !== null;
+
+    const sinReservaActual = Boolean(
+        usarDatosCabana &&
+        !datosCabana?.reservaId &&
+        ["", "libre-libre", "sale-libre"].includes(
+            String(datosCabana?.estado || "")
+        )
+    );
+
+    texto.hidden = sinReservaActual;
+    if (sinReservaActual) {
+        texto.textContent = "";
+        return;
+    }
 
 
 const adultos =
@@ -7966,8 +7984,6 @@ const configuracionResumenRapido = [
 let resumenRapidoTarjetaActiva = null;
 let resumenRapidoTemporizador = null;
 let resumenRapidoPointerId = null;
-let resumenRapidoInicioX = 0;
-let resumenRapidoInicioY = 0;
 
 function obtenerReservaQueSale(
     numeroCabana,
@@ -8228,20 +8244,25 @@ function llenarPanelResumenRapido(
             ".tarjeta-resumen-rapido-lista"
         );
 
-    const encabezado =
+    const etiqueta =
         panel?.querySelector(
-            ".tarjeta-resumen-rapido-titulo"
+            ".tarjeta-resumen-rapido-etiqueta"
         );
 
-    if (!panel || !lista || !encabezado) {
+    const conteo =
+        panel?.querySelector(
+            ".tarjeta-resumen-rapido-conteo"
+        );
+
+    if (!panel || !lista || !etiqueta || !conteo) {
         return;
     }
 
     const lineas =
         obtenerLineasResumenRapido(tipo);
 
-    encabezado.textContent =
-        `${titulo} · ${lineas.length}`;
+    etiqueta.textContent = titulo;
+    conteo.textContent = String(lineas.length);
 
     lista.innerHTML = "";
 
@@ -8262,13 +8283,38 @@ function llenarPanelResumenRapido(
 
     lineas.forEach(textoLinea => {
 
+        const partes = String(textoLinea)
+            .split("·")
+            .map(parte => parte.trim())
+            .filter(Boolean);
+
         const linea =
-            document.createElement("strong");
+            document.createElement("div");
 
         linea.className =
             "tarjeta-resumen-rapido-linea";
 
-        linea.textContent = textoLinea;
+        const cabana = document.createElement("span");
+        cabana.className = "tarjeta-resumen-rapido-cabana";
+        cabana.textContent = partes.shift() || "DETALLE";
+
+        const contenido = document.createElement("span");
+        contenido.className = "tarjeta-resumen-rapido-contenido";
+
+        const principal = document.createElement("strong");
+        principal.className = "tarjeta-resumen-rapido-principal";
+        principal.textContent = partes.shift() || "Sin titular";
+        contenido.appendChild(principal);
+
+        if (partes.length > 0) {
+            const meta = document.createElement("small");
+            meta.className = "tarjeta-resumen-rapido-meta";
+            meta.textContent = partes.join(" · ");
+            contenido.appendChild(meta);
+        }
+
+        linea.appendChild(cabana);
+        linea.appendChild(contenido);
 
         lista.appendChild(linea);
     });
@@ -8326,11 +8372,7 @@ function iniciarResumenRapido(
     resumenRapidoPointerId =
         evento.pointerId;
 
-    resumenRapidoInicioX =
-        evento.clientX;
-
-    resumenRapidoInicioY =
-        evento.clientY;
+    tarjeta.setPointerCapture?.(evento.pointerId);
 
     tarjeta.classList.add(
         "tarjeta-resumen-rapido-esperando"
@@ -8402,6 +8444,10 @@ function inicializarResumenRapido() {
                 "Mantén presionado para ver el detalle."
             );
 
+            tarjeta.setAttribute("role", "button");
+            tarjeta.tabIndex = 0;
+            tarjeta.title = "Mantén presionado para ver el detalle";
+
             const panel =
                 document.createElement("div");
 
@@ -8411,10 +8457,25 @@ function inicializarResumenRapido() {
             panel.hidden = true;
 
             const titulo =
-                document.createElement("span");
+                document.createElement("div");
 
             titulo.className =
                 "tarjeta-resumen-rapido-titulo";
+
+            const etiqueta =
+                document.createElement("span");
+
+            etiqueta.className =
+                "tarjeta-resumen-rapido-etiqueta";
+
+            const conteo =
+                document.createElement("span");
+
+            conteo.className =
+                "tarjeta-resumen-rapido-conteo";
+
+            titulo.appendChild(etiqueta);
+            titulo.appendChild(conteo);
 
             const lista =
                 document.createElement("div");
@@ -8450,41 +8511,41 @@ function inicializarResumenRapido() {
                     evento.preventDefault();
                 }
             );
+
+            tarjeta.addEventListener(
+                "keydown",
+                evento => {
+                    if (
+                        evento.repeat ||
+                        !["Enter", " "].includes(evento.key)
+                    ) {
+                        return;
+                    }
+
+                    evento.preventDefault();
+                    cerrarResumenRapido();
+                    resumenRapidoTarjetaActiva = tarjeta;
+                    llenarPanelResumenRapido(
+                        tarjeta,
+                        configuracion.tipo,
+                        configuracion.titulo
+                    );
+                    panel.hidden = false;
+                    tarjeta.classList.add(
+                        "tarjeta-resumen-rapido-activa"
+                    );
+                }
+            );
+
+            tarjeta.addEventListener(
+                "keyup",
+                evento => {
+                    if (["Enter", " "].includes(evento.key)) {
+                        cerrarResumenRapido();
+                    }
+                }
+            );
         });
-
-    document.addEventListener(
-        "pointermove",
-        evento => {
-
-            if (
-                resumenRapidoPointerId === null ||
-                evento.pointerId !==
-                    resumenRapidoPointerId
-            ) {
-                return;
-            }
-
-            const distanciaX =
-                Math.abs(
-                    evento.clientX -
-                    resumenRapidoInicioX
-                );
-
-            const distanciaY =
-                Math.abs(
-                    evento.clientY -
-                    resumenRapidoInicioY
-                );
-
-            if (
-                distanciaX > 14 ||
-                distanciaY > 14
-            ) {
-                cerrarResumenRapido();
-            }
-        },
-        { passive: true }
-    );
 
     document.addEventListener(
         "pointerup",

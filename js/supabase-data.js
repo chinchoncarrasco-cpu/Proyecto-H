@@ -60,8 +60,6 @@
 
         if (estado === "sale-ingresa" || estado === "libre-ingresa") {
             id = fila.ingreso_estadia_id;
-        } else if (estado === "sale-libre") {
-            id = fila.salida_estadia_id;
         } else if (estado === "continua") {
             id = fila.continua_estadia_id;
         } else if (estado === "fullday") {
@@ -77,7 +75,7 @@
             case "libre-ingresa":
                 return fila.ingreso_titular || "Sin titular";
             case "sale-libre":
-                return fila.salida_titular || "Sin titular";
+                return "Sin titular";
             case "continua":
                 return fila.continua_titular || "Sin titular";
             case "fullday":
@@ -117,15 +115,14 @@
         return new Map((data || []).map(item => [item.id, item]));
     }
 
-    function pintarFilaOperacion(fila, estadiasPorId) {
+    function pintarEstadoOperacion(fila) {
         const numero = String(fila.numero);
         const tr = document.querySelector(
             `.tabla-contenedor tbody tr[data-cabana="${numero}"]`
         );
 
-        if (!tr) return;
+        if (!tr) return null;
 
-        const estadia = obtenerEstadiaPrincipal(fila, estadiasPorId);
         const titular = obtenerTitularPrincipal(fila);
 
         const titularElemento = tr.querySelector(
@@ -139,6 +136,19 @@
         if (estado) {
             estado.value = fila.estado_operativo || "libre-libre";
         }
+
+        tr.dataset.haikuFuente = "supabase";
+        tr.dataset.haikuCabanaId = fila.cabana_id || "";
+
+        return tr;
+    }
+
+    function pintarFilaOperacion(fila, estadiasPorId) {
+        const tr = pintarEstadoOperacion(fila);
+        if (!tr) return;
+
+        const numero = String(fila.numero);
+        const estadia = obtenerEstadiaPrincipal(fila, estadiasPorId);
 
         const adultos = tr.querySelector('[data-campo="adultos"]');
         const ninos = tr.querySelector('[data-campo="ninos"]');
@@ -161,14 +171,34 @@
                     : estadia?.tipo_estadia === "fullday"
                         ? "FD"
                         : "";
+            const contenedorNoches = noches.closest(".cabana-noches");
+            if (contenedorNoches) contenedorNoches.hidden = !estadia;
+        }
+
+        const ocupacion = tr.querySelector(".ocupacion-cabana");
+        if (
+            ocupacion &&
+            typeof actualizarTextoOcupacionResumen === "function"
+        ) {
+            actualizarTextoOcupacionResumen(ocupacion, estadia
+                ? {
+                    reservaId: estadia.reserva_id || "ocupada",
+                    estado: fila.estado_operativo,
+                    adultos: estadia.adultos,
+                    ninos: estadia.ninos,
+                    mascotas: estadia.mascotas
+                }
+                : { estado: fila.estado_operativo });
         }
 
         const ingreso = tr.querySelector('[data-campo="ingreso"]');
         if (ingreso) {
             ingreso.value =
-                fila.hora_ingreso_prevista ||
-                estadia?.hora_ingreso_prevista ||
-                "";
+                fila.estado_operativo === "sale-libre"
+                    ? ""
+                    : fila.hora_ingreso_prevista ||
+                        estadia?.hora_ingreso_prevista ||
+                        "";
         }
 
         const checkin = tr.querySelector('[data-campo="checkinRealizado"]');
@@ -202,9 +232,6 @@
                 estadoRevision.value = valor;
             }
         }
-
-        tr.dataset.haikuFuente = "supabase";
-        tr.dataset.haikuCabanaId = fila.cabana_id || "";
     }
 
     async function cargarContadoresRelacionados(fecha, filas) {
@@ -274,6 +301,12 @@
             if (error) throw error;
 
             const filas = Array.isArray(data) ? data : [];
+
+            // El RPC ya contiene el estado operativo y el titular. Pintarlos
+            // ahora evita mantener colores antiguos mientras se consultan los
+            // detalles de noches y ocupación en una segunda llamada.
+            filas.forEach(pintarEstadoOperacion);
+
             const estadiasPorId = await cargarDetallesEstadias(filas);
 
             filas.forEach(fila =>

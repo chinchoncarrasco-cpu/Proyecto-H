@@ -843,7 +843,8 @@ botonGuardarNota.addEventListener("click", async () => {
                 fecha: fechaSeleccionada,
                 numeroCabana,
                 texto: nota,
-                reservaId: cabana.reservaId || ""
+                reservaId: cabana.reservaId || "",
+                estadiaId: cabana.estadiaId || ""
             });
         } catch (error) {
             console.error(

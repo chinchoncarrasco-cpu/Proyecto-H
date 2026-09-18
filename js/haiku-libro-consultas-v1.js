@@ -769,21 +769,28 @@
                 return codigo || palabras.size>=3;
             });
         };
+        const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
+            normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
+        const pagoVerificadoSistema = p => Boolean(p?.verificado_en || p?.datos_origen?.verificacion_migrada === true ||
+            p?.datos_origen?.verificacion_abono === true);
         const fuertesUsados = new Set(resultados.flatMap(r => (r.libro.pagos || []).filter(pagoTieneIdentificadorFuerte)
             .flatMap(p => pagos.filter(x=>pagoCoincide(p,x)).map(x=>x.id))));
         const items=[];
+        const itemsFuertes=[];
         for (const result of resultados) {
             if (result.estado !== 'asociada') continue;
             for (const p of result.libro.pagos || []) {
-                if (pagoTieneIdentificadorFuerte(p) || !Number.isSafeInteger(Number(p.monto)) || Number(p.monto)<=0) continue;
-                items.push({p,reservaId:result.sistema.reserva_id,titular:result.libro.titular});
+                if (!Number.isSafeInteger(Number(p.monto)) || Number(p.monto)<=0) continue;
+                const item={p,reservaId:result.sistema.reserva_id,titular:result.libro.titular};
+                (pagoTieneIdentificadorFuerte(p) ? itemsFuertes : items).push(item);
             }
         }
+        const firmaFinancieraIgual = (a,b) => a.reservaId===b.reservaId && moneda(a.p)===moneda(b.p) &&
+            Number(a.p.monto)===Number(b.p.monto) && medioLibro(a.p)===medioLibro(b.p) &&
+            String(a.p.fecha_comprobante || '').slice(0,10)===String(b.p.fecha_comprobante || '').slice(0,10);
         const compatibles = item => pagos.filter(p => p.id && !fuertesUsados.has(p.id) && !consumidos.has(p.id) &&
             p.reserva_id===item.reservaId && moneda(p)===moneda(item.p) && Number(p.monto)===Number(item.p.monto) &&
             medioSistema(p)===medioLibro(item.p));
-        const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
-            normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
         const tokensTitular = valor => [...new Set(texto(valor).split(' ').filter(t=>/^\p{L}+$/u.test(t) && t.length>=2))];
         const titularVarianteCompatible = (a,b) => {
             const ta=tokensTitular(a),tb=tokensTitular(b);
@@ -791,6 +798,25 @@
             const [corto,largo]=ta.length<=tb.length?[ta,new Set(tb)]:[tb,new Set(ta)];
             return corto.every(t=>largo.has(t));
         };
+
+        // Un abono ya verificado en Proyecto H puede ser anterior a la captura
+        // de CodAut/Folio. Se reconoce únicamente con una correspondencia 1 ↔ 1
+        // exacta de reserva, monto, moneda, medio y fecha. Si el identificador
+        // aparece en otro pago o existe cualquier ambigüedad, conserva revisión.
+        for (const item of itemsFuertes.filter(x => x.p.tipo_movimiento==='alojamiento' &&
+            x.p.pago_recibido===true && x.p.estado_pago==='registrado_en_libro' && x.p.fecha_comprobante && medioLibro(x.p))) {
+            if (pagos.some(p=>pagoCoincide(item.p,p))) continue;
+            const candidatos=compatibles(item).filter(p=>
+                !identificadorFuerteSistema(p) && pagoVerificadoSistema(p) &&
+                S.normalizar(p.estado)==='confirmado' && S.normalizar(p.tipo_movimiento)==='pago' &&
+                (!S.normalizar(p.etapa_operativa) || S.normalizar(p.etapa_operativa)==='abono') &&
+                String(p.fecha_pago || '').slice(0,10)===String(item.p.fecha_comprobante).slice(0,10));
+            if (candidatos.length!==1) continue;
+            const libroCompatibles=[...items,...itemsFuertes].filter(otro=>firmaFinancieraIgual(otro,item));
+            if (libroCompatibles.length!==1) continue;
+            asignadas.set(item.p,candidatos[0]);
+            consumidos.add(candidatos[0].id);
+        }
 
         // Evidencia exacta conservada por Haku: misma reserva, monto y medio,
         // más origen XLSX o glosa completa. La fecha puede haber sido corregida.
@@ -1063,7 +1089,7 @@
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
         // Global identifier check: a payment on another reservation is a conflict, never new.
         const pagos = await paginas(() => cliente.from("pagos")
-            .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
+            .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
         const pagosNoVigentes = pagos.filter(p=>!pagoSistemaVigente(p));
         const pagosExistentes = pagosDebilesExistentes(resultados, pagosVigentes);

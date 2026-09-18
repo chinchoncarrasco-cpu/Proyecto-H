@@ -83,6 +83,14 @@
         // No interferimos con el rojo de una CAB bloqueada.
         if (estado === "bloqueada") return true;
 
+        // La salida ya está descrita en Día anterior. Sin un nuevo ingreso,
+        // la columna actual representa una cabaña libre aunque exista hora de
+        // checkout para el contexto lateral.
+        if (estado === "sale-libre") {
+            fila.classList.add("cabana-libre");
+            return true;
+        }
+
         // SALE / INGRESA tiene dos huéspedes en el mismo día. Cuando el nuevo
         // huésped ya hizo check-in, su verde domina sobre la salida anterior.
         if (nuevoHuespedYaIngreso) {
@@ -94,12 +102,6 @@
         // Debe dominar sobre el check-in histórico de la noche anterior.
         if (tieneCheckout) {
             fila.classList.add("cabana-checkout");
-            return true;
-        }
-
-        // Antes de realizar checkout, SALE / LIBRE vuelve a su amarillo original.
-        if (estado === "sale-libre") {
-            fila.classList.add("cabana-sale-libre");
             return true;
         }
 

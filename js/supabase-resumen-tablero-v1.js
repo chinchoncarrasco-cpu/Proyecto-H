@@ -6,7 +6,6 @@
 (() => {
     "use strict";
 
-    const MEDIA_ESCRITORIO = "(min-width: 901px)";
     const ESTADOS = {
         "libre-libre": "LIBRE",
         "libre-ingresa": "INGRESA",
@@ -17,8 +16,86 @@
         fullday: "FULLDAY"
     };
 
+    const COLUMNAS_OPERATIVAS = [
+        { id: "cabana", nombre: "Cabaña" },
+        { id: "estado", nombre: "Estado" },
+        { id: "aseo", nombre: "Aseo" },
+        { id: "ingreso", nombre: "Ingreso" },
+        { id: "notas", nombre: "Notas" },
+        { id: "servicios", nombre: "Servicios" },
+        { id: "estado-final", nombre: "Estado final" }
+    ];
+
     let actualizacionPendiente = false;
     let arrastreNotas = null;
+    const columnasOcultas = new Set();
+    const filasOcultasPorFecha = new Map();
+    const CLAVE_FILAS_OCULTAS = "haikuResumenFilasOcultasPorFechaV2";
+
+    function fechaResumenActiva() {
+        try {
+            const fecha = String(fechaSeleccionada || "").slice(0, 10);
+            return /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : "";
+        } catch (_) {
+            return "";
+        }
+    }
+
+    function filasOcultasDeFecha(fecha = fechaResumenActiva()) {
+        const fechaISO = String(fecha || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaISO)) return new Set();
+
+        if (!filasOcultasPorFecha.has(fechaISO)) {
+            filasOcultasPorFecha.set(fechaISO, new Set());
+        }
+        return filasOcultasPorFecha.get(fechaISO);
+    }
+
+    function cargarFilasOcultas() {
+        try {
+            const guardadas = JSON.parse(
+                window.localStorage.getItem(CLAVE_FILAS_OCULTAS) || "{}"
+            );
+            if (!guardadas || Array.isArray(guardadas) || typeof guardadas !== "object") {
+                return;
+            }
+
+            Object.entries(guardadas).forEach(([fecha, numeros]) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Array.isArray(numeros)) {
+                    return;
+                }
+
+                const filas = filasOcultasDeFecha(fecha);
+                numeros
+                    .map(numero => String(numero || "").trim())
+                    .filter(numero => /^\d+$/.test(numero))
+                    .forEach(numero => filas.add(numero));
+            });
+        } catch (_) {
+            // Un valor anterior inválido no debe impedir que cargue el tablero.
+        }
+    }
+
+    function guardarFilasOcultas() {
+        try {
+            const guardadas = {};
+            [...filasOcultasPorFecha.entries()]
+                .sort(([fechaA], [fechaB]) => fechaA.localeCompare(fechaB))
+                .forEach(([fecha, filas]) => {
+                    if (!filas.size) return;
+                    guardadas[fecha] = [...filas]
+                        .sort((numeroA, numeroB) => Number(numeroA) - Number(numeroB));
+                });
+            window.localStorage.setItem(
+                CLAVE_FILAS_OCULTAS,
+                JSON.stringify(guardadas)
+            );
+        } catch (_) {
+            // El tablero sigue funcionando si el navegador bloquea localStorage.
+        }
+    }
+
+    cargarFilasOcultas();
 
     function fechaVisible(fecha) {
         if (!fecha) return "";
@@ -47,20 +124,59 @@
         }
     }
 
+    function estadoRealCabana(cabana) {
+        return String(
+            cabana?.estadoEstadia ||
+            cabana?.estado_estadia ||
+            cabana?.estadoReserva ||
+            cabana?.estado_reserva ||
+            ""
+        ).trim().toLowerCase();
+    }
+
     function estadoVisualContexto(cabana) {
         const estado = String(cabana?.estado || "").trim();
+        const estadoReal = estadoRealCabana(cabana);
 
         if (estado === "bloqueada" || estado === "sale-bloqueada") {
             return "bloqueada";
         }
-        if (cabana?.checkoutRealizado === true || String(cabana?.checkout || "").trim()) {
-            return "checkout";
+        if (estadoReal === "checked_out" || cabana?.checkoutRealizado === true || String(cabana?.checkout || "").trim()) {
+            return "checked_out";
         }
-        if (cabana?.checkinRealizado === true) {
-            return "checkin";
+        if (estadoReal === "hospedada" || cabana?.checkinRealizado === true) {
+            return "hospedada";
+        }
+        if (estadoReal === "confirmada") {
+            return "confirmada";
+        }
+        if (estadoReal === "pendiente") {
+            return "pendiente";
         }
 
         return estado || "libre-libre";
+    }
+
+    function aplicarEstadoRealFila(fila, cabana) {
+        const clases = [
+            "cabana-estado-confirmada",
+            "cabana-estado-pendiente",
+            "cabana-estado-hospedada",
+            "cabana-estado-checked-out"
+        ];
+        fila.classList.remove(...clases);
+
+        const operativo = String(cabana?.estado || "").trim();
+        if (["bloqueada", "sale-bloqueada"].includes(operativo)) return;
+
+        const estado = estadoRealCabana(cabana);
+        const clase = {
+            confirmada: "cabana-estado-confirmada",
+            pendiente: "cabana-estado-pendiente",
+            hospedada: "cabana-estado-hospedada",
+            checked_out: "cabana-estado-checked-out"
+        }[estado];
+        if (clase) fila.classList.add(clase);
     }
 
     function resumenContexto(fecha, numeroCabana) {
@@ -98,15 +214,6 @@
         }
     }
 
-    function restaurarCheckoutOriginal(fila) {
-        const checkout = fila.querySelector(
-            ".resumen-dia-contexto--anterior .checkout-cabana"
-        );
-        const informacion = fila.querySelector("td.info-cabana");
-
-        if (checkout && informacion) informacion.appendChild(checkout);
-    }
-
     function actualizarBotonContexto(tabla, tipo) {
         const boton = tabla.querySelector(
             `[data-resumen-contexto-toggle="${tipo}"]`
@@ -128,12 +235,17 @@
 
     function configurarCabeceraContexto(tabla, celda, tipo, texto) {
         let etiqueta = celda.querySelector(".resumen-contexto-cabecera-etiqueta");
-        let boton = celda.querySelector("[data-resumen-contexto-toggle]");
+        let boton = tabla.querySelector(
+            `[data-resumen-contexto-toggle="${tipo}"]`
+        );
 
-        if (!etiqueta || !boton) {
-            celda.replaceChildren();
+        if (!etiqueta) {
             etiqueta = document.createElement("span");
             etiqueta.className = "resumen-contexto-cabecera-etiqueta";
+            celda.appendChild(etiqueta);
+        }
+
+        if (!boton) {
             boton = document.createElement("button");
             boton.type = "button";
             boton.className = "resumen-contexto-toggle";
@@ -142,7 +254,7 @@
                 evento.stopPropagation();
                 alternarContexto(tabla, tipo);
             });
-            celda.append(etiqueta, boton);
+            celda.appendChild(boton);
         }
 
         etiqueta.textContent = texto;
@@ -154,6 +266,297 @@
         actualizarBotonContexto(tabla, tipo);
     }
 
+    function ubicarBotonContextoSiguiente(tabla) {
+        const cabeceraEstadoFinal = tabla.querySelector(
+            'th[data-resumen-columna="estado-final"]'
+        );
+        const boton = tabla.querySelector(
+            '[data-resumen-contexto-toggle="siguiente"]'
+        );
+        if (!cabeceraEstadoFinal || !boton) return;
+
+        boton.classList.add("resumen-contexto-toggle--estado-final");
+        if (boton.parentElement !== cabeceraEstadoFinal) {
+            cabeceraEstadoFinal.appendChild(boton);
+        }
+    }
+
+    function actualizarColumnaOperativa(tabla, columna) {
+        const oculto = columnasOcultas.has(columna.id);
+
+        tabla
+            .querySelectorAll(`[data-resumen-columna="${columna.id}"]`)
+            .forEach(celda => {
+                celda.dataset.resumenColumnaOculta = String(oculto);
+            });
+
+        const boton = tabla.querySelector(
+            `th[data-resumen-columna="${columna.id}"] .resumen-columna-toggle`
+        );
+        if (!boton) return;
+
+        boton.textContent = oculto ? "+" : "−";
+        boton.title = `${oculto ? "Mostrar" : "Ocultar"} columna ${columna.nombre}`;
+        boton.setAttribute("aria-label", boton.title);
+        boton.setAttribute("aria-expanded", String(!oculto));
+    }
+
+    function alternarColumnaOperativa(tabla, columna) {
+        if (columnasOcultas.has(columna.id)) {
+            columnasOcultas.delete(columna.id);
+        } else {
+            columnasOcultas.add(columna.id);
+        }
+        actualizarColumnaOperativa(tabla, columna);
+    }
+
+    function manejarToggleColumna(evento) {
+        const boton = evento.target.closest?.(".resumen-columna-toggle");
+        if (!boton) return;
+
+        const tabla = boton.closest("table");
+        const id = boton.closest("th")?.dataset.resumenColumna;
+        const columna = COLUMNAS_OPERATIVAS.find(item => item.id === id);
+        if (tabla && columna) alternarColumnaOperativa(tabla, columna);
+    }
+
+    function configurarColumnasOperativas(tabla) {
+        const encabezado = tabla.tHead?.rows?.[0];
+        if (!encabezado) return;
+
+        const cabeceras = [...encabezado.cells].filter(
+            celda => !celda.classList.contains("resumen-contexto-cabecera")
+        );
+
+        COLUMNAS_OPERATIVAS.forEach((columna, indice) => {
+            const cabecera = cabeceras[indice];
+            if (!cabecera) return;
+
+            cabecera.classList.add("resumen-columna-cabecera");
+            cabecera.dataset.resumenColumna = columna.id;
+
+            let etiqueta = cabecera.querySelector(".resumen-columna-etiqueta");
+            let boton = cabecera.querySelector(".resumen-columna-toggle");
+            if (!etiqueta || !boton) {
+                etiqueta = document.createElement("span");
+                etiqueta.className = "resumen-columna-etiqueta";
+                etiqueta.textContent = columna.nombre;
+
+                boton = document.createElement("button");
+                boton.type = "button";
+                boton.className = "resumen-columna-toggle";
+
+                cabecera.replaceChildren(etiqueta, boton);
+            }
+
+            tabla.querySelectorAll("tbody tr[data-cabana]").forEach(fila => {
+                const celdas = [...fila.cells].filter(
+                    celda => !celda.classList.contains("resumen-dia-contexto")
+                );
+                const celda = celdas[indice];
+                if (celda) celda.dataset.resumenColumna = columna.id;
+            });
+
+            actualizarColumnaOperativa(tabla, columna);
+        });
+    }
+
+    function actualizarFilaOperativa(fila) {
+        const numero = String(fila.dataset.cabana || "");
+        const filasOcultas = filasOcultasDeFecha();
+        const oculto = filasOcultas.has(numero);
+        fila.dataset.resumenFilaOculta = String(oculto);
+
+        const boton = fila.querySelector(".resumen-fila-toggle");
+        if (!boton) return;
+
+        boton.textContent = oculto ? "+" : "−";
+        boton.title = `${oculto ? "Mostrar" : "Ocultar"} resumen CAB ${numero}`;
+        boton.setAttribute("aria-label", boton.title);
+        boton.setAttribute("aria-expanded", String(!oculto));
+    }
+
+    function etiquetaFilaMinima(contenedor, tipo) {
+        if (!contenedor) return null;
+
+        let etiqueta = contenedor.querySelector(
+            `:scope > .resumen-fila-minimo--${tipo}`
+        );
+        if (!etiqueta) {
+            etiqueta = document.createElement("span");
+            etiqueta.className =
+                `resumen-fila-minimo resumen-fila-minimo--${tipo}`;
+            contenedor.appendChild(etiqueta);
+        }
+        return etiqueta;
+    }
+
+    function actualizarDatosFilaMinima(fila) {
+        const anterior = fila.querySelector(".resumen-dia-contexto--anterior");
+        const informacion = fila.querySelector("td.info-cabana");
+        const siguiente = fila.querySelector(".resumen-dia-contexto--siguiente");
+
+        const celdaEstado = fila.querySelector('[data-resumen-columna="estado"]');
+        const celdaAseo = fila.querySelector('[data-resumen-columna="aseo"]');
+        const celdaIngreso = fila.querySelector('[data-resumen-columna="ingreso"]');
+        const celdaNotas = fila.querySelector('[data-resumen-columna="notas"]');
+        const celdaServicios = fila.querySelector('[data-resumen-columna="servicios"]');
+        const celdaEstadoFinal = fila.querySelector(
+            '[data-resumen-columna="estado-final"]'
+        );
+
+        const estadoAnterior = etiquetaFilaMinima(anterior, "anterior");
+        const resumenActual = etiquetaFilaMinima(informacion, "actual");
+        const estadoSiguiente = etiquetaFilaMinima(siguiente, "siguiente");
+        const estadoActual = etiquetaFilaMinima(celdaEstado, "estado");
+        const aseoActual = etiquetaFilaMinima(celdaAseo, "aseo");
+        const ingresoActual = etiquetaFilaMinima(celdaIngreso, "ingreso");
+        const notasActuales = etiquetaFilaMinima(celdaNotas, "notas");
+        const serviciosActuales = etiquetaFilaMinima(celdaServicios, "servicios");
+        const estadoFinal = etiquetaFilaMinima(celdaEstadoFinal, "estado-final");
+
+        const textoSelect = select => {
+            if (!select || !String(select.value || "").trim()) return "";
+            return select.selectedOptions?.[0]?.textContent?.trim() || "";
+        };
+
+        const textoSinControles = elemento => {
+            if (!elemento) return "";
+            const copia = elemento.cloneNode(true);
+            copia
+                .querySelectorAll("button, input, select, textarea")
+                .forEach(control => control.remove());
+            return String(copia.textContent || "")
+                .replace(/\s+/g, " ")
+                .trim();
+        };
+
+        if (estadoAnterior) {
+            estadoAnterior.textContent = anterior
+                ?.querySelector(".resumen-dia-contexto-estado")
+                ?.textContent?.trim() || "LIBRE";
+        }
+
+        if (resumenActual) {
+            const cabana = informacion
+                ?.querySelector(".cabana-ficha-boton")
+                ?.textContent?.trim() || `CAB ${fila.dataset.cabana || ""}`;
+            const titular = informacion
+                ?.querySelector(".titular-cabana")
+                ?.textContent?.trim() || "Sin titular";
+            const nochesElemento = informacion?.querySelector(".cabana-noches");
+            const nochesValor = nochesElemento
+                ?.querySelector(".valor-noches")
+                ?.textContent?.trim() || "";
+            const noches = nochesElemento ? ` ${nochesValor}N` : "";
+            resumenActual.textContent = `${cabana} · ${titular}${noches}`;
+        }
+
+        if (estadoSiguiente) {
+            estadoSiguiente.textContent = siguiente
+                ?.querySelector(".resumen-dia-contexto-estado")
+                ?.textContent?.trim() || "LIBRE";
+        }
+
+        if (estadoActual) {
+            const select = celdaEstado?.querySelector('select[data-campo="estado"]');
+            const checkin = celdaEstado?.querySelector(
+                'input[data-campo="checkinRealizado"]'
+            )?.checked;
+            const partes = [textoSelect(select)];
+            if (checkin) partes.push("CHECK-IN");
+            estadoActual.textContent = partes.filter(Boolean).join(" · ");
+        }
+
+        if (aseoActual) {
+            const encargado = celdaAseo
+                ?.querySelector('input[data-campo="aseo"]')
+                ?.value?.trim() || "";
+            const horaInicio = celdaAseo
+                ?.querySelector('input[data-campo="aseoIn"]')
+                ?.value?.trim() || "";
+            const horaFin = celdaAseo
+                ?.querySelector('input[data-campo="aseoOut"]')
+                ?.value?.trim() || "";
+            const horario = horaInicio && horaFin
+                ? `${horaInicio}–${horaFin}`
+                : (horaInicio || horaFin);
+            aseoActual.textContent = [encargado, horario]
+                .filter(Boolean)
+                .join(" · ");
+        }
+
+        if (ingresoActual) {
+            ingresoActual.textContent = celdaIngreso
+                ?.querySelector('input[data-campo="ingreso"]')
+                ?.value?.trim() || "";
+        }
+
+        if (notasActuales) {
+            const notas = [
+                ...(celdaNotas?.querySelectorAll(".nota-operativa-item") || [])
+            ]
+                .map(textoSinControles)
+                .filter(Boolean);
+            if (!notas.length) {
+                const caja = celdaNotas?.querySelector(".nota-cabana");
+                const texto = textoSinControles(caja);
+                if (texto) notas.push(texto);
+            }
+            notasActuales.textContent = notas.join(" · ");
+        }
+
+        if (serviciosActuales) {
+            serviciosActuales.textContent = celdaServicios
+                ?.querySelector('input[data-campo="servicio"]')
+                ?.value?.trim() || "";
+        }
+
+        if (estadoFinal) {
+            estadoFinal.textContent = textoSelect(
+                celdaEstadoFinal?.querySelector('select[data-campo="estadoFinal"]')
+            );
+        }
+    }
+
+    function configurarFilasOperativas(tabla) {
+        tabla.querySelectorAll("tbody tr[data-cabana]").forEach(fila => {
+            const informacion = fila.querySelector("td.info-cabana");
+            if (!informacion) return;
+
+            let boton = informacion.querySelector(":scope > .resumen-fila-toggle");
+            if (!boton) {
+                boton = document.createElement("button");
+                boton.type = "button";
+                boton.className = "resumen-fila-toggle";
+                boton.dataset.resumenFilaToggle = fila.dataset.cabana || "";
+                informacion.prepend(boton);
+            }
+
+            actualizarDatosFilaMinima(fila);
+            actualizarFilaOperativa(fila);
+        });
+    }
+
+    function manejarToggleFila(evento) {
+        const boton = evento.target.closest?.(".resumen-fila-toggle");
+        if (!boton) return;
+
+        const fila = boton.closest("tr[data-cabana]");
+        const numero = String(fila?.dataset.cabana || "");
+        if (!fila || !numero) return;
+
+        const filasOcultas = filasOcultasDeFecha();
+        if (filasOcultas.has(numero)) {
+            filasOcultas.delete(numero);
+        } else {
+            filasOcultas.add(numero);
+        }
+        guardarFilasOcultas();
+        actualizarDatosFilaMinima(fila);
+        actualizarFilaOperativa(fila);
+    }
+
     function asegurarEstructura() {
         const tabla = document.querySelector(
             "#seccion-resumen .tabla-contenedor > table"
@@ -161,6 +564,14 @@
         if (!tabla) return null;
 
         tabla.classList.add("resumen-tablero");
+        const contenedor = tabla.closest(".tabla-contenedor");
+        if (contenedor) {
+            contenedor.tabIndex = 0;
+            contenedor.setAttribute(
+                "aria-label",
+                "Estado de cabañas: desliza horizontalmente para recorrer las columnas"
+            );
+        }
 
         tabla.querySelectorAll("tbody tr[data-cabana]").forEach(fila => {
             const notas = fila.querySelector(".celda-notas");
@@ -176,17 +587,7 @@
         return tabla;
     }
 
-    function activarContextosEscritorio(tabla) {
-        if (!window.matchMedia(MEDIA_ESCRITORIO).matches) {
-            tabla
-                .querySelectorAll("tbody tr[data-cabana]")
-                .forEach(restaurarCheckoutOriginal);
-            tabla
-                .querySelectorAll(".resumen-dia-contexto, .resumen-contexto-cabecera")
-                .forEach(elemento => elemento.remove());
-            return;
-        }
-
+    function activarContextos(tabla) {
         const encabezado = tabla.tHead?.rows?.[0];
         if (encabezado) {
             let anterior = encabezado.querySelector(
@@ -246,8 +647,10 @@
         const tabla = asegurarEstructura();
         if (!tabla) return;
 
-        activarContextosEscritorio(tabla);
-        if (!window.matchMedia(MEDIA_ESCRITORIO).matches) return;
+        activarContextos(tabla);
+        configurarColumnasOperativas(tabla);
+        ubicarBotonContextoSiguiente(tabla);
+        configurarFilasOperativas(tabla);
 
         let actual;
         try {
@@ -262,6 +665,7 @@
 
         tabla.querySelectorAll("tbody tr[data-cabana]").forEach(fila => {
             const numero = String(fila.dataset.cabana || "");
+            aplicarEstadoRealFila(fila, datosCabana(actual, numero));
 
             pintarContexto(
                 fila.querySelector(".resumen-dia-contexto--anterior"),
@@ -273,6 +677,7 @@
                 "Día siguiente",
                 resumenContexto(siguiente, numero)
             );
+            actualizarDatosFilaMinima(fila);
         });
     }
 
@@ -295,6 +700,21 @@
 
         // Reutiliza exactamente el flujo existente de selección de fecha.
         seleccionarDia(anio, mes - 1, dia, nuevaFecha);
+        programarActualizacion();
+    }
+
+    function navegarHoy() {
+        const actual = new Date();
+        const anio = actual.getFullYear();
+        const mes = actual.getMonth();
+        const dia = actual.getDate();
+        const fecha = [anio, mes + 1, dia]
+            .map((parte, indice) =>
+                indice === 0 ? String(parte) : String(parte).padStart(2, "0")
+            )
+            .join("-");
+
+        seleccionarDia(anio, mes, dia, fecha);
         programarActualizacion();
     }
 
@@ -346,8 +766,13 @@
             .getElementById("resumen-dia-anterior")
             ?.addEventListener("click", () => navegar(-1));
         document
+            .getElementById("resumen-dia-hoy")
+            ?.addEventListener("click", navegarHoy);
+        document
             .getElementById("resumen-dia-siguiente")
             ?.addEventListener("click", () => navegar(1));
+        document.addEventListener("click", manejarToggleColumna);
+        document.addEventListener("click", manejarToggleFila);
 
         const cargarOriginal = window.cargarCabanasDia;
         if (
@@ -374,9 +799,6 @@
             characterData: true,
             subtree: true
         });
-
-        const media = window.matchMedia(MEDIA_ESCRITORIO);
-        media.addEventListener?.("change", programarActualizacion);
 
         tabla.addEventListener("pointerdown", iniciarArrastreNotas);
         tabla.addEventListener("click", evento => {

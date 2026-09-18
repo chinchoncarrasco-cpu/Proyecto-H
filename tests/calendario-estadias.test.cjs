@@ -188,22 +188,54 @@ test('decorador Full Day delega y no vuelve a pintar checkout con color de tipo'
     assert.ok(e.classList.contains('cal-reserva-checkout')); assert.ok(!e.classList.contains('cal-reserva-fullday'));
 });
 
-test('sync completo conserva estadiaId desde Supabase hasta las barras, sin usar ficha ni flags locales', async () => {
+test('sync deja el día de salida SALE / LIBRE sin datos del huésped y conserva la barra desde la noche anterior', async () => {
     const h = harness([
         stay('E1','pendiente', {fecha_ingreso:'2026-09-03', fecha_salida:'2026-09-04', tipo_estadia:'alojamiento', cabanas:{numero:5}}),
         stay('E2','checked_out', {fecha_ingreso:'2026-09-04', fecha_salida:'2026-09-04', tipo_estadia:'fullday', cabanas:{numero:10}})
     ]);
+    let fechaRepintada = '';
+    h.context.cargarCabanasDia = fecha => { fechaRepintada = fecha; };
     h.context.haikuSesion = {};
     h.load('supabase-sync-v3.js'); await h.context.haikuSincronizarReservasSupabase();
     assert.equal(h.errors.length, 0);
     const data = JSON.parse(h.storage.get('haikuDatos'));
     assert.equal(data['2026-09-03'].cabanas[5].estadiaId, 'E1');
-    assert.equal(data['2026-09-04'].cabanas[5].estadiaId, 'E1');
+    assert.equal(data['2026-09-04'].cabanas[5].estado, 'sale-libre');
+    assert.equal(data['2026-09-04'].cabanas[5].salidaEstadiaId, 'E1');
+    assert.equal(data['2026-09-04'].cabanas[5].estadiaId, undefined);
+    assert.equal(data['2026-09-04'].cabanas[5].reservaId, undefined);
+    assert.equal(data['2026-09-04'].cabanas[5].titular, undefined);
+    assert.equal(fechaRepintada, '2026-09-03');
     assert.equal(data['2026-09-04'].cabanas[10].estadiaId, 'E2');
+    assert.equal(data['2026-09-03'].cabanas[5].estadoEstadia, 'pendiente');
+    assert.equal(data['2026-09-04'].cabanas[10].estadoEstadia, 'checked_out');
+    assert.equal(data['2026-09-03'].cabanas[5].estadoReserva, 'checked_out');
     Object.assign(data['2026-09-03'].cabanas[5], {checkout: true, checkinRealizado: true, abonoVerificado: true, abono: 999});
     h.storage.set('haikuFichaReservas', JSON.stringify({R1:{checkoutRealizado: true}}));
     h.calendar(data); h.context.haikuSesion = null;
     h.load('supabase-calendario-estados-v1.js'); await h.refresh();
     assert.ok(h.body.querySelector('[data-estadia-id="E1"]').classList.contains('cal-reserva-confirmacion-pendiente'));
     assert.ok(h.body.querySelector('[data-estadia-id="E2"]').classList.contains('cal-reserva-checkout'));
+});
+
+test('sync muestra SALE / INGRESA con el huésped nuevo cuando salida e ingreso coinciden', async () => {
+    const saliente = stay('E1','checked_out', {
+        fecha_ingreso:'2026-09-03', fecha_salida:'2026-09-04',
+        tipo_estadia:'alojamiento', cabanas:{numero:11}
+    });
+    const entrante = stay('E2','confirmada', {
+        reserva_id:'R2', fecha_ingreso:'2026-09-04', fecha_salida:'2026-09-06',
+        tipo_estadia:'alojamiento', cabanas:{numero:11},
+        reservas:{id:'R2', titular_nombre:'Huésped nuevo', estado_reserva:'confirmada'}
+    });
+    const h = harness([saliente, entrante]);
+    h.context.haikuSesion = {};
+    h.load('supabase-sync-v3.js');
+    await h.context.haikuSincronizarReservasSupabase();
+
+    const actual = JSON.parse(h.storage.get('haikuDatos'))['2026-09-04'].cabanas[11];
+    assert.equal(actual.estado, 'sale-ingresa');
+    assert.equal(actual.reservaId, 'R2');
+    assert.equal(actual.estadiaId, 'E2');
+    assert.equal(actual.titular, 'Huésped nuevo');
 });

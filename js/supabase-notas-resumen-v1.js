@@ -13,6 +13,8 @@
     const CLAVE_MIGRACION = "haikuNotasResumenMigradasV1";
     const cabanasPorNumero = new Map();
     const numerosPorCabana = new Map();
+    const estadiasPorId = new Map();
+    const estadiasPorReserva = new Map();
 
     let canal = null;
     let fechaCargada = "";
@@ -103,7 +105,7 @@
         const { data, error } = await cliente
             .from("notas")
             .select(
-                "id,reserva_id,cabana_id,fecha_operacion,texto,creado_en"
+                "id,reserva_id,estadia_id,cabana_id,fecha_operacion,texto,creado_en"
             )
             .eq("tipo", TIPO_NOTA)
             .eq("fecha_operacion", fecha)
@@ -113,12 +115,98 @@
         return data || [];
     }
 
+    function fechaDentroEstadia(fecha, estadia) {
+        const dia = String(fecha || "").slice(0, 10);
+        const ingreso = String(estadia?.fecha_ingreso || "").slice(0, 10);
+        const salida = String(estadia?.fecha_salida || "").slice(0, 10);
+        return Boolean(dia && ingreso && salida && ingreso <= dia && dia <= salida);
+    }
+
+    function registrarEstadias(filas) {
+        estadiasPorId.clear();
+        estadiasPorReserva.clear();
+
+        (filas || []).forEach(estadia => {
+            const id = String(estadia?.id || "");
+            const reservaId = String(estadia?.reserva_id || "");
+            if (id) estadiasPorId.set(id, estadia);
+            if (!reservaId) return;
+            if (!estadiasPorReserva.has(reservaId)) {
+                estadiasPorReserva.set(reservaId, []);
+            }
+            estadiasPorReserva.get(reservaId).push(estadia);
+        });
+    }
+
+    async function cargarEstadiasDeNotas(filas) {
+        const estadiaIds = [...new Set(
+            (filas || []).map(fila => String(fila?.estadia_id || ""))
+                .filter(esUuid)
+        )];
+        const reservaIds = [...new Set(
+            (filas || []).map(fila => String(fila?.reserva_id || ""))
+                .filter(esUuid)
+        )];
+        const consultas = [];
+
+        if (estadiaIds.length > 0) {
+            consultas.push(
+                cliente.from("reserva_estadias")
+                    .select("id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,estado_estadia")
+                    .in("id", estadiaIds)
+            );
+        }
+        if (reservaIds.length > 0) {
+            consultas.push(
+                cliente.from("reserva_estadias")
+                    .select("id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,estado_estadia")
+                    .in("reserva_id", reservaIds)
+            );
+        }
+
+        const resultados = await Promise.all(consultas);
+        const error = resultados.find(resultado => resultado.error)?.error;
+        if (error) throw error;
+
+        const unicas = new Map();
+        resultados.forEach(resultado => {
+            (resultado.data || []).forEach(estadia => {
+                if (estadia?.id) unicas.set(String(estadia.id), estadia);
+            });
+        });
+        registrarEstadias([...unicas.values()]);
+    }
+
+    function estadiaActualDeNota(fila) {
+        const directa = estadiasPorId.get(String(fila?.estadia_id || ""));
+        if (directa) return directa;
+
+        const candidatas = (
+            estadiasPorReserva.get(String(fila?.reserva_id || "")) || []
+        ).filter(estadia =>
+            !["cancelada", "no_show"].includes(String(estadia?.estado_estadia || "")) &&
+            fechaDentroEstadia(fila?.fecha_operacion, estadia)
+        );
+        const mismaCabana = candidatas.find(estadia =>
+            String(estadia?.cabana_id || "") === String(fila?.cabana_id || "")
+        );
+
+        if (mismaCabana) return mismaCabana;
+        return candidatas.length === 1 ? candidatas[0] : null;
+    }
+
+    function resolverCabanaIdNota(fila) {
+        return estadiaActualDeNota(fila)?.cabana_id || fila?.cabana_id || "";
+    }
+
     function notaLocalDesdeFila(fila) {
+        const estadia = estadiaActualDeNota(fila);
         return {
             id: fila.id,
-            cabana: numerosPorCabana.get(String(fila.cabana_id)) || "",
+            cabana: numerosPorCabana.get(String(resolverCabanaIdNota(fila))) || "",
             texto: fila.texto || "",
             reservaId: fila.reserva_id || "",
+            estadiaId: estadia?.id || fila.estadia_id || "",
             haikuFuente: "supabase"
         };
     }
@@ -147,6 +235,7 @@
 
             const cabanaLocal = dia?.cabanas?.[numero] || {};
             const reservaId = nota?.reservaId || cabanaLocal.reservaId;
+            const estadiaId = nota?.estadiaId || cabanaLocal.estadiaId;
             const registro = {
                 fecha_operacion: fecha,
                 tipo: TIPO_NOTA,
@@ -157,6 +246,9 @@
 
             if (esUuid(reservaId)) {
                 registro.reserva_id = reservaId;
+            }
+            if (esUuid(estadiaId)) {
+                registro.estadia_id = estadiaId;
             }
 
             const { error } = await cliente
@@ -204,6 +296,8 @@
                 filas = await consultarNotas(fecha);
             }
 
+            await cargarEstadiasDeNotas(filas);
+
             const dia = datosDia(fecha);
             if (!dia) return;
 
@@ -241,7 +335,7 @@
         }, retraso);
     }
 
-    async function guardarNota({ fecha, numeroCabana, texto, reservaId }) {
+    async function guardarNota({ fecha, numeroCabana, texto, reservaId, estadiaId }) {
         const fechaISO = String(fecha || fechaActual()).slice(0, 10);
         const numero = String(numeroCabana || "");
         const contenido = String(texto || "").trim();
@@ -264,12 +358,17 @@
         if (esUuid(reservaId)) {
             registro.reserva_id = reservaId;
         }
+        const estadiaActual = estadiaId ||
+            datosDia(fechaISO)?.cabanas?.[numero]?.estadiaId;
+        if (esUuid(estadiaActual)) {
+            registro.estadia_id = estadiaActual;
+        }
 
         let { data, error } = await cliente
             .from("notas")
             .insert(registro)
             .select(
-                "id,reserva_id,cabana_id,fecha_operacion,texto,creado_en"
+                "id,reserva_id,estadia_id,cabana_id,fecha_operacion,texto,creado_en"
             )
             .single();
 
@@ -277,7 +376,7 @@
             const repetida = await cliente
                 .from("notas")
                 .select(
-                    "id,reserva_id,cabana_id,fecha_operacion,texto,creado_en"
+                    "id,reserva_id,estadia_id,cabana_id,fecha_operacion,texto,creado_en"
                 )
                 .eq("tipo", TIPO_NOTA)
                 .eq("fecha_operacion", fechaISO)
@@ -290,6 +389,7 @@
         }
 
         if (error) throw error;
+        await cargarEstadiasDeNotas([data]);
         return notaLocalDesdeFila(data);
     }
 

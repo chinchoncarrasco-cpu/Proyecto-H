@@ -89,7 +89,7 @@
         if (["libre-ingresa","sale-ingresa"].includes(fila.estado_operativo)) {
             return fila.ingreso_reserva_id || "";
         }
-        if (fila.estado_operativo === "sale-libre") return fila.salida_reserva_id || "";
+        if (fila.estado_operativo === "sale-libre") return "";
         if (fila.estado_operativo === "continua") return fila.continua_reserva_id || "";
         if (fila.estado_operativo === "fullday") return fila.fullday_reserva_id || "";
         return "";
@@ -259,7 +259,14 @@
         limpiarClasesEstado(campo);
 
         const estadia = ficha.estadias?.[0] || {};
-        const estado = ficha.reserva?.estado_reserva || "pendiente";
+        const estadoReserva = String(ficha.reserva?.estado_reserva || "").toLowerCase();
+        const estadoEstadia = String(estadia.estado_estadia || "").toLowerCase();
+        // Cancelación y No-Show pertenecen a la reserva completa. Para los
+        // estados operativos, cada cabaña manda sobre el estado general: una
+        // reserva grupal puede tener CAB 2 hospedada y CAB 7 aún confirmada.
+        const estado = ["cancelada", "no_show"].includes(estadoReserva)
+            ? estadoReserva
+            : estadoEstadia || estadoReserva || "pendiente";
 
         if (estado === "cancelada") {
             campo.textContent = "● Cancelada";

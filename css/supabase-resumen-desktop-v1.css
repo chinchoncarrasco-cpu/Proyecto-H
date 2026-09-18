@@ -1,11 +1,15 @@
 /* =====================================================
    HAIKU · ESTADO DE CABAÑAS · TABLERO OPERATIVO
-   Presentación de escritorio inspirada en la referencia.
+   Presentación compartida por escritorio y móvil.
    Los datos y controles siguen perteneciendo al flujo existente.
 ===================================================== */
 
+/* Posición y búsqueda propias de la composición amplia. */
 @media (min-width: 901px) {
     body:has(#seccion-resumen.activa) .contenido {
+        width: auto;
+        max-width: none;
+        box-sizing: border-box;
         padding-left: 0;
         padding-right: 0;
     }
@@ -51,16 +55,41 @@
     }
 
     #seccion-resumen {
-        width: calc(100vw - var(--haiku-sidebar-ancho, 240px));
-        max-width: none;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
         margin-left: 0;
         padding-top: 55px;
     }
 
-    /* La referencia concentra la operación en un único tablero. Los
-       contadores siguen en el DOM y conservan sus datos/bindings. */
+    #seccion-resumen .resumen-tablero th:nth-child(3),
+    #seccion-resumen .resumen-tablero td:nth-child(3) {
+        width: 90px !important;
+    }
+
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin,
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
+        transform: none;
+    }
+
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin {
+        gap: 0 !important;
+    }
+
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+        flex: 1 1 auto !important;
+    }
+
+}
+
+/* Presentación común del panel y del tablero. */
+    /* Indicadores diarios visibles sobre el tablero. */
     #seccion-resumen > .resumen {
-        display: none;
+        display: grid;
     }
 
     #seccion-resumen > .panel:first-of-type {
@@ -108,50 +137,93 @@
     #seccion-resumen .resumen-navegacion-dias {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 6px;
         margin-left: auto;
+        padding: 4px;
+        border: 1px solid rgba(207, 218, 228, 0.9);
+        border-radius: 12px;
+        background: rgba(240, 244, 248, 0.78);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
     }
 
     #seccion-resumen .resumen-dia-boton {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        min-width: 148px;
-        min-height: 46px;
-        padding: 10px 18px;
-        border: 1px solid #d8e0e8;
-        border-radius: 7px;
-        background: #ffffff;
-        color: #151c24;
+        gap: 8px;
+        min-width: 142px;
+        min-height: 42px;
+        padding: 8px 12px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #1d2c3a;
+        box-shadow: 0 1px 2px rgba(32, 52, 70, 0.08);
         font: inherit;
         font-size: 13px;
         font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
         cursor: pointer;
-        transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+        transition: border-color 0.16s ease, background 0.16s ease,
+            box-shadow 0.16s ease, transform 0.16s ease;
     }
 
     #seccion-resumen .resumen-dia-boton:hover {
-        border-color: #aebdcb;
-        background: #f7f9fb;
+        border-color: #b9c7d3;
+        background: #ffffff;
+        box-shadow: 0 4px 10px rgba(32, 52, 70, 0.11);
         transform: translateY(-1px);
     }
 
+    #seccion-resumen .resumen-dia-boton:focus-visible {
+        outline: 3px solid rgba(49, 78, 120, 0.2);
+        outline-offset: 2px;
+    }
+
     #seccion-resumen .resumen-dia-boton > span {
-        font-size: 22px;
-        font-weight: 400;
+        display: inline-grid;
+        flex: 0 0 24px;
+        width: 24px;
+        height: 24px;
+        place-items: center;
+        border-radius: 50%;
+        background: #edf2f6;
+        font-size: 17px;
+        font-weight: 500;
         line-height: 1;
     }
 
     #seccion-resumen .resumen-dia-boton--siguiente {
         border-color: #314e78;
-        background: #314e78;
+        background: linear-gradient(135deg, #385b89 0%, #2d4971 100%);
         color: #ffffff;
+        box-shadow: 0 4px 10px rgba(35, 62, 98, 0.2);
+    }
+
+    #seccion-resumen .resumen-dia-boton--siguiente > span {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    #seccion-resumen .resumen-dia-boton--hoy {
+        min-width: 68px;
+        padding-right: 14px;
+        padding-left: 14px;
+        border-color: #c7d3de;
+        background: #eaf0f5;
+        color: #29445f;
+        box-shadow: none;
+    }
+
+    #seccion-resumen .resumen-dia-boton--hoy:hover {
+        border-color: #9eb0bf;
+        background: #dfe8f0;
     }
 
     #seccion-resumen .resumen-dia-boton--siguiente:hover {
         border-color: #263f64;
-        background: #263f64;
+        background: linear-gradient(135deg, #314f7a 0%, #253e62 100%);
+        box-shadow: 0 6px 14px rgba(35, 62, 98, 0.24);
     }
 
     #seccion-resumen .tabla-contenedor {
@@ -229,7 +301,9 @@
     }
 
     #seccion-resumen .resumen-contexto-cabecera--anterior .resumen-contexto-toggle {
-        right: 2px;
+        top: 50%;
+        right: -16px;
+        transform: translateY(-50%);
     }
 
     #seccion-resumen .resumen-contexto-cabecera--siguiente .resumen-contexto-toggle {
@@ -246,6 +320,8 @@
 
     #seccion-resumen .resumen-tablero .resumen-contexto-cabecera--anterior {
         width: 68px;
+        z-index: 7;
+        overflow: visible;
     }
 
     #seccion-resumen .resumen-tablero .resumen-contexto-cabecera--siguiente {
@@ -283,6 +359,32 @@
         right: auto;
         left: 50%;
         transform: translate(-50%, -50%);
+    }
+
+    #seccion-resumen .resumen-tablero.resumen-contexto-anterior-oculto
+        :is(.resumen-contexto-cabecera--anterior, .resumen-dia-contexto--anterior) {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+    }
+
+    #seccion-resumen .resumen-tablero.resumen-contexto-siguiente-oculto
+        :is(.resumen-contexto-cabecera--siguiente, .resumen-dia-contexto--siguiente) {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+    }
+
+    #seccion-resumen .resumen-tablero.resumen-contexto-anterior-oculto
+        .resumen-contexto-cabecera--anterior .resumen-contexto-toggle {
+        top: 50%;
+        right: auto;
+        left: 2px;
+        transform: translateY(-50%);
+    }
+
+    #seccion-resumen .resumen-tablero th:nth-child(2) {
+        padding-left: 53px !important;
     }
 
     #seccion-resumen .resumen-tablero th:nth-child(2),
@@ -329,26 +431,9 @@
     }
 
     #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
-        select[data-campo="estado"] option[value="sale-libre"]:checked
-    ) > td:not(.resumen-dia-contexto),
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-sale-libre > td:not(.resumen-dia-contexto) {
-        background: #F6EBCF !important;
-    }
-
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
         select[data-campo="estado"] option[value="fullday"]:checked
     ) > td:not(.resumen-dia-contexto) {
         background: #E9E2F3 !important;
-    }
-
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
-        select[data-campo="estado"] option[value="libre-ingresa"]:checked
-    ) > td:not(.resumen-dia-contexto),
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
-        select[data-campo="estado"] option[value="sale-ingresa"]:checked
-    ) > td:not(.resumen-dia-contexto),
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-ingresa > td:not(.resumen-dia-contexto) {
-        background: #F8D7B8 !important;
     }
 
     #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-libre > td:not(.resumen-dia-contexto) {
@@ -360,11 +445,55 @@
     }
 
     #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-checkin > td:not(.resumen-dia-contexto) {
-        background: #D8EEDF !important;
+        background: #45B16D !important;
+        color: #ffffff;
     }
 
     #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-bloqueada > td:not(.resumen-dia-contexto) {
         background: #fde2e2 !important;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-confirmada
+        > td:not(.resumen-dia-contexto) {
+        background: #66CEF5 !important;
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-pendiente
+        > td:not(.resumen-dia-contexto) {
+        background: #95D6D3 !important;
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-hospedada
+        > td:not(.resumen-dia-contexto) {
+        background: #45B16D !important;
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-checked-out
+        > td:not(.resumen-dia-contexto) {
+        background: #A0A0A0 !important;
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+        .cabana-estado-confirmada,
+        .cabana-estado-pendiente,
+        .cabana-estado-hospedada,
+        .cabana-estado-checked-out
+    ) :is(input, select, button, textarea) {
+        color: inherit;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+        .cabana-estado-confirmada,
+        .cabana-estado-pendiente,
+        .cabana-estado-hospedada,
+        .cabana-estado-checked-out
+    ) select option {
+        background: #ffffff;
+        color: #17212b;
     }
 
     #seccion-resumen .resumen-tablero td.info-cabana {
@@ -426,12 +555,9 @@
     }
 
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="libre-libre"],
+    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="sale-libre"],
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="continua"] {
         --resumen-contexto-fondo: linear-gradient(#f3f4f4, #f3f4f4);
-    }
-
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="sale-libre"] {
-        --resumen-contexto-fondo: linear-gradient(#F6EBCF, #F6EBCF);
     }
 
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="fullday"] {
@@ -440,15 +566,27 @@
 
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="libre-ingresa"],
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="sale-ingresa"] {
-        --resumen-contexto-fondo: linear-gradient(#F8D7B8, #F8D7B8);
+        --resumen-contexto-fondo: linear-gradient(#ffffff, #ffffff);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="checkin"] {
-        --resumen-contexto-fondo: linear-gradient(#D8EEDF, #D8EEDF);
+    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="hospedada"] {
+        --resumen-contexto-fondo: linear-gradient(#45B16D, #45B16D);
+        color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="checkout"] {
-        --resumen-contexto-fondo: linear-gradient(#eef6fb, #eef6fb);
+    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="confirmada"] {
+        --resumen-contexto-fondo: linear-gradient(#66CEF5, #66CEF5);
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="pendiente"] {
+        --resumen-contexto-fondo: linear-gradient(#95D6D3, #95D6D3);
+        color: #ffffff;
+    }
+
+    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="checked_out"] {
+        --resumen-contexto-fondo: linear-gradient(#A0A0A0, #A0A0A0);
+        color: #ffffff;
     }
 
     #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="bloqueada"] {
@@ -806,31 +944,593 @@
         background: rgba(255, 255, 255, 0.58);
         color: #0f5b43;
     }
-}
 
-/* El nuevo contexto lateral sólo existe en escritorio. Si el ancho cambia,
-   el adaptador lo retira y estas reglas no alteran el responsive existente. */
+/* En móvil se conserva el mismo tablero operativo y se recorre de forma
+   horizontal dentro de su propio contenedor. */
 @media (max-width: 900px) {
+    body:has(#seccion-resumen.activa) {
+        overflow-x: hidden;
+    }
+
+    body:has(#seccion-resumen.activa) .contenido {
+        min-width: 0;
+        padding-right: 0;
+        padding-left: 0;
+        overflow-x: hidden;
+    }
+
+    #seccion-resumen {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding-top: 0;
+    }
+
+    #seccion-resumen > .panel:first-of-type {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0;
+    }
+
+    #seccion-resumen .tabla-contenedor {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: visible;
+        overscroll-behavior-inline: contain;
+        touch-action: pan-x pan-y;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #seccion-resumen .resumen-tablero {
+        width: 1270px;
+        min-width: 1270px;
+        max-width: none;
+    }
+
+    /* Las reglas móviles históricas asignaban 135 px al primer th y 90 px
+       al segundo. Con los contextos laterales, ahora esas columnas son
+       Día anterior y Cabaña, respectivamente. Restituimos sus medidas del
+       tablero nuevo para mantener la diagonal y el contenido proporcionados. */
+    #seccion-resumen .resumen-tablero
+        :is(.resumen-contexto-cabecera--anterior, .resumen-dia-contexto--anterior) {
+        width: 68px !important;
+        min-width: 68px !important;
+        max-width: 68px !important;
+    }
+
+    #seccion-resumen .resumen-tablero th:nth-child(2),
+    #seccion-resumen .resumen-tablero td:nth-child(2) {
+        width: 170px !important;
+        min-width: 170px !important;
+        max-width: 170px !important;
+    }
+
+    #seccion-resumen .resumen-tablero th:nth-child(3),
+    #seccion-resumen .resumen-tablero td:nth-child(3) {
+        width: 74px !important;
+        min-width: 74px !important;
+        max-width: 74px !important;
+    }
+
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        margin: 0 !important;
+        gap: 0 !important;
+        transform: none;
+    }
+
+    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: 1 1 auto !important;
+    }
+
     #seccion-resumen .resumen-navegacion-dias {
         display: flex;
-        gap: 8px;
+        width: 100%;
+        box-sizing: border-box;
+        gap: 4px;
         margin-top: 10px;
+        margin-left: 0;
+        padding: 4px;
+        border-radius: 10px;
     }
 
     #seccion-resumen .resumen-dia-boton {
-        min-height: 38px;
-        padding: 8px 11px;
-        border: 1px solid var(--borde);
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: center;
+        gap: 5px;
+        min-height: 40px;
+        padding: 7px 8px;
+        border: 1px solid transparent;
         border-radius: 7px;
-        background: #ffffff;
+        background: rgba(255, 255, 255, 0.94);
         color: var(--texto);
         font: inherit;
         font-size: 11px;
         font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+    }
+
+    #seccion-resumen .resumen-dia-boton > span {
+        flex-basis: 20px;
+        width: 20px;
+        height: 20px;
+        font-size: 15px;
+    }
+
+    #seccion-resumen .resumen-dia-boton--hoy {
+        flex: 0 0 58px;
+        min-width: 58px;
+        padding-right: 8px;
+        padding-left: 8px;
+        border-color: #c7d3de;
+        background: #eaf0f5;
+        color: #29445f;
+    }
+
+    #seccion-resumen .resumen-dia-boton--siguiente {
+        border-color: #314e78;
+        background: linear-gradient(135deg, #385b89 0%, #2d4971 100%);
+        color: #ffffff;
     }
 
     #seccion-resumen .resumen-estado-cabecera {
         align-items: flex-start;
         flex-direction: column;
+        min-height: 0;
+        padding: 16px 14px 14px;
+        gap: 8px;
     }
+
+    #seccion-resumen .resumen-estado-cabecera h2 {
+        font-size: 24px;
+    }
+
+    #seccion-resumen .resumen-tablero input,
+    #seccion-resumen .resumen-tablero select {
+        min-height: 40px;
+    }
+}
+
+/* Controles discretos para contraer y restaurar columnas operativas. */
+#seccion-resumen .resumen-columna-cabecera {
+    position: relative;
+}
+
+#seccion-resumen .resumen-columna-etiqueta {
+    transition: opacity 0.16s ease;
+}
+
+#seccion-resumen .resumen-columna-cabecera:not(
+    [data-resumen-columna="cabana"]
+) {
+    text-align: center;
+}
+
+#seccion-resumen .resumen-columna-cabecera:not(
+    [data-resumen-columna="cabana"]
+) .resumen-columna-etiqueta {
+    display: block;
+    width: 100%;
+    text-align: center;
+}
+
+#seccion-resumen .resumen-columna-toggle {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    z-index: 8;
+    display: grid;
+    width: 15px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(220, 228, 234, 0.56);
+    color: #637483;
+    font: 700 11px/1 system-ui, sans-serif;
+    opacity: 0.42;
+    transform: translateY(-50%);
+    cursor: pointer;
+    transition: color 0.16s ease, background-color 0.16s ease,
+        opacity 0.16s ease, transform 0.16s ease;
+}
+
+#seccion-resumen .resumen-columna-cabecera:hover .resumen-columna-toggle,
+#seccion-resumen .resumen-columna-toggle:hover,
+#seccion-resumen .resumen-columna-toggle:focus-visible {
+    background: #dce6ed;
+    color: #29445f;
+    opacity: 1;
+}
+
+#seccion-resumen .resumen-columna-toggle:focus-visible {
+    outline: 2px solid rgba(49, 78, 120, 0.24);
+    outline-offset: 1px;
+}
+
+/* El control de Día siguiente vive dentro de Estado final para que la
+   columna contextual pueda cerrarse por completo. */
+#seccion-resumen
+    .resumen-columna-cabecera[data-resumen-columna="estado-final"] {
+    overflow: visible;
+}
+
+#seccion-resumen
+    .resumen-columna-cabecera[data-resumen-columna="estado-final"]
+    > .resumen-columna-toggle {
+    right: 22px;
+}
+
+#seccion-resumen .resumen-contexto-toggle--estado-final {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    left: auto;
+    z-index: 9;
+    display: grid;
+    width: 15px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(220, 228, 234, 0.56);
+    color: #435864;
+    font: 700 13px/1 system-ui, sans-serif;
+    opacity: 0.72;
+    transform: translateY(-50%);
+    cursor: pointer;
+}
+
+#seccion-resumen .resumen-tablero [data-resumen-columna-oculta="true"] {
+    width: 24px !important;
+    min-width: 24px !important;
+    max-width: 24px !important;
+    padding-right: 0 !important;
+    padding-left: 0 !important;
+}
+
+#seccion-resumen .resumen-tablero th[data-resumen-columna-oculta="true"]
+    .resumen-columna-etiqueta {
+    visibility: hidden;
+    opacity: 0;
+}
+
+#seccion-resumen .resumen-tablero th[data-resumen-columna-oculta="true"]
+    .resumen-columna-toggle {
+    right: 50%;
+    color: #38546c;
+    opacity: 0.72;
+    transform: translate(50%, -50%);
+}
+
+#seccion-resumen .resumen-tablero
+    th[data-resumen-columna="estado-final"][data-resumen-columna-oculta="true"] {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+}
+
+#seccion-resumen .resumen-tablero
+    th[data-resumen-columna="estado-final"][data-resumen-columna-oculta="true"]
+    > .resumen-columna-toggle {
+    right: 22px;
+    transform: translateY(-50%);
+}
+
+#seccion-resumen .resumen-tablero td[data-resumen-columna-oculta="true"] {
+    overflow: hidden !important;
+    color: transparent !important;
+    font-size: 0 !important;
+}
+
+#seccion-resumen .resumen-tablero td[data-resumen-columna-oculta="true"]
+    > *:not(.resumen-fila-toggle) {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Un control por cabaña contrae la fila completa sin alterar sus campos. */
+#seccion-resumen .resumen-tablero td.info-cabana {
+    position: relative;
+}
+
+#seccion-resumen .resumen-fila-toggle {
+    position: absolute;
+    top: 4px;
+    left: 3px;
+    z-index: 9;
+    display: grid;
+    width: 15px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(220, 228, 234, 0.58);
+    color: #617483;
+    font: 700 11px/1 system-ui, sans-serif;
+    opacity: 0.4;
+    cursor: pointer;
+    transition: color 0.16s ease, background-color 0.16s ease,
+        opacity 0.16s ease, transform 0.16s ease;
+}
+
+#seccion-resumen .resumen-tablero td.info-cabana:hover .resumen-fila-toggle,
+#seccion-resumen .resumen-fila-toggle:hover,
+#seccion-resumen .resumen-fila-toggle:focus-visible {
+    background: #dce6ed;
+    color: #29445f;
+    opacity: 1;
+}
+
+#seccion-resumen .resumen-fila-toggle:focus-visible {
+    outline: 2px solid rgba(49, 78, 120, 0.24);
+    outline-offset: 1px;
+}
+
+#seccion-resumen .resumen-fila-minimo {
+    display: none;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"] {
+    height: 36px !important;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"] > td {
+    height: 36px !important;
+    min-height: 36px !important;
+    max-height: 36px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    overflow: hidden !important;
+}
+
+/* Las piezas diagonales sobresalen de las celdas de día anterior/siguiente.
+   Al minimizar deben seguir visibles para conservar la separación visual. */
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    > td.resumen-dia-contexto {
+    overflow: visible !important;
+}
+
+/* La fila compacta es mucho más baja que la abierta. Reducimos el recorrido
+   horizontal de las diagonales para conservar el mismo ángulo aparente y
+   evitar que invadan el nombre de la cabaña. */
+@media (min-width: 901px) {
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::after {
+        width: 15px;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::after {
+        right: -14px;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--siguiente::before {
+        left: -43px;
+        width: 44px;
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 15px 100%);
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::before {
+        width: 17px;
+        clip-path: polygon(0 0, 2px 0, 17px 100%, 15px 100%);
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::before {
+        right: -16px;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--siguiente::after {
+        left: -45px;
+        width: 17px;
+        clip-path: polygon(0 0, 2px 0, 17px 100%, 15px 100%);
+    }
+}
+
+@media (max-width: 900px) {
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::after {
+        right: -14px;
+        width: 15px;
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--siguiente::before {
+        left: -43px;
+        width: 44px;
+        clip-path: polygon(0 0, 100% 0, 100% 100%, 15px 100%);
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--anterior::before {
+        right: -16px;
+        width: 17px;
+        clip-path: polygon(0 0, 2px 0, 17px 100%, 15px 100%);
+    }
+
+    #seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+        .resumen-dia-contexto--siguiente::after {
+        left: -45px;
+        width: 17px;
+        clip-path: polygon(0 0, 2px 0, 17px 100%, 15px 100%);
+    }
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    > td > *:not(.resumen-fila-toggle):not(.resumen-fila-minimo) {
+    display: none !important;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-minimo {
+    position: absolute;
+    top: 50%;
+    z-index: 8;
+    display: block;
+    overflow: hidden;
+    color: #17212b;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.15px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: translateY(-50%);
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-minimo--anterior {
+    right: 3px;
+    left: 7px;
+    text-align: left;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-minimo--actual {
+    right: 4px;
+    left: 25px;
+    font-size: 11px;
+    text-align: left;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-minimo--siguiente {
+    right: 1px;
+    left: 1px;
+    font-size: 9px;
+    letter-spacing: 0;
+    text-align: center;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    :is(
+        .resumen-fila-minimo--estado,
+        .resumen-fila-minimo--aseo,
+        .resumen-fila-minimo--ingreso,
+        .resumen-fila-minimo--notas,
+        .resumen-fila-minimo--servicios,
+        .resumen-fila-minimo--estado-final
+    ) {
+    right: 4px;
+    left: 4px;
+    text-align: center;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-minimo:empty {
+    display: none !important;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-resumen-fila-oculta="true"]
+    .resumen-fila-toggle {
+    top: 50%;
+    left: 3px;
+    color: #38546c;
+    opacity: 0.78;
+    transform: translateY(-50%);
+}
+
+/* =====================================================
+   CONTRASTE DEL TEXTO SEGÚN EL COLOR REAL DE LA FILA
+   La identificación de la cabaña permanece siempre negra.
+===================================================== */
+
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    .cabana-checkin,
+    .cabana-checkout,
+    .cabana-bloqueada,
+    .cabana-estado-confirmada,
+    .cabana-estado-pendiente,
+    .cabana-estado-hospedada,
+    .cabana-estado-checked-out
+):not(:has(select[data-campo="estado"] option[value="libre-libre"]:checked)):not(:has(select[data-campo="estado"] option[value="sale-libre"]:checked))
+ > td:not(.info-cabana):not(.resumen-dia-contexto),
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    .cabana-checkin,
+    .cabana-checkout,
+    .cabana-bloqueada,
+    .cabana-estado-confirmada,
+    .cabana-estado-pendiente,
+    .cabana-estado-hospedada,
+    .cabana-estado-checked-out
+):not(:has(select[data-campo="estado"] option[value="libre-libre"]:checked)):not(:has(select[data-campo="estado"] option[value="sale-libre"]:checked))
+ > td:not(.info-cabana):not(.resumen-dia-contexto) * {
+    color: #ffffff !important;
+}
+
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    .cabana-checkin,
+    .cabana-checkout,
+    .cabana-bloqueada,
+    .cabana-estado-confirmada,
+    .cabana-estado-pendiente,
+    .cabana-estado-hospedada,
+    .cabana-estado-checked-out
+):not(:has(select[data-campo="estado"] option[value="libre-libre"]:checked)):not(:has(select[data-campo="estado"] option[value="sale-libre"]:checked))
+ > td:not(.info-cabana):not(.resumen-dia-contexto)
+ :is(input, textarea)::placeholder {
+    color: rgba(255, 255, 255, 0.84) !important;
+    opacity: 1;
+}
+
+/* Edge/Chrome dibujan el reloj del input de hora como un control nativo. */
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    .cabana-checkin,
+    .cabana-checkout,
+    .cabana-bloqueada,
+    .cabana-estado-confirmada,
+    .cabana-estado-pendiente,
+    .cabana-estado-hospedada,
+    .cabana-estado-checked-out
+):not(:has(select[data-campo="estado"] option[value="libre-libre"]:checked)):not(:has(select[data-campo="estado"] option[value="sale-libre"]:checked))
+ > td:not(.info-cabana):not(.resumen-dia-contexto)
+ input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: brightness(0) invert(1);
+    opacity: 1;
+}
+
+/* Las opciones desplegadas necesitan fondo claro para seguir siendo legibles. */
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]
+    select option {
+    background: #ffffff !important;
+    color: #17212b !important;
+}
+
+/* El estado operativo libre es la autoridad visual inmediata. Así una clase
+   anterior no conserva su color mientras termina la hidratación de Supabase. */
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+    select[data-campo="estado"] option[value="libre-libre"]:checked
+) > td:not(.resumen-dia-contexto),
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+    select[data-campo="estado"] option[value="sale-libre"]:checked
+) > td:not(.resumen-dia-contexto) {
+    background: #F1F3F2 !important;
+}
+
+/* Primera celda: CAB, titular, noches y ocupación siempre en negro. */
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]
+    > td.info-cabana,
+#seccion-resumen .resumen-tablero tbody tr[data-cabana]
+    > td.info-cabana * {
+    color: #111a16 !important;
 }

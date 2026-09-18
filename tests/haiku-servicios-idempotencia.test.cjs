@@ -80,7 +80,7 @@ test('la huella operativa es estable y no depende del orden de ejecución', () =
     assert.equal(I.huellaServicio(hecho), I.huellaServicio({ ...hecho }));
     assert.notEqual(I.huellaServicio(hecho), I.huellaServicio({ ...hecho, hora: '23:15' }));
     const source = fs.readFileSync(path.join(__dirname, '../js/servicios.js'), 'utf8');
-    const cuerpo = source.match(/function generarIdServicio[\s\S]*?\n}\n\nfunction registrarHistorialServicio/)[0];
+    const cuerpo = source.match(/function generarIdServicio[\s\S]*?\r?\n}\r?\n\r?\nfunction registrarHistorialServicio/)[0];
     assert.doesNotMatch(cuerpo, /Date\.now|Math\.random/);
 });
 

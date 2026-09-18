@@ -859,6 +859,55 @@ test('Bruno migrated historical WebPay is omitted only with unique residual and 
  assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'));
 });
 
+test('verified Proyecto H payments without captured identifiers are omitted by exact unique movement match',async()=>{
+ const credito=readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'208468',folio:null,bovtar:null,
+  fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-01',texto_original:'WebPay crédito Alejandro Ramos Donaire'});
+ const debito=readyPay({monto:50000,medio_pago:'debito',codigo_autorizacion:null,folio:'000250',bovtar:'094778',
+  fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-06',texto_original:'Tarjeta débito Alejandro Ramos Donaire'});
+ const reserva=readyBook({titular:'Alejandro Ramos Donaire',cabana:2,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-07',
+  pagos:[credito,debito]});
+ const pagos=[
+  {id:'h-credito',reserva_id:'r1',monto:160000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
+   medio_pago:'webpay_credito',fecha_pago:'2026-09-01T12:00:00Z',datos_origen:{verificacion_migrada:true}},
+  {id:'h-debito',reserva_id:'r1',monto:50000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
+   medio_pago:'tarjeta_debito',fecha_pago:'2026-09-06T12:00:00Z',verificado_en:'2026-09-06T12:05:00Z',datos_origen:{}}
+ ];
+ const comp=await compare([reserva],[stay(reserva)],pagos);
+ assert.deepEqual(comp.pagosDetalle.map(x=>x.estado),['en_sistema','en_sistema']);
+ assert.deepEqual(comp.pagosDetalle.map(x=>x.sistema.id),['h-credito','h-debito']);
+ assert.ok(comp.pagosDetalle.every(x=>x.coincidencia_debil===true));
+ const plan=Q.crearPlanIncorporacion([reserva],comp);
+ const items=plan.items.filter(item=>[credito,debito].includes(item.pagoLibro));
+ assert.equal(items.length,2);assert.ok(items.every(item=>item.categoria==='omitidos'&&item.payload===null&&item.aprobable!==true));
+ assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'));
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+});
+
+test('identifier-less Proyecto H fallback fails closed when verification or financial identity is not exact and unique',async()=>{
+ const movimiento=readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'208468',
+  fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-01'});
+ const reserva=readyBook({titular:'Alejandro Ramos Donaire',cabana:2,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-07',pagos:[movimiento]});
+ const base={id:'h-credito',reserva_id:'r1',monto:160000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  etapa_operativa:'abono',medio_pago:'webpay_credito',fecha_pago:'2026-09-01T12:00:00Z',verificado_en:'2026-09-01T12:05:00Z',datos_origen:{}};
+ const casos=[
+  ['sin verificar',[{...base,verificado_en:null}]],
+  ['fecha distinta',[{...base,fecha_pago:'2026-09-02T12:00:00Z'}]],
+  ['medio distinto',[{...base,medio_pago:'webpay_debito'}]],
+  ['identificador incompatible',[{...base,codigo_autorizacion:'OTRO'}]],
+  ['dos candidatos',[base,{...base,id:'h-credito-2'}]],
+  ['identificador usado globalmente',[base,{...base,id:'otra-reserva',reserva_id:'r2',codigo_autorizacion:'208468'}]]
+ ];
+ for(const [nombre,pagos] of casos){
+  const comp=await compare([reserva],[stay(reserva)],pagos);
+  assert.notEqual(comp.pagosDetalle[0].estado,'en_sistema',nombre);
+ }
+ const duplicadoLibro={...movimiento,origen:{hoja:'Sep26',celda:'OTRA'}};
+ const dos={...reserva,pagos:[movimiento,duplicadoLibro]};
+ const comp=await compare([dos],[stay(dos)],[base]);
+ assert.ok(comp.pagosDetalle.every(x=>x.estado!=='en_sistema'));
+});
+
 test('Bruno historical reconciliation fails closed for every ambiguous or incomplete accounting condition',async()=>{
  const base=escenarioBruno();
  const clonLibro={...base.pagoB,origen:{hoja:'Sep26',celda:'A3'}};
@@ -1435,6 +1484,22 @@ test('different Libro groups targeting one reservation produce one consolidated 
  assert.equal(serialized.filter(i=>i.tipo==='reserva_actualizar').length,1);
  const notes=serialized[0].reserva.despues.observaciones;
  assert.match(notes,/Nota operativa/);assert.match(notes,/Factura/);assert.match(notes,/Llegada tarde/);
+});
+
+test('shared CAB 2 and CAB 7 both keep the hosted state read from the Libro',async()=>{
+ const datos={titular:'Marco Iturrieta Rojas',rut_documento:'14252507-0',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',
+  estado_operativo:'hospedada',estado_confirmacion:'confirmada_por_color'};
+ const cab2=readyBook({...datos,id:'libro-cab2',cabana:2,texto_original:'Marco Iturrieta Rojas // CAB 2'});
+ const cab7=readyBook({...datos,id:'libro-cab7',cabana:7,texto_original:'Marco Iturrieta Rojas // CAB 7'});
+ const reserva={...stay(cab2).reservas,grupo_reserva_id:'grupo-marco',estado_reserva:'confirmada'};
+ const rows=[stay(cab2,{id:'estadia-cab2',reserva_id:'reserva-marco',reservas:reserva}),
+  stay(cab7,{id:'estadia-cab7',reserva_id:'reserva-marco',reservas:reserva})];
+ const plan=await prepare([cab2,cab7],rows),operaciones=Q.serializarIncorporacion(plan)
+  .filter(item=>item.tipo==='reserva_actualizar');
+ assert.equal(operaciones.length,2);
+ assert.deepEqual(operaciones.map(item=>item.estadia_id).sort(),['estadia-cab2','estadia-cab7']);
+ assert.ok(operaciones.every(item=>item.estadia.antes.estado_estadia==='confirmada'&&
+  item.estadia.despues.estado_estadia==='hospedada'));
 });
 
 test('new reservation keeps the Libro state in the confirmation payload',async()=>{

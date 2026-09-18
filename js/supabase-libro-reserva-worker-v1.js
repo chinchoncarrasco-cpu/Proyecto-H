@@ -140,16 +140,41 @@ function parsearAlineacion(inner) {
     return Object.keys(salida).length ? salida : null;
 }
 
-function parsearEstilosXml(xml) {
+function coloresTemaXml(xml) {
+    if (!xml) return [];
+    return ["lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"].map((clave) => {
+        const contenedor = primerTag(xml, `a:${clave}`)?.inner || "";
+        return primerTag(contenedor, "a:srgbClr")?.attrs?.val || primerTag(contenedor, "a:sysClr")?.attrs?.lastClr || null;
+    });
+}
+
+function resolverColorTema(c, temas) {
+    if (!c || c.rgb || !Number.isInteger(c.theme) || !temas?.[c.theme]) return c;
+    return { ...c, rgb: `FF${String(temas[c.theme]).slice(-6).toUpperCase()}` };
+}
+
+function resolverFuenteTema(font, temas) {
+    return font?.color ? { ...font, color: resolverColorTema(font.color, temas) } : font;
+}
+
+function parsearEstilosXml(xml, temas = []) {
     if (!xml) return [];
     const fontsCont = primerTag(xml, "fonts")?.inner || "";
     const fillsCont = primerTag(xml, "fills")?.inner || "";
     const bordersCont = primerTag(xml, "borders")?.inner || "";
     const xfsCont = primerTag(xml, "cellXfs")?.inner || "";
 
-    const fonts = bloques(fontsCont, "font").map((b) => parsearFuente(b.inner));
-    const fills = bloques(fillsCont, "fill").map((b) => parsearFill(b.inner));
-    const borders = bloques(bordersCont, "border").map((b) => parsearBorde(b.inner));
+    const fonts = bloques(fontsCont, "font").map((b) => resolverFuenteTema(parsearFuente(b.inner), temas));
+    const fills = bloques(fillsCont, "fill").map((b) => {
+        const fill = parsearFill(b.inner);
+        return fill ? { ...fill, fgColor: resolverColorTema(fill.fgColor, temas), bgColor: resolverColorTema(fill.bgColor, temas) } : fill;
+    });
+    const borders = bloques(bordersCont, "border").map((b) => {
+        const border = parsearBorde(b.inner);
+        if (!border) return border;
+        return Object.fromEntries(Object.entries(border).map(([lado, valor]) => [lado,
+            valor?.color ? { ...valor, color: resolverColorTema(valor.color, temas) } : valor]));
+    });
 
     return bloques(xfsCont, "xf").map((xf) => {
         const salida = {};
@@ -171,7 +196,7 @@ function textoDeTagsT(contenido) {
         .join("");
 }
 
-function parsearTextoEnriquecido(contenido) {
+function parsearTextoEnriquecido(contenido, temas = []) {
     const runs = bloques(contenido, "r");
     if (!runs.length) return [];
 
@@ -179,15 +204,15 @@ function parsearTextoEnriquecido(contenido) {
         const rPr = primerTag(run.inner, "rPr");
         return {
             texto: textoDeTagsT(run.inner),
-            font: rPr ? parsearFuente(rPr.inner) : null
+            font: rPr ? resolverFuenteTema(parsearFuente(rPr.inner), temas) : null
         };
     }).filter((run) => run.texto !== "");
 }
 
-async function leerTextosCompartidos(zip) {
+async function leerTextosCompartidos(zip, temas = []) {
     const xml = await zip.file("xl/sharedStrings.xml")?.async("text");
     if (!xml) return [];
-    return bloques(xml, "si").map((si) => parsearTextoEnriquecido(si.inner));
+    return bloques(xml, "si").map((si) => parsearTextoEnriquecido(si.inner, temas));
 }
 
 function rutaNormalizada(base, target) {
@@ -325,8 +350,10 @@ async function leerHoja(buffer, nombreHoja) {
     try {
         const zip = await self.JSZip.loadAsync(buffer);
         const estilosXml = await zip.file("xl/styles.xml")?.async("text");
-        estilos = parsearEstilosXml(estilosXml || "");
-        const textosCompartidos = await leerTextosCompartidos(zip);
+        const temaXml = await zip.file("xl/theme/theme1.xml")?.async("text");
+        const temas = coloresTemaXml(temaXml || "");
+        estilos = parsearEstilosXml(estilosXml || "", temas);
+        const textosCompartidos = await leerTextosCompartidos(zip, temas);
         const rutaHoja = await rutaHojaDesdeNombre(zip, nombreHoja);
         const hojaXml = rutaHoja ? await zip.file(rutaHoja)?.async("text") : null;
         if (hojaXml) {
