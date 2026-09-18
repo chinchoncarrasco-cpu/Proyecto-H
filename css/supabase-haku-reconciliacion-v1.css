@@ -1485,6 +1485,33 @@
 .haiku-asistente-panel .haku-incorporacion-compacta :is(.haiku-incorporacion-cabecera,.haiku-incorporacion-item-cabecera) { flex-wrap: wrap; }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios { list-style: none; padding: 0; margin: 6px 0; }
 .haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-cambios > li { border-top: 1px solid #e6ece8; padding: 6px 0; font-size: .73rem; overflow-wrap: anywhere; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-comparacion {
+    margin: 0; border: 1px solid #dce6df; border-radius: 4px; background: #fbfdfc; overflow: hidden;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-comparacion > summary {
+    margin: 0; padding: 8px 10px; background: #f4f8f5; color: #344b3e; font-size: .7rem; font-weight: 750; cursor: pointer;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-contenido {
+    display: grid; gap: 7px; padding: 8px; border-top: 1px solid #dce6df;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente {
+    min-width: 0; padding: 8px 9px; border: 1px solid #e0e7e3; border-radius: 3px; background: #fff;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente--libro {
+    border-color: #cfe2d6; background: #f1f8f3;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente h4 {
+    margin: 0 0 6px; color: #617369; font-size: .61rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente ul {
+    list-style: none; margin: 0; padding: 0;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente li {
+    margin: 0; padding: 5px 0; border-top: 1px solid #e7ede9; color: #35453c; font-size: .68rem; line-height: 1.4; overflow-wrap: anywhere;
+}
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente li:first-child { padding-top: 0; border-top: 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-fuente li:last-child { padding-bottom: 0; }
+.haiku-asistente-panel .haku-incorporacion-compacta .haiku-incorporacion-notas-vacio { margin: 0; color: #78847d; font-size: .67rem; }
 
 /* Resultado guardado: continuidad visual con la confirmación, sin alterar sus datos. */
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-incorporacion-resultado) {

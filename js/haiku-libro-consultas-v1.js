@@ -3213,11 +3213,39 @@
         const contenedor = elemento('div', titulo ? 'haiku-incorporacion-cambios-propuestos' : '');
         if (titulo) contenedor.append(elemento('strong', 'haiku-incorporacion-cambios-titulo', titulo));
         const cambios = elemento('ul','haiku-incorporacion-cambios');
+        const fragmentosNotas = valor => {
+            const texto = String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi, '\n');
+            const unicos = new Map();
+            for (const fragmento of texto.split(/\r?\n|\s*\/\/\s*/).map(x => x.trim()).filter(Boolean)) {
+                const clave = S.normalizar(fragmento).replace(/[.,;:]+$/g, '');
+                if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
+            }
+            return [...unicos.values()];
+        };
+        const bloqueNotas = (tituloBloque, fragmentos, clase) => {
+            const bloque = elemento('section', `haiku-incorporacion-notas-fuente ${clase}`);
+            bloque.append(elemento('h4', '', tituloBloque));
+            if (!fragmentos.length) bloque.append(elemento('p', 'haiku-incorporacion-notas-vacio', 'Sin información.'));
+            else {
+                const lista = elemento('ul');
+                fragmentos.forEach(fragmento => lista.append(elemento('li', '', fragmento)));
+                bloque.append(lista);
+            }
+            return bloque;
+        };
         for (const c of item.cambios) {
             const fila = elemento('li');
             if (c.campo === 'Notas y detalles del Libro') {
-                const notas = elemento('details');
-                notas.append(elemento('summary','',c.campo),elemento('p','',`Proyecto H: ${c.anterior ?? 'sin dato'}`),elemento('p','',`Libro: ${c.libro}`));
+                const actuales = fragmentosNotas(c.anterior);
+                const clavesActuales = new Set(actuales.map(x => S.normalizar(x).replace(/[.,;:]+$/g, '')));
+                const nuevas = fragmentosNotas(c.libro).filter(x => !clavesActuales.has(S.normalizar(x).replace(/[.,;:]+$/g, '')));
+                const notas = elemento('details', 'haiku-incorporacion-notas-comparacion');
+                const contenido = elemento('div', 'haiku-incorporacion-notas-contenido');
+                contenido.append(
+                    bloqueNotas('Proyecto H actual', actuales, 'haiku-incorporacion-notas-fuente--actual'),
+                    bloqueNotas('Notas nuevas del Libro', nuevas, 'haiku-incorporacion-notas-fuente--libro')
+                );
+                notas.append(elemento('summary','',c.campo),contenido);
                 fila.append(notas);
             } else {
                 fila.append(elemento('strong','haku-cambio-campo',c.campo + ':'),

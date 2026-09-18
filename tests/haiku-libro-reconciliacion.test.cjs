@@ -1807,6 +1807,24 @@ test('shared reservation notes combine both cabins without repeated conflicting 
  const repeat=await prepare([a,b],rows);assert.ok(!repeat.items.some(i=>i.categoria==='actualizaciones'));
 });
 
+test('notes update shows ordered current and new fragments without internal markers or repeated text',async()=>{
+ const r=readyBook({titular:'Karina Cruz',cabana:2,texto_original:'Karina Cruz // CAMA ADICIONAL // NO MOVER'});
+ const observaciones='2 alojamientos\n[DATOS DEL LIBRO]\nMarco Iturrieta Rojas // NO MOVER\n[/DATOS DEL LIBRO]';
+ const sistema=stay(r,{adultos:3,reservas:{...stay(r).reservas,observaciones}});
+ const plan=await prepare([r],[sistema]);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const detalle=h.out.querySelector('.haiku-incorporacion-notas-comparacion');
+ assert.ok(detalle);
+ const fuentes=detalle.querySelectorAll('.haiku-incorporacion-notas-fuente');
+ const texto=nodo=>nodo.querySelectorAll('*').map(elemento=>elemento.textContent).join(' ');
+ assert.equal(fuentes.length,2);
+ assert.match(texto(fuentes[0]),/Proyecto H actual.*2 alojamientos.*Marco Iturrieta Rojas.*NO MOVER/);
+ assert.match(texto(fuentes[1]),/Notas nuevas del Libro.*Karina Cruz.*CAMA ADICIONAL/);
+ assert.doesNotMatch(texto(fuentes[1]),/Marco Iturrieta Rojas/);
+ assert.doesNotMatch(texto(detalle),/\[\/?DATOS DEL LIBRO\]|\/\//);
+ assert.match(plan.items.find(item=>item.categoria==='actualizaciones').payload.reserva.despues.observaciones,/\[DATOS DEL LIBRO\]/);
+});
+
 test('different Libro groups targeting one reservation produce one consolidated reservation patch',async()=>{
  const a=readyBook({texto_original:'Marco Iturrieta // Factura'});
  const b=readyBook({id:'b2',cabana:2,fecha_checkin:'2026-09-20',fecha_checkout:'2026-09-21',texto_original:'Marco Iturrieta // Llegada tarde'});
