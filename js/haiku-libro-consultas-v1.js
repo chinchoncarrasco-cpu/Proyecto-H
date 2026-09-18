@@ -2164,11 +2164,10 @@
             const servicios = serializados.filter(item => item.tipo === 'pago_servicios_4c')
                 .map(item => ({ operacionId: crearIdOperacion(), item, resultado: null }));
             const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c');
-            if (servicios.length > 1 || (servicios.length && items.length)) {
-                throw new Error('Confirma cada pago protegido de servicios por separado para conservar una única operación atómica.');
-            }
             solicitud = { operacionId: crearIdOperacion(), items, servicios, omitidosAlRevalidar };
-            // Se conserva la misma solicitud para que un reintento de red sea idempotente.
+            // Cada pago protegido conserva su propia operación idempotente. El lote
+            // guarda los resultados parciales para que un reintento continúe desde
+            // el primer pago pendiente sin repetir los ya confirmados.
             plan.solicitudPendiente = solicitud;
         } else omitidosAlRevalidar = solicitud.omitidosAlRevalidar || 0;
 

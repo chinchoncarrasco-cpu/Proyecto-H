@@ -35,6 +35,10 @@ function cliente(tablas,opciones={}){
    return {data:opciones.capacidad||null,error:null};
   }
   if(nombre==='haiku_incorporar_pago_servicios_libro_v1'){
+   if(typeof opciones.writerHandler==='function'){
+    const indice=calls.filter(c=>c.nombre==='haiku_incorporar_pago_servicios_libro_v1').length-1;
+    return opciones.writerHandler({args,indice});
+   }
    if(opciones.writerError) return {error:{message:opciones.writerError}};
    return {data:{ok:true,pagos_creados:1,omitidos:0,pago_id:'p-nuevo'},error:null};
   }
@@ -186,6 +190,43 @@ test('pago confirmado existente se omite antes de capability y del writer 4C',as
  const item=plan.items.find(i=>i.pagoLibro===p);
  assert.equal(item.categoria,'omitidos');assert.notEqual(item.aprobable,true);
  assert.equal(db.calls.some(c=>c.nombre==='haiku_libro_aplicaciones_servicio_capacidad_v1'),false);
+});
+
+test('confirma varios pagos protegidos en un lote y reanuda sin duplicar tras un corte de red',async()=>{
+ const primero=pago({concepto:'Tinaja',monto:30000,codigo_autorizacion:'622979',texto_original:'Carlos // 622979 // Tinaja $30.000'});
+ const segundo=pago({concepto:'Late Checkout',monto:20000,codigo_autorizacion:'622980',texto_original:'Carlos // 622980 // Late Checkout $20.000'});
+ const r=reserva(primero);r.pagos=[primero,segundo];
+ const tablas=tablasCarlos(r,{servicios:[servicio('s1','Tinaja Tonel','2026-09-12',30000),servicio('s2','Late Checkout','2026-09-12',20000)],
+  vista_estado_cargos:[cargo('c1','s1','Tinaja Tonel',30000),cargo('c2','s2','Late Checkout',20000)]});
+ let intentoWriter=0;
+ const db=cliente(tablas,{capacidad:CAP,writerHandler:({indice})=>{
+  intentoWriter++;
+  if(intentoWriter===2) throw new Error('Failed to fetch');
+  return {data:{ok:true,pagos_creados:1,omitidos:0,pago_id:`p-${indice}`},error:null};
+ }});
+ const result={reservas:[r],q};
+ const inicial=await Q.prepararIncorporacion(result,new Map(),new Set(),db);
+ const revisables=inicial.items.filter(item=>item.pagoLibro===primero||item.pagoLibro===segundo);
+ assert.equal(revisables.length,2);assert.ok(revisables.every(item=>item.aprobable===true));
+ const aprobados=new Set(revisables.map(item=>item.id));
+ const plan=await Q.prepararIncorporacion(result,new Map(),aprobados,db);
+ assert.equal(Q.serializarIncorporacion(plan).filter(item=>item.tipo==='pago_servicios_4c').length,2);
+
+ await assert.rejects(Q.confirmarIncorporacion(result,new Map(),aprobados,plan,db),/Failed to fetch/);
+ assert.equal(plan.solicitudPendiente.servicios.length,2);
+ assert.ok(plan.solicitudPendiente.servicios[0].resultado);
+ assert.equal(plan.solicitudPendiente.servicios[1].resultado,null);
+ const llamadasTrasFallo=db.calls.filter(c=>c.nombre==='haiku_incorporar_pago_servicios_libro_v1');
+ assert.equal(llamadasTrasFallo.length,2);
+ const operacionPrimerPago=llamadasTrasFallo[0].args.p_operacion_id;
+ const operacionSegundoPago=llamadasTrasFallo[1].args.p_operacion_id;
+
+ const confirmado=await Q.confirmarIncorporacion(result,new Map(),aprobados,plan,db);
+ const llamadasFinales=db.calls.filter(c=>c.nombre==='haiku_incorporar_pago_servicios_libro_v1');
+ assert.equal(llamadasFinales.length,3,'el primer pago confirmado no vuelve a enviarse');
+ assert.equal(llamadasFinales.filter(c=>c.args.p_operacion_id===operacionPrimerPago).length,1);
+ assert.equal(llamadasFinales[2].args.p_operacion_id,operacionSegundoPago,'el pago pendiente reusa su operación idempotente');
+ assert.equal(confirmado.resultado.pagos_creados,2);
 });
 
 test('conflicto de RPC 4C no usa fallback ni reintento ciego y exige comparar de nuevo',async()=>{
