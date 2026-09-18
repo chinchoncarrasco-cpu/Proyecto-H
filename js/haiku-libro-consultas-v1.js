@@ -1360,6 +1360,8 @@
             ...(r.servicios || []).map(x => x.texto_original)].filter(Boolean);
         const notas = [...new Set(original)].join('\n').replace(/\[\/?DATOS DEL LIBRO\]/g, '');
         const existentes = String(s.observaciones || '').replace(/\[DATOS DEL LIBRO\][\s\S]*?\[\/DATOS DEL LIBRO\]/g, '').trim();
+        const clavesExistentes = new Set(fragmentosObservaciones(s.observaciones).map(claveFragmentoObservacion));
+        const agregaNotas = fragmentosObservaciones(notas).some(fragmento => !clavesExistentes.has(claveFragmentoObservacion(fragmento)));
         const docCambio = r.rut_documento && documentoCanon(r.rut_documento) !== documentoCanon(s.rut_documento);
         // El color del Libro puede confirmar un estado posterior, pero nunca debe
         // deshacer automáticamente un check-in o checkout ya registrado.
@@ -1369,7 +1371,7 @@
             { titular_nombre:r.titular, titular_numero_documento:r.rut_documento,
                 titular_tipo_documento:docCambio ? (/^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$/.test(r.rut_documento) ? 'rut' : /[a-z]/i.test(r.rut_documento) ? 'pasaporte' : 'documento') : undefined,
                 correo_contacto:r.correo, telefono_contacto:r.telefono,
-                observaciones:notas ? S.normalizar(s.observaciones) === S.normalizar(notas) ? s.observaciones :
+                observaciones:notas && agregaNotas ?
                     [existentes, `[DATOS DEL LIBRO]\n${notas}\n[/DATOS DEL LIBRO]`].filter(Boolean).join('\n\n') : undefined });
         const estadia = parcheLibro({ cabana_numero:s.cabana, fecha_ingreso:s.fecha_checkin, fecha_salida:s.fecha_checkout,
             tipo_estadia:s.tipo_estadia === 'full_day' ? 'fullday' : s.tipo_estadia, adultos:s.adultos, ninos:s.ninos, mascotas:s.mascotas, estado_estadia:s.estado_operativo },
@@ -1393,6 +1395,20 @@
             return '';
         }).trim();
         return { base, bloques };
+    }
+
+    function claveFragmentoObservacion(valor) {
+        return S.normalizar(valor).replace(/[.,;:]+$/g, '');
+    }
+
+    function fragmentosObservaciones(valor) {
+        const texto = String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi, '\n');
+        const unicos = new Map();
+        for (const fragmento of texto.split(/\r?\n|\s*\/\/\s*/).map(x => x.trim()).filter(Boolean)) {
+            const clave = claveFragmentoObservacion(fragmento);
+            if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
+        }
+        return [...unicos.values()];
     }
 
     function unirObservacionesLibro(antes, propuestas) {
@@ -3213,15 +3229,6 @@
         const contenedor = elemento('div', titulo ? 'haiku-incorporacion-cambios-propuestos' : '');
         if (titulo) contenedor.append(elemento('strong', 'haiku-incorporacion-cambios-titulo', titulo));
         const cambios = elemento('ul','haiku-incorporacion-cambios');
-        const fragmentosNotas = valor => {
-            const texto = String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi, '\n');
-            const unicos = new Map();
-            for (const fragmento of texto.split(/\r?\n|\s*\/\/\s*/).map(x => x.trim()).filter(Boolean)) {
-                const clave = S.normalizar(fragmento).replace(/[.,;:]+$/g, '');
-                if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
-            }
-            return [...unicos.values()];
-        };
         const bloqueNotas = (tituloBloque, fragmentos, clase) => {
             const bloque = elemento('section', `haiku-incorporacion-notas-fuente ${clase}`);
             bloque.append(elemento('h4', '', tituloBloque));
@@ -3236,9 +3243,9 @@
         for (const c of item.cambios) {
             const fila = elemento('li');
             if (c.campo === 'Notas y detalles del Libro') {
-                const actuales = fragmentosNotas(c.anterior);
-                const clavesActuales = new Set(actuales.map(x => S.normalizar(x).replace(/[.,;:]+$/g, '')));
-                const nuevas = fragmentosNotas(c.libro).filter(x => !clavesActuales.has(S.normalizar(x).replace(/[.,;:]+$/g, '')));
+                const actuales = fragmentosObservaciones(c.anterior);
+                const clavesActuales = new Set(actuales.map(claveFragmentoObservacion));
+                const nuevas = fragmentosObservaciones(c.libro).filter(x => !clavesActuales.has(claveFragmentoObservacion(x)));
                 const notas = elemento('details', 'haiku-incorporacion-notas-comparacion');
                 const contenido = elemento('div', 'haiku-incorporacion-notas-contenido');
                 contenido.append(

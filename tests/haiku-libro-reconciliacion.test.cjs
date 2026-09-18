@@ -1825,6 +1825,16 @@ test('notes update shows ordered current and new fragments without internal mark
  assert.match(plan.items.find(item=>item.categoria==='actualizaciones').payload.reserva.despues.observaciones,/\[DATOS DEL LIBRO\]/);
 });
 
+test('existing Libro notes with different separators do not create a formatting-only update',async()=>{
+ const fragmentos=['LISTA ARCOÍRIS','Macarena Hurtado','14127985-8','macarenahurtado.bm@gmail.com','+56 9 7353 1409',
+  '2adl','DG','03-09-2026','Tinaja jacuzzi a las 22:15','Batas en cabaña','cortesía a las 10am','se cambiaron de la cab 5 a la cab 10','se le vendió full day','tinaja por coordinar'];
+ const r=readyBook({titular:'Macarena Hurtado',rut_documento:'14127985-8',cabana:5,texto_original:fragmentos.join(' // ')});
+ const sistema=stay(r,{reservas:{...stay(r).reservas,observaciones:fragmentos.join('\n')}});
+ const plan=await prepare([r],[sistema]);
+ assert.ok(!plan.items.some(item=>item.categoria==='actualizaciones'));
+ assert.ok(plan.items.some(item=>item.categoria==='asociadas'));
+});
+
 test('different Libro groups targeting one reservation produce one consolidated reservation patch',async()=>{
  const a=readyBook({texto_original:'Marco Iturrieta // Factura'});
  const b=readyBook({id:'b2',cabana:2,fecha_checkin:'2026-09-20',fecha_checkout:'2026-09-21',texto_original:'Marco Iturrieta // Llegada tarde'});
