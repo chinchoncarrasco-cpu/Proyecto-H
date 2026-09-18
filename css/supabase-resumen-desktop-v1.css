@@ -341,7 +341,7 @@
     }
 
     #seccion-resumen .resumen-tablero.resumen-contexto-anterior-oculto
-        .resumen-dia-contexto--anterior > *,
+        .resumen-dia-contexto--anterior > *:not(.resumen-dia-anterior-fila-toggle),
     #seccion-resumen .resumen-tablero.resumen-contexto-siguiente-oculto
         .resumen-dia-contexto--siguiente > *,
     #seccion-resumen .resumen-tablero.resumen-contexto-anterior-oculto
@@ -381,6 +381,79 @@
         right: auto;
         left: 2px;
         transform: translateY(-50%);
+    }
+
+    #seccion-resumen .resumen-dia-contexto--anterior[data-resumen-bloque-oculto="true"] {
+        display: none !important;
+    }
+
+    #seccion-resumen .resumen-dia-anterior-fila-toggle {
+        position: absolute;
+        top: auto;
+        right: auto;
+        bottom: 3px;
+        left: calc(100% + 4px);
+        z-index: 8;
+        display: grid;
+        width: 15px;
+        min-width: 15px;
+        height: 15px;
+        padding: 0;
+        place-items: center;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: #526a7b;
+        font: 700 11px/1 system-ui, sans-serif;
+        opacity: 0.68;
+        cursor: pointer;
+        transition: color 0.16s ease, background-color 0.16s ease,
+            opacity 0.16s ease, transform 0.16s ease;
+    }
+
+    #seccion-resumen .resumen-dia-contexto--anterior:hover
+        .resumen-dia-anterior-fila-toggle,
+    #seccion-resumen .info-cabana[data-resumen-anterior-expandido="true"]:hover
+        .resumen-dia-anterior-fila-toggle,
+    #seccion-resumen .resumen-dia-anterior-fila-toggle:hover,
+    #seccion-resumen .resumen-dia-anterior-fila-toggle:focus-visible {
+        background: transparent;
+        color: #29445f;
+        opacity: 1;
+    }
+
+    #seccion-resumen .resumen-dia-anterior-fila-toggle:focus-visible {
+        outline: 2px solid rgba(49, 78, 120, 0.24);
+        outline-offset: 1px;
+    }
+
+    #seccion-resumen .info-cabana[data-resumen-anterior-expandido="true"]
+        > .resumen-dia-anterior-fila-toggle {
+        right: auto;
+        bottom: 3px;
+        left: 0;
+    }
+
+    #seccion-resumen .resumen-tablero.resumen-contexto-anterior-oculto
+        .resumen-dia-contexto--anterior
+        > .resumen-dia-anterior-fila-toggle {
+        left: 0;
+    }
+
+    /* Al ocultar únicamente el bloque anterior, la celda actual ocupa su
+       espacio, pero conserva la separación diagonal del diseño original. */
+    #seccion-resumen .resumen-tablero
+        .info-cabana[data-resumen-anterior-expandido="true"]::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 4;
+        width: 46px;
+        background: rgba(255, 255, 255, 0.96);
+        clip-path: polygon(0 0, 2px 0, 46px 100%, 44px 100%);
+        pointer-events: none;
     }
 
     #seccion-resumen .resumen-tablero th:nth-child(2) {

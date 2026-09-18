@@ -30,6 +30,7 @@
     let arrastreNotas = null;
     const columnasOcultas = new Set();
     const filasOcultasPorFecha = new Map();
+    const bloquesAnterioresOcultosPorFecha = new Map();
     const CLAVE_FILAS_OCULTAS = "haikuResumenFilasOcultasPorFechaV2";
 
     function fechaResumenActiva() {
@@ -49,6 +50,16 @@
             filasOcultasPorFecha.set(fechaISO, new Set());
         }
         return filasOcultasPorFecha.get(fechaISO);
+    }
+
+    function bloquesAnterioresOcultosDeFecha(fecha = fechaResumenActiva()) {
+        const fechaISO = String(fecha || "").slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaISO)) return new Set();
+
+        if (!bloquesAnterioresOcultosPorFecha.has(fechaISO)) {
+            bloquesAnterioresOcultosPorFecha.set(fechaISO, new Set());
+        }
+        return bloquesAnterioresOcultosPorFecha.get(fechaISO);
     }
 
     function cargarFilasOcultas() {
@@ -376,6 +387,52 @@
         boton.setAttribute("aria-expanded", String(!oculto));
     }
 
+    function actualizarBloqueAnteriorFila(fila) {
+        const numero = String(fila.dataset.cabana || "");
+        const celda = fila.querySelector(".resumen-dia-contexto--anterior");
+        const informacion = fila.querySelector("td.info-cabana");
+        const boton = fila.querySelector(".resumen-dia-anterior-fila-toggle");
+        if (!numero || !celda || !informacion || !boton) return;
+
+        const oculto = bloquesAnterioresOcultosDeFecha().has(numero);
+        celda.dataset.resumenBloqueOculto = String(oculto);
+        informacion.dataset.resumenAnteriorExpandido = String(oculto);
+
+        if (oculto) {
+            informacion.colSpan = 2;
+            if (boton.parentElement !== informacion) {
+                informacion.appendChild(boton);
+            }
+        } else {
+            informacion.removeAttribute("colspan");
+            if (boton.parentElement !== celda) {
+                celda.appendChild(boton);
+            }
+        }
+
+        boton.textContent = oculto ? "+" : "−";
+        boton.title = `${oculto ? "Mostrar" : "Ocultar"} Día anterior de CAB ${numero}`;
+        boton.setAttribute("aria-label", boton.title);
+        boton.setAttribute("aria-expanded", String(!oculto));
+    }
+
+    function configurarBloqueAnteriorFila(fila) {
+        const celda = fila.querySelector(".resumen-dia-contexto--anterior");
+        if (!celda) return;
+
+        let boton = fila.querySelector(".resumen-dia-anterior-fila-toggle");
+        if (!boton) {
+            boton = document.createElement("button");
+            boton.type = "button";
+            boton.className = "resumen-dia-anterior-fila-toggle";
+            boton.dataset.resumenDiaAnteriorFilaToggle =
+                fila.dataset.cabana || "";
+            celda.appendChild(boton);
+        }
+
+        actualizarBloqueAnteriorFila(fila);
+    }
+
     function etiquetaFilaMinima(contenedor, tipo) {
         if (!contenedor) return null;
 
@@ -533,9 +590,32 @@
                 informacion.prepend(boton);
             }
 
+            configurarBloqueAnteriorFila(fila);
             actualizarDatosFilaMinima(fila);
             actualizarFilaOperativa(fila);
         });
+    }
+
+    function manejarToggleBloqueAnterior(evento) {
+        const boton = evento.target.closest?.(
+            ".resumen-dia-anterior-fila-toggle"
+        );
+        if (!boton) return;
+
+        evento.preventDefault();
+        evento.stopPropagation();
+
+        const fila = boton.closest("tr[data-cabana]");
+        const numero = String(fila?.dataset.cabana || "");
+        if (!fila || !numero) return;
+
+        const ocultos = bloquesAnterioresOcultosDeFecha();
+        if (ocultos.has(numero)) {
+            ocultos.delete(numero);
+        } else {
+            ocultos.add(numero);
+        }
+        actualizarBloqueAnteriorFila(fila);
     }
 
     function manejarToggleFila(evento) {
@@ -773,6 +853,7 @@
             ?.addEventListener("click", () => navegar(1));
         document.addEventListener("click", manejarToggleColumna);
         document.addEventListener("click", manejarToggleFila);
+        document.addEventListener("click", manejarToggleBloqueAnterior);
 
         const cargarOriginal = window.cargarCabanasDia;
         if (
