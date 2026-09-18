@@ -34,6 +34,20 @@ test('Paulina: one $190.000 transaction keeps two applications instead of becomi
     assert.deepEqual(grouped[0].aplicaciones_libro.map(x=>x.monto),[160000,30000]);
 });
 
+test('Paulina: a pending WebPay note still forms one receipt for verification against Proyecto H',()=>{
+    const common={titular:'Paulina Varas',cabana:3,fecha_bloque:'2026-09-04',fecha_comprobante:'2026-08-31',moneda:'CLP',
+        codigo_autorizacion:'285466',medio_pago:'webpay',pago_recibido:null,estado_pago:'por_confirmar'};
+    const grouped=C.agruparTransaccionesDistribuidas([
+        {...common,monto:160000,concepto:'cab2/1noche',tipo_movimiento:'alojamiento',origen:{hoja:'Sep26',celda:'K46:N46'},texto_original:'Paulina Varas // Webpay por confirmar // COD.AUT: 285466 // MONTO $190.000 // CREDITO'},
+        {...common,monto:30000,concepto:'TINAJA',tipo_movimiento:'servicio',origen:{hoja:'Sep26',celda:'K47:N47'},texto_original:'Paulina Varas // Webpay por confirmar // COD.AUT: 285466 // MONTO $190.000 // CREDITO'}
+    ].map(C.corregirPago));
+    assert.equal(grouped.length,1);
+    assert.equal(grouped[0].monto,190000);
+    assert.equal(grouped[0].estado_pago,'por_confirmar');
+    assert.equal(grouped[0].evidencia_agrupacion.confirmacion_pago,'requiere_pago_existente_en_proyecto_h');
+    assert.deepEqual(grouped[0].aplicaciones_libro.map(x=>[x.concepto,x.monto]),[['cab2/1noche',160000],['TINAJA',30000]]);
+});
+
 test('shared identifier with incompatible totals is not silently consolidated',()=>{
     const base={codigo_autorizacion:'X1',monto:100000,moneda:'CLP',texto_original:'CodAut X1 // MONTO $190.000'};
     assert.equal(C.agruparTransaccionesDistribuidas([base,{...base,monto:50000}]).length,2);

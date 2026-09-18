@@ -319,6 +319,36 @@ test('Macarena canonical parent already in Proyecto H is one omitted transaction
  assert.equal(items.length,1);assert.equal(items[0].categoria,'omitidos');assert.equal(items[0].payload,null);assert.notEqual(items[0].aprobable,true);
  assert.equal(p.aplicaciones_libro.length,2);assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
 });
+test('Paulina pending distributed receipt compares its 190k parent without shrinking the existing payment to 160k',async()=>{
+ const p=pay({monto:190000,moneda:'CLP',codigo_autorizacion:'285466',folio:null,bovtar:null,
+  medio_pago:'webpay_credito',fecha_bloque:'2026-09-04',fecha_comprobante:'2026-08-31',
+  pago_recibido:null,estado_pago:'por_confirmar',tipo_movimiento:'distribuido',transaccion_distribuida:true,
+  monto_total:190000,total_declarado:190000,concepto:'cab2/1noche + TINAJA',
+  aplicaciones_libro:[{monto:160000,concepto:'cab2/1noche',tipo_movimiento:'alojamiento'},
+   {monto:30000,concepto:'TINAJA',tipo_movimiento:'servicio'}]});
+ const r=book({titular:'Paulina Varas',cabana:3,fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-05',pagos:[p]});
+ const existente={id:'paulina-190',reserva_id:'r1',estado:'confirmado',tipo_movimiento:'pago',monto:190000,moneda:'CLP',
+  medio_pago:'webpay_debito',codigo_autorizacion:'285466',fecha_pago:'2026-09-02',datos_origen:{}};
+ const comp=await compare([r],[stay(r)],[existente]);
+ assert.equal(comp.pagosDetalle.length,1);assert.equal(comp.pagosDetalle[0].estado,'diferente');
+ const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'actualizaciones');assert.equal(item.payload.tipo,'pago_actualizar');
+ assert.equal(item.payload.pago.despues.monto,undefined);
+ assert.equal(item.payload.pago.despues.medio_pago,'webpay_credito');
+ assert.equal(item.payload.pago.despues.fecha_pago,'2026-08-31T12:00:00Z');
+ assert.doesNotMatch(item.motivos.join(' '),/repite el identificador|no confirma este pago recibido/i);
+ assert.match(item.aviso,/un solo comprobante de \$190\.000 CLP.*cab2\/1noche: \$160\.000 CLP.*TINAJA: \$30\.000 CLP.*no se crean cobros nuevos/i);
+ assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
+});
+test('a pending distributed receipt without one existing Proyecto H payment remains blocked',async()=>{
+ const p=pay({monto:190000,codigo_autorizacion:'285466',medio_pago:'webpay_credito',pago_recibido:null,
+  estado_pago:'por_confirmar',tipo_movimiento:'distribuido',transaccion_distribuida:true,
+  aplicaciones_libro:[{monto:160000,concepto:'alojamiento'},{monto:30000,concepto:'tinaja'}]});
+ const r=book({pagos:[p]}),comp=await compare([r],[stay(r)],[]);
+ assert.equal(comp.pagosDetalle[0].estado,'revisar');
+ const item=Q.crearPlanIncorporacion([r],comp).items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'dudosos');assert.notEqual(item.seleccionado,true);assert.notEqual(item.aprobable,true);
+});
 test('voided cancelled or invalid system payments never satisfy already exists',async()=>{
  const r=book({pagos:[pay()]});
  for(const estado of ['anulado','cancelado','invalido']){

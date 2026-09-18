@@ -1198,7 +1198,9 @@
                     result.pagosComparacion.push({ estado: diferenciasPago.length ? "diferente" : "en_sistema", pago: p, sistema: x, reserva: r, diferencias: diferenciasPago });
                 } else if (pagosExistentes.has(p)) {
                     result.pagosComparacion.push({ estado: "en_sistema", pago: p, sistema: pagosExistentes.get(p), reserva: r, coincidencia_debil: true, diferencias: [] });
-                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && candidatosNoVigentes.length === 0 && Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad") {
+                } else if (pagoTieneIdentificadorFuerte(p) && candidatos.length === 0 && candidatosNoVigentes.length === 0 &&
+                    Number(p.monto) > 0 && p.tipo_movimiento !== "penalidad" &&
+                    (!p.transaccion_distribuida || p.pago_recibido === true && p.estado_pago === "registrado_en_libro")) {
                     result.pagosComparacion.push({ estado: "nuevo_seguro", pago: p, reserva: r });
                 } else {
                     result.pagosComparacion.push({ estado: "revisar", pago: p, reserva: r });
@@ -1932,7 +1934,11 @@
                 const motivos = [];
                 if (destino?.bloqueado || !r.pagos.includes(p)) motivos.push('Primero confirma la asociación del movimiento con la reserva.');
                 if (!Number.isSafeInteger(p.monto) || p.monto <= 0 || p.moneda !== 'CLP') motivos.push('El monto o la moneda requiere revisión.');
-                if (p.tipo_movimiento !== 'alojamiento' || p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro') motivos.push('El Libro no confirma este pago recibido de alojamiento.');
+                const aplicacionesDistribuidas = p.transaccion_distribuida && Array.isArray(p.aplicaciones_libro) &&
+                    p.aplicaciones_libro.length > 1 && p.aplicaciones_libro.every(aplicacion =>
+                        Number.isSafeInteger(Number(aplicacion?.monto)) && Number(aplicacion.monto) > 0) &&
+                    p.aplicaciones_libro.reduce((total, aplicacion) => total + Number(aplicacion.monto), 0) === Number(p.monto);
+                if (!aplicacionesDistribuidas && (p.tipo_movimiento !== 'alojamiento' || p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro')) motivos.push('El Libro no confirma este pago recibido de alojamiento.');
                 if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
                 if (!medioLibro(p)) motivos.push('Falta precisar el medio de pago.');
                 const otros = (comp.pagosDetalle || []).filter(y => y !== x && pagoCoincide(p,{...y.pago,datos_origen:{bovtar:y.pago.bovtar}}));
@@ -1944,7 +1950,11 @@
                 item.cambios=patch.cambios;
                 item.pagoLibro = p;
                 item.pagoSistema = duplicado;
-                if ('monto' in patch.despues) item.aviso='Se corregirá el importe del mismo pago. Si disminuye, se ajustará su distribución entre cargos para no aplicar más que el monto del Libro; quedará registrado el cambio.';
+                if (aplicacionesDistribuidas) {
+                    const detalle = p.aplicaciones_libro.map(aplicacion =>
+                        `${aplicacion.concepto || aplicacion.tipo_movimiento || 'Aplicación'}: ${money(Number(aplicacion.monto))}`).join(' + ');
+                    item.aviso = `Haku reconoce un solo comprobante de ${money(Number(p.monto))}. Distribución del Libro: ${detalle}. Se conserva como un solo pago; no se crean cobros nuevos.`;
+                } else if ('monto' in patch.despues) item.aviso='Se corregirá el importe del mismo pago. Si disminuye, se ajustará su distribución entre cargos para no aplicar más que el monto del Libro; quedará registrado el cambio.';
                 continue;
             }
             const importado = snapshot.pagos.find(v => v.datos_origen?.item_id === id);

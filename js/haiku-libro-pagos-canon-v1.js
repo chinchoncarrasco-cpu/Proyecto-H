@@ -120,10 +120,16 @@
             };
             const conceptos = grupo.map(x => normalizarTexto(x.pago.concepto));
             const origenes = grupo.map(x => `${x.pago.origen?.hoja || ""}!${x.pago.origen?.celda || ""}`);
+            const estados = grupo.map(x => normalizarTexto(x.pago.estado_pago));
+            const estadoCompartido = estados.length === grupo.length && new Set(estados).size === 1 &&
+                (estados[0] === 'registrado_en_libro' || estados[0] === 'por_confirmar');
+            const recepcionCompatible = estados[0] === 'registrado_en_libro'
+                ? grupo.every(x => x.pago.pago_recibido === true)
+                : grupo.every(x => x.pago.pago_recibido !== true);
             const compatibles = ['titular','cabana','fecha_bloque','fecha_comprobante','moneda','medio_pago'].every(mismos) &&
                 grupo.every(x => Number.isSafeInteger(Number(x.pago.monto)) && Number(x.pago.monto) > 0 &&
-                    x.pago.pago_recibido === true && x.pago.estado_pago === 'registrado_en_libro' &&
                     x.pago.origen?.hoja && x.pago.origen?.celda && normalizarTexto(x.pago.concepto)) &&
+                estadoCompartido && recepcionCompatible &&
                 new Set(grupo.map(x => x.pago.origen.hoja)).size === 1 && new Set(origenes).size === grupo.length &&
                 new Set(conceptos).size === grupo.length;
             if (!compatibles) { conflicto(grupo, 'Identificador compartido con contexto o aplicaciones incompatibles.', reemplazo); continue; }
@@ -155,6 +161,7 @@
                 identificador_transaccion: clave,
                 evidencia_agrupacion: { identificador_fuerte:clave, misma_reserva_contextual:true, fecha_compatible:true,
                     moneda_compatible:true, medio_compatible:true, origenes_distintos:true,
+                    confirmacion_pago:estados[0] === 'registrado_en_libro' ? 'confirmado_en_libro' : 'requiere_pago_existente_en_proyecto_h',
                     total: declarados.length ? 'explicito_verificado' : 'suma_inferida_por_identidad_fuerte' }
             });
             grupo.slice(1).forEach(x => omitidos.add(x.indice));
