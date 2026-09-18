@@ -1331,6 +1331,15 @@
     const estadoLibro = r => ['hospedada','checked_out'].includes(r.estado_operativo) ? r.estado_operativo :
         r.estado_confirmacion === 'confirmada_por_color' ? 'confirmada' : r.estado_confirmacion === 'pendiente_por_color' ? 'pendiente' :
         r.estado_operativo === 'sin_checkin' ? 'confirmada' : undefined;
+    const prioridadEstadoEstadia = Object.freeze({ pendiente:0, confirmada:1, hospedada:2, checked_out:3 });
+    function estadoLibroActualizable(r, estadoActual) {
+        const propuesto = estadoLibro(r);
+        if (!propuesto) return undefined;
+        const actual = S.normalizar(estadoActual);
+        if (actual in prioridadEstadoEstadia && propuesto in prioridadEstadoEstadia &&
+            prioridadEstadoEstadia[propuesto] < prioridadEstadoEstadia[actual]) return undefined;
+        return propuesto;
+    }
     const etiquetasActualizacion = { titular_nombre:'Nombre', titular_numero_documento:'RUT/pasaporte', titular_tipo_documento:'Tipo de documento',
         correo_contacto:'Correo', telefono_contacto:'Teléfono', observaciones:'Notas y detalles del Libro', estado_reserva:'Estado de reserva',
         cabana_numero:'Cabaña', fecha_ingreso:'Check-In', fecha_salida:'Check-Out', tipo_estadia:'Tipo de estadía', adultos:'Adultos', ninos:'Niños', mascotas:'Mascotas',
@@ -1352,7 +1361,9 @@
         const notas = [...new Set(original)].join('\n').replace(/\[\/?DATOS DEL LIBRO\]/g, '');
         const existentes = String(s.observaciones || '').replace(/\[DATOS DEL LIBRO\][\s\S]*?\[\/DATOS DEL LIBRO\]/g, '').trim();
         const docCambio = r.rut_documento && documentoCanon(r.rut_documento) !== documentoCanon(s.rut_documento);
-        const estado = estadoLibro(r);
+        // El color del Libro puede confirmar un estado posterior, pero nunca debe
+        // deshacer automáticamente un check-in o checkout ya registrado.
+        const estado = estadoLibroActualizable(r, s.estado_operativo);
         const reserva = parcheLibro({ titular_nombre:s.titular, titular_numero_documento:s.rut_documento, titular_tipo_documento:s.tipo_documento,
             correo_contacto:s.correo, telefono_contacto:s.telefono, observaciones:s.observaciones, estado_reserva:s.estado_reserva },
             { titular_nombre:r.titular, titular_numero_documento:r.rut_documento,

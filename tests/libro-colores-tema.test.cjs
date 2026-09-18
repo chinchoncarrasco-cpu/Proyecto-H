@@ -36,3 +36,15 @@ test('worker resolves theme colors inside rich text guest details',()=>{
  const runs=structuredClone(w.parsearTextoEnriquecido('<r><rPr><color theme="0"/></rPr><t>Marco Iturrieta Rojas</t></r>',themes));
  assert.equal(runs[0].font.color.rgb,'FFFFFFFF');
 });
+
+test('worker resolves white theme in inline rich text before classifying a hosted stay',()=>{
+ const w=worker();
+ const sheet='<worksheet><sheetData><row r="3"><c r="C3" s="0" t="inlineStr"><is>'+
+  '<r><rPr><color theme="0"/></rPr><t>Karina Cruz // 3 noches</t></r>'+
+  '<r><rPr><color rgb="FFFF0000"/></rPr><t> // NO MOVER</t></r>'+
+  '</is></c></row></sheetData></worksheet>';
+ const cell=structuredClone(vm.runInContext(`(()=>[...parsearCeldasXml(${JSON.stringify(sheet)}, [], coloresTemaXml(${JSON.stringify(theme)})).values()][0])()`,w));
+ vm.runInContext(fs.readFileSync(require.resolve('../js/haiku-libro-semantica-v1.js'),'utf8'),w);
+ assert.equal(cell.runs[0].font.color.rgb,'FFFFFFFF');
+ assert.equal(w.HAIKU_LIBRO_SEMANTICA.fuente(cell,[{}]).estado,'hospedada');
+});

@@ -1834,6 +1834,21 @@ test('shared CAB 2 and CAB 7 both keep the hosted state read from the Libro',asy
   item.estadia.despues.estado_estadia==='hospedada'));
 });
 
+test('CAB 2 and CAB 7 never regress a hosted stay when Libro only confirms the reservation',async()=>{
+ const datos={titular:'Karina Cruz',rut_documento:'15068130-8',fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',
+  estado_operativo:'no_determinado',estado_confirmacion:'confirmada_por_color'};
+ const cab2=readyBook({...datos,id:'libro-cab2',cabana:2,texto_original:'Karina Cruz // CAB 2'});
+ const cab7=readyBook({...datos,id:'libro-cab7',cabana:7,texto_original:'Karina Cruz // CAB 7'});
+ const reserva={...stay(cab2).reservas,grupo_reserva_id:'grupo-karina',estado_reserva:'confirmada'};
+ const rows=[stay(cab2,{id:'estadia-cab2',reserva_id:'reserva-karina',reservas:reserva,adultos:3,estado_estadia:'hospedada'}),
+  stay(cab7,{id:'estadia-cab7',reserva_id:'reserva-karina',reservas:reserva,adultos:5,estado_estadia:'hospedada'})];
+ const plan=await prepare([cab2,cab7],rows),operaciones=Q.serializarIncorporacion(plan)
+  .filter(item=>item.tipo==='reserva_actualizar');
+ assert.equal(operaciones.length,2);
+ assert.ok(operaciones.every(item=>item.estadia.despues.adultos===2));
+ assert.ok(operaciones.every(item=>!('estado_estadia' in item.estadia.antes)&&!('estado_estadia' in item.estadia.despues)));
+});
+
 test('new reservation keeps the Libro state in the confirmation payload',async()=>{
  for(const [datos,estado] of [[{estado_confirmacion:'confirmada_por_color'},'confirmada'],[{estado_operativo:'hospedada'},'hospedada'],[{estado_operativo:'checked_out'},'checked_out']]) {
   const plan=await prepare([readyBook(datos)]);assert.equal(Q.serializarIncorporacion(plan)[0].estadias[0].datos.estado_estadia,estado);

@@ -281,7 +281,7 @@ function parsearDimensionesHoja(xml) {
     return { columnas, filas };
 }
 
-function parsearCeldasXml(xml, textosCompartidos = []) {
+function parsearCeldasXml(xml, textosCompartidos = [], temas = []) {
     const mapa = new Map();
     for (const celda of bloques(xml, "c")) {
         const direccion = celda.attrs.r;
@@ -297,7 +297,7 @@ function parsearCeldasXml(xml, textosCompartidos = []) {
             if (Number.isInteger(indice) && indice >= 0) runs = textosCompartidos[indice] || [];
         } else if (tipo === "inlineStr") {
             const inline = primerTag(celda.inner, "is");
-            if (inline) runs = parsearTextoEnriquecido(inline.inner);
+            if (inline) runs = parsearTextoEnriquecido(inline.inner, temas);
         }
 
         mapa.set(direccion, {
@@ -360,7 +360,7 @@ async function leerHoja(buffer, nombreHoja) {
             const dimensiones = parsearDimensionesHoja(hojaXml);
             columnas = dimensiones.columnas;
             filas = dimensiones.filas;
-            celdasXml = parsearCeldasXml(hojaXml, textosCompartidos);
+            celdasXml = parsearCeldasXml(hojaXml, textosCompartidos, temas);
         }
     } catch (error) {
         // Si el complemento OOXML no estuviera disponible, mantenemos la lectura
