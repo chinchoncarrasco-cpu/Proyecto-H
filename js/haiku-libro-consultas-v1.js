@@ -558,6 +558,24 @@
             S.normalizar(pagoSistema.tipo_movimiento) === 'pago' && pagoVerificadoSistema(pagoSistema);
     }
 
+    function pagoFuerteExistenteSinCambios(pagoLibro, pagos, reservaId) {
+        if (!reservaId || !pagoTieneIdentificadorFuerte(pagoLibro)) return null;
+        const candidatos = pagos.filter(pago => pago?.id && pagoCoincide(pagoLibro, pago));
+        if (candidatos.length !== 1) return null;
+        const pagoSistema = candidatos[0];
+        const monedaLibro = String(pagoLibro.moneda || '').trim().toUpperCase();
+        const monedaSistema = String(pagoSistema.moneda || '').trim().toUpperCase();
+        const medioPagoLibro = medioLibro(pagoLibro), medioPagoSistema = medioSistema(pagoSistema);
+        const tipoSistema = S.normalizar(pagoSistema.tipo_movimiento);
+        if (!pagoSistemaVigente(pagoSistema) || pagoSistema.reserva_id !== reservaId ||
+            !Number.isSafeInteger(Number(pagoLibro.monto)) || Number(pagoLibro.monto) <= 0 ||
+            Number(pagoSistema.monto) !== Number(pagoLibro.monto) ||
+            !monedaLibro || !monedaSistema || monedaLibro !== monedaSistema ||
+            !medioPagoLibro || !medioPagoSistema || medioPagoLibro !== medioPagoSistema ||
+            (tipoSistema && tipoSistema !== 'pago') || actualizacionPagoLibro(pagoLibro, pagoSistema).cambios.length) return null;
+        return pagoSistema;
+    }
+
     function pagoEfectivoLibroAplicable(pago, reserva, sistema) {
         return !pagoTieneIdentificadorFuerte(pago) && pago?.clasificacion_financiera !== "dudoso" &&
             medioLibro(pago) === "efectivo" && ["alojamiento", "servicio"].includes(pago.tipo_movimiento) &&
@@ -1274,14 +1292,10 @@
                         reserva: r, coincidencia_debil: true, diferencias: [] });
                     continue;
                 }
-                const candidatos = pagosVigentes.filter(x => pagoCoincide(p, x));
-                const existente = p.advertencias?.length && S.mismaPersona(p.titular, r.titular) &&
-                    candidatos.length === 1 && candidatos[0].reserva_id === s.reserva_id &&
-                    candidatos[0].moneda === p.moneda &&
-                    Number(candidatos[0].monto) === p.monto && medioSistema(candidatos[0]) === medioLibro(p) &&
-                    mismaFechaCalendario(candidatos[0].fecha_pago,p.fecha_comprobante) ? candidatos[0] : null;
+                const existente = pagoFuerteExistenteSinCambios(p, pagos, s.reserva_id);
                 result.pagosComparacion.push({ estado: existente ? 'en_sistema' : 'revisar', pago: p, reserva: r,
-                    ...(existente ? { sistema: existente } : {}), diferencias: p.advertencias || [] });
+                    ...(existente ? { sistema: existente, coincidencia_fuerte: true } : {}),
+                    diferencias: existente ? [] : p.advertencias || [] });
             }
 
             for (const service of r.servicios) {
@@ -1444,7 +1458,8 @@
             bove:p.bove, codigo_autorizacion:p.codigo_autorizacion };
         if (p.fecha_comprobante && !mismaFechaCalendario(s.fecha_pago,p.fecha_comprobante)) propuesta.fecha_pago = p.fecha_comprobante + 'T12:00:00Z';
         if (p.medio_pago === 'transferencia') propuesta.referencia_externa = p.texto_original;
-        return parcheLibro({ ...s, bovtar:s.datos_origen?.bovtar, concepto_libro:s.datos_origen?.concepto_libro }, propuesta);
+        const bovtarActual = bovtarSistemaCoincide(p,s) ? p.bovtar : s.datos_origen?.bovtar;
+        return parcheLibro({ ...s, bovtar:bovtarActual, concepto_libro:s.datos_origen?.concepto_libro }, propuesta);
     }
 
     function separarObservacionesLibro(valor) {
@@ -1990,7 +2005,14 @@
                 if (coincidencias.length !== 1 || duplicado.reserva_id !== destino?.reserva_id) {
                     add('dudosos',id,texto,null,['El identificador pertenece a otra reserva o a varios pagos; confirma el destino correcto.']); continue;
                 }
-                if (!patch.cambios.length) { add('omitidos',id,texto+' · El pago ya coincide con el Libro.'); continue; }
+                if (!patch.cambios.length) {
+                    if (pagoFuerteExistenteSinCambios(p, snapshot.pagos, destino.reserva_id)) {
+                        add('omitidos',id,texto+' · El pago ya coincide con el Libro.');
+                    } else {
+                        add('dudosos',id,texto,null,['El identificador coincide, pero el pago existente no tiene una identidad financiera vigente y completa.']);
+                    }
+                    continue;
+                }
                 const motivos = [];
                 const asociacionFinancieraSegura = asociacionFinancieraInequivoca(p, duplicado, coincidencias, destino);
                 if ((destino?.bloqueado || !r.pagos.includes(p)) && !asociacionFinancieraSegura) motivos.push('Primero confirma la asociación del movimiento con la reserva.');

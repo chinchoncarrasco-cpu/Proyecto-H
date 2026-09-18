@@ -1147,6 +1147,8 @@ test('Maria Loreto migrated transfer tolerates only a unique 1-to-1 historical d
  const c=await comparar();
  assert.equal(c.pagosDetalle[0].estado,'en_sistema');assert.equal(c.pagosDetalle[0].sistema.id,'transfer-historica');
  assert.equal(c.pagosDetalle[0].coincidencia_debil,true);assert.equal(c.meta.pagos_faltantes,0);assert.equal(c.meta.pagos_revisar,0);
+ const vista=renderHarness();vista.render({q:{...q,solo_pagos:true},comparacion:c});
+ assert.match(vista.texts(),/Ya existe en Proyecto H \(1\)/);assert.doesNotMatch(vista.texts(),/Pagos que requieren revisión \(/);
  const plan=Q.crearPlanIncorporacion([r],c),omitido=plan.items.find(i=>i.pagoLibro===transferencia);
  assert.equal(omitido.categoria,'omitidos');assert.equal(omitido.payload,null);assert.notEqual(omitido.aprobable,true);
  assert.ok(!Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'));
@@ -1712,19 +1714,23 @@ test('strong payment already present is updated from Libro instead of omitted; r
  assert.ok(!again.items.some(i=>['pagos','actualizaciones'].includes(i.categoria)));
 });
 
-test('Libro concept alone never updates an existing matching payment',async()=>{
- const p=readyPay({titular:'Paola Ríos Contreras',cabana:3,monto:160000,medio_pago:'webpay_credito',
+test('Paola matching CodAut is already classified as existing before preparation',async()=>{
+ const p=readyPay({titular:'Maria Jose Gassibe',cabana:3,monto:160000,medio_pago:'webpay_credito',
   codigo_autorizacion:'095112',fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-03',concepto:'cab3/1noche'});
  const r=readyBook({titular:'Paola Ríos Contreras',cabana:3,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-06',
   pagos:[],pagos_sin_asociacion:[p]});
  const existing={id:'p-paola',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:160000,moneda:'CLP',
   medio_pago:'webpay_credito',codigo_autorizacion:'095112',fecha_pago:'2026-09-03T12:00:00Z',datos_origen:{}};
  const comp=await compare([r],[stay(r)],[existing]);
- assert.equal(comp.pagosDetalle[0].estado,'revisar');
+ assert.equal(comp.pagosDetalle[0].estado,'en_sistema');assert.equal(comp.pagosDetalle[0].sistema.id,'p-paola');
+ assert.equal(comp.pagosDetalle[0].coincidencia_fuerte,true);
+ assert.equal(comp.meta.pagos_revisar,0);assert.equal(comp.meta.pagos_faltantes,0);
  const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
  assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);assert.equal(item.seleccionado,false);
- assert.match(item.texto,/El pago ya coincide con el Libro/);
+ assert.match(item.texto,/El pago ya existe en Proyecto H/);
  assert.ok(!plan.items.some(i=>i.payload?.tipo==='pago_actualizar'));
+ const vista=renderHarness();vista.render({q:{...q,solo_pagos:true},comparacion:comp});
+ assert.match(vista.texts(),/Ya existe en Proyecto H \(1\)/);assert.doesNotMatch(vista.texts(),/Pagos que requieren revisión \(/);
  const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
  assert.doesNotMatch(h.texts(),/Concepto del Libro|Actualizar pago con el Libro/);
 });
@@ -1792,6 +1798,30 @@ test('Laura date correction stays blocked when strong financial association is n
   const serializados=Q.serializarIncorporacion(plan);
   assert.ok(!serializados.some(x=>x.tipo==='pago_actualizar'||x.tipo==='pago'),nombre);
  }
+});
+
+test('Laura exact verified CodAut is existing in comparison and omitted in preparation',async()=>{
+ const {comp,plan}=await escenarioLauraFecha({sistema:{fecha_pago:'2026-08-09T12:00:00Z'}});
+ assert.equal(comp.pagosDetalle[0].estado,'en_sistema');assert.equal(comp.pagosDetalle[0].sistema.id,'p-laura');
+ assert.equal(comp.pagosDetalle[0].coincidencia_fuerte,true);
+ assert.equal(comp.meta.pagos_revisar,0);assert.equal(comp.meta.pagos_faltantes,0);
+ const omitido=plan.items.find(item=>item.categoria==='omitidos'&&/Laura Mayorga Ocampo/.test(item.texto));
+ assert.ok(omitido);assert.equal(omitido.payload,null);assert.equal(omitido.seleccionado,false);
+ assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'||item.tipo==='pago_actualizar'));
+});
+
+test('a repeated strong identifier remains review in comparison and preparation',async()=>{
+ const p=readyPay({titular:'Paola Ríos Contreras',cabana:3,monto:160000,medio_pago:'webpay_credito',
+  codigo_autorizacion:'095112',fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-03'});
+ const r=readyBook({titular:'Paola Ríos Contreras',cabana:3,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-06',
+  pagos:[],pagos_sin_asociacion:[p]});
+ const existente={id:'p-paola-1',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',monto:160000,moneda:'CLP',
+  medio_pago:'webpay_credito',codigo_autorizacion:'095112',fecha_pago:'2026-09-03T12:00:00Z',datos_origen:{}};
+ const comp=await compare([r],[stay(r)],[existente,{...existente,id:'p-paola-2'}]);
+ assert.equal(comp.pagosDetalle[0].estado,'revisar');assert.equal(comp.meta.pagos_revisar,1);
+ const plan=Q.crearPlanIncorporacion([r],comp);
+ assert.ok(plan.items.some(item=>item.categoria==='dudosos'&&/varios pagos/.test(item.motivos.join(' '))));
+ assert.ok(!Q.serializarIncorporacion(plan).some(item=>item.tipo==='pago'||item.tipo==='pago_actualizar'));
 });
 
 const advertenciaGeometria='La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.';
