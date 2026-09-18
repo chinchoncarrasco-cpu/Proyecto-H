@@ -19,7 +19,7 @@ function cargador({pc=true}={}) {
     const hook=`
         mostrarVacio=mostrarCargando=actualizarEstado=actualizarPaginacion=poblarSelector=renderizarHoja=()=>{};
         leerEnSegundoPlano=async()=>({nombres:window.invalido?[]:['Sep26'],hojas:[]});
-        window.cargarTest=(archivo,restaurado=false)=>(cargaLista=cargarArchivo(archivo,restaurado));
+        window.cargarTest=(archivo,restaurado=false,origen='manual')=>(cargaLista=cargarArchivo(archivo,restaurado,origen));
         window.restaurarTest=()=>cargaLista=restaurarLibro();
         window.quitarTest=quitarLibro;
     `;
@@ -27,6 +27,7 @@ function cargador({pc=true}={}) {
     vm.runInContext(source.replace(/\}\)\(\);\s*$/,hook+'})();'),ctx);
     return {store,eventos,ctx,fallar:()=>fail=true,invalidar:()=>ctx.invalido=true,
         cargar:(bytes,name='Libro.xlsx',restaurado=false)=>ctx.cargarTest({name,size:bytes.length,arrayBuffer:async()=>new Uint8Array(bytes).buffer},restaurado),
+        cargarGoogle:(bytes,name='Libro.xlsx')=>ctx.cargarTest({name,size:bytes.length,arrayBuffer:async()=>new Uint8Array(bytes).buffer},false,'google'),
         flush:()=>{while(timers.length)timers.shift()();},avisos:()=>eventos.filter(e=>e.type==='haiku:libro-version-cargada')};
 }
 test('cargador real: primera carga no emite; segunda distinta emite después de finalizar y guardar',async()=>{
@@ -38,6 +39,11 @@ test('cargador real: primera carga no emite; segunda distinta emite después de 
 test('mismos bytes aunque cambie nombre no emiten ni rotan anterior',async()=>{
     const h=cargador();await h.cargar([1]);await h.cargar([2]);h.flush();const anterior=h.store.get('anterior');
     await h.cargar([2],'Otro nombre.xlsx');h.flush();assert.equal(h.avisos().length,1);assert.equal(h.store.get('anterior'),anterior);
+});
+test('una versión nueva recibida desde Google emite una actualización automática',async()=>{
+    const h=cargador();await h.cargar([1]);await h.cargarGoogle([2]);h.flush();
+    assert.equal(h.avisos().length,1);assert.equal(h.avisos()[0].detail.carga_manual,false);
+    assert.equal(h.avisos()[0].detail.carga_automatica,true);assert.equal(h.avisos()[0].detail.origen,'google');
 });
 test('F5/restauración real no emite',async()=>{
     const h=cargador();await h.cargar([1]);await h.cargar([2]);h.flush();await h.ctx.restaurarTest();h.flush();assert.equal(h.avisos().length,1);
@@ -55,9 +61,14 @@ test('quitar invalida el evento diferido; móvil sin anterior no emite',async()=
     const m=cargador({pc:false});await m.cargar([1]);await m.cargar([2]);m.flush();assert.equal(m.avisos().length,0);
 });
 const evento=g=>({generacion:g,carga_manual:true,tenia_anterior:true});
+const eventoGoogle=g=>({generacion:g,carga_manual:false,carga_automatica:true,origen:'google',tenia_anterior:true});
 test('evento duplicado: una comparación y un aviso final',async()=>{
     let calls=0;const mensajes=[];const c=A.crearControlador({generacion:()=>2,obtener:async()=>{calls++;return res();},mostrar:x=>mensajes.push(x),limpiar(){}});
     await c.cargar(evento(2));await c.cargar(evento(2));assert.equal(calls,1);assert.equal(mensajes.filter(x=>!x.pendiente).length,1);
+});
+test('evento de Google inicia automáticamente la comparación y el aviso',async()=>{
+    let calls=0;const mensajes=[];const c=A.crearControlador({generacion:()=>2,obtener:async()=>{calls++;return res();},mostrar:x=>mensajes.push(x),limpiar(){}});
+    await c.cargar(eventoGoogle(2));assert.equal(calls,1);assert.equal(mensajes.filter(x=>!x.pendiente).length,1);
 });
 test('generación nueva descarta B silenciosamente y procesa C sin paralelo',async()=>{
     let g=2,resolveB,calls=0;const mensajes=[];

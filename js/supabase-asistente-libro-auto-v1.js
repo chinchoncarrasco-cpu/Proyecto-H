@@ -1,4 +1,4 @@
-/* ETAPA 3: sólo una carga manual confirmada inicia el aviso. Sin persistencia nueva. */
+/* ETAPA 3: una versión nueva confirmada, manual o desde Google, inicia el aviso. */
 (function(root) {
     'use strict';
     if (root.HAIKU_ASISTENTE_LIBRO_AUTO_V1) return;
@@ -38,7 +38,8 @@
         return {
             invalidar(){token++;limpiar();},
             async cargar(detail) {
-                if (!detail?.carga_manual || !detail.tenia_anterior || !Number.isInteger(detail.generacion) || detail.generacion!==generacion() || detail.generacion<=ultima) return;
+                const cargaAdmitida = detail?.carga_manual || detail?.carga_automatica;
+                if (!cargaAdmitida || !detail.tenia_anterior || !Number.isInteger(detail.generacion) || detail.generacion!==generacion() || detail.generacion<=ultima) return;
                 ultima=detail.generacion;
                 const turno=++token,g=detail.generacion;
                 const vigente=()=>turno===token && generacion()===g;

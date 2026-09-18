@@ -658,7 +658,7 @@
         }
     }
 
-    async function cargarArchivo(archivo, restaurado = false) {
+    async function cargarArchivo(archivo, restaurado = false, origen = "manual") {
         if (!archivo) return;
         if (!/\.xlsx$/i.test(archivo.name)) {
             mostrarVacio("Formato no compatible", "Selecciona una copia descargada en formato .xlsx.");
@@ -710,7 +710,15 @@
             );
             renderizarHoja(hojaActual);
             if (!restaurado && actualizacion && persistenciaConfirmada) {
-                const detalle = {generacion:cargaId, nombre:archivoNombre, tenia_anterior:true, carga_manual:true};
+                const cargaGoogle = origen === "google";
+                const detalle = {
+                    generacion:cargaId,
+                    nombre:archivoNombre,
+                    tenia_anterior:true,
+                    carga_manual:!cargaGoogle,
+                    carga_automatica:cargaGoogle,
+                    origen:cargaGoogle ? "google" : "manual"
+                };
                 // Siguiente tarea: cargarArchivo y listo() pueden finalizar antes del consumidor.
                 setTimeout(() => {
                     if (cargaId === operacionLibro && persistenciaConfirmada && libroIndice) {
@@ -787,6 +795,10 @@
             modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
             limpiar: quitarLibro,
             listo: () => cargaLista,
+            cargarDesdeGoogle: archivo => {
+                cargaLista = cargarArchivo(archivo, false, "google");
+                return cargaLista;
+            },
             listarHojas: () => [...(libroIndice?.SheetNames || [])],
             consultarIndice: (version = "actual") => consultarHoja("", version, "indice_nombres"),
             consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),

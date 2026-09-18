@@ -224,6 +224,13 @@
     }
 
     async function entregarAlLibro(archivo) {
+        const lector = root.HAIKU_LIBRO_RESERVA_V1;
+        if (typeof lector?.cargarDesdeGoogle === "function") {
+            await lector.cargarDesdeGoogle(archivo);
+            if (!lector.estado?.().cargado) throw new Error("El lector local no confirmó la carga del Libro.");
+            return;
+        }
+
         const entrada = $("libro-reserva-archivo");
         if (!entrada) throw new Error("No encontré el cargador del Libro de Reserva.");
         if (typeof DataTransfer !== "function") throw new Error("Este navegador no permite entregar el XLSX al lector local.");
@@ -231,8 +238,8 @@
         dt.items.add(archivo);
         entrada.files = dt.files;
         entrada.dispatchEvent(new Event("change", { bubbles: true }));
-        await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
-        if (!root.HAIKU_LIBRO_RESERVA_V1?.estado?.().cargado) throw new Error("El lector local no confirmó la carga del Libro.");
+        await lector?.listo?.();
+        if (!lector?.estado?.().cargado) throw new Error("El lector local no confirmó la carga del Libro.");
     }
 
     function libroLocalCargado() {
