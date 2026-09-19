@@ -26,7 +26,7 @@ test('post-data context excludes a trailing instruction without resolving two ac
  }
 });
 test('operational language does not expel a guest or become a reservation on its own',()=>{
- for(const nota of ['Llegará tarde','Solicita leña','Manager pendiente','Llegada tarde','Sin azúcar','Cena por pagar','AGREGAR ESTACIONAMIENTO','Enviar instrucciones','Preparar bienvenida','Camas juntas','Confirmado por recepción']){
+ for(const nota of ['Llegará tarde','Solicita leña','Manager pendiente','Llegada tarde','Sin azúcar','Cena por pagar','AGREGAR ESTACIONAMIENTO','Enviar instrucciones','Preparar bienvenida','Camas juntas','Confirmado por recepción','VIENE CON MASCOTA','VIENEN CON 2 MASCOTAS','TRAE MASCOTA']){
   for(const texto of [`Ana Pérez // ${nota} // 1 NOCHE`,`${nota}\nAna Pérez\n1 NOCHE`]){
    const h=normalizar(texto);assert.equal(h.reservas.length,1,texto);assert.equal(h.reservas[0].titular,'Ana Pérez',texto);assert.equal(h.reservas[0].texto_original,texto);
   }

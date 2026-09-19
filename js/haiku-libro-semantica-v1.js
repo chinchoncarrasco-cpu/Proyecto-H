@@ -68,10 +68,11 @@
         const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
         const objetos = /^(?:cortesia|articulos?|art\.?|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
+        const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
         const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
-        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || contextoPosterior;
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || acompanamientoMascota.test(t) || contextoPosterior;
     }
     function clasificarFragmentos(texto) {
         let humanoPrevio=false, datosPosteriores=false;
@@ -93,17 +94,22 @@
         const candidatos=candidatosTitular(texto);
         return candidatos.length===1?candidatos[0].texto:null;
     }
-    function declaracionNochesReserva(texto) {
+    function declaracionesNochesReserva(texto) {
         // `cab6/1noche` es un concepto financiero histórico, no una declaración
         // de duración. El resto de los slash sí separa datos de la reserva.
+        const cantidades = [];
         for (const bloque of String(texto || '').split(/\s*\/{2,}\s*|\r?\n/)) {
             const fragmentos = String(bloque).split(/\s*\/\s*/).map(x => x.trim()).filter(Boolean);
             for (let i = 0; i < fragmentos.length; i++) {
                 const match = normalizar(fragmentos[i]).match(/^(\d+)\s*noches?$/);
-                if (match && !/^cab(?:ana)?\s*\d+$/i.test(normalizar(fragmentos[i - 1]))) return Number(match[1]);
+                if (match && !/^cab(?:ana)?\s*\d+$/i.test(normalizar(fragmentos[i - 1]))) cantidades.push(Number(match[1]));
             }
         }
-        return null;
+        return cantidades;
+    }
+    function declaracionNochesReserva(texto) {
+        const cantidades = [...new Set(declaracionesNochesReserva(texto))];
+        return cantidades.length === 1 ? cantidades[0] : null;
     }
     function extensionNochesReserva(texto) {
         const extensiones = [];
@@ -309,9 +315,13 @@
                 const extensionTexto = nochesTexto === null ? {cantidad:null,ambigua:false} : extensionNochesReserva(cell.valor);
                 const nochesExtensionTexto = extensionTexto.cantidad;
                 const nochesTextoEfectivas = nochesTexto === null ? null : nochesTexto + (nochesExtensionTexto ?? 0);
-                const noches = fd ? 0 : dias.length;
+                const nochesGeometria = fd ? 0 : dias.length;
                 const dudas = [];
                 const notasInterpretacion = [];
+                const advertenciasInformativas = [];
+                const partes = separarCampos(cell.valor);
+                const fechasTexto = [...new Set(partes.map(fechaTexto).filter(Boolean))];
+                const fechaRegistro = fechasTexto.at(-1) || null;
                 const paso = headers[1] ? headers[1].c - headers[0].c : null;
                 const calendarioRegular = Number.isInteger(paso) && paso > 0 && headers.every((d,i)=>!i||d.c-headers[i-1].c===paso);
                 const diasConsecutivos = dias.every((d,i)=>!i||d===sumarDias(dias[i-1],1));
@@ -321,7 +331,17 @@
                     merge.s.c===cell.c && cell.c>=h.c && cell.c<=h.c+Math.max(0,paso-2) &&
                     merge.e.c>=ultimoDia.c+Math.max(0,paso-2) && merge.e.c<=ultimoDia.c+paso-1 && !contenidoContradictorio;
                 const geometriaInequivoca = !!dias.length && calendarioRegular && diasConsecutivos && cabRows.filter(c=>c.r===cab.r).length===1 && mergeSeguro;
-                if (!geometriaInequivoca) dudas.push("La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.");
+                const geometriaResueltaTexto = !fd && !geometriaInequivoca && !contenidoContradictorio &&
+                    cabRows.filter(c=>c.r===cab.r).length===1 && fechasTexto.length===1 && fechasTexto[0]===h.fechaISO &&
+                    Number.isInteger(nochesTexto) && nochesTexto>0 && nochesExtensionTexto===null && !extensionTexto.ambigua;
+                const fechaCheckin = geometriaResueltaTexto ? fechasTexto[0] : h.fechaISO;
+                const noches = geometriaResueltaTexto ? nochesTexto : nochesGeometria;
+                const fechasOcupadas = geometriaResueltaTexto
+                    ? Array.from({length:nochesTexto},(_,indice)=>sumarDias(fechaCheckin,indice))
+                    : dias;
+                const fechaCheckout = fd ? h.fechaISO : sumarDias(fechasOcupadas.at(-1),1);
+                if (geometriaResueltaTexto) advertenciasInformativas.push("La geometría del Libro es inconsistente; fechas obtenidas del texto explícito de la reserva.");
+                else if (!geometriaInequivoca) dudas.push("La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.");
                 if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
@@ -329,13 +349,12 @@
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
                 const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
-                const partes = separarCampos(cell.valor);
-                const fechaRegistro = partes.map(fechaTexto).filter(Boolean).at(-1) || null;
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
-                res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: h.fechaISO,
-                    fecha_checkout: fd ? h.fechaISO : sumarDias(dias.at(-1), 1), fechas_ocupadas: dias, noches, noches_texto: nochesTexto,
+                res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: fechaCheckin,
+                    fecha_checkout: fechaCheckout, fechas_ocupadas: fechasOcupadas, noches, noches_texto: nochesTexto,
                     noches_extension_texto: nochesExtensionTexto, noches_extension_ambigua: extensionTexto.ambigua, noches_texto_efectivas: nochesTextoEfectivas,
-                    geometria_inequivoca: geometriaInequivoca, notas_interpretacion: notasInterpretacion,
+                    geometria_inequivoca: geometriaInequivoca, geometria_resuelta_texto: geometriaResueltaTexto,
+                    notas_interpretacion: notasInterpretacion, advertencias_informativas: advertenciasInformativas,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,

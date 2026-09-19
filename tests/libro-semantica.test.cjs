@@ -94,6 +94,42 @@ test('single, double and repeated slash variants all separate reservation fields
  assert.equal(reserva.fecha_checkin,'2026-09-21');assert.equal(reserva.fecha_checkout,'2026-09-22');
  assert.equal(reserva.servicios[0].concepto,'tonel');
 });
+test('explicit date and nights recover only an imperfect but corroborated merge',async()=>{
+ const texto=(fecha,noches)=>`Catalina Ejemplo // 12.345.678-5 // catalina@example.test // +56 9 1234 5678 // 3 ADL / ${noches} NOCHE${noches===1?'':'S'} // ${fecha} // JF // CAMA ADICIONAL // VIENE CON MASCOTA // COORDINAR TINAJA DE CORTESÍA`;
+ const leer=(valor,fin)=>{const h=hojaDosNoches(valor);h.combinaciones[0].e.c=fin;return S.normalizarHoja(h,'Sep26').reservas[0];};
+
+ const correcta=leer(texto('21.09.2026',1),4);
+ assert.equal(correcta.geometria_inequivoca,true);assert.equal(correcta.geometria_resuelta_texto,false);
+ assert.equal(correcta.fecha_checkin,'2026-09-21');assert.equal(correcta.fecha_checkout,'2026-09-22');
+
+ const unaNoche=leer(texto('21.09.2026',1),3);
+ assert.equal(unaNoche.geometria_inequivoca,false);assert.equal(unaNoche.geometria_resuelta_texto,true);
+ assert.equal(unaNoche.fecha_checkin,'2026-09-21');assert.equal(unaNoche.fecha_checkout,'2026-09-22');
+ assert.deepEqual(unaNoche.fechas_ocupadas,['2026-09-21']);assert.deepEqual(unaNoche.advertencias,[]);
+ assert.match(unaNoche.advertencias_informativas.join(' '),/geometría.*texto explícito/i);
+
+ const dosNoches=leer(texto('21.09.2026',2),7);
+ assert.equal(dosNoches.geometria_resuelta_texto,true);assert.equal(dosNoches.fecha_checkout,'2026-09-23');
+ assert.deepEqual(dosNoches.fechas_ocupadas,['2026-09-21','2026-09-22']);
+
+ const client={auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from(){const q={select(){return q},order(){return q},range:async()=>({data:[]})};return q}};
+ const comparacion=await Q.compararSistema([unaNoche],client,{desde:'2026-09-21',hasta:'2026-09-22'});
+ assert.equal(comparacion[0].estado,'sin_coincidencia');assert.equal(comparacion.meta.faltantes,1);
+});
+test('contradictory or insufficient explicit evidence never overrides imperfect geometry',()=>{
+ const leer=texto=>{const h=hojaDosNoches(texto);h.combinaciones[0].e.c=3;return S.normalizarHoja(h,'Sep26').reservas[0];};
+ for(const [caso,texto] of [
+  ['fecha distinta del ancla','Persona Ejemplo // 1 NOCHE // 22.09.2026'],
+  ['dos fechas','Persona Ejemplo // 1 NOCHE // 21.09.2026 // 22.09.2026'],
+  ['sin noches','Persona Ejemplo // 21.09.2026'],
+  ['noches contradictorias','Persona Ejemplo // 1 NOCHE // 2 NOCHES // 21.09.2026'],
+  ['fecha inválida','Persona Ejemplo // 1 NOCHE // 31.09.2026']
+ ]){
+  const reserva=leer(texto);assert.equal(reserva.geometria_resuelta_texto,false,caso);
+  assert.ok(reserva.advertencias.some(x=>/geometría.*incompleta o ambigua/i.test(x)),caso);
+  assert.equal(reserva.advertencias_informativas.length,0,caso);
+ }
+});
 test('incomplete merge and nonconsecutive calendar remain blocking geometry warnings',()=>{
  const incompleta=hojaDosNoches('Persona Prueba // 2 noches');incompleta.combinaciones[0].e.c=7;
  const a=S.normalizarHoja(incompleta,'Sep26').reservas[0];
