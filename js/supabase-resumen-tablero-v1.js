@@ -32,6 +32,8 @@
     const filasOcultasPorFecha = new Map();
     const bloquesAnterioresOcultosPorFecha = new Map();
     const CLAVE_FILAS_OCULTAS = "haikuResumenFilasOcultasPorFechaV2";
+    const CLAVE_BLOQUES_ANTERIORES_OCULTOS =
+        "haikuResumenDiaAnteriorOcultoPorFechaV1";
 
     function fechaResumenActiva() {
         try {
@@ -106,7 +108,54 @@
         }
     }
 
+    function cargarBloquesAnterioresOcultos() {
+        try {
+            const guardados = JSON.parse(
+                window.localStorage.getItem(
+                    CLAVE_BLOQUES_ANTERIORES_OCULTOS
+                ) || "{}"
+            );
+            if (!guardados || Array.isArray(guardados) || typeof guardados !== "object") {
+                return;
+            }
+
+            Object.entries(guardados).forEach(([fecha, numeros]) => {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Array.isArray(numeros)) {
+                    return;
+                }
+
+                const bloques = bloquesAnterioresOcultosDeFecha(fecha);
+                numeros
+                    .map(numero => String(numero || "").trim())
+                    .filter(numero => /^\d+$/.test(numero))
+                    .forEach(numero => bloques.add(numero));
+            });
+        } catch (_) {
+            // Un valor anterior inválido no debe impedir que cargue el tablero.
+        }
+    }
+
+    function guardarBloquesAnterioresOcultos() {
+        try {
+            const guardados = {};
+            [...bloquesAnterioresOcultosPorFecha.entries()]
+                .sort(([fechaA], [fechaB]) => fechaA.localeCompare(fechaB))
+                .forEach(([fecha, bloques]) => {
+                    if (!bloques.size) return;
+                    guardados[fecha] = [...bloques]
+                        .sort((numeroA, numeroB) => Number(numeroA) - Number(numeroB));
+                });
+            window.localStorage.setItem(
+                CLAVE_BLOQUES_ANTERIORES_OCULTOS,
+                JSON.stringify(guardados)
+            );
+        } catch (_) {
+            // El tablero sigue funcionando si el navegador bloquea localStorage.
+        }
+    }
+
     cargarFilasOcultas();
+    cargarBloquesAnterioresOcultos();
 
     function fechaVisible(fecha) {
         if (!fecha) return "";
@@ -615,6 +664,7 @@
         } else {
             ocultos.add(numero);
         }
+        guardarBloquesAnterioresOcultos();
         actualizarBloqueAnteriorFila(fila);
     }
 
