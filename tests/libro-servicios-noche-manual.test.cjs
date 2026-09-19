@@ -9,12 +9,22 @@ function entorno() {
         servicios: [{ concepto: 'tonel', texto_original: textoYenny, hora: '19:15' }] };
     const db = { reserva_estadias: [{ id: 'e1', reserva_id: 'r1', cabana_id: 'c6', fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout }],
         reservas: [{ id: 'r1', titular_nombre: r.titular }], cabanas: [{ id: 'c6', numero: 6 }], servicios: [], notas: [] };
-    const state = { r, db, generacion: 1, calls: [], lecturas: 0 };
+    const state = { r, db, generacion: 1, calls: [], lecturas: 0, confirmar: false, rpcResult: null };
     class Element {
         constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.value = ''; this.style = {}; this.dataset = {}; }
         append(...els) { this.children.push(...els); els.forEach(el => el.parentElement = this); } appendChild(el) { this.append(el); }
         setAttribute(k, v) { this[k] = v; } addEventListener(k, fn) { this.listeners[k] = fn; }
         replaceChildren(...els) { this.children = []; this.append(...els); }
+        remove() { if (!this.parentElement) return; this.parentElement.children = this.parentElement.children.filter(x => x !== this); this.parentElement = null; }
+        cloneNode(deep = false) {
+            const clone = new Element(this.tag);
+            for (const key of ['className', 'value', 'type', 'checked', 'disabled', 'id', 'open', 'text']) {
+                if (Object.prototype.hasOwnProperty.call(this, key)) clone[key] = this[key];
+            }
+            clone.style = { ...this.style }; clone.dataset = { ...this.dataset };
+            if (deep) clone.append(...this.children.map(child => child.cloneNode(true)));
+            return clone;
+        }
         get isConnected() { return true; }
         get classList() { return { contains: cls => (this.className || '').split(' ').includes(cls) }; }
         matches(selector) {
@@ -32,16 +42,21 @@ function entorno() {
         }
         closest(selector) { return this.matches(selector) ? this : this.parentElement?.closest(selector) || null; }
         querySelectorAll(selector) { if (selector === ':scope > details') return this.children.filter(x => x.tag === 'details'); return this.children.flatMap(x => [...(x.matches(selector) ? [x] : []), ...x.querySelectorAll(selector)]); }
+        querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
         set textContent(v) { this.text = v; this.children = []; } get textContent() { return (this.text || '') + this.children.map(x => x.textContent).join(''); }
     }
     const captures = [], document = { createElement: t => new Element(t), getElementById: () => null, head: new Element('head'),
         addEventListener: (type, fn, capture) => captures.push({ type, fn, capture }), querySelectorAll: selector => document.card?.querySelectorAll(selector) || [] };
-    const c = { document, queueMicrotask, addEventListener() {}, confirm: () => { state.calls.push('confirm'); return false; },
+    const c = { document, queueMicrotask, addEventListener() {}, confirm: () => { state.calls.push('confirm'); return state.confirmar; },
         HAIKU_LIBRO_RESERVA_V1: { listo: async () => {}, estado: () => ({ cargado: true, nombre: 'fixture.xlsx', generacion: state.generacion }),
             listarHojas: () => ['Sep26'], consultarHoja: async () => { state.lecturas++; return { reservas: [copy(r)] }; } },
         haikuSupabase: { from: tabla => { const q = { select: () => q, lte: () => q, gte: () => q, in: () => q, eq: () => q,
             then: (ok, fail) => Promise.resolve({ data: copy(db[tabla]), error: null }).then(ok, fail) }; return q; },
-            rpc: () => { state.calls.push('rpc'); throw Error('Prohibida escritura en test'); } } };
+            rpc: async () => {
+                state.calls.push('rpc');
+                if (state.rpcResult) return { data: copy(state.rpcResult), error: null };
+                throw Error('Prohibida escritura en test');
+            } } };
     vm.createContext(c);
     state.importaciones = 0;
     c.registrarImportacion = () => state.importaciones++;
@@ -234,6 +249,40 @@ test('comparison button enters the guarded incorporation flow and preserves the 
     await e.click(all(out).find(x => x.dataset.hakuAccion === 'incorporar'));
     assert.ok(e.state.lecturas > antes); assert.deepEqual(e.calls, ['confirm']);
     assert.equal(e.state.importaciones, 0); // Guard owns the existing incorporation path; no double dispatch.
+});
+
+test('completed service incorporation uses the current saved-result design', async () => {
+    const e = entorno(), out = new e.Element('div'); e.document.card = out;
+    e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00', hora: '18:00' });
+    const previous = new e.Element('div'); previous.className = 'haiku-asistente-mensaje--usuario'; previous.textContent = consultaComparacion;
+    out.previousElementSibling = previous;
+    e.cargarGuard(); e.api.renderizar(await e.api.construir(consultaComparacion), out, consultaComparacion);
+    e.state.confirmar = true;
+    e.state.rpcResult = { ok: true, servicios_creados: 1, notas_creadas: 0, servicios_omitidos: 0, notas_omitidas: 0 };
+
+    const all = el => [el, ...el.children.flatMap(all)];
+    await e.click(all(out).find(x => x.dataset.hakuAccion === 'incorporar'));
+
+    assert.deepEqual(e.calls, ['confirm', 'rpc']);
+    assert.ok(out.classList.contains('haku-incorporacion-resultado'));
+    assert.ok(out.classList.contains('haku-incorporacion-resultado--servicios'));
+    assert.ok(out.children[0].classList.contains('haku-incorporacion-resultado-cabecera'));
+    assert.equal(out.children[0].children[0].children[0].textContent, 'LIBRO ↔ PROYECTO H');
+    assert.equal(out.children[0].children[0].children[1].textContent, 'Incorporación completada');
+    assert.equal(out.children[0].children[1].className, 'haiku-incorporacion-modo');
+    assert.equal(out.children[0].children[1].textContent, 'Guardado');
+    const indicadores = out.children[2].children;
+    assert.deepEqual(indicadores.map(x => [x.children[1].textContent, x.children[0].textContent]), [
+        ['Servicios', '1'], ['Notas', '0'], ['Omitidos', '0']
+    ]);
+    const detalle = out.children.find(x => x.tag === 'details');
+    assert.ok(detalle.classList.contains('haku-incorporacion-resultado-detalle'));
+    assert.equal(detalle.children[0].textContent, 'Ver detalle de la revisión anterior');
+    const acciones = out.children.find(x => x.classList.contains('haiku-incorporacion-acciones'));
+    assert.ok(acciones);
+    assert.equal(acciones.children[0].className, 'libro-reserva-boton secundario');
+    assert.equal(acciones.children[0].textContent, 'Revisar de nuevo');
+    assert.equal(out.children.some(x => x.classList.contains('haku-libro-servicios__head')), false);
 });
 
 test('active capture guard blocks obsolete overrides instead of selecting another row by position', async () => {

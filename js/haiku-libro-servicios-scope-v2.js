@@ -625,13 +625,18 @@
                 p_operacion_id: uuid(), p_servicios: servicios.map(x => x.payload), p_notas: notas.map(x => x.payload)
             });
             if (error) throw error; if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
+            card.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-resultado haku-incorporacion-resultado--servicios";
             card.replaceChildren();
-            const head = document.createElement("div"); head.className = "haku-libro-servicios__head"; const left = document.createElement("div");
-            const k = document.createElement("div"); k.className = "haku-libro-servicios__kicker"; k.textContent = "LIBRO → PROYECTO H"; const t = document.createElement("div"); t.className = "haku-libro-servicios__title"; t.textContent = "Incorporación completada"; left.append(k, t);
-            const chip = document.createElement("span"); chip.className = "haku-libro-servicios__chip"; chip.textContent = "Guardado"; head.append(left, chip);
-            const resumen = document.createElement("div"); resumen.className = "haku-libro-servicios__texto";
-            resumen.textContent = `Proyecto H confirmó ${data.servicios_creados || 0} servicio${data.servicios_creados === 1 ? "" : "s"} y ${data.notas_creadas || 0} nota${data.notas_creadas === 1 ? "" : "s"}. Se omitieron ${Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0)} elementos que ya existían. El Libro original no fue modificado.`;
-            card.append(head, resumen);
+            const cabecera = document.createElement("div"); cabecera.className = "haiku-incorporacion-cabecera haku-incorporacion-resultado-cabecera"; const titulo = document.createElement("div");
+            const k = document.createElement("span"); k.textContent = "LIBRO ↔ PROYECTO H"; const t = document.createElement("strong"); t.textContent = "Incorporación completada"; titulo.append(k, t);
+            const estado = document.createElement("span"); estado.className = "haiku-incorporacion-modo"; estado.textContent = "Guardado"; cabecera.append(titulo, estado);
+            const mensaje = document.createElement("p"); mensaje.className = "haiku-incorporacion-aviso haku-incorporacion-resultado-mensaje"; mensaje.textContent = "Proyecto H confirmó la incorporación completa. El Libro original no fue modificado.";
+            const resumen = document.createElement("div"); resumen.className = "haiku-incorporacion-resumen haku-incorporacion-resultado-resumen";
+            for (const [cantidad, etiqueta] of [[Number(data.servicios_creados || 0), "Servicios"], [Number(data.notas_creadas || 0), "Notas"], [Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0), "Omitidos"]]) {
+                const indicador = document.createElement("div"); indicador.className = "haiku-incorporacion-indicador haku-incorporacion-resultado-indicador";
+                const valor = document.createElement("strong"); valor.textContent = String(cantidad); const label = document.createElement("span"); label.textContent = etiqueta; indicador.append(valor, label); resumen.append(indicador);
+            }
+            card.append(cabecera, mensaje, resumen);
         } catch (error) {
             const aviso = document.createElement("div"); aviso.className = "haku-libro-servicios__razones"; aviso.textContent = mensajeErrorIncorporacion(error); card.append(aviso);
             botones.forEach(x => x.disabled = false);
