@@ -603,6 +603,14 @@
         return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
     }
 
+    function mensajeErrorIncorporacion(error) {
+        const texto = String(error?.message || error || "").trim();
+        if (/permission denied for table eventos_auditoria/i.test(texto)) {
+            return "Proyecto H no pudo registrar la auditoría de la incorporación. No se guardó ningún servicio ni nota; vuelve a intentar después de actualizar la base.";
+        }
+        return texto || "No se pudo completar la incorporación.";
+    }
+
     async function importarSeleccionados(seleccionados, card, textoOriginal, overrides = new Map()) {
         const ids = [...seleccionados]; if (!ids.length) return;
         const actual = await construir(textoOriginal, overrides), mapa = new Map(actual.items.filter(x => x.estado === "listo").map(x => [x.item_id, x]));
@@ -625,7 +633,7 @@
             resumen.textContent = `Proyecto H confirmó ${data.servicios_creados || 0} servicio${data.servicios_creados === 1 ? "" : "s"} y ${data.notas_creadas || 0} nota${data.notas_creadas === 1 ? "" : "s"}. Se omitieron ${Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0)} elementos que ya existían. El Libro original no fue modificado.`;
             card.append(head, resumen);
         } catch (error) {
-            const aviso = document.createElement("div"); aviso.className = "haku-libro-servicios__razones"; aviso.textContent = error?.message || "No se pudo completar la incorporación."; card.append(aviso);
+            const aviso = document.createElement("div"); aviso.className = "haku-libro-servicios__razones"; aviso.textContent = mensajeErrorIncorporacion(error); card.append(aviso);
             botones.forEach(x => x.disabled = false);
         }
     }
@@ -658,7 +666,11 @@
             seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-franja--normal haku-icono--calendario haku-libro-servicios__seccion--existentes"),
             seccion("Requieren revisión manual", revisar, seleccionados, "haku-franja--revision haku-icono--alerta haku-libro-servicios__seccion--revision", confirmarNoche)
         );
-        if (resultado.quiereIncorporar && (listosServicios.length || listosNotas.length)) {
+        // La comparación ya contiene una selección explícita y revalidable. Permitir
+        // iniciar la incorporación desde esta misma vista aunque la consulta original
+        // haya dicho "comparar": el guard vuelve a leer Libro y Proyecto H antes de
+        // pedir confirmación y los ítems dudosos/existentes continúan deshabilitados.
+        if (listosServicios.length || listosNotas.length) {
             const acciones = document.createElement("div"); acciones.className = "haku-libro-servicios__acciones"; const boton = document.createElement("button"); boton.type = "button"; boton.className = "haku-libro-servicios__boton";
             boton.dataset.hakuAccion = 'incorporar';
             const refrescar = () => { const elegidos = resultado.items.filter(x => seleccionados.has(x.item_id)); const s = elegidos.filter(x => x.kind === "servicio").length, n = elegidos.filter(x => x.kind === "nota").length; boton.textContent = `Incorporar ${s} servicio${s === 1 ? "" : "s"} + ${n} nota${n === 1 ? "" : "s"}`; boton.disabled = !elegidos.length; };

@@ -164,6 +164,14 @@
         card.append(aviso);
     }
 
+    function mensajeErrorIncorporacion(error) {
+        const texto = String(error?.message || error || "").trim();
+        if (/permission denied for table eventos_auditoria/i.test(texto)) {
+            return "Proyecto H no pudo registrar la auditoría de la incorporación. No se guardó ningún servicio ni nota; vuelve a intentar después de actualizar la base.";
+        }
+        return texto || "No se pudo completar la incorporación.";
+    }
+
     function prepararDetalleAnterior(card) {
         const copia = card.cloneNode(true);
         copia.querySelectorAll(".haku-libro-servicios__acciones,.haku-libro-servicios__error-guard").forEach(x => x.remove());
@@ -322,7 +330,7 @@
         const texto = textoAnteriorDelCard(card);
         boton.disabled = true;
         importarSeguro(card, texto).catch(error => {
-            mostrarError(card, error?.message || "No se pudo completar la incorporación.");
+            mostrarError(card, mensajeErrorIncorporacion(error));
             bloquearRevision(card);
             if (boton.isConnected) boton.disabled = false;
         });

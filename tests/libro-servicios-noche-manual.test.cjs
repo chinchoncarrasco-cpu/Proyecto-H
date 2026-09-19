@@ -56,6 +56,7 @@ function entorno() {
     return { ...state, state, api: c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2, document, Element, cargarGuard, click };
 }
 const consulta = 'incorpora servicios del Libro septiembre 2026';
+const consultaComparacion = 'Libro: compara servicios de septiembre 2026 con Proyecto H';
 const asociacion = { estado: 'asociada', sistema: { reserva_id: 'r1', id: 'e1' } };
 function preparar(e, texto, extra = {}) { return e.api.prepararServicio(e.r, { concepto: 'jacuzzi', texto_original: texto, hora: '19:15', ...extra }, asociacion); }
 async function elegir(e) {
@@ -147,14 +148,14 @@ test('rendered confirmation rebuilds the card into ready services without invoki
     assert.deepEqual(e.calls, []);
 });
 
-test('services and notes render as four compact sections closed after every render', async () => {
+test('a comparison renders four compact sections and its incorporation button', async () => {
     const e = entorno(), out = new e.Element('div');
     const built = await e.api.construir(consulta), original = built.items.find(x => x.kind === 'servicio');
     const ready = { ...copy(original), item_id: 'ready', estado: 'listo', razones: [], inferencias: [] };
     const note = { ...copy(ready), item_id: 'note', kind: 'nota', texto: 'Dejar batas en recepción', payload: { reserva_id: 'r1', importante: true } };
     const existing = { ...copy(ready), item_id: 'existing', estado: 'existente' };
     const review = { ...copy(original), item_id: 'review', estado: 'revisar', razones: ['Requiere revisión manual.'] };
-    const result = { ...built, items: [ready, note, existing, review], quiereIncorporar: true };
+    const result = { ...built, items: [ready, note, existing, review], quiereIncorporar: false };
 
     e.api.renderizar(result, out, consulta);
     let sections = out.querySelectorAll(':scope > details');
@@ -175,6 +176,10 @@ test('services and notes render as four compact sections closed after every rend
     assert.ok(out.classList.contains('haku-comparacion-compacta'));
     assert.equal(out.querySelectorAll('input[type=checkbox]').length, 4);
     assert.equal(out.querySelectorAll('input[type=checkbox]:not(:disabled)').length, 2);
+    const incorporar = out.querySelectorAll('button').find(x => x.dataset.hakuAccion === 'incorporar');
+    assert.ok(incorporar);
+    assert.equal(incorporar.textContent, 'Incorporar 1 servicio + 1 nota');
+    assert.equal(incorporar.disabled, false);
 
     sections[0].open = true;
     e.api.renderizar(result, out, consulta);
@@ -210,19 +215,19 @@ test('compact selector confirms an index, and confirmed item is selectable in th
     assert.equal(all(nueva).some(x => x.tag === 'select'), false);
 });
 
-test('document capture guard distinguishes manual confirmation from incorporation and preserves the override', async () => {
+test('comparison button enters the guarded incorporation flow and preserves the manual-night override', async () => {
     const e = entorno(), out = new e.Element('div'); e.document.card = out;
     // Otros elementos ya listos: el guard anterior abría el confirm global por ellos.
     e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00', hora: '18:00' });
-    const previous = new e.Element('div'); previous.className = 'haiku-asistente-mensaje--usuario'; previous.textContent = consulta;
+    const previous = new e.Element('div'); previous.className = 'haiku-asistente-mensaje--usuario'; previous.textContent = consultaComparacion;
     out.previousElementSibling = previous;
-    e.cargarGuard(); e.api.renderizar(await e.api.construir(consulta), out, consulta);
+    e.cargarGuard(); e.api.renderizar(await e.api.construir(consultaComparacion), out, consultaComparacion);
     const all = el => [el, ...el.children.flatMap(all)];
     const manual = all(out).find(x => x.dataset.hakuAccion === 'confirmar-noche');
     assert.equal(manual.type, 'button'); all(out).find(x => x.tag === 'select').value = '2';
     await e.click(manual); // Dispatch document capture first, then target handler.
     assert.deepEqual(e.calls, []); assert.equal(e.state.importaciones, 0);
-    const actual = await e.api.revalidarVista(out, consulta), yenny = actual.items.find(x => x.kind === 'servicio');
+    const actual = await e.api.revalidarVista(out, consultaComparacion), yenny = actual.items.find(x => x.kind === 'servicio');
     assert.equal(yenny.estado, 'listo'); assert.equal(yenny.nocheManual, 2); assert.equal(yenny.fecha, '2026-09-05');
     assert.ok(all(out).some(x => x.textContent.includes('Listo · fecha confirmada manualmente')));
     const antes = e.state.lecturas;
