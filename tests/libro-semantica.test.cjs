@@ -75,6 +75,25 @@ test('Isabel associates by identity cabin and geometric dates despite stale writ
  const sistema={...isabel,id:'proyecto-h',notas_interpretacion:[]};
  assert.equal(S.asociar(isabel,[sistema]).estado,'asociada');
 });
+test('single, double and repeated slash variants all separate reservation fields',()=>{
+ assert.deepEqual(S.separarCampos('// Nombre Ejemplo/RUT 12.345.678-5///2 ADL/1 MASCOTA/1 NOCHE//IN'),
+  ['Nombre Ejemplo','RUT 12.345.678-5','2 ADL','1 MASCOTA','1 NOCHE','IN']);
+ assert.deepEqual(S.separarCampos('Nombre Ejemplo/03/09/26/2 ADL'),['Nombre Ejemplo','03/09/26','2 ADL']);
+ const texto='Andrés Ejemplo/12.345.678-5/andres@example.test//+56 9 1234 5678//2adl/1mascota/1noche/CA/17-09-26//Tonel de madera de cortesía 20.45 a 21.45';
+ const hoja=hojaDosNoches(texto);hoja.combinaciones[0].e.c=4;
+ const resultado=S.normalizarHoja(hoja,'Sep26');
+ assert.equal(resultado.anotaciones.length,0);
+ assert.equal(resultado.reservas.length,1);
+ const reserva=resultado.reservas[0];
+ assert.equal(reserva.titular,'Andrés Ejemplo');
+ assert.equal(reserva.rut_documento,'12.345.678-5');
+ assert.equal(reserva.correo,'andres@example.test');
+ assert.equal(reserva.telefono,'+56 9 1234 5678');
+ assert.equal(reserva.adultos,2);assert.equal(reserva.mascotas,1);assert.equal(reserva.noches_texto,1);
+ assert.equal(reserva.operador,'CA');assert.equal(reserva.fecha_ingreso_libro,'2026-09-17');
+ assert.equal(reserva.fecha_checkin,'2026-09-21');assert.equal(reserva.fecha_checkout,'2026-09-22');
+ assert.equal(reserva.servicios[0].concepto,'tonel');
+});
 test('incomplete merge and nonconsecutive calendar remain blocking geometry warnings',()=>{
  const incompleta=hojaDosNoches('Persona Prueba // 2 noches');incompleta.combinaciones[0].e.c=7;
  const a=S.normalizarHoja(incompleta,'Sep26').reservas[0];

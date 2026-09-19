@@ -149,7 +149,9 @@
         const etiquetasNoTitular = /^(cliente frecuente|x hacer|por hacer|pendiente|sin titular)$/;
         if (!etiquetasNoTitular.test(actual)) return r;
 
-        const partes = String(r?.texto_original || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
+        const partes = typeof S.separarCampos === "function"
+            ? S.separarCampos(r?.texto_original)
+            : String(r?.texto_original || "").split(/\s*\/+\s*|\r?\n/).map(x => x.trim()).filter(Boolean);
         const candidato = partes.find(x => {
             const n = S.normalizar(x);
             return !etiquetasNoTitular.test(n) &&
@@ -856,7 +858,9 @@
             return Boolean(origen?.hoja && origen?.celda && item.p.origen?.hoja && item.p.origen?.celda && source(origen)===source(item.p.origen));
         };
         const referenciaExacta = (item, existente) => {
-            const textoCompleto=texto(item.p.texto_original), segmentos=String(item.p.texto_original || '').split(/\s*\/{2,}\s*|\r?\n/).map(texto).filter(Boolean);
+            const textoCompleto=texto(item.p.texto_original), segmentos=(typeof S.separarCampos === 'function'
+                ? S.separarCampos(item.p.texto_original)
+                : String(item.p.texto_original || '').split(/\s*\/+\s*|\r?\n/)).map(texto).filter(Boolean);
             const titular=texto(item.titular), monto=String(Number(item.p.monto));
             const referenciaEspecifica = valor => {
                 if (!valor || valor.length<12 || valor===titular) return false;
@@ -1498,7 +1502,10 @@
     function fragmentosObservaciones(valor) {
         const texto = String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi, '\n');
         const unicos = new Map();
-        for (const fragmento of texto.split(/\r?\n|\s*\/\/\s*/).map(x => x.trim()).filter(Boolean)) {
+        const fragmentos = typeof S.separarCampos === 'function'
+            ? S.separarCampos(texto)
+            : texto.split(/\r?\n|\s*\/+\s*/).map(x => x.trim()).filter(Boolean);
+        for (const fragmento of fragmentos) {
             const clave = claveFragmentoObservacion(fragmento);
             if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
         }

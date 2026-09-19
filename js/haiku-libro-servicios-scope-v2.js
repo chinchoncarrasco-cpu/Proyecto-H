@@ -131,7 +131,9 @@
     }
 
     function fragmentosReserva(texto) {
-        return String(texto || "").split(/\s*\/\/\s*|\n|;/).map(x => x.trim()).filter(Boolean);
+        const campos = root.HAIKU_LIBRO_SEMANTICA?.separarCampos?.(texto) ||
+            String(texto || "").split(/\s*\/+\s*|\r?\n/).map(x => x.trim()).filter(Boolean);
+        return campos.flatMap(x => x.split(';').map(y => y.trim()).filter(Boolean));
     }
 
     function textoNotaBatas(fragmento) {

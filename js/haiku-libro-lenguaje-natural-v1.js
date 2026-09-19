@@ -14,10 +14,9 @@
     const ETIQUETA_NO_TITULAR = /^(?:(?:huesped|cliente)\s+frecuente(?:\s+trato\s+especial)?|trato\s+especial|late\s*check\s*out|full\s*day|x\s+hacer|por\s+hacer|pendiente|sin\s+titular)$/;
 
     function partesReservaLibro(texto) {
-        return String(texto || "")
-            .split(/\s*\/\/\s*|\n/)
-            .map(x => x.trim())
-            .filter(Boolean);
+        return typeof base.separarCampos === "function"
+            ? base.separarCampos(texto)
+            : String(texto || "").split(/\s*\/+\s*|\r?\n/).map(x => x.trim()).filter(Boolean);
     }
 
     function esNombrePersonaLibro(texto) {

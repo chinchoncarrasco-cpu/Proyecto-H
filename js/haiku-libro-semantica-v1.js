@@ -4,6 +4,18 @@
     const normalizar = v => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
     const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
     const digitos = v => String(v || "").replace(/\D/g, "");
+    // En el Libro el slash es un separador de campos. Aceptamos uno o varios,
+    // con o sin espacios, además de saltos de línea. Las fechas DD/MM/AA(AA)
+    // se protegen porque sus slash sí forman parte del valor.
+    function separarCampos(texto) {
+        const fechas = [];
+        const protegido = String(texto || "").replace(/\b\d{1,2}\/\d{1,2}\/(?:\d{4}|\d{2})\b/g, valor => {
+            fechas.push(valor);
+            return `\uE000${fechas.length - 1}\uE001`;
+        });
+        return protegido.split(/\s*\/+\s*|\r?\n/).map(x => x.trim())
+            .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => fechas[Number(indice)]));
+    }
     function iso(y, m, d) {
         const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
         return date.getUTCFullYear() === Number(y) && date.getUTCMonth() === Number(m) - 1 && date.getUTCDate() === Number(d) ? date.toISOString().slice(0, 10) : null;
@@ -43,7 +55,7 @@
     }
     // Conserva el criterio previo de las evidencias de cancelación y bloqueo.
     function titularContexto(texto) {
-        const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
+        const partes = separarCampos(texto);
         const etiqueta = /^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|late check out|x hacer|por hacer|pendiente|sin titular)\b/;
         return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
     }
@@ -63,7 +75,7 @@
     }
     function clasificarFragmentos(texto) {
         let humanoPrevio=false, datosPosteriores=false;
-        return String(texto || '').split(/\s*\/\/\s*|\r?\n/).map(x=>x.trim()).filter(Boolean).map(texto=>{
+        return separarCampos(texto).map(texto=>{
             const t=normalizar(texto);
             let tipo='otro';
             if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) tipo='etiqueta';
@@ -82,23 +94,28 @@
         return candidatos.length===1?candidatos[0].texto:null;
     }
     function declaracionNochesReserva(texto) {
-        for (const fragmento of String(texto || '').split(/\s*\/\/\s*|\r?\n/)) {
-            const match = normalizar(fragmento).match(/^(\d+)\s*noches?$/);
-            if (match) return Number(match[1]);
+        // `cab6/1noche` es un concepto financiero histórico, no una declaración
+        // de duración. El resto de los slash sí separa datos de la reserva.
+        for (const bloque of String(texto || '').split(/\s*\/{2,}\s*|\r?\n/)) {
+            const fragmentos = String(bloque).split(/\s*\/\s*/).map(x => x.trim()).filter(Boolean);
+            for (let i = 0; i < fragmentos.length; i++) {
+                const match = normalizar(fragmentos[i]).match(/^(\d+)\s*noches?$/);
+                if (match && !/^cab(?:ana)?\s*\d+$/i.test(normalizar(fragmentos[i - 1]))) return Number(match[1]);
+            }
         }
         return null;
     }
     function extensionNochesReserva(texto) {
         const extensiones = [];
         const patron = /\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar))\s+(\d+)\s*noches?\b/g;
-        for (const fragmento of String(texto || '').split(/\s*\/\/\s*|\r?\n/)) {
+        for (const fragmento of separarCampos(texto)) {
             for (const match of normalizar(fragmento).matchAll(patron)) extensiones.push(Number(match[1]));
         }
         return { cantidad: extensiones.length === 1 ? extensiones[0] : null, ambigua: extensiones.length > 1 };
     }
     // La recuperación de titulares financieros conserva su contrato previo.
     function titularPago(texto) {
-        const partes = String(texto || "").split(/\s*\/\/\s*|\n/).map(x => x.trim()).filter(Boolean);
+        const partes = separarCampos(texto);
         const candidato = partes.find(x => !/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normalizar(x)));
         return candidato && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(candidato) && candidato.split(/\s+/).length >= 2 ? candidato : null;
     }
@@ -124,7 +141,7 @@
     }
     function servicios(texto) {
         const salida = [];
-        for (const parte of String(texto || "").split(/\/\/|\n|;/)) {
+        for (const parte of separarCampos(texto).flatMap(x => x.split(';').map(y => y.trim()).filter(Boolean))) {
             const t = normalizar(parte);
             if (mencionInformativaServicio(t)) continue;
             for (const [tipo, re] of [["jacuzzi", /jacuzzi/], ["tonel", /tonel/], ["tinaja", /tinaja/], ["lateout", /late\s*(check\s*)?out/], ["cama_adicional", /cama.*adicional/], ["cuna", /\bcuna\b/], ["masaje", /masaj/]]) {
@@ -138,7 +155,7 @@
             servicio.pendiente, servicio.cortesia, servicio.monto ?? ''].join('|'), servicio])).values()];
     }
     function aseo(cell, fecha, cabana, origen) {
-        const partes = cell.valor.split(/\/\/|\n/).map(x => x.trim()).filter(Boolean);
+        const partes = separarCampos(cell.valor);
         const dato = regex => { const m = cell.valor.match(regex); return m && !/\?|camarero|tiempos/i.test(m[1]) ? m[1].trim() : null; };
         const horas = cell.valor.match(/\b(\d{1,2})[:.](\d{2})\s*-\s*(\d{1,2})[:.](\d{2})\b/);
         return { fecha, cabana, checkout_por: dato(/check\s*out\s+([^/\n]+)/i), camarero: partes[1] && !/camarero|\?/.test(normalizar(partes[1])) ? partes[1] : null,
@@ -200,8 +217,8 @@
         for (const label of cells.filter(c => c.c === columnaPrimaria && normalizar(c.valor) === 'cancelaciones' && c.r > Math.max(...cabRows.map(c => c.r)) && c.r < financialRow)) {
             const siguiente = cells.filter(c => c.r > label.r && ((c.c === columnaPrimaria && c.valor?.trim()) || /pagos de arriendos de hoy/.test(normalizar(c.valor)))).sort((a,b)=>a.r-b.r)[0];
             if (!siguiente) continue;
-            for (const cell of cells.filter(c => c.r >= label.r && c.r < siguiente.r && c.c > columnaPrimaria && c.valor?.includes('//'))) {
-                const contenido = cell.valor.split('//').filter(t => !/^(?:cancelad[ao]s?\b|cancelacion\b)/.test(normalizar(t))).join('//');
+            for (const cell of cells.filter(c => c.r >= label.r && c.r < siguiente.r && c.c > columnaPrimaria && /\//.test(c.valor || ''))) {
+                const contenido = separarCampos(cell.valor).filter(t => !/^(?:cancelad[ao]s?\b|cancelacion\b)/.test(normalizar(t))).join(' // ');
                 const nombre = titularContexto(contenido);
                 const hs = headers.filter((h,i) => cell.c >= h.c && cell.c < (headers[i+1]?.c ?? h.c+4));
                 if (!nombre || hs.length !== 1) continue;
@@ -312,7 +329,7 @@
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
                 const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
-                const partes = cell.valor.split(/\/\/|\n/).map(x => x.trim());
+                const partes = separarCampos(cell.valor);
                 const fechaRegistro = partes.map(fechaTexto).filter(Boolean).at(-1) || null;
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: h.fechaISO,
@@ -637,6 +654,6 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto });
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);
