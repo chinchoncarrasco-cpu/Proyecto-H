@@ -202,11 +202,19 @@
         const notaAdministrativa = /\b(?:observacion|instruccion|informativo)\b/.test(texto) ||
             (!montoValido && /\b(?:bove|manager|boleta)\b/.test(texto));
         const evidenciaIngresoCompleta = montoValido && fechaValida && (medioValido || identificadorFuerte) && estructuraCoherente;
+        const colores = Object.values(pago.evidencia_financiera?.colores || {}).map(valor => String(valor || "").toUpperCase());
+        const fondoNota = colores.some(valor => ["FF0000", "C00000", "CC0000", "E60000", "FFFF00"].includes(valor));
+        const sinIdentidadPago = !pago.codigo_autorizacion && !pago.folio && !pago.bovtar &&
+            !medioValido && !String(pago.titular || "").trim() && !String(pago.concepto || "").trim();
+        const notaDestacadaSinComprobante = fondoNota && sinIdentidadPago && !montoValido && !fila?.monto;
 
         // Reembolsos y obligaciones por pagar describen dinero, pero no acreditan
         // por sí mismos un ingreso recibido. Si mezclan señales de ingreso quedan
         // en revisión; sin ellas se conservan sólo como nota financiera.
-        if (reembolso || obligacion || notaAdministrativa) {
+        // Una celda roja o amarilla dentro del bloque financiero también es una
+        // nota cuando carece de todas las señales estructuradas de un comprobante.
+        // El color por sí solo nunca degrada un pago con identidad financiera.
+        if (reembolso || obligacion || notaAdministrativa || notaDestacadaSinComprobante) {
             return evidenciaIngresoCompleta ? "dudoso" : "nota_financiera";
         }
         if (pago.estado_pago === "por_confirmar" || pago.estado_pago === "pendiente") return "dudoso";
@@ -228,6 +236,12 @@
             clasificacion_financiera: "nota_financiera",
             motivo: "Texto administrativo relacionado con dinero; no acredita un ingreso recibido."
         };
+    }
+
+    function esNotaImportanteFinanciera(pago) {
+        if (!pago || pago.clasificacion_financiera !== "nota_financiera") return false;
+        const colores = Object.values(pago.evidencia_financiera?.colores || {}).map(valor => String(valor || "").toUpperCase());
+        return colores.some(valor => ["FF0000", "C00000", "CC0000", "E60000", "FFFF00"].includes(valor));
     }
 
     function ajustarResultadoPagos(data) {
@@ -284,10 +298,18 @@
                 continue;
             }
 
+            const pagos = depurarPagos(reserva.pagos, reserva);
+            const pagosSinAsociacion = depurarPagos(reserva.pagos_sin_asociacion, reserva);
+            const notasFinancierasImportantes = [...(reserva.pagos || []), ...(reserva.pagos_sin_asociacion || [])]
+                .map(ajustar)
+                .filter(esNotaImportanteFinanciera)
+                .map(pago => pago.texto_original)
+                .filter(Boolean);
             reservas.push({
                 ...reserva,
-                pagos: depurarPagos(reserva.pagos, reserva),
-                pagos_sin_asociacion: depurarPagos(reserva.pagos_sin_asociacion, reserva)
+                notas_importantes: [...new Set([...(reserva.notas_importantes || []), ...notasFinancierasImportantes])],
+                pagos,
+                pagos_sin_asociacion: pagosSinAsociacion
             });
         }
 

@@ -20,6 +20,15 @@ test('WebPay keeps its channel together with debit or credit card type',()=>{
     assert.equal(C.medioDesdeTexto({texto_original:'CREDITO // Folio 12 // BOVTAR 34'}),'credito');
 });
 
+test('BOVE, BOVTAR and CodAut remain three independent identifiers',()=>{
+    const pago=C.corregirPago({bove:'16979',bovtar:'094778',codigo_autorizacion:'091559',
+        texto_original:'BOVE 16979 // Folio 000250 // BOVTAR 094778 // CodAut 091559 // WebPay crédito'});
+    assert.equal(pago.bove,'16979');
+    assert.equal(pago.bove_administrativo,'16979');
+    assert.equal(pago.bovtar,'094778');
+    assert.equal(pago.codigo_autorizacion,'091559');
+});
+
 test('Paulina: one $190.000 transaction keeps two applications instead of becoming a $160.000 payment',()=>{
     const common={titular:'Paulina Varas',cabana:1,fecha_bloque:'2026-09-10',fecha_comprobante:'2026-09-08',moneda:'CLP',
         codigo_autorizacion:'285466',medio_pago:'webpay',pago_recibido:true,estado_pago:'registrado_en_libro'};

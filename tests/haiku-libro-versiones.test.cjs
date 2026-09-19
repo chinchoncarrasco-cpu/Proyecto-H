@@ -147,7 +147,7 @@ test('identical weak transfer has no differences and a secondary identification 
  assert.equal(c.tipo,'sin_cambios');assert.deepEqual(c.diferencias,[]);
  assert.equal(c.pagos_sin_cambios[0].tipo,'sin_cambios_aparentes');
  assert.equal(c.pagos_sin_cambios[0].detalle,'Sin cambios aparentes en el pago');
- assert.equal(c.pagos_sin_cambios[0].nota,'Identificación débil: no posee CodAut/Folio+Bovtar/BOVE para validación inequívoca.');
+ assert.equal(c.pagos_sin_cambios[0].nota,'Identificación débil: no posee CodAut ni Folio+BOVTAR para validación inequívoca.');
 });
 test('weak payment normalization ignores accents, case and spacing',()=>{
  const c=comparePayments([weak({texto_original:'Transferéncia  // Arriendo'})],[weak({texto_original:' transferencia // arriendo '})]);
@@ -190,8 +190,10 @@ test('strong identifiers take priority over identical weak content for both supp
  }
 });
 test('strong payment concept and secondary identifier changes are observable',()=>{
- for(const extra of [{concepto:'Jacuzzi',texto_original:'Nuevo concepto relevante'},{bove:'999'}])
-  assert.equal(comparePayments([pay()],[pay(extra)]).diferencias[0].tipo,'pago_modificado');
+ const concepto=comparePayments([pay()],[pay({concepto:'Jacuzzi',texto_original:'Nuevo concepto relevante'})]);
+ assert.equal(concepto.diferencias[0].tipo,'pago_modificado');
+ const bove=comparePayments([pay({bove:'100'})],[pay({bove:'999'})]);
+ assert.equal(bove.tipo,'sin_cambios');assert.deepEqual(bove.diferencias,[]);
 });
 test('visual and textual payment reports separate unchanged, detected change and review with collapsed technical details',async()=>{
  const ctx={HAIKU_LIBRO_SEMANTICA:S,document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){}};
@@ -309,4 +311,16 @@ test('Alejandra workbook interpretation preserves leading-zero identifiers befor
  assert.equal(before.pagos[0].folio,'000211');assert.equal(before.pagos[0].bovtar,'033752');
  const c=S.compararVersiones(before,after)[0];
  assert.equal(c.tipo,'sin_cambios');assert.equal(c.pagos_sin_cambios[0].tipo,'pago_sin_cambios');
+});
+
+test('workbook parser keeps BOVE, BOVTAR and CodAut in their own fields',()=>{
+ const cell=(r,c,valor,extra={})=>({r,c,valor,...extra});
+ const raw={celdas:[cell(0,1,'14/09/26',{fechaISO:'2026-09-14'}),cell(0,5,'15/09/26',{fechaISO:'2026-09-15'}),
+  cell(2,0,'Cabaña 11'),cell(2,1,'Persona Prueba'),cell(4,1,'Pagos de arriendos de hoy'),cell(5,0,'Cabaña 11'),
+  cell(5,1,'09/09/26',{fechaISO:'2026-09-09'}),
+  cell(5,2,'Persona Prueba // WebPay crédito // BOVE 016979 // Folio 000250 // BOVTAR 094778 // CodAut 091559'),
+  cell(5,3,'CAB 11'),cell(5,4,'$210.000')],combinaciones:[{s:{r:2,c:1},e:{r:2,c:8}},{s:{r:5,c:0},e:{r:6,c:0}}]};
+ const [pago]=S.normalizarHoja(raw,'Sep26').pagos;
+ assert.equal(pago.bove,'016979');assert.equal(pago.folio,'000250');
+ assert.equal(pago.bovtar,'094778');assert.equal(pago.codigo_autorizacion,'091559');
 });

@@ -80,8 +80,9 @@
         return (lista || []).reduce((total, item) => total + Number(item?.[campo] || 0), 0);
     }
 
-    function agruparPagos(pagos, cabanaPorReserva) {
+    function agruparPagos(pagos, cabanaPorReserva, aplicaciones = [], cargoPorId = new Map()) {
         const grupos = new Map();
+        const grupoPorPago = new Map();
         (pagos || []).forEach(pago => {
             const clave = pago.pago_grupo_id ? `grupo:${pago.pago_grupo_id}` : `pago:${pago.id}`;
             if (!grupos.has(clave)) {
@@ -93,13 +94,28 @@
                     autorizacion: pago.codigo_autorizacion || "",
                     bove: pago.bove || "",
                     referencia: pago.referencia_externa || "",
-                    cabanas: new Set()
+                    cabanas: new Set(),
+                    aplicaciones: []
                 });
             }
             const grupo = grupos.get(clave);
+            grupoPorPago.set(String(pago.id), grupo);
             grupo.monto += Number(pago.monto || 0);
             const cabana = cabanaPorReserva.get(String(pago.reserva_id));
             if (cabana) grupo.cabanas.add(cabana);
+        });
+        const aplicacionesVistas = new Set();
+        (aplicaciones || []).forEach(aplicacion => {
+            const grupo = grupoPorPago.get(String(aplicacion.pago_id));
+            if (!grupo) return;
+            const clave = `${aplicacion.pago_id}:${aplicacion.cargo_id}:${aplicacion.monto_aplicado}`;
+            if (aplicacionesVistas.has(clave)) return;
+            aplicacionesVistas.add(clave);
+            const cargo = cargoPorId.get(String(aplicacion.cargo_id)) || {};
+            grupo.aplicaciones.push({
+                concepto: cargo.concepto || (cargo.tipo_cargo === "servicio" ? "Servicio" : "Alojamiento"),
+                monto: Number(aplicacion.monto_aplicado || 0)
+            });
         });
         return [...grupos.values()].sort((a,b) => String(b.fecha || "").localeCompare(String(a.fecha || "")));
     }
@@ -122,19 +138,15 @@
 
         const consultas = [cliente
             .from("vista_estado_cargos")
-            .select("cargo_id,reserva_id,servicio_id,tipo_cargo,estado,monto_ajustado,aplicado_neto,saldo_cargo")
+            .select("cargo_id,reserva_id,servicio_id,tipo_cargo,concepto,estado,monto_ajustado,aplicado_neto,saldo_cargo")
             .in("reserva_id", ids)
-            .eq("estado", "activo")];
-        if (tipo === "abono") {
-            consultas.push(cliente
-                .from("pagos")
-                .select("id,reserva_id,monto,medio_pago,fecha_pago,folio,codigo_autorizacion,bove,referencia_externa,pago_grupo_id")
-                .in("reserva_id", ids)
-                .eq("tipo_movimiento", "pago")
-                .eq("etapa_operativa", "abono")
-                .eq("estado", "confirmado")
-                .order("fecha_pago", { ascending:false }));
-        }
+            .eq("estado", "activo"), cliente
+            .from("pagos")
+            .select("id,reserva_id,monto,tipo_movimiento,estado,medio_pago,fecha_pago,folio,codigo_autorizacion,bove,referencia_externa,pago_grupo_id")
+            .in("reserva_id", ids)
+            .eq("tipo_movimiento", "pago")
+            .eq("estado", "confirmado")
+            .order("fecha_pago", { ascending:false })];
         if (tipo === "servicios") {
             consultas.push(cliente
                 .from("servicios")
@@ -143,50 +155,50 @@
         }
 
         const resultados = await Promise.all(consultas);
-        const [cargosR, detalleR] = resultados;
+        const [cargosR, pagosR, serviciosR] = resultados;
         if (cargosR.error) throw cargosR.error;
-        if (detalleR?.error) throw detalleR.error;
+        if (pagosR.error) throw pagosR.error;
+        if (serviciosR?.error) throw serviciosR.error;
 
         const cargos = (cargosR.data || []).filter(item => item.estado === "activo");
         const alojamiento = cargos.filter(item => item.tipo_cargo === "alojamiento");
         const cargosServicio = cargos.filter(item => item.tipo_cargo === "servicio");
-        const resumenCalculado = {
-            // La ficha define Total como lo aplicado más el saldo vigente.
-            // El popup conserva exactamente esa misma autoridad visual.
-            total: sumar(alojamiento, "aplicado_neto") + sumar(alojamiento, "saldo_cargo"),
-            abono: sumar(alojamiento, "aplicado_neto"),
-            saldo: sumar(alojamiento, "saldo_cargo"),
-            servicios: sumar(cargosServicio, "saldo_cargo")
-        };
-        const resumen = grupo?.es_grupo ? {
-            total: Number(grupo.total_alojamiento || 0),
-            abono: Number(grupo.abonado_alojamiento || 0),
-            saldo: Number(grupo.saldo_alojamiento || 0),
-            servicios: Number(grupo.servicios_pendientes || 0)
-        } : resumenCalculado;
+        const pagos = pagosR.data || [];
+        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1.calcular(cargos, pagos);
 
         const porCabana = miembros.map(miembro => {
-            const propios = alojamiento.filter(cargo => String(cargo.reserva_id) === miembro.reservaId);
+            const propios = cargos.filter(cargo => String(cargo.reserva_id) === miembro.reservaId);
             return {
                 cabana: miembro.cabana,
                 nombre: miembro.nombre,
-                total: sumar(propios, "aplicado_neto") + sumar(propios, "saldo_cargo"),
+                total: sumar(propios, "monto_ajustado"),
                 abono: sumar(propios, "aplicado_neto"),
                 saldo: sumar(propios, "saldo_cargo")
             };
         });
+
+        let aplicaciones = [];
+        if (tipo === "abono" && pagos.length) {
+            const aplicacionesR = await cliente
+                .from("pago_aplicaciones")
+                .select("pago_id,cargo_id,monto_aplicado")
+                .in("pago_id", pagos.map(pago => pago.id));
+            if (aplicacionesR.error) throw aplicacionesR.error;
+            aplicaciones = aplicacionesR.data || [];
+        }
+        const cargoPorId = new Map(cargos.map(cargo => [String(cargo.cargo_id),cargo]));
 
         const detalle = {
             esGrupo: Boolean(grupo?.es_grupo),
             miembros,
             resumen,
             porCabana,
-            pagos: tipo === "abono" ? agruparPagos(detalleR?.data || [], cabanaPorReserva) : [],
+            pagos: tipo === "abono" ? agruparPagos(pagos, cabanaPorReserva, aplicaciones, cargoPorId) : [],
             servicios: []
         };
 
         if (tipo === "servicios") {
-            const serviciosPorId = new Map((detalleR?.data || []).map(item => [String(item.id),item]));
+            const serviciosPorId = new Map((serviciosR?.data || []).map(item => [String(item.id),item]));
             detalle.servicios = cargosServicio
                 .filter(cargo => Number(cargo.saldo_cargo || 0) > 0)
                 .map(cargo => {
@@ -234,7 +246,7 @@
         contenido.replaceChildren();
         const etiquetas = {
             total: datos.esGrupo ? "Total del grupo" : "Total de la reserva",
-            abono: datos.esGrupo ? "Abonos del grupo" : "Abonos de la reserva",
+            abono: datos.esGrupo ? "Pagos del grupo" : "Pagos de la reserva",
             saldo: datos.esGrupo ? "Saldo del grupo" : "Saldo de la reserva",
             servicios: datos.esGrupo ? "Servicios pendientes del grupo" : "Servicios pendientes"
         };
@@ -244,7 +256,7 @@
         contenido.append(cabecera);
 
         const ecuacion = crear("div", "haiku-ficha-detalle-ecuacion");
-        [["Total",datos.resumen.total],["Abonado",datos.resumen.abono],["Saldo",datos.resumen.saldo]]
+        [["Total",datos.resumen.total],["Pagado",datos.resumen.abono],["Saldo",datos.resumen.saldo]]
             .forEach(([label,monto]) => {
                 const celda = crear("div");
                 celda.append(crear("span", "", label), crear("strong", "", dinero(monto)));
@@ -259,21 +271,22 @@
                     item.cabana ? `CAB ${item.cabana}` : "Alojamiento",
                     dinero(tipo === "total" ? item.total : item.saldo),
                     tipo === "total"
-                        ? `Abonado ${dinero(item.abono)} · Saldo ${dinero(item.saldo)}`
-                        : `de ${dinero(item.total)} · abonado ${dinero(item.abono)}`
+                        ? `Aplicado ${dinero(item.abono)} · Saldo ${dinero(item.saldo)}`
+                        : `de ${dinero(item.total)} · aplicado ${dinero(item.abono)}`
                 ));
-            agregarSeccion(contenido, tipo === "total" ? "Desglose de alojamiento" : "Saldo por cabaña", filas,
-                tipo === "saldo" ? "El alojamiento está completamente pagado." : "No hay cargos de alojamiento activos.");
+            agregarSeccion(contenido, tipo === "total" ? "Desglose de cargos" : "Saldo por cabaña", filas,
+                tipo === "saldo" ? "La reserva está completamente pagada." : "No hay cargos activos.");
         }
 
         if (tipo === "abono") {
             const filas = datos.pagos.map(pago => filaDetalle(
                 `${fechaCorta(pago.fecha)} · ${textoMedio(pago.medio)}`,
                 dinero(pago.monto),
-                [pago.cabanas.size ? [...pago.cabanas].sort((a,b) => Number(a)-Number(b)).map(n => `CAB ${n}`).join(" + ") : "", identificadoresPago(pago)]
+                [pago.cabanas.size ? [...pago.cabanas].sort((a,b) => Number(a)-Number(b)).map(n => `CAB ${n}`).join(" + ") : "", identificadoresPago(pago),
+                    ...(pago.aplicaciones || []).map(aplicacion => `Aplicado ${dinero(aplicacion.monto)} a ${aplicacion.concepto}`)]
                     .filter(Boolean).join(" · ")
             ));
-            agregarSeccion(contenido, "Pagos confirmados", filas, "No hay abonos confirmados para mostrar.");
+            agregarSeccion(contenido, "Pagos confirmados", filas, "No hay pagos confirmados para mostrar.");
         }
 
         if (tipo === "servicios") {

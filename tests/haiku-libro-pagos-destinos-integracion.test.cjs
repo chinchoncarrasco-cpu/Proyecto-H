@@ -8,7 +8,7 @@ const Q = require('../js/haiku-libro-consultas-v1.js');
 
 const q = { desde: '2026-09-01', hasta: '2026-09-30' };
 const pago = extra => ({ tipo_movimiento: 'servicio', concepto: 'tinaja', monto: 30000, moneda: 'CLP',
-    medio_pago: 'debito', codigo_autorizacion: '622979', fecha_comprobante: '2026-09-12', fecha_bloque: '2026-09-12',
+    medio_pago: 'webpay_debito', codigo_autorizacion: '622979', fecha_comprobante: '2026-09-12', fecha_bloque: '2026-09-12',
     pago_recibido: true, estado_pago: 'registrado_en_libro', texto_original: 'Tinaja $30.000',
     origen: { hoja: 'Sep26', celda: 'K20' }, ...extra });
 const reserva = p => ({ id: 'libro-1', titular: 'Carlos Marquez', rut_documento: '11111111-1', cabana: 1,
@@ -66,7 +66,7 @@ test('comparación adjunta destino único, pero el plan bloquea escritura por co
 test('deduplicación en_sistema ocurre antes del destino y no lee cargos financieros', async () => {
     const p = pago(), r = reserva(p);
     const existente = { id: 'p1', reserva_id: 'r1', monto: 30000, moneda: 'CLP', estado: 'confirmado',
-        codigo_autorizacion: p.codigo_autorizacion, medio_pago: 'tarjeta_debito', fecha_pago: p.fecha_comprobante };
+        codigo_autorizacion: p.codigo_autorizacion, medio_pago: 'webpay_debito', fecha_pago: p.fecha_comprobante };
     const db = cliente({ reserva_estadias: [estadia(r)], pagos: [existente], servicios: [servicio] });
     const comp = await Q.compararSistema([r], db, q);
     assert.equal(comp.pagosDetalle[0].estado, 'en_sistema');

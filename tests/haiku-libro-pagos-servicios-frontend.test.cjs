@@ -8,7 +8,7 @@ const Q=require('../js/haiku-libro-consultas-v1.js');
 
 const q={desde:'2026-09-01',hasta:'2026-09-30'};
 const CAP={version:1,contrato:'aplicaciones_servicio_v1',rpc:'haiku_incorporar_pago_servicios_libro_v1',efectivo_sin_identificador:false};
-const pago=extra=>({tipo_movimiento:'servicio',concepto:'tinaja',monto:30000,moneda:'CLP',medio_pago:'debito',
+const pago=extra=>({tipo_movimiento:'servicio',concepto:'tinaja',monto:30000,moneda:'CLP',medio_pago:'webpay_debito',
  codigo_autorizacion:'622979',fecha_comprobante:'2026-09-12',fecha_bloque:'2026-09-12',pago_recibido:true,
  estado_pago:'registrado_en_libro',texto_original:'Carlos // 622979 // Tinaja $30.000',origen:{hoja:'Sep26',celda:'K20'},...extra});
 const reserva=p=>({id:'libro-1',titular:'Carlos Marquez',rut_documento:'11111111-1',cabana:1,
@@ -115,7 +115,7 @@ test('una transacción de 50000 produce un pago con dos aplicaciones explícitas
 });
 
 test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masajes',async()=>{
- const p=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',
+ const p=pago({monto:95000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000232',bovtar:'002506',
   fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01',texto_original:'Sara Bertrand // Débito // Folio 000232 // Aut. 002506 // masajes'});
  const r=reserva(p);r.titular='Sara Bertrand';r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';
  r.servicios=[{concepto:'tinaja',texto_original:'Tinaja mencionada',pendiente:true}];
@@ -143,9 +143,9 @@ test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masa
 });
 
 test('el pago fuerte de Sara ya existente se omite antes de distribuir cargos',async()=>{
- const p=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const p=pago({monto:95000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000232',bovtar:'002506',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
  const r=reserva(p);r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';
- const existente={id:'p-sara',reserva_id:'r1',monto:95000,moneda:'CLP',estado:'confirmado',codigo_autorizacion:'002506',medio_pago:'tarjeta_debito',fecha_pago:'2026-09-02'};
+ const existente={id:'p-sara',reserva_id:'r1',monto:95000,moneda:'CLP',estado:'confirmado',codigo_autorizacion:null,folio:'000232',bove:'002506',medio_pago:'tarjeta_debito',fecha_pago:'2026-09-02'};
  const tablas=tablasCarlos(r,{pagos:[existente],servicios:[servicio('s1','Masaje Descontracturante 60 min','2026-09-01',50000),servicio('s2','Masaje Terapéutico 60 min','2026-09-01',45000)],
   vista_estado_cargos:[cargo('c1','s1','Masaje Descontracturante 60 min',50000),cargo('c2','s2','Masaje Terapéutico 60 min',45000)]});
  const db=cliente(tablas,{capacidad:CAP}),plan=await Q.prepararIncorporacion({reservas:[r],q},new Map(),new Set(),db);
@@ -156,8 +156,8 @@ test('el pago fuerte de Sara ya existente se omite antes de distribuir cargos',a
 });
 
 test('dos movimientos Libro con el identificador fuerte de Sara quedan en revisión',async()=>{
- const primero=pago({monto:95000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
- const segundo=pago({monto:50000,concepto:'masajes',codigo_autorizacion:'002506',folio:'000232',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const primero=pago({monto:95000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000232',bovtar:'002506',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
+ const segundo=pago({monto:50000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000232',bovtar:'002506',fecha_comprobante:'2026-09-02',fecha_bloque:'2026-09-01'});
  const r=reserva(primero);r.fecha_checkin='2026-09-01';r.fecha_checkout='2026-09-02';r.pagos=[primero,segundo];
  const tablas=tablasCarlos(r,{servicios:[servicio('s1','Masaje Descontracturante 60 min','2026-09-01',50000),servicio('s2','Masaje Terapéutico 60 min','2026-09-01',45000)],
   vista_estado_cargos:[cargo('c1','s1','Masaje Descontracturante 60 min',50000),cargo('c2','s2','Masaje Terapéutico 60 min',45000)]});
@@ -184,7 +184,7 @@ test('suma distinta, destinos ausentes, ya aplicados, reserva ambigua y nota fin
 });
 
 test('pago confirmado existente se omite antes de capability y del writer 4C',async()=>{
- const p=pago(),r=reserva(p),existente={id:'p1',reserva_id:'r1',monto:30000,moneda:'CLP',estado:'confirmado',codigo_autorizacion:'622979',medio_pago:'tarjeta_debito',fecha_pago:'2026-09-12'};
+ const p=pago(),r=reserva(p),existente={id:'p1',reserva_id:'r1',monto:30000,moneda:'CLP',estado:'confirmado',codigo_autorizacion:'622979',medio_pago:'webpay_debito',fecha_pago:'2026-09-12'};
  const db=cliente(tablasCarlos(r,{pagos:[existente]}),{capacidad:CAP});
  const plan=await Q.prepararIncorporacion({reservas:[r],q},new Map(),new Set(),db);
  const item=plan.items.find(i=>i.pagoLibro===p);

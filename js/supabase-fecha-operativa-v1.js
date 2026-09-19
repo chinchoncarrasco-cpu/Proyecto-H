@@ -56,19 +56,6 @@
     };
 })();
 
-// Carga aislada del Libro online sin tocar el cargador principal.
-(() => {
-    "use strict";
-
-    if (document.querySelector('script[data-haiku-libro-google-v1]')) return;
-
-    const script = document.createElement("script");
-    script.src = `js/supabase-libro-google-readonly-v1.js?v=${Date.now()}`;
-    script.async = true;
-    script.dataset.haikuLibroGoogleV1 = "1";
-    document.head.appendChild(script);
-})();
-
 // Fix visual aislado: evita que las miniaturas adjuntas de Haku se compriman.
 (() => {
     "use strict";

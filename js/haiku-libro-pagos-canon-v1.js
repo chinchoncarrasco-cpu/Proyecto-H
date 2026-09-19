@@ -174,15 +174,12 @@
 
         const copia = { ...pago };
         const bovtar = canonId(pago.bovtar);
-        const boveAdministrativo = pago.bove || null;
 
-        // Proyecto H histórico guarda el identificador mostrado como BOVTAR en
-        // `pagos.bove` para varios pagos de tarjeta. La conciliación antigua
-        // compara ese campo, así que exponemos BOVTAR por ese canal únicamente
-        // cuando el Libro realmente trae BOVTAR. Un BOVE administrativo sin
-        // BOVTAR nunca convierte un movimiento en "nuevo seguro".
-        copia.bove_administrativo = boveAdministrativo;
-        copia.bove = bovtar ? pago.bovtar : null;
+        // El Libro usa tres identificadores con significados distintos:
+        // BOVE es la boleta SII, BOVTAR es la autorización del voucher físico
+        // y CodAut es la autorización de WebPay. Nunca copiamos uno sobre otro.
+        copia.bove = pago.bove || null;
+        copia.bove_administrativo = pago.bove || null;
         copia.medio_pago = medioDesdeTexto(pago);
         copia.identificador_pago = bovtar ? "bovtar" : (canonId(pago.codigo_autorizacion) ? "codigo_autorizacion" : null);
 

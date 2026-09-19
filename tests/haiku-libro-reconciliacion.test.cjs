@@ -88,11 +88,11 @@ test('payments-only intent requires a direct comparison request, not incidental 
 });
 
 test('payment-only presentation uses identical comparison states and the existing preparation without writes',async()=>{
- const payment=(id,extra={})=>({monto:10000,moneda:'CLP',medio_pago:'credito',tipo_movimiento:'alojamiento',codigo_autorizacion:id,fecha_comprobante:'2026-09-17',fecha_bloque:'2026-09-17',origen:{hoja:'Sep26',celda:id},...extra});
+ const payment=(id,extra={})=>({monto:10000,moneda:'CLP',medio_pago:'webpay_credito',tipo_movimiento:'alojamiento',codigo_autorizacion:id,fecha_comprobante:'2026-09-17',fecha_bloque:'2026-09-17',origen:{hoja:'Sep26',celda:id},...extra});
  const pagos=[payment('EXISTE'),payment('NUEVO'),payment(null,{medio_pago:'efectivo'}),payment('DIFIERE')];
  const sin=payment('SIN',{advertencias:['Sin asociación inequívoca']});
  const r=book({pagos,pagos_sin_asociacion:[sin],servicios:[],hoja:'Sep26'});
- const existentes=['EXISTE','DIFIERE'].map(c=>({id:c,reserva_id:'r1',codigo_autorizacion:c,monto:c==='EXISTE'?10000:20000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-17'}));
+ const existentes=['EXISTE','DIFIERE'].map(c=>({id:c,reserva_id:'r1',codigo_autorizacion:c,monto:c==='EXISTE'?10000:20000,moneda:'CLP',medio_pago:'webpay_credito',fecha_pago:'2026-09-17'}));
  const db=client([stay(r)],existentes),h=renderHarness(null,db);
  const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Sep26'],consultarHoja:async()=>({reservas:[r]})};
  h.context.HAIKU_LIBRO_RESERVA_V1=libro;
@@ -181,6 +181,7 @@ test('each shared-voucher card requires its own approval; one approval never app
  const serialized=Q.serializarIncorporacion(both);
  assert.equal(serialized.length,1);assert.equal(serialized[0].argumentos.p_monto,193000);
  assert.equal(serialized[0].argumentos.p_modo_aplicacion,'ninguno');
+ assert.equal(serialized[0].argumentos.p_bove,'173121','el adaptador heredado transporta BOVTAR, no BOVE tributario');
  assert.deepEqual(serialized[0].datos_origen.distribucion_manual.componentes.map(c=>[c.monto,c.concepto,c.folio,c.bovtar]),
   [[153000,'cab1/1noche','000235','173121'],[40000,'early check in','000235','173121']]);
  assert.equal(serialized[0].reserva_id,'r5');assert.ok(serialized.every(i=>i.tipo==='pago'));
@@ -189,7 +190,8 @@ test('each shared-voucher card requires its own approval; one approval never app
 test('shared voucher with existing ID, real ambiguity, or a duplicate application stays blocked',async()=>{
  const existing={id:'existing',reserva_id:'r5',folio:'000235',bove:'173121',monto:193000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-03'};
  const {plan}=await prepararMacarena(new Set(),[existing]);
- assert.ok(plan.items.filter(i=>i.pagoLibro?.folio==='000235').every(i=>!i.aprobable&&!i.seleccionado));
+ const existingReview=plan.items.filter(i=>i.pagoLibro?.folio==='000235');
+ assert.equal(existingReview.length,1);assert.ok(existingReview.every(i=>i.categoria==='dudosos'&&!i.aprobable&&!i.seleccionado));
  const {rs}=await prepararMacarena();
  const extra=stay(rs[0],{id:'other',reserva_id:'other',cabanas:{numero:6}});
  const ambiguous=(await prepararMacarena(new Set(),[],[extra])).plan;
@@ -207,9 +209,15 @@ test('a recorded distribution is omitted as one existing receipt; September 04 i
  const approved=new Set(parts.map(i=>i.id));
  const complete=(await prepararMacarena(approved)).plan;
  const serialized=Q.serializarIncorporacion(complete)[0];
- const existing={id:'recorded',reserva_id:'r5',folio:'000235',bove:'173121',monto:193000,datos_origen:serialized.datos_origen};
+ const datosOrigen=structuredClone(serialized.datos_origen);
+ datosOrigen.distribucion_manual.id='identificador-generado-por-parser-anterior';
+ datosOrigen.distribucion_manual.componentes.forEach(parte=>{parte.version_parser_anterior=1;});
+ const existing={id:'recorded',reserva_id:'r5',estado:'confirmado',tipo_movimiento:'pago',folio:'000235',bove:'173121',monto:193000,
+  moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-03',datos_origen:datosOrigen};
  const repeat=(await prepararMacarena(approved,[existing])).plan;
- assert.ok(repeat.items.filter(i=>i.pagoLibro?.folio==='000235').every(i=>i.categoria==='omitidos'&&!i.aprobable));
+ const receipt=repeat.items.filter(i=>i.pagoLibro?.folio==='000235');
+ assert.equal(receipt.length,1);assert.ok(receipt.every(i=>i.categoria==='omitidos'&&!i.aprobable));
+ assert.match(receipt[0].aviso,/comprobante completo.*2 partes guardadas/i);
  assert.equal(Q.serializarIncorporacion(repeat).length,0);
  const fourth=p=>p.items.filter(i=>i.pagoLibro?.fecha_bloque==='2026-09-04');
  assert.deepEqual(fourth(initial),fourth(complete));
@@ -918,6 +926,60 @@ test('verified Proyecto H payments without captured identifiers are omitted by e
  assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
 });
 
+test('Alejandro debit with Libro Folio+BOVTAR matches Proyecto H Folio+CodAut and is omitted',async()=>{
+ const movimiento=readyPay({monto:50000,medio_pago:'debito',tipo_movimiento:'distribuido',transaccion_distribuida:true,
+  codigo_autorizacion:null,folio:'000250',bovtar:'094778',bove:'094778',bove_administrativo:null,
+  fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-06',
+  aplicaciones_libro:[{monto:30000,concepto:'JACUZZI',tipo_movimiento:'servicio'},
+   {monto:20000,concepto:'LATEOUT',tipo_movimiento:'servicio'}],texto_original:'Tarjeta débito Alejandro Ramos Donaire'});
+ const reserva=readyBook({titular:'Alejandro Ramos Donaire',cabana:2,fecha_checkin:'2026-09-05',fecha_checkout:'2026-09-07',
+  pagos:[movimiento]});
+ const existente={id:'h-debito',reserva_id:'r1',monto:50000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  etapa_operativa:'checkout',medio_pago:'tarjeta_debito',folio:'000250',codigo_autorizacion:'094778',
+  fecha_pago:'2026-09-06T12:00:00Z',verificado_en:'2026-09-06T12:05:00Z',datos_origen:{}};
+ const comp=await compare([reserva],[stay(reserva)],[existente]);
+ assert.equal(comp.pagosDetalle.length,1);assert.equal(comp.pagosDetalle[0].estado,'en_sistema');
+ assert.equal(comp.pagosDetalle[0].sistema.id,'h-debito');
+ const plan=Q.crearPlanIncorporacion([reserva],comp),item=plan.items.find(i=>i.pagoLibro===movimiento);
+ assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);assert.notEqual(item.aprobable,true);
+ assert.equal(Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago'),false);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ assert.equal(h.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+
+ const corregido={...movimiento,fecha_comprobante:'2026-09-07'};
+ const reservaCorregida={...reserva,pagos:[corregido]};
+ const compCorregida=await compare([reservaCorregida],[stay(reservaCorregida)],[existente]);
+ const planCorregido=Q.crearPlanIncorporacion([reservaCorregida],compCorregida);
+ const actualizacion=planCorregido.items.find(i=>i.pagoLibro===corregido);
+ assert.equal(actualizacion.categoria,'actualizaciones');
+ assert.deepEqual(actualizacion.payload.pago.despues,{fecha_pago:'2026-09-07T12:00:00Z'});
+ assert.deepEqual(actualizacion.payload.identificadores,{codigo_autorizacion:'094778',folio:'000250',bovtar:'094778',bove:null});
+
+ for(const [nombre,cambio] of [
+  ['otro folio',{folio:'000251'}],
+  ['otra autorización',{codigo_autorizacion:'094779'}],
+  ['otra reserva',{reserva_id:'r2'}],
+  ['otro monto',{monto:51000}],
+  ['otro medio',{medio_pago:'tarjeta_credito'}]
+ ]){
+  const inseguro=await compare([reserva],[stay(reserva)],[{...existente,...cambio}]);
+  assert.notEqual(inseguro.pagosDetalle[0].estado,'en_sistema',nombre);
+ }
+});
+
+test('CodAut, BOVTAR and BOVE never cross-match between payment channels',async()=>{
+ const voucher=readyPay({monto:50000,medio_pago:'debito',codigo_autorizacion:null,folio:'000250',bovtar:'091559',bove:'16979'});
+ const reservaVoucher=readyBook({pagos:[voucher]});
+ const webpay={id:'webpay',reserva_id:'r1',monto:50000,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  medio_pago:'webpay_debito',codigo_autorizacion:'091559',folio:'000250',bove:'16979',fecha_pago:'2026-09-10'};
+ assert.notEqual((await compare([reservaVoucher],[stay(reservaVoucher)],[webpay])).pagosDetalle[0].estado,'en_sistema');
+
+ const libroWebpay=readyPay({monto:50000,medio_pago:'webpay_debito',codigo_autorizacion:'091559',folio:null,bovtar:null,bove:'16979'});
+ const reservaWebpay=readyBook({pagos:[libroWebpay]});
+ const fisico={...webpay,id:'fisico',medio_pago:'tarjeta_debito',codigo_autorizacion:'091559',folio:'000250'};
+ assert.notEqual((await compare([reservaWebpay],[stay(reservaWebpay)],[fisico])).pagosDetalle[0].estado,'en_sistema');
+});
+
 test('Alejandro verified payment is recovered when the Libro keeps it in the unassociated block list',async()=>{
  const movimiento=readyPay({monto:160000,medio_pago:'webpay_credito',codigo_autorizacion:'208468',folio:null,bovtar:null,
   titular:'Alejandro Ramos',cabana:2,fecha_bloque:'2026-09-05',fecha_comprobante:'2026-09-01',
@@ -1055,10 +1117,15 @@ test('fresh revalidation omits a reservation inserted after comparison',async()=
  assert.equal(p.items[0].categoria,'omitidos');assert.equal(p.items.filter(i=>i.categoria==='nuevas').length,0);
 });
 test('strong identifiers on another reservation require review without moving money',async()=>{
- for(const fields of [{codigo_autorizacion:'AUTH-123'},{codigo_autorizacion:null,folio:'123',bovtar:'45'},{codigo_autorizacion:null,bove:'800'}]) {
- const p=readyPay(fields),r=readyBook({pagos:[p]}),plan=await prepare([r],[],[{...p,reserva_id:'another',datos_origen:{bovtar:p.bovtar}}]);
- assert.equal(plan.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
+ for(const fields of [{codigo_autorizacion:'AUTH-123'},{codigo_autorizacion:null,folio:'123',bovtar:'45'}]) {
+  const p=readyPay(fields),r=readyBook({pagos:[p]}),plan=await prepare([r],[],[{...p,reserva_id:'another',datos_origen:{bovtar:p.bovtar}}]);
+  assert.equal(plan.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
  }
+ const bove=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,bove:'800'}),r=readyBook({pagos:[bove]});
+ const plan=await prepare([r],[],[{...bove,id:'otro-bove',reserva_id:'another'}]);
+ const item=plan.items.find(i=>i.id.startsWith('pago:'));
+ assert.doesNotMatch(item.motivos.join(' '),/identificador pertenece a otra reserva|identificador coincide/i,
+  'BOVE no debe comportarse como identidad financiera fuerte');
 });
 test('Full Day remains same-day fullday with zero nights',async()=>{
  const p=await prepare([readyBook({tipo_estadia:'full_day',fecha_checkout:'2026-09-17'})]);
@@ -1068,6 +1135,24 @@ test('payment for a new reservation carries a dependency and symbolic reference,
  const p=await prepare([readyBook({pagos:[readyPay()]})]);const r=p.items.find(i=>i.categoria==='nuevas'),pay=p.items.find(i=>i.categoria==='pagos');
  assert.ok(pay);assert.equal(pay.payload.reserva_ref,r.id);assert.equal(pay.payload.argumentos.p_reserva_id,null);assert.deepEqual(pay.dependeDe,[r.id]);
  assert.ok(p.permisos.includes('pagos.registrar'));
+});
+test('BOVE tributario is never serialized through the legacy BOVTAR payment parameter',async()=>{
+ const p=readyPay({medio_pago:'webpay_credito',codigo_autorizacion:'COD-WEBPAY-1',folio:null,bovtar:null,bove:'16979'});
+ const plan=await prepare([readyBook({pagos:[p]})],[stay()]);
+ const item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.payload.argumentos.p_codigo_autorizacion,'COD-WEBPAY-1');
+ assert.equal(item.payload.argumentos.p_bove,null);
+ assert.equal(item.payload.datos_origen.bovtar,null);
+});
+test('a BOVE-only difference never creates an update for an existing WebPay payment',async()=>{
+ const p=readyPay({medio_pago:'webpay_credito',codigo_autorizacion:'COD-WEBPAY-2',folio:null,bovtar:null,bove:'16980'});
+ const r=readyBook({pagos:[p]});
+ const existente={id:'webpay-existente',reserva_id:'r1',monto:p.monto,moneda:'CLP',estado:'confirmado',tipo_movimiento:'pago',
+  medio_pago:'webpay_credito',codigo_autorizacion:'COD-WEBPAY-2',fecha_pago:p.fecha_comprobante,datos_origen:{},bove:null};
+ const comp=await compare([r],[stay(r)],[existente]);
+ const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
+ assert.equal(item.categoria,'omitidos');assert.equal(item.payload,null);
+ assert.equal(plan.items.some(i=>i.payload?.tipo==='pago_actualizar'),false);
 });
 test('missing essentials block reservation and its payment, invalid rows are not silently lost',async()=>{
  const p=await prepare([readyBook({adultos:null,pagos:[readyPay()]})]);assert.equal(p.items[0].seleccionado,false);assert.match(p.items[0].motivos.join(' '),/adultos/);
@@ -1632,6 +1717,22 @@ test('Karina shared card receipt includes the existing 10% penalty and serialize
  assert.ok(pagos[0].depende_de===undefined);
  await Q.confirmarIncorporacion(resultado,decisiones,idsAprobados,aprobado,db);
  assert.equal(lotes.length,2);assert.equal(lotes[1].length,1);assert.equal(lotes[1][0].tipo,'pago');assert.equal(lotes[1][0].argumentos.p_monto,588000);
+
+ const origenGuardado=structuredClone(pagos[0].datos_origen);
+ origenGuardado.distribucion_manual.id='distribucion-generada-antes-del-cambio-de-parser';
+ origenGuardado.distribucion_manual.componentes.forEach(parte=>{parte.detalle_historico='conservado';});
+ const pagoGuardado={id:'pago-karina-588',reserva_id:'reserva-cab2',estado:'confirmado',tipo_movimiento:'pago',etapa_operativa:'abono',
+  monto:588000,moneda:'CLP',medio_pago:'tarjeta_credito',fecha_pago:'2026-09-17T12:00:00Z',folio:'000284',
+  datos_origen:{...origenGuardado,bovtar:'271708'}};
+ const dbRepeticion=client(rows,[...existentes,pagoGuardado]);
+ const comparacionRepetida=await Q.compararSistema([cab2,cab7],dbRepeticion,q);
+ const planRepetido=await Q.prepararIncorporacion({reservas:[cab2,cab7],q,comparacion:comparacionRepetida},new Map(),new Set(),dbRepeticion);
+ const comprobanteRepetido=planRepetido.items.filter(item=>item.pagoLibro?.folio==='000284'&&item.pagoLibro?.transaccion_distribuida);
+ assert.equal(comprobanteRepetido.length,1);
+ assert.equal(comprobanteRepetido[0].categoria,'omitidos');
+ assert.equal(comprobanteRepetido[0].pagoLibro.monto,588000);
+ assert.match(comprobanteRepetido[0].aviso,/3 partes guardadas/);
+ assert.ok(!Q.serializarIncorporacion(planRepetido).some(item=>item.tipo==='pago'));
 });
 
 test('an unlabeled third receipt part can be explicitly approved as the exact existing 10% penalty',async()=>{

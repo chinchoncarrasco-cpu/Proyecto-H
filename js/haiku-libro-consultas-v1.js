@@ -241,6 +241,32 @@
         })[medio] || medio || null;
     }
 
+    function medioTarjetaFisica(p) {
+        return ['tarjeta_credito', 'tarjeta_debito'].includes(medioSistema(p));
+    }
+
+    function codAutSistema(p) {
+        // En pagos físicos, `codigo_autorizacion` puede contener un BOVTAR
+        // heredado. Sólo WebPay (o un registro antiguo sin medio conocido)
+        // expone este campo semánticamente como CodAut.
+        if (medioTarjetaFisica(p)) return null;
+        return normalizarId(p?.codigo_autorizacion) ? p.codigo_autorizacion : null;
+    }
+
+    function bovtarSistema(p, opciones = {}) {
+        if (!p || !normalizarId(p.folio)) return null;
+        // Las ubicaciones explícitas conservan su semántica aunque el snapshot
+        // histórico no traiga medio de pago. Los campos heredados sólo pueden
+        // representar BOVTAR cuando el registro sí demuestra tarjeta física.
+        const explicito = [p?.datos_origen?.bovtar, p?.bovtar].find(normalizarId);
+        if (explicito) return explicito;
+        if (!medioTarjetaFisica(p)) return null;
+        const heredados = [p?.datos_origen?.autorizacion];
+        if (opciones.permitirCodigoLegacy !== false) heredados.push(p?.codigo_autorizacion);
+        heredados.push(p?.bove);
+        return heredados.find(normalizarId) || null;
+    }
+
     function documentoCanon(v) {
         return normalizarId(v).replace(/^0+/, "");
     }
@@ -482,15 +508,13 @@
     function bovtarSistemaCoincide(p, x) {
         const esperado = normalizarId(p?.bovtar);
         if (!esperado) return false;
-        // Los pagos históricos guardaron la autorización/BOVTAR en `pagos.bove`.
-        // Sólo se usa ese campo junto con un Folio del Libro; un BOVE aislado
-        // continúa siendo administrativo y nunca identifica un pago.
-        return [x?.datos_origen?.bovtar, x?.datos_origen?.autorizacion, x?.bovtar, x?.bove]
-            .some(valor => normalizarId(valor) === esperado);
+        // En un movimiento individual de servicio, un valor heredado dentro de
+        // `codigo_autorizacion` sólo se acepta tras validar su aplicación exacta.
+        return normalizarId(bovtarSistema(x, { permitirCodigoLegacy:p?.tipo_movimiento !== 'servicio' })) === esperado;
     }
 
     function pagoCoincide(p, x) {
-        if (normalizarId(p?.codigo_autorizacion) && normalizarId(x?.codigo_autorizacion) === normalizarId(p.codigo_autorizacion)) return true;
+        if (normalizarId(p?.codigo_autorizacion) && normalizarId(codAutSistema(x)) === normalizarId(p.codigo_autorizacion)) return true;
         if (normalizarId(p?.folio) && normalizarId(p?.bovtar) && normalizarId(x?.folio) === normalizarId(p.folio) && bovtarSistemaCoincide(p, x)) return true;
         return false;
     }
@@ -504,16 +528,13 @@
         const codigo = normalizarId(pagoLibro.codigo_autorizacion);
         const folio = normalizarId(pagoLibro.folio);
         const bovtar = normalizarId(pagoLibro.bovtar);
-        const autorizaciones = pago => [...new Set([pago?.codigo_autorizacion, pago?.datos_origen?.autorizacion,
-            pago?.datos_origen?.bovtar, pago?.bovtar, pago?.bove].map(normalizarId).filter(Boolean))];
-        const relacionado = pago => Boolean(codigo && normalizarId(pago?.codigo_autorizacion) === codigo ||
-            folio && normalizarId(pago?.folio) === folio || bovtar && autorizaciones(pago).includes(bovtar));
+        const relacionado = pago => Boolean(codigo && normalizarId(codAutSistema(pago)) === codigo ||
+            folio && normalizarId(pago?.folio) === folio || bovtar && normalizarId(bovtarSistema(pago)) === bovtar);
         const identidadCompleta = pago => {
-            if (codigo) return normalizarId(pago?.codigo_autorizacion) === codigo &&
+            if (codigo) return normalizarId(codAutSistema(pago)) === codigo &&
                 (!folio || normalizarId(pago?.folio) === folio);
             if (!folio || !bovtar || normalizarId(pago?.folio) !== folio) return false;
-            const valores = autorizaciones(pago);
-            return valores.includes(bovtar) && valores.every(valor => valor === bovtar);
+            return normalizarId(bovtarSistema(pago)) === bovtar;
         };
         const relacionados = pagos.filter(pago => pago?.id && relacionado(pago));
         if (new Set(relacionados.map(pago => pago.id)).size !== 1) {
@@ -623,9 +644,8 @@
         const moneda = pago => String(pago?.moneda || "CLP").trim().toUpperCase();
         const medioWebpay = pago => ["webpay_credito", "webpay_debito"].includes(
             typeof pago === "string" ? pago : medioSistema(pago));
-        const identificadorFuerteSistema = pago => Boolean(normalizarId(pago?.codigo_autorizacion) ||
-            normalizarId(pago?.folio) && [pago?.datos_origen?.bovtar, pago?.datos_origen?.autorizacion,
-                pago?.bovtar, pago?.bove].some(normalizarId));
+        const identificadorFuerteSistema = pago => Boolean(normalizarId(codAutSistema(pago)) ||
+            normalizarId(pago?.folio) && normalizarId(bovtarSistema(pago)));
         const pagoHistoricoLibroAplicable = (pago, resultado) => resultado.estado === "asociada" &&
             pagoTieneIdentificadorFuerte(pago) && pago?.tipo_movimiento === "alojamiento" &&
             pago?.pago_recibido === true && pago?.estado_pago === "registrado_en_libro" &&
@@ -866,8 +886,8 @@
                 return codigo || palabras.size>=3;
             });
         };
-        const identificadorFuerteSistema = p => Boolean(normalizarId(p?.codigo_autorizacion) ||
-            normalizarId(p?.folio) && bovtarSistemaCoincide({bovtar:p?.datos_origen?.bovtar || p?.bove},p));
+        const identificadorFuerteSistema = p => Boolean(normalizarId(codAutSistema(p)) ||
+            normalizarId(p?.folio) && normalizarId(bovtarSistema(p)));
         const tokensTitular = valor => [...new Set(texto(valor).split(' ').filter(t=>/^\p{L}+$/u.test(t) && t.length>=2))];
         const titularVarianteCompatible = (a,b) => {
             const ta=tokensTitular(a),tb=tokensTitular(b);
@@ -1455,10 +1475,10 @@
     }
     function actualizacionPagoLibro(p, s) {
         const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibro(p), folio:p.folio, bovtar:p.bovtar,
-            bove:p.bove, codigo_autorizacion:p.codigo_autorizacion };
+            codigo_autorizacion:p.codigo_autorizacion };
         if (p.fecha_comprobante && !mismaFechaCalendario(s.fecha_pago,p.fecha_comprobante)) propuesta.fecha_pago = p.fecha_comprobante + 'T12:00:00Z';
         if (p.medio_pago === 'transferencia') propuesta.referencia_externa = p.texto_original;
-        const bovtarActual = bovtarSistemaCoincide(p,s) ? p.bovtar : s.datos_origen?.bovtar;
+        const bovtarActual = bovtarSistemaCoincide(p,s) ? p.bovtar : (s.datos_origen?.bovtar || s.bovtar);
         return parcheLibro({ ...s, bovtar:bovtarActual, concepto_libro:s.datos_origen?.concepto_libro }, propuesta);
     }
 
@@ -1684,6 +1704,41 @@
             grupo.forEach(y => salida.set(y, distribucion));
         }
         return salida;
+    }
+
+    function firmaParteDistribucion(parte) {
+        return JSON.stringify([
+            S.normalizar(parte?.tipo_movimiento),
+            Number(parte?.cabana) || null,
+            Number(parte?.monto) || null,
+            String(parte?.reserva_id || ''),
+            String(parte?.estadia_id || '')
+        ]);
+    }
+
+    function distribucionGuardadaEquivale(actual, guardada) {
+        if (!actual || !guardada || actual.tipo !== guardada.tipo) return false;
+        const partesActuales = Array.isArray(actual.componentes) ? actual.componentes : [];
+        const partesGuardadas = Array.isArray(guardada.componentes) ? guardada.componentes : [];
+        if (!partesActuales.length || partesActuales.length !== partesGuardadas.length) return false;
+        const totalGuardado = Number(guardada.total) || partesGuardadas.reduce((n, parte) => n + Number(parte?.monto || 0), 0);
+        if (Number(actual.total) !== totalGuardado) return false;
+        const firmas = partes => partes.map(firmaParteDistribucion).sort();
+        return JSON.stringify(firmas(partesActuales)) === JSON.stringify(firmas(partesGuardadas));
+    }
+
+    function comprobanteDistribuidoYaRegistrado(pagoLibro, pagoSistema, coincidencias, distribucion) {
+        if (coincidencias.length !== 1 || !pagoSistemaVigente(pagoSistema) ||
+            S.normalizar(pagoSistema?.tipo_movimiento || 'pago') !== 'pago' ||
+            pagoSistema?.reserva_id !== distribucion?.reserva_id_ancla ||
+            Number(pagoSistema?.monto) !== Number(distribucion?.total)) return false;
+        const monedaSistema = String(pagoSistema?.moneda || 'CLP').trim().toUpperCase();
+        if (monedaSistema !== String(pagoLibro?.moneda || 'CLP').trim().toUpperCase() ||
+            medioSistema(pagoSistema) && medioSistema(pagoSistema) !== medioLibro(pagoLibro) ||
+            pagoSistema?.fecha_pago && pagoLibro?.fecha_comprobante &&
+                !mismaFechaCalendario(pagoSistema.fecha_pago, pagoLibro.fecha_comprobante)) return false;
+        const guardada = pagoSistema?.datos_origen?.distribucion_manual;
+        return Boolean(guardada && (guardada.id === distribucion.id || distribucionGuardadaEquivale(distribucion, guardada)));
     }
 
     const CAPACIDAD_PAGOS_SERVICIO_4C = Object.freeze({
@@ -1945,6 +2000,7 @@
         const destinosFinancieros = new Map(destinos);
         destinosFinancierosSeguros.forEach((valor,clave) => destinosFinancieros.set(clave,valor));
         const distribuciones = distribucionesManuales(comp, destinosFinancieros);
+        const comprobantesDistribuidosRevisados = new Set();
         const vistos = [];
         for (const x of comp.pagosDetalle || []) {
             const p = x.pago, r = x.reserva, destino = destinosFinancieros.get(claveReserva(r));
@@ -1970,11 +2026,22 @@
             const distribucion = distribuciones.get(x);
             if (distribucion) {
                 if (duplicado) {
-                    const yaDistribuido = coincidencias.length === 1 && duplicado.reserva_id === distribucion.reserva_id_ancla &&
-                        Number(duplicado.monto) === distribucion.total &&
-                        duplicado.datos_origen?.distribucion_manual?.id === distribucion.id;
-                    add(yaDistribuido ? 'omitidos' : 'dudosos', id, texto + (yaDistribuido ? ' · Ya existe en Proyecto H.' : ''), null,
+                    const yaDistribuido = comprobanteDistribuidoYaRegistrado(p, duplicado, coincidencias, distribucion);
+                    const claveComprobante = `${duplicado.id}:${distribucion.tipo}:${distribucion.total}`;
+                    if (comprobantesDistribuidosRevisados.has(claveComprobante)) continue;
+                    comprobantesDistribuidosRevisados.add(claveComprobante);
+                    const cabanas = [...new Set(distribucion.componentes.map(parte => Number(parte.cabana)).filter(Boolean))].sort((a,b) => a-b);
+                    const pagoResumen = { ...p, monto:distribucion.total, concepto:'comprobante compartido',
+                        cabana:cabanas.join(' + '), transaccion_distribuida:true, aplicaciones_libro:distribucion.componentes };
+                    const textoResumen = `${r.titular} · CAB ${cabanas.join(' + ')} · ${money(distribucion.total)} · comprobante compartido · Check-In ${r.fecha_checkin}`;
+                    const item = add(yaDistribuido ? 'omitidos' : 'dudosos', `comprobante-existente:${claveComprobante}`,
+                        textoResumen + (yaDistribuido ? ' · Ya existe en Proyecto H.' : ''), null,
                         yaDistribuido ? [] : ['El comprobante ya existe en Proyecto H; revisa su distribución sin registrarlo nuevamente.']);
+                    item.pagoLibro = pagoResumen;
+                    item.pagoSistema = duplicado;
+                    item.aviso = yaDistribuido ?
+                        `Haku verificó el comprobante completo de ${money(distribucion.total)} y sus ${distribucion.componentes.length} partes guardadas. No se registrará nuevamente.` :
+                        `Haku agrupó ${distribucion.componentes.length} partes del Libro bajo un solo comprobante de ${money(distribucion.total)}. La distribución guardada no coincide de forma suficiente para omitirlo automáticamente.`;
                     continue;
                 }
                 const manual = aprobados.has(id);
@@ -1982,7 +2049,9 @@
                     { contrato: 'haiku_incorporar_libro_v1', reserva_ref: null,
                         argumentos: { p_reserva_id: distribucion.reserva_id_ancla, p_monto: p.monto, p_medio_pago: medioLibro(p),
                             p_etapa_operativa: 'abono', p_fecha_pago: p.fecha_comprobante, p_folio: p.folio,
-                            p_codigo_autorizacion: p.codigo_autorizacion, p_bove: p.bove || null,
+                            // El RPC histórico llama `p_bove` al canal de BOVTAR.
+                            // Nunca se envía aquí el número tributario BOVE del Libro.
+                            p_codigo_autorizacion: p.codigo_autorizacion, p_bove: p.bovtar || null,
                             p_referencia_externa: p.texto_original, p_observaciones: p.texto_original,
                             p_aplicaciones: [], p_modo_aplicacion: 'ninguno' },
                         datos_origen: { bovtar: p.bovtar, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual },
@@ -2027,8 +2096,12 @@
                 const otros = (comp.pagosDetalle || []).filter(y => y !== x && pagoCoincide(p,{...y.pago,datos_origen:{bovtar:y.pago.bovtar}}));
                 if (otros.some(y => claveReserva(y.reserva) !== claveReserva(r) || JSON.stringify(actualizacionPagoLibro(y.pago,duplicado).despues) !== JSON.stringify(patch.despues))) motivos.push('El Libro repite el identificador con datos incompatibles.');
                 if (plan.items.some(i => i.payload?.pago_id === duplicado.id)) { add('omitidos',id,texto+' · Actualización del mismo pago ya preparada.'); continue; }
+                const bovtarEnCodigoSistema = medioTarjetaFisica(duplicado) && normalizarId(p.folio) === normalizarId(duplicado.folio) &&
+                    normalizarId(p.bovtar) && normalizarId(duplicado.codigo_autorizacion) === normalizarId(p.bovtar);
                 const item = add('actualizaciones',id,texto+' · Actualizar pago con el Libro',
-                    {tipo:'pago_actualizar',pago_id:duplicado.id,reserva_id:duplicado.reserva_id,pago:patch,identificadores:{codigo_autorizacion:p.codigo_autorizacion,folio:p.folio,bovtar:p.bovtar,bove:p.bove}},
+                    {tipo:'pago_actualizar',pago_id:duplicado.id,reserva_id:duplicado.reserva_id,pago:patch,identificadores:{
+                        codigo_autorizacion:p.codigo_autorizacion || (bovtarEnCodigoSistema ? duplicado.codigo_autorizacion : null),
+                        folio:p.folio, bovtar:p.bovtar, bove:null}},
                     motivos,destino?.dependeDe || [],['pagos.registrar','pagos.verificar']);
                 item.cambios=patch.cambios;
                 item.pagoLibro = p;
@@ -2087,7 +2160,8 @@
             const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: p.texto_original || null,
                     p_fecha_pago: p.fecha_comprobante || null, p_folio: p.folio || null, p_codigo_autorizacion: p.codigo_autorizacion || null,
-                    p_bove: p.bove || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
+                    // Adaptador de esquema heredado: `p_bove` transporta BOVTAR.
+                    p_bove: p.bovtar || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
                 datos_origen: { bovtar: p.bovtar || null, fecha_bloque: p.fecha_bloque, origen: p.origen }, aprobado_manualmente: manual };
             if (!p.fecha_comprobante) motivos.push('Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.');
             const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);

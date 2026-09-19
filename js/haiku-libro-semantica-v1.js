@@ -359,7 +359,7 @@
                     const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         codigo_autorizacion: ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
-                        bove: ref(/bove\s*:\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
+                        bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manager/.test(t),
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
                         monto_penalidad: /penalidad/.test(t) ? monto(t.match(/([\d.,]+)\s+de penalidad/)?.[1]) : null,
@@ -478,8 +478,8 @@
                 const verificacion = 'Verificado por ' + ({ aut: 'CodAut', folio: 'Folio+BOVTAR' })[id.split(':')[0]];
                 const campos = ['monto', 'moneda', 'concepto', 'tipo_movimiento', 'medio_pago', 'estado_pago', 'fecha_comprobante',
                     'bove_pendiente', 'manager_pendiente', 'saldo_por_pagar', 'monto_penalidad', 'penalidad_porcentaje',
-                    'codigo_autorizacion', 'folio', 'bovtar', 'bove'];
-                const valor = (p, k) => ['codigo_autorizacion', 'folio', 'bovtar', 'bove'].includes(k) ? canonIdVersion(p[k]) :
+                    'codigo_autorizacion', 'folio', 'bovtar'];
+                const valor = (p, k) => ['codigo_autorizacion', 'folio', 'bovtar'].includes(k) ? canonIdVersion(p[k]) :
                     k === 'moneda' ? normalizar(p[k] || 'CLP') : k.endsWith('_pendiente') ? !!p[k] : normalizar(p[k]);
                 const campos_cambiados = campos.filter(k => valor(anterior, k) !== valor(actual, k));
                 const completo = [anterior, actual].every(p => Number.isFinite(p.monto) && normalizar(p.concepto));
@@ -518,7 +518,7 @@
             const igual = pagoVersion(p) === pagoVersion(q);
             diferencias.push({ campo: 'pagos', tipo: igual && completo ? 'sin_cambios_aparentes' : igual ? 'pago_revision' : 'pago_modificado',
                 detalle: igual && completo ? 'Sin cambios aparentes en el pago' : igual ? 'No se puede asociar de forma inequívoca entre versiones' : 'Pago modificado.',
-                nota: igual && completo ? 'Identificación débil: no posee CodAut/Folio+Bovtar/BOVE para validación inequívoca.' : undefined,
+                nota: igual && completo ? 'Identificación débil: no posee CodAut ni Folio+BOVTAR para validación inequívoca.' : undefined,
                 verificacion: 'Coincidencia débil', anterior: p, actual: q, pago: q });
         }
         for (const p of debilesB.filter(p => !usados.has(p))) diferencias.push({ campo: 'pagos', tipo: 'pago_revision',

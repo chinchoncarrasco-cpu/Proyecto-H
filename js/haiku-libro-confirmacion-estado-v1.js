@@ -79,11 +79,12 @@
         const actualizar = () => {
             if (terminado || !card.isConnected) return;
             const texto = String(aviso.textContent || "").trim();
-            if (/^No se pudo confirmar:/i.test(texto)) {
+            const conflictoDatos = /^No se guardó nada:/i.test(texto);
+            if (/^No se pudo confirmar:/i.test(texto) || conflictoDatos) {
                 terminado = true;
                 estado.className = "haiku-confirmacion-estado-v1 haiku-confirmacion-estado-v1--error";
                 estado.textContent = texto;
-                if (boton?.isConnected) boton.textContent = "Reintentar confirmación";
+                if (boton?.isConnected) boton.textContent = conflictoDatos ? "Volver a comparar con datos actuales" : "Reintentar confirmación";
                 estado.scrollIntoView({ block: "nearest", behavior: "smooth" });
                 observador.disconnect();
                 return;
@@ -132,5 +133,5 @@
         vigilar(card, boton, acciones);
     }, true);
 
-    root.HAIKU_LIBRO_CONFIRMACION_ESTADO_V1 = Object.freeze({ version: "1.1.0" });
+    root.HAIKU_LIBRO_CONFIRMACION_ESTADO_V1 = Object.freeze({ version: "1.2.0" });
 })(typeof window !== "undefined" ? window : globalThis);

@@ -118,7 +118,7 @@
                 .order("fecha_servicio", { ascending: true }),
             cliente
                 .from("vista_estado_cargos")
-                .select("cargo_id,servicio_id,tipo_cargo,monto,estado,aplicado_neto,saldo_cargo,estado_pago")
+                .select("cargo_id,servicio_id,tipo_cargo,monto,monto_ajustado,estado,aplicado_neto,saldo_cargo,estado_pago")
                 .eq("reserva_id", reservaId),
             cliente
                 .from("notas")
@@ -290,18 +290,14 @@
     }
 
     function pintarPagos(ficha) {
-        const alojamiento = (ficha.cargos || []).filter(
-            c => c.tipo_cargo === "alojamiento" && c.estado === "activo"
+        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1.calcular(
+            ficha.cargos || [], ficha.pagos || []
         );
-        const servicios = (ficha.cargos || []).filter(
-            c => c.tipo_cargo === "servicio" && c.estado === "activo"
-        );
-
         const valores = {
-            "ficha-pago-total": alojamiento.reduce((s,c) => s + Number(c.aplicado_neto || 0) + Number(c.saldo_cargo || 0), 0),
-            "ficha-pago-abono": alojamiento.reduce((s,c) => s + Number(c.aplicado_neto || 0), 0),
-            "ficha-pago-saldo": alojamiento.reduce((s,c) => s + Number(c.saldo_cargo || 0), 0),
-            "ficha-pago-servicios": servicios.reduce((s,c) => s + Number(c.saldo_cargo || 0), 0)
+            "ficha-pago-total": resumen.total,
+            "ficha-pago-abono": resumen.abono,
+            "ficha-pago-saldo": resumen.saldo,
+            "ficha-pago-servicios": resumen.servicios
         };
         Object.entries(valores).forEach(([id,valor]) => {
             const el = document.getElementById(id);
@@ -333,10 +329,13 @@
         const pendientes = document.getElementById("ficha-servicios-pendientes");
         if (!programados || !realizados || !pendientes) return;
 
-        const cargosPorServicio = new Map(
-            (ficha.cargos || []).filter(c => c.servicio_id).map(c => [c.servicio_id,c])
+        const cargosPorServicio = new Map((ficha.cargos || [])
+            .filter(c => c.servicio_id && c.estado === "activo")
+            .map(c => [c.servicio_id,c]));
+        const lista = (ficha.servicios || []).filter(servicio =>
+            !["cancelado", "cancelada", "anulado", "anulada", "no_show"]
+                .includes(String(servicio.estado_servicio || "").toLowerCase())
         );
-        const lista = ficha.servicios || [];
         const p = lista.filter(s => s.estado_servicio !== "realizado");
         const r = lista.filter(s => s.estado_servicio === "realizado");
         const pp = lista.filter(s => {
