@@ -1134,10 +1134,19 @@
         const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
 
-        const raw = await paginas(() => cliente.from("reserva_estadias")
-            .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)"));
+        const consultaEstadias = () => {
+            let consulta=cliente.from("reserva_estadias")
+                .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)");
+            // El informe histórico sólo necesita el pequeño intervalo de sus cambios.
+            // Los clientes de prueba/legacy sin estos filtros conservan el recorrido normal.
+            if(q.focal===true&&typeof consulta.lte==='function'&&typeof consulta.gte==='function'){
+                consulta=consulta.lte('fecha_ingreso',hasta).gte('fecha_salida',desde);
+            }
+            return consulta;
+        };
+        const raw = await paginas(consultaEstadias);
 
-        const system = raw.map(e => ({
+        const systemAll = raw.map(e => ({
             id: e.id,
             reserva_id: e.reserva_id,
             grupo_reserva_id: e.reservas?.grupo_reserva_id,
@@ -1153,7 +1162,8 @@
             tipo_estadia: e.tipo_estadia,
             adultos: e.adultos, ninos: e.ninos, mascotas: e.mascotas, observaciones: e.reservas?.observaciones,
             tipo_documento: e.reservas?.titular_tipo_documento
-        })).filter(candidatoElegible);
+        }));
+        const system = systemAll.filter(candidatoElegible);
 
         validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
 
@@ -1181,6 +1191,8 @@
             vacio.grupos = [];
             vacio.pagosDetalle = [];
             vacio.serviciosDetalle = [];
+            vacio.snapshot = { estadias: system, estadias_todas: systemAll, pagos: [], finanzas: null,
+                efectivo_aplicado: null };
             return vacio;
         }
 
@@ -1229,16 +1241,16 @@
 
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
         // Global identifier check: a payment on another reservation is a conflict, never new.
-        const pagos = await paginas(() => cliente.from("pagos")
+        const pagos = q.incluirFinanzas===false ? [] : await paginas(() => cliente.from("pagos")
             .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
         const pagosNoVigentes = pagos.filter(p=>!pagoSistemaVigente(p));
         const pagosExistentes = pagosDebilesExistentes(resultados, pagosVigentes);
         const servicios = [];
-        for (let i = 0; i < ids.length; i += 50) {
+        if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
             servicios.push(...await paginas(() => cliente.from("servicios")
-                .select("id,reserva_id,estadia_id,fecha_servicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
+                .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
                 .in("reserva_id", grupo)));
         }
 
@@ -1323,9 +1335,31 @@
             }
 
             for (const service of r.servicios) {
-                const existe = servicios.some(x => x.reserva_id === s.reserva_id && S.normalizar(x.catalogo_servicios?.nombre).includes(service.concepto.replace(/_/g, " ")));
-                result.serviciosComparacion.push({ estado: existe ? "en_sistema" : "revisar", servicio: service, reserva: r });
-                if (!existe) result.diferencias.push(`Servicio mencionado sin coincidencia por concepto: ${service.concepto}. La fecha y el monto requieren revisión.`);
+                const conceptoLibro=S.normalizar(service.concepto).replace(/_/g," ");
+                const candidatas=servicios.filter(x=>x.reserva_id===s.reserva_id &&
+                    !/cancelad|no.?show|anulad/.test(S.normalizar(x.estado_servicio)) &&
+                    S.normalizar([x.catalogo_servicios?.codigo,x.catalogo_servicios?.nombre].filter(Boolean).join(' ')).replace(/_/g,' ').includes(conceptoLibro));
+                const diferenciasServicio=x=>{
+                    const diferencias=[];
+                    const horaSistema=String(x.hora_inicio||'').slice(0,5);
+                    if(service.hora&&horaSistema&&service.hora!==horaSistema)diferencias.push(`Horario: Proyecto H ${horaSistema} / Libro ${service.hora}`);
+                    if(service.monto!=null&&x.total!=null&&Number(service.monto)!==Number(x.total))diferencias.push(`Monto: Proyecto H ${x.total} / Libro ${service.monto}`);
+                    return diferencias;
+                };
+                const exactas=candidatas.filter(x=>!diferenciasServicio(x).length);
+                if(exactas.length){
+                    result.serviciosComparacion.push({estado:'en_sistema',servicio:service,sistema:exactas[0],reserva:r,razon:'Ya existe y coincide en Proyecto H.'});
+                }else if(candidatas.length===1){
+                    const diferencias=diferenciasServicio(candidatas[0]);
+                    result.serviciosComparacion.push({estado:'diferente',servicio:service,sistema:candidatas[0],reserva:r,diferencias,
+                        razon:diferencias.join(' · ')||'Existe en Proyecto H, pero sus datos operativos requieren revisión.'});
+                    result.diferencias.push(`Servicio ${service.concepto} con diferencias: ${diferencias.join('; ')||'revisar datos operativos'}.`);
+                }else if(!candidatas.length){
+                    result.serviciosComparacion.push({estado:'faltante',servicio:service,reserva:r,razon:'Falta en Proyecto H.'});
+                    result.diferencias.push(`Servicio mencionado sin coincidencia por concepto: ${service.concepto}.`);
+                }else{
+                    result.serviciosComparacion.push({estado:'revisar',servicio:service,reserva:r,razon:'Requiere revisión: existen varias coincidencias posibles en Proyecto H.'});
+                }
             }
         }
 
@@ -1400,7 +1434,7 @@
             }
         }
 
-        resultados.snapshot = { estadias: system, pagos: pagosVigentes, finanzas: snapshotFinanciero,
+        resultados.snapshot = { estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, finanzas: snapshotFinanciero,
             efectivo_aplicado: snapshotEfectivoAplicado };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
@@ -1476,6 +1510,135 @@
                 tipo_estadia:r.tipo_estadia === 'full_day' ? 'fullday' : r.tipo_estadia, adultos:r.adultos, ninos:r.ninos, mascotas:r.mascotas, estado_estadia:estado });
         return { tipo:'reserva_actualizar', reserva_id:s.reserva_id, estadia_id:s.id,
             reserva, estadia, cambios:[...reserva.cambios,...estadia.cambios] };
+    }
+    const camposHistoricosDirectos={cabana:'cabana',fecha_checkin:'fecha_checkin',fecha_checkout:'fecha_checkout',
+        tipo_estadia:'tipo_estadia',titular:'titular',adultos:'adultos',ninos:'ninos',mascotas:'mascotas',
+        rut_documento:'rut_documento',correo:'correo',telefono:'telefono'};
+    const canonHistorial=(campo,valor)=>{
+        if(campo==='rut_documento')return documentoCanon(valor);
+        if(campo==='telefono')return telefonoCanon(valor);
+        if(campo==='cabana'||['adultos','ninos','mascotas','noches'].includes(campo))return Number(valor);
+        if(campo==='tipo_estadia')return /full.?day|fullday/.test(S.normalizar(valor))?'full_day':S.normalizar(valor);
+        return S.normalizar(valor);
+    };
+    function firmaReservaHistorial(r={}){
+        return JSON.stringify([r.titular,r.rut_documento,r.correo,r.telefono,r.cabana,r.fecha_checkin,r.fecha_checkout,r.tipo_estadia].map(S.normalizar));
+    }
+    function nochesSistema(s){
+        if(s?.tipo_estadia==='full_day'||s?.fecha_checkin===s?.fecha_checkout)return 0;
+        return Math.round((Date.parse(s?.fecha_checkout)-Date.parse(s?.fecha_checkin))/86400000);
+    }
+    function detalleCambioHistorico(cambio,reserva,sistema,comparacion){
+        const campo=cambio.campo,objetivo=reserva?.[campo];
+        if(campo==='estado_operativo'){
+            const propuesto=estadoLibroActualizable(reserva,sistema.estado_operativo);
+            return {pendiente:propuesto!==undefined&&S.normalizar(propuesto)!==S.normalizar(sistema.estado_operativo),proyecto:sistema.estado_operativo,accionable:propuesto!==undefined};
+        }
+        if(campo==='noches'){
+            const proyecto=nochesSistema(sistema);
+            // Las noches son un valor derivado de las fechas. Se informa la
+            // diferencia, pero una discrepancia aislada no tiene escritura
+            // propia y por eso no debe habilitar la preparación.
+            return {pendiente:canonHistorial(campo,objetivo)!==canonHistorial(campo,proyecto),proyecto,accionable:false};
+        }
+        if(campo==='servicios'){
+            const items=(comparacion.serviciosDetalle||[]).filter(x=>firmaReservaHistorial(x.reserva)===firmaReservaHistorial(reserva));
+            const pendientes=items.filter(x=>x.estado!=='en_sistema');
+            return {pendiente:pendientes.length>0,proyecto:pendientes.map(x=>x.razon||x.estado).join(' · ')||'Ya coincide',accionable:pendientes.every(x=>['faltante','diferente'].includes(x.estado))};
+        }
+        if(['notas_importantes','pagos_pendientes'].includes(campo)){
+            const observaciones=S.normalizar(sistema.observaciones);
+            const faltan=(Array.isArray(objetivo)?objetivo:[]).filter(x=>!observaciones.includes(S.normalizar(x)));
+            return {pendiente:faltan.length>0,proyecto:faltan.length?'Aún no contiene la información detectada':'Ya contiene la información',accionable:true};
+        }
+        const clave=camposHistoricosDirectos[campo];
+        if(clave){
+            const proyecto=sistema[clave];
+            return {pendiente:canonHistorial(campo,objetivo)!==canonHistorial(campo,proyecto),proyecto,accionable:true};
+        }
+        return {pendiente:true,proyecto:'No se puede comprobar automáticamente',accionable:false};
+    }
+    function reservaPreparacionHistorial(reserva,sistema,campos){
+        const r={...reserva,titular:sistema.titular,cabana:sistema.cabana,fecha_checkin:sistema.fecha_checkin,
+            fecha_checkout:sistema.fecha_checkout,tipo_estadia:sistema.tipo_estadia,adultos:sistema.adultos,ninos:sistema.ninos,
+            mascotas:sistema.mascotas,estado_operativo:sistema.estado_operativo,rut_documento:sistema.rut_documento,
+            correo:sistema.correo,telefono:sistema.telefono,texto_original:'',notas_importantes:[],pagos_pendientes:[],pagos:[],pagos_sin_asociacion:[],servicios:[]};
+        for(const campo of campos)if(campo in reserva)r[campo]=structuredClone(reserva[campo]);
+        return r;
+    }
+    function asociacionHistoricaSegura(registro,comparacion){
+        const anterior=registro?.anterior;
+        if(!anterior)return null;
+        const candidatos=(comparacion.snapshot?.estadias||[]).filter(s=>
+            mismasFechas(anterior,s)&&Number(anterior.cabana)===Number(s.cabana)&&identidad(anterior,s).compatible);
+        return candidatos.length===1?candidatos[0]:null;
+    }
+    async function revalidarCambiosDetectados(registros,cliente,{generacion}={}){
+        const lista=Array.isArray(registros)?registros:[];
+        if(!lista.length)return {items:[],resueltos:[],total:0,reservas:[],comparacion:[],generacion,q:null};
+        const grupos=new Map();
+        for(const registro of lista.filter(x=>['modificacion','nueva','cancelacion'].includes(x.tipo))){
+            const reserva=registro.actual||registro.anterior;
+            if(!reserva)continue;
+            const firma=firmaReservaHistorial(reserva);
+            if(!grupos.has(firma))grupos.set(firma,{reserva:structuredClone(reserva),registros:[]});
+            grupos.get(firma).registros.push(registro);
+        }
+        const entradas=[...grupos.values()];
+        const reservas=entradas.map((grupo,indice)=>{
+            const campos=new Set(grupo.registros.flatMap(x=>(x.cambios||[]).map(c=>c.campo)));
+            const r={...structuredClone(grupo.reserva),_historial_indice:indice,pagos:[],pagos_sin_asociacion:[],texto_original:'',
+                notas_importantes:campos.has('notas_importantes')?grupo.reserva.notas_importantes||[]:[],
+                pagos_pendientes:campos.has('pagos_pendientes')?grupo.reserva.pagos_pendientes||[]:[],
+                servicios:campos.has('servicios')?grupo.reserva.servicios||[]:[]};
+            return r;
+        });
+        const fechas=lista.flatMap(x=>[x.anterior?.fecha_checkin,x.anterior?.fecha_checkout,x.actual?.fecha_checkin,x.actual?.fecha_checkout]).filter(Boolean).sort();
+        const q={desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,
+            incluirServicios:lista.some(x=>(x.cambios||[]).some(c=>c.campo==='servicios'))};
+        const comparacion=await compararSistema(reservas,cliente,q);
+        const items=[],resueltos=[],filasPreparacion=[],reservasPreparacion=[];
+        for(let indice=0;indice<entradas.length;indice++){
+            const grupo=entradas[indice],resultado=Array.from(comparacion).find(x=>x.libro?._historial_indice===indice)||Array.from(comparacion)[indice];
+            for(const registro of grupo.registros){
+                if(registro.tipo==='nueva'){
+                    if(resultado?.estado==='asociada'){resueltos.push(registro.id);continue;}
+                    const accionable=resultado?.estado==='sin_coincidencia';
+                    items.push({...registro,estado:accionable?'pendiente':'revision',accionable,proyecto:resultado?.estado||'sin coincidencia'});
+                    if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
+                    continue;
+                }
+                if(registro.tipo==='cancelacion'){
+                    const candidatos=(comparacion.snapshot?.estadias_todas||[]).filter(s=>mismasFechas(registro.anterior,s)&&Number(registro.anterior.cabana)===Number(s.cabana)&&identidad(registro.anterior,s).compatible);
+                    const cancelada=candidatos.length===1&&/cancelad|no.?show/.test(S.normalizar(`${candidatos[0].estado_reserva} ${candidatos[0].estado_operativo}`));
+                    if(cancelada){resueltos.push(registro.id);continue;}
+                    items.push({...registro,estado:candidatos.length===1?'pendiente':'revision',accionable:false,
+                        proyecto:candidatos.length===1?candidatos[0].estado_reserva||candidatos[0].estado_operativo:'No se pudo asociar de forma única'});
+                    continue;
+                }
+                const sistemaHistorico=resultado?.estado==='asociada'&&resultado.sistema
+                    ?resultado.sistema:asociacionHistoricaSegura(registro,comparacion);
+                if(!sistemaHistorico){
+                    items.push({...registro,estado:'revision',accionable:false,proyecto:'No se pudo asociar de forma segura'});continue;
+                }
+                const pendientes=[];
+                for(const cambio of registro.cambios||[]){
+                    const detalle=detalleCambioHistorico(cambio,grupo.reserva,sistemaHistorico,comparacion);
+                    if(detalle.pendiente)pendientes.push({...cambio,proyecto:detalle.proyecto,accionable:detalle.accionable});
+                }
+                if(!pendientes.length){resueltos.push(registro.id);continue;}
+                const accionable=pendientes.every(x=>x.accionable);
+                items.push({...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico});
+                if(accionable){
+                    const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)));
+                    filasPreparacion.push({...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)});reservasPreparacion.push(libro);
+                }
+            }
+        }
+        const unicas=[...new Map(filasPreparacion.map(x=>[firmaReservaHistorial(x.libro),x])).values()];
+        const prep=[...unicas];prep.grupos=agruparComparacion(unicas);prep.pagosDetalle=[];prep.serviciosDetalle=[];prep.snapshot=comparacion.snapshot;prep.meta={...(comparacion.meta||{}),libro:prep.grupos.length,estadias_libro:unicas.length};
+        const reservasPrep=[...new Map(reservasPreparacion.map(x=>[firmaReservaHistorial(x),x])).values()];
+        return {items,resueltos,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,q};
     }
     function actualizacionPagoLibro(p, s) {
         const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibro(p), folio:p.folio, bovtar:p.bovtar,
@@ -2807,8 +2970,32 @@
         renderizarComparacion(out, result);
         return result;
     }
+    async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){
+        if(!root.document)throw new Error('La vista de preparación sólo está disponible en el panel.');
+        if(generacion===undefined||generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)throw new Error('El Libro cambió; vuelve a generar el informe.');
+        if(!Array.isArray(reservas)||!reservas.length||!Array.isArray(comparacion))throw new Error('No hay diferencias accionables para preparar.');
+        const result={ [ENTRADA_ESTRUCTURADA]:true,reservas:structuredClone(reservas),generacion,
+            q:{desde:q?.desde,hasta:q?.hasta},comparacion };
+        const decisiones=new Map(),aprobados=new Set();
+        const plan=crearPlanIncorporacion(result.reservas,comparacion,decisiones,aprobados,comparacion);
+        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))throw new Error('No hay diferencias accionables seguras para preparar.');
+        const volver=async()=>renderizarComparacion(out,result);
+        let incorporar;
+        const aprobar=async ids=>{
+            const listaIds=Array.isArray(ids)?ids:[ids];listaIds.forEach(id=>aprobados.add(id));
+            out.replaceChildren(elemento('p','','Revalidando los pagos aprobados…'));
+            try{
+                const nuevo=await prepararIncorporacion(result,decisiones,aprobados);
+                renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+            }catch(error){listaIds.forEach(id=>aprobados.delete(id));throw error;}
+        };
+        incorporar=planActual=>confirmarIncorporacion(result,decisiones,aprobados,planActual);
+        renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
+        return {result,plan};
+    }
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas, abrirComparacionEstructurada});
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,revalidarCambiosDetectados,
+        abrirComparacionEstructurada, abrirPreparacionComparacion});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 

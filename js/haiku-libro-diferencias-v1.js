@@ -263,9 +263,10 @@
             await libro.listo();
             const generacion = libro.estado().generacion;
             const comprobar = () => { if (libro.estado().generacion !== generacion) throw new Error('El Libro cambió durante la comparación. Repite la consulta.'); };
-            const indiceAnterior = await libro.consultarIndice('anterior'); comprobar();
-            if (!indiceAnterior) return {...salida('sin_linea_base'), generado_en};
             const indiceActual = await libro.consultarIndice('actual'); comprobar();
+            const indiceAnterior = await libro.consultarIndice('anterior'); comprobar();
+            const libro_actual={generacion};
+            if (!indiceAnterior) return {...salida('sin_linea_base'), generado_en,libro_actual};
             const alcance = seleccionarHojas(indiceAnterior,indiceActual,fechaReferencia);
             const huellas = async (indice, version) => {
                 const nombres = alcance.seleccionadas.filter(h => indice.nombres.includes(h));
@@ -300,7 +301,7 @@
             for (const hoja of diagnostico.hojas_historicas_modificadas) resultado.advertencias.push({hoja,tipo:'hoja_historica_modificada'});
             for (const hoja of diagnostico.hojas_especiales_modificadas) resultado.advertencias.push({hoja,tipo:'hoja_especial_modificada'});
             for (const hoja of diagnostico.hojas_huella_no_disponible) resultado.advertencias.push({hoja,tipo:'huella_no_disponible'});
-            return {...resultado, generado_en, diagnostico};
+            return {...resultado, generado_en, diagnostico,libro_actual};
         } catch (e) { return error(String(e.message || e)); }
     }
     const api = Object.freeze({comparar, compararUltimasVersiones, validarSegmento, planificarHojas, seleccionarHojas, mesHoja, HOJAS_ESPECIALES_VIGILADAS, evidenciaCancelacion});

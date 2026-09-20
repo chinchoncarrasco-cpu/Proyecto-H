@@ -139,7 +139,7 @@ test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masa
  assert.equal(apps.length,2);assert.equal(apps.reduce((suma,item)=>suma+item.monto,0),95000);
  assert.deepEqual(apps.map(item=>[item.cargo_id,item.monto]),[['c1',50000],['c2',45000]]);
  const comp=await Q.compararSistema([r],cliente(tablas,{capacidad:CAP}),q);
- assert.equal(comp.serviciosDetalle.find(item=>item.servicio.concepto==='tinaja').estado,'revisar');
+ assert.equal(comp.serviciosDetalle.find(item=>item.servicio.concepto==='tinaja').estado,'faltante');
 });
 
 test('el pago fuerte de Sara ya existente se omite antes de distribuir cargos',async()=>{

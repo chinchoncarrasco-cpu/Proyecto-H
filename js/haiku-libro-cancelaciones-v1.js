@@ -19,11 +19,8 @@
   const matches=(resultado.cancelaciones_confirmadas||[]).filter(x=>JSON.stringify(x)===JSON.stringify(caso));
   if(matches.length!==1)throw Error('La evidencia de cancelación ya no coincide. Vuelve a comparar.');
  }
- async function resolver(caso,cliente){
+ function resolverDesdeReservas(caso,rs){
   const r=caso.fuente==='libro_actual'?caso.evidencia:caso.anterior;
-  const estadias=await filas(()=>cliente.from('reserva_estadias').select('id,reserva_id').eq('fecha_ingreso',r.fecha_checkin).order('id'));
-  const ids=[...new Set(estadias.map(e=>e.reserva_id))];if(!ids.length)throw Error('No encontré la reserva exacta en Proyecto H.');
-  const rs=await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',ids).order('id'));
   const candidatos=rs.filter(v=>normal(v.titular_nombre)===normal(r.titular)&&v.estadias?.some(e=>e.fecha_ingreso===r.fecha_checkin));
   const compatibles=candidatos.filter(v=>compatible(r,v));
   if(compatibles.length!==1)throw Error('La reserva no se identifica de forma única; requiere revisión.');
@@ -34,6 +31,13 @@
    if(r[a]&&v[b]&&canon(r[a])!==canon(v[b]))throw Error('Los datos de identidad no coinciden; requiere revisión.');
   }
   return v;
+ }
+ async function resolver(caso,cliente){
+  const r=caso.fuente==='libro_actual'?caso.evidencia:caso.anterior;
+  const estadias=await filas(()=>cliente.from('reserva_estadias').select('id,reserva_id').eq('fecha_ingreso',r.fecha_checkin).order('id'));
+  const ids=[...new Set(estadias.map(e=>e.reserva_id))];if(!ids.length)throw Error('No encontré la reserva exacta en Proyecto H.');
+  const rs=await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',ids).order('id'));
+  return resolverDesdeReservas(caso,rs);
  }
  function compatible(r,v){
   const e=v.estadias?.find(e=>e.fecha_ingreso===r.fecha_checkin);if(!e)return false;
@@ -70,6 +74,29 @@
     const v=await resolver(caso,cliente),e=v.estadias[0];
     caso.actual={...evidencia,cabana:e.cabanas?.numero,fecha_checkout:e.fecha_salida};
     caso.reserva_id=v.id;caso.estado_proyecto=v.estado_reserva;
+    if(v.estado_reserva==='cancelada')out.cancelaciones_ya_coinciden.push(caso);
+    else if(!['pendiente','confirmada','hospedada'].includes(v.estado_reserva))throw Error('Estado de Proyecto H no activo; requiere revisión manual.');
+    else out.cancelaciones_confirmadas.push(caso);
+   }catch(error){out.cancelaciones_revision.push(`${evidencia.titular} · ${evidencia.origen?.hoja}: ${error.message}`);}
+  }
+  return out;
+ }
+ function detectarActualConSnapshot(hojas,estadias){
+  const out={cancelaciones_confirmadas:[],cancelaciones_revision:[],cancelaciones_ya_coinciden:[]};
+  const grupos=new Map();
+  for(const e of estadias||[]){
+   if(!e?.reserva_id)continue;
+   if(!grupos.has(e.reserva_id))grupos.set(e.reserva_id,{id:e.reserva_id,titular_nombre:e.titular,titular_numero_documento:e.rut_documento,
+    correo_contacto:e.correo,telefono_contacto:e.telefono,estado_reserva:e.estado_reserva,estadias:[]});
+   grupos.get(e.reserva_id).estadias.push({id:e.id,fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout,estado_estadia:e.estado_operativo,cabanas:{numero:e.cabana}});
+  }
+  const reservas=[...grupos.values()];
+  for(const hoja of hojas||[])for(const evidencia of hoja?.cancelaciones||[]){
+   try{
+    comprobarEvidencia(evidencia,hoja);
+    const caso={tipo:'cancelacion_confirmada',fuente:'libro_actual',evidencia:structuredClone(evidencia)};
+    const v=resolverDesdeReservas(caso,reservas),e=v.estadias[0];
+    caso.actual={...evidencia,cabana:e.cabanas?.numero,fecha_checkout:e.fecha_salida};caso.reserva_id=v.id;caso.estado_proyecto=v.estado_reserva;
     if(v.estado_reserva==='cancelada')out.cancelaciones_ya_coinciden.push(caso);
     else if(!['pendiente','confirmada','hospedada'].includes(v.estado_reserva))throw Error('Estado de Proyecto H no activo; requiere revisión manual.');
     else out.cancelaciones_confirmadas.push(caso);
@@ -172,5 +199,5 @@
    });box.append(status,button);out.appendChild(box);
   }
  }
- const api=Object.freeze({preparar,confirmar,adjuntar,detectarActual,adjuntarResueltas,adjuntarRevision});root.HAIKU_LIBRO_CANCELACIONES_V1=api;if(typeof module!=='undefined')module.exports=api;
+ const api=Object.freeze({preparar,confirmar,adjuntar,detectarActual,detectarActualConSnapshot,adjuntarResueltas,adjuntarRevision});root.HAIKU_LIBRO_CANCELACIONES_V1=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

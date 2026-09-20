@@ -170,9 +170,10 @@ function reader(before,after,hook=()=>{}) {
             hook(name,version); const data=(version==='anterior'?before:after)[name]; if(data instanceof Error) throw data; return structuredClone(data);
         }};
 }
-test('API: primera carga no consulta hojas y devuelve sin_linea_base',async()=>{
+test('API: primera carga conserva el contexto actual sin consultar hojas todavía',async()=>{
     const libro=reader(null,{Sep26:sheet([row()])}); const r=await D.compararUltimasVersiones({libro,fechaReferencia:'2026-09-09'});
-    assert.equal(r.estado,'sin_linea_base'); assert.equal(libro.calls.length,1);
+    assert.equal(r.estado,'sin_linea_base'); assert.deepEqual(libro.calls,[['indice','actual'],['indice','anterior']]);
+    assert.equal(r.libro_actual.generacion,1);
 });
 test('API: índices de ambas versiones, hojas retiradas y lecturas secuenciales',async()=>{
     const libro=reader({Sep26:sheet([row()]),Oct26:sheet([])},{Sep26:sheet([row({cabana:9})])});

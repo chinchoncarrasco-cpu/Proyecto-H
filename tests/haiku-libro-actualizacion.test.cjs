@@ -160,3 +160,59 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
     assert.match(html,/Cobertura parcial/);
     assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
 });
+
+test('sin cambios históricos pendientes muestra sincronización y oculta preparar',()=>{
+    const html=A.renderizarPendientes({items:[],generacion:7,preparacion:{reservas:[reserva]}});
+    assert.match(html,/Cambios detectados aún pendientes de aplicar/);
+    assert.match(html,/Todos los cambios detectados ya están sincronizados con Proyecto H/);
+    assert.match(html,/Revalidar contra Proyecto H/);
+    assert.doesNotMatch(html,/Preparar incorporación/);
+});
+
+test('un cambio histórico accionable muestra valores y habilita preparar sin exponer contacto',()=>{
+    const actual={...reserva,correo:'privado@example.test',telefono:'999999999',rut_documento:'12345678-9',estado_operativo:'hospedada'};
+    const pendientes={generacion:7,items:[{tipo:'modificacion',actual,detectado_generacion:6,estado:'pendiente',accionable:true,
+        cambios:[{campo:'estado_operativo',antes:'confirmada',ahora:'hospedada',proyecto:'confirmada'}]}],preparacion:{reservas:[actual]}};
+    const html=A.renderizarPendientes(pendientes);
+    assert.match(html,/CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE/);
+    assert.match(html,/Anterior: confirmada/);assert.match(html,/Nuevo valor del Libro: hospedada/);assert.match(html,/Proyecto H actual: confirmada/);
+    assert.match(html,/Preparar incorporación/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
+});
+
+test('un cambio detectado en la generación actual se distingue como cambio de esta actualización',()=>{
+    const actual={...reserva,adultos:3};
+    const html=A.renderizarPendientes({generacion:7,items:[{tipo:'modificacion',actual,detectado_generacion:7,estado:'pendiente',accionable:true,
+        cambios:[{campo:'adultos',antes:2,ahora:3,proyecto:2}]}],preparacion:{reservas:[actual]}});
+    assert.match(html,/CAMBIO DE ESTA ACTUALIZACIÓN/);assert.match(html,/Anterior: 2/);assert.match(html,/Nuevo valor del Libro: 3/);
+    assert.match(html,/Proyecto H actual: 2/);assert.match(html,/Preparar incorporación/);
+});
+
+test('historial fusiona A→B y B→C sin inventar una auditoría mensual',()=>{
+    const a={...reserva,estado_operativo:'confirmada'},b={...reserva,estado_operativo:'hospedada'},c={...b,adultos:3};
+    const ab={generado_en:'2026-09-18T10:00:00Z',modificadas:[{anterior:a,actual:b,cambios:[{campo:'estado_operativo',antes:'confirmada',ahora:'hospedada'}]}]};
+    const bc={generado_en:'2026-09-19T10:00:00Z',modificadas:[{anterior:b,actual:c,cambios:[{campo:'adultos',antes:2,ahora:3}]}]};
+    const uno=A.fusionarHistorialCambios(null,ab,2),dos=A.fusionarHistorialCambios(uno,bc,3);
+    assert.equal(dos.cambios.length,1);assert.equal(dos.cambios[0].actual.adultos,3);
+    assert.deepEqual(dos.cambios[0].cambios.map(x=>x.campo).sort(),['adultos','estado_operativo']);
+});
+
+test('cache histórica no relee XLSX y Revalidar sólo repite la consulta focal',async()=>{
+    let lecturas=0,guardados=0,revalidaciones=0,g=7,registro={version:1,cambios:[]};
+    const resultadoInforme={libro_actual:{generacion:7},modificadas:[]};
+    const cache=A.crearCachePendientes({generacion:()=>g,leer:async()=>{lecturas++;return registro;},guardar:async x=>{guardados++;registro=x;},
+        revalidarCambios:async cambios=>{revalidaciones++;assert.equal(cambios.length,0);return {items:[],resueltos:[],reservas:[],comparacion:[],q:null};}});
+    await cache.obtener(resultadoInforme);await cache.obtener(resultadoInforme);
+    assert.deepEqual([lecturas,guardados,revalidaciones],[1,0,1]);
+    await cache.obtener(resultadoInforme,{revalidar:true});
+    assert.deepEqual([lecturas,guardados,revalidaciones],[2,0,2]);
+    g=8;await assert.rejects(cache.obtener(resultadoInforme),/Libro cambió/);
+});
+
+test('un fallo focal conserva el historial y permite reintentar',async()=>{
+    let intentos=0,registro={version:1,cambios:[]};
+    const cache=A.crearCachePendientes({generacion:()=>3,leer:async()=>registro,guardar:async x=>{registro=x;},
+        revalidarCambios:async()=>{intentos++;if(intentos===1)throw Error('Supabase no disponible');return {items:[],resueltos:[],reservas:[],comparacion:[],q:null};}});
+    const informe={libro_actual:{generacion:3},modificadas:[]};
+    await assert.rejects(cache.obtener(informe),/Supabase no disponible/);
+    await cache.obtener(informe,{revalidar:true});assert.equal(intentos,2);
+});

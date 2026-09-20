@@ -101,6 +101,22 @@ test('already cancelled and disappeared without CANCELACIONES never propose writ
  const p=await x.api.preparar(out.cancelaciones_ya_coinciden[0],1);assert.equal(p.estado,'ya_coincide');await x.api.confirmar(p);assert.equal(x.calls(),0);
  assert.equal((await x.api.detectarActual(sheet([]),x.cliente)).cancelaciones_confirmadas.length,0);
 });
+test('snapshot del comparador detecta cancelaciones actuales sin consultas adicionales',()=>{
+ const x=environment(),snapshot=[{id:'s1',reserva_id:'r1',titular:r().titular,rut_documento:null,correo:r().correo,telefono:null,
+  estado_reserva:'confirmada',fecha_checkin:r().fecha_checkin,fecha_checkout:r().fecha_checkout,estado_operativo:'confirmada',cabana:1}];
+ const out=x.api.detectarActualConSnapshot([sheet([],[e()])],snapshot);
+ assert.equal(out.cancelaciones_confirmadas.length,1);assert.equal(out.cancelaciones_revision.length,0);assert.equal(out.cancelaciones_ya_coinciden.length,0);
+ snapshot[0].estado_reserva='cancelada';const listo=x.api.detectarActualConSnapshot([sheet([],[e()])],snapshot);
+ assert.equal(listo.cancelaciones_confirmadas.length,0);assert.equal(listo.cancelaciones_ya_coinciden.length,1);
+});
+test('snapshot ambiguo o incompatible conserva la cancelación para revisión manual',()=>{
+ const x=environment(),base={id:'s1',reserva_id:'r1',titular:r().titular,correo:r().correo,estado_reserva:'confirmada',
+  fecha_checkin:r().fecha_checkin,fecha_checkout:r().fecha_checkout,estado_operativo:'confirmada',cabana:1};
+ for(const snapshot of [[],[base,{...base,id:'s2',reserva_id:'r2'}],[{...base,correo:'otra@example.test'}]]){
+  const out=x.api.detectarActualConSnapshot([sheet([],[e()])],snapshot);
+  assert.equal(out.cancelaciones_confirmadas.length,0);assert.equal(out.cancelaciones_revision.length,1);
+ }
+});
 test('current preview revalidates generation, evidence, identity and target snapshot',async()=>{
  for(const mutate of [x=>x.change(),x=>x.libro.consultarHoja=async()=>sheet([]),x=>x.row.correo_contacto='changed@example.test',x=>x.row.id='r2']){
   const x=environment(),out=await x.api.detectarActual(sheet([],[e()]),x.cliente),p=await x.api.preparar(out.cancelaciones_confirmadas[0],1);

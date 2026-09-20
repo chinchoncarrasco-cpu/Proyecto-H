@@ -333,7 +333,7 @@ test('Pascual: efectivo aplicado al Late Check-out queda omitido aunque exista o
     assert.equal(detalle.coincidencia_aplicacion_servicio, true);
     assert.equal(detalle.cargo_sistema.cargo_id, 'c-lateout-06');
     assert.equal(comp.snapshot.efectivo_aplicado.cargos.filter(x => x.tipo_cargo === 'servicio').length, 2);
-    assert.equal(comp.serviciosDetalle[0].estado, 'revisar');
+    assert.equal(comp.serviciosDetalle[0].estado, 'faltante');
     assert.equal(comp.meta.pagos_revisar, 0);
     assert.equal(comp.meta.servicios_revisar, 1);
     const item = Q.crearPlanIncorporacion([libro], comp).items.find(x => x.pagoLibro === movimiento || x.texto.includes('$20.000'));

@@ -76,3 +76,10 @@ test('índice de nombres nuevo conserva ausencia de línea base y readonly',asyn
     assert.equal(h.transactions[0].mode,'readonly');assert.equal(h.workers[0].message.tipo,'indice_nombres');
     assert.equal(await lector({anterior:false}).context.consultaTest('','anterior','indice_nombres'),null);
 });
+test('historial de cambios reutiliza el almacén local y no crea otra base ni tabla',()=>{
+    const source=fs.readFileSync(path.join(__dirname,'../js/supabase-libro-reserva-v1.js'),'utf8');
+    assert.match(source,/almacen\.get\("cambios_detectados"\)/);
+    assert.match(source,/almacen\.put\(registro, "cambios_detectados"\)/);
+    assert.match(source,/leerCambiosDetectados/);assert.match(source,/guardarCambiosDetectados/);
+    assert.equal((source.match(/indexedDB\.open\("haiku-libro-reserva-local"/g)||[]).length,1);
+});

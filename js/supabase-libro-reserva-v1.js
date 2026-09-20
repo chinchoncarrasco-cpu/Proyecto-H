@@ -64,7 +64,9 @@
                 try {
                     const tx = db.transaction("libro", accion.startsWith("leer") ? "readonly" : "readwrite");
                     const almacen = tx.objectStore("libro");
-                    const solicitud = accion.startsWith("leer") ? almacen.get(accion === "leer_anterior" ? "anterior" : "actual")
+                    const solicitud = accion === "leer_cambios" ? almacen.get("cambios_detectados")
+                        : accion.startsWith("leer") ? almacen.get(accion === "leer_anterior" ? "anterior" : "actual")
+                        : accion === "guardar_cambios" ? almacen.put(registro, "cambios_detectados")
                         : accion === "borrar" ? almacen.clear() : almacen.get("actual");
                     let actualizacion = false;
                     if (accion === "guardar") solicitud.onsuccess = () => {
@@ -78,7 +80,8 @@
                         almacen.put(registro, "actual");
                     };
                     // A request's success alone does not guarantee that the write committed.
-                    tx.oncomplete = () => { db.close(); resolve(accion === "guardar" ? {actualizacion} : solicitud.result); };
+                    tx.oncomplete = () => { db.close(); resolve(accion === "guardar" ? {actualizacion} :
+                        accion === "guardar_cambios" ? registro : solicitud.result); };
                     tx.onabort = () => { db.close(); reject(tx.error || new Error("Operación local cancelada")); };
                     tx.onerror = () => {};
                 } catch (error) { db.close(); reject(error); }
@@ -802,6 +805,8 @@
             listarHojas: () => [...(libroIndice?.SheetNames || [])],
             consultarIndice: (version = "actual") => consultarHoja("", version, "indice_nombres"),
             consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),
+            leerCambiosDetectados: async () => persistenciaPC ? await copiaLocal("leer_cambios") : null,
+            guardarCambiosDetectados: async registro => persistenciaPC ? await copiaLocal("guardar_cambios", structuredClone(registro)) : registro,
             consultarHoja,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
             buscarHojasBove: numero => consultarHoja(numero, "actual", "buscar_bove"),
