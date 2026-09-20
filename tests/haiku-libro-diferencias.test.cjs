@@ -15,7 +15,8 @@ test('A: primera copia es línea base, nunca todas nuevas', () => {
     assert.equal(D.comparar(null,[sheet([row()])]).resumen.nuevas,0);
 });
 test('B: mismo conjunto no cambia aunque cambien celda y orden; entrada inmutable y salida clonable', () => {
-    const a = freeze([sheet([row()])]), b = freeze([sheet([row({id:'Sep26!ZZ90', texto_original:'ANA   PÉREZ\n2 ADLT'})])]);
+    const a = freeze([sheet([row({coordenadas_origen:{celda:'A3',merge:{s:{r:2,c:0},e:{r:2,c:2}}},formato:{fondo:'FFFFFF'},geometria_inequivoca:true,notas_interpretacion:['origen A'],advertencias_informativas:['estilo A']})])]);
+    const b = freeze([sheet([row({id:'Sep26!ZZ90',texto_original:'ANA   PÉREZ\n2 ADLT',coordenadas_origen:{celda:'ZZ90',merge:{s:{r:89,c:701},e:{r:89,c:704}}},formato:{fondo:'000000'},geometria_inequivoca:false,notas_interpretacion:['origen B'],advertencias_informativas:['estilo B']})])]);
     const r = D.comparar(a,b);
     assert.equal(r.estado,'sin_cambios'); assert.ok(Object.values(r.resumen).every(n=>n===0));
     assert.deepEqual(structuredClone(r),r); assert.deepEqual(D.comparar(a,b),r);
@@ -38,6 +39,20 @@ for (const [campo, valor] of [['cabana',9],['fecha_checkin','2026-09-02'],['fech
 const service = (extra={}) => ({concepto:'tinaja', pendiente:false, cortesia:false, hora:'18:00', monto:null, texto_original:'TINAJA 18:00',...extra});
 test('I: agregar y eliminar servicio detecta diferencias', () => {
     for(const [a,b] of [[[],[service()]],[[service()],[]]]) assert.equal(compare([row({servicios:a})],[row({servicios:b})]).modificadas[0].cambios[0].campo,'servicios');
+});
+test('Catalina: estado, solicitud y horario de servicio son cambios operativos reales',()=>{
+    const anterior=row({titular:'Catalina Sierra',estado_operativo:'sin_checkin',notas_importantes:['COORDINAR TINAJA DE CORTESÍA'],servicios:[service({hora:null,cortesia:true})]});
+    const actual={...anterior,estado_operativo:'hospedada',notas_importantes:['TINAJA DE CORTESÍA TONEL 19.15 HRS'],servicios:[service({hora:'19:15',cortesia:true}),service({concepto:'tonel',hora:'19:15',cortesia:true})]};
+    const r=compare([anterior],[actual]);
+    assert.equal(r.resumen.modificadas,1);
+    assert.deepEqual(r.modificadas[0].cambios.map(c=>c.campo),['estado_operativo','notas_importantes','servicios']);
+});
+test('cambio Full Day → alojamiento permanece operativo y visible',()=>{
+    const anterior=row({tipo_estadia:'full_day',fecha_checkout:'2026-09-03',noches:0});
+    const actual={...anterior,tipo_estadia:'alojamiento',fecha_checkout:'2026-09-04',noches:1};
+    const r=compare([anterior],[actual]);
+    assert.equal(r.resumen.modificadas,1);
+    assert.ok(r.modificadas[0].cambios.some(c=>c.campo==='tipo_estadia'));
 });
 test('J/K: homónimos sin señales distintivas y contactos reutilizados no se desempatan por celda', () => {
     const a=row({rut_documento:null,correo:null,telefono:null});

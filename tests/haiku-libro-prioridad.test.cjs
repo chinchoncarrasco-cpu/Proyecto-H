@@ -12,7 +12,7 @@ test('modificación usa ambas fechas, incluyendo salida de hoy y traslado al fut
     assert.equal(g.hoy.length,1);assert.equal(g.hoy[0].segmentos.length,2);assert.match(g.hoy[0].explicacion,/Salida hoy/);
 });
 test('cambio de cabaña en estadía en curso tiene prioridad hoy',()=>{
-    const g=clasificar(result({modificadas:[{anterior:row('2026-09-08'),actual:row('2026-09-08',undefined,{cabana:5}),cambios:[{campo:'cabana',antes:8,ahora:5}]}]}));assert.equal(g.hoy.length,1);
+    const g=clasificar(result({modificadas:[{anterior:row('2026-09-08'),actual:row('2026-09-08',undefined,{cabana:5}),cambios:[{campo:'cabana',antes:8,ahora:5}]}]}));assert.equal(g.hoy.length,1);assert.deepEqual(g.hoy[0].cambios,['Cabaña']);
 });
 test('ausencia y ambigua conservan tipo y candidatos',()=>{
     const g=clasificar(result({ya_no_aparecen:[{anterior:row()}],ambiguas:[{anteriores:[row()],actuales:[row('2026-09-20','2026-09-21')]}]}));
@@ -45,6 +45,18 @@ test('clasificación no muta entrada y se actualiza con el día aunque resultado
 test('presentación escapa texto y no muestra contactos',()=>{
     const html=P.renderizar(result({nuevas:[{actual:row(undefined,undefined,{titular:'<img src=x>',telefono:'999999999',correo:'secreto@test.cl'})}]}),opciones);
     assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|999999999|secreto@test/);assert.match(html,/Prioridad de los cambios detectados/); assert.ok(html.includes("Esta sección clasifica únicamente los cambios de esta actualización. No representa todas las reservas, ingresos o salidas de los próximos días."));
+});
+test('tarjeta modificada explica campos operativos sin exponer valores sensibles',()=>{
+    const anterior=row('2026-09-10','2026-09-11',{titular:'Catalina Sierra',correo:'anterior@test.cl'});
+    const actual={...anterior,estado_operativo:'hospedada',correo:'actual@test.cl'};
+    const html=P.renderizar(result({modificadas:[{anterior,actual,cambios:[
+        {campo:'estado_operativo',antes:'sin_checkin',ahora:'hospedada'},
+        {campo:'notas_importantes',antes:['Coordinar tinaja'],ahora:['Tinaja 19:15']},
+        {campo:'servicios',antes:[],ahora:[{concepto:'tinaja',hora:'19:15'}]},
+        {campo:'correo',antes:'anterior@test.cl',ahora:'actual@test.cl'}
+    ]}]}),opciones);
+    assert.match(html,/Cambios detectados: Estado operativo · Notas o solicitudes · Servicios · Correo/);
+    assert.doesNotMatch(html,/sin_checkin|hospedada|19:15|anterior@test|actual@test/);
 });
 test('integración manual, Ver informe y resumen automático consumen proyección sin comparar',()=>{
     const root={HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1:P};
