@@ -708,7 +708,7 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
    selector.startsWith('.')&&(e.className||'').split(' ').includes(selector.slice(1)));}
   querySelector(selector){return this.querySelectorAll(selector)[0]||null}
  }
- const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
+ const context={structuredClone,HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
   document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
@@ -1336,6 +1336,32 @@ test('second screen revalidates, shows all categories, enforces dependencies and
  const checks=h.out.querySelectorAll('input'),first=checks[0];first.checked=false;first.events.change();
  assert.equal(checks[1].disabled,true);assert.equal(checks[1].checked,false);
  assert.equal(db.calls.filter(x=>x==='pagos').length,2);
+});
+test('historical preparation button revalidates Proyecto H before opening the guarded preview',async()=>{
+ const actual=readyBook({estado_operativo:'hospedada'}),anterior={...actual,estado_operativo:'sin_checkin'};
+ const sistema=stay(actual,{estado_estadia:'confirmada'}),db=client([sistema]);
+ const registro={id:'historial-estado',tipo:'modificacion',detectado_generacion:2,anterior,actual,
+  cambios:[{campo:'estado_operativo',antes:'sin_checkin',ahora:'hospedada'}]};
+ const pendientes=await Q.revalidarCambiosDetectados([registro],db,{generacion:3});
+ const h=renderHarness(null,db);h.context.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:3})};
+ const lecturas=db.calls.filter(x=>x==='reserva_estadias').length;
+ await h.Q.abrirPreparacionComparacion(h.out,{reservas:pendientes.reservas,comparacion:pendientes.comparacion,
+  generacion:3,q:pendientes.q});
+ assert.ok(db.calls.filter(x=>x==='reserva_estadias').length>lecturas);
+ assert.match(h.texts(),/Confirmar incorporación/);
+ assert.ok(!db.calls.some(x=>String(x).startsWith('haiku_')));
+});
+test('historical preparation refuses a snapshot whose change was already applied',async()=>{
+ const actual=readyBook({estado_operativo:'hospedada'}),anterior={...actual,estado_operativo:'sin_checkin'};
+ const sistema=stay(actual,{estado_estadia:'confirmada'}),db=client([sistema]);
+ const registro={id:'historial-resuelto',tipo:'modificacion',detectado_generacion:2,anterior,actual,
+  cambios:[{campo:'estado_operativo',antes:'sin_checkin',ahora:'hospedada'}]};
+ const pendientes=await Q.revalidarCambiosDetectados([registro],db,{generacion:3});
+ sistema.estado_estadia='hospedada';
+ const h=renderHarness(null,db);h.context.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:3})};
+ await assert.rejects(h.Q.abrirPreparacionComparacion(h.out,{reservas:pendientes.reservas,comparacion:pendientes.comparacion,
+  generacion:3,q:pendientes.q}),/ya no tiene diferencias accionables seguras/);
+ assert.doesNotMatch(h.texts(),/Confirmar incorporación/);
 });
 test('confirmation button executes the atomic RPC and shows the saved result',async()=>{
  const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);

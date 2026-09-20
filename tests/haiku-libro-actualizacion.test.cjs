@@ -164,6 +164,7 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
 test('sin cambios históricos pendientes muestra sincronización y oculta preparar',()=>{
     const html=A.renderizarPendientes({items:[],generacion:7,preparacion:{reservas:[reserva]}});
     assert.match(html,/Cambios detectados aún pendientes de aplicar/);
+    assert.match(html,/haku-comparacion-compacta haku-pendientes-compactos/);
     assert.match(html,/Todos los cambios detectados ya están sincronizados con Proyecto H/);
     assert.match(html,/Revalidar contra Proyecto H/);
     assert.doesNotMatch(html,/Preparar incorporación/);
@@ -176,6 +177,9 @@ test('un cambio histórico accionable muestra valores y habilita preparar sin ex
     const html=A.renderizarPendientes(pendientes);
     assert.match(html,/CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE/);
     assert.match(html,/Anterior: confirmada/);assert.match(html,/Nuevo valor del Libro: hospedada/);assert.match(html,/Proyecto H actual: confirmada/);
+    assert.match(html,/class="haiku-comparacion-acordeon haku-pendiente-item/);
+    assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
+    assert.match(html,/class="libro-reserva-boton haku-libro-preparar"/);
     assert.match(html,/Preparar incorporación/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
 });
 

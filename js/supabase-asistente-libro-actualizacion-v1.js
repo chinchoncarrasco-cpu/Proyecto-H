@@ -136,18 +136,20 @@
     }
     function renderizarPendientes(pendientes={}){
         const items=lista(pendientes.items),accionables=items.filter(x=>x.accionable).length;
-        let html='<section class="haku-libro-pendientes" aria-label="Cambios detectados aún pendientes de aplicar"><header class="haiku-asistente-preview-cabecera"><div><span>HISTORIAL DE ACTUALIZACIONES → PROYECTO H</span><strong>Cambios detectados aún pendientes de aplicar</strong></div><span class="haiku-asistente-confianza haiku-asistente-confianza--alta">Revalidación focalizada</span></header>';
+        let html='<section class="haku-libro-pendientes haiku-asistente-preview haku-comparacion-compacta haku-pendientes-compactos" aria-label="Cambios detectados aún pendientes de aplicar"><header class="haiku-asistente-preview-cabecera"><div><span>HISTORIAL DE ACTUALIZACIONES → PROYECTO H</span><strong>Cambios detectados aún pendientes de aplicar</strong></div><span class="haiku-asistente-confianza haiku-asistente-confianza--alta">Revalidación focalizada</span></header>';
         if(!items.length)html+='<p class="haku-libro-sin-pendientes"><strong>Todos los cambios detectados ya están sincronizados con Proyecto H.</strong></p>';
         else{
-            html+=`<p>${items.length} cambio${items.length===1?'':'s'} detectado${items.length===1?'':'s'} todavía pendiente${items.length===1?'':'s'}; ${accionables} puede${accionables===1?'':'n'} entrar a preparación segura.</p>`;
+            html+=`<div class="haiku-asistente-preview-grid haku-pendientes-metricas"><div class="haiku-asistente-preview-dato"><span>Cambios pendientes</span><strong>${items.length}</strong></div><div class="haiku-asistente-preview-dato"><span>Preparación segura</span><strong>${accionables}</strong></div></div>`;
+            html+=`<p class="haiku-asistente-preview-resumen haku-pendientes-resumen">${items.length} cambio${items.length===1?'':'s'} detectado${items.length===1?'':'s'} todavía pendiente${items.length===1?'':'s'}; ${accionables} puede${accionables===1?'':'n'} entrar a preparación segura.</p>`;
             for(const item of items){
                 const r=item.actual||item.anterior||{};
                 const etiqueta=item.detectado_generacion===pendientes.generacion?'CAMBIO DE ESTA ACTUALIZACIÓN':'CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE';
-                html+=`<div class="haku-libro-item"><small>${etiqueta}</small>${reserva(r)}${item.tipo==='nueva'?'<p>La reserva detectada como nueva todavía no tiene una coincidencia segura en Proyecto H.</p>':item.tipo==='cancelacion'?`<p>Cancelación detectada; Proyecto H actual: ${escapar(item.proyecto)}.</p>`:`<dl>${lista(item.cambios).map(cambioPendiente).join('')}</dl>`}<p><strong>${item.estado==='pendiente'?'Pendiente de aplicar':'Requiere revisión antes de aplicar'}</strong></p></div>`;
+                const tono=item.accionable?'normal':'revision',icono=item.tipo==='cancelacion'?'calendario':item.accionable?'intercambio':'alerta';
+                html+=`<details class="haiku-comparacion-acordeon haku-pendiente-item haku-franja--${tono} haku-icono--${icono}"><summary>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Titular no determinado')}</summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>${escapar(fecha(r.fecha_checkin))} → ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${item.tipo==='nueva'?'<p>La reserva detectada como nueva todavía no tiene una coincidencia segura en Proyecto H.</p>':item.tipo==='cancelacion'?`<p>Cancelación detectada; Proyecto H actual: ${escapar(item.proyecto)}.</p>`:`<dl>${lista(item.cambios).map(cambioPendiente).join('')}</dl>`}<p class="haku-pendiente-estado"><strong>${item.estado==='pendiente'?'Pendiente de aplicar':'Requiere revisión antes de aplicar'}</strong></p></div></details>`;
             }
         }
-        html+='<div class="haku-libro-pendientes-acciones"><button type="button" class="haku-libro-revalidar" data-haku-revalidar-proyecto>Revalidar contra Proyecto H</button>';
-        if(items.some(x=>x.accionable)&&pendientes.preparacion?.reservas?.length)html+='<button type="button" class="haku-libro-revalidar" data-haku-preparar-pendientes>Preparar incorporación</button>';
+        html+='<div class="haku-libro-pendientes-acciones"><button type="button" class="libro-reserva-boton secundario haku-libro-revalidar" data-haku-revalidar-proyecto>Revalidar contra Proyecto H</button>';
+        if(items.some(x=>x.accionable)&&pendientes.preparacion?.reservas?.length)html+='<button type="button" class="libro-reserva-boton haku-libro-preparar" data-haku-preparar-pendientes>Preparar incorporación</button>';
         return html+'</div></section>';
     }
     function crearCache(comparar, generacion) {
@@ -248,8 +250,6 @@
         root.addEventListener('haiku:libro-cambio',()=>{cache.invalidar();cachePendientes.invalidar();});
         const style = doc.createElement('style');
         style.textContent = `.haku-libro-actualizacion{border:1px solid #cadfd1;border-radius:16px;background:#f7faf8;padding:14px;color:#26342c;overflow-wrap:anywhere}.haku-libro-actualizacion h3{font-size:19px;margin:0}.haku-libro-actualizacion p{margin:5px 0;font-size:12px;line-height:1.5}.haku-libro-actualizacion h4{font-size:12px;margin:16px 0 7px}.haku-libro-contadores{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:12px 0}.haku-libro-contadores>div{background:white;border:1px solid #dfe9e2;border-radius:10px;padding:8px;text-align:center}.haku-libro-contadores strong,.haku-libro-contadores span{display:block}.haku-libro-contadores span{font-size:10px}.haku-libro-item{border:1px solid #dfe9e2;border-radius:10px;padding:10px;background:white;margin:6px 0}.haku-libro-item>strong,.haku-libro-item>small{display:block}.haku-libro-item small{font-size:10px;color:#1f7650;margin-bottom:5px}.haku-libro-item dl{font-size:12px;margin-bottom:0}.haku-libro-item dt{font-weight:700;margin-top:7px}.haku-libro-item dd{margin:3px 0;white-space:pre-wrap}.haku-libro-item summary{cursor:pointer;font-size:12px;margin:7px 0}.haku-libro-aviso{background:#fffaf1;border:1px solid #ead8bc;padding:9px;border-radius:10px}@media(max-width:420px){.haku-libro-contadores{grid-template-columns:repeat(2,minmax(0,1fr))}}`;
-        style.textContent += `.haku-libro-pendientes{border:1px solid #cadfd1;border-radius:16px;background:#f7faf8;padding:14px;color:#26342c;overflow-wrap:anywhere;margin-top:10px}.haku-libro-pendientes p{margin:5px 0;font-size:12px;line-height:1.5}.haku-libro-pendientes-error{background:#fffaf1;border:1px solid #ead8bc;padding:9px;border-radius:10px}.haku-libro-revalidar{margin-top:10px;border:1px solid #9fc6ad;border-radius:9px;background:#fff;color:#1f6345;padding:7px 10px;cursor:pointer}.haku-libro-revalidar:disabled{opacity:.6;cursor:wait}`;
-        style.textContent += `.haku-libro-pendientes-acciones{display:flex;flex-wrap:wrap;gap:7px}.haku-libro-preparacion-zona{margin-top:10px}`;
         doc.head.appendChild(style);
         function mensaje(tipo,texto) {
             const el = doc.createElement('div'); el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`; el.textContent = texto; mensajes.appendChild(el); mensajes.scrollTop = mensajes.scrollHeight; return el;
@@ -266,11 +266,16 @@
                     const preparar=zona.querySelector?.('[data-haku-preparar-pendientes]');
                     preparar?.addEventListener?.('click',async()=>{
                         preparar.disabled=true;
-                        const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';vista.textContent='Preparando vista previa con la comparación actual…';zona.appendChild(vista);
+                        preparar.setAttribute?.('aria-busy','true');
+                        const anterior=zona.querySelector?.('.haku-libro-preparacion-zona');anterior?.remove?.();
+                        const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';vista.textContent='Revalidando Proyecto H y preparando una vista previa segura…';zona.appendChild(vista);
+                        vista.scrollIntoView?.({block:'nearest'});
                         try{
                             if(!root.HAIKU_LIBRO_CONSULTAS?.abrirPreparacionComparacion)throw new Error('El flujo seguro de incorporación todavía no está disponible.');
                             await root.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion(vista,pendientes.preparacion);
-                        }catch(error){vista.textContent=error?.message||'No se pudo preparar la incorporación.';preparar.disabled=false;}
+                            vista.scrollIntoView?.({block:'nearest'});
+                        }catch(error){vista.classList?.add?.('haku-libro-pendientes-error');vista.textContent=error?.message||'No se pudo preparar la incorporación.';preparar.disabled=false;}
+                        finally{preparar.removeAttribute?.('aria-busy');mensajes.scrollTop=mensajes.scrollHeight;}
                     });
                 }catch(error){
                     zona.innerHTML=`<section class="haku-libro-pendientes"><header class="haiku-asistente-preview-cabecera"><div><span>HISTORIAL DE ACTUALIZACIONES → PROYECTO H</span><strong>Cambios detectados aún pendientes de aplicar</strong></div></header><p class="haku-libro-pendientes-error">No fue posible revalidar el historial de cambios.${error?.message ? ` ${escapar(error.message)}` : ''}</p></section>`;

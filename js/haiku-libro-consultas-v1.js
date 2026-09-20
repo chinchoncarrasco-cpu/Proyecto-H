@@ -2977,9 +2977,15 @@
         const result={ [ENTRADA_ESTRUCTURADA]:true,reservas:structuredClone(reservas),generacion,
             q:{desde:q?.desde,hasta:q?.hasta},comparacion };
         const decisiones=new Map(),aprobados=new Set();
-        const plan=crearPlanIncorporacion(result.reservas,comparacion,decisiones,aprobados,comparacion);
-        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))throw new Error('No hay diferencias accionables seguras para preparar.');
-        const volver=async()=>renderizarComparacion(out,result);
+        // El historial indica qué campos conviene preparar, pero Proyecto H es
+        // la fuente vigente. Revalidar nuevamente al pulsar el botón evita abrir
+        // una propuesta basada en el snapshot que generó el informe.
+        const plan=await prepararIncorporacion(result,decisiones,aprobados);
+        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))throw new Error('Proyecto H ya no tiene diferencias accionables seguras. Revalida el informe.');
+        const volver=async()=>{
+            const actualizado=await revalidarEntradaEstructurada(result);
+            renderizarComparacion(out,actualizado);
+        };
         let incorporar;
         const aprobar=async ids=>{
             const listaIds=Array.isArray(ids)?ids:[ids];listaIds.forEach(id=>aprobados.add(id));
