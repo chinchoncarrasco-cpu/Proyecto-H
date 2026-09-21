@@ -80,15 +80,14 @@ test('capability ausente nunca deja un payload de fallback al writer histórico'
  assert.equal(x.db.calls.some(c=>c.nombre==='haiku_incorporar_pago_servicios_libro_v1'),false);
 });
 
-test('capability exacta habilita aprobación de Carlos y serializa el contrato 4C',async()=>{
+test('NUEVO_SEGURO con capability exacta queda preparado sin una aprobación intermedia',async()=>{
  const inicial=await prepararCarlos();
  assert.equal(inicial.item.aprobableFinancieramente,true);
  assert.equal(inicial.item.backendServiciosDisponible,true);
- assert.equal(inicial.item.aprobable,true);
- assert.equal(inicial.item.categoria,'dudosos');
- const aprobado=await prepararCarlos(CAP,new Set([inicial.item.id]));
- assert.equal(aprobado.item.categoria,'pagos');assert.equal(aprobado.item.seleccionado,true);
- const [out]=Q.serializarIncorporacion(aprobado.plan);
+ assert.notEqual(inicial.item.aprobable,true);
+ assert.equal(inicial.item.categoria,'pagos');assert.equal(inicial.item.seleccionado,true);
+ assert.doesNotMatch(inicial.item.motivos.join(' '),/aprobación manual/i);
+ const [out]=Q.serializarIncorporacion(inicial.plan);
  assert.equal(out.tipo,'pago_servicios_4c');assert.equal(out.reserva_id,'r1');assert.equal(out.aprobado_manualmente,true);
  assert.equal(out.argumentos.p_monto,30000);assert.equal(out.argumentos.p_modo_aplicacion,'ninguno');
  assert.equal(out.argumentos.p_bove,null,'un BOVE administrativo nunca se copia al canal BOVTAR');
@@ -106,9 +105,8 @@ test('una transacción de 50000 produce un pago con dos aplicaciones explícitas
  const r=reserva(p),tablas=tablasCarlos(r,{servicios:[servicio('s1','Late Checkout','2026-09-12',20000),servicio('s2','Jacuzzi','2026-09-12',30000)],
   vista_estado_cargos:[cargo('c1','s1','Late Checkout',20000),cargo('c2','s2','Jacuzzi',30000)]});
  const inicial=await prepararCarlos(CAP,new Set(),{pago:p,reserva:r,tablas});
- assert.equal(inicial.item.aprobable,true);
- const aprobado=await prepararCarlos(CAP,new Set([inicial.item.id]),{pago:p,reserva:r,tablas});
- const [out]=Q.serializarIncorporacion(aprobado.plan),apps=out.datos_origen.aplicaciones_servicio_v1.aplicaciones;
+ assert.equal(inicial.item.categoria,'pagos');assert.equal(inicial.item.seleccionado,true);
+ const [out]=Q.serializarIncorporacion(inicial.plan),apps=out.datos_origen.aplicaciones_servicio_v1.aplicaciones;
  assert.equal(out.tipo,'pago_servicios_4c');assert.equal(apps.length,2);
  assert.equal(apps.reduce((n,a)=>n+a.monto,0),50000);
  assert.deepEqual(apps.map(a=>[a.cargo_id,a.monto]),[['c1',20000],['c2',30000]]);
@@ -128,11 +126,9 @@ test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masa
  ]});
  const inicial=await prepararCarlos(CAP,new Set(),{pago:p,reserva:r,tablas});
  assert.equal(inicial.item.aprobableFinancieramente,true);
- assert.equal(inicial.item.aprobable,true);
- assert.equal(inicial.item.motivos.length,1,'sólo conserva la aprobación manual normal del flujo de servicios');
- const aprobado=await prepararCarlos(CAP,new Set([inicial.item.id]),{pago:p,reserva:r,tablas});
- assert.equal(aprobado.item.categoria,'pagos');assert.equal(aprobado.item.seleccionado,true);
- const serializados=Q.serializarIncorporacion(aprobado.plan),pagosServicio=serializados.filter(item=>item.tipo==='pago_servicios_4c');
+ assert.equal(inicial.item.categoria,'pagos');assert.equal(inicial.item.seleccionado,true);
+ assert.equal(inicial.item.motivos.length,0);
+ const serializados=Q.serializarIncorporacion(inicial.plan),pagosServicio=serializados.filter(item=>item.tipo==='pago_servicios_4c');
  assert.equal(pagosServicio.length,1);
  const [out]=pagosServicio,apps=out.datos_origen.aplicaciones_servicio_v1.aplicaciones;
  assert.equal(out.tipo,'pago_servicios_4c');assert.equal(out.argumentos.p_monto,95000);
@@ -140,6 +136,41 @@ test('Sara: un pago fuerte de 95000 prepara una distribución única de dos masa
  assert.deepEqual(apps.map(item=>[item.cargo_id,item.monto]),[['c1',50000],['c2',45000]]);
  const comp=await Q.compararSistema([r],cliente(tablas,{capacidad:CAP}),q);
  assert.equal(comp.serviciosDetalle.find(item=>item.servicio.concepto==='tinaja').estado,'faltante');
+});
+
+test('Freddy y Guillermo: pagos de servicio NUEVO_SEGURO se preparan una sola vez sin aprobación duplicada',async()=>{
+ const casos=[
+  {titular:'Freddy Peña',checkin:'2026-09-18',checkout:'2026-09-20',pagos:[
+   pago({monto:70000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000292',bovtar:'005706',fecha_bloque:'2026-09-18',fecha_comprobante:'2026-09-20',origen:{hoja:'Sep26',celda:'BS63:BV63'}}),
+   pago({monto:70000,concepto:'masajes',medio_pago:'debito',codigo_autorizacion:null,folio:'000293',bovtar:'001410',fecha_bloque:'2026-09-18',fecha_comprobante:'2026-09-20',origen:{hoja:'Sep26',celda:'BS64:BV64'}})
+  ],servicio:servicio('s1','Masaje Terapéutico 30 min','2026-09-19',140000),cargo:cargo('c1','s1','Masaje Terapéutico 30 min',140000)},
+  {titular:'Guillermo Lastra',checkin:'2026-09-17',checkout:'2026-09-19',pagos:[
+   pago({monto:30000,concepto:'tinaja',medio_pago:'debito',codigo_autorizacion:null,folio:'000290',bovtar:'541195',fecha_bloque:'2026-09-17',fecha_comprobante:'2026-09-19',origen:{hoja:'Sep26',celda:'BO74:BR74'}})
+  ],servicio:servicio('s2','Tinaja Tonel','2026-09-17',30000),cargo:cargo('c2','s2','Tinaja Tonel',30000)}
+ ];
+ for(const caso of casos){
+  const r=reserva(caso.pagos[0]);r.titular=caso.titular;r.fecha_checkin=caso.checkin;r.fecha_checkout=caso.checkout;r.pagos=caso.pagos;
+  const tablas=tablasCarlos(r,{servicios:[caso.servicio],vista_estado_cargos:[caso.cargo]});
+  const db=cliente(tablas,{capacidad:CAP}),comparacion=await Q.compararSistema([r],db,q);
+  assert.equal(comparacion.pagosDetalle.filter(item=>item.estado==='nuevo_seguro').length,caso.pagos.length,caso.titular);
+  const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+  const items=plan.items.filter(item=>caso.pagos.includes(item.pagoLibro));
+  assert.equal(items.length,caso.pagos.length,caso.titular);
+  assert.ok(items.every(item=>item.categoria==='pagos'&&item.seleccionado&&item.motivos.length===0),caso.titular);
+  assert.equal(new Set(items.map(item=>item.id)).size,items.length,caso.titular);
+ }
+});
+
+test('un cambio de cargo o saldo entre comparación y preparación vuelve a revisión con motivo explícito',async()=>{
+ const p=pago(),r=reserva(p),tablas=tablasCarlos(r),db=cliente(tablas,{capacidad:CAP});
+ const comparacion=await Q.compararSistema([r],db,q);
+ assert.equal(comparacion.pagosDetalle[0].estado,'nuevo_seguro');
+ tablas.vista_estado_cargos=[cargo('c2','s1','Tinaja Tonel',30000)];
+ const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+ const item=plan.items.find(x=>x.pagoLibro===p);
+ assert.equal(item.categoria,'dudosos');assert.equal(item.seleccionado,false);
+ assert.match(item.motivos.join(' '),/cambió el destino financiero, cargo o saldo/i);
+ assert.equal(Q.serializarIncorporacion(plan).some(x=>x.tipo==='pago_servicios_4c'),false);
 });
 
 test('el pago fuerte de Sara ya existente se omite antes de distribuir cargos',async()=>{
@@ -207,8 +238,8 @@ test('confirma varios pagos protegidos en un lote y reanuda sin duplicar tras un
  const result={reservas:[r],q};
  const inicial=await Q.prepararIncorporacion(result,new Map(),new Set(),db);
  const revisables=inicial.items.filter(item=>item.pagoLibro===primero||item.pagoLibro===segundo);
- assert.equal(revisables.length,2);assert.ok(revisables.every(item=>item.aprobable===true));
- const aprobados=new Set(revisables.map(item=>item.id));
+ assert.equal(revisables.length,2);assert.ok(revisables.every(item=>item.categoria==='pagos'&&item.seleccionado));
+ const aprobados=new Set();
  const plan=await Q.prepararIncorporacion(result,new Map(),aprobados,db);
  assert.equal(Q.serializarIncorporacion(plan).filter(item=>item.tipo==='pago_servicios_4c').length,2);
 

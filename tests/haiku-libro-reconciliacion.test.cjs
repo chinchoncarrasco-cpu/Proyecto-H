@@ -309,7 +309,7 @@ test('two candidates and duplicate book rows stay ambiguous; cancelled stays are
  assert.equal((await compare([book(),book({id:'copy'})],[stay()])).meta.asociadas,0);
  assert.equal((await compare([book()],[stay(book(),{estado_estadia:'cancelada'})]))[0].estado,'sin_coincidencia');
 });
-const pay=(extra={})=>({codigo_autorizacion:'AUTH-123',monto:100000,moneda:'CLP',tipo_movimiento:'alojamiento',origen:{hoja:'Sep26',celda:'O27:R27'},...extra});
+const pay=(extra={})=>({codigo_autorizacion:'AUTH-123',monto:100000,moneda:'CLP',medio_pago:'webpay_credito',tipo_movimiento:'alojamiento',origen:{hoja:'Sep26',celda:'O27:R27'},...extra});
 test('safe new payment, existing payment and identifier attached elsewhere',async()=>{
  const r=book({pagos:[pay()]});
  assert.equal((await compare([r],[stay()])).pagosDetalle[0].estado,'nuevo_seguro');
@@ -1095,6 +1095,7 @@ test('comparison decisions preserve existing, different, review and genuinely ne
    monto:scenario==='different'?p.monto+1000:p.monto};
   const comp=await compare([r],[stay(r)],scenario==='new'?[]:[existing]);
   assert.equal(comp.pagosDetalle[0].estado,{existing:'en_sistema',different:'diferente',review:'revisar',new:'nuevo_seguro'}[scenario]);
+  assert.equal(comp.pagosDetalle[0].resolucionPago.estado,{existing:'EXISTENTE_SEGURO',different:'CONFLICTO',review:'AMBIGUO',new:'NUEVO_SEGURO'}[scenario]);
   const plan=Q.crearPlanIncorporacion([r],comp),item=plan.items.find(i=>i.pagoLibro===p);
   assert.equal(item.categoria,{existing:'omitidos',different:'actualizaciones',review:'dudosos',new:'pagos'}[scenario]);
   if(scenario==='existing') {
@@ -1320,6 +1321,19 @@ test('wrong checkin block, pending money and unknown webpay subtype stay blocked
  for(const extra of [{fecha_bloque:'2026-09-18'},{pago_recibido:null,estado_pago:'pendiente'},{medio_pago:'webpay'}]) {
  const p=await prepare([readyBook({pagos:[readyPay(extra)]})]);assert.equal(p.items.find(i=>i.id.startsWith('pago:')).categoria,'dudosos');
  }
+});
+test('Diego con Folio y BOVTAR pero sin crédito/débito es AMBIGUO desde la comparación',async()=>{
+ const pagoDiego=readyPay({medio_pago:null,codigo_autorizacion:null,folio:'000289',bovtar:'000110',monto:160000,
+  fecha_bloque:'2026-09-18',fecha_comprobante:'2026-09-18',origen:{hoja:'Sep26',celda:'BS52:BV52'},
+  texto_original:'Diego Lizama // Bovtar:000110 - Folio:000289'});
+ const reservaDiego=readyBook({titular:'Diego Lizama',cabana:6,fecha_checkin:'2026-09-18',fecha_checkout:'2026-09-20',pagos:[pagoDiego]});
+ const db=client([stay(reservaDiego)]),comparacion=await Q.compararSistema([reservaDiego],db,q);
+ assert.equal(comparacion.pagosDetalle[0].resolucionPago.estado,'AMBIGUO');
+ assert.equal(comparacion.pagosDetalle[0].estado,'revisar');
+ const plan=await Q.prepararIncorporacion({reservas:[reservaDiego],q,comparacion},new Map(),new Set(),db);
+ const item=plan.items.find(i=>i.pagoLibro===pagoDiego);
+ assert.equal(item.categoria,'dudosos');assert.equal(item.seleccionado,false);
+ assert.match(item.motivos.join(' '),/Falta precisar el medio de pago/i);
 });
 test('manual approval allows a weak identifier only after explicit review and cannot bypass missing data',async()=>{
  const rs=[readyBook({pagos:[readyPay({codigo_autorizacion:null})]})],p=await prepare(rs),item=p.items.find(i=>i.categoria==='dudosos');assert.equal(item.aprobable,true);

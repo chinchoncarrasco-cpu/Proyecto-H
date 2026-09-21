@@ -1469,7 +1469,8 @@
         for (const item of items.filter(item=>!resoluciones.has(item.p))) {
             if (item.result.estado !== 'asociada' || !item.result.sistema?.reserva_id) {
                 resolver(item,estados.AMBIGUO,null,'sin_destino',['Primero debe resolverse la reserva destino.']);
-            } else if (item.asociado && pagoTieneIdentificadorFuerte(item.p) && item.p.clasificacion_financiera !== 'dudoso' && item.p.tipo_movimiento !== 'penalidad' &&
+            } else if (item.asociado && pagoTieneIdentificadorFuerte(item.p) && medioLibro(item.p) &&
+                item.p.clasificacion_financiera !== 'dudoso' && item.p.tipo_movimiento !== 'penalidad' &&
                 item.p.pago_recibido !== false && !/pendiente|por.confirmar|rechazad|anulad/.test(S.normalizar(item.p.estado_pago)) &&
                 Number.isSafeInteger(Number(item.p.monto)) && Number(item.p.monto) > 0) {
                 resolver(item,estados.NUEVO_SEGURO,null,'identificador_nuevo');
@@ -2475,6 +2476,27 @@
         const distribuciones = distribucionesManuales(comp, destinosFinancieros);
         const comprobantesDistribuidosRevisados = new Set();
         const vistos = [];
+        const claveMovimientoRevalidado = movimiento => [source(movimiento?.pago?.origen),
+            huellaFuentePago(movimiento?.pago, {cabana:movimiento?.reserva?.cabana})].join('|');
+        const movimientosAnteriores = new Map((anterior?.pagosDetalle || [])
+            .map(movimiento => [claveMovimientoRevalidado(movimiento), movimiento]));
+        const firmaDestinoRevalidado = (movimiento, comparacion, destinoActual = null) => {
+            if (!movimiento) return null;
+            const resultado = Array.from(comparacion || []).find(item =>
+                claveReserva(item.libro) === claveReserva(movimiento.reserva));
+            const financiero = movimiento.destinoFinanciero || null;
+            const aplicaciones = financiero?.aplicaciones_payload || financiero?.aplicaciones || [];
+            return JSON.stringify({
+                reserva_id:destinoActual?.reserva_id || movimiento.reserva_sistema_id || resultado?.sistema?.reserva_id || null,
+                estado:financiero?.estado || null,
+                aplicaciones:aplicaciones.map(aplicacion => [
+                    aplicacion.cargo_id || aplicacion.cargo?.cargo_id || null,
+                    Number(aplicacion.monto) || 0,
+                    Number(aplicacion.saldo_esperado ?? aplicacion.cargo?.saldo_cargo) || 0,
+                    Number(aplicacion.aplicado_esperado ?? aplicacion.cargo?.aplicado_neto) || 0
+                ]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+            });
+        };
         for (const x of comp.pagosDetalle || []) {
             const p = x.pago, r = x.reserva, destino = destinosFinancieros.get(claveReserva(r));
             const id = idMovimientoIncorporacion(x);
@@ -2604,9 +2626,14 @@
             const medio = medioLibro(p);
             if (!medio) motivos.push('Falta precisar el medio de pago (Webpay crédito o débito, si corresponde).');
             const asociadoLibro = r.pagos.includes(p);
-            const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) && (x.estado === 'nuevo_seguro' || destino?.reserva_ref);
+            // La revalidación canónica ya decidió si el movimiento sigue siendo
+            // nuevo y seguro. Preparación comprueba que el payload todavía sea
+            // construible, pero no vuelve a exigir una aprobación intermedia.
+            const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO;
+            const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) &&
+                (nuevoSeguroCanonico || Boolean(destino?.reserva_ref));
             const manual = aprobados.has(id);
-            if (servicio4C && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
+            if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             const mismoMontoSinIdentificador = !fuerte && (
                 snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda)) ||
                 vistos.some(v => v.destino === destinoActual && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda)
@@ -2614,8 +2641,17 @@
             if (mismoMontoSinIdentificador && !manual) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
             if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');
             if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
+            const movimientoAnterior = movimientosAnteriores.get(claveMovimientoRevalidado(x));
+            if (nuevoSeguroCanonico && movimientoAnterior?.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO &&
+                firmaDestinoRevalidado(movimientoAnterior, anterior) !== firmaDestinoRevalidado(x, comp, destino)) {
+                motivos.push('Proyecto H cambió el destino financiero, cargo o saldo desde la comparación; vuelve a revisar este pago.');
+            }
             const payloadServicio = servicio4C ?
-                payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas, manual) : null;
+                // El backend 4C conserva su guardia `p_manual`; para un
+                // NUEVO_SEGURO la confirmación final del plan satisface esa
+                // guardia sin agregar un segundo botón de aprobación.
+                payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas,
+                    manual || nuevoSeguroCanonico) : null;
             if (servicio4C && !payloadServicio) motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
             const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: p.texto_original || null,
