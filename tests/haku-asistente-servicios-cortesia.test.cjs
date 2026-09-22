@@ -124,7 +124,7 @@ test('dos servicios con titular normalizado igual conservan la ambigüedad',asyn
 });
 
 test('Hernan encontrado con pago aplicado queda bloqueado sin confirmar ni llamar al RPC',async()=>{
- const cliente=clienteLectura(datosServicio('Hernan Guzmán',{cabana:8,servicio:{fecha_servicio:'2026-09-13',hora_inicio:'19:15:00'}}));
+ const cliente=clienteLectura(datosServicio('Hernán Guzmán',{cabana:8,servicio:{fecha_servicio:'2026-09-13',hora_inicio:'19:15:00'}}));
  let llamadasRpc=0;cliente.rpc=async()=>{llamadasRpc++;throw Error('No debe ejecutarse');};
  const pagado=finanzas({
   estados:[{...finanzas().estados[0],aplicado_neto:30000,saldo_cargo:0,estado_pago:'pagado'}],
@@ -136,7 +136,10 @@ test('Hernan encontrado con pago aplicado queda bloqueado sin confirmar ni llama
  assert.equal(p.estado,'bloqueada');assert.equal(p.candidato.id,'s1');
  assert.match(p.elegibilidad.razones.join(' '),/aplicaciones de pago históricas/i);
  assert.match(p.elegibilidad.razones.join(' '),/cargo activo no coincide/i);
- assert.doesNotMatch(A.renderizar(p),/data-servicio-cortesia-confirmar/);
+ const vista=A.renderizar(p);
+ for(const texto of ['Hernán Guzmán · CAB 8','Tinaja Tonel de Madera','13-09-2026 · 19:15','Requiere revisión','Pago aplicado','Estado financiero','Existen aplicaciones de pago históricas.','El cargo activo no coincide con el total pendiente del servicio.','Revisión manual necesaria'])assert.ok(vista.includes(texto),texto);
+ assert.match(vista,/haku-servicio-cortesia--bloqueada/);
+ assert.doesNotMatch(vista,/data-servicio-cortesia-confirmar/);
  assert.equal((await A.confirmar(p,'No debe cambiarse')).estado,'bloqueada');
  assert.equal(llamadasRpc,0);
 });

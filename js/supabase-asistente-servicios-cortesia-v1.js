@@ -332,6 +332,29 @@
  function renderizar(p){
   if(p.estado==='multiples')return `<article class="haku-servicio-cortesia"><h3>Servicios coincidentes</h3><p>${esc(p.mensaje)}</p><ol>${p.candidatos.map(c=>`<li>${esc(resumen(c))}</li>`).join('')}</ol><p>No elegí ninguno automáticamente.</p></article>`;
   if(p.estado==='obsoleta')return `<article class="haku-servicio-cortesia"><p>${esc(p.mensaje)}</p></article>${renderizar(p.nueva)}`;
+  if(p.estado==='bloqueada'&&p.candidato&&p.elegibilidad?.razones?.length){
+   const c=p.candidato,razones=p.elegibilidad.razones;
+   const titular=[c.reserva?.titular_nombre,c.cabana_numero!=null?`CAB ${c.cabana_numero}`:null].filter(Boolean).join(' · ');
+   const fechaHora=[c.fecha_servicio?fechaVisible(c.fecha_servicio):null,cortoHora(c.hora_inicio)].filter(Boolean).join(' · ');
+   const etiquetas={
+    'Existen aplicaciones de pago históricas.':'Pago aplicado',
+    'Existen ajustes históricos.':'Ajustes financieros',
+    'El cargo activo no coincide con el total pendiente del servicio.':'Estado financiero',
+    'Debe existir exactamente un cargo activo.':'Cargo del servicio',
+    'Existen cargos relacionados incoherentes.':'Cargos relacionados',
+    'El estado operativo requiere revisión.':'Estado del servicio',
+    'El catálogo está inactivo.':'Tipo de servicio',
+    'El catálogo no permite cortesía.':'Tipo de servicio',
+    'El servicio no es un cobro normal positivo.':'Tipo de cobro',
+    'El servicio figura como cortesía, pero sus finanzas no son coherentes.':'Estado financiero'
+   };
+   const tieneHistorial=razones.some(x=>x==='Existen aplicaciones de pago históricas.'||x==='Existen ajustes históricos.');
+   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada">
+    <header class="haku-servicio-cortesia-cabecera"><div class="haku-servicio-cortesia-estado"><span class="haku-servicio-cortesia-sello">Cambio de servicio</span><span class="haku-servicio-cortesia-etiqueta">Requiere revisión</span></div>${titular?`<strong class="haku-servicio-cortesia-titular">${esc(titular)}</strong>`:''}${c.catalogo?.nombre?`<span class="haku-servicio-cortesia-nombre">${esc(c.catalogo.nombre)}</span>`:''}${fechaHora?`<span class="haku-servicio-cortesia-fecha">${esc(fechaHora)}</span>`:''}</header>
+    <p class="haku-servicio-cortesia-intro">${tieneHistorial?'No puedo realizar este cambio automáticamente porque el servicio tiene historial financiero asociado.':'No puedo realizar este cambio automáticamente. El servicio requiere revisión.'}</p>
+    <section class="haku-servicio-cortesia-motivos" aria-label="Motivos de revisión"><h3>Motivos</h3><ul>${razones.map(x=>`<li><strong>${esc(etiquetas[x]||'Revisión requerida')}</strong><span>${esc(x)}</span></li>`).join('')}</ul></section>
+    <p class="haku-servicio-cortesia-cierre">Revisión manual necesaria</p></article>`;
+  }
   if(['no_encontrado','incompleta','bloqueada','already_courtesy','cancelada','revision_humana','sin_permiso'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><p>${esc(p.mensaje)}</p>${p.elegibilidad?.razones?.length?`<ul>${p.elegibilidad.razones.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}</article>`;
   if(p.estado==='simulada')return `<article class="haku-servicio-cortesia"><h3>Confirmación simulada</h3><p>${esc(p.mensaje)}</p><p>No se llamó a Supabase ni se modificó Proyecto H.</p><details><summary>Payload preparado</summary><pre>${esc(JSON.stringify({rpc:p.rpc,parametros:p.parametros},null,2))}</pre></details></article>`;
   if(p.estado==='realizado'){
@@ -360,6 +383,18 @@
    .haku-servicio-cortesia-cabecera{display:flex;flex-direction:column;gap:2px;padding-bottom:12px;border-bottom:1px solid #e7ede9}
    .haku-servicio-cortesia-sello{margin-bottom:6px;color:#24704e;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
    .haku-servicio-cortesia--realizado .haku-servicio-cortesia-sello{color:#1c6b42}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-estado{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-sello{margin:0;color:#65746a}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-etiqueta{padding:3px 8px;border:1px solid #ecd9b4;border-radius:999px;background:#fbf4e7;color:#805a22;font-size:10px;font-weight:700;white-space:nowrap}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-intro{margin:12px 0;color:#3e4c42}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos{padding-top:11px;border-top:1px solid #e7ede9}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos h3{margin:0 0 6px;color:#65746a;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos ul{list-style:none;margin:0;padding:0}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos li{display:grid;gap:2px;padding:8px 0}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos li+li{border-top:1px solid #eef1ee}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos li strong{color:#334139;font-size:11px}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-motivos li span{color:#59675d;font-size:11px}
+   .haku-servicio-cortesia--bloqueada .haku-servicio-cortesia-cierre{margin:10px 0 0;padding-top:10px;border-top:1px solid #e7ede9;color:#805a22;font-size:11px;font-weight:700}
    .haku-servicio-cortesia-titular{color:#17251d;font-size:15px;line-height:1.25}
    .haku-servicio-cortesia-nombre{color:#334139;font-size:13px;font-weight:650}
    .haku-servicio-cortesia-fecha{color:#65746a;font-size:12px}
