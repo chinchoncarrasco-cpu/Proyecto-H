@@ -159,13 +159,21 @@
 
     function horasDeServicio(texto) {
         const sinFechas = normalizar(texto).replace(/\b\d{1,2}[-/]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/g, " ");
-        const horas = [];
+        const horas = [], rangosMinuto = [];
         const agregar = (h, m = "00") => {
             const hora = Number(h), minuto = Number(m);
             if (hora <= 23 && minuto <= 59) horas.push(`${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`);
         };
-        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*[:.,]\s*([0-5]\d)\b/g)) agregar(m[1], m[2]);
-        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*(?:hrs?|h)\b/g)) agregar(m[1]);
+        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*[:.,]\s*([0-5]\d)\b/g)) {
+            rangosMinuto.push([m.index, m.index + m[0].length]);
+            agregar(m[1], m[2]);
+        }
+        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*(?:hrs?|h)\b/g)) {
+            // "19.15 HRS" es una sola hora. El segundo patrón también veía
+            // "15 HRS" dentro del minuto y lo convertía en un fin 15:00.
+            if (rangosMinuto.some(([inicio, fin]) => m.index >= inicio && m.index < fin)) continue;
+            agregar(m[1]);
+        }
         for (const m of sinFechas.matchAll(/\b(\d{1,2})\s*(am|pm)\b/g)) {
             let h = Number(m[1]) % 12; if (m[2] === "pm") h += 12; agregar(h);
         }

@@ -425,9 +425,12 @@
         const mins = minutosHora(hora);
         if ((normalizar(reserva.tipo_estadia) === "full_day" || reserva.fecha_checkin === reserva.fecha_checkout) && Number.isInteger(mins) && (mins < 570 || mins > 1290)) razones.push("El horario queda fuera del Full Day (09:30–21:30).");
 
-        let personas = mapa.requierePersonas ? personasTexto(servicio.texto_original) : (mapa.codigo?.startsWith("masaje") ? 1 : 0);
+        const personasExplicitas = mapa.requierePersonas ? personasTexto(servicio.texto_original) : null;
+        let personas = mapa.requierePersonas ? personasExplicitas : (mapa.codigo?.startsWith("masaje") ? 1 : 0);
+        let provenienciaPersonas = Number.isInteger(personasExplicitas) ? "EXPLICITO" : "AUSENTE";
         if (mapa.requierePersonas && !Number.isInteger(personas) && Number.isInteger(reserva?.adultos) && reserva.adultos > 0) {
             personas = reserva.adultos;
+            provenienciaPersonas = "INFERIDO";
             inferencias.push(`Personas inferidas desde la ocupación de la reserva: ${reserva.adultos} adulto${reserva.adultos === 1 ? "" : "s"}.`);
         }
         if (mapa.requierePersonas && !Number.isInteger(personas)) razones.push("Falta indicar cuántas personas usarán la tinaja y la reserva no permite inferirlo.");
@@ -445,10 +448,23 @@
         const clasificacion = completitud === "COMPLETO" ? "servicio_confirmado" : "servicio_por_confirmar";
         const puedePreparar = completitud === "COMPLETO" && ["cobrable", "cortesia"].includes(intencion_cobro) &&
             asociacion.estado === "asociada" && mapa.codigo && fecha;
+        const proveniencia = Object.freeze({
+            concepto: mapa.codigo ? "EXPLICITO" : "AUSENTE",
+            fecha: fechaDeclarada ? "EXPLICITO" : fecha ? "INFERIDA_SEGURA" : "AUSENTE",
+            hora_inicio: hora ? "EXPLICITO" : "AUSENTE",
+            hora_fin: hora_fin ? "EXPLICITO" : "AUSENTE",
+            personas: provenienciaPersonas,
+            cantidad: /\bx\s*\d+\b|\b\d+\s*(?:servicios?|tinajas?|jacuzzis?|toneles?|masajes?|camas?|cunas?)\b/.test(normalizar(servicio?.texto_original))
+                ? "EXPLICITO" : Number.isInteger(servicio?.cantidad) ? "INFERIDO" : "AUSENTE",
+            tipo_cobro: ["cobrable", "cortesia"].includes(intencion_cobro) || servicio?.pendiente === true ||
+                servicio?.cortesia === true || servicio?.evidencia_origen?.pendiente_pago === true ||
+                servicio?.evidencia_origen?.cortesia === true ? "EXPLICITO" : "AUSENTE",
+            monto: servicio?.monto != null && Number.isFinite(Number(servicio.monto)) ? "EXPLICITO" : "AUSENTE"
+        });
         return {
             kind: "servicio", semantica, completitud, clasificacion, intencion_operativa, intencion_cobro,
             evidencia_origen: servicio?.evidencia_origen || null,
-            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia,
+            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia, proveniencia,
             opcionesNoches, nocheManual,
             puedeElegirNoche: !fecha && !fechaInfo.conflicto && razonesUnicas.length === 1 && razonesUnicas[0].startsWith('Falta una fecha inequívoca') && opcionesNoches.length > 0,
             inferencias: [...new Set(inferencias)], razones: razonesUnicas,
@@ -541,21 +557,31 @@
         if (porOrigen.length === 1) return { estado: "existente", candidato: porOrigen[0], candidatos: porOrigen, motivo: "Mismo origen estable." };
         if (porOrigen.length > 1) return { estado: "revisar", candidato: null, candidatos: porOrigen, motivo: "El mismo origen identifica varios servicios activos." };
 
+        const esExplicito = campo => item?.proveniencia?.[campo]
+            ? item.proveniencia[campo] === "EXPLICITO"
+            : true;
+        const contradiccionesExplicitas = (candidato, horaFin) => {
+            const campos = [];
+            if (esExplicito("hora_fin") && horaFin && horaCorta(candidato.hora_fin) !== horaFin) campos.push("hora_fin");
+            if (esExplicito("personas") && Number.isInteger(item.personas) && item.personas > 0 &&
+                Number(candidato.personas) > 0 && Number(candidato.personas) !== item.personas) campos.push("personas");
+            if (esExplicito("monto") && item.servicio?.monto != null && candidato.total != null &&
+                Number.isFinite(Number(item.servicio.monto)) && Number(candidato.total) !== Number(item.servicio.monto)) campos.push("monto");
+            return campos;
+        };
         const codigos = codigosCompatibles(item), hora = horaCorta(item.hora), horaFin = horaCorta(item.hora_fin);
         if (codigos.size && item.fecha && hora) {
             const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) && x.fecha_servicio === item.fecha && horaCorta(x.hora_inicio) === hora);
-            const compatiblesOperativos = mismoHechoBase.filter(x => {
-                if (horaFin && horaCorta(x.hora_fin) !== horaFin) return false;
-                if (Number.isInteger(item.personas) && item.personas > 0 && Number(x.personas) > 0 && Number(x.personas) !== item.personas) return false;
-                if (Number(item.servicio?.monto) > 0 && Number(x.total) > 0 && Number(x.total) !== Number(item.servicio.monto)) return false;
-                return true;
-            });
+            const evaluados = mismoHechoBase.map(candidato => ({ candidato, contradicciones: contradiccionesExplicitas(candidato, horaFin) }));
+            const compatiblesOperativos = evaluados.filter(x => !x.contradicciones.length).map(x => x.candidato);
             if (mismoHechoBase.length && !compatiblesOperativos.length) {
-                return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, motivo: "Hay un servicio existente con la misma fecha y hora, pero su rango, personas o monto contradicen el Libro." };
+                const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
+                return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, contradicciones,
+                    motivo: `Hay un servicio existente con la misma fecha y hora, pero contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
             const textoOrigen = normalizar(item.servicio?.texto_original);
-            const cortesiaExplicita = Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
-            const cobroExplicito = Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
+            const cortesiaExplicita = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
+            const cobroExplicito = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
                 /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b/.test(textoOrigen));
             const compatibles = compatiblesOperativos.filter(x => {
                 if (cortesiaExplicita && x.tipo_cobro !== "cortesia") return false;
