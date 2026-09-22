@@ -107,6 +107,10 @@ test('explicit date and nights recover only an imperfect but corroborated merge'
  assert.equal(unaNoche.fecha_checkin,'2026-09-21');assert.equal(unaNoche.fecha_checkout,'2026-09-22');
  assert.deepEqual(unaNoche.fechas_ocupadas,['2026-09-21']);assert.deepEqual(unaNoche.advertencias,[]);
  assert.match(unaNoche.advertencias_informativas.join(' '),/geometría.*texto explícito/i);
+ assert.equal(unaNoche.servicios.some(x=>x.concepto==='cama_adicional'),false);
+ const camaNota=unaNoche.menciones_servicio.find(x=>x.concepto==='cama_adicional');
+ assert.equal(camaNota.texto_original,'CAMA ADICIONAL');assert.equal(camaNota.clasificacion,'nota');
+ assert.equal(camaNota.evidencia_origen.origen_campo,'notas_reserva');assert.equal(camaNota.intencion_operativa,false);
 
  const dosNoches=leer(texto('21.09.2026',2),7);
  assert.equal(dosNoches.geometria_resuelta_texto,true);assert.equal(dosNoches.fecha_checkout,'2026-09-23');
@@ -142,14 +146,22 @@ test('incomplete merge and nonconsecutive calendar remain blocking geometry warn
 });
 test('informational or unconfirmed service questions do not become services',()=>{
  for(const nota of [
+  'CAMAADICIONAL',
+  'Consultó por cama adicional',
+  'Cama adicional si es posible',
   'Consultó cómo era el sistema de tinajas.',
   'Se le explicó cómo funciona la tinaja, no confirmó.',
   'Preguntó por jacuzzi pero no reservó.',
+  'Le interesaba masaje.',
+  'Cotizó jacuzzi.',
+  'Tinaja si es posible.',
   'Consultó valor de masaje, no hubo respuesta.',
   'Consultó por tinaja, pendiente respuesta.'
  ]){
   const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
   assert.ok(r,nota);assert.deepEqual(r.servicios,[],nota);
+  assert.equal(r.menciones_servicio.length,1,nota);assert.equal(r.menciones_servicio[0].clasificacion,'nota',nota);
+  assert.equal(r.menciones_servicio[0].intencion_operativa,false,nota);
  }
 });
 test('structured and explicit service evidence remains operational for every existing concept',()=>{
@@ -166,7 +178,40 @@ test('structured and explicit service evidence remains operational for every exi
  const pendiente=S.normalizarHoja(hojaDosNoches('Persona Prueba // 2 noches // Tinaja x pagar'),'Sep26').reservas[0].servicios[0];
  assert.equal(pendiente.pendiente,true);
  const repetido=S.normalizarHoja(hojaDosNoches('Persona Prueba // 2 noches // CAMA ADICIONAL; CAMA ADICIONAL'),'Sep26').reservas[0];
- assert.equal(repetido.servicios.length,1);
+ assert.equal(repetido.servicios.length,0);assert.equal(repetido.menciones_servicio.length,1);
+});
+test('service parsing keeps operational classification separate from payment intent',()=>{
+ const reserva=nota=>S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
+ const parse=nota=>reserva(nota).servicios;
+ for(const nota of ['Cama adicional','  CUNA  ','Tinaja']){
+  const r=reserva(nota);assert.equal(r.servicios.length,0,nota);assert.equal(r.menciones_servicio[0].clasificacion,'nota',nota);
+ }
+ for(const nota of ['Solicita cama adicional','Preparar cama adicional','Jacuzzi por coordinar']){
+  const [item]=parse(nota);assert.ok(item,nota);assert.equal(item.clasificacion,'servicio_por_confirmar',nota);
+  assert.equal(item.intencion_cobro,'no_determinada',nota);
+  assert.equal(item.intencion_operativa,true,nota);
+ }
+ const [ambiguo]=parse('TONEL POR CONFIRMAR');
+ assert.equal(ambiguo.semantica,'AMBIGUO');assert.equal(ambiguo.intencion_operativa,false);assert.equal(ambiguo.clasificacion,'servicio_por_confirmar');
+ const [campoServicios]=S.servicios('Cama adicional',{origen_campo:'servicios'});
+ assert.equal(campoServicios.clasificacion,'servicio_por_confirmar');assert.equal(campoServicios.intencion_operativa,true);
+ assert.equal(campoServicios.evidencia_origen.origen_campo,'servicios');
+ for(const nota of ['Masaje 16:00 confirmado','Late Check-out 13:00 confirmado']){
+  const [item]=parse(nota);assert.ok(item,nota);assert.equal(item.clasificacion,'servicio_confirmado',nota);
+  assert.equal(item.intencion_cobro,'no_determinada',nota);
+ }
+ for(const nota of ['Jacuzzi por coordinar por cobrar','Jacuzzi por coordinar POR PAGAR','Jacuzzi por coordinar pendiente de pago',
+  'Jacuzzi por coordinar pendiente por pagar','Jacuzzi por coordinar pago pendiente']){
+  const [item]=parse(nota);assert.equal(item.clasificacion,'servicio_por_confirmar',nota);
+  assert.equal(item.intencion_cobro,'cobrable',nota);assert.equal(item.pendiente,true,nota);
+  assert.equal(item.evidencia_origen.pendiente_pago,true,nota);
+ }
+ const [cortesia]=parse('Jacuzzi de CORTESÍA por coordinar');
+ assert.equal(cortesia.clasificacion,'servicio_por_confirmar');assert.equal(cortesia.intencion_cobro,'cortesia');assert.equal(cortesia.cortesia,true);
+ const [rango]=parse('dejar batas tinaja de 17:45 a 18:45');
+ assert.equal(rango.hora,'17:45');assert.equal(rango.hora_fin,'18:45');assert.equal(rango.intencion_operativa,true);
+ const [conFecha]=parse('tinaja 17:45 el 12.09.2026');
+ assert.equal(conFecha.hora,'17:45');assert.equal(conFecha.hora_fin,null);
 });
 test('valid dates, range, month and unknown dates',()=>{
  const q=Q.interpretar('Libro CAB 6 del 11 al 13 de septiembre de 2026',['Sep26']);assert.equal(q.desde,'2026-09-11');assert.equal(q.hasta,'2026-09-13');assert.equal(q.cabana,6);

@@ -85,12 +85,12 @@ test('la huella operativa es estable y no depende del orden de ejecución', () =
 });
 
 test('el concepto segmentado Late Check-out no vuelve a mapearse como Jacuzzi por texto mezclado', () => {
-    const context = { document: {}, addEventListener() {} };
+    const context = { document: {}, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js') };
     vm.createContext(context);
     const source = fs.readFileSync(path.join(__dirname, '../js/haiku-libro-servicios-scope-v2.js'), 'utf8');
     vm.runInContext(source.replace('const api = Object.freeze({', 'const api = Object.freeze({prepararServicio, claveServicio,'), context);
     const reservaLibro = { titular: 'Alejandro Ramos Donaire', cabana: 2, fecha_checkin: '2026-09-05', fecha_checkout: '2026-09-06', noches: 1, adultos: 2, tipo_estadia: 'alojamiento' };
-    const servicioLibro = { concepto: 'lateout', texto_original: 'Jacuzzi a las 22,15 sáb 05-09 x pagar late check out hasta las 14:00 x pagar', hora: '22:15' };
+    const servicioLibro = { concepto: 'lateout', texto_original: 'Jacuzzi a las 22,15 sáb 05-09 x pagar late check out hasta las 14:00 x pagar', hora: '22:15', semantica: 'SERVICIO_REAL', intencion_cobro: 'cobrable' };
     const item = context.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararServicio(
         reservaLibro,
         servicioLibro,

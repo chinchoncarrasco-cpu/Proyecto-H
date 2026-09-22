@@ -6,7 +6,7 @@ const textoYenny = 'TÓNEL A LAS 19:15 X PAGAR / CAB 6 YA ENTREGO SUS BATAS A RE
 function entorno() {
     const r = { titular: 'Yenny Acuña Berrios', cabana: 6, fecha_checkin: '2026-09-04', fecha_checkout: '2026-09-06', noches: 2, adultos: 2,
         tipo_estadia: 'alojamiento', texto_original: textoYenny, coordenadas_origen: { hoja: 'Sep26', celda: 'O8' },
-        servicios: [{ concepto: 'tonel', texto_original: textoYenny, hora: '19:15' }] };
+        servicios: [{ concepto: 'tonel', texto_original: textoYenny, hora: '19:15', semantica: 'SERVICIO_REAL' }] };
     const db = { reserva_estadias: [{ id: 'e1', reserva_id: 'r1', cabana_id: 'c6', fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout }],
         reservas: [{ id: 'r1', titular_nombre: r.titular }], cabanas: [{ id: 'c6', numero: 6 }], servicios: [], notas: [] };
     const state = { r, db, generacion: 1, calls: [], lecturas: 0, confirmar: false, rpcResult: null };
@@ -47,7 +47,7 @@ function entorno() {
     }
     const captures = [], document = { createElement: t => new Element(t), getElementById: () => null, head: new Element('head'),
         addEventListener: (type, fn, capture) => captures.push({ type, fn, capture }), querySelectorAll: selector => document.card?.querySelectorAll(selector) || [] };
-    const c = { document, queueMicrotask, addEventListener() {}, confirm: () => { state.calls.push('confirm'); return state.confirmar; },
+    const c = { document, queueMicrotask, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js'), confirm: () => { state.calls.push('confirm'); return state.confirmar; },
         HAIKU_LIBRO_RESERVA_V1: { listo: async () => {}, estado: () => ({ cargado: true, nombre: 'fixture.xlsx', generacion: state.generacion }),
             listarHojas: () => ['Sep26'], consultarHoja: async () => { state.lecturas++; return { reservas: [copy(r)] }; } },
         haikuSupabase: { from: tabla => { const q = { select: () => q, lte: () => q, gte: () => q, in: () => q, eq: () => q,
@@ -73,7 +73,7 @@ function entorno() {
 const consulta = 'incorpora servicios del Libro septiembre 2026';
 const consultaComparacion = 'Libro: compara servicios de septiembre 2026 con Proyecto H';
 const asociacion = { estado: 'asociada', sistema: { reserva_id: 'r1', id: 'e1' } };
-function preparar(e, texto, extra = {}) { return e.api.prepararServicio(e.r, { concepto: 'jacuzzi', texto_original: texto, hora: '19:15', ...extra }, asociacion); }
+function preparar(e, texto, extra = {}) { return e.api.prepararServicio(e.r, { concepto: 'jacuzzi', texto_original: texto, hora: '19:15', semantica: 'SERVICIO_REAL', ...extra }, asociacion); }
 async function elegir(e) {
     const result = await e.api.construir(consulta), item = result.items.find(x => x.kind === 'servicio');
     const overrides = new Map([[item.item_id, { noche_indice: 2, firma: item.firmaNoche }]]);
@@ -143,12 +143,87 @@ test('existing service is omitted after choice, and its existing marker works in
 test('additional safety issues suppress the selector; operational notes stay notes', async () => {
     for (const change of [e => { e.r.servicios[0].hora = null; e.r.servicios[0].texto_original = 'tonel'; },
         e => e.r.adultos = null, e => e.r.adultos = 9, e => { e.r.servicios[0].concepto = 'desconocido'; e.r.servicios[0].texto_original = 'servicio sin tipo'; },
-        e => e.r.servicios[0].hora = '29:15', e => e.r.servicios[0].cortesia = true, e => e.db.reservas[0].titular_nombre = 'Otra Persona']) {
+        e => e.r.servicios[0].hora = '29:15', e => e.db.reservas[0].titular_nombre = 'Otra Persona']) {
         const e = entorno(); change(e); const item = (await e.api.construir(consulta)).items.find(x => x.kind === 'servicio');
         assert.equal(item.puedeElegirNoche, false);
     }
     const e = entorno(); e.r.texto_original = 'Dejar batas en cabaña';
     assert.ok((await e.api.construir(consulta)).items.some(x => x.kind === 'nota' && x.texto === 'Dejar batas en cabaña'));
+});
+
+test('a service pending confirmation is visible, unselectable and cannot reach the writer', async () => {
+    const e = entorno();
+    e.r.texto_original = 'CAMA ADICIONAL';
+    e.r.servicios = [{ concepto: 'cama_adicional', texto_original: 'CAMA ADICIONAL', origen_campo: 'servicios', intencion_operativa: true,
+        clasificacion: 'servicio_por_confirmar', intencion_cobro: 'no_determinada' }];
+    const result = await e.api.construir(consulta), item = result.items.find(x => x.kind === 'servicio');
+    assert.equal(item.clasificacion, 'servicio_por_confirmar');assert.equal(item.estado, 'revisar');assert.equal(item.payload, null);
+    assert.equal(result.items.some(x => x.kind === 'nota' && x.texto === 'CAMA ADICIONAL'), false);
+    const seleccionados = new Set(), fila = e.api.crearItem(item, seleccionados);
+    assert.equal(fila.children[0].disabled, true);assert.equal(seleccionados.size, 0);
+    await assert.rejects(e.api.importarSeleccionados(new Set([item.item_id]), new e.Element('div'), consulta), /cambiaron/);
+    assert.deepEqual(e.calls, []);
+});
+
+test('Catalina bare CAMAADICIONAL from reservation notes remains one Note and never a Service', async () => {
+    const e = entorno();
+    e.r.texto_original = 'CAMAADICIONAL';
+    e.r.servicios = [];
+    e.r.menciones_servicio = [{ concepto: 'cama_adicional', texto_original: 'CAMAADICIONAL', origen_campo: 'notas_reserva',
+        intencion_operativa: false, clasificacion: 'nota', intencion_cobro: 'no_determinada',
+        evidencia_origen: { origen_campo: 'notas_reserva', intencion_operativa: false } }];
+    const result = await e.api.construir(consulta);
+    const notas = result.items.filter(x => x.kind === 'nota' && x.texto === 'CAMAADICIONAL');
+    assert.equal(notas.length, 1);
+    assert.equal(notas[0].clasificacion, 'nota');assert.equal(notas[0].estado, 'listo');
+    assert.equal(result.items.some(x => x.kind === 'servicio' && x.servicio?.texto_original === 'CAMAADICIONAL'), false);
+});
+
+test('Sara generic tinaja resolves one existing courtesy only after inferring its one-night date', async () => {
+    const configurar = () => {
+        const e = entorno();
+        e.r.titular = 'Sara Bertrand';e.r.fecha_checkin = '2026-09-04';e.r.fecha_checkout = '2026-09-05';e.r.noches = 1;e.r.adultos = 2;
+        e.r.texto_original = 'dejar batas tinaja de 17:45 a 18:45';
+        e.r.servicios = [{ concepto: 'tinaja', texto_original: e.r.texto_original, hora: '17:45', hora_fin: '18:45',
+            clasificacion: 'servicio_por_confirmar', intencion_cobro: 'no_determinada' }];
+        e.db.reserva_estadias[0].fecha_ingreso = e.r.fecha_checkin;e.db.reserva_estadias[0].fecha_salida = e.r.fecha_checkout;
+        e.db.reservas[0].titular_nombre = e.r.titular;
+        return e;
+    };
+    const existente = { id: 'tinaja-sara', reserva_id: 'r1', estadia_id: 'e1', fecha_servicio: '2026-09-04',
+        hora_inicio: '17:45:00', hora_fin: '18:45:00', personas: 2, tipo_cobro: 'cortesia', estado_servicio: 'programado',
+        catalogo_servicios: { codigo: 'tinajaJacuzzi', nombre: 'Tinaja Jacuzzi' } };
+
+    const e = configurar();e.db.servicios.push(existente);
+    const item = (await e.api.construir(consulta)).items.find(x => x.kind === 'servicio');
+    assert.equal(item.fecha, '2026-09-04');assert.equal(item.estado, 'existente');assert.equal(item.decision_identidad, 'existente');
+    assert.equal(item.mapa.codigo, 'tinajaJacuzzi');assert.equal(item.intencion_cobro, 'cortesia');assert.equal(item.cortesia, true);
+    assert.equal(item.payload, null);assert.equal(item.razones.length, 0);
+    const fila = e.api.crearItem(item, new Set()), all = el => [el, ...el.children.flatMap(all)];
+    assert.ok(all(fila).some(x => /Ya existe en Proyecto H.*cortesía.*omitido/.test(x.textContent)));
+    await assert.rejects(e.api.importarSeleccionados(new Set([item.item_id]), new e.Element('div'), consulta), /cambiaron/);
+    assert.deepEqual(e.calls, []);
+
+    const sinExistente = configurar(), pendiente = (await sinExistente.api.construir(consulta)).items.find(x => x.kind === 'servicio');
+    assert.equal(pendiente.fecha, '2026-09-04');assert.equal(pendiente.estado, 'revisar');
+    assert.equal(pendiente.clasificacion, 'servicio_por_confirmar');assert.equal(pendiente.payload, null);
+
+    const ambiguo = configurar();ambiguo.db.servicios.push(existente, { ...existente, id: 'tinaja-sara-2' });
+    const revisar = (await ambiguo.api.construir(consulta)).items.find(x => x.kind === 'servicio');
+    assert.equal(revisar.estado, 'revisar');assert.equal(revisar.decision_identidad, 'revisar');
+    assert.ok(revisar.razones.some(x => /más de un servicio existente compatible/i.test(x)));
+
+    const cobroContradictorio = configurar();cobroContradictorio.r.servicios[0].intencion_cobro = 'cobrable';cobroContradictorio.r.servicios[0].pendiente = true;
+    cobroContradictorio.db.servicios.push(existente);
+    const conflicto = (await cobroContradictorio.api.construir(consulta)).items.find(x => x.kind === 'servicio');
+    assert.equal(conflicto.estado, 'revisar');assert.equal(conflicto.payload, null);
+    assert.ok(conflicto.razones.some(x => /contradice la intención de cobro/i.test(x)));
+
+    const especifico = configurar();especifico.r.servicios[0] = { ...especifico.r.servicios[0], concepto: 'jacuzzi', clasificacion: 'servicio_confirmado', intencion_cobro: 'cobrable' };
+    especifico.db.servicios.push(existente);
+    const resueltoPorProyectoH = (await especifico.api.construir(consulta)).items.find(x => x.kind === 'servicio');
+    assert.equal(resueltoPorProyectoH.estado, 'existente');assert.equal(resueltoPorProyectoH.intencion_cobro, 'cortesia');
+    assert.equal(resueltoPorProyectoH.payload, null);
 });
 
 test('rendered confirmation rebuilds the card into ready services without invoking the writer', async () => {
@@ -166,20 +241,20 @@ test('rendered confirmation rebuilds the card into ready services without invoki
 test('a comparison renders four compact sections and its incorporation button', async () => {
     const e = entorno(), out = new e.Element('div');
     const built = await e.api.construir(consulta), original = built.items.find(x => x.kind === 'servicio');
-    const ready = { ...copy(original), item_id: 'ready', estado: 'listo', razones: [], inferencias: [] };
-    const note = { ...copy(ready), item_id: 'note', kind: 'nota', texto: 'Dejar batas en recepción', payload: { reserva_id: 'r1', importante: true } };
+    const ready = { ...copy(original), item_id: 'ready', estado: 'listo', semantica: 'SERVICIO_REAL', completitud: 'COMPLETO', clasificacion: 'servicio_confirmado', razones: [], inferencias: [], payload: { reserva_id: 'r1' } };
+    const note = { ...copy(ready), item_id: 'note', kind: 'nota', clasificacion: 'nota', intencion_cobro: 'no_determinada', texto: 'Dejar batas en recepción', payload: { reserva_id: 'r1', importante: true } };
     const existing = { ...copy(ready), item_id: 'existing', estado: 'existente' };
-    const review = { ...copy(original), item_id: 'review', estado: 'revisar', razones: ['Requiere revisión manual.'] };
+    const review = { ...copy(original), item_id: 'review', estado: 'revisar', semantica: 'SERVICIO_REAL', completitud: 'FALTAN_DATOS', clasificacion: 'servicio_por_confirmar', payload: null, razones: ['Requiere revisión manual.'] };
     const result = { ...built, items: [ready, note, existing, review], quiereIncorporar: false };
 
     e.api.renderizar(result, out, consulta);
     let sections = out.querySelectorAll(':scope > details');
     assert.equal(sections.length, 4);
     assert.deepEqual(sections.map(x => x.children[0].children[0].textContent), [
-        'Servicios listos para incorporar',
-        'Notas operativas para el resumen',
-        'Ya existen en Proyecto H',
-        'Requieren revisión manual'
+        'Servicios preparables para incorporar',
+        'Servicios que requieren revisión',
+        'Notas narrativas para el resumen',
+        'Ya existen en Proyecto H'
     ]);
     assert.deepEqual(sections.map(x => x.children[0].children[1].textContent), ['1', '1', '1', '1']);
     assert.ok(sections.every(x => x.open === false));
@@ -233,7 +308,7 @@ test('compact selector confirms an index, and confirmed item is selectable in th
 test('comparison button enters the guarded incorporation flow and preserves the manual-night override', async () => {
     const e = entorno(), out = new e.Element('div'); e.document.card = out;
     // Otros elementos ya listos: el guard anterior abría el confirm global por ellos.
-    e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00', hora: '18:00' });
+    e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00 x pagar', hora: '18:00' });
     const previous = new e.Element('div'); previous.className = 'haiku-asistente-mensaje--usuario'; previous.textContent = consultaComparacion;
     out.previousElementSibling = previous;
     e.cargarGuard(); e.api.renderizar(await e.api.construir(consultaComparacion), out, consultaComparacion);
@@ -253,7 +328,7 @@ test('comparison button enters the guarded incorporation flow and preserves the 
 
 test('completed service incorporation uses the current saved-result design', async () => {
     const e = entorno(), out = new e.Element('div'); e.document.card = out;
-    e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00', hora: '18:00' });
+    e.r.servicios.push({ concepto: 'jacuzzi', texto_original: 'jacuzzi el 04-09 a las 18:00 x pagar', hora: '18:00' });
     const previous = new e.Element('div'); previous.className = 'haiku-asistente-mensaje--usuario'; previous.textContent = consultaComparacion;
     out.previousElementSibling = previous;
     e.cargarGuard(); e.api.renderizar(await e.api.construir(consultaComparacion), out, consultaComparacion);

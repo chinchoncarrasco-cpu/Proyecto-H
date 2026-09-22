@@ -4,17 +4,18 @@
     const normalizar = v => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
     const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
     const digitos = v => String(v || "").replace(/\D/g, "");
-    // En el Libro el slash es un separador de campos. Aceptamos uno o varios,
-    // con o sin espacios, además de saltos de línea. Las fechas DD/MM/AA(AA)
-    // se protegen porque sus slash sí forman parte del valor.
+    // En el Libro el slash es un separador de campos, salvo cuando pertenece a
+    // un token léxico conocido. El inventario real de Sep26 contiene fechas y
+    // las abreviaturas C/U y C/D; proteger el token completo evita mutilar el
+    // contenido sin convertir cada frase del Libro en una excepción.
     function separarCampos(texto) {
-        const fechas = [];
-        const protegido = String(texto || "").replace(/\b\d{1,2}\/\d{1,2}\/(?:\d{4}|\d{2})\b/g, valor => {
-            fechas.push(valor);
-            return `\uE000${fechas.length - 1}\uE001`;
+        const tokens = [];
+        const protegido = String(texto || "").replace(/\b\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*(?:\d{4}|\d{2})\b|\bC\s*\/\s*[UD]\b/gi, valor => {
+            tokens.push(valor);
+            return `\uE000${tokens.length - 1}\uE001`;
         });
-        return protegido.split(/\s*\/+\s*|\r?\n/).map(x => x.trim())
-            .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => fechas[Number(indice)]));
+        return protegido.split(/\s*(?:\/+\*\/+|\/+)\s*|\r?\n/).map(x => x.trim())
+            .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => tokens[Number(indice)]));
     }
     function iso(y, m, d) {
         const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
@@ -135,30 +136,152 @@
         if (/^\d{1,3}([.,]\d{3})+$/.test(t)) t = t.replace(/[.,]/g, "");
         return /^\d+$/.test(t) ? Number(t) : null;
     }
-    function mencionInformativaServicio(t) {
-        const informativa = /\b(?:consulto|pregunto|averiguo|cotizo|consulta(?:ndo)?|pregunta(?:ndo)?|se le (?:explico|indico|informo)|como (?:era|funciona|funcionaba))\b/.test(t);
-        if (!informativa) return false;
-        const evidenciaEstructurada = /\b[0-2]?\d[:.,][0-5]\d\b|(?:\$|\bclp\b)\s*\d|\bx pagar\b|\bpor pagar\b|\bpendiente\s+(?:de\s+)?(?:pago|pagar)\b|\bcortesia\b|\bregalo\b/.test(t);
-        if (evidenciaEstructurada) return false;
-        const noConfirmada = /\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b|\bsin confirmar\b|\bno hubo respuesta\b|\bsin respuesta\b/.test(t);
-        if (noConfirmada) return true;
-        const sinNegaciones = t.replace(/\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b/g, '');
-        return !/\b(?:reservo|pidio|solicito|agendo|agendar|contrato|confirmo|reservada?|confirmada?|usar|uso)\b/.test(sinNegaciones);
+    function evidenciaCobroServicio(t) {
+        return /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b|\bpagad[oa]s?\b|\bcobrarle\b/.test(t);
     }
-    function servicios(texto) {
+    const SEMANTICA_SERVICIO = Object.freeze({
+        NO_SERVICIO: "NO_SERVICIO", SERVICIO_REAL: "SERVICIO_REAL", CONSULTA_SERVICIO: "CONSULTA_SERVICIO",
+        SERVICIO_DESCARTADO: "SERVICIO_DESCARTADO", AMBIGUO: "AMBIGUO"
+    });
+    const INTENCION_FINANCIERA = Object.freeze({ CORTESIA: "CORTESIA", COBRABLE: "COBRABLE", NO_DETERMINADA: "NO_DETERMINADA" });
+
+    function conceptosDeServicio(texto) {
+        const t = normalizar(texto), hallados = [];
+        if (/\bjacuzzi\b/.test(t)) hallados.push("jacuzzi");
+        if (/\btonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/.test(t)) hallados.push("tonel");
+        if (/\btinajas?\b/.test(t) && !hallados.some(x => x === "jacuzzi" || x === "tonel")) hallados.push("tinaja");
+        if (/\blate[\s-]*(?:check[\s-]*)?out\b/.test(t)) hallados.push("lateout");
+        if (/\bcama\s*adicional\b|\bcamaadicional\b/.test(t)) hallados.push("cama_adicional");
+        if (/\bcuna\b/.test(t)) hallados.push("cuna");
+        if (/\bmasaj\w*\b|\bdescontractur\w*\b/.test(t)) hallados.push("masaje");
+        return [...new Set(hallados)];
+    }
+
+    function horasDeServicio(texto) {
+        const sinFechas = normalizar(texto).replace(/\b\d{1,2}[-/]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/g, " ");
+        const horas = [];
+        const agregar = (h, m = "00") => {
+            const hora = Number(h), minuto = Number(m);
+            if (hora <= 23 && minuto <= 59) horas.push(`${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`);
+        };
+        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*[:.,]\s*([0-5]\d)\b/g)) agregar(m[1], m[2]);
+        for (const m of sinFechas.matchAll(/\b([01]?\d|2[0-3])\s*(?:hrs?|h)\b/g)) agregar(m[1]);
+        for (const m of sinFechas.matchAll(/\b(\d{1,2})\s*(am|pm)\b/g)) {
+            let h = Number(m[1]) % 12; if (m[2] === "pm") h += 12; agregar(h);
+        }
+        return [...new Set(horas)];
+    }
+
+    function clasificarIntencionFinanciera(texto) {
+        const t = normalizar(texto), evidencias = [];
+        const cortesia = /\bco+rtesia\b|\bregalo\b/.test(t);
+        const cobrable = evidenciaCobroServicio(t) || /(?:\$\s*\d|\bclp\s*\$?\s*\d)/.test(t);
+        if (cortesia) evidencias.push("cortesía explícita");
+        if (cobrable) evidencias.push("cobro explícito");
+        return { intencion: cortesia && !cobrable ? INTENCION_FINANCIERA.CORTESIA : cobrable && !cortesia ? INTENCION_FINANCIERA.COBRABLE : INTENCION_FINANCIERA.NO_DETERMINADA, evidencias };
+    }
+
+    function ocurrenciasDeServicio(texto) {
+        const t = normalizar(texto), ocurrencias = [];
+        const agregar = (concepto, indice) => { if (indice >= 0) ocurrencias.push({ concepto, indice }); };
+        const jacuzzi = t.search(/\bjacuzzi\b/), tonel = t.search(/\btonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/), tinaja = t.search(/\btinajas?\b/);
+        if (jacuzzi >= 0) agregar("jacuzzi", tinaja >= 0 ? Math.min(tinaja, jacuzzi) : jacuzzi);
+        if (tonel >= 0 && jacuzzi < 0) agregar("tonel", tinaja >= 0 ? Math.min(tinaja, tonel) : tonel);
+        if (tinaja >= 0 && jacuzzi < 0 && tonel < 0) agregar("tinaja", tinaja);
+        for (const [concepto, re] of [["lateout", /\blate[\s-]*(?:check[\s-]*)?out\b/g], ["cama_adicional", /\bcama\s*adicional\b|\bcamaadicional\b/g], ["cuna", /\bcuna\b/g]]) {
+            for (const m of t.matchAll(re)) agregar(concepto, m.index);
+        }
+        const mencionesMasaje = [...t.matchAll(/\bmasaj\w*\b/g)];
+        const masajes = mencionesMasaje.filter((m, i) => !(i > 0 && /^masaj\w*\s+(?:por|x)\s+(?:pagar|cobrar)\b/.test(t.slice(m.index))))
+            .map(m => ({ concepto: "masaje", indice: m.index }));
+        const descontracturantes = [...t.matchAll(/\bdescontractur\w*\b/g)].filter(m => !masajes.some(x => x.indice < m.index && m.index - x.indice < 24));
+        ocurrencias.push(...masajes, ...descontracturantes.map(m => ({ concepto: "masaje", indice: m.index })));
+        return ocurrencias.sort((a, b) => a.indice - b.indice).filter((x, i, xs) => !i || x.indice !== xs[i - 1].indice || x.concepto !== xs[i - 1].concepto);
+    }
+
+    function unidadesDeServicio(texto) {
+        const original = String(texto || ""), ocurrencias = ocurrenciasDeServicio(original);
+        return ocurrencias.map((ocurrencia, indice) => {
+            const inicio = indice === 0 ? 0 : ocurrencia.indice, fin = ocurrencias[indice + 1]?.indice ?? original.length;
+            const segmento = original.slice(inicio, fin).trim(), previo = original.slice(Math.max(0, ocurrencia.indice - 16), ocurrencia.indice);
+            const horas = horasDeServicio(segmento);
+            if (!horas.length && ocurrencia.concepto === "masaje" && indice > 0 && /simultane/.test(normalizar(original))) horas.push(...horasDeServicio(original.slice(0, ocurrencia.indice)));
+            let cantidad = Number((`${previo} ${segmento}`).match(/\b(\d+)\s*(?=(?:masaj|descontractur))/i)?.[1]);
+            if (!Number.isInteger(cantidad) && ocurrencia.concepto === "masaje") cantidad = Number(segmento.match(/\bc\s*\/\s*[ud]\s*x\s*(\d+)\b/i)?.[1]);
+            if (!Number.isInteger(cantidad)) cantidad = 1;
+            const todosMasajes = ocurrencias.every(x => x.concepto === "masaje");
+            const financiera = clasificarIntencionFinanciera(todosMasajes ? original : segmento);
+            return { concepto: ocurrencia.concepto, texto: segmento || original.trim(), cantidad, hora: horas[0] || null, hora_fin: horas[1] || null,
+                intencion_financiera: financiera.intencion, evidencias_financieras: financiera.evidencias };
+        });
+    }
+
+    function clasificarFragmentoServicio(fragmento, contextoReserva = {}) {
+        const texto = String(fragmento || "").trim(), t = normalizar(texto), conceptos = conceptosDeServicio(texto), evidencias = [];
+        const base = semantica => ({ semantica, conceptos, evidencias: [...evidencias], unidadesServicio: [] });
+        if (!conceptos.length) return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        const estadoReserva = normalizar(contextoReserva?.estado_reserva || contextoReserva?.estado || "");
+        const descartado = /\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b|\bfinalmente\s+no\s+reservo\b/.test(t);
+        const consulta = /\bconsultar\s+si\s+desea\b|\b(?:consulto|pregunto|averiguo|cotizo|consulta(?:ndo)?|pregunta(?:ndo)?|interesaba)\b|\bse\s+le\s+(?:explico|indico|informo)\b|\bcomo\s+(?:era|funciona|funcionaba)\b/.test(t);
+        const compromiso = /\b(?:reservo|pidio|solicito|agendo|contrato|confirmo|reservada?|confirmada?)\b/.test(t.replace(/\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b/g, ""));
+        if (contextoReserva?.cancelada === true || /cancelad|no_show|anulad/.test(estadoReserva) || descartado) {
+            evidencias.push(contextoReserva?.cancelada === true || /cancelad|no_show|anulad/.test(estadoReserva) ? "reserva cancelada o no operativa" : "prestación descartada explícitamente");
+            return base(SEMANTICA_SERVICIO.SERVICIO_DESCARTADO);
+        }
+        if ((consulta && !compromiso) || /\bsi\s+es\s+posible\b/.test(t)) { evidencias.push("consulta sin compromiso operativo"); return base(SEMANTICA_SERVICIO.CONSULTA_SERVICIO); }
+        const mencionAislada = /^(?:cama\s*adicional|camaadicional|cuna|tinaja|jacuzzi|tonel|masaje)$/i.test(t);
+        if (mencionAislada && contextoReserva?.origen_campo !== "servicios") {
+            evidencias.push("mención aislada sin intención de prestación"); return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
+        const soloPorConfirmar = /^(?:tinaja|jacuzzi|tonel|cuna|cama\s*adicional|masaje)\s+(?:x|por|sin)\s+confirmar\.?$/.test(t);
+        if (soloPorConfirmar) { evidencias.push("mención pendiente sin evidencia de prestación concreta"); return { ...base(SEMANTICA_SERVICIO.AMBIGUO), unidadesServicio: unidadesDeServicio(texto) }; }
+        const pruebas = [
+            [/\b\d+\s*(?:horas?|hrs?|min(?:utos?)?|masaj\w*|personas?|pers\.?|pax|camas?|cunas?)\b/, "cantidad o duración"],
+            [/\b[0-2]?\d\s*[:.,]\s*[0-5]\d\b|\b[0-2]?\d\s*(?:hrs?|am|pm)\b/, "horario"],
+            [/\b\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)\b/, "fecha o día"],
+            [/\b(?:solicita(?:n|do)?|solicito|pidio|pide(?:n)?|reservo|reservada?|confirmo|confirmada?|agendo|agendar|preparar|dejar|entregar|respetar|requiere(?:n)?|coordinar|agregar|contrato|usar)\b/, "acción operativa"],
+            [/\bcon\s+[\p{L}][\p{L}\s.'’-]+/u, "profesional indicado"],
+            [/\bco+rtesia\b|\bregalo\b/, "cortesía explícita"],
+            [/\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:de\s+|por\s+)?(?:pago|pagar|cobro|cobrar)\b|\bpagad[oa]s?\b|\bcobrarle\b|(?:\$|\bclp\b)\s*\d/, "intención de cobro"],
+            [/\b(?:por|x)\s+coordinar\b/, "coordinación operativa"]
+        ];
+        for (const [re, nombre] of pruebas) if (re.test(t)) evidencias.push(nombre);
+        if (contextoReserva?.origen_campo === "servicios") evidencias.push("campo explícito de Servicios");
+        if (!evidencias.length) return { ...base(SEMANTICA_SERVICIO.AMBIGUO), unidadesServicio: unidadesDeServicio(texto) };
+        return { ...base(SEMANTICA_SERVICIO.SERVICIO_REAL), unidadesServicio: unidadesDeServicio(texto) };
+    }
+
+    // Contrato transitorio para consumidores antiguos: ya no decide semántica;
+    // sólo proyecta la decisión canónica a su antiguo booleano.
+    function evidenciaIntencionOperativaServicio(texto, origen_campo = "notas_reserva") {
+        const resultado = clasificarFragmentoServicio(texto, { origen_campo });
+        return { operativa: resultado.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL,
+            motivo: resultado.evidencias.join("; ") || "Sin evidencia de una prestación concreta.", semantica: resultado.semantica };
+    }
+
+    function servicios(texto, opciones = {}) {
+        const origen_campo = opciones?.origen_campo || "servicios";
         const salida = [];
         for (const parte of separarCampos(texto).flatMap(x => x.split(';').map(y => y.trim()).filter(Boolean))) {
-            const t = normalizar(parte);
-            if (mencionInformativaServicio(t)) continue;
-            for (const [tipo, re] of [["jacuzzi", /jacuzzi/], ["tonel", /tonel/], ["tinaja", /tinaja/], ["lateout", /late\s*(check\s*)?out/], ["cama_adicional", /cama.*adicional/], ["cuna", /\bcuna\b/], ["masaje", /masaj/]]) {
-                if (!re.test(t)) continue;
-                const hora = t.match(/\b([0-2]?\d)[:.,]([0-5]\d)\b/);
-                salida.push({ concepto: tipo, texto_original: parte.trim(), pendiente: /\bx pagar\b|por pagar|pendiente/.test(t),
-                    cortesia: /cortesia|regalo/.test(t), hora: hora ? `${hora[1].padStart(2, "0")}:${hora[2]}` : null, monto: null });
+            const canon = clasificarFragmentoServicio(parte, { ...opciones, origen_campo });
+            if (!canon.conceptos.length) continue;
+            const unidades = canon.unidadesServicio.length ? canon.unidadesServicio : [{ concepto: canon.conceptos[0], texto: parte.trim(), cantidad: 1,
+                hora: null, hora_fin: null, intencion_financiera: INTENCION_FINANCIERA.NO_DETERMINADA, evidencias_financieras: [] }];
+            for (const unidad of unidades) {
+                const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera];
+                const pendiente = intencion_cobro === "cobrable", cortesia = intencion_cobro === "cortesia";
+                const incompletoLegado = ["tinaja", "cama_adicional", "cuna"].includes(unidad.concepto) || /\b(?:x|por|sin)\s+confirmar\b|\b(?:por\s+)?coordinar\b/.test(normalizar(unidad.texto));
+                const clasificacion = canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL ? (incompletoLegado ? "servicio_por_confirmar" : "servicio_confirmado") : canon.semantica === SEMANTICA_SERVICIO.AMBIGUO ? "servicio_por_confirmar" : "nota";
+                salida.push({ concepto: unidad.concepto, conceptos: canon.conceptos, texto_original: unidad.texto, fragmento_original: parte.trim(),
+                    origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias, unidad_servicio: unidad,
+                    intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, clasificacion, intencion_cobro, pendiente, cortesia,
+                    evidencia_origen: { origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias,
+                        intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, pendiente_pago: pendiente, cortesia },
+                    cantidad: unidad.cantidad, hora: unidad.hora, hora_fin: unidad.hora_fin, monto: null });
             }
         }
-        return [...new Map(salida.map(servicio => [[servicio.concepto, normalizar(servicio.texto_original), servicio.hora || '',
-            servicio.pendiente, servicio.cortesia, servicio.monto ?? ''].join('|'), servicio])).values()];
+        return [...new Map(salida.map(servicio => [[servicio.concepto, normalizar(servicio.texto_original), servicio.hora || '', servicio.hora_fin || '',
+            servicio.clasificacion, servicio.intencion_cobro, servicio.pendiente, servicio.cortesia, servicio.monto ?? ''].join('|'), servicio])).values()];
     }
     function aseo(cell, fecha, cabana, origen) {
         const partes = separarCampos(cell.valor);
@@ -345,6 +468,7 @@
                 if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
+                const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva" });
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
                 const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
@@ -360,7 +484,9 @@
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,
                     estado_confirmacion: ["B4A7D6", "D9D2E9"].includes(colors.fondo) ? "confirmada_por_color" : ["D5A6BD", "F4CCCC", "EAD1DC"].includes(colors.fondo) ? "pendiente_por_color" : "no_determinado",
                     estado_operativo: colors.estado, notas_importantes: colors.notas, pagos_pendientes: [...new Set([...colors.pendientes, ...pendientesTexto])],
-                    servicios: servicios(cell.valor), texto_original: cell.valor, coordenadas_origen: src, formato: colors, advertencias: dudas, pagos: [], pagos_sin_asociacion: [], cobertura_pagos: false });
+                    servicios: conceptosServicio.filter(x => [SEMANTICA_SERVICIO.SERVICIO_REAL, SEMANTICA_SERVICIO.AMBIGUO].includes(x.semantica)),
+                    menciones_servicio: conceptosServicio.filter(x => ![SEMANTICA_SERVICIO.SERVICIO_REAL, SEMANTICA_SERVICIO.AMBIGUO].includes(x.semantica)),
+                    texto_original: cell.valor, coordenadas_origen: src, formato: colors, advertencias: dudas, pagos: [], pagos_sin_asociacion: [], cobertura_pagos: false });
             }
         }
         for (let k = 0; k < paymentCabs.length; k++) {
@@ -384,7 +510,7 @@
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
                     const ref = re => text.match(re)?.[1]?.trim() || null;
-                    const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor).length || /masaj|lena|carbon|desayuno/.test(c) ? "servicio" : "otro";
+                    const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
                     if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
@@ -673,6 +799,8 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto });
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
+        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        evidenciaIntencionOperativaServicio });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);

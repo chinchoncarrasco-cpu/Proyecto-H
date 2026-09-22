@@ -68,7 +68,7 @@
     function esConsultaServicios(texto) {
         const t = normalizar(texto);
         if (!/\blibro\b/.test(t)) return false;
-        if (!/\bservicios?\b|\btinajas?\b|\bjacuzzi\b|\bmasajes?\b|\blate\s*(?:check\s*)?out\b|\bcamas?\s+adicional(?:es)?\b|\bcunas?\b/.test(t)) return false;
+        if (!/\bservicios?\b|\btinajas?\b|\bjacuzzi\b|\bmasajes?\b|\blate[\s-]*(?:check[\s-]*)?out\b|\bcamas?\s+adicional(?:es)?\b|\bcunas?\b/.test(t)) return false;
         return /\brevisa|revisar|busca|buscar|lista|listar|muestra|mostrar|compara|comparar|pasa|pasar|agrega|agregar|incorpora|incorporar|registra|registrar|servicios?\b/.test(t);
     }
 
@@ -113,21 +113,35 @@
     }
 
     function depurarServicios(reserva) {
-        const grupos = new Map();
-        for (const servicio of Array.isArray(reserva?.servicios) ? reserva.servicios : []) {
-            const key = normalizar(servicio?.texto_original);
-            if (!grupos.has(key)) grupos.set(key, []);
-            grupos.get(key).push(servicio);
-        }
-        const salida = [];
-        for (const items of grupos.values()) {
-            const conceptos = new Set(items.map(x => x.concepto));
-            for (const item of items) {
-                if (item.concepto === "tinaja" && (conceptos.has("jacuzzi") || conceptos.has("tonel"))) continue;
-                salida.push(item);
+        const grupos = new Map(), semantica = root.HAIKU_LIBRO_SEMANTICA;
+        const candidatos = [
+            ...(Array.isArray(reserva?.servicios) ? reserva.servicios : []),
+            ...(Array.isArray(reserva?.menciones_servicio) ? reserva.menciones_servicio : [])
+        ];
+        for (const original of candidatos) {
+            const texto = original?.fragmento_original || original?.texto_original || "";
+            let expandidos = [original];
+            if (!original?.semantica && typeof semantica?.clasificarFragmentoServicio === "function") {
+                const canon = semantica.clasificarFragmentoServicio(texto, {
+                    origen_campo: original?.origen_campo || original?.evidencia_origen?.origen_campo || "notas_reserva",
+                    estado_reserva: reserva?.estado_reserva,
+                    cancelada: reserva?.cancelada === true
+                });
+                const unidades = canon.unidadesServicio.length ? canon.unidadesServicio : [{ concepto: canon.conceptos[0] || original?.concepto,
+                    texto, cantidad: 1, hora: original?.hora || null, hora_fin: original?.hora_fin || null, intencion_financiera: "NO_DETERMINADA" }];
+                expandidos = unidades.map((unidad, indice) => ({ ...original, concepto: unidad.concepto, conceptos: canon.conceptos,
+                    texto_original: unidad.texto || texto, fragmento_original: texto, semantica: canon.semantica,
+                    evidencias_semanticas: canon.evidencias, unidad_indice: indice, cantidad: unidad.cantidad,
+                    hora: unidad.hora || original?.hora || null, hora_fin: unidad.hora_fin || original?.hora_fin || null,
+                    intencion_cobro: ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera] || original?.intencion_cobro || "no_determinada" }));
+            }
+            for (const servicio of expandidos) {
+                const key = [normalizar(servicio?.fragmento_original || servicio?.texto_original), servicio?.concepto || "", servicio?.unidad_indice ?? "",
+                    servicio?.hora || "", servicio?.hora_fin || "", servicio?.semantica || ""].join("|");
+                if (!grupos.has(key)) grupos.set(key, servicio);
             }
         }
-        return salida;
+        return [...grupos.values()];
     }
 
     function fragmentosReserva(texto) {
@@ -143,26 +157,26 @@
 
     function esNotaConocida(fragmento) {
         const t = normalizar(fragmento);
-        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|iva\s+descontad|solicita?r?\s+factura|promo\s+haiku|voucher\s+regalo|cama\s+adicional|agregar\s+cama|\bcuna\b|coordinar.{0,35}tinaja|tinaja.{0,35}coordinar|pedir.{0,30}(?:documento|pasaporte|dni|rut)|presentar.{0,30}(?:documento|pasaporte|dni|rut)|solicitar.{0,30}(?:documento|pasaporte|dni|rut)|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest(?:a|ado|ados|ada|adas)|batas\s+en\s+caba/.test(t);
+        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|iva\s+descontad|solicita?r?\s+factura|promo\s+haiku|voucher\s+regalo|pedir.{0,30}(?:documento|pasaporte|dni|rut)|presentar.{0,30}(?:documento|pasaporte|dni|rut)|solicitar.{0,30}(?:documento|pasaporte|dni|rut)|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest(?:a|ado|ados|ada|adas)|batas\s+en\s+caba/.test(t);
     }
 
     function notaImportante(texto) {
         const t = normalizar(texto);
-        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|cama\s+adicional|\bcuna\b|dejar\s+batas|coordinar|documento|pasaporte|\bdni\b|\brut\b|factura|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest/.test(t);
+        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|dejar\s+batas|documento|pasaporte|\bdni\b|\brut\b|factura|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest/.test(t);
     }
 
-    function servicioDebeSerNota(servicio) {
-        const t = normalizar(servicio?.texto_original), c = servicio?.concepto;
-        if (c === "cama_adicional" || c === "cuna") return true;
-        if (c === "tinaja") return true;
-        if (["jacuzzi", "tonel"].includes(c) && /\b(?:x|por)\s+confirmar\b|\bcoordinar\b|\bpor\s+coordinar\b|\bconsultar\b/.test(t)) return true;
-        return false;
+    function intencionCobroServicio(servicio) {
+        if (["cortesia", "cobrable", "no_determinada"].includes(servicio?.intencion_cobro)) return servicio.intencion_cobro;
+        const analizar = root.HAIKU_LIBRO_SEMANTICA?.clasificarIntencionFinanciera;
+        const canon = typeof analizar === "function" ? analizar(servicio?.fragmento_original || servicio?.texto_original) : null;
+        return ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[canon?.intencion] || "no_determinada";
     }
 
     function extraerNotasReserva(reserva, servicios) {
         const notas = [];
-        for (const s of servicios) if (servicioDebeSerNota(s)) notas.push(s.texto_original);
+        const fragmentosServicio = new Set((servicios || []).flatMap(s => [s?.fragmento_original, s?.texto_original]).map(normalizar).filter(Boolean));
         for (const frag of fragmentosReserva(reserva?.texto_original)) {
+            if (fragmentosServicio.has(normalizar(frag))) continue;
             const batas = textoNotaBatas(frag);
             if (batas) notas.push(batas);
             if (esNotaConocida(frag)) notas.push(frag);
@@ -257,17 +271,34 @@
         return candidatas.length === 1 ? candidatas[0] : null;
     }
 
+    function textoSinFechaNumerica(texto, reserva) {
+        const original = String(texto || ""), fecha = fechaExplicita(original, reserva);
+        if (!fecha) return original;
+        const [year, month, day] = fecha.split("-").map(Number);
+        return original
+            .replace(/\b\d{1,2}[-/.]\d{1,2}[-/.](?:\d{2}|\d{4})\b/g, " ")
+            .replace(/\b(\d{1,2})[-/.](\d{1,2})(?![-/.]\d)\b/g, (valor, d, m) =>
+                Number(d) === day && Number(m) === month && year === Number(reserva?.fecha_checkin?.slice(0, 4)) ? " " : valor);
+    }
+
     function horaTexto(texto, preferirHasta = false) {
         const t = normalizar(texto);
         const patrones = preferirHasta
-            ? [/hasta\s+(?:las?\s+)?([0-2]?\d)[:.,]([0-5]\d)/, /hasta\s+(?:las?\s+)?([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/]
-            : [/\b([0-2]?\d)[:.,]([0-5]\d)\b/, /\b([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/];
+            ? [/hasta\s+(?:las?\s+)?([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /hasta\s+(?:las?\s+)?([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/]
+            : [/\b([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /\b([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/];
         for (const re of patrones) {
             const m = t.match(re); if (!m) continue;
             const hh = Number(m[1]), mm = m[2] === undefined ? 0 : Number(m[2]);
             if (hh <= 23 && mm <= 59) return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
         }
         return null;
+    }
+
+    function horaFinTexto(texto) {
+        const horas = [...normalizar(texto).matchAll(/\b([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/g)]
+            .map(m => `${String(Number(m[1])).padStart(2, "0")}:${m[2]}`)
+            .filter(h => Number(h.slice(0, 2)) <= 23);
+        return horas.length > 1 ? horas[1] : null;
     }
 
     function minutosHora(hora) {
@@ -313,9 +344,9 @@
         const noches = Number.isInteger(reserva?.noches) ? reserva.noches : diferenciaDias(reserva?.fecha_checkin, reserva?.fecha_checkout);
         if (noches !== 1) return { fecha: null, inferida: false, detalle: null };
         if (Number.isInteger(mins)) {
-            if (mins >= 15 * 60) return { fecha: reserva.fecha_checkin, inferida: true, detalle: `Fecha inferida por estadía de 1 noche: ${hora} es después del check-in de las 15:00, por lo que corresponde al día de ingreso.` };
-            if (mins <= 12 * 60) return { fecha: reserva.fecha_checkout, inferida: true, detalle: `Fecha inferida por estadía de 1 noche: ${hora} es antes o a la hora del check-out de las 12:00, por lo que corresponde al día de salida.` };
-            return { fecha: null, inferida: false, detalle: "El horario cae entre check-out (12:00) y check-in (15:00); no se infiere la fecha." };
+            if (mins >= 15 * 60 && mins <= 23 * 60 + 15) return { fecha: reserva.fecha_checkin, inferida: true, detalle: `Fecha inferida por estadía de 1 noche: ${hora} está entre 15:00 y 23:15, por lo que corresponde al día de ingreso.` };
+            if (mins >= 8 * 60 && mins < 15 * 60) return { fecha: reserva.fecha_checkout, inferida: true, detalle: `Fecha inferida por estadía de 1 noche: ${hora} está entre 08:00 y 14:59, por lo que corresponde al día de salida.` };
+            return { fecha: null, inferida: false, detalle: "El horario queda fuera de las franjas seguras 08:00–14:59 y 15:00–23:15; no se infiere la fecha." };
         }
         if (/\btarde\b|\bnoche\b/.test(texto)) return { fecha: reserva.fecha_checkin, inferida: true, detalle: "Fecha inferida por estadía de 1 noche: al indicar tarde/noche corresponde al día de ingreso." };
         if (/\bmanana\b/.test(texto)) return { fecha: reserva.fecha_checkout, inferida: true, detalle: "Fecha inferida por estadía de 1 noche: al indicar mañana corresponde al día de salida." };
@@ -334,9 +365,9 @@
         // el código de la tinaja con la fecha/hora del checkout.
         if (concepto === "lateout") return { codigo: "lateCheckout", nombre: "Late Check-out", requiereHorario: true, requierePersonas: false, permiteCortesia: false };
         if (concepto === "jacuzzi") return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: false };
+        if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: false };
+        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (concepto === "masaje") {
             const minutos = Number(t.match(/\b(30|60)\s*min/)?.[1]);
             if (/relajante/.test(t) && /descontracturante/.test(t)) return { motivo: "La misma nota contiene dos masajes distintos; deben separarse antes de incorporarlos." };
@@ -350,12 +381,22 @@
 
     function prepararServicio(reserva, servicio, asociacion, nocheManual = null) {
         const razones = [], inferencias = [];
+        if (servicio?.semantica !== "SERVICIO_REAL") throw new Error("prepararServicio sólo acepta unidades clasificadas canónicamente como SERVICIO_REAL.");
+        const semantica = servicio.semantica, intencion_operativa = true;
+        const intencion_cobro = intencionCobroServicio(servicio);
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
         const mapa = mapearConcepto(servicio);
         if (!mapa.codigo) razones.push(mapa.motivo);
         const esLate = servicio.concepto === "lateout" || mapa.codigo === "lateCheckout";
-        const hora = mapa.requiereHorario ? (esLate ? horaTexto(servicio.texto_original, true) : (servicio.hora || horaTexto(servicio.texto_original))) : null;
-        if (mapa.requiereHorario && !hora) razones.push("Falta un horario inequívoco del servicio.");
+        const requiereHorario = Boolean(mapa.requiereHorario || ["tinaja", "jacuzzi", "tonel", "masaje", "lateout"].includes(servicio.concepto));
+        const fechaDeclarada = fechaExplicita(servicio.texto_original, reserva), textoHorario = textoSinFechaNumerica(servicio.texto_original, reserva);
+        const horaConfundidaConFecha = fechaDeclarada && servicio.hora === `${fechaDeclarada.slice(8, 10)}:${fechaDeclarada.slice(5, 7)}`;
+        const horaFinConfundidaConFecha = fechaDeclarada && servicio.hora_fin === `${fechaDeclarada.slice(8, 10)}:${fechaDeclarada.slice(5, 7)}`;
+        const horaEstructurada = horaConfundidaConFecha ? null : servicio.hora;
+        const horaFinEstructurada = horaFinConfundidaConFecha ? null : servicio.hora_fin;
+        const hora = requiereHorario ? (esLate ? (horaTexto(textoHorario, true) || horaEstructurada || horaTexto(textoHorario)) : (horaEstructurada || horaTexto(textoHorario))) : null;
+        const hora_fin = requiereHorario && !esLate ? (horaFinEstructurada || horaFinTexto(textoHorario)) : null;
+        if (requiereHorario && !hora) razones.push("Falta un horario inequívoco del servicio.");
         const fechaInfo = esLate ? { fecha: reserva.fecha_checkout, inferida: false, detalle: null } : inferirFechaServicio(reserva, servicio, hora);
         const opcionesNoches = nochesValidas(reserva, hora);
         if (nocheManual != null && !fechaInfo.fecha && !fechaInfo.conflicto) {
@@ -379,24 +420,34 @@
         if (mapa.codigo === "tinajaJacuzzi" && Number.isInteger(personas) && (personas < 1 || personas > 5)) razones.push("La cantidad de personas no es válida para Jacuzzi.");
         if (mapa.codigo === "tinajaTonel" && Number.isInteger(personas) && (personas < 1 || personas > 3)) razones.push("La cantidad de personas no es válida para Tonel de madera.");
 
-        const cortesia = Boolean(servicio.cortesia || /\bcortesia\b|\bregalo\b/.test(normalizar(servicio.texto_original)));
-        if (cortesia && mapa.codigo && !mapa.permiteCortesia) razones.push(`${mapa.nombre} no admite cortesía en el catálogo actual de Proyecto H.`);
+        const cortesia = intencion_cobro === "cortesia";
+        if (intencion_cobro === "no_determinada") razones.push("Falta definir si el servicio es cobrable o cortesía; Haku no lo convertirá automáticamente en cobrable.");
+        if (cortesia && mapa.codigo && !mapa.permiteCortesia) razones.push(`Haku no puede preparar automáticamente una cortesía para ${mapa.nombre}; requiere revisión.`);
         const itemId = claveServicio(reserva, servicio);
+        const razonesUnicas = [...new Set(razones.filter(Boolean))];
+        const completitud = razonesUnicas.length ? "FALTAN_DATOS" : "COMPLETO";
+        // Alias de presentación conservado temporalmente para la UI existente. No
+        // participa en la semántica: deriva exclusivamente de la completitud.
+        const clasificacion = completitud === "COMPLETO" ? "servicio_confirmado" : "servicio_por_confirmar";
+        const puedePreparar = completitud === "COMPLETO" && ["cobrable", "cortesia"].includes(intencion_cobro) &&
+            asociacion.estado === "asociada" && mapa.codigo && fecha;
         return {
-            kind: "servicio", item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, personas, cortesia,
+            kind: "servicio", semantica, completitud, clasificacion, intencion_operativa, intencion_cobro,
+            evidencia_origen: servicio?.evidencia_origen || null,
+            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia,
             opcionesNoches, nocheManual,
-            puedeElegirNoche: !fecha && !fechaInfo.conflicto && razones.length === 1 && razones[0].startsWith('Falta una fecha inequívoca') && opcionesNoches.length > 0,
-            inferencias: [...new Set(inferencias)], razones: [...new Set(razones.filter(Boolean))],
-            payload: asociacion.estado === "asociada" && mapa.codigo && fecha ? {
+            puedeElegirNoche: !fecha && !fechaInfo.conflicto && razonesUnicas.length === 1 && razonesUnicas[0].startsWith('Falta una fecha inequívoca') && opcionesNoches.length > 0,
+            inferencias: [...new Set(inferencias)], razones: razonesUnicas,
+            payload: puedePreparar ? {
                 item_id: itemId,
                 reserva_id: asociacion.sistema.reserva_id,
                 estadia_id: asociacion.sistema.id,
                 codigo_servicio: mapa.codigo,
                 fecha_servicio: fecha,
                 hora: hora || null,
-                cantidad: 1,
+                cantidad: Number.isInteger(servicio?.cantidad) && servicio.cantidad > 0 ? servicio.cantidad : 1,
                 personas: Number.isInteger(personas) ? personas : 0,
-                tipo_cobro: cortesia ? "cortesia" : "normal",
+                tipo_cobro: intencion_cobro === "cortesia" ? "cortesia" : "normal",
                 precio_manual: null,
                 motivo_cortesia: cortesia ? `Cortesía indicada en el Libro: ${servicio.texto_original}` : null,
                 observaciones: `Importado desde Libro de Reserva. ${servicio.texto_original}`
@@ -404,12 +455,25 @@
         };
     }
 
-    function prepararNota(reserva, texto, asociacion) {
+    function prepararAmbiguo(reserva, servicio, asociacion) {
+        const motivo = servicio?.evidencias_semanticas?.join("; ") || "El fragmento no permite decidir si existe una prestación concreta.";
+        return {
+            kind: "servicio", semantica: "AMBIGUO", completitud: null, identidad: null,
+            clasificacion: "servicio_por_confirmar", intencion_operativa: false,
+            intencion_cobro: intencionCobroServicio(servicio), item_id: claveServicio(reserva, servicio),
+            reserva, servicio, asociacion, mapa: mapearConcepto(servicio), fecha: null, hora: servicio?.hora || null,
+            hora_fin: servicio?.hora_fin || null, personas: null, cortesia: false, opcionesNoches: [], nocheManual: null,
+            puedeElegirNoche: false, inferencias: [], razones: [`Semántica ambigua: ${motivo}`], payload: null, estado: "revisar"
+        };
+    }
+
+    function prepararNota(reserva, texto, asociacion, semantica = "NO_SERVICIO") {
         const razones = [];
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
         const itemId = claveNota(reserva, texto);
         return {
-            kind: "nota", item_id: itemId, reserva, texto, asociacion, inferencias: [], razones,
+            kind: "nota", semantica, completitud: null, identidad: null, clasificacion: "nota", intencion_cobro: "no_determinada",
+            item_id: itemId, reserva, texto, asociacion, inferencias: [], razones,
             payload: asociacion.estado === "asociada" ? {
                 item_id: itemId,
                 reserva_id: asociacion.sistema.reserva_id,
@@ -436,9 +500,58 @@
         return Array.isArray(c) ? c[0]?.codigo || null : c?.codigo || null;
     }
 
+    function nombreExistente(x) {
+        const c = x?.catalogo_servicios;
+        return (Array.isArray(c) ? c[0]?.nombre : c?.nombre) || codigoExistente(x) || "Servicio";
+    }
+
+    function horaCorta(valor) {
+        return String(valor || "").match(/^(\d{1,2}):(\d{2})/)?.slice(1, 3).map((v, i) => i ? v : v.padStart(2, "0")).join(":") || "";
+    }
+
+    function codigosCompatibles(item) {
+        if (item.servicio?.concepto === "tinaja") return new Set(["tinajaJacuzzi", "tinajaTonel"]);
+        if (item.mapa?.codigo) return new Set([item.mapa.codigo]);
+        if (item.servicio?.concepto === "masaje") return new Set();
+        return new Set();
+    }
+
     function decisionServicioExistente(item, existentes) {
+        if (item?.semantica !== "SERVICIO_REAL") return { estado: "no_aplica", motivo: "La identidad sólo se resuelve para SERVICIO_REAL." };
         const reservaId = item.payload?.reserva_id || (item.asociacion?.estado === 'asociada' ? item.asociacion.sistema.reserva_id : null);
         if (!reservaId) return { estado: "revisar", motivo: "Falta la reserva destino para comprobar el servicio." };
+        const estadiaId = item.payload?.estadia_id || item.asociacion?.sistema?.id || null;
+        const activos = existentes.filter(x => x.reserva_id === reservaId && !/cancelad|no_show|anulad/i.test(String(x.estado_servicio || "")) &&
+            (!estadiaId || !x.estadia_id || x.estadia_id === estadiaId));
+        const marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`, porOrigen = activos.filter(x => String(x.observaciones || "").includes(marca));
+        if (porOrigen.length === 1) return { estado: "existente", candidato: porOrigen[0], candidatos: porOrigen, motivo: "Mismo origen estable." };
+        if (porOrigen.length > 1) return { estado: "revisar", candidato: null, candidatos: porOrigen, motivo: "El mismo origen identifica varios servicios activos." };
+
+        const codigos = codigosCompatibles(item), hora = horaCorta(item.hora), horaFin = horaCorta(item.hora_fin);
+        if (codigos.size && item.fecha && hora) {
+            const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) && x.fecha_servicio === item.fecha && horaCorta(x.hora_inicio) === hora);
+            const compatiblesOperativos = mismoHechoBase.filter(x => {
+                if (horaFin && horaCorta(x.hora_fin) !== horaFin) return false;
+                if (Number.isInteger(item.personas) && item.personas > 0 && Number(x.personas) > 0 && Number(x.personas) !== item.personas) return false;
+                if (Number(item.servicio?.monto) > 0 && Number(x.total) > 0 && Number(x.total) !== Number(item.servicio.monto)) return false;
+                return true;
+            });
+            if (mismoHechoBase.length && !compatiblesOperativos.length) {
+                return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, motivo: "Hay un servicio existente con la misma fecha y hora, pero su rango, personas o monto contradicen el Libro." };
+            }
+            const textoOrigen = normalizar(item.servicio?.texto_original);
+            const cortesiaExplicita = Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
+            const cobroExplicito = Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
+                /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b/.test(textoOrigen));
+            const compatibles = compatiblesOperativos.filter(x => {
+                if (cortesiaExplicita && x.tipo_cobro !== "cortesia") return false;
+                if (cobroExplicito && x.tipo_cobro === "cortesia") return false;
+                return true;
+            });
+            if (compatibles.length === 1) return { estado: "existente", candidato: compatibles[0], candidatos: compatibles, motivo: "Servicio equivalente único en Proyecto H." };
+            if (compatibles.length > 1) return { estado: "revisar", candidato: null, candidatos: compatibles, motivo: "Hay más de un servicio existente compatible; no se elige automáticamente." };
+            if (compatiblesOperativos.length) return { estado: "revisar", candidato: null, candidatos: compatiblesOperativos, motivo: "El servicio existente contradice la intención de cobro o cortesía indicada por el Libro." };
+        }
         const identidad = root.HAIKU_SERVICIOS_IDENTIDAD_V1;
         if (identidad?.resolverServicio && item.payload) {
             return identidad.resolverServicio({
@@ -447,14 +560,27 @@
                 item_id: item.item_id
             }, existentes);
         }
-        const hora = String(item.hora || "").slice(0, 5), marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`;
-        const coincide = existentes.some(x => {
-            if (x.reserva_id !== reservaId || /cancelad/i.test(String(x.estado_servicio || ""))) return false;
-            if (String(x.observaciones || "").includes(marca)) return true;
-            if (!item.payload) return false;
-            return codigoExistente(x) === item.payload.codigo_servicio && x.fecha_servicio === item.payload.fecha_servicio && String(x.hora_inicio || "").slice(0, 5) === hora;
-        });
-        return { estado: coincide ? "existente" : "nuevo", motivo: coincide ? "Coincidencia operativa exacta." : null };
+        if (!item.fecha || (codigos.size && !hora)) return { estado: "revisar", candidato: null, candidatos: [], motivo: "Falta fecha u hora para comprobar el servicio existente sin adivinar." };
+        return { estado: "nuevo", candidato: null, candidatos: [], motivo: "No existe un servicio operativo compatible." };
+    }
+
+    function aplicarServicioExistente(item, decision) {
+        const existente = decision.candidato, codigo = codigoExistente(existente);
+        item.estado = "existente";
+        item.identidad = "YA_EXISTE";
+        item.decision_identidad = "existente";
+        item.servicio_existente = existente;
+        item.intencion_cobro = existente?.tipo_cobro === "cortesia" ? "cortesia" : "cobrable";
+        item.cortesia = item.intencion_cobro === "cortesia";
+        item.fecha = item.fecha || existente?.fecha_servicio || null;
+        item.hora = item.hora || horaCorta(existente?.hora_inicio) || null;
+        item.hora_fin = item.hora_fin || horaCorta(existente?.hora_fin) || null;
+        if ((!Number.isInteger(item.personas) || item.personas <= 0) && Number(existente?.personas) > 0) item.personas = Number(existente.personas);
+        item.payload = null;
+        item.razones = [];
+        if (codigo) item.mapa = { ...item.mapa, codigo, nombre: nombreExistente(existente) };
+        item.inferencias = [...new Set([...(item.inferencias || []), `${decision.motivo} Proyecto H conserva la autoridad sobre este servicio${item.cortesia ? " de cortesía" : ""}.`])];
+        return item;
     }
 
     function servicioYaExiste(item, existentes) {
@@ -486,10 +612,19 @@
         if (!cliente) throw new Error("No está disponible la conexión con Proyecto H.");
         const libro = await leerLibro(texto), sistema = await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
         for (const reserva of libro.reservas) {
-            const asociacion = asociarReserva(reserva, sistema), servicios = depurarServicios(reserva);
-            const notas = extraerNotasReserva(reserva, servicios);
-            for (const servicio of servicios) if (!servicioDebeSerNota(servicio)) items.push(prepararServicio(reserva, servicio, asociacion));
-            for (const nota of notas) items.push(prepararNota(reserva, nota, asociacion));
+            const asociacion = asociarReserva(reserva, sistema), candidatos = depurarServicios(reserva), notasCanonicas = new Map();
+            for (const candidato of candidatos) {
+                if (candidato.semantica === "SERVICIO_REAL") items.push(prepararServicio(reserva, candidato, asociacion));
+                else if (candidato.semantica === "AMBIGUO") items.push(prepararAmbiguo(reserva, candidato, asociacion));
+                else {
+                    const nota = candidato.fragmento_original || candidato.texto_original || "";
+                    if (nota && !notasCanonicas.has(normalizar(nota))) notasCanonicas.set(normalizar(nota), prepararNota(reserva, nota, asociacion, candidato.semantica || "NO_SERVICIO"));
+                }
+            }
+            for (const nota of extraerNotasReserva(reserva, candidatos)) {
+                if (!notasCanonicas.has(normalizar(nota))) notasCanonicas.set(normalizar(nota), prepararNota(reserva, nota, asociacion, "NO_SERVICIO"));
+            }
+            items.push(...notasCanonicas.values());
         }
         // Firma exacta, sin persistencia: incluye todos los datos leídos del Libro y la asociación actual.
         const firmaLibro = JSON.stringify([libro.archivo, libro.generacion, libro.reservas]);
@@ -501,16 +636,29 @@
         for (const [id, eleccion] of overrides) if (!items.some(x => x.item_id === id)) overrides.set(id, { ...eleccion, invalidada: true });
         const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id || (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
         const existentes = await cargarExistentes(cliente, reservaIds);
-        for (const item of items) {
+        for (let indice = 0; indice < items.length; indice++) {
+            const item = items[indice];
             if (item.kind === "nota") {
                 item.estado = notaYaExiste(item, existentes.notas) ? "existente" : item.razones.length ? "revisar" : "listo";
                 continue;
             }
+            if (item.semantica === "AMBIGUO") {
+                item.estado = "revisar";
+                continue;
+            }
             const decision = decisionServicioExistente(item, existentes.servicios);
+            if (decision.estado === "existente") {
+                aplicarServicioExistente(item, decision);
+                continue;
+            }
+            item.identidad = decision.estado === "nuevo" ? "NO_EXISTE" : "IDENTIDAD_AMBIGUA";
             item.decision_identidad = decision.estado;
-            if (decision.estado === "revisar") item.razones.push(decision.motivo);
+            if (decision.estado === "revisar") {
+                item.razones.push(decision.motivo);
+                item.payload = null;
+            }
             item.razones = [...new Set(item.razones.filter(Boolean))];
-            item.estado = decision.estado === "existente" ? "existente" : item.razones.length ? "revisar" : "listo";
+            item.estado = item.identidad === "NO_EXISTE" && item.completitud === "COMPLETO" && item.payload ? "listo" : "revisar";
         }
         return { ...libro, items, quiereIncorporar: quiereIncorporar(texto) };
     }
@@ -556,13 +704,15 @@
 
     function crearItem(item, seleccionados, confirmarNoche) {
         const fila = document.createElement("div"); fila.className = `haku-libro-servicios__item haku-libro-servicios__item--${item.estado}${item.kind === "nota" ? " haku-libro-servicios__item--nota" : ""}`;
-        const check = document.createElement("input"); check.type = "checkbox"; check.className = "haku-libro-servicios__check"; check.disabled = item.estado !== "listo"; check.checked = item.estado === "listo";
+        const seleccionable = item.estado === "listo" && (item.kind === "nota" || (item.semantica === "SERVICIO_REAL" && item.completitud === "COMPLETO")) && Boolean(item.payload);
+        const check = document.createElement("input"); check.type = "checkbox"; check.className = "haku-libro-servicios__check"; check.disabled = !seleccionable; check.checked = seleccionable;
         check.dataset.hakuItemId = item.item_id;
         if (check.checked) seleccionados.add(item.item_id); check.addEventListener("change", () => check.checked ? seleccionados.add(item.item_id) : seleccionados.delete(item.item_id));
         const cuerpo = document.createElement("div"), nombre = document.createElement("div"); nombre.className = "haku-libro-servicios__nombre"; nombre.textContent = nombreItem(item);
         const meta = document.createElement("div"); meta.className = "haku-libro-servicios__meta";
-        if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera cargo`;
-        else meta.textContent = `${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""}${item.cortesia ? " · cortesía" : ""}`;
+        if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera servicio ni cargo`;
+        else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${item.hora ? ` · ${item.hora}` : ""} · ${item.cortesia ? "cortesía" : "cobrable"} · omitido`;
+        else meta.textContent = `${item.semantica === "AMBIGUO" ? "Fragmento ambiguo" : item.completitud === "COMPLETO" ? "Servicio preparable" : "Servicio que requiere revisión"} · ${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""} · ${item.intencion_cobro === "cortesia" ? "cortesía" : item.intencion_cobro === "cobrable" ? "cobrable" : "cobro por definir"}`;
         const texto = document.createElement("div"); texto.className = "haku-libro-servicios__texto"; texto.textContent = item.kind === "nota" ? item.texto : (item.servicio.texto_original || "Servicio indicado en el Libro");
         cuerpo.append(nombre, meta, texto);
         if (item.nocheManual && item.estado === 'listo') meta.textContent += ' · Listo · fecha confirmada manualmente';
@@ -615,10 +765,12 @@
 
     async function importarSeleccionados(seleccionados, card, textoOriginal, overrides = new Map()) {
         const ids = [...seleccionados]; if (!ids.length) return;
-        const actual = await construir(textoOriginal, overrides), mapa = new Map(actual.items.filter(x => x.estado === "listo").map(x => [x.item_id, x]));
+        const actual = await construir(textoOriginal, overrides), mapa = new Map(actual.items.filter(x => x.estado === "listo" && x.payload &&
+            (x.kind === "nota" || (x.semantica === "SERVICIO_REAL" && x.completitud === "COMPLETO"))).map(x => [x.item_id, x]));
         const elegidos = ids.map(id => mapa.get(id)).filter(Boolean);
         if (elegidos.length !== ids.length) throw new Error("Uno o más elementos cambiaron desde la vista previa. Vuelve a revisar antes de guardar.");
         const servicios = elegidos.filter(x => x.kind === "servicio"), notas = elegidos.filter(x => x.kind === "nota");
+        if (servicios.some(x => x.semantica !== "SERVICIO_REAL" || x.completitud !== "COMPLETO" || !x.payload)) throw new Error("Un servicio incompleto o ambiguo no puede incorporarse ni generar cargo.");
         const confirmar = root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
         if (!confirmar) return;
         const botones = card.querySelectorAll("button,input[type=checkbox]"); botones.forEach(x => x.disabled = true);
@@ -658,26 +810,27 @@
             try { const actual = await construir(textoOriginal, overrides); renderizar(actual, out, textoOriginal, overrides); }
             catch (e) { overrides.delete(item.item_id); throw e; }
         };
-        const listosServicios = resultado.items.filter(x => x.estado === "listo" && x.kind === "servicio");
-        const listosNotas = resultado.items.filter(x => x.estado === "listo" && x.kind === "nota");
-        const existentes = resultado.items.filter(x => x.estado === "existente"), revisar = resultado.items.filter(x => x.estado === "revisar"), seleccionados = new Set();
+        const listosServicios = resultado.items.filter(x => x.estado === "listo" && x.kind === "servicio" && x.semantica === "SERVICIO_REAL" && x.completitud === "COMPLETO");
+        const pendientesServicios = resultado.items.filter(x => x.kind === "servicio" && x.estado === "revisar");
+        const notas = resultado.items.filter(x => x.kind === "nota" && x.estado !== "existente");
+        const existentes = resultado.items.filter(x => x.estado === "existente"), seleccionados = new Set();
         const head = document.createElement("div"); head.className = "haku-libro-servicios__head"; const left = document.createElement("div");
         const kicker = document.createElement("div"); kicker.className = "haku-libro-servicios__kicker"; kicker.textContent = "LIBRO · SERVICIOS + NOTAS";
         const title = document.createElement("div"); title.className = "haku-libro-servicios__title"; title.textContent = "Interpretación operativa del Libro"; left.append(kicker, title);
         const chip = document.createElement("span"); chip.className = "haku-libro-servicios__chip"; chip.textContent = `${resultado.desde} → ${resultado.hasta}`; head.append(left, chip); out.append(head);
         const stats = document.createElement("div"); stats.className = "haku-libro-servicios__stats";
-        stats.append(stat("Servicios listos", listosServicios.length), stat("Notas listas", listosNotas.length), stat("Ya existen", existentes.length), stat("Revisar", revisar.length), stat("Total", resultado.items.length)); out.append(stats);
+        stats.append(stat("Preparables", listosServicios.length), stat("Requieren revisión", pendientesServicios.length), stat("Notas", notas.length), stat("Ya existen", existentes.length), stat("Total", resultado.items.length)); out.append(stats);
         out.append(
-            seccion("Servicios listos para incorporar", listosServicios, seleccionados, "haku-franja--normal haku-icono--servicio haku-libro-servicios__seccion--servicios"),
-            seccion("Notas operativas para el resumen", listosNotas, seleccionados, "haku-franja--neutro haku-icono--archivo haku-libro-servicios__seccion--notas"),
-            seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-franja--normal haku-icono--calendario haku-libro-servicios__seccion--existentes"),
-            seccion("Requieren revisión manual", revisar, seleccionados, "haku-franja--revision haku-icono--alerta haku-libro-servicios__seccion--revision", confirmarNoche)
+            seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-franja--normal haku-icono--servicio haku-libro-servicios__seccion--servicios"),
+            seccion("Servicios que requieren revisión", pendientesServicios, seleccionados, "haku-franja--revision haku-icono--alerta haku-libro-servicios__seccion--revision", confirmarNoche),
+            seccion("Notas narrativas para el resumen", notas, seleccionados, "haku-franja--neutro haku-icono--archivo haku-libro-servicios__seccion--notas"),
+            seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-franja--normal haku-icono--calendario haku-libro-servicios__seccion--existentes")
         );
         // La comparación ya contiene una selección explícita y revalidable. Permitir
         // iniciar la incorporación desde esta misma vista aunque la consulta original
         // haya dicho "comparar": el guard vuelve a leer Libro y Proyecto H antes de
         // pedir confirmación y los ítems dudosos/existentes continúan deshabilitados.
-        if (listosServicios.length || listosNotas.length) {
+        if (listosServicios.length || notas.some(x => x.estado === "listo")) {
             const acciones = document.createElement("div"); acciones.className = "haku-libro-servicios__acciones"; const boton = document.createElement("button"); boton.type = "button"; boton.className = "haku-libro-servicios__boton";
             boton.dataset.hakuAccion = 'incorporar';
             const refrescar = () => { const elegidos = resultado.items.filter(x => seleccionados.has(x.item_id)); const s = elegidos.filter(x => x.kind === "servicio").length, n = elegidos.filter(x => x.kind === "nota").length; boton.textContent = `Incorporar ${s} servicio${s === 1 ? "" : "s"} + ${n} nota${n === 1 ? "" : "s"}`; boton.disabled = !elegidos.length; };
@@ -685,7 +838,7 @@
             acciones.append(boton); out.append(acciones);
         }
         const pie = document.createElement("div"); pie.className = "haku-libro-servicios__pie";
-        pie.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. “Tinaja” sin tipo, cama adicional, cuna y otras instrucciones operativas se tratan como notas, no como servicios."; out.append(pie);
+        pie.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. La semántica del Libro no cambia después de clasificarse: identidad, completitud y cobro se revisan por separado."; out.append(pie);
     }
 
     async function procesar(texto) {
