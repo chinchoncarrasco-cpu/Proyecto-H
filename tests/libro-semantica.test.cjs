@@ -169,7 +169,7 @@ test('structured and explicit service evidence remains operational for every exi
   ['Tinaja 20:00','tinaja'],['Tinaja x pagar','tinaja'],['Tinaja pendiente de pago','tinaja'],['Tinaja pendiente pagar','tinaja'],
   ['Reservó tinaja','tinaja'],['Pidió tinaja','tinaja'],['Agendar tinaja','tinaja'],
   ['Jacuzzi 21:00','jacuzzi'],['Masaje 18:00','masaje'],['Tonel 19:15','tonel'],['Cuna confirmada','cuna'],
-  ['Cama adicional x pagar','cama_adicional'],['Late out 13:00','lateout'],['Consultó por tinaja y reservó para las 20:00','tinaja']
+  ['Late out 13:00','lateout'],['Consultó por tinaja y reservó para las 20:00','tinaja']
  ];
  for(const [nota,concepto] of casos){
   const r=S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
@@ -183,31 +183,34 @@ test('structured and explicit service evidence remains operational for every exi
 test('service parsing keeps operational classification separate from payment intent',()=>{
  const reserva=nota=>S.normalizarHoja(hojaDosNoches(`Persona Prueba // 2 noches // ${nota}`),'Sep26').reservas[0];
  const parse=nota=>reserva(nota).servicios;
- for(const nota of ['Cama adicional','  CUNA  ','Tinaja']){
+ for(const nota of ['Cama adicional','AGREGAR CAMA ADICIONAL','Solicita cama adicional','Preparar cama adicional','  CUNA  ','Tinaja']){
   const r=reserva(nota);assert.equal(r.servicios.length,0,nota);assert.equal(r.menciones_servicio[0].clasificacion,'nota',nota);
  }
- for(const nota of ['Solicita cama adicional','Preparar cama adicional','Jacuzzi por coordinar']){
+ for(const nota of ['Solicita Tinaja','Preparar Tinaja']){
   const [item]=parse(nota);assert.ok(item,nota);assert.equal(item.clasificacion,'servicio_por_confirmar',nota);
   assert.equal(item.intencion_cobro,'no_determinada',nota);
   assert.equal(item.intencion_operativa,true,nota);
  }
- const [ambiguo]=parse('TONEL POR CONFIRMAR');
- assert.equal(ambiguo.semantica,'AMBIGUO');assert.equal(ambiguo.intencion_operativa,false);assert.equal(ambiguo.clasificacion,'servicio_por_confirmar');
  const [campoServicios]=S.servicios('Cama adicional',{origen_campo:'servicios'});
  assert.equal(campoServicios.clasificacion,'servicio_por_confirmar');assert.equal(campoServicios.intencion_operativa,true);
  assert.equal(campoServicios.evidencia_origen.origen_campo,'servicios');
- for(const nota of ['Masaje 16:00 confirmado','Late Check-out 13:00 confirmado']){
-  const [item]=parse(nota);assert.ok(item,nota);assert.equal(item.clasificacion,'servicio_confirmado',nota);
-  assert.equal(item.intencion_cobro,'no_determinada',nota);
+ const [masaje]=parse('Masaje 16:00 confirmado');
+ assert.equal(masaje.clasificacion,'servicio_confirmado');assert.equal(masaje.intencion_cobro,'cobrable');
+ const [late]=parse('Late Check-out 13:00 confirmado');
+ assert.equal(late.clasificacion,'servicio_confirmado');assert.equal(late.intencion_cobro,'no_determinada');
+ for(const nota of ['TONEL POR CONFIRMAR','Tinaja pendiente de coordinar','Tinaja pendiente de confirmación',
+  'PROMO HAIKU SEGUNDA NOCHE TINAJA JACUZZI DE CORTESÍA POR COORDINAR',
+  'Jacuzzi por coordinar por cobrar','Jacuzzi por coordinar POR PAGAR','Jacuzzi por coordinar pendiente de pago',
+  'Jacuzzi por coordinar pendiente por pagar','Jacuzzi por coordinar pago pendiente','Jacuzzi de CORTESÍA por coordinar',
+  '1 hora de tinaja tipo jacuzzi de cortesía por coordinar','Coordinar horario de tinaja']){
+  const r=reserva(nota);assert.equal(r.servicios.length,0,nota);assert.equal(r.menciones_servicio[0].clasificacion,'nota',nota);
+  assert.equal(r.menciones_servicio[0].intencion_operativa,false,nota);
  }
- for(const nota of ['Jacuzzi por coordinar por cobrar','Jacuzzi por coordinar POR PAGAR','Jacuzzi por coordinar pendiente de pago',
-  'Jacuzzi por coordinar pendiente por pagar','Jacuzzi por coordinar pago pendiente']){
-  const [item]=parse(nota);assert.equal(item.clasificacion,'servicio_por_confirmar',nota);
+ for(const nota of ['Masaje 16:00 confirmado por pagar','Late Check-out 13:00 confirmado por pagar']){
+  const [item]=parse(nota);assert.ok(item,nota);assert.equal(item.clasificacion,'servicio_confirmado',nota);
   assert.equal(item.intencion_cobro,'cobrable',nota);assert.equal(item.pendiente,true,nota);
   assert.equal(item.evidencia_origen.pendiente_pago,true,nota);
  }
- const [cortesia]=parse('Jacuzzi de CORTESÍA por coordinar');
- assert.equal(cortesia.clasificacion,'servicio_por_confirmar');assert.equal(cortesia.intencion_cobro,'cortesia');assert.equal(cortesia.cortesia,true);
  const [rango]=parse('dejar batas tinaja de 17:45 a 18:45');
  assert.equal(rango.hora,'17:45');assert.equal(rango.hora_fin,'18:45');assert.equal(rango.intencion_operativa,true);
  const [conFecha]=parse('tinaja 17:45 el 12.09.2026');

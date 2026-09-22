@@ -8,11 +8,11 @@ const golden = require('./fixtures/libro-servicios-sep26-golden.cjs');
 test('golden Sep26 cubre exactamente 63 fragmentos con las cinco semánticas canónicas', () => {
   assert.equal(golden.casos.length, 63);
   assert.deepEqual(Object.fromEntries(Object.values(golden.S).map(estado => [estado, golden.casos.filter(x => x.semantica === estado).length])), {
-    NO_SERVICIO: 8,
-    SERVICIO_REAL: 49,
+    NO_SERVICIO: 14,
+    SERVICIO_REAL: 44,
     CONSULTA_SERVICIO: 3,
     SERVICIO_DESCARTADO: 2,
-    AMBIGUO: 1
+    AMBIGUO: 0
   });
   assert.deepEqual(golden.casos.map(x => x.id), Array.from({ length: 63 }, (_, i) => i + 1));
   assert.ok(golden.casos.every(x => x.origen.startsWith('Sep26!') && x.texto && x.evidencias.length));
@@ -64,10 +64,11 @@ test('unidades múltiples no mezclan horarios ni conceptos', () => {
   assert.deepEqual(simultaneos.unidadesServicio.map(x => x.hora), ['19:00', '19:00']);
 });
 
-test('Tinaja x confirmar permanece como el único ambiguo documentado', () => {
+test('por coordinar o confirmar queda como Nota y no sobrevive como ambiguo', () => {
   const ambiguos = golden.casos.filter(x => S.clasificarFragmentoServicio(x.texto, x.contexto).semantica === 'AMBIGUO');
-  assert.deepEqual(ambiguos.map(x => x.id), [17]);
-  assert.match(ambiguos[0].observacion, /no contiene fecha, hora, duración/i);
+  assert.deepEqual(ambiguos.map(x => x.id), []);
+  assert.deepEqual([17, 31, 48, 50, 60].map(id => S.clasificarFragmentoServicio(golden.casos[id - 1].texto).semantica),
+    Array(5).fill('NO_SERVICIO'));
 });
 
 test('scope-v2 consume la autoridad canónica y no conserva clasificadores semánticos paralelos', () => {

@@ -278,6 +278,23 @@
         return candidatas.length === 1 ? candidatas[0] : null;
     }
 
+    function fechaExplicitaServicio(servicio, reserva) {
+        const propia = fechaExplicita(servicio?.texto_original, reserva);
+        if (propia) return propia;
+        const fuenteCompleta = servicio?.texto_fuente_completo || servicio?.unidad_servicio?.texto_fuente_completo;
+        if (!fuenteCompleta || normalizar(fuenteCompleta) === normalizar(servicio?.texto_original)) return null;
+        const t = normalizar(fuenteCompleta).replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, "-");
+        const candidatas = [], agregar = token => {
+            const fecha = fechaExplicita(token, reserva);
+            if (fecha) candidatas.push(fecha);
+        };
+        const sinCompletas = t.replace(/\b\d{1,2}[-/.]\d{1,2}[-/.](?:\d{2}|\d{4})\b/g, token => { agregar(token); return " "; });
+        for (const m of sinCompletas.matchAll(/\b\d{1,2}[-/.]\d{1,2}(?![-/.]\d)\b/g)) agregar(m[0]);
+        for (const m of t.matchAll(/\b(?:domingo|dom|lunes|lun|martes|mar|miercoles|mie|jueves|jue|viernes|vie|sabado|sab)\b/g)) agregar(m[0]);
+        const unicas = [...new Set(candidatas)];
+        return unicas.length === 1 ? unicas[0] : null;
+    }
+
     function textoSinFechaNumerica(texto, reserva) {
         const original = String(texto || ""), fecha = fechaExplicita(original, reserva);
         if (!fecha) return original;
@@ -334,7 +351,7 @@
     }
 
     function inferirFechaServicio(reserva, servicio, hora) {
-        const explicita = fechaExplicita(servicio?.texto_original, reserva);
+        const explicita = fechaExplicitaServicio(servicio, reserva);
         const ordinales = nocheOrdinal(servicio?.texto_original);
         if (ordinales) {
             const noche = ordinales.length === 1 && nochesValidas(reserva, hora).find(n => n.noche_indice === ordinales[0]);
@@ -403,7 +420,7 @@
         if (!mapa.codigo) razones.push(...(Array.isArray(mapa.motivos) ? mapa.motivos : [mapa.motivo]));
         const esLate = servicio.concepto === "lateout" || mapa.codigo === "lateCheckout";
         const requiereHorario = Boolean(mapa.requiereHorario || ["tinaja", "jacuzzi", "tonel", "masaje", "lateout"].includes(servicio.concepto));
-        const fechaDeclarada = fechaExplicita(servicio.texto_original, reserva), textoHorario = textoSinFechaNumerica(servicio.texto_original, reserva);
+        const fechaDeclarada = fechaExplicitaServicio(servicio, reserva), textoHorario = textoSinFechaNumerica(servicio.texto_original, reserva);
         const horaConfundidaConFecha = fechaDeclarada && servicio.hora === `${fechaDeclarada.slice(8, 10)}:${fechaDeclarada.slice(5, 7)}`;
         const horaFinConfundidaConFecha = fechaDeclarada && servicio.hora_fin === `${fechaDeclarada.slice(8, 10)}:${fechaDeclarada.slice(5, 7)}`;
         const horaEstructurada = horaConfundidaConFecha ? null : servicio.hora;
@@ -570,27 +587,32 @@
             return campos;
         };
         const codigos = codigosCompatibles(item), hora = horaCorta(item.hora), horaFin = horaCorta(item.hora_fin);
-        if (codigos.size && item.fecha && hora) {
-            const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) && x.fecha_servicio === item.fecha && horaCorta(x.hora_inicio) === hora);
-            const evaluados = mismoHechoBase.map(candidato => ({ candidato, contradicciones: contradiccionesExplicitas(candidato, horaFin) }));
-            const compatiblesOperativos = evaluados.filter(x => !x.contradicciones.length).map(x => x.candidato);
-            if (mismoHechoBase.length && !compatiblesOperativos.length) {
-                const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
-                return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, contradicciones,
-                    motivo: `Hay un servicio existente con la misma fecha y hora, pero contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
-            }
-            const textoOrigen = normalizar(item.servicio?.texto_original);
+        if (codigos.size && hora) {
+            const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
+                (!item.fecha || x.fecha_servicio === item.fecha) && horaCorta(x.hora_inicio) === hora);
+            const textoOrigen = normalizar(`${item.servicio?.texto_original || ""} ${item.servicio?.texto_fuente_completo || ""}`);
             const cortesiaExplicita = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
             const cobroExplicito = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
                 /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b/.test(textoOrigen));
-            const compatibles = compatiblesOperativos.filter(x => {
-                if (cortesiaExplicita && x.tipo_cobro !== "cortesia") return false;
-                if (cobroExplicito && x.tipo_cobro === "cortesia") return false;
-                return true;
-            });
-            if (compatibles.length === 1) return { estado: "existente", candidato: compatibles[0], candidatos: compatibles, motivo: "Servicio equivalente único en Proyecto H." };
+            const contradiccionesFinancieras = candidato => {
+                const campos = [];
+                if (cortesiaExplicita && candidato.tipo_cobro !== "cortesia") campos.push("tipo_cobro");
+                if (cortesiaExplicita && candidato.tipo_cobro === "cortesia" && candidato.total != null &&
+                    Number.isFinite(Number(candidato.total)) && Number(candidato.total) !== 0) campos.push("total");
+                if (cobroExplicito && candidato.tipo_cobro === "cortesia") campos.push("tipo_cobro");
+                return campos;
+            };
+            const evaluados = mismoHechoBase.map(candidato => ({ candidato,
+                contradicciones: [...new Set([...contradiccionesExplicitas(candidato, horaFin), ...contradiccionesFinancieras(candidato)])] }));
+            const compatibles = evaluados.filter(x => !x.contradicciones.length).map(x => x.candidato);
+            if (compatibles.length === 1) return { estado: "existente", candidato: compatibles[0], candidatos: compatibles,
+                motivo: item.fecha ? "Servicio equivalente único en Proyecto H." : "Servicio equivalente único por reserva, hora e intención financiera; la fecha ausente no se inventa." };
             if (compatibles.length > 1) return { estado: "revisar", candidato: null, candidatos: compatibles, motivo: "Hay más de un servicio existente compatible; no se elige automáticamente." };
-            if (compatiblesOperativos.length) return { estado: "revisar", candidato: null, candidatos: compatiblesOperativos, motivo: "El servicio existente contradice la intención de cobro o cortesía indicada por el Libro." };
+            if (mismoHechoBase.length) {
+                const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
+                return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, contradicciones,
+                    motivo: `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
+            }
         }
         const identidad = root.HAIKU_SERVICIOS_IDENTIDAD_V1;
         if (identidad?.resolverServicio && item.payload) {

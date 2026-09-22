@@ -18,15 +18,15 @@ module.exports = Object.freeze([
     celda: 'Sep26!BO7',
     texto: '1 MASAJE RELAJANTE 60 MIN A LAS 16 HRS CON JOSEFINA MELLADO',
     unidades: [
-      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 1, hora: '16:00', simultaneo: false, profesionales: ['Josefina Mellado'], asignacion_profesional: 'Josefina Mellado', intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: [] }
+      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 1, hora: '16:00', simultaneo: false, profesionales: ['Josefina Mellado'], asignacion_profesional: 'Josefina Mellado', intencion_financiera: 'COBRABLE', marcadores_distribucion: [] }
     ]
   },
   {
     celda: 'Sep26!BS7',
     texto: '1 MASAJE DESCONTRACTURANTE 60 MIN A LAS 12.15 Y 1 MASAJE RELAJANTE A LAS 13.15 AMBOS CON MÓNICA SÁB 19-09',
     unidades: [
-      { tipo: 'descontracturante', duracion_minutos: 60, cantidad: 1, hora: '12:15', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: 'Mónica', intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: [] },
-      { tipo: 'terapeutico', duracion_minutos: null, cantidad: 1, hora: '13:15', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: 'Mónica', intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: [] }
+      { tipo: 'descontracturante', duracion_minutos: 60, cantidad: 1, hora: '12:15', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: 'Mónica', intencion_financiera: 'COBRABLE', marcadores_distribucion: [] },
+      { tipo: 'terapeutico', duracion_minutos: null, cantidad: 1, hora: '13:15', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: 'Mónica', intencion_financiera: 'COBRABLE', marcadores_distribucion: [] }
     ]
   },
   {
@@ -40,21 +40,21 @@ module.exports = Object.freeze([
     celda: 'Sep26!BS10',
     texto: 'SABADO 19-9-26 MASAJES RELAJANTES 30 MIN C/U X 4, 2 CON TESSY Y CON MÓNICA, DESDE LAS 11 AM',
     unidades: [
-      { tipo: 'terapeutico', duracion_minutos: 30, cantidad: 4, hora: '11:00', simultaneo: false, profesionales: ['Tessy', 'Mónica'], asignacion_profesional: null, intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: ['C/U'] }
+      { tipo: 'terapeutico', duracion_minutos: 30, cantidad: 4, hora: '11:00', simultaneo: false, profesionales: ['Tessy', 'Mónica'], asignacion_profesional: null, intencion_financiera: 'COBRABLE', marcadores_distribucion: ['C/U'] }
     ]
   },
   {
     celda: 'Sep26!BC13',
     texto: '2 MASAJES RELAJANTES DE 60 MIN C/U DESDE LAS 16 HRS CON MÓNICA 15-09',
     unidades: [
-      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 2, hora: '16:00', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: null, intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: ['C/U'] }
+      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 2, hora: '16:00', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: null, intencion_financiera: 'COBRABLE', marcadores_distribucion: ['C/U'] }
     ]
   },
   {
     celda: 'Sep26!BC13',
     texto: '2 MASAJEs RELAJANTE DE 60 MIN C/U  DESDE LAS 16 HRS CON MÓNICA',
     unidades: [
-      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 2, hora: '16:00', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: null, intencion_financiera: 'NO_DETERMINADA', marcadores_distribucion: ['C/U'] }
+      { tipo: 'terapeutico', duracion_minutos: 60, cantidad: 2, hora: '16:00', simultaneo: false, profesionales: ['Mónica'], asignacion_profesional: null, intencion_financiera: 'COBRABLE', marcadores_distribucion: ['C/U'] }
     ]
   }
 ]);

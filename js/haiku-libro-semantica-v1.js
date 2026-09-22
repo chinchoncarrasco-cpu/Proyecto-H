@@ -189,6 +189,13 @@
         return { intencion: cortesia && !cobrable ? INTENCION_FINANCIERA.CORTESIA : cobrable && !cortesia ? INTENCION_FINANCIERA.COBRABLE : INTENCION_FINANCIERA.NO_DETERMINADA, evidencias };
     }
 
+    function pendienteDeCoordinarOConfirmar(texto) {
+        const t = normalizar(texto);
+        return /\b(?:x|por|sin)\s+(?:coordinar|confirmar)(?:\s+(?:el\s+)?horario)?\b/.test(t) ||
+            /\bpendiente\s+(?:de|por)\s+(?:coordinar|confirmar|coordinacion|confirmacion)\b/.test(t) ||
+            /\bcoordinar\s+(?:(?:el\s+)?horario|con\s+(?:el\s+|la\s+)?huesped)\b/.test(t);
+    }
+
     function normalizarPosicional(texto) {
         return String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     }
@@ -277,7 +284,13 @@
     function parsearUnidadesMasaje(texto) {
         const original = String(texto || "").trim(), anclas = anclasMasaje(original);
         if (!anclas.length) return [];
-        const financiera = clasificarIntencionFinanciera(original);
+        const financieraDeclarada = clasificarIntencionFinanciera(original);
+        // Regla operacional confirmada: un masaje real siempre es cobrable. Una
+        // cortesía explícita se conserva como contradicción para que scope-v2 la
+        // detenga; nunca se transforma silenciosamente en un masaje gratuito.
+        const financiera = financieraDeclarada.intencion === INTENCION_FINANCIERA.NO_DETERMINADA
+            ? { intencion: INTENCION_FINANCIERA.COBRABLE, evidencias: [...financieraDeclarada.evidencias, "masaje cobrable por regla de negocio"] }
+            : financieraDeclarada;
         const inicios = anclas.map((a, i) => i === 0 ? 0 : inicioUnidadMasaje(original, a.indice));
         const unidades = anclas.map((ancla, indice) => {
             const segmento = original.slice(inicios[indice], inicios[indice + 1] ?? original.length).trim();
@@ -359,21 +372,26 @@
             return base(SEMANTICA_SERVICIO.SERVICIO_DESCARTADO);
         }
         if ((consulta && !compromiso) || /\bsi\s+es\s+posible\b/.test(t)) { evidencias.push("consulta sin compromiso operativo"); return base(SEMANTICA_SERVICIO.CONSULTA_SERVICIO); }
+        if (pendienteDeCoordinarOConfirmar(texto)) {
+            evidencias.push("servicio pendiente de coordinación o confirmación");
+            return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
+        if (conceptos.length === 1 && conceptos[0] === "cama_adicional" && contextoReserva?.origen_campo !== "servicios") {
+            evidencias.push("cama adicional indicada fuera de la estructura de Servicios");
+            return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
         const mencionAislada = /^(?:cama\s*adicional|camaadicional|cuna|tinaja|jacuzzi|tonel|masaje)$/i.test(t);
         if (mencionAislada && contextoReserva?.origen_campo !== "servicios") {
             evidencias.push("mención aislada sin intención de prestación"); return base(SEMANTICA_SERVICIO.NO_SERVICIO);
         }
-        const soloPorConfirmar = /^(?:tinaja|jacuzzi|tonel|cuna|cama\s*adicional|masaje)\s+(?:x|por|sin)\s+confirmar\.?$/.test(t);
-        if (soloPorConfirmar) { evidencias.push("mención pendiente sin evidencia de prestación concreta"); return { ...base(SEMANTICA_SERVICIO.AMBIGUO), unidadesServicio: unidadesDeServicio(texto) }; }
         const pruebas = [
             [/\b\d+\s*(?:horas?|hrs?|min(?:utos?)?|masaj\w*|personas?|pers\.?|pax|camas?|cunas?)\b/, "cantidad o duración"],
             [/\b[0-2]?\d\s*[:.,]\s*[0-5]\d\b|\b[0-2]?\d\s*(?:hrs?|am|pm)\b/, "horario"],
             [/\b\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)\b/, "fecha o día"],
-            [/\b(?:solicita(?:n|do)?|solicito|pidio|pide(?:n)?|reservo|reservada?|confirmo|confirmada?|agendo|agendar|preparar|dejar|entregar|respetar|requiere(?:n)?|coordinar|agregar|contrato|usar)\b/, "acción operativa"],
+            [/\b(?:solicita(?:n|do)?|solicito|pidio|pide(?:n)?|reservo|reservada?|confirmo|confirmada?|agendo|agendar|preparar|dejar|entregar|respetar|requiere(?:n)?|contrato|usar)\b/, "acción operativa"],
             [/\bcon\s+[\p{L}][\p{L}\s.'’-]+/u, "profesional indicado"],
             [/\bco+rtesia\b|\bregalo\b/, "cortesía explícita"],
             [/\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:de\s+|por\s+)?(?:pago|pagar|cobro|cobrar)\b|\bpagad[oa]s?\b|\bcobrarle\b|(?:\$|\bclp\b)\s*\d/, "intención de cobro"],
-            [/\b(?:por|x)\s+coordinar\b/, "coordinación operativa"]
         ];
         for (const [re, nombre] of pruebas) if (re.test(t)) evidencias.push(nombre);
         if (contextoReserva?.origen_campo === "servicios") evidencias.push("campo explícito de Servicios");

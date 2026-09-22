@@ -133,6 +133,53 @@ test('Relajante sin duración conserva la revisión manual', () => {
   assert.equal(preparado.payload, null);
 });
 
+test('masajes reales son cobrables por regla de negocio y una cortesía explícita se revisa', () => {
+  const P = scope();
+  const asociacion = { estado: 'asociada', sistema: { id: 'estadia', reserva_id: 'reserva' } };
+  const reserva = { titular: 'Prueba', cabana: 1, fecha_checkin: '2026-09-18', fecha_checkout: '2026-09-19', noches: 1, adultos: 2, tipo_estadia: 'alojamiento' };
+
+  const normal = S.servicios('1 masaje relajante de 60 min a las 18 hrs', { origen_campo: 'notas_reserva' })[0];
+  const preparadoNormal = P.prepararServicio(reserva, normal, asociacion);
+  assert.equal(normal.intencion_cobro, 'cobrable');
+  assert.equal(preparadoNormal.payload.tipo_cobro, 'normal');
+
+  const cortesia = S.servicios('1 masaje relajante de 60 min a las 18 hrs de cortesía', { origen_campo: 'notas_reserva' })[0];
+  const preparadoCortesia = P.prepararServicio(reserva, cortesia, asociacion);
+  assert.equal(cortesia.intencion_cobro, 'cortesia');
+  assert.equal(preparadoCortesia.payload, null);
+  assert.ok(preparadoCortesia.razones.some(x => /cortesía.*Masaje Terapéutico/i.test(x)));
+});
+
+test('Laura: la fecha compartida alcanza a ambas unidades y la segunda sólo conserva la duración pendiente', () => {
+  const P = scope();
+  const asociacion = { estado: 'asociada', sistema: { id: 'estadia', reserva_id: 'reserva' } };
+  const reserva = { titular: 'Laura', cabana: 5, fecha_checkin: '2026-09-18', fecha_checkout: '2026-09-20', noches: 2, adultos: 2, tipo_estadia: 'alojamiento' };
+  const servicios = S.servicios(golden[3].texto, { origen_campo: 'notas_reserva' });
+  const preparados = servicios.map(servicio => P.prepararServicio(reserva, servicio, asociacion));
+
+  assert.deepEqual(preparados.map(x => x.fecha), ['2026-09-19', '2026-09-19']);
+  assert.deepEqual(Array.from(preparados[0].razones), []);
+  assert.deepEqual(Array.from(preparados[1].razones), ['Falta duración del masaje.']);
+  assert.equal(preparados[0].payload.codigo_servicio, 'masajeDescontracturante60');
+  assert.equal(preparados[1].payload, null);
+});
+
+test('una unidad sin fecha no hereda una fecha ambigua cuando el fragmento completo contiene dos días distintos', () => {
+  const P = scope();
+  const asociacion = { estado: 'asociada', sistema: { id: 'estadia', reserva_id: 'reserva' } };
+  const reserva = { titular: 'Prueba', cabana: 5, fecha_checkin: '2026-09-18', fecha_checkout: '2026-09-20', noches: 2, adultos: 2, tipo_estadia: 'alojamiento' };
+  const base = S.servicios('1 masaje relajante de 60 min a las 13 hrs', { origen_campo: 'notas_reserva' })[0];
+  const servicio = {
+    ...base,
+    texto_fuente_completo: '1 masaje relajante de 60 min el 18-09 y 1 masaje descontracturante de 60 min el 19-09'
+  };
+  const preparado = P.prepararServicio(reserva, servicio, asociacion);
+
+  assert.equal(preparado.fecha, null);
+  assert.equal(preparado.payload, null);
+  assert.ok(preparado.razones.some(x => x.startsWith('Falta una fecha inequívoca')));
+});
+
 test('catálogo consume tipo y duración estructurados y entrega motivos precisos', () => {
   const P = scope();
   const servicio = unidad => ({ ...unidad, concepto: 'masaje', texto_original: unidad.texto, unidad_servicio: unidad });
