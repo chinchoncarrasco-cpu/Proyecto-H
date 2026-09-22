@@ -98,7 +98,8 @@ test('recognized incomplete services stay pending and never become notes or serv
 test('confirmed massage and late checkout keep normal incorporation semantics', () => {
     const massage = P.prepararServicio(reserva, {
         concepto: 'masaje', texto_original: 'Masaje terapéutico 60 min 16:00 confirmado el 12/09/2026 por cobrar',
-        hora: '16:00', semantica: 'SERVICIO_REAL', clasificacion: 'servicio_confirmado', intencion_cobro: 'cobrable'
+        tipo: 'terapeutico', duracion_minutos: 60, hora: '16:00', semantica: 'SERVICIO_REAL',
+        clasificacion: 'servicio_confirmado', intencion_cobro: 'cobrable'
     }, asociacion);
     assert.equal(massage.clasificacion, 'servicio_confirmado');assert.equal(massage.intencion_cobro, 'cobrable');
     assert.equal(massage.payload.codigo_servicio, 'masajeTerapeutico60');assert.equal(massage.payload.tipo_cobro, 'normal');

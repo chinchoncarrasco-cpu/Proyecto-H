@@ -133,6 +133,13 @@
                     texto_original: unidad.texto || texto, fragmento_original: texto, semantica: canon.semantica,
                     evidencias_semanticas: canon.evidencias, unidad_indice: indice, cantidad: unidad.cantidad,
                     hora: unidad.hora || original?.hora || null, hora_fin: unidad.hora_fin || original?.hora_fin || null,
+                    tipo: unidad.tipo ?? null, duracion_minutos: unidad.duracion_minutos ?? null,
+                    simultaneo: unidad.simultaneo === true,
+                    profesionales: Array.isArray(unidad.profesionales) ? [...unidad.profesionales] : [],
+                    asignacion_profesional: unidad.asignacion_profesional ?? null,
+                    marcadores_distribucion: Array.isArray(unidad.marcadores_distribucion) ? [...unidad.marcadores_distribucion] : [],
+                    modalidad_horario: unidad.modalidad_horario ?? null,
+                    texto_fuente_completo: unidad.texto_fuente_completo || texto, unidad_servicio: unidad,
                     intencion_cobro: ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera] || original?.intencion_cobro || "no_determinada" }));
             }
             for (const servicio of expandidos) {
@@ -369,12 +376,19 @@
         if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
         if (concepto === "masaje") {
-            const minutos = Number(t.match(/\b(30|60)\s*min/)?.[1]);
-            if (/relajante/.test(t) && /descontracturante/.test(t)) return { motivo: "La misma nota contiene dos masajes distintos; deben separarse antes de incorporarlos." };
-            if (/descontractur/.test(t) && minutos) return { codigo: `masajeDescontracturante${minutos}`, nombre: `Masaje Descontracturante ${minutos} min`, requiereHorario: true, requierePersonas: false, permiteCortesia: false };
-            if (/terapeut/.test(t) && minutos) return { codigo: `masajeTerapeutico${minutos}`, nombre: `Masaje Terapéutico ${minutos} min`, requiereHorario: true, requierePersonas: false, permiteCortesia: false };
-            if (/relajante/.test(t)) return { motivo: "El Libro dice masaje relajante, pero ese nombre no tiene una equivalencia inequívoca en el catálogo actual." };
-            return { motivo: "Falta precisar el tipo de masaje y si es de 30 o 60 minutos." };
+            const tipoFuente = servicio?.tipo ?? servicio?.unidad_servicio?.tipo ?? null;
+            const tipoNormalizado = normalizar(tipoFuente);
+            const tipo = /^(?:relajant\w*|reljant\w*|holistic\w*)$/.test(tipoNormalizado) ? "terapeutico" : tipoFuente;
+            const minutos = servicio?.duracion_minutos ?? servicio?.unidad_servicio?.duracion_minutos ?? null;
+            const base = { requiereHorario: true, requierePersonas: false, permiteCortesia: false, tipo, duracion_minutos: minutos };
+            const motivos = [];
+            if (!tipo) motivos.push("Falta tipo de masaje.");
+            if (!Number.isInteger(minutos)) motivos.push("Falta duración del masaje.");
+            else if (![30, 60].includes(minutos)) motivos.push(`La duración de ${minutos} min no tiene una equivalencia definida en el catálogo actual.`);
+            if (motivos.length) return { ...base, motivos, motivo: motivos[0] };
+            if (tipo === "descontracturante") return { ...base, codigo: `masajeDescontracturante${minutos}`, nombre: `Masaje Descontracturante ${minutos} min` };
+            if (tipo === "terapeutico") return { ...base, codigo: `masajeTerapeutico${minutos}`, nombre: `Masaje Terapéutico ${minutos} min` };
+            return { ...base, motivos: ["El tipo de masaje no tiene una equivalencia definida en el catálogo actual."], motivo: "El tipo de masaje no tiene una equivalencia definida en el catálogo actual." };
         }
         return { motivo: "No hay una equivalencia segura con el catálogo de servicios de Proyecto H." };
     }
@@ -386,7 +400,7 @@
         const intencion_cobro = intencionCobroServicio(servicio);
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
         const mapa = mapearConcepto(servicio);
-        if (!mapa.codigo) razones.push(mapa.motivo);
+        if (!mapa.codigo) razones.push(...(Array.isArray(mapa.motivos) ? mapa.motivos : [mapa.motivo]));
         const esLate = servicio.concepto === "lateout" || mapa.codigo === "lateCheckout";
         const requiereHorario = Boolean(mapa.requiereHorario || ["tinaja", "jacuzzi", "tonel", "masaje", "lateout"].includes(servicio.concepto));
         const fechaDeclarada = fechaExplicita(servicio.texto_original, reserva), textoHorario = textoSinFechaNumerica(servicio.texto_original, reserva);
@@ -396,7 +410,7 @@
         const horaFinEstructurada = horaFinConfundidaConFecha ? null : servicio.hora_fin;
         const hora = requiereHorario ? (esLate ? (horaTexto(textoHorario, true) || horaEstructurada || horaTexto(textoHorario)) : (horaEstructurada || horaTexto(textoHorario))) : null;
         const hora_fin = requiereHorario && !esLate ? (horaFinEstructurada || horaFinTexto(textoHorario)) : null;
-        if (requiereHorario && !hora) razones.push("Falta un horario inequívoco del servicio.");
+        if (requiereHorario && !hora) razones.push(servicio.concepto === "masaje" ? "Falta horario del masaje." : "Falta un horario inequívoco del servicio.");
         const fechaInfo = esLate ? { fecha: reserva.fecha_checkout, inferida: false, detalle: null } : inferirFechaServicio(reserva, servicio, hora);
         const opcionesNoches = nochesValidas(reserva, hora);
         if (nocheManual != null && !fechaInfo.fecha && !fechaInfo.conflicto) {

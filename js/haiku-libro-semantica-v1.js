@@ -153,7 +153,7 @@
         if (/\blate[\s-]*(?:check[\s-]*)?out\b/.test(t)) hallados.push("lateout");
         if (/\bcama\s*adicional\b|\bcamaadicional\b/.test(t)) hallados.push("cama_adicional");
         if (/\bcuna\b/.test(t)) hallados.push("cuna");
-        if (/\bmasaj\w*\b|\bdescontractur\w*\b/.test(t)) hallados.push("masaje");
+        if (/\bmasaj\w*\b|\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/.test(t)) hallados.push("masaje");
         return [...new Set(hallados)];
     }
 
@@ -181,6 +181,127 @@
         return { intencion: cortesia && !cobrable ? INTENCION_FINANCIERA.CORTESIA : cobrable && !cortesia ? INTENCION_FINANCIERA.COBRABLE : INTENCION_FINANCIERA.NO_DETERMINADA, evidencias };
     }
 
+    function normalizarPosicional(texto) {
+        return String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    }
+
+    function tipoMasaje(texto) {
+        const t = normalizar(texto);
+        if (/\b(?:descontractur\w*|descontratur\w*)\b/.test(t)) return "descontracturante";
+        // Equivalencia explícita de negocio: en el Libro, Relajante y
+        // Holístico son nombres operacionales del masaje Terapéutico.
+        if (/\b(?:relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/.test(t)) return "terapeutico";
+        return null;
+    }
+
+    function esHoraProgramada(texto, indice) {
+        return /(?:\ba|\bdesde|\bhasta)\s+las?\s*$/.test(normalizar(String(texto || "").slice(Math.max(0, indice - 24), indice)));
+    }
+
+    function duracionMasaje(texto) {
+        const original = String(texto || ""), t = normalizar(original);
+        const minutos = t.match(/\b(30|60)\s*min(?:uto)?s?\b/);
+        if (minutos) return Number(minutos[1]);
+        for (const hora of t.matchAll(/\b(?:1|una)\s*(?:hora|hrs?|h)\b/g)) if (!esHoraProgramada(original, hora.index)) return 60;
+        if (/\bmedia\s+hora\b/.test(t)) return 30;
+        return null;
+    }
+
+    function textoSinDuracionMasaje(texto) {
+        const original = String(texto || "");
+        return original.replace(/\b(?:1|una)\s*(?:hora|hrs?|h)\b/gi, (valor, indice) =>
+            esHoraProgramada(original, indice) ? valor : " ".repeat(valor.length));
+    }
+
+    function nombreProfesional(texto) {
+        const limpio = String(texto || "").replace(/^\s*con\s+/i, "").replace(/\s+/g, " ").trim();
+        const canon = { monica: "Mónica", josefina: "Josefina", "josefina mellado": "Josefina Mellado", tessy: "Tessy" };
+        const conocido = canon[normalizar(limpio)];
+        if (conocido) return conocido;
+        return limpio.split(" ").filter(Boolean).map(p => p.charAt(0).toLocaleUpperCase("es-CL") + p.slice(1).toLocaleLowerCase("es-CL")).join(" ");
+    }
+
+    function profesionalesMasaje(texto) {
+        const original = String(texto || ""), salida = [];
+        const patron = /\bcon\s+(.+?)(?=\s+(?:a\s+las?|desde\s+las?|por\s+pagar|x\s+pagar|s[áa]b(?:ado)?|domingo|lunes|martes|mi[ée]rcoles|jueves|viernes|\d{1,2}\s*[-/.]\s*\d{1,2})|[,.;()]|$)/giu;
+        for (const coincidencia of original.matchAll(patron)) {
+            const partes = coincidencia[1].split(/\s+y\s+(?:con\s+)?|\s*\/\s*/i)
+                .map(nombreProfesional).filter(nombre => nombre && !/\d/.test(nombre));
+            salida.push(...partes);
+        }
+        return [...new Set(salida)];
+    }
+
+    function anclasMasaje(texto) {
+        const t = normalizarPosicional(texto).replace(/\b\d{1,2}\s*[-/.–—−]\s*\d{1,2}(?:\s*[-/.–—−]\s*(?:\d{2}|\d{4}))?\b/g, valor => " ".repeat(valor.length));
+        const anclas = [];
+        const masajes = /(?:\b(\d+)\s+)?\bmasajes?\b(?:\s+(relajant\w*|reljant\w*|holistic\w*|descontractur\w*|descontratur\w*|terapeut\w*))?/g;
+        for (const m of t.matchAll(masajes)) {
+            const resto = t.slice(m.index + m[0].length);
+            if (!m[1] && !m[2] && /^\s+(?:por|x)\s+(?:pagar|cobrar)\b/.test(resto)) continue;
+            anclas.push({ indice: m.index, fin: m.index + m[0].length, cantidad: m[1] ? Number(m[1]) : null });
+        }
+        const tiposSueltos = /(?:\b(\d+)\s+)?\b(descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/g;
+        for (const m of t.matchAll(tiposSueltos)) {
+            if (anclas.some(a => m.index >= a.indice && m.index < a.fin)) continue;
+            anclas.push({ indice: m.index, fin: m.index + m[0].length, cantidad: m[1] ? Number(m[1]) : null });
+        }
+        return anclas.sort((a, b) => a.indice - b.indice);
+    }
+
+    function inicioUnidadMasaje(texto, indice) {
+        const previo = String(texto || "").slice(0, indice);
+        const conector = previo.match(/\b(?:y|e)\s*$/i);
+        return conector ? indice - conector[0].length : indice;
+    }
+
+    function cantidadMasaje(segmento, cantidadAncla) {
+        const t = normalizar(segmento);
+        const porUnidad = t.match(/\bc\s*\/\s*u\s*x\s*(\d+)\b/);
+        if (porUnidad) return Number(porUnidad[1]);
+        const multiplicador = t.match(/\bx\s*(\d+)\b/);
+        if (multiplicador) return Number(multiplicador[1]);
+        if (Number.isInteger(cantidadAncla) && cantidadAncla > 0) return cantidadAncla;
+        if (/\bmasaje\b/.test(t)) return 1;
+        return null;
+    }
+
+    function parsearUnidadesMasaje(texto) {
+        const original = String(texto || "").trim(), anclas = anclasMasaje(original);
+        if (!anclas.length) return [];
+        const financiera = clasificarIntencionFinanciera(original);
+        const inicios = anclas.map((a, i) => i === 0 ? 0 : inicioUnidadMasaje(original, a.indice));
+        const unidades = anclas.map((ancla, indice) => {
+            const segmento = original.slice(inicios[indice], inicios[indice + 1] ?? original.length).trim();
+            const horas = horasDeServicio(textoSinDuracionMasaje(segmento));
+            const profesionales = profesionalesMasaje(segmento);
+            const marcadores = [...normalizarPosicional(segmento).matchAll(/\bc\s*\/\s*([ud])\b/g)]
+                .map(m => `C/${m[1].toUpperCase()}`);
+            return {
+                concepto: "masaje", tipo: tipoMasaje(segmento), duracion_minutos: duracionMasaje(segmento),
+                cantidad: cantidadMasaje(segmento, ancla.cantidad), hora: horas[0] || null, hora_fin: horas[1] || null,
+                simultaneo: /\bsimultane(?:o|a|os|as)\b/.test(normalizar(segmento)), profesionales,
+                asignacion_profesional: null, marcadores_distribucion: [...new Set(marcadores)],
+                modalidad_horario: /\bdesde\s+las?\b/.test(normalizar(segmento)) ? "desde" : /\ba\s+las?\b/.test(normalizar(segmento)) ? "a_las" : null,
+                texto: segmento, texto_original: segmento, texto_fuente_completo: original,
+                intencion_financiera: financiera.intencion, evidencias_financieras: financiera.evidencias
+            };
+        });
+        const simultaneidadGlobal = /\bsimultane(?:o|a|os|as)\b/.test(normalizar(original));
+        const profesionalesCompartidos = profesionalesMasaje(original);
+        const horasGlobales = [...new Set(unidades.map(u => u.hora).filter(Boolean))];
+        const comparteProfesional = simultaneidadGlobal || /\bambos?\s+con\b/.test(normalizar(original));
+        for (const unidad of unidades) {
+            if (simultaneidadGlobal) {
+                unidad.simultaneo = true;
+                if (!unidad.hora && horasGlobales.length === 1) unidad.hora = horasGlobales[0];
+            }
+            if (comparteProfesional && profesionalesCompartidos.length) unidad.profesionales = [...profesionalesCompartidos];
+            unidad.asignacion_profesional = unidad.cantidad === 1 && unidad.profesionales.length === 1 ? unidad.profesionales[0] : null;
+        }
+        return unidades;
+    }
+
     function ocurrenciasDeServicio(texto) {
         const t = normalizar(texto), ocurrencias = [];
         const agregar = (concepto, indice) => { if (indice >= 0) ocurrencias.push({ concepto, indice }); };
@@ -201,6 +322,7 @@
 
     function unidadesDeServicio(texto) {
         const original = String(texto || ""), ocurrencias = ocurrenciasDeServicio(original);
+        if (ocurrencias.length && ocurrencias.every(x => x.concepto === "masaje")) return parsearUnidadesMasaje(original);
         return ocurrencias.map((ocurrencia, indice) => {
             const inicio = indice === 0 ? 0 : ocurrencia.indice, fin = ocurrencias[indice + 1]?.indice ?? original.length;
             const segmento = original.slice(inicio, fin).trim(), previo = original.slice(Math.max(0, ocurrencia.indice - 16), ocurrencia.indice);
@@ -267,17 +389,24 @@
             if (!canon.conceptos.length) continue;
             const unidades = canon.unidadesServicio.length ? canon.unidadesServicio : [{ concepto: canon.conceptos[0], texto: parte.trim(), cantidad: 1,
                 hora: null, hora_fin: null, intencion_financiera: INTENCION_FINANCIERA.NO_DETERMINADA, evidencias_financieras: [] }];
-            for (const unidad of unidades) {
+            for (const [unidad_indice, unidad] of unidades.entries()) {
                 const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera];
                 const pendiente = intencion_cobro === "cobrable", cortesia = intencion_cobro === "cortesia";
                 const incompletoLegado = ["tinaja", "cama_adicional", "cuna"].includes(unidad.concepto) || /\b(?:x|por|sin)\s+confirmar\b|\b(?:por\s+)?coordinar\b/.test(normalizar(unidad.texto));
                 const clasificacion = canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL ? (incompletoLegado ? "servicio_por_confirmar" : "servicio_confirmado") : canon.semantica === SEMANTICA_SERVICIO.AMBIGUO ? "servicio_por_confirmar" : "nota";
                 salida.push({ concepto: unidad.concepto, conceptos: canon.conceptos, texto_original: unidad.texto, fragmento_original: parte.trim(),
                     origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias, unidad_servicio: unidad,
+                    unidad_indice,
                     intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, clasificacion, intencion_cobro, pendiente, cortesia,
                     evidencia_origen: { origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias,
                         intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, pendiente_pago: pendiente, cortesia },
-                    cantidad: unidad.cantidad, hora: unidad.hora, hora_fin: unidad.hora_fin, monto: null });
+                    tipo: unidad.tipo ?? null, duracion_minutos: unidad.duracion_minutos ?? null, cantidad: unidad.cantidad,
+                    hora: unidad.hora, hora_fin: unidad.hora_fin, simultaneo: unidad.simultaneo === true,
+                    profesionales: Array.isArray(unidad.profesionales) ? [...unidad.profesionales] : [],
+                    asignacion_profesional: unidad.asignacion_profesional ?? null,
+                    marcadores_distribucion: Array.isArray(unidad.marcadores_distribucion) ? [...unidad.marcadores_distribucion] : [],
+                    modalidad_horario: unidad.modalidad_horario ?? null,
+                    texto_fuente_completo: unidad.texto_fuente_completo || parte.trim(), monto: null });
             }
         }
         return [...new Map(salida.map(servicio => [[servicio.concepto, normalizar(servicio.texto_original), servicio.hora || '', servicio.hora_fin || '',
@@ -800,7 +929,7 @@
         return cambios;
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
-        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, parsearUnidadesMasaje, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);
