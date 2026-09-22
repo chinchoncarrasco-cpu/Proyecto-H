@@ -104,20 +104,22 @@ test('p_estado_esperado coincide exactamente con el contrato cerrado del RPC',()
  });
 });
 
-test('motivo es obligatorio y confirmar sólo simula tras revalidar',async()=>{
+test('motivo es obligatorio y la simulación anterior sigue disponible',async()=>{
  let lecturas=0,rpc=0;
  const buscar=async()=>{lecturas++;return [candidato()];},cargar=async()=>finanzas();
  const p=await A.preparar('Haku cambia a cortesía la tinaja tonel de Luis Ortiz del 12-09',{diaActual:'2026-09-22',permiso:()=>true,buscar,cargarFinanzas:cargar,cliente:{rpc(){rpc++;throw Error('No debe llamarse');}}});
- assert.equal((await A.confirmar(p,'   ',{operacionId:'op1'})).estado,'bloqueada');
- const r=await A.confirmar(p,'  Promo HAIKU  ',{operacionId:'00000000-0000-4000-8000-000000000001'});
+ assert.equal((await A.simular(p,'   ',{operacionId:'op1'})).estado,'bloqueada');
+ const r=await A.simular(p,'  Promo HAIKU  ',{operacionId:'00000000-0000-4000-8000-000000000001'});
  assert.equal(r.estado,'simulada');assert.equal(r.rpc,'haiku_cambiar_servicio_a_cortesia_v1');assert.equal(r.parametros.p_motivo,'Promo HAIKU');
  assert.equal(r.parametros.p_servicio_id,'s1');assert.deepEqual(r.parametros.p_estado_esperado,p.p_estado_esperado);
  assert.equal(lecturas,2);assert.equal(rpc,0);assert.match(A.renderizar(r),/No se llamó a Supabase/);
 });
 
-test('módulo y cargador mantienen esta etapa estrictamente read-only y aislada',()=>{
+test('módulo conserva el bloqueo de producción y usa sólo el RPC para escribir',()=>{
  const source=fs.readFileSync('js/supabase-asistente-servicios-cortesia-v1.js','utf8');
- assert.doesNotMatch(source,/\.rpc\s*\(|\.(?:insert|update|upsert|delete)\s*\(|localStorage|sessionStorage|HAIKU_LIBRO|serviciosRegistrados/);
+ assert.match(source,/const RPC_PRODUCCION_HABILITADO=false/);
+ assert.match(source,/cliente\.rpc\(RPC,original\.payload\)/);
+ assert.doesNotMatch(source,/\.(?:insert|update|upsert|delete)\s*\(|localStorage|sessionStorage|HAIKU_LIBRO|serviciosRegistrados/);
  assert.match(source,/\.from\('servicios'\)/);assert.match(source,/\.from\('cargos'\)/);assert.match(source,/Ejecución remota deshabilitada/);
  const panel=fs.readFileSync('panel.html','utf8');assert.match(panel,/supabase-asistente-servicios-cortesia-v1/);
 });

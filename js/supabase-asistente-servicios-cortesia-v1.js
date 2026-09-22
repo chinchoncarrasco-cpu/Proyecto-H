@@ -1,6 +1,6 @@
 /* HAKU · MODIFICAR SERVICIO EXISTENTE · NORMAL A CORTESÍA V1
  * Texto natural -> búsqueda persistida -> elegibilidad -> vista previa.
- * La confirmación es una simulación read-only: este módulo no contiene writer ni RPC.
+ * La ejecución queda cerrada en producción hasta desplegar y verificar el RPC.
  */
 (function(root){
  'use strict';
@@ -8,7 +8,9 @@
 
  const INTENCION='MODIFICAR_SERVICIO_EXISTENTE';
  const ACCION='NORMAL_A_CORTESIA';
- const RPC_FUTURO='haiku_cambiar_servicio_a_cortesia_v1';
+ const RPC='haiku_cambiar_servicio_a_cortesia_v1';
+ // Retirar este guard sólo en la etapa autorizada de activación, tras desplegar el RPC.
+ const RPC_PRODUCCION_HABILITADO=false;
  const propuestas=new WeakMap();
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
  const numero=v=>v==null||v===''?null:Number(v);
@@ -164,28 +166,148 @@
    const candidato=candidatos[0],finanzas=await cargar(candidato,{cliente}),elegibilidad=evaluarElegibilidad(candidato,finanzas);
    if(elegibilidad.estado==='already_courtesy')return {estado:'already_courtesy',consulta:q,candidato,mensaje:'Este servicio ya está registrado como cortesía. No requiere cambios.'};
    if(!elegibilidad.elegible)return {estado:'bloqueada',consulta:q,candidato,elegibilidad,mensaje:'No puedo demostrar que este cambio sea seguro. Requiere revisión.'};
-   const p={estado:'propuesta',consulta:q,candidato,elegibilidad,p_estado_esperado:estadoEsperado(candidato,finanzas),mensaje:'Cambio preparado en modo de simulación. No se ha modificado Proyecto H.'};
-   propuestas.set(p,{consulta:{...q},servicioId:candidato.id,snapshot:JSON.stringify(p.p_estado_esperado),cliente,buscar,cargar,permiso});
+   const p={estado:'propuesta',consulta:q,candidato,elegibilidad,p_estado_esperado:estadoEsperado(candidato,finanzas),mensaje:RPC_PRODUCCION_HABILITADO?'Cambio preparado. No se ha modificado Proyecto H.':'Cambio preparado en modo de simulación. No se ha modificado Proyecto H.'};
+   propuestas.set(p,{consulta:{...q},servicioId:candidato.id,snapshot:JSON.stringify(p.p_estado_esperado),evidencia:JSON.stringify({candidato,finanzas}),cliente,buscar,cargar,permiso,operacionId:null,payload:null,enCurso:null,resultado:null,rpcRespondioExito:false});
    return p;
   }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
  }
  function uuid(opciones={}){
   if(opciones.operacionId)return opciones.operacionId;
   if(typeof root.crypto?.randomUUID==='function')return root.crypto.randomUUID();
-  throw Error('No se pudo generar el identificador de la operación simulada.');
+  throw Error('No se pudo generar el identificador de la operación.');
  }
- async function confirmar(p,motivo,opciones={}){
+ const avisoCambio='La situación de este servicio cambió desde que preparé la propuesta. Volveré a comprobarlo antes de realizar el cambio.';
+ const permisoRpc=(opciones,cliente)=>RPC_PRODUCCION_HABILITADO||
+  (opciones.modoPruebaLocal===true&&typeof module!=='undefined'&&!!module.exports&&
+   !root.document&&cliente?.__hakuCortesiaMock===true);
+ async function releer(original){
+  const candidatos=await original.buscar(original.consulta,{cliente:original.cliente});
+  if(candidatos.length!==1||candidatos[0].id!==original.servicioId)return null;
+  const candidato=candidatos[0],finanzas=await original.cargar(candidato,{cliente:original.cliente});
+  return {candidato,finanzas,elegibilidad:evaluarElegibilidad(candidato,finanzas),snapshot:estadoEsperado(candidato,finanzas),evidencia:JSON.stringify({candidato,finanzas})};
+ }
+ const coincidePropuesta=(original,lectura)=>lectura?.elegibilidad.elegible&&
+  JSON.stringify(lectura.snapshot)===original.snapshot&&lectura.evidencia===original.evidencia;
+ async function obsoleta(original){
+  const nueva=await preparar(original.consulta,{cliente:original.cliente,buscar:original.buscar,cargarFinanzas:original.cargar,permiso:original.permiso});
+  return {estado:'obsoleta',mensaje:avisoCambio,nueva};
+ }
+ function respuestaError(error){
+  const mensaje=String(error?.message||error||''),codigo=String(error?.code||'');
+  if(codigo==='40001'||/obsoleta|cambiaron|cambió de reserva|propuesta nueva/i.test(mensaje))return 'stale';
+  if(codigo==='42501'||/permiso|sesión|usuario no activo/i.test(mensaje))return 'sin_permiso';
+  if(/aplicaciones de pago históricas/i.test(mensaje))return 'aplicaciones';
+  if(/ajustes históricos/i.test(mensaje))return 'ajustes';
+  if(/cargo activo|incoheren|finanzas|postcondición|historial financiero/i.test(mensaje))return 'incoherencia';
+  return 'desconocido';
+ }
+ function verificarCambio(original,lectura,motivo){
+  if(!lectura||lectura.candidato.id!==original.servicioId||lectura.candidato.tipo_cobro!=='cortesia'||numero(lectura.candidato.total)!==0||numero(lectura.candidato.monto_adicional)!==0||
+     String(lectura.candidato.motivo_cortesia||'').trim()!==motivo)return false;
+  const antes=JSON.parse(original.snapshot),cargos=lectura.finanzas.cargos;
+  return cargos.length===antes.cantidad_cargos&&cargos.every(c=>c.estado==='anulado')&&
+   cargos.some(c=>c.id===antes.cargo_id&&c.estado==='anulado'&&numero(c.monto)===antes.cargo_monto)&&
+   lectura.finanzas.estados.length===cargos.length&&lectura.finanzas.estados.every(e=>e.estado==='anulado')&&
+   lectura.finanzas.aplicaciones.length===antes.cantidad_aplicaciones&&
+   lectura.finanzas.ajustes.length===antes.cantidad_ajustes;
+ }
+ function refrescarAutoridades(original,lectura){
+  if(!root.document||!root.CustomEvent)return;
+  root.document.dispatchEvent(new root.CustomEvent('haiku:servicio-supabase-cambiado',{
+   detail:{servicioId:original.servicioId,reservaId:lectura.candidato.reserva_id}
+  }));
+ }
+ function resultadoExito(p,original,lectura,motivo,origen){
+  const antes=JSON.parse(original.snapshot),resultado={
+   estado:'realizado',mensaje:origen==='relectura'?'Cambio realizado, acreditado por una nueva lectura.':'Cambio realizado.',
+   candidato:lectura.candidato,servicio_despues:lectura.candidato,cargo_anterior:antes,
+   motivo,operacion_id:original.operacionId,origen
+  };
+  original.resultado=resultado;refrescarAutoridades(original,lectura);return resultado;
+ }
+ async function verificarEstado(p){
+  const original=propuestas.get(p);
+  if(!original||!original.payload)return {estado:'bloqueada',mensaje:'No hay una operación pendiente para comprobar.'};
+  if(original.resultado)return original.resultado;
+  try{
+   const lectura=await releer(original);
+   if(verificarCambio(original,lectura,original.payload.p_motivo))return resultadoExito(p,original,lectura,original.payload.p_motivo,'relectura');
+   if(coincidePropuesta(original,lectura))
+    return original.rpcRespondioExito
+     ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente; la lectura todavía no refleja el cambio. Sólo volveré a leer.',propuesta:p,motivo:original.payload.p_motivo}
+     :{estado:'reintento_seguro',mensaje:'La lectura confirma que el servicio sigue sin cambios. Puedes reintentar la misma operación.',propuesta:p,motivo:original.payload.p_motivo,operacion_id:original.operacionId};
+   return await obsoleta(original);
+  }catch(error){
+   return {estado:'incierto',mensaje:'No pude comprobar el estado real del servicio. Sólo se permite volver a leer; no se repetirá el RPC automáticamente.',propuesta:p,motivo:original.payload.p_motivo};
+  }
+ }
+ async function simular(p,motivo,opciones={}){
   const original=propuestas.get(p),limpio=String(motivo??'').trim();
   if(!original)return {estado:'bloqueada',mensaje:'Prepara una propuesta nueva antes de confirmar.'};
   if(!limpio)return {estado:'bloqueada',mensaje:'El motivo de cortesía es obligatorio.'};
   if(!original.permiso())return {estado:'bloqueada',mensaje:'El permiso servicios.editar ya no está disponible.'};
   try{
-   const candidatos=await original.buscar(original.consulta,{cliente:original.cliente});
-   if(candidatos.length!==1||candidatos[0].id!==original.servicioId)return {estado:'bloqueada',mensaje:'La coincidencia cambió. Prepara una propuesta nueva.'};
-   const actual=candidatos[0],finanzas=await original.cargar(actual,{cliente:original.cliente}),elegibilidad=evaluarElegibilidad(actual,finanzas),snapshot=estadoEsperado(actual,finanzas);
-   if(!elegibilidad.elegible||JSON.stringify(snapshot)!==original.snapshot)return {estado:'bloqueada',mensaje:'El servicio o sus finanzas cambiaron. Prepara una propuesta nueva.'};
-   return {estado:'simulada',mensaje:'Confirmación simulada. El RPC no fue ejecutado.',rpc:RPC_FUTURO,parametros:{p_operacion_id:uuid(opciones),p_servicio_id:original.servicioId,p_motivo:limpio,p_estado_esperado:snapshot}};
+   const lectura=await releer(original);
+   if(!coincidePropuesta(original,lectura))return await obsoleta(original);
+   return {estado:'simulada',mensaje:'Confirmación simulada. El RPC no fue ejecutado.',rpc:RPC,parametros:{p_operacion_id:uuid(opciones),p_servicio_id:original.servicioId,p_motivo:limpio,p_estado_esperado:lectura.snapshot}};
   }catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+ }
+ async function confirmarInterno(p,original,limpio,opciones){
+  const cliente=original.cliente;
+  if(!permisoRpc(opciones,cliente))return {estado:'bloqueada',mensaje:'La ejecución del RPC sigue bloqueada hasta su despliegue y autorización.'};
+  if(!limpio)return {estado:'bloqueada',mensaje:'El motivo de cortesía es obligatorio.'};
+  if(original.resultado)return original.resultado;
+  if(original.payload&&original.payload.p_motivo!==limpio)return {estado:'bloqueada',mensaje:'El motivo cambió. Prepara una propuesta nueva para otra operación.'};
+  if(!original.permiso())return {estado:'sin_permiso',mensaje:'No tienes el permiso servicios.editar. No se realizó ningún cambio.'};
+  opciones.onEstado?.('Verificando nuevamente…');
+  let lectura;
+  try{lectura=await releer(original);}catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+  if(original.payload&&verificarCambio(original,lectura,limpio))return resultadoExito(p,original,lectura,limpio,'relectura');
+  if(!coincidePropuesta(original,lectura))return await obsoleta(original);
+  if(original.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El RPC ya respondió correctamente. Sólo volveré a leer el estado.',propuesta:p,motivo:limpio};
+  if(!original.payload){
+   original.operacionId=uuid(opciones);
+   original.payload=Object.freeze({p_operacion_id:original.operacionId,p_servicio_id:original.servicioId,p_motivo:limpio,p_estado_esperado:Object.freeze({...lectura.snapshot})});
+  }
+  opciones.onEstado?.('Aplicando cambio…');
+  let respuesta,errorRpc;
+  try{({data:respuesta,error:errorRpc}=await cliente.rpc(RPC,original.payload));}
+  catch(error){errorRpc=error;}
+  if(errorRpc){
+   const clase=respuestaError(errorRpc);
+   if(clase==='stale')return await obsoleta(original);
+   if(clase==='sin_permiso')return {estado:'sin_permiso',mensaje:'No tienes permiso para realizar este cambio.'};
+   if(clase==='aplicaciones'||clase==='ajustes'||clase==='incoherencia')
+    return {estado:'revision_humana',mensaje:clase==='aplicaciones'?'El servicio tiene aplicaciones de pago históricas; requiere revisión humana.':clase==='ajustes'?'El servicio tiene ajustes históricos; requiere revisión humana.':'Las finanzas del servicio son incoherentes; requiere revisión humana.'};
+   return await verificarEstado(p);
+  }
+  if(!respuesta||respuesta.ok!==true||respuesta.servicio_id!==original.servicioId)
+   return await verificarEstado(p);
+  if(respuesta.estado==='already_courtesy')return {estado:'already_courtesy',mensaje:'Este servicio ya está registrado como cortesía. No requiere cambios.'};
+  if(respuesta.estado!=='changed_to_courtesy'||respuesta.cargo_id!==original.payload.p_estado_esperado.cargo_id||
+     numero(respuesta.cargo_monto_historico)!==original.payload.p_estado_esperado.cargo_monto)
+   return await verificarEstado(p);
+  original.rpcRespondioExito=true;
+  const observado=await verificarEstado(p);
+  if(observado.estado==='sincronizando'||observado.estado==='incierto'){
+   for(let intento=0;intento<2;intento++){
+    await new Promise(resolver=>setTimeout(resolver,300));
+    const siguiente=await verificarEstado(p);
+    if(siguiente.estado==='realizado'||siguiente.estado==='obsoleta')return siguiente;
+   }
+  }
+  return observado.estado==='incierto'
+   ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente; estoy esperando poder leer el cambio. Sólo volveré a leer.',propuesta:p,motivo:limpio}
+   :observado;
+ }
+ function confirmar(p,motivo,opciones={}){
+  const original=propuestas.get(p);
+  if(!original)return Promise.resolve({estado:'bloqueada',mensaje:'Prepara una propuesta nueva antes de confirmar.'});
+  if(original.enCurso)return original.enCurso;
+  const tarea=confirmarInterno(p,original,String(motivo??'').trim(),opciones);
+  original.enCurso=tarea;
+  void tarea.then(()=>{original.enCurso=null;},()=>{original.enCurso=null;});
+  return tarea;
  }
  const cancelar=()=>({estado:'cancelada',mensaje:'Cambio cancelado. No se modificó Proyecto H.'});
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -194,10 +316,16 @@
  function resumen(c){return `${c.catalogo?.nombre||'Servicio'} · ${fechaVisible(c.fecha_servicio)} · ${cortoHora(c.hora_inicio)||'sin hora'}${c.hora_fin?`–${cortoHora(c.hora_fin)}`:''} · CAB ${c.cabana_numero||'—'}`;}
  function renderizar(p){
   if(p.estado==='multiples')return `<article class="haku-servicio-cortesia"><h3>Servicios coincidentes</h3><p>${esc(p.mensaje)}</p><ol>${p.candidatos.map(c=>`<li>${esc(resumen(c))}</li>`).join('')}</ol><p>No elegí ninguno automáticamente.</p></article>`;
-  if(['no_encontrado','incompleta','bloqueada','already_courtesy','cancelada'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><p>${esc(p.mensaje)}</p>${p.elegibilidad?.razones?.length?`<ul>${p.elegibilidad.razones.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}</article>`;
+  if(p.estado==='obsoleta')return `<article class="haku-servicio-cortesia"><p>${esc(p.mensaje)}</p></article>${renderizar(p.nueva)}`;
+  if(['no_encontrado','incompleta','bloqueada','already_courtesy','cancelada','revision_humana','sin_permiso'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><p>${esc(p.mensaje)}</p>${p.elegibilidad?.razones?.length?`<ul>${p.elegibilidad.razones.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}</article>`;
   if(p.estado==='simulada')return `<article class="haku-servicio-cortesia"><h3>Confirmación simulada</h3><p>${esc(p.mensaje)}</p><p>No se llamó a Supabase ni se modificó Proyecto H.</p><details><summary>Payload preparado</summary><pre>${esc(JSON.stringify({rpc:p.rpc,parametros:p.parametros},null,2))}</pre></details></article>`;
+  if(p.estado==='realizado'){
+   const c=p.candidato,antes=p.cargo_anterior;
+   return `<article class="haku-servicio-cortesia"><h3>Cambio realizado</h3><strong>${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><p>${esc(c.catalogo.nombre)}<br>${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}</p><div class="haku-servicio-cortesia-grid"><section><b>Antes</b><p>Cobro normal<br>${esc(dinero(antes.total))}</p></section><section><b>Ahora</b><p>Cortesía<br>$0</p></section></div><p>Cargo asociado: anulado · monto histórico ${esc(dinero(antes.cargo_monto))}. No existe cobro pendiente activo por este servicio.</p><p><b>Motivo:</b> ${esc(p.motivo)}</p>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">La modificación se realizó después del check-out.</p>':''}</article>`;
+  }
+  if(['sincronizando','incierto','reintento_seguro'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>${p.estado==='sincronizando'?'Sincronizando':p.estado==='incierto'?'Estado por comprobar':'Reintento disponible'}</h3><p>${esc(p.mensaje)}</p><div class="haku-servicio-cortesia-acciones">${p.estado==='reintento_seguro'?`<button type="button" data-servicio-cortesia-reintentar ${RPC_PRODUCCION_HABILITADO?'':'disabled'}>Reintentar misma operación</button>`:'<button type="button" data-servicio-cortesia-releer>Comprobar estado</button>'}</div></article>`;
   const c=p.candidato,cargo=p.p_estado_esperado;
-  return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><strong>${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><p>${esc(c.catalogo.nombre)}<br>${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(cortoHora(c.hora_fin))}`:''}</p><div class="haku-servicio-cortesia-grid"><section><b>Actual</b><p>Cobro normal<br>${esc(dinero(c.total))}<br>Cargo pendiente ${esc(dinero(cargo.saldo_cargo))}</p></section><section><b>Cambio propuesto</b><p>Cortesía<br>$0</p></section></div><p><b>Efecto:</b> el cargo pendiente asociado será anulado al confirmar.</p>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">La reserva ya realizó check-out.</p>':''}<label>Motivo de cortesía<textarea data-servicio-cortesia-motivo rows="3" autocomplete="off"></textarea></label><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cortesia-confirmar disabled>Confirmar cambio · simulación</button><button type="button" data-servicio-cortesia-cancelar>Cancelar</button></div><small>Ejecución remota deshabilitada en esta etapa.</small></article>`;
+  return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><strong>${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><p>${esc(c.catalogo.nombre)}<br>${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(cortoHora(c.hora_fin))}`:''}</p><div class="haku-servicio-cortesia-grid"><section><b>Actual</b><p>Cobro normal<br>${esc(dinero(c.total))}<br>Cargo pendiente ${esc(dinero(cargo.saldo_cargo))}</p></section><section><b>Cambio propuesto</b><p>Cortesía<br>$0</p></section></div><p><b>Efecto:</b> el cargo pendiente asociado será anulado al confirmar.</p>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">La reserva ya realizó check-out.</p>':''}<label>Motivo de cortesía<textarea data-servicio-cortesia-motivo rows="3" autocomplete="off"></textarea></label><p data-servicio-cortesia-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cortesia-confirmar disabled>Confirmar cambio${RPC_PRODUCCION_HABILITADO?'':' · simulación'}</button><button type="button" data-servicio-cortesia-cancelar>Cancelar</button></div>${RPC_PRODUCCION_HABILITADO?'':'<small>Ejecución remota deshabilitada en esta etapa.</small>'}</article>`;
  }
  function instalar(){
   const doc=root.document,style=doc.createElement('style');style.textContent='.haku-servicio-cortesia{background:#f8faf7;color:#263c2c;border:1px solid #cbd9cd;border-radius:14px;padding:14px;overflow-wrap:anywhere;font-size:12px}.haku-servicio-cortesia h3{font-size:16px;margin:0 0 8px}.haku-servicio-cortesia p{line-height:1.5}.haku-servicio-cortesia-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.haku-servicio-cortesia-grid section{background:white;border:1px solid #dce5de;border-radius:10px;padding:10px}.haku-servicio-cortesia-aviso{color:#7a4d13}.haku-servicio-cortesia label{display:grid;gap:6px;font-weight:600}.haku-servicio-cortesia textarea{font:inherit;resize:vertical;border:1px solid #aebfb2;border-radius:8px;padding:8px}.haku-servicio-cortesia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.haku-servicio-cortesia button{font:inherit;border:1px solid #adc2b2;border-radius:9px;padding:8px 11px;background:white;color:#294b37}.haku-servicio-cortesia button:disabled{background:#edf0ed;color:#748078}.haku-servicio-cortesia pre{white-space:pre-wrap;font-size:11px}';doc.head.appendChild(style);
@@ -210,9 +338,18 @@
    el.addEventListener('input',e=>{if(!e.target?.matches?.('[data-servicio-cortesia-motivo]'))return;const b=el.querySelector('[data-servicio-cortesia-confirmar]');if(b)b.disabled=!e.target.value.trim();});
    el.addEventListener('click',async e=>{const b=e.target?.closest?.('button');if(!b)return;e.preventDefault();e.stopPropagation();
     if(b.hasAttribute('data-servicio-cortesia-cancelar')){p=cancelar();el.innerHTML=renderizar(p);return;}
-    if(!b.hasAttribute('data-servicio-cortesia-confirmar')||b.disabled)return;
-    const motivo=el.querySelector('[data-servicio-cortesia-motivo]')?.value||'';el.querySelectorAll('button,textarea').forEach(x=>x.disabled=true);
-    p=await confirmar(p,motivo);el.innerHTML=renderizar(p);
+    if(b.disabled)return;
+    if(!b.matches('[data-servicio-cortesia-confirmar],[data-servicio-cortesia-reintentar],[data-servicio-cortesia-releer]'))return;
+    const propuesta=p.estado==='propuesta'?p:p.propuesta;
+    const motivo=p.estado==='propuesta'?el.querySelector('[data-servicio-cortesia-motivo]')?.value||'':p.motivo;
+    el.querySelectorAll('button,textarea').forEach(x=>x.disabled=true);
+    try{
+     if(b.hasAttribute('data-servicio-cortesia-releer'))p=await verificarEstado(propuesta);
+     else if(!RPC_PRODUCCION_HABILITADO)p=await simular(propuesta,motivo);
+     else p=await confirmar(propuesta,motivo,{onEstado:estado=>{const indicador=el.querySelector('[data-servicio-cortesia-estado]');if(indicador)indicador.textContent=estado;else el.textContent=estado;}});
+    }catch(error){p={estado:'incierto',mensaje:'No pude completar la comprobación. Consulta nuevamente el estado antes de reintentar.',propuesta,motivo};}
+    el.innerHTML=renderizar(p);
+    if(p.estado==='obsoleta')p=p.nueva;
    });
   }
   function interceptar(e){
@@ -224,7 +361,7 @@
   }
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
- const api=Object.freeze({interpretar,buscarServicios,resolverCandidatos,cargarFinanzas,estadoEsperado,evaluarElegibilidad,preparar,confirmar,cancelar,renderizar});
+ const api=Object.freeze({interpretar,buscarServicios,resolverCandidatos,cargarFinanzas,estadoEsperado,evaluarElegibilidad,preparar,simular,confirmar,verificarEstado,cancelar,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_CORTESIA_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();
