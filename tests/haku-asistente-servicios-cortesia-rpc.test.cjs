@@ -28,11 +28,17 @@ function arnes(){
  return h;
 }
 
-test('producción continúa bloqueada aunque el cliente exponga el RPC',async()=>{
+test('vista previa real exige motivo y confirma sólo al llamar el RPC autorizado',async()=>{
  const h=arnes(),p=await h.preparar();
+ const vista=A.renderizar(p);
+ for(const texto of ['Luis Ortiz · CAB 10','Tinaja Tonel de Madera','12-09-2026 · 20:45–21:45','Antes','Normal · $30.000','Cargo pendiente · $30.000','Después','Cortesía · $0','Cargo activo será anulado','Esta reserva ya realizó check-out.','Motivo:','Al confirmar, Proyecto H cambiará el servicio','data-servicio-cortesia-confirmar disabled>Confirmar cambio'])assert.ok(vista.includes(texto),texto);
+ assert.doesNotMatch(vista,/simulación|RPC no será ejecutado|Ejecución remota deshabilitada/i);
+ assert.equal(h.llamadas.length,0);
+ const sinMotivo=await A.confirmar(p,'   ',{operacionId:OPERACION});
+ assert.equal(sinMotivo.estado,'bloqueada');assert.equal(h.llamadas.length,0);
  const r=await A.confirmar(p,'Cortesía autorizada',{operacionId:OPERACION});
- assert.equal(r.estado,'bloqueada');assert.equal(h.llamadas.length,0);
- assert.match(A.renderizar(p),/Ejecución remota deshabilitada/);
+ assert.equal(r.estado,'realizado');assert.equal(h.llamadas.length,1);
+ assert.equal(h.llamadas[0].nombre,'haiku_cambiar_servicio_a_cortesia_v1');
 });
 
 test('revalida, envía sólo el RPC y acredita servicio y cargo mediante relectura',async()=>{
@@ -101,7 +107,8 @@ test('already courtesy, permiso y rechazos financieros no se convierten en éxit
   [{error:{message:'El servicio tiene ajustes históricos; requiere revisión humana'}},'revision_humana'],
   [{error:{message:'El cargo activo no coincide con el servicio; requiere revisión humana'}},'revision_humana']]){
   const h=arnes(),p=await h.preparar();h.cliente.rpc=async()=>{h.llamadas.push(1);return respuesta;};
-  assert.equal((await h.confirmar(p)).estado,esperado);assert.equal(h.llamadas.length,1);
+  const r=await h.confirmar(p);assert.equal(r.estado,esperado);assert.equal(h.llamadas.length,1);
+  if(esperado==='already_courtesy')assert.doesNotMatch(A.renderizar(r),/Confirmar cambio/);
  }
 });
 

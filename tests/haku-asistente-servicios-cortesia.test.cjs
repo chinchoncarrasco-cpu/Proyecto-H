@@ -115,11 +115,12 @@ test('motivo es obligatorio y la simulación anterior sigue disponible',async()=
  assert.equal(lecturas,2);assert.equal(rpc,0);assert.match(A.renderizar(r),/No se llamó a Supabase/);
 });
 
-test('módulo conserva el bloqueo de producción y usa sólo el RPC para escribir',()=>{
+test('módulo habilita el RPC real y lo conserva como único writer',()=>{
  const source=fs.readFileSync('js/supabase-asistente-servicios-cortesia-v1.js','utf8');
- assert.match(source,/const RPC_PRODUCCION_HABILITADO=false/);
+ assert.match(source,/const RPC_PRODUCCION_HABILITADO=true/);
  assert.match(source,/cliente\.rpc\(RPC,original\.payload\)/);
  assert.doesNotMatch(source,/\.(?:insert|update|upsert|delete)\s*\(|localStorage|sessionStorage|HAIKU_LIBRO|serviciosRegistrados/);
- assert.match(source,/\.from\('servicios'\)/);assert.match(source,/\.from\('cargos'\)/);assert.match(source,/Ejecución remota deshabilitada/);
+ assert.match(source,/\.from\('servicios'\)/);assert.match(source,/\.from\('cargos'\)/);
+ assert.match(source,/else p=await confirmar\(propuesta,motivo/);
  const panel=fs.readFileSync('panel.html','utf8');assert.match(panel,/supabase-asistente-servicios-cortesia-v1/);
 });
