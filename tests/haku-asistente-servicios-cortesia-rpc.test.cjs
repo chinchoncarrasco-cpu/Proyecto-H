@@ -31,7 +31,10 @@ function arnes(){
 test('vista previa real exige motivo y confirma sólo al llamar el RPC autorizado',async()=>{
  const h=arnes(),p=await h.preparar();
  const vista=A.renderizar(p);
- for(const texto of ['Luis Ortiz · CAB 10','Tinaja Tonel de Madera','12-09-2026 · 20:45–21:45','Antes','Normal · $30.000','Cargo pendiente · $30.000','Después','Cortesía · $0','Cargo activo será anulado','Esta reserva ya realizó check-out.','Motivo:','Al confirmar, Proyecto H cambiará el servicio','data-servicio-cortesia-confirmar disabled>Confirmar cambio'])assert.ok(vista.includes(texto),texto);
+ for(const texto of ['Luis Ortiz · CAB 10','Tinaja Tonel de Madera','12-09-2026 · 20:45–21:45','Antes','Normal','$30.000','Cargo pendiente','Después','Cortesía','$0','será anulado','Esta reserva ya realizó check-out.','Motivo de cortesía','Al confirmar, Proyecto H cambiará el servicio','Confirmar cambio','Cancelar'])assert.ok(vista.includes(texto),texto);
+ assert.match(vista,/haku-servicio-cortesia-comparacion/);
+ assert.match(vista,/data-servicio-cortesia-motivo/);
+ assert.match(vista,/data-servicio-cortesia-confirmar disabled/);
  assert.doesNotMatch(vista,/simulación|RPC no será ejecutado|Ejecución remota deshabilitada/i);
  assert.equal(h.llamadas.length,0);
  const sinMotivo=await A.confirmar(p,'   ',{operacionId:OPERACION});
@@ -48,7 +51,8 @@ test('revalida, envía sólo el RPC y acredita servicio y cargo mediante relectu
  assert.equal(h.llamadas.length,1);assert.equal(h.llamadas[0].nombre,'haiku_cambiar_servicio_a_cortesia_v1');
  assert.deepEqual(Object.keys(h.llamadas[0].payload).sort(),['p_estado_esperado','p_motivo','p_operacion_id','p_servicio_id']);
  assert.deepEqual(h.llamadas[0].payload.p_estado_esperado,p.p_estado_esperado);
- assert.match(A.renderizar(r),/Cambio realizado/);assert.match(A.renderizar(r),/No existe cobro pendiente activo/);
+ const resultado=A.renderizar(r);
+ for(const texto of ['✓ Cambio realizado','Luis Ortiz · CAB 10','Normal','Cortesía','$30.000','$0','Cargo asociado anulado','Monto histórico conservado','Sin cobro pendiente activo','Motivo:','Cortesía autorizada','Modificación realizada después del check-out.'])assert.ok(resultado.includes(texto),texto);
  assert.equal((await A.verificarEstado(p)).estado,'realizado');assert.equal(h.llamadas.length,1);
 });
 

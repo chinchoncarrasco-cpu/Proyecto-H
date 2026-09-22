@@ -320,14 +320,57 @@
   if(p.estado==='simulada')return `<article class="haku-servicio-cortesia"><h3>Confirmación simulada</h3><p>${esc(p.mensaje)}</p><p>No se llamó a Supabase ni se modificó Proyecto H.</p><details><summary>Payload preparado</summary><pre>${esc(JSON.stringify({rpc:p.rpc,parametros:p.parametros},null,2))}</pre></details></article>`;
   if(p.estado==='realizado'){
    const c=p.candidato,antes=p.cargo_anterior;
-   return `<article class="haku-servicio-cortesia"><h3>Cambio realizado</h3><strong>${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><p>${esc(c.catalogo.nombre)}<br>${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}</p><div class="haku-servicio-cortesia-grid"><section><b>Antes</b><p>Cobro normal<br>${esc(dinero(antes.total))}</p></section><section><b>Ahora</b><p>Cortesía<br>$0</p></section></div><p>Cargo asociado: anulado · monto histórico ${esc(dinero(antes.cargo_monto))}. No existe cobro pendiente activo por este servicio.</p><p><b>Motivo:</b> ${esc(p.motivo)}</p>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">La modificación se realizó después del check-out.</p>':''}</article>`;
+   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--realizado">
+    <header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">✓ Cambio realizado</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}</span></header>
+    <div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>Normal</strong><b>${esc(dinero(antes.total))}</b></div><span class="haku-servicio-cortesia-flecha" aria-hidden="true">→</span><div><span>Después</span><strong>Cortesía</strong><b>$0</b></div></div>
+    <p class="haku-servicio-cortesia-efecto">Cargo asociado anulado <span>·</span> Monto histórico conservado: <strong>${esc(dinero(antes.cargo_monto))}</strong> <span>·</span> Sin cobro pendiente activo</p>
+    <p class="haku-servicio-cortesia-motivo-resultado"><span>Motivo:</span> ${esc(p.motivo)}</p>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">Modificación realizada después del check-out.</p>':''}</article>`;
   }
   if(['sincronizando','incierto','reintento_seguro'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>${p.estado==='sincronizando'?'Sincronizando':p.estado==='incierto'?'Estado por comprobar':'Reintento disponible'}</h3><p>${esc(p.mensaje)}</p><div class="haku-servicio-cortesia-acciones">${p.estado==='reintento_seguro'?`<button type="button" data-servicio-cortesia-reintentar ${RPC_PRODUCCION_HABILITADO?'':'disabled'}>Reintentar misma operación</button>`:'<button type="button" data-servicio-cortesia-releer>Comprobar estado</button>'}</div></article>`;
   const c=p.candidato,cargo=p.p_estado_esperado;
-  return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><strong>${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><p>${esc(c.catalogo.nombre)}<br>${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(cortoHora(c.hora_fin))}`:''}</p><div class="haku-servicio-cortesia-grid"><section><b>Antes</b><p>Normal · ${esc(dinero(c.total))}<br>Cargo pendiente · ${esc(dinero(cargo.saldo_cargo))}</p></section><section><b>Después</b><p>Cortesía · $0<br>Cargo activo será anulado</p></section></div>${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">Esta reserva ya realizó check-out.</p>':''}<label>Motivo:<textarea data-servicio-cortesia-motivo rows="3" autocomplete="off"></textarea></label><p>Al confirmar, Proyecto H cambiará el servicio y anulará su cargo activo.</p><p data-servicio-cortesia-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cortesia-confirmar disabled>Confirmar cambio</button><button type="button" data-servicio-cortesia-cancelar>Cancelar</button></div></article>`;
+  return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta">
+   <header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">Cambio de servicio</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva.titular_nombre)} · CAB ${esc(c.cabana_numero)}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fechaVisible(c.fecha_servicio))} · ${esc(cortoHora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(cortoHora(c.hora_fin))}`:''}</span></header>
+   <div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>Normal</strong><b>${esc(dinero(c.total))}</b></div><span class="haku-servicio-cortesia-flecha" aria-hidden="true">→</span><div><span>Después</span><strong>Cortesía</strong><b>$0</b></div></div>
+   <p class="haku-servicio-cortesia-efecto">Cargo pendiente <strong>${esc(dinero(cargo.saldo_cargo))}</strong> <span aria-hidden="true">→</span> será anulado</p>
+   ${c.reserva.estado_reserva==='checked_out'?'<p class="haku-servicio-cortesia-aviso">Esta reserva ya realizó check-out.</p>':''}
+   <label class="haku-servicio-cortesia-motivo">Motivo de cortesía<textarea data-servicio-cortesia-motivo rows="2" autocomplete="off"></textarea></label>
+   <p class="haku-servicio-cortesia-confirmacion">Al confirmar, Proyecto H cambiará el servicio y anulará su cargo activo.</p><p data-servicio-cortesia-estado></p>
+   <div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cortesia-confirmar disabled>Confirmar cambio</button><button type="button" data-servicio-cortesia-cancelar>Cancelar</button></div></article>`;
  }
  function instalar(){
-  const doc=root.document,style=doc.createElement('style');style.textContent='.haku-servicio-cortesia{background:#f8faf7;color:#263c2c;border:1px solid #cbd9cd;border-radius:14px;padding:14px;overflow-wrap:anywhere;font-size:12px}.haku-servicio-cortesia h3{font-size:16px;margin:0 0 8px}.haku-servicio-cortesia p{line-height:1.5}.haku-servicio-cortesia-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.haku-servicio-cortesia-grid section{background:white;border:1px solid #dce5de;border-radius:10px;padding:10px}.haku-servicio-cortesia-aviso{color:#7a4d13}.haku-servicio-cortesia label{display:grid;gap:6px;font-weight:600}.haku-servicio-cortesia textarea{font:inherit;resize:vertical;border:1px solid #aebfb2;border-radius:8px;padding:8px}.haku-servicio-cortesia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.haku-servicio-cortesia button{font:inherit;border:1px solid #adc2b2;border-radius:9px;padding:8px 11px;background:white;color:#294b37}.haku-servicio-cortesia button:disabled{background:#edf0ed;color:#748078}.haku-servicio-cortesia pre{white-space:pre-wrap;font-size:11px}';doc.head.appendChild(style);
+  const doc=root.document,style=doc.createElement('style');style.textContent=`
+   .haku-servicio-cortesia{box-sizing:border-box;width:100%;padding:14px 16px;background:#fff;color:#263c2c;border:1px solid #dbe5de;border-radius:11px;overflow-wrap:anywhere;font-size:12px;line-height:1.45}
+   .haku-servicio-cortesia h3{font-size:15px;margin:0 0 8px}.haku-servicio-cortesia p{line-height:1.45}
+   .haku-servicio-cortesia-cabecera{display:flex;flex-direction:column;gap:2px;padding-bottom:12px;border-bottom:1px solid #e7ede9}
+   .haku-servicio-cortesia-sello{margin-bottom:6px;color:#24704e;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+   .haku-servicio-cortesia--realizado .haku-servicio-cortesia-sello{color:#1c6b42}
+   .haku-servicio-cortesia-titular{color:#17251d;font-size:15px;line-height:1.25}
+   .haku-servicio-cortesia-nombre{color:#334139;font-size:13px;font-weight:650}
+   .haku-servicio-cortesia-fecha{color:#65746a;font-size:12px}
+   .haku-servicio-cortesia-comparacion{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid #e7ede9}
+   .haku-servicio-cortesia-comparacion>div{display:grid;gap:1px;min-width:0}
+   .haku-servicio-cortesia-comparacion>div>span{color:#7b8980;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase}
+   .haku-servicio-cortesia-comparacion strong{font-size:12px;font-weight:600;color:#425048}
+   .haku-servicio-cortesia-comparacion b{font-size:18px;line-height:1.2;color:#17251d}
+   .haku-servicio-cortesia-comparacion>div:last-child strong,.haku-servicio-cortesia-comparacion>div:last-child b{color:#1f6e4c}
+   .haku-servicio-cortesia-flecha{color:#81a08c;text-align:center;font-size:18px}
+   .haku-servicio-cortesia-efecto{margin:10px 0 0;color:#45584a;font-size:11px}
+   .haku-servicio-cortesia-efecto strong{color:#263c2c}.haku-servicio-cortesia-efecto>span{color:#819488}
+   .haku-servicio-cortesia-aviso{margin:9px 0 0;color:#795c2f;font-size:11px}
+   .haku-servicio-cortesia-motivo{display:grid;gap:6px;margin-top:14px;color:#344d3c;font-size:11px;font-weight:700}
+   .haku-servicio-cortesia textarea{box-sizing:border-box;width:100%;min-height:56px;font:inherit;font-size:12px;font-weight:400;line-height:1.4;resize:vertical;border:1px solid #cbd9cf;border-radius:7px;padding:8px 9px;background:#fff;color:#263c2c}
+   .haku-servicio-cortesia textarea:focus-visible,.haku-servicio-cortesia button:focus-visible{outline:2px solid #31835b;outline-offset:2px}
+   .haku-servicio-cortesia-confirmacion{margin:9px 0 0;color:#65746a;font-size:11px}
+   .haku-servicio-cortesia-motivo-resultado{margin:12px 0 0;padding-top:10px;border-top:1px solid #e7ede9;color:#263c2c}
+   .haku-servicio-cortesia-motivo-resultado span{color:#65746a;font-weight:700}
+   .haku-servicio-cortesia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+   .haku-servicio-cortesia button{min-height:34px;font:inherit;font-weight:700;border:1px solid #cbd9cf;border-radius:7px;padding:7px 11px;background:#fff;color:#425048;cursor:pointer}
+   .haku-servicio-cortesia button[data-servicio-cortesia-confirmar]:not(:disabled){border-color:#1f6e4c;background:#1f6e4c;color:#fff}
+   .haku-servicio-cortesia button[data-servicio-cortesia-confirmar]:not(:disabled):hover{background:#174f39}
+   .haku-servicio-cortesia button:disabled{background:#edf0ed;color:#748078;cursor:not-allowed}
+   .haku-servicio-cortesia pre{white-space:pre-wrap;font-size:11px}
+   @media(max-width:540px){.haku-servicio-cortesia{padding:12px}.haku-servicio-cortesia-comparacion{grid-template-columns:minmax(0,1fr);gap:4px}.haku-servicio-cortesia-flecha{text-align:left;line-height:1}.haku-servicio-cortesia-comparacion>div:last-child{padding-top:2px}}
+  `;doc.head.appendChild(style);
   let ocupado=false;
   async function procesar(texto,campo,mensajes){
    if(ocupado)return;ocupado=true;campo.value='';campo.dispatchEvent(new root.Event('input',{bubbles:true}));
