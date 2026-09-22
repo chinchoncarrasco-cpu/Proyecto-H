@@ -12,6 +12,7 @@
  const RPC_PRODUCCION_HABILITADO=true;
  const propuestas=new WeakMap();
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+ const normTitular=v=>norm(v).replace(/[^\p{L}\p{N}]+/gu,' ').trim();
  const numero=v=>v==null||v===''?null:Number(v);
  const cortoHora=v=>String(v??'').match(/^(\d{1,2}):(\d{2})/)?.slice(1,3).map((x,i)=>i?x:x.padStart(2,'0')).join(':')||null;
  const uno=v=>Array.isArray(v)?v[0]||null:v||null;
@@ -40,8 +41,8 @@
   let candidato=resto.replace(/^\s+de\s+/i,'');
   candidato=candidato.split(/\s*[,;]?\s+(?=(?:cab(?:aña|ana)?\.?\s*\d+|(?:del?|el)\s+\d{1,2}(?:[-/.]|\s+de\s+)|a\s+las?\s+\d|a\s+cortes[ií]a)\b)/i)[0];
   candidato=candidato.replace(/[.,;:!?]+$/,'').trim();
-  const palabras=candidato.match(/[\p{L}][\p{L}'-]*/gu)||[];
-  return palabras.length>=2&&palabras.join(' ').length===candidato.replace(/\s+/g,' ').length?candidato:null;
+  const palabras=candidato.match(/[\p{L}]+(?:['’][\p{L}]+)*/gu)||[];
+  return palabras.length>=2&&normTitular(palabras.join(' '))===normTitular(candidato)?candidato:null;
  }
  function interpretar(texto,{diaActual=hoy()}={}){
   const limpio=quitarHaku(texto),t=norm(limpio);
@@ -78,7 +79,7 @@
   }
  }
  function resolverCandidatos(q,{reservas=[],servicios=[],estadias=[]}={}){
-  const reservasExactas=new Map(reservas.filter(r=>norm(r.titular_nombre)===norm(q.titular)).map(r=>[r.id,r]));
+  const reservasExactas=new Map(reservas.filter(r=>normTitular(r.titular_nombre)===normTitular(q.titular)).map(r=>[r.id,r]));
   const estadiasPorId=new Map(estadias.map(e=>[e.id,e]));
   return servicios.map(s=>{
    const reserva=reservasExactas.get(s.reserva_id),estadia=estadiasPorId.get(s.estadia_id),catalogo=uno(s.catalogo_servicios);
@@ -92,18 +93,33 @@
  }
  async function buscarServicios(q,{cliente=root.haikuSupabase}={}){
   if(!cliente?.from)throw Error('No está disponible la lectura autenticada de Proyecto H.');
-  const patron=`%${String(q.titular||'').trim().split(/\s+/).join('%')}%`;
-  const reservas=await filas(()=>cliente.from('reservas').select('id,titular_nombre,estado_reserva,bove_checkout').ilike('titular_nombre',patron).order('id'));
-  const reservaIds=reservas.map(r=>r.id);
-  if(!reservaIds.length)return [];
+  if(!q.codigos_servicio?.length)return [];
+  const catalogo=await filas(()=>cliente.from('catalogo_servicios').select('id,codigo').in('codigo',q.codigos_servicio).order('id'));
+  const catalogoIds=catalogo.map(c=>c.id);
+  if(!catalogoIds.length)return [];
   const servicios=await filas(()=>{
-   let x=cliente.from('servicios').select('id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,motivo_cortesia,estado_servicio,actualizado_en,catalogo_servicios(id,codigo,nombre,activo,permite_cortesia)').in('reserva_id',reservaIds);
+   let x=cliente.from('servicios').select('id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,motivo_cortesia,estado_servicio,actualizado_en,catalogo_servicios(id,codigo,nombre,activo,permite_cortesia)').in('catalogo_servicio_id',catalogoIds);
    if(q.fecha)x=x.eq('fecha_servicio',q.fecha);
    return x.order('id');
   });
-  const estadiaIds=[...new Set(servicios.map(s=>s.estadia_id).filter(Boolean))];
-  const estadias=estadiaIds.length?await filas(()=>cliente.from('reserva_estadias').select('id,reserva_id,cabana_id,cabanas(numero)').in('id',estadiaIds).order('id')):[];
-  return resolverCandidatos(q,{reservas,servicios,estadias});
+  const conHora=q.hora?servicios.filter(s=>cortoHora(s.hora_inicio)===q.hora):servicios;
+  if(!conHora.length)return [];
+  async function porIds(tabla,columnas,campo,ids){
+   const salida=[];
+   for(let i=0;i<ids.length;i+=100){
+    const lote=ids.slice(i,i+100);
+    salida.push(...await filas(()=>cliente.from(tabla).select(columnas).in(campo,lote).order('id')));
+   }
+   return salida;
+  }
+  const reservaIds=[...new Set(conHora.map(s=>s.reserva_id).filter(Boolean))];
+  const reservas=await porIds('reservas','id,titular_nombre,estado_reserva,bove_checkout','id',reservaIds);
+  const titulares=new Set(reservas.filter(r=>normTitular(r.titular_nombre)===normTitular(q.titular)).map(r=>r.id));
+  const conTitular=conHora.filter(s=>titulares.has(s.reserva_id));
+  if(!conTitular.length)return [];
+  const estadiaIds=[...new Set(conTitular.map(s=>s.estadia_id).filter(Boolean))];
+  const estadias=await porIds('reserva_estadias','id,reserva_id,cabana_id,cabanas(numero)','id',estadiaIds);
+  return resolverCandidatos(q,{reservas,servicios:conTitular,estadias});
  }
  async function cargarFinanzas(candidato,{cliente=root.haikuSupabase}={}){
   const cargos=await filas(()=>cliente.from('cargos').select('id,reserva_id,estadia_id,servicio_id,tipo_cargo,estadia_noche_id,monto,estado,actualizado_en').eq('servicio_id',candidato.id).order('id'));
