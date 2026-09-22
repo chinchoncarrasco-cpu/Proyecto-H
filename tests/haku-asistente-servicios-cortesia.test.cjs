@@ -21,6 +21,25 @@ const finanzas=(extra={})=>({
  estados:[{cargo_id:'c1',monto:30000,monto_ajustado:30000,aplicado_neto:0,saldo_cargo:30000,estado:'activo',estado_pago:'pendiente'}],
  aplicaciones:[],ajustes:[],...extra
 });
+function clienteLectura(tablas){
+ const consultas=[];
+ return {consultas,from(tabla){
+  const filtros=[],registro={tabla,filtros:[]};
+  const b={
+   select(){return b;},
+   in(campo,valores){registro.filtros.push([campo,[...valores]]);filtros.push(fila=>valores.includes(fila[campo]));return b;},
+   eq(campo,valor){registro.filtros.push([campo,valor]);filtros.push(fila=>fila[campo]===valor);return b;},
+   order(){return b;},
+   async range(desde,hasta){consultas.push(registro);return {data:(tablas[tabla]||[]).filter(fila=>filtros.every(f=>f(fila))).slice(desde,hasta+1),error:null};}
+  };return b;
+ }};
+}
+const datosServicio=(nombre,extra={})=>({
+ catalogo_servicios:[{id:'cs1',codigo:'tinajaTonel'}],
+ reservas:[{...reserva,titular_nombre:nombre}],
+ reserva_estadias:[{...estadia,cabanas:{numero:extra.cabana||10}}],
+ servicios:[servicio(extra.servicio||{})]
+});
 
 test('interpreta NORMAL_A_CORTESIA, quita Haku y extrae evidencia sin inventar ausentes',()=>{
  const casos=[
@@ -51,19 +70,84 @@ test('resuelve cero, uno o varios candidatos sólo con datos persistidos',()=>{
 });
 
 test('buscarServicios consulta Proyecto H y filtra titular, estadía y cabaña persistidos',async()=>{
- const tablas={reservas:[reserva],servicios:[servicio()],reserva_estadias:[estadia]},consultadas=[];
- const cliente={from(nombre){
-  consultadas.push(nombre);const filtros=[];
-  const b={
-   select(){return b;},ilike(c,p){filtros.push(x=>new RegExp('^'+p.split('%').map(s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$','i').test(String(x[c]||'')));return b;},
-   in(c,v){filtros.push(x=>v.includes(x[c]));return b;},eq(c,v){filtros.push(x=>x[c]===v);return b;},order(){return b;},
-   async range(){return {data:(tablas[nombre]||[]).filter(x=>filtros.every(f=>f(x))),error:null};}
-  };return b;
- }};
+ const cliente=clienteLectura(datosServicio('Luis Ortiz'));
  const q=A.interpretar('Pasa a cortesía la tinaja tonel de Luis Ortiz cab 10 del 12-09',{diaActual:'2026-09-22'});
  const encontrados=await A.buscarServicios(q,{cliente});
  assert.equal(encontrados.length,1);assert.equal(encontrados[0].id,'s1');
- assert.deepEqual(consultadas,['reservas','servicios','reserva_estadias']);
+ assert.deepEqual(cliente.consultas.map(x=>x.tabla),['catalogo_servicios','servicios','reservas','reserva_estadias']);
+ assert.deepEqual(cliente.consultas[1].filtros,[['catalogo_servicio_id',['cs1']],['fecha_servicio','2026-09-12']]);
+});
+
+test('Hernan Guzman encuentra Tonel de Hernan Guzmán sin hora explícita',async()=>{
+ const cliente=clienteLectura(datosServicio('Hernan Guzmán',{cabana:8,servicio:{fecha_servicio:'2026-09-13',hora_inicio:'19:15:00'}}));
+ const orden='Haku, pasa el Tonel de Hernan Guzman, cab 8, del 13-09 a cortesía.';
+ const q=A.interpretar(orden,{diaActual:'2026-09-22'});
+ assert.deepEqual([q.titular,q.codigo_servicio,q.fecha,q.hora,q.cabana],['Hernan Guzman','tinajaTonel','2026-09-13',null,8]);
+ const encontrados=await A.buscarServicios(q,{cliente});
+ assert.equal(encontrados.length,1);assert.equal(encontrados[0].id,'s1');assert.equal(encontrados[0].hora_inicio,'19:15:00');
+ assert.equal(encontrados[0].cabana_numero,8);
+});
+
+test('titulares equivalentes por tildes, caja, espacios y puntuación se encuentran sin coincidencia difusa',async()=>{
+ for(const [escrito,persistido] of [
+  ['Hernan Guzman','Hernán Guzmán'],['Jose Rojas','José Rojas'],['Monica Perez','Mónica, Pérez'],
+  ['Monica, Perez','Mónica Pérez'],['Jose-Rojas','José Rojas'],
+  ['Josefina Mellado','JOSEFINA  MELLADO'],['Luis Ortiz','Luis Ortiz']
+ ]){
+  const cliente=clienteLectura(datosServicio(persistido));
+  const q=A.interpretar(`Pasa la tinaja tonel de ${escrito}, cab 10, del 12-09 a cortesía`,{diaActual:'2026-09-22'});
+  assert.equal((await A.buscarServicios(q,{cliente})).length,1,escrito);
+ }
+ const cliente=clienteLectura(datosServicio('Josefa Rojas'));
+ const q=A.interpretar('Pasa la tinaja tonel de Jose Rojas, cab 10, del 12-09 a cortesía',{diaActual:'2026-09-22'});
+ assert.equal((await A.buscarServicios(q,{cliente})).length,0);
+});
+
+test('búsqueda exacta sin fecha conserva un único servicio persistido',async()=>{
+ const cliente=clienteLectura(datosServicio('Luis Ortiz'));
+ const q=A.interpretar('Pasa la tinaja tonel de Luis Ortiz a cortesía',{diaActual:'2026-09-22'});
+ assert.equal(q.fecha,null);
+ assert.equal((await A.buscarServicios(q,{cliente}))[0].id,'s1');
+ assert.deepEqual(cliente.consultas[1].filtros,[['catalogo_servicio_id',['cs1']]]);
+});
+
+test('dos servicios con titular normalizado igual conservan la ambigüedad',async()=>{
+ const datos=datosServicio('José Rojas');
+ datos.reservas.push({...reserva,id:'r2',titular_nombre:'Jose Rojas'});
+ datos.reserva_estadias.push({...estadia,id:'e2',reserva_id:'r2'});
+ datos.servicios.push(servicio({id:'s2',reserva_id:'r2',estadia_id:'e2'}));
+ const cliente=clienteLectura(datos);
+ const orden='Pasa la tinaja tonel de Jose Rojas cab 10 del 12-09 a cortesía';
+ const p=await A.preparar(orden,{diaActual:'2026-09-22',cliente,permiso:()=>true,cargarFinanzas:async()=>{throw Error('No debe leer finanzas ambiguas');}});
+ assert.equal(p.estado,'multiples');assert.deepEqual(p.candidatos.map(c=>c.id),['s1','s2']);
+ assert.doesNotMatch(A.renderizar(p),/data-servicio-cortesia-confirmar/);
+});
+
+test('Hernan encontrado con pago aplicado queda bloqueado sin confirmar ni llamar al RPC',async()=>{
+ const cliente=clienteLectura(datosServicio('Hernan Guzmán',{cabana:8,servicio:{fecha_servicio:'2026-09-13',hora_inicio:'19:15:00'}}));
+ let llamadasRpc=0;cliente.rpc=async()=>{llamadasRpc++;throw Error('No debe ejecutarse');};
+ const pagado=finanzas({
+  estados:[{...finanzas().estados[0],aplicado_neto:30000,saldo_cargo:0,estado_pago:'pagado'}],
+  aplicaciones:[{id:'a1',cargo_id:'c1',pago_id:'p1',monto_aplicado:30000}]
+ });
+ const p=await A.preparar('Haku, pasa el Tonel de Hernan Guzman, cab 8, del 13-09 a cortesía.',{
+  diaActual:'2026-09-22',cliente,permiso:()=>true,cargarFinanzas:async()=>pagado
+ });
+ assert.equal(p.estado,'bloqueada');assert.equal(p.candidato.id,'s1');
+ assert.match(p.elegibilidad.razones.join(' '),/aplicaciones de pago históricas/i);
+ assert.match(p.elegibilidad.razones.join(' '),/cargo activo no coincide/i);
+ assert.doesNotMatch(A.renderizar(p),/data-servicio-cortesia-confirmar/);
+ assert.equal((await A.confirmar(p,'No debe cambiarse')).estado,'bloqueada');
+ assert.equal(llamadasRpc,0);
+});
+
+test('sin servicio del código y fecha solicitados mantiene no encontrado',async()=>{
+ const cliente=clienteLectura(datosServicio('Hernan Guzmán',{cabana:8,servicio:{fecha_servicio:'2026-09-14'}}));
+ const p=await A.preparar('Pasa el Tonel de Hernan Guzman, cab 8, del 13-09 a cortesía',{
+  diaActual:'2026-09-22',cliente,permiso:()=>true
+ });
+ assert.equal(p.estado,'no_encontrado');
+ assert.deepEqual(cliente.consultas.map(x=>x.tabla),['catalogo_servicios','servicios']);
 });
 
 test('preparar maneja cero, uno y múltiples sin elegir por posición',async()=>{
