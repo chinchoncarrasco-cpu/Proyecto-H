@@ -669,8 +669,8 @@
    .haku-servicio-cortesia-motivo-resultado span{color:#65746a;font-weight:700}
    .haku-servicio-cortesia-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
    .haku-servicio-cortesia button{min-height:34px;font:inherit;font-weight:700;border:1px solid #cbd9cf;border-radius:7px;padding:7px 11px;background:#fff;color:#425048;cursor:pointer}
-   .haku-servicio-cortesia button:is([data-servicio-cortesia-confirmar],[data-servicio-cobro-confirmar]):not(:disabled){border-color:#1f6e4c;background:#1f6e4c;color:#fff}
-   .haku-servicio-cortesia button:is([data-servicio-cortesia-confirmar],[data-servicio-cobro-confirmar]):not(:disabled):hover{background:#174f39}
+   .haku-servicio-cortesia button:is([data-servicio-cortesia-confirmar],[data-servicio-cobro-confirmar],[data-servicio-cancelacion-confirmar]):not(:disabled){border-color:#1f6e4c;background:#1f6e4c;color:#fff}
+   .haku-servicio-cortesia button:is([data-servicio-cortesia-confirmar],[data-servicio-cobro-confirmar],[data-servicio-cancelacion-confirmar]):not(:disabled):hover{background:#174f39}
    .haku-servicio-cortesia button:disabled{background:#edf0ed;color:#748078;cursor:not-allowed}
    .haku-servicio-cortesia pre{white-space:pre-wrap;font-size:11px}
    @media(max-width:540px){.haku-servicio-cortesia{padding:12px}.haku-servicio-cortesia-comparacion{grid-template-columns:minmax(0,1fr);gap:4px}.haku-servicio-cortesia-flecha{text-align:left;line-height:1}.haku-servicio-cortesia-comparacion>div:last-child{padding-top:2px}}

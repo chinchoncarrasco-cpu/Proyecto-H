@@ -113,19 +113,20 @@ test('lee checkout de todas las estadías de la reserva y conserva el más recie
  assert.equal(lectura.checkout,otro.checkout_realizado_en);
  assert.equal(C.evaluarElegibilidad(candidato(),lectura).estado,'bloqueada');
 });
-test('normal limpio y cortesía limpia muestran propuesta y snapshot exacto del RPC',async()=>{
+test('normal limpio y cortesía limpia muestran propuesta real y snapshot exacto del RPC',async()=>{
  const q=C.interpretar(orden,{diaActual}),cliente=clienteLectura(tablas());
  const p=await C.preparar(q,{cliente,permiso:()=>true});
  assert.equal(p.estado,'propuesta');assert.equal(p.p_estado_esperado.cargo_activo_id,'c1');
  assert.equal(p.p_estado_esperado.cargo_saldo,30000);assert.equal(p.p_estado_esperado.cantidad_aplicaciones,0);
  assert.equal(p.p_estado_esperado.checkout_realizado_en,null);
  assert.deepEqual(p.p_estado_esperado.cargos,[cargo]);
- assert.match(C.renderizar(p),/Confirmar cancelación · simulación/);assert.match(C.renderizar(p),/Motivo de cancelación/);
+ assert.match(C.renderizar(p),/Confirmar cancelación/);assert.doesNotMatch(C.renderizar(p),/simulación/i);
+ assert.match(C.renderizar(p),/Motivo de cancelación/);
  const c=candidato({tipo_cobro:'cortesia',total:0,motivo_cortesia:'Cortesía'});
  assert.equal(C.evaluarElegibilidad(c,{finanzas:finanzas({cargos:[],estados:[]}),checkout:null}).estado,'elegible');
  assert.match(C.renderizar({...p,candidato:c,p_estado_esperado:{...p.p_estado_esperado,cargo_saldo:null}}),/Sin cargo activo/);
 });
-test('motivo obligatorio, revalidación, idempotencia local y ausencia de escrituras',async()=>{
+test('motivo obligatorio y cambio previo bloquean antes de llamar al RPC',async()=>{
  const q=C.interpretar(orden,{diaActual}),cliente=clienteLectura(tablas());
  let n=0,rpc=0;
  cliente.rpc=()=>{rpc++;throw Error('RPC prohibido');};
@@ -134,26 +135,19 @@ test('motivo obligatorio, revalidación, idempotencia local y ausencia de escrit
  const p=await C.preparar(q,{cliente,permiso:()=>true,buscar,cargarFinanzas});
  assert.equal((await C.confirmar(p,'   ')).estado,'motivo_requerido');
  assert.equal(n,1);
- const [uno,dos]=await Promise.all([C.confirmar(p,'Huésped desistió',{operacionId:'op-1'}),C.confirmar(p,'Huésped desistió',{operacionId:'op-2'})]);
- assert.equal(uno.estado,'simulada');assert.strictEqual(uno,dos);assert.equal(n,2);
- assert.equal(uno.rpc,'haiku_cancelar_servicio_asistente_v1');
- assert.equal(uno.parametros.p_operacion_id,'op-1');assert.equal(uno.parametros.p_motivo,'Huésped desistió');
- assert.deepEqual(uno.parametros.p_estado_esperado,p.p_estado_esperado);
- assert.strictEqual(await C.confirmar(p,'Otro motivo'),uno);
- assert.equal(rpc,0);assert.equal(C.RPC_CANCELACION_PRODUCCION_HABILITADO,false);
- const p2=await C.preparar(q,{cliente,permiso:()=>true,buscar,cargarFinanzas});
- assert.equal((await C.confirmar(p2,'Nuevo',{operacionId:'op-3'})).parametros.p_operacion_id,'op-3');
  let cambio=false;
  const buscarCambio=async()=>[candidato(cambio?{actualizado_en:'nuevo'}:{})];
  const p3=await C.preparar(q,{cliente,permiso:()=>true,buscar:buscarCambio,cargarFinanzas});
  cambio=true;
- const obsoleta=await C.confirmar(p3,'Motivo',{operacionId:'op-4'});
- assert.equal(obsoleta.estado,'obsoleta');assert.notEqual(obsoleta.nueva.estado,'simulada');
+ const obsoleta=await C.confirmar(p3,'Motivo');
+ assert.equal(obsoleta.estado,'obsoleta');assert.equal(obsoleta.nueva.estado,'propuesta');
  assert.equal(rpc,0);
 });
-test('módulo de cancelación no contiene ruta de escritura y carga después de la autoridad',()=>{
+test('módulo usa sólo el RPC asistido y carga después de la autoridad',()=>{
  const js=fs.readFileSync(require.resolve('../js/supabase-asistente-servicios-cancelacion-v1.js'),'utf8');
- assert.doesNotMatch(js,/\.rpc\s*\(|\.(?:update|insert|delete|upsert)\s*\(/);
+ assert.match(js,/RPC_CANCELACION_PRODUCCION_HABILITADO=true/);
+ assert.match(js,/\.rpc\(RPC,o\.payload\)/);
+ assert.doesNotMatch(js,/\.(?:update|insert|delete|upsert)\s*\(/);
  const html=fs.readFileSync(require('node:path').join(__dirname,'../panel.html'),'utf8');
  assert.ok(html.indexOf("'supabase-asistente-servicios-cortesia-v1','supabase-asistente-servicios-cancelacion-v1'")>0);
 });

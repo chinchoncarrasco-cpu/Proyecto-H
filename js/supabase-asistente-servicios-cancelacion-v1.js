@@ -6,7 +6,7 @@
   (typeof require==='function'?require('./supabase-asistente-servicios-cortesia-v1.js'):null);
  const INTENCION='CANCELAR_SERVICIO_EXISTENTE';
  const RPC='haiku_cancelar_servicio_asistente_v1';
- const RPC_CANCELACION_PRODUCCION_HABILITADO=false;
+ const RPC_CANCELACION_PRODUCCION_HABILITADO=true;
  const propuestas=new WeakMap();
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  const numero=v=>v==null||v===''?null:Number(v);
@@ -68,13 +68,14 @@
   }
  }
  async function cargarEstado(candidato,{cliente=root.haikuSupabase,cargarFinanzas=autoridad.cargarFinanzas}={}){
-  const [finanzas,estadias]=await Promise.all([
+  const [finanzas,estadias,pagos]=await Promise.all([
    cargarFinanzas(candidato,{cliente,completo:true}),
-   filas(()=>cliente.from('reserva_estadias').select('id,reserva_id,checkout_realizado_en').eq('reserva_id',candidato.reserva_id).order('id'))
+   filas(()=>cliente.from('reserva_estadias').select('id,reserva_id,checkout_realizado_en').eq('reserva_id',candidato.reserva_id).order('id')),
+   filas(()=>cliente.from('pagos').select('*').eq('reserva_id',candidato.reserva_id).order('id'))
   ]);
   const checkout=estadias.map(x=>x.checkout_realizado_en).filter(Boolean)
    .sort((a,b)=>Date.parse(a)-Date.parse(b)).at(-1)||null;
-  return {finanzas,checkout,estadias};
+  return {finanzas,checkout,estadias,pagos};
  }
  async function buscarServicios(q,{cliente=root.haikuSupabase}={}){
   if(q.familia!=='masaje')return autoridad.buscarServicios(q,{cliente});
@@ -142,42 +143,150 @@
    const lectura=await cargarEstado(candidato,{cliente,cargarFinanzas:cargar});
    const elegibilidad=evaluarElegibilidad(candidato,lectura);
    if(!elegibilidad.elegible)return {estado:'bloqueada',consulta:q,candidato,elegibilidad,mensaje:'No puedo cancelar automáticamente este servicio. Requiere revisión.'};
-   const p={estado:'propuesta',consulta:q,candidato,elegibilidad,p_estado_esperado:estadoEsperado(candidato,lectura),mensaje:'Propuesta de cancelación preparada en modo simulación.'};
+   const p={estado:'propuesta',consulta:q,candidato,elegibilidad,p_estado_esperado:estadoEsperado(candidato,lectura),mensaje:'Propuesta de cancelación preparada. No se ha modificado Proyecto H.'};
    propuestas.set(p,{consulta:q,servicioId:candidato.id,snapshot:JSON.stringify(p.p_estado_esperado),
-    evidencia:JSON.stringify({candidato,lectura}),cliente,buscar,cargar,permiso,operacionId:null,payload:null,resultado:null,enCurso:null});
+    evidencia:JSON.stringify({candidato,lectura}),candidatoInicial:JSON.parse(JSON.stringify(candidato)),
+    lecturaInicial:JSON.parse(JSON.stringify(lectura)),cliente,buscar,cargar,permiso,
+    operacionId:null,payload:null,resultado:null,enCurso:null,rpcRespondioExito:false,respuestaCargoId:null});
    return p;
   }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
  }
- async function confirmar(p,motivo,opciones={}){
+ async function releer(o){
+  const candidatos=await o.buscar(o.consulta,{cliente:o.cliente});
+  if(candidatos.length!==1||candidatos[0].id!==o.servicioId)return null;
+  const candidato=candidatos[0],lectura=await cargarEstado(candidato,{cliente:o.cliente,cargarFinanzas:o.cargar});
+  return {candidato,lectura,snapshot:estadoEsperado(candidato,lectura),evidencia:JSON.stringify({candidato,lectura})};
+ }
+ const coincidePropuesta=(o,actual)=>actual&&evaluarElegibilidad(actual.candidato,actual.lectura).elegible&&
+  JSON.stringify(actual.snapshot)===o.snapshot&&actual.evidencia===o.evidencia;
+ async function obsoleta(o){
+  const nueva=await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarFinanzas:o.cargar,permiso:o.permiso});
+  return {estado:'obsoleta',mensaje:'El servicio o sus finanzas cambiaron. Preparé una propuesta nueva.',nueva};
+ }
+ function errorRpc(error){
+  const codigo=String(error?.code||''),mensaje=String(error?.message||error||'');
+  if(codigo==='40001'||/obsoleta|estado esperado|propuesta nueva|cambió de reserva/i.test(mensaje))return 'stale';
+  if(codigo==='42501'||/permiso|sesión|usuario no activo/i.test(mensaje))return 'sin_permiso';
+  if(/aplicaciones|ajustes|historial financiero|cargo activo|finanzas|BOVE|check.out|estado operativo|requiere revisión/i.test(mensaje))return 'revision_humana';
+  return 'incierto';
+ }
+ async function auditar(o,actual){
+  const eventos=await filas(()=>o.cliente.from('eventos_auditoria')
+   .select('id,entidad_tipo,entidad_id,reserva_id,usuario_id,origen,cambios,datos_contexto')
+   .eq('entidad_id',o.servicioId).order('id'));
+  return eventos.some(e=>e.entidad_tipo==='servicios'&&e.reserva_id===actual.candidato.reserva_id&&
+   e.usuario_id===actual.candidato.cancelado_por&&e.origen==='haku'&&
+   e.datos_contexto?.operacion_id===o.operacionId&&
+   Array.isArray(e.cambios)&&e.cambios.some(x=>x.campo==='estado_servicio'&&x.anterior==='programado'&&x.nuevo==='cancelado')&&
+   e.cambios.some(x=>x.campo==='motivo_cancelacion'&&x.nuevo===o.payload.p_motivo));
+ }
+ async function verificarCambio(o,actual){
+  if(!actual||!o.payload)return false;
+  const antes=o.candidatoInicial,despues=actual.candidato,anterior=o.lecturaInicial,posterior=actual.lectura;
+  if(despues.id!==o.servicioId||despues.estado_servicio!=='cancelado'||!despues.cancelado_en||!despues.cancelado_por||
+     despues.motivo_cancelacion!==o.payload.p_motivo)return false;
+  for(const campo of ['reserva_id','estadia_id','catalogo_servicio_id','recurso_id','fecha_servicio','hora_inicio','hora_fin',
+    'cantidad','personas','precio_unitario_aplicado','monto_adicional','total','tipo_cobro','motivo_cortesia','motivo_ajuste_precio'])
+   if(JSON.stringify(despues[campo]??null)!==JSON.stringify(antes[campo]??null))return false;
+  if(despues.reserva?.estado_reserva!==antes.reserva?.estado_reserva||
+     despues.reserva?.bove_checkout!=null||posterior.checkout!==anterior.checkout||
+     JSON.stringify(despues.catalogo)!==JSON.stringify(antes.catalogo))return false;
+  const cargosAntes=anterior.finanzas.cargos,cargosDespues=posterior.finanzas.cargos;
+  if(cargosAntes.length!==cargosDespues.length||cargosDespues.some(x=>x.estado==='activo')||
+     posterior.finanzas.aplicaciones.length!==0||posterior.finanzas.ajustes.length!==0||
+     JSON.stringify(posterior.pagos)!==JSON.stringify(anterior.pagos))return false;
+  for(const cargo of cargosAntes){
+   const nuevo=cargosDespues.find(x=>x.id===cargo.id);
+   if(!nuevo||nuevo.monto!==cargo.monto||nuevo.reserva_id!==cargo.reserva_id||
+      nuevo.estadia_id!==cargo.estadia_id||nuevo.servicio_id!==cargo.servicio_id||
+      nuevo.estado!=='anulado'||(cargo.estado==='anulado'&&JSON.stringify(nuevo)!==JSON.stringify(cargo)))return false;
+  }
+  if(antes.tipo_cobro==='normal'&&(!cargosAntes.some(x=>x.id===o.payload.p_estado_esperado.cargo_activo_id&&x.estado==='activo')||
+     (o.respuestaCargoId&&o.respuestaCargoId!==o.payload.p_estado_esperado.cargo_activo_id)))return false;
+  return auditar(o,actual);
+ }
+ function resultadoExito(p,o,actual,origen){
+  const cargo=o.lecturaInicial.finanzas.cargos.find(x=>x.id===o.payload.p_estado_esperado.cargo_activo_id)||null;
+  const resultado={estado:'realizado',mensaje:origen==='relectura'?'Cancelación acreditada por una nueva lectura.':'Servicio cancelado y verificado.',
+   candidato:actual.candidato,cargo_anterior:cargo,motivo:o.payload.p_motivo,operacion_id:o.operacionId,origen};
+  o.resultado=resultado;
+  if(root.document&&root.CustomEvent)root.document.dispatchEvent(new root.CustomEvent('haiku:servicio-supabase-cambiado',
+   {detail:{servicioId:o.servicioId,reservaId:actual.candidato.reserva_id}}));
+  return resultado;
+ }
+ async function verificarEstado(p){
   const o=propuestas.get(p);
-  if(!o)return {estado:'bloqueada',mensaje:'Prepara una propuesta nueva antes de confirmar.'};
-  if(o.enCurso)return o.enCurso;
+  if(!o?.payload)return {estado:'bloqueada',mensaje:'No hay una operación pendiente para comprobar.'};
   if(o.resultado)return o.resultado;
-  if(!String(motivo??'').trim())return {estado:'motivo_requerido',mensaje:'Ingresa un motivo de cancelación.',propuesta:p};
-  o.enCurso=(async()=>{
-   try{
-    if(!o.permiso())return {estado:'bloqueada',mensaje:'Ya no tienes el permiso servicios.cancelar.'};
-    const candidatos=await o.buscar(o.consulta,{cliente:o.cliente});
-    if(candidatos.length!==1||candidatos[0].id!==o.servicioId)
-     return {estado:'obsoleta',mensaje:'La identificación cambió. Preparé una propuesta nueva.',nueva:await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarFinanzas:o.cargar,permiso:o.permiso})};
-    const c=candidatos[0],lectura=await cargarEstado(c,{cliente:o.cliente,cargarFinanzas:o.cargar});
-    const nuevo=estadoEsperado(c,lectura);
-    if(!evaluarElegibilidad(c,lectura).elegible||JSON.stringify(nuevo)!==o.snapshot||JSON.stringify({candidato:c,lectura})!==o.evidencia)
-     return {estado:'obsoleta',mensaje:'El servicio o sus finanzas cambiaron. Preparé una propuesta nueva.',nueva:await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarFinanzas:o.cargar,permiso:o.permiso})};
-    if(!o.payload){
-     const id=opciones.operacionId||root.crypto?.randomUUID?.();
-     if(!id)throw Error('No se pudo generar un identificador de operación.');
-     o.operacionId=id;
-     o.payload={p_operacion_id:id,p_servicio_id:o.servicioId,p_motivo:String(motivo),p_estado_esperado:nuevo};
-    }
-    // C2: no existe ninguna llamada de escritura en esta ruta, incluso si alguien cambia el flag.
-    o.resultado={estado:'simulada',mensaje:'Confirmación simulada. No se llamó al RPC ni se modificó Proyecto H.',
-     candidato:c,rpc:RPC,parametros:o.payload,operacion_id:o.operacionId,produccion_habilitada:RPC_CANCELACION_PRODUCCION_HABILITADO};
-    return o.resultado;
-   }catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar el servicio. ${error?.message||error}`};}
-   finally{o.enCurso=null;}
-  })();
-  return o.enCurso;
+  try{
+   const actual=await releer(o);
+   if(await verificarCambio(o,actual))return resultadoExito(p,o,actual,'relectura');
+   if(coincidePropuesta(o,actual))return o.rpcRespondioExito
+    ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente. Sólo volveré a leer; no repetiré la escritura.',propuesta:p}
+    :{estado:'reintento_seguro',mensaje:'La lectura confirma el estado anterior. Puedes reintentar la misma operación.',propuesta:p,operacion_id:o.operacionId};
+   if(actual?.candidato.estado_servicio==='cancelado')return o.rpcRespondioExito
+    ?{estado:'sincronizando',mensaje:'La cancelación aún no se puede acreditar por lectura. Sólo volveré a leer.',propuesta:p}
+    :{estado:'revision_humana',mensaje:'El servicio está cancelado, pero no pude acreditar que esta operación lo canceló. Requiere revisión; no repetiré la escritura.'};
+   return await obsoleta(o);
+  }catch(error){return {estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo se permite volver a leer; no repetiré el RPC automáticamente.',propuesta:p};}
+ }
+ async function confirmarInterno(p,o,motivo,opciones){
+  if(!RPC_CANCELACION_PRODUCCION_HABILITADO)return {estado:'bloqueada',mensaje:'La cancelación real sigue bloqueada.'};
+  if(!motivo.trim())return {estado:'motivo_requerido',mensaje:'Ingresa un motivo de cancelación.',propuesta:p};
+  if(o.resultado)return o.resultado;
+  if(o.payload&&o.payload.p_motivo!==motivo)return {estado:'bloqueada',mensaje:'El motivo cambió. Prepara una propuesta nueva para otra operación.'};
+  if(!o.permiso())return {estado:'sin_permiso',mensaje:'No tienes el permiso servicios.cancelar. No se realizó ningún cambio.'};
+  opciones.onEstado?.('Verificando nuevamente…');
+  let actual;
+  try{actual=await releer(o);}catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+  if(o.payload){
+   try{if(await verificarCambio(o,actual))return resultadoExito(p,o,actual,'relectura');}
+   catch(error){return {estado:'incierto',mensaje:'No pude acreditar la operación por lectura. Sólo volveré a leer; no repetiré el RPC automáticamente.',propuesta:p};}
+  }
+  if(!coincidePropuesta(o,actual))return await obsoleta(o);
+  if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El RPC ya respondió correctamente. Sólo volveré a leer el resultado.',propuesta:p};
+  if(!o.payload){
+   const id=opciones.operacionId||root.crypto?.randomUUID?.();
+   if(!id)return {estado:'bloqueada',mensaje:'No se pudo generar un identificador de operación.'};
+   o.operacionId=id;
+   o.payload=Object.freeze({p_operacion_id:id,p_servicio_id:o.servicioId,p_motivo:motivo,
+    p_estado_esperado:JSON.parse(o.snapshot)});
+  }
+  opciones.onEstado?.('Cancelando servicio…');
+  let respuesta,error;
+  try{({data:respuesta,error}=await o.cliente.rpc(RPC,o.payload));}catch(e){error=e;}
+  if(error){
+   const clase=errorRpc(error);
+   if(clase==='stale')return await obsoleta(o);
+   if(clase==='sin_permiso')return {estado:'sin_permiso',mensaje:'No tienes permiso para cancelar este servicio.'};
+   if(clase==='revision_humana')return {estado:'revision_humana',mensaje:'El servicio o su historial financiero requiere revisión humana. No se realizó otro intento.'};
+   return verificarEstado(p);
+  }
+  if(!respuesta||respuesta.ok!==true||respuesta.servicio_id!==o.servicioId)return verificarEstado(p);
+  if(respuesta.estado==='already_cancelled')return {estado:'already_cancelled',mensaje:'Este servicio ya está cancelado. No requiere cambios.'};
+  if(respuesta.estado!=='cancelled'||respuesta.operacion_id!==o.operacionId||
+     respuesta.motivo!==o.payload.p_motivo||numero(respuesta.total_original)!==numero(o.candidatoInicial.total)||
+     (o.candidatoInicial.tipo_cobro==='normal'&&respuesta.cargo_anulado_id!==o.payload.p_estado_esperado.cargo_activo_id))
+   return verificarEstado(p);
+  o.rpcRespondioExito=true;o.respuestaCargoId=respuesta.cargo_anulado_id||null;
+  let observado=await verificarEstado(p);
+  if(['sincronizando','incierto'].includes(observado.estado))for(let intento=0;intento<2;intento++){
+   await new Promise(resolver=>setTimeout(resolver,300));
+   observado=await verificarEstado(p);
+   if(['realizado','obsoleta','revision_humana'].includes(observado.estado))return observado;
+  }
+  return observado.estado==='incierto'
+   ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente; sólo volveré a leer antes de acreditar el cambio.',propuesta:p}
+   :observado;
+ }
+ function confirmar(p,motivo,opciones={}){
+  const o=propuestas.get(p);
+  if(!o)return Promise.resolve({estado:'bloqueada',mensaje:'Prepara una propuesta nueva antes de confirmar.'});
+  if(o.enCurso)return o.enCurso;
+  const tarea=confirmarInterno(p,o,String(motivo??''),opciones);
+  o.enCurso=tarea;
+  void tarea.then(()=>{o.enCurso=null;},()=>{o.enCurso=null;});
+  return tarea;
  }
  function resumen(c){return `${c.reserva?.titular_nombre||'Titular'} · CAB ${c.cabana_numero??'—'} · ${c.catalogo?.nombre||'Servicio'} · ${fecha(c.fecha_servicio)} · ${hora(c.hora_inicio)||'sin hora'}`;}
  function renderizar(p){
@@ -187,10 +296,14 @@
    const c=p.candidato;
    return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada"><header class="haku-servicio-cortesia-cabecera"><div class="haku-servicio-cortesia-estado"><span class="haku-servicio-cortesia-sello">Cancelar servicio</span><span class="haku-servicio-cortesia-etiqueta">Requiere revisión</span></div><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}</span></header><p class="haku-servicio-cortesia-intro">No puedo cancelar este servicio automáticamente.</p><section class="haku-servicio-cortesia-motivos"><h3>Motivos</h3><ul>${p.elegibilidad.razones.map(x=>`<li><strong>Revisión requerida</strong><span>${esc(x)}</span></li>`).join('')}</ul></section><p class="haku-servicio-cortesia-cierre">Revisión manual necesaria</p></article>`;
   }
-  if(p.estado==='simulada')return `<article class="haku-servicio-cortesia"><h3>Confirmación simulada</h3><p>${esc(p.mensaje)}</p><details><summary>RPC y payload preparados</summary><pre>${esc(JSON.stringify({rpc:p.rpc,parametros:p.parametros},null,2))}</pre></details></article>`;
+  if(p.estado==='realizado'){
+   const c=p.candidato,normal=c.tipo_cobro==='normal';
+   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--realizado"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">✓ Servicio cancelado</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>Programado · ${normal?'Cobro normal':'Cortesía'}</strong><b>${esc(dinero(c.total))}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Ahora</span><strong>Cancelado</strong></div></div><p class="haku-servicio-cortesia-efecto">${normal?`Cargo asociado: <strong>Anulado</strong> · Monto histórico conservado: <strong>${esc(dinero(p.cargo_anterior?.monto))}</strong> · Sin cobro pendiente activo`:'Sin cargo activo ni cobro pendiente.'}</p><p class="haku-servicio-cortesia-motivo-resultado"><span>Motivo:</span> ${esc(p.motivo)}</p></article>`;
+  }
+  if(['sincronizando','incierto','reintento_seguro'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>${p.estado==='reintento_seguro'?'Reintento disponible':'Comprobando cancelación'}</h3><p>${esc(p.mensaje)}</p><div class="haku-servicio-cortesia-acciones">${p.estado==='reintento_seguro'?'<button type="button" data-servicio-cancelacion-reintentar>Reintentar misma operación</button>':'<button type="button" data-servicio-cancelacion-releer>Comprobar estado</button>'}</div></article>`;
   if(p.estado!=='propuesta')return `<article class="haku-servicio-cortesia"><h3>Cancelar servicio</h3><p>${esc(p.mensaje)}</p></article>`;
   const c=p.candidato,normal=c.tipo_cobro==='normal',cargo=p.p_estado_esperado;
-  return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">Cancelar servicio</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(hora(c.hora_fin))}`:''}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Estado actual</span><strong>Programado</strong><b>${normal?`Cobro normal · ${esc(dinero(c.total))}`:'Cortesía · $0'}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Después</span><strong>Cancelado</strong></div></div><p class="haku-servicio-cortesia-efecto">${normal?`Cargo pendiente ${esc(dinero(cargo.cargo_saldo))} → será anulado. El monto histórico se conservará.`:'Sin cargo activo. No se generará ningún cobro.'}</p><label class="haku-servicio-cortesia-motivo">Motivo de cancelación<textarea data-servicio-cancelacion-motivo rows="2" required autocomplete="off"></textarea></label><p class="haku-servicio-cortesia-confirmacion">Esta confirmación es una simulación: no modificará Proyecto H.</p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cancelacion-confirmar disabled>Confirmar cancelación · simulación</button><button type="button" data-servicio-cancelacion-cancelar>Cancelar</button></div></article>`;
+  return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">Cancelar servicio</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(hora(c.hora_fin))}`:''}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>Programado</strong><b>${normal?`Cobro normal · ${esc(dinero(c.total))}`:'Cortesía · $0'}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Después</span><strong>Cancelado</strong></div></div><p class="haku-servicio-cortesia-efecto">${normal?`Cargo pendiente ${esc(dinero(cargo.cargo_saldo))} → será anulado. El monto histórico se conservará.`:'Sin cargo activo. No se generará ningún cobro.'}</p><label class="haku-servicio-cortesia-motivo">Motivo de cancelación<textarea data-servicio-cancelacion-motivo rows="2" required autocomplete="off"></textarea></label><p class="haku-servicio-cortesia-confirmacion">Al confirmar, Proyecto H cancelará el servicio y anulará su cargo pendiente, si existe.</p><p data-servicio-cancelacion-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-cancelacion-confirmar disabled>Confirmar cancelación</button><button type="button" data-servicio-cancelacion-cancelar>Cancelar</button></div></article>`;
  }
  function instalar(){
   const doc=root.document;
@@ -203,11 +316,19 @@
    el.addEventListener('input',e=>{if(!e.target?.matches?.('[data-servicio-cancelacion-motivo]'))return;const b=el.querySelector('[data-servicio-cancelacion-confirmar]');if(b)b.disabled=!e.target.value.trim();});
    el.addEventListener('click',async e=>{const b=e.target?.closest?.('button');if(!b)return;e.preventDefault();e.stopPropagation();
     if(b.hasAttribute('data-servicio-cancelacion-cancelar')){p={estado:'cancelada',mensaje:'Cancelé la propuesta. No se modificó Proyecto H.'};el.innerHTML=renderizar(p);return;}
-    if(!b.hasAttribute('data-servicio-cancelacion-confirmar')||b.disabled||p?.estado!=='propuesta')return;
-    const motivo=el.querySelector('[data-servicio-cancelacion-motivo]')?.value||'';
-    if(!motivo.trim())return;
+    const confirmarAhora=b.hasAttribute('data-servicio-cancelacion-confirmar')&&p?.estado==='propuesta';
+    const reintentar=b.hasAttribute('data-servicio-cancelacion-reintentar')&&p?.estado==='reintento_seguro';
+    const releerEstado=b.hasAttribute('data-servicio-cancelacion-releer')&&['incierto','sincronizando'].includes(p?.estado);
+    if(b.disabled||!confirmarAhora&&!reintentar&&!releerEstado)return;
+    const propuesta=confirmarAhora?p:p.propuesta;
+    const motivo=confirmarAhora?el.querySelector('[data-servicio-cancelacion-motivo]')?.value||'':null;
+    if(confirmarAhora&&!motivo.trim())return;
     el.querySelectorAll('button,textarea').forEach(x=>x.disabled=true);
-    p=await confirmar(p,motivo);el.innerHTML=renderizar(p);
+    try{p=releerEstado?await verificarEstado(propuesta):await confirmar(propuesta,
+     confirmarAhora?motivo:propuestas.get(propuesta)?.payload?.p_motivo,
+     {onEstado:estado=>{const indicador=el.querySelector('[data-servicio-cancelacion-estado]');if(indicador)indicador.textContent=estado;else el.textContent=estado;}});
+    }catch(error){p={estado:'incierto',mensaje:'No pude comprobar el resultado. Sólo volveré a leer antes de intentar otra operación.',propuesta};}
+    el.innerHTML=renderizar(p);
     if(p.estado==='obsoleta')p=p.nueva;
    });
   }
@@ -221,7 +342,7 @@
   }
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
- const api=Object.freeze({RPC_CANCELACION_PRODUCCION_HABILITADO,interpretar,buscarServicios,cargarEstado,estadoEsperado,evaluarElegibilidad,preparar,confirmar,renderizar});
+ const api=Object.freeze({RPC_CANCELACION_PRODUCCION_HABILITADO,interpretar,buscarServicios,cargarEstado,estadoEsperado,evaluarElegibilidad,preparar,confirmar,verificarEstado,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_CANCELACION_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();
