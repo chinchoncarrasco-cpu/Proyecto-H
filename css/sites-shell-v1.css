@@ -1,0 +1,493 @@
+/* Sites V1: capa visual del shell real. No estiliza el contenido de las secciones. */
+:root {
+    --sites-shell-ink: #172522;
+    --sites-shell-ink-soft: #2a3c37;
+    --sites-shell-canvas: #f5f7f5;
+    --sites-shell-surface: #ffffff;
+    --sites-shell-line: #dce5e0;
+    --sites-shell-muted: #687873;
+    --sites-shell-green: #22735c;
+    --sites-shell-green-soft: #e6f2eb;
+    --sites-shell-amber: #a36522;
+    --sites-shell-amber-soft: #fff2df;
+    --sites-shell-red: #aa4e44;
+    --sites-shell-red-soft: #f9e9e6;
+    --sites-shell-blue: #3a6e8b;
+    --sites-shell-blue-soft: #e8f2f7;
+    --sites-shell-font: Inter, "Segoe UI", Arial, sans-serif;
+    --sites-shell-sidebar-width: var(--haiku-sidebar-ancho, 240px);
+}
+
+body:has(> .sites-shell-topbar) {
+    background: var(--sites-shell-canvas);
+}
+
+/* El ancho usa la variable del redimensionador real. Sus estilos se inyectan
+   después y usan !important; sólo estas propiedades necesitan el mismo nivel. */
+.sidebar.sites-shell-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--sites-shell-sidebar-width) !important;
+    height: 100vh;
+    padding: 0;
+    overflow: hidden;
+    background: var(--sites-shell-ink);
+    color: #d9e4dd;
+    font-family: var(--sites-shell-font);
+    z-index: 100;
+}
+
+.sidebar.sites-shell-sidebar .sidebar-superior {
+    flex: 0 0 auto;
+}
+
+.sidebar.sites-shell-sidebar .logo {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    height: 91px;
+    padding: 0 23px;
+    border-bottom: 1px solid #34433e;
+}
+
+.sidebar.sites-shell-sidebar .sites-shell-brand-mark {
+    flex: none;
+    color: #d7b88a;
+    font-size: 29px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.sidebar.sites-shell-sidebar .logo h1 {
+    color: #ffffff;
+    font-size: 20px !important; /* sustituye el tamaño fijo del shell antiguo */
+    font-weight: 700;
+    letter-spacing: .21em !important;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.sidebar.sites-shell-sidebar nav.menu {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    padding: 24px 12px 16px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #667e70 transparent;
+}
+
+.sidebar.sites-shell-sidebar .sites-shell-nav-label {
+    padding: 0 13px 8px;
+    color: #92a89b;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: .15em;
+    line-height: 1.4;
+}
+
+.sidebar.sites-shell-sidebar .sites-shell-nav-label-gestion {
+    margin: 16px 13px 0;
+    padding: 18px 0 8px;
+    border-top: 1px solid #35443e;
+}
+
+.sidebar.sites-shell-sidebar nav.menu .menu-item {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #bfcdc6;
+    font-family: var(--sites-shell-font);
+    font-size: 14px;
+    font-weight: 560;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.sidebar.sites-shell-sidebar nav.menu .menu-item svg {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.sidebar.sites-shell-sidebar nav.menu .menu-item:hover,
+.sidebar.sites-shell-sidebar nav.menu .menu-item:focus-visible {
+    background: #24352e;
+    color: #ffffff;
+}
+
+.sidebar.sites-shell-sidebar nav.menu .menu-item.activo,
+.sidebar.sites-shell-sidebar nav.menu .haiku-cuenta-menu-boton[aria-expanded="true"] {
+    background: #355045;
+    color: #ffffff;
+    font-weight: 690;
+}
+
+.sites-shell-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    width: calc(100% - var(--sites-shell-sidebar-width));
+    height: 72px;
+    margin-left: var(--sites-shell-sidebar-width);
+    padding: 0 32px;
+    border-bottom: 1px solid var(--sites-shell-line);
+    background: var(--sites-shell-surface);
+    color: var(--sites-shell-ink);
+    font-family: var(--sites-shell-font);
+}
+
+.sites-shell-topbar-title {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: #74817c;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.sites-shell-topbar-title strong {
+    color: #283b34;
+    font-weight: 650;
+}
+
+.sites-shell-topbar-actions,
+.sites-shell-topbar-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.sites-shell-topbar-actions {
+    flex: 1 1 auto;
+    justify-content: space-between;
+}
+
+.sites-shell-topbar-buttons {
+    flex: 0 0 auto;
+}
+
+.sites-shell-searches {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    gap: 8px;
+    width: min(445px, 44vw);
+    min-width: 0;
+}
+
+/* El CSS histórico de las búsquedas del sidebar usa !important. Estos pocos
+   overrides son necesarios mientras ambas búsquedas viven en el header. */
+.sites-shell-topbar .busqueda-reservas-wrap,
+.sites-shell-topbar .busqueda-palabra-wrap {
+    min-width: 0;
+    height: 38px !important;
+    padding: 0 11px !important;
+    border: 1px solid var(--sites-shell-line) !important;
+    border-radius: 6px !important;
+    background: #f9fbf9 !important;
+    color: #73837b;
+}
+
+.sites-shell-topbar .busqueda-reservas-wrap > span,
+.sites-shell-topbar .busqueda-palabra-wrap > span {
+    color: #73837b !important;
+    font-size: 16px !important;
+}
+
+.sites-shell-topbar .busqueda-reservas-wrap input,
+.sites-shell-topbar .busqueda-palabra-wrap input {
+    color: var(--sites-shell-ink) !important;
+    font-size: 13px !important;
+}
+
+.sites-shell-topbar .busqueda-reservas-wrap input::placeholder,
+.sites-shell-topbar .busqueda-palabra-wrap input::placeholder {
+    color: #85938b !important;
+}
+
+/* Resumen conserva un override antiguo que ocultaba la búsqueda por palabra. */
+@media (min-width: 901px) {
+    body:has(#seccion-resumen.activa) .sites-shell-topbar .busqueda-palabra-wrap {
+        display: flex !important;
+    }
+
+    body:has(#seccion-resumen.activa) .sites-shell-topbar .busqueda-reservas-wrap {
+        height: 38px !important;
+        border-color: var(--sites-shell-line) !important;
+        background: #f9fbf9 !important;
+        box-shadow: none;
+    }
+}
+
+.sites-shell-topbar .boton-nueva-reserva,
+.sites-shell-topbar .boton-notificaciones {
+    position: static;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 38px;
+    margin: 0;
+    font-family: var(--sites-shell-font);
+    cursor: pointer;
+}
+
+.sites-shell-topbar .boton-nueva-reserva {
+    gap: 8px;
+    width: 124px;
+    padding: 0 10px;
+    border: 1px solid #245b4a;
+    border-radius: 6px;
+    background: #245b4a;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.sites-shell-topbar .boton-nueva-reserva:hover {
+    background: #1d4a3d;
+}
+
+.sites-shell-topbar .boton-notificaciones {
+    position: relative;
+    width: 38px;
+    padding: 0;
+    border: 1px solid var(--sites-shell-line);
+    border-radius: 6px;
+    background: #ffffff;
+    color: #344b40;
+}
+
+.sites-shell-topbar .boton-notificaciones:hover {
+    background: #edf4ef;
+}
+
+.sites-shell-topbar .boton-nueva-reserva svg,
+.sites-shell-topbar .boton-notificaciones svg {
+    width: 17px;
+    height: 17px;
+}
+
+.sites-shell-topbar .contador-notificaciones {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 15px;
+    height: 15px;
+    padding: 1px 3px;
+    border-radius: 999px;
+    background: #b16b33;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 13px;
+    text-align: center;
+}
+
+.sites-shell-topbar .contador-notificaciones[hidden] {
+    display: none;
+}
+
+.sites-shell-notification-anchor {
+    position: relative;
+}
+
+.sites-shell-topbar .panel-notificaciones {
+    position: fixed;
+    top: 64px;
+    right: 32px;
+    z-index: 125;
+    width: min(320px, calc(100vw - 24px));
+}
+
+main.contenido.sites-shell-main {
+    margin-left: var(--sites-shell-sidebar-width) !important;
+}
+
+.sites-shell-topbar :is(button, input):focus-visible,
+.sidebar.sites-shell-sidebar .menu-item:focus-visible {
+    outline: 3px solid #93bca9;
+    outline-offset: 2px;
+}
+
+@media (max-width: 1200px) and (min-width: 781px) {
+    .sites-shell-topbar {
+        gap: 12px;
+        padding: 0 20px;
+    }
+
+    .sites-shell-topbar-title {
+        display: none;
+    }
+
+    .sites-shell-searches {
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+        width: min(380px, 36vw);
+    }
+}
+
+@media (max-width: 900px) and (min-width: 781px) {
+    .sites-shell-topbar .boton-nueva-reserva {
+        width: 38px;
+        padding: 0;
+    }
+
+    .sites-shell-topbar .boton-nueva-reserva span {
+        display: none;
+    }
+}
+
+/* Móvil: conservamos la navegación horizontal funcional hasta la etapa
+   Cabañas + Aseo. Un drawer nuevo requeriría lógica de apertura/cierre. */
+@media (max-width: 780px) {
+    .sites-shell-topbar {
+        z-index: 1002;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: 58px 48px;
+        gap: 0 10px;
+        width: 100%;
+        height: 106px;
+        margin-left: 0;
+        padding: 0 12px;
+    }
+
+    .sites-shell-topbar-title {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .sites-shell-topbar-title .sites-shell-topbar-context,
+    .sites-shell-topbar-title .sites-shell-topbar-separator {
+        display: none;
+    }
+
+    .sites-shell-topbar-title strong {
+        font-size: 16px;
+        letter-spacing: .12em;
+    }
+
+    .sites-shell-topbar-actions {
+        display: contents;
+    }
+
+    .sites-shell-topbar-buttons {
+        grid-column: 2;
+        grid-row: 1;
+        gap: 7px;
+    }
+
+    .sites-shell-searches {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .sites-shell-topbar .boton-nueva-reserva {
+        width: 38px;
+        padding: 0;
+    }
+
+    .sites-shell-topbar .boton-nueva-reserva span {
+        display: none;
+    }
+
+    .sites-shell-topbar .panel-notificaciones {
+        top: 106px;
+        right: 12px;
+        max-height: calc(100dvh - 118px);
+    }
+
+    .sidebar.sites-shell-sidebar {
+        position: sticky !important;
+        inset: auto;
+        top: 106px !important;
+        z-index: 1001 !important;
+        width: 100% !important;
+        height: auto;
+        padding: 0 !important;
+        overflow: visible;
+    }
+
+    .sidebar.sites-shell-sidebar .sidebar-superior {
+        display: none;
+    }
+
+    .sidebar.sites-shell-sidebar .haiku-sidebar-resize-v1-handle {
+        display: none !important;
+    }
+
+    .sidebar.sites-shell-sidebar nav.menu {
+        flex-direction: row;
+        align-items: center;
+        gap: 5px;
+        margin: 0;
+        padding: 7px 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+    }
+
+    .sidebar.sites-shell-sidebar nav.menu::-webkit-scrollbar {
+        display: none;
+    }
+
+    .sidebar.sites-shell-sidebar .sites-shell-nav-label {
+        display: none;
+    }
+
+    .sidebar.sites-shell-sidebar nav.menu .menu-item {
+        width: auto;
+        min-height: 36px;
+        padding: 0 10px !important; /* sustituye el padding móvil antiguo */
+        font-size: 12px !important; /* sustituye el tamaño móvil antiguo */
+    }
+
+    .sidebar.sites-shell-sidebar nav.menu .menu-item svg {
+        width: 15px;
+        height: 15px;
+    }
+
+    main.contenido.sites-shell-main {
+        margin-left: 0 !important;
+    }
+}
+
+@media (max-width: 420px) {
+    .sites-shell-searches {
+        gap: 6px;
+    }
+
+    .sites-shell-topbar .busqueda-reservas-wrap,
+    .sites-shell-topbar .busqueda-palabra-wrap {
+        padding: 0 7px !important;
+    }
+
+    .sidebar.sites-shell-sidebar nav.menu .menu-item {
+        gap: 7px;
+    }
+}

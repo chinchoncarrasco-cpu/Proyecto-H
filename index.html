@@ -8,186 +8,120 @@
     <title>Haiku</title>
 
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/sites-shell-v1.css">
 </head>
 
 <body>
 
+    <header class="sites-shell-topbar" aria-label="Barra superior">
+        <div class="sites-shell-topbar-title">
+            <span class="sites-shell-topbar-context">Operación</span>
+            <span class="sites-shell-topbar-separator" aria-hidden="true">/</span>
+            <strong>Proyecto H</strong>
+        </div>
+
+        <div class="sites-shell-topbar-actions">
+            <div class="sites-shell-searches">
+                <div class="busqueda-reservas-wrap">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="busqueda-reservas" placeholder="Buscar reserva..." aria-label="Buscar reserva" autocomplete="off">
+                    <div id="resultados-busqueda-reservas" class="resultados-busqueda-reservas" hidden></div>
+                </div>
+
+                <div class="busqueda-palabra-wrap">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="busqueda-palabra" placeholder="Palabra clave..." aria-label="Buscar palabra en la sección" autocomplete="off">
+                    <span id="contador-busqueda-palabra" class="contador-busqueda-palabra" hidden>0/0</span>
+                    <button type="button" id="busqueda-palabra-anterior" class="busqueda-palabra-nav" aria-label="Coincidencia anterior" hidden>↑</button>
+                    <button type="button" id="busqueda-palabra-siguiente" class="busqueda-palabra-nav" aria-label="Coincidencia siguiente" hidden>↓</button>
+                </div>
+            </div>
+
+            <div class="sites-shell-topbar-buttons">
+                <button type="button" id="boton-nueva-reserva" class="boton-nueva-reserva" aria-label="Nueva reserva">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>Nueva reserva</span>
+                </button>
+
+                <div class="sites-shell-notification-anchor">
+                    <button type="button" id="boton-notificaciones" class="boton-notificaciones" aria-label="Abrir notificaciones">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
+                        <span id="contador-notificaciones" class="contador-notificaciones" hidden>0</span>
+                    </button>
+
+                    <div id="panel-notificaciones" class="panel-notificaciones" hidden>
+                        <div class="panel-notificaciones-cabecera">
+                            <div><strong>Notificaciones</strong><span>Actividad del turno</span></div>
+                            <button type="button" id="cerrar-notificaciones" class="cerrar-notificaciones" aria-label="Cerrar notificaciones">×</button>
+                        </div>
+                        <div id="notificaciones-contenido" class="notificaciones-contenido"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
     <!-- =========================
          BARRA LATERAL
     ========================== -->
-    <aside class="sidebar">
+    <aside class="sidebar sites-shell-sidebar">
 
     <div class="sidebar-superior">
 
     <div class="sidebar-fila-superior">
 
         <div class="logo">
+            <span class="sites-shell-brand-mark" aria-hidden="true">H</span>
             <h1>HAIKU</h1>
         </div>
 
-        <button
-    type="button"
-    id="boton-nueva-reserva"
-    class="boton-nueva-reserva"
->
-    + Nueva reserva
-</button>
-
-        <button
-            type="button"
-            id="boton-notificaciones"
-            class="boton-notificaciones"
-            aria-label="Abrir notificaciones"
-        >
-            🔔
-
-            <span
-                id="contador-notificaciones"
-                class="contador-notificaciones"
-                hidden
-            >
-                0
-            </span>
-        </button>
-
     </div>
 
-
-    <div class="busquedas-globales">
-
-        <div class="busqueda-reservas-wrap">
-            <span>⌕</span>
-
-            <input
-                type="search"
-                id="busqueda-reservas"
-                placeholder="Buscar reserva..."
-                autocomplete="off"
-            >
-
-            <div
-                id="resultados-busqueda-reservas"
-                class="resultados-busqueda-reservas"
-                hidden
-            ></div>
-
-        </div>
-
-
-        <div class="busqueda-palabra-wrap">
-            <span>⌕</span>
-
-            <input
-                type="search"
-                id="busqueda-palabra"
-                placeholder="Palabra clave..."
-                autocomplete="off"
-            >
-
-            <span
-            id="contador-busqueda-palabra"
-            class="contador-busqueda-palabra"
-            hidden
-            >
-            0/0 
-            </span>
-
-            <button
-            type="button"
-            id="busqueda-palabra-anterior"
-            class="busqueda-palabra-nav"
-            aria-label="Coincidencia anterior"
-            hidden
-            >
-            ↑
-            </button>
-
-            <button
-            type="button"
-            id="busqueda-palabra-siguiente"
-            class="busqueda-palabra-nav"
-            aria-label="Coincidencia siguiente"
-            hidden
-            >
-            ↓
-            </button>
-
-        </div>
-
-    </div>
 
 </div>
 
-<div
-    id="panel-notificaciones"
-    class="panel-notificaciones"
-    hidden
->
-    <div class="panel-notificaciones-cabecera">
+    <nav class="menu" aria-label="Navegación principal">
+        <span class="sites-shell-nav-label">OPERACIÓN</span>
 
-        <div>
-            <strong>Notificaciones</strong>
-            <span>Actividad del turno</span>
-        </div>
-
-        <button
-            type="button"
-            id="cerrar-notificaciones"
-            class="cerrar-notificaciones"
-            aria-label="Cerrar notificaciones"
-        >
-            ×
+        <button type="button" class="menu-item activo" data-seccion="resumen">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3zM9 20v-7h6v7"/></svg><span>Resumen</span>
         </button>
 
-    </div>
-
-<div
-    id="notificaciones-contenido"
-    class="notificaciones-contenido"
-></div>
-
-</div>
-
-    <nav class="menu">
-
-        <button class="menu-item activo" data-seccion="resumen">
-            🏠 Resumen
+        <button type="button" class="menu-item" data-seccion="calendario">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg><span>Calendario</span>
         </button>
 
-        <button class="menu-item" data-seccion="calendario">
-            📅 Calendario
+        <button type="button" class="menu-item" data-seccion="cabanas">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 11 10-8 10 8M4 10v11h16V10M9 21v-8h6v8"/></svg><span>Cabañas</span>
         </button>
 
-        <button class="menu-item" data-seccion="cabanas">
-            🏡 Cabañas
+        <button type="button" class="menu-item" data-seccion="aseo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 19 10-10M12 5l2 2M16 9l2 2M3 21l4-1-3-3zM18 2v3M16.5 3.5h3"/></svg><span>Aseo</span>
         </button>
 
-        <button class="menu-item" data-seccion="aseo">
-            🧹 Aseo
+        <button type="button" class="menu-item" data-seccion="servicios">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h16M6 17a6 6 0 0 1 12 0M12 11V8M3 21h18"/></svg><span>Servicios</span>
         </button>
 
-        <button class="menu-item" data-seccion="servicios">
-            🛎 Servicios
+        <button type="button" class="menu-item" data-seccion="pagos">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>Pagos</span>
         </button>
 
-        <button class="menu-item" data-seccion="pagos">
-        💳 Pagos
+        <button type="button" class="menu-item" data-seccion="cierre">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h6M9 18h4"/></svg><span>Cierre de turno</span>
         </button>
 
-        <button class="menu-item" data-seccion="cierre">
-            📋 Cierre de turno
+        <button type="button" class="menu-item" data-seccion="historial">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2"/></svg><span>Historial</span>
         </button>
 
-        <button class="menu-item" data-seccion="historial">
-            ↶ Historial
+        <span class="sites-shell-nav-label sites-shell-nav-label-gestion">GESTIÓN</span>
+        <button type="button" class="menu-item" data-seccion="reservas">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM3 6v14"/></svg><span>Reservas</span>
         </button>
 
-        <button class="menu-item" data-seccion="reservas">
-            🗂 Reservas
-        </button>
-
-        <button class="menu-item" data-seccion="libro-reserva">
-            📖 Libro de Reserva
+        <button type="button" class="menu-item" data-seccion="libro-reserva">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-3-2-6-2-9-1v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-3-1-6-1-9 1ZM12 5v15"/></svg><span>Libro de Reserva</span>
         </button>
 
     </nav>
@@ -198,7 +132,7 @@
     <!-- =========================
          CONTENIDO PRINCIPAL
     ========================== -->
-    <main class="contenido">
+    <main class="contenido sites-shell-main">
         
 <!-- =========================
      SECCIÓN RESUMEN
