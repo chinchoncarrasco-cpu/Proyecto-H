@@ -102,6 +102,8 @@
  }
  function titularCoincide(q,nombre){
   const buscado=normTitular(q.titular),real=normTitular(nombre);
+  if(q.accion==='CANCELAR_SERVICIO_EXISTENTE')
+   return !buscado||buscado===real||!buscado.includes(' ')&&real.split(' ')[0]===buscado;
   return buscado===real||q.accion===ACCION_COBRO_NORMAL&&
    q.cabana!=null&&q.fecha&&buscado&&!buscado.includes(' ')&&real.split(' ')[0]===buscado;
  }
@@ -125,7 +127,7 @@
   const catalogoIds=catalogo.map(c=>c.id);
   if(!catalogoIds.length)return [];
   const servicios=await filas(()=>{
-   let x=cliente.from('servicios').select('id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,motivo_cortesia,motivo_ajuste_precio,estado_servicio,actualizado_en,catalogo_servicios(id,codigo,nombre,activo,permite_cortesia,unidad,precio_base,capacidad_incluida,capacidad_maxima,precio_persona_adicional)').in('catalogo_servicio_id',catalogoIds);
+   let x=cliente.from('servicios').select('id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,motivo_cortesia,motivo_ajuste_precio,estado_servicio,actualizado_en,cancelado_en,cancelado_por,motivo_cancelacion,catalogo_servicios(id,codigo,nombre,activo,permite_cortesia,unidad,precio_base,capacidad_incluida,capacidad_maxima,precio_persona_adicional)').in('catalogo_servicio_id',catalogoIds);
    if(q.fecha)x=x.eq('fecha_servicio',q.fecha);
    return x.order('id');
   });
@@ -140,7 +142,7 @@
    return salida;
   }
   const reservaIds=[...new Set(conHora.map(s=>s.reserva_id).filter(Boolean))];
-  const reservas=await porIds('reservas','id,titular_nombre,estado_reserva,bove_checkout','id',reservaIds);
+  const reservas=await porIds('reservas','id,titular_nombre,estado_reserva,bove_checkout,actualizado_en','id',reservaIds);
   const titulares=new Set(reservas.filter(r=>titularCoincide(q,r.titular_nombre)).map(r=>r.id));
   const conTitular=conHora.filter(s=>titulares.has(s.reserva_id));
   if(!conTitular.length)return [];
@@ -708,7 +710,7 @@
   }
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
- const api=Object.freeze({interpretar,buscarServicios,resolverCandidatos,cargarFinanzas,estadoEsperado,evaluarElegibilidad,estadoEsperadoCobro,evaluarElegibilidadCobro,preparar,prepararCobro,confirmarCobro,verificarEstadoCobro,simular,confirmar,verificarEstado,cancelar,renderizar});
+ const api=Object.freeze({interpretar,fechaDesdeTexto,normTitular,buscarServicios,resolverCandidatos,cargarFinanzas,estadoEsperado,evaluarElegibilidad,estadoEsperadoCobro,evaluarElegibilidadCobro,preparar,prepararCobro,confirmarCobro,verificarEstadoCobro,simular,confirmar,verificarEstado,cancelar,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_CORTESIA_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();
