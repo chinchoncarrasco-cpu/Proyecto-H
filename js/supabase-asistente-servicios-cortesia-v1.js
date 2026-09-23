@@ -102,7 +102,7 @@
  }
  function titularCoincide(q,nombre){
   const buscado=normTitular(q.titular),real=normTitular(nombre);
-  if(['CANCELAR_SERVICIO_EXISTENTE','REACTIVAR_SERVICIO_EXISTENTE'].includes(q.accion))
+  if(['CANCELAR_SERVICIO_EXISTENTE','REACTIVAR_SERVICIO_EXISTENTE','MARCAR_SERVICIO_REALIZADO'].includes(q.accion))
    return !buscado||buscado===real||!buscado.includes(' ')&&real.split(' ')[0]===buscado;
   return buscado===real||q.accion===ACCION_COBRO_NORMAL&&
    q.cabana!=null&&q.fecha&&buscado&&!buscado.includes(' ')&&real.split(' ')[0]===buscado;
