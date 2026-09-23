@@ -111,7 +111,9 @@ test('Sebastián elegible: snapshot exacto, disponibilidad y cargo nuevo esperad
  assert.match(R.renderizar(p),/Cargo histórico anulado: \$30\.000/);
  assert.match(R.renderizar(p),/nuevo cargo activo por \$30\.000/);
  assert.match(R.renderizar(p),/Horario disponible/);
- assert.match(R.renderizar(p),/Confirmar reactivación · simulación/);
+ assert.match(R.renderizar(p),/Confirmar reactivación<\/button>/);
+ assert.match(R.renderizar(p),/Proyecto H reactivará el servicio/);
+ assert.doesNotMatch(R.renderizar(p),/simulación/i);
  assert.ok(cli.consultas.some(x=>x.tabla==='eventos_auditoria'));
  assert.ok(cli.consultas.some(x=>x.tabla==='recursos_servicio'));
 });
@@ -154,26 +156,26 @@ test('horario ocupado muestra conflictos y no ofrece Confirmar',async()=>{
  assert.match(R.renderizar(p),/Horario no disponible/);assert.match(R.renderizar(p),/22:30–23:30/);
  assert.doesNotMatch(R.renderizar(p),/data-servicio-reactivacion-confirmar/);
 });
-test('simulación revalida, conserva operation_id y payload, y nunca escribe',async()=>{
- const cli=clienteLectura(tablas());
+test('doble clic usa una sola llamada al RPC y conserva operation_id y payload',async()=>{
+ const datos=tablas(),cli=clienteLectura(datos),envios=[];
+ cli.rpc=async(nombre,payload)=>{
+  envios.push({nombre,payload});
+  datos.servicios.push(servicio({id:'s2',estado_servicio:'programado',hora_inicio:'22:45:00'}));
+  return {data:{ok:false,estado:'HORARIO_OCUPADO',operacion_id:payload.p_operacion_id,
+   servicio_id:payload.p_servicio_id,conflictos:[{id:'s2'}]},error:null};
+ };
  const p=await R.preparar(orden,opciones(cli));
  const id='11111111-1111-4111-8111-111111111111';
  const uno=R.confirmar(p,{operacionId:id}),dos=R.confirmar(p,{operacionId:id});
  assert.strictEqual(uno,dos);
  const resultado=await uno;
- assert.equal(resultado.estado,'simulada');assert.equal(resultado.rpc,'haiku_reactivar_servicio_asistente_v1');
- assert.equal(resultado.payload.p_operacion_id,id);assert.equal(resultado.payload.p_servicio_id,'s1');
- assert.deepEqual(resultado.payload.p_estado_esperado,p.p_estado_esperado);
- assert.strictEqual(await R.confirmar(p,{operacionId:'22222222-2222-4222-8222-222222222222'}),resultado);
+ assert.equal(resultado.estado,'horario_ocupado');assert.equal(resultado.nueva.estado,'bloqueada');
+ assert.equal(envios.length,1);assert.equal(envios[0].nombre,'haiku_reactivar_servicio_asistente_v1');
+ assert.equal(envios[0].payload.p_operacion_id,id);assert.equal(envios[0].payload.p_servicio_id,'s1');
+ assert.deepEqual(envios[0].payload.p_estado_esperado,p.p_estado_esperado);
  assert.deepEqual(cli.escrituras,[]);
- assert.match(R.renderizar(resultado),/RPC y payload preparados/);
- assert.match(R.renderizar(resultado),/No se modificó Proyecto H/);
- const nuevo=await R.preparar(orden,opciones(cli));
- assert.notStrictEqual(nuevo,p);
- assert.equal(nuevo.estado,'propuesta');
- const siguiente=await R.confirmar(nuevo,{operacionId:'22222222-2222-4222-8222-222222222222'});
- assert.equal(siguiente.payload.p_operacion_id,'22222222-2222-4222-8222-222222222222');
- assert.deepEqual(cli.escrituras,[]);
+ assert.match(R.renderizar(resultado),/Horario no disponible/);
+ assert.doesNotMatch(R.renderizar(resultado),/data-servicio-reactivacion-confirmar/);
 });
 test('stale state por servicio, finanzas, auditoría o disponibilidad invalida y reconstruye',async()=>{
  const cambios=[
@@ -191,11 +193,14 @@ test('stale state por servicio, finanzas, auditoría o disponibilidad invalida y
   assert.equal((await R.confirmar(p)).estado,'obsoleta');
  }
 });
-test('flag independiente y guard de escritura estático; carga tras autoridad y cancelación',()=>{
+test('flag independiente y único writer; carga tras autoridad y cancelación',()=>{
  const js=fs.readFileSync(require.resolve('../js/supabase-asistente-servicios-reactivacion-v1.js'),'utf8');
- assert.equal(R.RPC_REACTIVACION_PRODUCCION_HABILITADO,false);
- assert.match(js,/RPC_REACTIVACION_PRODUCCION_HABILITADO=false/);
- assert.doesNotMatch(js,/\.(?:rpc|update|insert|delete|upsert)\s*\(/);
+ assert.equal(R.RPC_REACTIVACION_PRODUCCION_HABILITADO,true);
+ assert.match(js,/RPC_REACTIVACION_PRODUCCION_HABILITADO=true/);
+ assert.match(js,/\.rpc\(RPC,o\.payload\)/);
+ assert.equal((js.match(/\.rpc\(/g)||[]).length,1);
+ assert.doesNotMatch(js,/\.(?:update|insert|delete|upsert)\s*\(/);
+ assert.doesNotMatch(js,/\.rpc\(['"]haiku_reactivar_servicio['"]/);
  const html=fs.readFileSync(path.join(__dirname,'../panel.html'),'utf8');
  assert.ok(html.indexOf("'supabase-asistente-servicios-cortesia-v1','supabase-asistente-servicios-cancelacion-v1','supabase-asistente-servicios-reactivacion-v1'")>0);
 });

@@ -1,4 +1,4 @@
-/* Haku · reactivación de servicios persistidos · C2: sólo simulación. */
+/* Haku · reactivación segura de servicios persistidos. */
 (function(root){
  'use strict';
  if(root.HAIKU_ASISTENTE_SERVICIOS_REACTIVACION_V1)return;
@@ -8,7 +8,7 @@
   (typeof require==='function'?require('./supabase-asistente-servicios-cancelacion-v1.js'):null);
  const INTENCION='REACTIVAR_SERVICIO_EXISTENTE';
  const RPC='haiku_reactivar_servicio_asistente_v1';
- const RPC_REACTIVACION_PRODUCCION_HABILITADO=false;
+ const RPC_REACTIVACION_PRODUCCION_HABILITADO=true;
  const propuestas=new WeakMap();
  const numero=v=>v==null||v===''?null:Number(v);
  const hora=v=>String(v??'').match(/^(\d{1,2}):(\d{2})/)?.slice(1).map((x,i)=>i?x:x.padStart(2,'0')).join(':')||null;
@@ -60,7 +60,7 @@
     .select('id,recurso_id,fecha_servicio,hora_inicio,hora_fin,estado_servicio,actualizado_en')
     .eq('recurso_id',c.recurso_id).eq('fecha_servicio',c.fecha_servicio).order('id')):[],
    filas(()=>cliente.from('pagos').select('*').eq('reserva_id',c.reserva_id).order('id')),
-   filas(()=>cliente.from('eventos_auditoria').select('id,entidad_tipo,entidad_id,reserva_id,cambios')
+   filas(()=>cliente.from('eventos_auditoria').select('id,entidad_tipo,entidad_id,reserva_id,usuario_id,origen,cambios,datos_contexto')
     .eq('entidad_id',c.id).order('id'))
   ]);
   const estadia=estadias.find(x=>x.id===c.estadia_id)||null;
@@ -158,7 +158,9 @@
     mensaje:'Propuesta de reactivación preparada. No se ha modificado Proyecto H.'};
    propuestas.set(p,{consulta:q,servicioId:candidato.id,cliente,buscar,cargar,permiso,
     diaActual:opciones.diaActual||null,snapshot:JSON.stringify(esperado),
-    evidencia:JSON.stringify({candidato,lectura}),invalidada:false,enCurso:null,resultado:null});
+    evidencia:JSON.stringify({candidato,lectura}),candidatoInicial:JSON.parse(JSON.stringify(candidato)),
+    lecturaInicial:JSON.parse(JSON.stringify(lectura)),invalidada:false,enCurso:null,resultado:null,
+    operacionId:null,payload:null,rpcRespondioExito:false,respuestaCargoId:null});
    return p;
   }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
  }
@@ -170,29 +172,148 @@
   return {candidato,lectura,snapshot:estadoEsperado(candidato,lectura),
    evidencia:JSON.stringify({candidato,lectura})};
  }
+ const coincidePropuesta=(o,actual)=>actual&&
+  evaluarElegibilidad(actual.candidato,actual.lectura,{diaActual:o.diaActual||hoy()}).elegible&&
+  JSON.stringify(actual.snapshot)===o.snapshot&&actual.evidencia===o.evidencia;
+ async function obsoleta(o,mensaje='El servicio, sus finanzas o la disponibilidad cambiaron. Preparé una nueva evaluación.'){
+  o.invalidada=true;
+  const nueva=await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarFinanzas:o.cargar,
+   permiso:o.permiso,diaActual:o.diaActual||hoy()});
+  return {estado:'obsoleta',mensaje,nueva};
+ }
+ function errorRpc(error){
+  const codigo=String(error?.code||''),mensaje=String(error?.message||error||'');
+  if(codigo==='40001'||/obsoleta|estado esperado|propuesta nueva|cambió de reserva/i.test(mensaje))return 'stale';
+  if(codigo==='42501'||/permiso|sesión|usuario no activo/i.test(mensaje))return 'sin_permiso';
+  if(codigo==='23P01'||/horario ocupado|horario dejó|solapamiento|disponibilidad/i.test(mensaje))return 'horario_ocupado';
+  if(/aplicaciones|ajustes|historial|cargo activo|finanzas|BOVE|check.?out|estado operativo|requiere revisión|cancelación|recurso|catálogo|fecha.*pasó/i.test(mensaje))return 'revision_humana';
+  return 'incierto';
+ }
+ function auditar(o,actual){
+  return actual.lectura.auditoria.filter(e=>e.entidad_tipo==='servicios'&&e.entidad_id===o.servicioId&&
+   e.reserva_id===actual.candidato.reserva_id&&e.usuario_id&&e.origen==='haku'&&
+   e.datos_contexto?.operacion_id===o.operacionId&&Array.isArray(e.cambios)&&
+   e.cambios.some(x=>x.campo==='estado_servicio'&&x.anterior==='cancelado'&&x.nuevo==='programado')).length===1;
+ }
+ function verificarCambio(o,actual){
+  if(!actual||!o.payload)return false;
+  const antes=o.candidatoInicial,despues=actual.candidato,previa=o.lecturaInicial,posterior=actual.lectura;
+  if(despues.id!==o.servicioId||despues.estado_servicio!=='programado'||
+     despues.cancelado_en!=null||despues.cancelado_por!=null||despues.motivo_cancelacion!=null)return false;
+  for(const campo of ['reserva_id','estadia_id','catalogo_servicio_id','recurso_id','fecha_servicio','hora_inicio','hora_fin',
+   'cantidad','personas','precio_unitario_aplicado','monto_adicional','total','tipo_cobro','motivo_cortesia','motivo_ajuste_precio'])
+   if(JSON.stringify(despues[campo]??null)!==JSON.stringify(antes[campo]??null))return false;
+  if(posterior.reserva?.estado_reserva!==previa.reserva?.estado_reserva||
+     posterior.reserva?.bove_checkout!==previa.reserva?.bove_checkout||
+     posterior.reserva?.bove_cierre!==previa.reserva?.bove_cierre||
+     posterior.checkout!==previa.checkout||
+     posterior.estadia?.estado_estadia!==previa.estadia?.estado_estadia||
+     posterior.catalogo?.activo!==previa.catalogo?.activo||
+     posterior.recurso?.activo!==previa.recurso?.activo||posterior.conflictos.length)return false;
+  if(JSON.stringify(posterior.pagos)!==JSON.stringify(previa.pagos)||
+     JSON.stringify(posterior.finanzas.aplicaciones)!==JSON.stringify(previa.finanzas.aplicaciones)||
+     JSON.stringify(posterior.finanzas.ajustes)!==JSON.stringify(previa.finanzas.ajustes))return false;
+  const historicos=previa.finanzas.cargos,cargos=posterior.finanzas.cargos;
+  if(historicos.some(x=>{
+   const actualCargo=cargos.find(y=>y.id===x.id);
+   return !actualCargo||actualCargo.estado!=='anulado'||JSON.stringify(actualCargo)!==JSON.stringify(x);
+  }))return false;
+  const nuevos=cargos.filter(x=>!historicos.some(y=>y.id===x.id));
+  const activos=cargos.filter(x=>x.estado==='activo');
+  if(antes.tipo_cobro==='normal'){
+   if(nuevos.length!==1||activos.length!==1||nuevos[0].id!==activos[0].id||
+      (o.respuestaCargoId&&o.respuestaCargoId!==nuevos[0].id)||
+      nuevos[0].servicio_id!==o.servicioId||nuevos[0].reserva_id!==antes.reserva_id||
+      nuevos[0].estadia_id!==antes.estadia_id||nuevos[0].tipo_cargo!=='servicio'||
+      nuevos[0].estadia_noche_id!=null||nuevos[0].estado!=='activo'||
+      numero(nuevos[0].monto)!==numero(antes.total))return false;
+  }else if(nuevos.length||activos.length||cargos.length!==historicos.length)return false;
+  return auditar(o,actual);
+ }
+ function resultadoExito(p,o,actual,origen){
+  const ids=new Set(o.lecturaInicial.finanzas.cargos.map(x=>x.id));
+  const cargoNuevo=actual.lectura.finanzas.cargos.find(x=>!ids.has(x.id))||null;
+  const resultado={estado:'realizado',mensaje:origen==='relectura'?'Reactivación acreditada por una nueva lectura.':'Servicio reactivado y verificado.',
+   candidato:actual.candidato,cargos_historicos:o.lecturaInicial.finanzas.cargos,cargo_nuevo:cargoNuevo,
+   operacion_id:o.operacionId,origen,disponibilidad:'reservado'};
+  o.resultado=resultado;
+  if(root.document&&root.CustomEvent)root.document.dispatchEvent(new root.CustomEvent('haiku:servicio-supabase-cambiado',
+   {detail:{servicioId:o.servicioId,reservaId:actual.candidato.reserva_id}}));
+  return resultado;
+ }
+ async function verificarEstado(p){
+  const o=propuestas.get(p);
+  if(!o?.payload)return {estado:'bloqueada',mensaje:'No hay una operación pendiente para comprobar.'};
+  if(o.resultado)return o.resultado;
+  try{
+   const actual=await releer(o);
+   if(verificarCambio(o,actual))return resultadoExito(p,o,actual,'relectura');
+   if(o.rpcAlreadyActive)return actual?.candidato.estado_servicio==='programado'
+    ?{estado:'already_active',mensaje:'Este servicio ya está activo/programado. No requiere reactivación.'}
+    :{estado:'sincronizando',mensaje:'El RPC informó que el servicio ya estaba activo. Sólo volveré a leer; no repetiré la escritura.',propuesta:p};
+   if(coincidePropuesta(o,actual))return o.rpcRespondioExito
+    ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente. Sólo volveré a leer; no repetiré la escritura.',propuesta:p}
+    :{estado:'reintento_seguro',mensaje:'La lectura confirma el estado anterior. Puedes reintentar la misma operación.',propuesta:p,operacion_id:o.operacionId};
+   if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'La reactivación aún no se puede acreditar por lectura. Sólo volveré a leer.',propuesta:p};
+   if(actual?.candidato.estado_servicio==='programado')return {estado:'revision_humana',mensaje:'El servicio está programado, pero no pude acreditar que esta operación lo reactivó. Requiere revisión; no repetiré el RPC.'};
+   return {estado:'revision_humana',mensaje:'El servicio o sus finanzas cambiaron. Requiere revisión antes de otra operación.'};
+  }catch(error){return {estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo se permite volver a leer; no repetiré el RPC automáticamente.',propuesta:p};}
+ }
  async function confirmarInterno(p,o,opciones){
-  if(RPC_REACTIVACION_PRODUCCION_HABILITADO)return {estado:'bloqueada',mensaje:'Esta etapa sólo permite simulación.'};
+  if(!RPC_REACTIVACION_PRODUCCION_HABILITADO)return {estado:'bloqueada',mensaje:'La reactivación real sigue bloqueada.'};
   if(o.resultado)return o.resultado;
   if(o.invalidada)return {estado:'obsoleta',mensaje:'Esta propuesta ya fue invalidada. Prepara una nueva.'};
   if(!o.permiso())return {estado:'sin_permiso',mensaje:'No tienes el permiso servicios.editar.'};
   opciones.onEstado?.('Revalidando servicio, finanzas y disponibilidad…');
   let actual;
-  try{actual=await releer(o);}catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
-  const elegible=actual&&evaluarElegibilidad(actual.candidato,actual.lectura,{diaActual:o.diaActual||hoy()}).elegible;
-  if(!elegible||JSON.stringify(actual.snapshot)!==o.snapshot||actual.evidencia!==o.evidencia){
-   o.invalidada=true;
-   const nueva=await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarFinanzas:o.cargar,
-    permiso:o.permiso,diaActual:o.diaActual||hoy()});
-   return {estado:'obsoleta',mensaje:'El servicio, sus finanzas o la disponibilidad cambiaron. Preparé una nueva evaluación.',nueva};
+  try{actual=await releer(o);}catch(error){return o.payload
+   ?{estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo volveré a leer antes de considerar un reintento.',propuesta:p}
+   :{estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+  if(o.payload&&verificarCambio(o,actual))return resultadoExito(p,o,actual,'relectura');
+  if(!coincidePropuesta(o,actual))return o.payload?verificarEstado(p):obsoleta(o);
+  if(o.rpcAlreadyActive)return verificarEstado(p);
+  if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El RPC ya respondió correctamente. Sólo volveré a leer el resultado.',propuesta:p};
+  if(!o.payload){
+   const id=opciones.operacionId||root.crypto?.randomUUID?.();
+   if(!id||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i).test(id))
+    return {estado:'bloqueada',mensaje:'No se pudo generar un identificador de operación válido.'};
+   o.operacionId=id;
+   o.payload=Object.freeze({p_operacion_id:id,p_servicio_id:o.servicioId,
+    p_estado_esperado:JSON.parse(o.snapshot)});
   }
-  const id=opciones.operacionId||root.crypto?.randomUUID?.();
-  if(!id||!(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i).test(id))
-   return {estado:'bloqueada',mensaje:'No se pudo generar un identificador de operación válido.'};
-  const payload=Object.freeze({p_operacion_id:id,p_servicio_id:o.servicioId,
-   p_estado_esperado:JSON.parse(o.snapshot)});
-  o.resultado={estado:'simulada',mensaje:'Reactivación simulada. No se modificó Proyecto H.',
-   candidato:actual.candidato,rpc:RPC,payload,operacion_id:id};
-  return o.resultado;
+  opciones.onEstado?.('Reactivando servicio…');
+  let respuesta,error;
+  try{({data:respuesta,error}=await o.cliente.rpc(RPC,o.payload));}catch(e){error=e;}
+  if(error){
+   const clase=errorRpc(error);
+   if(clase==='stale')return obsoleta(o);
+   if(clase==='sin_permiso')return {estado:'sin_permiso',mensaje:'No tienes permiso para reactivar este servicio.'};
+   if(clase==='horario_ocupado')return {estado:'horario_ocupado',mensaje:'El horario dejó de estar disponible. No se reactivó el servicio.',nueva:(await obsoleta(o)).nueva};
+   if(clase==='revision_humana')return {estado:'revision_humana',mensaje:'El servicio o su historial financiero requiere revisión humana. No se realizó otro intento.'};
+   return verificarEstado(p);
+  }
+  if(respuesta?.estado==='HORARIO_OCUPADO')return {estado:'horario_ocupado',mensaje:'El horario dejó de estar disponible. No se reactivó el servicio.',
+   conflictos:respuesta.conflictos||[],nueva:(await obsoleta(o)).nueva};
+  if(respuesta?.estado==='already_active'){
+   o.rpcAlreadyActive=true;
+   return verificarEstado(p);
+  }
+  if(!respuesta||respuesta.ok!==true||respuesta.estado!=='reactivated'||
+     respuesta.servicio_id!==o.servicioId||respuesta.operacion_id!==o.operacionId||
+     respuesta.tipo_cobro!==o.candidatoInicial.tipo_cobro||numero(respuesta.total)!==numero(o.candidatoInicial.total)||
+     numero(respuesta.cargos_historicos)!==o.lecturaInicial.finanzas.cargos.length||
+     (o.candidatoInicial.tipo_cobro==='normal'?!respuesta.cargo_nuevo_id:respuesta.cargo_nuevo_id!=null))
+   return verificarEstado(p);
+  o.rpcRespondioExito=true;o.respuestaCargoId=respuesta.cargo_nuevo_id||null;
+  let observado=await verificarEstado(p);
+  if(['sincronizando','incierto'].includes(observado.estado))for(let intento=0;intento<2;intento++){
+   await new Promise(resolver=>setTimeout(resolver,300));
+   observado=await verificarEstado(p);
+   if(['realizado','revision_humana','already_active'].includes(observado.estado))return observado;
+  }
+  return observado.estado==='incierto'
+   ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente; sólo volveré a leer antes de acreditar el cambio.',propuesta:p}
+   :observado;
  }
  function confirmar(p,opciones={}){
   const o=propuestas.get(p);
@@ -211,12 +332,19 @@
    const conflictos=p.disponibilidad?.conflictos||[];
    return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada"><header class="haku-servicio-cortesia-cabecera"><div class="haku-servicio-cortesia-estado"><span class="haku-servicio-cortesia-sello">Reactivar servicio</span><span class="haku-servicio-cortesia-etiqueta">Requiere revisión</span></div><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}</span></header><p class="haku-servicio-cortesia-intro">No puedo reactivar automáticamente este servicio.</p>${conflictos.length?`<section class="haku-servicio-cortesia-motivos"><h3>Disponibilidad · Horario no disponible</h3><ul>${conflictos.map(x=>`<li><strong>Horario ocupado</strong><span>${esc(hora(x.hora_inicio))}–${esc(hora(x.hora_fin))}</span></li>`).join('')}</ul></section>`:''}<section class="haku-servicio-cortesia-motivos"><h3>Motivos</h3><ul>${razones.map(x=>`<li><strong>Revisión requerida</strong><span>${esc(x)}</span></li>`).join('')}</ul></section><p class="haku-servicio-cortesia-cierre">Revisión manual necesaria</p></article>`;
   }
-  if(p.estado==='simulada')return `<article class="haku-servicio-cortesia haku-servicio-cortesia--realizado"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">✓ Simulación completada</span><strong class="haku-servicio-cortesia-titular">${esc(p.candidato.reserva?.titular_nombre)} · CAB ${esc(p.candidato.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(p.candidato.catalogo?.nombre)}</span></header><p>${esc(p.mensaje)}</p><details><summary>RPC y payload preparados</summary><p>${esc(p.rpc)}</p><pre>${esc(JSON.stringify(p.payload,null,2))}</pre></details></article>`;
+  if(p.estado==='realizado'){
+   const c=p.candidato,normal=c.tipo_cobro==='normal';
+   const montoHistorico=p.cargos_historicos.reduce((n,x)=>n+Number(x.monto||0),0);
+   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--realizado"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">✓ Servicio reactivado</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>Cancelado</strong><b>${normal?`Cobro normal · ${esc(dinero(c.total))}`:'Cortesía · $0'}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Ahora</span><strong>Programado</strong></div></div><p class="haku-servicio-cortesia-efecto">${p.cargos_historicos.length?`Cargo histórico: <strong>Anulado · ${esc(dinero(montoHistorico))}</strong><br>`:''}${normal?`Nuevo cargo: <strong>Activo · ${esc(dinero(p.cargo_nuevo?.monto))}</strong>`:'No se creó ningún cargo.'}</p><p class="haku-servicio-cortesia-efecto">Horario: <strong>Disponible y reservado nuevamente.</strong></p></article>`;
+  }
+  if(p.estado==='horario_ocupado')return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada"><h3>Horario no disponible · Requiere revisión</h3><p>${esc(p.mensaje)}</p></article>${p.nueva?.estado==='bloqueada'?renderizar(p.nueva):''}`;
+  if(p.estado==='revision_humana')return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada"><h3>Requiere revisión</h3><p>${esc(p.mensaje)}</p></article>`;
+  if(['sincronizando','incierto','reintento_seguro'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>${p.estado==='reintento_seguro'?'Reintento disponible':'Comprobando reactivación'}</h3><p>${esc(p.mensaje)}</p><div class="haku-servicio-cortesia-acciones">${p.estado==='reintento_seguro'?'<button type="button" data-servicio-reactivacion-reintentar>Reintentar misma operación</button>':'<button type="button" data-servicio-reactivacion-releer>Comprobar estado</button>'}</div></article>`;
   if(p.estado!=='propuesta')return `<article class="haku-servicio-cortesia"><h3>Reactivar servicio</h3><p>${esc(p.mensaje)}</p></article>`;
   const c=p.candidato,normal=c.tipo_cobro==='normal';
   const historicos=p.cargos_historicos||[];
   const montoHistorico=historicos.reduce((n,x)=>n+Number(x.monto||0),0);
-  return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">Reactivar servicio</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(hora(c.hora_fin))}`:''}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Estado actual</span><strong>Cancelado</strong><b>${normal?`Cobro normal · ${esc(dinero(c.total))}`:'Cortesía · $0'}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Después</span><strong>Programado</strong></div></div><p class="haku-servicio-cortesia-efecto"><strong>Disponibilidad</strong> · ${c.recurso_id&&c.hora_inicio&&c.hora_fin?'✓ Horario disponible':'No requiere horario compartido'}</p><p class="haku-servicio-cortesia-efecto"><strong>Efecto financiero</strong><br>${normal?`${historicos.length?`Cargo histórico anulado: ${esc(dinero(montoHistorico))} → permanecerá anulado.<br>`:''}Se creará un nuevo cargo activo por ${esc(dinero(c.total))}.`:'No se creará ningún cargo.'}</p><p class="haku-servicio-cortesia-confirmacion">La cancelación anterior quedará en el historial. Esta confirmación es una simulación: no modificará Proyecto H.</p><p data-servicio-reactivacion-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-reactivacion-confirmar>Confirmar reactivación · simulación</button><button type="button" data-servicio-reactivacion-cancelar>Cancelar</button></div></article>`;
+  return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta"><header class="haku-servicio-cortesia-cabecera"><span class="haku-servicio-cortesia-sello">Reactivar servicio</span><strong class="haku-servicio-cortesia-titular">${esc(c.reserva?.titular_nombre)} · CAB ${esc(c.cabana_numero??'—')}</strong><span class="haku-servicio-cortesia-nombre">${esc(c.catalogo?.nombre)}</span><span class="haku-servicio-cortesia-fecha">${esc(fecha(c.fecha_servicio))} · ${esc(hora(c.hora_inicio)||'sin hora')}${c.hora_fin?`–${esc(hora(c.hora_fin))}`:''}</span></header><div class="haku-servicio-cortesia-comparacion"><div><span>Estado actual</span><strong>Cancelado</strong><b>${normal?`Cobro normal · ${esc(dinero(c.total))}`:'Cortesía · $0'}</b></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Después</span><strong>Programado</strong></div></div><p class="haku-servicio-cortesia-efecto"><strong>Disponibilidad</strong> · ${c.recurso_id&&c.hora_inicio&&c.hora_fin?'✓ Horario disponible':'No requiere horario compartido'}</p><p class="haku-servicio-cortesia-efecto"><strong>Efecto financiero</strong><br>${normal?`${historicos.length?`Cargo histórico anulado: ${esc(dinero(montoHistorico))} → permanecerá anulado.<br>`:''}Se creará un nuevo cargo activo por ${esc(dinero(c.total))}.`:'No se creará ningún cargo.'}</p><p class="haku-servicio-cortesia-confirmacion">Al confirmar, Proyecto H reactivará el servicio y, si corresponde, creará un cargo nuevo. La cancelación anterior quedará en el historial.</p><p data-servicio-reactivacion-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-reactivacion-confirmar>Confirmar reactivación</button><button type="button" data-servicio-reactivacion-cancelar>Cancelar</button></div></article>`;
  }
  function instalar(){
   const doc=root.document;let ocupado=false;
@@ -227,10 +355,15 @@
    let p;try{p=await preparar(texto);el.innerHTML=renderizar(p);}catch(error){el.textContent=`No pude leer el servicio. ${error?.message||error}`;}finally{ocupado=false;mensajes.scrollTop=mensajes.scrollHeight;}
    el.addEventListener('click',async e=>{const b=e.target?.closest?.('button');if(!b)return;e.preventDefault();e.stopPropagation();
     if(b.hasAttribute('data-servicio-reactivacion-cancelar')){p={estado:'cancelada',mensaje:'Cancelé la propuesta. No se modificó Proyecto H.'};el.innerHTML=renderizar(p);return;}
-    if(!b.hasAttribute('data-servicio-reactivacion-confirmar')||b.disabled||p?.estado!=='propuesta')return;
-    b.disabled=true;
-    try{p=await confirmar(p,{onEstado:estado=>{const indicador=el.querySelector('[data-servicio-reactivacion-estado]');if(indicador)indicador.textContent=estado;}});}
-    catch(error){p={estado:'bloqueada',mensaje:`No pude completar la simulación. ${error?.message||error}`};}
+    const confirmarAhora=b.hasAttribute('data-servicio-reactivacion-confirmar')&&p?.estado==='propuesta';
+    const reintentar=b.hasAttribute('data-servicio-reactivacion-reintentar')&&p?.estado==='reintento_seguro';
+    const releerEstado=b.hasAttribute('data-servicio-reactivacion-releer')&&['sincronizando','incierto'].includes(p?.estado);
+    if(b.disabled||!confirmarAhora&&!reintentar&&!releerEstado)return;
+    const propuesta=confirmarAhora?p:p.propuesta;
+    el.querySelectorAll('button').forEach(x=>x.disabled=true);
+    try{p=releerEstado?await verificarEstado(propuesta):await confirmar(propuesta,
+     {onEstado:estado=>{const indicador=el.querySelector('[data-servicio-reactivacion-estado]');if(indicador)indicador.textContent=estado;}});}
+    catch(error){p={estado:'incierto',mensaje:'No pude comprobar el resultado. Sólo volveré a leer antes de otro intento.',propuesta};}
     el.innerHTML=renderizar(p);if(p.estado==='obsoleta')p=p.nueva;
    });
   }
@@ -245,7 +378,7 @@
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
  const api=Object.freeze({RPC_REACTIVACION_PRODUCCION_HABILITADO,interpretar,cargarEstado,estadoEsperado,
-  evaluarElegibilidad,preparar,confirmar,renderizar});
+  evaluarElegibilidad,preparar,confirmar,verificarEstado,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_REACTIVACION_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();
