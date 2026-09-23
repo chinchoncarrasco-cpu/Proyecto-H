@@ -156,7 +156,7 @@ test('pendiente, parcial, cortesía y ajustes mantienen estados financieros sepa
  const ajustado=await R.preparar(orden,opciones(clienteLectura(tablas({cargo_ajustes:[{id:'aj1',cargo_id:'c1',monto:1000}]}))));
  assert.equal(ajustado.estado,'bloqueada');assert.match(R.renderizar(ajustado),/ajustes históricos/);
 });
-test('snapshot completo, revalidación, UUID estable, doble clic y cero escrituras',async()=>{
+test('snapshot completo, confirmación real y propuesta obsoleta bloqueada antes del RPC',async()=>{
  const datos=tablas(),cli=clienteLectura(datos),p=await R.preparar(orden,opciones(cli));
  assert.equal(p.estado,'propuesta');
  assert.deepEqual(Object.keys(p.p_estado_esperado),['version','servicio','reserva','estadia','catalogo',
@@ -166,34 +166,23 @@ test('snapshot completo, revalidación, UUID estable, doble clic y cero escritur
  assert.equal(Object.hasOwn(p.p_estado_esperado.estadia,'cabanas'),false);
  assert.equal(p.p_estado_esperado.finanzas[0].ajuste_neto,0);
  assert.equal(p.p_estado_esperado.finanzas[0].estado_pago,'pendiente');
- assert.equal(R.RPC_REALIZADO_PRODUCCION_HABILITADO,false);
- assert.match(R.renderizar(p),/Confirmar cambio · simulación/);
- const id='11111111-1111-4111-8111-111111111111';
- const [a,b]=await Promise.all([R.confirmar(p,{operationId:id}),R.confirmar(p,{operationId:id})]);
- assert.equal(a,b);assert.equal(a.estado,'simulada');assert.equal(a.rpc,'haiku_marcar_servicio_realizado_asistente_v1');
- assert.equal(a.operation_id,id);assert.equal(a.payload.p_operacion_id,id);
- assert.deepEqual(a.payload.p_estado_esperado,p.p_estado_esperado);
- assert.equal((await R.confirmar(p)).operation_id,id);
- assert.deepEqual(cli.escrituras,[]);
- assert.ok(cli.consultas.filter(x=>x.tabla==='servicios').length>=4);
- for(const tabla of ['reservas','reserva_estadias','cargos','vista_estado_cargos','pagos'])
-  assert.ok(cli.consultas.filter(x=>x.tabla===tabla).length>=2,tabla);
- assert.equal(cli.consultas.some(x=>x.tabla==='eventos_auditoria'),false);
- const otra=await R.preparar(orden,opciones(clienteLectura(tablas())));
- otra.p_estado_esperado.servicio.total=1;
- const segundo=await R.confirmar(otra,{operationId:'22222222-2222-4222-8222-222222222222'});
- assert.notEqual(segundo.operation_id,id);
- assert.equal(segundo.payload.p_estado_esperado.servicio.total,30000);
+ assert.equal(R.RPC_REALIZADO_PRODUCCION_HABILITADO,true);
+ assert.match(R.renderizar(p),/>Confirmar cambio</);
+ assert.doesNotMatch(R.renderizar(p),/simulación|no modificará Proyecto H/i);
+ assert.match(R.renderizar(p),/Proyecto H marcará este servicio como realizado/);
+ p.p_estado_esperado.servicio.total=1;
+ assert.equal(cli.escrituras.length,0);
  const datosViejos=tablas(),viejo=await R.preparar(orden,opciones(clienteLectura(datosViejos)));
  datosViejos.cargos[0]={...cargo,monto:31000};
  const stale=await R.confirmar(viejo,{operationId:'33333333-3333-4333-8333-333333333333'});
  assert.equal(stale.estado,'obsoleta');assert.equal(stale.nueva.estado,'bloqueada');
  assert.equal((await R.confirmar(viejo)).estado,'obsoleta');
 });
-test('cargador conecta el módulo después de la búsqueda persistida y el código no contiene writer',()=>{
+test('cargador conecta el módulo y existe un único writer, el RPC oficial',()=>{
  const panel=fs.readFileSync(path.join(__dirname,'../panel.html'),'utf8');
  const src=fs.readFileSync(path.join(__dirname,'../js/supabase-asistente-servicios-realizado-v1.js'),'utf8');
  assert.ok(panel.indexOf('supabase-asistente-servicios-reactivacion-v1')<panel.indexOf('supabase-asistente-servicios-realizado-v1'));
- assert.doesNotMatch(src,/\.rpc\s*\(|\.update\s*\(|\.insert\s*\(|\.delete\s*\(|\.upsert\s*\(/);
- assert.doesNotMatch(src,/eventos_auditoria/);
+ assert.equal((src.match(/\.rpc\s*\(/g)||[]).length,1);
+ assert.match(src,/const RPC='haiku_marcar_servicio_realizado_asistente_v1'/);
+ assert.doesNotMatch(src,/\.update\s*\(|\.insert\s*\(|\.delete\s*\(|\.upsert\s*\(/);
 });

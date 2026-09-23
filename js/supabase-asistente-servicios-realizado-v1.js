@@ -1,4 +1,4 @@
-/* Haku · marcar un servicio persistido como realizado · C2: sólo simulación. */
+/* Haku · marcar un servicio persistido como realizado. */
 (function(root){
  'use strict';
  if(root.HAIKU_ASISTENTE_SERVICIOS_REALIZADO_V1)return;
@@ -8,7 +8,7 @@
   (typeof require==='function'?require('./supabase-asistente-servicios-cancelacion-v1.js'):null);
  const INTENCION='MARCAR_SERVICIO_REALIZADO';
  const RPC='haiku_marcar_servicio_realizado_asistente_v1';
- const RPC_REALIZADO_PRODUCCION_HABILITADO=false;
+ const RPC_REALIZADO_PRODUCCION_HABILITADO=true;
  const propuestas=new WeakMap();
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  const num=v=>v==null||v===''?null:Number(v);
@@ -182,38 +182,142 @@
    const esperado=estadoEsperado(lectura),p={estado:'propuesta',consulta:q,candidato,lectura,
     p_estado_esperado:esperado,mensaje:'Propuesta preparada. Proyecto H no ha cambiado.'};
    propuestas.set(p,{consulta:q,servicioId:candidato.id,cliente,buscar,cargar,leerTiempo,permiso,
-    snapshot:JSON.stringify(esperado),reloj:lectura.reloj,invalidada:false,enCurso:null,operationId:null,payload:null,resultado:null});
+    snapshot:JSON.stringify(esperado),lecturaInicial:lectura,candidatoInicial:candidato,
+    invalidada:false,enCurso:null,operationId:null,payload:null,resultado:null,
+    rpcRespondioExito:false,rpcAlreadyRealized:false});
    return p;
   }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
  }
- async function confirmarInterno(p,o,opciones){
-  if(RPC_REALIZADO_PRODUCCION_HABILITADO)throw Error('Esta versión sólo implementa la simulación.');
-  if(o.invalidada)return {estado:'obsoleta',mensaje:'Esta propuesta ya fue invalidada. Prepara una nueva.'};
+ async function releer(o){
+  const candidatos=await o.buscar(o.consulta,{cliente:o.cliente});
+  if(candidatos.length!==1||candidatos[0].id!==o.servicioId)return null;
+  const lectura=await o.cargar(candidatos[0],{cliente:o.cliente,leerTiempo:o.leerTiempo});
+  if(lectura.servicio.id!==o.servicioId)return null;
+  return {candidato:{...candidatos[0],...lectura.servicio,reserva:lectura.reserva,catalogo:lectura.catalogo},
+   lectura,snapshot:JSON.stringify(estadoEsperado(lectura))};
+ }
+ const coincidePropuesta=(o,actual)=>actual&&evaluarElegibilidad(actual.lectura).elegible&&
+  actual.snapshot===o.snapshot;
+ async function obsoleta(o,mensaje='El servicio, la reserva o las finanzas cambiaron. Preparé una nueva evaluación.'){
+  o.invalidada=true;
+  const nueva=await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarEstado:o.cargar,
+   leerTiempo:o.leerTiempo,permiso:o.permiso});
+  return {estado:'obsoleta',mensaje,nueva};
+ }
+ function errorRpc(error){
+  const codigo=String(error?.code||''),mensaje=String(error?.message||error||'');
+  if(codigo==='40001'||/obsoleta|estado esperado|propuesta nueva|cambió la reserva/i.test(mensaje))return 'stale';
+  if(codigo==='42501'||/permiso|iniciar sesión|usuario no activo/i.test(mensaje))return 'sin_permiso';
+  if(/BOVE|check.?out|requiere revisión|estado operativo|estadía|catálogo|horario|fecha futura|ajustes|aplicaciones|pagos|cargo|saldo|finanzas/i.test(mensaje))return 'revision_humana';
+  return 'incierto';
+ }
+ function mismaFila(a,b,ignorar=[]){
+  if(!a||!b)return false;
+  const omitir=new Set(ignorar);
+  return JSON.stringify(Object.fromEntries(Object.entries(a).filter(([k])=>!omitir.has(k))))===
+   JSON.stringify(Object.fromEntries(Object.entries(b).filter(([k])=>!omitir.has(k))));
+ }
+ async function verificarCambio(o,actual){
+  if(!actual||!o.payload)return false;
+  const antes=o.lecturaInicial,despues=actual.lectura;
+  if(despues.servicio.id!==o.servicioId||despues.servicio.estado_servicio!=='realizado'||
+     !mismaFila(antes.servicio,despues.servicio,['estado_servicio','actualizado_en'])||
+     !mismaFila(antes.reserva,despues.reserva)||!mismaFila(antes.estadia,despues.estadia)||
+     !mismaFila(antes.catalogo,despues.catalogo)||antes.checkout!==despues.checkout||
+     antes.cargos.length!==despues.cargos.length||
+     !mismaFila(antes.pagos,despues.pagos)||!mismaFila(antes.aplicaciones,despues.aplicaciones)||
+     !mismaFila(antes.ajustes,despues.ajustes)||!mismaFila(antes.estados,despues.estados))return false;
+  for(let i=0;i<antes.cargos.length;i++){
+   const inicial=antes.cargos[i],final=despues.cargos[i];
+   if(!mismaFila(inicial,final,inicial.estado==='activo'?['actualizado_en']:[]))return false;
+  }
+  const eventos=await filas(()=>o.cliente.from('eventos_auditoria')
+   .select('id,entidad_tipo,entidad_id,reserva_id,usuario_id,origen,cambios,datos_contexto')
+   .eq('entidad_id',o.servicioId).order('id'));
+  return eventos.filter(e=>e.entidad_tipo==='servicios'&&e.entidad_id===o.servicioId&&
+   e.reserva_id===despues.servicio.reserva_id&&e.usuario_id&&e.origen==='haku'&&
+   e.datos_contexto?.operacion_id===o.operationId&&Array.isArray(e.cambios)&&
+   e.cambios.some(x=>x.campo==='estado_servicio'&&x.anterior===antes.servicio.estado_servicio&&
+    x.nuevo==='realizado')).length===1;
+ }
+ function resultadoExito(o,actual,origen){
+  const l=actual.lectura,resultado={estado:'realizado',mensaje:'Servicio marcado como realizado y verificado.',
+   candidato:actual.candidato,lectura:l,estado_anterior:o.lecturaInicial.servicio.estado_servicio,
+   operation_id:o.operationId,origen};
+  o.resultado=resultado;
+  if(root.document&&root.CustomEvent)root.document.dispatchEvent(new root.CustomEvent('haiku:servicio-supabase-cambiado',
+   {detail:{servicioId:o.servicioId,reservaId:l.servicio.reserva_id}}));
+  return resultado;
+ }
+ async function verificarEstado(p){
+  const o=propuestas.get(p);
+  if(!o?.payload)return {estado:'bloqueada',mensaje:'No hay una operación pendiente para comprobar.'};
   if(o.resultado)return o.resultado;
-  if(!o.permiso())return {estado:'bloqueada',mensaje:'No tienes el permiso servicios.editar.'};
   try{
-   opciones.onEstado?.('Revalidando servicio, reserva, finanzas y tiempo…');
-   const candidatos=await o.buscar(o.consulta,{cliente:o.cliente});
-   if(candidatos.length!==1||candidatos[0].id!==o.servicioId){o.invalidada=true;
-    return {estado:'obsoleta',mensaje:'La identificación del servicio cambió.',
-     nueva:await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarEstado:o.cargar,leerTiempo:o.leerTiempo,permiso:o.permiso})};}
-   const actual=await o.cargar(candidatos[0],{cliente:o.cliente,leerTiempo:o.leerTiempo});
-   if(!evaluarElegibilidad(actual).elegible||JSON.stringify(estadoEsperado(actual))!==o.snapshot){
-    o.invalidada=true;
-    return {estado:'obsoleta',mensaje:'El servicio, la reserva o las finanzas cambiaron.',
-     nueva:await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarEstado:o.cargar,leerTiempo:o.leerTiempo,permiso:o.permiso})};
-   }
-   if(!o.payload){
-    const id=opciones.operationId||root.crypto?.randomUUID?.();
-    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id||''))
-     return {estado:'bloqueada',mensaje:'No se pudo generar un operation_id válido.'};
-    o.operationId=id;
-    o.payload=Object.freeze({p_operacion_id:id,p_servicio_id:o.servicioId,p_estado_esperado:JSON.parse(o.snapshot)});
-   }
-   o.resultado={estado:'simulada',mensaje:'Confirmación simulada. No se llamó al RPC ni se modificó Proyecto H.',
-    rpc:RPC,operation_id:o.operationId,payload:o.payload,candidato:p.candidato,lectura:p.lectura};
-   return o.resultado;
-  }catch(error){return {estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+   const actual=await releer(o);
+   if(await verificarCambio(o,actual))return resultadoExito(o,actual,'relectura');
+   if(o.rpcAlreadyRealized)return actual?.lectura.servicio.estado_servicio==='realizado'
+    ?{estado:'already_realized',mensaje:'Este servicio ya estaba realizado. No se hizo otra modificación.'}
+    :{estado:'sincronizando',mensaje:'El RPC informó que el servicio ya estaba realizado. Sólo volveré a leer.',propuesta:p};
+   if(coincidePropuesta(o,actual))return o.rpcRespondioExito
+    ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente. Sólo volveré a leer; no repetiré la escritura.',propuesta:p}
+    :{estado:'reintento_seguro',mensaje:'La lectura confirma el estado anterior. Puedes reintentar la misma operación.',propuesta:p,operation_id:o.operationId};
+   if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El cambio aún no se puede acreditar por lectura. Sólo volveré a leer.',propuesta:p};
+   return {estado:'revision_humana',mensaje:'El servicio o sus finanzas cambiaron. Requiere revisión antes de otra operación.'};
+  }catch(_){return {estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo se permite volver a leer; no repetiré el RPC automáticamente.',propuesta:p};}
+ }
+ async function confirmarInterno(p,o,opciones){
+  if(!RPC_REALIZADO_PRODUCCION_HABILITADO)return {estado:'bloqueada',mensaje:'El cambio real sigue bloqueado.'};
+  if(o.resultado)return o.resultado;
+  if(o.invalidada)return {estado:'obsoleta',mensaje:'Esta propuesta ya fue invalidada. Prepara una nueva.'};
+  if(!o.permiso())return {estado:'sin_permiso',mensaje:'No tienes el permiso servicios.editar.'};
+  opciones.onEstado?.('Revalidando servicio, reserva, finanzas y tiempo…');
+  let actual;
+  try{actual=await releer(o);}catch(error){return o.payload
+   ?{estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo volveré a leer antes de considerar un reintento.',propuesta:p}
+   :{estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+  if(o.payload){
+   try{if(await verificarCambio(o,actual))return resultadoExito(o,actual,'relectura');}
+   catch(_){return {estado:'incierto',mensaje:'No pude acreditar la operación por lectura. Sólo volveré a leer.',propuesta:p};}
+  }
+  if(!coincidePropuesta(o,actual))return o.payload?verificarEstado(p):obsoleta(o);
+  if(o.rpcAlreadyRealized)return verificarEstado(p);
+  if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El RPC ya respondió correctamente. Sólo volveré a leer el resultado.',propuesta:p};
+  if(!o.payload){
+   const id=opciones.operationId||root.crypto?.randomUUID?.();
+   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id||''))
+    return {estado:'bloqueada',mensaje:'No se pudo generar un operation_id válido.'};
+   o.operationId=id;
+   o.payload=Object.freeze({p_operacion_id:id,p_servicio_id:o.servicioId,p_estado_esperado:JSON.parse(o.snapshot)});
+  }
+  opciones.onEstado?.('Marcando servicio como realizado…');
+  let respuesta,error;
+  try{({data:respuesta,error}=await o.cliente.rpc(RPC,o.payload));}catch(e){error=e;}
+  if(error){
+   const clase=errorRpc(error);
+   if(clase==='stale')return obsoleta(o);
+   if(clase==='sin_permiso'){o.invalidada=true;return {estado:'sin_permiso',mensaje:'No tienes permiso para modificar este servicio.'};}
+   if(clase==='revision_humana'){o.invalidada=true;return {estado:'revision_humana',mensaje:'El servicio requiere revisión humana. No se realizó otro intento.'};}
+   return verificarEstado(p);
+  }
+  if(respuesta?.estado==='already_realized'&&respuesta.ok===true&&
+     respuesta.servicio_id===o.servicioId&&respuesta.operacion_id===o.operationId){
+   o.rpcAlreadyRealized=true;return verificarEstado(p);
+  }
+  if(!respuesta||respuesta.ok!==true||respuesta.estado!=='realized'||
+     respuesta.servicio_id!==o.servicioId||respuesta.operacion_id!==o.operationId||
+     respuesta.estado_servicio!=='realizado'||respuesta.tipo_cobro!==o.lecturaInicial.servicio.tipo_cobro||
+     num(respuesta.total)!==num(o.lecturaInicial.servicio.total))return verificarEstado(p);
+  o.rpcRespondioExito=true;
+  let observado=await verificarEstado(p);
+  if(['sincronizando','incierto'].includes(observado.estado))for(let intento=0;intento<2;intento++){
+   await new Promise(resolver=>setTimeout(resolver,300));
+   observado=await verificarEstado(p);
+   if(['realizado','revision_humana'].includes(observado.estado))return observado;
+  }
+  return observado.estado==='incierto'
+   ?{estado:'sincronizando',mensaje:'El RPC respondió correctamente; sólo volveré a leer antes de acreditar el cambio.',propuesta:p}
+   :observado;
  }
  function confirmar(p,opciones={}){
   const o=propuestas.get(p);
@@ -230,13 +334,22 @@
   if(p.estado==='obsoleta')return `<article class="haku-servicio-cortesia"><h3>Propuesta obsoleta</h3><p>${esc(p.mensaje)}</p></article>${p.nueva?renderizar(p.nueva):''}`;
   if(p.estado==='already_realized')return `<article class="haku-servicio-cortesia">${cabecera(p.candidato)}<p>${esc(p.mensaje)}</p></article>`;
   if(p.estado==='bloqueada'&&p.candidato)return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada">${cabecera(p.candidato)}<p class="haku-servicio-cortesia-etiqueta">Requiere revisión</p><p>${esc(p.mensaje)}</p><ul>${p.evaluacion.razones.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></article>`;
-  if(!['propuesta','simulada'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><p>${esc(p.mensaje)}</p></article>`;
+  if(p.estado==='realizado'){
+   const f=finanzasVisuales(p.lectura);
+   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--realizado">${cabecera(p.candidato)}
+    <h3>✓ Servicio marcado como realizado</h3>
+    <div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>${esc(etiquetaEstado(p.estado_anterior))}</strong></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Ahora</span><strong>Realizado</strong></div></div>
+    <h3>Estado financiero</h3><p><strong>${esc(f.titulo)}</strong><br>${esc(f.detalle)}</p>
+    <p class="haku-servicio-cortesia-efecto">${p.candidato.tipo_cobro==='cortesia'?'La cortesía sigue en $0.':'El cargo sigue activo y su saldo intacto.'} No se modificaron pagos ni aplicaciones.</p></article>`;
+  }
+  if(p.estado==='revision_humana')return `<article class="haku-servicio-cortesia haku-servicio-cortesia--bloqueada"><h3>Requiere revisión</h3><p>${esc(p.mensaje)}</p></article>`;
+  if(['sincronizando','incierto','reintento_seguro'].includes(p.estado))return `<article class="haku-servicio-cortesia"><h3>${p.estado==='reintento_seguro'?'Reintento disponible':'Comprobando cambio'}</h3><p>${esc(p.mensaje)}</p><div class="haku-servicio-cortesia-acciones">${p.estado==='reintento_seguro'?'<button type="button" data-servicio-realizado-reintentar>Reintentar misma operación</button>':'<button type="button" data-servicio-realizado-releer>Comprobar estado</button>'}</div></article>`;
+  if(p.estado!=='propuesta')return `<article class="haku-servicio-cortesia"><h3>Cambio de servicio</h3><p>${esc(p.mensaje)}</p></article>`;
   const c=p.candidato,l=p.lectura||null,f=l?finanzasVisuales(l):null;
   return `<article class="haku-servicio-cortesia haku-servicio-cortesia--propuesta">${cabecera(c)}
    <h3>Estado operativo</h3><div class="haku-servicio-cortesia-comparacion"><div><span>Antes</span><strong>${esc(etiquetaEstado(c.estado_servicio))}</strong></div><span class="haku-servicio-cortesia-flecha">→</span><div><span>Después</span><strong>Realizado</strong></div></div>
    <h3>Estado financiero</h3><p><strong>${esc(f?.titulo)}</strong><br>${esc(f?.detalle)}</p><p class="haku-servicio-cortesia-efecto">${esc(f?.explicacion)}</p>
-   ${p.estado==='propuesta'?`<p class="haku-servicio-cortesia-confirmacion">Confirmar sólo revalidará y preparará el RPC. En esta etapa no modificará Proyecto H.</p><p data-servicio-realizado-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-realizado-confirmar>Confirmar cambio · simulación</button><button type="button" data-servicio-realizado-cancelar>Cancelar</button></div>`:
-    `<p class="haku-servicio-cortesia-confirmacion">${esc(p.mensaje)}</p><p><strong>RPC preparado:</strong> ${esc(p.rpc)}<br><strong>operation_id:</strong> ${esc(p.operation_id)}</p><details><summary>Payload preparado</summary><pre>${esc(JSON.stringify(p.payload,null,2))}</pre></details>`}</article>`;
+   <p class="haku-servicio-cortesia-confirmacion">Al confirmar, Proyecto H marcará este servicio como realizado. El estado financiero no cambiará.</p><p data-servicio-realizado-estado></p><div class="haku-servicio-cortesia-acciones"><button type="button" data-servicio-realizado-confirmar>Confirmar cambio</button><button type="button" data-servicio-realizado-cancelar>Cancelar</button></div></article>`;
  }
  function instalar(){
   const doc=root.document,style=doc.createElement('style');
@@ -250,8 +363,14 @@
    let p;try{p=await preparar(texto);el.innerHTML=renderizar(p);}catch(error){el.textContent=`No pude leer el servicio. ${error?.message||error}`;}finally{ocupado=false;mensajes.scrollTop=mensajes.scrollHeight;}
    el.addEventListener('click',async e=>{const b=e.target?.closest?.('button');if(!b)return;e.preventDefault();e.stopPropagation();
     if(b.hasAttribute('data-servicio-realizado-cancelar')){p={estado:'cancelada',mensaje:'Cancelé la propuesta. No se modificó Proyecto H.'};el.innerHTML=renderizar(p);return;}
-    if(!b.hasAttribute('data-servicio-realizado-confirmar')||b.disabled||p?.estado!=='propuesta')return;
-    b.disabled=true;try{p=await confirmar(p,{onEstado:estado=>{const x=el.querySelector('[data-servicio-realizado-estado]');if(x)x.textContent=estado;}});}catch(error){p={estado:'bloqueada',mensaje:`No pude revalidar. ${error?.message||error}`};}
+    const confirma=b.hasAttribute('data-servicio-realizado-confirmar')&&p?.estado==='propuesta';
+    const reintenta=b.hasAttribute('data-servicio-realizado-reintentar')&&p?.estado==='reintento_seguro';
+    const relee=b.hasAttribute('data-servicio-realizado-releer')&&['sincronizando','incierto'].includes(p?.estado);
+    if(!confirma&&!reintenta&&!relee||b.disabled)return;
+    b.disabled=true;const propuesta=p.propuesta||p;
+    try{p=relee?await verificarEstado(propuesta):await confirmar(propuesta,{onEstado:estado=>{
+     const x=el.querySelector('[data-servicio-realizado-estado]');if(x)x.textContent=estado;}});}
+    catch(_){p={estado:'incierto',mensaje:'No pude comprobar el resultado. Sólo volveré a leer antes de otro intento.',propuesta};}
     el.innerHTML=renderizar(p);if(p.estado==='obsoleta'&&p.nueva)p=p.nueva;
    });
   }
@@ -266,7 +385,7 @@
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
  const api=Object.freeze({RPC_REALIZADO_PRODUCCION_HABILITADO,interpretar,leerReloj,cargarEstado,estadoEsperado,
-  evaluarElegibilidad,finanzasVisuales,preparar,confirmar,renderizar});
+  evaluarElegibilidad,finanzasVisuales,preparar,confirmar,verificarEstado,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_REALIZADO_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();
