@@ -43,6 +43,20 @@ test('reconoce la acción canónica y los alias Tonel/Jacuzzi sin exigir frase e
  assert.equal(A.interpretar('Pasa el tonel de Monica Perez a cortesía').accion,'NORMAL_A_CORTESIA');
 });
 
+test('interpreta exactamente las órdenes previstas para Ignacio y Nestor',()=>{
+ const casos=[
+  ['Haku, pasa el Tonel de Ignacio Figueroa, cab 6, del 12-09 a las 22:15 a cobro normal para 2 personas.',
+   ['tinajaTonel','Ignacio Figueroa',6,'2026-09-12','22:15',2]],
+  ['Haku, pasa el Jacuzzi de Nestor Gelvez, cab 4, del 13-09 a las 22:15 a cobro normal para 4 personas.',
+   ['tinajaJacuzzi','Nestor Gelvez',4,'2026-09-13','22:15',4]]
+ ];
+ for(const [texto,esperado] of casos){const q=A.interpretar(texto,{diaActual:'2026-09-22'});
+  assert.equal(q.accion,'CORTESIA_A_NORMAL');
+  assert.deepEqual([q.codigo_servicio,q.titular,q.cabana,q.fecha,q.hora,q.personas_solicitadas],esperado);
+  assert.deepEqual(q.errores,[]);
+ }
+});
+
 test('resuelve personas explícitas sin confundirlas con horas y pide contexto para un nombre aislado',()=>{
  for(const frase of ['para 4 personas','4 personas','x 4 pers','para 4','cantidad 4']){
   const q=A.interpretar(`Pasa el jacuzzi de Monica Perez a cobro normal ${frase}`,{diaActual:'2026-09-22'});
@@ -120,38 +134,30 @@ test('el estado esperado incluye exactamente las claves del RPC y conserva el ca
  assert.deepEqual(e.cargos,[cargo]);assert.equal(e.cantidad_cargos_activos,0);
 });
 
-test('tarjeta muestra comparación y confirmación simulada; revalida y jamás llama al RPC',async()=>{
- let rpc=0,lecturas=0;
- const o=opciones({cliente:{rpc:async()=>{rpc++;throw Error('RPC prohibido');}},buscar:async()=>{lecturas++;return [candidato()];}});
- const p=await A.preparar(orden,o);assert.equal(p.estado,'propuesta');
- assert.equal((await A.confirmar(p,'motivo improcedente')).estado,'bloqueada');
+test('tarjeta real muestra importe y advierte antes de modificar; preparar no llama al RPC',async()=>{
+ let rpc=0;
+ const p=await A.preparar(orden,opciones({cliente:{rpc:async()=>{rpc++;throw Error('No debe llamarse durante preparación');}}}));
+ assert.equal(p.estado,'propuesta');assert.equal((await A.confirmar(p,'motivo improcedente')).estado,'bloqueada');
  const vista=A.renderizar(p);
- for(const texto of ['Mónica Pérez · CAB 4','Tinaja Jacuzzi','25-09-2026 · 19:15–21:15','Cortesía','Cobro normal','$80.000','4 personas','Confirmar cambio · simulación','No se ejecutará el RPC'])assert.ok(vista.includes(texto),texto);
- assert.match(vista,/data-servicio-cobro-confirmar/);assert.doesNotMatch(vista,/data-servicio-cortesia-confirmar/);
- const operacionId='d9042e70-2ac6-41f8-9f07-65f16bdcc77b';
- const a=A.simularCobro(p,{operacionId}),b=A.simularCobro(p,{operacionId:'f125b628-3b5c-4d29-9df8-f6a1db2d73a5'});
- assert.equal(a,b);const resultado=await a;
- assert.equal(resultado.estado,'simulada');assert.equal(resultado.rpc,'haiku_cambiar_servicio_a_cobro_normal_v1');
- assert.deepEqual(Object.keys(resultado.parametros),['p_operacion_id','p_servicio_id','p_personas','p_estado_esperado']);
- assert.equal(resultado.parametros.p_operacion_id,operacionId);assert.equal(resultado.parametros.p_servicio_id,'s1');assert.equal(resultado.parametros.p_personas,4);
- assert.deepEqual(resultado.parametros.p_estado_esperado,p.p_estado_esperado);
- assert.equal(rpc,0);assert.equal(lecturas,2);
- assert.match(A.renderizar(resultado),/No se llamó al RPC/);
+ for(const texto of ['Mónica Pérez · CAB 4','Tinaja Jacuzzi','25-09-2026 · 19:15–21:15','Cortesía','Cobro normal','$80.000','4 personas','Confirmar cambio','Proyecto H cambiará el servicio'])assert.ok(vista.includes(texto),texto);
+ assert.match(vista,/data-servicio-cobro-confirmar/);assert.doesNotMatch(vista,/simulación|No se ejecutará el RPC|data-servicio-cortesia-confirmar/);
+ assert.equal(rpc,0);
 });
 
-test('estado obsoleto bloquea la simulación y prepara una propuesta nueva',async()=>{
+test('estado obsoleto bloquea la ejecución real y prepara una propuesta nueva',async()=>{
  let actual=candidato();let rpc=0;
  const o=opciones({buscar:async()=>[actual],cliente:{rpc:async()=>{rpc++;}}});
  const p=await A.preparar(orden,o);
  actual=candidato({actualizado_en:'2026-09-22T13:00:00Z'});
- const r=await A.simularCobro(p,{uuid:()=> 'op-1'});
+ const r=await A.confirmarCobro(p,{operacionId:'d9042e70-2ac6-41f8-9f07-65f16bdcc77b'});
  assert.equal(r.estado,'obsoleta');assert.equal(r.nueva.estado,'propuesta');assert.equal(rpc,0);
 });
 
-test('el flag independiente de cobro queda apagado y la ruta UI sólo llega a simularCobro',()=>{
+test('el flag independiente de cobro está activo y la ruta UI sólo usa su confirmación',()=>{
  const fuente=fs.readFileSync(require.resolve('../js/supabase-asistente-servicios-cortesia-v1.js'),'utf8');
  assert.match(fuente,/const RPC_PRODUCCION_HABILITADO=true;/);
- assert.match(fuente,/const RPC_COBRO_NORMAL_PRODUCCION_HABILITADO=false;/);
- assert.match(fuente,/if\(b\.hasAttribute\('data-servicio-cobro-confirmar'\)\)p=await simularCobro\(propuesta\)/);
- assert.doesNotMatch(A.simularCobro.toString(),/\.rpc\s*\(/);
+ assert.match(fuente,/const RPC_COBRO_NORMAL_PRODUCCION_HABILITADO=true;/);
+ assert.match(fuente,/if\(b\.hasAttribute\('data-servicio-cobro-confirmar'\)\|\|b\.hasAttribute\('data-servicio-cobro-reintentar'\)\)/);
+ assert.match(fuente,/p=await confirmarCobro\(propuesta/);
+ assert.match(fuente,/cliente\.rpc\(RPC_COBRO_NORMAL,original\.payload\)/);
 });
