@@ -28,8 +28,141 @@ const descripcionCalendario = document.getElementById("calendario-descripcion");
 const botonAnterior = document.getElementById("mes-anterior");
 const botonSiguiente = document.getElementById("mes-siguiente");
 const botonHoyCalendario = document.getElementById("calendario-hoy");
+const agendaCalendarioMovil = document.getElementById("calendario-agenda-movil");
 
 let fechaCalendario = new Date();
+let fechaCalendarioSeleccionadaMovil =
+    `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+let reservasCalendarioMes = [];
+
+function esCalendarioMovil() {
+    return window.matchMedia?.("(max-width: 780px)").matches === true;
+}
+
+function reservasEnFechaCalendario(fecha, reservas) {
+    return reservas.filter(reserva => {
+        const salida = sumarDiasCalendario(reserva.fechaIngreso, Number(reserva.noches) || 0);
+        // Las barras representan noches; la agenda del día incluye también salidas.
+        return reserva.fechaIngreso <= fecha &&
+            (reserva.esBloqueo || reserva.esFullDay ? fecha < salida : fecha <= salida);
+    });
+}
+
+function fechaBreveCalendario(fecha) {
+    const [año, mes, dia] = fecha.split("-").map(Number);
+    return new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" })
+        .format(new Date(año, mes - 1, dia));
+}
+
+function pintarLeyendaCalendarioMovil() {
+    const categorias = new Set();
+    const inicio = `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}-01`;
+    const fin = sumarDiasCalendario(
+        inicio, new Date(fechaCalendario.getFullYear(), fechaCalendario.getMonth() + 1, 0).getDate() - 1
+    );
+    reservasCalendarioMes.forEach(reserva => {
+        const salida = sumarDiasCalendario(reserva.fechaIngreso, Number(reserva.noches) || 0);
+        if (reserva.fechaIngreso > fin || salida < inicio) return;
+        if (reserva.esBloqueo) { categorias.add("bloqueo"); return; }
+        const estado = window.HAIKU_CALENDARIO_ESTADOS_V1
+            ?.estado?.(reserva.reservaId, reserva.estadiaId) || "";
+        if (estado === "hospedada") categorias.add("hospedado");
+        else if (reserva.esFullDay && estado !== "checked_out") categorias.add("fullday");
+        else if (estado === "confirmada") categorias.add("confirmada");
+    });
+    seccionCalendario.querySelectorAll("[data-calendario-leyenda]").forEach(item => {
+        item.hidden = !categorias.has(item.dataset.calendarioLeyenda);
+    });
+}
+
+function pintarAgendaCalendarioMovil() {
+    if (!agendaCalendarioMovil || !esCalendarioMovil()) return;
+    const fecha = fechaCalendarioSeleccionadaMovil;
+    const [año, mes, dia] = fecha.split("-").map(Number);
+    const fechaVisible = new Intl.DateTimeFormat("es-CL", {
+        weekday: "long", day: "numeric", month: "long"
+    }).format(new Date(año, mes - 1, dia));
+    const cabecera = document.createElement("div");
+    cabecera.className = "sites-calendario-agenda-cabecera";
+    const titulo = document.createElement("strong");
+    titulo.textContent = fechaVisible.charAt(0).toUpperCase() + fechaVisible.slice(1);
+    const resumen = document.createElement("button");
+    resumen.type = "button";
+    resumen.textContent = "Ver resumen del día";
+    resumen.addEventListener("click", () => seleccionarDia(año, mes - 1, dia, fecha));
+    cabecera.append(titulo, resumen);
+    agendaCalendarioMovil.replaceChildren(cabecera);
+
+    const reservas = reservasEnFechaCalendario(fecha, reservasCalendarioMes);
+    if (!reservas.length) {
+        const vacio = document.createElement("p");
+        vacio.className = "sites-calendario-agenda-vacia";
+        vacio.textContent = "Sin reservas ni bloqueos para este día.";
+        agendaCalendarioMovil.appendChild(vacio);
+        return;
+    }
+
+    reservas.forEach(reserva => {
+        const fila = document.createElement("button");
+        fila.type = "button";
+        fila.className = "sites-calendario-agenda-item";
+        fila.dataset.reservaId = reserva.reservaId || "";
+        fila.dataset.estadiaId = reserva.estadiaId || "";
+        fila.dataset.cabana = String(reserva.numeroCabana);
+        if (reserva.esFullDay) fila.dataset.haikuFullday = "1";
+        if (reserva.esBloqueo) fila.classList.add("cal-reserva-bloqueada");
+        const estado = window.HAIKU_CALENDARIO_ESTADOS_V1
+            ?.estado?.(reserva.reservaId, reserva.estadiaId) || "";
+        if (!reserva.esBloqueo) {
+            if (estado === "hospedada") fila.classList.add("cal-reserva-checkin");
+            else if (estado === "checked_out") fila.classList.add("cal-reserva-checkout");
+            else if (reserva.esFullDay) fila.classList.add("cal-reserva-fullday");
+            else if (estado === "confirmada") fila.classList.add("cal-reserva-confirmada");
+            else if (estado === "pendiente") fila.classList.add("cal-reserva-confirmacion-pendiente");
+        }
+        const riel = document.createElement("span");
+        riel.className = "sites-calendario-agenda-riel";
+        const texto = document.createElement("span");
+        texto.className = "sites-calendario-agenda-texto";
+        const nombre = document.createElement("strong");
+        nombre.textContent = `CAB ${reserva.numeroCabana} · ${reserva.esBloqueo ? "Bloqueada" : reserva.titular}`;
+        const detalle = document.createElement("small");
+        const salida = reserva.esFullDay ? reserva.fechaIngreso :
+            sumarDiasCalendario(reserva.fechaIngreso, Number(reserva.noches) || 0);
+        detalle.textContent = `${reserva.esBloqueo ? "Bloqueo" : reserva.esFullDay ? "Full Day" : "Reserva"} · ` +
+            `${fechaBreveCalendario(reserva.fechaIngreso)} – ${fechaBreveCalendario(salida)}`;
+        texto.append(nombre, detalle);
+        const flecha = document.createElement("span");
+        flecha.className = "sites-calendario-agenda-flecha";
+        flecha.textContent = "›";
+        fila.append(riel, texto, flecha);
+        fila.addEventListener("click", () => {
+            if (reserva.esBloqueo) {
+                const id = String(reserva.bloqueoId || "").match(/BLQ-SB-([0-9a-f-]{36})/i)?.[1];
+                if (id) window.HAIKU_BLOQUEOS_CALENDARIO_SUPABASE_V1?.liberar?.(id);
+                return;
+            }
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(reserva.reservaId, fila);
+        });
+        agendaCalendarioMovil.appendChild(fila);
+    });
+}
+
+function seleccionarFechaCalendarioMovil(fecha) {
+    fechaCalendarioSeleccionadaMovil = fecha;
+    const [año, mes] = fecha.split("-").map(Number);
+    if (fechaCalendario.getFullYear() !== año || fechaCalendario.getMonth() !== mes - 1) {
+        fechaCalendario = new Date(año, mes - 1, 1);
+        generarCalendario();
+        return;
+    }
+    calendarioGrid.querySelectorAll(".dia-calendario").forEach(celda => {
+        const seleccionada = celda.dataset.fecha === fecha;
+        celda.classList.toggle("seleccionado", seleccionada);
+        celda.setAttribute("aria-pressed", String(seleccionada));
+    });
+    pintarAgendaCalendarioMovil();
+}
 
 const seccionCalendario =
     document.getElementById("seccion-calendario");
@@ -99,6 +232,10 @@ function generarCalendario() {
 
     const año = fechaCalendario.getFullYear();
     const mes = fechaCalendario.getMonth();
+    if (esCalendarioMovil() &&
+        !fechaCalendarioSeleccionadaMovil.startsWith(`${año}-${String(mes + 1).padStart(2, "0")}-`)) {
+        fechaCalendarioSeleccionadaMovil = `${año}-${String(mes + 1).padStart(2, "0")}-01`;
+    }
 
     // Título del mes
     const nombreMes = new Intl.DateTimeFormat("es-CL", {
@@ -179,6 +316,11 @@ function generarCalendario() {
         ) {
             elementoDia.classList.add("hoy");
         }
+        if (esCalendarioMovil()) {
+            const seleccionada = fechaDia === fechaCalendarioSeleccionadaMovil;
+            elementoDia.classList.toggle("seleccionado", seleccionada);
+            elementoDia.setAttribute("aria-pressed", String(seleccionada));
+        }
 
         const numero = document.createElement("span");
         numero.classList.add("numero-dia");
@@ -188,6 +330,10 @@ function generarCalendario() {
         elementoDia.addEventListener("click", () => {
             if (modoBloqueoCalendario) {
                 seleccionarFechaBloqueoCalendario(fechaDia);
+                return;
+            }
+            if (esCalendarioMovil()) {
+                seleccionarFechaCalendarioMovil(fechaDia);
                 return;
             }
             fechaCalendario = new Date(añoDia, mesDia, 1);
@@ -218,18 +364,16 @@ window.HAIKU_VINCULOS_ESTABLES_V1
 // ========================================
 
 function dibujarReservasCalendario() {
+    const movil = esCalendarioMovil();
 
     // Capa independiente para las reservas.
 // Así las barras NO alteran la cuadrícula de los días.
-const capaReservas =
-    document.createElement("div");
+const capaReservas = movil ? null : document.createElement("div");
 
-capaReservas.className =
-    "calendario-reservas-capa";
-
-calendarioGrid.appendChild(
-    capaReservas
-);
+if (capaReservas) {
+    capaReservas.className = "calendario-reservas-capa";
+    calendarioGrid.appendChild(capaReservas);
+}
 
     const datosCalendario =
         JSON.parse(
@@ -413,6 +557,7 @@ const reservasOrdenadas =
                 b.fechaIngreso
             );
         });
+reservasCalendarioMes = reservasOrdenadas;
 
 
 const filasReserva = new Map();
@@ -527,7 +672,7 @@ if (descripcionCalendario) {
             Number(reserva.noches) || 0
         );
         return reserva.fechaIngreso < inicioSiguienteMes &&
-            fechaSalida > inicioMes;
+            (movil && !reserva.esBloqueo ? fechaSalida >= inicioMes : fechaSalida > inicioMes);
     });
     const reservas = visibles.filter(reserva => !reserva.esBloqueo).length;
     const bloqueos = visibles.length - reservas;
@@ -535,6 +680,19 @@ if (descripcionCalendario) {
         `${reservas} ${reservas === 1 ? "reserva" : "reservas"} · ` +
         `${bloqueos} ${bloqueos === 1 ? "bloqueo" : "bloqueos"}`;
 }
+
+if (movil) {
+    calendarioGrid.querySelectorAll(".dia-calendario").forEach(celda => {
+        celda.classList.toggle(
+            "sites-calendario-dia-con-actividad",
+            reservasEnFechaCalendario(celda.dataset.fecha, reservasOrdenadas).length > 0
+        );
+    });
+    pintarAgendaCalendarioMovil();
+    pintarLeyendaCalendarioMovil();
+    return;
+}
+seccionCalendario.querySelectorAll("[data-calendario-leyenda]").forEach(item => { item.hidden = false; });
 
 // ========================================
 // MÁXIMO 3 FILAS VISIBLES + CONTADOR +N
@@ -2021,6 +2179,10 @@ botonAnterior.addEventListener("click", () => {
         fechaCalendario.getMonth() - 1,
         1
     );
+    if (esCalendarioMovil()) {
+        fechaCalendarioSeleccionadaMovil =
+            `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}-01`;
+    }
     generarCalendario();
 });
 
@@ -2032,6 +2194,10 @@ botonSiguiente.addEventListener("click", () => {
         fechaCalendario.getMonth() + 1,
         1
     );
+    if (esCalendarioMovil()) {
+        fechaCalendarioSeleccionadaMovil =
+            `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}-01`;
+    }
     generarCalendario();
 });
 
@@ -2039,6 +2205,10 @@ if (botonHoyCalendario) {
     botonHoyCalendario.addEventListener("click", () => {
         document.querySelector(".calendario-panel-dia")?.remove();
         fechaCalendario = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        if (esCalendarioMovil()) {
+            fechaCalendarioSeleccionadaMovil =
+                `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
+        }
         generarCalendario();
     });
 }
@@ -2046,6 +2216,7 @@ if (botonHoyCalendario) {
 
 // Generar calendario al cargar
 generarCalendario();
+window.matchMedia?.("(max-width: 780px)").addEventListener?.("change", () => generarCalendario());
 
 // ========================================
 // ACTUALIZAR CALENDARIO AL ABRIR LA SECCIÓN

@@ -4375,7 +4375,7 @@
     const nota = document.querySelector("#seccion-libro-reserva .libro-reserva-nota span:last-child");
     if (nota) nota.textContent = "Haku puede consultar esta copia local sin modificar el original ni guardarla en Google o Supabase. En PC se conservan como máximo el Libro actual y el anterior; Quitar libro de memoria borra ambos.";
 
-    if (acciones && root.matchMedia("(min-width: 901px)").matches) {
+    if (acciones) {
         const boton = document.createElement("button");
         boton.type = "button";
         boton.className = "libro-reserva-boton secundario";

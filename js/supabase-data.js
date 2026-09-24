@@ -34,6 +34,10 @@
         return String(fecha).slice(0, 10);
     }
 
+    function fechaVisibleResumen() {
+        try { return normalizarFecha(fechaSeleccionada); } catch (_) { return ""; }
+    }
+
     function diferenciaDias(inicio, fin) {
         const a = new Date(`${inicio}T12:00:00`);
         const b = new Date(`${fin}T12:00:00`);
@@ -277,6 +281,8 @@
             .select("id,estado_servicio")
             .eq("fecha_servicio", fecha);
 
+        if (fechaVisibleResumen() && fechaVisibleResumen() !== fecha) return;
+
         if (!errorServicios && serviciosContador) {
             serviciosContador.textContent = String(
                 (servicios || []).length
@@ -310,6 +316,8 @@
             .select("reserva_id,saldo")
             .in("reserva_id", reservasIngreso);
 
+        if (fechaVisibleResumen() && fechaVisibleResumen() !== fecha) return;
+
         if (!errorSaldos && pagosContador) {
             const pendientes = (saldos || [])
                 .filter(item => Number(item.saldo || 0) > 0)
@@ -331,6 +339,8 @@
             );
 
             if (error) throw error;
+
+            if (fechaVisibleResumen() && fechaVisibleResumen() !== fechaISO) return;
 
             const filas = Array.isArray(data) ? data : [];
             identidadDia = {
@@ -357,6 +367,8 @@
             filas.forEach(fila => pintarEstadoOperacion(fila, fechaISO));
 
             const estadiasPorId = await cargarDetallesEstadias(filas);
+
+            if (fechaVisibleResumen() && fechaVisibleResumen() !== fechaISO) return;
 
             filas.forEach(fila =>
                 pintarFilaOperacion(fila, estadiasPorId, fechaISO)
@@ -389,6 +401,8 @@
 
             await cargarContadoresRelacionados(fechaISO, filas);
 
+            if (fechaVisibleResumen() && fechaVisibleResumen() !== fechaISO) return;
+
             ultimoDiaCargado = fechaISO;
             document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
                 detail: { fecha: fechaISO }
@@ -407,6 +421,12 @@
             );
         } finally {
             cargandoDia = false;
+            // Si el usuario cambió de día durante una lectura, la llamada
+            // intermedia pudo descartarse por cargandoDia. Leer el día vigente.
+            const vigente = fechaVisibleResumen();
+            if (vigente && vigente !== fechaISO && window.haikuSesion) {
+                cargarOperacionDia(vigente);
+            }
         }
     }
 

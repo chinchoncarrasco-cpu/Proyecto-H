@@ -25,6 +25,8 @@ class Element {
         };
     }
     appendChild(element) { element.parentNode = this; this.children.push(element); return element; }
+    append(...elements) { elements.forEach(element => this.appendChild(element)); }
+    replaceChildren(...elements) { this.children = []; this.append(...elements); }
     remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(element => element !== this); }
     set innerHTML(value) {
         this.html = value;
@@ -58,10 +60,12 @@ class Element {
     setAttribute(name, value) { this[name] = value; }
 }
 
-function harness(cache = {}) {
+function harness(cache = {}, mobile = false) {
     const body = new Element('body');
     const ids = new Map();
     const store = new Map([['haikuDatos', JSON.stringify(cache)]]);
+    let mobileViewport = mobile;
+    const mediaListeners = [];
     const document = {
         body,
         createElement: tag => new Element(tag),
@@ -86,12 +90,19 @@ function harness(cache = {}) {
         guardarDatos() {},
         console: {log() {}, info() {}, warn() {}, error() {}},
         setTimeout() {},
+        matchMedia: () => ({
+            get matches() { return mobileViewport; },
+            addEventListener: (_event, callback) => mediaListeners.push(callback)
+        }),
         addEventListener() {}
     });
     context.window = context;
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'calendario.js'), 'utf8'), context, {filename: 'calendario.js'});
     vm.runInContext('fechaCalendario = new Date(2026, 8, 1); fechaSeleccionada = "2026-09-03"; generarCalendario();', context);
-    return {body, document, context};
+    return {body, document, context, setMobile(value) {
+        mobileViewport = value;
+        mediaListeners.forEach(callback => callback());
+    }};
 }
 
 function reserva(id, titular, cabana, fecha = '2026-09-04') {
@@ -232,4 +243,93 @@ test('la geometría Sites reserva la franja superior del número y un carril pro
     assert.ok(barTop + 3 * lane + moreHeight <= row, '+N cabe dentro del día');
     assert.match(bar, /margin-top:\s*calc\(var\(--cal-sites-bars-top\)\s*\+\s*var\(--fila-reserva\)\s*\*\s*var\(--cal-sites-lane-step\)\)/);
     assert.match(more, /margin-top:\s*calc\(var\(--cal-sites-bars-top\)\s*\+\s*3\s*\*\s*var\(--cal-sites-lane-step\)\)/);
+});
+
+test('móvil muestra matriz compacta Sites y agenda real: continúa, ingresa, sale, recambio, Full Day y bloqueo', () => {
+    const bloqueo = '11111111-1111-4111-8111-111111111111';
+    const h = harness({
+        '2026-09-20': {cabanas: {
+            1: {reservaId: 'R-sale', estadiaId: 'E-sale', titular: 'Sale Hoy', fechaOrigenReserva: '2026-09-20', noches: 3},
+            3: {reservaId: 'R-continua', estadiaId: 'E-continua', titular: 'Continúa', fechaOrigenReserva: '2026-09-20', noches: 6}
+        }},
+        '2026-09-23': {cabanas: {
+            1: {reservaId: 'R-recambio', estadiaId: 'E-recambio', titular: 'Entra Hoy', fechaOrigenReserva: '2026-09-23', noches: 2},
+            2: {reservaId: 'R-ingresa', estadiaId: 'E-ingresa', titular: 'Ingresa', fechaOrigenReserva: '2026-09-23', noches: 2},
+            4: {reservaId: 'R-full', estadiaId: 'E-full', titular: 'Full Day', fechaOrigenReserva: '2026-09-23', noches: 0, tipoEstadia: 'fullday'},
+            5: {estado: 'bloqueada', bloqueoId: `BLQ-SB-${bloqueo}`, bloqueoFechaInicio: '2026-09-23', bloqueoFechaFin: '2026-09-25'}
+        }}
+    }, true);
+    vm.runInContext('fechaCalendarioSeleccionadaMovil = "2026-09-23"; generarCalendario()', h.context);
+    const grid = h.document.getElementById('calendario-grid');
+    const agenda = h.document.getElementById('calendario-agenda-movil');
+    assert.equal(grid.querySelector('.calendario-reservas-capa'), null);
+    assert.equal(grid.querySelector('.calendario-reserva-barra'), null);
+    assert.equal(grid.querySelector('.calendario-mas-reservas'), null);
+    assert.equal(grid.querySelectorAll('.dia-calendario').length, 35);
+    assert.ok(grid.querySelector('.dia-calendario[data-fecha="2026-09-23"]').classList.contains('seleccionado'));
+    assert.ok(grid.querySelector('.dia-calendario[data-fecha="2026-09-23"]').classList.contains('sites-calendario-dia-con-actividad'));
+    assert.equal(h.document.getElementById('calendario-descripcion').textContent, '5 reservas · 1 bloqueo');
+    const filas = agenda.querySelectorAll('.sites-calendario-agenda-item');
+    assert.deepEqual(filas.map(fila => fila.dataset.reservaId),
+        ['R-sale', 'R-recambio', 'R-ingresa', 'R-continua', 'R-full', `BLQ-SB-${bloqueo}-CAB-5`]);
+    assert.match(filas[0].children[1].children[1].textContent, /20 sept.*23 sept/);
+    assert.match(filas[4].children[1].children[1].textContent, /Full Day/);
+    assert.match(filas[5].children[1].children[1].textContent, /Bloqueo/);
+    const liberados = [];
+    h.context.HAIKU_BLOQUEOS_CALENDARIO_SUPABASE_V1 = { liberar: id => liberados.push(id) };
+    filas[5].click();
+    assert.deepEqual(liberados, [bloqueo], 'el bloqueo conserva su flujo real');
+});
+
+test('tap móvil cambia sólo selección y agenda; vacío limpia filas, detalle usa ID y resumen conserva fecha', () => {
+    const h = harness({'2026-09-23': {cabanas: Object.fromEntries([reserva(1, 'Titular Real', 2, '2026-09-23')])}}, true);
+    vm.runInContext('fechaCalendarioSeleccionadaMovil = "2026-09-23"; generarCalendario()', h.context);
+    const grid = h.document.getElementById('calendario-grid');
+    const agenda = h.document.getElementById('calendario-agenda-movil');
+    const celdasAntes = grid.querySelectorAll('.dia-calendario');
+    const abiertas = [];
+    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (id, boton) => abiertas.push([id, boton]) };
+    agenda.querySelector('.sites-calendario-agenda-item').click();
+    assert.equal(abiertas[0][0], 'R1');
+    assert.equal(abiertas[0][1].dataset.estadiaId, 'E1');
+
+    grid.querySelector('.dia-calendario[data-fecha="2026-09-28"]').click();
+    assert.equal(grid.querySelectorAll('.dia-calendario')[0], celdasAntes[0], 'sin reconstruir el mes');
+    assert.equal(agenda.querySelectorAll('.sites-calendario-agenda-item').length, 0);
+    assert.match(agenda.querySelector('.sites-calendario-agenda-vacia').textContent, /Sin reservas/);
+    assert.equal(grid.querySelector('.dia-calendario[data-fecha="2026-09-28"]').classList.contains('seleccionado'), true);
+    assert.equal(vm.runInContext('fechaSeleccionada', h.context), '2026-09-03', 'tap no navega ni cambia día operativo');
+    const resumen = [];
+    h.context.seleccionarDia = (...args) => resumen.push(args);
+    agenda.children[0].children[1].click();
+    assert.deepEqual(resumen[0], [2026, 8, 28, '2026-09-28']);
+});
+
+test('móvil cambia mes y al volver a desktop conserva exactamente barras y +N', () => {
+    const cabanas = Object.fromEntries([
+        reserva(1, 'Ana', 1), reserva(2, 'Bruno', 2),
+        reserva(3, 'Carla', 3), reserva(4, 'Diego', 4)
+    ]);
+    const h = harness({'2026-09-04': {cabanas}}, true);
+    h.document.getElementById('mes-siguiente').click();
+    assert.equal(vm.runInContext('fechaCalendarioSeleccionadaMovil', h.context), '2026-10-01');
+    assert.match(h.document.getElementById('calendario-agenda-movil').children[0].children[0].textContent, /1 de octubre/i);
+    h.document.getElementById('mes-anterior').click();
+    assert.equal(vm.runInContext('fechaCalendarioSeleccionadaMovil', h.context), '2026-09-01');
+    h.setMobile(false);
+    assert.equal(h.body.querySelectorAll('.calendario-reserva-barra').length, 3);
+    assert.equal(h.body.querySelector('.calendario-mas-reservas').textContent, '+1');
+    assert.equal(h.body.querySelector('.calendario-panel-dia'), null);
+});
+
+test('contrato visual móvil usa el breakpoint Sites, no pinta barras y evita ancho extra', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'sites-calendario-v1.css'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    assert.match(html, /id="calendario-agenda-movil"/);
+    assert.match(html, /data-corto="X">Miércoles/);
+    assert.match(css, /@media \(max-width: 780px\)/);
+    assert.match(css, /grid-auto-rows:\s*44px/);
+    assert.match(css, /#seccion-calendario \.calendario-reserva-barra,[\s\S]*?\.calendario-mas-reservas \{ display: none; \}/);
+    assert.match(css, /grid-template-columns:\s*repeat\(7, minmax\(0, 1fr\)\)/);
+    assert.match(css, /\.sites-calendario-agenda-movil \{[\s\S]*?min-width:\s*0/);
 });

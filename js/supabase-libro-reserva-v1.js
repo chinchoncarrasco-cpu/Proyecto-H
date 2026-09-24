@@ -7,7 +7,15 @@
     const visoresConZoom = new WeakSet();
     function instalarZoomLibro(visor, tabla) {
         tabla.style.zoom = String(zoomLibro / 100);
-        if (visoresConZoom.has(visor)) return;
+        if (visoresConZoom.has(visor)) {
+            const controles = document.getElementById?.('sites-libro-zoom-slot')?.querySelectorAll?.('button');
+            if (controles?.length === 3) {
+                controles[0].disabled = zoomLibro === 60;
+                controles[1].disabled = false;
+                controles[2].disabled = zoomLibro === 160;
+            }
+            return;
+        }
         visoresConZoom.add(visor);
         const barra = document.createElement('div');
         barra.className = 'libro-reserva-zoom';
@@ -24,7 +32,10 @@
         }
         menos.addEventListener('click',()=>ajustar(zoomLibro-10)); mas.addEventListener('click',()=>ajustar(zoomLibro+10)); indicador.addEventListener('click',()=>ajustar(100));
         visor.addEventListener('wheel',e=>{ if (!e.ctrlKey || !e.deltaY) return; e.preventDefault(); ajustar(zoomLibro+(e.deltaY<0?10:-10)); },{passive:false});
-        barra.append(menos,indicador,mas); visor.before(barra);
+        barra.append(menos,indicador,mas);
+        const espacioSites = document.getElementById?.('sites-libro-zoom-slot');
+        if (espacioSites) espacioSites.replaceChildren(barra);
+        else visor.before(barra);
     }
     const DESCARGA_LIBRO_URL = "https://docs.google.com/spreadsheets/d/1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk/export?format=xlsx";
     const VERSION_QUERY = (() => {
@@ -43,6 +54,7 @@
     let persistenciaConfirmada = false;
     let colaConsulta = Promise.resolve();
     const cacheConsultas = new Map();
+    let revisionMemoriaVisual = 0;
 
     function copiaLocal(accion, registro) {
         const tarea = colaLocal.then(() => new Promise((resolve, reject) => {
@@ -94,15 +106,27 @@
     async function quitarLibro() {
         const id = ++operacionLibro;
         limpiarMemoria();
-        if (!persistenciaPC) return;
+        if (!persistenciaPC) {
+            notificarVistaLibro("eliminado", false);
+            return;
+        }
         actualizarEstado("Quitando libro…", "Borrando la copia de este navegador.");
         try {
             await copiaLocal("borrar");
-            if (id === operacionLibro) actualizarEstado("Sin archivo cargado", "Libro actual y anterior eliminados de la memoria y de este navegador.");
+            if (id === operacionLibro) {
+                const googleConectado = window.HAIKU_LIBRO_GOOGLE_V1?.estado?.().conectado === true;
+                actualizarEstado("Sin archivo cargado", googleConectado
+                    ? "Copias locales eliminadas. Google sigue conectado y puede volver a descargarlas."
+                    : "Libro actual y anterior eliminados de la memoria y de este navegador.");
+                void actualizarMemoriaVisual();
+                notificarVistaLibro("eliminado", false);
+            }
         } catch (_) {
             if (id !== operacionLibro) return;
             actualizarEstado("No se pudo borrar la copia local", "Vuelve a pulsar Quitar libro de memoria antes de recargar.");
             $("libro-reserva-quitar").disabled = false;
+            void actualizarMemoriaVisual();
+            notificarVistaLibro("error", false);
         }
     }
 
@@ -110,7 +134,10 @@
         const id = operacionLibro;
         try {
             const registro = await copiaLocal("leer");
-            if (id !== operacionLibro || !registro) return;
+            if (id !== operacionLibro || !registro) {
+                if (id === operacionLibro) void actualizarMemoriaVisual();
+                return;
+            }
             if (!(registro.buffer instanceof ArrayBuffer) || !registro.buffer.byteLength || !/\.xlsx$/i.test(registro.nombre)) {
                 throw new Error("Copia local inválida");
             }
@@ -120,6 +147,7 @@
             if (id !== operacionLibro) return;
             actualizarEstado("No se pudo recuperar el libro", "Carga el XLSX otra vez o pulsa Quitar libro de memoria para borrar la copia local.");
             $("libro-reserva-quitar").disabled = false;
+            void actualizarMemoriaVisual();
         }
     }
 
@@ -189,19 +217,86 @@
         if (texto) texto.textContent = detalle;
     }
 
+    function notificarVistaLibro(origen, cargado) {
+        window.dispatchEvent(new CustomEvent("haiku:libro-vista-actualizada", {
+            detail: { origen, cargado }
+        }));
+    }
+
+    function actualizarPieVisor() {
+        const pie = $("sites-libro-foot-left");
+        if (pie) pie.textContent = hojaActual && archivoBuffer
+            ? `${hojaActual} · copia local de solo lectura`
+            : "Sin hoja seleccionada · solo lectura";
+    }
+
+    async function actualizarMemoriaVisual() {
+        const titulo = $("sites-libro-memoria-titulo");
+        const detalle = $("sites-libro-memoria-detalle");
+        if (!titulo || !detalle) return;
+        const revision = ++revisionMemoriaVisual;
+        if (!persistenciaPC) {
+            titulo.textContent = archivoBuffer ? "Libro en esta pestaña" : "Sin copia local";
+            detalle.textContent = "En este dispositivo la copia no persiste al recargar";
+            return;
+        }
+        try {
+            const actual = await copiaLocal("leer");
+            const anterior = await copiaLocal("leer_anterior");
+            if (revision !== revisionMemoriaVisual) return;
+            if (archivoBuffer && !persistenciaConfirmada) {
+                titulo.textContent = "Copia sin guardar";
+                detalle.textContent = actual?.buffer
+                    ? "La versión guardada anteriormente sigue disponible"
+                    : "Esta carga no persistirá al recargar";
+            } else {
+                titulo.textContent = actual?.buffer ? "Libro disponible" : "Sin copia local";
+                detalle.textContent = actual?.buffer
+                    ? (anterior?.buffer ? "Copia actual y anterior en este navegador" : "Copia actual en este navegador")
+                    : "Carga un XLSX para conservarlo en este navegador";
+            }
+        } catch (_) {
+            if (revision !== revisionMemoriaVisual) return;
+            titulo.textContent = "Memoria no disponible";
+            detalle.textContent = "No se pudo consultar el almacenamiento local";
+        }
+    }
+
+    function actualizarDescarga() {
+        const boton = $("libro-reserva-descargar");
+        if (!boton) return;
+        if (archivoBuffer && archivoNombre) {
+            boton.disabled = false;
+            boton.textContent = "↓ Descargar versión actual";
+            boton.title = "Descargar la copia XLSX cargada en este navegador";
+        } else {
+            boton.disabled = !DESCARGA_LIBRO_URL;
+            boton.textContent = DESCARGA_LIBRO_URL ? "↓ Descargar XLSX oficial" : "Descarga no disponible";
+            boton.title = DESCARGA_LIBRO_URL
+                ? "Abrir la descarga oficial para cargar una copia local"
+                : "Falta configurar el enlace del archivo oficial";
+        }
+    }
+
     function configurarDescarga() {
         const boton = $("libro-reserva-descargar");
         if (!boton) return;
-        if (!DESCARGA_LIBRO_URL) {
-            boton.disabled = true;
-            boton.textContent = "Descarga pendiente de enlace";
-            boton.title = "Falta configurar el enlace exacto del archivo oficial";
-            return;
-        }
-        boton.disabled = false;
-        boton.textContent = "↓ Descargar versión actual";
+        actualizarDescarga();
         boton.addEventListener("click", () => {
-            window.open(DESCARGA_LIBRO_URL, "_blank", "noopener,noreferrer");
+            if (archivoBuffer && archivoNombre) {
+                const url = URL.createObjectURL(new Blob([archivoBuffer], {
+                    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                }));
+                const enlace = document.createElement("a");
+                enlace.href = url;
+                enlace.download = archivoNombre;
+                document.body.appendChild(enlace);
+                enlace.click();
+                enlace.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            } else if (DESCARGA_LIBRO_URL) {
+                window.open(DESCARGA_LIBRO_URL, "_blank", "noopener,noreferrer");
+            }
         });
     }
 
@@ -260,6 +355,15 @@
         combinacionesCargadas = [];
         rangoCargado = null;
         paginaActual = 0;
+        zoomLibro = 100;
+        const controlesZoom = $("sites-libro-zoom-slot")?.querySelectorAll?.("button");
+        if (controlesZoom?.length === 3) {
+            controlesZoom.forEach(boton => { boton.disabled = true; });
+            controlesZoom[1].textContent = "100%";
+        }
+        actualizarDescarga();
+        actualizarPieVisor();
+        if (!persistenciaPC) void actualizarMemoriaVisual();
 
         const entrada = $("libro-reserva-archivo");
         const selector = $("libro-reserva-hoja");
@@ -514,6 +618,17 @@
         return 72;
     }
 
+    function letraColumna(indice) {
+        let numero = indice + 1;
+        let letras = "";
+        while (numero > 0) {
+            numero -= 1;
+            letras = String.fromCharCode(65 + numero % 26) + letras;
+            numero = Math.floor(numero / 26);
+        }
+        return letras;
+    }
+
     function altoFilaPx(fila) {
         if (!fila) return null;
         if (Number.isFinite(fila.hpx) && fila.hpx > 0) return fila.hpx;
@@ -564,6 +679,10 @@
         tabla.setAttribute("aria-label", `Hoja ${hojaActual}`);
 
         const grupoColumnas = document.createElement("colgroup");
+        const columnaNumeros = document.createElement("col");
+        columnaNumeros.className = "sites-libro-gutter";
+        columnaNumeros.style.width = "42px";
+        grupoColumnas.appendChild(columnaNumeros);
         for (let columna = rango.s.c; columna <= rango.e.c; columna += 1) {
             const col = document.createElement("col");
             const config = columnasCargadas[columna];
@@ -579,6 +698,22 @@
         }
         tabla.appendChild(grupoColumnas);
 
+        const cabecera = document.createElement("thead");
+        const filaCabecera = document.createElement("tr");
+        const esquina = document.createElement("th");
+        esquina.className = "sites-libro-corner";
+        esquina.setAttribute("aria-label", "Número de fila y columna");
+        filaCabecera.appendChild(esquina);
+        for (let columna = rango.s.c; columna <= rango.e.c; columna += 1) {
+            const encabezado = document.createElement("th");
+            encabezado.className = "sites-libro-colhead";
+            encabezado.scope = "col";
+            encabezado.textContent = letraColumna(columna);
+            filaCabecera.appendChild(encabezado);
+        }
+        cabecera.appendChild(filaCabecera);
+        tabla.appendChild(cabecera);
+
         const cuerpo = document.createElement("tbody");
 
         for (let fila = filaInicio; fila <= filaFin; fila += 1) {
@@ -587,6 +722,12 @@
             const alto = altoFilaPx(configFila);
             if (alto) tr.style.height = `${alto}px`;
             if (configFila?.hidden) tr.hidden = true;
+
+            const numeroFila = document.createElement("th");
+            numeroFila.className = "sites-libro-rowhead";
+            numeroFila.scope = "row";
+            numeroFila.textContent = String(fila + 1);
+            tr.appendChild(numeroFila);
 
             for (let columna = rango.s.c; columna <= rango.e.c; columna += 1) {
                 const clave = `${fila}:${columna}`;
@@ -623,12 +764,14 @@
         if (meta) {
             meta.textContent = `${libroIndice.SheetNames.length} hojas detectadas · “${hojaActual}” · ${filas.toLocaleString("es-CL")} filas × ${columnas.toLocaleString("es-CL")} columnas · formato visual del XLSX`;
         }
+        actualizarPieVisor();
     }
 
     async function renderizarHoja(nombre) {
         if (!archivoBuffer || !nombre) return;
         const miRender = ++renderId;
         hojaActual = nombre;
+        actualizarPieVisor();
         mostrarCargando(`Abriendo “${nombre}” y recuperando su formato…`);
 
         try {
@@ -684,6 +827,7 @@
                 Workbook: { Sheets: indice.hojas || [] }
             };
             if (!libroIndice.SheetNames?.length) throw new Error("El archivo no contiene hojas");
+            actualizarDescarga();
             let estadoLocal = "";
             let actualizacion = false;
             if (persistenciaPC) {
@@ -711,6 +855,8 @@
                 archivoNombre,
                 `${bytesLegibles(archivo.size)} · leído localmente ${fechaHoraActual()}${estadoLocal}`
             );
+            void actualizarMemoriaVisual();
+            notificarVistaLibro(origen, true);
             renderizarHoja(hojaActual);
             if (!restaurado && actualizacion && persistenciaConfirmada) {
                 const cargaGoogle = origen === "google";
@@ -738,6 +884,8 @@
                 actualizarEstado("No fue posible leer el archivo", "La copia guardada anteriormente no se reemplazó. Puedes quitarla con el botón.");
                 $("libro-reserva-quitar").disabled = false;
             }
+            void actualizarMemoriaVisual();
+            notificarVistaLibro("error", false);
         }
     }
 
@@ -815,6 +963,7 @@
 
         configurarDescarga();
         limpiarMemoria();
+        void actualizarMemoriaVisual();
 
         const cargar = $("libro-reserva-cargar");
         const entrada = $("libro-reserva-archivo");

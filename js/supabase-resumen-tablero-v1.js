@@ -15,10 +15,19 @@
         fullday: ["Full day", "fullday"]
     });
     const selectorFila = "#seccion-resumen .sites-resumen-cabana[data-cabana]";
+    const filtros = new Set(["continuan", "ingresan", "salen", "servicios", "pagos"]);
     const historial = new Map();
+    const operacionFiltrada = new Map();
     const historialPendiente = new Map();
     const historialVersion = new Map();
     let actualizacionPendiente = false;
+    let filtroSeleccionado = "";
+    let serviciosHidratados = false;
+    const pagosHidratados = new Set();
+    let cobrosConocidos = { clave: "", cargos: new Map() };
+    let cobrosEnLectura = "";
+    let versionCobros = 0;
+    let usuarioHistorial = "";
 
     function fechaActiva() {
         try {
@@ -330,6 +339,211 @@
             descripcionDia(estado, titular === "Sin titular" ? "" : titular));
     }
 
+    function operacionParaFiltro(fila, fecha) {
+        const numero = String(fila.dataset.cabana || "");
+        if (window.haikuSesion) {
+            // El historial del tablero se invalida y consulta de nuevo en cada
+            // refresh/realtime. La identidad inicial sola podría quedar vieja.
+            if (fila.dataset.resumenFecha !== fecha) return null;
+            const operacion = (historial.get(fecha) || operacionFiltrada.get(fecha))?.get(numero);
+            if (!operacion) return null;
+            const estado = String(operacion.estado_operativo || "");
+            return {
+                estado,
+                ingresaHoy: ["libre-ingresa", "sale-ingresa", "fullday"].includes(estado),
+                saleHoy: Boolean(operacion.salida_estadia_id || operacion.fullday_estadia_id) ||
+                    ["sale-libre", "sale-ingresa", "fullday"].includes(estado)
+            };
+        }
+        const estado = String(datosLocales(fecha, numero)?.estado || "");
+        return {
+            estado,
+            ingresaHoy: ["libre-ingresa", "sale-ingresa", "fullday"].includes(estado),
+            saleHoy: ["sale-libre", "sale-ingresa", "fullday", "sale-bloqueada"].includes(estado)
+        };
+    }
+
+    function serviciosDelDia(fecha) {
+        if (window.haikuSesion && !serviciosHidratados) return null;
+        let servicios = [];
+        try {
+            servicios = JSON.parse(localStorage.getItem("haikuServicios") || "[]");
+        } catch (_) { return []; }
+        return (Array.isArray(servicios) ? servicios : [])
+            .filter(servicio => servicio.fechaServicio === fecha &&
+                !["cancelado", "no_show"].includes(String(servicio.estadoServicio || "")));
+    }
+
+    function cabanasConServicios(servicios) {
+        return new Set((servicios || [])
+            .map(servicio => String(servicio.numeroCabana || ""))
+            .filter(Boolean));
+    }
+
+    function pagosPendientesDelDia(fecha) {
+        if (!window.haikuSesion || !pagosHidratados.has(fecha)) return null;
+        const puente = window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1;
+        if (!puente?.estaListo?.(fecha)) return null;
+        const pendientes = puente.obtener(fecha);
+        return Array.isArray(pendientes) ? pendientes : null;
+    }
+
+    function objetivosCobro(operacion) {
+        const estado = String(operacion?.estado_operativo || "");
+        const objetivos = [];
+        if (["libre-ingresa", "sale-ingresa", "fullday"].includes(estado)) {
+            const id = estado === "fullday" ? operacion.fullday_reserva_id : operacion.ingreso_reserva_id;
+            if (id) objetivos.push(`${id}|alojamiento`);
+        }
+        if (["sale-libre", "sale-ingresa", "fullday"].includes(estado)) {
+            const id = estado === "fullday" ? operacion.fullday_reserva_id : operacion.salida_reserva_id;
+            if (id) objetivos.push(`${id}|servicio`);
+        }
+        return objetivos;
+    }
+
+    function invalidarCobrosConocidos() {
+        ++versionCobros;
+        cobrosConocidos = { clave: "", cargos: new Map() };
+        cobrosEnLectura = "";
+    }
+
+    function identidadLecturaCobros(fecha, operaciones) {
+        const ids = [...new Set([...operaciones.values()].flatMap(objetivosCobro)
+            .map(objetivo => objetivo.split("|")[0]))].sort();
+        return { ids, clave: `${fecha}|${ids.join(",")}` };
+    }
+
+    function cargarCobrosConocidos(fecha, operaciones, lectura) {
+        if (!window.haikuSesion || !operaciones || !pagosHidratados.has(fecha)) return;
+        const { ids, clave } = lectura;
+        if (cobrosConocidos.clave === clave || cobrosEnLectura === clave) return;
+        if (!ids.length) {
+            cobrosConocidos = { clave, cargos: new Map() };
+            return;
+        }
+        const version = ++versionCobros;
+        cobrosEnLectura = clave;
+        window.haikuSupabase.from("vista_estado_cargos")
+            .select("reserva_id,tipo_cargo,estado,saldo_cargo,monto_ajustado")
+            .in("reserva_id", ids)
+            .then(({ data, error }) => {
+                if (error) throw error;
+                if (version !== versionCobros || fecha !== fechaActiva()) return;
+                const cargos = new Map();
+                for (const cargo of Array.isArray(data) ? data : []) {
+                    if (cargo.estado !== "activo") continue;
+                    if (!["alojamiento", "servicio"].includes(cargo.tipo_cargo)) continue;
+                    const id = `${cargo.reserva_id}|${cargo.tipo_cargo}`;
+                    const estado = cargos.get(id) || { cero: true, conMonto: false };
+                    const saldo = Number(cargo.saldo_cargo);
+                    estado.cero = estado.cero && cargo.saldo_cargo != null &&
+                        Number.isFinite(saldo) && saldo === 0;
+                    estado.conMonto = estado.conMonto || Number(cargo.monto_ajustado) > 0;
+                    cargos.set(id, estado);
+                }
+                cobrosConocidos = { clave, cargos };
+                programarActualizacion();
+            })
+            .catch(error => console.warn("Resumen: no fue posible leer cobros del día", error))
+            .finally(() => {
+                if (cobrosEnLectura === clave) cobrosEnLectura = "";
+            });
+    }
+
+    function pintarCobros(fila, fecha, pendientes, operaciones, lectura) {
+        const celda = fila.querySelector?.(".sites-resumen-celda--cobros");
+        const valor = celda?.querySelector(".sites-resumen-valor");
+        const detalle = celda?.querySelector(".sites-resumen-subvalor");
+        if (!valor || !detalle) return;
+        let principal = "—", secundario = "", visual = "";
+        const numero = String(fila.dataset.cabana || "");
+        const propios = (pendientes || []).filter(item => String(item.numeroCabana || "") === numero);
+        if (pendientes && fila.dataset.resumenFecha === fecha && propios.length) {
+            const montos = propios.map(item => Number(item.monto));
+            principal = montos.every(monto => Number.isFinite(monto) && monto > 0)
+                ? `Saldo $${Math.round(montos.reduce((total, monto) => total + monto, 0)).toLocaleString("es-CL")}`
+                : "Cobro pendiente";
+            secundario = propios.length > 1 ? `${propios.length} cobros pendientes` :
+                propios[0].tipo === "checkin" ? "Cobro pendiente de ingreso" :
+                    propios[0].tipo === "servicio" ? "Servicios pendientes de salida" : "Cobro pendiente";
+            visual = "pendiente";
+        } else if (pendientes && fila.dataset.resumenFecha === fecha && operaciones) {
+            const objetivos = objetivosCobro(operaciones.get(numero));
+            if (cobrosConocidos.clave === lectura?.clave) {
+                const conocidos = objetivos.map(id => cobrosConocidos.cargos.get(id)).filter(Boolean);
+                if (conocidos.length && conocidos.every(cargo => cargo.cero)) {
+                    principal = conocidos.some(cargo => cargo.conMonto) ? "Pagado" : "Sin cobro pendiente";
+                    secundario = "Sin saldo pendiente";
+                    visual = "pagado";
+                }
+            }
+        }
+        texto(valor, principal);
+        texto(detalle, secundario);
+        if (visual) valor.dataset.cobroVisual = visual;
+        else delete valor.dataset.cobroVisual;
+    }
+
+    function coincideFiltro(fila, fecha, tipo, fuentes = {}) {
+        if (!tipo) return true;
+        const numero = String(fila.dataset.cabana || "");
+        if (tipo === "servicios") return fuentes.servicios?.has(numero) || false;
+        if (tipo === "pagos") return fila.dataset.resumenFecha === fecha &&
+            (fuentes.pagos?.has(numero) || false);
+        const operacion = operacionParaFiltro(fila, fecha);
+        if (!operacion) return false;
+        if (tipo === "continuan") return operacion.estado === "continua";
+        if (tipo === "ingresan") return operacion.ingresaHoy === true;
+        if (tipo === "salen") return operacion.saleHoy === true;
+        return false;
+    }
+
+    function aplicarFiltro(fecha) {
+        const filas = [...document.querySelectorAll(selectorFila)];
+        const servicios = serviciosDelDia(fecha);
+        const pendientes = pagosPendientesDelDia(fecha);
+        const operaciones = historial.get(fecha) || operacionFiltrada.get(fecha);
+        const lecturaCobros = operaciones ? identidadLecturaCobros(fecha, operaciones) : null;
+        cargarCobrosConocidos(fecha, operaciones, lecturaCobros);
+        filas.forEach(fila => pintarCobros(fila, fecha, pendientes, operaciones, lecturaCobros));
+        if (servicios) texto(document.getElementById?.("contador-servicios"), String(servicios.length));
+        const operacionDisponible = !window.haikuSesion ||
+            (filas.every(fila => fila.dataset.resumenFecha === fecha) &&
+                (historial.has(fecha) || operacionFiltrada.has(fecha)));
+        if (operacionDisponible) {
+            for (const [tipo, id] of [["continuan", "contador-continuan"],
+                ["ingresan", "contador-ingresan"], ["salen", "contador-salen"]]) {
+                const total = filas.filter(fila => coincideFiltro(fila, fecha, tipo)).length;
+                texto(document.getElementById?.(id), String(total));
+            }
+        }
+        const fuentes = {
+            servicios: filtroSeleccionado === "servicios" ? cabanasConServicios(servicios) : null,
+            pagos: filtroSeleccionado === "pagos" ? new Set((pendientes || [])
+                .map(pendiente => String(pendiente.numeroCabana || "")).filter(Boolean)) : null
+        };
+        let visibles = 0;
+        filas.forEach(fila => {
+            const mostrar = coincideFiltro(fila, fecha, filtroSeleccionado, fuentes);
+            fila.hidden = !mostrar;
+            if (mostrar) visibles++;
+        });
+        texto(document.getElementById?.("resumen-cabanas-conteo"),
+            `${visibles} de ${filas.length} cabañas`);
+        const mostrarTodas = document.getElementById?.("resumen-mostrar-todas");
+        if (mostrarTodas) mostrarTodas.hidden = !filtroSeleccionado;
+        document.querySelectorAll("#seccion-resumen [data-resumen-filtro]").forEach(tarjeta => {
+            tarjeta.setAttribute?.("aria-pressed", String(tarjeta.dataset?.resumenFiltro === filtroSeleccionado));
+        });
+    }
+
+    function seleccionarFiltro(tipo) {
+        if (tipo && !filtros.has(tipo)) return;
+        filtroSeleccionado = filtroSeleccionado === tipo ? "" : tipo;
+        aplicarFiltro(fechaActiva());
+    }
+
     function actualizar() {
         actualizacionPendiente = false;
         const fecha = fechaActiva();
@@ -338,6 +552,7 @@
             resumenFila(fila, fecha);
             pintarFlujo(fila, fecha);
         });
+        aplicarFiltro(fecha);
         cargarHistorial(fecha);
     }
 
@@ -356,6 +571,15 @@
         }
     }
 
+    function invalidarHistorialDeOtraSesion() {
+        for (const dia of new Set([...historial.keys(), ...historialPendiente.keys()])) {
+            historialVersion.set(dia, (historialVersion.get(dia) || 0) + 1);
+        }
+        historial.clear();
+        historialPendiente.clear();
+        operacionFiltrada.clear();
+    }
+
     function cargarHistorial(fecha) {
         if (!window.haikuSesion || !window.haikuSupabase) return;
         for (const dia of [sumarDias(fecha, -1), fecha, sumarDias(fecha, 1)]) {
@@ -365,8 +589,12 @@
                 .then(({ data, error }) => {
                     if (error) throw error;
                     if ((historialVersion.get(dia) || 0) !== version) return;
-                    historial.set(dia, new Map((Array.isArray(data) ? data : [])
-                        .map(item => [String(item.numero), item])));
+                    const filas = new Map((Array.isArray(data) ? data : [])
+                        .map(item => [String(item.numero), item]));
+                    historial.set(dia, filas);
+                    // Conservar la última proyección del mismo día evita que
+                    // notas/servicios/pagos hagan parpadear el filtro al refrescar.
+                    if (dia === fechaActiva()) operacionFiltrada.set(dia, filas);
                     if (fechaActiva() === fecha) programarActualizacion();
                 })
                 .catch(error => {
@@ -409,6 +637,22 @@
     function iniciar() {
         const lista = document.querySelector("#seccion-resumen .sites-resumen-lista");
         if (!lista) return;
+        const metricas = document.querySelector("#seccion-resumen > .resumen");
+        metricas?.addEventListener("click", evento => {
+            const tarjeta = evento.target.closest?.("[data-resumen-filtro]");
+            if (tarjeta) seleccionarFiltro(tarjeta.dataset.resumenFiltro);
+        });
+        metricas?.addEventListener("keydown", evento => {
+            if (!["Enter", " "].includes(evento.key) || evento.repeat) return;
+            const tarjeta = evento.target.closest?.("[data-resumen-filtro]");
+            if (!tarjeta) return;
+            evento.preventDefault();
+            seleccionarFiltro(tarjeta.dataset.resumenFiltro);
+        });
+        document.getElementById?.("resumen-mostrar-todas")?.addEventListener("click", () => {
+            filtroSeleccionado = "";
+            aplicarFiltro(fechaActiva());
+        });
         document.getElementById("resumen-dia-anterior")?.addEventListener("click", () => navegar(-1));
         document.getElementById("resumen-dia-hoy")?.addEventListener("click", navegarHoy);
         document.getElementById("resumen-dia-siguiente")?.addEventListener("click", () => navegar(1));
@@ -433,6 +677,27 @@
         lista.addEventListener("change", programarActualizacion);
         document.addEventListener("haiku:resumen-datos-actualizados", () => {
             invalidarHistorial(fechaActiva());
+            programarActualizacion();
+        });
+        document.addEventListener("haiku:servicios-hidratados", () => {
+            serviciosHidratados = true;
+            programarActualizacion();
+        });
+        document.addEventListener("haiku:resumen-pagos-actualizados", evento => {
+            const fecha = String(evento.detail?.fecha || "");
+            if (fecha) pagosHidratados.add(fecha);
+            invalidarCobrosConocidos();
+            if (fecha === fechaActiva()) programarActualizacion();
+        });
+        window.addEventListener?.("haiku:auth-ready", evento => {
+            const usuario = String(evento.detail?.auth?.id || evento.detail?.usuario?.id || "");
+            if (usuario !== usuarioHistorial || !usuario) {
+                usuarioHistorial = usuario;
+                serviciosHidratados = false;
+                pagosHidratados.clear();
+                invalidarCobrosConocidos();
+                invalidarHistorialDeOtraSesion();
+            }
             programarActualizacion();
         });
 

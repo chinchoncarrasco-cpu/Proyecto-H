@@ -161,6 +161,12 @@
             } catch (_) {}
         }
 
+        // La vista Resumen reaplica su filtro cuando cambia el conjunto real
+        // de pendientes, incluso si la cantidad permanece igual.
+        document.dispatchEvent(new CustomEvent("haiku:resumen-pagos-actualizados", {
+            detail: { fecha }
+        }));
+
     }
 
     async function cargar(fecha = fechaActual()) {

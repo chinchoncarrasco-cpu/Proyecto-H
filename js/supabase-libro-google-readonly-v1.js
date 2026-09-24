@@ -109,6 +109,20 @@
         if (detalleEl) detalleEl.textContent = detalle || "";
 
         const conectado = Boolean(accessToken);
+        const onlineTitulo = $("sites-libro-online-titulo");
+        const onlineDetalle = $("sites-libro-online-detalle");
+        const syncTitulo = $("sites-libro-sync-titulo");
+        const syncDetalle = $("sites-libro-sync-detalle");
+        if (onlineTitulo) onlineTitulo.textContent = conectado
+            ? (estado === "error" ? "Conexión con incidencias" : "Conectado")
+            : (estado === "trabajando" ? "Conectando…" : "Sin conexión");
+        if (onlineDetalle) onlineDetalle.textContent = detalle || "Google Drive de solo lectura";
+        if (syncTitulo) syncTitulo.textContent = !conectado
+            ? "Sin sincronización activa"
+            : (sincronizando ? "Comprobando Google…" : estado === "error" ? "Comprobación con incidencias" : "Comprobación automática activa");
+        if (syncDetalle) syncDetalle.textContent = !conectado
+            ? "Conecta Google para actualizar"
+            : (estado === "error" ? detalle || "Revisa la conexión con Google" : "Cada 60 s; descarga si Google cambia");
         const conectarBtn = $("haiku-libro-google-conectar");
         const syncBtn = $("haiku-libro-google-sincronizar");
         const desconectarBtn = $("haiku-libro-google-desconectar");
@@ -260,8 +274,9 @@
             const anterior = localStorage.getItem(MODIFIED_KEY) || "";
             const cambio = Boolean(metadata.modifiedTime) && metadata.modifiedTime !== anterior;
             const necesitaArchivo = !libroLocalCargado();
+            const descargarCopia = forzar || cambio || necesitaArchivo;
 
-            if (forzar || cambio || necesitaArchivo) {
+            if (descargarCopia) {
                 pintar("trabajando", "Libro online", cambio && anterior ? "Nueva versión detectada. Actualizando…" : "Descargando versión oficial…");
                 const archivo = await descargar(metadata);
                 await entregarAlLibro(archivo);
@@ -271,13 +286,18 @@
             pintar(
                 "ok",
                 "Libro online conectado",
-                `Actualizado · ${horaChile(metadata.modifiedTime)}${metadata.name ? ` · ${metadata.name}` : ""}`
+                descargarCopia
+                    ? `Copia local actualizada desde Google · ${horaChile(metadata.modifiedTime)}${metadata.name ? ` · ${metadata.name}` : ""}`
+                    : `Google sin cambios · ${horaChile(metadata.modifiedTime)} · copia local no comparada`
             );
         } catch (error) {
             console.error("HAIKU · Libro Google solo lectura:", error);
             pintar("error", "Libro online", error?.message || "No fue posible consultar Google Drive.");
         } finally {
             sincronizando = false;
+            const caja = $("haiku-libro-google");
+            if (caja) pintar(caja.dataset.estado, $("haiku-libro-google-titulo")?.textContent,
+                $("haiku-libro-google-detalle")?.textContent);
             const btn = $("haiku-libro-google-sincronizar");
             if (btn) btn.disabled = !accessToken;
         }
@@ -336,6 +356,12 @@
         }
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible" && accessToken) void sincronizar(false);
+        });
+        root.addEventListener("haiku:libro-vista-actualizada", evento => {
+            if (!accessToken || evento.detail?.origen === "google") return;
+            pintar("neutral", "Libro online conectado", evento.detail?.cargado
+                ? "Copia local cargada; no verificada frente a Google."
+                : "Sin copia local; Google puede volver a descargarla.");
         });
     }
 

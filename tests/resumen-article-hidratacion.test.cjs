@@ -75,6 +75,7 @@ test('una respuesta RPC sin filas limpia enlaces previos y anuncia el repintado'
         window: { haikuSesion: {} },
         cliente: { rpc: async () => ({ data: [], error: null }) },
         normalizarFecha: fecha => fecha,
+        fechaVisibleResumen: () => '2026-09-23',
         document: {
             querySelectorAll: () => [articulo],
             getElementById: () => null,

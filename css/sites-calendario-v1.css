@@ -1,4 +1,4 @@
-/* Sites V1 · Calendario real. La cuadrícula conserva las barras, +N y el panel del calendario de Proyecto H. */
+/* Sites V1 · Calendario real: barras desktop y agenda compacta móvil comparten datos. */
 
 body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     background-color: var(--sites-shell-canvas);
@@ -411,6 +411,9 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 #seccion-calendario .sites-calendario-leyenda-marca--fullday { --marca-fondo: #f5ecd9; --marca-borde: #bb9452; }
 #seccion-calendario .sites-calendario-leyenda-marca--bloqueo { --marca-fondo: #eee9e5; --marca-borde: #a3877e; }
 
+#seccion-calendario .sites-calendario-agenda-movil { display: none; }
+#seccion-calendario .sites-calendario-leyenda > span[hidden] { display: none; }
+
 /* El panel +N se crea directamente bajo body; estas clases son exclusivas del Calendario. */
 .calendario-panel-dia {
     display: flex;
@@ -512,7 +515,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     #seccion-calendario .calendario-reserva-barra { font-size: 9px; }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 780px) {
     #seccion-calendario {
         width: 100%;
         min-width: 0;
@@ -539,7 +542,7 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     #seccion-calendario .sites-calendario-barra-mes { min-height: 58px; padding: 6px 12px; }
     #seccion-calendario #titulo-mes { font-size: 15px; }
     #seccion-calendario .sites-calendario-dias-semana span {
-        padding: 8px 0;
+        padding: 7px 0;
         font-size: 0;
         text-align: center;
     }
@@ -549,47 +552,117 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
         font-size: 10px;
     }
 
-    #seccion-calendario .sites-calendario-grid,
-    #seccion-calendario .calendario-reservas-capa {
+    #seccion-calendario .sites-calendario-grid {
         grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-auto-rows: 44px;
         width: 100%;
+        padding: 5px 5px 8px;
     }
 
     #seccion-calendario .dia-calendario {
         min-width: 0;
         min-height: 0;
-        height: var(--cal-sites-row-height);
-        padding: 7px 3px;
+        height: 44px;
+        align-items: center;
+        padding: 5px 1px;
+        border: 0;
+        background: transparent;
+        text-align: center;
     }
+
+    #seccion-calendario .dia-calendario:is(.hoy, .seleccionado, .dia-vacio) { background: transparent; }
+    #seccion-calendario .dia-calendario.seleccionado { background: #f2f8f3; }
 
     #seccion-calendario .dia-calendario .numero-dia {
-        width: 22px;
-        min-width: 22px;
-        height: 22px;
-        min-height: 22px;
-        font-size: 11px;
+        width: 29px !important;
+        min-width: 29px !important;
+        height: 29px !important;
+        min-height: 29px !important;
+        font-size: 12px;
     }
 
-    #seccion-calendario .calendario-reserva-barra {
-        display: flex;
-        gap: 2px;
-        margin-top: calc(var(--cal-sites-bars-top) + var(--fila-reserva) * var(--cal-sites-lane-step));
-        margin-right: 1px;
-        margin-left: 1px;
-        padding: 0 3px;
-        font-size: 9px;
+    #seccion-calendario .dia-calendario.hoy:not(.seleccionado) .numero-dia {
+        background: transparent;
+        color: #24382d;
     }
 
-    #seccion-calendario .sites-calendario-barra-cabana { font-size: 9px; }
-
-    #seccion-calendario .calendario-mas-reservas {
+    #seccion-calendario .dia-calendario.sites-calendario-dia-con-actividad::after {
+        content: "";
         display: block;
-        margin-top: calc(var(--cal-sites-bars-top) + 3 * var(--cal-sites-lane-step));
-        margin-right: 1px;
-        margin-left: 1px;
-        padding: 0 3px;
-        font-size: 10px;
+        width: 3px;
+        height: 3px;
+        margin: 1px auto 0;
+        border-radius: 50%;
+        background: #54906e;
     }
+
+    #seccion-calendario .dia-calendario.seleccionado.sites-calendario-dia-con-actividad::after { background: #214c3b; }
+    #seccion-calendario .calendario-reservas-capa { display: none; }
+    #seccion-calendario .calendario-reserva-barra,
+    #seccion-calendario .calendario-mas-reservas { display: none; }
+
+    #seccion-calendario .sites-calendario-agenda-movil {
+        display: block;
+        min-width: 0;
+        margin-top: 17px;
+        padding: 12px 15px;
+        border: 1px solid var(--sites-shell-line);
+        border-radius: 9px;
+        background: #fff;
+    }
+
+    #seccion-calendario .sites-calendario-agenda-cabecera {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 9px;
+        margin-bottom: 6px;
+    }
+
+    #seccion-calendario .sites-calendario-agenda-cabecera strong {
+        min-width: 0;
+        color: #263c30;
+        font-size: 14px;
+        line-height: 1.25;
+    }
+
+    #seccion-calendario .sites-calendario-agenda-cabecera button {
+        flex: 0 0 92px;
+        padding: 5px 0;
+        border: 0;
+        background: transparent;
+        color: #276248;
+        font: 700 11px/1.2 var(--sites-shell-font);
+        text-align: right;
+    }
+
+    #seccion-calendario .sites-calendario-agenda-item {
+        --cal-agenda-accent: #849c8e;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-width: 0;
+        padding: 10px 0;
+        border: 0;
+        border-top: 1px solid #e9eee9;
+        background: transparent;
+        color: #273d32;
+        font: inherit;
+        text-align: left;
+    }
+
+    #seccion-calendario .sites-calendario-agenda-item:is(.cal-reserva-checkin) { --cal-agenda-accent: #387d5e; }
+    #seccion-calendario .sites-calendario-agenda-item:is(.cal-reserva-confirmada, .cal-reserva-checkout, .cal-reserva-confirmacion-pendiente) { --cal-agenda-accent: #84b2be; }
+    #seccion-calendario .sites-calendario-agenda-item.cal-reserva-fullday { --cal-agenda-accent: #bb9452; }
+    #seccion-calendario .sites-calendario-agenda-item.cal-reserva-bloqueada { --cal-agenda-accent: #a3877e; }
+    #seccion-calendario .sites-calendario-agenda-item:hover { background: #f7faf8; }
+    #seccion-calendario .sites-calendario-agenda-riel { flex: none; width: 3px; height: 32px; border-radius: 2px; background: var(--cal-agenda-accent); }
+    #seccion-calendario .sites-calendario-agenda-texto { display: grid; gap: 3px; min-width: 0; }
+    #seccion-calendario .sites-calendario-agenda-texto strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    #seccion-calendario .sites-calendario-agenda-texto small { color: #77867b; font-size: 11px; }
+    #seccion-calendario .sites-calendario-agenda-flecha { margin-left: auto; color: #6f8877; }
+    #seccion-calendario .sites-calendario-agenda-vacia { margin: 0; padding: 14px 0 5px; color: #728076; font-size: 12px; }
 
     #seccion-calendario .sites-calendario-leyenda { gap: 9px 13px; }
 }

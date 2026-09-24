@@ -36,6 +36,8 @@
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
     <link rel="stylesheet" href="css/sites-pagos-v1.css">
     <link rel="stylesheet" href="css/sites-reservas-v1.css">
+    <link rel="stylesheet" href="css/sites-libro-reserva-v1.css">
+    <link rel="stylesheet" href="css/sites-notificaciones-v1.css">
 </head>
 
 <body>
@@ -76,17 +78,24 @@
                         <span id="contador-notificaciones" class="contador-notificaciones" hidden>0</span>
                     </button>
 
-                    <div id="panel-notificaciones" class="panel-notificaciones" hidden>
-                        <div class="panel-notificaciones-cabecera">
-                            <div><strong>Notificaciones</strong><span>Actividad del turno</span></div>
-                            <button type="button" id="cerrar-notificaciones" class="cerrar-notificaciones" aria-label="Cerrar notificaciones">×</button>
-                        </div>
+                    <!-- Montaje oculto para los lectores legacy; nunca forma parte de la interfaz visible. -->
+                    <div id="panel-notificaciones" class="panel-notificaciones" hidden inert aria-hidden="true">
                         <div id="notificaciones-contenido" class="notificaciones-contenido"></div>
                     </div>
                 </div>
             </div>
         </div>
     </header>
+
+    <div id="sites-notificaciones-overlay" class="sites-notificaciones-overlay" hidden></div>
+    <aside id="sites-notificaciones-drawer" class="sites-notificaciones-drawer" role="dialog" aria-modal="true"
+        aria-labelledby="sites-notificaciones-titulo" hidden>
+        <header class="sites-notificaciones-head">
+            <div><small id="sites-notificaciones-turno">TURNO</small><h2 id="sites-notificaciones-titulo">Centro de notificaciones</h2></div>
+            <button type="button" id="sites-notificaciones-cerrar" aria-label="Cerrar centro de notificaciones">×</button>
+        </header>
+        <div id="sites-notificaciones-contenido" class="sites-notificaciones-body"></div>
+    </aside>
 
     <!-- =========================
          BARRA LATERAL
@@ -206,7 +215,7 @@
 
 <section class="resumen">
 
-    <div class="tarjeta">
+    <div class="tarjeta" data-resumen-filtro="continuan" role="button" tabindex="0" aria-pressed="false">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V6m16 13V6M4 15h16M7 8h5a3 3 0 0 1 3 3v4M4 19v-4m16 4v-4"/></svg></span>
         <div>
             <p>Continúan</p>
@@ -214,7 +223,7 @@
         </div>
     </div>
 
-    <div class="tarjeta">
+    <div class="tarjeta" data-resumen-filtro="ingresan" role="button" tabindex="0" aria-pressed="false">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 20h16"/></svg></span>
         <div>
             <p>Ingresan</p>
@@ -222,7 +231,7 @@
         </div>
     </div>
 
-    <div class="tarjeta">
+    <div class="tarjeta" data-resumen-filtro="salen" role="button" tabindex="0" aria-pressed="false">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20V7m0 0-5 5m5-5 5 5M4 4h16"/></svg></span>
         <div>
             <p>Salen</p>
@@ -230,7 +239,7 @@
         </div>
     </div>
 
-    <div class="tarjeta">
+    <div class="tarjeta" data-resumen-filtro="servicios" role="button" tabindex="0" aria-pressed="false">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 13h18v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3ZM6 13V6a2 2 0 0 1 4 0M6 20l-1 2m14-2 1 2"/></svg></span>
         <div>
             <p>Servicios</p>
@@ -238,7 +247,7 @@
         </div>
     </div>
 
-    <div class="tarjeta alerta">
+    <div class="tarjeta alerta" data-resumen-filtro="pagos" role="button" tabindex="0" aria-pressed="false">
         <span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6 15h5"/></svg></span>
         <div>
            <p>Pagos pendientes</p>
@@ -255,7 +264,10 @@
 
     <div class="sites-resumen-tabla-cabecera">
         <h3>Estado de cabañas</h3>
-        <p>11 de 11 cabañas</p>
+        <div class="sites-resumen-tabla-controles">
+            <p id="resumen-cabanas-conteo" aria-live="polite">— de — cabañas</p>
+            <button type="button" id="resumen-mostrar-todas" hidden>Mostrar todas</button>
+        </div>
     </div>
 
 <section class="panel sites-resumen-tablero-panel">
@@ -3362,7 +3374,7 @@
             <div class="dias-semana sites-calendario-dias-semana" aria-hidden="true">
                 <span data-corto="L">Lunes</span>
                 <span data-corto="M">Martes</span>
-                <span data-corto="M">Miércoles</span>
+                <span data-corto="X">Miércoles</span>
                 <span data-corto="J">Jueves</span>
                 <span data-corto="V">Viernes</span>
                 <span data-corto="S">Sábado</span>
@@ -3375,11 +3387,13 @@
 
         </section>
 
+        <section id="calendario-agenda-movil" class="sites-calendario-agenda-movil" aria-live="polite" aria-label="Reservas del día seleccionado"></section>
+
         <div class="sites-calendario-leyenda" aria-label="Estados de reservas en el calendario">
-            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--hospedado" aria-hidden="true"></i>Hospedado</span>
-            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--confirmada" aria-hidden="true"></i>Confirmada</span>
-            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--fullday" aria-hidden="true"></i>Full Day</span>
-            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--bloqueo" aria-hidden="true"></i>Bloqueo</span>
+            <span data-calendario-leyenda="hospedado"><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--hospedado" aria-hidden="true"></i>Hospedado</span>
+            <span data-calendario-leyenda="confirmada"><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--confirmada" aria-hidden="true"></i>Confirmada</span>
+            <span data-calendario-leyenda="fullday"><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--fullday" aria-hidden="true"></i>Full Day</span>
+            <span data-calendario-leyenda="bloqueo"><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--bloqueo" aria-hidden="true"></i>Bloqueo</span>
         </div>
 
     </section>
@@ -5528,80 +5542,83 @@
      SECCIÓN LIBRO DE RESERVA · ARCHIVO LOCAL
 ======================================== -->
 
-<section id="seccion-libro-reserva" class="seccion-app">
+<section id="seccion-libro-reserva" class="seccion-app sites-libro-reserva">
 
-    <header class="cabecera libro-reserva-cabecera">
+    <header class="cabecera libro-reserva-cabecera sites-libro-heading">
         <div>
-            <p class="subtitulo">OPERACIÓN · SÓLO LECTURA</p>
+            <p class="subtitulo">CONSULTA DEL LIBRO</p>
             <h2>Libro de Reserva</h2>
-            <p class="texto-secundario">
-                Consulta una copia XLSX del libro sin abrirlo ni conectarlo dentro de Proyecto H.
-            </p>
-            <span class="libro-reserva-seguridad">🔒 Archivo local · Sólo lectura</span>
+            <p class="texto-secundario">Consulta la copia XLSX dentro de Haku.</p>
         </div>
+        <span class="libro-reserva-seguridad"><span aria-hidden="true">◇</span> Solo lectura</span>
     </header>
 
-    <section class="panel libro-reserva-panel">
-        <div class="libro-reserva-herramientas">
-            <div class="libro-reserva-acciones">
-                <button type="button" id="libro-reserva-descargar" class="libro-reserva-boton" disabled>
-                    Descarga pendiente de enlace
-                </button>
-                <button type="button" id="libro-reserva-cargar" class="libro-reserva-boton secundario">
-                    📂 Cargar XLSX descargado
-                </button>
-                <input
-                    type="file"
-                    id="libro-reserva-archivo"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    hidden
-                >
-                <button type="button" id="libro-reserva-quitar" class="libro-reserva-boton secundario peligro" disabled>
-                    Quitar libro de memoria
-                </button>
+    <section class="panel libro-reserva-panel sites-libro-shell" aria-label="Visor del Libro de Reserva">
+        <div class="sites-libro-origen" aria-live="polite">
+            <div class="libro-reserva-estado sites-libro-origen-bloque">
+                <span class="sites-libro-origen-kicker">ARCHIVO ACTUAL · COPIA LOCAL</span>
+                <strong id="libro-reserva-estado-titulo">Preparando libro…</strong>
+                <span id="libro-reserva-estado-detalle">Comprobando la memoria de este navegador.</span>
             </div>
+            <div class="sites-libro-origen-bloque">
+                <span class="sites-libro-origen-kicker">MEMORIA LOCAL</span>
+                <strong id="sites-libro-memoria-titulo">Comprobando…</strong>
+                <span id="sites-libro-memoria-detalle">Comprobando disponibilidad local</span>
+            </div>
+            <div class="sites-libro-origen-bloque">
+                <span class="sites-libro-origen-kicker">LIBRO ONLINE</span>
+                <strong id="sites-libro-online-titulo">Sin conexión</strong>
+                <span id="sites-libro-online-detalle">Google Drive de solo lectura</span>
+            </div>
+            <div class="sites-libro-origen-bloque">
+                <span class="sites-libro-origen-kicker">SINCRONIZACIÓN</span>
+                <strong id="sites-libro-sync-titulo">Sin sincronización activa</strong>
+                <span id="sites-libro-sync-detalle">Consulta local de solo lectura</span>
+            </div>
+        </div>
 
-            <div class="libro-reserva-estado" aria-live="polite">
-                <strong id="libro-reserva-estado-titulo">Sin archivo cargado</strong>
-                <span id="libro-reserva-estado-detalle">Nada queda guardado en el navegador ni en Supabase.</span>
+        <div class="libro-reserva-herramientas" role="toolbar" aria-label="Herramientas del libro">
+            <div class="libro-reserva-acciones">
+                <button type="button" id="libro-reserva-descargar" class="libro-reserva-boton" disabled>↓ Descargar XLSX oficial</button>
+                <button type="button" id="libro-reserva-cargar" class="libro-reserva-boton secundario">↑ Cargar XLSX descargado</button>
+                <input type="file" id="libro-reserva-archivo" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+                <button type="button" id="libro-reserva-quitar" class="libro-reserva-boton secundario peligro" title="Borra las copias locales actual y anterior y los cambios detectados. No elimina el XLSX original. Google conectado puede volver a descargarlas." disabled>Quitar libro de memoria</button>
             </div>
+            <span class="sites-libro-online-label">LIBRO ONLINE</span>
         </div>
 
         <div class="libro-reserva-control-hoja">
-            <label>
-                Hoja del libro
-                <select id="libro-reserva-hoja" disabled aria-label="Seleccionar hoja del libro"></select>
-            </label>
-            <div>
-                <div id="libro-reserva-meta" class="libro-reserva-meta">
-                    Selecciona un XLSX para detectar sus hojas reales.
-                </div>
+            <div class="sites-libro-hoja-info">
+                <label for="libro-reserva-hoja">HOJA DEL LIBRO</label>
+                <select id="libro-reserva-hoja" disabled aria-label="Seleccionar hoja del libro"><option>Sin hojas</option></select>
+                <div id="libro-reserva-meta" class="libro-reserva-meta">Preparando hojas del libro…</div>
+            </div>
+            <div class="sites-libro-hoja-controles">
                 <div class="libro-reserva-paginacion" aria-label="Navegación por filas">
                     <button type="button" id="libro-reserva-pagina-anterior" disabled aria-label="Filas anteriores">←</button>
-                    <span id="libro-reserva-pagina-estado"></span>
+                    <span id="libro-reserva-pagina-estado" aria-live="polite">Sin filas</span>
                     <button type="button" id="libro-reserva-pagina-siguiente" disabled aria-label="Filas siguientes">→</button>
                 </div>
-            </div>
-        </div>
-
-        <div id="libro-reserva-visor" class="libro-reserva-visor">
-            <div class="libro-reserva-vacio">
-                <div>
-                    <strong>El libro se abrirá aquí, sólo para lectura</strong>
-                    <p>
-                        Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene
-                        únicamente en la memoria temporal de esta pestaña.
-                    </p>
+                <span class="sites-libro-controles-divisor" aria-hidden="true"></span>
+                <span class="sites-libro-zoom-etiqueta">Zoom</span>
+                <div id="sites-libro-zoom-slot" class="sites-libro-zoom-slot" aria-label="Zoom del libro">
+                    <button type="button" disabled aria-label="Alejar Libro">−</button>
+                    <output>100 %</output>
+                    <button type="button" disabled aria-label="Acercar Libro">+</button>
                 </div>
             </div>
         </div>
 
+        <div id="libro-reserva-visor" class="libro-reserva-visor" role="region" tabindex="0" aria-label="Hoja XLSX; desplaza horizontal y verticalmente">
+            <div class="libro-reserva-cargando">Preparando una vista de solo lectura…</div>
+        </div>
+        <div class="sites-libro-visor-pie">
+            <span id="sites-libro-foot-left">Vista de la hoja · formato de planilla</span>
+            <span id="sites-libro-foot-right">Desplázate para ver más columnas y filas</span>
+        </div>
         <div class="libro-reserva-nota">
-            <span>🛡️</span>
-            <span>
-                Esta versión no inicia sesión en Google, no abre el documento compartido, no escribe en Drive,
-                no guarda el XLSX en Supabase y todavía no envía sus datos a Haku.
-            </span>
+            <span aria-hidden="true">ⓘ</span>
+            <span>Haku consulta una copia local en modo solo lectura. El XLSX original no se modifica. En computador se conservan hasta dos versiones en este navegador; Quitar libro de memoria borra ambas.</span>
         </div>
     </section>
 
@@ -6010,6 +6027,7 @@
     <script src="js/servicios.js"></script>
     <script src="js/sites-servicios-v1.js"></script>
     <script src="js/sites-pagos-v1.js"></script>
+    <script src="js/sites-notificaciones-v1.js"></script>
 
 </body>
 

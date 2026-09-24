@@ -114,7 +114,7 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     color: var(--sites-shell-green);
 }
 
-/* Las cinco tarjetas siguen siendo los disparadores del resumen rápido. */
+/* Las cinco métricas filtran el mismo listado de cabañas. */
 #seccion-resumen > .resumen {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -139,6 +139,8 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     background: var(--sites-shell-surface);
     box-shadow: none;
     transform: none;
+    cursor: pointer;
+    touch-action: manipulation;
 }
 
 #seccion-resumen > .resumen .tarjeta:first-child {
@@ -154,6 +156,15 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     background: #f0f6f2;
     box-shadow: none;
     transform: none;
+}
+
+#seccion-resumen > .resumen .tarjeta[aria-pressed="true"] {
+    background: #f0f6f2;
+}
+
+#seccion-resumen > .resumen .tarjeta:focus-visible {
+    outline: 2px solid #72ad89;
+    outline-offset: -3px;
 }
 
 #seccion-resumen > .resumen .tarjeta > span:first-child {
@@ -192,11 +203,6 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     letter-spacing: -.04em;
 }
 
-#seccion-resumen > .resumen .tarjeta-resumen-rapido-activa,
-#seccion-resumen > .resumen .tarjeta-resumen-rapido-esperando {
-    z-index: 1600;
-}
-
 /* El listado usa los artículos de Sites y conserva los controles reales. */
 #seccion-resumen > .panel.sites-resumen-tablero-panel {
     min-width: 0;
@@ -229,6 +235,30 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     margin: 0;
     color: var(--sites-shell-muted);
     font-size: 12px;
+}
+
+#seccion-resumen .sites-resumen-tabla-controles {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#seccion-resumen #resumen-mostrar-todas {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--sites-shell-green);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#seccion-resumen #resumen-mostrar-todas[hidden] { display: none; }
+
+#seccion-resumen #resumen-mostrar-todas:focus-visible {
+    outline: 2px solid #72ad89;
+    outline-offset: 3px;
 }
 
 #seccion-resumen .tabla-contenedor {
@@ -451,34 +481,6 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
         font-size: 19px;
     }
 
-    /* El panel de pulsación sostenida no queda recortado por las cinco
-       columnas estrechas. Todas las tarjetas lo alinean al borde del grupo. */
-    #seccion-resumen > .resumen .tarjeta .tarjeta-resumen-rapido-panel {
-        left: 0;
-        right: auto;
-        width: min(320px, calc(100vw - 30px));
-    }
-
-    #seccion-resumen > .resumen .tarjeta:nth-child(2) .tarjeta-resumen-rapido-panel {
-        left: calc(-1 * (100vw - 30px) / 5);
-    }
-
-    #seccion-resumen > .resumen .tarjeta:nth-child(3) .tarjeta-resumen-rapido-panel {
-        left: calc(-2 * (100vw - 30px) / 5);
-    }
-
-    #seccion-resumen > .resumen .tarjeta:nth-child(4) .tarjeta-resumen-rapido-panel {
-        left: calc(-3 * (100vw - 30px) / 5);
-    }
-
-    #seccion-resumen > .resumen .tarjeta:nth-child(5) .tarjeta-resumen-rapido-panel {
-        left: calc(-4 * (100vw - 30px) / 5);
-    }
-
-    #seccion-resumen > .resumen .tarjeta .tarjeta-resumen-rapido-panel::before {
-        content: none;
-    }
-
     #seccion-resumen > .panel.sites-resumen-tablero-panel {
         border-radius: 9px;
     }
@@ -557,6 +559,8 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
   border-bottom: 1px solid var(--sites-shell-line, #dce5e0);
   background: #fff;
 }
+
+#seccion-resumen .sites-resumen-cabana[hidden] { display: none; }
 
 #seccion-resumen .sites-resumen-cabana:last-child { border-bottom: 0; }
 #seccion-resumen .sites-resumen-cabana:hover { background: #fcfdfc; }
