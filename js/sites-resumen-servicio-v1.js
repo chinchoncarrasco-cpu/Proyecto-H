@@ -8,7 +8,7 @@
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const FECHA = /^\d{4}-\d{2}-\d{2}$/;
     const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
-    const estado = { identidad: null, catalogo: new Map(), ocupada: false, consumida: false, version: 0 };
+    const estado = { identidad: null, catalogo: new Map(), ocupada: false, consumida: false, version: 0, origen: "resumen" };
 
     const elemento = id => document.getElementById(id);
     // Una sesión autenticada jamás puede caer en el guardado local si falla el cliente.
@@ -18,6 +18,8 @@
         try { return String(fechaSeleccionada || "").slice(0, 10); }
         catch { return ""; }
     };
+    const fechaOrigen = () => estado.origen === "servicios"
+        ? String(elemento("sites-servicios-fecha")?.value || "") : fechaActual();
 
     function identidadOperacion(fila) {
         if (!fila) return null;
@@ -51,8 +53,13 @@
             !FECHA.test(fecha) || !/^\d{1,2}$/.test(numeroCabana)) {
             throw new Error("La sesión, el permiso o la fecha del servicio no son válidos.");
         }
-        const article = articuloActual(numeroCabana, fecha);
-        if (!article) throw new Error("El Resumen cambió. Actualiza el día antes de agregar el servicio.");
+        const article = estado.origen === "resumen" ? articuloActual(numeroCabana, fecha) : null;
+        if (estado.origen === "resumen" && !article) {
+            throw new Error("El Resumen cambió. Actualiza el día antes de agregar el servicio.");
+        }
+        if (estado.origen === "servicios" && fechaOrigen() !== fecha) {
+            throw new Error("La fecha de Servicios cambió. Reabre el formulario.");
+        }
 
         const cliente = window.haikuSupabase;
         const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
@@ -65,10 +72,10 @@
         if (!actual || (reservaEsperada && actual.reservaId !== reservaEsperada)) {
             throw new Error("La reserva cambió. Reabre el formulario desde el Resumen actualizado.");
         }
-        if (article.dataset.resumenReservaId !== actual.reservaId) {
+        if (article && article.dataset.resumenReservaId !== actual.reservaId) {
             throw new Error("La reserva visible ya no coincide con Proyecto H. Actualiza el Resumen.");
         }
-        if (article.dataset.resumenEstadiaId !== actual.estadiaId) {
+        if (article && article.dataset.resumenEstadiaId !== actual.estadiaId) {
             throw new Error("La estadía visible ya no coincide con Proyecto H. Actualiza el Resumen.");
         }
 
@@ -268,15 +275,16 @@
         } catch { total.textContent = "—"; }
     }
 
-    async function abrir(numeroCabana) {
+    async function abrir(numeroCabana, opciones = {}) {
         const modal = elemento("resumen-servicio-modal");
         const guardar = elemento("resumen-servicio-guardar");
         if (!modal || !guardar) return;
         const version = ++estado.version;
+        estado.origen = opciones.origen === "servicios" ? "servicios" : "resumen";
         estado.identidad = null;
         estado.catalogo = new Map();
         estado.consumida = false;
-        const fecha = fechaActual();
+        const fecha = estado.origen === "servicios" ? String(opciones.fecha || "") : fechaActual();
         modal.hidden = false;
         guardar.disabled = true;
         elemento("resumen-servicio-observaciones").value = "";
@@ -355,7 +363,7 @@
         guardar.textContent = "Guardando…";
         let rpcIniciado = false;
         try {
-            if (!permiso() || fechaActual() !== identidad.fecha) {
+            if (!permiso() || fechaOrigen() !== identidad.fecha) {
                 throw new Error("La sesión, el permiso o el día seleccionado cambiaron.");
             }
             const valores = valoresFormulario();
@@ -371,9 +379,10 @@
                 throw new Error("El catálogo cambió. Reabre el formulario antes de guardar.");
             }
             const article = articuloActual(identidad.numeroCabana, identidad.fecha);
-            if (!permiso() || fechaActual() !== identidad.fecha ||
-                article?.dataset.resumenReservaId !== identidad.reservaId ||
-                article?.dataset.resumenEstadiaId !== identidad.estadiaId) {
+            if (!permiso() || fechaOrigen() !== identidad.fecha ||
+                (estado.origen === "resumen" && (
+                    article?.dataset.resumenReservaId !== identidad.reservaId ||
+                    article?.dataset.resumenEstadiaId !== identidad.estadiaId))) {
                 throw new Error("La reserva, la estadía o el permiso cambiaron. Reabre el formulario.");
             }
             const payload = validarFormulario(valores, producto, actual);
@@ -453,6 +462,7 @@
     }
 
     window.HAIKU_RESUMEN_SERVICIO_SITES_V1 = Object.freeze({
-        identidadOperacion, validarFormulario, precioCatalogo, abrir, confirmar
+        identidadOperacion, validarFormulario, precioCatalogo, abrir, confirmar,
+        abrirDesdeServicios: (numeroCabana, fecha) => abrir(numeroCabana, { origen: "servicios", fecha })
     });
 })();

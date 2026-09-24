@@ -109,10 +109,18 @@
             if (errorCargos) throw errorCargos;
 
             const cargoIds = (cargos || []).map(c => c.id);
+            let estadosCargo = [];
             let aplicaciones = [];
             let pagos = [];
 
             if (cargoIds.length) {
+                const { data: estadosDb, error: errorEstados } = await cliente
+                    .from("vista_estado_cargos")
+                    .select("cargo_id,monto_ajustado,saldo_cargo")
+                    .in("cargo_id", cargoIds);
+                if (errorEstados) throw errorEstados;
+                estadosCargo = estadosDb || [];
+
                 const { data: apps, error: errorApps } = await cliente
                     .from("pago_aplicaciones")
                     .select("cargo_id,pago_id,monto_aplicado")
@@ -134,6 +142,7 @@
             }
 
             const servicioDbPorId = new Map((serviciosDb || []).map(s => [s.id, s]));
+            const estadoCargoPorId = new Map(estadosCargo.map(e => [e.cargo_id, e]));
             const cargosPorServicio = new Map();
             (cargos || []).forEach(c => {
                 if (!cargosPorServicio.has(c.servicio_id)) cargosPorServicio.set(c.servicio_id, []);
@@ -166,8 +175,9 @@
                     huboCambios = true;
                 }
 
-                const esCortesia = filaDb.tipo_cobro === "cortesia" || Number(filaDb.total || 0) === 0;
+                const esCortesia = filaDb.tipo_cobro === "cortesia";
                 let nuevoEstadoPago = esCortesia ? "no-corresponde" : "pendiente";
+                let saldoVerificado = esCortesia || ["cancelado", "no_show"].includes(estadoOperativo) ? 0 : null;
 
                 if (!esCortesia) {
                     const cargosServicio = cargosPorServicio.get(idDb) || [];
@@ -183,13 +193,33 @@
                         });
                     });
 
+                    // Checkout y Servicios leen el mismo saldo calculado por
+                    // la vista financiera; no se reconstruye desde el precio.
+                    const vista = cargosServicio.length === 1
+                        ? estadoCargoPorId.get(cargosServicio[0].id) : null;
+                    const saldoVista = Number(vista?.saldo_cargo);
+                    const montoAjustado = Number(vista?.monto_ajustado);
+                    if (vista && totalCargo > 0 && Number.isFinite(saldoVista) &&
+                        Number.isFinite(montoAjustado) && montoAjustado >= 0 &&
+                        saldoVista >= 0 && saldoVista <= montoAjustado) {
+                        saldoVerificado = saldoVista;
+                    }
+
                     if (totalCargo > 0 && totalPagado >= totalCargo) {
                         nuevoEstadoPago = "pagado";
                     }
                 }
+                if (["cancelado", "no_show"].includes(estadoOperativo)) {
+                    nuevoEstadoPago = "no-corresponde";
+                    saldoVerificado = (cargosPorServicio.get(idDb) || []).length === 0 ? 0 : null;
+                }
 
                 if (servicio.estadoPago !== nuevoEstadoPago) {
                     servicio.estadoPago = nuevoEstadoPago;
+                    huboCambios = true;
+                }
+                if (servicio.saldoPendienteVerificado !== saldoVerificado) {
+                    servicio.saldoPendienteVerificado = saldoVerificado;
                     huboCambios = true;
                 }
             });
@@ -205,6 +235,7 @@
             }
 
             ocultarAccionesPagoManual();
+            document.dispatchEvent(new CustomEvent("haiku:servicios-finanzas-actualizadas"));
 
             console.info("HAIKU · Servicios V2: estados financieros sincronizados desde Supabase.");
         } catch (error) {

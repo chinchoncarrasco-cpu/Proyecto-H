@@ -1,0 +1,113 @@
+/* Servicios: lectura operativa compacta, sin tarjetas por registro. */
+.sites-servicios{padding:27px 32px 56px;min-width:0;color:#24392e}
+.sites-servicios[hidden]{display:none!important}
+.sites-servicios-heading{margin-bottom:19px}
+.sites-servicios-heading h1{font-size:28px;line-height:1.16;letter-spacing:-.045em;color:#1d3329}
+.sites-servicios-heading p{font-size:13px;color:#718078;margin-top:6px;text-transform:capitalize}
+.sv-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:#fff;border:1px solid #dce6de;border-radius:8px;margin-bottom:20px;box-shadow:0 2px 12px #263c3007}
+.sv-metrics>div{padding:13px 17px;min-width:0;display:grid;gap:3px;border-right:1px solid #e5ece6}
+.sv-metrics>div:last-child{border-right:0}
+.sv-metrics span{font-size:11px;color:#6e8072}
+.sv-metrics strong{font-size:18px;font-weight:720;line-height:1.2;letter-spacing:-.025em;color:#244b37;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-metrics small{font-size:11px;color:#829086;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-surface{background:#fff;border:1px solid #dce6de;border-radius:8px;box-shadow:0 2px 12px #263c3007;margin-bottom:18px;overflow:visible}
+.sv-section-top{display:flex;align-items:end;justify-content:space-between;gap:18px;padding:16px 18px 14px;border-bottom:1px solid #e6eee7}
+.sv-section-top .eyebrow{font-size:10px;margin-bottom:4px}
+.sv-section-top h2{font-size:17px;font-weight:730;line-height:1.2;letter-spacing:-.027em;color:#21392c}
+.sv-section-top p{font-size:11px;color:#7b8a80;margin-top:4px}
+.sv-availability-actions{display:flex;align-items:end;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.sv-date-control{display:grid;gap:4px;font-size:10px;color:#718579;font-weight:720;text-transform:uppercase;letter-spacing:.05em}
+.sv-date-control input{height:32px;border:1px solid #d7e3d9;border-radius:5px;background:#fff;color:#294233;padding:0 7px;font-size:11px;letter-spacing:0}
+.sv-copy-actions{display:flex;gap:5px}
+.sv-copy-actions button,.sv-register{min-height:32px;border:1px solid #d8e4da;border-radius:5px;background:#fff;color:#2b6149;padding:0 10px;font-size:11px;font-weight:670;white-space:nowrap}
+.sv-copy-actions button:hover,.sv-register:hover{background:#f1f7f2}
+.sv-copy-actions button:last-child{background:#eaf3ec;border-color:#d2e3d6}
+.sv-slot-table{padding:0 18px 12px}
+.sv-slot-head,.sv-slot-row{display:grid;grid-template-columns:130px repeat(2,minmax(0,1fr));align-items:center;gap:11px}
+.sv-slot-head{min-height:38px;border-bottom:1px solid #dfe9e2;color:#486a54;font-size:11px;font-weight:730}
+.sv-slot-head>span{display:flex;justify-content:space-between;gap:8px;white-space:nowrap}
+.sv-slot-head small{font-size:10px;color:#83978a;font-weight:590}
+.sv-slot-row{min-height:33px;border-bottom:1px solid #edf1ed;font-size:11px;color:#334a39}
+.sv-slot-row:last-child{border-bottom:0}
+.sv-slot-row strong{font-size:11px;font-weight:690;font-variant-numeric:tabular-nums;color:#2d4a37}
+.sv-slot-free,.sv-slot-occupied{display:inline-flex;align-items:center;gap:4px;justify-content:flex-start;width:max-content;font-size:11px;font-weight:660}
+.sv-slot-free{color:#397b55}.sv-slot-free::before,.sv-slot-occupied::before{content:"";width:6px;height:6px;border-radius:50%;background:#69a779}
+.sv-slot-occupied{color:#8b6941}.sv-slot-occupied::before{background:#c89c58}.sv-slot-occupied small{font-size:10px;color:#9a7b53}
+.sv-agenda .sv-section-top{padding-bottom:12px}.sv-agenda-hint{font-size:10px;color:#8a978e}
+.sv-agenda-list{padding:0 18px 5px}
+.sv-agenda-row{display:grid;grid-template-columns:62px minmax(165px,1.35fr) minmax(165px,1fr) 105px 150px;gap:12px;align-items:center;min-height:58px;padding:8px 0;border-bottom:1px solid #e8efe9;position:relative}
+.sv-agenda-row:last-child{border-bottom:0}
+.sv-agenda-row>time{font-size:15px;font-weight:750;letter-spacing:-.025em;color:#224734;font-variant-numeric:tabular-nums;align-self:start;padding-top:4px}
+.sv-service-main{min-width:0;display:grid;gap:2px}
+.sv-service-main strong{font-size:12px;font-weight:730;color:#263b2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-service-main>span{font-size:11px;color:#6b7d6e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-service-main small{font-size:10px;color:#8c998e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sv-agenda-row.cancelado .sv-service-main strong{color:#776b69}
+.sv-charge{min-width:0;font-size:11px}
+.sv-payment{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.sv-payment strong{font-weight:740}.sv-payment.due{color:#8c6431}.sv-payment.paid{color:#466b55}.sv-payment.courtesy{color:#896532;background:#f9f1df;border-radius:3px;padding:3px 6px;font-weight:710}
+.sv-payment.annulled{color:#a16860;display:grid;gap:1px;white-space:normal}.sv-payment.annulled small{font-size:10px;color:#9b8984}
+.sv-status{width:max-content;border-radius:4px;padding:4px 7px;font-size:10px;font-weight:690}
+.sv-status.pendiente{background:#f5edda;color:#8b6a34}.sv-status.realizado{background:#e5f2e9;color:#33714f}.sv-status.cancelado{background:#f5eae8;color:#9d625b}
+.sv-row-actions{display:flex;justify-content:flex-end;align-items:center;gap:6px;min-width:0}
+.sv-done-action{border:1px solid #d1e3d4;border-radius:5px;background:#fff;color:#2a6a49;min-height:28px;padding:0 7px;font-size:10px;font-weight:680;white-space:nowrap}
+.sv-done-action:hover{background:#eff7f0}
+.sv-more{position:relative}.sv-more summary{list-style:none;width:27px;height:28px;display:grid;place-items:center;border-radius:5px;cursor:pointer;color:#536b5c;font-size:17px;letter-spacing:1px}
+.sv-more summary::-webkit-details-marker{display:none}.sv-more summary:hover,.sv-more[open] summary{background:#edf4ee}
+.sv-menu{position:absolute;right:0;top:29px;z-index:5;min-width:155px;padding:4px;background:#fff;border:1px solid #d7e2d9;border-radius:6px;box-shadow:0 10px 28px #23382d25}
+.sv-menu button{display:block;width:100%;border:0;background:transparent;text-align:left;padding:7px 9px;color:#415d49;font-size:11px;border-radius:4px;white-space:nowrap}.sv-menu button:hover{background:#f1f6f2}.sv-menu button.danger{color:#a4554b}
+.sv-agenda-row.realizado>time,.sv-agenda-row.cancelado>time{color:#6d8172}
+.sv-agenda-row.cancelado{background:#fcfaf9}
+.sv-agenda-row.cancelado::before{content:"";position:absolute;left:-18px;top:7px;bottom:7px;width:2px;background:#d29a91}
+.sv-extras .sv-section-top{border-bottom:0}.sv-extras:has(.sv-agenda-list) .sv-section-top{border-bottom:1px solid #e6eee7}
+.sv-empty{padding:16px 0;color:#7b8a7f;font-size:12px}
+@media(max-width:1200px){.sites-servicios{padding-left:24px;padding-right:24px}.sv-agenda-row{grid-template-columns:55px minmax(145px,1.2fr) minmax(140px,.9fr) 86px 122px;gap:8px}.sv-done-action{font-size:9px}.sv-section-top{align-items:start}.sv-availability-actions{max-width:450px}.sv-slot-head,.sv-slot-row{grid-template-columns:120px repeat(2,minmax(0,1fr))}}
+@media(max-width:780px){.sites-servicios{padding:22px 15px 48px}.sites-servicios-heading h1{font-size:24px}.sites-servicios-heading p{font-size:12px}.sv-metrics{margin-bottom:16px}.sv-metrics>div{padding:10px 9px}.sv-metrics span,.sv-metrics small{font-size:10px}.sv-metrics strong{font-size:15px}.sv-section-top{flex-wrap:wrap;padding:14px}.sv-section-top h2{font-size:16px}.sv-availability-actions{justify-content:space-between;width:100%;max-width:none;align-items:end}.sv-copy-actions{flex-wrap:wrap}.sv-copy-actions button{padding:0 7px;font-size:10px}.sv-slot-table{padding:0 12px 8px}.sv-slot-head,.sv-slot-row{grid-template-columns:110px repeat(2,minmax(0,1fr));gap:5px}.sv-slot-head{font-size:10px}.sv-slot-head>span{display:grid;gap:1px}.sv-slot-row{min-height:32px}.sv-slot-occupied small{display:none}.sv-agenda-list{padding:0 13px 4px}.sv-agenda-row{grid-template-columns:52px minmax(0,1fr) auto;gap:4px 8px;padding:10px 0;min-height:72px}.sv-agenda-row>time{grid-column:1;grid-row:1/3;font-size:14px}.sv-service-main{grid-column:2;grid-row:1}.sv-charge{grid-column:2;grid-row:2}.sv-status{grid-column:3;grid-row:1}.sv-row-actions{grid-column:3;grid-row:2}.sv-agenda-hint{display:none}.sv-agenda-row.cancelado::before{left:-13px}}
+@media(max-width:430px){.sv-metrics>div{padding:9px 7px}.sv-metrics strong{font-size:13px}.sv-metrics small{font-size:9px}.sv-slot-head,.sv-slot-row{grid-template-columns:89px repeat(2,minmax(0,1fr))}.sv-slot-row strong{font-size:10px}.sv-slot-head span{font-size:9px}.sv-slot-free,.sv-slot-occupied{font-size:10px}.sv-service-main strong{font-size:11px}.sv-service-main span{font-size:10px}.sv-payment{font-size:10px}.sv-done-action{padding:0 5px;max-width:96px;white-space:normal;line-height:1.1}.sv-date-control input{max-width:140px}.sv-copy-actions{gap:4px}.sv-copy-actions button{min-height:29px}}
+
+/* El shell y los módulos antiguos mantienen sus nodos para los handlers reales;
+   sólo la composición Sites queda visible en Servicios. */
+#seccion-servicios > :not(#sites-servicios-root){display:none!important}
+#seccion-servicios .sites-servicios{width:100%;max-width:none;box-sizing:border-box}
+#seccion-servicios .sites-servicios .sv-copy-actions button,
+#seccion-servicios .sites-servicios .sv-register{min-height:32px;padding:0 10px;background:#fff;border:1px solid #d8e4da;border-radius:5px;color:#2b6149;font-size:11px;font-weight:670}
+#seccion-servicios .sites-servicios .sv-copy-actions button:last-child{background:#eaf3ec;border-color:#d2e3d6}
+#seccion-servicios .sites-servicios .sv-done-action{min-height:28px;padding:0 7px;background:#fff;border:1px solid #d1e3d4;border-radius:5px;color:#2a6a49;font-size:10px;font-weight:680}
+#seccion-servicios .sites-servicios .sv-more .sv-menu button{display:block;width:100%;min-height:0;padding:7px 9px;background:transparent;border:0;color:#415d49;text-align:left;font-size:11px}
+.sites-servicios-eyebrow{font-size:10px;font-weight:750;letter-spacing:.18em;color:#567766;text-transform:uppercase}
+.sites-servicios-heading{margin-bottom:19px}
+.sites-servicios-heading h1{margin:4px 0 0;font-size:28px;line-height:1.16;letter-spacing:-.045em;color:#1d3329}
+.sites-servicios-heading p:last-child{margin:6px 0 0;color:#718078;font-size:13px;text-transform:capitalize}
+.sites-servicios-cargando{min-height:170px;display:grid;place-items:center;background:#fff;border:1px solid #dce6de;border-radius:8px;color:#60786a}
+.sites-servicios-copia-estado{min-height:0;margin:0 18px 8px;color:#2b6149;font-size:11px}
+.sv-slot-conflict,.sv-slot-unknown{font-size:11px;color:#995b48}
+.sv-agenda .sv-empty,.sv-extras .sv-empty{padding:18px}
+.sv-payment{white-space:normal}
+.sv-payment.annulled small{display:block}
+.sv-menu{z-index:15}
+.sites-servicios-selector[hidden]{display:none!important}
+.sites-servicios-selector{position:fixed;z-index:100;inset:0;background:#13261f9b;display:flex;justify-content:flex-end}
+.sites-servicios-selector-panel{width:min(470px,100%);height:100%;background:#fff;box-shadow:-12px 0 35px #10271f35;display:flex;flex-direction:column}
+.sites-servicios-selector-panel header{display:flex;justify-content:space-between;align-items:start;padding:22px 24px;border-bottom:1px solid #dce6de}
+.sites-servicios-selector-panel header small{color:#668675;font-size:10px;font-weight:750;letter-spacing:.13em}
+.sites-servicios-selector-panel h2{margin:4px 0 0;font-size:20px;color:#263d30}
+.sites-servicios-selector-panel header button{border:0;background:none;color:#597362;font-size:26px;cursor:pointer}
+.sites-servicios-selector-body{padding:20px 24px;overflow:auto;flex:1;color:#536b5b;font-size:13px}
+.sites-servicios-selector-body p{margin:0 0 14px}
+#sites-servicios-cabanas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#sites-servicios-cabanas button{border:1px solid #d7e2d9;background:#fff;border-radius:5px;padding:11px 10px;text-align:left;color:#285840;cursor:pointer;font-weight:670}
+#sites-servicios-cabanas button:hover{background:#f1f7f2}
+#sites-servicios-selector-estado{margin-top:16px}
+.sites-servicios-selector-panel footer{padding:13px 24px;border-top:1px solid #dce6de;text-align:right}
+.sites-servicios-selector-panel footer button{border:1px solid #d7e2d9;background:#fff;border-radius:5px;padding:9px 13px;color:#285840;cursor:pointer}
+#seccion-servicios .sites-servicios-selector-panel header button{min-height:0;padding:0;border:0;background:transparent;color:#597362;font-size:26px}
+#seccion-servicios .sites-servicios-selector-panel footer button{background:#fff;border:1px solid #d7e2d9;color:#285840}
+#seccion-servicios .sites-servicios-selector-panel footer #sites-servicios-realizado-confirmar{background:#245b4a;border-color:#245b4a;color:#fff}
+#seccion-servicios .sites-servicios-selector-panel footer #sites-servicios-realizado-confirmar[hidden]{display:none}
+#seccion-servicios .sites-servicios-selector-panel footer #sites-servicios-cancelar-confirmar{background:#92534a;border-color:#92534a;color:#fff}
+.sites-servicios-realizado-resumen{border:1px solid #dce6de;border-radius:6px;padding:12px;margin:12px 0;display:grid;gap:6px;color:#284235}
+.sites-servicios-realizado-resumen strong{font-size:14px}
+.sites-servicios-realizado-resumen small{font-size:11px;color:#718078}
+#sites-servicios-realizado-contenido ul{margin:0;padding-left:19px;display:grid;gap:7px;color:#563f34}
+@media(max-width:780px){.sites-servicios .sv-agenda-row{grid-template-columns:54px minmax(0,1fr) auto}.sites-servicios .sv-service-main>span{white-space:normal}.sites-servicios .sv-row-actions{justify-content:flex-end}.sites-servicios .sv-slot-occupied{width:auto}.sites-servicios .sv-slot-head>span{white-space:normal}}
+@media(max-width:500px){.sites-servicios .sv-metrics{grid-template-columns:1fr}.sites-servicios .sv-metrics>div{border-right:0;border-bottom:1px solid #e5ece6}.sites-servicios .sv-metrics>div:last-child{border-bottom:0}.sites-servicios .sv-agenda-row{grid-template-columns:48px minmax(0,1fr);gap:6px}.sites-servicios .sv-agenda-row>time{grid-column:1;grid-row:1/4}.sites-servicios .sv-service-main{grid-column:2;grid-row:1}.sites-servicios .sv-charge{grid-column:2;grid-row:2}.sites-servicios .sv-status{grid-column:2;grid-row:3}.sites-servicios .sv-row-actions{grid-column:2;grid-row:4;justify-content:flex-start}.sites-servicios .sv-slot-head,.sites-servicios .sv-slot-row{grid-template-columns:85px repeat(2,minmax(0,1fr))}.sites-servicios .sv-availability-actions{display:grid}.sites-servicios .sv-copy-actions{display:flex;flex-wrap:wrap}}

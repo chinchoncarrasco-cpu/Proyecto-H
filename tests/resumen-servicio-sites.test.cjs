@@ -37,7 +37,8 @@ function entorno() {
         "resumen-servicio-programacion",
         "resumen-servicio-motivo-wrap", "resumen-servicio-motivo-cortesia",
         "resumen-servicio-observaciones", "resumen-servicio-sites-estado", "resumen-servicio-kicker",
-        "resumen-servicio-contexto"].forEach(id => campo(id));
+        "resumen-servicio-contexto", "sites-servicios-fecha"].forEach(id => campo(id));
+    campos.get("sites-servicios-fecha").value = "2026-09-23";
     campos.get("resumen-servicio-modal").hidden = true;
     campos.get("resumen-servicio-guardar").textContent = "Guardar servicio";
     campos.get("resumen-servicio-cantidad").value = "1";
@@ -346,4 +347,20 @@ test("modo local sin sesión conserva la ruta heredada y no intercepta", () => {
     assert.match(source, /evento\.stopImmediatePropagation\(\)/);
     assert.doesNotMatch(source, /\.insert\(|\.update\(|\.delete\(/);
     assert.equal(h.api.precioCatalogo(catalogo, 1, 2), 30000);
+});
+
+test("Servicios abre el mismo drawer con identidad RPC sin depender del artículo de Resumen", async () => {
+    const h = entorno();
+    h.article.dataset.resumenReservaId = SERVICIO;
+    await h.api.abrirDesdeServicios("6", "2026-09-23");
+    assert.equal(h.campos.get("resumen-servicio-guardar").disabled, false);
+    assert.match(h.campos.get("resumen-servicio-contexto").textContent, /Valentina Araya/);
+    h.campos.get("resumen-servicio-producto").value = "tinajaTonel";
+    h.campos.get("resumen-servicio-hora").value = "19:15";
+    h.campos.get("resumen-servicio-personas").value = "2";
+    const pendiente = h.api.confirmar();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.llamadas.filter(x => x.nombre === "haiku_registrar_servicio").length, 1);
+    h.resolver();
+    assert.equal(await pendiente, true, h.campos.get("resumen-servicio-sites-estado").textContent);
 });

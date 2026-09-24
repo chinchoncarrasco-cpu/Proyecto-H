@@ -69,6 +69,82 @@ async function propuesta(t,cli){
  return p;
 }
 
+test('manual selecciona el ID exacto y omite sólo filtros preventivos exclusivos de Haku',async()=>{
+ const historico={...cargo,id:'c0',estado:'anulado'};
+ const t=datos({servicios:[structuredClone(servicio),{...servicio,id:'s2'}],
+  cargos:[structuredClone(cargo),historico],vista_estado_cargos:[structuredClone(vista)]});
+ const cli=cliente(t),sinReloj={...opciones(cli),leerTiempo:async()=>null};
+ const manual=await R.prepararManual('s1',sinReloj);
+ assert.equal(manual.estado,'propuesta');
+ assert.equal(manual.candidato.id,'s1');
+ assert.equal(manual.p_estado_esperado.cargos.length,2);
+ assert.equal(cli.envios.length,0);
+ const haku=await R.preparar(orden,sinReloj);
+ assert.equal(haku.estado,'multiples');
+ const tUnico=datos({cargos:[structuredClone(cargo),historico],
+  vista_estado_cargos:[structuredClone(vista)]});
+ const hakuUnico=await R.preparar(orden,{...opciones(cliente(tUnico)),leerTiempo:async()=>null});
+ assert.equal(hakuUnico.estado,'bloqueada');
+ assert.match(hakuUnico.mensaje,/automáticamente/);
+ assert.ok(hakuUnico.evaluacion.razones.some(x=>/hora del servidor/.test(x)));
+ assert.ok(hakuUnico.evaluacion.razones.some(x=>/cargo o su saldo/.test(x)));
+});
+
+test('manual conserva los bloqueos canónicos y sus razones concretas',async()=>{
+ for(const [extra,razon] of [
+  [{servicios:[{...servicio,fecha_servicio:'2026-09-24'}]},/fecha del servicio es futura/],
+  [{servicios:[{...servicio,estado_servicio:'cancelado'}]},/estado operativo/],
+  [{reservas:[{...reserva,bove_checkout:'BOVE-1'}]},/BOVE/],
+  [{cargo_ajustes:[{id:'aj1',cargo_id:'c1'}]},/ajustes históricos/]
+ ]){
+  const cli=cliente(datos(extra));
+  const p=await R.prepararManual('s1',opciones(cli));
+  assert.equal(p.estado,'bloqueada');
+  assert.match(p.mensaje,/No se puede marcar este servicio/);
+  assert.ok(p.evaluacion.razones.some(x=>razon.test(x)),String(razon));
+  assert.equal(cli.envios.length,0);
+ }
+});
+
+test('manual revalida con sus propias reglas y detiene una propuesta obsoleta',async()=>{
+ const t=datos(),cli=cliente(t);
+ const p=await R.prepararManual('s1',{...opciones(cli),leerTiempo:async()=>null});
+ assert.equal(p.estado,'propuesta');
+ t.cargos[0].monto=31000;
+ const resultado=await R.confirmar(p,{operationId});
+ assert.equal(resultado.estado,'obsoleta');
+ assert.equal(resultado.nueva.estado,'bloqueada');
+ assert.ok(resultado.nueva.evaluacion.razones.some(x=>/cargo o su saldo/.test(x)));
+ assert.doesNotMatch(resultado.mensaje,/Preparé|automáticamente/);
+ assert.equal(cli.envios.length,0);
+});
+
+test('manual confirma con el RPC protegido, mantiene cargo y saldo y expone rechazo canónico',async()=>{
+ const t=datos(),cli=cliente(t),sinReloj={...opciones(cli),leerTiempo:async()=>null};
+ const p=await R.prepararManual('s1',sinReloj);
+ assert.equal(p.estado,'propuesta');
+ const finanzas=structuredClone({cargos:t.cargos,pagos:t.pagos,
+  aplicaciones:t.pago_aplicaciones,ajustes:t.cargo_ajustes,estados:t.vista_estado_cargos});
+ cli.rpc=async(nombre,payload)=>{cli.envios.push({nombre,payload:structuredClone(payload)});
+  aplicar(t,payload);return {data:respuesta(payload),error:null};};
+ const r=await R.confirmar(p,{operationId});
+ assert.equal(r.estado,'realizado');
+ assert.equal(cli.envios.length,1);
+ assert.equal(cli.envios[0].nombre,'haiku_marcar_servicio_realizado_asistente_v1');
+ assert.deepEqual({cargos:t.cargos,pagos:t.pagos,aplicaciones:t.pago_aplicaciones,
+  ajustes:t.cargo_ajustes,estados:t.vista_estado_cargos},finanzas);
+
+ const bloqueado=datos(),cliBloqueado=cliente(bloqueado);
+ const pBloqueado=await R.prepararManual('s1',{...opciones(cliBloqueado),leerTiempo:async()=>null});
+ cliBloqueado.rpc=async(nombre,payload)=>{cliBloqueado.envios.push({nombre,payload});
+  return {data:null,error:new Error('El servicio tiene fecha futura; requiere revisión humana')};};
+ const resultado=await R.confirmar(pBloqueado,{operationId:otroId});
+ assert.equal(resultado.estado,'revision_humana');
+ assert.match(resultado.mensaje,/fecha futura/);
+ assert.doesNotMatch(resultado.mensaje,/automáticamente/);
+ assert.equal(bloqueado.servicios[0].estado_servicio,'programado');
+});
+
 test('confirmación real usa sólo el RPC oficial y acredita servicio, cargo, saldo y auditoría',async()=>{
  const t=datos(),cli=cliente(t),p=await propuesta(t,cli);
  const finanzas=structuredClone({cargos:t.cargos,pagos:t.pagos,aplicaciones:t.pago_aplicaciones,

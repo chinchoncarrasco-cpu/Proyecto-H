@@ -336,12 +336,12 @@
         programarDecoracion(20);
     }
 
-    async function cancelarServicio(id) {
+    async function cancelarServicio(id, opciones = {}) {
         if (procesando) return;
         const servicio = listaServicios().find(s => String(s.id) === String(id));
         if (!servicio) return;
 
-        if (!confirm(
+        if (!opciones.confirmadoDesdeSites && !confirm(
             `¿Marcar como CANCELADA esta solicitud?\n\n${servicio.hora || ""} · ${servicio.nombre || "Servicio"}\nCAB ${servicio.numeroCabana || ""} · ${servicio.titular || ""}\n\nEl cobro pendiente pasará a $0, dejará de aparecer en Check-out y el horario quedará disponible.`
         )) return;
 

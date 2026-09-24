@@ -105,7 +105,7 @@
     estado_pago:x.estado_pago??null,ajuste_neto:x.ajuste_neto??null})),
    aplicaciones:l.aplicaciones,pagos:l.pagos,ajustes:l.ajustes};
  }
- function evaluarElegibilidad(l){
+ function evaluarElegibilidad(l,{manual=false}={}){
   const s=l.servicio,r=l.reserva,e=l.estadia,cat=l.catalogo,razones=[];
   if(s.estado_servicio==='realizado')return {estado:'already_realized',elegible:false,razones:[]};
   if(!['programado','en_proceso'].includes(s.estado_servicio))razones.push('El estado operativo requiere revisión.');
@@ -118,7 +118,17 @@
   if(cat.id!==s.catalogo_servicio_id||cat.activo!==true)razones.push('El catálogo requiere revisión.');
   if(s.hora_inicio&&s.hora_fin&&s.hora_fin<=s.hora_inicio)razones.push('El horario del servicio requiere revisión.');
   const tiempo=l.reloj?formatoChile(l.reloj):null;
-  if(!tiempo||!s.fecha_servicio||s.fecha_servicio>tiempo.dia||
+  if(manual){
+   // El RPC comprueba now() en la transacción. Si el GET no expone Date,
+   // la acción manual puede llegar al RPC; Haku conserva su bloqueo preventivo.
+   if(!s.fecha_servicio)razones.push('Falta la fecha del servicio.');
+   else if(tiempo&&s.fecha_servicio>tiempo.dia)razones.push('La fecha del servicio es futura.');
+   else if(tiempo&&s.fecha_servicio===tiempo.dia&&
+      (!s.hora_fin||hora(s.hora_fin)>tiempo.hora))
+    razones.push('El horario del servicio aún no termina.');
+   if(s.estado_servicio==='en_proceso'&&!s.hora_fin)
+    razones.push('Falta la hora de término del servicio en proceso.');
+  }else if(!tiempo||!s.fecha_servicio||s.fecha_servicio>tiempo.dia||
      (s.fecha_servicio===tiempo.dia&&(!s.hora_fin||hora(s.hora_fin)>tiempo.hora))||
      (s.estado_servicio==='en_proceso'&&!s.hora_fin))
    razones.push('No pude verificar con la hora del servidor Supabase que el servicio ya terminó.');
@@ -130,8 +140,9 @@
   if(s.tipo_cobro==='normal'){
    const cargo=activos.length===1?activos[0]:null,vista=cargo?l.estados.find(x=>x.cargo_id===cargo.id):null;
    if(!(num(s.total)>0)||!cargo||num(cargo.monto)!==num(s.total)||cargo.concepto!==cat.nombre||cargo.moneda!=='CLP'||
-      l.aplicaciones.some(x=>x.cargo_id!==cargo?.id)||l.estados.length!==l.cargos.length||
-      l.estados.some(x=>!l.cargos.some(y=>y.id===x.cargo_id))||!vista||
+      l.aplicaciones.some(x=>x.cargo_id!==cargo?.id)||
+      (!manual&&(l.estados.length!==l.cargos.length||
+       l.estados.some(x=>!l.cargos.some(y=>y.id===x.cargo_id))))||!vista||
       num(vista.aplicado_neto)==null||num(vista.aplicado_neto)<0||num(vista.aplicado_neto)>num(cargo?.monto)||
       num(vista.monto_ajustado)!==num(cargo?.monto)||num(vista.saldo_cargo)!==num(cargo?.monto)-num(vista.aplicado_neto))
     razones.push('El cargo o su saldo requiere revisión.');
@@ -157,6 +168,7 @@
     `El estado financiero no cambiará. El cargo seguirá pendiente por ${dinero(saldo)}.`};
  }
  async function preparar(texto,opciones={}){
+  const manual=opciones.modoManual===true;
   const q=typeof texto==='string'?interpretar(texto,{diaActual:opciones.diaActual}):texto;
   if(!q)return {estado:'no_aplica'};
   if(q.errores?.length)return {estado:'incompleta',consulta:q,
@@ -167,26 +179,39 @@
    cargar=opciones.cargarEstado||cargarEstado,leerTiempo=opciones.leerTiempo||leerReloj;
   try{
    const candidatos=await buscar(q,{cliente});
-   if(!candidatos.length)return {estado:'no_encontrado',consulta:q,mensaje:'No encontré un servicio persistido que coincida con esos datos.'};
+   if(!candidatos.length)return {estado:'no_encontrado',consulta:q,mensaje:manual?
+    'No se encontró el servicio seleccionado.':'No encontré un servicio persistido que coincida con esos datos.'};
    if(candidatos.length>1)return {estado:'multiples',consulta:q,candidatos,
     mensaje:`Encontré ${candidatos.length} servicios. Indica fecha, hora, tipo o cabaña para identificar uno solo.`};
    const encontrado=candidatos[0],lectura=await cargar(encontrado,{cliente,leerTiempo});
    if(lectura.servicio.id!==encontrado.id||lectura.servicio.actualizado_en!==encontrado.actualizado_en)
     throw Error('El servicio cambió durante la lectura; prepara una propuesta nueva.');
    const candidato={...encontrado,...lectura.servicio,reserva:lectura.reserva,catalogo:lectura.catalogo};
-   const evaluacion=evaluarElegibilidad(lectura);
+   const evaluacion=evaluarElegibilidad(lectura,{manual});
    if(evaluacion.estado==='already_realized')return {estado:'already_realized',consulta:q,candidato,
     mensaje:'Este servicio ya está marcado como realizado.'};
    if(!evaluacion.elegible)return {estado:'bloqueada',consulta:q,candidato,evaluacion,lectura,
-    mensaje:'No puedo marcar automáticamente este servicio como realizado. Requiere revisión.'};
+    mensaje:manual?'No se puede marcar este servicio como realizado.':
+     'No puedo marcar automáticamente este servicio como realizado. Requiere revisión.'};
    const esperado=estadoEsperado(lectura),p={estado:'propuesta',consulta:q,candidato,lectura,
     p_estado_esperado:esperado,mensaje:'Propuesta preparada. Proyecto H no ha cambiado.'};
-   propuestas.set(p,{consulta:q,servicioId:candidato.id,cliente,buscar,cargar,leerTiempo,permiso,
+   propuestas.set(p,{consulta:q,servicioId:candidato.id,cliente,buscar,cargar,leerTiempo,permiso,manual,
     snapshot:JSON.stringify(esperado),lecturaInicial:lectura,candidatoInicial:candidato,
     invalidada:false,enCurso:null,operationId:null,payload:null,resultado:null,
     rpcRespondioExito:false,rpcAlreadyRealized:false});
    return p;
-  }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
+  }catch(error){return {estado:'bloqueada',consulta:q,mensaje:manual?
+   `No se pudo completar la lectura de Proyecto H. ${error?.message||error}`:
+   `No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
+ }
+ async function buscarServicioExacto(q,{cliente}){
+  return filas(()=>cliente.from('servicios')
+   .select('id,reserva_id,estadia_id,catalogo_servicio_id,actualizado_en')
+   .eq('id',q.servicio_id));
+ }
+ function prepararManual(servicioId,opciones={}){
+  return preparar({intencion:INTENCION,servicio_id:servicioId,errores:[]},
+   {...opciones,modoManual:true,buscar:buscarServicioExacto});
  }
  async function releer(o){
   const candidatos=await o.buscar(o.consulta,{cliente:o.cliente});
@@ -196,13 +221,14 @@
   return {candidato:{...candidatos[0],...lectura.servicio,reserva:lectura.reserva,catalogo:lectura.catalogo},
    lectura,snapshot:JSON.stringify(estadoEsperado(lectura))};
  }
- const coincidePropuesta=(o,actual)=>actual&&evaluarElegibilidad(actual.lectura).elegible&&
+ const coincidePropuesta=(o,actual)=>actual&&evaluarElegibilidad(actual.lectura,{manual:o.manual}).elegible&&
   actual.snapshot===o.snapshot;
  async function obsoleta(o,mensaje='El servicio, la reserva o las finanzas cambiaron. Preparé una nueva evaluación.'){
   o.invalidada=true;
   const nueva=await preparar(o.consulta,{cliente:o.cliente,buscar:o.buscar,cargarEstado:o.cargar,
-   leerTiempo:o.leerTiempo,permiso:o.permiso});
-  return {estado:'obsoleta',mensaje,nueva};
+   leerTiempo:o.leerTiempo,permiso:o.permiso,modoManual:o.manual});
+  return {estado:'obsoleta',mensaje:o.manual?
+   'El servicio, la reserva o las finanzas cambiaron. Revisa el estado actual antes de continuar.':mensaje,nueva};
  }
  function errorRpc(error){
   const codigo=String(error?.code||''),mensaje=String(error?.message||error||'');
@@ -275,7 +301,9 @@
   let actual;
   try{actual=await releer(o);}catch(error){return o.payload
    ?{estado:'incierto',mensaje:'No pude comprobar el estado real. Sólo volveré a leer antes de considerar un reintento.',propuesta:p}
-   :{estado:'bloqueada',mensaje:`No pude revalidar la propuesta. ${error?.message||error}`};}
+    :{estado:'bloqueada',mensaje:o.manual?
+      `No se pudo revalidar el servicio. ${error?.message||error}`:
+      `No pude revalidar la propuesta. ${error?.message||error}`};}
   if(o.payload){
    try{if(await verificarCambio(o,actual))return resultadoExito(o,actual,'relectura');}
    catch(_){return {estado:'incierto',mensaje:'No pude acreditar la operación por lectura. Sólo volveré a leer.',propuesta:p};}
@@ -297,7 +325,9 @@
    const clase=errorRpc(error);
    if(clase==='stale')return obsoleta(o);
    if(clase==='sin_permiso'){o.invalidada=true;return {estado:'sin_permiso',mensaje:'No tienes permiso para modificar este servicio.'};}
-   if(clase==='revision_humana'){o.invalidada=true;return {estado:'revision_humana',mensaje:'El servicio requiere revisión humana. No se realizó otro intento.'};}
+   if(clase==='revision_humana'){o.invalidada=true;return {estado:'revision_humana',mensaje:o.manual?
+    `No se puede marcar este servicio como realizado. ${error?.message||error}`:
+    'El servicio requiere revisión humana. No se realizó otro intento.'};}
    return verificarEstado(p);
   }
   if(respuesta?.estado==='already_realized'&&respuesta.ok===true&&
@@ -385,7 +415,7 @@
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
  const api=Object.freeze({RPC_REALIZADO_PRODUCCION_HABILITADO,interpretar,leerReloj,cargarEstado,estadoEsperado,
-  evaluarElegibilidad,finanzasVisuales,preparar,confirmar,verificarEstado,renderizar});
+  evaluarElegibilidad,finanzasVisuales,preparar,prepararManual,confirmar,verificarEstado,renderizar});
  root.HAIKU_ASISTENTE_SERVICIOS_REALIZADO_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();

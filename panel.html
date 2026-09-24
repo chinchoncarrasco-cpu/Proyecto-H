@@ -34,6 +34,7 @@
                 html = html.replace('<link rel="stylesheet" href="css/sites-resumen-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-calendario-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-cabanas-v1.css">', "");
+                html = html.replace('<link rel="stylesheet" href="css/sites-servicios-v1.css">', "");
                 const estiloArranquePrivado = `<style id="haiku-privacidad-arranque-style">html.haiku-privacidad-arranque::before{content:"";position:fixed;inset:0;z-index:2147483647;display:block;background:#101511;pointer-events:all;}</style>`;
                 const scriptArranquePrivado = `<script>(function(){var raiz=document.documentElement;var terminado=false;function liberar(){if(terminado)return;terminado=true;raiz.classList.remove('haiku-privacidad-arranque');}function loginListo(){var overlay=document.querySelector('.haiku-auth-overlay');if(!overlay||overlay.hidden||window.haikuSesion)return false;var estado=document.getElementById('haiku-auth-estado');var texto=(estado&&estado.textContent||'').trim();if(!texto)return false;return !/comprobando\\s+sesión|validando\\s+acceso/i.test(texto);}function privacidadLista(){try{var api=window.HAIKU_PRIVACIDAD;var estado=api&&typeof api.estado==='function'?api.estado():null;return !!(estado&&(estado.modo!=='oculto'||estado.armado===true));}catch(e){return false;}}function revisar(){if(loginListo()||privacidadLista()){requestAnimationFrame(function(){requestAnimationFrame(liberar);});return;}setTimeout(revisar,16);}revisar();})();<` + '/script>';
                 html = html.replace('<html lang="es">','<html lang="es" class="haiku-privacidad-arranque">');
@@ -43,7 +44,7 @@
                 // La prueba visual del Resumen debe cargar siempre los drawers y sus puentes vigentes.
                 for (const modulo of ["app", "calendario", "sites-resumen-drawer-v1", "sites-resumen-reserva-v1",
                     "sites-resumen-nota-v1", "sites-resumen-servicio-v1", "sites-resumen-pago-v1",
-                    "supabase-resumen-tablero-v1", "checklist-optimista-v1", "sites-cabanas-v1"]) {
+                    "supabase-resumen-tablero-v1", "checklist-optimista-v1", "sites-cabanas-v1", "sites-servicios-v1"]) {
                     html = html.replace(`src="js/${modulo}.js"`, `src="js/${modulo}.js?v=${version}"`);
                 }
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/supabase-pagos-v4-fix.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-webpay-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-cierre-final-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-cierre-modern-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-historial-v1.css?v=${version}">
@@ -54,6 +55,7 @@
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-resumen-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-calendario-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-cabanas-v1.css?v=${version}">\n</head>`);
+                html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-servicios-v1.css?v=${version}">\n</head>`);
                 const marca = "<!-- JAVASCRIPT -->";
                 if (!html.includes(marca)) throw new Error("No se encontró el punto de inserción JAVASCRIPT en index.html");
                 const scriptsSupabaseBase = [

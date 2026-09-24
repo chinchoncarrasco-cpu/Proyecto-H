@@ -405,7 +405,10 @@
     window.HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1 = Object.freeze({
         renderizar,
         textoWhatsApp,
-        horariosDisponibles
+        horariosDisponibles,
+        horarios: HORARIOS,
+        serviciosTinajaDelDia,
+        estadoHorario
     });
 
     cargarEstilos();

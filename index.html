@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="css/sites-resumen-v1.css">
     <link rel="stylesheet" href="css/sites-calendario-v1.css">
     <link rel="stylesheet" href="css/sites-cabanas-v1.css">
+    <link rel="stylesheet" href="css/sites-servicios-v1.css">
 </head>
 
 <body>
@@ -5266,6 +5267,36 @@
 
 <section id="seccion-servicios" class="seccion-app">
 
+    <div id="sites-servicios-root" class="sites-servicios">
+        <header class="sites-servicios-heading">
+            <p class="sites-servicios-eyebrow">SERVICIOS COMPLEMENTARIOS</p>
+            <h1>Servicios</h1>
+            <p id="sites-servicios-fecha-label">Comprobando servicios de Proyecto H…</p>
+        </header>
+        <div id="sites-servicios-contenido" aria-live="polite"></div>
+        <div id="sites-servicios-selector" class="sites-servicios-selector" hidden>
+            <div class="sites-servicios-selector-panel" role="dialog" aria-modal="true" aria-labelledby="sites-servicios-selector-titulo">
+                <header><div><small>SERVICIOS</small><h2 id="sites-servicios-selector-titulo">Registrar servicio</h2></div><button type="button" data-sites-servicios-cerrar aria-label="Cerrar">×</button></header>
+                <div class="sites-servicios-selector-body"><p>Selecciona una cabaña con reserva vigente para la fecha elegida.</p><div id="sites-servicios-cabanas"></div><p id="sites-servicios-selector-estado" role="status"></p></div>
+                <footer><button type="button" data-sites-servicios-cerrar>Cerrar</button></footer>
+            </div>
+        </div>
+        <div id="sites-servicios-realizado" class="sites-servicios-selector" hidden>
+            <div class="sites-servicios-selector-panel" role="dialog" aria-modal="true" aria-labelledby="sites-servicios-realizado-titulo">
+                <header><div><small>SERVICIOS</small><h2 id="sites-servicios-realizado-titulo">Marcar servicio como realizado</h2></div><button type="button" data-sites-servicios-realizado-cerrar aria-label="Cerrar">×</button></header>
+                <div class="sites-servicios-selector-body" id="sites-servicios-realizado-contenido" role="status"></div>
+                <footer><button type="button" data-sites-servicios-realizado-cerrar>Cerrar</button><button type="button" id="sites-servicios-realizado-confirmar" hidden>Confirmar cambio</button></footer>
+            </div>
+        </div>
+        <div id="sites-servicios-cancelar" class="sites-servicios-selector" hidden>
+            <div class="sites-servicios-selector-panel" role="dialog" aria-modal="true" aria-labelledby="sites-servicios-cancelar-titulo">
+                <header><div><small>SERVICIOS</small><h2 id="sites-servicios-cancelar-titulo">Cancelar servicio</h2></div><button type="button" data-sites-servicios-cancelar-cerrar aria-label="Cerrar">×</button></header>
+                <div class="sites-servicios-selector-body" id="sites-servicios-cancelar-contenido"></div>
+                <footer><button type="button" data-sites-servicios-cancelar-cerrar>Volver</button><button type="button" id="sites-servicios-cancelar-confirmar">Cancelar servicio</button></footer>
+            </div>
+        </div>
+    </div>
+
     <header class="cabecera">
         <div>
             <p class="eyebrow">SERVICIOS COMPLEMENTARIOS</p>
@@ -6198,6 +6229,7 @@
     <script src="js/cierre.js"></script>
     <script src="js/pagos.js"></script>
     <script src="js/servicios.js"></script>
+    <script src="js/sites-servicios-v1.js"></script>
 
 </body>
 
