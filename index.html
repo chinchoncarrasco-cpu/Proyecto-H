@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="css/sites-calendario-v1.css">
     <link rel="stylesheet" href="css/sites-cabanas-v1.css">
     <link rel="stylesheet" href="css/sites-cierre-v1.css">
+    <link rel="stylesheet" href="css/sites-historial-v1.css">
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
     <link rel="stylesheet" href="css/sites-pagos-v1.css">
 </head>
@@ -5305,7 +5306,42 @@
      SECCIÓN HISTORIAL
 ======================================== -->
 
-<section id="seccion-historial" class="seccion-app">
+<section id="seccion-historial" class="seccion-app sites-history">
+    <div class="sites-history-workspace">
+        <header class="sites-history-heading">
+            <div>
+                <span class="sites-history-overline">TRAZABILIDAD</span>
+                <h1>Historial y auditoría</h1>
+                <p>Actividad operativa y detalle técnico de los cambios.</p>
+            </div>
+            <button type="button" class="sites-history-refresh" data-historial-refresh>↻&nbsp; Actualizar</button>
+        </header>
+        <div class="sites-history-tabs" role="tablist" aria-label="Tipo de historial">
+            <button type="button" role="tab" aria-selected="true" data-historial-modo="historial">Historial</button>
+            <button type="button" role="tab" aria-selected="false" data-historial-modo="auditoria">Auditoría</button>
+        </div>
+        <section class="sites-history-shell" aria-label="Eventos del historial">
+            <div class="sites-history-filters" data-historial-filtros>
+                <label><span>Buscar</span><input type="search" data-historial-buscar placeholder="Reserva, huésped, cabaña, servicio, ID..." autocomplete="off"></label>
+                <label><span>Desde</span><input type="date" data-historial-desde></label>
+                <label><span>Hasta</span><input type="date" data-historial-hasta></label>
+                <label><span>Tipo</span><select data-historial-tipo><option value="">Todos</option></select></label>
+            </div>
+            <div class="sites-history-list-bar">
+                <strong data-historial-contador>Preparando historial…</strong>
+                <span data-historial-fuente>Actividad registrada</span>
+                <button type="button" data-historial-limpiar hidden>Limpiar filtros</button>
+            </div>
+            <p class="sites-history-error" data-historial-error hidden></p>
+            <div class="sites-history-results" data-historial-lista aria-live="polite">
+                <p class="sites-history-loading">Cargando actividad real…</p>
+            </div>
+            <div class="sites-history-more" data-historial-mas-wrap hidden>
+                <button type="button" data-historial-mas>Mostrar más eventos</button>
+            </div>
+        </section>
+    </div>
+    <div class="sites-history-legacy">
 
     <header class="cabecera historial-cabecera">
         <div>
@@ -5385,6 +5421,8 @@
         ></div>
 
     </section>
+
+    </div>
 
 </section>
 
