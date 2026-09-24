@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/sites-shell-v1.css">
     <link rel="stylesheet" href="css/sites-resumen-v1.css">
+    <link rel="stylesheet" href="css/sites-calendario-v1.css">
 </head>
 
 <body>
@@ -3287,22 +3288,22 @@
          SECCIÓN CALENDARIO
     ========================== -->
 
-    <section id="seccion-calendario" class="seccion-app">
+    <section id="seccion-calendario" class="seccion-app sites-calendario">
 
-        <header class="cabecera calendario-cabecera-principal">
+        <header class="cabecera calendario-cabecera-principal sites-calendario-encabezado">
 
-            <div>
-                <p class="subtitulo">Planificación</p>
+            <div class="sites-calendario-encabezado-texto">
+                <p class="subtitulo sites-calendario-etiqueta">Planificación</p>
                 <h2>Calendario</h2>
-                <p class="texto-secundario">
-                    Selecciona un día para revisar o preparar el turno.
+                <p id="calendario-descripcion" class="texto-secundario sites-calendario-descripcion" aria-live="polite">
+                    Reservas y bloqueos del mes
                 </p>
             </div>
 
             <button
                 type="button"
                 id="activar-bloqueo-calendario"
-                class="calendario-bloqueo-boton"
+                class="calendario-bloqueo-boton sites-calendario-accion-bloqueo"
                 aria-pressed="false"
             >
                 Bloquear fechas
@@ -3312,45 +3313,53 @@
 
         <div
             id="calendario-bloqueo-ayuda"
-            class="calendario-bloqueo-ayuda"
+            class="calendario-bloqueo-ayuda sites-calendario-ayuda-bloqueo"
             hidden
         >
             Selecciona la fecha inicial del bloqueo.
         </div>
 
-        <section class="panel calendario-panel">
+        <section class="panel calendario-panel sites-calendario-panel" aria-label="Mes de reservas y bloqueos">
 
-            <div class="calendario-cabecera">
+            <div class="calendario-cabecera sites-calendario-barra-mes">
 
-                <button id="mes-anterior" class="boton-calendario">
-                    ←
+                <button type="button" id="mes-anterior" class="boton-calendario sites-calendario-navegar" aria-label="Mes anterior">
+                    <span aria-hidden="true">‹</span>
                 </button>
 
-                <h3 id="titulo-mes">
-                    Agosto 2026
-                </h3>
+                <div class="sites-calendario-mes-centro">
+                    <h3 id="titulo-mes">Mes actual</h3>
+                    <button type="button" id="calendario-hoy" class="sites-calendario-ir-hoy">Hoy</button>
+                </div>
 
-                <button id="mes-siguiente" class="boton-calendario">
-                    →
+                <button type="button" id="mes-siguiente" class="boton-calendario sites-calendario-navegar" aria-label="Mes siguiente">
+                    <span aria-hidden="true">›</span>
                 </button>
 
             </div>
 
-            <div class="dias-semana">
-                <span>Lun</span>
-                <span>Mar</span>
-                <span>Mié</span>
-                <span>Jue</span>
-                <span>Vie</span>
-                <span>Sáb</span>
-                <span>Dom</span>
+            <div class="dias-semana sites-calendario-dias-semana" aria-hidden="true">
+                <span data-corto="L">Lunes</span>
+                <span data-corto="M">Martes</span>
+                <span data-corto="M">Miércoles</span>
+                <span data-corto="J">Jueves</span>
+                <span data-corto="V">Viernes</span>
+                <span data-corto="S">Sábado</span>
+                <span data-corto="D">Domingo</span>
             </div>
 
-            <div id="calendario-grid" class="calendario-grid">
+            <div id="calendario-grid" class="calendario-grid sites-calendario-grid">
                 <!-- JavaScript generará los días aquí -->
             </div>
 
         </section>
+
+        <div class="sites-calendario-leyenda" aria-label="Estados de reservas en el calendario">
+            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--hospedado" aria-hidden="true"></i>Hospedado</span>
+            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--confirmada" aria-hidden="true"></i>Confirmada</span>
+            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--fullday" aria-hidden="true"></i>Full Day</span>
+            <span><i class="sites-calendario-leyenda-marca sites-calendario-leyenda-marca--bloqueo" aria-hidden="true"></i>Bloqueo</span>
+        </div>
 
     </section>
 

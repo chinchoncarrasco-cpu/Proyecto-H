@@ -1,0 +1,602 @@
+/* Sites V1 · Calendario real. La cuadrícula conserva las barras, +N y el panel del calendario de Proyecto H. */
+
+body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
+    background-color: var(--sites-shell-canvas);
+    background-image: none;
+}
+
+#seccion-calendario {
+    --cal-sites-row-height: 134px;
+    --cal-sites-bars-top: 38px;
+    --cal-sites-lane-step: 23px;
+    --cal-sites-bar-height: 20px;
+    width: 100%;
+    max-width: 1800px;
+    min-width: 0;
+    margin: 0 auto;
+    padding: 27px 32px 60px;
+    color: var(--sites-shell-ink);
+    font-family: var(--sites-shell-font);
+}
+
+#seccion-calendario .sites-calendario-encabezado {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+    min-height: 0;
+    margin: 0 0 19px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+#seccion-calendario .sites-calendario-encabezado-texto {
+    min-width: 0;
+}
+
+#seccion-calendario .sites-calendario-etiqueta {
+    margin: 0 0 7px;
+    color: #698779;
+    font-size: 11px;
+    font-weight: 770;
+    letter-spacing: .15em;
+    line-height: 1.2;
+}
+
+#seccion-calendario .sites-calendario-encabezado h2 {
+    margin: 0;
+    color: #1c3029;
+    font-size: 28px;
+    font-weight: 730;
+    letter-spacing: -.045em;
+    line-height: 1.18;
+}
+
+#seccion-calendario .sites-calendario-descripcion {
+    margin: 7px 0 0;
+    color: var(--sites-shell-muted);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+#seccion-calendario .sites-calendario-accion-bloqueo {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid #cfddd5;
+    border-radius: 6px;
+    background: #fff;
+    color: #295b49;
+    font: 650 13px/1.2 var(--sites-shell-font);
+    white-space: nowrap;
+}
+
+#seccion-calendario .sites-calendario-accion-bloqueo:hover {
+    border-color: #a9c9b7;
+    background: #eef5f0;
+}
+
+#seccion-calendario .sites-calendario-accion-bloqueo.activo {
+    border-color: #865047;
+    background: #865047;
+    color: #fff;
+}
+
+#seccion-calendario .sites-calendario-ayuda-bloqueo {
+    margin: -6px 0 15px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+#seccion-calendario .sites-calendario-panel {
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--sites-shell-line);
+    border-radius: 9px;
+    background: var(--sites-shell-surface);
+    box-shadow: 0 3px 14px #1f3d2b08;
+}
+
+#seccion-calendario .sites-calendario-barra-mes {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    align-items: center;
+    gap: 8px;
+    min-height: 62px;
+    margin: 0;
+    padding: 7px 20px;
+    border-bottom: 1px solid var(--sites-shell-line);
+}
+
+#seccion-calendario .sites-calendario-mes-centro {
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    min-width: 0;
+}
+
+#seccion-calendario #titulo-mes {
+    margin: 0;
+    color: #20382e;
+    font-size: 17px;
+    font-weight: 710;
+    letter-spacing: -.025em;
+    line-height: 1.25;
+    text-align: center;
+    text-transform: capitalize;
+}
+
+#seccion-calendario .sites-calendario-navegar {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #dbe4de;
+    border-radius: 6px;
+    background: #fff;
+    color: #365646;
+    font-size: 24px;
+    font-weight: 400;
+    line-height: 1;
+}
+
+#seccion-calendario .sites-calendario-navegar:hover {
+    background: #edf4ef;
+}
+
+#seccion-calendario .sites-calendario-ir-hoy {
+    padding: 2px 7px 0;
+    border: 0;
+    background: transparent;
+    color: #507565;
+    font: 650 11px/1.2 var(--sites-shell-font);
+    cursor: pointer;
+}
+
+#seccion-calendario .sites-calendario-ir-hoy:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+#seccion-calendario .sites-calendario-ir-hoy[hidden] {
+    display: none;
+}
+
+#seccion-calendario :is(.sites-calendario-navegar, .sites-calendario-ir-hoy, .sites-calendario-accion-bloqueo):focus-visible,
+#seccion-calendario :is(.calendario-reserva-barra, .calendario-mas-reservas):focus-visible,
+.calendario-panel-dia :is(.calendario-panel-cerrar, .calendario-panel-reserva):focus-visible {
+    outline: 2px solid #2d7158;
+    outline-offset: 2px;
+}
+
+#seccion-calendario .sites-calendario-dias-semana {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    border-bottom: 1px solid #e0e9e3;
+    background: #f7faf8;
+}
+
+#seccion-calendario .sites-calendario-dias-semana span {
+    min-width: 0;
+    padding: 10px 12px;
+    color: #6d7d73;
+    font-size: 10px;
+    font-weight: 720;
+    letter-spacing: .11em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+/* Los días y la capa de reservas comparten altura: 38px libres antes de la primera barra. */
+#seccion-calendario .sites-calendario-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: var(--cal-sites-row-height);
+    min-width: 0;
+    width: 100%;
+}
+
+#seccion-calendario .dia-calendario {
+    position: relative;
+    z-index: auto;
+    appearance: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 0;
+    height: var(--cal-sites-row-height);
+    padding: 8px 10px;
+    overflow: visible;
+    border: 0;
+    border-right: 1px solid #e7ede8;
+    border-bottom: 1px solid #e0e9e3;
+    background: #fff;
+    color: #24382d;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+#seccion-calendario .dia-calendario:nth-child(7n) {
+    border-right: 0;
+}
+
+#seccion-calendario .dia-calendario:hover {
+    background: #f7faf8;
+}
+
+#seccion-calendario .dia-calendario.dia-vacio {
+    background: #fbfcfb;
+    color: #a9b5ac;
+}
+
+#seccion-calendario .dia-calendario.hoy {
+    background: #f2f8f3;
+}
+
+#seccion-calendario .dia-calendario.seleccionado:not(.hoy) {
+    background: #f7faf8;
+}
+
+#seccion-calendario .dia-calendario .numero-dia {
+    position: relative;
+    z-index: 7;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    border-radius: 50%;
+    color: #24382d;
+    font-size: 12px;
+    font-weight: 710;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+#seccion-calendario .dia-calendario:is(.hoy, .seleccionado) .numero-dia {
+    background: #275d49;
+    color: #fff;
+}
+
+#seccion-calendario .calendario-reservas-capa {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: var(--cal-sites-row-height);
+    pointer-events: none;
+    z-index: 5;
+}
+
+#seccion-calendario .calendario-reserva-barra {
+    --cal-sites-bar-bg: #e5eff3;
+    --cal-sites-bar-ink: #2c5969;
+    --cal-sites-bar-accent: #84b2be;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    align-self: start;
+    height: var(--cal-sites-bar-height);
+    margin-top: calc(var(--cal-sites-bars-top) + var(--fila-reserva) * var(--cal-sites-lane-step));
+    margin-left: 3px;
+    margin-right: 3px;
+    padding: 0 7px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 3px;
+    background: var(--cal-sites-bar-bg);
+    color: var(--cal-sites-bar-ink);
+    font: 630 11px/var(--cal-sites-bar-height) var(--sites-shell-font);
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-shadow: inset 2px 0 var(--cal-sites-bar-accent);
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 6;
+}
+
+#seccion-calendario .calendario-reserva-barra:hover {
+    filter: brightness(.96);
+}
+
+#seccion-calendario .sites-calendario-barra-cabana {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 770;
+    letter-spacing: .02em;
+}
+
+#seccion-calendario .sites-calendario-barra-titular {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#seccion-calendario .sites-calendario-barra-continuacion {
+    flex: 0 0 auto;
+    opacity: .75;
+    font-size: 12px;
+    line-height: 1;
+}
+
+#seccion-calendario .calendario-reserva-barra:is(.cal-reserva-checkin, .cal-reserva-continua) {
+    --cal-sites-bar-bg: #dbece4;
+    --cal-sites-bar-ink: #1d5943;
+    --cal-sites-bar-accent: #387d5e;
+}
+
+#seccion-calendario .calendario-reserva-barra:is(.cal-reserva-fullday, .cal-reserva-ingresa, .cal-reserva-sale) {
+    --cal-sites-bar-bg: #f5ecd9;
+    --cal-sites-bar-ink: #78582a;
+    --cal-sites-bar-accent: #bb9452;
+}
+
+#seccion-calendario .calendario-reserva-barra:is(.cal-reserva-checkout, .cal-reserva-confirmada, .cal-reserva-confirmacion-pendiente) {
+    --cal-sites-bar-bg: #e5eff3;
+    --cal-sites-bar-ink: #2c5969;
+    --cal-sites-bar-accent: #84b2be;
+}
+
+#seccion-calendario .calendario-reserva-barra.cal-reserva-bloqueada {
+    --cal-sites-bar-bg: #eee9e5;
+    --cal-sites-bar-ink: #705953;
+    --cal-sites-bar-accent: #a3877e;
+    background: var(--cal-sites-bar-bg) !important;
+    color: var(--cal-sites-bar-ink) !important;
+    border: 0 !important;
+    background-image: repeating-linear-gradient(115deg, transparent 0 8px, #cdbfb728 8px 10px) !important;
+}
+
+/* +N ocupa su propio carril después de las tres barras, sin tapar la tercera. */
+#seccion-calendario .calendario-mas-reservas {
+    align-self: start;
+    height: 18px;
+    margin-top: calc(var(--cal-sites-bars-top) + 3 * var(--cal-sites-lane-step));
+    margin-left: 3px;
+    margin-right: 3px;
+    padding: 0 5px;
+    border: 0;
+    border-radius: 3px;
+    background: #f3f7f4;
+    color: #345a48;
+    font: 740 10px/18px var(--sites-shell-font);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 8;
+}
+
+#seccion-calendario .calendario-mas-reservas:hover {
+    background: #e4efe7;
+}
+
+#seccion-calendario .sites-calendario-leyenda {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 21px;
+    margin: 15px 0 0;
+    color: #66776d;
+    font-size: 11px;
+}
+
+#seccion-calendario .sites-calendario-leyenda > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#seccion-calendario .sites-calendario-leyenda-marca {
+    width: 17px;
+    height: 8px;
+    border-left: 3px solid var(--marca-borde);
+    border-radius: 2px;
+    background: var(--marca-fondo);
+}
+
+#seccion-calendario .sites-calendario-leyenda-marca--hospedado { --marca-fondo: #dbece4; --marca-borde: #387d5e; }
+#seccion-calendario .sites-calendario-leyenda-marca--confirmada { --marca-fondo: #e5eff3; --marca-borde: #84b2be; }
+#seccion-calendario .sites-calendario-leyenda-marca--fullday { --marca-fondo: #f5ecd9; --marca-borde: #bb9452; }
+#seccion-calendario .sites-calendario-leyenda-marca--bloqueo { --marca-fondo: #eee9e5; --marca-borde: #a3877e; }
+
+/* El panel +N se crea directamente bajo body; estas clases son exclusivas del Calendario. */
+.calendario-panel-dia {
+    display: flex;
+    flex-direction: column;
+    width: min(320px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: min(480px, calc(100vh - 24px));
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--sites-shell-line, #dce5e0);
+    border-radius: 9px;
+    background: #fff;
+    color: var(--sites-shell-ink, #172522);
+    box-shadow: 0 18px 50px #14282035;
+    font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
+
+.calendario-panel-dia .calendario-panel-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e5ebe6;
+}
+
+.calendario-panel-dia .calendario-panel-fecha {
+    align-items: flex-start;
+}
+
+.calendario-panel-dia .calendario-panel-fecha small {
+    color: #6d7d73;
+    font-size: 10px;
+    font-weight: 720;
+    letter-spacing: .1em;
+}
+
+.calendario-panel-dia .calendario-panel-fecha strong {
+    margin: 2px 0 0;
+    color: #20382e;
+    font-size: 20px;
+    font-weight: 710;
+}
+
+.calendario-panel-dia .calendario-panel-cerrar {
+    position: static;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    color: #687b70;
+    font-size: 21px;
+    line-height: 28px;
+}
+
+.calendario-panel-dia .calendario-panel-lista {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    gap: 5px;
+    padding: 9px;
+    overflow-y: auto;
+}
+
+.calendario-panel-dia .calendario-panel-reserva {
+    --cal-sites-panel-accent: #84b2be;
+    display: block;
+    min-height: 32px;
+    padding: 7px 9px;
+    border: 1px solid #e5ebe6;
+    border-left: 3px solid var(--cal-sites-panel-accent);
+    border-radius: 5px;
+    background: #fff;
+    color: #263e32;
+    font: 630 12px/1.35 var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.calendario-panel-dia .calendario-panel-reserva:hover {
+    background: #f7faf8;
+}
+
+.calendario-panel-dia .calendario-panel-reserva:is(.cal-reserva-checkin, .cal-reserva-continua) { --cal-sites-panel-accent: #387d5e; }
+.calendario-panel-dia .calendario-panel-reserva:is(.cal-reserva-fullday, .cal-reserva-ingresa, .cal-reserva-sale) { --cal-sites-panel-accent: #bb9452; }
+.calendario-panel-dia .calendario-panel-reserva.cal-reserva-bloqueada { --cal-sites-panel-accent: #a3877e; }
+
+@media (max-width: 1200px) {
+    #seccion-calendario { padding-right: 24px; padding-left: 24px; }
+    #seccion-calendario .calendario-reserva-barra { padding-right: 5px; padding-left: 5px; font-size: 10px; }
+    #seccion-calendario .dia-calendario { padding-right: 7px; padding-left: 7px; }
+}
+
+@media (max-width: 1100px) {
+    #seccion-calendario .sites-calendario-dias-semana span { padding: 9px 5px; font-size: 9px; }
+    #seccion-calendario .calendario-reserva-barra { font-size: 9px; }
+}
+
+@media (max-width: 600px) {
+    #seccion-calendario {
+        width: 100%;
+        min-width: 0;
+        padding: 21px 14px 48px;
+    }
+
+    #seccion-calendario .sites-calendario-encabezado {
+        flex-direction: row;
+        align-items: flex-end;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+
+    #seccion-calendario .sites-calendario-encabezado h2 { font-size: 24px; }
+    #seccion-calendario .sites-calendario-descripcion { font-size: 11px; }
+    #seccion-calendario .sites-calendario-accion-bloqueo {
+        max-width: 110px;
+        min-height: 33px;
+        padding: 5px 8px;
+        font-size: 10px;
+        white-space: normal;
+    }
+
+    #seccion-calendario .sites-calendario-barra-mes { min-height: 58px; padding: 6px 12px; }
+    #seccion-calendario #titulo-mes { font-size: 15px; }
+    #seccion-calendario .sites-calendario-dias-semana span {
+        padding: 8px 0;
+        font-size: 0;
+        text-align: center;
+    }
+
+    #seccion-calendario .sites-calendario-dias-semana span::before {
+        content: attr(data-corto);
+        font-size: 10px;
+    }
+
+    #seccion-calendario .sites-calendario-grid,
+    #seccion-calendario .calendario-reservas-capa {
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    #seccion-calendario .dia-calendario {
+        min-width: 0;
+        min-height: 0;
+        height: var(--cal-sites-row-height);
+        padding: 7px 3px;
+    }
+
+    #seccion-calendario .dia-calendario .numero-dia {
+        width: 22px;
+        min-width: 22px;
+        height: 22px;
+        min-height: 22px;
+        font-size: 11px;
+    }
+
+    #seccion-calendario .calendario-reserva-barra {
+        display: flex;
+        gap: 2px;
+        margin-top: calc(var(--cal-sites-bars-top) + var(--fila-reserva) * var(--cal-sites-lane-step));
+        margin-right: 1px;
+        margin-left: 1px;
+        padding: 0 3px;
+        font-size: 9px;
+    }
+
+    #seccion-calendario .sites-calendario-barra-cabana { font-size: 9px; }
+
+    #seccion-calendario .calendario-mas-reservas {
+        display: block;
+        margin-top: calc(var(--cal-sites-bars-top) + 3 * var(--cal-sites-lane-step));
+        margin-right: 1px;
+        margin-left: 1px;
+        padding: 0 3px;
+        font-size: 10px;
+    }
+
+    #seccion-calendario .sites-calendario-leyenda { gap: 9px 13px; }
+}
+
+@media (max-width: 420px) {
+    #seccion-calendario { padding-right: 10px; padding-left: 10px; }
+    #seccion-calendario .sites-calendario-barra-mes { grid-template-columns: 29px minmax(0, 1fr) 29px; }
+    #seccion-calendario .sites-calendario-navegar { width: 29px; height: 29px; }
+    #seccion-calendario #titulo-mes { font-size: 14px; }
+}

@@ -23,9 +23,11 @@ fechaActual.textContent = fechaFormateada;
 
 const calendarioGrid = document.getElementById("calendario-grid");
 const tituloMes = document.getElementById("titulo-mes");
+const descripcionCalendario = document.getElementById("calendario-descripcion");
 
 const botonAnterior = document.getElementById("mes-anterior");
 const botonSiguiente = document.getElementById("mes-siguiente");
+const botonHoyCalendario = document.getElementById("calendario-hoy");
 
 let fechaCalendario = new Date();
 
@@ -108,6 +110,12 @@ function generarCalendario() {
         nombreMes.charAt(0).toUpperCase() +
         nombreMes.slice(1);
 
+    if (botonHoyCalendario) {
+        botonHoyCalendario.hidden =
+            mes === hoy.getMonth() &&
+            año === hoy.getFullYear();
+    }
+
 
     // Primer día del mes
     const primerDia = new Date(año, mes, 1);
@@ -130,82 +138,64 @@ function generarCalendario() {
     }
 
 
-    // Espacios antes del día 1
+    // Las semanas completas muestran fechas contiguas. Los números quedan
+    // dentro de cada celda, en su franja superior reservada por Sites.
+    const totalCeldas = Math.ceil(
+        (posicionPrimerDia + cantidadDias) / 7
+    ) * 7;
 
-    for (let i = 0; i < posicionPrimerDia; i++) {
-
-        const espacio = document.createElement("div");
-
-        espacio.classList.add(
-            "dia-calendario",
-            "dia-vacio"
+    for (let indice = 0; indice < totalCeldas; indice++) {
+        const fechaCelda = new Date(
+            año,
+            mes,
+            1 - posicionPrimerDia + indice
+        );
+        const dia = fechaCelda.getDate();
+        const añoDia = fechaCelda.getFullYear();
+        const mesDia = fechaCelda.getMonth();
+        const fechaDia =
+            `${añoDia}-${String(mesDia + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+        const elementoDia = document.createElement("button");
+        elementoDia.type = "button";
+        elementoDia.classList.add("dia-calendario");
+        elementoDia.dataset.fecha = fechaDia;
+        elementoDia.setAttribute(
+            "aria-label",
+            new Intl.DateTimeFormat("es-CL", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric"
+            }).format(fechaCelda)
         );
 
-        calendarioGrid.appendChild(espacio);
-    }
-
-
-    // Crear días
-
-    for (let dia = 1; dia <= cantidadDias; dia++) {
-
-        const elementoDia = document.createElement("div");
-
-        elementoDia.classList.add("dia-calendario");
-
-
-        const numero = document.createElement("span");
-
-        numero.classList.add("numero-dia");
-
-        numero.textContent = dia;
-
-        elementoDia.appendChild(numero);
-
-
-        // Comprobar si es hoy
-
-        const esHoy =
+        if (mesDia !== mes) {
+            elementoDia.classList.add("dia-vacio");
+        }
+        if (
             dia === hoy.getDate() &&
-            mes === hoy.getMonth() &&
-            año === hoy.getFullYear();
-
-
-        if (esHoy) {
+            mesDia === hoy.getMonth() &&
+            añoDia === hoy.getFullYear()
+        ) {
             elementoDia.classList.add("hoy");
         }
 
+        const numero = document.createElement("span");
+        numero.classList.add("numero-dia");
+        numero.textContent = dia;
+        elementoDia.appendChild(numero);
 
-        // Guardamos la fecha dentro del elemento
+        elementoDia.addEventListener("click", () => {
+            if (modoBloqueoCalendario) {
+                seleccionarFechaBloqueoCalendario(fechaDia);
+                return;
+            }
+            fechaCalendario = new Date(añoDia, mesDia, 1);
+            seleccionarDia(añoDia, mesDia, dia, fechaDia);
+        });
 
-        const fechaDia =
-            `${año}-${String(mes + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-
-        elementoDia.dataset.fecha = fechaDia;
-       
-        // CLICK EN UN DÍA
-
-elementoDia.addEventListener("click", () => {
-
-    if (modoBloqueoCalendario) {
-        seleccionarFechaBloqueoCalendario(
-            elementoDia.dataset.fecha
-        );
-        return;
+        calendarioGrid.appendChild(elementoDia);
     }
-
-    seleccionarDia(
-        año,
-        mes,
-        dia,
-        elementoDia.dataset.fecha
-    );
-
-});
-
-
-calendarioGrid.appendChild(elementoDia);
-}
 
 
 // Ahora que todos los días existen,
@@ -525,6 +515,27 @@ if (posicionPrimerDia === -1) {
     posicionPrimerDia = 6;
 }
 
+if (descripcionCalendario) {
+    const inicioMes =
+        `${anioCalendario}-${String(mesCalendario + 1).padStart(2, "0")}-01`;
+    const siguienteMes = new Date(anioCalendario, mesCalendario + 1, 1);
+    const inicioSiguienteMes =
+        `${siguienteMes.getFullYear()}-${String(siguienteMes.getMonth() + 1).padStart(2, "0")}-01`;
+    const visibles = reservasOrdenadas.filter(reserva => {
+        const fechaSalida = sumarDiasCalendario(
+            reserva.fechaIngreso,
+            Number(reserva.noches) || 0
+        );
+        return reserva.fechaIngreso < inicioSiguienteMes &&
+            fechaSalida > inicioMes;
+    });
+    const reservas = visibles.filter(reserva => !reserva.esBloqueo).length;
+    const bloqueos = visibles.length - reservas;
+    descripcionCalendario.textContent =
+        `${reservas} ${reservas === 1 ? "reserva" : "reservas"} · ` +
+        `${bloqueos} ${bloqueos === 1 ? "bloqueo" : "bloqueos"}`;
+}
+
 // ========================================
 // MÁXIMO 3 FILAS VISIBLES + CONTADOR +N
 // ========================================
@@ -768,12 +779,28 @@ if (reserva.esFullDay) barra.dataset.haikuFullday = '1';
 );
 
 
-            // El nombre aparece solo
-            // en el primer tramo visible
-            barra.textContent =
-                indiceSegmento === 0
-                    ? `CAB ${reserva.numeroCabana} · ${reserva.titular}`
-                    : "";
+            // La etiqueta mantiene el titular real y la cabaña en cada
+            // tramo semanal; un tramo continuado se distingue sin perderlos.
+            if (indiceSegmento > 0) {
+                const continuacion = document.createElement("span");
+                continuacion.className =
+                    "sites-calendario-barra-continuacion";
+                continuacion.textContent = "↳";
+                continuacion.setAttribute("aria-hidden", "true");
+                barra.appendChild(continuacion);
+            }
+            const cabanaBarra = document.createElement("span");
+            cabanaBarra.className = "sites-calendario-barra-cabana";
+            cabanaBarra.textContent = `CAB ${reserva.numeroCabana}`;
+            barra.appendChild(cabanaBarra);
+            const titularBarra = document.createElement("span");
+            titularBarra.className = "sites-calendario-barra-titular";
+            titularBarra.textContent = reserva.titular;
+            barra.appendChild(titularBarra);
+            barra.setAttribute(
+                "aria-label",
+                `CAB ${reserva.numeroCabana} · ${reserva.titular}`
+            );
 
 
             barra.dataset.cabana =
@@ -897,7 +924,9 @@ function abrirPanelReservasDia(fecha) {
         document.createElement("div");
 
     panel.className =
-        "calendario-panel-dia";
+        "calendario-panel-dia sites-calendario-popover";
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", `Reservas del ${dia} de ${new Intl.DateTimeFormat("es-CL", {month: "long", year: "numeric"}).format(fechaPanel)}`);
 
 
     panel.innerHTML = `
@@ -905,7 +934,7 @@ function abrirPanelReservasDia(fecha) {
 
             <div class="calendario-panel-fecha">
                 <small>${nombreDia}</small>
-                <strong>${dia}</strong>
+                <strong>${dia} de ${new Intl.DateTimeFormat("es-CL", {month: "long", year: "numeric"}).format(fechaPanel)}</strong>
             </div>
 
             <button
@@ -1072,6 +1101,10 @@ reservasOcultasPorFecha.forEach(
 
         botonMas.textContent =
             `+${cantidad}`;
+        botonMas.setAttribute(
+            "aria-label",
+            `${cantidad} ${cantidad === 1 ? "reserva adicional" : "reservas adicionales"} el ${fecha}`
+        );
 
 
         botonMas.dataset.fecha =
@@ -1956,7 +1989,10 @@ document.addEventListener("keydown", evento => {
 
     if (modoBloqueoCalendario) {
         cambiarModoBloqueoCalendario(false);
+        return;
     }
+
+    document.querySelector(".calendario-panel-dia")?.remove();
 });
 
 
@@ -1979,25 +2015,33 @@ document
 // ========================================
 
 botonAnterior.addEventListener("click", () => {
-
-    fechaCalendario.setMonth(
-        fechaCalendario.getMonth() - 1
+    document.querySelector(".calendario-panel-dia")?.remove();
+    fechaCalendario = new Date(
+        fechaCalendario.getFullYear(),
+        fechaCalendario.getMonth() - 1,
+        1
     );
-
     generarCalendario();
-
 });
 
 
 botonSiguiente.addEventListener("click", () => {
-
-    fechaCalendario.setMonth(
-        fechaCalendario.getMonth() + 1
+    document.querySelector(".calendario-panel-dia")?.remove();
+    fechaCalendario = new Date(
+        fechaCalendario.getFullYear(),
+        fechaCalendario.getMonth() + 1,
+        1
     );
-
     generarCalendario();
-
 });
+
+if (botonHoyCalendario) {
+    botonHoyCalendario.addEventListener("click", () => {
+        document.querySelector(".calendario-panel-dia")?.remove();
+        fechaCalendario = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        generarCalendario();
+    });
+}
 
 
 // Generar calendario al cargar

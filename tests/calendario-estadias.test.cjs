@@ -17,6 +17,7 @@ class Element {
     }
     appendChild(e) { e.parentNode = this; this.children.push(e); return e; }
     remove() { this.parentNode.children = this.parentNode.children.filter(e => e !== this); }
+    setAttribute(name, value) { (this.attributes ||= {})[name] = String(value); }
     set innerHTML(value) {
         this.children = [];
         for (const m of value.matchAll(/<([\w-]+)\b[^>]*class="([^"]+)"[^>]*>/g)) {
