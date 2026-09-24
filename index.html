@@ -31,6 +31,7 @@
     <link rel="stylesheet" href="css/sites-resumen-v1.css">
     <link rel="stylesheet" href="css/sites-calendario-v1.css">
     <link rel="stylesheet" href="css/sites-cabanas-v1.css">
+    <link rel="stylesheet" href="css/sites-cierre-v1.css">
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
     <link rel="stylesheet" href="css/sites-pagos-v1.css">
 </head>
@@ -3539,7 +3540,31 @@
      SECCIÓN CIERRE DE TURNO
 ======================================== -->
 
-<section id="seccion-cierre" class="seccion-app">
+<section id="seccion-cierre" class="seccion-app sites-cierre sites-cierre-pending">
+    <div class="sites-cierre-workspace">
+        <header class="sites-cierre-heading">
+            <span class="sites-cierre-overline">CONTROL OPERATIVO</span>
+            <h1>Cierre de turno</h1>
+            <p><span id="sites-cierre-fecha">Cargando fecha operativa…</span> · Revisión final, pendientes y entrega administrativa del turno.</p>
+        </header>
+        <section class="sites-cierre-dashboard" aria-label="Control de cierre">
+            <div class="sites-cierre-dashboard-head">
+                <div><span class="sites-cierre-overline">CONTROL DE CIERRE</span><h2 id="sites-cierre-estado">Preparando cierre…</h2><p id="sites-cierre-resumen">Cargando controles reales del turno.</p></div>
+                <a href="#sites-cierre-final-slot">Revisar decisión ›</a>
+            </div>
+            <div id="sites-cierre-progress-slot"></div>
+            <div class="sites-cierre-metrics">
+                <div><small>Etapas completas</small><strong id="sites-cierre-etapas-completas">—</strong></div>
+                <div><small>Controles pendientes</small><strong id="sites-cierre-pendientes">—</strong></div>
+                <div><small>Cabañas pendientes</small><strong id="sites-cierre-cabanas-pendientes">—</strong></div>
+                <div><small>Con observaciones</small><strong id="sites-cierre-observaciones">—</strong></div>
+                <div><small>Estado del turno</small><strong id="sites-cierre-turno">—</strong></div>
+            </div>
+        </section>
+        <div id="sites-cierre-stages" class="sites-cierre-stages" aria-live="polite"><p class="sites-cierre-loading">Preparando controles del cierre…</p></div>
+        <div id="sites-cierre-final-slot"></div>
+    </div>
+    <div class="sites-cierre-legacy">
 
     <header class="cabecera">
         <div>
@@ -3804,7 +3829,7 @@
         <div class="cierre-evidencia-acciones">
 
             <label class="cierre-evidencia-boton">
-                📁 Subir imagen
+                Adjuntar imágenes
                 <input
                     type="file"
                     accept="image/*"
@@ -3818,17 +3843,9 @@
                 class="cierre-evidencia-boton"
                 data-evidencia-pegar="registro"
             >
-                📋 Pegar imagen
+                Pegar imagen
             </button>
 
-        </div>
-
-        <div
-            class="cierre-evidencia-zona"
-            data-evidencia-zona="registro"
-            tabindex="0"
-        >
-            <span>Haz clic aquí y presiona Ctrl + V para pegar una imagen</span>
         </div>
 
         <div
@@ -3876,7 +3893,7 @@
             <div class="cierre-evidencia-acciones">
 
                 <label class="cierre-evidencia-boton">
-                    📁 Subir imagen
+                    Adjuntar imágenes
 
                     <input
                         type="file"
@@ -3891,19 +3908,9 @@
                     class="cierre-evidencia-boton"
                     data-evidencia-pegar="cloudbeds-reserva"
                 >
-                    📋 Pegar imagen
+                    Pegar imagen
                 </button>
 
-            </div>
-
-            <div
-                class="cierre-evidencia-zona"
-                data-evidencia-zona="cloudbeds-reserva"
-                tabindex="0"
-            >
-                <span>
-                    Haz clic aquí y presiona Ctrl + V para pegar una imagen
-                </span>
             </div>
 
             <div
@@ -3942,7 +3949,7 @@
             <div class="cierre-evidencia-acciones">
 
                 <label class="cierre-evidencia-boton">
-                    📁 Subir imagen
+                    Adjuntar imágenes
 
                     <input
                         type="file"
@@ -3957,19 +3964,9 @@
                     class="cierre-evidencia-boton"
                     data-evidencia-pegar="cloudbeds-pago"
                 >
-                    📋 Pegar imagen
+                    Pegar imagen
                 </button>
 
-            </div>
-
-            <div
-                class="cierre-evidencia-zona"
-                data-evidencia-zona="cloudbeds-pago"
-                tabindex="0"
-            >
-                <span>
-                    Haz clic aquí y presiona Ctrl + V para pegar una imagen
-                </span>
             </div>
 
             <div
@@ -4015,7 +4012,7 @@
             <div class="cierre-evidencia-acciones">
 
                 <label class="cierre-evidencia-boton">
-                    📁 Subir imagen
+                    Adjuntar imágenes
                     <input
                         type="file"
                         accept="image/*"
@@ -4029,17 +4026,9 @@
                     class="cierre-evidencia-boton"
                     data-evidencia-pegar="manager-pagos"
                 >
-                    📋 Pegar imagen
+                    Pegar imagen
                 </button>
 
-            </div>
-
-            <div
-                class="cierre-evidencia-zona"
-                data-evidencia-zona="manager-pagos"
-                tabindex="0"
-            >
-                <span>Haz clic aquí y presiona Ctrl + V para pegar una imagen</span>
             </div>
 
             <div
@@ -4076,7 +4065,7 @@
             <div class="cierre-evidencia-acciones">
 
                 <label class="cierre-evidencia-boton">
-                    📁 Subir imagen
+                    Adjuntar imágenes
                     <input
                         type="file"
                         accept="image/*"
@@ -4090,17 +4079,9 @@
                     class="cierre-evidencia-boton"
                     data-evidencia-pegar="manager-caja"
                 >
-                    📋 Pegar imagen
+                    Pegar imagen
                 </button>
 
-            </div>
-
-            <div
-                class="cierre-evidencia-zona"
-                data-evidencia-zona="manager-caja"
-                tabindex="0"
-            >
-                <span>Haz clic aquí y presiona Ctrl + V para pegar una imagen</span>
             </div>
 
             <div
@@ -4161,145 +4142,61 @@
     </div>
 
 
-    <div class="cierre-bloques">
-
-        <!-- DETALLES DE CABAÑAS -->
-
-        <div class="cierre-bloque">
-
-            <div class="cierre-bloque-titulo">
-                <h4>🏠 Detalles de cabañas</h4>
-            </div>
-
-            <div class="cierre-pregunta">
-
-                <span>
-                    ¿Cabañas y detalles revisados correctamente?
-                </span>
-
-                <div class="cierre-opciones">
-
-                    <label>
-                        <input
-                            type="radio"
-                            name="detalles-cabanas"
-                            value="si"
-                        >
-                        Sí
-                    </label>
-
-                    <label>
-                        <input
-                            type="radio"
-                            name="detalles-cabanas"
-                            value="pendientes"
-                        >
-                        Hay pendientes
-                    </label>
-
+    <div class="sites-cierre-pending-grid">
+        <article class="sites-cierre-pending-item" data-sites-pending="detalles-cabanas">
+            <button type="button" class="sites-cierre-pending-head" aria-expanded="true" aria-controls="sites-cierre-detalles-body">
+                <strong>Detalles de cabañas</strong>
+                <small class="sites-cierre-pending-count">0/1 revisados</small>
+                <span class="sites-cierre-pending-chevron" aria-hidden="true">⌃</span>
+            </button>
+            <div id="sites-cierre-detalles-body" class="sites-cierre-pending-body">
+                <div class="sites-cierre-pending-question">
+                    <span>¿Cabañas y detalles revisados correctamente?</span>
+                    <div class="sites-cierre-pending-choices" role="group" aria-label="¿Cabañas y detalles revisados correctamente?">
+                        <label><input type="radio" name="detalles-cabanas" value="si">Sí</label>
+                        <label><input type="radio" name="detalles-cabanas" value="pendientes">Hay pendientes</label>
+                    </div>
                 </div>
-
             </div>
+        </article>
 
-        </div>
-
-
-        <!-- PENDIENTES POR HACER -->
-
-        <div class="cierre-bloque">
-
-            <div class="cierre-bloque-titulo">
-                <h4>🛠️ Pendientes por hacer</h4>
-            </div>
-
-            <div class="cierre-pregunta">
-
-                <span>
-                    ¿Quedan tareas pendientes para el siguiente turno?
-                </span>
-
-                <div class="cierre-opciones">
-
-                    <label>
-                        <input
-                            type="radio"
-                            name="pendientes-hacer"
-                            value="no"
-                        >
-                        No
-                    </label>
-
-                    <label>
-                        <input
-                            type="radio"
-                            name="pendientes-hacer"
-                            value="si"
-                        >
-                        Sí
-                    </label>
-
+        <article class="sites-cierre-pending-item" data-sites-pending="pendientes-hacer">
+            <button type="button" class="sites-cierre-pending-head" aria-expanded="true" aria-controls="sites-cierre-tareas-body">
+                <strong>Pendientes por hacer</strong>
+                <small class="sites-cierre-pending-count">0/1 revisados</small>
+                <span class="sites-cierre-pending-chevron" aria-hidden="true">⌃</span>
+            </button>
+            <div id="sites-cierre-tareas-body" class="sites-cierre-pending-body">
+                <div class="sites-cierre-pending-question">
+                    <span>¿Quedan tareas pendientes para el siguiente turno?</span>
+                    <div class="sites-cierre-pending-choices" role="group" aria-label="¿Quedan tareas pendientes para el siguiente turno?">
+                        <label><input type="radio" name="pendientes-hacer" value="no">No</label>
+                        <label><input type="radio" name="pendientes-hacer" value="si">Sí</label>
+                    </div>
                 </div>
-
             </div>
+        </article>
 
-        </div>
-
-
-        <!-- NOVEDADES -->
-
-        <div class="cierre-bloque">
-
-            <div class="cierre-bloque-titulo">
-                <h4>📝 Novedades del turno</h4>
+        <article class="sites-cierre-pending-item" data-sites-pending="hay-novedades">
+            <button type="button" class="sites-cierre-pending-head" aria-expanded="true" aria-controls="sites-cierre-novedades-body">
+                <strong>Novedades del turno</strong>
+                <small class="sites-cierre-pending-count">0/1 revisados</small>
+                <span class="sites-cierre-pending-chevron" aria-hidden="true">⌃</span>
+            </button>
+            <div id="sites-cierre-novedades-body" class="sites-cierre-pending-body">
+                <div class="sites-cierre-pending-question">
+                    <span>¿Hay novedades que informar?</span>
+                    <div class="sites-cierre-pending-choices" role="group" aria-label="¿Hay novedades que informar?">
+                        <label><input type="radio" name="hay-novedades" value="no">No</label>
+                        <label><input type="radio" name="hay-novedades" value="si">Sí</label>
+                    </div>
+                </div>
+                <label class="sites-cierre-pending-field">
+                    <span>Observaciones o información importante para el siguiente turno</span>
+                    <textarea data-cierre-campo="novedades" rows="4" placeholder="Ej: CAB 4 queda pendiente revisión de calefactor..."></textarea>
+                </label>
             </div>
-
-            <div class="cierre-pregunta">
-
-    <span>
-        ¿Hay novedades que informar?
-    </span>
-
-    <div class="cierre-opciones">
-
-        <label>
-            <input
-                type="radio"
-                name="hay-novedades"
-                value="no"
-            >
-            No
-        </label>
-
-        <label>
-            <input
-                type="radio"
-                name="hay-novedades"
-                value="si"
-            >
-            Sí
-        </label>
-
-    </div>
-
-</div>
-
-            <label class="cierre-campo-texto">
-
-                <span>
-                    Observaciones o información importante
-                    para el siguiente turno
-                </span>
-
-                <textarea
-                    data-cierre-campo="novedades"
-                    rows="4"
-                    placeholder="Ej: CAB 4 queda pendiente revisión de calefactor..."
-                ></textarea>
-
-            </label>
-
-        </div>
-
+        </article>
     </div>
 
 </section>
@@ -5048,6 +4945,7 @@
 </section>
 
     </section>
+    </div>
 
 </section>
 
@@ -6163,6 +6061,7 @@
     <script src="js/sites-resumen-pago-v1.js"></script>
     <script src="js/supabase-resumen-tablero-v1.js"></script>
     <script src="js/cierre.js"></script>
+    <script src="js/sites-cierre-v1.js"></script>
     <script src="js/pagos.js"></script>
     <script src="js/servicios.js"></script>
     <script src="js/sites-servicios-v1.js"></script>

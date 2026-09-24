@@ -201,9 +201,30 @@
         return null;
     }
 
+    // Proyección de sólo lectura para la franja Sites: cada subida conserva
+    // su fila, aunque el preview legacy muestre únicamente la más reciente.
+    async function listarEvidenciasSupabase(fecha, nombre) {
+        const cierre = await asegurarCierre(fechaOperativa(fecha));
+        const { data, error } = await cliente
+            .from("evidencias")
+            .select("storage_path,creado_en")
+            .eq("cierre_id", cierre.cierre_id)
+            .eq("descripcion", `cierre:${nombreSeguro(nombre)}`)
+            .order("creado_en", { ascending: false });
+        if (error) throw error;
+        const archivos = (data || []).filter(item => item.storage_path);
+        return Promise.all(archivos.map(async item => {
+            const { data: firma, error: errorFirma } = await cliente
+                .storage.from(BUCKET).createSignedUrl(item.storage_path, 3600);
+            if (errorFirma) throw errorFirma;
+            return { url: firma?.signedUrl || "", creado_en: item.creado_en };
+        }));
+    }
+
     // Sobrescribimos las funciones globales que ya usa cierre.js.
     window.guardarEvidencia = guardarEvidenciaSupabase;
     window.obtenerEvidencia = obtenerEvidenciaSupabase;
+    window.HAIKU_CIERRE_EVIDENCIAS_V1 = Object.freeze({ listar: listarEvidenciasSupabase });
 
     console.info("HAIKU · Evidencias de Cierre Supabase V1 preparadas.");
 })();

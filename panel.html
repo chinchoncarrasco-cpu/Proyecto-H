@@ -34,6 +34,7 @@
                 html = html.replace('<link rel="stylesheet" href="css/sites-resumen-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-calendario-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-cabanas-v1.css">', "");
+                html = html.replace('<link rel="stylesheet" href="css/sites-cierre-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-servicios-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-pagos-v1.css">', "");
                 html = html.replace('<script src="js/sites-pagos-v1.js"><' + '/script>', "");
@@ -46,7 +47,7 @@
                 // La prueba visual del Resumen debe cargar siempre los drawers y sus puentes vigentes.
                 for (const modulo of ["app", "calendario", "sites-resumen-drawer-v1", "sites-resumen-reserva-v1",
                     "sites-resumen-nota-v1", "sites-resumen-servicio-v1", "sites-resumen-pago-v1",
-                    "supabase-resumen-tablero-v1", "checklist-optimista-v1", "sites-cabanas-v1", "sites-servicios-v1"]) {
+                    "supabase-resumen-tablero-v1", "checklist-optimista-v1", "sites-cabanas-v1", "sites-cierre-v1", "sites-servicios-v1"]) {
                     html = html.replace(`src="js/${modulo}.js"`, `src="js/${modulo}.js?v=${version}"`);
                 }
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/supabase-pagos-v4-fix.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-webpay-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-cierre-final-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-cierre-modern-v1.css?v=${version}">\n<link rel="stylesheet" href="css/supabase-historial-v1.css?v=${version}">
@@ -57,6 +58,7 @@
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-resumen-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-calendario-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-cabanas-v1.css?v=${version}">\n</head>`);
+                html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-cierre-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-servicios-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-pagos-v1.css?v=${version}">\n</head>`);
                 const marca = "<!-- JAVASCRIPT -->";

@@ -1,0 +1,138 @@
+/* Cierre de turno: composición Sites sobre controles reales de Proyecto H. */
+body:has(#seccion-cierre.activa) > main.contenido.sites-shell-main { box-sizing:border-box; width:auto; max-width:none; min-width:0; padding:0; }
+#seccion-cierre.sites-cierre { width:100%; max-width:none; min-width:0; box-sizing:border-box; background:#f8fbf9; color:#25392f; font-family:var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); }
+#seccion-cierre .sites-cierre-workspace { width:100%; max-width:none; box-sizing:border-box; padding:26px 32px 58px; }
+#seccion-cierre .sites-cierre-legacy { display:none!important; }
+#seccion-cierre .sites-cierre-heading { margin:0 0 18px; }
+#seccion-cierre .sites-cierre-heading h1 { margin:4px 0 0; font-size:28px; line-height:1.18; letter-spacing:-.04em; color:#25392f; }
+#seccion-cierre .sites-cierre-heading p { margin:6px 0 0; color:#758279; font-size:13px; }
+#seccion-cierre .sites-cierre-overline { display:block; color:#63816f; font-size:10px; font-weight:770; letter-spacing:.15em; }
+#seccion-cierre .sites-cierre-dashboard { border:1px solid #274d39; border-radius:9px; background:#233a30; color:#f5f8f5; padding:20px 22px 0; margin-bottom:17px; box-shadow:0 5px 17px #1633220d; }
+#seccion-cierre .sites-cierre-dashboard .sites-cierre-overline { color:#9bc4a6; }
+#seccion-cierre .sites-cierre-dashboard-head { display:flex; align-items:start; justify-content:space-between; gap:20px; }
+#seccion-cierre .sites-cierre-dashboard h2 { margin:5px 0 0; color:#f5f8f5; font-size:20px; letter-spacing:-.025em; }
+#seccion-cierre .sites-cierre-dashboard p { margin:5px 0 0; color:#d0dcd3; font-size:12px; }
+#seccion-cierre .sites-cierre-dashboard a { color:#e5f4e8; font-size:11px; font-weight:690; text-decoration:none; white-space:nowrap; }
+#seccion-cierre .sites-cierre-dashboard a:hover { text-decoration:underline; }
+#seccion-cierre .cierre-progreso { margin:0!important; padding:0!important; border:0!important; border-radius:0!important; background:transparent!important; box-shadow:none!important; }
+#seccion-cierre .cierre-progreso-info { display:flex; justify-content:space-between; align-items:center; margin:18px 0 7px!important; }
+#seccion-cierre .cierre-progreso-info span { color:#d6e3d9!important; font-size:11px!important; }
+#seccion-cierre .cierre-progreso-info strong { color:#fff!important; font-size:14px!important; }
+#seccion-cierre .cierre-barra { height:5px!important; margin:0 0 16px!important; background:#506458!important; border-radius:4px!important; }
+#seccion-cierre .cierre-barra-progreso { background:#9cd0aa!important; height:100%; }
+#seccion-cierre .cierre-etapas-resumen { display:none!important; }
+#seccion-cierre .sites-cierre-metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border-top:1px solid #466153; }
+#seccion-cierre .sites-cierre-metrics>div { min-width:0; padding:13px 15px 15px; border-right:1px solid #466153; }
+#seccion-cierre .sites-cierre-metrics>div:first-child { padding-left:0; }
+#seccion-cierre .sites-cierre-metrics>div:last-child { border:0; }
+#seccion-cierre .sites-cierre-metrics small { display:block; color:#c5d5ca; font-size:10px; }
+#seccion-cierre .sites-cierre-metrics strong { display:block; margin-top:3px; font-size:20px; line-height:1.2; font-variant-numeric:tabular-nums; color:#fff; }
+#seccion-cierre .sites-cierre-metrics #sites-cierre-pendientes,
+#seccion-cierre .sites-cierre-metrics #sites-cierre-cabanas-pendientes,
+#seccion-cierre .sites-cierre-metrics #sites-cierre-observaciones { color:#ffd5a0; }
+#seccion-cierre .sites-cierre-metrics #sites-cierre-turno { font-size:13px; margin-top:7px; }
+#seccion-cierre .sites-cierre-stages { display:grid; gap:9px; }
+#seccion-cierre .sites-cierre-loading { margin:0; padding:24px; background:#fff; border:1px solid #dce6de; border-radius:8px; color:#718078; }
+#seccion-cierre .sites-cierre-stage { min-width:0; background:#fff!important; border:1px solid #dce6de!important; border-radius:8px!important; box-shadow:none!important; overflow:hidden; margin:0!important; padding:0!important; }
+#seccion-cierre .sites-cierre-stage-head { width:100%; min-height:68px; display:flex; align-items:center; gap:14px; text-align:left; border:0; background:#fff; color:#25392c; padding:12px 19px; cursor:pointer; }
+#seccion-cierre .sites-cierre-stage-head:hover { background:#f9fbf9; }
+#seccion-cierre .sites-cierre-stage-number { flex:none; padding:7px 6px; border:1px solid #d9e6dc; border-radius:5px; font-size:12px; line-height:1; font-weight:750; color:#417456; }
+#seccion-cierre .sites-cierre-stage-title { flex:1; min-width:0; display:grid; gap:4px; }
+#seccion-cierre .sites-cierre-stage-title strong { color:#25392c; font-size:15px; letter-spacing:-.012em; }
+#seccion-cierre .sites-cierre-stage-title small { color:#7a8a7d; font-size:11px; }
+#seccion-cierre .sites-cierre-stage-count { color:#697f70; font-size:11px; white-space:nowrap; }
+#seccion-cierre .sites-cierre-badge { flex:none; border-radius:4px; padding:4px 7px; background:#fff0dc; color:#8e5c25; font-size:10px; font-weight:740; white-space:nowrap; }
+#seccion-cierre .sites-cierre-badge.complete { background:#e9f3ec; color:#2d744e; }
+#seccion-cierre .sites-cierre-chevron { color:#6d8676; font-size:18px; }
+#seccion-cierre .sites-cierre-stage-body { border-top:1px solid #e8eee9; padding:13px 19px 16px; }
+#seccion-cierre .sites-cierre-stage-body[hidden],
+#seccion-cierre .sites-cierre-sub-body[hidden],
+#seccion-cierre .sites-cierre-pending-body[hidden],
+#seccion-cierre .sites-cierre-cabin-body[hidden],
+#seccion-cierre .sites-cierre-cabin[hidden] { display:none!important; }
+#seccion-cierre .cierre-bloques { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:8px!important; }
+#seccion-cierre .cierre-bloque { min-width:0; align-self:start; border:1px solid #e1e9e2!important; border-radius:6px!important; background:#fff!important; padding:0!important; box-shadow:none!important; overflow:hidden; }
+#seccion-cierre .sites-cierre-stage[data-cierre-etapa="1"] .cierre-bloque:nth-child(-n+2) { grid-column:1/-1; }
+#seccion-cierre .sites-cierre-pending-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; align-items:start; }
+#seccion-cierre .sites-cierre-pending-item { min-width:0; overflow:hidden; border:1px solid #e1e9e2; border-radius:6px; background:#fff; }
+#seccion-cierre .sites-cierre-pending-head { display:flex; align-items:center; gap:8px; width:100%; min-height:43px; padding:8px 11px; border:0; background:#f9fbf9; color:#294032; text-align:left; cursor:pointer; }
+#seccion-cierre .sites-cierre-pending-head:hover { background:#f1f7f2; }
+#seccion-cierre .sites-cierre-pending-head strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+#seccion-cierre .sites-cierre-pending-count { flex:none; color:#779080; font-size:11px; font-weight:400; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#seccion-cierre .sites-cierre-pending-chevron { flex:none; color:#698677; font-size:17px; line-height:1; }
+#seccion-cierre .sites-cierre-pending-body { padding:10px 12px 12px; border-top:1px solid #e8eee8; }
+#seccion-cierre .sites-cierre-pending-question { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:36px; color:#405749; font-size:12px; }
+#seccion-cierre .sites-cierre-pending-choices { display:flex; gap:5px; flex:none; }
+#seccion-cierre .sites-cierre-pending-choices label { display:inline-flex; align-items:center; gap:4px; min-height:26px; box-sizing:border-box; padding:0 8px; border:1px solid #d6e2d9; border-radius:4px; background:#fff; color:#5d7765; font-size:11px; cursor:pointer; white-space:nowrap; }
+#seccion-cierre .sites-cierre-pending-choices label:has(input:checked) { background:#e9f3eb; border-color:#96bf9f; color:#256446; }
+#seccion-cierre .sites-cierre-pending-choices input { width:13px; height:13px; margin:0; accent-color:#2e7450; }
+#seccion-cierre .sites-cierre-pending-field { display:grid; gap:6px; margin-top:10px; padding-top:9px; border-top:1px solid #e9f0ea; color:#405749; font-size:11px; }
+#seccion-cierre .sites-cierre-pending-field[hidden] { display:none!important; }
+#seccion-cierre .sites-cierre-pending-field textarea { width:100%; min-height:76px; box-sizing:border-box; padding:8px 10px; border:1px solid #d9e5db; border-radius:5px; background:#fff; color:#25392f; font:inherit; resize:vertical; }
+#seccion-cierre .sites-cierre-sub-head { width:100%; min-height:42px; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 11px; background:#f9fbf9; color:#294032; border:0; text-align:left; font-size:12px; cursor:pointer; }
+#seccion-cierre .sites-cierre-sub-head strong { flex:1; min-width:0; }
+#seccion-cierre .sites-cierre-sub-head small { color:#779080; font-size:11px; font-weight:400; }
+#seccion-cierre .sites-cierre-sub-body { padding:10px 12px 12px; border-top:1px solid #e8eee8; }
+#seccion-cierre .sites-cierre-source-link { margin-top:9px; padding:0; border:0; background:transparent; color:#285e46; font-size:11px; font-weight:700; cursor:pointer; }
+#seccion-cierre .cierre-pregunta { min-width:0; border-top:0!important; border-bottom:1px solid #edf1ed; padding:7px 0!important; color:#405749; font-size:12px; }
+#seccion-cierre .cierre-pregunta:last-child { border-bottom:0; }
+#seccion-cierre .cierre-opciones { display:flex; gap:5px; flex-wrap:wrap; }
+#seccion-cierre .cierre-opciones label { display:inline-flex; align-items:center; gap:4px; min-height:26px; border:1px solid #d6e2d9; border-radius:4px; padding:0 8px; background:#fff; color:#5d7765; font-size:11px; cursor:pointer; }
+#seccion-cierre .cierre-opciones label:has(input:checked) { background:#e9f3eb; border-color:#96bf9f; color:#256446; }
+#seccion-cierre .cierre-check { display:flex; align-items:center; gap:7px; min-height:27px!important; padding:3px 0!important; border-bottom:1px solid #edf1ed; border-radius:0!important; background:transparent!important; color:#425749; font-size:11px; }
+#seccion-cierre .cierre-llaves-grid,#seccion-cierre .cierre-cabana-checks { gap:0 15px!important; }
+#seccion-cierre .cierre-check input { width:14px; height:14px; margin:0; accent-color:#2e7450; }
+#seccion-cierre .cierre-evidencia { margin:9px 0 0; padding:9px 10px; border:0!important; border-left:2px solid #d2e5d7!important; border-radius:2px!important; background:#f8fbf8!important; }
+#seccion-cierre .cierre-evidencia-titulo { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; margin:0 0 7px; color:#31513d; font-size:11px; }
+#seccion-cierre .sites-cierre-evidence-status { color:#829086; font-size:10px; font-weight:400; }
+#seccion-cierre .cierre-evidencia-acciones { display:flex; align-items:center; gap:6px; }
+#seccion-cierre .cierre-evidencia-boton { display:inline-flex; align-items:center; justify-content:center; min-height:27px!important; box-sizing:border-box; padding:4px 9px!important; border:1px solid #d3e1d5!important; border-radius:4px!important; background:#fff!important; color:#315c41!important; font-size:10px!important; line-height:1.2; font-weight:650; cursor:pointer; }
+#seccion-cierre .cierre-evidencia-boton:focus-visible,#seccion-cierre .cierre-evidencia-toggle:focus-visible { outline:2px solid #35805a; outline-offset:2px; }
+#seccion-cierre .cierre-evidencia-zona { display:none!important; }
+#seccion-cierre .cierre-evidencia-toggle { display:inline-flex; min-height:27px!important; margin-top:7px; padding:3px 0!important; border:0!important; border-radius:0!important; background:transparent!important; color:#285e46!important; font-size:10px!important; font-weight:700; }
+#seccion-cierre .cierre-evidencia-toggle[hidden] { display:none!important; }
+#seccion-cierre .cierre-evidencia-preview { max-width:100%; margin-top:7px; border-radius:4px; }
+#seccion-cierre .cierre-evidencia-preview img { width:auto; max-width:100%; max-height:180px; object-fit:contain; border:1px solid #dbe7dd; border-radius:4px; }
+#seccion-cierre .sites-cierre-evidence-links { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:7px; }
+#seccion-cierre .sites-cierre-evidence-links[hidden] { display:none!important; }
+#seccion-cierre .sites-cierre-evidence-links a { color:#285e46; font-size:10px; font-weight:700; text-decoration:underline; }
+#seccion-cierre .cierre-campo-texto textarea { width:100%; box-sizing:border-box; border:1px solid #d9e5db; border-radius:5px; background:#fff; }
+#seccion-cierre .cierre-grid { display:grid!important; grid-template-columns:repeat(3,minmax(0,1fr))!important; gap:9px!important; }
+#seccion-cierre .cierre-card { min-width:0; background:transparent!important; border:0!important; border-right:1px solid #e5ece6!important; border-radius:0!important; padding:2px 13px 3px 0!important; box-shadow:none!important; }
+#seccion-cierre .cierre-card:last-child { border-right:0!important; }
+#seccion-cierre .cierre-card h3 { color:#2c503a; font-size:12px!important; }
+#seccion-cierre .sites-cierre-tinaja-note { display:grid; gap:6px; margin-top:10px; color:#526c5a; font-size:11px; font-weight:700; }
+#seccion-cierre .sites-cierre-tinaja-note textarea { width:100%; min-height:52px; border:1px solid #d9e5db; border-radius:5px; padding:8px 9px; box-sizing:border-box; font:inherit; font-weight:400; }
+#seccion-cierre .sites-cierre-cabin-summary { display:flex; flex-wrap:wrap; gap:16px; color:#607567; font-size:11px; margin-bottom:10px; }
+#seccion-cierre .sites-cierre-filters { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px; }
+#seccion-cierre .sites-cierre-filters button { min-height:29px; padding:0 9px; border:1px solid #d7e2d9; border-radius:4px; background:#fff; color:#5a7160; font-size:11px; font-weight:660; cursor:pointer; }
+#seccion-cierre .sites-cierre-filters button.active { background:#285e46; border-color:#285e46; color:#fff; }
+#seccion-cierre .cierre-cabanas-grid { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:0 16px!important; border-top:1px solid #e7eee8; }
+#seccion-cierre .cierre-cabana-card { min-width:0; border:0!important; border-bottom:1px solid #e7eee8!important; border-radius:0!important; box-shadow:none!important; background:#fff!important; padding:0!important; }
+#seccion-cierre .sites-cierre-cabin-head { display:flex; align-items:center; gap:8px; min-height:43px; }
+#seccion-cierre .sites-cierre-cabin-head>button:first-child { flex:1; min-width:0; display:flex; align-items:center; gap:7px; border:0; background:none; color:#365543; text-align:left; padding:6px 0; cursor:pointer; }
+#seccion-cierre .sites-cierre-cabin-name { flex:1; color:#2c4535; font-size:12px; }
+#seccion-cierre .sites-cierre-cabin-fraction { color:#7d9081; font-size:10px; white-space:nowrap; }
+#seccion-cierre .sites-cierre-cabin-open { flex:none; border:0; background:none; color:#285e46; font-size:10px; font-weight:700; cursor:pointer; }
+#seccion-cierre .sites-cierre-cabin-body { padding:0 7px 12px; }
+#seccion-cierre .sites-cierre-cabin-body .cierre-cabana-header { margin-bottom:6px; }
+#seccion-cierre .sites-cierre-cabin-body .cierre-cabana-header h3 { display:none; }
+#seccion-cierre .sites-cierre-cabin-body .cierre-cabana-checks { display:grid!important; grid-template-columns:repeat(2,minmax(0,1fr))!important; gap:0 15px!important; }
+#seccion-cierre #cierre-final-supabase { margin:17px 0 0!important; padding:17px 19px!important; border:1px solid #dbe5dd!important; border-left:3px solid #ad783b!important; border-radius:8px!important; background:#fff!important; box-shadow:none!important; }
+#seccion-cierre #cierre-final-supabase .cierre-final-cabecera:before { content:'DECISIÓN FINAL'; display:block; position:absolute; top:0; left:0; color:#668675; font-size:10px; letter-spacing:.15em; font-weight:770; }
+#seccion-cierre #cierre-final-supabase .cierre-final-cabecera { position:relative; padding-top:16px; }
+#seccion-cierre #cierre-final-supabase .cierre-final-cabecera h3 { font-size:18px; }
+#seccion-cierre #cierre-final-supabase .cierre-final-metricas { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; border-block:1px solid #e5ece6; }
+#seccion-cierre #cierre-final-supabase .cierre-final-metrica { border:0; border-right:1px solid #e5ece6; border-radius:0; background:#fff; }
+#seccion-cierre #cierre-final-supabase .cierre-final-metrica:last-child { border:0; }
+#seccion-cierre .sites-cierre-warnings { padding:8px 0 2px; color:#6e5738; }
+#seccion-cierre .sites-cierre-warnings strong { font-size:11px; }
+#seccion-cierre .sites-cierre-warnings ul { display:flex; flex-wrap:wrap; gap:3px 22px; margin:5px 0 0; padding-left:17px; font-size:11px; line-height:1.5; }
+#seccion-cierre #cierre-final-supabase .cierre-final-resumen { width:100%; border-radius:5px; }
+#seccion-cierre #cierre-final-supabase .cierre-final-acciones { justify-content:flex-end; }
+#seccion-cierre #cierre-final-supabase .cierre-final-boton { flex:none; min-height:36px; border-radius:5px; font-size:12px; }
+#seccion-cabanas #sites-cierre-volver { display:block; margin:0 0 14px; padding:0; border:0; background:transparent; color:#285e46; font:inherit; font-weight:700; cursor:pointer; }
+#seccion-cabanas #sites-cierre-volver[hidden] { display:none; }
+@media(max-width:1100px){#seccion-cierre .sites-cierre-workspace{padding:24px}#seccion-cierre .sites-cierre-metrics>div{padding-inline:9px}#seccion-cierre .sites-cierre-pending-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:740px){#seccion-cierre .sites-cierre-workspace{padding:20px 15px 45px}#seccion-cierre .sites-cierre-dashboard{padding:17px 16px 0}#seccion-cierre .sites-cierre-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#seccion-cierre .sites-cierre-metrics>div{border-bottom:1px solid #466153}#seccion-cierre .sites-cierre-stage-head{padding:10px 12px;gap:9px}#seccion-cierre .sites-cierre-stage-count{display:none}#seccion-cierre .sites-cierre-stage-body{padding:12px}#seccion-cierre .cierre-bloques,#seccion-cierre .cierre-grid,#seccion-cierre .cierre-cabanas-grid,#seccion-cierre .sites-cierre-pending-grid{grid-template-columns:1fr!important}#seccion-cierre .cierre-card{border-right:0!important;border-bottom:1px solid #e5ece6!important}#seccion-cierre .sites-cierre-filters{flex-wrap:nowrap;overflow-x:auto}#seccion-cierre .sites-cierre-filters button{white-space:nowrap;flex:none}}
+@media(max-width:420px){#seccion-cierre .sites-cierre-dashboard-head{display:block}#seccion-cierre .sites-cierre-dashboard-head a{display:inline-block;margin-top:8px}#seccion-cierre .sites-cierre-stage-title small{line-height:1.25}#seccion-cierre .sites-cierre-stage-head>.sites-cierre-badge{font-size:9px}#seccion-cierre .cierre-pregunta{display:block}#seccion-cierre .cierre-opciones{margin-top:5px}#seccion-cierre .sites-cierre-cabin-body .cierre-cabana-checks{grid-template-columns:1fr!important}}

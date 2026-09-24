@@ -104,6 +104,9 @@
         }
 
         console.info("HAIKU · Cierre guardado en Supabase:", fecha, codigo, cabanaNumero || "global");
+        window.dispatchEvent(new CustomEvent("haiku:cierre-respuesta-guardada", {
+            detail: { fecha, codigo, cabanaNumero }
+        }));
     }
 
     function limpiarObjetoLegacy(cierre) {

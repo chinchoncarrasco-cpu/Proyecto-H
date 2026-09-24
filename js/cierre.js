@@ -367,10 +367,6 @@ document.querySelectorAll("[data-evidencia-preview]").forEach(async (preview) =>
 
     const imagenGuardada = await obtenerEvidencia(fecha, nombre);
 
-    const zona = document.querySelector(
-        `[data-evidencia-zona="${nombre}"]`
-    );
-
     if (imagenGuardada) {
 
     preview.innerHTML = "";
@@ -391,10 +387,6 @@ if (botonToggle?.classList.contains("cierre-evidencia-toggle")) {
     botonToggle.textContent = "▸ Abrir evidencia";
 }
 
-    if (zona) {
-        zona.style.display = "none";
-    }
-
     // Mantener abierto el bloque de evidencia
     const bloqueEvidencia = preview.closest("[data-evidencia]");
 
@@ -407,9 +399,6 @@ if (botonToggle?.classList.contains("cierre-evidencia-toggle")) {
     preview.innerHTML = "";
     preview.style.display = "none";
 
-    if (zona) {
-        zona.style.display = "";
-    }
 }
 });
 
@@ -809,16 +798,9 @@ checksEvidencia.forEach(check => {
         // Mostrar evidencia cuando el check está marcado
         evidencia.hidden = !check.checked;
 
-        // Dar foco automáticamente a la zona de pegado
+        // El botón compacto recibe el pegado por teclado.
         if (check.checked) {
-
-            const zona = evidencia.querySelector(
-                `[data-evidencia-zona="${nombre}"]`
-            );
-
-            if (zona) {
-                zona.focus();
-            }
+            evidencia.querySelector(`[data-evidencia-pegar="${nombre}"]`)?.focus();
         }
 
     });
@@ -875,6 +857,9 @@ inputsEvidencia.forEach(input => {
         nombre,
         lector.result
     );
+    window.dispatchEvent(new CustomEvent("haiku:cierre-evidencia-guardada", {
+        detail: { fecha: fechaSeleccionada, nombre }
+    }));
 
     prepararToggleEvidencia(preview);
 preview.style.display = "block";
@@ -884,15 +869,6 @@ const botonToggle = preview.previousElementSibling;
 if (botonToggle?.classList.contains("cierre-evidencia-toggle")) {
     botonToggle.textContent = "▾ Cerrar evidencia";
 }
-
-    // Ocultar zona de instrucciones
-    const zona = document.querySelector(
-        `[data-evidencia-zona="${nombre}"]`
-    );
-
-    if (zona) {
-        zona.style.display = "none";
-    }
 
     // Mantener abierto el bloque de evidencia
     const bloqueEvidencia =
@@ -910,22 +886,16 @@ if (botonToggle?.classList.contains("cierre-evidencia-toggle")) {
 });
 
 // ========================================
-// EVIDENCIAS - PEGAR IMAGEN
+// EVIDENCIAS - PEGAR IMAGEN DESDE EL CONTROL COMPACTO
 // ========================================
 
-const zonasPegarEvidencia = document.querySelectorAll(
-    "[data-evidencia-zona]"
+const botonesPegarEvidencia = document.querySelectorAll(
+    "[data-evidencia-pegar]"
 );
 
-zonasPegarEvidencia.forEach(zona => {
-
-    // Al hacer clic, el cuadro queda preparado para Ctrl + V
-    zona.addEventListener("click", () => {
-        zona.focus();
-    });
-
-    // Escuchar Ctrl + V dentro del cuadro
-    zona.addEventListener("paste", (evento) => {
+botonesPegarEvidencia.forEach(boton => {
+    boton.addEventListener("click", () => boton.focus());
+    boton.addEventListener("paste", (evento) => {
 
         const items = evento.clipboardData?.items;
 
@@ -943,7 +913,7 @@ zonasPegarEvidencia.forEach(zona => {
 
             if (!archivo) return;
 
-            const nombre = zona.dataset.evidenciaZona;
+            const nombre = boton.dataset.evidenciaPegar;
 
             const preview = document.querySelector(
                 `[data-evidencia-preview="${nombre}"]`
@@ -965,10 +935,10 @@ zonasPegarEvidencia.forEach(zona => {
                 preview.appendChild(imagen);
                 
                 // GUARDAR IMAGEN POR FECHA
-                guardarEvidencia(fechaSeleccionada, nombre, lector.result);
-
-                // Ocultar el cuadro de instrucciones
-                zona.style.display = "none";
+                Promise.resolve(guardarEvidencia(fechaSeleccionada, nombre, lector.result))
+                    .then(() => window.dispatchEvent(new CustomEvent("haiku:cierre-evidencia-guardada", {
+                        detail: { fecha: fechaSeleccionada, nombre }
+                    })), () => {});
 
                 // Mostrar el preview
                 prepararToggleEvidencia(preview);
@@ -988,31 +958,6 @@ zonasPegarEvidencia.forEach(zona => {
     });
 });
 
-
-// ========================================
-// BOTÓN PEGAR IMAGEN
-// ========================================
-
-const botonesPegarEvidencia = document.querySelectorAll(
-    "[data-evidencia-pegar]"
-);
-
-botonesPegarEvidencia.forEach(boton => {
-
-    boton.addEventListener("click", () => {
-
-        const nombre = boton.dataset.evidenciaPegar;
-
-        const zona = document.querySelector(
-            `[data-evidencia-zona="${nombre}"]`
-        );
-
-        if (!zona) return;
-
-        zona.style.display = "flex";
-        zona.focus();
-    });
-});
 
 // ========================================
 // ACTUALIZAR PROGRESO DEL CIERRE

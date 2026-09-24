@@ -129,7 +129,7 @@
             </div>
         `;
 
-        seccion.appendChild(panel);
+        (seccion.querySelector("#sites-cierre-final-slot") || seccion).appendChild(panel);
 
         panel.querySelector("[data-cierre-final-cerrar]")?.addEventListener("click", cerrarTurno);
         panel.querySelector("[data-cierre-final-reabrir]")?.addEventListener("click", reabrirCierre);
@@ -285,6 +285,7 @@
                     : "Todos los controles requeridos están completos. El turno puede cerrarse sin pendientes.";
             }
         }
+        window.dispatchEvent(new CustomEvent("haiku:cierre-estado-actualizado", { detail: estado }));
     }
 
     function escaparHtml(valor) {
