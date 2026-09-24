@@ -16,6 +16,7 @@
         "revisionAseo",
         "aseoIn",
         "aseoOut",
+        "aseoEstado",
         "solicitudAseoExpress",
         "checklistAseoExpress",
         "detallesAseoExpress",

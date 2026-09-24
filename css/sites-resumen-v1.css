@@ -972,6 +972,18 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
 }
 
 #seccion-resumen .summary-time-pair input { padding: 0 2px 0 4px; }
+#seccion-resumen .summary-final-field select[hidden] { display: none; }
+#seccion-resumen .summary-final-field .sites-resumen-final-lectura {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid #d5e1d8;
+  border-radius: 4px;
+  background: #f8fbf9;
+  color: #2c4938;
+  font: 11px/1.2 var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
 #seccion-resumen .summary-time-pair input::-webkit-calendar-picker-indicator {
   width: 11px;
   margin: 0;

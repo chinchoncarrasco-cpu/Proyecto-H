@@ -37,7 +37,7 @@
     }
 
     function aseoVisible() {
-        const seccion = document.getElementById("seccion-aseo");
+        const seccion = document.getElementById("seccion-cabanas");
         return Boolean(
             !document.hidden &&
             seccion?.classList.contains("activa")
@@ -46,7 +46,7 @@
 
     function usuarioEditandoAseo() {
         const activo = document.activeElement;
-        const seccion = document.getElementById("seccion-aseo");
+        const seccion = document.getElementById("seccion-cabanas");
 
         return Boolean(
             activo &&
@@ -267,7 +267,7 @@
     // Si llegó un cambio mientras se editaba, lo aplicamos al abandonar el
     // campo. Dejamos margen para que termine primero su escritura local.
     document.addEventListener("focusout", evento => {
-        if (!evento.target?.closest?.("#seccion-aseo")) return;
+        if (!evento.target?.closest?.("#seccion-cabanas")) return;
         if (!refrescoPendiente) return;
 
         setTimeout(() => {

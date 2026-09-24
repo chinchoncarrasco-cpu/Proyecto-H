@@ -25,10 +25,15 @@
         return localStorage.getItem("haikuRevisionCabana") || "";
     }
 
-    function estadoFinal(valorRevision) {
-        if (valorRevision === "lista") return "LISTA";
-        if (valorRevision === "con-detalles") return "CON DETALLES";
-        return "";
+    function estadoFinalDerivado(numero, valorRevision) {
+        const fecha = fechaActual();
+        const dato = fecha && typeof obtenerDatosDia === "function"
+            ? obtenerDatosDia(fecha)?.cabanas?.[numero] || {}
+            : {};
+        const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
+        return typeof derivar === "function"
+            ? derivar({ ...dato, estadoRevision: valorRevision })
+            : "pendiente";
     }
 
     function revisionDesdeEstadoFinal(valorEstadoFinal) {
@@ -49,7 +54,12 @@
             return "con-detalles";
         }
 
-        return "pendiente";
+        if (valor === "EN_REVISION" || valor === "EN REVISIÓN" || valor === "EN REVISION") {
+            return "en_revision";
+        }
+
+        if (valor === "" || valor === "PENDIENTE") return "pendiente";
+        return null;
     }
 
     function aplicarLocal(numero, valorRevision) {
@@ -59,7 +69,10 @@
         const datos = obtenerDatosDia(fecha);
         datos.cabanas[numero] ||= {};
         datos.cabanas[numero].estadoRevision = valorRevision;
-        datos.cabanas[numero].estadoFinal = estadoFinal(valorRevision);
+        if (datos.cabanas[numero].revisionCompletaCiclo?.fecha === fecha) {
+            datos.cabanas[numero].revisionCompletaCiclo.verificado = false;
+        }
+        datos.cabanas[numero].estadoFinal = estadoFinalDerivado(numero, valorRevision);
 
         if (typeof guardarDatos === "function") {
             guardarDatos();
@@ -75,9 +88,7 @@
         );
 
         if (selector) {
-            selector.value = selector.dataset.campo === "estadoRevision"
-                ? valorRevision
-                : estadoFinal(valorRevision);
+            selector.value = estadoFinalDerivado(numero, valorRevision);
         }
     }
 
@@ -94,27 +105,6 @@
         }
     }
 
-    function refrescarAseoExpressAbierto() {
-        const panel = document.getElementById("aseo-express-individual");
-        const selector = document.getElementById("aseo-express-estado");
-        const numero = localStorage.getItem("haikuAseoExpressCabana") || "";
-        const fecha = fechaActual();
-
-        if (
-            !panel?.classList.contains("activa") ||
-            !selector ||
-            !numero ||
-            !fecha ||
-            typeof obtenerDatosDia !== "function"
-        ) {
-            return;
-        }
-
-        const datos = obtenerDatosDia(fecha);
-        selector.value =
-            datos.cabanas?.[numero]?.estadoRevision || "pendiente";
-    }
-
     function refrescarDesdeLocal() {
         const fecha = fechaActual();
         if (!fecha || typeof obtenerDatosDia !== "function") return;
@@ -127,7 +117,6 @@
         });
 
         refrescarVistasLocales();
-        refrescarAseoExpressAbierto();
         document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
             detail: { fecha }
         }));
@@ -211,9 +200,8 @@
         throw error;
     }
 
-    async function guardarEstadoResumenEnSupabase(numero, valorRevision) {
+    async function guardarEstadoResumenEnSupabase(numero, valorRevision, fecha) {
         const supabase = cliente();
-        const fecha = fechaActual();
 
         if (!supabase || !fecha || !numero) {
             return;
@@ -233,7 +221,7 @@
         const usuarioId = await obtenerUsuarioId();
         const ahora = new Date().toISOString();
 
-        let estado = "en_proceso";
+        let estado = valorRevision === "pendiente" ? "pendiente" : "en_proceso";
         let resultado = null;
         let finalizadoEn = null;
 
@@ -261,6 +249,24 @@
 
         window.HAIKU_REVISION_SUPABASE_V1?.limpiarCache?.();
 
+        if (typeof obtenerDatosDia === "function") {
+            const cabana = obtenerDatosDia(fecha)?.cabanas?.[numero];
+            if (cabana) {
+                cabana.estadoRevision = valorRevision;
+                cabana.revisionCompletaCiclo = {
+                    fecha,
+                    verificado: true,
+                    id: revision.id,
+                    estado,
+                    resultado
+                };
+                const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
+                if (typeof derivar === "function") cabana.estadoFinal = derivar(cabana);
+                if (typeof guardarDatos === "function") guardarDatos();
+            }
+        }
+        if (fecha === fechaActual()) refrescarDesdeLocal();
+
         console.log(
             "HAIKU · Estado final guardado en revisión Supabase:",
             {
@@ -279,7 +285,7 @@
 
         const tarea = anterior
             .catch(() => {})
-            .then(() => guardarEstadoResumenEnSupabase(numero, valorRevision));
+            .then(() => guardarEstadoResumenEnSupabase(numero, valorRevision, fecha));
 
         escriturasPendientes.set(clave, tarea);
 
@@ -358,57 +364,8 @@
         });
     }
 
-    function instalarSelectorResumen() {
-        const seccion = document.getElementById("seccion-resumen");
-        if (!seccion || seccion.dataset.haikuRevisionResumenV2 === "1") return;
-
-        seccion.dataset.haikuRevisionResumenV2 = "1";
-
-        // Delegación en captura: detectamos el cambio aunque la lógica legacy
-        // redibuje otras vistas inmediatamente después.
-        seccion.addEventListener(
-            "change",
-            evento => {
-                const selector = evento.target?.closest?.(
-                    '[data-campo="estadoFinal"], [data-campo="estadoRevision"]'
-                );
-
-                if (!selector) return;
-
-                const fila = selector.closest("[data-cabana]");
-                const numero = String(fila?.dataset?.cabana || "");
-                if (!numero) return;
-
-                const valorRevision = revisionDesdeEstadoFinal(
-                    selector.value
-                );
-
-                // Feedback inmediato para Cabañas y Aseo.
-                aplicarLocal(numero, valorRevision);
-                refrescarVistasLocales();
-
-                encolarEscritura(numero, valorRevision)
-                    .then(() => {
-                        clearTimeout(timer);
-                        timer = setTimeout(resincronizar, 0);
-                    })
-                    .catch(error => {
-                        console.error(
-                            "HAIKU · No fue posible sincronizar Estado final con la revisión Supabase:",
-                            error
-                        );
-
-                        // Si falló la escritura, volvemos a la verdad de Supabase.
-                        clearTimeout(timer);
-                        timer = setTimeout(resincronizar, 0);
-                    });
-            },
-            true
-        );
-    }
-
     function instalarAutoRefresh() {
-        ["seccion-resumen", "seccion-cabanas", "seccion-aseo"].forEach(id => {
+        ["seccion-resumen", "seccion-cabanas"].forEach(id => {
             const seccion = document.getElementById(id);
             if (!seccion) return;
 
@@ -433,8 +390,13 @@
 
     function iniciar() {
         instalarSelectorRevision();
-        instalarSelectorResumen();
         instalarAutoRefresh();
+        document.addEventListener("haiku:revision-estado-guardado", evento => {
+            if (evento.detail?.fecha === fechaActual()) resincronizar();
+        });
+        document.addEventListener("haiku:revision-item-guardado", evento => {
+            if (evento.detail?.fecha === fechaActual()) resincronizar();
+        });
         resincronizar();
 
         window.HAIKU_REVISION_RESUMEN_SYNC_V2 = Object.freeze({
@@ -442,6 +404,9 @@
             refrescarDesdeLocal,
             guardarDesdeResumen(numero, estado) {
                 const valorRevision = revisionDesdeEstadoFinal(estado);
+                if (!valorRevision) {
+                    return Promise.reject(new Error("Estado de revisión no reconocido."));
+                }
                 aplicarLocal(String(numero), valorRevision);
                 refrescarVistasLocales();
                 return encolarEscritura(String(numero), valorRevision);

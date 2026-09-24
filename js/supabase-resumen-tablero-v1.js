@@ -264,8 +264,26 @@
 
         const final = fila.querySelector(".sites-resumen-celda--final");
         const selectFinal = campo(fila, "estadoFinal") || campo(fila, "estadoRevision");
-        texto(final?.querySelector(".sites-resumen-valor"),
-            selectFinal?.selectedOptions?.[0]?.textContent?.trim() || "Pendiente");
+        const cabana = datosLocales(fecha, String(fila.dataset.cabana || ""));
+        const valorFinal = window.HAIKU_CABANAS_SITES_V1?.estadoFinal?.(cabana, fecha);
+        const etiquetasFinales = { pendiente: "Pendiente", en_curso: "En curso",
+            lista_para_revisar: "Lista para revisar", "con-detalles": "Con detalles",
+            lista: "Lista", no_requiere: "No requiere" };
+        const etiquetaFinal = etiquetasFinales[valorFinal]
+            || selectFinal?.selectedOptions?.[0]?.textContent?.trim() || "Pendiente";
+        if (selectFinal) {
+            selectFinal.disabled = true;
+            selectFinal.hidden = true;
+            selectFinal.setAttribute("aria-label", `Estado final de cabaña ${fila.dataset.cabana}: ${etiquetaFinal}`);
+            let lectura = selectFinal.parentElement?.querySelector(".sites-resumen-final-lectura");
+            if (!lectura && selectFinal.parentElement) {
+                lectura = document.createElement("output");
+                lectura.className = "sites-resumen-final-lectura";
+                selectFinal.insertAdjacentElement("afterend", lectura);
+            }
+            texto(lectura, etiquetaFinal);
+        }
+        texto(final?.querySelector(".sites-resumen-valor"), etiquetaFinal);
         habilitarAcciones(fila, datosReserva);
     }
 

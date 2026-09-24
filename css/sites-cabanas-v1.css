@@ -1,0 +1,1093 @@
+/* Etapa 4 Sites: Cabañas y Aseo reales. Composición visual del prototipo; sin lógica ni datos demo. */
+/* Sólo al mostrar Cabañas, el shell cede el ancho y padding a su workspace Sites. */
+body:has(#seccion-cabanas.activa) > main.contenido.sites-shell-main {
+  box-sizing: border-box;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  padding: 0;
+}
+
+/* La ficha usa el canvas Sites aunque los estilos fotográficos legacy sigan disponibles. */
+body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([hidden])) {
+  background-color: var(--sites-shell-canvas, #f5f7f5);
+  background-image: none;
+  background-attachment: scroll;
+}
+
+/* El resto de selectores queda dentro de #seccion-cabanas. */
+#seccion-cabanas { width:100%; max-width:1800px; margin:0 auto; font-family:var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); background:transparent; }
+
+#seccion-cabanas :is(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+#seccion-cabanas :is(button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--sites-shell-green, #22735c);
+  outline-offset: 2px;
+}
+
+#seccion-cabanas {
+  padding:27px 32px 56px;min-width:0;color:#24382e
+}
+
+#seccion-cabanas[hidden],
+#seccion-cabanas .cabins-tabs[hidden] {
+  display:none!important
+}
+#seccion-cabanas #cabinsList[hidden],
+#seccion-cabanas #cabinsDetail[hidden],
+#seccion-cabanas #cabinsOperation[hidden],
+#seccion-cabanas #cabinsReview[hidden],
+#seccion-cabanas #revision-individual:not(.activa),
+#seccion-cabanas #aseo-express-individual:not(.activa) { display:none; }
+#seccion-cabanas #revision-individual.activa,
+#seccion-cabanas #aseo-express-individual.activa { display:block; position:static; width:auto; min-height:0; margin:0; padding:0; background:transparent; box-shadow:none; border:0; }
+#seccion-cabanas #cabinsList.aseo-panel { margin:0; padding:0; border:0; background:transparent; box-shadow:none; }
+
+#seccion-cabanas .cabins-heading {
+  display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px
+}
+
+#seccion-cabanas .cabins-heading h1 {
+  font-size:28px;line-height:1.16;letter-spacing:-.045em;color:#1c3029
+}
+
+#seccion-cabanas .cabins-heading p {
+  font-size:13px;color:#728078;margin-top:6px
+}
+
+#seccion-cabanas .cabins-heading-date {
+  font-size:12px;color:#728078;white-space:nowrap;text-transform:capitalize
+}
+
+#seccion-cabanas .cabins-tabs {
+  display:flex;align-items:end;gap:27px;border-bottom:1px solid #dce6df;margin-bottom:19px
+}
+
+#seccion-cabanas .cabins-tabs button {
+  border:0;border-bottom:2px solid transparent;background:none;padding:0 2px 12px;color:#77867c;font-size:13px;font-weight:680;white-space:nowrap
+}
+
+#seccion-cabanas .cabins-tabs button:hover {
+  color:#275d48
+}
+
+#seccion-cabanas .cabins-tabs button.active {
+  color:#245b46;border-color:#245b46
+}
+
+#seccion-cabanas .cb-summary {
+  display:flex;flex-wrap:wrap;gap:0 20px;align-items:center;background:#f3f8f4;border-left:3px solid #3b7658;border-radius:3px;padding:10px 14px;margin-bottom:19px;color:#63756a;font-size:12px
+}
+
+#seccion-cabanas .cb-summary span+span {
+  border-left:1px solid #d7e5da;padding-left:20px
+}
+
+#seccion-cabanas .cb-summary strong {
+  color:#1f5742;font-size:17px;font-variant-numeric:tabular-nums;margin-right:5px
+}
+
+#seccion-cabanas .cb-section-head {
+  display:flex;justify-content:space-between;align-items:end;gap:16px;margin:0 0 13px
+}
+
+#seccion-cabanas .cb-section-head h2,
+#seccion-cabanas .cb-detail-section-title h3 {
+  font-size:16px;font-weight:730;letter-spacing:-.022em;color:#21372c
+}
+
+#seccion-cabanas .cb-section-head p {
+  font-size:12px;color:#75837a;margin-top:4px
+}
+
+#seccion-cabanas .cb-outline,
+#seccion-cabanas .cb-quiet {
+  border:1px solid #d7e2d9;background:#fff;color:#305f4a;border-radius:6px;font-size:12px;font-weight:660;padding:8px 11px;white-space:nowrap
+}
+
+#seccion-cabanas .cb-outline:hover,
+#seccion-cabanas .cb-quiet:hover {
+  background:#f0f6f1
+}
+
+#seccion-cabanas .cb-primary {
+  background:#245b4a;border:1px solid #245b4a;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;font-weight:690;white-space:nowrap
+}
+
+#seccion-cabanas .cb-primary:hover {
+  background:#1d4d3d
+}
+
+#seccion-cabanas .cb-filters {
+  display:flex;align-items:center;gap:13px;margin:0 0 10px
+}
+
+#seccion-cabanas .cb-filters button {
+  border:0;background:none;color:#75847a;padding:5px 0;font-size:12px;font-weight:630
+}
+
+#seccion-cabanas .cb-filters button[aria-pressed="true"] {
+  color:#225e43;box-shadow:0 1px #225e43
+}
+
+#seccion-cabanas .cb-request-form {
+  display:flex;align-items:end;flex-wrap:wrap;gap:9px;margin:0 0 15px;padding:13px 15px;background:#f7faf8;border:1px solid #e0e9e2;border-radius:7px
+}
+
+#seccion-cabanas .cb-request-form label,
+#seccion-cabanas .cb-inline-request label {
+  font-size:11px;font-weight:670;color:#6b7b71;display:grid;gap:5px
+}
+
+#seccion-cabanas .cb-request-form label:nth-child(2) {
+  flex:1;min-width:190px
+}
+
+#seccion-cabanas .cb-request-form input,
+#seccion-cabanas .cb-request-form select,
+#seccion-cabanas .cb-inline-request input {
+  min-height:33px;border:1px solid #d8e4da;background:#fff;border-radius:5px;padding:0 9px;color:#24382e;font-size:12px
+}
+
+#seccion-cabanas .cb-request-form label:first-child select {
+  width:135px
+}
+
+#seccion-cabanas .cb-request-form label:nth-child(3) input {
+  width:115px
+}
+
+#seccion-cabanas .cb-operation-table,
+#seccion-cabanas .cb-review-list {
+  background:#fff;border:1px solid #dce6de;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px #263c3007
+}
+
+#seccion-cabanas .cb-review-list { display:block; gap:0; padding:0; }
+
+#seccion-cabanas .cb-operation-head,
+#seccion-cabanas .cb-operation-row {
+  display:grid;grid-template-columns:minmax(150px,1.32fr) minmax(108px,.76fr) minmax(102px,.7fr) 88px 88px minmax(128px,.9fr) minmax(150px,1.24fr) 75px;align-items:center;gap:9px;padding:0 15px
+}
+
+#seccion-cabanas .cb-operation-head {
+  height:36px;background:#f6f9f7;border-bottom:1px solid #e4ebe5;color:#75857a;font-size:10px;font-weight:720;letter-spacing:.06em;text-transform:uppercase
+}
+
+#seccion-cabanas .cb-operation-row {
+  min-height:70px;border:0;border-bottom:1px solid #e7ede8;border-radius:0;box-shadow:none;padding-top:10px;padding-bottom:10px
+}
+
+#seccion-cabanas .cb-operation-row:last-child,
+#seccion-cabanas .cb-review-row:last-child {
+  border-bottom:0
+}
+
+#seccion-cabanas .cb-operation-row:hover,
+#seccion-cabanas .cb-review-row:hover {
+  background:#fafcfb
+}
+
+#seccion-cabanas .cb-cabin,
+#seccion-cabanas .cb-review-ident {
+  min-width:0;display:grid;gap:2px
+}
+
+#seccion-cabanas .cb-cabin strong,
+#seccion-cabanas .cb-review-ident strong {
+  font-size:13px;font-weight:740;white-space:nowrap;color:#203c2e
+}
+
+#seccion-cabanas .cb-cabin span,
+#seccion-cabanas .cb-review-ident span {
+  font-size:12px;color:#4d6254;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+
+#seccion-cabanas .cb-cabin small {
+  font-size:10px;color:#87958a
+}
+
+#seccion-cabanas .cb-cell {
+  min-width:0;display:grid;gap:3px
+}
+
+#seccion-cabanas .cb-cell>span,
+#seccion-cabanas .cb-mobile-label {
+  display:none
+}
+
+#seccion-cabanas .cb-cell select,
+#seccion-cabanas .cb-cell input,
+#seccion-cabanas .cb-review-mode select,
+#seccion-cabanas .cb-detail-fields input,
+#seccion-cabanas .cb-detail-fields select,
+#seccion-cabanas .cb-mode-select select,
+#seccion-cabanas .cb-review-close select {
+  width:100%;min-width:0;height:32px;border:1px solid #dce6de;border-radius:5px;background:#fff;padding:0 7px;color:#344d3f;font-size:11px
+}
+
+#seccion-cabanas .cb-cell input[type=time] {
+  padding:0 4px;font-variant-numeric:tabular-nums
+}
+
+#seccion-cabanas .cb-cell select.progress {
+  color:#785d2d
+}
+
+#seccion-cabanas .cb-cell select.ready {
+  color:#246348
+}
+
+#seccion-cabanas .cb-cell select.pending {
+  color:#8b6d38
+}
+
+#seccion-cabanas .cb-pending {
+  min-width:0;color:#617266;font-size:11px;line-height:1.3
+}
+
+#seccion-cabanas .cb-pending>span:not(.cb-mobile-label) {
+  display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+
+#seccion-cabanas .cb-requests {
+  display:flex;flex-wrap:wrap;gap:3px;margin-top:4px
+}
+
+#seccion-cabanas .cb-requests>span {
+  display:inline-flex;align-items:center;gap:3px;max-width:100%;padding:3px 5px;border-radius:3px;background:#edf4ed;color:#405f4b;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+
+#seccion-cabanas .cb-requests button {
+  background:none;border:0;padding:0 1px;color:#668573;font-size:13px;line-height:10px
+}
+
+#seccion-cabanas .cb-open {
+  border:0;background:none;color:#28644a;display:inline-flex;align-items:center;justify-content:flex-end;gap:3px;font-size:11px;font-weight:720;white-space:nowrap;padding:6px 0
+}
+
+#seccion-cabanas .cb-open:hover {
+  text-decoration:underline;text-underline-offset:3px
+}
+
+#seccion-cabanas .cb-open svg {
+  width:13px;height:13px
+}
+
+#seccion-cabanas .cb-review-head,
+#seccion-cabanas .cb-review-row {
+  display:grid;grid-template-columns:minmax(160px,1.35fr) minmax(140px,.85fr) minmax(155px,1fr) minmax(102px,.7fr) minmax(135px,.9fr) minmax(120px,.78fr);align-items:center;gap:13px;padding:0 16px
+}
+
+#seccion-cabanas .cb-review-head {
+  height:36px;background:#f6f9f7;border-bottom:1px solid #e4ebe5;color:#75857a;font-size:10px;font-weight:720;letter-spacing:.06em;text-transform:uppercase
+}
+
+#seccion-cabanas .cb-review-row {
+  min-height:58px;border-bottom:1px solid #e7ede8;padding-top:9px;padding-bottom:9px
+}
+
+#seccion-cabanas .cb-review-row small {
+  display:none
+}
+
+#seccion-cabanas .cb-review-mode select {
+  max-width:168px
+}
+
+#seccion-cabanas .cb-review-progress {
+  color:#75857a;font-size:11px
+}
+
+#seccion-cabanas .cb-review-progress strong {
+  color:#2d5742;font-variant-numeric:tabular-nums;font-size:13px
+}
+
+#seccion-cabanas .cb-badge {
+  display:inline-flex;align-items:center;width:max-content;max-width:100%;border-radius:4px;padding:4px 7px;font-size:11px;font-weight:690;white-space:nowrap
+}
+
+#seccion-cabanas .cb-badge.pending {
+  background:#f8f0df;color:#8b6831
+}
+
+#seccion-cabanas .cb-badge.progress {
+  background:#eaf1ee;color:#456957
+}
+
+#seccion-cabanas .cb-badge.ready {
+  background:#e0f1e5;color:#246247
+}
+
+#seccion-cabanas .cb-badge.issue {
+  background:#f5e9e6;color:#9b584b
+}
+
+#seccion-cabanas .cb-empty {
+  padding:30px 16px;font-size:13px;color:#728076
+}
+
+#seccion-cabanas .cb-backline {
+  display:flex;justify-content:space-between;align-items:center;margin:-3px 0 15px;color:#77877a;font-size:12px
+}
+
+#seccion-cabanas .cb-backline button {
+  border:0;background:none;color:#2b644b;padding:6px 0;font-size:12px;font-weight:690;display:inline-flex;align-items:center;gap:5px
+}
+
+#seccion-cabanas .cb-backline svg {
+  width:15px;height:15px
+}
+
+#seccion-cabanas .cb-detail-title {
+  display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid #e0e9e1
+}
+
+#seccion-cabanas .cb-detail-title .eyebrow {
+  margin-bottom:4px
+}
+
+#seccion-cabanas .cb-detail-title h2 {
+  font-size:24px;line-height:1.2;letter-spacing:-.035em;color:#1f382b
+}
+
+#seccion-cabanas .cb-detail-title p {
+  font-size:12px;color:#698072;margin-top:4px
+}
+
+#seccion-cabanas .cb-process {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:15px 0 22px;background:#f5f9f6;border-radius:6px;overflow:hidden
+}
+
+#seccion-cabanas .cb-stage {
+  display:flex;align-items:center;gap:9px;min-width:0;padding:10px 16px;border-right:1px solid #dce8de
+}
+
+#seccion-cabanas .cb-stage:last-child {
+  border-right:0
+}
+
+#seccion-cabanas .cb-stage>span:last-child {
+  display:grid;gap:2px;min-width:0
+}
+
+#seccion-cabanas .cb-stage small {
+  font-size:10px;font-weight:690;color:#6c8272
+}
+
+#seccion-cabanas .cb-stage strong {
+  font-size:12px;color:#2e513b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+
+#seccion-cabanas .cb-stage-dot {
+  height:8px;width:8px;border-radius:50%;background:#ba9959;flex:none
+}
+
+#seccion-cabanas .cb-stage-dot.progress {
+  background:#739b85
+}
+
+#seccion-cabanas .cb-stage-dot.ready {
+  background:#3f9568
+}
+
+#seccion-cabanas .cb-stage-dot.issue {
+  background:#bf7668
+}
+
+#seccion-cabanas .cb-detail-layout {
+  display:grid;grid-template-columns:minmax(260px,310px) minmax(0,1fr);align-items:start;gap:24px
+}
+
+#seccion-cabanas .cb-detail-ops,
+#seccion-cabanas .cb-detail-review {
+  min-width:0
+}
+
+#seccion-cabanas .cb-detail-ops {
+  padding-right:24px;border-right:1px solid #e0e9e2
+}
+
+#seccion-cabanas .cb-detail-section-title {
+  display:flex;justify-content:space-between;align-items:end;gap:12px;margin:0 0 14px
+}
+
+#seccion-cabanas .cb-detail-section-title small {
+  display:block;font-size:11px;color:#839087;margin-top:3px
+}
+
+#seccion-cabanas .cb-detail-fields {
+  display:grid;grid-template-columns:1fr 1fr;gap:11px 9px
+}
+
+#seccion-cabanas .cb-detail-fields label,
+#seccion-cabanas .cb-review-close label,
+#seccion-cabanas .cb-mode-select {
+  min-width:0;display:grid;gap:5px;font-size:11px;color:#66786c;font-weight:680
+}
+
+#seccion-cabanas .cb-detail-fields label:nth-child(-n+2),
+#seccion-cabanas .cb-detail-fields label.wide {
+  grid-column:1/-1
+}
+
+#seccion-cabanas .cb-detail-fields input,
+#seccion-cabanas .cb-detail-fields select,
+#seccion-cabanas .cb-review-close select {
+  font-size:12px;height:35px
+}
+
+#seccion-cabanas .cb-detail-pending {
+  border-top:1px solid #e6eee7;margin-top:17px;padding-top:15px;font-size:12px;color:#536a59
+}
+
+#seccion-cabanas .cb-detail-pending strong {
+  font-size:12px;color:#284935
+}
+
+#seccion-cabanas .cb-detail-pending p {
+  margin:6px 0;line-height:1.4
+}
+
+#seccion-cabanas .cb-pending-editor {
+  display:grid;gap:5px;font-size:10px;color:#768a7b;margin:9px 0
+}
+
+#seccion-cabanas .cb-pending-editor input {
+  height:34px;width:100%;min-width:0;border:1px solid #dce6de;border-radius:5px;padding:0 8px;background:#fff;color:#344d3f;font-size:12px
+}
+
+#seccion-cabanas .cb-detail-pending .cb-requests {
+  margin:8px 0
+}
+
+#seccion-cabanas .cb-text-action {
+  background:none;border:0;color:#266446;padding:8px 0;font-size:11px;font-weight:720
+}
+
+#seccion-cabanas .cb-inline-request {
+  display:grid;gap:8px;margin:8px 0 0
+}
+
+#seccion-cabanas .cb-inline-request input {
+  width:100%
+}
+
+#seccion-cabanas .cb-inline-request button {
+  justify-self:start
+}
+
+#seccion-cabanas .cb-mode-select {
+  min-width:158px
+}
+
+#seccion-cabanas .cb-mode-select select {
+  height:33px;font-size:11px
+}
+
+#seccion-cabanas .cb-review-count {
+  padding:9px 0;border-top:1px solid #e3ebe4;font-size:11px;color:#6b7d70
+}
+
+#seccion-cabanas .cb-review-count strong {
+  margin-left:6px;color:#1f6947;font-size:12px;font-variant-numeric:tabular-nums
+}
+
+#seccion-cabanas .cb-checklist {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px;border-top:1px solid #e7eee8
+}
+
+#seccion-cabanas .cb-sector {
+  min-width:0;border-bottom:1px solid #e7eee8
+}
+
+#seccion-cabanas .cb-sector-head {
+  width:100%;min-height:48px;padding:7px 0;border:0;background:none;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#254333
+}
+
+#seccion-cabanas .cb-sector-head>span:first-child {
+  display:grid;gap:2px
+}
+
+#seccion-cabanas .cb-sector-head strong {
+  font-size:12px;font-weight:740
+}
+
+#seccion-cabanas .cb-sector-head small {
+  font-size:10px;color:#7b8b7e
+}
+
+#seccion-cabanas .cb-sector-head>span:last-child {
+  font-size:20px;font-weight:350;color:#698a76
+}
+
+#seccion-cabanas .cb-sector-body {
+  padding:0 0 12px;display:grid;gap:10px
+}
+
+#seccion-cabanas .cb-group {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 8px
+}
+
+#seccion-cabanas .cb-group-name {
+  grid-column:1/-1;margin:1px 0 2px;font-size:10px;font-weight:720;color:#72917a;text-transform:uppercase;letter-spacing:.035em
+}
+
+#seccion-cabanas .cb-check {
+  display:flex;align-items:start;gap:6px;min-width:0;font-size:11px;line-height:1.4;color:#4d6253;padding:3px 0;cursor:pointer
+}
+
+#seccion-cabanas .cb-check input {
+  accent-color:#2d7350;width:14px;height:14px;flex:none;margin:0
+}
+
+#seccion-cabanas .cb-check span {
+  overflow-wrap:anywhere
+}
+
+#seccion-cabanas .cb-check:has(input:checked) span {
+  color:#71887a
+}
+
+#seccion-cabanas .cb-observations {
+  padding-top:18px;display:grid;gap:7px
+}
+
+#seccion-cabanas .cb-observations>label {
+  font-size:12px;font-weight:720;color:#264735
+}
+
+#seccion-cabanas .cb-observations textarea {
+  width:100%;min-height:76px;border:1px solid #d9e5db;border-radius:6px;padding:9px;color:#2b4636;font-size:12px;resize:vertical
+}
+
+#seccion-cabanas .cb-observations>div {
+  display:flex;justify-content:flex-end;gap:6px
+}
+
+#seccion-cabanas .cb-observations button {
+  padding:5px 10px
+}
+
+#seccion-cabanas .cb-review-close {
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px;padding:14px 0;border-top:1px solid #dfe9e1
+}
+
+#seccion-cabanas .cb-final-readonly {
+  min-width:0;display:grid;gap:5px;font-size:11px;color:#66786c;font-weight:680
+}
+
+#seccion-cabanas .cb-final-readonly output {
+  display:flex;align-items:center;min-height:35px;padding:0 9px;
+  border:1px solid #dce6de;border-radius:5px;background:#f7faf8;
+  color:#344d3f;font-size:12px;font-weight:700
+}
+
+#seccion-cabanas #cabinsFinalState[hidden],
+#seccion-cabanas #cabinsExpressFinalState[hidden] { display:none; }
+
+#seccion-cabanas .cb-express-panel {
+  margin-top:17px;border-top:1px solid #dfe9e1
+}
+
+#seccion-cabanas .cb-express-toggle {
+  width:100%;min-height:48px;padding:8px 0;border:0;background:transparent;
+  color:#254333;display:flex;align-items:center;justify-content:space-between;
+  gap:12px;text-align:left;cursor:pointer
+}
+
+#seccion-cabanas .cb-express-heading { display:grid;gap:3px; }
+#seccion-cabanas .cb-express-heading strong { font-size:12px;font-weight:740; }
+#seccion-cabanas .cb-express-heading small { font-size:10px;color:#7b8b7e; }
+#seccion-cabanas .cb-express-icon { font-size:20px;font-weight:350;color:#698a76; }
+#seccion-cabanas .cb-express-toggle:focus-visible {
+  outline:2px solid #2d7350;outline-offset:3px;border-radius:3px
+}
+#seccion-cabanas .cb-express-panel #aseo-express-individual.activa { padding-top:4px; }
+
+@media(max-width:1450px) {
+#seccion-cabanas {
+  padding-left:24px;padding-right:24px
+}
+#seccion-cabanas .cb-operation-head {
+  display:none
+}
+#seccion-cabanas .cb-cell>span { display:block;color:#77897c;font-size:10px;font-weight:650; }
+#seccion-cabanas .cb-operation-row {
+  grid-template-columns:minmax(180px,1.3fr) minmax(108px,.75fr) minmax(108px,.75fr) 91px 91px minmax(130px,.9fr) 70px;gap:6px 8px
+}
+
+@media(max-width:1270px) {
+#seccion-cabanas .cb-review-head { display:none; }
+#seccion-cabanas .cb-review-row {
+  grid-template-columns:minmax(150px,1.3fr) minmax(110px,.9fr) minmax(155px,1fr) minmax(100px,.8fr);gap:6px 12px
+}
+#seccion-cabanas .cb-review-ident { grid-column:1;grid-row:1/3; }
+#seccion-cabanas .cb-review-clean { grid-column:2;grid-row:1; }
+#seccion-cabanas .cb-review-mode { grid-column:3;grid-row:1; }
+#seccion-cabanas .cb-review-progress { grid-column:4;grid-row:1; }
+#seccion-cabanas .cb-review-status { grid-column:2/4;grid-row:2; }
+#seccion-cabanas .cb-review-row .cb-open { grid-column:4;grid-row:2; }
+#seccion-cabanas .cb-review-row small { display:block;font-size:10px;color:#839188;margin-bottom:2px; }
+#seccion-cabanas .cb-operation-row {
+  grid-template-columns:minmax(150px,1.2fr) minmax(100px,.8fr) minmax(100px,.8fr) 85px 85px minmax(120px,1fr);gap:6px
+}
+#seccion-cabanas .cb-operation-row>.cb-open { grid-column:6;grid-row:2; }
+#seccion-cabanas .cb-operation-row>.cb-state { grid-column:6;grid-row:1; }
+#seccion-cabanas .cb-operation-row>.cb-pending { grid-column:2/6;grid-row:2; }
+#seccion-cabanas .cb-cabin { grid-row:1/3; }
+}
+#seccion-cabanas .cb-operation-row>.cb-pending {
+  grid-column:2/7;grid-row:2
+}
+#seccion-cabanas .cb-operation-row>.cb-open {
+  grid-column:7;grid-row:1/3
+}
+#seccion-cabanas .cb-cabin {
+  grid-row:1/3
+}
+#seccion-cabanas .cb-operation-row {
+  min-height:73px
+}
+#seccion-cabanas .cb-pending>span:not(.cb-mobile-label) {
+  white-space:normal
+}
+}
+
+@media(max-width:1100px) {
+#seccion-cabanas .cb-detail-layout {
+  grid-template-columns:minmax(220px,265px) minmax(0,1fr);gap:18px
+}
+#seccion-cabanas .cb-detail-ops {
+  padding-right:18px
+}
+#seccion-cabanas .cb-checklist {
+  grid-template-columns:1fr
+}
+#seccion-cabanas .cb-review-head {
+  display:none
+}
+#seccion-cabanas .cb-review-row {
+  grid-template-columns:minmax(150px,1.3fr) minmax(110px,.9fr) minmax(155px,1fr) minmax(100px,.8fr);gap:6px 12px
+}
+#seccion-cabanas .cb-operation-row {
+  grid-template-columns:minmax(150px,1.2fr) minmax(100px,.8fr) minmax(100px,.8fr) 85px 85px minmax(120px,1fr);gap:6px
+}
+#seccion-cabanas .cb-operation-row>.cb-open {
+  grid-column:6;grid-row:2
+}
+#seccion-cabanas .cb-operation-row>.cb-state {
+  grid-column:6;grid-row:1
+}
+#seccion-cabanas .cb-operation-row>.cb-pending {
+  grid-column:2/6;grid-row:2
+}
+#seccion-cabanas .cb-cabin {
+  grid-row:1/3
+}
+}
+
+@media(max-width:1070px) {
+#seccion-cabanas {
+  padding:22px 15px 46px
+}
+#seccion-cabanas .cabins-heading {
+  align-items:start;margin-bottom:16px
+}
+#seccion-cabanas .cabins-heading h1 {
+  font-size:24px
+}
+#seccion-cabanas .cabins-heading-date {
+  font-size:10px;text-align:right;max-width:96px;white-space:normal
+}
+#seccion-cabanas .cabins-tabs {
+  gap:21px;margin-bottom:15px
+}
+#seccion-cabanas .cabins-tabs button {
+  font-size:12px
+}
+#seccion-cabanas .cb-summary {
+  gap:4px 12px;padding:8px 11px;margin-bottom:17px
+}
+#seccion-cabanas .cb-summary span+span {
+  padding-left:0;border:0
+}
+#seccion-cabanas .cb-summary strong {
+  font-size:14px
+}
+#seccion-cabanas .cb-section-head {
+  align-items:start
+}
+#seccion-cabanas .cb-section-head h2 {
+  font-size:15px
+}
+#seccion-cabanas .cb-section-head p {
+  font-size:11px
+}
+#seccion-cabanas .cb-outline {
+  font-size:11px;padding:7px 8px
+}
+#seccion-cabanas .cb-operation-row,
+#seccion-cabanas .cb-review-row {
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 11px;padding:12px
+}
+#seccion-cabanas .cb-cabin {
+  grid-column:1;grid-row:1
+}
+#seccion-cabanas .cb-operation-row>.cb-state {
+  grid-column:2;grid-row:1;align-self:start;min-width:126px
+}
+#seccion-cabanas .cb-operation-row>.cb-cell:nth-child(2) {
+  grid-column:1;grid-row:2
+}
+#seccion-cabanas .cb-operation-row>.cb-cell:nth-child(3) {
+  grid-column:2;grid-row:2
+}
+#seccion-cabanas .cb-operation-row>.cb-cell:nth-child(4) {
+  grid-column:1;grid-row:3
+}
+#seccion-cabanas .cb-operation-row>.cb-cell:nth-child(5) {
+  grid-column:2;grid-row:3
+}
+#seccion-cabanas .cb-operation-row>.cb-pending {
+  grid-column:1/-1;grid-row:4;border-top:1px solid #edf2ed;padding-top:6px
+}
+#seccion-cabanas .cb-operation-row>.cb-open {
+  grid-column:1/-1;grid-row:5;justify-self:start;padding:0
+}
+#seccion-cabanas .cb-cell>span,
+#seccion-cabanas .cb-mobile-label {
+  display:block;color:#77897c;font-size:10px;font-weight:650
+}
+#seccion-cabanas .cb-pending>span:not(.cb-mobile-label) {
+  white-space:normal
+}
+#seccion-cabanas .cb-operation-row .cb-cell {
+  min-width:0
+}
+#seccion-cabanas .cb-operation-row .cb-cell input,
+#seccion-cabanas .cb-operation-row .cb-cell select {
+  height:32px
+}
+#seccion-cabanas .cb-review-row {
+  grid-template-columns:1fr auto;gap:7px
+}
+#seccion-cabanas .cb-review-ident {
+  grid-column:1;grid-row:1
+}
+#seccion-cabanas .cb-review-clean {
+  grid-column:2;grid-row:1
+}
+#seccion-cabanas .cb-review-mode {
+  grid-column:1;grid-row:2
+}
+#seccion-cabanas .cb-review-progress {
+  grid-column:2;grid-row:2;align-self:end
+}
+#seccion-cabanas .cb-review-status {
+  grid-column:1;grid-row:3
+}
+#seccion-cabanas .cb-review-row .cb-open {
+  grid-column:2;grid-row:3
+}
+#seccion-cabanas .cb-review-row small {
+  display:block;font-size:10px;color:#839188;margin-bottom:4px
+}
+#seccion-cabanas .cb-backline {
+  margin-top:0
+}
+#seccion-cabanas .cb-detail-title h2 {
+  font-size:22px
+}
+#seccion-cabanas .cb-process {
+  margin:14px 0
+}
+#seccion-cabanas .cb-stage {
+  padding:9px 7px;gap:5px
+}
+#seccion-cabanas .cb-stage small {
+  font-size:9px
+}
+#seccion-cabanas .cb-stage strong {
+  font-size:10px
+}
+#seccion-cabanas .cb-detail-layout {
+  grid-template-columns:1fr;gap:22px
+}
+#seccion-cabanas .cb-detail-ops {
+  padding:0 0 19px;border-right:0;border-bottom:1px solid #dfe8e0
+}
+#seccion-cabanas .cb-detail-fields {
+  grid-template-columns:repeat(2,minmax(0,1fr))
+}
+#seccion-cabanas .cb-detail-fields label:nth-child(-n+2) {
+  grid-column:auto
+}
+#seccion-cabanas .cb-detail-fields label.wide {
+  grid-column:1/-1
+}
+#seccion-cabanas .cb-checklist {
+  grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px
+}
+#seccion-cabanas .cb-request-form label:nth-child(2) {
+  order:0
+}
+#seccion-cabanas .cb-request-form label:first-child {
+  order:-1
+}
+#seccion-cabanas .cb-request-form label:nth-child(3) {
+  order:1
+}
+#seccion-cabanas .cb-request-form button {
+  order:2
+}
+}
+
+@media(max-width:520px) {
+#seccion-cabanas .cabins-heading-date {
+  display:none
+}
+
+#seccion-cabanas .cb-checklist {
+  grid-template-columns:1fr
+}
+#seccion-cabanas .cb-section-head {
+  align-items:start
+}
+#seccion-cabanas .cb-section-head p {
+  max-width:215px
+}
+#seccion-cabanas .cb-review-progress span {
+  display:none
+}
+#seccion-cabanas .cb-review-close {
+  gap:8px
+}
+#seccion-cabanas .cb-process {
+  grid-template-columns:repeat(3,minmax(0,1fr))
+}
+#seccion-cabanas .cb-stage-dot {
+  width:6px;height:6px
+}
+#seccion-cabanas .cb-stage {
+  gap:5px
+}
+#seccion-cabanas .cb-stage strong {
+  font-size:9px
+}
+#seccion-cabanas .cb-group {
+  grid-template-columns:repeat(2,minmax(0,1fr))
+}
+#seccion-cabanas .cb-request-form {
+  display:grid;grid-template-columns:1fr 1fr
+}
+#seccion-cabanas .cb-request-form label:nth-child(2) {
+  grid-column:1/-1
+}
+#seccion-cabanas .cb-request-form label:first-child select,
+#seccion-cabanas .cb-request-form label:nth-child(3) input {
+  width:100%
+}
+#seccion-cabanas .cb-request-form .cb-primary,
+#seccion-cabanas .cb-request-form .cb-quiet {
+  min-height:33px
+}
+}
+
+/* Los ítems y sus IDs siguen viniendo de checklist.js. Sólo cambia su
+   presentación cuando Revisión y Aseo Express viven dentro de Cabañas. */
+#seccion-cabanas #revision-checklist,
+#seccion-cabanas #aseo-express-checklist {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 0 20px;
+  min-width: 0;
+  padding: 0;
+  border-top: 1px solid #e7eee8;
+}
+
+#seccion-cabanas .revision-panel #revision-checklist,
+#seccion-cabanas .revision-panel #aseo-express-checklist {
+  padding: 0;
+}
+
+/* La revisión completa heredaba un inset !important de su antigua tarjeta. */
+#seccion-cabanas #revision-individual #revision-checklist {
+  padding: 0 !important;
+}
+
+#seccion-cabanas #revision-checklist .checklist-area,
+#seccion-cabanas #aseo-express-checklist .revision-area {
+  min-width: 0;
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid #e7eee8;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#seccion-cabanas #revision-checklist .checklist-area > h4,
+#seccion-cabanas #aseo-express-checklist .revision-area > h4 {
+  min-height: 48px;
+  margin: 0;
+  padding: 14px 0 10px;
+  color: #254333;
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.25;
+}
+
+#seccion-cabanas #revision-checklist .checklist-area > h5 {
+  margin: 4px 0 7px;
+  color: #72917a;
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: .035em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+#seccion-cabanas #revision-checklist .checklist-items {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  margin: 0 0 9px;
+}
+
+#seccion-cabanas #revision-checklist .checklist-item,
+#seccion-cabanas #aseo-express-checklist .revision-area label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 3px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #4d6253;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+#seccion-cabanas #revision-checklist .checklist-item:is(:hover, :has(input:checked)),
+#seccion-cabanas #aseo-express-checklist .revision-area label:is(:hover, :has(input:checked)) {
+  border: 0;
+  background: transparent;
+}
+
+#seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"],
+#seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"] {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #2d7350;
+}
+
+#seccion-cabanas #revision-checklist .checklist-item:has(input:checked) span {
+  color: #71887a;
+}
+
+/* Soporta el encabezado plegable y contador que agrega la integración JS,
+   manteniendo el mismo DOM de inputs y data-checklist-id. */
+#seccion-cabanas #revision-checklist .checklist-area > .cb-sector-head {
+  min-height: 48px;
+  padding: 7px 0;
+}
+
+#seccion-cabanas #revision-checklist .checklist-area > .cb-sector-body {
+  display: block;
+  padding: 0 0 4px;
+}
+
+#seccion-cabanas #revision-checklist .checklist-area > .cb-sector-body[hidden],
+#seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-body[hidden] {
+  display: none;
+}
+
+#seccion-cabanas #revision-checklist .cb-sector-head .cb-sector-count,
+#seccion-cabanas #aseo-express-checklist .cb-sector-head .cb-sector-count {
+  color: #7b8b7e;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#seccion-cabanas #aseo-express-checklist .revision-area {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 4px 8px;
+}
+
+#seccion-cabanas #aseo-express-checklist .revision-area > :is(h4, .cb-sector-head) {
+  grid-column: 1 / -1;
+}
+
+#seccion-cabanas #aseo-express-checklist .revision-area > .cb-sector-body {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  padding: 0;
+}
+
+@media (max-width: 1100px) {
+  #seccion-cabanas #revision-checklist,
+  #seccion-cabanas #aseo-express-checklist {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) and (min-width: 521px) {
+  #seccion-cabanas #revision-checklist,
+  #seccion-cabanas #aseo-express-checklist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+  }
+}
+
+@media (max-width: 520px) {
+  #seccion-cabanas #revision-checklist,
+  #seccion-cabanas #aseo-express-checklist {
+    grid-template-columns: 1fr;
+  }
+}
+
+#seccion-cabanas #panel-agregar-solicita.cb-request-drawer { display:none; position:fixed; inset:0; z-index:1200; background:#182d25a8; padding:0; }
+#seccion-cabanas #panel-agregar-solicita.cb-request-drawer.activo { display:flex; justify-content:flex-end; }
+#seccion-cabanas .cb-request-drawer-panel { display:flex; flex-direction:column; width:min(100%,440px); min-height:100%; background:#fff; box-shadow:-12px 0 36px #18332720; }
+#seccion-cabanas .cb-request-drawer-panel>header { display:flex; align-items:start; justify-content:space-between; gap:12px; padding:24px; border-bottom:1px solid #e0e8e1; }
+#seccion-cabanas .cb-request-drawer-panel h2 { font-size:21px; color:#21382d; }
+#seccion-cabanas .cb-request-drawer-panel>header button { border:0; background:none; color:#52685b; font-size:27px; line-height:1; }
+#seccion-cabanas .cb-request-drawer-body { flex:1; display:grid; align-content:start; gap:16px; padding:24px; }
+#seccion-cabanas .cb-request-drawer-body label { display:grid; gap:6px; color:#405b48; font-size:12px; font-weight:700; }
+#seccion-cabanas .cb-request-drawer-body select,
+#seccion-cabanas .cb-request-drawer-body textarea { width:100%; border:1px solid #d7e2d9; border-radius:6px; padding:9px; background:#fff; color:#24382e; font-size:13px; }
+#seccion-cabanas .cb-request-drawer-panel>footer { display:flex; justify-content:flex-end; gap:8px; padding:16px 24px; border-top:1px solid #e0e8e1; }
+#seccion-cabanas .eyebrow { color:#51745e; font-size:10px; font-weight:750; letter-spacing:.13em; text-transform:uppercase; }
+#seccion-cabanas .cb-operation-row .cb-cell input { width:100%; min-width:0; height:32px; border:1px solid #dce6de; border-radius:5px; background:#fff; padding:0 7px; color:#344d3f; font-size:11px; }
+#seccion-cabanas .cb-operation-row .cb-cell input[type=time] { padding:0 4px; }
+#seccion-cabanas .cb-review-mode>span { font-size:11px; color:#5d7163; }
+#seccion-cabanas .cb-detail-ops #cabinsDetailRequests { display:block; }
+#seccion-cabanas .cb-detail-ops #cabinsDetailRequests p { margin:7px 0; color:#738579; font-size:11px; }
+#seccion-cabanas .cb-observations .revision-clipboard-acciones { display:flex; justify-content:flex-end; gap:6px; }
+#seccion-cabanas .cb-observations .revision-clipboard-acciones button,
+#seccion-cabanas .cb-observations .aseo-express-clipboard-acciones button { border:1px solid #d7e2d9; border-radius:6px; background:#fff; color:#305f4a; padding:5px 10px; font-size:11px; }
+#seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head,
+#seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head { width:100%; min-height:48px; padding:7px 0; border:0; background:none; text-align:left; display:flex; align-items:center; justify-content:space-between; color:#254333; }
+#seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head>span:first-child,
+#seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head>span:first-child { display:grid; gap:2px; }
+#seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head strong,
+#seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head strong { font-size:12px; }
+#seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head small,
+#seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head small { font-size:10px; color:#7b8b7e; }
+#seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head>span:last-child,
+#seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head>span:last-child { font-size:20px; font-weight:350; }

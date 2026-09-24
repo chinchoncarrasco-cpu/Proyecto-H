@@ -17,6 +17,7 @@
     let permitiendoCreacionLegacy = false;
     let cargandoDia = false;
     let ultimoDiaCargado = "";
+    let identidadDia = { fecha: "", filas: new Map() };
 
     const CLAVES_LEGACY_DATOS = [
         "haikuDatos",
@@ -332,6 +333,10 @@
             if (error) throw error;
 
             const filas = Array.isArray(data) ? data : [];
+            identidadDia = {
+                fecha: fechaISO,
+                filas: new Map(filas.map(fila => [String(fila.numero), fila]))
+            };
 
             document
                 .querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]")
@@ -404,6 +409,22 @@
             cargandoDia = false;
         }
     }
+
+    // Proyección de identidad del RPC ya consultado para Resumen. Cabañas
+    // consume los mismos datos por fecha/ID, sin leer texto renderizado.
+    window.HAIKU_OPERACION_DIA_IDENTIDAD_V1 = Object.freeze({
+        obtener(fecha, numero) {
+            if (normalizarFecha(fecha) !== identidadDia.fecha) return null;
+            const fila = identidadDia.filas.get(String(numero));
+            if (!fila) return null;
+            const identidad = identidadReservaOperacion(fila);
+            return {
+                estado: String(fila.estado_operativo || ""),
+                reservaId: String(identidad.id || ""),
+                titular: String(identidad.titular || "").trim()
+            };
+        }
+    });
 
     function limpiarCacheLegacyUnaVez() {
         if (localStorage.getItem("haikuSupabaseLocalResetV1") === "1") {

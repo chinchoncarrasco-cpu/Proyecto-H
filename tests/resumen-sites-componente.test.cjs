@@ -12,7 +12,7 @@ function articulos() {
 }
 
 function api({ document, sesion = true, permisos = [], datos = {}, checkoutDisponible = true,
-    rpc = null, logger = console } = {}) {
+    rpc = null, logger = console, finalResolver = null } = {}) {
     const cierre = fuente.lastIndexOf("})();");
     assert.ok(cierre > 0);
     const codigo = `${fuente.slice(0, cierre)}\n` +
@@ -24,6 +24,7 @@ function api({ document, sesion = true, permisos = [], datos = {}, checkoutDispo
             haikuSesion: sesion ? { usuario: { id: "u1" } } : null,
             haikuTienePermiso: codigo => permisos.includes(codigo),
             HAIKU_RESUMEN_PAGO_SITES_V1: { tieneTarjeta: () => checkoutDisponible },
+            HAIKU_CABANAS_SITES_V1: finalResolver ? { estadoFinal: finalResolver } : null,
             haikuSupabase: rpc ? { rpc } : null
         },
         datosPorFecha: datos,
@@ -108,7 +109,7 @@ test("hay una sola instancia por cabaña de cada control y acción real", () => 
     assert.doesNotMatch(html, /Ocultar día anterior/);
 });
 
-test("Ver detalle sólo edita las dos horas de Aseo y el estado final", () => {
+test("Ver detalle sólo edita las dos horas de Aseo y deja Estado final en lectura", () => {
     for (const { numero, contenido } of articulos()) {
         assert.match(contenido, new RegExp(
             `<strong class="sites-resumen-valor titular-cabana" data-titular-cabana="${numero}">`),
@@ -121,6 +122,8 @@ test("Ver detalle sólo edita las dos horas de Aseo y el estado final", () => {
         assert.deepEqual([...visible.matchAll(/data-campo="([^"]+)"/g)].map(([, campo]) => campo),
             ["aseoIn", "aseoOut", numero === "7" ? "estadoRevision" : "estadoFinal"],
             `CAB ${numero}: controles visibles`);
+        const final = visible.match(/<select[^>]*data-campo="(?:estadoFinal|estadoRevision)"[^>]*>/)?.[0] || "";
+        assert.match(final, /\bdisabled\b/, `CAB ${numero}: el estado final no se edita`);
         assert.match(visible, /class="sites-resumen-detalle-servicios"/);
         assert.match(visible, /class="sites-resumen-detalle-notas"/);
         assert.doesNotMatch(visible, /nota-eliminar|nota-resumen-agregar|servicio-resumen-wrap/);
@@ -132,6 +135,45 @@ test("Ver detalle sólo edita las dos horas de Aseo y el estado final", () => {
         }
         assert.match(oculto, new RegExp(`data-nota-cabana="${numero}"`));
     }
+});
+
+test("Resumen pinta los seis finales derivados en un output sin habilitar el selector histórico", () => {
+    let valor = "pendiente";
+    let salida = null;
+    let creaciones = 0;
+    const visible = { textContent: "" };
+    const contenedor = { querySelector: selector => selector === ".sites-resumen-final-lectura" ? salida : null };
+    const selectFinal = {
+        disabled: false, hidden: false, parentElement: contenedor,
+        selectedOptions: [{ textContent: "Pendiente" }], atributos: {},
+        setAttribute(nombre, texto) { this.atributos[nombre] = texto; },
+        insertAdjacentElement(posicion, nodo) {
+            assert.equal(posicion, "afterend");
+            salida = nodo;
+        }
+    };
+    const final = { querySelector: selector => selector === ".sites-resumen-valor" ? visible : null };
+    const { fila } = filaFalsa(1, "libre-libre", {
+        '[data-campo="estadoFinal"]': selectFinal,
+        ".sites-resumen-celda--final": final
+    });
+    const documento = { readyState: "loading", addEventListener() {},
+        createElement(etiqueta) { assert.equal(etiqueta, "output"); creaciones++; return { textContent: "" }; } };
+    const modulo = api({ document: documento, finalResolver: () => valor });
+    for (const [codigo, rotulo] of [
+        ["pendiente", "Pendiente"], ["en_curso", "En curso"],
+        ["lista_para_revisar", "Lista para revisar"], ["con-detalles", "Con detalles"],
+        ["lista", "Lista"], ["no_requiere", "No requiere"]
+    ]) {
+        valor = codigo;
+        modulo.resumenFila(fila, "2026-09-23");
+        assert.equal(visible.textContent, rotulo);
+        assert.equal(salida.textContent, rotulo);
+        assert.equal(selectFinal.disabled, true);
+        assert.equal(selectFinal.hidden, true);
+        assert.equal(selectFinal.atributos["aria-label"], `Estado final de cabaña 1: ${rotulo}`);
+    }
+    assert.equal(creaciones, 1, "los repintados reutilizan el mismo elemento de lectura");
 });
 
 test("el titular visible exige proyección con UUID de la reserva exacta", () => {

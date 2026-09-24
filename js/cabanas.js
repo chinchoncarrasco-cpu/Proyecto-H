@@ -20,6 +20,11 @@ function guardarCampoCabana(elemento) {
     const numeroCabana = fila.dataset.cabana;
     const campo = elemento.dataset.campo;
 
+    // El estado final se deriva de Aseo y Revisión; no es un campo editable.
+    if (campo === "estadoFinal") {
+        return;
+    }
+
     if (!fechaSeleccionada) {
         return;
     }
@@ -157,26 +162,6 @@ if (
 
 // Marcar que este día/cabaña fue editado manualmente
 datos.cabanas[numeroCabana].editadoManual = true;
-
-// ========================================
-// SINCRONIZAR ESTADO FINAL -> REVISIÓN
-// ========================================
-
-if (campo === "estadoFinal") {
-
-    let estadoRevision = "pendiente";
-
-    if (valor === "LISTA") {
-        estadoRevision = "lista";
-    }
-
-    else if (valor === "CON DETALLES") {
-        estadoRevision = "con-detalles";
-    }
-
-    datos.cabanas[numeroCabana].estadoRevision =
-        estadoRevision;
-}
 
 guardarDatos();
 
@@ -374,15 +359,6 @@ if (
         obtenerEstadoIngresoReserva(
             datosCabana.reservaId
         );
-
-    console.log(
-    "DEBUG CONT",
-    {
-        reservaId: datosCabana.reservaId,
-        estadoActual: datosCabana.estado,
-        estadoIngreso
-    }
-);
 
     if (
         estadoIngreso === "libre-ingresa" ||
@@ -892,6 +868,10 @@ if (resumenTexto) {
 // ========================================
 
 function actualizarTarjetasRevision(fecha) {
+    if (window.HAIKU_CABANAS_SITES_V1?.pintarRevision) {
+        window.HAIKU_CABANAS_SITES_V1.pintarRevision(fecha);
+        return;
+    }
 
     if (!fecha) {
         return;
@@ -1358,39 +1338,6 @@ revisionEstado.addEventListener("change", () => {
     revisionEstado.value;
 
     guardarDatos();
-
-// Sincronizar ESTADO DE REVISIÓN -> ESTADO FINAL del resumen
-const filaCabana = document.querySelector(
-    `#seccion-resumen .sites-resumen-cabana[data-cabana="${numeroCabana}"]`
-);
-
-if (filaCabana) {
-
-    const selectorResumen = filaCabana.querySelector(
-        '[data-campo="estadoFinal"]'
-    );
-
-    if (selectorResumen) {
-
-        if (revisionEstado.value === "lista") {
-            selectorResumen.value = "LISTA";
-        }
-
-        else if (revisionEstado.value === "con-detalles") {
-            selectorResumen.value = "CON DETALLES";
-        }
-
-        else {
-            selectorResumen.value = "";
-        }
-
-        // Guardar también estadoFinal
-        datos.cabanas[numeroCabana].estadoFinal =
-            selectorResumen.value;
-
-        guardarDatos();
-    }
-}
 
 actualizarTarjetasRevision(fechaSeleccionada);
 actualizarResumenAseo(fechaSeleccionada);
@@ -5591,6 +5538,10 @@ if (revisionCabanaGuardada) {
 // ========================================
 
 function actualizarResumenAseo(fecha) {
+    if (window.HAIKU_CABANAS_SITES_V1?.pintar) {
+        window.HAIKU_CABANAS_SITES_V1.pintar(fecha);
+        return;
+    }
 
     const contenedor =
         document.getElementById("aseo-resumen");
@@ -5885,6 +5836,9 @@ document.addEventListener("click", (evento) => {
         return;
     }
 
+    // La fila Sites abre la ficha completa con su propio botón «Abrir».
+    if (tarjeta.closest("#seccion-cabanas")) return;
+
     // No abrir la revisión si estamos usando
     // un select, input o botón de la tarjeta
     if (evento.target.closest("select, input, button")) {
@@ -5898,10 +5852,17 @@ document.addEventListener("click", (evento) => {
 
 });
 
+function cicloAseoExpressVigente(cabana, fecha) {
+    const ciclo = cabana?.aseoExpressCiclo;
+    return ciclo?.verificado === true &&
+        ciclo.existe === true &&
+        String(ciclo.fecha || "").slice(0, 10) === String(fecha || "").slice(0, 10);
+}
+
 function abrirRevisionAseoExpress(numeroCabana) {
 
     const panelAseo =
-        document.querySelector("#seccion-aseo .aseo-panel");
+        document.querySelector("#seccion-cabanas .aseo-panel");
 
     const revisionExpress =
         document.getElementById("aseo-express-individual");
@@ -5911,6 +5872,18 @@ function abrirRevisionAseoExpress(numeroCabana) {
 
     const fecha =
         document.getElementById("aseo-express-fecha");
+
+    if (!fechaSeleccionada) {
+        return;
+    }
+
+    const datos = obtenerDatosDia(fechaSeleccionada);
+    const datosCabana = datos.cabanas[numeroCabana] || {};
+
+    // La apertura visual no crea ni supone un ciclo Express.
+    if (!cicloAseoExpressVigente(datosCabana, fechaSeleccionada)) {
+        return;
+    }
 
     if (
         !panelAseo ||
@@ -5945,12 +5918,6 @@ function abrirRevisionAseoExpress(numeroCabana) {
         // ========================================
     // CARGAR CHECKLIST ASEO EXPRESS
     // ========================================
-
-    const datos =
-        obtenerDatosDia(fechaSeleccionada);
-
-    const datosCabana =
-        datos.cabanas[numeroCabana] || {};
 
     const solicitudAseoExpress =
     document.getElementById("aseo-express-solicitud");
@@ -6003,7 +5970,7 @@ if (solicitudAseoExpress) {
 
     if (estadoExpress) {
         estadoExpress.value =
-            datosCabana.estadoRevision || "pendiente";
+            datosCabana.estadoRevisionExpress || "pendiente";
     }
 
     panelAseo.style.display = "none";
@@ -6035,20 +6002,19 @@ document.addEventListener("change", (evento) => {
     const datos =
         obtenerDatosDia(fechaSeleccionada);
 
-    if (!datos.cabanas[numeroCabana]) {
-        datos.cabanas[numeroCabana] = {};
+    const datosCabana = datos.cabanas[numeroCabana];
+    if (!cicloAseoExpressVigente(datosCabana, fechaSeleccionada)) {
+        return;
     }
 
-    if (!datos.cabanas[numeroCabana].checklistAseoExpress) {
-        datos.cabanas[numeroCabana].checklistAseoExpress = {};
+    if (!datosCabana.checklistAseoExpress) {
+        datosCabana.checklistAseoExpress = {};
     }
 
     const item =
         check.dataset.aseoExpressItem;
 
-    datos.cabanas[numeroCabana]
-        .checklistAseoExpress[item] =
-        check.checked;
+    datosCabana.checklistAseoExpress[item] = check.checked;
 
     guardarDatos();
 
@@ -6062,7 +6028,7 @@ if (botonVolverAseo) {
     botonVolverAseo.addEventListener("click", () => {
 
         const panelAseo =
-            document.querySelector("#seccion-aseo .aseo-panel");
+            document.querySelector("#seccion-cabanas .aseo-panel");
 
         const revisionExpress =
             document.getElementById("aseo-express-individual");
@@ -6104,11 +6070,12 @@ if (detallesAseoExpress) {
         const datos =
             obtenerDatosDia(fechaSeleccionada);
 
-        if (!datos.cabanas[numeroCabana]) {
-            datos.cabanas[numeroCabana] = {};
+        const datosCabana = datos.cabanas[numeroCabana];
+        if (!cicloAseoExpressVigente(datosCabana, fechaSeleccionada)) {
+            return;
         }
 
-        datos.cabanas[numeroCabana].detallesAseoExpress =
+        datosCabana.detallesAseoExpress =
             detallesAseoExpress.value;
 
         guardarDatos();
@@ -6142,44 +6109,19 @@ if (estadoAseoExpress) {
         const datos =
             obtenerDatosDia(fechaSeleccionada);
 
-        if (!datos.cabanas[numeroCabana]) {
-            datos.cabanas[numeroCabana] = {};
+        const datosCabana = datos.cabanas[numeroCabana];
+        if (!cicloAseoExpressVigente(datosCabana, fechaSeleccionada)) {
+            return;
         }
 
-        // Estado compartido
-        datos.cabanas[numeroCabana].estadoRevision =
-            estadoAseoExpress.value;
-
-        // Sincronizar Estado Final
-        if (estadoAseoExpress.value === "lista") {
-
-            datos.cabanas[numeroCabana].estadoFinal =
-                "LISTA";
-
-        } else if (
-            estadoAseoExpress.value === "con-detalles"
-        ) {
-
-            datos.cabanas[numeroCabana].estadoFinal =
-                "CON DETALLES";
-
-        } else {
-
-            datos.cabanas[numeroCabana].estadoFinal = "";
-
-        }
+        // Express conserva su revisión propia; la completa y el estado final
+        // se calculan por sus autoridades respectivas.
+        datosCabana.estadoRevisionExpress = estadoAseoExpress.value;
 
         guardarDatos();
 
         // Actualizar todas las vistas conectadas
         cargarCabanasDia(fechaSeleccionada);
-
-        // Mantener sincronizado el selector
-        // de la revisión normal de Cabañas
-        if (revisionEstado) {
-            revisionEstado.value =
-                estadoAseoExpress.value;
-        }
 
     });
 
@@ -6337,20 +6279,8 @@ document.addEventListener("change", (evento) => {
         datos.cabanas[numeroCabana] = {};
     }
 
-    // Guardar estado para Revisión
+// Guardar estado para Revisión
 datos.cabanas[numeroCabana].estadoRevision = selector.value;
-
-// Convertir el estado de Aseo al formato que usa Resumen
-let estadoFinalResumen = "";
-
-if (selector.value === "lista") {
-    estadoFinalResumen = "LISTA";
-} else if (selector.value === "con-detalles") {
-    estadoFinalResumen = "CON DETALLES";
-}
-
-// Guardar estado para Resumen
-datos.cabanas[numeroCabana].estadoFinal = estadoFinalResumen;
 
     guardarDatos();
 

@@ -10,29 +10,6 @@
         return window.HAIKU_REVISION_RESUMEN_SYNC_V2 || null;
     }
 
-    function estadoFinalDesdeRevision(valor) {
-        if (valor === "lista") return "LISTA";
-        if (valor === "con-detalles") return "CON DETALLES";
-        return "";
-    }
-
-    function aplicarResumenVisual(numero, valorRevision) {
-        const fila = document.querySelector(
-            `#seccion-resumen .sites-resumen-cabana[data-cabana="${String(numero)}"]`
-        );
-        const selector = fila?.querySelector('[data-campo="estadoFinal"]');
-
-        if (!selector) return;
-        selector.value = estadoFinalDesdeRevision(valorRevision);
-        document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
-            detail: {
-                fecha: typeof fechaSeleccionada === "undefined"
-                    ? ""
-                    : String(fechaSeleccionada || "").slice(0, 10)
-            }
-        }));
-    }
-
     function aplicarRevisionCabanaVisual(numero, valorRevision) {
         const numeroAbierto = localStorage.getItem("haikuRevisionCabana") || "";
         if (String(numeroAbierto) !== String(numero)) return;
@@ -45,13 +22,12 @@
         const api = apiRevision();
         if (!api || !numero) return;
 
-        aplicarResumenVisual(numero, valorRevision);
         aplicarRevisionCabanaVisual(numero, valorRevision);
 
         try {
             await api.guardarDesdeResumen(
                 String(numero),
-                estadoFinalDesdeRevision(valorRevision)
+                valorRevision
             );
             await api.resincronizar?.();
         } catch (error) {
@@ -64,7 +40,7 @@
     }
 
     function instalar() {
-        const seccion = document.getElementById("seccion-aseo");
+        const seccion = document.getElementById("seccion-cabanas");
         if (!seccion || seccion.dataset.haikuAseoEstadoSyncV1 === "1") return;
 
         seccion.dataset.haikuAseoEstadoSyncV1 = "1";
@@ -83,12 +59,8 @@
                     return;
                 }
 
-                // Selector dentro de Revisión Aseo Express.
-                if (objetivo?.id === "aseo-express-estado") {
-                    const numero = localStorage.getItem("haikuAseoExpressCabana") || "";
-                    const valor = objetivo.value || "pendiente";
-                    guardarDesdeAseo(numero, valor);
-                }
+                // Aseo Express usa su propia revisión; nunca escribe la
+                // revisión completa a través de este puente.
             },
             true
         );

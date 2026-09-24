@@ -278,7 +278,7 @@
 
         // Refuerzo después de los clics legacy, por compatibilidad móvil.
         document.addEventListener("click", evento => {
-            const abre = evento.target.closest("[data-revision-cabana]");
+            const abre = evento.target.closest(".cabana-revision[data-revision-cabana]");
             const vuelve = evento.target.closest("#volver-cabanas");
 
             if (!abre && !vuelve) {

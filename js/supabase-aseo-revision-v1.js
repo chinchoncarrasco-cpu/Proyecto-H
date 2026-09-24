@@ -160,8 +160,7 @@
         return data || null;
     }
 
-    async function asegurarRevision(numeroCabana) {
-        const fecha = fechaOperativa();
+    async function asegurarRevision(numeroCabana, fecha = fechaOperativa()) {
         if (!fecha) {
             throw new Error("No hay fecha operativa seleccionada.");
         }
@@ -265,6 +264,14 @@
             return "pendiente";
         }
 
+        if (revision.estado === "pendiente") {
+            return "pendiente";
+        }
+
+        if (revision.estado === "en_proceso") {
+            return "en_revision";
+        }
+
         if (revision.resultado === "lista") {
             return "lista";
         }
@@ -279,16 +286,62 @@
         return "pendiente";
     }
 
+    function cicloRevision(fecha, revision, verificado = true) {
+        return {
+            fecha,
+            verificado,
+            id: revision?.id || null,
+            estado: revision?.estado || null,
+            resultado: revision?.resultado || null
+        };
+    }
+
+    function invalidarCiclos(fecha, numeros = null) {
+        if (!fecha || typeof obtenerDatosDia !== "function") return;
+        const datos = obtenerDatosDia(fecha);
+        const cabanas = datos?.cabanas || {};
+        const lista = numeros || Object.keys(cabanas);
+        let cambio = false;
+        lista.forEach(numero => {
+            const cabana = cabanas[numero];
+            if (!cabana) return;
+            cabana.revisionCompletaCiclo = cicloRevision(fecha, null, false);
+            cambio = true;
+        });
+        if (cambio && typeof guardarDatos === "function") guardarDatos();
+        if (cambio && fecha === fechaOperativa()) refrescarVistasLegacy();
+    }
+
+    function invalidarCiclosPersistidos() {
+        if (typeof datosPorFecha === "undefined") return;
+        let cambio = false;
+        Object.values(datosPorFecha || {}).forEach(dia => {
+            Object.values(dia?.cabanas || {}).forEach(cabana => {
+                if (cabana?.revisionCompletaCiclo?.verificado !== true) return;
+                cabana.revisionCompletaCiclo.verificado = false;
+                cambio = true;
+            });
+        });
+        if (cambio && typeof guardarDatos === "function") guardarDatos();
+        if (cambio) refrescarVistasLegacy();
+    }
+
+    function actualizarEstadoFinalDerivado(datosCabana) {
+        const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
+        if (typeof derivar === "function") {
+            datosCabana.estadoFinal = derivar(datosCabana);
+        }
+    }
+
     function actualizarCacheLocal(
+        fecha,
         numeroCabana,
         config,
         revision,
         items
     ) {
-        const fecha = fechaOperativa();
-
         if (
-            !fecha ||
+            !fecha || fecha !== fechaOperativa() ||
             typeof obtenerDatosDia !== "function"
         ) {
             return;
@@ -311,22 +364,15 @@
             checklist[legacyId] = item?.estado === "ok";
         });
 
-        datosCabana.checklist = checklist;
+        datosCabana.checklist = window.HAIKU_CHECKLIST_OPTIMISTA_V1
+            ?.aplicarCache("completa", fecha, numeroCabana, checklist) || checklist;
         datosCabana.estadoRevision =
             estadoLegacyDesdeRevision(revision);
+        datosCabana.revisionCompletaCiclo =
+            cicloRevision(fecha, revision);
         datosCabana.detallesRevision =
             revision?.observaciones || "";
-
-        // Estado final del Resumen sigue la revisión.
-        if (datosCabana.estadoRevision === "lista") {
-            datosCabana.estadoFinal = "LISTA";
-        } else if (
-            datosCabana.estadoRevision === "con-detalles"
-        ) {
-            datosCabana.estadoFinal = "CON DETALLES";
-        } else {
-            datosCabana.estadoFinal = "";
-        }
+        actualizarEstadoFinalDerivado(datosCabana);
 
         if (typeof guardarDatos === "function") {
             guardarDatos();
@@ -372,7 +418,9 @@
                     String(cfg.checklist_item_id)
                 );
 
-                checkbox.checked = item?.estado === "ok";
+                checkbox.checked = window.HAIKU_CHECKLIST_OPTIMISTA_V1
+                    ?.valor("completa", fechaOperativa(), numeroCabana, cfg.legacy_checklist_id || checkbox.dataset.checklistId,
+                        item?.estado === "ok") ?? (item?.estado === "ok");
             });
 
         const selectorEstado =
@@ -413,17 +461,21 @@
             // No la llamamos siempre para evitar renderes innecesarios.
             // El estado final se actualiza en las vistas específicas.
         }
+        document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+            detail: { fecha }
+        }));
     }
 
     async function guardarItem(
         numeroCabana,
         legacyId,
         checked,
-        checkbox
+        checkbox,
+        fechaSeleccion = fechaOperativa()
     ) {
         const supabase = cliente();
         if (!supabase) {
-            return;
+            throw new Error("No hay conexión con Supabase para guardar el ítem.");
         }
 
         const cabana = await obtenerCabana(numeroCabana);
@@ -439,7 +491,7 @@
             );
         }
 
-        const revision = await asegurarRevision(numeroCabana);
+        const revision = await asegurarRevision(numeroCabana, fechaSeleccion);
         const ahora = new Date().toISOString();
 
         const payload = {
@@ -466,9 +518,11 @@
             throw error;
         }
 
-        // Si una revisión ya estaba cerrada y se modifica un ítem,
-        // vuelve a quedar en proceso para no mostrar un resultado viejo.
-        if (revision.estado === "completada") {
+        try {
+        // Desde aquí el ítem ya está persistido. Si falla una actualización
+        // secundaria, el check no debe revertirse como si el upsert hubiera fallado.
+        // Un cambio del checklist inicia o reabre la revisión real.
+        if (["pendiente", "completada"].includes(revision.estado)) {
             const usuarioId = await obtenerUsuarioId();
 
             const { error: errorRevision } = await supabase
@@ -482,35 +536,32 @@
                 .eq("id", revision.id);
 
             if (errorRevision) {
-                throw errorRevision;
+                const parcial = new Error("El check se guardó, pero no se pudo actualizar el estado de revisión.");
+                parcial.itemPersistido = true;
+                parcial.cause = errorRevision;
+                throw parcial;
             }
 
             revision.estado = "en_proceso";
             revision.resultado = null;
             revision.finalizado_en = null;
 
-            const selectorEstado =
-                document.getElementById("revision-estado");
+        }
 
-            if (selectorEstado) {
-                selectorEstado.value = "pendiente";
-            }
+        if (String(numeroRevisionAbierta()) === String(numeroCabana)) {
+            const selectorEstado = document.getElementById("revision-estado");
+            if (selectorEstado) selectorEstado.value = "en_revision";
+        }
 
-            const fecha = fechaOperativa();
-            const datos =
-                typeof obtenerDatosDia === "function"
-                    ? obtenerDatosDia(fecha)
-                    : null;
-
-            if (datos?.cabanas?.[numeroCabana]) {
-                datos.cabanas[numeroCabana].estadoRevision =
-                    "pendiente";
-                datos.cabanas[numeroCabana].estadoFinal = "";
-
-                if (typeof guardarDatos === "function") {
-                    guardarDatos();
-                }
-            }
+        const fecha = revision.fecha;
+        const datos = fecha === fechaOperativa() &&
+            typeof obtenerDatosDia === "function" ? obtenerDatosDia(fecha) : null;
+        if (datos?.cabanas?.[numeroCabana]) {
+            const cabana = datos.cabanas[numeroCabana];
+            cabana.estadoRevision = "en_revision";
+            cabana.revisionCompletaCiclo = cicloRevision(fecha, revision);
+            actualizarEstadoFinalDerivado(cabana);
+            if (typeof guardarDatos === "function") guardarDatos();
         }
 
         if (checkbox) {
@@ -525,7 +576,7 @@
         document.dispatchEvent(
             new CustomEvent("haiku:revision-item-guardado", {
                 detail: {
-                    fecha: fechaOperativa(),
+                    fecha: revision.fecha,
                     numeroCabana: String(numeroCabana),
                     legacyId: String(legacyId),
                     checked: Boolean(checked),
@@ -533,6 +584,13 @@
                 }
             })
         );
+        } catch (errorPosterior) {
+            if (errorPosterior.itemPersistido === true) throw errorPosterior;
+            const parcial = new Error("El check se guardó, pero falló una actualización posterior.");
+            parcial.itemPersistido = true;
+            parcial.cause = errorPosterior;
+            throw parcial;
+        }
     }
 
     async function guardarEstadoRevision(numeroCabana) {
@@ -555,7 +613,11 @@
         const usuarioId = await obtenerUsuarioId();
         const ahora = new Date().toISOString();
 
-        let estado = "en_proceso";
+        if (!["pendiente", "en_revision", "con-detalles", "lista"].includes(valor)) {
+            throw new Error(`Estado de revisión no reconocido: ${valor}`);
+        }
+
+        let estado = valor === "pendiente" ? "pendiente" : "en_proceso";
         let resultado = null;
         let finalizadoEn = null;
 
@@ -588,7 +650,19 @@
         }
 
         Object.assign(revision, payload);
+        if (revision.fecha === fechaOperativa() && typeof obtenerDatosDia === "function") {
+            const cabana = obtenerDatosDia(revision.fecha)?.cabanas?.[numeroCabana];
+            if (cabana) {
+                cabana.estadoRevision = valor;
+                cabana.revisionCompletaCiclo = cicloRevision(revision.fecha, revision);
+                actualizarEstadoFinalDerivado(cabana);
+                if (typeof guardarDatos === "function") guardarDatos();
+            }
+        }
         refrescarVistasLegacy();
+        document.dispatchEvent(new CustomEvent("haiku:revision-estado-guardado", {
+            detail: { fecha: revision.fecha, numeroCabana: String(numeroCabana), revisionId: revision.id }
+        }));
     }
 
     async function guardarDetallesRevision(numeroCabana) {
@@ -607,10 +681,16 @@
         const revision = await asegurarRevision(numeroCabana);
         const usuarioId = await obtenerUsuarioId();
 
+        const iniciaRevision = revision.estado === "pendiente";
         const payload = {
             observaciones: detalles.value.trim() || null,
             revisado_por: usuarioId
         };
+        if (iniciaRevision) {
+            payload.estado = "en_proceso";
+            payload.resultado = null;
+            payload.finalizado_en = null;
+        }
 
         const { error } = await supabase
             .from("revisiones_cabana")
@@ -622,58 +702,56 @@
         }
 
         Object.assign(revision, payload);
+        if (iniciaRevision && revision.fecha === fechaOperativa()) {
+            const selectorEstado = document.getElementById("revision-estado");
+            if (selectorEstado && String(numeroRevisionAbierta()) === String(numeroCabana)) {
+                selectorEstado.value = "en_revision";
+            }
+            const cabana = typeof obtenerDatosDia === "function"
+                ? obtenerDatosDia(revision.fecha)?.cabanas?.[numeroCabana] : null;
+            if (cabana) {
+                cabana.estadoRevision = "en_revision";
+                cabana.revisionCompletaCiclo = cicloRevision(revision.fecha, revision);
+                actualizarEstadoFinalDerivado(cabana);
+                if (typeof guardarDatos === "function") guardarDatos();
+            }
+            refrescarVistasLegacy();
+            document.dispatchEvent(new CustomEvent("haiku:revision-estado-guardado", {
+                detail: { fecha: revision.fecha, numeroCabana: String(numeroCabana), revisionId: revision.id }
+            }));
+        }
     }
 
-    function instalarListenersRevision(numeroCabana, config) {
-        const contenedor =
-            document.getElementById("revision-checklist");
+    function instalarListenerItemsRevision() {
+        document.addEventListener("change", async evento => {
+            const checkbox = evento.target?.closest?.('input[type="checkbox"][data-checklist-id]');
+            if (!checkbox || !document.getElementById("revision-checklist")?.contains(checkbox)) return;
+            const numeroCabana = numeroRevisionAbierta();
+            const fecha = fechaOperativa();
+            if (!numeroCabana || !fecha) return;
+            const legacyId = String(checkbox.dataset.checklistId || "");
+            const valorEsperado = checkbox.checked;
+            const optimista = window.HAIKU_CHECKLIST_OPTIMISTA_V1;
+            const pendiente = optimista?.iniciar("completa", fecha, numeroCabana, legacyId, checkbox);
+            if (optimista && !pendiente) {
+                evento.stopImmediatePropagation?.();
+                return;
+            }
+            try {
+                await guardarItem(numeroCabana, legacyId, valorEsperado, checkbox, fecha);
+                optimista?.terminar(pendiente, true);
+            } catch (error) {
+                console.error("HAIKU · No fue posible guardar ítem de revisión en Supabase:", error);
+                if (optimista) optimista.terminar(pendiente, error.itemPersistido === true);
+                else if (!error.itemPersistido) checkbox.checked = !valorEsperado;
+                alert(error.itemPersistido
+                    ? "El check se guardó, pero no fue posible actualizar el estado de revisión. Recarga para verificar."
+                    : "No fue posible guardar este check en Supabase. Intenta nuevamente.");
+            }
+        }, true);
+    }
 
-        if (contenedor) {
-            contenedor
-                .querySelectorAll(
-                    'input[type="checkbox"][data-checklist-id]'
-                )
-                .forEach(checkbox => {
-                    const legacyId = String(
-                        checkbox.dataset.checklistId || ""
-                    );
-
-                    if (!config.has(legacyId)) {
-                        return;
-                    }
-
-                    if (
-                        checkbox.dataset.supabaseRevisionListener === "1"
-                    ) {
-                        return;
-                    }
-
-                    checkbox.dataset.supabaseRevisionListener = "1";
-
-                    checkbox.addEventListener("change", async () => {
-                        const valorEsperado = checkbox.checked;
-
-                        try {
-                            await guardarItem(
-                                numeroCabana,
-                                legacyId,
-                                valorEsperado,
-                                checkbox
-                            );
-                        } catch (error) {
-                            console.error(
-                                "HAIKU · No fue posible guardar ítem de revisión en Supabase:",
-                                error
-                            );
-
-                            checkbox.checked = !valorEsperado;
-                            alert(
-                                "No fue posible guardar este check en Supabase. Intenta nuevamente."
-                            );
-                        }
-                    });
-                });
-        }
+    function instalarListenersRevision() {
 
         const selector =
             document.getElementById("revision-estado");
@@ -739,10 +817,13 @@
     async function prepararRevision(numeroCabana) {
         const supabase = cliente();
         const fecha = fechaOperativa();
+        const version = window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version();
 
         if (!supabase || !fecha || !numeroCabana) {
             return;
         }
+
+        invalidarCiclos(fecha, [String(numeroCabana)]);
 
         try {
             const cabana = await obtenerCabana(numeroCabana);
@@ -759,7 +840,11 @@
                 ? await obtenerItemsRevision(revision.id)
                 : new Map();
 
+            if (fecha !== fechaOperativa() ||
+                (version !== undefined && version !== window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version())) return;
+
             actualizarCacheLocal(
+                fecha,
                 String(numeroCabana),
                 config,
                 revision,
@@ -773,10 +858,7 @@
                 items
             );
 
-            instalarListenersRevision(
-                String(numeroCabana),
-                config
-            );
+            instalarListenersRevision();
 
             refrescarVistasLegacy();
 
@@ -813,6 +895,7 @@
         resumenSincronizando = true;
 
         try {
+            invalidarCiclos(fecha);
             const { data: cabanas, error: errorCabanas } =
                 await supabase
                     .from("cabanas")
@@ -854,6 +937,8 @@
                 throw errorRevisiones;
             }
 
+            if (fecha !== fechaOperativa()) return;
+
             const ultimaPorCabana = new Map();
 
             (revisiones || []).forEach(revision => {
@@ -878,23 +963,11 @@
 
                     datos.cabanas[numero].estadoRevision =
                         estadoLegacyDesdeRevision(revision);
+                    datos.cabanas[numero].revisionCompletaCiclo =
+                        cicloRevision(fecha, revision);
                     datos.cabanas[numero].detallesRevision =
                         revision?.observaciones || "";
-
-                    if (
-                        datos.cabanas[numero].estadoRevision ===
-                        "lista"
-                    ) {
-                        datos.cabanas[numero].estadoFinal = "LISTA";
-                    } else if (
-                        datos.cabanas[numero].estadoRevision ===
-                        "con-detalles"
-                    ) {
-                        datos.cabanas[numero].estadoFinal =
-                            "CON DETALLES";
-                    } else {
-                        datos.cabanas[numero].estadoFinal = "";
-                    }
+                    actualizarEstadoFinalDerivado(datos.cabanas[numero]);
 
                     const key = claveRevision(fecha, numero);
                     cacheRevisiones.set(key, revision || null);
@@ -920,6 +993,7 @@
                 }
             );
         } catch (error) {
+            if (fecha === fechaOperativa()) invalidarCiclos(fecha);
             console.error(
                 "HAIKU · No fue posible sincronizar revisiones desde Supabase:",
                 error
@@ -953,52 +1027,14 @@
         window.mostrarChecklistCabana = puente;
     }
 
-    function instalarAutoRefreshAseo() {
-        const seccion = document.getElementById("seccion-aseo");
-
-        if (!seccion) {
-            return;
-        }
-
-        let estabaActiva = seccion.classList.contains("activa");
-
-        const observer = new MutationObserver(() => {
-            const activa = seccion.classList.contains("activa");
-
-            if (activa && !estabaActiva) {
-                cacheRevisiones.clear();
-                sincronizarResumenFecha();
-            }
-
-            estabaActiva = activa;
-        });
-
-        observer.observe(seccion, {
-            attributes: true,
-            attributeFilter: ["class"]
-        });
-
-        const botonAseo = document.querySelector(
-            '.menu-item[data-seccion="aseo"]'
-        );
-
-        if (botonAseo) {
-            botonAseo.addEventListener("click", () => {
-                setTimeout(() => {
-                    cacheRevisiones.clear();
-                    sincronizarResumenFecha();
-                }, 0);
-            });
-        }
-
-        if (estabaActiva) {
-            sincronizarResumenFecha();
-        }
-    }
-
     function iniciar() {
+        invalidarCiclosPersistidos();
         instalarPuenteMostrarChecklist();
-        instalarAutoRefreshAseo();
+        instalarListenerItemsRevision();
+
+        // El puente V2 observa Resumen y Cabañas, e invoca
+        // sincronizarResumenFecha al entrar. Evitamos otro observer y otra
+        // lectura simultánea para la misma sección.
 
         window.HAIKU_REVISION_SUPABASE_V1 = Object.freeze({
             prepararRevision,

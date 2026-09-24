@@ -78,6 +78,36 @@
         } catch (_) {}
     }
 
+    function avisarResumenActualizado(fecha) {
+        if (fecha !== fechaOperativa() || typeof CustomEvent !== "function") return;
+        document.dispatchEvent?.(new CustomEvent("haiku:resumen-datos-actualizados", {
+            detail: { fecha }
+        }));
+    }
+
+    function invalidarExpressEnCache(fecha = "") {
+        let dias = [];
+        try {
+            if (typeof datosPorFecha !== "undefined" && datosPorFecha) {
+                dias = fecha ? [datosPorFecha[fecha]] : Object.values(datosPorFecha);
+            } else if (fecha || fechaOperativa()) {
+                dias = [datosDia(fecha || fechaOperativa())];
+            }
+        } catch (_) {}
+        let modificado = false;
+        dias.forEach(dia => Object.values(dia?.cabanas || {}).forEach(cabana => {
+            if (Object.hasOwn(cabana, "aseoExpressCiclo")) {
+                delete cabana.aseoExpressCiclo;
+                modificado = true;
+            }
+            if (Object.hasOwn(cabana, "estadoRevisionExpress")) {
+                delete cabana.estadoRevisionExpress;
+                modificado = true;
+            }
+        }));
+        if (modificado) guardarCache();
+    }
+
     function cabanaCache(fecha, numero, crear = true) {
         const dia = datosDia(fecha);
         if (!dia) return null;
@@ -179,6 +209,11 @@
     }
 
     function estadoAseo(cabana) {
+        // "no_requiere" es un estado canónico futuro. "cancelado" conserva
+        // su significado histórico y nunca se reinterpreta como sin aseo.
+        if (["pendiente", "asignado", "en_proceso", "completado", "cancelado", "no_requiere"].includes(cabana?.aseoEstado)) {
+            return cabana.aseoEstado;
+        }
         if (cabana?.aseoOut) return "completado";
         if (cabana?.aseoIn) return "en_proceso";
         if (String(cabana?.aseo || "").trim()) return "asignado";
@@ -191,13 +226,6 @@
             String(cabana?.revisionAseo || "").trim() ||
             cabana?.aseoIn ||
             cabana?.aseoOut
-        );
-    }
-
-    function tieneExpressLegacy(cabana) {
-        return Boolean(
-            String(cabana?.detallesAseoExpress || "").trim() ||
-            Object.values(cabana?.checklistAseoExpress || {}).some(Boolean)
         );
     }
 
@@ -275,9 +303,37 @@
         if (!fecha || !numero) return Promise.resolve();
 
         actualizarCampoLocal(fecha, String(numero), campo, valor);
+        const cabana = cabanaCache(fecha, String(numero));
+        if (cabana && (["aseoIn", "aseoOut"].includes(campo) || (campo === "aseo" && String(valor).trim()))) {
+            delete cabana.aseoEstado;
+            guardarCache();
+        }
         return encolar(`aseo:${fecha}:${numero}`, () =>
             guardarAseoCompleto(fecha, String(numero))
         );
+    }
+
+    function guardarEstadoAseo(numero, estado) {
+        const fecha = fechaOperativa();
+        const valor = String(estado || "");
+        if (!fecha || !numero || !["pendiente", "en_proceso", "completado", "cancelado", "no_requiere"].includes(valor)) {
+            return Promise.reject(new Error("Estado de aseo no reconocido."));
+        }
+        const cabana = cabanaCache(fecha, String(numero));
+        const anterior = cabana.aseoEstado;
+        cabana.aseoEstado = valor;
+        guardarCache();
+        return encolar(`aseo:${fecha}:${numero}`, () => guardarAseoCompleto(fecha, String(numero)))
+            .then(resultado => {
+                avisarResumenActualizado(fecha);
+                return resultado;
+            })
+            .catch(error => {
+                if (anterior === undefined) delete cabana.aseoEstado;
+                else cabana.aseoEstado = anterior;
+                guardarCache();
+                throw error;
+            });
     }
 
     async function guardarSolicitud(fecha, numero, descripcion) {
@@ -331,6 +387,19 @@
         return `${fecha}::${numero}`;
     }
 
+    function cicloExpressVerificado(fecha, numero) {
+        const ciclo = cabanaCache(fecha, numero, false)?.aseoExpressCiclo;
+        return fecha === fechaOperativa() && fechaHidratada === fecha &&
+            ciclo?.verificado === true && ciclo.fecha === fecha && ciclo.existe === true;
+    }
+
+    function estadoVisualRevisionExpress(revision) {
+        if (revision?.estado === "completada" && revision.resultado === "lista") return "lista";
+        if (revision?.estado === "completada" && revision.resultado === "con_detalles") return "con-detalles";
+        if (revision?.estado === "en_proceso") return "en_revision";
+        return "pendiente";
+    }
+
     async function obtenerRevisionExpress(fecha, numero, forzar = false) {
         const clave = claveRevision(fecha, numero);
         if (!forzar && revisionesExpress.has(clave)) {
@@ -357,10 +426,27 @@
     }
 
     async function asegurarRevisionExpress(fecha, numero) {
-        let revision = await obtenerRevisionExpress(fecha, numero);
+        await cargarReferencias();
+        const ref = cabanasPorNumero.get(String(numero));
+        if (!ref) throw new Error("Cabaña Aseo Express no reconocida.");
+        const { data: solicitud, error: errorSolicitud } = await cliente()
+            .from("solicitudes")
+            .select("id,fecha_operativa,cabana_id,estado")
+            .eq("fecha_operativa", fecha)
+            .eq("cabana_id", ref.id)
+            .eq("categoria", CATEGORIA_SOLICITUD)
+            .neq("estado", "cancelada")
+            .maybeSingle();
+        errorSiExiste(errorSolicitud);
+        if (!solicitud) {
+            throw new Error("No existe solicitud vigente de Aseo Express para esta fecha y cabaña.");
+        }
+
+        // Verificar contra Supabase incluso si el caché local contiene una
+        // revisión antigua: abrir la UI nunca crea una revisión nueva.
+        let revision = await obtenerRevisionExpress(fecha, numero, true);
         if (revision) return revision;
 
-        const ref = cabanasPorNumero.get(String(numero));
         const payload = {
             fecha,
             cabana_id: ref.id,
@@ -419,10 +505,56 @@
         revisionesExpress.set(claveRevision(fecha, numero), data);
     }
 
-    async function migrarLegacySiCorresponde(fecha, filasAseo, solicitudes, revisiones) {
+    async function guardarEstadoRevisionExpress(numero, valorSolicitado) {
+        const fecha = fechaOperativa();
+        const numeroCabana = String(numero || "");
+        const valor = String(valorSolicitado || "");
+        if (!fecha || !numeroCabana || !["pendiente", "en_revision", "con-detalles", "lista"].includes(valor)) {
+            throw new Error("Estado de revisión Express no reconocido.");
+        }
+
+        // Antes de escribir, releer la solicitud/revisión de esa fecha y
+        // cabaña. Un texto o checklist del caché local no autoriza un ciclo.
+        await hidratar(fecha, { pintar: false });
+        const cabana = cabanaCache(fecha, numeroCabana, false);
+        if (!cicloExpressVerificado(fecha, numeroCabana)) {
+            throw new Error("No existe un ciclo real de Aseo Express verificado para esta cabaña y fecha.");
+        }
+
+        const resultado = await encolar(`express:${fecha}:${numeroCabana}`, async () => {
+            const revision = await asegurarRevisionExpress(fecha, numeroCabana);
+            const ahora = new Date().toISOString();
+            const completada = valor === "con-detalles" || valor === "lista";
+            const detalles = document.getElementById("aseo-express-detalles");
+            const payload = {
+                estado: completada ? "completada" : valor === "en_revision" ? "en_proceso" : "pendiente",
+                resultado: valor === "con-detalles" ? "con_detalles" : valor === "lista" ? "lista" : null,
+                finalizado_en: completada ? ahora : null,
+                revisado_por: usuarioId(),
+                observaciones: String(detalles?.value ?? cabana?.detallesAseoExpress ?? "").trim() || null
+            };
+            const { data, error } = await cliente()
+                .from("revisiones_cabana")
+                .update(payload)
+                .eq("id", revision.id)
+                .eq("tipo_revision", TIPO_REVISION_EXPRESS)
+                .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,finalizado_en,revisado_por")
+                .single();
+            errorSiExiste(error);
+            if (!data) throw new Error("No se pudo verificar la revisión Express guardada.");
+            revisionesExpress.set(claveRevision(fecha, numeroCabana), data);
+            return data;
+        });
+
+        await hidratar(fecha, { pintar: true });
+        if (fecha === fechaOperativa() && fechaHidratada !== fecha) {
+            throw new Error("El estado Express se guardó, pero no se pudo verificar la lectura posterior.");
+        }
+        return resultado;
+    }
+
+    async function migrarLegacySiCorresponde(fecha, filasAseo) {
         const aseosPorCabana = new Map((filasAseo || []).map(fila => [String(fila.cabana_id), fila]));
-        const solicitudesPorCabana = new Map((solicitudes || []).map(fila => [String(fila.cabana_id), fila]));
-        const revisionesPorCabana = new Map((revisiones || []).map(fila => [String(fila.cabana_id), fila]));
 
         for (const [numero, ref] of cabanasPorNumero) {
             const local = cabanaCache(fecha, numero, false);
@@ -433,28 +565,6 @@
                 if (creada) aseosPorCabana.set(String(ref.id), creada);
             }
 
-            if (
-                !solicitudesPorCabana.has(String(ref.id)) &&
-                String(local.solicitudAseoExpress || "").trim()
-            ) {
-                const creada = await guardarSolicitud(
-                    fecha,
-                    numero,
-                    String(local.solicitudAseoExpress)
-                );
-                if (creada) solicitudesPorCabana.set(String(ref.id), creada);
-            }
-
-            if (!revisionesPorCabana.has(String(ref.id)) && tieneExpressLegacy(local)) {
-                const revision = await asegurarRevisionExpress(fecha, numero);
-                if (String(local.detallesAseoExpress || "").trim()) {
-                    await guardarDetallesExpress(fecha, numero, local.detallesAseoExpress);
-                }
-                for (const [claveItem, marcado] of Object.entries(local.checklistAseoExpress || {})) {
-                    if (marcado) await guardarItemExpress(fecha, numero, claveItem, true);
-                }
-                revisionesPorCabana.set(String(ref.id), revision);
-            }
         }
     }
 
@@ -487,9 +597,7 @@
 
         await migrarLegacySiCorresponde(
             fecha,
-            aseosResp.data || [],
-            solicitudesResp.data || [],
-            revisionesResp.data || []
+            aseosResp.data || []
         );
 
         // Releer sólo cuando la protección legacy creó filas nuevas.
@@ -548,7 +656,12 @@
             [...cabanasPorNumero.entries()].map(([numero, ref]) => [String(ref.id), numero])
         );
         const aseos = new Map(remoto.aseos.map(fila => [String(fila.cabana_id), fila]));
-        const solicitudes = new Map(remoto.solicitudes.map(fila => [String(fila.cabana_id), fila]));
+        const solicitudes = new Map();
+        remoto.solicitudes.forEach(fila => {
+            if (fila.estado !== "cancelada" && !solicitudes.has(String(fila.cabana_id))) {
+                solicitudes.set(String(fila.cabana_id), fila);
+            }
+        });
         const revisiones = new Map(remoto.revisiones.map(fila => [String(fila.cabana_id), fila]));
         const itemsPorRevision = new Map();
 
@@ -564,30 +677,64 @@
             if (!local) continue;
 
             const aseo = aseos.get(cabanaId);
+            local.aseoEstado = aseo?.estado || "";
             local.aseo = aseo?.encargado_nombre || "";
             local.revisionAseo = aseo?.revisor_nombre || "";
             local.aseoIn = horaSantiago(aseo?.iniciado_en);
             local.aseoOut = horaSantiago(aseo?.completado_en);
 
-            const solicitud = solicitudes.get(cabanaId);
-            local.solicitudAseoExpress =
-                solicitud && solicitud.estado !== "cancelada"
-                    ? solicitud.descripcion || ""
-                    : "";
+            const solicitudVigente = solicitudes.get(cabanaId) || null;
+            if (solicitudVigente) {
+                local.solicitudAseoExpress = solicitudVigente.descripcion || "";
+            }
 
-            const revision = revisiones.get(cabanaId);
+            // Una revisión aislada puede pertenecer a un ciclo histórico; sin
+            // solicitud vigente no habilita ni se atribuye al bloque actual.
+            const revision = solicitudVigente ? revisiones.get(cabanaId) : null;
+            local.aseoExpressCiclo = {
+                fecha,
+                verificado: true,
+                existe: Boolean(solicitudVigente),
+                solicitudId: solicitudVigente?.id || null,
+                estadoSolicitud: solicitudVigente?.estado || null,
+                revisionId: revision?.id || null,
+                estadoRevision: revision?.estado || null,
+                resultadoRevision: revision?.resultado || null
+            };
+            local.estadoRevisionExpress = local.aseoExpressCiclo.existe
+                ? estadoVisualRevisionExpress(revision)
+                : null;
             revisionesExpress.set(claveRevision(fecha, numero), revision || null);
-            local.detallesAseoExpress = revision?.observaciones || "";
-            local.checklistAseoExpress = {};
+            if (revision) {
+                local.detallesAseoExpress = revision.observaciones || "";
+                local.checklistAseoExpress = {};
 
-            (itemsPorRevision.get(String(revision?.id)) || []).forEach(item => {
-                for (const [claveItem, refItem] of itemsPorClave) {
-                    if (String(refItem.id) === String(item.checklist_item_id)) {
-                        local.checklistAseoExpress[claveItem] = item.estado === "ok";
-                        break;
+                (itemsPorRevision.get(String(revision.id)) || []).forEach(item => {
+                    for (const [claveItem, refItem] of itemsPorClave) {
+                        if (String(refItem.id) === String(item.checklist_item_id)) {
+                            local.checklistAseoExpress[claveItem] = item.estado === "ok";
+                            break;
+                        }
                     }
+                });
+            } else if (solicitudVigente) {
+                // Una solicitud nueva sin revisión empieza vacía. Los datos
+                // locales previos se conservan, pero no se atribuyen al ciclo.
+                if ((local.detallesAseoExpress || Object.values(local.checklistAseoExpress || {}).some(Boolean)) &&
+                    !local.aseoExpressLegacy) {
+                    local.aseoExpressLegacy = {
+                        detalles: local.detallesAseoExpress || "",
+                        checklist: { ...local.checklistAseoExpress }
+                    };
                 }
-            });
+                local.detallesAseoExpress = "";
+                local.checklistAseoExpress = {};
+            }
+            if (solicitudVigente) {
+                local.checklistAseoExpress = window.HAIKU_CHECKLIST_OPTIMISTA_V1
+                    ?.aplicarCache("express", fecha, numero, local.checklistAseoExpress || {})
+                    || local.checklistAseoExpress || {};
+            }
         }
 
         guardarCache();
@@ -610,9 +757,10 @@
         const local = cabanaCache(fecha, String(numero), false) || {};
 
         document.querySelectorAll("[data-aseo-express-item]").forEach(check => {
-            check.checked = local.checklistAseoExpress?.[
-                check.dataset.aseoExpressItem
-            ] === true;
+            check.checked = window.HAIKU_CHECKLIST_OPTIMISTA_V1?.valor(
+                "express", fecha, numero, check.dataset.aseoExpressItem,
+                local.checklistAseoExpress?.[check.dataset.aseoExpressItem] === true
+            ) ?? (local.checklistAseoExpress?.[check.dataset.aseoExpressItem] === true);
         });
 
         const detalles = document.getElementById("aseo-express-detalles");
@@ -631,6 +779,7 @@
         if (!fecha || !cliente() || !window.haikuSesion) return;
 
         if (hidratacionActual) return hidratacionActual;
+        const version = window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version();
 
         hidratacionActual = (async () => {
             await esperarEscrituras();
@@ -639,12 +788,15 @@
             // Si el usuario cambió de fecha durante la consulta, no pintamos
             // datos antiguos sobre la nueva fecha.
             if (fecha !== fechaOperativa()) return;
+            if (version !== undefined &&
+                version !== window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version()) return;
 
             aplicarEnCache(fecha, remoto);
             fechaHidratada = fecha;
             ultimaActualizacion = Date.now();
 
             if (opciones.pintar !== false) pintarAseo();
+            avisarResumenActualizado(fecha);
 
             const abierta = localStorage.getItem("haikuAseoExpressCabana") || "";
             const panel = document.getElementById("aseo-express-individual");
@@ -652,6 +804,13 @@
 
             console.info("HAIKU · Aseo sincronizado desde Supabase:", { fecha });
         })().catch(error => {
+            if (fecha === fechaOperativa()) {
+                invalidarExpressEnCache(fecha);
+                fechaHidratada = "";
+                // Cerrar un Express visible cuya autoridad dejó de ser
+                // verificable; los controles no quedan habilitados por caché.
+                pintarAseo();
+            }
             console.error("HAIKU · No fue posible cargar Aseo desde Supabase:", error);
         }).finally(() => {
             hidratacionActual = null;
@@ -691,25 +850,67 @@
                 return;
             }
 
+            if (objetivo?.id === "aseo-express-estado") {
+                const fecha = fechaOperativa();
+                const numero = localStorage.getItem("haikuAseoExpressCabana") || "";
+                const previo = cabanaCache(fecha, numero, false)?.estadoRevisionExpress || "pendiente";
+                if (!numero || !cicloExpressVerificado(fecha, numero)) {
+                    evento.stopImmediatePropagation?.();
+                    objetivo.value = previo;
+                    return;
+                }
+                objetivo.disabled = true;
+                guardarEstadoRevisionExpress(numero, objetivo.value).catch(error => {
+                    console.error("HAIKU · No fue posible guardar el estado de revisión Express:", error);
+                    objetivo.value = previo;
+                    window.alert?.("No fue posible verificar o guardar la revisión de Aseo Express.");
+                }).finally(() => {
+                    objetivo.disabled = false;
+                });
+                return;
+            }
+
             const check = objetivo?.closest?.("[data-aseo-express-item]");
             if (check) {
                 const fecha = fechaOperativa();
                 const numero = localStorage.getItem("haikuAseoExpressCabana") || "";
-                if (!fecha || !numero) return;
+                if (!fecha || !numero) {
+                    evento.stopImmediatePropagation?.();
+                    return;
+                }
 
                 const local = cabanaCache(fecha, numero);
+                if (!cicloExpressVerificado(fecha, numero)) {
+                    evento.stopImmediatePropagation?.();
+                    check.checked = local?.checklistAseoExpress?.[check.dataset.aseoExpressItem] === true;
+                    return;
+                }
+                const claveItem = check.dataset.aseoExpressItem;
+                const marcado = check.checked;
+                const optimista = window.HAIKU_CHECKLIST_OPTIMISTA_V1;
+                const pendiente = optimista?.iniciar("express", fecha, numero, claveItem, check);
+                if (optimista && !pendiente) {
+                    evento.stopImmediatePropagation?.();
+                    return;
+                }
                 if (!local.checklistAseoExpress) local.checklistAseoExpress = {};
-                local.checklistAseoExpress[check.dataset.aseoExpressItem] = check.checked;
+                local.checklistAseoExpress[claveItem] = marcado;
                 guardarCache();
 
                 encolar(`express:${fecha}:${numero}`, () =>
                     guardarItemExpress(
                         fecha,
                         numero,
-                        check.dataset.aseoExpressItem,
-                        check.checked
+                        claveItem,
+                        marcado
                     )
-                );
+                ).then(() => {
+                    optimista?.terminar(pendiente, true);
+                }).catch(error => {
+                    optimista?.terminar(pendiente, false);
+                    if (!optimista) check.checked = !marcado;
+                    window.alert?.("No fue posible guardar este check de Aseo Express. Intenta nuevamente.");
+                });
             }
         }, true);
 
@@ -732,10 +933,18 @@
             if (evento.target?.id === "aseo-express-detalles") {
                 const fecha = fechaOperativa();
                 const numero = localStorage.getItem("haikuAseoExpressCabana") || "";
-                if (!fecha || !numero) return;
+                if (!fecha || !numero) {
+                    evento.stopImmediatePropagation?.();
+                    return;
+                }
 
                 const valor = evento.target.value;
                 const local = cabanaCache(fecha, numero);
+                if (!cicloExpressVerificado(fecha, numero)) {
+                    evento.stopImmediatePropagation?.();
+                    evento.target.value = local?.detallesAseoExpress || "";
+                    return;
+                }
                 local.detallesAseoExpress = valor;
                 guardarCache();
 
@@ -769,10 +978,24 @@
                 const numero = eliminar.dataset.eliminarSolicita;
                 if (!fecha || !numero) return;
 
+                const cabana = cabanaCache(fecha, numero, false);
+                const solicitudEliminada = String(cabana?.solicitudAseoExpress || "").trim();
                 actualizarCampoLocal(fecha, numero, "solicitudAseoExpress", "");
-                encolar(`solicitud:${fecha}:${numero}`, () =>
+                const escritura = encolar(`solicitud:${fecha}:${numero}`, () =>
                     cancelarSolicitud(fecha, numero)
                 );
+                if (solicitudEliminada) escritura.then(() => {
+                    if (typeof registrarActividadHaiku !== "function") return;
+                    registrarActividadHaiku({
+                        tipo: "solicitud",
+                        accion: "Solicitud eliminada",
+                        reservaId: cabana?.reservaId || "",
+                        numeroCabana: numero,
+                        titular: cabana?.titular || "",
+                        fechaOperacion: fecha,
+                        detalle: solicitudEliminada
+                    });
+                }, () => {});
             }
         }, true);
     }
@@ -785,19 +1008,25 @@
 
         const original = window.abrirRevisionAseoExpress;
         function puente(numeroCabana) {
-            const resultado = original.apply(this, arguments);
-            Promise.resolve()
-                .then(() => hidratar(fechaOperativa(), { pintar: false }))
-                .then(() => pintarExpress(numeroCabana));
-            return resultado;
+            const fecha = fechaOperativa();
+            const contexto = this;
+            const argumentos = arguments;
+            return Promise.resolve()
+                .then(() => hidratar(fecha, { pintar: false }))
+                .then(() => {
+                    if (!cicloExpressVerificado(fecha, numeroCabana)) return;
+                    const resultado = original.apply(contexto, argumentos);
+                    pintarExpress(numeroCabana);
+                    return resultado;
+                });
         }
         puente.__haikuAseoOperacionV1 = true;
         window.abrirRevisionAseoExpress = puente;
     }
 
     function instalarRefrescos() {
-        const botonAseo = document.querySelector('.menu-item[data-seccion="aseo"]');
-        botonAseo?.addEventListener("click", () => programarRefresco(0));
+        const botonCabanas = document.querySelector('.menu-item[data-seccion="cabanas"]');
+        botonCabanas?.addEventListener("click", () => programarRefresco(0));
 
         window.addEventListener("focus", () => {
             if (Date.now() - ultimaActualizacion > 1500) programarRefresco(80);
@@ -821,6 +1050,10 @@
         if (inicializado || !cliente()) return;
         inicializado = true;
 
+        // El caché local puede venir de otra sesión. Una proyección Express
+        // sólo vuelve a estar verificada tras la lectura remota de este arranque.
+        invalidarExpressEnCache();
+
         instalarEventosAseo();
         instalarPuenteExpress();
         instalarRefrescos();
@@ -828,6 +1061,8 @@
         window.HAIKU_ASEO_OPERACION_V1 = Object.freeze({
             hidratar,
             guardarCampoAseo,
+            guardarEstadoAseo,
+            guardarEstadoRevisionExpress,
             fechaHoraSantiagoAISO,
             horaSantiago,
             esperarEscrituras,

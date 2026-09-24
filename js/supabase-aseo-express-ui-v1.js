@@ -195,7 +195,7 @@
     function iniciar() {
         prepararBotones();
 
-        const seccion = document.getElementById("seccion-aseo");
+        const seccion = document.getElementById("aseo-express-individual");
         if (seccion && typeof MutationObserver === "function") {
             const observer = new MutationObserver(prepararBotones);
             observer.observe(seccion, { childList: true, subtree: true });
