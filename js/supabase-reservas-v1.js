@@ -1,5 +1,5 @@
 // ========================================
-// RESERVAS V1 · TABLA OPERATIVA DE SOLO LECTURA
+// RESERVAS · TABLA SITES DE SOLO LECTURA
 // Consulta paginada a Supabase. No edita ni crea reservas.
 // Sin observers globales, polling, intervalos ni parches.
 // ========================================
@@ -15,27 +15,25 @@
     if (!cliente || !seccion || !botonMenu) return;
 
     const COLUMNAS_BASE = [
-        { id: "fecha_reserva", label: "Fecha de la reserva", tipo: "fecha" },
-        { id: "plan_tarifario", label: "Nombre del Plan de Tarifas (Interno)", tipo: "texto" },
-        { id: "cabanas", label: "Número de Habitación / Cabaña", tipo: "texto" },
-        { id: "nombre", label: "Nombre", tipo: "texto" },
-        { id: "apellido", label: "Apellido", tipo: "texto" },
-        { id: "check_in", label: "Check-In", tipo: "fecha" },
-        { id: "check_out", label: "Check-Out", tipo: "fecha" },
-        { id: "adultos", label: "Adultos", tipo: "numero" },
-        { id: "ninos", label: "Niños", tipo: "numero" },
-        { id: "precio_total", label: "Precio Total", tipo: "moneda" },
-        { id: "abono", label: "Depósito / Abono", tipo: "moneda" },
-        { id: "saldo_pendiente", label: "Saldo Pendiente", tipo: "moneda" },
-        { id: "estado", label: "Estado", tipo: "estado" },
-        { id: "correo", label: "Correo Electrónico", tipo: "texto" },
-        { id: "telefono", label: "Móvil / Teléfono", tipo: "texto" },
-        { id: "documento", label: "RUT / Pasaporte", tipo: "texto" },
-        { id: "fuente", label: "Fuente", tipo: "texto" },
-        { id: "pais", label: "País", tipo: "texto" }
+        { id: "guest", label: "Huésped / reserva", orden: "nombre", principal: true, inicial: true },
+        { id: "cabin", label: "Cabaña", orden: "cabanas", principal: true, inicial: true },
+        { id: "stay", label: "Estadía", orden: "check_in", principal: true, inicial: true },
+        { id: "pax", label: "Huéspedes", inicial: true },
+        { id: "total", label: "Precio total", orden: "precio_total", inicial: true },
+        { id: "deposit", label: "Depósito / abono", orden: "abono", inicial: true },
+        { id: "due", label: "Saldo pendiente", orden: "saldo_pendiente", inicial: true },
+        { id: "status", label: "Estado", orden: "estado", principal: true, inicial: true },
+        { id: "created", label: "Fecha reserva", orden: "fecha_reserva" },
+        { id: "plan", label: "Plan", orden: "plan_tarifario" },
+        { id: "adults", label: "Adultos", orden: "adultos" },
+        { id: "children", label: "Niños", orden: "ninos" },
+        { id: "email", label: "Correo electrónico", orden: "correo" },
+        { id: "phone", label: "Móvil / teléfono", orden: "telefono" },
+        { id: "document", label: "RUT / pasaporte", orden: "documento" },
+        { id: "country", label: "País", orden: "pais" }
     ];
 
-    const CLAVE_COLUMNAS = "haikuReservasColumnasV1";
+    const CLAVE_COLUMNAS = "haikuReservasColumnasSitesV1";
     const elementos = {
         buscar: document.getElementById("reservas-buscar"),
         contador: document.getElementById("reservas-contador"),
@@ -43,6 +41,7 @@
         estado: document.getElementById("reservas-estado"),
         cabecera: document.getElementById("reservas-tabla-cabecera"),
         cuerpo: document.getElementById("reservas-tabla-cuerpo"),
+        listaMovil: document.getElementById("reservas-mobile-list"),
         vacio: document.getElementById("reservas-vacio"),
         rango: document.getElementById("reservas-rango"),
         porPagina: document.getElementById("reservas-por-pagina"),
@@ -62,6 +61,7 @@
         cerrarColumnas: document.getElementById("reservas-cerrar-columnas"),
         columnasLista: document.getElementById("reservas-columnas-lista"),
         columnasRestablecer: document.getElementById("reservas-columnas-restablecer"),
+        columnasMostrarTodas: document.getElementById("reservas-columnas-mostrar-todas"),
         columnasListo: document.getElementById("reservas-columnas-listo"),
         filtroEstado: document.getElementById("reservas-filtro-estado"),
         filtroCategoria: document.getElementById("reservas-filtro-categoria")
@@ -98,6 +98,7 @@
     let orden = "fecha_reserva";
     let ascendente = false;
     let cargadoUnaVez = false;
+    let filasActuales = [];
     let tokenCarga = 0;
     let temporizadorBusqueda = null;
 
@@ -122,17 +123,12 @@
 
             const idsValidos = new Set(COLUMNAS_BASE.map(item => item.id));
             const idsGuardados = new Set(guardadas.map(item => item && item.id));
-            if (
-                guardadas.length !== COLUMNAS_BASE.length ||
-                idsGuardados.size !== COLUMNAS_BASE.length ||
-                [...idsValidos].some(id => !idsGuardados.has(id))
-            ) {
-                return columnasIniciales();
-            }
+            if (guardadas.length !== COLUMNAS_BASE.length || idsGuardados.size !== COLUMNAS_BASE.length ||
+                [...idsValidos].some(id => !idsGuardados.has(id))) return columnasIniciales();
 
-            return guardadas.map(item => ({
-                id: item.id,
-                visible: item.visible !== false
+            return COLUMNAS_BASE.map(definicion => ({
+                id: definicion.id,
+                visible: definicion.principal || guardadas.find(item => item.id === definicion.id)?.visible === true
             }));
         } catch {
             return columnasIniciales();
@@ -140,7 +136,7 @@
     }
 
     function columnasIniciales() {
-        return COLUMNAS_BASE.map(item => ({ id: item.id, visible: true }));
+        return COLUMNAS_BASE.map(item => ({ id: item.id, visible: item.inicial === true }));
     }
 
     function guardarColumnas() {
@@ -155,7 +151,7 @@
 
     function columnasVisibles() {
         const visibles = columnas.filter(item => item.visible && definicionColumna(item.id));
-        return visibles.length ? visibles : [columnas[0]];
+        return visibles;
     }
 
     function escapeHtml(valor) {
@@ -176,6 +172,7 @@
     }
 
     function moneda(valor) {
+        if (valor === null || valor === undefined || valor === "") return "—";
         const numero = Number(valor);
         return Number.isFinite(numero)
             ? "$" + Math.round(numero).toLocaleString("es-CL")
@@ -200,52 +197,107 @@
 
     function mostrarEstado(mensaje, tipo = "") {
         elementos.estado.textContent = mensaje || "";
+        elementos.estado.hidden = !mensaje;
+        elementos.estado.classList.toggle("rv-error", tipo === "error");
         if (tipo) elementos.estado.dataset.tipo = tipo;
         else delete elementos.estado.dataset.tipo;
     }
 
+    function titular(fila) {
+        return [fila.nombre, fila.apellido].filter(Boolean).join(" ").trim() || "Sin titular registrado";
+    }
+
+    function cabanasVisibles(fila) {
+        return String(fila.cabanas || "").replace(/\bCAB\s+(\d+)\b/g, "Cabaña $1") || "—";
+    }
+
+    function variasEstadias(fila) {
+        // La RPC agrega cada estadía con este separador, incluso si repite cabaña.
+        return String(fila.cabanas || "").includes(" → ");
+    }
+
+    function planVisible(fila) {
+        if (!fila.plan_tarifario) return "";
+        return variasEstadias(fila) && fila.es_fullday ? "Incluye Full Day" : String(fila.plan_tarifario);
+    }
+
+    function duracionVisible(fila) {
+        if (variasEstadias(fila)) return "Varias estadías";
+        if (fila.es_fullday) return "Full Day";
+        if (!fila.check_in || !fila.check_out) return "";
+        const ingreso = new Date(`${String(fila.check_in).slice(0, 10)}T12:00:00`);
+        const salida = new Date(`${String(fila.check_out).slice(0, 10)}T12:00:00`);
+        const noches = Math.max(0, Math.round((salida - ingreso) / 86400000));
+        return Number.isFinite(noches) ? `${noches} ${noches === 1 ? "noche" : "noches"}` : "";
+    }
+
+    function huespedesVisibles(fila) {
+        const adultos = fila.adultos == null ? NaN : Number(fila.adultos);
+        const ninos = fila.ninos == null ? NaN : Number(fila.ninos);
+        const partes = [];
+        const prefijo = variasEstadias(fila) ? "hasta " : "";
+        if (Number.isFinite(adultos)) partes.push(`${prefijo}${adultos} ${adultos === 1 ? "adulto" : "adultos"}`);
+        if (Number.isFinite(ninos) && ninos > 0) partes.push(`${prefijo}${ninos} ${ninos === 1 ? "niño" : "niños"}`);
+        const texto = partes.join(" · ") || "—";
+        return variasEstadias(fila) && texto !== "—" ? `${texto} por estadía` : texto;
+    }
+
+    function estadoClase(estado) {
+        return ({ pendiente: "pending", confirmada: "confirmed", hospedada: "occupied",
+            checked_out: "departed", cancelada: "cancelled", no_show: "cancelled" })[estado] || "";
+    }
+
+    function insigniaEstado(fila) {
+        return `<span class="rv-badge ${estadoClase(fila.estado)}">${escapeHtml(estadoVisible(fila.estado))}</span>`;
+    }
+
+    function sublineaReserva(fila) {
+        const partes = [fila.codigo_haiku, fila.fecha_reserva ? fechaVisible(fila.fecha_reserva) : ""].filter(Boolean);
+        return partes.length ? `<small class="rv-subline">${escapeHtml(partes.join(" · "))}</small>` : "";
+    }
+
     function celdaHtml(fila, columna) {
-        const valor = fila[columna.id];
-
-        if (columna.tipo === "fecha") {
-            return escapeHtml(fechaVisible(valor));
+        const id = escapeHtml(fila.reserva_id);
+        switch (columna.id) {
+            case "guest":
+                return `<button type="button" class="rv-name" data-abrir-reserva="${id}" aria-label="Ver reserva de ${escapeHtml(titular(fila))}">${escapeHtml(titular(fila))}</button>${sublineaReserva(fila)}`;
+            case "cabin":
+                return `<span class="rv-cabin">${escapeHtml(cabanasVisibles(fila))}</span>${planVisible(fila) ? `<small class="rv-subline">${escapeHtml(planVisible(fila))}</small>` : ""}`;
+            case "stay":
+                return `<span class="rv-stay">${escapeHtml(fechaVisible(fila.check_in))} <i>→</i> ${escapeHtml(fechaVisible(fila.check_out))}</span><small class="rv-subline">${escapeHtml(duracionVisible(fila))}</small>`;
+            case "pax": return `<span class="rv-nowrap">${escapeHtml(huespedesVisibles(fila))}</span>`;
+            case "total": return `<strong class="rv-money">${escapeHtml(moneda(fila.precio_total))}</strong>`;
+            case "deposit": return `<span class="rv-money secondary">${escapeHtml(moneda(fila.abono))}</span>`;
+            case "due": {
+                const saldo = Number(fila.saldo_pendiente);
+                const tono = Number.isFinite(saldo) && saldo > 0 ? "owing" : "settled";
+                return `<strong class="rv-money ${tono}">${escapeHtml(moneda(fila.saldo_pendiente))}</strong>`;
+            }
+            case "status": return insigniaEstado(fila);
+            case "created": return escapeHtml(fechaVisible(fila.fecha_reserva));
+            case "plan": return escapeHtml(planVisible(fila) || "—");
+            case "adults": return fila.adultos == null ? "—" : escapeHtml(variasEstadias(fila) ? `Máx. ${fila.adultos}` : fila.adultos);
+            case "children": return fila.ninos == null ? "—" : escapeHtml(variasEstadias(fila) ? `Máx. ${fila.ninos}` : fila.ninos);
+            case "email": return escapeHtml(fila.correo || "—");
+            case "phone": return escapeHtml(fila.telefono || "—");
+            case "document": return escapeHtml(fila.documento || "—");
+            case "country": return escapeHtml(fila.pais || "—");
+            default: return "—";
         }
-
-        if (columna.tipo === "moneda") {
-            return escapeHtml(moneda(valor));
-        }
-
-        if (columna.tipo === "estado") {
-            return '<span class="reservas-estado-badge" data-estado="' +
-                escapeHtml(valor || "") + '">' +
-                escapeHtml(estadoVisible(valor)) +
-                "</span>";
-        }
-
-        if (columna.id === "plan_tarifario" && fila.es_fullday) {
-            return '<span class="reservas-plan-fullday" title="Derivado del tipo de estadía Full Day guardado en Proyecto H">Full Day</span>';
-        }
-
-        if (valor === null || valor === undefined || valor === "") {
-            return '<span class="reservas-dato-faltante">—</span>';
-        }
-
-        return escapeHtml(valor);
     }
 
     function renderizarCabecera() {
         const celdas = columnasVisibles().map(item => {
             const columna = definicionColumna(item.id);
-            const activa = orden === columna.id;
+            const activa = orden === columna.orden;
             const indicador = activa ? (ascendente ? "↑" : "↓") : "↕";
-            return '<th scope="col"><button type="button" data-reservas-orden="' +
-                escapeHtml(columna.id) + '">' +
-                escapeHtml(columna.label) +
-                '<span class="reservas-orden" aria-hidden="true">' + indicador + "</span>" +
-                "</button></th>";
+            const contenido = columna.orden
+                ? `<button type="button" data-reservas-orden="${escapeHtml(columna.orden)}">${escapeHtml(columna.label)} <span class="reservas-orden" aria-hidden="true">${indicador}</span></button>`
+                : escapeHtml(columna.label);
+            return `<th scope="col" data-columna="${escapeHtml(columna.id)}" class="rv-col-${escapeHtml(columna.id)}">${contenido}</th>`;
         }).join("");
 
-        elementos.cabecera.innerHTML = "<tr>" + celdas + "</tr>";
+        elementos.cabecera.innerHTML = `<tr>${celdas}<th scope="col" class="rv-detail-col">Detalle</th></tr>`;
 
         elementos.cabecera.querySelectorAll("[data-reservas-orden]").forEach(boton => {
             boton.addEventListener("click", () => {
@@ -262,23 +314,38 @@
     }
 
     function renderizarFilas(filas) {
+        filasActuales = filas;
         const visibles = columnasVisibles();
+        const visiblesMovil = new Set(visibles.map(item => item.id));
 
         elementos.cuerpo.innerHTML = filas.map(fila => {
             const celdas = visibles.map(item => {
                 const columna = definicionColumna(item.id);
-                const bruto = fila[columna.id];
-                const titulo = bruto === null || bruto === undefined ? "" : String(bruto);
-                return '<td data-columna="' + escapeHtml(columna.id) +
-                    '" title="' + escapeHtml(titulo) + '">' +
-                    celdaHtml(fila, columna) +
-                    "</td>";
+                return `<td data-columna="${escapeHtml(columna.id)}" class="rv-col-${escapeHtml(columna.id)}">${celdaHtml(fila, columna)}</td>`;
             }).join("");
-            return '<tr data-reserva-id="' + escapeHtml(fila.reserva_id) + '">' + celdas + "</tr>";
+            const id = escapeHtml(fila.reserva_id);
+            const atencion = fila.estado === "checked_out" && Number(fila.saldo_pendiente) > 0 ? " rv-needs-attention" : "";
+            return `<tr data-reserva-id="${id}" class="${atencion.trim()}">${celdas}<td class="rv-detail-col"><button type="button" data-abrir-reserva="${id}" aria-label="Ver detalle de ${escapeHtml(titular(fila))}">›</button></td></tr>`;
+        }).join("");
+
+        elementos.listaMovil.innerHTML = filas.map(fila => {
+            const id = escapeHtml(fila.reserva_id);
+            const atencion = fila.estado === "checked_out" && Number(fila.saldo_pendiente) > 0 ? " attention" : "";
+            const finanzas = [
+                visiblesMovil.has("pax") ? `<span data-columna="pax">${escapeHtml(huespedesVisibles(fila))}</span>` : "",
+                visiblesMovil.has("total") ? `<span data-columna="total">Total ${escapeHtml(moneda(fila.precio_total))}</span>` : "",
+                visiblesMovil.has("deposit") ? `<span data-columna="deposit">Abono ${escapeHtml(moneda(fila.abono))}</span>` : ""
+            ].filter(Boolean).join('<span aria-hidden="true"> · </span>');
+            return `<article class="rv-mobile-row${atencion}" data-reserva-id="${id}">
+                <div class="rv-mobile-main"><button type="button" data-columna="guest" data-abrir-reserva="${id}"><strong>${escapeHtml(titular(fila))}</strong><small>${escapeHtml([fila.codigo_haiku, fila.fecha_reserva ? fechaVisible(fila.fecha_reserva) : ""].filter(Boolean).join(" · "))}</small></button><span data-columna="status">${insigniaEstado(fila)}</span></div>
+                <div class="rv-mobile-meta"><span data-columna="cabin">${escapeHtml(cabanasVisibles(fila))}</span><span data-columna="stay">${escapeHtml(fechaVisible(fila.check_in))} → ${escapeHtml(fechaVisible(fila.check_out))}</span>${visiblesMovil.has("due") ? `<strong data-columna="due" class="${Number(fila.saldo_pendiente) > 0 ? "owing" : "settled"}">${escapeHtml(moneda(fila.saldo_pendiente))}</strong>` : ""}</div>
+                <div class="rv-mobile-finance">${finanzas}<button type="button" data-abrir-reserva="${id}">Ver detalle</button></div>
+            </article>`;
         }).join("");
 
         elementos.vacio.hidden = filas.length !== 0;
         elementos.cabecera.closest("table").hidden = filas.length === 0;
+        elementos.listaMovil.hidden = filas.length === 0;
     }
 
     function actualizarPaginacion() {
@@ -287,15 +354,17 @@
 
         const desde = total ? ((pagina - 1) * porPagina) + 1 : 0;
         const hasta = total ? Math.min(pagina * porPagina, total) : 0;
+        const esperando = !cargadoUnaVez && elementos.estado.dataset.tipo !== "error";
 
-        elementos.contador.textContent = total + (total === 1 ? " reserva" : " reservas");
-        elementos.rango.textContent = desde + "–" + hasta + " de " + total;
+        elementos.contador.textContent = esperando ? "— reservas" : total + (total === 1 ? " reserva" : " reservas");
+        elementos.rango.textContent = esperando ? "—" : desde + "–" + hasta + " de " + total;
         elementos.paginaActual.textContent = String(pagina);
         elementos.anterior.disabled = pagina <= 1;
         elementos.siguiente.disabled = pagina >= paginas;
     }
 
     function valorNumero(campo) {
+        if (!campo || String(campo.value || "").trim() === "") return null;
         const numero = Number(campo && campo.value);
         return Number.isInteger(numero) && numero >= 0 ? numero : null;
     }
@@ -486,21 +555,46 @@
         poblarSelect(elementos.filtroEstado, estados, "Todos");
     }
 
+    function vaciarListado(mensaje, tipo = "") {
+        ++tokenCarga;
+        cargadoUnaVez = false;
+        total = 0;
+        renderizarFilas([]);
+        mostrarEstado(mensaje, tipo);
+        actualizarPaginacion();
+        elementos.recargar.disabled = false;
+    }
+
+    async function agregarCodigosPagina(filas) {
+        const ids = [...new Set(filas.map(fila => fila.reserva_id).filter(Boolean))];
+        if (!ids.length) return filas;
+        try {
+            const { data, error } = await cliente.from("reservas")
+                .select("id,codigo_haiku")
+                .in("id", ids);
+            if (error) throw error;
+            const codigos = new Map((Array.isArray(data) ? data : [])
+                .map(item => [String(item.id), String(item.codigo_haiku || "").trim()]));
+            return filas.map(fila => ({ ...fila, codigo_haiku: codigos.get(String(fila.reserva_id)) || "" }));
+        } catch (error) {
+            console.warn("HAIKU · No se pudo leer el código visible de esta página de Reservas.", error);
+            return filas;
+        }
+    }
+
     async function cargarReservas() {
         if (!window.haikuSesion) {
-            mostrarEstado("Esperando una sesión autorizada…");
+            vaciarListado("Esperando una sesión autorizada…");
             return;
         }
 
         if (window.haikuTienePermiso?.("reservas.ver") !== true) {
-            mostrarEstado("Tu usuario no tiene permiso para consultar Reservas.", "error");
-            renderizarFilas([]);
-            total = 0;
-            actualizarPaginacion();
+            vaciarListado("Tu usuario no tiene permiso para consultar Reservas.", "error");
             return;
         }
 
         const token = ++tokenCarga;
+        const sesionSolicitante = window.haikuSesion;
         mostrarEstado("Cargando reservas…");
         elementos.recargar.disabled = true;
 
@@ -511,21 +605,44 @@
             );
 
             if (token !== tokenCarga) return;
+            if (window.haikuSesion !== sesionSolicitante ||
+                window.haikuTienePermiso?.("reservas.ver") !== true) {
+                vaciarListado("La sesión cambió. Actualiza Reservas para continuar.", "error");
+                return;
+            }
             if (error) throw error;
 
             const respuesta = data && typeof data === "object" ? data : {};
             const filas = Array.isArray(respuesta.reservas) ? respuesta.reservas : [];
             total = Number(respuesta.total || 0);
+            const paginas = Math.max(1, Math.ceil(total / porPagina));
+            if (pagina > paginas) {
+                pagina = paginas;
+                cargarReservas();
+                return;
+            }
+            const filasConCodigo = await agregarCodigosPagina(filas);
+            if (token !== tokenCarga) return;
+            if (window.haikuSesion !== sesionSolicitante ||
+                window.haikuTienePermiso?.("reservas.ver") !== true) {
+                vaciarListado("La sesión cambió. Actualiza Reservas para continuar.", "error");
+                return;
+            }
             cargadoUnaVez = true;
 
             actualizarMetadatos(respuesta);
             renderizarCabecera();
-            renderizarFilas(filas);
+            renderizarFilas(filasConCodigo);
             actualizarPaginacion();
             renderizarChips();
             mostrarEstado("");
         } catch (error) {
             if (token !== tokenCarga) return;
+            if (window.haikuSesion !== sesionSolicitante ||
+                window.haikuTienePermiso?.("reservas.ver") !== true) {
+                vaciarListado("La sesión cambió. Actualiza Reservas para continuar.", "error");
+                return;
+            }
             console.error("HAIKU · Reservas V1:", error);
             mostrarEstado(
                 "No fue posible cargar las reservas. Recarga o revisa tu conexión.",
@@ -564,57 +681,25 @@
         elementos.abrirColumnas.setAttribute("aria-expanded", "false");
     }
 
-    function moverColumna(indice, desplazamiento) {
-        const destino = indice + desplazamiento;
-        if (destino < 0 || destino >= columnas.length) return;
-        const copia = [...columnas];
-        const temporal = copia[indice];
-        copia[indice] = copia[destino];
-        copia[destino] = temporal;
-        columnas = copia;
-        guardarColumnas();
-        renderizarConfiguradorColumnas();
-        renderizarCabecera();
-        if (cargadoUnaVez) cargarReservas();
-    }
-
     function renderizarConfiguradorColumnas() {
-        elementos.columnasLista.innerHTML = columnas.map((item, indice) => {
+        elementos.columnasLista.innerHTML = columnas.map(item => {
             const columna = definicionColumna(item.id);
-            return '<div class="reservas-columna-config">' +
-                '<label><input type="checkbox" data-columna-visible="' + escapeHtml(item.id) + '"' +
-                (item.visible ? " checked" : "") + "> " + escapeHtml(columna.label) + "</label>" +
-                '<button type="button" data-columna-subir="' + indice + '" aria-label="Subir columna"' +
-                (indice === 0 ? " disabled" : "") + ">↑</button>" +
-                '<button type="button" data-columna-bajar="' + indice + '" aria-label="Bajar columna"' +
-                (indice === columnas.length - 1 ? " disabled" : "") + ">↓</button>" +
-                "</div>";
+            return `<label><input type="checkbox" data-columna-visible="${escapeHtml(item.id)}"${item.visible ? " checked" : ""}${columna.principal ? " disabled" : ""}> ${escapeHtml(columna.label)}${columna.principal ? "<small>principal</small>" : ""}</label>`;
         }).join("");
 
         elementos.columnasLista.querySelectorAll("[data-columna-visible]").forEach(check => {
             check.addEventListener("change", () => {
                 const item = columnas.find(columna => columna.id === check.dataset.columnaVisible);
                 if (!item) return;
-
-                const cantidadVisible = columnas.filter(columna => columna.visible).length;
-                if (!check.checked && cantidadVisible <= 1) {
+                if (definicionColumna(item.id)?.principal && !check.checked) {
                     check.checked = true;
                     return;
                 }
-
                 item.visible = check.checked;
                 guardarColumnas();
                 renderizarCabecera();
-                if (cargadoUnaVez) cargarReservas();
+                renderizarFilas(filasActuales);
             });
-        });
-
-        elementos.columnasLista.querySelectorAll("[data-columna-subir]").forEach(boton => {
-            boton.addEventListener("click", () => moverColumna(Number(boton.dataset.columnaSubir), -1));
-        });
-
-        elementos.columnasLista.querySelectorAll("[data-columna-bajar]").forEach(boton => {
-            boton.addEventListener("click", () => moverColumna(Number(boton.dataset.columnaBajar), 1));
         });
     }
 
@@ -651,7 +736,38 @@
         guardarColumnas();
         renderizarConfiguradorColumnas();
         renderizarCabecera();
-        if (cargadoUnaVez) cargarReservas();
+        renderizarFilas(filasActuales);
+    });
+
+    elementos.columnasMostrarTodas.addEventListener("click", () => {
+        columnas = COLUMNAS_BASE.map(item => ({ id: item.id, visible: true }));
+        guardarColumnas();
+        renderizarConfiguradorColumnas();
+        renderizarCabecera();
+        renderizarFilas(filasActuales);
+    });
+
+    seccion.addEventListener("click", async evento => {
+        const boton = evento.target.closest("[data-abrir-reserva]");
+        if (!boton || !seccion.contains(boton)) return;
+        const reservaId = boton.dataset.abrirReserva;
+        if (!filasActuales.some(fila => String(fila.reserva_id) === reservaId)) return;
+        const abrir = window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId;
+        if (typeof abrir !== "function") {
+            mostrarEstado("No se pudo abrir el detalle de esta reserva. Recarga la página.", "error");
+            return;
+        }
+        boton.disabled = true;
+        try {
+            await abrir(reservaId, boton);
+        } finally {
+            boton.disabled = false;
+        }
+    });
+
+    document.addEventListener("click", evento => {
+        if (!elementos.panelFiltros.hidden && !elementos.panelFiltros.parentElement.contains(evento.target)) cerrarPanelFiltros();
+        if (!elementos.panelColumnas.hidden && !elementos.panelColumnas.parentElement.contains(evento.target)) cerrarPanelColumnas();
     });
 
     elementos.porPagina.addEventListener("change", () => {
@@ -700,6 +816,10 @@
 
     window.addEventListener("haiku:auth-ready", () => {
         if (seccion.classList.contains("activa")) cargarReservas();
+    });
+
+    cliente.auth?.onAuthStateChange?.(evento => {
+        if (evento === "SIGNED_OUT") vaciarListado("Esperando una sesión autorizada…");
     });
 
     renderizarCabecera();

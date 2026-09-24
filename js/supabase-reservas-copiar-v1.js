@@ -1,3 +1,5 @@
+// RESERVAS · COPIAR LA VISTA SITES COMO PNG
+// Sólo columnas y filas visibles; no consulta ni escribe datos.
 // ========================================
 // RESERVAS · COPIAR TABLA COMO PNG V1
 // Genera una imagen de la página actualmente renderizada de Reservas.
@@ -10,52 +12,12 @@
     if (window.HAIKU_RESERVAS_COPIAR_V1) return;
 
     const seccion = document.getElementById("seccion-reservas");
-    const botonColumnas = document.getElementById("reservas-configurar-columnas");
-    const tabla = seccion?.querySelector(".reservas-tabla");
+    const boton = document.getElementById("reservas-copiar-tabla");
+    const tabla = seccion?.querySelector(".rv-table.sites-reservas-tabla");
     const chips = document.getElementById("reservas-chips");
     const contador = document.getElementById("reservas-contador");
 
-    if (!seccion || !botonColumnas || !tabla) return;
-
-    const style = document.createElement("style");
-    style.id = "reservas-copiar-tabla-v1-style";
-    style.textContent = `
-        #seccion-reservas .reservas-copiar-tabla[data-estado="copiado"] {
-            border-color: #9fcbb4;
-            background: #eaf5ef;
-            color: #13553a;
-        }
-
-        #seccion-reservas .reservas-copiar-tabla[data-estado="descargado"] {
-            border-color: #d7c7a5;
-            background: #fff8e8;
-            color: #77591e;
-        }
-
-        #seccion-reservas .reservas-copiar-tabla[data-estado="error"] {
-            border-color: #e8bbb7;
-            background: #fff3f2;
-            color: #9e2b25;
-        }
-
-        @media (min-width: 1051px) {
-            #seccion-reservas .reservas-barra-superior {
-                grid-template-columns: minmax(240px, 1fr) auto auto auto auto auto;
-            }
-        }
-
-        @media (min-width: 769px) and (max-width: 1050px) {
-            #seccion-reservas .reservas-barra-superior {
-                grid-template-columns: 1fr auto auto auto;
-            }
-
-            #seccion-reservas .reservas-copiar-tabla {
-                grid-column: 4;
-                grid-row: 2;
-            }
-        }
-    `;
-    document.head.appendChild(style);
+    if (!seccion || !boton || !tabla) return;
 
     const PALETA = Object.freeze({
         fondo: "#f4f7f5",
@@ -72,6 +34,7 @@
     const ESTADOS = Object.freeze({
         confirmada: { fondo: "#e8f2ff", texto: "#2765a5" },
         hospedada: { fondo: "#e6f6ed", texto: "#18704a" },
+        hospedado: { fondo: "#e6f6ed", texto: "#18704a" },
         checked_out: { fondo: "#e6f7f6", texto: "#18756f" },
         pendiente: { fondo: "#fff4d8", texto: "#806013" },
         cancelada: { fondo: "#fdebea", texto: "#a23b36" },
@@ -95,8 +58,29 @@
 
     function encabezadoVisible(th) {
         const clon = th.cloneNode(true);
-        clon.querySelectorAll(".reservas-orden").forEach(nodo => nodo.remove());
+        clon.querySelectorAll(".reservas-orden, .rv-sort, button span, [aria-hidden='true'], svg").forEach(nodo => nodo.remove());
         return limpiarTexto(clon.textContent);
+    }
+
+    function elementoVisible(elemento) {
+        if (elemento.hidden || elemento.getAttribute("aria-hidden") === "true") return false;
+        const estilo = getComputedStyle(elemento);
+        return estilo.display !== "none" && estilo.visibility !== "hidden" && estilo.visibility !== "collapse";
+    }
+
+    function textoVisible(elemento) {
+        const partes = [];
+        function visitar(nodo) {
+            if (nodo.nodeType === 3) {
+                partes.push(nodo.nodeValue);
+                return;
+            }
+            if (nodo.nodeType !== 1 || !elementoVisible(nodo)) return;
+            if (nodo.matches(".sr-only, .visually-hidden")) return;
+            nodo.childNodes.forEach(visitar);
+        }
+        visitar(elemento);
+        return limpiarTexto(partes.join(" "));
     }
 
     function filtrosVisibles() {
@@ -159,24 +143,30 @@
     }
 
     function datosTabla() {
-        const encabezados = [...tabla.querySelectorAll("thead th")]
-            .filter(th => getComputedStyle(th).display !== "none")
-            .map((th, indice) => ({
-                indice,
+        const listaMovil = seccion.querySelector(".sites-reservas-mobile");
+        if (listaMovil && elementoVisible(listaMovil)) {
+            return datosListaMovil(listaMovil);
+        }
+
+        const encabezados = [...tabla.querySelectorAll("thead th[data-columna]")]
+            .filter(elementoVisible)
+            .map(th => ({
                 label: encabezadoVisible(th),
-                id: th.querySelector("button")?.dataset?.orden || `columna_${indice}`
+                id: th.dataset.columna
             }))
             .filter(columna => columna.label);
 
         const filas = [...tabla.querySelectorAll("tbody tr")]
-            .filter(fila => getComputedStyle(fila).display !== "none")
-            .map(fila => [...fila.querySelectorAll("td")]
-                .filter(td => getComputedStyle(td).display !== "none")
-                .map(td => ({
-                    texto: limpiarTexto(td.textContent),
-                    id: td.dataset.columna || ""
-                })))
-            .filter(fila => fila.length === encabezados.length);
+            .filter(elementoVisible)
+            .map(fila => {
+                const celdas = [...fila.querySelectorAll("td[data-columna]")]
+                    .filter(elementoVisible);
+                return encabezados.map(columna => {
+                    const celda = celdas.find(td => td.dataset.columna === columna.id);
+                    return celda ? { texto: textoVisible(celda), id: columna.id } : null;
+                });
+            })
+            .filter(fila => fila.every(Boolean));
 
         if (!encabezados.length || !filas.length) {
             throw new Error("No hay reservas visibles para copiar.");
@@ -185,11 +175,49 @@
         return { encabezados, filas };
     }
 
+    function datosListaMovil(lista) {
+        const etiquetas = Object.freeze({
+            guest: "Huésped / reserva", cabin: "Cabaña", stay: "Estadía",
+            status: "Estado", pax: "Huéspedes", total: "Precio total",
+            deposit: "Depósito / abono", due: "Saldo pendiente"
+        });
+        const tarjetas = [...lista.querySelectorAll(".rv-mobile-row")].filter(elementoVisible);
+        if (!tarjetas.length) throw new Error("No hay reservas visibles para copiar.");
+
+        function campoVisible(campo, tarjeta) {
+            for (let nodo = campo; nodo && nodo !== tarjeta; nodo = nodo.parentElement) {
+                if (!elementoVisible(nodo)) return false;
+            }
+            return true;
+        }
+
+        const ids = new Set();
+        const encabezados = [];
+        tarjetas[0].querySelectorAll("[data-columna]").forEach(campo => {
+            const id = campo.dataset.columna;
+            if (!etiquetas[id] || ids.has(id) || !campoVisible(campo, tarjetas[0])) return;
+            ids.add(id);
+            encabezados.push({ id, label: etiquetas[id] });
+        });
+        if (!encabezados.length) throw new Error("No hay columnas visibles para copiar.");
+
+        const filas = tarjetas.map(tarjeta => {
+            const campos = [...tarjeta.querySelectorAll("[data-columna]")]
+                .filter(campo => campoVisible(campo, tarjeta));
+            return encabezados.map(columna => {
+                const campo = campos.find(nodo => nodo.dataset.columna === columna.id);
+                return { id: columna.id, texto: campo ? textoVisible(campo) : "—" };
+            });
+        });
+
+        return { encabezados, filas };
+    }
+
     function anchoMinimo(id) {
-        if (["plan_tarifario", "cabanas", "correo"].includes(id)) return 180;
-        if (["nombre", "apellido", "estado"].includes(id)) return 135;
-        if (["telefono", "documento"].includes(id)) return 145;
-        if (["precio_total", "abono", "saldo_pendiente"].includes(id)) return 125;
+        if (["guest", "email"].includes(id)) return 210;
+        if (["stay", "cabin", "plan", "document"].includes(id)) return 175;
+        if (["phone", "status", "pax"].includes(id)) return 145;
+        if (["total", "deposit", "due"].includes(id)) return 125;
         return 105;
     }
 
@@ -235,14 +263,14 @@
         const id = celda.id || columna.id;
         const texto = celda.texto || "—";
 
-        if (id === "estado") {
+        if (id === "status") {
             const clave = normalizarClave(texto);
             const estilo = ESTADOS[clave] || { fondo: "#edf2ef", texto: "#536159" };
             dibujarBadge(ctx, x, y, ancho, alto, texto, estilo.fondo, estilo.texto, true);
             return;
         }
 
-        if (id === "plan_tarifario" && /full\s*day/i.test(texto)) {
+        if (id === "plan" && /full\s*day/i.test(texto)) {
             dibujarBadge(ctx, x, y, ancho, alto, texto, "#fff0c9", "#765006");
             return;
         }
@@ -251,12 +279,12 @@
         ctx.beginPath();
         ctx.rect(x + 9, y + 2, ancho - 18, alto - 4);
         ctx.clip();
-        ctx.font = ["nombre", "apellido"].includes(id)
+        ctx.font = ["guest", "cabin"].includes(id)
             ? "700 12px Arial, sans-serif"
             : "12px Arial, sans-serif";
         ctx.fillStyle = texto === "—" ? "#9aa49f" : PALETA.texto;
         ctx.textBaseline = "middle";
-        ctx.textAlign = ["precio_total", "abono", "saldo_pendiente"].includes(id) ? "right" : "left";
+        ctx.textAlign = ["total", "deposit", "due"].includes(id) ? "right" : "left";
         const disponible = ancho - 20;
         const dibujado = textoAjustado(ctx, texto, disponible);
         const textoX = ctx.textAlign === "right" ? x + ancho - 10 : x + 10;
@@ -415,16 +443,6 @@
         return "descargado";
     }
 
-    const boton = document.createElement("button");
-    boton.type = "button";
-    boton.id = "reservas-copiar-tabla";
-    boton.className = "reservas-boton-icono reservas-copiar-tabla";
-    boton.title = "Copiar la página actual de Reservas como imagen PNG";
-    boton.setAttribute("aria-label", "Copiar tabla de reservas como imagen PNG");
-    boton.innerHTML = "⧉ <span>Copiar tabla</span>";
-
-    botonColumnas.insertAdjacentElement("afterend", boton);
-
     boton.addEventListener("click", async () => {
         const textoOriginal = boton.innerHTML;
         boton.disabled = true;
@@ -456,5 +474,4 @@
         generarYCopiar
     });
 
-    console.info("RESERVAS · Copiar tabla como PNG V1 preparado.");
 })();

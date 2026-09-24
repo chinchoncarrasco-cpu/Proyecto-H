@@ -8,7 +8,8 @@
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const FECHA = /^\d{4}-\d{2}-\d{2}$/;
     const OMITIDOS = new Set(["cancelado", "cancelada", "anulado", "anulada", "no_show"]);
-    const estado = { version: 0, identidad: null, ficha: null, estadia: null, ocupado: false, drawer: null };
+    const estado = { version: 0, reservaId: null, identidad: null, ficha: null,
+        estadia: null, ocupado: false, drawer: null };
 
     function fechaActiva() {
         try { return String(fechaSeleccionada || "").slice(0, 10); }
@@ -79,6 +80,25 @@
     }
 
     async function revalidar(identidad) {
+        if (identidad.origen === "reservas") {
+            if (!window.haikuSesion || !window.haikuSupabase ||
+                window.haikuTienePermiso?.("reservas.ver") !== true ||
+                typeof window.haikuLeerFichaSupabaseV2 !== "function") {
+                throw new Error("El permiso o la lectura de reservas cambiaron. Reabre la ficha.");
+            }
+            const ficha = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+            const estadia = elegirEstadia(ficha, identidad);
+            if (!window.haikuSesion || window.haikuTienePermiso?.("reservas.ver") !== true ||
+                String(ficha?.reserva?.id || "") !== identidad.reservaId || !estadia ||
+                (estadia.reserva_id && String(estadia.reserva_id) !== identidad.reservaId) ||
+                String(estadia.fecha_ingreso || "").slice(0, 10) !== identidad.fechaIngreso ||
+                String(estadia.fecha_salida || "").slice(0, 10) !== identidad.fechaSalida ||
+                String(estadia.tipo_estadia || "") !== identidad.tipoEstadia ||
+                String(ficha.reserva.estado_reserva || "") !== identidad.estadoReserva) {
+                throw new Error("La reserva o su estadía cambiaron. Actualiza Reservas y vuelve a abrirla.");
+            }
+            return ficha;
+        }
         if (!window.haikuSesion || !window.haikuSupabase ||
             window.haikuTienePermiso?.("reservas.ver") !== true ||
             fechaActiva() !== identidad.fecha || !filaActual(identidad)) {
@@ -119,6 +139,11 @@
                 </header>
                 <div class="sites-resumen-drawer-body">
                     <p data-reserva-estado role="status">Cargando reserva desde Proyecto H…</p>
+                    <div data-reserva-estadias hidden>
+                        <label class="sites-resumen-drawer-field">Estadía y cabaña
+                            <select data-reserva-estadia-select aria-label="Seleccionar estadía y cabaña"></select>
+                        </label>
+                    </div>
                     <div data-reserva-contenido hidden>
                         <div class="rd-top"><div class="rd-topline"><span class="rd-reference" data-reserva-codigo></span>
                             <span class="rd-status" data-reserva-estado-operativo></span></div>
@@ -164,6 +189,9 @@
         drawer.querySelector("[data-reserva-cerrar]").addEventListener("click", cerrar);
         drawer.querySelector("[data-reserva-historial]").addEventListener("click", () => actuar("historial"));
         drawer.querySelector("[data-reserva-editar]").addEventListener("click", () => actuar("editar"));
+        drawer.querySelector("[data-reserva-estadia-select]").addEventListener("change", evento => {
+            seleccionarEstadia(evento.target.value);
+        });
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.registrar?.(drawer, {
             cerrar,
             focoInicial: () => drawer.querySelector("[data-reserva-cerrar]")
@@ -309,6 +337,7 @@
         const drawer = estado.drawer;
         if (!drawer || drawer.hidden) return;
         estado.version++;
+        estado.reservaId = null;
         estado.identidad = null;
         estado.ficha = null;
         estado.estadia = null;
@@ -321,6 +350,7 @@
         const drawer = crearDrawer();
         const version = ++estado.version;
         const identidad = capturar(boton);
+        estado.reservaId = identidad?.reservaId || null;
         estado.identidad = identidad;
         estado.ficha = null;
         estado.estadia = null;
@@ -331,6 +361,7 @@
         colocar("[data-reserva-kicker]", identidad
             ? `CABAÑA ${identidad.numeroCabana}` : "RESERVA");
         drawer.querySelector("[data-reserva-contenido]").hidden = true;
+        drawer.querySelector("[data-reserva-estadias]").hidden = true;
         drawer.querySelector("[data-reserva-historial]").disabled = true;
         drawer.querySelector("[data-reserva-editar]").disabled = true;
         estadoVisible("Comprobando reserva en Proyecto H…");
@@ -367,19 +398,135 @@
         }
     }
 
+    function identidadEstadia(reservaId, ficha, estadia) {
+        return {
+            origen: "reservas", reservaId,
+            estadiaId: String(estadia.id), numeroCabana: String(estadia.cabana_numero),
+            fechaIngreso: String(estadia.fecha_ingreso || "").slice(0, 10),
+            fechaSalida: String(estadia.fecha_salida || "").slice(0, 10),
+            tipoEstadia: String(estadia.tipo_estadia || ""),
+            estadoReserva: String(ficha.reserva.estado_reserva || "")
+        };
+    }
+
+    function seleccionarEstadia(estadiaId) {
+        const ficha = estado.ficha;
+        const reservaId = estado.reservaId;
+        if (estado.ocupado) {
+            estado.drawer.querySelector("[data-reserva-estadia-select]").value = estado.identidad?.estadiaId || "";
+            return false;
+        }
+        if (!ficha || !reservaId || !window.haikuSesion ||
+            window.haikuTienePermiso?.("reservas.ver") !== true) return false;
+        const estadia = ficha.estadias.find(item => String(item.id) === String(estadiaId));
+        if (!estadia) return false;
+        estado.version++;
+        const identidad = identidadEstadia(reservaId, ficha, estadia);
+        estado.identidad = identidad;
+        estado.estadia = estadia;
+        try {
+            pintar(ficha, estadia, identidad);
+            return true;
+        } catch (error) {
+            estado.identidad = null;
+            estado.estadia = null;
+            estado.drawer.querySelector("[data-reserva-contenido]").hidden = true;
+            estado.drawer.querySelector("[data-reserva-historial]").disabled = true;
+            estado.drawer.querySelector("[data-reserva-editar]").disabled = true;
+            estadoVisible(error?.message || "No se pudo mostrar la estadía.", true);
+            return false;
+        }
+    }
+
+    async function abrirPorId(reservaId, disparador = null) {
+        if (!window.haikuSesion || !window.haikuSupabase ||
+            window.haikuTienePermiso?.("reservas.ver") !== true ||
+            !UUID.test(String(reservaId || ""))) return false;
+        const drawer = crearDrawer();
+        const version = ++estado.version;
+        estado.reservaId = String(reservaId);
+        estado.identidad = null;
+        estado.ficha = null;
+        estado.estadia = null;
+        window.HAIKU_SITES_RESUMEN_DRAWER_V1?.marcarDisparador?.(drawer, disparador);
+        drawer.hidden = false;
+        window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();
+        colocar("#sites-resumen-reserva-titulo", "Ficha de reserva");
+        colocar("[data-reserva-kicker]", "RESERVA");
+        drawer.querySelector("[data-reserva-contenido]").hidden = true;
+        drawer.querySelector("[data-reserva-estadias]").hidden = true;
+        drawer.querySelector("[data-reserva-historial]").disabled = true;
+        drawer.querySelector("[data-reserva-editar]").disabled = true;
+        estadoVisible("Comprobando reserva en Proyecto H…");
+        try {
+            if (typeof window.haikuLeerFichaSupabaseV2 !== "function") {
+                throw new Error("La lectura de ficha de Proyecto H no está disponible.");
+            }
+            const ficha = await window.haikuLeerFichaSupabaseV2(estado.reservaId);
+            if (version !== estado.version) return false;
+            if (String(ficha?.reserva?.id || "") !== estado.reservaId) {
+                throw new Error("La ficha no corresponde a la reserva seleccionada.");
+            }
+            const estadias = ficha.estadias;
+            if (!Array.isArray(estadias) || !estadias.length || estadias.some(estadia =>
+                !UUID.test(String(estadia?.id || "")) ||
+                !/^\d{1,2}$/.test(String(estadia?.cabana_numero || "")) ||
+                (estadia.reserva_id && String(estadia.reserva_id) !== estado.reservaId))) {
+                throw new Error("La reserva no tiene estadías y cabañas verificables.");
+            }
+            if (!Object.hasOwn(ficha.reserva, "observaciones")) {
+                const { data, error } = await window.haikuSupabase.from("reservas")
+                    .select("observaciones").eq("id", estado.reservaId).single();
+                if (error) throw error;
+                ficha.reserva.observaciones = data?.observaciones || "";
+            }
+            if (version !== estado.version) return false;
+            if (!window.haikuSesion || window.haikuTienePermiso?.("reservas.ver") !== true) {
+                throw new Error("El permiso para ver reservas cambió. Reabre la ficha.");
+            }
+            estado.ficha = ficha;
+            if (estadias.length === 1) return seleccionarEstadia(estadias[0].id);
+
+            colocar("#sites-resumen-reserva-titulo", ficha.reserva.titular_nombre || "Ficha de reserva");
+            colocar("[data-reserva-kicker]", `RESERVA · ${ficha.reserva.codigo_haiku || ficha.reserva.cloudbeds_id || estado.reservaId}`);
+            const selector = drawer.querySelector("[data-reserva-estadia-select]");
+            selector.replaceChildren();
+            const opcionInicial = document.createElement("option");
+            opcionInicial.value = "";
+            opcionInicial.disabled = true;
+            opcionInicial.textContent = "Selecciona una estadía";
+            selector.appendChild(opcionInicial);
+            for (const estadia of estadias) {
+                const opcion = document.createElement("option");
+                opcion.value = String(estadia.id);
+                opcion.textContent = `Cabaña ${estadia.cabana_numero} · ${fechaVisible(estadia.fecha_ingreso)} → ${fechaVisible(estadia.fecha_salida)}`;
+                selector.appendChild(opcion);
+            }
+            selector.value = "";
+            drawer.querySelector("[data-reserva-estadias]").hidden = false;
+            estadoVisible("Esta reserva tiene varias estadías. Selecciona la cabaña para ver su detalle.");
+            return true;
+        } catch (error) {
+            if (version !== estado.version) return false;
+            console.warn("HAIKU · No fue posible verificar ficha Sites por ID:", error);
+            estadoVisible(error?.message || "No se pudo cargar la reserva.", true);
+            return false;
+        }
+    }
+
     async function actuar(accion) {
         if (estado.ocupado || !estado.identidad || !estado.ficha || !estado.estadia) return false;
         const identidad = estado.identidad;
         const version = estado.version;
         estado.ocupado = true;
         try {
-            await revalidar(identidad);
+            const fichaValidada = await revalidar(identidad);
             if (version !== estado.version) return false;
             if (accion === "historial") {
                 const abrir = window.HistorialSupabase?.abrirReserva;
                 if (typeof abrir !== "function") throw new Error("El historial de Proyecto H no está disponible.");
                 const meta = { cabana: identidad.numeroCabana,
-                    titular: String(estado.ficha.reserva.titular_nombre || "") };
+                    titular: String((identidad.origen === "reservas" ? fichaValidada : estado.ficha).reserva.titular_nombre || "") };
                 cerrar();
                 await abrir(identidad.reservaId, meta);
                 return true;
@@ -390,10 +537,12 @@
                     typeof abrirModalEditarReserva !== "function") {
                     throw new Error("No tienes permiso o el editor de reservas no está disponible.");
                 }
-                const ficha = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+                const ficha = identidad.origen === "reservas"
+                    ? fichaValidada : await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
                 if (version !== estado.version) return false;
-                await revalidar(identidad);
+                if (identidad.origen !== "reservas") await revalidar(identidad);
                 if (version !== estado.version ||
+                    String(ficha?.reserva?.id || "") !== identidad.reservaId ||
                     !elegirEstadia(ficha, identidad) ||
                     !window.haikuPrepararEdicionFichaSupabaseV2(ficha, identidad.estadiaId)) {
                     throw new Error("La estadía cambió. Reabre la ficha antes de editar.");
@@ -416,7 +565,7 @@
     }
 
     window.HAIKU_RESUMEN_RESERVA_SITES_V1 = Object.freeze({
-        abrirDesdeBoton, cerrar,
+        abrirDesdeBoton, abrirPorId, cerrar,
         // Funciones puras para comprobar identidad exacta y cabañas grupales.
         identidadOperacion, elegirEstadia
     });
