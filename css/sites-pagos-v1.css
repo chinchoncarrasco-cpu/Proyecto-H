@@ -1,0 +1,761 @@
+/* Etapa 6 Sites: Pagos reales. La capa visual no calcula saldos ni registra movimientos. */
+body:has(#seccion-pagos.activa) > main.contenido.sites-shell-main {
+    box-sizing: border-box;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    padding: 0;
+}
+
+#seccion-pagos {
+    width: 100%;
+    min-width: 0;
+    color: #24382d;
+    font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
+
+#seccion-pagos :is(button, input, select, textarea) { font-family: inherit; }
+#seccion-pagos :is(button, input, select, textarea, a, summary):focus-visible {
+    outline: 2px solid var(--sites-shell-green, #22735c);
+    outline-offset: 2px;
+}
+
+#seccion-pagos .sites-pagos-workspace {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0 auto;
+    padding: 26px 32px 56px;
+}
+
+#seccion-pagos .sites-pagos-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 7px;
+    margin: 0 0 19px;
+}
+#seccion-pagos .sites-pagos-heading-copy { flex: 1 1 280px; min-width: 0; }
+#seccion-pagos .sites-pagos-heading .eyebrow {
+    margin: 0 0 5px;
+    color: #658375;
+    font-size: 10px;
+    font-weight: 780;
+    letter-spacing: .14em;
+}
+#seccion-pagos .sites-pagos-heading h1 {
+    margin: 0;
+    color: #21372b;
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: -.038em;
+}
+#seccion-pagos .sites-pagos-heading .subtitulo {
+    margin: 6px 0 0;
+    color: #718078;
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.4;
+    text-transform: none;
+}
+
+/* La regla PC anterior fijaba estos dos botones sobre la topbar. Sólo aquí se revierte. */
+#seccion-pagos .sites-pagos-heading :is(.haiku-anadir-pago-boton, .haiku-ajuste-cargo-boton) {
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 35px !important;
+    margin: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px !important;
+    border: 1px solid #cbdad0;
+    border-radius: 5px;
+    background: #fff;
+    box-shadow: none;
+    color: #285946;
+    font-size: 12px;
+    font-weight: 680;
+    white-space: nowrap;
+}
+#seccion-pagos .sites-pagos-heading :is(.haiku-anadir-pago-boton, .haiku-ajuste-cargo-boton):hover {
+    background: #f1f6f2;
+    box-shadow: none;
+    transform: none;
+}
+
+#seccion-pagos .sites-pagos-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0;
+    margin: 0 0 20px;
+    overflow: hidden;
+    border: 1px solid #dbe4dd;
+    border-radius: 8px;
+    background: #fff;
+}
+#seccion-pagos .sites-pagos-metrics .pago-indicador {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: center;
+    align-items: baseline;
+    gap: 3px 8px;
+    min-width: 0;
+    min-height: 77px;
+    margin: 0;
+    padding: 13px 17px;
+    border: 0;
+    border-right: 1px solid #e1e9e2;
+    border-radius: 0;
+    background: transparent;
+    color: #33483c;
+    text-decoration: none;
+}
+#seccion-pagos .sites-pagos-metrics .pago-indicador:last-child { border-right: 0; }
+#seccion-pagos .sites-pagos-metrics .pago-indicador:hover { background: #f5f8f5; }
+#seccion-pagos .sites-pagos-metrics .pago-indicador span { min-width: 0; font-size: 12px; font-weight: 650; }
+#seccion-pagos .sites-pagos-metrics .pago-indicador strong {
+    color: #27523f;
+    font-size: 22px;
+    font-weight: 730;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+#seccion-pagos .sites-pagos-metrics .pago-indicador small {
+    grid-column: 1 / -1;
+    color: #718277;
+    font-size: 11px;
+    font-weight: 400;
+}
+#seccion-pagos .sites-pagos-metrics .pago-indicador:nth-child(-n+3) strong { color: #9b5c22; }
+
+#seccion-pagos .sites-pagos-section {
+    margin: 0 0 16px;
+    overflow: hidden;
+    border: 1px solid #dbe4dd;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: none;
+    scroll-margin-top: 84px;
+}
+#seccion-pagos .sites-pagos-section-heading {
+    display: block;
+    padding: 17px 19px 14px;
+    border-bottom: 1px solid #e3eae4;
+}
+#seccion-pagos .sites-pagos-kicker {
+    display: block;
+    margin: 0 0 4px;
+    color: #749080;
+    font-size: 10px;
+    font-weight: 780;
+    letter-spacing: .13em;
+}
+#seccion-pagos .sites-pagos-section-heading h2 {
+    margin: 0;
+    color: #21372c;
+    font-size: 18px;
+    font-weight: 730;
+    line-height: 1.25;
+    letter-spacing: -.02em;
+}
+#seccion-pagos .sites-pagos-section-count {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #edf3ee;
+    color: #476b54;
+    font-size: 11px;
+    font-weight: 700;
+    vertical-align: 2px;
+}
+#seccion-pagos .sites-pagos-section-heading p { margin: 3px 0 0; color: #728078; font-size: 12px; }
+
+/* Las autoridades existentes llenan los cuatro listados; aquí se presenta cada registro como fila Sites. */
+#seccion-pagos .sites-pagos-list {
+    display: block;
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0;
+    padding: 0 19px;
+}
+/* Misma barrera estática que el CSS crítico de index.html: los lectores tempranos
+   pueden escribir en estos montajes antes de que corra el adaptador Sites. */
+#seccion-pagos.sites-pagos-protegido #pagos-lista-abonos > :not(.haiku-abono-verificacion-v2):not(.sites-pagos-vacio-canonico),
+#seccion-pagos.sites-pagos-protegido #pagos-lista-checkin > :not(.haiku-saldo-v5[data-sites-pagos-compuesto="1"]):not(.sites-pagos-vacio-canonico),
+#seccion-pagos.sites-pagos-protegido #pagos-lista-checkout > :not(.haiku-checkout-v1[data-sites-pagos-compuesto="1"]):not(.sites-pagos-vacio-canonico),
+#seccion-pagos.sites-pagos-protegido #pagos-lista-webpay > :not(.haiku-webpay-pendiente):not(.sites-pagos-vacio-canonico) { display: none; }
+#seccion-pagos.sites-pagos-protegido #pagos-lista-abonos:not(:has(> .haiku-abono-verificacion-v2, > .sites-pagos-vacio-canonico))::before,
+#seccion-pagos.sites-pagos-protegido #pagos-lista-checkin:not(:has(> .haiku-saldo-v5[data-sites-pagos-compuesto="1"], > .sites-pagos-vacio-canonico))::before,
+#seccion-pagos.sites-pagos-protegido #pagos-lista-checkout:not(:has(> .haiku-checkout-v1[data-sites-pagos-compuesto="1"], > .sites-pagos-vacio-canonico))::before,
+#seccion-pagos.sites-pagos-protegido #pagos-lista-webpay:not(:has(> .haiku-webpay-pendiente, > .sites-pagos-vacio-canonico))::before {
+    content: "Cargando datos del turno…";
+    display: block;
+    padding: 17px 0;
+    color: #748177;
+    font-size: 12px;
+}
+#seccion-pagos .sites-pagos-list > :is(p, .pagos-checkout-vacio) { margin: 0; padding: 17px 0; color: #748177; font-size: 12px; }
+#seccion-pagos .sites-pagos-list > :is(.haiku-abono-verificacion-v2, .haiku-saldo-v4) {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid #e7ece7;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+    overflow: visible;
+}
+#seccion-pagos .sites-pagos-list > :is(.haiku-abono-verificacion-v2, .haiku-saldo-v4):last-child { border-bottom: 0; }
+#seccion-pagos .sites-pagos-list > .pago-checkout-item.haiku-checkout-v1 { overflow: visible; }
+#seccion-pagos .sites-pagos-list > .haiku-abono-verificacion-v2 { padding: 10px 0 9px; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-cabecera { padding: 0 0 7px; border-bottom: 0; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad { gap: 6px; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad strong { color: #20392d; font-size: 13px; font-weight: 760; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-identidad span { color: #526357; font-size: 11px; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-estado {
+    border-radius: 3px;
+    padding: 3px 6px;
+    background: #fff2df;
+    color: #925b27;
+    font-size: 10px;
+    font-weight: 730;
+}
+#seccion-pagos .sites-pagos-list .haiku-abono-verificacion-v2.verificado .haiku-abono-v2-estado { background: #eaf2ec; color: #376b4d; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento { padding: 5px 0; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento {
+    display: grid;
+    grid-template-columns: 98px 145px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 12px;
+    min-height: 32px;
+    padding: 4px 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento-superior,
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen { display: contents; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen > span { display: block; min-width: 0; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen > span:first-child { grid-column: 1; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen > span:nth-child(2) { grid-column: 2; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen small { display: none; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+    margin: 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar span { white-space: nowrap; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento + .haiku-abono-v2-movimiento { border-top-color: #edf1ed; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen { gap: 20px; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen > span { gap: 6px; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen small { color: #718278; font-size: 10px; font-weight: 550; letter-spacing: 0; text-transform: none; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-resumen strong { color: #243e30; font-size: 13px; font-weight: 730; font-variant-numeric: tabular-nums; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle { margin: 2px 0 0; padding: 0; border: 0; border-radius: 0; background: none; color: #718278; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar { color: #2b694a; font-size: 11px; font-weight: 680; }
+#seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar input { accent-color: #2b694a; }
+#seccion-pagos .sites-pagos-editar-abonos {
+    min-height: 25px;
+    padding: 0 8px;
+    border: 1px solid #c7d9c8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2b694a;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+#seccion-pagos .sites-pagos-editar-abonos:hover { background: #f1f7f2; }
+
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-nuevo {
+    display: grid;
+    grid-template-columns: minmax(195px, 1.4fr) minmax(105px, .65fr) minmax(105px, .65fr) minmax(170px, .9fr);
+    align-items: center;
+    gap: 9px 15px;
+    min-width: 0;
+    padding: 12px 0 9px;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-cabecera {
+    display: contents;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad strong { color: #20392d; font-size: 13px; font-weight: 760; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-identidad span { color: #526357; font-size: 11px; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-estado {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: start;
+    display: inline-flex;
+    width: max-content;
+    padding: 3px 6px;
+    border-radius: 3px;
+    background: #fff2df;
+    color: #925b27;
+    font-size: 10px;
+    font-weight: 730;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4.pago-checkin-completo .pago-checkin-estado { background: #eaf2ec; color: #376b4d; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-resumen-nuevo {
+    display: contents;
+    min-width: 0;
+    margin: 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda {
+    grid-row: 1;
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda:first-child { grid-column: 2; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda:last-child { grid-column: 3; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda span { color: #708076; font-size: 11px; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda strong { color: #2b3f31; font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4:not(.pago-checkin-completo) .haiku-saldo-resumen-celda:last-child strong { color: #9a5d22; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicios,
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .sites-pagos-detalle,
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 > .pago-checkin-nuevo > :is(.haiku-saldo-detalle, .haiku-saldo-formulario, .haiku-bove-cierre, .haiku-checkin-servicios-separados, .haiku-checkin-grupo-vinculo, .haiku-checkin-grupo-servicios) {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicios { margin: 5px 0; padding: 0; border: 0; }
+#seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-checkout-servicio { border-bottom-color: #edf1ed; }
+
+#seccion-pagos .sites-pagos-detalle { grid-column: 1 / -1; margin: 3px 0 0; padding: 0; border: 0; }
+#seccion-pagos .sites-pagos-detalle > summary {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    cursor: pointer;
+    list-style: none;
+    color: #296348;
+    font-size: 11px;
+    font-weight: 710;
+}
+#seccion-pagos .sites-pagos-detalle > summary::-webkit-details-marker { display: none; }
+#seccion-pagos .sites-pagos-detalle > summary::before { content: '›'; margin-right: 5px; font-size: 18px; line-height: .8; transition: transform .15s; }
+#seccion-pagos .sites-pagos-detalle[open] > summary::before { transform: rotate(90deg); }
+#seccion-pagos .sites-pagos-detalle > summary:hover { text-decoration: underline; }
+#seccion-pagos .sites-pagos-detalle > :not(summary) { min-width: 0; }
+#seccion-pagos .sites-pagos-detalle[open] { padding-bottom: 7px; border-bottom: 1px solid #e7ece7; }
+#seccion-pagos .sites-pagos-detalle-contenido {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 4px;
+    padding-top: 11px;
+    border-top: 1px dashed #dce7de;
+}
+#seccion-pagos .sites-pagos-detalle-col { display: flex; flex-direction: column; min-width: 0; }
+#seccion-pagos .sites-pagos-detalle-col > h3 {
+    margin: 0 0 7px;
+    color: #688071;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+#seccion-pagos .sites-pagos-detalle-vacio { margin: 6px 0; color: #738178; font-size: 11px; }
+#seccion-pagos .sites-pagos-detalle-col > :is(.haiku-saldo-detalle, .haiku-saldo-formulario, .haiku-bove-cierre, .haiku-checkout-servicios, .haiku-checkin-servicios-separados, .haiku-checkin-grupo-servicios) {
+    min-width: 0;
+    margin: 0;
+}
+#seccion-pagos .sites-pagos-detalle-pagos > .haiku-saldo-detalle {
+    padding: 0;
+    border: 0;
+}
+#seccion-pagos .sites-pagos-detalle-pagos > .haiku-saldo-detalle > summary { display: none; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pagos-lista { display: block; margin: 0; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-confirmado {
+    min-width: 0;
+    margin: 0;
+    padding: 9px 0;
+    border: 0;
+    border-bottom: 1px solid #edf1ed;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-confirmado:first-child { padding-top: 3px; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-principal { display: flex; gap: 5px 9px; flex-wrap: wrap; align-items: baseline; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-principal > strong { color: #263e30; font-size: 12px; font-variant-numeric: tabular-nums; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-principal > span:not(.haiku-pago-ok) { color: #4a5c50; font-size: 11px; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-pago-ok { margin-left: auto; font-size: 11px; }
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-saldo-pago-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 9px;
+    margin-top: 4px;
+    color: #728078;
+    font-size: 10px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+#seccion-pagos .sites-pagos-detalle-pagos .haiku-pago-editar { border-radius: 4px; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-cierre {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 3px 9px;
+    margin: 0;
+    padding: 7px 0;
+    border: 0;
+    border-bottom: 1px solid #edf1ed;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-size: 11px;
+}
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-cierre > strong { color: #32684a; font-size: 11px; font-weight: 700; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > strong { color: #9c662c; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-ok > span { color: #264b36; font-weight: 700; font-variant-numeric: tabular-nums; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-ok > span::before { content: 'N.º '; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-cierre > :is(small, .haiku-bove-fila),
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > span,
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > .sites-pagos-abrir-bove { grid-column: 1 / -1; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-cierre > small,
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > span { color: #728078; font-size: 10px; line-height: 1.4; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-bove-pendiente > .sites-pagos-abrir-bove { justify-self: start; margin: 4px 0 0; }
+#seccion-pagos .sites-pagos-detalle-documentos > :is(.haiku-checkin-servicios-separados, .haiku-checkin-grupo-servicios) {
+    display: grid;
+    gap: 5px;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid #edf1ed;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkin-servicios-bove {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 7px;
+    padding-top: 6px;
+    border-top: 1px solid #edf1ed;
+}
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkin-servicios-bove strong { color: #32684a; }
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkin-servicios-pendiente { color: #9c662c; }
+#seccion-pagos .sites-pagos-detalle-documentos > .haiku-checkout-servicios { margin: 0; border: 0; }
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkout-servicio { min-width: 0; padding: 7px 0; border-bottom: 1px solid #edf1ed; }
+#seccion-pagos .sites-pagos-detalle-documentos .haiku-checkout-servicio-nombre strong { white-space: normal; overflow: visible; }
+#seccion-pagos .sites-pagos-abrir-pago,
+#seccion-pagos .sites-pagos-abrir-bove {
+    width: auto;
+    min-height: 30px;
+    margin: 7px 0 0;
+    padding: 0 10px;
+    border: 1px solid #c7d9c8;
+    border-radius: 4px;
+    background: #f5faf6;
+    box-shadow: none;
+    color: #2b694a;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+#seccion-pagos .sites-pagos-abrir-pago:hover,
+#seccion-pagos .sites-pagos-abrir-bove:hover { background: #e8f3eb; }
+#seccion-pagos .sites-pagos-registro .haiku-saldo-formulario[hidden],
+#seccion-pagos .sites-pagos-registro .haiku-bove-fila[hidden] { display: none; }
+
+/* El editor canónico de pagos conserva campos/handlers; se presenta como panel lateral. */
+#seccion-pagos .haiku-pago-editor:not([hidden]) {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0 0 0 auto;
+    z-index: 9998;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: min(440px, 100vw);
+    height: 100dvh;
+    margin: 0;
+    padding: 22px;
+    overflow-y: auto;
+    border: 0;
+    border-left: 1px solid #dbe4dd;
+    background: #fff;
+    box-shadow: -12px 0 35px #10241d20, 0 0 0 100vmax #10241db0;
+}
+#seccion-pagos .haiku-pago-editor:not([hidden])::before {
+    content: "Editar pago";
+    display: block;
+    margin: -4px -4px 5px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #dce5e0;
+    color: #21312e;
+    font-size: 22px;
+    font-weight: 730;
+    letter-spacing: -.035em;
+}
+#seccion-pagos .haiku-pago-editor:not([hidden]) .haiku-pago-editor-acciones {
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid #dce5e0;
+}
+#seccion-pagos .haiku-pago-editor:not([hidden]) .haiku-pago-editor-acciones button { min-height: 38px; border-radius: 6px; font-size: 12px; }
+
+#seccion-pagos .sites-pagos-webpay-layout { display: grid; grid-template-columns: minmax(230px, .85fr) minmax(0, 1.8fr); }
+#seccion-pagos .sites-pagos-webpay-pending { min-width: 0; padding: 18px 20px; border-right: 1px solid #e4eae4; background: #f8faf8; }
+#seccion-pagos .sites-pagos-webpay-pending h3 { margin: 0; color: #2c4635; font-size: 13px; }
+#seccion-pagos .sites-pagos-webpay-pending #pagos-lista-webpay { display: block; padding: 0; margin: 8px 0 0; }
+#seccion-pagos .sites-pagos-webpay-pending .pagos-checkout-vacio { margin: 0; padding: 2px 0 10px; color: #748177; font-size: 12px; }
+#seccion-pagos .sites-pagos-webpay-pending .pago-webpay-item {
+    margin: 0;
+    padding: 11px 0;
+    border: 0;
+    border-bottom: 1px solid #e0e8e1;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+#seccion-pagos .sites-pagos-webpay-pending .pago-webpay-item:last-child { border-bottom: 0; }
+#seccion-pagos .sites-pagos-webpay-pending .haiku-webpay-header { gap: 8px; }
+#seccion-pagos .sites-pagos-webpay-pending .haiku-webpay-badge { border-radius: 3px; font-size: 10px; }
+#seccion-pagos .sites-pagos-webpay-pending .haiku-webpay-monto { font-variant-numeric: tabular-nums; }
+#seccion-pagos .sites-pagos-webpay-pending .haiku-webpay-datos { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+#seccion-pagos .sites-pagos-webpay-pending .haiku-webpay-asociacion { padding: 10px 0 0; }
+#seccion-pagos .sites-pagos-webpay-entry { min-width: 0; padding: 18px 20px 20px; }
+#seccion-pagos .sites-pagos-webpay-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 5px 15px;
+    margin-bottom: 13px;
+}
+#seccion-pagos .sites-pagos-webpay-title h3 { margin: 0; color: #2c4635; font-size: 13px; }
+#seccion-pagos .sites-pagos-webpay-title span { color: #73837a; font-size: 11px; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-nuevo {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px 13px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+}
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-fila { display: contents; }
+#seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 4px;
+    margin: 0 0 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+#seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda strong { color: #2c4635; font-size: 13px; }
+#seccion-pagos .sites-pagos-webpay-entry .haiku-webpay-ayuda span { color: #73837a; font-size: 11px; line-height: 1.4; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo { min-width: 0; gap: 4px; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-nombre) { grid-column: span 2; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-tarjeta) { grid-column: span 2; }
+#seccion-pagos .sites-pagos-webpay-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    margin-top: 3px;
+    padding-top: 11px;
+    border-top: 1px solid #e6ece6;
+}
+#seccion-pagos .sites-pagos-webpay-footer span { color: #809087; font-size: 11px; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo label { color: #4c6254; font-size: 11px; font-weight: 650; }
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo :is(input, select) {
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    padding: 0 9px;
+    border: 1px solid #d6e1d8;
+    border-radius: 5px;
+    background: #fff;
+    color: #253a2e;
+    font-size: 12px;
+}
+#seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo :is(input, select)::placeholder { color: #98a69d; }
+#seccion-pagos .sites-pagos-webpay-entry #pagos-webpay-agregar {
+    flex: none;
+    width: auto;
+    min-height: 34px;
+    margin: 4px 0 0;
+    padding: 0 12px;
+    border: 1px solid #255c48;
+    border-radius: 5px;
+    background: #255c48;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 710;
+}
+#seccion-pagos .sites-pagos-webpay-entry #pagos-webpay-agregar:hover { background: #1f4e3d; }
+
+/* Los dos controles globales de Pagos conservan sus handlers; sus contenedores pasan a drawer lateral. */
+body > :is(#haiku-pago-grupo-overlay, #haiku-ajuste-cargo-overlay) {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    padding: 0;
+    background: #12251db0;
+    backdrop-filter: none;
+}
+body > #haiku-pago-grupo-overlay > .haiku-pago-grupo-modal,
+body > #haiku-ajuste-cargo-overlay > .haiku-ajuste-cargo-modal {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    width: min(520px, 100vw);
+    max-height: 100dvh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 8px 0 0 8px;
+    border-color: #dbe4dd;
+    box-shadow: -16px 0 42px #10241d30;
+}
+body > #haiku-pago-grupo-overlay .haiku-pago-grupo-cabecera,
+body > #haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-cabecera { flex: none; }
+body > #haiku-pago-grupo-overlay .haiku-pago-grupo-cuerpo,
+body > #haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-cuerpo {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+body > #haiku-pago-grupo-overlay .haiku-pago-grupo-acciones,
+body > #haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-acciones {
+    position: sticky;
+    bottom: -22px;
+    z-index: 1;
+    margin: 18px -22px -22px;
+    padding: 13px 22px 18px;
+    border-top: 1px solid #e4ebe5;
+    background: #fff;
+}
+.sites-pagos-selector .sites-resumen-drawer-panel,
+.sites-pagos-bove .sites-resumen-drawer-panel { width: min(460px, 100vw); }
+body > :is(.sites-pagos-selector, .sites-pagos-bove) {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
+    padding: 0;
+    background: #10241db0;
+}
+body > :is(.sites-pagos-selector, .sites-pagos-bove)[hidden] { display: none; }
+.sites-pagos-selector .sites-resumen-drawer-body,
+.sites-pagos-bove .sites-resumen-drawer-body { color: #405749; font-size: 13px; line-height: 1.5; }
+.sites-pagos-selector .sites-resumen-drawer-body > p:first-child,
+.sites-pagos-bove .sites-resumen-drawer-body > p:first-child { margin: 0 0 18px; color: #63766a; }
+.sites-pagos-selector .sites-resumen-drawer-body > label,
+.sites-pagos-bove .sites-resumen-drawer-body > label { display: block; color: #51695b; font-size: 12px; font-weight: 690; }
+.sites-pagos-selector .sites-resumen-drawer-body > :is(select, input),
+.sites-pagos-bove .sites-resumen-drawer-body > :is(select, input) { width: 100%; margin: 6px 0 0; }
+.sites-pagos-selector .sites-pagos-selector-estado,
+.sites-pagos-bove [data-sites-bove-estado] { margin-top: 14px; color: #9a5d22; font-size: 12px; }
+.sites-pagos-selector .sites-resumen-drawer-footer [data-sites-pagos-continuar],
+.sites-pagos-bove .sites-resumen-drawer-footer [data-sites-bove-confirmar] { border-color: #245b4a; background: #245b4a; color: #fff; }
+.sites-pagos-selector .sites-resumen-drawer-footer [data-sites-pagos-continuar]:disabled { cursor: not-allowed; opacity: .48; }
+.sites-pagos-selector .sites-resumen-drawer-body :is(button, select),
+.sites-pagos-bove .sites-resumen-drawer-body :is(button, select) { cursor: pointer; }
+
+@media (max-width: 1050px) {
+    #seccion-pagos .sites-pagos-workspace { padding: 23px 24px 45px; }
+    #seccion-pagos .sites-pagos-webpay-layout { grid-template-columns: 1fr; }
+    #seccion-pagos .sites-pagos-webpay-pending { border-right: 0; border-bottom: 1px solid #e4eae4; }
+    #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-nuevo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+    #seccion-pagos .sites-pagos-workspace { padding: 20px 15px 42px; }
+    #seccion-pagos .sites-pagos-heading { align-items: flex-start; gap: 8px; }
+    #seccion-pagos .sites-pagos-heading-copy { flex-basis: 100%; }
+    #seccion-pagos .sites-pagos-heading h1 { font-size: 24px; }
+    #seccion-pagos .sites-pagos-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #seccion-pagos .sites-pagos-metrics .pago-indicador { min-height: 65px; padding: 10px 12px; }
+    #seccion-pagos .sites-pagos-metrics .pago-indicador:nth-child(2) { border-right: 0; }
+    #seccion-pagos .sites-pagos-metrics .pago-indicador:nth-child(-n+2) { border-bottom: 1px solid #e1e9e2; }
+    #seccion-pagos .sites-pagos-section-heading { padding: 13px 14px; }
+    #seccion-pagos .sites-pagos-section-heading h2 { font-size: 17px; }
+    #seccion-pagos .sites-pagos-list { padding: 0 14px; }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento {
+        grid-template-columns: minmax(70px, .7fr) minmax(105px, 1fr) auto;
+        gap: 5px 8px;
+        padding: 8px 0;
+    }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle {
+        grid-column: 1 / 3;
+        grid-row: 2;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar { grid-column: 3; grid-row: 1 / 3; }
+    #seccion-pagos .sites-pagos-detalle-contenido { grid-template-columns: 1fr; gap: 13px; }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-nuevo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-estado { grid-column: 2; justify-self: end; }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda { grid-row: 2; }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda:first-child { grid-column: 1; }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .haiku-saldo-resumen-celda:last-child { grid-column: 2; }
+    #seccion-pagos .sites-pagos-webpay-pending,
+    #seccion-pagos .sites-pagos-webpay-entry { padding: 14px; }
+    body > #haiku-pago-grupo-overlay .haiku-pago-grupo-acciones,
+    body > #haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-acciones {
+        bottom: -16px;
+        margin: 18px -16px -16px;
+        padding: 12px 16px 16px;
+    }
+}
+
+@media (max-width: 460px) {
+    #seccion-pagos .sites-pagos-metrics .pago-indicador span { font-size: 11px; }
+    #seccion-pagos .sites-pagos-metrics .pago-indicador strong { font-size: 20px; }
+    #seccion-pagos .sites-pagos-metrics .pago-indicador small { font-size: 10px; }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-movimiento { grid-template-columns: 75px minmax(0, 1fr); }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-detalle { grid-column: 1 / -1; grid-row: 2; }
+    #seccion-pagos .sites-pagos-list .haiku-abono-v2-confirmar { grid-column: 2; grid-row: 3; justify-self: start; }
+    #seccion-pagos .sites-pagos-list .haiku-saldo-v4 .pago-checkin-resumen-nuevo { gap: 8px; }
+    #seccion-pagos .sites-pagos-webpay-footer { flex-direction: column; align-items: stretch; }
+    #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-nuevo { grid-template-columns: 1fr; }
+    #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-nombre),
+    #seccion-pagos .sites-pagos-webpay-entry .pagos-webpay-campo:has(#pagos-webpay-tarjeta) { grid-column: 1; }
+    #seccion-pagos .sites-pagos-webpay-entry #pagos-webpay-agregar { justify-self: stretch; }
+    #seccion-pagos .haiku-pago-editor:not([hidden]) { width: 100vw; padding: 16px; }
+    body > #haiku-pago-grupo-overlay > .haiku-pago-grupo-modal,
+    body > #haiku-ajuste-cargo-overlay > .haiku-ajuste-cargo-modal,
+    .sites-pagos-selector .sites-resumen-drawer-panel,
+    .sites-pagos-bove .sites-resumen-drawer-panel { width: 100vw; border-radius: 0; }
+}

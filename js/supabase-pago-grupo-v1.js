@@ -281,9 +281,9 @@
         estado("");
     }
 
-    async function obtenerReservasDia() {
-        const fecha = fechaActual();
-        if (!fecha) return [];
+    async function obtenerReservasDia(fechaEsperada = fechaActual()) {
+        const fecha = fechaEsperada;
+        if (!fecha || fecha !== fechaActual()) return [];
 
         const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
         if (error) throw error;
@@ -307,6 +307,7 @@
             agregar(fila.numero, fila.fullday_reserva_id, fila.fullday_titular, "Full Day");
         });
 
+        if (fecha !== fechaActual()) return [];
         const items = [...base.values()];
         if (!items.length) return [];
 
@@ -316,6 +317,7 @@
             .in("id", items.map(i => i.reservaId));
 
         if (eReservas) throw eReservas;
+        if (fecha !== fechaActual()) return [];
 
         const meta = new Map((reservas || []).map(r => [String(r.id), r]));
         const grupos = new Map();
@@ -327,15 +329,18 @@
             if (!grupos.has(key)) {
                 grupos.set(key, {
                     reservaId: item.reservaId,
+                    numero: item.numero,
                     grupoId: r.grupo_reserva_id || "",
                     titular: r.titular_nombre || item.titular,
                     cabs: [],
+                    reservaIds: [],
                     contextos: []
                 });
             }
 
             const g = grupos.get(key);
             if (item.numero && !g.cabs.includes(item.numero)) g.cabs.push(item.numero);
+            if (!g.reservaIds.includes(item.reservaId)) g.reservaIds.push(item.reservaId);
             if (item.contexto && !g.contextos.includes(item.contexto)) g.contextos.push(item.contexto);
         });
 
@@ -359,6 +364,7 @@
             items.forEach(item => {
                 const op = document.createElement("option");
                 op.value = item.reservaId;
+                op.dataset.reservaIds = item.reservaIds.join(",");
                 op.textContent = item.grupoId
                     ? `↳ ${item.titular} · ${item.cabs.map(n => `CAB ${n}`).join(" + ")}`
                     : `CAB ${item.cabs[0] || "—"} · ${item.titular}`;
@@ -407,16 +413,41 @@
         };
     }
 
-    async function contextoPagoResumen(reservaId, fechaEsperada) {
+    async function contextoPagoResumen(reservaId, fechaEsperada, origen = "resumen", cabanaEsperada = 0) {
         const id = String(reservaId || "");
-        if (!id || fechaEsperada !== fechaActual()) return null;
+        if (!id || fechaEsperada !== fechaActual() || !["resumen", "pagos"].includes(origen)) return null;
+        const cabana = Number(cabanaEsperada);
+        if (origen === "pagos" && !cabana) return null;
         const { data, error } = await cliente.rpc("haiku_operacion_dia", {
             p_fecha: fechaEsperada
         });
         if (error) throw error;
-        const fila = (data || []).find(item =>
-            item.estado_operativo === "continua" && String(item.continua_reserva_id || "") === id);
-        if (!fila || fechaEsperada !== fechaActual()) return null;
+        const identidades = fila => {
+            const estado = String(fila.estado_operativo || "");
+            if (origen === "resumen") {
+                return estado === "continua"
+                    ? [{ id: fila.continua_reserva_id, titular: fila.continua_titular }]
+                    : [];
+            }
+            return [
+                ...(["libre-ingresa", "sale-ingresa"].includes(estado)
+                    ? [{ id: fila.ingreso_reserva_id, titular: fila.ingreso_titular }] : []),
+                ...(estado === "continua"
+                    ? [{ id: fila.continua_reserva_id, titular: fila.continua_titular }] : []),
+                ...(["sale-libre", "sale-ingresa"].includes(estado)
+                    ? [{ id: fila.salida_reserva_id, titular: fila.salida_titular }] : []),
+                ...(estado === "fullday"
+                    ? [{ id: fila.fullday_reserva_id, titular: fila.fullday_titular }] : [])
+            ];
+        };
+        const coincidencia = (data || []).flatMap(fila =>
+            identidades(fila)
+                .filter(item => String(item.id || "") === id &&
+                    (origen !== "pagos" || Number(fila.numero) === cabana))
+                .map(item => ({ fila, titular: item.titular }))
+        )[0];
+        if (!coincidencia || fechaEsperada !== fechaActual()) return null;
+        const { fila, titular } = coincidencia;
         const finanzas = await finanzasReserva(id);
         if (fechaEsperada !== fechaActual()) return null;
         const miembros = finanzas.es_grupo
@@ -429,7 +460,8 @@
         if (!cabanas.includes(Number(fila.numero))) return null;
         return {
             reservaId: id,
-            titular: finanzas.titular || fila.continua_titular || "Sin titular",
+            titular: (origen === "pagos" ? titular || finanzas.titular :
+                finanzas.titular || fila.continua_titular) || "Sin titular",
             cabanas,
             miembros,
             total: Number(finanzas.total_alojamiento || 0),
@@ -461,7 +493,8 @@
         };
     }
 
-    async function registrarPagoControlado(reservaId, datos, fechaEsperada, origen = "resumen") {
+    async function registrarPagoControlado(reservaId, datos, fechaEsperada,
+        origen = "resumen", cabanaEsperada = 0) {
         if (guardando) throw new Error("Ya se está registrando un pago.");
         guardando = true;
         try {
@@ -471,7 +504,7 @@
             }
             const contexto = origen === "modal"
                 ? await contextoPagoModal(reservaId, fechaEsperada)
-                : await contextoPagoResumen(reservaId, fechaEsperada);
+                : await contextoPagoResumen(reservaId, fechaEsperada, origen, cabanaEsperada);
             if (!contexto || contexto.saldo <= 0) {
                 throw new Error("La reserva ya no tiene saldo de alojamiento cobrable en esta fecha.");
             }
@@ -860,6 +893,27 @@
         await cargarReservas();
     }
 
+    async function abrirEdicion(reservaId, fechaEsperada = fechaActual()) {
+        const id = String(reservaId || "").trim();
+        if (!id || fechaEsperada !== fechaActual()) return false;
+        crearModal();
+        await abrirModal();
+        if (fechaEsperada !== fechaActual()) return false;
+        const overlay = document.getElementById("haiku-pago-grupo-overlay");
+        const select = document.getElementById("haiku-pago-reserva");
+        const opcion = select && [...select.options].find(option =>
+            option.value === id || option.dataset?.reservaIds?.split(",").includes(id));
+        if (!overlay || overlay.hidden || !opcion) {
+            if (overlay && !overlay.hidden) {
+                estado("La reserva ya no está disponible en el día seleccionado.", "error");
+            }
+            return false;
+        }
+        select.value = opcion.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+    }
+
     function cerrarModal(forzar = false) {
         const overlay = document.getElementById("haiku-pago-grupo-overlay");
         if (!overlay || (guardando && !forzar)) return;
@@ -970,6 +1024,8 @@
 
     window.HAIKU_PAGO_GRUPO_V1 = Object.freeze({
         abrir: abrirModal,
+        abrirEdicion,
+        listarReservasDia: obtenerReservasDia,
         refrescarFicha: refrescarFichaFinanzas,
         contextoResumen: contextoPagoResumen,
         registrarResumen: registrarPagoControlado,

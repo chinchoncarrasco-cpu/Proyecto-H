@@ -243,7 +243,7 @@
 
             if (!pendientes.length) {
                 lista.innerHTML = `
-                    <p class="pagos-checkout-vacio">
+                    <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
                         No hay WebPay pendientes de asociar.
                     </p>
                 `;
@@ -320,7 +320,7 @@
         } catch (error) {
             console.error("HAIKU · WebPay: error al cargar pendientes", error);
             lista.innerHTML = `
-                <p class="pagos-checkout-vacio">
+                <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
                     No fue posible cargar WebPay desde Supabase.
                 </p>
             `;

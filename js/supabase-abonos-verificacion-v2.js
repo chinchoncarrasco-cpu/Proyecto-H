@@ -224,6 +224,7 @@
         tarjeta.className = "haiku-abono-verificacion-v2 haiku-abono-v2-unidad" +
             (todosVerificados ? " verificado" : " pendiente");
         tarjeta.dataset.unidadKey = unidad.key;
+        tarjeta.dataset.reservaId = unidad.reservaIds[0] || "";
 
         const estado = todosVerificados
             ? `✓ ${cantidad === 1 ? "Verificado" : `${cantidad} abonos verificados`}`
@@ -267,7 +268,7 @@
             const ids = [...new Set(ingresos.map(item => String(item.reservaId)).filter(Boolean))];
 
             if (!ids.length) {
-                lista.innerHTML = `<p class="pagos-checkout-vacio">No hay ingresos para esta fecha.</p>`;
+                lista.innerHTML = `<p class="pagos-checkout-vacio sites-pagos-vacio-canonico">No hay ingresos para esta fecha.</p>`;
                 contador.textContent = "0";
                 return;
             }

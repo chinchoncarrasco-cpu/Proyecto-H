@@ -437,7 +437,7 @@
             });
 
             contador.textContent = String(pendientes);
-            if (!ingresos.length) lista.innerHTML = `<p class="pagos-checkout-vacio">No hay ingresos para esta fecha.</p>`;
+            if (!ingresos.length) lista.innerHTML = `<p class="pagos-checkout-vacio sites-pagos-vacio-canonico">No hay ingresos para esta fecha.</p>`;
             console.info("HAIKU · Saldo Check-in V5 separado:", fecha, ingresos.length);
         } catch (error) {
             console.error("HAIKU · Error cargando Saldo Check-in V5:", error);

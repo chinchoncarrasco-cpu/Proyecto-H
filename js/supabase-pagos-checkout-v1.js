@@ -630,7 +630,7 @@
 
             if (!tarjetas) {
                 lista.innerHTML = `
-                    <p class="pagos-checkout-vacio">
+                    <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
                         No hay cobros pendientes de servicios.
                     </p>`;
             }
@@ -644,7 +644,7 @@
         } catch (error) {
             console.error("HAIKU · Error cargando Cobros Check-out V1:", error);
             lista.innerHTML = `
-                <p class="pagos-checkout-vacio">
+                <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
                     No fue posible cargar los cobros de Check-out.
                 </p>`;
         } finally {

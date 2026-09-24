@@ -7,12 +7,32 @@
 
     <title>Haiku</title>
 
+    <!-- Primer paint de Pagos: los lectores legacy pueden llenar los mismos montajes
+         antes de la autoridad final. Esta barrera existe aun sin JS ni observer. -->
+    <style id="sites-pagos-primer-paint">
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-abonos > :not(.haiku-abono-verificacion-v2):not(.sites-pagos-vacio-canonico),
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-checkin > :not(.haiku-saldo-v5[data-sites-pagos-compuesto="1"]):not(.sites-pagos-vacio-canonico),
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-checkout > :not(.haiku-checkout-v1[data-sites-pagos-compuesto="1"]):not(.sites-pagos-vacio-canonico),
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-webpay > :not(.haiku-webpay-pendiente):not(.sites-pagos-vacio-canonico) { display: none; }
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-abonos:not(:has(> .haiku-abono-verificacion-v2, > .sites-pagos-vacio-canonico))::before,
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-checkin:not(:has(> .haiku-saldo-v5[data-sites-pagos-compuesto="1"], > .sites-pagos-vacio-canonico))::before,
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-checkout:not(:has(> .haiku-checkout-v1[data-sites-pagos-compuesto="1"], > .sites-pagos-vacio-canonico))::before,
+        #seccion-pagos.sites-pagos-protegido #pagos-lista-webpay:not(:has(> .haiku-webpay-pendiente, > .sites-pagos-vacio-canonico))::before {
+            content: "Cargando datos del turno…";
+            display: block;
+            padding: 17px 0;
+            color: #748177;
+            font-size: 12px;
+        }
+    </style>
+
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/sites-shell-v1.css">
     <link rel="stylesheet" href="css/sites-resumen-v1.css">
     <link rel="stylesheet" href="css/sites-calendario-v1.css">
     <link rel="stylesheet" href="css/sites-cabanas-v1.css">
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
+    <link rel="stylesheet" href="css/sites-pagos-v1.css">
 </head>
 
 <body>
@@ -5035,230 +5055,146 @@
 <!-- SECCIÓN PAGOS -->
 <!-- ============================= -->
 
-<section id="seccion-pagos" class="seccion-app">
-
-    <header class="cabecera">
-        <div>
-            <p class="eyebrow">CONTROL FINANCIERO</p>
-            <h1>Pagos</h1>
-            <p class="subtitulo">
-                Verificación de abonos y cobros del día.
-            </p>
-        </div>
-    </header>
-
-    <!-- RESUMEN DE PAGOS -->
-
-<section class="pagos-resumen">
-
-    <div class="pago-indicador">
-        <span>Abonos por verificar</span>
-        <strong id="pagos-contador-abonos">0</strong>
-    </div>
-
-    <div class="pago-indicador">
-        <span>Saldos Check-in</span>
-        <strong id="pagos-contador-checkin">0</strong>
-    </div>
-
-    <div class="pago-indicador">
-        <span>Cobros Check-out</span>
-        <strong id="pagos-contador-checkout">0</strong>
-    </div>
-
-    <div class="pago-indicador">
-        <span>WebPay por confirmar</span>
-        <strong id="pagos-contador-webpay">0</strong>
-    </div>
-
-</section>
-
-<!-- ===================================== -->
-<!-- VERIFICAR ABONOS -->
-<!-- ===================================== -->
-
-<section class="panel pagos-panel">
-
-    <div class="panel-titulo">
-        <div>
-            <h2>Verificar abonos</h2>
-            <p>Confirma los abonos de las reservas que ingresan hoy.</p>
-        </div>
-    </div>
-
-    <div id="pagos-lista-abonos">
-        <!-- Aquí aparecerán automáticamente las reservas -->
-    </div>
-
-</section>
-
-<!-- ============================= -->
-<!-- SALDOS CHECK-IN -->
-<!-- ============================= -->
-
-<section class="panel pagos-panel">
-
-    <div class="panel-titulo">
-        <div>
-            <h2>Saldos Check-in</h2>
-            <p>Registro de pago y cierre administrativo de los ingresos del día.</p>
-        </div>
-    </div>
-
-    <div id="pagos-lista-checkin">
-        <!-- Aquí aparecerán automáticamente las reservas -->
-    </div>
-
-</section>
-
-<!-- ============================= -->
-<!-- COBROS CHECK-OUT -->
-<!-- ============================= -->
-
-<section class="panel pagos-panel">
-
-    <div class="panel-titulo">
-        <div>
-            <h2>Cobros Check-out</h2>
-            <p>Servicios y consumos pendientes de pago de los huéspedes.</p>
-        </div>
-    </div>
-
-    <div id="pagos-lista-checkout">
-        <!-- Aquí aparecerán automáticamente los servicios pendientes -->
-    </div>
-
-</section>
-
-<!-- ============================= -->
-<!-- WEBPAY POR CONFIRMAR -->
-<!-- ============================= -->
-
-<section class="panel pagos-panel">
-
-    <div class="panel-titulo">
-        <div>
-            <h2>WebPay por confirmar</h2>
-            <p>Pagos WebPay pendientes de revisión administrativa.</p>
-        </div>
-    </div>
-
-    <div class="pagos-webpay-nuevo">
-
-        <div class="pagos-webpay-campo">
-            <label>Nombre</label>
-            <input
-                type="text"
-                id="pagos-webpay-nombre"
-                placeholder="Nombre del huésped"
-            >
-        </div>
-
-        <div class="pagos-webpay-campo">
-            <label>RUT</label>
-            <input
-                type="text"
-                id="pagos-webpay-rut"
-                placeholder="12.345.678-9"
-            >
-        </div>
-
-        <div class="pagos-webpay-fila">
-
-            <div class="pagos-webpay-campo">
-                <label>Cabaña</label>
-                <select id="pagos-webpay-cabana">
-                    <option value="">Seleccionar</option>
-                    <option value="1">CAB 1</option>
-                    <option value="2">CAB 2</option>
-                    <option value="3">CAB 3</option>
-                    <option value="4">CAB 4</option>
-                    <option value="5">CAB 5</option>
-                    <option value="6">CAB 6</option>
-                    <option value="7">CAB 7</option>
-                    <option value="8">CAB 8</option>
-                    <option value="9">CAB 9</option>
-                    <option value="10">CAB 10</option>
-                    <option value="11">CAB 11</option>
-                </select>
+<section id="seccion-pagos" class="seccion-app sites-pagos sites-pagos-protegido">
+    <div class="sites-pagos-workspace">
+        <header class="cabecera sites-pagos-heading">
+            <div class="sites-pagos-heading-copy">
+                <p class="eyebrow">CONTROL FINANCIERO</p>
+                <h1>Pagos</h1>
+                <p class="subtitulo">Verificación de abonos y cobros del turno · <span id="sites-pagos-fecha"></span></p>
             </div>
+        </header>
 
-            <div class="pagos-webpay-campo">
-                <label>Monto</label>
-                <input
-                    type="number"
-                    id="pagos-webpay-monto"
-                    min="0"
-                    step="1000"
-                    placeholder="160000"
-                >
+        <nav class="pagos-resumen sites-pagos-metrics" aria-label="Resumen de pagos del turno">
+            <a class="pago-indicador" href="#sites-pagos-abonos">
+                <span>Abonos por verificar</span>
+                <strong id="pagos-contador-abonos">0</strong>
+                <small>Confirmar medio y respaldo</small>
+            </a>
+            <a class="pago-indicador" href="#sites-pagos-checkin">
+                <span>Saldos Check-in</span>
+                <strong id="pagos-contador-checkin">0</strong>
+                <small>Alojamiento y BOVE</small>
+            </a>
+            <a class="pago-indicador" href="#sites-pagos-checkout">
+                <span>Cobros Check-out</span>
+                <strong id="pagos-contador-checkout">0</strong>
+                <small>Servicios y consumos</small>
+            </a>
+            <a class="pago-indicador" href="#sites-pagos-webpay">
+                <span>WebPay por confirmar</span>
+                <strong id="pagos-contador-webpay">0</strong>
+                <small>Asociación administrativa</small>
+            </a>
+        </nav>
+
+        <section id="sites-pagos-abonos" class="panel pagos-panel sites-pagos-section" aria-labelledby="sites-pagos-abonos-titulo">
+            <div class="panel-titulo sites-pagos-section-heading">
+                <div>
+                    <span class="sites-pagos-kicker">01 · INGRESOS</span>
+                    <h2 id="sites-pagos-abonos-titulo">Verificar abonos <span class="sites-pagos-section-count" data-sites-pagos-count="abonos">0</span></h2>
+                    <p>Confirmación individual de cada abono de los ingresos del turno.</p>
+                </div>
             </div>
+            <div id="pagos-lista-abonos" class="sites-pagos-list" aria-live="polite"></div>
+        </section>
 
-        </div>
-
-        <div class="pagos-webpay-fila">
-
-            <div class="pagos-webpay-campo">
-                <label>Cod. Aut.</label>
-                <input
-                    type="text"
-                    id="pagos-webpay-codaut"
-                    placeholder="822236"
-                >
+        <section id="sites-pagos-checkin" class="panel pagos-panel sites-pagos-section" aria-labelledby="sites-pagos-checkin-titulo">
+            <div class="panel-titulo sites-pagos-section-heading">
+                <div>
+                    <span class="sites-pagos-kicker">02 · INGRESOS</span>
+                    <h2 id="sites-pagos-checkin-titulo">Saldos Check-in <span class="sites-pagos-section-count" data-sites-pagos-count="checkin">0</span></h2>
+                    <p>Alojamiento, pagos y documentos asociados.</p>
+                </div>
             </div>
+            <div id="pagos-lista-checkin" class="sites-pagos-list" aria-live="polite"></div>
+        </section>
 
-            <div class="pagos-webpay-campo">
-                <label>Tipo</label>
-                <select id="pagos-webpay-tipo">
-                    <option value="">Seleccionar</option>
-                    <option value="VC">VC</option>
-                    <option value="VN">VN</option>
-                    <option value="VD">VD</option>
-                </select>
+        <section id="sites-pagos-checkout" class="panel pagos-panel sites-pagos-section" aria-labelledby="sites-pagos-checkout-titulo">
+            <div class="panel-titulo sites-pagos-section-heading">
+                <div>
+                    <span class="sites-pagos-kicker">03 · SALIDAS</span>
+                    <h2 id="sites-pagos-checkout-titulo">Cobros Check-out <span class="sites-pagos-section-count" data-sites-pagos-count="checkout">0</span></h2>
+                    <p>Servicios, consumos y documento de salida.</p>
+                </div>
             </div>
+            <div id="pagos-lista-checkout" class="sites-pagos-list" aria-live="polite"></div>
+        </section>
 
-        </div>
-
-        <div class="pagos-webpay-campo">
-            <label>Fecha de pago</label>
-            <input
-                type="date"
-                id="pagos-webpay-fecha-pago"
-            >
-        </div>
-
-        <div class="pagos-webpay-campo">
-            <label>Fecha reserva</label>
-            <input
-                type="date"
-                id="pagos-webpay-fecha-reserva"
-            >
-        </div>
-
-        <div class="pagos-webpay-campo">
-            <label>Tarjeta</label>
-            <input
-                type="text"
-                id="pagos-webpay-tarjeta"
-                placeholder="548742XXXXXX7786 Mastercard"
-            >
-        </div>
-
-        <button
-            type="button"
-            id="pagos-webpay-agregar"
-        >
-            + Agregar WebPay
-        </button>
-
+        <section id="sites-pagos-webpay" class="panel pagos-panel sites-pagos-section" aria-labelledby="sites-pagos-webpay-titulo">
+            <div class="panel-titulo sites-pagos-section-heading">
+                <div>
+                    <span class="sites-pagos-kicker">04 · CONCILIACIÓN</span>
+                    <h2 id="sites-pagos-webpay-titulo">WebPay por confirmar <span class="sites-pagos-section-count" data-sites-pagos-count="webpay">0</span></h2>
+                    <p>Ingreso administrativo previo a la asociación con la reserva.</p>
+                </div>
+            </div>
+            <div class="sites-pagos-webpay-layout">
+                <div class="sites-pagos-webpay-pending">
+                    <h3>Pagos sin asociar</h3>
+                    <div id="pagos-lista-webpay" aria-live="polite"></div>
+                </div>
+                <div class="sites-pagos-webpay-entry">
+                    <div class="sites-pagos-webpay-title"><h3>Ingreso administrativo</h3><span>Registro pendiente · requiere revisión posterior</span></div>
+                    <div class="pagos-webpay-nuevo">
+                        <div class="pagos-webpay-campo">
+                            <label for="pagos-webpay-nombre">Nombre</label>
+                            <input type="text" id="pagos-webpay-nombre" placeholder="Nombre del huésped">
+                        </div>
+                        <div class="pagos-webpay-campo">
+                            <label for="pagos-webpay-rut">RUT</label>
+                            <input type="text" id="pagos-webpay-rut" placeholder="12.345.678-9">
+                        </div>
+                        <div class="pagos-webpay-fila">
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-cabana">Cabaña (referencia)</label>
+                                <select id="pagos-webpay-cabana">
+                                    <option value="">Seleccionar</option>
+                                    <option value="1">CAB 1</option><option value="2">CAB 2</option><option value="3">CAB 3</option>
+                                    <option value="4">CAB 4</option><option value="5">CAB 5</option><option value="6">CAB 6</option>
+                                    <option value="7">CAB 7</option><option value="8">CAB 8</option><option value="9">CAB 9</option>
+                                    <option value="10">CAB 10</option><option value="11">CAB 11</option>
+                                </select>
+                            </div>
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-monto">Monto en CLP</label>
+                                <input type="number" id="pagos-webpay-monto" min="0" step="1000" placeholder="160000">
+                            </div>
+                        </div>
+                        <div class="pagos-webpay-fila">
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-codaut">Código de autorización</label>
+                                <input type="text" id="pagos-webpay-codaut" placeholder="Código de autorización">
+                            </div>
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-tipo">Medio WebPay</label>
+                                <select id="pagos-webpay-tipo">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="webpay_credito">WebPay Crédito</option>
+                                    <option value="webpay_debito">WebPay Débito</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="pagos-webpay-fila">
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-fecha-pago">Fecha de pago</label>
+                                <input type="date" id="pagos-webpay-fecha-pago">
+                            </div>
+                            <div class="pagos-webpay-campo">
+                                <label for="pagos-webpay-fecha-reserva">Fecha reserva (referencia)</label>
+                                <input type="date" id="pagos-webpay-fecha-reserva">
+                            </div>
+                        </div>
+                        <div class="pagos-webpay-campo">
+                            <label for="pagos-webpay-tarjeta">Tarjeta (enmascarada, opcional)</label>
+                            <input type="text" id="pagos-webpay-tarjeta" placeholder="Ej: 548742XXXXXX7786 Mastercard">
+                        </div>
+                        <div class="sites-pagos-webpay-footer"><span>El registro quedará pendiente de asociación con la reserva.</span><button type="button" id="pagos-webpay-agregar">Registrar WebPay pendiente</button></div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
-
-    <div id="pagos-lista-webpay">
-        <!-- Aquí aparecerán las tarjetas WebPay -->
-    </div>
-
-</section>
-
 </section>
 
 <!-- ===================================== -->
@@ -6230,6 +6166,7 @@
     <script src="js/pagos.js"></script>
     <script src="js/servicios.js"></script>
     <script src="js/sites-servicios-v1.js"></script>
+    <script src="js/sites-pagos-v1.js"></script>
 
 </body>
 

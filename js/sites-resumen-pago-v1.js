@@ -70,8 +70,11 @@
         }
     }
 
-    async function identidadReal({ cabana, reservaId, etapa, fecha }) {
+    async function identidadReal({ cabana, reservaId, etapa, fecha, origenPagos, fechaDisparador }) {
         if (fecha !== fechaActual()) throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
+        if (origenPagos && fechaDisparador !== fecha) {
+            throw new Error("La fecha del pago cambió. Vuelve a abrir la acción desde Pagos.");
+        }
         const cliente = window.haikuSupabase;
         if (!cliente || !window.haikuSesion) throw new Error("Debes iniciar sesión para registrar pagos.");
         const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
@@ -81,20 +84,32 @@
         if (!fila) throw new Error("La cabaña ya no aparece en el día seleccionado.");
         const estado = String(fila.estado_operativo || "");
         const esCheckin = ["libre-ingresa", "sale-ingresa", "fullday"].includes(estado);
-        const id = etapa === "checkin" && esCheckin
-            ? String((estado === "fullday" ? fila.fullday_reserva_id : fila.ingreso_reserva_id) || "")
-            : etapa === "checkout" && estado === "sale-libre"
-                ? String(fila.salida_reserva_id || "")
+        const identidades = etapa === "checkin" && esCheckin
+            ? [{ id: estado === "fullday" ? fila.fullday_reserva_id : fila.ingreso_reserva_id,
+                titular: estado === "fullday" ? fila.fullday_titular : fila.ingreso_titular }]
+            : etapa === "checkout" && (["sale-libre", "sale-ingresa", "fullday"].includes(estado))
+                ? [{ id: estado === "fullday" ? fila.fullday_reserva_id : fila.salida_reserva_id,
+                    titular: estado === "fullday" ? fila.fullday_titular : fila.salida_titular }]
                 : etapa === "abono" && estado === "continua"
-                    ? String(fila.continua_reserva_id || "") : "";
-        if (!id || id !== reservaId) {
+                    ? [{ id: fila.continua_reserva_id, titular: fila.continua_titular }]
+                    : etapa === "abono" && origenPagos
+                        ? [
+                            ...(["libre-ingresa", "sale-ingresa"].includes(estado)
+                                ? [{ id: fila.ingreso_reserva_id, titular: fila.ingreso_titular }] : []),
+                            ...(["sale-libre", "sale-ingresa"].includes(estado)
+                                ? [{ id: fila.salida_reserva_id, titular: fila.salida_titular }] : []),
+                            ...(estado === "fullday"
+                                ? [{ id: fila.fullday_reserva_id, titular: fila.fullday_titular }] : [])
+                        ] : [];
+        const coincidencia = identidades.find(item => String(item.id || "") === reservaId);
+        if (!coincidencia) {
             throw new Error("La reserva o la etapa de cobro cambió. Vuelve a abrir el pago.");
         }
-        return fila;
+        return { fila, titular: coincidencia.titular || "" };
     }
 
     async function contextoValidado(solicitud) {
-        const fila = await identidadReal(solicitud);
+        const { titular: titularDia } = await identidadReal(solicitud);
         let operador, tipo, contexto;
         if (solicitud.etapa === "checkout") {
             operador = window.HAIKU_PAGO_CHECKOUT_RESUMEN_V1;
@@ -109,7 +124,8 @@
                 fechaPagoPredeterminada: abono.fechaPagoPredeterminada
             };
             tipo = "abono";
-            contexto = await operador?.contexto(solicitud.reservaId, solicitud.fecha);
+            contexto = await operador?.contexto(solicitud.reservaId, solicitud.fecha,
+                solicitud.origenPagos ? "pagos" : "resumen", solicitud.cabana);
         } else {
             const grupo = window.HAIKU_PAGO_CHECKIN_GRUPO_RESUMEN_V1;
             if (!grupo) throw new Error("El módulo de pagos conjuntos no está disponible.");
@@ -133,11 +149,8 @@
         if (!cabanas.map(Number).includes(Number(solicitud.cabana))) {
             throw new Error("El cobro ya no corresponde a esta cabaña.");
         }
-        const titular = solicitud.etapa === "checkout" ? fila.salida_titular :
-            solicitud.etapa === "abono" ? fila.continua_titular :
-            fila.estado_operativo === "fullday" ? fila.fullday_titular : fila.ingreso_titular;
         return { ...solicitud, operador, tipo, contexto,
-            titular: titular || contexto.titular || "Sin titular" };
+            titular: titularDia || contexto.titular || "Sin titular" };
     }
 
     function formulario() {
@@ -157,7 +170,8 @@
             <p class="sites-resumen-pago-reserva">Reserva: ${escapar(reservaId)}</p>
             <div class="sites-resumen-pago-resumen">
                 <div><span>Total</span><strong>${dinero(total)}</strong></div>
-                <div><span>Abonado</span><strong>${dinero(Math.max(0, total - saldo))}</strong></div>
+                ${actual.origenPagos ? "" :
+                    `<div><span>Abonado</span><strong>${dinero(Math.max(0, total - saldo))}</strong></div>`}
                 <div><span>Saldo pendiente</span><strong>${dinero(saldo)}</strong></div>
             </div>
             ${saldo > 0 ? `<div class="sites-resumen-pago-formulario">
@@ -252,7 +266,9 @@
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();
         try {
             const contexto = await contextoValidado({ reservaId: id, etapa,
-                cabana: Number(cabana), fecha, boton });
+                cabana: Number(cabana), fecha, boton,
+                origenPagos: boton?.dataset?.sitesPagosOrigen === "1",
+                fechaDisparador: boton?.dataset?.sitesPagosFecha || "" });
             if (turno !== secuencia || panel.hidden) return true;
             actual = contexto;
             formulario();
@@ -295,7 +311,10 @@
             if (!previo.boton?.isConnected || previo.boton.hidden ||
                 previo.boton.dataset.resumenPagoReservaId !== previo.reservaId ||
                 previo.boton.dataset.resumenPagoEtapa !== previo.etapa ||
-                Number(previo.boton.dataset.resumenPago) !== previo.cabana) {
+                Number(previo.boton.dataset.resumenPago) !== previo.cabana ||
+                (previo.origenPagos &&
+                    (previo.boton.dataset.sitesPagosOrigen !== "1" ||
+                        previo.boton.dataset.sitesPagosFecha !== previo.fechaDisparador))) {
                 throw new Error("La acción de esta cabaña cambió. Vuelve a abrir el pago.");
             }
             const vigente = await contextoValidado(previo);
@@ -312,7 +331,12 @@
                 throw new Error("Los datos del pago cambiaron durante la verificación. Vuelve a abrir el pago.");
             }
             boton.textContent = "Registrando...";
-            await vigente.operador.registrar(vigente.reservaId, datos, vigente.fecha);
+            if (vigente.tipo === "abono") {
+                await vigente.operador.registrar(vigente.reservaId, datos, vigente.fecha,
+                    vigente.origenPagos ? "pagos" : "resumen", vigente.cabana);
+            } else {
+                await vigente.operador.registrar(vigente.reservaId, datos, vigente.fecha);
+            }
             actual = null;
             estado(`Pago de ${dinero(datos.monto)} registrado. Cierra y vuelve a abrir para consultar el saldo actualizado.`, "exito");
             Promise.allSettled([
