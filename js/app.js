@@ -478,109 +478,10 @@ resumenLavanderia.addEventListener("input", () => {
 cargarDatosDia(fechaSeleccionada);
 
 // ========================================
-// NOTAS EN RESUMEN · BOTÓN + POR CABAÑA
+// ABRIR NOTA DESDE LA ACCIÓN DEL RESUMEN
 // ========================================
 
-function prepararNotasResumenPorCabana() {
-
-    document
-        .querySelectorAll(
-            ".tabla-contenedor tbody tr[data-cabana]"
-        )
-        .forEach(fila => {
-
-            const numeroCabana =
-                fila.dataset.cabana;
-
-            const celdaNotas =
-                fila.querySelector(".celda-notas");
-
-            const campoIngreso =
-                fila.querySelector(
-                    '[data-campo="ingreso"]'
-                );
-
-            const celdaIngreso =
-                campoIngreso?.closest("td");
-
-            if (!celdaNotas || !celdaIngreso) {
-                return;
-            }
-
-            // INGRESO debe quedar antes de NOTAS
-            fila.insertBefore(
-                celdaIngreso,
-                celdaNotas
-            );
-
-
-            // Evitar crear dos veces el botón
-            if (
-                celdaNotas.querySelector(
-                    ".nota-resumen-wrap"
-                )
-            ) {
-                return;
-            }
-
-
-            const cajaNota =
-                celdaNotas.querySelector(
-                    ".nota-cabana"
-                );
-
-            if (!cajaNota) {
-                return;
-            }
-
-
-            const contenedor =
-                document.createElement("div");
-
-            contenedor.className =
-                "nota-resumen-wrap";
-
-
-            celdaNotas.insertBefore(
-                contenedor,
-                cajaNota
-            );
-
-            contenedor.appendChild(
-                cajaNota
-            );
-
-
-            const boton =
-                document.createElement("button");
-
-            boton.type = "button";
-
-            boton.className =
-                "servicio-resumen-agregar nota-resumen-agregar";
-
-            boton.dataset.agregarNotaCabana =
-                numeroCabana;
-
-            boton.title = "Agregar nota";
-
-            boton.textContent = "+";
-
-            contenedor.appendChild(
-                boton
-            );
-
-        });
-
-}
-
-
-prepararNotasResumenPorCabana();
-
-
-// ========================================
-// ABRIR NOTA DESDE BOTÓN +
-// ========================================
+let versionBorradorNotaResumen = 0;
 
 document.addEventListener(
     "click",
@@ -598,6 +499,40 @@ document.addEventListener(
 
         const numeroCabana =
             boton.dataset.agregarNotaCabana;
+
+        const contextoNota = document.getElementById("sites-resumen-nota-contexto");
+        const kickerNota = document.getElementById("sites-resumen-nota-kicker");
+        if (kickerNota) kickerNota.textContent = `CABAÑA ${numeroCabana}`;
+
+        let identidadNota = null;
+        if (window.haikuSesion) {
+            try {
+                identidadNota = window.HAIKU_SITES_RESUMEN_NOTA_V1?.preparar(boton);
+                if (!window.HAIKU_SITES_RESUMEN_NOTA_V1) {
+                    throw new Error("No está disponible la identidad segura de la nota.");
+                }
+            } catch (error) {
+                alert(error.message || "No se pudo identificar la cabaña de esta nota.");
+                return;
+            }
+        }
+
+        if (contextoNota) {
+            const fila = boton.closest(".sites-resumen-cabana");
+            const reservaId = identidadNota?.reservaId || String(fila?.dataset.resumenReservaId || "");
+            const titular = reservaId && fila?.dataset.resumenFecha === fechaSeleccionada &&
+                fila?.dataset.resumenTitularReservaId === reservaId
+                    ? String(fila.dataset.resumenTitular || "").trim() : "";
+            const datosCabana = obtenerDatosDia(fechaSeleccionada)?.cabanas?.[numeroCabana];
+            const codigo = reservaId && String(datosCabana?.reservaId || "") === reservaId
+                ? String(datosCabana.codigoHaiku || "").trim() : "";
+            const adultos = reservaId ? Number(fila?.querySelector('[data-campo="adultos"]')?.value || 0) : 0;
+            const ninos = reservaId ? Number(fila?.querySelector('[data-campo="ninos"]')?.value || 0) : 0;
+            const ocupacion = [adultos ? `${adultos} adulto${adultos === 1 ? "" : "s"}` : "",
+                ninos ? `${ninos} niño${ninos === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+            contextoNota.textContent = [titular || (reservaId ? "Reserva del día" : "Sin reserva"),
+                codigo, ocupacion].filter(Boolean).join(" · ");
+        }
 
 
         const selectorCabana =
@@ -623,6 +558,7 @@ document.addEventListener(
 
 
         if (panelAgregarNota) {
+            versionBorradorNotaResumen++;
             panelAgregarNota.classList.add(
                 "activo"
             );
@@ -701,21 +637,25 @@ function mostrarNotasOperativas(fecha) {
             continue;
         }
 
-        cajaNota.innerHTML = notasCabana
-    .map(nota => `
-        <span class="nota-operativa-item">
-            ${nota.texto}
-            <button
-                type="button"
-                class="nota-eliminar"
-                data-cabana="${numeroCabana}"
-                data-texto="${nota.texto}"
-                title="Eliminar nota"
-            >×</button>
-        </span>
-    `)
-    .join(" ");
+        cajaNota.replaceChildren(...notasCabana.map(nota => {
+            const item = document.createElement("span");
+            item.className = "nota-operativa-item";
+            item.textContent = nota.texto;
+            const eliminar = document.createElement("button");
+            eliminar.type = "button";
+            eliminar.className = "nota-eliminar";
+            eliminar.dataset.cabana = String(numeroCabana);
+            eliminar.dataset.texto = nota.texto;
+            eliminar.title = "Eliminar nota";
+            eliminar.textContent = "×";
+            item.appendChild(eliminar);
+            return item;
+        }));
     }
+
+    document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+        detail: { fecha }
+    }));
 }
 
 // =====================================
@@ -815,20 +755,39 @@ cerrarPanelNota();
 
 botonGuardarNota.addEventListener("click", async () => {
 
+    if (botonGuardarNota.disabled) return;
+
     if (!fechaSeleccionada) {
         return;
     }
 
+    const fechaNota = fechaSeleccionada;
+    const versionBorrador = versionBorradorNotaResumen;
     const nota = textoNota.value.trim();
 
     if (!nota) {
         return;
     }
 
-    const datos = obtenerDatosDia(fechaSeleccionada);
+    const datos = obtenerDatosDia(fechaNota);
 
     const numeroCabana = selectorNotaCabana.value;
     const cabana = datos.cabanas?.[numeroCabana] || {};
+    botonGuardarNota.disabled = true;
+    try {
+    let identidadNota = null;
+    if (window.haikuSesion) {
+        try {
+            if (!window.HAIKU_SITES_RESUMEN_NOTA_V1) {
+                throw new Error("No está disponible la identidad segura de la nota.");
+            }
+            identidadNota = await window.HAIKU_SITES_RESUMEN_NOTA_V1.validar(
+                fechaNota, numeroCabana);
+        } catch (error) {
+            alert(error.message || "La reserva cambió. La nota no se guardó.");
+            return;
+        }
+    }
     let notaOperativa = {
         cabana: selectorNotaCabana.value,
         texto: nota
@@ -840,11 +799,12 @@ botonGuardarNota.addEventListener("click", async () => {
     if (puenteNotas) {
         try {
             notaOperativa = await puenteNotas.guardar({
-                fecha: fechaSeleccionada,
+                fecha: fechaNota,
                 numeroCabana,
                 texto: nota,
-                reservaId: cabana.reservaId || "",
-                estadiaId: cabana.estadiaId || ""
+                reservaId: identidadNota ? identidadNota.reservaId : cabana.reservaId || "",
+                estadiaId: identidadNota ? identidadNota.estadiaId : cabana.estadiaId || "",
+                cabanaIdEsperada: identidadNota?.cabanaId
             });
         } catch (error) {
             console.error(
@@ -854,6 +814,9 @@ botonGuardarNota.addEventListener("click", async () => {
             alert("No fue posible guardar la nota. Intenta nuevamente.");
             return;
         }
+    } else if (window.haikuSesion) {
+        alert("No está disponible el guardado real de notas. La nota no se guardó.");
+        return;
     }
 
     if (
@@ -874,25 +837,35 @@ botonGuardarNota.addEventListener("click", async () => {
         registrarActividadHaiku({
             tipo: "nota",
             accion: "Nota operativa agregada",
-            reservaId: cabana.reservaId || "",
+            reservaId: identidadNota ? identidadNota.reservaId : cabana.reservaId || "",
             numeroCabana,
             titular: cabana.titular || "",
-            fechaOperacion: fechaSeleccionada,
+            fechaOperacion: fechaNota,
             detalle: nota
         });
     }
 
 mostrarNotasOperativas(fechaSeleccionada);
+if (identidadNota && puenteNotas?.refrescar) {
+    try { await puenteNotas.refrescar(fechaNota); }
+    catch (error) { console.warn("HAIKU · Nota guardada; el refresco remoto sigue pendiente:", error); }
+}
 
 // Sincronizar Cabañas y Aseo inmediatamente
 actualizarTarjetasRevision(fechaSeleccionada);
 actualizarResumenAseo(fechaSeleccionada);
 generarResumenOperativo(fechaSeleccionada);
 
-textoNota.value = "";
-selectorNotaCabana.value = "";
+if (versionBorrador === versionBorradorNotaResumen &&
+    textoNota.value.trim() === nota && selectorNotaCabana.value === numeroCabana) {
+    textoNota.value = "";
+    selectorNotaCabana.value = "";
+    cerrarPanelNota();
+}
 
-cerrarPanelNota();
+    } finally {
+        botonGuardarNota.disabled = false;
+    }
 
 });
 

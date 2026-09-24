@@ -161,7 +161,7 @@
         if (!numero || !fecha) return false;
 
         const tr = document.querySelector(
-            `#seccion-resumen tr[data-cabana="${CSS.escape(numero)}"]`
+            `#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(numero)}"]`
         );
         if (!tr) return false;
 
@@ -185,7 +185,14 @@
         const titular = tr.querySelector(
             `[data-titular-cabana="${CSS.escape(numero)}"]`
         );
-        if (titular) titular.textContent = titularPrincipal(fila);
+        const titularProyectado = String(tr.dataset.resumenTitular || "").trim();
+        const salidaSites = String(fila?.estado_operativo || "") === "sale-libre" &&
+            tr.dataset.resumenFecha === fecha &&
+            Boolean(String(fila?.salida_reserva_id || "").trim()) &&
+            String(tr.dataset.resumenTitularReservaId || "") === String(fila?.salida_reserva_id || "") &&
+            Boolean(titularProyectado) &&
+            !/^(?:sin titular|sin reserva|bloqueada)$/i.test(titularProyectado);
+        if (titular) titular.textContent = salidaSites ? titularProyectado : titularPrincipal(fila);
 
         if (fila?.bloqueo_id) {
             limpiarColor(tr);
@@ -245,7 +252,7 @@
 
         if (!noches) {
             const valorNoches = document.querySelector(
-                `#seccion-resumen tr[data-cabana="${CSS.escape(numero)}"] [data-valor-noches="${CSS.escape(numero)}"]`
+                `#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(numero)}"] [data-valor-noches="${CSS.escape(numero)}"]`
             );
             const numeroVisual = Number(String(valorNoches?.textContent || "").replace(/[^0-9]/g, ""));
             if (numeroVisual > 0) noches = numeroVisual;
@@ -321,6 +328,9 @@
             if (fechaActual() === fecha) {
                 aplicarFilasFecha(fecha);
                 fijarContadorSalen(fecha);
+                document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                    detail: { fecha }
+                }));
             }
 
             return filas;

@@ -428,6 +428,68 @@
             </div>`;
     }
 
+    async function contextoPagoResumen(reservaId, fecha) {
+        const id = String(reservaId || "");
+        if (!id || fecha !== fechaActual()) return null;
+        const salida = (await reservasCheckoutDia(fecha)).find(item => String(item.reservaId) === id);
+        if (!salida) return null;
+        const cargos = await cargosServicios([id]);
+        if (!cargos.length) return null;
+        return {
+            reservaId: id,
+            cabanas: salida.cabanas,
+            titular: salida.titular || "Sin titular",
+            cargos: cargos.map(cargo => String(cargo.cargo_id || "")).filter(Boolean).sort(),
+            total: cargos.reduce((suma, cargo) => suma + Number(cargo.monto || 0), 0),
+            saldo: cargos.reduce((suma, cargo) => suma + Number(cargo.saldo_cargo || 0), 0)
+        };
+    }
+
+    async function registrarPagoControlado(reservaId, datos, fecha) {
+        if (guardandoPago) throw new Error("Ya se está registrando un pago.");
+        guardandoPago = true;
+        try {
+            if (!window.haikuSesion) throw new Error("Debes iniciar sesión para registrar pagos.");
+            if (!window.haikuTienePermiso?.("pagos.registrar")) {
+                throw new Error("Tu usuario no tiene permiso para registrar pagos.");
+            }
+            if (!window.haikuTienePermiso?.("pagos.verificar")) {
+                throw new Error("Tu usuario no tiene permiso para validar pagos como Manager.");
+            }
+            const contexto = await contextoPagoResumen(reservaId, fecha);
+            if (!contexto || contexto.saldo <= 0) {
+                throw new Error("La reserva ya no tiene servicios pendientes de cobro en esta fecha.");
+            }
+            const monto = Number(datos.monto || 0);
+            const medioDB = MEDIOS[datos.medio] || "";
+            const req = requisitosMedio(medioDB);
+            if (!Number.isFinite(monto) || monto <= 0 || monto > contexto.saldo) {
+                throw new Error(`El monto debe estar entre $1 y ${dinero(contexto.saldo)}.`);
+            }
+            if (!medioDB) throw new Error("Selecciona el medio de pago.");
+            if (req.glosa && !datos.glosa) throw new Error("Transferencia requiere Glosa.");
+            if (req.folio && !datos.folio) throw new Error("Este medio requiere Folio.");
+            if (req.codAut && !datos.codAut) throw new Error("Este medio requiere CodAut.");
+            if (!datos.manager) throw new Error("Manager debe revisar el pago antes de registrarlo.");
+            if (fecha !== fechaActual()) throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
+            const { data, error } = await cliente.rpc("haiku_registrar_pago_checkout", {
+                p_reserva_id: contexto.reservaId,
+                p_monto: monto,
+                p_medio_pago: medioDB,
+                p_glosa: datos.glosa || null,
+                p_folio: datos.folio || null,
+                p_codigo_autorizacion: datos.codAut || null,
+                p_manager_revisado: true
+            });
+            if (error) throw error;
+            borradores.delete(contexto.reservaId);
+            await cargarCheckoutSupabase();
+            return data;
+        } finally {
+            guardandoPago = false;
+        }
+    }
+
     async function cargarCheckoutSupabase() {
         if (renderizando || !window.haikuSesion) return;
 
@@ -629,54 +691,16 @@
         if (!tarjeta || !reservaId) return;
 
         const datos = leerFormulario(tarjeta);
-        const medioDB = MEDIOS[datos.medio] || "";
-        const req = requisitosMedio(medioDB);
-        const saldoActual = Number(tarjeta.dataset.saldoServicios || 0);
-
-        if (datos.monto <= 0) return alert("Ingresa el monto de este pago.");
-        if (saldoActual > 0 && datos.monto > saldoActual) {
-            return alert(`El pago supera el saldo de servicios (${dinero(saldoActual)}).`);
-        }
-        if (!medioDB) return alert("Selecciona el medio de pago.");
-        if (req.glosa && !datos.glosa) return alert("Transferencia requiere Glosa.");
-        if (req.folio && !datos.folio) return alert("Este medio requiere Folio.");
-        if (req.codAut && !datos.codAut) return alert("Este medio requiere CodAut.");
-        if (!datos.manager) return alert("Manager debe revisar el pago antes de registrarlo.");
-        if (!window.haikuTienePermiso?.("pagos.registrar")) {
-            return alert("Tu usuario no tiene permiso para registrar pagos.");
-        }
-        if (!window.haikuTienePermiso?.("pagos.verificar")) {
-            return alert("Tu usuario no tiene permiso para validar pagos como Manager.");
-        }
-
-        guardandoPago = true;
         const texto = boton.textContent;
         boton.disabled = true;
         boton.textContent = "Registrando…";
 
         try {
-            const { error } = await cliente.rpc(
-                "haiku_registrar_pago_checkout",
-                {
-                    p_reserva_id: reservaId,
-                    p_monto: datos.monto,
-                    p_medio_pago: medioDB,
-                    p_glosa: datos.glosa || null,
-                    p_folio: datos.folio || null,
-                    p_codigo_autorizacion: datos.codAut || null,
-                    p_manager_revisado: true
-                }
-            );
-
-            if (error) throw error;
-
-            borradores.delete(reservaId);
-            await cargarCheckoutSupabase();
+            await registrarPagoControlado(reservaId, datos, fechaActual());
         } catch (error) {
             console.error("HAIKU · No fue posible registrar pago Check-out:", error);
             alert(error?.message || "No fue posible registrar el pago de Check-out.");
         } finally {
-            guardandoPago = false;
             boton.disabled = false;
             boton.textContent = texto;
         }
@@ -742,6 +766,11 @@
     // apartado Check-out consulta cargos/pagos reales de PostgreSQL.
     window.cargarCobrosCheckout = cargarCheckoutSupabase;
     window.haikuCargarCheckoutSupabase = cargarCheckoutSupabase;
+    window.HAIKU_PAGO_CHECKOUT_RESUMEN_V1 = Object.freeze({
+        contexto: contextoPagoResumen,
+        registrar: registrarPagoControlado,
+        requisitos: medio => requisitosMedio(MEDIOS[medio] || "")
+    });
 
     const estilo = document.createElement("style");
     estilo.textContent = `

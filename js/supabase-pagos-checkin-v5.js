@@ -446,6 +446,73 @@
         }
     }
 
+    async function contextoPagoResumen(reservaId, fecha) {
+        const id = String(reservaId || "");
+        if (!id || fecha !== fechaActual()) return null;
+        const ingreso = (await ingresosDia(fecha)).find(item => String(item.reservaId) === id);
+        if (!ingreso) return null;
+        const saldos = await saldosAlojamiento([id]);
+        const estado = saldos.get(id);
+        if (!estado) return null;
+        return {
+            reservaId: id,
+            cabana: ingreso.numero,
+            titular: ingreso.titular || "Sin titular",
+            total: Number(estado.total_alojamiento || 0),
+            saldo: Number(estado.saldo_alojamiento || 0)
+        };
+    }
+
+    async function registrarPagoControlado(reservaId, datos, fecha) {
+        if (guardandoPago) throw new Error("Ya se está registrando un pago.");
+        guardandoPago = true;
+        try {
+            if (!window.haikuSesion) throw new Error("Debes iniciar sesión para registrar pagos.");
+            if (!window.haikuTienePermiso?.("pagos.registrar")) {
+                throw new Error("Tu usuario no tiene permiso para registrar pagos.");
+            }
+            if (!window.haikuTienePermiso?.("pagos.verificar")) {
+                throw new Error("Tu usuario no tiene permiso para validar pagos como Manager.");
+            }
+            const contexto = await contextoPagoResumen(reservaId, fecha);
+            if (!contexto || contexto.saldo <= 0) {
+                throw new Error("La reserva ya no tiene un saldo de alojamiento cobrable en esta fecha.");
+            }
+            const monto = Number(datos.monto || 0);
+            const medioDB = MEDIOS[datos.medio] || "";
+            const req = requisitosMedio(medioDB);
+            if (!Number.isFinite(monto) || monto <= 0 || monto > contexto.saldo) {
+                throw new Error(`El monto debe estar entre $1 y ${dinero(contexto.saldo)}.`);
+            }
+            if (!medioDB) throw new Error("Selecciona el medio de pago.");
+            if (req.glosa && !datos.glosa) throw new Error("Transferencia requiere Glosa.");
+            if (req.folio && !datos.folio) throw new Error("Tarjeta requiere Folio.");
+            if (req.bovtar && !datos.bovtar) throw new Error("Tarjeta requiere BOVTAR.");
+            if (req.codAut && !datos.codAut) throw new Error("WebPay requiere CodAut.");
+            if (!datos.manager) throw new Error("Manager debe revisar el pago antes de registrarlo.");
+            if (fecha !== fechaActual()) throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
+
+            const { data, error } = await cliente.rpc("haiku_registrar_pago_checkin_v2", {
+                p_reserva_id: contexto.reservaId,
+                p_monto: monto,
+                p_medio_pago: medioDB,
+                p_glosa: datos.glosa || null,
+                p_folio: datos.folio || null,
+                p_bovtar: datos.bovtar || null,
+                p_codigo_autorizacion: datos.codAut || null,
+                p_manager_revisado: true
+            });
+            if (error) throw error;
+            borradores.delete(contexto.reservaId);
+            await cargarSaldosCheckinMixto();
+            await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1?.refrescar(fecha);
+            await window.haikuSincronizarReservasSupabase?.();
+            return data;
+        } finally {
+            guardandoPago = false;
+        }
+    }
+
     function programarRender(ms = 40) {
         clearTimeout(timerRender);
         timerRender = setTimeout(cargarSaldosCheckinMixto, ms);
@@ -568,45 +635,16 @@
         evento.stopImmediatePropagation();
 
         const d = leerFormulario(tarjeta);
-        const medioDB = MEDIOS[d.medio] || "";
-        const req = requisitosMedio(medioDB);
-        if (d.monto <= 0) return alert("Ingresa el monto de este pago.");
-        if (!medioDB) return alert("Selecciona el medio de pago.");
-        if (req.glosa && !d.glosa) return alert("Transferencia requiere Glosa.");
-        if (req.folio && !d.folio) return alert("Tarjeta requiere Folio.");
-        if (req.bovtar && !d.bovtar) return alert("Tarjeta requiere BOVTAR.");
-        if (req.codAut && !d.codAut) return alert("WebPay requiere CodAut.");
-        if (!d.manager) return alert("Manager debe revisar el pago antes de registrarlo.");
-        if (!window.haikuTienePermiso?.("pagos.registrar")) return alert("Tu usuario no tiene permiso para registrar pagos.");
-        if (!window.haikuTienePermiso?.("pagos.verificar")) return alert("Tu usuario no tiene permiso para validar pagos como Manager.");
-
-        guardandoPago = true;
         const textoAnterior = boton.textContent;
         boton.disabled = true;
         boton.textContent = "Registrando…";
         try {
-            const { data, error } = await cliente.rpc("haiku_registrar_pago_checkin_v2", {
-                p_reserva_id: reservaId,
-                p_monto: d.monto,
-                p_medio_pago: medioDB,
-                p_glosa: d.glosa || null,
-                p_folio: d.folio || null,
-                p_bovtar: d.bovtar || null,
-                p_codigo_autorizacion: d.codAut || null,
-                p_manager_revisado: true
-            });
-            if (error) throw error;
+            const data = await registrarPagoControlado(reservaId, d, fechaActual());
             console.info("HAIKU · Pago parcial Check-in V5 registrado:", data);
-            borradores.delete(reservaId);
-            await cargarSaldosCheckinMixto();
-            await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1
-                ?.refrescar(fechaActual());
-            await window.haikuSincronizarReservasSupabase?.();
         } catch (error) {
             console.error("HAIKU · No fue posible registrar pago Check-in V5:", error);
             alert(error?.message || "No fue posible registrar el pago.");
         } finally {
-            guardandoPago = false;
             boton.disabled = false;
             boton.textContent = textoAnterior;
         }
@@ -677,6 +715,11 @@
 
     window.addEventListener("haiku:auth-ready", () => setTimeout(activar, 100));
     setTimeout(activar, 180);
+    window.HAIKU_PAGO_CHECKIN_RESUMEN_V1 = Object.freeze({
+        contexto: contextoPagoResumen,
+        registrar: registrarPagoControlado,
+        requisitos: medio => requisitosMedio(MEDIOS[medio] || "")
+    });
 
     const estilo = document.createElement("style");
     estilo.textContent = `

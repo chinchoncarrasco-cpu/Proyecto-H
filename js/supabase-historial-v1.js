@@ -1182,19 +1182,21 @@
         document.body.style.overflow = "";
     }
 
-    async function abrirHistorialReserva() {
+    async function abrirHistorialReserva(reservaIdSolicitado = "", metaSolicitud = null) {
         const ficha = document.getElementById("ficha-reserva-modal");
-        const reservaId = ficha?.dataset.reservaId || "";
+        const reservaId = String(reservaIdSolicitado || ficha?.dataset.reservaId || "").trim();
         if (!reservaId) return;
 
         const modal = asegurarModalReserva();
         const listaEl = modal.querySelector("[data-historial-reserva-lista]");
         const meta = modal.querySelector("[data-historial-reserva-meta]");
-        const titular =
-            document.getElementById("ficha-huesped-titular")?.textContent?.trim() ||
-            document.getElementById("ficha-reserva-titular")?.textContent?.trim() ||
-            "";
-        const cabana = ficha?.dataset.numeroCabana || "";
+        const titular = metaSolicitud
+            ? String(metaSolicitud.titular || "").trim()
+            : document.getElementById("ficha-huesped-titular")?.textContent?.trim() ||
+                document.getElementById("ficha-reserva-titular")?.textContent?.trim() || "";
+        const cabana = metaSolicitud
+            ? String(metaSolicitud.cabana || "").trim()
+            : ficha?.dataset.numeroCabana || "";
 
         if (meta) {
             meta.textContent = [

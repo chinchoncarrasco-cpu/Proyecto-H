@@ -122,7 +122,7 @@
         })();
 
         if (fecha) {
-            document.querySelectorAll("#seccion-resumen [data-cabana]").forEach(fila => {
+            document.querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]").forEach(fila => {
                 const numero = String(fila?.dataset?.cabana || "");
                 const campo = fila.querySelector('[data-campo="servicio"]');
                 if (!numero || !campo) return;
@@ -163,6 +163,11 @@
                 detail: { cantidad: lista.length, fecha }
             })
         );
+        if (fecha) {
+            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                detail: { fecha }
+            }));
+        }
     }
 
     async function traerServiciosSupabase() {

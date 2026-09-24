@@ -102,7 +102,7 @@
         return { fila: fila || null, reservaId: reservaIdDeFila(fila) };
     }
 
-    async function cargarFicha(reservaId) {
+    async function cargarFicha(reservaId, { lecturaCompleta = false } = {}) {
         const { data: core, error: errorCore } = await cliente.rpc(
             "haiku_ficha_reserva_core",
             { p_reserva_id: reservaId }
@@ -141,6 +141,10 @@
         [serviciosR,cargosR,notasR,solicitudesR,pagosR].forEach(r => {
             if (r.error) console.warn("HAIKU · Ficha V2 lectura parcial:", r.error);
         });
+        if (lecturaCompleta &&
+            [serviciosR,cargosR,notasR,solicitudesR,pagosR,bovesR].some(r => r.error)) {
+            throw new Error("No se pudo verificar toda la ficha de esta reserva. Inténtalo de nuevo.");
+        }
 
         return {
             ...core,
@@ -513,6 +517,11 @@
         evento.preventDefault();
         evento.stopPropagation();
         evento.stopImmediatePropagation();
+        if (boton.closest("#seccion-resumen") &&
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirDesdeBoton) {
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1.abrirDesdeBoton(boton);
+            return;
+        }
         abrirFicha(boton.dataset.fichaCabana, fechaActual());
     }, true);
 
@@ -530,6 +539,16 @@
     }, true);
 
     window.haikuAbrirFichaSupabaseV2 = abrirFicha;
+    // Lectura compartida por el drawer Sites: no abre ni modifica la ficha legacy.
+    window.haikuLeerFichaSupabaseV2 = reservaId =>
+        cargarFicha(reservaId, { lecturaCompleta: true });
+    window.haikuPrepararEdicionFichaSupabaseV2 = (ficha, estadiaId) => {
+        const estadias = Array.isArray(ficha?.estadias) ? ficha.estadias : [];
+        const elegida = estadias.find(estadia => String(estadia.id) === String(estadiaId));
+        if (!elegida || !ficha?.reserva) return false;
+        prepararCacheEdicion({ ...ficha, estadias: [elegida, ...estadias.filter(e => e !== elegida)] });
+        return true;
+    };
     // Refresco por identidad: no resolver nuevamente por CAB/fecha tras guardar.
     window.haikuRefrescarFichaSupabaseV2 = async reservaId => {
         const modal = document.getElementById('ficha-reserva-modal');

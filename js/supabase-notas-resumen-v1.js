@@ -335,7 +335,7 @@
         }, retraso);
     }
 
-    async function guardarNota({ fecha, numeroCabana, texto, reservaId, estadiaId }) {
+    async function guardarNota({ fecha, numeroCabana, texto, reservaId, estadiaId, cabanaIdEsperada }) {
         const fechaISO = String(fecha || fechaActual()).slice(0, 10);
         const numero = String(numeroCabana || "");
         const contenido = String(texto || "").trim();
@@ -345,6 +345,9 @@
         const cabanaId = cabanasPorNumero.get(numero);
         if (!fechaISO || !cabanaId || !contenido) {
             throw new Error("Faltan datos para guardar la nota operativa.");
+        }
+        if (cabanaIdEsperada && cabanaId !== cabanaIdEsperada) {
+            throw new Error("La cabaña cambió. La nota no se guardó.");
         }
 
         const registro = {
@@ -358,8 +361,9 @@
         if (esUuid(reservaId)) {
             registro.reserva_id = reservaId;
         }
-        const estadiaActual = estadiaId ||
-            datosDia(fechaISO)?.cabanas?.[numero]?.estadiaId;
+        const estadiaActual = estadiaId === undefined
+            ? datosDia(fechaISO)?.cabanas?.[numero]?.estadiaId
+            : estadiaId;
         if (esUuid(estadiaActual)) {
             registro.estadia_id = estadiaActual;
         }
@@ -389,6 +393,11 @@
         }
 
         if (error) throw error;
+        if (data.cabana_id !== cabanaId ||
+            (reservaId !== undefined && String(data.reserva_id || "") !== String(reservaId || "")) ||
+            (estadiaId !== undefined && String(data.estadia_id || "") !== String(estadiaId || ""))) {
+            throw new Error("Ya existe una nota igual asociada a otra reserva o estadía.");
+        }
         await cargarEstadiasDeNotas([data]);
         return notaLocalDesdeFila(data);
     }

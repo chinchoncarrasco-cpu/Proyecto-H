@@ -62,13 +62,13 @@
         padding-top: 55px;
     }
 
-    #seccion-resumen .resumen-tablero th:nth-child(3),
-    #seccion-resumen .resumen-tablero td:nth-child(3) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(3),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) {
         width: 90px !important;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin,
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin > select {
         width: 100% !important;
         min-width: 0 !important;
         max-width: none !important;
@@ -76,11 +76,11 @@
         transform: none;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin {
         gap: 0 !important;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin > select {
         flex: 1 1 auto !important;
     }
 
@@ -239,7 +239,7 @@
         container-name: haiku-resumen-tabla;
     }
 
-    #seccion-resumen .resumen-tablero {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) {
         width: 100%;
         min-width: 1270px;
         table-layout: fixed;
@@ -247,12 +247,12 @@
         border-spacing: 0 4px;
     }
 
-    #seccion-resumen .resumen-tablero thead,
-    #seccion-resumen .resumen-tablero thead tr {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) thead,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) thead tr {
         background: #f8fafc;
     }
 
-    #seccion-resumen .resumen-tablero thead th {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) thead th {
         height: 42px;
         padding: 0 2px;
         border-top: 1px solid #d6dde3;
@@ -267,7 +267,7 @@
         white-space: nowrap;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-contexto-cabecera {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera {
         position: relative;
         width: 84px;
         padding: 0;
@@ -276,11 +276,11 @@
         text-align: center;
     }
 
-    #seccion-resumen .resumen-contexto-cabecera-etiqueta {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera-etiqueta {
         display: block;
     }
 
-    #seccion-resumen .resumen-contexto-toggle {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-toggle {
         position: absolute;
         top: 2px;
         z-index: 6;
@@ -300,31 +300,31 @@
             opacity 0.14s ease;
     }
 
-    #seccion-resumen .resumen-contexto-cabecera--anterior .resumen-contexto-toggle {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera--anterior .resumen-contexto-toggle {
         top: 50%;
         right: -16px;
         transform: translateY(-50%);
     }
 
-    #seccion-resumen .resumen-contexto-cabecera--siguiente .resumen-contexto-toggle {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera--siguiente .resumen-contexto-toggle {
         left: 2px;
     }
 
-    #seccion-resumen .resumen-contexto-toggle:hover,
-    #seccion-resumen .resumen-contexto-toggle:focus-visible {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-toggle:hover,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-toggle:focus-visible {
         outline: none;
         background: rgba(37, 83, 66, 0.16);
         color: #184f3c;
         opacity: 1;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-contexto-cabecera--anterior {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera--anterior {
         width: 68px;
         z-index: 7;
         overflow: visible;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-contexto-cabecera--siguiente {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-contexto-cabecera--siguiente {
         width: 68px;
         letter-spacing: 0;
     }
@@ -442,7 +442,7 @@
 
     /* Al ocultar únicamente el bloque anterior, la celda actual ocupa su
        espacio, pero conserva la separación diagonal del diseño original. */
-    #seccion-resumen .resumen-tablero
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente)
         .info-cabana[data-resumen-anterior-expandido="true"]::before {
         content: "";
         position: absolute;
@@ -456,26 +456,26 @@
         pointer-events: none;
     }
 
-    #seccion-resumen .resumen-tablero th:nth-child(2) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(2) {
         padding-left: 53px !important;
     }
 
-    #seccion-resumen .resumen-tablero th:nth-child(2),
-    #seccion-resumen .resumen-tablero td:nth-child(2) { width: 170px; }
-    #seccion-resumen .resumen-tablero th:nth-child(3),
-    #seccion-resumen .resumen-tablero td:nth-child(3) { width: 140px; }
-    #seccion-resumen .resumen-tablero th:nth-child(4),
-    #seccion-resumen .resumen-tablero td:nth-child(4) { width: 200px; }
-    #seccion-resumen .resumen-tablero th:nth-child(5),
-    #seccion-resumen .resumen-tablero td:nth-child(5) { width: 105px; }
-    #seccion-resumen .resumen-tablero th:nth-child(6),
-    #seccion-resumen .resumen-tablero td:nth-child(6) { width: 180px; }
-    #seccion-resumen .resumen-tablero th:nth-child(7),
-    #seccion-resumen .resumen-tablero td:nth-child(7) { width: 190px; }
-    #seccion-resumen .resumen-tablero th:nth-child(8),
-    #seccion-resumen .resumen-tablero td:nth-child(8) { width: 145px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(2),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(2) { width: 170px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(3),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) { width: 140px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(4),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(4) { width: 200px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(5),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(5) { width: 105px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(6),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(6) { width: 180px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(7),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(7) { width: 190px; }
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(8),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(8) { width: 145px; }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana] {
         height: 112px;
         border-radius: 0;
         background: transparent;
@@ -483,12 +483,12 @@
         transform: none;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:hover {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:hover {
         transform: none;
         box-shadow: none;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana] > td:not(.resumen-dia-contexto) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana] > td:not(.resumen-dia-contexto) {
         position: relative;
         padding: 14px 2px;
         border-top: 0;
@@ -497,60 +497,60 @@
         vertical-align: middle;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:has(
         select[data-campo="estado"] option[value="libre-libre"]:checked
     ) > td:not(.resumen-dia-contexto) {
         background: #F1F3F2 !important;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:has(
         select[data-campo="estado"] option[value="fullday"]:checked
     ) > td:not(.resumen-dia-contexto) {
         background: #E9E2F3 !important;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-libre > td:not(.resumen-dia-contexto) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-libre > td:not(.resumen-dia-contexto) {
         background: #f3f4f4 !important;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-checkout > td:not(.resumen-dia-contexto) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-checkout > td:not(.resumen-dia-contexto) {
         background: #eef6fb !important;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-checkin > td:not(.resumen-dia-contexto) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-checkin > td:not(.resumen-dia-contexto) {
         background: #45B16D !important;
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-bloqueada > td:not(.resumen-dia-contexto) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-bloqueada > td:not(.resumen-dia-contexto) {
         background: #fde2e2 !important;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-confirmada
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-estado-confirmada
         > td:not(.resumen-dia-contexto) {
         background: #66CEF5 !important;
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-pendiente
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-estado-pendiente
         > td:not(.resumen-dia-contexto) {
         background: #95D6D3 !important;
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-hospedada
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-estado-hospedada
         > td:not(.resumen-dia-contexto) {
         background: #45B16D !important;
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana].cabana-estado-checked-out
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana].cabana-estado-checked-out
         > td:not(.resumen-dia-contexto) {
         background: #A0A0A0 !important;
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
         .cabana-estado-confirmada,
         .cabana-estado-pendiente,
         .cabana-estado-hospedada,
@@ -559,7 +559,7 @@
         color: inherit;
     }
 
-    #seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
         .cabana-estado-confirmada,
         .cabana-estado-pendiente,
         .cabana-estado-hospedada,
@@ -569,7 +569,7 @@
         color: #17212b;
     }
 
-    #seccion-resumen .resumen-tablero td.info-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td.info-cabana {
         position: static;
         left: auto;
         z-index: auto;
@@ -581,11 +581,11 @@
         box-shadow: none;
     }
 
-    #seccion-resumen .resumen-tablero td.celda-estado-final {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td.celda-estado-final {
         padding-right: 51px !important;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto {
         --resumen-contexto-fondo: linear-gradient(#f3f4f4, #f3f4f4);
         position: relative;
         z-index: 2;
@@ -601,7 +601,7 @@
         overflow: visible;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior {
         width: 68px;
         padding-right: 4px;
         padding-left: 8px;
@@ -615,7 +615,7 @@
         box-shadow: inset 0 -1px 0 rgba(143, 154, 164, 0.72);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--siguiente {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--siguiente {
         width: 68px;
         padding-right: 8px;
         padding-left: 4px;
@@ -627,47 +627,47 @@
         background-size: 128px 100% !important;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="libre-libre"],
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="sale-libre"],
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="continua"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="libre-libre"],
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="sale-libre"],
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="continua"] {
         --resumen-contexto-fondo: linear-gradient(#f3f4f4, #f3f4f4);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="fullday"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="fullday"] {
         --resumen-contexto-fondo: linear-gradient(#E9E2F3, #E9E2F3);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="libre-ingresa"],
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="sale-ingresa"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="libre-ingresa"],
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="sale-ingresa"] {
         --resumen-contexto-fondo: linear-gradient(#ffffff, #ffffff);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="hospedada"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="hospedada"] {
         --resumen-contexto-fondo: linear-gradient(#45B16D, #45B16D);
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="confirmada"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="confirmada"] {
         --resumen-contexto-fondo: linear-gradient(#66CEF5, #66CEF5);
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="pendiente"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="pendiente"] {
         --resumen-contexto-fondo: linear-gradient(#95D6D3, #95D6D3);
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="checked_out"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="checked_out"] {
         --resumen-contexto-fondo: linear-gradient(#A0A0A0, #A0A0A0);
         color: #ffffff;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto[data-estado-visual="bloqueada"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto[data-estado-visual="bloqueada"] {
         --resumen-contexto-fondo: linear-gradient(#fde2e2, #fde2e2);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior::after,
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--siguiente::before {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior::after,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--siguiente::before {
         content: "";
         position: absolute;
         top: 0;
@@ -680,7 +680,7 @@
         pointer-events: none;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior::after {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior::after {
         right: -43px;
         background-image: var(--resumen-contexto-fondo);
         background-position: right top;
@@ -689,7 +689,7 @@
         clip-path: polygon(0 0, 0 100%, 100% 100%);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--siguiente::before {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--siguiente::before {
         left: -43px;
         background-image: var(--resumen-contexto-fondo);
         background-position: left top;
@@ -698,8 +698,8 @@
         clip-path: polygon(0 0, 100% 0, 100% 100%);
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior::before,
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--siguiente::after {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior::before,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--siguiente::after {
         content: "";
         position: absolute;
         top: 0;
@@ -711,37 +711,37 @@
         pointer-events: none;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior::before {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior::before {
         right: -45px;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--siguiente::after {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--siguiente::after {
         left: -45px;
     }
 
-    #seccion-resumen .resumen-dia-contexto-fecha,
-    #seccion-resumen .resumen-dia-contexto-titular,
-    #seccion-resumen .resumen-dia-contexto-estado {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-fecha,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-titular,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-estado {
         display: block;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    #seccion-resumen .resumen-dia-contexto-fecha {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-fecha {
         margin-bottom: 5px;
         color: #526372;
         font-size: 9px;
         font-style: normal;
     }
 
-    #seccion-resumen .resumen-dia-contexto-titular {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-titular {
         margin-bottom: 4px;
         font-size: 10px;
         font-weight: 750;
     }
 
-    #seccion-resumen .resumen-dia-contexto-estado {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto-estado {
         color: #10202d;
         font-size: 9px;
         font-style: normal;
@@ -749,14 +749,14 @@
         letter-spacing: 0.15px;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior .checkout-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior .checkout-cabana {
         display: flex;
         align-items: center;
         width: 54px;
         margin-top: 6px;
     }
 
-    #seccion-resumen .resumen-tablero .resumen-dia-contexto--anterior .checkout-cabana input[type="time"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .resumen-dia-contexto--anterior .checkout-cabana input[type="time"] {
         width: 54px !important;
         min-width: 0 !important;
         height: 22px !important;
@@ -770,7 +770,7 @@
         font-size: 9px;
     }
 
-    #seccion-resumen .cabana-titular-linea {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .cabana-titular-linea {
         display: flex;
         align-items: center;
         flex-wrap: wrap;
@@ -781,27 +781,27 @@
         line-height: 1.25;
     }
 
-    #seccion-resumen .cabana-ficha-boton {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .cabana-ficha-boton {
         color: #111a23;
         font-size: 12px;
         font-weight: 800;
     }
 
-    #seccion-resumen .titular-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .titular-cabana {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 
-    #seccion-resumen .ocupacion-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .ocupacion-cabana {
         display: flex;
         align-items: center;
         gap: 4px;
         margin-bottom: 7px;
     }
 
-    #seccion-resumen .ocupacion-cabana label {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .ocupacion-cabana label {
         display: flex;
         align-items: center;
         gap: 2px;
@@ -809,7 +809,7 @@
         font-size: 9px;
     }
 
-    #seccion-resumen .ocupacion-cabana input[type="number"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .ocupacion-cabana input[type="number"] {
         width: 34px;
         min-width: 34px;
         height: 25px;
@@ -818,19 +818,19 @@
         text-align: center;
     }
 
-    #seccion-resumen .checkout-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .checkout-cabana {
         display: flex;
         align-items: center;
     }
 
-    #seccion-resumen .checkout-cabana input[type="time"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .checkout-cabana input[type="time"] {
         width: 104px;
         height: 30px;
     }
 
-    #seccion-resumen .resumen-tablero input,
-    #seccion-resumen .resumen-tablero select,
-    #seccion-resumen .nota-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) input,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) select,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana {
         border: 0;
         border-bottom: 1px solid rgba(54, 69, 81, 0.38);
         border-radius: 0;
@@ -840,55 +840,55 @@
         transition: border-color 0.16s ease, background-color 0.16s ease;
     }
 
-    #seccion-resumen .resumen-tablero input:hover,
-    #seccion-resumen .resumen-tablero select:hover,
-    #seccion-resumen .nota-cabana:hover {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) input:hover,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) select:hover,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana:hover {
         border-bottom-color: rgba(35, 56, 69, 0.62);
         background: rgba(255, 255, 255, 0.2);
     }
 
-    #seccion-resumen .resumen-tablero input:focus,
-    #seccion-resumen .resumen-tablero select:focus,
-    #seccion-resumen .nota-cabana:focus,
-    #seccion-resumen .nota-cabana:focus-within {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) input:focus,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) select:focus,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana:focus,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana:focus-within {
         outline: none;
         border-bottom-color: #346652;
         background: rgba(255, 255, 255, 0.34);
         box-shadow: 0 1px 0 #346652;
     }
 
-    #seccion-resumen .resumen-tablero input,
-    #seccion-resumen .resumen-tablero select {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) input,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) select {
         min-height: 36px;
         padding: 7px 9px;
         font-size: 11px;
     }
 
-    #seccion-resumen .estado-reserva-con-checkin,
-    #seccion-resumen .estado-reserva-con-checkin > select,
-    #seccion-resumen .campo-encargado-aseo,
-    #seccion-resumen .estado-final-contenido,
-    #seccion-resumen .estado-final-select,
-    #seccion-resumen .servicio-resumen-wrap,
-    #seccion-resumen .servicio-resumen-wrap input {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .estado-reserva-con-checkin,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .estado-reserva-con-checkin > select,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .campo-encargado-aseo,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .estado-final-contenido,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .estado-final-select,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-wrap,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-wrap input {
         width: 100%;
         min-width: 0;
         max-width: none;
     }
 
-    #seccion-resumen .estado-reserva-con-checkin {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .estado-reserva-con-checkin {
         gap: 6px;
     }
 
-    #seccion-resumen .checkin-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .checkin-cabana {
         flex: 0 0 auto;
     }
 
-    #seccion-resumen .aseo-principal {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-principal {
         margin-bottom: 7px;
     }
 
-    #seccion-resumen .aseo-horarios {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-horarios {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
         align-items: center;
@@ -896,7 +896,7 @@
         width: 100%;
     }
 
-    #seccion-resumen .aseo-horarios::after {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-horarios::after {
         content: "→";
         display: block;
         grid-column: 2;
@@ -907,31 +907,31 @@
         font-weight: 750;
     }
 
-    #seccion-resumen .aseo-horarios input:first-child {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-horarios input:first-child {
         grid-column: 1;
         grid-row: 1;
         order: initial;
     }
 
-    #seccion-resumen .aseo-horarios input:last-child {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-horarios input:last-child {
         grid-column: 3;
         grid-row: 1;
         order: initial;
     }
 
-    #seccion-resumen .aseo-horarios input[type="time"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .aseo-horarios input[type="time"] {
         width: 100%;
         min-width: 0;
         padding-right: 4px;
         padding-left: 4px;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(5) input[type="time"] {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(5) input[type="time"] {
         width: 100%;
         min-width: 0;
     }
 
-    #seccion-resumen .nota-cabana {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana {
         width: 100% !important;
         min-width: 0 !important;
         max-width: none !important;
@@ -944,17 +944,17 @@
         user-select: none;
     }
 
-    #seccion-resumen .nota-cabana::-webkit-scrollbar {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana::-webkit-scrollbar {
         display: none;
         width: 0;
         height: 0;
     }
 
-    #seccion-resumen .nota-cabana--arrastrando {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-cabana--arrastrando {
         cursor: grabbing;
     }
 
-    #seccion-resumen .resumen-tablero .nota-eliminar {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-eliminar {
         display: inline-grid;
         place-items: center;
         flex: 0 0 15px;
@@ -974,27 +974,27 @@
             opacity 0.14s ease, transform 0.14s ease;
     }
 
-    #seccion-resumen .resumen-tablero .nota-eliminar:hover {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-eliminar:hover {
         background: rgba(152, 54, 54, 0.14);
         color: #8c3030;
         opacity: 1;
         transform: scale(1.06);
     }
 
-    #seccion-resumen .resumen-tablero .nota-eliminar:focus-visible {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-eliminar:focus-visible {
         outline: 2px solid rgba(52, 102, 82, 0.42);
         outline-offset: 2px;
         opacity: 1;
     }
 
-    #seccion-resumen .servicio-resumen-wrap {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-wrap {
         display: flex;
         align-items: center;
         gap: 7px;
     }
 
-    #seccion-resumen .servicio-resumen-agregar,
-    #seccion-resumen .nota-resumen-agregar {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-agregar,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-resumen-agregar {
         flex: 0 0 27px;
         width: 27px;
         min-width: 27px;
@@ -1009,10 +1009,10 @@
         transition: color 0.16s ease, background-color 0.16s ease;
     }
 
-    #seccion-resumen .servicio-resumen-agregar:hover,
-    #seccion-resumen .nota-resumen-agregar:hover,
-    #seccion-resumen .servicio-resumen-agregar:focus-visible,
-    #seccion-resumen .nota-resumen-agregar:focus-visible {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-agregar:hover,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-resumen-agregar:hover,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .servicio-resumen-agregar:focus-visible,
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) .nota-resumen-agregar:focus-visible {
         outline: none;
         background: rgba(255, 255, 255, 0.58);
         color: #0f5b43;
@@ -1055,7 +1055,7 @@
         -webkit-overflow-scrolling: touch;
     }
 
-    #seccion-resumen .resumen-tablero {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) {
         width: 1270px;
         min-width: 1270px;
         max-width: none;
@@ -1065,28 +1065,28 @@
        al segundo. Con los contextos laterales, ahora esas columnas son
        Día anterior y Cabaña, respectivamente. Restituimos sus medidas del
        tablero nuevo para mantener la diagonal y el contenido proporcionados. */
-    #seccion-resumen .resumen-tablero
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente)
         :is(.resumen-contexto-cabecera--anterior, .resumen-dia-contexto--anterior) {
         width: 68px !important;
         min-width: 68px !important;
         max-width: 68px !important;
     }
 
-    #seccion-resumen .resumen-tablero th:nth-child(2),
-    #seccion-resumen .resumen-tablero td:nth-child(2) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(2),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(2) {
         width: 170px !important;
         min-width: 170px !important;
         max-width: 170px !important;
     }
 
-    #seccion-resumen .resumen-tablero th:nth-child(3),
-    #seccion-resumen .resumen-tablero td:nth-child(3) {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) th:nth-child(3),
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) {
         width: 74px !important;
         min-width: 74px !important;
         max-width: 74px !important;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin {
         width: 100% !important;
         min-width: 0 !important;
         max-width: none !important;
@@ -1095,7 +1095,7 @@
         transform: none;
     }
 
-    #seccion-resumen .resumen-tablero td:nth-child(3) .estado-reserva-con-checkin > select {
+    #seccion-resumen .resumen-tablero:not(.sites-resumen-componente) td:nth-child(3) .estado-reserva-con-checkin > select {
         width: 100% !important;
         min-width: 0 !important;
         max-width: none !important;
@@ -1528,7 +1528,7 @@
    La identificación de la cabaña permanece siempre negra.
 ===================================================== */
 
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
     .cabana-checkin,
     .cabana-checkout,
     .cabana-bloqueada,
@@ -1538,7 +1538,7 @@
     .cabana-estado-checked-out
 ):not(:has(select[data-campo="estado"] option[value="libre-libre"]:checked)):not(:has(select[data-campo="estado"] option[value="sale-libre"]:checked))
  > td:not(.info-cabana):not(.resumen-dia-contexto),
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
     .cabana-checkin,
     .cabana-checkout,
     .cabana-bloqueada,
@@ -1551,7 +1551,7 @@
     color: #ffffff !important;
 }
 
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
     .cabana-checkin,
     .cabana-checkout,
     .cabana-bloqueada,
@@ -1567,7 +1567,7 @@
 }
 
 /* Edge/Chrome dibujan el reloj del input de hora como un control nativo. */
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:is(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:is(
     .cabana-checkin,
     .cabana-checkout,
     .cabana-bloqueada,
@@ -1591,19 +1591,19 @@
 
 /* El estado operativo libre es la autoridad visual inmediata. Así una clase
    anterior no conserva su color mientras termina la hidratación de Supabase. */
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:has(
     select[data-campo="estado"] option[value="libre-libre"]:checked
 ) > td:not(.resumen-dia-contexto),
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]:has(
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]:has(
     select[data-campo="estado"] option[value="sale-libre"]:checked
 ) > td:not(.resumen-dia-contexto) {
     background: #F1F3F2 !important;
 }
 
 /* Primera celda: CAB, titular, noches y ocupación siempre en negro. */
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]
     > td.info-cabana,
-#seccion-resumen .resumen-tablero tbody tr[data-cabana]
+#seccion-resumen .resumen-tablero:not(.sites-resumen-componente) tbody tr[data-cabana]
     > td.info-cabana * {
     color: #111a16 !important;
 }

@@ -68,7 +68,7 @@
 
     function aplicarResumen(numero, valorRevision) {
         const fila = document.querySelector(
-            `#seccion-resumen [data-cabana="${String(numero)}"]`
+            `#seccion-resumen .sites-resumen-cabana[data-cabana="${String(numero)}"]`
         );
         const selector = fila?.querySelector(
             '[data-campo="estadoFinal"], [data-campo="estadoRevision"]'
@@ -128,6 +128,9 @@
 
         refrescarVistasLocales();
         refrescarAseoExpressAbierto();
+        document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+            detail: { fecha }
+        }));
     }
 
     async function obtenerUsuarioId() {

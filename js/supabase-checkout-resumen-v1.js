@@ -59,7 +59,7 @@
 
     function aplicarColorFila(numero, fecha = fechaActualResumen()) {
         const cabana = datosCabanaDia(numero, fecha);
-        const fila = document.querySelector(`tr[data-cabana="${CSS.escape(String(numero))}"]`);
+        const fila = document.querySelector(`#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(String(numero))}"]`);
         if (!cabana || !fila) return false;
 
         const estado = String(cabana.estado || "").toLowerCase();
@@ -162,7 +162,7 @@
     }
 
     function aplicarColoresResumen(fecha = fechaActualResumen()) {
-        document.querySelectorAll('tr[data-cabana]').forEach(fila => {
+        document.querySelectorAll('#seccion-resumen .sites-resumen-cabana[data-cabana]').forEach(fila => {
             aplicarColorFila(fila.dataset.cabana, fecha);
         });
     }
@@ -198,7 +198,7 @@
         cabana.checkoutRealizado = true;
         if (!String(cabana.checkout || "").trim() && hora) cabana.checkout = hora;
 
-        const fila = document.querySelector(`tr[data-cabana="${CSS.escape(numero)}"]`);
+        const fila = document.querySelector(`#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(numero)}"]`);
         const inputCheckout = fila?.querySelector('[data-campo="checkout"]');
         if (inputCheckout && !inputCheckout.value && hora) {
             inputCheckout.value = hora;
@@ -261,7 +261,7 @@
     async function registrarCheckoutDesdeHora(input) {
         if (guardandoHora || !input?.value) return;
 
-        const fila = input.closest('tr[data-cabana]');
+        const fila = input.closest('.sites-resumen-cabana[data-cabana]');
         const numero = String(fila?.dataset?.cabana || "");
         const fecha = fechaActualResumen();
         const hora = String(input.value || "");
@@ -356,6 +356,10 @@
                 try { if (typeof guardarDatos === "function") guardarDatos(); } catch (_) {}
             }
 
+            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                detail: { fecha }
+            }));
+
             console.info(
                 "HAIKU · Estados de salida reflejados en Resumen:",
                 aplicadas,
@@ -382,10 +386,10 @@
     });
 
     document.addEventListener("change", evento => {
-        const campoCabana = evento.target?.closest?.('tr[data-cabana] .campo-cabana');
+        const campoCabana = evento.target?.closest?.('#seccion-resumen .sites-resumen-cabana[data-cabana] .campo-cabana');
         if (!campoCabana) return;
 
-        const fila = campoCabana.closest('tr[data-cabana]');
+        const fila = campoCabana.closest('.sites-resumen-cabana[data-cabana]');
         requestAnimationFrame(() => aplicarColorFila(fila?.dataset?.cabana));
 
         if (campoCabana.matches('[data-campo="checkout"]') && campoCabana.value) {

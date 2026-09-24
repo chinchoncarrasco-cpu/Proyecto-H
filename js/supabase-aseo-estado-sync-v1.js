@@ -18,12 +18,19 @@
 
     function aplicarResumenVisual(numero, valorRevision) {
         const fila = document.querySelector(
-            `#seccion-resumen [data-cabana="${String(numero)}"]`
+            `#seccion-resumen .sites-resumen-cabana[data-cabana="${String(numero)}"]`
         );
         const selector = fila?.querySelector('[data-campo="estadoFinal"]');
 
         if (!selector) return;
         selector.value = estadoFinalDesdeRevision(valorRevision);
+        document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+            detail: {
+                fecha: typeof fechaSeleccionada === "undefined"
+                    ? ""
+                    : String(fechaSeleccionada || "").slice(0, 10)
+            }
+        }));
     }
 
     function aplicarRevisionCabanaVisual(numero, valorRevision) {

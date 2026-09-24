@@ -24,6 +24,9 @@
         efectivo: "Efectivo",
         otro: "Otro"
     });
+    const MEDIOS_DESDE_UI = Object.freeze(Object.fromEntries(
+        Object.entries(MEDIOS_UI).map(([codigo, etiqueta]) => [etiqueta, codigo])
+    ));
 
     const dinero = valor => `$${Math.round(Number(valor || 0)).toLocaleString("es-CL")}`;
 
@@ -404,6 +407,116 @@
         };
     }
 
+    async function contextoPagoResumen(reservaId, fechaEsperada) {
+        const id = String(reservaId || "");
+        if (!id || fechaEsperada !== fechaActual()) return null;
+        const { data, error } = await cliente.rpc("haiku_operacion_dia", {
+            p_fecha: fechaEsperada
+        });
+        if (error) throw error;
+        const fila = (data || []).find(item =>
+            item.estado_operativo === "continua" && String(item.continua_reserva_id || "") === id);
+        if (!fila || fechaEsperada !== fechaActual()) return null;
+        const finanzas = await finanzasReserva(id);
+        if (fechaEsperada !== fechaActual()) return null;
+        const miembros = finanzas.es_grupo
+            ? (finanzas.miembros || []).map(item => String(item.reserva_id || "")).filter(Boolean).sort()
+            : [id];
+        if (!miembros.includes(id)) return null;
+        const cabanas = finanzas.es_grupo
+            ? (finanzas.miembros || []).map(item => Number(item.cabana)).filter(Boolean).sort((a,b) => a-b)
+            : [Number(fila.numero)];
+        if (!cabanas.includes(Number(fila.numero))) return null;
+        return {
+            reservaId: id,
+            titular: finanzas.titular || fila.continua_titular || "Sin titular",
+            cabanas,
+            miembros,
+            total: Number(finanzas.total_alojamiento || 0),
+            saldo: Number(finanzas.saldo_alojamiento || 0)
+        };
+    }
+
+    async function contextoPagoModal(reservaId, fechaEsperada) {
+        const id = String(reservaId || "");
+        if (!id || fechaEsperada !== fechaActual()) return null;
+        const elegible = (await obtenerReservasDia()).some(item => item.reservaId === id);
+        if (!elegible || fechaEsperada !== fechaActual()) return null;
+        const finanzas = await finanzasReserva(id);
+        if (fechaEsperada !== fechaActual()) return null;
+        return {
+            reservaId: id,
+            total: Number(finanzas.total_alojamiento || 0),
+            saldo: Number(finanzas.saldo_alojamiento || 0)
+        };
+    }
+
+    function requisitosPagoResumen(medioUI) {
+        const medio = MEDIOS_DESDE_UI[medioUI] || "";
+        return {
+            glosa: medio === "transferencia",
+            codAut: ["webpay_credito", "webpay_debito"].includes(medio),
+            folio: ["tarjeta_credito", "tarjeta_debito"].includes(medio),
+            bovtar: ["tarjeta_credito", "tarjeta_debito"].includes(medio)
+        };
+    }
+
+    async function registrarPagoControlado(reservaId, datos, fechaEsperada, origen = "resumen") {
+        if (guardando) throw new Error("Ya se está registrando un pago.");
+        guardando = true;
+        try {
+            if (!window.haikuSesion) throw new Error("Debes iniciar sesión para registrar pagos.");
+            if (!window.haikuTienePermiso?.("pagos.registrar")) {
+                throw new Error("Tu usuario no tiene permiso para registrar pagos.");
+            }
+            const contexto = origen === "modal"
+                ? await contextoPagoModal(reservaId, fechaEsperada)
+                : await contextoPagoResumen(reservaId, fechaEsperada);
+            if (!contexto || contexto.saldo <= 0) {
+                throw new Error("La reserva ya no tiene saldo de alojamiento cobrable en esta fecha.");
+            }
+            const monto = Math.round(Number(datos.monto || 0));
+            const medio = MEDIOS_DESDE_UI[datos.medio] ||
+                (MEDIOS_UI[datos.medio] ? datos.medio : "");
+            const fechaPago = fechaPagoISO(datos.fechaPago);
+            const requisitos = requisitosPagoResumen(MEDIOS_UI[medio] || "");
+            if (!Number.isFinite(monto) || monto <= 0 || monto > contexto.saldo) {
+                throw new Error(`El monto debe estar entre $1 y ${dinero(contexto.saldo)}.`);
+            }
+            if (!medio) throw new Error("Selecciona el medio de pago.");
+            if (!fechaPago) throw new Error("Selecciona una fecha de pago válida.");
+            if (requisitos.glosa && !datos.glosa) throw new Error("Ingresa la glosa de la transferencia.");
+            if (requisitos.codAut && !datos.codAut) throw new Error("Ingresa el CodAut de WebPay.");
+            if (requisitos.folio && (!datos.folio || !datos.bovtar)) {
+                throw new Error("Ingresa Folio y BOVTAR.");
+            }
+            if (fechaEsperada !== fechaActual()) {
+                throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
+            }
+            const { data, error } = await cliente.rpc("haiku_registrar_pago_grupo", {
+                p_reserva_id: contexto.reservaId,
+                p_monto: monto,
+                p_medio_pago: medio,
+                p_etapa_operativa: "abono",
+                p_fecha_pago: fechaPago,
+                p_folio: datos.folio || null,
+                p_codigo_autorizacion: datos.codAut || null,
+                p_bove: datos.bovtar || null,
+                p_referencia_externa: datos.glosa || null,
+                p_observaciones: datos.observacion || null
+            });
+            if (error) throw error;
+            await Promise.allSettled([
+                Promise.resolve().then(() => window.haikuCargarAbonosSupabase?.()),
+                Promise.resolve().then(() => window.haikuCargarSaldosCheckinSupabase?.()),
+                Promise.resolve().then(() => window.haikuSincronizarReservasSupabase?.())
+            ]);
+            return data;
+        } finally {
+            guardando = false;
+        }
+    }
+
     function idsReservaActuales() {
         if (!reservaSeleccionada || !resumenActual) return [];
 
@@ -680,35 +793,21 @@
             return;
         }
 
-        guardando = true;
-        validarFormulario();
-
         const confirmar = document.getElementById("haiku-pago-confirmar");
-        if (confirmar) confirmar.textContent = "Registrando...";
+        if (confirmar) {
+            confirmar.disabled = true;
+            confirmar.textContent = "Registrando...";
+        }
 
         estado("Registrando pago...");
 
         try {
-            const { data, error } = await cliente.rpc("haiku_registrar_pago_grupo", {
-                p_reserva_id: reservaSeleccionada,
-                p_monto: monto,
-                p_medio_pago: medio,
-                p_etapa_operativa: "abono",
-                p_fecha_pago: fechaPago,
-                p_folio: datos.folio || null,
-                p_codigo_autorizacion: datos.codaut || null,
-                p_bove: datos.bove || null,
-                p_referencia_externa: datos.glosa || null,
-                p_observaciones: datos.observacion || null
-            });
-
-            if (error) throw error;
-
-            await Promise.allSettled([
-                Promise.resolve().then(() => window.haikuCargarAbonosSupabase?.()),
-                Promise.resolve().then(() => window.haikuCargarSaldosCheckinSupabase?.()),
-                Promise.resolve().then(() => window.haikuSincronizarReservasSupabase?.())
-            ]);
+            const data = await registrarPagoControlado(reservaSeleccionada, {
+                monto, medio, fechaPago: fechaElegida,
+                glosa: datos.glosa, folio: datos.folio,
+                codAut: datos.codaut, bovtar: datos.bove,
+                observacion: datos.observacion
+            }, fechaActual(), "modal");
 
             await refrescarFichaFinanzas();
 
@@ -732,8 +831,6 @@
             console.error("HAIKU · registrar pago por titular:", error);
             estado(error?.message || "No fue posible registrar el pago.", "error");
         } finally {
-            guardando = false;
-
             if (confirmar) confirmar.textContent = "Registrar pago";
             validarFormulario();
         }
@@ -873,7 +970,11 @@
 
     window.HAIKU_PAGO_GRUPO_V1 = Object.freeze({
         abrir: abrirModal,
-        refrescarFicha: refrescarFichaFinanzas
+        refrescarFicha: refrescarFichaFinanzas,
+        contextoResumen: contextoPagoResumen,
+        registrarResumen: registrarPagoControlado,
+        requisitosResumen: requisitosPagoResumen,
+        fechaPagoPredeterminada: hoyChile
     });
 
     console.info("HAIKU · Pago por titular / múltiples abonos V2 preparado.");

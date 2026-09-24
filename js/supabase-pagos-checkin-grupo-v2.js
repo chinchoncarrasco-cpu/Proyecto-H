@@ -53,16 +53,84 @@
         }catch(e){console.warn("HAIKU · Check-in grupo V2:",e)}finally{procesando=false;observar(lista)}
     }
     function luego(ms=80){clearTimeout(timer);timer=setTimeout(aplicar,ms)}
+    async function contextoPagoResumen(reservaId, fechaEsperada){
+        const id=String(reservaId||"");
+        if(!id||fechaEsperada!==fecha())return null;
+        const grupo=(await gruposDelDia()).find(g=>g.miembros.some(m=>m.reservaId===id));
+        if(!grupo)return null;
+        const representante=grupo.miembros[0].reservaId;
+        const estado=await finanzas(representante);
+        if(fechaEsperada!==fecha()||!estado.es_grupo)return null;
+        return{
+            reservaId:id,rpcReservaId:representante,grupoId:grupo.grupoId,titular:grupo.titular,
+            cabanas:grupo.miembros.map(m=>m.numero),
+            miembros:grupo.miembros.map(m=>m.reservaId).sort(),
+            total:Number(estado.total_alojamiento||0),
+            saldo:Number(estado.saldo_alojamiento||0)
+        };
+    }
+    async function registrarPagoControlado(reservaId,datos,fechaEsperada){
+        if(guardando)throw new Error("Ya se está registrando un pago.");
+        guardando=true;
+        try{
+            if(!window.haikuSesion)throw new Error("Debes iniciar sesión para registrar pagos.");
+            if(!window.haikuTienePermiso?.("pagos.registrar")||!window.haikuTienePermiso?.("pagos.verificar")){
+                throw new Error("Tu usuario no tiene permiso para registrar/verificar este pago.");
+            }
+            const contexto=await contextoPagoResumen(reservaId,fechaEsperada);
+            if(!contexto||contexto.saldo<=0)throw new Error("La reserva conjunta ya no tiene saldo cobrable en esta fecha.");
+            const monto=Math.round(Number(datos.monto||0)),medio=MEDIOS[datos.medio]||"",r=requisitos(medio);
+            if(!Number.isFinite(monto)||monto<=0||monto>contexto.saldo)throw new Error(`El monto debe estar entre $1 y ${money(contexto.saldo)}.`);
+            if(!medio)throw new Error("Selecciona el medio de pago.");
+            if(!datos.manager)throw new Error("El pago debe ser revisado por Manager.");
+            if(r.glosa&&!datos.glosa)throw new Error("Transferencia requiere Glosa.");
+            if(r.folio&&!datos.folio)throw new Error("Completa el Folio.");
+            if(r.codaut&&!datos.codaut)throw new Error("Completa el CodAut.");
+            if(fechaEsperada!==fecha())throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
+            const{data,error}=await sb.rpc("haiku_registrar_pago_checkin_grupo",{
+                p_reserva_id:contexto.rpcReservaId,p_monto:monto,p_medio_pago:medio,
+                p_glosa:datos.glosa||null,p_folio:datos.folio||null,
+                p_codigo_autorizacion:datos.codaut||null,p_manager_revisado:true
+            });
+            if(error)throw error;
+            borradores.delete(contexto.grupoId);
+            await Promise.allSettled([
+                Promise.resolve().then(()=>window.haikuCargarSaldosCheckinSupabase?.()),
+                Promise.resolve().then(()=>window.haikuCargarAbonosSupabase?.()),
+                Promise.resolve().then(()=>window.haikuSincronizarReservasSupabase?.())
+            ]);
+            luego(160);
+            return data;
+        }finally{guardando=false;}
+    }
     async function registrarPago(card){
-        if(guardando)return;const id=card.dataset.reservaId||"",monto=Math.round(Number(card.querySelector("[data-grupo-saldo-monto]")?.value||0)),ui=card.querySelector("[data-grupo-saldo-medio]")?.value||"",medio=MEDIOS[ui]||"",glosa=card.querySelector("[data-grupo-saldo-glosa]")?.value?.trim()||"",folio=card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"",codaut=card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"",manager=card.querySelector("[data-grupo-saldo-manager]")?.checked===true;
-        if(!id||monto<=0||!medio){alert("Completa monto y medio de pago.");return}if(!manager){alert("El pago debe ser revisado por Manager.");return}const r=requisitos(medio);if(r.glosa&&!glosa){alert("Transferencia requiere Glosa.");return}if(r.folio&&!folio){alert("Completa el Folio.");return}if(r.codaut&&!codaut){alert("Completa el CodAut.");return}if(!window.haikuTienePermiso?.("pagos.registrar")||!window.haikuTienePermiso?.("pagos.verificar")){alert("Tu usuario no tiene permiso para registrar/verificar este pago.");return}
-        guardar(card);guardando=true;const btn=card.querySelector("[data-grupo-saldo-registrar]");if(btn){btn.disabled=true;btn.textContent="Registrando..."}
-        try{const{error}=await sb.rpc("haiku_registrar_pago_checkin_grupo",{p_reserva_id:id,p_monto:monto,p_medio_pago:medio,p_glosa:glosa||null,p_folio:folio||null,p_codigo_autorizacion:codaut||null,p_manager_revisado:true});if(error)throw error;borradores.delete(card.dataset.grupoId||"");await Promise.allSettled([Promise.resolve().then(()=>window.haikuCargarSaldosCheckinSupabase?.()),Promise.resolve().then(()=>window.haikuCargarAbonosSupabase?.()),Promise.resolve().then(()=>window.haikuSincronizarReservasSupabase?.())]);luego(160)}catch(e){console.error("HAIKU · pago Check-in conjunto:",e);alert(e?.message||"No fue posible registrar el pago conjunto.")}finally{guardando=false;if(btn?.isConnected){btn.disabled=false;btn.textContent="Registrar pago conjunto"}}
+        if(guardando)return;
+        const id=card.dataset.reservaId||"";
+        const datos={
+            monto:Math.round(Number(card.querySelector("[data-grupo-saldo-monto]")?.value||0)),
+            medio:card.querySelector("[data-grupo-saldo-medio]")?.value||"",
+            glosa:card.querySelector("[data-grupo-saldo-glosa]")?.value?.trim()||"",
+            folio:card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"",
+            codaut:card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"",
+            manager:card.querySelector("[data-grupo-saldo-manager]")?.checked===true
+        };
+        guardar(card);
+        const btn=card.querySelector("[data-grupo-saldo-registrar]");
+        if(btn){btn.disabled=true;btn.textContent="Registrando..."}
+        try{await registrarPagoControlado(id,datos,fecha());}
+        catch(e){console.error("HAIKU · pago Check-in conjunto:",e);alert(e?.message||"No fue posible registrar el pago conjunto.")}
+        finally{if(btn?.isConnected){btn.disabled=false;btn.textContent="Registrar pago conjunto"}}
     }
     async function registrarBove(card){const id=card.dataset.reservaId||"",v=card.querySelector("[data-grupo-bove]")?.value?.trim()||"";if(!id||!v){alert("Ingresa el BOVE del alojamiento.");return}if(!window.haikuTienePermiso?.("pagos.verificar")){alert("Tu usuario no tiene permiso para registrar BOVE.");return}const btn=card.querySelector("[data-grupo-bove-registrar]");if(btn){btn.disabled=true;btn.textContent="Registrando..."}try{const{error}=await sb.rpc("haiku_registrar_bove_reserva_grupo",{p_reserva_id:id,p_bove:v});if(error)throw error;await window.haikuCargarSaldosCheckinSupabase?.();luego(160)}catch(e){console.error("HAIKU · BOVE conjunto:",e);alert(e?.message||"No fue posible registrar el BOVE conjunto.")}finally{if(btn?.isConnected){btn.disabled=false;btn.textContent="Registrar BOVE"}}}
     document.addEventListener("change",e=>{const card=e.target.closest?.(".haiku-checkin-grupo-v2");if(!card)return;if(e.target.matches("[data-grupo-saldo-medio]")){guardar(card);campos(card)}else if(e.target.matches("[data-grupo-saldo-monto],[data-grupo-saldo-manager]"))guardar(card)},true);
     document.addEventListener("input",e=>{const card=e.target.closest?.(".haiku-checkin-grupo-v2");if(card&&e.target.matches("[data-grupo-saldo-glosa],[data-grupo-saldo-folio],[data-grupo-saldo-codaut]"))guardar(card)},true);
     document.addEventListener("click",e=>{const card=e.target.closest?.(".haiku-checkin-grupo-v2");if(!card)return;if(e.target.closest("[data-grupo-saldo-registrar]")){e.preventDefault();e.stopPropagation();registrarPago(card)}if(e.target.closest("[data-grupo-bove-registrar]")){e.preventDefault();e.stopPropagation();registrarBove(card)}},true);
     function instalar(){const lista=document.getElementById("pagos-lista-checkin");if(lista)observar(lista);luego(160)}
-    document.addEventListener("click",e=>{if(e.target.closest?.('[data-seccion="pagos"]'))setTimeout(instalar,120)});window.addEventListener("haiku:auth-ready",()=>setTimeout(instalar,200));setTimeout(instalar,300);window.haikuAplicarCheckinGrupos=aplicar;console.info("HAIKU · Check-in conjunto V2 preparado.");
+    document.addEventListener("click",e=>{if(e.target.closest?.('[data-seccion="pagos"]'))setTimeout(instalar,120)});window.addEventListener("haiku:auth-ready",()=>setTimeout(instalar,200));setTimeout(instalar,300);window.haikuAplicarCheckinGrupos=aplicar;
+    window.HAIKU_PAGO_CHECKIN_GRUPO_RESUMEN_V1=Object.freeze({
+        contexto:contextoPagoResumen,
+        registrar:registrarPagoControlado,
+        requisitos:medio=>requisitos(MEDIOS[medio]||"")
+    });
+    console.info("HAIKU · Check-in conjunto V2 preparado.");
 })();

@@ -41,14 +41,14 @@
     }
 
     function campoResumen(objetivo) {
-        if (!objetivo?.matches?.("#seccion-resumen .tabla-contenedor tbody tr[data-cabana] [data-campo]")) {
+        if (!objetivo?.matches?.("#seccion-resumen .sites-resumen-cabana[data-cabana] [data-campo]")) {
             return null;
         }
 
         const campo = String(objetivo.dataset.campo || "");
         if (!CAMPOS_ASEO.has(campo)) return null;
 
-        const fila = objetivo.closest("tr[data-cabana]");
+        const fila = objetivo.closest(".sites-resumen-cabana[data-cabana]");
         const numero = String(fila?.dataset.cabana || "");
         if (!numero) return null;
 
@@ -67,7 +67,7 @@
         const cabanas = dia?.cabanas || {};
 
         document
-            .querySelectorAll("#seccion-resumen .tabla-contenedor tbody tr[data-cabana]")
+            .querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]")
             .forEach(fila => {
                 const numero = String(fila.dataset.cabana || "");
                 const cabana = cabanas?.[numero] || {};
@@ -84,6 +84,10 @@
                     }
                 });
             });
+
+        document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+            detail: { fecha }
+        }));
     }
 
     async function hidratarYPintar() {

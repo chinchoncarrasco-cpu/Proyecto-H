@@ -169,7 +169,7 @@
             pares.forEach(({ numero, reservaId }) => {
                 if (!vinculados.get(reservaId)) return;
 
-                const fila = seccion.querySelector(`tbody tr[data-cabana="${numero}"]`);
+                const fila = seccion.querySelector(`.sites-resumen-cabana[data-cabana="${numero}"]`);
                 const titular = fila?.querySelector(".titular-cabana");
                 if (!fila || !titular) return;
 

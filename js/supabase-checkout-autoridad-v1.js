@@ -162,7 +162,7 @@
             cabana.checkout = horaReal;
         }
 
-        const fila = document.querySelector(`tr[data-cabana="${CSS.escape(numero)}"]`);
+        const fila = document.querySelector(`#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(numero)}"]`);
         const input = fila?.querySelector('[data-campo="checkout"]');
         if (input && input.value !== horaReal) input.value = horaReal;
 
@@ -191,6 +191,10 @@
                 try { window.HAIKU_VINCULOS_ESTABLES_V1?.refrescarCalendario?.(); } catch (_) {}
             }
 
+            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                detail: { fecha }
+            }));
+
             console.info("HAIKU · Checkout sincronizado desde autoridad Supabase:", estadias.length, "· fecha", fecha);
             return true;
         } catch (error) {
@@ -205,7 +209,7 @@
         if (revirtiendo || !input) return;
         if (String(input.value || "").trim()) return;
 
-        const fila = input.closest('tr[data-cabana]');
+        const fila = input.closest('.sites-resumen-cabana[data-cabana]');
         const numero = String(fila?.dataset?.cabana || "");
         const fecha = fechaActualResumen();
         if (!numero || !fecha) return;
@@ -258,7 +262,7 @@
     // Capturamos el change sólo para el caso VACÍO. El módulo existente sigue
     // siendo responsable de registrar/modificar una hora no vacía.
     document.addEventListener("change", evento => {
-        const input = evento.target?.closest?.('tr[data-cabana] [data-campo="checkout"]');
+        const input = evento.target?.closest?.('#seccion-resumen .sites-resumen-cabana[data-cabana] [data-campo="checkout"]');
         if (!input || String(input.value || "").trim()) return;
         revertirCheckoutAlBorrar(input);
     });

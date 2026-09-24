@@ -9,6 +9,7 @@
 
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/sites-shell-v1.css">
+    <link rel="stylesheet" href="css/sites-resumen-v1.css">
 </head>
 
 <body>
@@ -140,67 +141,12 @@
 
 <section id="seccion-resumen" class="seccion-app activa">
 
-<!-- =========================
-     TARJETAS RESUMEN
-========================== -->
-
-<section class="resumen">
-
-    <div class="tarjeta">
-        <span>🟢</span>
-        <div>
-            <p>Ingresan</p>
-            <strong id="contador-ingresan">3</strong>
-        </div>
-    </div>
-
-    <div class="tarjeta">
-        <span>🔴</span>
-        <div>
-            <p>Salen</p>
-            <strong id="contador-salen">6</strong>
-        </div>
-    </div>
-
-    <div class="tarjeta">
-        <span>🔵</span>
-        <div>
-            <p>Continúan</p>
-            <strong id="contador-continuan">2</strong>
-        </div>
-    </div>
-
-    <div class="tarjeta">
-        <span>🛁</span>
-        <div>
-            <p>Servicios</p>
-            <strong id="contador-servicios">3</strong>
-        </div>
-    </div>
-
-    <div class="tarjeta alerta">
-        <span>💳</span>
-        <div>
-           <p>Pagos pendientes</p>
-           <strong id="contador-pagos">0</strong>
-        </div>
-    </div>
-
-</section>
-
-
-        <!-- =========================
-             MATRIZ DE CABAÑAS
-        ========================== -->
-
-<section class="panel">
-
     <div class="panel-titulo resumen-estado-cabecera">
         <div>
-            <h2>Estado de cabañas</h2>
-            <p>Operación general del día</p>
+            <p class="sites-resumen-eyebrow">Operación del día</p>
+            <h2>Resumen de cabañas</h2>
             <p id="fecha-actual" class="resumen-fecha-actual">
-                Sábado 15 de agosto de 2026
+                Cargando fecha operativa…
             </p>
         </div>
 
@@ -232,39 +178,132 @@
         </nav>
     </div>
 
+<!-- =========================
+     TARJETAS RESUMEN
+========================== -->
+
+<section class="resumen">
+
+    <div class="tarjeta">
+        <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V6m16 13V6M4 15h16M7 8h5a3 3 0 0 1 3 3v4M4 19v-4m16 4v-4"/></svg></span>
+        <div>
+            <p>Continúan</p>
+            <strong id="contador-continuan">—</strong>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v13m0 0-5-5m5 5 5-5M4 20h16"/></svg></span>
+        <div>
+            <p>Ingresan</p>
+            <strong id="contador-ingresan">—</strong>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20V7m0 0-5 5m5-5 5 5M4 4h16"/></svg></span>
+        <div>
+            <p>Salen</p>
+            <strong id="contador-salen">—</strong>
+        </div>
+    </div>
+
+    <div class="tarjeta">
+        <span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 13h18v3a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-3ZM6 13V6a2 2 0 0 1 4 0M6 20l-1 2m14-2 1 2"/></svg></span>
+        <div>
+            <p>Servicios</p>
+            <strong id="contador-servicios">—</strong>
+        </div>
+    </div>
+
+    <div class="tarjeta alerta">
+        <span aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 10h19M6 15h5"/></svg></span>
+        <div>
+           <p>Pagos pendientes</p>
+           <strong id="contador-pagos">—</strong>
+        </div>
+    </div>
+
+</section>
+
+
+        <!-- =========================
+             MATRIZ DE CABAÑAS
+        ========================== -->
+
+    <div class="sites-resumen-tabla-cabecera">
+        <h3>Estado de cabañas</h3>
+        <p>11 de 11 cabañas</p>
+    </div>
+
+<section class="panel sites-resumen-tablero-panel">
 
             <div class="tabla-contenedor">
 
-                <table>
+                <div class="sites-resumen-lista" role="list" aria-label="Estado de cabañas">
+<div class="sites-resumen-encabezado" aria-hidden="true">
+  <span>Cabaña</span><span>Huésped / reserva</span><span>Estado</span>
+  <span>Aseo y horario</span><span>Servicios / notas</span><span>Cobros</span><span>Estado final</span>
+</div>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="1">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="1" aria-label="Abrir detalle de cabaña 1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 1</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="1">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="1" aria-expanded="false" aria-controls="sites-resumen-detalle-1">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-1" role="region" aria-label="Detalle de cabaña 1" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 1">
 
-                    <thead>
-                        <tr>
-                            <th>Cabaña</th>
-                            <th>Estado</th>
-                            <th>Aseo</th>
-                            <th>Ingreso</th>
-                            <th>Notas</th>
-                            <th>Servicios</th>
-                            <th>Estado final</th>
-                        </tr>
-                    </thead>
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-                    <tbody>
+    <span aria-hidden="true">→</span>
 
-                       <tr data-cabana="1">
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
 
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+</div><label class="summary-final-field">Estado final<select
+            class="campo-cabana estado-final-select"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 1"
+        >
+            <option value="">Pendiente</option>
+            <option value="LISTA">Lista</option>
+            <option value="CON DETALLES">Con detalles</option>
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="1"
->
-    CAB 1
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="1"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="1">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="1" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 1</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="1">Sin titular</span>
+
 
     <button
         type="button"
@@ -287,7 +326,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab1-adultos"
@@ -295,10 +334,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab1-ninos"
@@ -306,10 +345,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab1-mascotas"
@@ -317,26 +356,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 1">
 
     <option value="">Seleccionar...</option>
 
@@ -370,68 +418,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="1"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
     type="text"
@@ -441,51 +438,75 @@
     readonly
 >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="1"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="1"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="2">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="2" aria-label="Abrir detalle de cabaña 2"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 2</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="2">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="2" aria-expanded="false" aria-controls="sites-resumen-detalle-2">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-2" role="region" aria-label="Detalle de cabaña 2" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 2">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 2"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="2">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="2"
->
-    CAB 2
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="2"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="2">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="2" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 2</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="2">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -506,7 +527,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
     <input
         type="number"
         id="cab2-adultos"
@@ -517,7 +538,7 @@
     >
 </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab2-ninos"
@@ -528,7 +549,7 @@
 
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab2-mascotas"
@@ -536,27 +557,36 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
 
-</td>
-
-    <td>
-        
-        <div class="estado-reserva-con-checkin">
-
-        <select class="campo-cabana" data-campo="estado">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 2">
 
     <option value="">Seleccionar...</option>
 
@@ -590,68 +620,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="2"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -661,52 +640,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="2"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="2"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="3">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="3" aria-label="Abrir detalle de cabaña 3"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 3</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="3">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="3" aria-expanded="false" aria-controls="sites-resumen-detalle-3">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-3" role="region" aria-label="Detalle de cabaña 3" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 3">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 3"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="3">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="3"
->
-    CAB 3
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="3"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="3">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="3" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 3</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="3">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -727,7 +729,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab3-adultos"
@@ -735,10 +737,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab3-ninos"
@@ -746,10 +748,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab3-mascotas"
@@ -757,26 +759,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 3">
 
     <option value="">Seleccionar...</option>
 
@@ -810,68 +821,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="3"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -881,52 +841,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="3"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="3"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="4">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="4" aria-label="Abrir detalle de cabaña 4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 4</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="4">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="4" aria-expanded="false" aria-controls="sites-resumen-detalle-4">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-4" role="region" aria-label="Detalle de cabaña 4" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 4">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 4"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="4">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="4"
->
-    CAB 4
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="4"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="4">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="4" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 4</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="4">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -947,7 +930,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab4-adultos"
@@ -955,10 +938,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab4-ninos"
@@ -966,10 +949,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab4-mascotas"
@@ -977,26 +960,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 4">
 
     <option value="">Seleccionar...</option>
 
@@ -1030,68 +1022,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="4"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -1101,52 +1042,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="4"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="4"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="5">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="5" aria-label="Abrir detalle de cabaña 5"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 5</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="5">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="5" aria-expanded="false" aria-controls="sites-resumen-detalle-5">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-5" role="region" aria-label="Detalle de cabaña 5" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 5">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 5"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="5">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="5"
->
-    CAB 5
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="5"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="5">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="5" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 5</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="5">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -1167,7 +1131,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab5-adultos"
@@ -1175,10 +1139,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab5-ninos"
@@ -1186,10 +1150,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab5-mascotas"
@@ -1197,26 +1161,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 5">
 
     <option value="">Seleccionar...</option>
 
@@ -1250,68 +1223,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="5"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -1321,52 +1243,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="5"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="5"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="6">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="6" aria-label="Abrir detalle de cabaña 6"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 6</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="6">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="6" aria-expanded="false" aria-controls="sites-resumen-detalle-6">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-6" role="region" aria-label="Detalle de cabaña 6" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 6">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 6"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="6">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="6"
->
-    CAB 6
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="6"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="6">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="6" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 6</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="6">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -1387,7 +1332,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab6-adultos"
@@ -1395,10 +1340,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab6-ninos"
@@ -1406,10 +1351,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab6-mascotas"
@@ -1417,26 +1362,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 6">
 
     <option value="">Seleccionar...</option>
 
@@ -1470,68 +1424,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="6"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -1541,52 +1444,74 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="6"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="6"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="7">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="7" aria-label="Abrir detalle de cabaña 7"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 7</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="7">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="7" aria-expanded="false" aria-controls="sites-resumen-detalle-7">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-7" role="region" aria-label="Detalle de cabaña 7" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 7">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
-            class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
-        >
-            <option value="">Pendiente</option>
-            <option value="LISTA">Lista</option>
-            
-            <option value="CON DETALLES">Con detalles</option>
-        </select>
+    <span aria-hidden="true">→</span>
 
-    </div>
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
 
-</td>
-
-</tr>
-
-<tr data-cabana="7">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
-    type="button"
-    class="cabana-ficha-boton"
-    data-ficha-cabana="7"
+</div><label class="summary-final-field">Estado final<select
+    class="campo-cabana estado-final-select"
+    data-campo="estadoRevision" aria-label="Estado final de cabaña 7"
 >
-    CAB 7
-</button>
+    <option value="pendiente">Pendiente</option>
+    <option value="lista">Lista</option>
+    <option value="con-detalles">Con detalles</option>
+</select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
+    type="button"
+    class="cabana-ficha-boton sites-resumen-accion"
+    data-ficha-cabana="7"
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="7"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="7">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="7" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 7</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="7">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -1607,7 +1532,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab7-adultos"
@@ -1615,10 +1540,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab7-ninos"
@@ -1626,10 +1551,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab7-mascotas"
@@ -1637,26 +1562,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 7">
 
     <option value="">Seleccionar...</option>
 
@@ -1690,68 +1624,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="7"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -1761,51 +1644,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="7"
-            title="Agregar servicio"
+
+
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="7"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="8">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="8" aria-label="Abrir detalle de cabaña 8"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 8</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="8">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="8" aria-expanded="false" aria-controls="sites-resumen-detalle-8">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-8" role="region" aria-label="Detalle de cabaña 8" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 8">
+
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
+
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
+            class="campo-cabana estado-final-select"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 8"
         >
-            +
-        </button>
+            <option value="">Pendiente</option>
+            <option value="LISTA">Lista</option>
 
-    </div>
-</td>
-
-    <td class="celda-estado-final">
-
-    <div class="estado-final-contenido">
-
-        <select
-    class="campo-cabana estado-final-select"
-    data-campo="estadoRevision"
->
-    <option value="pendiente">Pendiente</option>
-    <option value="lista">Lista</option>
-    <option value="con-detalles">Con detalles</option>
-</select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="8">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+            <option value="CON DETALLES">Con detalles</option>
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="8"
->
-    CAB 8
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="8"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="8">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="8" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 8</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="8">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -1826,7 +1733,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab8-adultos"
@@ -1834,10 +1741,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab8-ninos"
@@ -1845,10 +1752,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab8-mascotas"
@@ -1856,26 +1763,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 8">
 
     <option value="">Seleccionar...</option>
 
@@ -1909,68 +1825,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="8"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -1980,52 +1845,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="8"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="8"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="9">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="9" aria-label="Abrir detalle de cabaña 9"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 9</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="9">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="9" aria-expanded="false" aria-controls="sites-resumen-detalle-9">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-9" role="region" aria-label="Detalle de cabaña 9" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 9">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 9"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="9">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="9"
->
-    CAB 9
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="9"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="9">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="9" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 9</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="9">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -2046,7 +1934,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab9-adultos"
@@ -2054,10 +1942,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab9-ninos"
@@ -2065,10 +1953,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab9-mascotas"
@@ -2076,26 +1964,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 9">
 
     <option value="">Seleccionar...</option>
 
@@ -2129,68 +2026,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="9"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -2200,52 +2046,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="9"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="9"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="10">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="10" aria-label="Abrir detalle de cabaña 10"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 10</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="10">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="10" aria-expanded="false" aria-controls="sites-resumen-detalle-10">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-10" role="region" aria-label="Detalle de cabaña 10" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 10">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 10"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="10">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="10"
->
-    CAB 10
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="10"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="10">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="10" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 10</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="10">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -2266,7 +2135,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab10-adultos"
@@ -2274,10 +2143,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab10-ninos"
@@ -2285,10 +2154,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab10-mascotas"
@@ -2296,26 +2165,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 10">
 
     <option value="">Seleccionar...</option>
 
@@ -2349,68 +2227,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="10"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -2420,52 +2247,75 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="10"
-            title="Agregar servicio"
-        >
-            +
-        </button>
 
-    </div>
-</td>
 
-    <td class="celda-estado-final">
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="10"
+    ></div></div>
+  </div>
+</article>
+<article class="sites-resumen-cabana" role="listitem" data-cabana="11">
+  <div class="sites-resumen-fila">
+    <div class="sites-resumen-celda sites-resumen-celda--cabana"><button type="button" class="sites-resumen-cabana-ident" data-resumen-ficha-cabana="11" aria-label="Abrir detalle de cabaña 11"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-8h6v8M3 13h18"/></svg><strong>Cabaña 11</strong></button></div>
+    <div class="sites-resumen-celda sites-resumen-celda--huesped"><strong class="sites-resumen-valor titular-cabana" data-titular-cabana="11">Sin reserva</strong><small class="sites-resumen-subvalor">Disponible hoy</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--estado"><span class="sites-resumen-estado-badge" data-estado-visual="libre">Libre</span></div>
+    <div class="sites-resumen-celda sites-resumen-celda--aseo"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--servicios"><span class="sites-resumen-servicio-chip">Sin servicios</span><small class="sites-resumen-subvalor">—</small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--cobros"><strong class="sites-resumen-valor">—</strong><small class="sites-resumen-subvalor"></small></div>
+    <div class="sites-resumen-celda sites-resumen-celda--final"><strong class="sites-resumen-valor">Pendiente</strong><small class="sites-resumen-subvalor">Estado al cierre</small><button type="button" class="sites-resumen-expandir" data-resumen-expandir="11" aria-expanded="false" aria-controls="sites-resumen-detalle-11">Ver detalle ↓</button></div>
+  </div>
+  <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+    <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">—</span></div>
+    <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">—</span></div>
+  </div>
+  <div class="sites-resumen-detalle" id="sites-resumen-detalle-11" role="region" aria-label="Detalle de cabaña 11" hidden>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--reserva"><h4 class="sites-resumen-detalle-titulo">Reserva y horarios</h4><p class="sites-resumen-reserva-horario">Ingreso: sin datos</p><p class="sites-resumen-reserva-personas">Sin datos de huéspedes</p><p class="sites-resumen-reserva-extra"></p></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--aseo"><h4 class="sites-resumen-detalle-titulo">Aseo y cierre</h4><p class="sites-resumen-aseo-resumen">Sin datos de aseo</p><div class="summary-aseo-fields"><div class="summary-time-pair" role="group" aria-label="Horario de aseo de cabaña 11">
 
-    <div class="estado-final-contenido">
+    <label class="sites-resumen-aseo-hora">Hora IN<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoIn"
+    ></label>
 
-        <select
+    <span aria-hidden="true">→</span>
+
+    <label class="sites-resumen-aseo-hora">Hora OUT<input
+        type="time"
+        class="campo-cabana"
+        data-campo="aseoOut"
+    ></label>
+
+</div><label class="summary-final-field">Estado final<select
             class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
+            data-campo="estadoFinal" aria-label="Estado final de cabaña 11"
         >
             <option value="">Pendiente</option>
             <option value="LISTA">Lista</option>
-            
+
             <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
-
-<tr data-cabana="11">
-
-    <td class="info-cabana">
-
-    <strong class="cabana-titular-linea">
-    <button
+        </select></label></div></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--servicios"><h4 class="sites-resumen-detalle-titulo">Servicios y notas</h4><ul class="sites-resumen-detalle-servicios"></ul><p class="sites-resumen-notas-etiqueta">Notas</p><ul class="sites-resumen-detalle-notas"></ul></section>
+    <section class="sites-resumen-detalle-bloque sites-resumen-detalle-bloque--acciones"><h4 class="sites-resumen-detalle-titulo">Acciones frecuentes</h4><div class="sites-resumen-acciones"><button
     type="button"
-    class="cabana-ficha-boton"
+    class="cabana-ficha-boton sites-resumen-accion"
     data-ficha-cabana="11"
->
-    CAB 11
-</button>
+>Ver reserva</button><button
+            type="button"
+            class="servicio-resumen-agregar sites-resumen-accion"
+            data-agregar-servicio="11"
+            title="Agregar servicio"
+        >+ Servicio</button><button type="button" class="sites-resumen-accion" data-agregar-nota-cabana="11">+ Nota</button><button type="button" class="sites-resumen-accion sites-resumen-accion--pago" data-resumen-pago="11" hidden>Pago</button></div></section>
+  </div>
+
+  <div class="sites-resumen-datos-funcionales" hidden aria-hidden="true">
+    <div class="sites-resumen-control-grupo"><strong class="cabana-titular-linea">
+    <span class="cabana-ficha-label">Cabaña 11</span>
 <span>·</span>
-    <span class="titular-cabana" data-titular-cabana="11">Sin titular</span>
+
     <button
         type="button"
         class="editar-titular"
@@ -2486,7 +2336,7 @@
 
     <div class="ocupacion-cabana">
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Adultos</span>
             <input
                 type="number"
                 id="cab11-adultos"
@@ -2494,10 +2344,10 @@
                 data-campo="adultos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Niños</span>
             <input
                 type="number"
                 id="cab11-ninos"
@@ -2505,10 +2355,10 @@
                 data-campo="ninos"
                 min="0"
             >
-            
+
         </label>
 
-        <label>
+        <label class="sites-resumen-ocupacion-campo"><span>Mascotas</span>
             <input
                 type="number"
                 id="cab11-mascotas"
@@ -2516,26 +2366,35 @@
                 data-campo="mascotas"
                 min="0"
             >
-            
+
         </label>
 
     </div>
 
-    <label class="checkout-cabana">
-    
-    <input
+    </div>
+    <div class="sites-resumen-control-grupo"><label class="aseo-principal sites-resumen-aseo-responsable"><span>Responsable</span>
+
+        <input
+            type="text"
+            class="campo-cabana campo-encargado-aseo"
+            data-campo="aseo"
+            placeholder="Ej: Full - Rodolfo"
+        >
+
+    </label>
+
+    </div>
+    <div class="sites-resumen-horarios"><label class="sites-resumen-control-grupo">Hora IN <input
+            type="time"
+            class="campo-cabana"
+            data-campo="ingreso"
+        ></label><label class="sites-resumen-control-grupo checkout-cabana">Hora OUT <input
         type="time"
         class="campo-cabana"
         data-campo="checkout"
-    >
-        </label>
-
-</td>
-
-    <td>
-
-        <div class="estado-reserva-con-checkin">
-        <select class="campo-cabana" data-campo="estado">
+    ></label></div>
+    <div class="sites-resumen-control-grupo"><span class="sites-resumen-control-etiqueta">Estado</span><div class="estado-reserva-con-checkin">
+        <select class="campo-cabana" data-campo="estado" aria-label="Estado operativo de cabaña 11">
 
     <option value="">Seleccionar...</option>
 
@@ -2569,68 +2428,17 @@
 
 </select>
 
-<label class="checkin-cabana" title="Check-in realizado">
+<label class="checkin-cabana" title="Check-in realizado"><span>Check-in realizado</span>
     <input
         type="checkbox"
         class="campo-cabana checkin-realizado"
         data-campo="checkinRealizado"
     >
-   
+
 </label>
 
-</div>
-
-    </td>
-
-    <td class="celda-aseo">
-
-    <div class="aseo-principal">
-
-        <input
-            type="text"
-            class="campo-cabana campo-encargado-aseo"
-            data-campo="aseo"
-            placeholder="Ej: Full - Rodolfo"
-        >
-
-    </div>
-
-    <div class="aseo-horarios">
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoIn"
-    >
-
-    <input
-        type="time"
-        class="campo-cabana"
-        data-campo="aseoOut"
-    >
-
-</div>
-
-</td>
-
-<!-- NOTAS -->
-<td class="celda-notas">
-    <div
-        class="nota-cabana"
-        data-nota-cabana="11"
-    ></div>
-</td>
-
-    <td>
-        <input
-            type="time"
-            class="campo-cabana"
-            data-campo="ingreso"
-        >
-    </td>
-
-    <td>
-    <div class="servicio-resumen-wrap">
+</div></div>
+    <div class="sites-resumen-control-grupo"><div class="servicio-resumen-wrap">
 
         <input
             type="text"
@@ -2640,42 +2448,16 @@
             readonly
         >
 
-        <button
-            type="button"
-            class="servicio-resumen-agregar"
-            data-agregar-servicio="11"
-            title="Agregar servicio"
-        >
-            +
-        </button>
-
-    </div>
-</td>
-
-    <td class="celda-estado-final">
-
-    <div class="estado-final-contenido">
-
-        <select
-            class="campo-cabana estado-final-select"
-            data-campo="estadoFinal"
-        >
-            <option value="">Pendiente</option>
-            <option value="LISTA">Lista</option>
-            
-            <option value="CON DETALLES">Con detalles</option>
-        </select>
-
-    </div>
-
-</td>
-
-</tr>
 
 
-                    </tbody>
-
-                </table>
+    </div></div>
+    <div class="sites-resumen-control-grupo"><div
+        class="nota-cabana"
+        data-nota-cabana="11"
+    ></div></div>
+  </div>
+</article>
+</div>
 
             </div>
 
@@ -2685,21 +2467,22 @@
         PANEL AGREGAR NOTA
         ========================== -->
 
-<div id="panel-agregar-nota">
+<div id="panel-agregar-nota" class="sites-resumen-drawer" role="presentation">
 
-    <div class="panel-nota">
+    <div class="sites-resumen-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="sites-resumen-nota-titulo" tabindex="-1">
 
-        <div class="panel-nota-cabecera">
+        <div class="sites-resumen-drawer-head">
 
             <div>
-                <p class="subtitulo">NOTA OPERATIVA</p>
-                <h3>Agregar nota</h3>
+                <p id="sites-resumen-nota-kicker" class="sites-resumen-drawer-kicker">CABAÑA</p>
+                <h3 id="sites-resumen-nota-titulo">Añadir nota</h3>
             </div>
 
             <button
                 type="button"
                 id="cerrar-panel-nota"
-                class="boton-cerrar-nota"
+                class="sites-resumen-drawer-close"
+                aria-label="Cerrar nota"
             >
                 ×
             </button>
@@ -2707,6 +2490,8 @@
         </div>
 
 
+        <div class="sites-resumen-drawer-body">
+        <p id="sites-resumen-nota-contexto" class="sites-resumen-drawer-intro"></p>
         <label class="campo-nota" style="display: none;">
             Cabaña
 
@@ -2732,22 +2517,23 @@
         </label>
 
 
-        <label class="campo-nota">
-            Nota
+        <label class="sites-resumen-drawer-field">
+            Nota operativa
 
             <textarea
                 id="nota-texto"
-                placeholder="Ej: Agregar 2 batas&#10;Sacar alfombra&#10;Preparar cama adicional"
+                placeholder="Escribe un aviso concreto para el turno"
             ></textarea>
         </label>
+        </div>
 
 
-        <div class="panel-nota-acciones">
+        <div class="sites-resumen-drawer-footer">
 
             <button
                 type="button"
                 id="cancelar-nota"
-                class="boton-secundario"
+                class="sites-resumen-drawer-secondary"
             >
                 Cancelar
             </button>
@@ -2766,6 +2552,7 @@
 
 </div>
 
+<div class="sites-resumen-inferior">
 
         <!-- =========================
              NOTAS IMPORTANTES
@@ -2774,12 +2561,11 @@
         <section class="panel notas">
 
             <div class="panel-titulo">
-                <div>
-                    <h3>📝 Notas importantes</h3>
-                    <p>Información relevante para el turno</p>
-                </div>
+                <h3>Notas importantes</h3>
+                <small>Para el turno</small>
             </div>
 
+            <label class="sites-resumen-campo-etiqueta" for="notas-dia">Información general</label>
             <textarea
                id="notas-dia"
                placeholder="Ej: CAB 3 solicitó leña adicional, huésped CAB 1 pendiente de pago..."
@@ -2794,10 +2580,8 @@
 <section class="panel resumen-dia-panel">
 
     <div class="panel-titulo">
-        <div>
-            <h3>📋 Resumen del día</h3>
-            <p>Resumen operativo listo para compartir</p>
-        </div>
+        <h3>Resumen del día</h3>
+        <button type="button" id="copiar-resumen-dia">Copiar resumen</button>
     </div>
 
     <div class="resumen-dia-contenido">
@@ -2824,13 +2608,11 @@
 
         </div>
 
-        <button type="button" id="copiar-resumen-dia">
-            📋 Copiar resumen
-        </button>
-
     </div>
 
 </section>
+
+</div>
 
     </section>
 
@@ -3370,112 +3152,85 @@
 
 </div>
 
-    <!-- ========================================
-     MODAL AGREGAR SERVICIO DESDE RESUMEN
-======================================== -->
+    <!-- Alta real de servicios desde Resumen, presentada como drawer Sites. -->
 
-<div id="resumen-servicio-modal" class="resumen-servicio-modal" hidden>
+<div id="resumen-servicio-modal" class="resumen-servicio-modal sites-resumen-drawer" role="presentation" hidden>
 
-    <div class="resumen-servicio-modal-contenido">
+    <div class="resumen-servicio-modal-contenido sites-resumen-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="resumen-servicio-titulo" aria-describedby="resumen-servicio-contexto" tabindex="-1">
 
-        <div class="resumen-servicio-modal-cabecera">
+        <div class="resumen-servicio-modal-cabecera sites-resumen-drawer-head">
             <div>
-                <span class="resumen-servicio-eyebrow">
-                    SERVICIO
-                </span>
+                <span id="resumen-servicio-kicker" class="resumen-servicio-eyebrow">CABAÑA</span>
 
-                <h3 id="resumen-servicio-titulo">
-                    Agregar servicio
-                </h3>
+                <h3 id="resumen-servicio-titulo">Agregar servicio</h3>
             </div>
 
             <button
                 type="button"
                 id="resumen-servicio-cerrar"
                 class="resumen-servicio-cerrar"
+                aria-label="Cerrar servicio"
             >
                 ×
             </button>
         </div>
 
-        <div class="resumen-servicio-campo">
-            <label>Cabaña</label>
-
-            <input
-                type="text"
-                id="resumen-servicio-cabana"
-                readonly
-            >
-        </div>
+        <div class="sites-resumen-drawer-body sites-resumen-servicio-form">
+            <p id="resumen-servicio-contexto" class="sites-resumen-servicio-intro">Comprobando la reserva de Proyecto H…</p>
+            <input type="hidden" id="resumen-servicio-cabana">
 
         <div class="resumen-servicio-campo">
-            <label>Servicio / producto</label>
+            <label for="resumen-servicio-producto">Servicio</label>
 
             <select id="resumen-servicio-producto">
                 <option value="">Seleccionar servicio</option>
             </select>
         </div>
 
-        <div class="resumen-servicio-campo">
-            <label>Cantidad</label>
-
-            <input
-                type="number"
-                id="resumen-servicio-cantidad"
-                min="1"
-                value="1"
-            >
+        <div class="sites-resumen-servicio-grid">
+            <div class="resumen-servicio-campo">
+                <label for="resumen-servicio-cantidad">Cantidad</label>
+                <input type="number" id="resumen-servicio-cantidad" min="1" step="1" value="1">
+            </div>
+            <div class="resumen-servicio-campo">
+                <label for="resumen-servicio-personas">Personas</label>
+                <input type="number" id="resumen-servicio-personas" min="0" step="1" value="1">
+            </div>
         </div>
 
-<!-- AQUÍ PEGAS PRECIO JACUZZI -->
+        <div id="resumen-servicio-precio-manual-wrap" class="resumen-servicio-campo" hidden>
+            <label id="resumen-servicio-precio-manual-label" for="resumen-servicio-precio-manual">Precio por hora · Jacuzzi</label>
+            <input type="number" id="resumen-servicio-precio-manual" min="1" step="1000" placeholder="Ej. 40000">
+        </div>
 
-<div
-    id="resumen-servicio-precio-manual-wrap"
-    class="resumen-servicio-campo"
-    hidden
->
-    <label>Precio Jacuzzi</label>
+        <div class="resumen-servicio-cobro sites-resumen-servicio-cobro" role="group" aria-label="Tipo de cobro">
+            <span>Tipo de cobro</span>
+            <div class="sites-resumen-servicio-cobro-opciones">
 
-    <input
-        type="number"
-        id="resumen-servicio-precio-manual"
-        min="0"
-        step="1000"
-        placeholder="Ej: 40000"
-    >
-</div>
+                <label class="sites-resumen-servicio-cobro-opcion">
+                    <input type="radio" name="resumen-servicio-tipo-cobro" value="normal" checked>
+                    Normal
+                </label>
+                <label class="sites-resumen-servicio-cobro-opcion">
+                    <input type="radio" name="resumen-servicio-tipo-cobro" value="cortesia">
+                    Cortesía · sin cobro
+                </label>
+            </div>
+        </div>
 
-        <div class="resumen-servicio-cobro">
-            <span>Cobro</span>
-
-            <label>
-                <input
-                    type="radio"
-                    name="resumen-servicio-tipo-cobro"
-                    value="normal"
-                    checked
-                >
-                Normal
-            </label>
-
-            <label>
-                <input
-                    type="radio"
-                    name="resumen-servicio-tipo-cobro"
-                    value="cortesia"
-                >
-                🎁 Cortesía
-            </label>
+        <div id="resumen-servicio-motivo-wrap" class="resumen-servicio-campo" hidden>
+            <label for="resumen-servicio-motivo-cortesia">Motivo de cortesía</label>
+            <textarea id="resumen-servicio-motivo-cortesia" rows="2" placeholder="Indica por qué no se cobrará este servicio"></textarea>
         </div>
 
         <div
             id="resumen-servicio-programacion"
-            class="resumen-servicio-programacion"
+            class="resumen-servicio-programacion sites-resumen-servicio-grid"
             hidden
         >
 
             <div class="resumen-servicio-campo">
-                <label>Fecha</label>
+                <label for="resumen-servicio-fecha">Fecha</label>
 
                 <input
                     type="date"
@@ -3484,7 +3239,7 @@
             </div>
 
             <div class="resumen-servicio-campo">
-                <label>Hora</label>
+                <label for="resumen-servicio-hora">Hora</label>
 
                 <input
                     type="time"
@@ -3494,25 +3249,32 @@
 
         </div>
 
-        <div class="resumen-servicio-total">
-            <span>Total</span>
-            <strong id="resumen-servicio-total">$0</strong>
+        <div class="resumen-servicio-campo sites-resumen-servicio-observaciones">
+            <label for="resumen-servicio-observaciones">Observación <span>(opcional)</span></label>
+            <textarea id="resumen-servicio-observaciones" rows="3" placeholder="Detalle relevante para el turno"></textarea>
         </div>
 
-        <div class="resumen-servicio-acciones">
+        <div class="resumen-servicio-total sites-resumen-servicio-total">
+            <span>Total del servicio</span>
+            <strong id="resumen-servicio-total">$0</strong>
+        </div>
+        <p id="resumen-servicio-sites-estado" class="sites-resumen-servicio-ayuda" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="resumen-servicio-acciones sites-resumen-drawer-footer">
+
+            <button
+                type="button"
+                id="resumen-servicio-cancelar"
+            >
+                Cerrar
+            </button>
 
             <button
                 type="button"
                 id="resumen-servicio-guardar"
             >
                 Guardar servicio
-            </button>
-
-            <button
-                type="button"
-                id="resumen-servicio-cancelar"
-            >
-                Cancelar
             </button>
 
         </div>
@@ -4499,7 +4261,7 @@
             <button
                 type="button"
                 id="guardar-solicita"
-                class="boton-principal"
+                class="sites-resumen-drawer-primary"
             >
                 Guardar solicita
             </button>
@@ -7422,6 +7184,12 @@ Terraza:
     <script src="js/checklist.js"></script>
     <script src="js/app.js"></script>
     <script src="js/cabanas.js"></script>
+    <script src="js/sites-resumen-drawer-v1.js"></script>
+    <script src="js/sites-resumen-reserva-v1.js"></script>
+    <script src="js/sites-resumen-nota-v1.js"></script>
+    <script src="js/sites-resumen-servicio-v1.js"></script>
+    <script src="js/sites-resumen-pago-v1.js"></script>
+    <script src="js/supabase-resumen-tablero-v1.js"></script>
     <script src="js/cierre.js"></script>
     <script src="js/pagos.js"></script>
     <script src="js/servicios.js"></script>

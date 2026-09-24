@@ -115,10 +115,10 @@
         return new Map((data || []).map(item => [item.id, item]));
     }
 
-    function pintarEstadoOperacion(fila) {
+    function pintarEstadoOperacion(fila, fecha) {
         const numero = String(fila.numero);
         const tr = document.querySelector(
-            `.tabla-contenedor tbody tr[data-cabana="${numero}"]`
+            `#seccion-resumen .sites-resumen-cabana[data-cabana="${numero}"]`
         );
 
         if (!tr) return null;
@@ -139,16 +139,47 @@
 
         tr.dataset.haikuFuente = "supabase";
         tr.dataset.haikuCabanaId = fila.cabana_id || "";
+        tr.dataset.resumenFecha = fecha;
+        tr.dataset.resumenSalidaTitular = fila.salida_titular || "";
+        tr.dataset.ingresoReservaId = fila.ingreso_reserva_id || "";
+        tr.dataset.salidaReservaId = fila.salida_reserva_id || "";
+        const identidad = identidadReservaOperacion(fila);
+        tr.dataset.resumenReservaId = fila.estado_operativo === "bloqueada" ? "" : identidad.id;
+        tr.dataset.resumenTitularReservaId = identidad.id;
+        tr.dataset.resumenTitular = identidad.id ? identidad.titular : "";
 
         return tr;
     }
 
-    function pintarFilaOperacion(fila, estadiasPorId) {
-        const tr = pintarEstadoOperacion(fila);
+    function identidadReservaOperacion(fila) {
+        switch (fila.estado_operativo) {
+            case "libre-ingresa":
+            case "sale-ingresa":
+                return { id: fila.ingreso_reserva_id || "", titular: fila.ingreso_titular || "" };
+            case "continua":
+                return { id: fila.continua_reserva_id || "", titular: fila.continua_titular || "" };
+            case "fullday":
+                return { id: fila.fullday_reserva_id || "", titular: fila.fullday_titular || "" };
+            case "sale-libre":
+                return { id: fila.salida_reserva_id || "", titular: fila.salida_titular || "" };
+            case "bloqueada":
+                if (fila.bloqueo_id && fila.salida_estadia_id) {
+                    return { id: fila.salida_reserva_id || "", titular: fila.salida_titular || "" };
+                }
+                return { id: "", titular: "" };
+            default:
+                return { id: "", titular: "" };
+        }
+    }
+
+    function pintarFilaOperacion(fila, estadiasPorId, fecha) {
+        const tr = pintarEstadoOperacion(fila, fecha);
         if (!tr) return;
 
         const numero = String(fila.numero);
         const estadia = obtenerEstadiaPrincipal(fila, estadiasPorId);
+        tr.dataset.resumenEstadiaId = fila.estado_operativo === "sale-libre"
+            ? fila.salida_estadia_id || "" : estadia?.id || "";
 
         const adultos = tr.querySelector('[data-campo="adultos"]');
         const ninos = tr.querySelector('[data-campo="ninos"]');
@@ -302,15 +333,28 @@
 
             const filas = Array.isArray(data) ? data : [];
 
+            document
+                .querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]")
+                .forEach(article => {
+                    article.dataset.resumenFecha = "";
+                    article.dataset.resumenSalidaTitular = "";
+                    article.dataset.resumenReservaId = "";
+                    article.dataset.resumenTitularReservaId = "";
+                    article.dataset.resumenTitular = "";
+                    article.dataset.salidaReservaId = "";
+                    article.dataset.ingresoReservaId = "";
+                    article.dataset.resumenEstadiaId = "";
+                });
+
             // El RPC ya contiene el estado operativo y el titular. Pintarlos
             // ahora evita mantener colores antiguos mientras se consultan los
             // detalles de noches y ocupación en una segunda llamada.
-            filas.forEach(pintarEstadoOperacion);
+            filas.forEach(fila => pintarEstadoOperacion(fila, fechaISO));
 
             const estadiasPorId = await cargarDetallesEstadias(filas);
 
             filas.forEach(fila =>
-                pintarFilaOperacion(fila, estadiasPorId)
+                pintarFilaOperacion(fila, estadiasPorId, fechaISO)
             );
 
             const ingresan = filas.filter(fila =>
@@ -341,6 +385,9 @@
             await cargarContadoresRelacionados(fechaISO, filas);
 
             ultimoDiaCargado = fechaISO;
+            document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                detail: { fecha: fechaISO }
+            }));
 
             console.info(
                 "HAIKU · Operación diaria desde Supabase:",

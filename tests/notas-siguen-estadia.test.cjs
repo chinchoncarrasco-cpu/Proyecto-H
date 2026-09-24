@@ -63,7 +63,8 @@ test('sin estadía inequívoca no mezcla notas de una reserva multicabaña', () 
 });
 
 test('las notas nuevas guardan la estadía concreta además de la reserva', () => {
-    assert.match(app, /reservaId: cabana\.reservaId \|\| "",\s*estadiaId: cabana\.estadiaId \|\| ""/);
+    assert.ok(app.includes('reservaId: identidadNota ? identidadNota.reservaId : cabana.reservaId || ""'));
+    assert.ok(app.includes('estadiaId: identidadNota ? identidadNota.estadiaId : cabana.estadiaId || ""'));
     assert.match(notas, /registro\.estadia_id = estadiaActual/);
     assert.match(notas, /registro\.estadia_id = estadiaId/);
 });

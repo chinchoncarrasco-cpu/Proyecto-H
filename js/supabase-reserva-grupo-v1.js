@@ -234,7 +234,7 @@
                 if (!grupoPorReserva.has(String(reservaId))) return;
 
                 const titular = document.querySelector(
-                    `.tabla-contenedor tbody tr[data-cabana="${numero}"] .titular-cabana`
+                    `#seccion-resumen .sites-resumen-cabana[data-cabana="${numero}"] .titular-cabana`
                 );
                 if (!titular || titular.previousElementSibling?.classList?.contains("haiku-reserva-grupo-marca")) {
                     return;

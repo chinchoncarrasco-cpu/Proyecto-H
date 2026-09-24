@@ -142,7 +142,7 @@
         const fecha = fechaActual();
         if (!fecha) return;
 
-        document.querySelectorAll(".tabla-contenedor tbody tr[data-cabana]").forEach(fila => {
+        document.querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]").forEach(fila => {
             const numero = fila.dataset.cabana;
             const reserva = reservaLocal(numero);
             const tieneReserva = Boolean(reserva?.reservaId);

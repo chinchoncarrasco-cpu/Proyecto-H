@@ -2,7 +2,7 @@
 // GESTIÓN DE CABAÑAS
 // ========================================
 
-const filasCabanas = document.querySelectorAll("[data-cabana]");
+const filasCabanas = document.querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]");
 
 
 // ========================================
@@ -439,6 +439,14 @@ function cargarCabanasDia(fecha) {
 
     filasCabanas.forEach(fila => {
 
+        if (fila.dataset.resumenFecha && fila.dataset.resumenFecha !== fecha) {
+            fila.dataset.resumenFecha = "";
+            fila.dataset.resumenSalidaTitular = "";
+            fila.dataset.resumenReservaId = "";
+            fila.dataset.ingresoReservaId = "";
+            fila.dataset.salidaReservaId = "";
+        }
+
         const numeroCabana = fila.dataset.cabana;
 
         const datosCabana =
@@ -563,6 +571,9 @@ if (valorNoches) {
     actualizarTarjetasRevision(fecha);
     actualizarResumenAseo(fecha);
     generarResumenOperativo(fecha);
+    document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+        detail: { fecha }
+    }));
 
 }
 
@@ -1350,7 +1361,7 @@ revisionEstado.addEventListener("change", () => {
 
 // Sincronizar ESTADO DE REVISIÓN -> ESTADO FINAL del resumen
 const filaCabana = document.querySelector(
-    `tr[data-cabana="${numeroCabana}"]`
+    `#seccion-resumen .sites-resumen-cabana[data-cabana="${numeroCabana}"]`
 );
 
 if (filaCabana) {

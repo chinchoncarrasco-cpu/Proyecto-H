@@ -139,7 +139,7 @@
         if (!numero) return;
 
         const tr = document.querySelector(
-            `#seccion-resumen tr[data-cabana="${CSS.escape(numero)}"]`
+            `#seccion-resumen .sites-resumen-cabana[data-cabana="${CSS.escape(numero)}"]`
         );
         if (!tr) return;
 
@@ -245,6 +245,9 @@
                 filas.forEach(aplicarFilaVisual);
                 actualizarContadorSalidas(filas);
                 estabilizarColores(filas, fecha);
+                document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
+                    detail: { fecha }
+                }));
             }
 
             console.info(
@@ -311,7 +314,7 @@
     }, true);
 
     document.addEventListener("change", evento => {
-        if (evento.target?.closest?.("#seccion-resumen tr[data-cabana]")) {
+        if (evento.target?.closest?.("#seccion-resumen .sites-resumen-cabana[data-cabana]")) {
             programar(60, fechaActual());
         }
     });
