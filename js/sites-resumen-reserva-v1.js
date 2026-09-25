@@ -438,7 +438,7 @@
         }
     }
 
-    async function abrirPorId(reservaId, disparador = null) {
+    async function abrirPorId(reservaId, disparador = null, seleccion = null) {
         if (!window.haikuSesion || !window.haikuSupabase ||
             window.haikuTienePermiso?.("reservas.ver") !== true ||
             !UUID.test(String(reservaId || ""))) return false;
@@ -485,6 +485,16 @@
                 throw new Error("El permiso para ver reservas cambió. Reabre la ficha.");
             }
             estado.ficha = ficha;
+            if (seleccion?.estadiaId) {
+                const estadiaId = String(seleccion.estadiaId);
+                const numeroCabana = String(seleccion.numeroCabana || "");
+                const estadia = estadias.find(item => String(item.id) === estadiaId);
+                if (!UUID.test(estadiaId) || !/^\d{1,2}$/.test(numeroCabana) ||
+                    !estadia || Number(estadia.cabana_numero) !== Number(numeroCabana)) {
+                    throw new Error("La estadía y cabaña seleccionadas no corresponden a la reserva. Actualiza el Calendario.");
+                }
+                return seleccionarEstadia(estadiaId);
+            }
             if (estadias.length === 1) return seleccionarEstadia(estadias[0].id);
 
             colocar("#sites-resumen-reserva-titulo", ficha.reserva.titular_nombre || "Ficha de reserva");

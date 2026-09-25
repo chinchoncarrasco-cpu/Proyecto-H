@@ -418,7 +418,9 @@
         await Promise.allSettled(tareas);
 
         try { if (typeof generarCalendario === "function") generarCalendario(); } catch (_) {}
-        try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada); } catch (_) {}
+        try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada, {
+            evento: "reserva reactivada", tipo: "externo"
+        }); } catch (_) {}
         try { if (typeof actualizarResumenDia === "function") actualizarResumenDia(fechaSeleccionada); } catch (_) {}
         try { if (typeof generarResumenOperativo === "function") generarResumenOperativo(fechaSeleccionada); } catch (_) {}
     }

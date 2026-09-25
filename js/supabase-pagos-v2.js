@@ -115,6 +115,7 @@
     }
 
     async function cargarAbonosSupabase() {
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos-v2")) return;
         const fecha = fechaActual();
         const lista = document.getElementById("pagos-lista-abonos");
         const contador = document.getElementById("pagos-contador-abonos");
@@ -124,6 +125,7 @@
             const ingresos = await ingresosDia(fecha);
             const ids = [...new Set(ingresos.map(i => i.reservaId))];
             const porReserva = agruparAbonos(await pagosAbono(ids));
+            if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos-v2-en-vuelo")) return;
             lista.innerHTML = "";
             let pendientes = 0;
 
@@ -187,6 +189,7 @@
     }
 
     async function cargarSaldosCheckinSupabase() {
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkin-v2")) return;
         const fecha = fechaActual();
         const lista = document.getElementById("pagos-lista-checkin");
         const contador = document.getElementById("pagos-contador-checkin");
@@ -196,6 +199,7 @@
             const ingresos = await ingresosDia(fecha);
             const ids = [...new Set(ingresos.map(i => i.reservaId))];
             const saldos = await saldosReservas(ids);
+            if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkin-v2-en-vuelo")) return;
             lista.innerHTML = "";
             let pendientes = 0;
 
@@ -273,6 +277,7 @@
             p_modo_aplicacion: "alojamiento"
         });
         if (error) throw error;
+        await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago legado");
         return data;
     }
 

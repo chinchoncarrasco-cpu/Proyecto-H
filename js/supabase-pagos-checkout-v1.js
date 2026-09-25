@@ -91,8 +91,8 @@
         return { glosa: false, folio: false, codAut: false };
     }
 
-    async function reservasCheckoutDia(fecha) {
-        const { data, error } = await cliente.rpc(
+    async function reservasCheckoutDia(fecha, operacion) {
+        const { data, error } = operacion ? { data: operacion, error: null } : await cliente.rpc(
             "haiku_operacion_dia",
             { p_fecha: fecha }
         );
@@ -261,7 +261,7 @@
             </div>`;
     }
 
-    function htmlServicios(cargos, servicios) {
+    function htmlServicios(cargos, servicios, disponibles = true) {
         const ordenados = [...cargos].sort((a, b) => {
             const sa = servicios.get(a.servicio_id) || {};
             const sb = servicios.get(b.servicio_id) || {};
@@ -275,7 +275,8 @@
                 ${ordenados.map(cargo => {
                     const servicio = servicios.get(cargo.servicio_id) || {};
                     const catalogo = servicio.catalogo_servicios || {};
-                    const nombre = catalogo.nombre || cargo.concepto || "Servicio";
+                    const nombre = catalogo.nombre || cargo.concepto ||
+                        (disponibles ? "Servicio" : "No disponible");
                     const saldo = Number(cargo.saldo_cargo || 0);
                     const monto = Number(cargo.monto || 0);
                     const pagado = saldo <= 0;
@@ -483,6 +484,7 @@
             });
             if (error) throw error;
             borradores.delete(contexto.reservaId);
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago check-out");
             await cargarCheckoutSupabase();
             return data;
         } finally {
@@ -490,15 +492,16 @@
         }
     }
 
-    async function cargarCheckoutSupabase() {
-        if (renderizando || !window.haikuSesion) return;
+    async function cargarCheckoutSupabase(opciones = {}) {
+        if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkout")) return;
+        if ((renderizando && !opciones.preparacion) || !window.haikuSesion) return;
 
-        const fecha = fechaActual();
-        const lista = document.getElementById("pagos-lista-checkout");
-        const contador = document.getElementById("pagos-contador-checkout");
+        const fecha = opciones.fecha || fechaActual();
+        const lista = opciones.lista || document.getElementById("pagos-lista-checkout");
+        const contador = opciones.contador || document.getElementById("pagos-contador-checkout");
         if (!fecha || !lista || !contador) return;
 
-        renderizando = true;
+        if (!opciones.preparacion) renderizando = true;
 
         try {
             try {
@@ -507,7 +510,7 @@
                 console.warn("HAIKU · Checkout continúa pese a migración parcial:", errorMigracion);
             }
 
-            const salidas = await reservasCheckoutDia(fecha);
+            const salidas = await reservasCheckoutDia(fecha, opciones.operacion);
             const ids = [...new Set(salidas.map(item => item.reservaId))];
 
             const [cargos, pagos, cierres] = await Promise.all([
@@ -515,20 +518,42 @@
                 pagosCheckout(ids),
                 cierresBove(ids)
             ]);
+            if (opciones.preparacion && ids.some(id => !cierres.has(id))) {
+                throw new Error("No está disponible el BOVE de una salida.");
+            }
+            if (opciones.preparacion && cargos.some(cargo =>
+                cargo.saldo_cargo == null || cargo.monto == null ||
+                !Number.isFinite(Number(cargo.saldo_cargo)) ||
+                !Number.isFinite(Number(cargo.monto)))) {
+                throw new Error("No está disponible el saldo canónico de un cargo activo.");
+            }
 
+            let serviciosDisponibles = true;
             const servicios = await serviciosPorId(
                 cargos.map(cargo => cargo.servicio_id)
-            );
+            ).catch(error => {
+                if (!opciones.preparacion) throw error;
+                serviciosDisponibles = false;
+                console.warn("HAIKU · Detalle de servicios no disponible en Pagos:", error);
+                return new Map();
+            });
 
             const idsUsuarios = pagos.map(pago => pago.verificado_por);
             cierres.forEach(cierre =>
                 idsUsuarios.push(cierre.bove_checkout_registrado_por)
             );
-            const usuarios = await usuariosPorId(idsUsuarios);
+            let usuariosDisponibles = true;
+            const usuarios = await usuariosPorId(idsUsuarios).catch(error => {
+                if (!opciones.preparacion) throw error;
+                usuariosDisponibles = false;
+                console.warn("HAIKU · Nombres de Pagos no disponibles:", error);
+                return new Map(idsUsuarios.filter(Boolean).map(id => [id, "No disponible"]));
+            });
 
             const cargosPorReserva = agruparPorReserva(cargos);
             const pagosPorReserva = agruparPorReserva(pagos);
 
+            if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkout-en-vuelo")) return;
             lista.innerHTML = "";
             let pendientes = 0;
             let tarjetas = 0;
@@ -577,7 +602,7 @@
                     .join("");
 
                 const borrador = borradores.get(item.reservaId) || borradorInicial(saldo);
-                if (!borradores.has(item.reservaId) && !pagosCompletos) {
+                if (!opciones.preparacion && !borradores.has(item.reservaId) && !pagosCompletos) {
                     borradores.set(item.reservaId, borrador);
                 }
 
@@ -597,7 +622,7 @@
                             </span>
                         </div>
 
-                        ${htmlServicios(cargosReserva, servicios)}
+                        ${htmlServicios(cargosReserva, servicios, serviciosDisponibles)}
 
                         <div class="pago-checkin-resumen-nuevo haiku-checkout-resumen">
                             <div class="haiku-saldo-resumen-celda">
@@ -634,6 +659,7 @@
                         No hay cobros pendientes de servicios.
                     </p>`;
             }
+            if (opciones.preparacion) return { lista, contador, salidas, cargos, pagos, cierres, servicios, serviciosDisponibles, usuarios, usuariosDisponibles, pendientes, tarjetas };
 
             console.info(
                 "HAIKU · Cobros Check-out Supabase V1:",
@@ -642,13 +668,15 @@
                 "reservas"
             );
         } catch (error) {
+            if (opciones.preparacion) throw error;
+            if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkout-error-en-vuelo")) return;
             console.error("HAIKU · Error cargando Cobros Check-out V1:", error);
             lista.innerHTML = `
                 <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
                     No fue posible cargar los cobros de Check-out.
                 </p>`;
         } finally {
-            renderizando = false;
+            if (!opciones.preparacion) renderizando = false;
         }
     }
 
@@ -736,6 +764,7 @@
             );
 
             if (error) throw error;
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar BOVE check-out");
             window.dispatchEvent(new CustomEvent('haiku:bove-actualizado', {detail:{reservaId,tipo:'checkout'}}));
             await cargarCheckoutSupabase();
         } catch (error) {
@@ -769,7 +798,8 @@
     window.HAIKU_PAGO_CHECKOUT_RESUMEN_V1 = Object.freeze({
         contexto: contextoPagoResumen,
         registrar: registrarPagoControlado,
-        requisitos: medio => requisitosMedio(MEDIOS[medio] || "")
+        requisitos: medio => requisitosMedio(MEDIOS[medio] || ""),
+        preparar: ({ fecha, operacion }) => cargarCheckoutSupabase({ fecha, operacion, lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
     });
 
     const estilo = document.createElement("style");

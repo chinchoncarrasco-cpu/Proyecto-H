@@ -881,6 +881,12 @@
     }
 
     async function sincronizarResumenFecha() {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaOperativa(), {
+                categoria: "revisión", evento: "sincronización resumen derivada",
+                tipo: "interno_derivado"
+            });
+        }
         if (resumenSincronizando) {
             return;
         }
@@ -935,6 +941,13 @@
 
             if (errorRevisiones) {
                 throw errorRevisiones;
+            }
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "revisión", evento: "sincronización resumen derivada",
+                    tipo: "interno_derivado"
+                });
             }
 
             if (fecha !== fechaOperativa()) return;
@@ -1028,6 +1041,52 @@
     }
 
     function iniciar() {
+        window.HAIKU_RESUMEN_REFRESH_V1?.registrar("revision", {
+            orden: 70, obligatoria: false,
+            preparar: async ({ fecha }) => {
+                const supabase = cliente();
+                const cabanasR = await supabase.from("cabanas")
+                    .select("id, numero, nombre, tipo")
+                    .eq("activa", true).order("numero", { ascending: true });
+                if (cabanasR.error) throw cabanasR.error;
+                const cabanas = cabanasR.data || [];
+                if (!cabanas.length) return { cabanas, revisiones: [] };
+                const revisionesR = await supabase.from("revisiones_cabana")
+                    .select("id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en")
+                    .eq("fecha", fecha).eq("tipo_revision", TIPO_REVISION)
+                    .neq("estado", "cancelada")
+                    .in("cabana_id", cabanas.map(cabana => cabana.id))
+                    .order("creado_en", { ascending: false });
+                if (revisionesR.error) throw revisionesR.error;
+                return { cabanas, revisiones: revisionesR.data || [] };
+            },
+            publicar: snapshot => {
+                const preparado = snapshot.datos.revision;
+                if (!preparado) return;
+                const { cabanas, revisiones } = preparado;
+                invalidarCiclos(snapshot.fecha);
+                const ultima = new Map();
+                revisiones.forEach(revision => {
+                    const id = String(revision.cabana_id);
+                    if (!ultima.has(id)) ultima.set(id, revision);
+                });
+                const datos = obtenerDatosDia(snapshot.fecha);
+                cabanas.forEach(cabana => {
+                    const numero = String(cabana.numero);
+                    cacheCabanas.set(numero, cabana);
+                    const revision = ultima.get(String(cabana.id));
+                    if (!datos.cabanas[numero]) datos.cabanas[numero] = {};
+                    datos.cabanas[numero].estadoRevision = estadoLegacyDesdeRevision(revision);
+                    datos.cabanas[numero].revisionCompletaCiclo =
+                        cicloRevision(snapshot.fecha, revision);
+                    datos.cabanas[numero].detallesRevision = revision?.observaciones || "";
+                    actualizarEstadoFinalDerivado(datos.cabanas[numero]);
+                    cacheRevisiones.set(claveRevision(snapshot.fecha, numero), revision || null);
+                });
+                if (typeof guardarDatos === "function") guardarDatos();
+                refrescarVistasLegacy();
+            }
+        });
         invalidarCiclosPersistidos();
         instalarPuenteMostrarChecklist();
         instalarListenerItemsRevision();

@@ -13,6 +13,7 @@
     const CAMPOS_ASEO = new Set(["aseo", "aseoIn", "aseoOut"]);
     let canal = null;
     let refrescoProgramado = null;
+    let origenProgramado = null;
     let refrescando = false;
 
     function fechaOperativa() {
@@ -90,7 +91,14 @@
         }));
     }
 
-    async function hidratarYPintar() {
+    async function hidratarYPintar(origen = {
+        evento: "sincronización derivada", tipo: "interno_derivado"
+    }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaOperativa(), {
+                categoria: "aseo", ...origen
+            });
+        }
         if (!window.haikuSesion || refrescando) return;
 
         const fecha = fechaOperativa();
@@ -110,11 +118,17 @@
         }
     }
 
-    function programarRefresco(demora = 70) {
+    function programarRefresco(demora = 70, origen = {
+        evento: "sincronización derivada", tipo: "interno_derivado"
+    }) {
+        if (refrescoProgramado && origenProgramado === "externo" &&
+            origen.tipo === "interno_derivado") return;
         clearTimeout(refrescoProgramado);
+        origenProgramado = origen.tipo;
         refrescoProgramado = setTimeout(() => {
             refrescoProgramado = null;
-            hidratarYPintar();
+            origenProgramado = null;
+            hidratarYPintar(origen);
         }, demora);
     }
 
@@ -128,7 +142,9 @@
             await api.guardarCampoAseo(info.numero, info.campo, valor);
             // La escritura ya quedó confirmada en Supabase. Repintamos sólo
             // estos campos desde la misma fuente para mantener PC y móvil iguales.
-            await hidratarYPintar();
+            await hidratarYPintar({
+                evento: "escritura aseo confirmada", tipo: "externo"
+            });
         } catch (error) {
             console.error("HAIKU · No fue posible guardar Aseo desde Resumen:", error);
             alert("No fue posible guardar el cambio de Aseo. Revisa la conexión e inténtalo nuevamente.");
@@ -150,7 +166,9 @@
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "aseos" },
-                () => programarRefresco(60)
+                () => programarRefresco(60, {
+                    evento: "realtime aseos", tipo: "externo"
+                })
             )
             .subscribe(status => {
                 if (status === "SUBSCRIBED") {
@@ -186,7 +204,9 @@
     });
 
     window.HAIKU_ASEO_RESUMEN_SYNC_V1 = Object.freeze({
-        refrescar: hidratarYPintar,
+        refrescar: () => hidratarYPintar({
+            evento: "refresh explícito aseo", tipo: "externo"
+        }),
         pintar: pintarResumen
     });
 

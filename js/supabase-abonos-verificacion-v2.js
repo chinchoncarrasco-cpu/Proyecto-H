@@ -44,8 +44,9 @@
         catch { return ""; }
     }
 
-    async function ingresosDia(fecha) {
-        const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
+    async function ingresosDia(fecha, operacion) {
+        const { data, error } = operacion ? { data: operacion, error: null } :
+            await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
         if (error) throw error;
 
         return (data || [])
@@ -256,27 +257,36 @@
         return tarjeta;
     }
 
-    async function cargarAbonosVerificacion() {
-        const fecha = fechaActual();
-        const lista = document.getElementById("pagos-lista-abonos");
-        const contador = document.getElementById("pagos-contador-abonos");
-        if (!fecha || !lista || !contador || !window.haikuSesion || cargando) return;
+    async function cargarAbonosVerificacion(opciones = {}) {
+        if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos")) return;
+        const fecha = opciones.fecha || fechaActual();
+        const lista = opciones.lista || document.getElementById("pagos-lista-abonos");
+        const contador = opciones.contador || document.getElementById("pagos-contador-abonos");
+        if (!fecha || !lista || !contador || !window.haikuSesion || (cargando && !opciones.preparacion)) return;
 
-        cargando = true;
+        if (!opciones.preparacion) cargando = true;
         try {
-            const ingresos = await ingresosDia(fecha);
+            const ingresos = await ingresosDia(fecha, opciones.operacion);
             const ids = [...new Set(ingresos.map(item => String(item.reservaId)).filter(Boolean))];
 
             if (!ids.length) {
+                if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos-en-vuelo")) return;
                 lista.innerHTML = `<p class="pagos-checkout-vacio sites-pagos-vacio-canonico">No hay ingresos para esta fecha.</p>`;
                 contador.textContent = "0";
-                return;
+                return opciones.preparacion ? { lista, contador, ingresos, metadatos: [], pagos: [] } : undefined;
             }
 
             const [metadatos, pagos] = await Promise.all([
                 metadatosReservas(ids),
                 abonos(ids)
             ]);
+            if (opciones.preparacion && ids.some(id => !metadatos.some(item => String(item.id) === String(id)))) {
+                throw new Error("No están disponibles las reservas necesarias para verificar abonos.");
+            }
+            if (opciones.preparacion && pagos.some(pago =>
+                pago.monto == null || !Number.isFinite(Number(pago.monto)))) {
+                throw new Error("No está disponible el monto de un abono confirmado.");
+            }
 
             const { unidades, unidadPorReserva } = construirUnidades(ingresos, metadatos);
             const pagosLogicos = construirPagosLogicos(pagos, unidadPorReserva);
@@ -291,6 +301,7 @@
                 (a.cabs[0] || 999) - (b.cabs[0] || 999)
             );
 
+            if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos-en-vuelo")) return;
             lista.innerHTML = "";
             let pendientes = 0;
 
@@ -307,11 +318,13 @@
             });
 
             contador.textContent = String(pendientes);
+            if (opciones.preparacion) return { lista, contador, ingresos, metadatos, pagos, pagosLogicos, pendientes };
             console.info("HAIKU · Verificar abonos V3 agrupado:", fecha, pagosLogicos.length);
         } catch (error) {
+            if (opciones.preparacion) throw error;
             console.error("HAIKU · No fue posible cargar Verificar abonos V3:", error);
         } finally {
-            cargando = false;
+            if (!opciones.preparacion) cargando = false;
         }
     }
 
@@ -330,6 +343,7 @@
         try {
             const { error } = await cliente.rpc("haiku_verificar_abono", { p_pago_id: pagoId });
             if (error) throw error;
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("verificar abono");
             await cargarAbonosVerificacion();
         } catch (error) {
             console.error("HAIKU · No fue posible verificar el abono:", error);
@@ -386,7 +400,8 @@
     setTimeout(instalar, 220);
 
     window.HAIKU_ABONOS_VERIFICACION_V2 = Object.freeze({
-        refrescar: cargarAbonosVerificacion
+        refrescar: cargarAbonosVerificacion,
+        preparar: ({ fecha, operacion }) => cargarAbonosVerificacion({ fecha, operacion, lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
     });
 
     console.info("HAIKU · Verificar abonos V3 agrupado preparado.");

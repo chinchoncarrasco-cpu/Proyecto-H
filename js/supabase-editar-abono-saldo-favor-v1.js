@@ -165,6 +165,7 @@
             if (error) throw error;
 
             const credito = Number(data?.saldo_a_favor_generado || 0);
+            window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("editar abono saldo a favor");
             window.HAIKU_EDITAR_ABONOS_V1?.cancelar?.({ limpiar: true });
             limpiar();
 

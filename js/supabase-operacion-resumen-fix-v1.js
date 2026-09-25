@@ -21,6 +21,7 @@
     let fechaPendiente = "";
     let canal = null;
     let timer = null;
+    let origenProgramado = null;
 
     function fechaActual() {
         try {
@@ -196,9 +197,16 @@
             .forEach(aplicarFilaVisual);
     }
 
-    async function refrescar(fechaForzada = "") {
+    async function refrescar(fechaForzada = "", origen = {
+        evento: "refresh explícito operación visual", tipo: "externo"
+    }) {
         const fecha = String(fechaForzada || fechaActual()).slice(0, 10);
         if (!fecha || !window.haikuSesion) return false;
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "operación visual", ...origen
+            });
+        }
 
         if (sincronizando) {
             fechaPendiente = fecha;
@@ -274,9 +282,18 @@
         }
     }
 
-    function programar(ms = 90, fecha = "") {
+    function programar(ms = 90, fecha = "", origen = {
+        evento: "programar operación visual", tipo: "interno_derivado"
+    }) {
+        if (timer && origenProgramado === "externo" &&
+            origen.tipo === "interno_derivado") return;
         clearTimeout(timer);
-        timer = setTimeout(() => refrescar(fecha || fechaActual()), ms);
+        origenProgramado = origen.tipo;
+        timer = setTimeout(() => {
+            timer = null;
+            origenProgramado = null;
+            refrescar(fecha || fechaActual(), origen);
+        }, ms);
     }
 
     function instalarRealtime() {
@@ -287,12 +304,16 @@
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "bloqueos_cabana" },
-                () => programar(90, fechaActual())
+                () => programar(90, fechaActual(), {
+                    evento: "realtime bloqueos", tipo: "externo"
+                })
             )
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "reserva_estadias" },
-                () => programar(90, fechaActual())
+                () => programar(90, fechaActual(), {
+                    evento: "realtime estadías", tipo: "externo"
+                })
             )
             .subscribe();
     }
@@ -309,41 +330,78 @@
             evento.target?.closest?.("#confirmar-bloqueo-calendario") ||
             evento.target?.closest?.(".haiku-bloqueo-liberar-confirmar")
         ) {
-            programar(80, fechaActual());
+            programar(80, fechaActual(), {
+                evento: "click sección/bloqueo", tipo: evento.target?.closest?.('[data-seccion="resumen"]')
+                    ? "interno_derivado" : "externo"
+            });
         }
     }, true);
 
     document.addEventListener("change", evento => {
         if (evento.target?.closest?.("#seccion-resumen .sites-resumen-cabana[data-cabana]")) {
-            programar(60, fechaActual());
+            programar(60, fechaActual(), {
+                evento: "cambio campo Resumen", tipo: "externo"
+            });
         }
     });
 
     window.addEventListener("haiku:auth-ready", () => {
         setTimeout(() => {
             instalarRealtime();
-            refrescar(fechaActual());
+            refrescar(fechaActual(), {
+                evento: "auth operación visual", tipo: "interno_derivado"
+            });
         }, 120);
     });
 
     window.addEventListener("pageshow", () => {
-        setTimeout(() => refrescar(fechaActual()), 120);
+        setTimeout(() => refrescar(fechaActual(), {
+            evento: "pageshow operación visual", tipo: "interno_derivado"
+        }), 120);
     });
 
     window.addEventListener("focus", () => {
-        setTimeout(() => refrescar(fechaActual()), 120);
+        setTimeout(() => refrescar(fechaActual(), {
+            evento: "focus operación visual", tipo: "interno_derivado"
+        }), 120);
     });
 
     setTimeout(() => {
         if (window.haikuSesion) {
             instalarRealtime();
-            refrescar(fechaActual());
+            refrescar(fechaActual(), {
+                evento: "inicio operación visual", tipo: "interno_derivado"
+            });
         }
     }, 220);
 
     window.HAIKU_OPERACION_RESUMEN_FIX_V1 = Object.freeze({
         refrescar,
         esSaleBloq
+    });
+
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("operacionVisual", {
+        orden: 85,
+        preparar: () => true,
+        publicar: snapshot => {
+            const filas = snapshot.datos.operacion.filas;
+            const dia = asegurarDia(datosPorFecha, snapshot.fecha);
+            filas.forEach(fila => {
+                const numero = String(fila?.numero || "");
+                if (!numero) return;
+                const anterior = dia.cabanas[numero] || {};
+                const titular = titularPrincipal(fila);
+                dia.cabanas[numero] = {
+                    ...anterior,
+                    estado: String(fila.estado_operativo || "libre-libre"),
+                    titular: ["Sin titular", "BLOQUEADA"].includes(titular) ? "" : titular
+                };
+            });
+            if (typeof guardarDatos === "function") guardarDatos();
+            filas.forEach(aplicarFilaVisual);
+            actualizarContadorSalidas(filas);
+            estabilizarColores(filas, snapshot.fecha);
+        }
     });
 
     console.info("HAIKU · Operación Resumen Fix V4 preparado.");

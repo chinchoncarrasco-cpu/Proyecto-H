@@ -299,6 +299,21 @@ test('una tarjeta recién insertada se compone antes de cualquier timeout o lect
     assert.equal(ui.rpc.length, 0);
 });
 
+test('la publicación atómica Sites compone identidades y acciones con la operación preparada, sin RPC ni observer', () => {
+    const ui = crearEntorno([]);
+    const ingreso = ui.tarjeta('checkin', 'r-ingreso');
+    const salida = ui.tarjeta('checkout', 'r-salida');
+    ui.ventana.HAIKU_SITES_PAGOS_V1.publicar([
+        { numero: 2, estado_operativo: 'libre-ingresa', ingreso_reserva_id: 'r-ingreso' },
+        { numero: 6, estado_operativo: 'sale-libre', salida_reserva_id: 'r-salida' }
+    ]);
+    assert.equal(ui.rpc.length, 0);
+    assert.equal(ingreso.card.dataset.sitesPagosCompuesto, '1');
+    assert.equal(salida.card.dataset.sitesPagosCompuesto, '1');
+    assert.equal(ingreso.card.querySelector('.sites-pagos-abrir-pago')?.dataset.resumenPagoReservaId, 'r-ingreso');
+    assert.equal(salida.card.querySelector('.sites-pagos-abrir-pago')?.dataset.resumenPagoReservaId, 'r-salida');
+});
+
 test('una tarjeta legacy temprana no puede recibir el atributo que la haría visible', () => {
     const ui = crearEntorno([]);
     const ingresoLegacy = ui.tarjeta('checkin', 'reserva-9', false, true);

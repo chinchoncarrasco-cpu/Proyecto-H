@@ -142,11 +142,66 @@ test("Ver reserva usa UUID y estadía exactos, muestra lectura real y cálculo c
     assert.equal(caso.drawer.get("[data-reserva-comentarios]").textContent, "Llegada confirmada");
 });
 
+test("Resumen y Calendario muestran la misma reserva simple en el drawer compartido", async () => {
+    const caso = montar();
+    assert.equal(await caso.api.abrirDesdeBoton(caso.boton), true);
+    const codigo = caso.drawer.get("[data-reserva-codigo]").textContent;
+    const titular = caso.drawer.get("#sites-resumen-reserva-titulo").textContent;
+    caso.api.cerrar();
+    assert.equal(await caso.api.abrirPorId(RESERVA, caso.boton,
+        { estadiaId: ESTADIA, numeroCabana: 9 }), true);
+    assert.equal(caso.drawer.get("[data-reserva-codigo]").textContent, codigo);
+    assert.equal(caso.drawer.get("#sites-resumen-reserva-titulo").textContent, titular);
+    assert.equal(caso.llamadasRpc, 2, "la segunda apertura no consulta el estado del Resumen");
+});
+
 test("Una reserva grupal usa la estadía de la CAB seleccionada y no la primera", async () => {
     const caso = montar({ ficha: fixture({ grupo: true }) });
     assert.equal(await caso.api.abrirDesdeBoton(caso.boton), true);
     assert.equal(caso.drawer.get("[data-reserva-ingreso]").textContent.includes("20"), true);
     assert.equal(caso.drawer.get("[data-reserva-duracion]").textContent, "4");
+});
+
+test("Calendario abre la misma ficha por UUID y selecciona su estadía exacta sin Resumen", async () => {
+    const caso = montar({ ficha: fixture({ grupo: true }) });
+    assert.equal(await caso.api.abrirPorId(RESERVA, caso.boton,
+        { estadiaId: ESTADIA, numeroCabana: 9 }), true);
+    assert.equal(caso.llamadasRpc, 0, "no depende de haiku_operacion_dia ni del Resumen");
+    assert.equal(caso.lecturas, 1);
+    assert.equal(caso.drawer.get("#sites-resumen-reserva-titulo").textContent, "Yann O'Connell");
+    assert.equal(caso.drawer.get("[data-reserva-codigo]").textContent, "H-20260920-01-625014");
+    assert.equal(caso.drawer.get("[data-reserva-kicker]").textContent,
+        "CABAÑA 9 · H-20260920-01-625014");
+    assert.equal(caso.drawer.get("[data-reserva-ingreso]").textContent.includes("20"), true);
+    await caso.drawer.get("[data-reserva-historial]").click();
+    assert.equal(caso.historial.id, RESERVA);
+    assert.equal(caso.historial.meta.cabana, "9");
+    assert.equal(caso.llamadasRpc, 0);
+
+    assert.equal(await caso.api.abrirPorId(RESERVA, caso.boton,
+        { estadiaId: ESTADIA, numeroCabana: 9 }), true);
+    await caso.drawer.get("[data-reserva-editar]").click();
+    assert.equal(caso.cacheEdit.estadiaId, ESTADIA);
+    assert.equal(caso.aperturasEditor, 1);
+    assert.equal(caso.llamadasRpc, 0);
+});
+
+test("una identidad de Calendario discordante no elige otra estadía ni habilita acciones", async () => {
+    const caso = montar({ ficha: fixture({ grupo: true }) });
+    assert.equal(await caso.api.abrirPorId(RESERVA, caso.boton,
+        { estadiaId: ESTADIA, numeroCabana: 1 }), false);
+    assert.match(caso.drawer.get("[data-reserva-estado]").textContent, /no corresponden/);
+    assert.equal(caso.drawer.get("[data-reserva-contenido]").hidden, true);
+    assert.equal(caso.drawer.get("[data-reserva-historial]").disabled, true);
+    assert.equal(caso.drawer.get("[data-reserva-editar]").disabled, true);
+});
+
+test("un abridor sin estadía exacta conserva el selector seguro de una reserva grupal", async () => {
+    const caso = montar({ ficha: fixture({ grupo: true }) });
+    assert.equal(await caso.api.abrirPorId(RESERVA, caso.boton), true);
+    assert.equal(caso.drawer.get("[data-reserva-estadias]").hidden, false);
+    assert.equal(caso.drawer.get("[data-reserva-contenido]").hidden, true);
+    assert.equal(caso.drawer.get("[data-reserva-editar]").disabled, true);
 });
 
 test("la salida libre abre la ficha de la reserva saliente exacta", async () => {

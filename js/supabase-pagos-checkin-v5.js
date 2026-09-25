@@ -74,8 +74,9 @@
         `;
     }
 
-    async function ingresosDia(fecha) {
-        const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
+    async function ingresosDia(fecha, operacion) {
+        const { data, error } = operacion ? { data: operacion, error: null } :
+            await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
         if (error) throw error;
         return (data || [])
             .filter(f => ["libre-ingresa", "sale-ingresa", "fullday"].includes(f.estado_operativo))
@@ -366,29 +367,44 @@
             </div>`;
     }
 
-    async function cargarSaldosCheckinMixto() {
-        if (renderizando || !window.haikuSesion) return;
-        const fecha = fechaActual();
-        const lista = document.getElementById("pagos-lista-checkin");
-        const contador = document.getElementById("pagos-contador-checkin");
+    async function cargarSaldosCheckinMixto(opciones = {}) {
+        if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkin")) return;
+        if ((renderizando && !opciones.preparacion) || !window.haikuSesion) return;
+        const fecha = opciones.fecha || fechaActual();
+        const lista = opciones.lista || document.getElementById("pagos-lista-checkin");
+        const contador = opciones.contador || document.getElementById("pagos-contador-checkin");
         if (!fecha || !lista || !contador) return;
 
-        renderizando = true;
+        if (!opciones.preparacion) renderizando = true;
         try {
-            const ingresos = await ingresosDia(fecha);
+            const ingresos = await ingresosDia(fecha, opciones.operacion);
             const ids = [...new Set(ingresos.map(i => i.reservaId))];
             const [saldos, pagos, cierres, servicios] = await Promise.all([
                 saldosAlojamiento(ids), pagosSaldo(ids), cierresBove(ids), totalesServicios(ids)
             ]);
+            if (opciones.preparacion && ids.some(id => !saldos.has(id) || !cierres.has(id) ||
+                saldos.get(id)?.saldo_alojamiento == null ||
+                saldos.get(id)?.total_alojamiento == null ||
+                !Number.isFinite(Number(saldos.get(id)?.saldo_alojamiento)) ||
+                !Number.isFinite(Number(saldos.get(id)?.total_alojamiento)))) {
+                throw new Error("No está disponible la autoridad financiera o BOVE de un ingreso.");
+            }
 
             const idsUsuarios = pagos.map(p => p.verificado_por);
             cierres.forEach(c => {
                 idsUsuarios.push(c.bove_cierre_registrado_por);
                 idsUsuarios.push(c.bove_checkout_registrado_por);
             });
-            const usuarios = await usuariosPorId(idsUsuarios);
+            let usuariosDisponibles = true;
+            const usuarios = await usuariosPorId(idsUsuarios).catch(error => {
+                if (!opciones.preparacion) throw error;
+                usuariosDisponibles = false;
+                console.warn("HAIKU · Nombres de Pagos no disponibles:", error);
+                return new Map(idsUsuarios.filter(Boolean).map(id => [id, "No disponible"]));
+            });
             const pagosPorReserva = agruparPagos(pagos);
 
+            if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkin-en-vuelo")) return;
             lista.innerHTML = "";
             let pendientes = 0;
 
@@ -415,7 +431,7 @@
 
                 const pagosHtml = pagosReserva.map(p => htmlPagoConfirmado(p, usuarios)).join("");
                 const borrador = borradores.get(item.reservaId) || borradorInicial(saldo);
-                if (!borradores.has(item.reservaId) && !pagosCompletos) borradores.set(item.reservaId, borrador);
+                if (!opciones.preparacion && !borradores.has(item.reservaId) && !pagosCompletos) borradores.set(item.reservaId, borrador);
 
                 tarjeta.innerHTML = `
                     <div class="pago-checkin-nuevo">
@@ -438,11 +454,13 @@
 
             contador.textContent = String(pendientes);
             if (!ingresos.length) lista.innerHTML = `<p class="pagos-checkout-vacio sites-pagos-vacio-canonico">No hay ingresos para esta fecha.</p>`;
+            if (opciones.preparacion) return { lista, contador, ingresos, saldos, pagos, cierres, servicios, usuarios, usuariosDisponibles, pendientes };
             console.info("HAIKU · Saldo Check-in V5 separado:", fecha, ingresos.length);
         } catch (error) {
+            if (opciones.preparacion) throw error;
             console.error("HAIKU · Error cargando Saldo Check-in V5:", error);
         } finally {
-            renderizando = false;
+            if (!opciones.preparacion) renderizando = false;
         }
     }
 
@@ -504,6 +522,7 @@
             });
             if (error) throw error;
             borradores.delete(contexto.reservaId);
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago check-in");
             await cargarSaldosCheckinMixto();
             await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1?.refrescar(fecha);
             await window.haikuSincronizarReservasSupabase?.();
@@ -610,6 +629,7 @@
             });
             if (error) throw error;
             console.info("HAIKU · Pago confirmado corregido:", data);
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("editar pago check-in");
             await cargarSaldosCheckinMixto();
             await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1?.refrescar(fechaActual());
             await window.haikuSincronizarReservasSupabase?.();
@@ -674,6 +694,7 @@
             });
             if (error) throw error;
             console.info("HAIKU · BOVE alojamiento V5 registrado:", data);
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar BOVE alojamiento");
             window.dispatchEvent(new CustomEvent('haiku:bove-actualizado', {detail:{reservaId,tipo:'alojamiento'}}));
             await cargarSaldosCheckinMixto();
             await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1
@@ -718,7 +739,8 @@
     window.HAIKU_PAGO_CHECKIN_RESUMEN_V1 = Object.freeze({
         contexto: contextoPagoResumen,
         registrar: registrarPagoControlado,
-        requisitos: medio => requisitosMedio(MEDIOS[medio] || "")
+        requisitos: medio => requisitosMedio(MEDIOS[medio] || ""),
+        preparar: ({ fecha, operacion }) => cargarSaldosCheckinMixto({ fecha, operacion, lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
     });
 
     const estilo = document.createElement("style");

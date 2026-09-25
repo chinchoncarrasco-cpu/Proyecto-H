@@ -8,6 +8,7 @@
 // ========================================
 
 function cargarAbonosPagos() {
+    if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("abonos-legacy")) return;
 
     const lista = document.getElementById("pagos-lista-abonos");
     const contador = document.getElementById("pagos-contador-abonos");
@@ -211,6 +212,7 @@ function formatearFechaWebpay(fecha) {
 
 
 function cargarWebpayPendientes() {
+    if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("webpay-legacy")) return;
 
     const lista =
         document.getElementById("pagos-lista-webpay");
@@ -537,6 +539,7 @@ cargarWebpayPendientes();
 // ========================================
 
 function cargarCobrosCheckout() {
+    if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkout-legacy")) return;
 
     const lista =
         document.getElementById("pagos-lista-checkout");
@@ -772,6 +775,7 @@ Object.values(gruposPorReserva).forEach(grupo => {
 // =====================================
 
 function cargarSaldosCheckin() {
+    if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("checkin-legacy")) return;
 
     const lista = document.getElementById("pagos-lista-checkin");
     const contador = document.getElementById("pagos-contador-checkin");

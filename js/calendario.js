@@ -75,6 +75,15 @@ function pintarLeyendaCalendarioMovil() {
     });
 }
 
+function abrirReservaCalendario(reserva, disparador) {
+    if (reserva.esBloqueo) return false;
+    return window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(
+        reserva.reservaId,
+        disparador,
+        { estadiaId: reserva.estadiaId, numeroCabana: reserva.numeroCabana }
+    ) || false;
+}
+
 function pintarAgendaCalendarioMovil() {
     if (!agendaCalendarioMovil || !esCalendarioMovil()) return;
     const fecha = fechaCalendarioSeleccionadaMovil;
@@ -142,7 +151,7 @@ function pintarAgendaCalendarioMovil() {
                 if (id) window.HAIKU_BLOQUEOS_CALENDARIO_SUPABASE_V1?.liberar?.(id);
                 return;
             }
-            window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(reserva.reservaId, fila);
+            abrirReservaCalendario(reserva, fila);
         });
         agendaCalendarioMovil.appendChild(fila);
     });
@@ -974,28 +983,7 @@ if (reserva.esFullDay) barra.dataset.haikuFullday = '1';
     evento => {
 
         evento.stopPropagation();
-
-        const fechaAnterior =
-            fechaSeleccionada;
-
-        // El modal de reserva necesita mirar
-        // el día de origen de esta reserva
-        fechaSeleccionada =
-            reserva.fechaIngreso;
-
-        const botonCabana =
-            document.querySelector(
-                `[data-ficha-cabana="${reserva.numeroCabana}"]`
-            );
-
-        if (botonCabana) {
-            botonCabana.click();
-        }
-
-        // Volvemos a dejar seleccionada
-        // la fecha que el usuario estaba mirando
-        fechaSeleccionada =
-            fechaAnterior;
+        abrirReservaCalendario(reserva, barra);
     }
 );
 
@@ -1152,32 +1140,9 @@ if (reserva.esFullDay) item.dataset.haikuFullday = '1';
     evento => {
 
         evento.stopPropagation();
-
-        const fechaAnterior =
-            fechaSeleccionada;
-
-        // Para abrir la ficha usamos
-        // el día que corresponde a este panel
-        fechaSeleccionada =
-            fecha;
-
-        const botonCabana =
-            document.querySelector(
-                `[data-ficha-cabana="${reserva.numeroCabana}"]`
-            );
-
-        if (botonCabana) {
-
-            // Cerramos el panel +N
-            panel.remove();
-
-            // Abrimos la ficha rápida existente
-            botonCabana.click();
-        }
-
-        // Restauramos la fecha que estaba seleccionada
-        fechaSeleccionada =
-            fechaAnterior;
+        if (reserva.esBloqueo) return;
+        panel.remove();
+        abrirReservaCalendario(reserva, item);
     }
 );
 
@@ -2261,7 +2226,28 @@ localStorage.setItem(
     fechaSeleccionada
 );
 
-function seleccionarDia(año, mes, dia, fechaISO) {
+function seleccionarDia(año, mes, dia, fechaISO, origenResumen) {
+
+    const refrescoResumen = window.HAIKU_RESUMEN_REFRESH_V1;
+    if (refrescoResumen?.activo() && !refrescoResumen.publicando()) {
+        fechaSeleccionada = fechaISO;
+        localStorage.setItem("haikuFechaSeleccionada", fechaSeleccionada);
+        if (typeof renderizarAgendaServicios === "function") renderizarAgendaServicios();
+        if (typeof cargarAbonosPagos === "function") cargarAbonosPagos();
+        if (typeof cargarCierreDia === "function") cargarCierreDia(fechaSeleccionada);
+        if (typeof actualizarCierreTurno === "function") actualizarCierreTurno();
+        document.querySelectorAll(".seccion-app").forEach(seccion =>
+            seccion.classList.remove("activa"));
+        document.getElementById("seccion-resumen")?.classList.add("activa");
+        document.querySelectorAll(".menu-item").forEach(boton =>
+            boton.classList.remove("activo"));
+        document.querySelector('.menu-item[data-seccion="resumen"]')?.classList.add("activo");
+        refrescoResumen.solicitar(fechaISO, origenResumen || {
+            categoria: "navegación usuario", evento: "seleccionarDia calendario",
+            tipo: "usuario"
+        });
+        return;
+    }
 
     fechaSeleccionada = fechaISO;
 

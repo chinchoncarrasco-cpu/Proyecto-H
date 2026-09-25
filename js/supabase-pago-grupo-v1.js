@@ -539,6 +539,7 @@
                 p_observaciones: datos.observacion || null
             });
             if (error) throw error;
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago grupo");
             await Promise.allSettled([
                 Promise.resolve().then(() => window.haikuCargarAbonosSupabase?.()),
                 Promise.resolve().then(() => window.haikuCargarSaldosCheckinSupabase?.()),

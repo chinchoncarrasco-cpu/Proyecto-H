@@ -417,6 +417,7 @@
             if (error) throw error;
 
             edicionActual = null;
+            window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("editar abono");
             document.getElementById("haiku-abono-edicion-aviso")?.remove();
             const confirmar = document.getElementById("haiku-pago-confirmar");
             if (confirmar) confirmar.textContent = "Registrar pago";

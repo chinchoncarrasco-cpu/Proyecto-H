@@ -165,6 +165,7 @@
                 cabanas
             };
         });
+        return reservasCache;
     }
 
     function puntuarReserva(reserva, pago) {
@@ -195,8 +196,8 @@
         return puntos;
     }
 
-    function opcionesReservas(pago) {
-        return [...reservasCache]
+    function opcionesReservas(pago, reservas = reservasCache) {
+        return [...reservas]
             .map(r => ({ ...r, puntos: puntuarReserva(r, pago) }))
             .sort((a, b) => {
                 if (b.puntos !== a.puntos) return b.puntos - a.puntos;
@@ -216,16 +217,23 @@
             .join("");
     }
 
-    async function cargarPendientes() {
-        const lista = document.getElementById("pagos-lista-webpay");
-        const contador = document.getElementById("pagos-contador-webpay");
+    async function cargarPendientes(opciones = {}) {
+        if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("webpay")) return;
+        const lista = opciones.lista || document.getElementById("pagos-lista-webpay");
+        const contador = opciones.contador || document.getElementById("pagos-contador-webpay");
 
         if (!lista || !contador) return;
 
-        lista.innerHTML = `<p class="pagos-checkout-vacio">Cargando WebPay desde Supabase…</p>`;
+        if (!opciones.preparacion) lista.innerHTML = `<p class="pagos-checkout-vacio">Cargando WebPay desde Supabase…</p>`;
 
         try {
-            await cargarReservas();
+            let reservas = [];
+            let candidatosDisponibles = true;
+            try { reservas = await cargarReservas(); }
+            catch (errorCandidatos) {
+                candidatosDisponibles = false;
+                console.warn("HAIKU · Candidatos WebPay no disponibles:", errorCandidatos);
+            }
 
             const { data, error } = await cliente
                 .from("pagos")
@@ -238,6 +246,11 @@
             if (error) throw error;
 
             const pendientes = data || [];
+            if (opciones.preparacion && pendientes.some(pago =>
+                pago.monto == null || !Number.isFinite(Number(pago.monto)))) {
+                throw new Error("No está disponible el monto de un WebPay pendiente.");
+            }
+            if (!opciones.preparacion && window.HAIKU_PAGOS_REFRESH_V1?.interceptar("webpay-en-vuelo")) return;
             contador.textContent = pendientes.length;
             lista.innerHTML = "";
 
@@ -247,7 +260,7 @@
                         No hay WebPay pendientes de asociar.
                     </p>
                 `;
-                return;
+                return opciones.preparacion ? { lista, contador, pendientes, reservas, candidatosDisponibles, webpayScope: "global" } : undefined;
             }
 
             pendientes.forEach(pago => {
@@ -284,8 +297,8 @@
                         <label>
                             <span>Asociar a reserva</span>
                             <select data-webpay-reserva>
-                                <option value="">Seleccionar reserva…</option>
-                                ${opcionesReservas(pago)}
+                                <option value="">${candidatosDisponibles ? "Seleccionar reserva…" : "Candidatos no disponibles"}</option>
+                                ${opcionesReservas(pago, reservas)}
                             </select>
                         </label>
 
@@ -305,7 +318,7 @@
                         </label>
 
                         <div class="haiku-webpay-acciones">
-                            <button type="button" class="haiku-webpay-confirmar" data-webpay-confirmar>
+                            <button type="button" class="haiku-webpay-confirmar" data-webpay-confirmar ${candidatosDisponibles ? "" : "disabled"}>
                                 Asociar y confirmar
                             </button>
                             <button type="button" class="haiku-webpay-anular" data-webpay-anular>
@@ -317,7 +330,10 @@
 
                 lista.appendChild(tarjetaEl);
             });
+            if (opciones.preparacion) return { lista, contador, pendientes, reservas, candidatosDisponibles, webpayScope: "global" };
         } catch (error) {
+            if (opciones.preparacion) throw error;
+            if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("webpay-error-en-vuelo")) return;
             console.error("HAIKU · WebPay: error al cargar pendientes", error);
             lista.innerHTML = `
                 <p class="pagos-checkout-vacio sites-pagos-vacio-canonico">
@@ -411,6 +427,7 @@
             if (fechaReserva) fechaReserva.value = "";
             if (tarjeta) tarjeta.value = "";
 
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar WebPay pendiente");
             await cargarPendientes();
         } catch (error) {
             console.error("HAIKU · WebPay: no fue posible registrar pendiente", error);
@@ -457,6 +474,7 @@
 
             console.log("HAIKU · WebPay asociado y confirmado:", data);
 
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("asociar WebPay");
             await cargarPendientes();
 
             if (typeof window.cargarAbonosPagos === "function") {
@@ -493,6 +511,7 @@
                 p_pago_id: pagoId
             });
             if (error) throw error;
+            await window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("anular WebPay pendiente");
             await cargarPendientes();
         } catch (error) {
             console.error("HAIKU · WebPay: no fue posible anular", error);
@@ -527,6 +546,9 @@
 
     // Sobrescribir la lectura legacy. A partir de aquí WebPay se lee desde Supabase.
     window.cargarWebpayPendientes = cargarPendientes;
+    window.HAIKU_WEBPAY_PAGOS_V1 = Object.freeze({
+        preparar: () => cargarPendientes({ lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
+    });
 
     configurarFormulario();
     cargarPendientes();

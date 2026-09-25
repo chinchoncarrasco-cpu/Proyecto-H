@@ -17,6 +17,7 @@
     let canal = null;
     let fechaVisible = "";
     let temporizador = null;
+    let origenProgramado = null;
 
     function fechaActual() {
         try {
@@ -169,22 +170,16 @@
 
     }
 
-    async function cargar(fecha = fechaActual()) {
+    async function prepararPagos(fecha, filasOperacion = null) {
         const fechaISO = String(fecha || "").slice(0, 10);
-        if (!fechaISO || !window.haikuSesion) return [];
-
-        if (cargasPorFecha.has(fechaISO)) {
-            return cargasPorFecha.get(fechaISO);
-        }
-
-        const carga = (async () => {
-            const { data: filas, error: errorOperacion } =
-                await cliente.rpc(
-                    "haiku_operacion_dia",
-                    { p_fecha: fechaISO }
-                );
-
-            if (errorOperacion) throw errorOperacion;
+        if (!fechaISO || !window.haikuSesion) return { pendientes: [], boves: [], cargos: [] };
+            let filas = filasOperacion;
+            if (!filas) {
+                const respuesta = await cliente.rpc(
+                    "haiku_operacion_dia", { p_fecha: fechaISO });
+                if (respuesta.error) throw respuesta.error;
+                filas = respuesta.data;
+            }
 
             const { ingresos, salidas } = operacionesDelDia(filas);
             const ids = [
@@ -196,18 +191,14 @@
             ];
 
             if (ids.length === 0) {
-                cachePorFecha.set(fechaISO, []);
-                cacheBovesPorFecha.set(fechaISO, []);
-                fechaVisible = fechaISO;
-                actualizarPantalla(fechaISO, []);
-                return [];
+                return { pendientes: [], boves: [], cargos: [] };
             }
 
             const [cargosR, reservasR] = await Promise.all([
                 cliente
                     .from("vista_estado_cargos")
                     .select(
-                        "reserva_id,tipo_cargo,estado,saldo_cargo"
+                        "reserva_id,tipo_cargo,estado,saldo_cargo,monto_ajustado"
                     )
                     .in("reserva_id", ids),
                 cliente
@@ -286,22 +277,50 @@
             const resultado = ordenarPendientes(pendientes);
             const resultadoBoves = ordenarPendientes(bovesPendientes);
 
-            cachePorFecha.set(fechaISO, resultado);
-            cacheBovesPorFecha.set(fechaISO, resultadoBoves);
-            fechaVisible = fechaISO;
-            actualizarPantalla(fechaISO, resultado);
+            return { pendientes: resultado, boves: resultadoBoves, cargos };
+    }
 
-            console.info(
-                "HAIKU · Pendientes sincronizados desde Supabase:",
-                {
-                    fecha: fechaISO,
-                    pagos: resultado,
-                    boves: resultadoBoves
-                }
-            );
+    function publicarPagos(fechaISO, datos, avisar = true) {
+        cachePorFecha.set(fechaISO, datos.pendientes);
+        cacheBovesPorFecha.set(fechaISO, datos.boves);
+        fechaVisible = fechaISO;
+        if (avisar) actualizarPantalla(fechaISO, datos.pendientes);
+        else {
+            const contador = document.getElementById("contador-pagos");
+            if (contador) contador.textContent = String(datos.pendientes.length);
+        }
+    }
 
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("pagos", {
+        orden: 30,
+        dependencias: ["operacion"],
+        preparar: () => true,
+        completar: ({ fecha, datos }) => prepararPagos(fecha, datos.operacion.filas),
+        publicar: snapshot => publicarPagos(snapshot.fecha, snapshot.datos.pagos, false)
+    });
+
+    async function cargar(fecha = fechaActual(), origen = "cargar pagos") {
+        const fechaISO = String(fecha || "").slice(0, 10);
+        const solicitud = typeof origen === "string"
+            ? { evento: origen, tipo: "externo" } : origen;
+        if (!fechaISO || !window.haikuSesion) return [];
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            await window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaISO, {
+                categoria: "pagos", ...solicitud
+            });
             return obtener(fechaISO);
-        })();
+        }
+        if (cargasPorFecha.has(fechaISO)) return cargasPorFecha.get(fechaISO);
+        const carga = prepararPagos(fechaISO).then(datos => {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaISO, {
+                    categoria: "pagos", ...solicitud
+                })
+                    .then(() => obtener(fechaISO));
+            }
+            publicarPagos(fechaISO, datos);
+            return obtener(fechaISO);
+        });
 
         cargasPorFecha.set(fechaISO, carga);
 
@@ -318,10 +337,16 @@
         }
     }
 
-    function programar(retraso = 100) {
+    function programar(retraso = 100, origen = "programar pagos") {
+        const tipo = typeof origen === "string" ? "externo" : origen?.tipo;
+        if (temporizador && origenProgramado === "externo" &&
+            tipo === "interno_derivado") return;
         clearTimeout(temporizador);
+        origenProgramado = tipo;
         temporizador = setTimeout(() => {
-            cargar(fechaActual()).catch(() => {});
+            temporizador = null;
+            origenProgramado = null;
+            cargar(fechaActual(), origen).catch(() => {});
         }, retraso);
     }
 
@@ -344,7 +369,7 @@
                     schema: "public",
                     table: tabla
                 },
-                () => programar(120)
+                () => programar(120, `realtime ${tabla}`)
             );
         });
 
@@ -537,15 +562,21 @@
     instalarIntegracionNotificaciones();
 
     window.addEventListener("haiku:auth-ready", iniciar);
-    window.addEventListener("online", () => programar(0));
-    window.addEventListener("focus", () => programar(0));
-    window.addEventListener("pageshow", () => programar(0));
+    window.addEventListener("online", () => programar(0, "online"));
+    window.addEventListener("focus", () => programar(0, {
+        evento: "focus", tipo: "interno_derivado"
+    }));
+    window.addEventListener("pageshow", () => programar(0, {
+        evento: "pageshow", tipo: "interno_derivado"
+    }));
 
     document.addEventListener("click", () => {
         setTimeout(() => {
             const fecha = fechaActual();
             if (fecha && fecha !== fechaVisible) {
-                cargar(fecha).catch(() => {});
+                cargar(fecha, { evento: "click document delayed",
+                    tipo: "interno_derivado" })
+                    .catch(() => {});
             }
         }, 0);
     }, true);

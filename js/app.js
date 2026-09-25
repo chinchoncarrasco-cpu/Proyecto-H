@@ -5204,7 +5204,9 @@ function guardarCambiosReservaEditada() {
         generarCalendario();
     }
     if (typeof cargarCabanasDia === "function") {
-        cargarCabanasDia(fechaSeleccionada);
+        cargarCabanasDia(fechaSeleccionada, {
+            evento: "reserva creada", tipo: "externo"
+        });
     }
     if (typeof actualizarResumenDia === "function") {
         actualizarResumenDia(fechaSeleccionada);
@@ -5531,7 +5533,8 @@ ninos:
             "function"
         ) {
             cargarCabanasDia(
-                fechaSeleccionada
+                fechaSeleccionada,
+                { evento: "reserva guardada", tipo: "externo" }
             );
         }
 

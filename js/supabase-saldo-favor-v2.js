@@ -31,14 +31,14 @@
     function medio(v){return MEDIOS[v]||v||"Sin medio"}
     function origen(f, disponible=true){const p=[medio(f?.medio_pago)];if(f?.glosa)p.push(`Glosa: ${f.glosa}`);if(f?.codigo_autorizacion)p.push(`CodAut: ${f.codigo_autorizacion}`);if(f?.folio)p.push(`Folio: ${f.folio}`);if(f?.bovtar)p.push(`BOVTAR: ${f.bovtar}`);if(f?.fecha_pago)p.push(fecha(f.fecha_pago));if(disponible)p.push(`Disponible ${money(f?.disponible)}`);return p.join(" · ")}
 
-    async function resumen(reservaId, fresco=false){
+    async function resumen(reservaId, fresco=false, cachear=true, estricto=false){
         const id=String(reservaId||"");if(!id)return null;
         const previo=cache.get(id);if(!fresco&&previo&&Date.now()-previo.ts<10000)return previo.data;
-        const{data,error}=await sb.rpc("haiku_saldo_favor_unidad",{p_reserva_id:id});if(error)throw error;
-        const r=data||{saldo_a_favor:0,fuentes:[],cargos_servicio:[]};cache.set(id,{ts:Date.now(),data:r});return r;
+        const{data,error}=await sb.rpc("haiku_saldo_favor_unidad",{p_reserva_id:id});if(error)throw error;if(estricto&&data==null)throw new Error("Saldo a favor no disponible.");
+        const r=data||{saldo_a_favor:0,fuentes:[],cargos_servicio:[]};if(cachear)cache.set(id,{ts:Date.now(),data:r});return r;
     }
     function limpiarCache(id=""){if(id)cache.delete(String(id));else cache.clear()}
-    function programar(ms=80){clearTimeout(timer);timer=setTimeout(decorar,ms)}
+    function programar(ms=80){if(window.HAIKU_PAGOS_REFRESH_V1?.interceptar("credito"))return;clearTimeout(timer);timer=setTimeout(decorar,ms)}
 
     // ---------- Añadir pago ----------
     function estadoPago(texto,tipo=""){const el=document.getElementById("haiku-pago-estado");if(!el)return;el.className="haiku-pago-grupo-estado"+(tipo?` ${tipo}`:"");el.textContent=texto}
@@ -75,6 +75,7 @@
             // El parámetro RPC `p_bove` es un nombre heredado: en pagos de
             // tarjeta transporta BOVTAR. El BOVE SII se registra por su flujo propio.
             const{data,error}=await sb.rpc("haiku_registrar_pago_grupo",{p_reserva_id:d.reservaId,p_monto:d.monto,p_medio_pago:d.medio,p_etapa_operativa:"abono",p_fecha_pago:d.fecha,p_folio:["tarjeta_credito","tarjeta_debito"].includes(d.medio)?d.folio||null:null,p_codigo_autorizacion:["webpay_credito","webpay_debito"].includes(d.medio)?d.codaut||null:null,p_bove:["tarjeta_credito","tarjeta_debito"].includes(d.medio)?d.bovtar||null:null,p_referencia_externa:d.medio==="transferencia"?d.glosa||null:null,p_observaciones:d.observacion||null});if(error)throw error;
+            window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("registrar pago con excedente");
             limpiarCache();await Promise.allSettled([window.haikuCargarAbonosSupabase?.(),window.haikuCargarSaldosCheckinSupabase?.(),window.haikuSincronizarReservasSupabase?.(),window.haikuCargarCheckoutSupabase?.(),window.HAIKU_EDITAR_ABONOS_V1?.refrescar?.()]);
             ["haiku-pago-monto","haiku-pago-glosa","haiku-pago-codaut","haiku-pago-folio","haiku-pago-bove","haiku-pago-observacion"].forEach(id=>{const el=document.getElementById(id);if(el)el.value=""});
             document.getElementById("haiku-pago-reserva")?.dispatchEvent(new Event("change",{bubbles:true}));
@@ -86,7 +87,7 @@
     async function decorarCheckin(){
         const cards=[...document.querySelectorAll("#pagos-lista-checkin .haiku-saldo-v5[data-reserva-id],#pagos-lista-checkin .haiku-checkin-grupo-v2[data-reserva-id]")].filter(x=>!x.hidden);
         cards.forEach(card=>card.querySelectorAll("[data-haiku-saldo-monto],[data-grupo-saldo-monto]").forEach(i=>i.removeAttribute("max")));
-        await Promise.allSettled(cards.map(async card=>{const id=card.dataset.reservaId;if(!id)return;const r=await resumen(id),credito=Number(r?.saldo_a_favor||0);let b=card.querySelector(".haiku-checkin-saldo-favor");if(credito<=0){b?.remove();return}if(!b){b=document.createElement("div");b.className="haiku-checkin-saldo-favor";card.querySelector(".pago-checkin-resumen-nuevo")?.insertAdjacentElement("afterend",b)}const firma=String(credito);if(b.dataset.firma!==firma){b.dataset.firma=firma;b.innerHTML=`<span>Saldo a favor disponible</span><strong>${money(credito)}</strong>`}}));
+        await Promise.allSettled(cards.map(async card=>{const id=card.dataset.reservaId;if(!id)return;const r=await resumen(id);if(window.HAIKU_PAGOS_REFRESH_V1?.interceptar("credito-en-vuelo"))return;const credito=Number(r?.saldo_a_favor||0);let b=card.querySelector(".haiku-checkin-saldo-favor");if(credito<=0){b?.remove();return}if(!b){b=document.createElement("div");b.className="haiku-checkin-saldo-favor";card.querySelector(".pago-checkin-resumen-nuevo")?.insertAdjacentElement("afterend",b)}const firma=String(credito);if(b.dataset.firma!==firma){b.dataset.firma=firma;b.innerHTML=`<span>Saldo a favor disponible</span><strong>${money(credito)}</strong>`}}));
     }
 
     // ---------- Check-out ----------
@@ -106,14 +107,42 @@
     async function aplicarCredito(){
         if(aplicando||!resumenModal)return;const c=cargoActual(),o=document.getElementById("haiku-saldo-favor-overlay"),reservaId=o?.dataset.reservaId||"",m=Math.round(Number(document.getElementById("credito-monto")?.value||0)),max=Math.min(Number(c?.saldo||0),Number(resumenModal.saldo_a_favor||0));if(!c||!reservaId||m<=0||m>max)return document.getElementById("credito-estado").textContent="Revisa el monto a utilizar.";if(!window.haikuTienePermiso?.("pagos.registrar"))return document.getElementById("credito-estado").textContent="Tu usuario no tiene permiso para aplicar pagos.";
         aplicando=true;const b=document.getElementById("credito-aplicar"),txt=b.textContent;b.disabled=true;b.textContent="Aplicando...";document.getElementById("credito-estado").textContent="Aplicando saldo a favor...";
-        try{const{data,error}=await sb.rpc("haiku_usar_saldo_favor",{p_reserva_id:reservaId,p_cargo_id:c.cargo_id,p_monto:m});if(error)throw error;limpiarCache();document.getElementById("credito-estado").textContent=`Se usaron ${money(data?.monto_usado||m)} · saldo del servicio ${money(data?.saldo_servicio_restante||0)}.`;await Promise.allSettled([window.haikuCargarCheckoutSupabase?.(),window.haikuCargarSaldosCheckinSupabase?.(),window.haikuCargarAbonosSupabase?.()]);setTimeout(()=>{aplicando=false;cerrarModal();programar(80)},420);return}catch(e){console.error("HAIKU · usar saldo a favor:",e);document.getElementById("credito-estado").textContent=e?.message||"No fue posible usar el saldo a favor."}finally{if(aplicando){aplicando=false;b.disabled=false;b.textContent=txt}}
+        try{const{data,error}=await sb.rpc("haiku_usar_saldo_favor",{p_reserva_id:reservaId,p_cargo_id:c.cargo_id,p_monto:m});if(error)throw error;window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("usar saldo a favor");limpiarCache();document.getElementById("credito-estado").textContent=`Se usaron ${money(data?.monto_usado||m)} · saldo del servicio ${money(data?.saldo_servicio_restante||0)}.`;await Promise.allSettled([window.haikuCargarCheckoutSupabase?.(),window.haikuCargarSaldosCheckinSupabase?.(),window.haikuCargarAbonosSupabase?.()]);setTimeout(()=>{aplicando=false;cerrarModal();programar(80)},420);return}catch(e){console.error("HAIKU · usar saldo a favor:",e);document.getElementById("credito-estado").textContent=e?.message||"No fue posible usar el saldo a favor."}finally{if(aplicando){aplicando=false;b.disabled=false;b.textContent=txt}}
     }
     async function decorarCheckout(){
         const cards=[...document.querySelectorAll("#pagos-lista-checkout .haiku-checkout-v1[data-reserva-id]")];
-        await Promise.allSettled(cards.map(async card=>{const id=card.dataset.reservaId;if(!id)return;const r=await resumen(id),credito=Number(r?.saldo_a_favor||0),cargos=(r?.cargos_servicio||[]).filter(c=>Number(c.saldo||0)>0);let p=card.querySelector(".haiku-checkout-saldo-favor");if(credito<=0||!cargos.length){p?.remove();return}if(!p){p=document.createElement("div");p.className="haiku-checkout-saldo-favor";const form=card.querySelector("[data-haiku-checkout-formulario]"),res=card.querySelector(".haiku-checkout-resumen");form?form.insertAdjacentElement("beforebegin",p):res?.insertAdjacentElement("afterend",p)}const fuentes=(r.fuentes||[]).slice(0,2),firma=JSON.stringify([credito,...fuentes.map(f=>[f.pago_id,f.disponible])]);if(p.dataset.firma===firma)return;p.dataset.firma=firma;p.innerHTML=`<div class="haiku-checkout-saldo-favor-head"><div><span>Saldo a favor</span><strong>${money(credito)}</strong></div><button type="button" data-usar-credito="${esc(id)}">Usar saldo a favor</button></div><div class="haiku-checkout-saldo-favor-origen">${fuentes.map(f=>`<small>${esc(origen(f))}</small>`).join("")}${(r.fuentes||[]).length>2?`<small>+ ${(r.fuentes||[]).length-2} origen(es) adicional(es)</small>`:""}</div>`}));
+        await Promise.allSettled(cards.map(async card=>{const id=card.dataset.reservaId;if(!id)return;const r=await resumen(id);if(window.HAIKU_PAGOS_REFRESH_V1?.interceptar("credito-en-vuelo"))return;const credito=Number(r?.saldo_a_favor||0),cargos=(r?.cargos_servicio||[]).filter(c=>Number(c.saldo||0)>0);let p=card.querySelector(".haiku-checkout-saldo-favor");if(credito<=0||!cargos.length){p?.remove();return}if(!p){p=document.createElement("div");p.className="haiku-checkout-saldo-favor";const form=card.querySelector("[data-haiku-checkout-formulario]"),res=card.querySelector(".haiku-checkout-resumen");form?form.insertAdjacentElement("beforebegin",p):res?.insertAdjacentElement("afterend",p)}const fuentes=(r.fuentes||[]).slice(0,2),firma=JSON.stringify([credito,...fuentes.map(f=>[f.pago_id,f.disponible])]);if(p.dataset.firma===firma)return;p.dataset.firma=firma;p.innerHTML=`<div class="haiku-checkout-saldo-favor-head"><div><span>Saldo a favor</span><strong>${money(credito)}</strong></div><button type="button" data-usar-credito="${esc(id)}">Usar saldo a favor</button></div><div class="haiku-checkout-saldo-favor-origen">${fuentes.map(f=>`<small>${esc(origen(f))}</small>`).join("")}${(r.fuentes||[]).length>2?`<small>+ ${(r.fuentes||[]).length-2} origen(es) adicional(es)</small>`:""}</div>`}));
     }
 
-    async function decorar(){await Promise.allSettled([decorarModalPago(),decorarCheckin(),decorarCheckout()])}
+    async function decorar(){
+        if(window.HAIKU_PAGOS_REFRESH_V1?.interceptar("credito-decorar"))return decorarModalPago();
+        await Promise.allSettled([decorarModalPago(),decorarCheckin(),decorarCheckout()]);
+    }
+    async function preparar(listaCheckin,listaCheckout){
+        const cards=[...listaCheckin.querySelectorAll(".haiku-saldo-v5[data-reserva-id]"),...listaCheckout.querySelectorAll(".haiku-checkout-v1[data-reserva-id]")].filter(card=>!card.hidden);
+        const ids=[...new Set(cards.map(card=>card.dataset.reservaId).filter(Boolean))];
+        const resultados=await Promise.all(ids.map(async id=>{try{return[id,{data:await resumen(id,true,false,true)}]}catch(error){return[id,{error}]}}));
+        return new Map(resultados);
+    }
+    function publicar(preparados,listaCheckin,listaCheckout){
+        const checkin=[...listaCheckin.querySelectorAll(".haiku-saldo-v5[data-reserva-id]")].filter(card=>!card.hidden);
+        for(const card of checkin){
+            card.querySelectorAll("[data-haiku-saldo-monto],[data-grupo-saldo-monto]").forEach(input=>input.removeAttribute("max"));
+            const resultado=preparados.get(card.dataset.reservaId);
+            if(!resultado||resultado.error){const b=document.createElement("div");b.className="haiku-checkin-saldo-favor";b.textContent="Saldo a favor no disponible";card.querySelector(".pago-checkin-resumen-nuevo")?.insertAdjacentElement("afterend",b);continue}
+            const credito=Number(resultado.data?.saldo_a_favor||0);if(credito<=0)continue;
+            const b=document.createElement("div");b.className="haiku-checkin-saldo-favor";b.innerHTML=`<span>Saldo a favor disponible</span><strong>${money(credito)}</strong>`;
+            card.querySelector(".pago-checkin-resumen-nuevo")?.insertAdjacentElement("afterend",b);
+        }
+        for(const card of listaCheckout.querySelectorAll(".haiku-checkout-v1[data-reserva-id]")){
+            const id=card.dataset.reservaId,resultado=preparados.get(id);
+            if(!resultado||resultado.error){const p=document.createElement("div");p.className="haiku-checkout-saldo-favor";p.textContent="Saldo a favor no disponible";card.querySelector(".haiku-checkout-resumen")?.insertAdjacentElement("afterend",p);continue}
+            const r=resultado.data,credito=Number(r?.saldo_a_favor||0),cargos=(r?.cargos_servicio||[]).filter(c=>Number(c.saldo||0)>0);if(credito<=0||!cargos.length)continue;
+            const fuentes=(r.fuentes||[]).slice(0,2),p=document.createElement("div");p.className="haiku-checkout-saldo-favor";
+            p.innerHTML=`<div class="haiku-checkout-saldo-favor-head"><div><span>Saldo a favor</span><strong>${money(credito)}</strong></div><button type="button" data-usar-credito="${esc(id)}">Usar saldo a favor</button></div><div class="haiku-checkout-saldo-favor-origen">${fuentes.map(f=>`<small>${esc(origen(f))}</small>`).join("")}${(r.fuentes||[]).length>2?`<small>+ ${(r.fuentes||[]).length-2} origen(es) adicional(es)</small>`:""}</div>`;
+            const form=card.querySelector("[data-haiku-checkout-formulario]"),res=card.querySelector(".haiku-checkout-resumen");form?form.insertAdjacentElement("beforebegin",p):res?.insertAdjacentElement("afterend",p);
+        }
+    }
 
     // Sólo captura el caso excedente; el pago normal queda a cargo del módulo existente.
     document.addEventListener("click",e=>{const b=e.target.closest?.("#haiku-pago-confirmar");if(!b||document.getElementById("haiku-abono-edicion-aviso"))return;const d=datosModal(),saldo=numeroTexto("haiku-pago-saldo");if(!(d.monto>saldo||saldo<=0))return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();registrarExcedente()},true);
@@ -139,6 +168,6 @@
     `;if(!document.getElementById(css.id))document.head.appendChild(css);
 
     crearModal();setInterval(()=>programar(0),30000);setTimeout(()=>programar(0),950);
-    window.HAIKU_SALDO_FAVOR_V2=Object.freeze({refrescar:()=>{limpiarCache();return decorar()},resumen,abrir:abrirModal});
+    window.HAIKU_SALDO_FAVOR_V2=Object.freeze({refrescar:()=>{limpiarCache();return decorar()},resumen,abrir:abrirModal,preparar,publicar});
     console.info("HAIKU · Saldo a favor V2 preparado.");
 })();

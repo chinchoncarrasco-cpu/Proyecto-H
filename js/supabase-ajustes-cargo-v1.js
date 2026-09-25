@@ -640,6 +640,7 @@
             if (error) throw error;
 
             resumenActual = data?.resumen || resumenActual;
+            window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("ajustar cargo");
             const monto = Number(data?.monto_ajuste || previa.monto);
             const signo = Number(data?.signo || tipo.signo);
 

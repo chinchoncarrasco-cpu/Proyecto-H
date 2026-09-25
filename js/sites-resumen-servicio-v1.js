@@ -400,7 +400,9 @@
                 throw new Error("El servicio se registró, pero no se pudo refrescar el Resumen. No vuelvas a confirmar.");
             }
             if (typeof window.cargarCabanasDia === "function") {
-                window.cargarCabanasDia(identidad.fecha);
+                window.cargarCabanasDia(identidad.fecha, {
+                    evento: "servicio RPC confirmado", tipo: "externo"
+                });
             }
             if (typeof window.actualizarResumenDia === "function") {
                 window.actualizarResumenDia(identidad.fecha);

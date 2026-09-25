@@ -31,6 +31,9 @@
 
     function fechaActiva() {
         try {
+            const coordinador = window.HAIKU_RESUMEN_REFRESH_V1;
+            if (coordinador?.activo() && !coordinador.publicando() &&
+                coordinador.ultimo()?.fecha) return coordinador.ultimo().fecha;
             const fecha = String(fechaSeleccionada || "").slice(0, 10);
             return /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : "";
         } catch (_) {
@@ -415,6 +418,7 @@
     }
 
     function cargarCobrosConocidos(fecha, operaciones, lectura) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
         if (!window.haikuSesion || !operaciones || !pagosHidratados.has(fecha)) return;
         const { ids, clave } = lectura;
         if (cobrosConocidos.clave === clave || cobrosEnLectura === clave) return;
@@ -429,6 +433,7 @@
             .in("reserva_id", ids)
             .then(({ data, error }) => {
                 if (error) throw error;
+                if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
                 if (version !== versionCobros || fecha !== fechaActiva()) return;
                 const cargos = new Map();
                 for (const cargo of Array.isArray(data) ? data : []) {
@@ -553,10 +558,24 @@
             pintarFlujo(fila, fecha);
         });
         aplicarFiltro(fecha);
-        cargarHistorial(fecha);
+        if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) cargarHistorial(fecha);
     }
 
-    function programarActualizacion() {
+    function programarActualizacion(origen) {
+        const coordinador = window.HAIKU_RESUMEN_REFRESH_V1;
+        if (coordinador?.activo()) {
+            if (!coordinador.publicando()) {
+                const evento = typeof origen === "string" ? origen :
+                    origen?.evento || origen?.type || "programarActualizacion";
+                coordinador.solicitar(origen?.fecha, {
+                    categoria: "tablero", evento,
+                    tipo: origen?.tipo || (evento === "programarActualizacion" ||
+                        evento === "MutationObserver pagos-lista-checkout"
+                        ? "interno_derivado" : "externo")
+                });
+            }
+            return;
+        }
         if (actualizacionPendiente) return;
         actualizacionPendiente = true;
         requestAnimationFrame(actualizar);
@@ -581,6 +600,7 @@
     }
 
     function cargarHistorial(fecha) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
         if (!window.haikuSesion || !window.haikuSupabase) return;
         for (const dia of [sumarDias(fecha, -1), fecha, sumarDias(fecha, 1)]) {
             if (historial.has(dia) || historialPendiente.has(dia)) continue;
@@ -588,6 +608,7 @@
             const pendiente = window.haikuSupabase.rpc("haiku_operacion_dia", { p_fecha: dia })
                 .then(({ data, error }) => {
                     if (error) throw error;
+                    if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
                     if ((historialVersion.get(dia) || 0) !== version) return;
                     const filas = new Map((Array.isArray(data) ? data : [])
                         .map(item => [String(item.numero), item]));
@@ -607,22 +628,82 @@
         }
     }
 
+    let navegacionCargando = null;
+
+    function finalizarNavegacionCargando(fecha, generacion) {
+        const pendiente = navegacionCargando;
+        if (!pendiente || pendiente.fecha !== fecha ||
+            (generacion != null && pendiente.generacion != null &&
+                generacion !== pendiente.generacion)) return;
+        pendiente.boton.removeAttribute("aria-busy");
+        if (pendiente.etiquetaOriginal == null) pendiente.boton.removeAttribute("aria-label");
+        else pendiente.boton.setAttribute("aria-label", pendiente.etiquetaOriginal);
+        navegacionCargando = null;
+    }
+
+    function mostrarNavegacionCargando(id, fecha) {
+        if (navegacionCargando) finalizarNavegacionCargando(
+            navegacionCargando.fecha, navegacionCargando.generacion);
+        const boton = document.getElementById(id);
+        if (!boton) return;
+        const etiquetaOriginal = boton.getAttribute("aria-label");
+        boton.setAttribute("aria-busy", "true");
+        boton.setAttribute("aria-label",
+            `${etiquetaOriginal || boton.textContent.replace(/\s+/g, " ").trim()}, cargando`);
+        navegacionCargando = { boton, fecha, generacion: null, etiquetaOriginal };
+    }
+
+    window.HAIKU_RESUMEN_NAV_CARGA_V1 = Object.freeze({
+        aceptar: (fecha, generacion) => {
+            if (navegacionCargando?.fecha === fecha) navegacionCargando.generacion = generacion;
+        },
+        finalizar: finalizarNavegacionCargando
+    });
+
     function navegar(diferencia) {
-        const fecha = fechaActiva();
+        // Mientras B se prepara, la vista muestra A, pero la navegación debe
+        // continuar desde el día que el usuario acaba de seleccionar.
+        let fecha = fechaActiva();
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            try {
+                const seleccionada = String(fechaSeleccionada || "").slice(0, 10);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(seleccionada)) fecha = seleccionada;
+            } catch (_) {}
+        }
         if (!fecha || typeof seleccionarDia !== "function") return;
         const nueva = sumarDias(fecha, diferencia);
         const [anio, mes, dia] = nueva.split("-").map(Number);
-        seleccionarDia(anio, mes - 1, dia, nueva);
-        programarActualizacion();
+        mostrarNavegacionCargando(diferencia < 0 ?
+            "resumen-dia-anterior" : "resumen-dia-siguiente", nueva);
+        seleccionarDia(anio, mes - 1, dia, nueva, {
+            categoria: "navegación usuario",
+            evento: diferencia < 0 ? "Día anterior" : "Día siguiente",
+            tipo: "usuario"
+        });
+        if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            programarActualizacion();
+            finalizarNavegacionCargando(nueva);
+        }
     }
 
     function navegarHoy() {
         if (typeof seleccionarDia !== "function") return;
         const ahora = new Date();
-        const fecha = [ahora.getFullYear(), String(ahora.getMonth() + 1).padStart(2, "0"),
-            String(ahora.getDate()).padStart(2, "0")].join("-");
-        seleccionarDia(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), fecha);
-        programarActualizacion();
+        const partes = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit"
+        }).formatToParts(ahora).filter(parte =>
+            ["year", "month", "day"].includes(parte.type))
+            .map(parte => [parte.type, parte.value]));
+        const fecha = `${partes.year}-${partes.month}-${partes.day}`;
+        mostrarNavegacionCargando("resumen-dia-hoy", fecha);
+        seleccionarDia(Number(partes.year), Number(partes.month) - 1,
+            Number(partes.day), fecha, {
+                categoria: "navegación usuario", evento: "Hoy", tipo: "usuario"
+            });
+        if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            programarActualizacion();
+            finalizarNavegacionCargando(fecha);
+        }
     }
 
     function alternarDetalle(boton) {
@@ -637,6 +718,57 @@
     function iniciar() {
         const lista = document.querySelector("#seccion-resumen .sites-resumen-lista");
         if (!lista) return;
+        window.HAIKU_RESUMEN_REFRESH_V1?.registrar("tablero", {
+            orden: 100,
+            dependencias: ["operacion", "pagos"],
+            preparar: async ({ fecha }) => {
+                const dias = [sumarDias(fecha, -1), sumarDias(fecha, 1)];
+                const respuestas = await Promise.all(dias.map(async dia => {
+                    try {
+                        const respuesta = await window.haikuSupabase.rpc(
+                            "haiku_operacion_dia", { p_fecha: dia });
+                        if (respuesta.error) throw respuesta.error;
+                        return { dia, filas: respuesta.data || [] };
+                    } catch (error) {
+                        console.warn("Resumen: no fue posible leer el contexto del día", dia, error);
+                        return null;
+                    }
+                }));
+                const mapas = new Map();
+                respuestas.forEach(respuesta => {
+                    if (respuesta) mapas.set(respuesta.dia, new Map(
+                        respuesta.filas.map(item => [String(item.numero), item])));
+                });
+                return mapas;
+            },
+            completar: async ({ fecha, datos }, mapas) => {
+                mapas.set(fecha, new Map(datos.operacion.filas
+                    .map(item => [String(item.numero), item])));
+                const lectura = identidadLecturaCobros(fecha, mapas.get(fecha));
+                const cargos = new Map();
+                for (const cargo of datos.pagos.cargos) {
+                    if (cargo.estado !== "activo" ||
+                        !["alojamiento", "servicio"].includes(cargo.tipo_cargo)) continue;
+                    const id = `${cargo.reserva_id}|${cargo.tipo_cargo}`;
+                    const estado = cargos.get(id) || { cero: true, conMonto: false };
+                    const saldo = Number(cargo.saldo_cargo);
+                    estado.cero = estado.cero && cargo.saldo_cargo != null &&
+                        Number.isFinite(saldo) && saldo === 0;
+                    estado.conMonto ||= Number(cargo.monto_ajustado) > 0;
+                    cargos.set(id, estado);
+                }
+                return { mapas, lectura, cargos };
+            },
+            publicar: snapshot => {
+                const { mapas, lectura, cargos } = snapshot.datos.tablero;
+                mapas.forEach((filas, dia) => historial.set(dia, filas));
+                operacionFiltrada.set(snapshot.fecha, mapas.get(snapshot.fecha));
+                serviciosHidratados = true;
+                pagosHidratados.add(snapshot.fecha);
+                cobrosConocidos = { clave: lectura.clave, cargos };
+                actualizar();
+            }
+        });
         const metricas = document.querySelector("#seccion-resumen > .resumen");
         metricas?.addEventListener("click", evento => {
             const tarjeta = evento.target.closest?.("[data-resumen-filtro]");
@@ -653,9 +785,12 @@
             filtroSeleccionado = "";
             aplicarFiltro(fechaActiva());
         });
-        document.getElementById("resumen-dia-anterior")?.addEventListener("click", () => navegar(-1));
-        document.getElementById("resumen-dia-hoy")?.addEventListener("click", navegarHoy);
-        document.getElementById("resumen-dia-siguiente")?.addEventListener("click", () => navegar(1));
+        const botonAnterior = document.getElementById("resumen-dia-anterior");
+        const botonHoy = document.getElementById("resumen-dia-hoy");
+        const botonSiguiente = document.getElementById("resumen-dia-siguiente");
+        botonAnterior?.addEventListener("click", () => navegar(-1));
+        botonHoy?.addEventListener("click", navegarHoy);
+        botonSiguiente?.addEventListener("click", () => navegar(1));
         lista.addEventListener("click", evento => {
             const boton = evento.target.closest?.("[data-resumen-expandir]");
             if (boton) {
@@ -675,19 +810,22 @@
         });
         lista.addEventListener("input", programarActualizacion);
         lista.addEventListener("change", programarActualizacion);
-        document.addEventListener("haiku:resumen-datos-actualizados", () => {
+        document.addEventListener("haiku:resumen-datos-actualizados", evento => {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.publicando()) return;
             invalidarHistorial(fechaActiva());
-            programarActualizacion();
+            programarActualizacion(evento);
         });
-        document.addEventListener("haiku:servicios-hidratados", () => {
+        document.addEventListener("haiku:servicios-hidratados", evento => {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.publicando()) return;
             serviciosHidratados = true;
-            programarActualizacion();
+            programarActualizacion(evento);
         });
         document.addEventListener("haiku:resumen-pagos-actualizados", evento => {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.publicando()) return;
             const fecha = String(evento.detail?.fecha || "");
             if (fecha) pagosHidratados.add(fecha);
             invalidarCobrosConocidos();
-            if (fecha === fechaActiva()) programarActualizacion();
+            if (fecha === fechaActiva()) programarActualizacion(evento);
         });
         window.addEventListener?.("haiku:auth-ready", evento => {
             const usuario = String(evento.detail?.auth?.id || evento.detail?.usuario?.id || "");
@@ -698,14 +836,18 @@
                 invalidarCobrosConocidos();
                 invalidarHistorialDeOtraSesion();
             }
-            programarActualizacion();
+            // El coordinador ya inicia o invalida la generación de sesión.
+            if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) programarActualizacion(evento);
         });
 
         const original = window.cargarCabanasDia;
         if (typeof original === "function" && !original.__haikuResumenSites) {
             const envuelta = function (...argumentos) {
                 const resultado = original.apply(this, argumentos);
-                programarActualizacion();
+                programarActualizacion({
+                    fecha: argumentos[0], evento: "cargarCabanasDia envuelto",
+                    tipo: "interno_derivado"
+                });
                 return resultado;
             };
             envuelta.__haikuResumenSites = true;
@@ -713,6 +855,7 @@
         }
 
         const observador = new MutationObserver(cambios => {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
             if (cambios.some(cambio => !cambio.target.closest?.(
                 ".sites-resumen-fila, .sites-resumen-flujo"
             ))) programarActualizacion();
@@ -720,13 +863,19 @@
         observador.observe(lista, { childList: true, characterData: true, subtree: true });
         const listaCheckout = document.getElementById("pagos-lista-checkout");
         if (listaCheckout) {
-            const observadorCheckout = new MutationObserver(programarActualizacion);
+            const observadorCheckout = new MutationObserver(() => {
+                programarActualizacion("MutationObserver pagos-lista-checkout");
+            });
             observadorCheckout.observe(listaCheckout, { childList: true, subtree: true });
         }
         programarActualizacion();
     }
 
-    window.HAIKU_RESUMEN_SITES_V1 = Object.freeze({ refrescar: programarActualizacion });
+    window.HAIKU_RESUMEN_SITES_V1 = Object.freeze({
+        refrescar: () => programarActualizacion({
+            evento: "refresh explícito tablero", tipo: "externo"
+        })
+    });
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", iniciar, { once: true });
     } else {

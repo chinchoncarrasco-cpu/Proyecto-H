@@ -821,7 +821,9 @@ function eliminarServicio(idServicio) {
 
     // Actualizar también el Resumen
 if (typeof cargarCabanasDia === "function") {
-    cargarCabanasDia(fechaSeleccionada);
+    cargarCabanasDia(fechaSeleccionada, {
+        evento: "servicio guardado", tipo: "externo"
+    });
 }
 
 if (typeof actualizarResumenDia === "function") {

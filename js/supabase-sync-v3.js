@@ -64,11 +64,11 @@
         return `${String(fecha).slice(0, 10)}::${String(numero)}`;
     }
 
-    function capturarCamposOperativos() {
+    function capturarCamposOperativos(cache = datosPorFecha) {
         const mapa = new Map();
 
         try {
-            Object.entries(datosPorFecha || {}).forEach(([fecha, dia]) => {
+            Object.entries(cache || {}).forEach(([fecha, dia]) => {
                 if (!dia?.cabanas) return;
 
                 Object.entries(dia.cabanas).forEach(([numero, cab]) => {
@@ -215,9 +215,9 @@
         return mapa;
     }
 
-    function limpiarReservasDelCache() {
+    function limpiarReservasDelCache(cache = datosPorFecha) {
         try {
-            Object.values(datosPorFecha || {}).forEach(dia => {
+            Object.values(cache || {}).forEach(dia => {
                 if (!dia?.cabanas) return;
                 Object.keys(dia.cabanas).forEach(numero => {
                     const cab = dia.cabanas[numero];
@@ -246,7 +246,8 @@
         abonos,
         huespedesPorReserva,
         fichas,
-        operativos
+        operativos,
+        obtenerDia = obtenerDatosDia
     ) {
         const reserva = estadia.reservas || {};
         const cabana = estadia.cabanas || {};
@@ -308,14 +309,14 @@
             continuidadAutomatica: false
         };
 
-        if (typeof obtenerDatosDia === "function") {
+        if (typeof obtenerDia === "function") {
             const ingreso = String(estadia.fecha_ingreso).slice(0, 10);
 
             if (estadia.tipo_estadia === "fullday") {
                 // Un Full Day liberado sigue existiendo como reserva/historial,
                 // pero deja de ocupar comercialmente la cabaña ese día.
                 if (!estadia.fullday_liberado_en) {
-                    const dia = obtenerDatosDia(ingreso);
+                    const dia = obtenerDia(ingreso);
                     const op = obtenerCamposOperativos(operativos, ingreso, numero);
                     dia.cabanas[numero] = {
                         ...base,
@@ -326,7 +327,7 @@
             } else {
                 for (let i = 0; i <= cantidadNoches; i++) {
                     const fecha = sumarDias(ingreso, i);
-                    const dia = obtenerDatosDia(fecha);
+                    const dia = obtenerDia(fecha);
                     const existente = dia.cabanas?.[numero];
                     const op = obtenerCamposOperativos(operativos, fecha, numero);
 
@@ -403,7 +404,49 @@
         }
     }
 
-    async function sincronizarReservasSupabase() {
+    async function prepararReservasResumen() {
+        const estadias = await obtenerReservasActivas();
+        const reservaIds = [...new Set(estadias.map(e => e.reserva_id).filter(Boolean))];
+        const [abonos, huespedes] = await Promise.all([
+            obtenerAbonos(reservaIds), obtenerHuespedes(reservaIds)
+        ]);
+        const cache = structuredClone(datosPorFecha || {});
+        const operativos = capturarCamposOperativos(cache);
+        limpiarReservasDelCache(cache);
+        const obtenerDia = fecha => {
+            if (!cache[fecha]) cache[fecha] = { encargado: "", notas: "", notasOperativas: [], cabanas: {}, servicios: [], pagos: [], mantencion: [], lavanderia: [] };
+            if (!cache[fecha].cabanas) cache[fecha].cabanas = {};
+            return cache[fecha];
+        };
+        const fichas = {};
+        estadias.forEach(estadia => escribirEstadiaEnCache(
+            estadia, abonos, huespedes, fichas, operativos, obtenerDia
+        ));
+        return { cache, fichas, cantidad: estadias.length };
+    }
+
+    function publicarReservasResumen(snapshot) {
+        const { cache, fichas } = snapshot.datos.reservas;
+        datosPorFecha = cache;
+        localStorage.setItem("haikuFichaReservas", JSON.stringify(fichas));
+        if (typeof guardarDatos === "function") guardarDatos();
+        if (typeof cargarCabanasDia === "function") cargarCabanasDia(snapshot.fecha);
+        if (typeof cargarDatosDia === "function") cargarDatosDia(snapshot.fecha);
+        if (typeof generarCalendario === "function") generarCalendario();
+    }
+
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("reservas", {
+        orden: 10, preparar: prepararReservasResumen, publicar: publicarReservasResumen
+    });
+
+    async function sincronizarReservasSupabase(origen = {
+        evento: "refresh explícito reservas", tipo: "externo"
+    }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                categoria: "reservas", ...origen
+            });
+        }
         if (sincronizando || !window.haikuSesion) return;
         sincronizando = true;
 
@@ -414,6 +457,12 @@
                 obtenerAbonos(reservaIds),
                 obtenerHuespedes(reservaIds)
             ]);
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                    categoria: "reservas", ...origen
+                });
+            }
 
             const operativos = capturarCamposOperativos();
             limpiarReservasDelCache();
@@ -466,16 +515,22 @@
     window.haikuSincronizarReservasSupabase = sincronizarReservasSupabase;
 
     window.addEventListener("haiku:auth-ready", () => {
-        setTimeout(sincronizarReservasSupabase, 50);
+        setTimeout(() => sincronizarReservasSupabase({
+            evento: "auth reservas", tipo: "interno_derivado"
+        }), 50);
     });
 
     document.addEventListener("click", evento => {
         if (!evento.target.closest('[data-seccion="calendario"]')) return;
-        setTimeout(sincronizarReservasSupabase, 20);
+        setTimeout(() => sincronizarReservasSupabase({
+            evento: "abrir calendario", tipo: "interno_derivado"
+        }), 20);
     });
 
     setTimeout(() => {
-        if (window.haikuSesion) sincronizarReservasSupabase();
+        if (window.haikuSesion) sincronizarReservasSupabase({
+            evento: "inicio reservas", tipo: "interno_derivado"
+        });
     }, 100);
 
     console.info("HAIKU · Sincronización visual Supabase V3 preparada.");

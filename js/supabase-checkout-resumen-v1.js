@@ -327,7 +327,14 @@
         }
     }
 
-    async function refrescar({ sincronizar = false } = {}) {
+    async function refrescar({ sincronizar = false, origen = {
+        evento: "refresh explícito checkout", tipo: "externo"
+    } } = {}) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                categoria: "checkout", ...origen
+            });
+        }
         if (refrescando) return;
 
         const fecha = fechaActualResumen();
@@ -345,6 +352,11 @@
             }
 
             const estadias = await obtenerCheckouts(fecha);
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "checkout", ...origen
+                });
+            }
             let aplicadas = 0;
             estadias.forEach(estadia => {
                 if (proyectarCheckout(estadia, fecha)) aplicadas += 1;
@@ -375,14 +387,31 @@
 
     instalarCss();
 
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("checkout", {
+        orden: 40,
+        preparar: ({ fecha }) => obtenerCheckouts(fecha),
+        publicar: snapshot => {
+            let aplicadas = 0;
+            snapshot.datos.checkout.forEach(estadia => {
+                if (proyectarCheckout(estadia, snapshot.fecha)) aplicadas++;
+            });
+            aplicarColoresResumen(snapshot.fecha);
+            if (aplicadas && typeof guardarDatos === "function") guardarDatos();
+        }
+    });
+
     window.addEventListener("haiku:auth-ready", () => {
-        refrescar({ sincronizar: true });
+        refrescar({ sincronizar: true, origen: {
+            evento: "auth checkout", tipo: "interno_derivado"
+        } });
     });
 
     document.addEventListener("click", evento => {
         const resumen = evento.target?.closest?.('.menu-item[data-seccion="resumen"]');
         if (!resumen) return;
-        requestAnimationFrame(() => refrescar({ sincronizar: true }));
+        requestAnimationFrame(() => refrescar({ sincronizar: true, origen: {
+            evento: "abrir Resumen", tipo: "interno_derivado"
+        } }));
     });
 
     document.addEventListener("change", evento => {
@@ -408,7 +437,9 @@
     window.HAIKU_CHECKOUT_RESUMEN_V1 = api;
 
     if (window.haikuSesion) {
-        refrescar({ sincronizar: true });
+        refrescar({ sincronizar: true, origen: {
+            evento: "inicio checkout", tipo: "interno_derivado"
+        } });
     }
 
     console.info("HAIKU · Checkout/colores del Resumen V2 preparado.");

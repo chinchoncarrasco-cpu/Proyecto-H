@@ -222,17 +222,9 @@
         });
     }
 
-    async function componer() {
+    function publicar(filas) {
         componerEstructura();
         const fecha = fechaActual();
-        if (!fecha) return;
-        let filas;
-        try { filas = await operacionDia(); }
-        catch (error) {
-            console.warn("HAIKU · No se pudo vincular el drawer de Pagos al día operativo:", error);
-            return; // Los controles reales originales permanecen disponibles en el detalle.
-        }
-        if (fecha !== fechaActual()) return;
         for (const etapa of ["checkin", "checkout"]) {
             const lista = document.getElementById(`pagos-lista-${etapa}`);
             const selector = etapa === "checkin"
@@ -246,8 +238,24 @@
                 });
         }
     }
+    async function componer() {
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("sites")) return;
+        componerEstructura();
+        const fecha = fechaActual();
+        if (!fecha) return;
+        let filas;
+        try { filas = await operacionDia(); }
+        catch (error) {
+            console.warn("HAIKU · No se pudo vincular el drawer de Pagos al día operativo:", error);
+            return; // Los controles reales originales permanecen disponibles en el detalle.
+        }
+        if (fecha !== fechaActual()) return;
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("sites-en-vuelo")) return;
+        publicar(filas);
+    }
 
     function programar(ms = 70) {
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("sites")) return;
         clearTimeout(temporizador);
         temporizador = setTimeout(() => {
             componer();
@@ -456,6 +464,7 @@
             lista.dataset.sitesPagosObservado = "1";
             // El CSS inicial mantiene ocultas las tarjetas tempranas aun sin observer.
             new MutationObserver(() => {
+                if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("sites")) return;
                 componerEstructura();
                 if (tipo !== "webpay") programar();
             }).observe(lista, { childList: true });
@@ -521,7 +530,8 @@
     window.addEventListener("load", instalar);
     instalar();
 
-    window.HAIKU_SITES_PAGOS_V1 = Object.freeze({ refrescar: () => {
+    window.HAIKU_SITES_PAGOS_V1 = Object.freeze({ publicar, refrescar: () => {
+        if (window.HAIKU_PAGOS_REFRESH_V1?.interceptar("sites-refrescar")) return;
         lecturaDia = null;
         componerEstructura();
         programar(0);

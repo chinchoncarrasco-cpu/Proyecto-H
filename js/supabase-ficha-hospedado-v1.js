@@ -148,7 +148,9 @@
         // Primero reconstruimos la fila con los datos frescos.
         try {
             if (typeof cargarCabanasDia === "function") {
-                cargarCabanasDia(fechaSeleccionada);
+                cargarCabanasDia(fechaSeleccionada, {
+                    evento: "estado de hospedaje confirmado", tipo: "externo"
+                });
             }
         } catch (_) {}
 

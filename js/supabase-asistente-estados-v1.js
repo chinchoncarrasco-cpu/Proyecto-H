@@ -215,7 +215,9 @@
         try { await window.haikuSincronizarReservasSupabase?.(); } catch {}
         try { await window.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.(); } catch {}
         try { if (typeof generarCalendario === "function") generarCalendario(); } catch {}
-        try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada); } catch {}
+        try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada, {
+            evento: "estado de reserva confirmado", tipo: "externo"
+        }); } catch {}
         try { if (typeof actualizarResumenDia === "function") actualizarResumenDia(fechaSeleccionada); } catch {}
         try { if (typeof generarResumenOperativo === "function") generarResumenOperativo(fechaSeleccionada); } catch {}
     }

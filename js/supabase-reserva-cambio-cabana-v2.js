@@ -266,7 +266,9 @@
             }
             try { await window.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.(); } catch {}
             try { if (typeof generarCalendario === "function") generarCalendario(); } catch {}
-            try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada); } catch {}
+            try { if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaSeleccionada, {
+                evento: "cambio de cabaña confirmado", tipo: "externo"
+            }); } catch {}
 
             const confirmacion = $("#reserva-paso-confirmacion");
             const resumen = $("#reserva-confirmacion-resumen");

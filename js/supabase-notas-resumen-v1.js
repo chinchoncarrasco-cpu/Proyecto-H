@@ -21,6 +21,7 @@
     let cargando = false;
     let cargaPendiente = false;
     let temporizadorCarga = null;
+    let origenProgramado = null;
 
     function fechaActual() {
         try {
@@ -138,7 +139,7 @@
         });
     }
 
-    async function cargarEstadiasDeNotas(filas) {
+    async function cargarEstadiasDeNotas(filas, registrar = true) {
         const estadiaIds = [...new Set(
             (filas || []).map(fila => String(fila?.estadia_id || ""))
                 .filter(esUuid)
@@ -174,15 +175,20 @@
                 if (estadia?.id) unicas.set(String(estadia.id), estadia);
             });
         });
-        registrarEstadias([...unicas.values()]);
+        const estadias = [...unicas.values()];
+        if (registrar) registrarEstadias(estadias);
+        return estadias;
     }
 
-    function estadiaActualDeNota(fila) {
-        const directa = estadiasPorId.get(String(fila?.estadia_id || ""));
+    function estadiaActualDeNota(fila, contexto = { porId: estadiasPorId, porReserva: estadiasPorReserva }) {
+        if (!contexto?.porId || !contexto?.porReserva) {
+            contexto = { porId: estadiasPorId, porReserva: estadiasPorReserva };
+        }
+        const directa = contexto.porId.get(String(fila?.estadia_id || ""));
         if (directa) return directa;
 
         const candidatas = (
-            estadiasPorReserva.get(String(fila?.reserva_id || "")) || []
+            contexto.porReserva.get(String(fila?.reserva_id || "")) || []
         ).filter(estadia =>
             !["cancelada", "no_show"].includes(String(estadia?.estado_estadia || "")) &&
             fechaDentroEstadia(fila?.fecha_operacion, estadia)
@@ -195,15 +201,15 @@
         return candidatas.length === 1 ? candidatas[0] : null;
     }
 
-    function resolverCabanaIdNota(fila) {
-        return estadiaActualDeNota(fila)?.cabana_id || fila?.cabana_id || "";
+    function resolverCabanaIdNota(fila, contexto) {
+        return estadiaActualDeNota(fila, contexto)?.cabana_id || fila?.cabana_id || "";
     }
 
-    function notaLocalDesdeFila(fila) {
-        const estadia = estadiaActualDeNota(fila);
+    function notaLocalDesdeFila(fila, contexto) {
+        const estadia = estadiaActualDeNota(fila, contexto);
         return {
             id: fila.id,
-            cabana: numerosPorCabana.get(String(resolverCabanaIdNota(fila))) || "",
+            cabana: numerosPorCabana.get(String(resolverCabanaIdNota(fila, contexto))) || "",
             texto: fila.texto || "",
             reservaId: fila.reserva_id || "",
             estadiaId: estadia?.id || fila.estadia_id || "",
@@ -276,8 +282,14 @@
         );
     }
 
-    async function cargarFecha(fecha = fechaActual(), migrar = true) {
+    async function cargarFecha(fecha = fechaActual(), migrar = true,
+        origen = { evento: "cargarFecha", tipo: "externo" }) {
         if (!fecha || !window.haikuSesion) return;
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "notas", ...origen
+            });
+        }
 
         if (cargando) {
             cargaPendiente = true;
@@ -297,6 +309,12 @@
             }
 
             await cargarEstadiasDeNotas(filas);
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "notas", ...origen
+                });
+            }
 
             const dia = datosDia(fecha);
             if (!dia) return;
@@ -323,15 +341,23 @@
 
             if (cargaPendiente) {
                 cargaPendiente = false;
-                programarCarga(0);
+                programarCarga(0, {
+                    evento: "carga pendiente legacy", tipo: "interno_derivado"
+                });
             }
         }
     }
 
-    function programarCarga(retraso = 100) {
+    function programarCarga(retraso = 100,
+        origen = { evento: "programarCarga", tipo: "externo" }) {
+        if (temporizadorCarga && origenProgramado === "externo" &&
+            origen.tipo === "interno_derivado") return;
         clearTimeout(temporizadorCarga);
+        origenProgramado = origen.tipo;
         temporizadorCarga = setTimeout(() => {
-            cargarFecha(fechaActual(), false).catch(() => {});
+            temporizadorCarga = null;
+            origenProgramado = null;
+            cargarFecha(fechaActual(), false, origen).catch(() => {});
         }, retraso);
     }
 
@@ -426,7 +452,9 @@
                     schema: "public",
                     table: "notas"
                 },
-                () => programarCarga(80)
+                () => programarCarga(80, {
+                    evento: "realtime notas", tipo: "externo"
+                })
             )
             .subscribe(estado => {
                 if (estado === "SUBSCRIBED") {
@@ -441,7 +469,9 @@
         if (!window.haikuSesion) return;
 
         instalarRealtime();
-        cargarFecha(fechaActual(), true).catch(() => {});
+        cargarFecha(fechaActual(), true, {
+            evento: "inicio/auth", tipo: "externo"
+        }).catch(() => {});
     }
 
     window.HAIKU_NOTAS_RESUMEN_SUPABASE_V1 = Object.freeze({
@@ -450,14 +480,50 @@
         refrescar: cargarFecha
     });
 
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("notas", {
+        orden: 50, obligatoria: false,
+        preparar: async ({ fecha }) => {
+            await cargarCabanas();
+            let filas = await consultarNotas(fecha);
+            if (migracionPendiente(fecha)) {
+                await migrarNotasLocales(fecha, filas);
+                marcarMigracion(fecha);
+                filas = await consultarNotas(fecha);
+            }
+            const estadias = await cargarEstadiasDeNotas(filas, false);
+            const porId = new Map(estadias.map(estadia => [String(estadia.id), estadia]));
+            const porReserva = new Map();
+            estadias.forEach(estadia => {
+                const id = String(estadia.reserva_id || "");
+                if (!porReserva.has(id)) porReserva.set(id, []);
+                porReserva.get(id).push(estadia);
+            });
+            const contexto = { porId, porReserva };
+            return filas.map(fila => notaLocalDesdeFila(fila, contexto))
+                .filter(nota => nota.cabana && nota.texto);
+        },
+        publicar: snapshot => {
+            if (!snapshot.datos.notas) return;
+            const dia = datosDia(snapshot.fecha);
+            if (!dia) return;
+            dia.notasOperativas = snapshot.datos.notas;
+            fechaCargada = snapshot.fecha;
+            repintar(snapshot.fecha);
+        }
+    });
+
     window.addEventListener("haiku:auth-ready", iniciar);
-    window.addEventListener("online", () => programarCarga(0));
+    window.addEventListener("online", () => programarCarga(0, {
+        evento: "online", tipo: "externo"
+    }));
     window.addEventListener("focus", () => {
         const fecha = fechaActual();
         if (fecha && fecha !== fechaCargada) {
-            cargarFecha(fecha, true).catch(() => {});
+            cargarFecha(fecha, true, {
+                evento: "focus", tipo: "interno_derivado"
+            }).catch(() => {});
         } else {
-            programarCarga(0);
+            programarCarga(0, { evento: "focus", tipo: "interno_derivado" });
         }
     });
 
@@ -465,7 +531,9 @@
         setTimeout(() => {
             const fecha = fechaActual();
             if (fecha && fecha !== fechaCargada) {
-                cargarFecha(fecha, true).catch(() => {});
+                cargarFecha(fecha, true, { evento: "click document delayed",
+                    tipo: "interno_derivado" })
+                    .catch(() => {});
             }
         }, 0);
     }, true);

@@ -97,7 +97,9 @@
 
             try {
                 if (typeof cargarCabanasDia === "function") {
-                    cargarCabanasDia(fechaActual());
+                    cargarCabanasDia(fechaActual(), {
+                        evento: "noches actualizadas en Supabase", tipo: "externo"
+                    });
                 }
             } catch {}
 

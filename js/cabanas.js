@@ -409,7 +409,14 @@ filasCabanas.forEach(fila => {
 // CARGAR CABAÑAS DEL DÍA
 // ========================================
 
-function cargarCabanasDia(fecha) {
+function cargarCabanasDia(fecha, origen = {
+    evento: "cargarCabanasDia", tipo: "interno_derivado"
+}) {
+    const refrescoResumen = window.HAIKU_RESUMEN_REFRESH_V1;
+    if (refrescoResumen?.activo() && !refrescoResumen.publicando()) {
+        refrescoResumen.solicitar(fecha, { categoria: "cabañas", ...origen });
+        return;
+    }
 
     const datos = obtenerDatosDia(fecha);
 
@@ -5009,7 +5016,8 @@ function cancelarReservaDesdeFicha() {
 
 
     cargarCabanasDia(
-        fechaSeleccionada
+        fechaSeleccionada,
+        { evento: "acción de reserva confirmada", tipo: "externo" }
     );
 
 
@@ -5109,7 +5117,8 @@ function marcarReservaComoNoShowDesdeFicha() {
         typeof cargarCabanasDia === "function"
     ) {
         cargarCabanasDia(
-            fechaSeleccionada
+            fechaSeleccionada,
+            { evento: "acción de reserva confirmada", tipo: "externo" }
         );
     }
 
@@ -5466,7 +5475,9 @@ if (btnGuardarServicioResumen) {
         );
 
         // Actualizar Resumen
-        cargarCabanasDia(fechaSeleccionada);
+        cargarCabanasDia(fechaSeleccionada, {
+            evento: "servicio guardado", tipo: "externo"
+        });
         actualizarResumenDia(fechaSeleccionada);
         generarResumenOperativo(fechaSeleccionada);
 
@@ -5768,7 +5779,9 @@ document.querySelectorAll(".aseo-encargado-input").forEach(input => {
         guardarDatos();
 
         // Refrescar Estado de cabañas
-        cargarCabanasDia(fecha);
+        cargarCabanasDia(fecha, {
+            evento: "aseo guardado", tipo: "externo"
+        });
     });
 
 });
@@ -6121,7 +6134,9 @@ if (estadoAseoExpress) {
         guardarDatos();
 
         // Actualizar todas las vistas conectadas
-        cargarCabanasDia(fechaSeleccionada);
+        cargarCabanasDia(fechaSeleccionada, {
+            evento: "revisión Express guardada", tipo: "externo"
+        });
 
     });
 
@@ -6285,7 +6300,9 @@ datos.cabanas[numeroCabana].estadoRevision = selector.value;
     guardarDatos();
 
 // Actualizar tabla Estado de cabañas
-cargarCabanasDia(fechaSeleccionada);
+cargarCabanasDia(fechaSeleccionada, {
+    evento: "revisión guardada", tipo: "externo"
+});
 
 // Actualizar las demás vistas
 actualizarResumenDia(fechaSeleccionada);
@@ -6331,7 +6348,9 @@ document.addEventListener("change", (evento) => {
     guardarDatos();
 
     // Actualizar Resumen y Aseo
-    cargarCabanasDia(fechaSeleccionada);
+    cargarCabanasDia(fechaSeleccionada, {
+        evento: "horario de aseo guardado", tipo: "externo"
+    });
     actualizarResumenAseo(fechaSeleccionada);
 });
 
@@ -6786,7 +6805,8 @@ if (menuEstadoFicha) {
             ) {
 
                 cargarCabanasDia(
-                    fechaSeleccionada
+                    fechaSeleccionada,
+                    { evento: "estado de reserva guardado", tipo: "externo" }
                 );
             }
 
@@ -7120,7 +7140,8 @@ document.addEventListener(
             "function"
         ) {
             cargarCabanasDia(
-                fechaSeleccionada
+                fechaSeleccionada,
+                { evento: "ficha de reserva guardada", tipo: "externo" }
             );
         }
 
@@ -7303,7 +7324,8 @@ document.addEventListener(
             "function"
         ) {
             cargarCabanasDia(
-                fechaSeleccionada
+                fechaSeleccionada,
+                { evento: "titular de reserva guardado", tipo: "externo" }
             );
         }
 
@@ -7828,7 +7850,8 @@ document.addEventListener(
             "function"
         ) {
             cargarCabanasDia(
-                fechaSeleccionada
+                fechaSeleccionada,
+                { evento: "fechas de reserva guardadas", tipo: "externo" }
             );
         }
 

@@ -92,6 +92,24 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
     transform: none;
 }
 
+#seccion-resumen > .resumen-estado-cabecera .resumen-dia-boton[aria-busy="true"]::after {
+    content: "";
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 11px;
+    height: 11px;
+    margin-left: 3px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    opacity: .7;
+    animation: sites-resumen-dia-cargando .8s linear infinite;
+}
+
+@keyframes sites-resumen-dia-cargando {
+    to { transform: rotate(360deg); }
+}
+
 #seccion-resumen > .resumen-estado-cabecera .resumen-dia-boton:focus-visible {
     outline: 2px solid #72ad89;
     outline-offset: 1px;

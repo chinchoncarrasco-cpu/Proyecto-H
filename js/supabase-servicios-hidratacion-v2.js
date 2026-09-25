@@ -14,6 +14,7 @@
 
     let sincronizando = null;
     let timer = null;
+    let origenProgramado = null;
     let primeraHidratacionLista = false;
 
     function marcarCargaInicial() {
@@ -142,7 +143,7 @@
         );
     }
 
-    function refrescarResumenServicios(lista) {
+    function refrescarResumenServicios(lista, avisar = true, soloServicios = false) {
         const fecha = (() => {
             try {
                 return typeof fechaSeleccionada !== "undefined"
@@ -151,7 +152,7 @@
             } catch { return ""; }
         })();
 
-        if (fecha) {
+        if (fecha && !soloServicios) {
             document.querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]").forEach(fila => {
                 const numero = String(fila?.dataset?.cabana || "");
                 const campo = fila.querySelector('[data-campo="servicio"]');
@@ -176,7 +177,7 @@
 
         try { renderizarAgendaServicios?.(); } catch {}
 
-        document.dispatchEvent(
+        if (avisar) document.dispatchEvent(
             new CustomEvent("haiku:servicios-hidratados", {
                 detail: {
                     cantidad: lista.filter(estaActivo).length,
@@ -185,7 +186,7 @@
                 }
             })
         );
-        if (fecha) {
+        if (fecha && avisar && !soloServicios) {
             document.dispatchEvent(new CustomEvent("haiku:resumen-datos-actualizados", {
                 detail: { fecha }
             }));
@@ -245,7 +246,14 @@
             .filter(servicio => servicio.id && servicio.fechaServicio);
     }
 
-    async function sincronizar() {
+    async function sincronizar(origen = "sincronizar servicios", destino = "servicios") {
+        const tipo = origen === "haiku:servicio-supabase-cambiado" ||
+            origen === "sincronizar servicios" ? "externo" : "interno_derivado";
+        if (destino === "resumen" && window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                categoria: "servicios", evento: origen, tipo
+            });
+        }
         if (sincronizando) return sincronizando;
 
         if (!primeraHidratacionLista) {
@@ -255,8 +263,15 @@
         sincronizando = (async () => {
             try {
                 const lista = await traerServiciosSupabase();
+                if (destino === "resumen" && window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                    await window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                        categoria: "servicios", evento: origen, tipo
+                    });
+                    return lista;
+                }
                 reemplazarCache(lista);
-                refrescarResumenServicios(lista);
+                refrescarResumenServicios(lista, true,
+                    window.HAIKU_RESUMEN_REFRESH_V1?.activo() === true);
 
                 primeraHidratacionLista = true;
                 limpiarMarcaCargaInicial();
@@ -288,14 +303,23 @@
         return sincronizando;
     }
 
-    function programar(delay = 80) {
+    function programar(delay = 80, origen = "programar servicios") {
+        const tipo = origen === "haiku:servicio-supabase-cambiado" ||
+            origen === "sincronizar servicios" ? "externo" : "interno_derivado";
+        if (timer && origenProgramado === "externo" &&
+            tipo === "interno_derivado") return;
         clearTimeout(timer);
+        origenProgramado = tipo;
 
         if (!primeraHidratacionLista) {
             marcarCargaInicial();
         }
 
-        timer = setTimeout(sincronizar, delay);
+        timer = setTimeout(() => {
+            timer = null;
+            origenProgramado = null;
+            sincronizar(origen, "resumen");
+        }, delay);
     }
 
     // El valor del localStorage puede pertenecer a una sesión/dispositivo
@@ -303,24 +327,37 @@
     // como un total definitivo.
     marcarCargaInicial();
 
-    window.addEventListener("haiku:auth-ready", () => programar(20));
+    window.addEventListener("haiku:auth-ready", () => programar(20, "haiku:auth-ready"));
 
     document.addEventListener("click", evento => {
         if (
             evento.target.closest('[data-seccion="resumen"]') ||
             evento.target.closest('[data-seccion="servicios"]') ||
             evento.target.closest('[data-ir-seccion="servicios"]')
-        ) programar(0);
+        ) programar(0, "click sección resumen/servicios");
     });
 
-    document.addEventListener("haiku:servicio-supabase-cambiado", () => programar(50));
+    document.addEventListener("haiku:servicio-supabase-cambiado", () =>
+        programar(50, "haiku:servicio-supabase-cambiado"));
     document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) programar(40);
+        if (!document.hidden) programar(40, "visibilitychange");
     });
-    window.addEventListener("focus", () => programar(60));
+    window.addEventListener("focus", () => programar(60, "focus"));
 
     window.haikuSincronizarServiciosDesdeSupabase = sincronizar;
     window.HAIKU_SERVICIOS_HIDRATACION_V2 = Object.freeze({ sincronizar });
+
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("servicios", {
+        orden: 20,
+        preparar: traerServiciosSupabase,
+        publicar: snapshot => {
+            const lista = snapshot.datos.servicios;
+            reemplazarCache(lista);
+            refrescarResumenServicios(lista, false);
+            primeraHidratacionLista = true;
+            limpiarMarcaCargaInicial();
+        }
+    });
 
     setTimeout(() => {
         if (window.haikuSesion) programar(0);

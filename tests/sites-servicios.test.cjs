@@ -6,7 +6,13 @@ const vm = require('node:vm');
 
 const fuente = fs.readFileSync(path.join(__dirname, '../js/sites-servicios-v1.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
-const fecha = '2026-09-24';
+const partesFecha = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit'
+}).formatToParts(new Date()).map(({ type, value }) => [type, value]));
+const fecha = `${partesFecha.year}-${partesFecha.month}-${partesFecha.day}`;
+const diaSiguiente = new Date(`${fecha}T12:00:00Z`);
+diaSiguiente.setUTCDate(diaSiguiente.getUTCDate() + 1);
+const fechaSiguiente = diaSiguiente.toISOString().slice(0, 10);
 const servicio = (id, hora, cambios = {}) => ({
     id, fechaServicio: fecha, hora, nombre: 'Tinaja Tonel de Madera', categoria: 'tinaja',
     numeroCabana: '6', titular: 'Dayana Luna', tipoCobro: 'normal', total: 30000,
@@ -171,8 +177,8 @@ test('marcar realizado prepara la acción manual por ID y sólo confirma mediant
         ['preparar-manual', 's1']);
     assert.equal(e.llamadas.includes('confirmar-realizado'), false);
     assert.equal(e.nodos.get('sites-servicios-realizado-confirmar').hidden, false);
-    assert.match(e.nodos.get('sites-servicios-realizado-contenido').innerHTML,
-        /Dayana Luna.*2026-09-24 19:15–20:15/);
+    assert.ok(e.nodos.get('sites-servicios-realizado-contenido').innerHTML
+        .includes(`Dayana Luna · ${fecha} 19:15–20:15`));
     assert.equal(e.nodos.get('sites-servicios-realizado-confirmar').textContent,
         'Marcar servicio como realizado');
     e.click('#sites-servicios-realizado-confirmar');
@@ -226,14 +232,14 @@ test('cancelar muestra confirmación Sites y reutiliza el RPC legacy sólo al co
 test('alta reutiliza el drawer real, una sola escucha y respeta fecha', async () => {
     const e = entorno(); e.emitir('haiku:servicios-hidratados');
     assert.equal(e.nodos.get('sites-servicios-root').listeners.click.length, 1);
-    e.cambiarFecha('2026-09-25');
+    e.cambiarFecha(fechaSiguiente);
     e.click('[data-sites-servicios-registrar]');
     await new Promise(setImmediate);
     assert.equal(e.llamadas.find(x => Array.isArray(x) && x[0] === 'haiku_operacion_dia')[1].p_fecha,
-        '2026-09-25');
+        fechaSiguiente);
     e.click('[data-sites-servicios-cabana]', { sitesServiciosCabana: '6' });
-    assert.deepEqual(e.llamadas.at(-1), ['abrir', '6', '2026-09-25']);
-    e.contexto.serviciosRegistrados = [servicio('nuevo', '22:15', { fechaServicio: '2026-09-25' })];
+    assert.deepEqual(e.llamadas.at(-1), ['abrir', '6', fechaSiguiente]);
+    e.contexto.serviciosRegistrados = [servicio('nuevo', '22:15', { fechaServicio: fechaSiguiente })];
     await e.api.refrescar();
     assert.match(e.html(), /Tinaja Tonel de Madera/);
     assert.equal(e.escuchas['haiku:servicios-hidratados'].length, 1);

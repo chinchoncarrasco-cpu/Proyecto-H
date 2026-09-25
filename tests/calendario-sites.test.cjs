@@ -152,28 +152,56 @@ test('cuatro reservas reales en un día mantienen tres barras y +1; el panel lis
     assert.equal(h.body.querySelector('.calendario-panel-dia'), null);
 });
 
-test('una reserva elegida en +N abre la ficha real para ese día y restaura la fecha operativa', () => {
+test('una reserva elegida en +N abre la ficha por identidad canónica sin depender del Resumen', () => {
     const cabanas = Object.fromEntries([
         reserva(1, 'Ana Real', 1), reserva(2, 'Bruno Real', 2),
         reserva(3, 'Carla Real', 3), reserva(4, 'Diego Real', 4)
     ]);
     const h = harness({'2026-09-04': {cabanas}});
-    const ficha = new Element('button');
-    ficha.dataset.fichaCabana = '4';
-    let clicks = 0;
-    let fechaDuranteClick;
-    ficha.addEventListener('click', () => {
-        clicks++;
-        fechaDuranteClick = vm.runInContext('fechaSeleccionada', h.context);
-    });
-    h.body.appendChild(ficha);
+    const abiertas = [];
+    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (...args) => {
+        abiertas.push(args);
+        assert.equal(vm.runInContext('fechaSeleccionada', h.context), '2026-09-03');
+    } };
 
     h.body.querySelector('.calendario-mas-reservas').click();
     h.body.querySelector('.calendario-panel-reserva[data-reserva-id="R4"]').click();
-    assert.equal(clicks, 1);
-    assert.equal(fechaDuranteClick, '2026-09-04');
+    assert.equal(abiertas.length, 1);
+    assert.equal(abiertas[0][0], 'R4');
+    assert.equal(abiertas[0][1].dataset.estadiaId, 'E4');
+    assert.equal(abiertas[0][2].estadiaId, 'E4');
+    assert.equal(abiertas[0][2].numeroCabana, '4');
     assert.equal(vm.runInContext('fechaSeleccionada', h.context), '2026-09-03');
     assert.equal(h.body.querySelector('.calendario-panel-dia'), null);
+});
+
+test('cada tramo de una estadía larga conserva reserva y estadía tras refrescar Calendario', () => {
+    const cache = {'2026-09-04': {cabanas: {2: {
+        reservaId: 'R-larga', estadiaId: 'E-larga', titular: 'Titular',
+        fechaOrigenReserva: '2026-09-04', noches: 4, estado: 'reservada'
+    }}}};
+    for (const h of [harness(cache), harness(cache)]) {
+        const abiertas = [];
+        h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (...args) => abiertas.push(args) };
+        const tramos = h.body.querySelectorAll('.calendario-reserva-barra');
+        assert.equal(tramos.length, 2, 'la estadía cruza de semana');
+        tramos.forEach(tramo => tramo.click());
+        assert.deepEqual(abiertas.map(([id]) => id), ['R-larga', 'R-larga']);
+        assert.deepEqual(abiertas.map(([, , contexto]) => [contexto.estadiaId, contexto.numeroCabana]),
+            [['E-larga', '2'], ['E-larga', '2']]);
+        assert.equal(vm.runInContext('fechaSeleccionada', h.context), '2026-09-03');
+    }
+});
+
+test('un bloqueo del Calendario no intenta abrir una ficha de reserva', () => {
+    const h = harness({'2026-09-04': {cabanas: {2: {
+        estado: 'bloqueada', bloqueoId: 'BLQ-SB-11111111-1111-4111-8111-111111111111',
+        bloqueoFechaInicio: '2026-09-04', bloqueoFechaFin: '2026-09-05'
+    }}}});
+    let aperturas = 0;
+    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: () => { aperturas++; } };
+    h.body.querySelector('.calendario-reserva-barra').click();
+    assert.equal(aperturas, 0);
 });
 
 test('mes sin reservas conserva sus días y navegación anterior/siguiente sin +N', () => {
@@ -288,10 +316,12 @@ test('tap móvil cambia sólo selección y agenda; vacío limpia filas, detalle 
     const agenda = h.document.getElementById('calendario-agenda-movil');
     const celdasAntes = grid.querySelectorAll('.dia-calendario');
     const abiertas = [];
-    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (id, boton) => abiertas.push([id, boton]) };
+    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (...args) => abiertas.push(args) };
     agenda.querySelector('.sites-calendario-agenda-item').click();
     assert.equal(abiertas[0][0], 'R1');
     assert.equal(abiertas[0][1].dataset.estadiaId, 'E1');
+    assert.equal(abiertas[0][2].estadiaId, 'E1');
+    assert.equal(abiertas[0][2].numeroCabana, '2');
 
     grid.querySelector('.dia-calendario[data-fecha="2026-09-28"]').click();
     assert.equal(grid.querySelectorAll('.dia-calendario')[0], celdasAntes[0], 'sin reconstruir el mes');
@@ -303,6 +333,25 @@ test('tap móvil cambia sólo selección y agenda; vacío limpia filas, detalle 
     h.context.seleccionarDia = (...args) => resumen.push(args);
     agenda.children[0].children[1].click();
     assert.deepEqual(resumen[0], [2026, 8, 28, '2026-09-28']);
+});
+
+test('agenda móvil abre el mismo ID en ingreso, continuación y salida', () => {
+    const h = harness({'2026-09-20': {cabanas: {2: {
+        reservaId: 'R-estadia', estadiaId: 'E-estadia', titular: 'Titular',
+        fechaOrigenReserva: '2026-09-20', noches: 3, estado: 'reservada'
+    }}}}, true);
+    const abiertas = [];
+    h.context.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (id, _boton, contexto) =>
+        abiertas.push([id, contexto.estadiaId, contexto.numeroCabana]) };
+    for (const fecha of ['2026-09-20', '2026-09-21', '2026-09-23']) {
+        vm.runInContext(`fechaCalendarioSeleccionadaMovil = "${fecha}"; generarCalendario()`, h.context);
+        h.document.getElementById('calendario-agenda-movil').querySelector('.sites-calendario-agenda-item').click();
+    }
+    assert.deepEqual(abiertas, [
+        ['R-estadia', 'E-estadia', '2'],
+        ['R-estadia', 'E-estadia', '2'],
+        ['R-estadia', 'E-estadia', '2']
+    ]);
 });
 
 test('móvil cambia mes y al volver a desktop conserva exactamente barras y +N', () => {

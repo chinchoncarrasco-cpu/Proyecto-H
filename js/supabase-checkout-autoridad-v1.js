@@ -169,7 +169,13 @@
         return true;
     }
 
-    async function sincronizarDesdeSupabase({ regenerarCalendario = true } = {}) {
+    async function sincronizarDesdeSupabase({ regenerarCalendario = true,
+        origen = { evento: "refresh explícito checkout autoridad", tipo: "externo" } } = {}) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                categoria: "checkout autoridad", ...origen
+            });
+        }
         if (sincronizando) return false;
         const fecha = fechaActualResumen();
         if (!fecha || !window.haikuSesion) return false;
@@ -177,6 +183,11 @@
         sincronizando = true;
         try {
             const estadias = await estadiasQueSalen(fecha);
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "checkout autoridad", ...origen
+                });
+            }
             const fichas = cargarFichasLocales();
 
             estadias.forEach(estadia => proyectarEstadoReal(estadia, fecha, fichas));
@@ -243,7 +254,9 @@
             // limpian hora, azul y ficha del checkout en PC/celular.
             try { await window.haikuSincronizarReservasSupabase?.(); } catch (_) {}
             try {
-                if (typeof cargarCabanasDia === "function") cargarCabanasDia(fecha);
+                if (typeof cargarCabanasDia === "function") cargarCabanasDia(fecha, {
+                    evento: "checkout revertido", tipo: "externo"
+                });
             } catch (_) {}
             await sincronizarDesdeSupabase({ regenerarCalendario: true });
 
@@ -268,26 +281,36 @@
     });
 
     window.addEventListener("haiku:auth-ready", () => {
-        sincronizarDesdeSupabase({ regenerarCalendario: true });
+        sincronizarDesdeSupabase({ regenerarCalendario: true, origen: {
+            evento: "auth checkout autoridad", tipo: "interno_derivado"
+        } });
     });
 
     window.addEventListener("pageshow", () => {
-        sincronizarDesdeSupabase({ regenerarCalendario: true });
+        sincronizarDesdeSupabase({ regenerarCalendario: true, origen: {
+            evento: "pageshow checkout autoridad", tipo: "interno_derivado"
+        } });
     });
 
     window.addEventListener("focus", () => {
-        sincronizarDesdeSupabase({ regenerarCalendario: true });
+        sincronizarDesdeSupabase({ regenerarCalendario: true, origen: {
+            evento: "focus checkout autoridad", tipo: "interno_derivado"
+        } });
     });
 
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") {
-            sincronizarDesdeSupabase({ regenerarCalendario: true });
+            sincronizarDesdeSupabase({ regenerarCalendario: true, origen: {
+                evento: "visibility checkout autoridad", tipo: "interno_derivado"
+            } });
         }
     });
 
     document.addEventListener("click", evento => {
         if (!evento.target?.closest?.('.menu-item[data-seccion="resumen"]')) return;
-        requestAnimationFrame(() => sincronizarDesdeSupabase({ regenerarCalendario: true }));
+        requestAnimationFrame(() => sincronizarDesdeSupabase({ regenerarCalendario: true,
+            origen: { evento: "abrir Resumen", tipo: "interno_derivado" }
+        }));
     });
 
     window.HAIKU_CHECKOUT_AUTORIDAD_V1 = Object.freeze({
@@ -296,8 +319,23 @@
         estadiaQueSale
     });
 
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("checkoutAutoridad", {
+        orden: 45,
+        preparar: ({ fecha }) => estadiasQueSalen(fecha),
+        publicar: snapshot => {
+            const fichas = cargarFichasLocales();
+            snapshot.datos.checkoutAutoridad.forEach(estadia =>
+                proyectarEstadoReal(estadia, snapshot.fecha, fichas));
+            guardarFichasLocales(fichas);
+            if (typeof guardarDatos === "function") guardarDatos();
+            window.HAIKU_CHECKOUT_RESUMEN_V2?.aplicarColores?.(snapshot.fecha);
+        }
+    });
+
     if (window.haikuSesion) {
-        sincronizarDesdeSupabase({ regenerarCalendario: true });
+        sincronizarDesdeSupabase({ regenerarCalendario: true, origen: {
+            evento: "inicio checkout autoridad", tipo: "interno_derivado"
+        } });
     }
 
     console.info("HAIKU · Checkout Autoridad Supabase V1 preparado.");

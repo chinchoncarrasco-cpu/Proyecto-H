@@ -297,9 +297,18 @@
         return resultado;
     }
 
-    async function consultarOperacion(fechaForzada = "") {
+    async function consultarOperacion(fechaForzada = "", origen = {
+        evento: "consulta visual derivada", tipo: "interno_derivado"
+    }) {
         const fecha = String(fechaForzada || fechaActual()).slice(0, 10);
         if (!fecha || !window.haikuSesion) return [];
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            await window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "autoridad visual", ...origen
+            });
+            const publicado = window.HAIKU_RESUMEN_REFRESH_V1.ultimo();
+            return publicado?.fecha === fecha ? publicado.datos?.operacion?.filas || [] : [];
+        }
 
         if (consultando) {
             fechaPendiente = fecha;
@@ -347,7 +356,14 @@
         }
     }
 
-    async function rehidratarBloqueosYFinalizar(fecha = fechaActual()) {
+    async function rehidratarBloqueosYFinalizar(fecha = fechaActual(), origen = {
+        evento: "rehidratación visual derivada", tipo: "interno_derivado"
+    }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "autoridad visual", ...origen
+            });
+        }
         if (rehidratandoBloqueos || !fecha || !window.haikuSesion) return;
         rehidratandoBloqueos = true;
 
@@ -371,6 +387,8 @@
 
     if (colorLegacy) {
         window.actualizarColorCabana = function (tr) {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo() &&
+                !window.HAIKU_RESUMEN_REFRESH_V1.publicando()) return;
             const fecha = fechaActual();
             const numero = String(tr?.dataset?.cabana || "");
             const fila = operacionPorFecha.get(fecha)?.get(numero);
@@ -400,6 +418,14 @@
 
     if (resumenLegacy) {
         window.actualizarResumenDia = function (fecha) {
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo() &&
+                !window.HAIKU_RESUMEN_REFRESH_V1.publicando()) {
+                window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "autoridad visual", evento: "actualizarResumenDia legacy",
+                    tipo: "interno_derivado"
+                });
+                return;
+            }
             const resultado = resumenLegacy(fecha);
             const clave = String(fecha || fechaActual()).slice(0, 10);
             fijarContadorSalen(clave);
@@ -420,7 +446,8 @@
         window.generarCalendario = function (...args) {
             const resultado = generarCalendarioLegacy.apply(this, args);
 
-            if (esperandoRenderPostSyncCalendario && !rehidratandoBloqueos) {
+            if (esperandoRenderPostSyncCalendario && !rehidratandoBloqueos &&
+                !window.HAIKU_RESUMEN_REFRESH_V1?.publicando()) {
                 esperandoRenderPostSyncCalendario = false;
                 queueMicrotask(() => rehidratarBloqueosYFinalizar(fechaActual()));
             }
@@ -459,7 +486,9 @@
 
     function programarRefresco() {
         clearTimeout(timer);
-        timer = setTimeout(() => rehidratarBloqueosYFinalizar(fechaActual()), 100);
+        timer = setTimeout(() => rehidratarBloqueosYFinalizar(fechaActual(), {
+            evento: "realtime bloqueos/estadías", tipo: "externo"
+        }), 100);
     }
 
     function instalarRealtime() {
@@ -488,10 +517,29 @@
     }, 320);
 
     window.HAIKU_AUTORIDAD_VISUAL_FINAL_V1 = Object.freeze({
-        refrescar: rehidratarBloqueosYFinalizar,
-        consultarOperacion,
+        refrescar: fecha => rehidratarBloqueosYFinalizar(fecha || fechaActual(), {
+            evento: "refresh explícito visual", tipo: "externo"
+        }),
+        consultarOperacion: fecha => consultarOperacion(fecha, {
+            evento: "consulta explícita visual", tipo: "externo"
+        }),
         aplicar: () => {
             const fecha = fechaActual();
+            aplicarFilasFecha(fecha);
+            fijarContadorSalen(fecha);
+        }
+    });
+
+    window.HAIKU_RESUMEN_REFRESH_V1?.registrar("autoridadVisual", {
+        orden: 90,
+        preparar: () => true,
+        publicar: snapshot => {
+            const { fecha } = snapshot;
+            const filas = snapshot.datos.operacion.filas;
+            operacionPorFecha.set(fecha,
+                new Map(filas.map(fila => [String(fila?.numero || ""), fila])));
+            salenPorFecha.set(fecha,
+                filas.filter(fila => Boolean(fila?.salida_estadia_id || fila?.fullday_estadia_id)).length);
             aplicarFilasFecha(fecha);
             fijarContadorSalen(fecha);
         }

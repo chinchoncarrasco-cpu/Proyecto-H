@@ -515,7 +515,9 @@
 
         // Antes de escribir, releer la solicitud/revisión de esa fecha y
         // cabaña. Un texto o checklist del caché local no autoriza un ciclo.
-        await hidratar(fecha, { pintar: false });
+        await hidratar(fecha, { pintar: false, origen: {
+            evento: "validación previa Express", tipo: "externo"
+        } });
         const cabana = cabanaCache(fecha, numeroCabana, false);
         if (!cicloExpressVerificado(fecha, numeroCabana)) {
             throw new Error("No existe un ciclo real de Aseo Express verificado para esta cabaña y fecha.");
@@ -546,7 +548,9 @@
             return data;
         });
 
-        await hidratar(fecha, { pintar: true });
+        await hidratar(fecha, { pintar: true, origen: {
+            evento: "escritura Express confirmada", tipo: "externo"
+        } });
         if (fecha === fechaOperativa() && fechaHidratada !== fecha) {
             throw new Error("El estado Express se guardó, pero no se pudo verificar la lectura posterior.");
         }
@@ -777,6 +781,15 @@
     async function hidratar(fechaSolicitada = fechaOperativa(), opciones = {}) {
         const fecha = String(fechaSolicitada || "").slice(0, 10);
         if (!fecha || !cliente() || !window.haikuSesion) return;
+        const origen = opciones.origen || {
+            evento: "hidratación aseo derivada", tipo: "interno_derivado"
+        };
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo() &&
+            document.getElementById("seccion-resumen")?.classList.contains("activa")) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "aseo operación", ...origen
+            });
+        }
 
         if (hidratacionActual) return hidratacionActual;
         const version = window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version();
@@ -784,6 +797,13 @@
         hidratacionActual = (async () => {
             await esperarEscrituras();
             const remoto = await leerFecha(fecha);
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo() &&
+                document.getElementById("seccion-resumen")?.classList.contains("activa")) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                    categoria: "aseo operación", ...origen
+                });
+            }
 
             // Si el usuario cambió de fecha durante la consulta, no pintamos
             // datos antiguos sobre la nueva fecha.
@@ -1041,12 +1061,28 @@
         setInterval(() => {
             const fecha = fechaOperativa();
             if (window.haikuSesion && fecha && fecha !== fechaHidratada) {
+                if (window.HAIKU_RESUMEN_REFRESH_V1?.enCurso()) return;
                 programarRefresco(0);
             }
         }, 1000);
     }
 
     function iniciar() {
+        window.HAIKU_RESUMEN_REFRESH_V1?.registrar("aseo", {
+            orden: 60, obligatoria: false,
+            preparar: async ({ fecha }) => {
+                await esperarEscrituras();
+                return leerFecha(fecha);
+            },
+            publicar: snapshot => {
+                if (!snapshot.datos.aseo) return;
+                aplicarEnCache(snapshot.fecha, snapshot.datos.aseo);
+                fechaHidratada = snapshot.fecha;
+                ultimaActualizacion = Date.now();
+                pintarAseo();
+                window.HAIKU_ASEO_RESUMEN_SYNC_V1?.pintar?.(snapshot.fecha);
+            }
+        });
         if (inicializado || !cliente()) return;
         inicializado = true;
 

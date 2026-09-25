@@ -326,7 +326,14 @@
         }
     }
 
-    async function cargarOperacionDia(fecha) {
+    async function cargarOperacionDia(fecha, origen = {
+        evento: "refresh explícito operación", tipo: "externo"
+    }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fecha, {
+                categoria: "operación", ...origen
+            });
+        }
         const fechaISO = normalizarFecha(fecha);
         if (!fechaISO || cargandoDia || !window.haikuSesion) return;
 
@@ -339,6 +346,12 @@
             );
 
             if (error) throw error;
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaISO, {
+                    categoria: "operación", ...origen
+                });
+            }
 
             if (fechaVisibleResumen() && fechaVisibleResumen() !== fechaISO) return;
 
@@ -367,6 +380,12 @@
             filas.forEach(fila => pintarEstadoOperacion(fila, fechaISO));
 
             const estadiasPorId = await cargarDetallesEstadias(filas);
+
+            if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+                return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaISO, {
+                    categoria: "operación", ...origen
+                });
+            }
 
             if (fechaVisibleResumen() && fechaVisibleResumen() !== fechaISO) return;
 
@@ -425,9 +444,62 @@
             // intermedia pudo descartarse por cargandoDia. Leer el día vigente.
             const vigente = fechaVisibleResumen();
             if (vigente && vigente !== fechaISO && window.haikuSesion) {
-                cargarOperacionDia(vigente);
+                cargarOperacionDia(vigente, {
+                    evento: "relectura de fecha vigente", tipo: "interno_derivado"
+                });
             }
         }
+    }
+
+    async function prepararOperacionResumen({ fecha }) {
+        const { data, error } = await cliente.rpc("haiku_operacion_dia", { p_fecha: fecha });
+        if (error) throw error;
+        const filas = Array.isArray(data) ? data : [];
+        const numeros = new Set(filas.map(fila => String(fila.numero || "")));
+        const articulos = document.querySelectorAll(
+            "#seccion-resumen .sites-resumen-cabana[data-cabana]");
+        if (!filas.length || [...articulos].some(article =>
+            !numeros.has(String(article.dataset.cabana || "")))) {
+            throw new Error("La operación del día no contiene todas las cabañas del Resumen.");
+        }
+        const estadiasPorId = await cargarDetallesEstadias(filas);
+        const idsEstadias = filas.flatMap(fila => [
+            fila.ingreso_estadia_id, fila.salida_estadia_id,
+            fila.continua_estadia_id, fila.fullday_estadia_id
+        ]).filter(Boolean);
+        if (idsEstadias.some(id => !estadiasPorId.has(id))) {
+            throw new Error("La operación del día tiene estadías sin detalle verificable.");
+        }
+        return { filas, estadiasPorId };
+    }
+
+    function publicarOperacionResumen(snapshot) {
+        const { fecha, datos } = snapshot;
+        const { filas, estadiasPorId } = datos.operacion;
+        identidadDia = { fecha, filas: new Map(filas.map(fila => [String(fila.numero), fila])) };
+        document.querySelectorAll("#seccion-resumen .sites-resumen-cabana[data-cabana]")
+            .forEach(article => {
+                article.dataset.resumenFecha = "";
+                article.dataset.resumenSalidaTitular = "";
+                article.dataset.resumenReservaId = "";
+                article.dataset.resumenTitularReservaId = "";
+                article.dataset.resumenTitular = "";
+                article.dataset.salidaReservaId = "";
+                article.dataset.ingresoReservaId = "";
+                article.dataset.resumenEstadiaId = "";
+            });
+        filas.forEach(fila => pintarFilaOperacion(fila, estadiasPorId, fecha));
+        const contar = predicado => filas.filter(predicado).length;
+        const metricas = {
+            "contador-ingresan": contar(fila => ["libre-ingresa", "sale-ingresa", "fullday"].includes(fila.estado_operativo)),
+            "contador-salen": contar(fila => ["sale-libre", "sale-ingresa", "fullday"].includes(fila.estado_operativo)),
+            "contador-continuan": contar(fila => fila.estado_operativo === "continua")
+        };
+        Object.entries(metricas).forEach(([id, valor]) => {
+            const nodo = document.getElementById(id);
+            if (nodo) nodo.textContent = String(valor);
+        });
+        ultimoDiaCargado = fecha;
     }
 
     // Proyección de identidad del RPC ya consultado para Resumen. Cabañas
@@ -646,6 +718,7 @@
     );
 
     function detectarCambioFecha() {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.enCurso()) return;
         let fecha = "";
         try { fecha = normalizarFecha(fechaSeleccionada); } catch {}
 
@@ -654,7 +727,9 @@
             fecha !== ultimoDiaCargado &&
             window.haikuSesion
         ) {
-            cargarOperacionDia(fecha);
+            cargarOperacionDia(fecha, {
+                evento: "detector de fecha", tipo: "interno_derivado"
+            });
         }
     }
 
@@ -680,7 +755,9 @@
             }).format(new Date());
         }
 
-        await cargarOperacionDia(fecha);
+        await cargarOperacionDia(fecha, {
+            evento: "inicio operación", tipo: "interno_derivado"
+        });
 
         document.addEventListener("click", () => {
             setTimeout(detectarCambioFecha, 0);
@@ -696,6 +773,12 @@
     }
 
     window.addEventListener("haiku:auth-ready", iniciar);
+
+    document.addEventListener("DOMContentLoaded", () => {
+        window.HAIKU_RESUMEN_REFRESH_V1?.registrar("operacion", {
+            orden: 80, preparar: prepararOperacionResumen, publicar: publicarOperacionResumen
+        });
+    }, { once: true });
 
     window.addEventListener("load", () => {
         setTimeout(() => {

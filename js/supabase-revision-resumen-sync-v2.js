@@ -105,7 +105,14 @@
         }
     }
 
-    function refrescarDesdeLocal() {
+    function refrescarDesdeLocal(origen = { evento: "proyección local", tipo: "interno_derivado" }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo() &&
+            !window.HAIKU_RESUMEN_REFRESH_V1.publicando()) {
+            window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaActual(), {
+                categoria: "revisión", ...origen
+            });
+            return;
+        }
         const fecha = fechaActual();
         if (!fecha || typeof obtenerDatosDia !== "function") return;
 
@@ -265,7 +272,9 @@
                 if (typeof guardarDatos === "function") guardarDatos();
             }
         }
-        if (fecha === fechaActual()) refrescarDesdeLocal();
+        if (fecha === fechaActual()) refrescarDesdeLocal({
+            evento: "escritura revisión confirmada", tipo: "externo"
+        });
 
         console.log(
             "HAIKU · Estado final guardado en revisión Supabase:",
@@ -312,7 +321,14 @@
         }
     }
 
-    async function resincronizar() {
+    async function resincronizar(origen = {
+        evento: "sincronización derivada", tipo: "interno_derivado"
+    }) {
+        if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+            return window.HAIKU_RESUMEN_REFRESH_V1.solicitar(fechaActual(), {
+                categoria: "revisión", ...origen
+            });
+        }
         if (sincronizando) {
             sincronizacionPendiente = true;
             return;
@@ -330,14 +346,14 @@
 
             puente.limpiarCache?.();
             await puente.sincronizarResumenFecha?.();
-            refrescarDesdeLocal();
+            refrescarDesdeLocal(origen);
         } finally {
             sincronizando = false;
 
             if (sincronizacionPendiente) {
                 sincronizacionPendiente = false;
                 clearTimeout(timer);
-                timer = setTimeout(resincronizar, 0);
+                timer = setTimeout(() => resincronizar(origen), 0);
             }
         }
     }
@@ -360,7 +376,9 @@
             // La capa V1 guarda esta misma selección en Supabase.
             // Damos un pequeño margen y luego verificamos desde la fuente real.
             clearTimeout(timer);
-            timer = setTimeout(resincronizar, 750);
+            timer = setTimeout(() => resincronizar({
+                evento: "selector revisión guardado", tipo: "externo"
+            }), 750);
         });
     }
 
@@ -392,10 +410,14 @@
         instalarSelectorRevision();
         instalarAutoRefresh();
         document.addEventListener("haiku:revision-estado-guardado", evento => {
-            if (evento.detail?.fecha === fechaActual()) resincronizar();
+            if (evento.detail?.fecha === fechaActual()) resincronizar({
+                evento: "revisión estado guardado", tipo: "externo"
+            });
         });
         document.addEventListener("haiku:revision-item-guardado", evento => {
-            if (evento.detail?.fecha === fechaActual()) resincronizar();
+            if (evento.detail?.fecha === fechaActual()) resincronizar({
+                evento: "revisión item guardado", tipo: "externo"
+            });
         });
         resincronizar();
 

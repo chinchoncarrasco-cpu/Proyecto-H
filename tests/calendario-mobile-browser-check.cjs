@@ -40,7 +40,8 @@ const documentHTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"
                 } }
             }));
             window.__opened = [];
-            window.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: id => window.__opened.push(id) };
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1 = { abrirPorId: (id, _boton, contexto) =>
+                window.__opened.push([id, contexto.estadiaId, contexto.numeroCabana]) };
             window.HAIKU_CALENDARIO_ESTADOS_V1 = { estado: id => id === 'R-ingresa' ? 'confirmada' : 'hospedada' };
         });
         await page.addScriptTag({ content: read('js/calendario.js') });
@@ -77,6 +78,10 @@ const documentHTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"
             if (mobile) assert.equal(result.dayHeight, 44);
         }
 
+        await page.setViewportSize({ width: 1100, height: 844 });
+        await page.locator('.calendario-reserva-barra[data-reserva-id="R-ingresa"]').click();
+        assert.deepEqual(await page.evaluate(() => window.__opened), [['R-ingresa', 'E-ingresa', '3']]);
+
         await page.setViewportSize({ width: 390, height: 844 });
         if (process.env.CALENDARIO_SCREENSHOT) {
             await page.screenshot({ path: process.env.CALENDARIO_SCREENSHOT, fullPage: true });
@@ -85,7 +90,8 @@ const documentHTML = `<!doctype html><html lang="es"><head><meta charset="utf-8"
             node.dataset.browserIdentity = 'stable';
         });
         await page.locator('.sites-calendario-agenda-item[data-reserva-id="R-sale"]').click();
-        assert.deepEqual(await page.evaluate(() => window.__opened), ['R-sale']);
+        assert.deepEqual(await page.evaluate(() => window.__opened),
+            [['R-ingresa', 'E-ingresa', '3'], ['R-sale', 'E-sale', '2']]);
         await page.locator('#calendario-grid .dia-calendario[data-fecha="2026-09-28"]').click();
         assert.equal(await page.locator('#calendario-grid .dia-calendario').first().getAttribute('data-browser-identity'), 'stable');
         assert.match(await page.locator('.sites-calendario-agenda-vacia').innerText(), /Sin reservas/);

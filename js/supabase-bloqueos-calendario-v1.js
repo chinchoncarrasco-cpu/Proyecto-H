@@ -289,7 +289,9 @@
 
         try {
             if (fecha && typeof cargarCabanasDia === "function") {
-                cargarCabanasDia(fecha);
+                cargarCabanasDia(fecha, {
+                    evento: "bloqueos sincronizados", tipo: "externo"
+                });
             }
         } catch (_) {}
     }

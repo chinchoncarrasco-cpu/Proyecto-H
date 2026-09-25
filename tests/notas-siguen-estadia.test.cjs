@@ -28,7 +28,7 @@ function resolverHarness(estadias, numeros) {
 
 test('Resumen ubica la nota por la cabaña actual de su estadía', () => {
     assert.match(notas, /id,reserva_id,estadia_id,cabana_id,fecha_operacion/);
-    assert.match(notas, /function resolverCabanaIdNota\(fila\)[\s\S]*?estadiaActualDeNota\(fila\)\?\.cabana_id/);
+    assert.match(notas, /function resolverCabanaIdNota\(fila, contexto\)[\s\S]*?estadiaActualDeNota\(fila, contexto\)\?\.cabana_id/);
     assert.match(notas, /candidatas\.length === 1 \? candidatas\[0\] : null/);
     assert.match(notas, /estadiaId: estadia\?\.id \|\| fila\.estadia_id/);
 
