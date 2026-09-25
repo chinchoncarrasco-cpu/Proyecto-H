@@ -42,7 +42,7 @@
         if (!estado) {
             estado = document.createElement("p");
             estado.className = "haiku-confirmacion-estado-v1";
-            acciones.insertAdjacentElement("afterend", estado);
+            acciones.insertAdjacentElement(card.classList?.contains("haku-incorporacion-sites") ? "beforebegin" : "afterend", estado);
         }
         return estado;
     }
@@ -69,7 +69,8 @@
     }
 
     function vigilar(card, boton, acciones) {
-        const aviso = card.querySelector(":scope > .haiku-incorporacion-aviso");
+        const aviso = card.querySelector(":scope > .haiku-incorporacion-aviso") ||
+            card.querySelector(":scope > .haku-incorporacion-sites-preparacion > .haiku-incorporacion-aviso");
         if (!aviso) return;
         const estado = obtenerEstado(card, acciones);
         estado.className = "haiku-confirmacion-estado-v1 haiku-confirmacion-estado-v1--proceso";

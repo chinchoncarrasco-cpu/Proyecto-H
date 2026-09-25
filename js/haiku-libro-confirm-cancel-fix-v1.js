@@ -160,8 +160,10 @@
         card.querySelectorAll(".haku-libro-servicios__error-guard").forEach(x => x.remove());
         const aviso = document.createElement("div");
         aviso.className = "haku-libro-servicios__razones haku-libro-servicios__error-guard";
+        aviso.setAttribute("role", "alert");
         aviso.textContent = String(texto || "No se pudo completar la incorporación.");
         card.append(aviso);
+        aviso.scrollIntoView?.({ block: "nearest" });
     }
 
     function mensajeErrorIncorporacion(error) {
@@ -170,79 +172,6 @@
             return "Proyecto H no pudo registrar la auditoría de la incorporación. No se guardó ningún servicio ni nota; vuelve a intentar después de actualizar la base.";
         }
         return texto || "No se pudo completar la incorporación.";
-    }
-
-    function prepararDetalleAnterior(card) {
-        const copia = card.cloneNode(true);
-        copia.querySelectorAll(".haku-libro-servicios__acciones,.haku-libro-servicios__error-guard").forEach(x => x.remove());
-        copia.querySelectorAll("button,input,select,textarea").forEach(control => {
-            control.disabled = true;
-            control.setAttribute("aria-disabled", "true");
-        });
-        const wrap = document.createElement("div");
-        wrap.className = "haku-libro-servicios__revision-anterior haku-libro-servicios haku-comparacion-compacta";
-        [...copia.children].forEach(child => wrap.append(child));
-        return wrap;
-    }
-
-    function botonSecundario(texto) {
-        const boton = document.createElement("button");
-        boton.type = "button";
-        boton.className = "libro-reserva-boton secundario";
-        boton.textContent = texto;
-        return boton;
-    }
-
-    function mostrarExito(card, data, textoOriginal, detalleAnterior) {
-        card.replaceChildren();
-        card.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-resultado haku-incorporacion-resultado--servicios";
-        const cabecera = document.createElement("div"); cabecera.className = "haiku-incorporacion-cabecera haku-incorporacion-resultado-cabecera";
-        const titulo = document.createElement("div");
-        const kicker = document.createElement("span"); kicker.textContent = "LIBRO ↔ PROYECTO H";
-        const nombre = document.createElement("strong"); nombre.textContent = "Incorporación completada";
-        titulo.append(kicker, nombre);
-        const estado = document.createElement("span"); estado.className = "haiku-incorporacion-modo"; estado.textContent = "Guardado";
-        cabecera.append(titulo, estado);
-        const mensaje = document.createElement("p"); mensaje.className = "haiku-incorporacion-aviso haku-incorporacion-resultado-mensaje";
-        const omitidos = Number(data?.servicios_omitidos || 0) + Number(data?.notas_omitidas || 0);
-        mensaje.textContent = `Proyecto H confirmó la incorporación completa. El Libro original no fue modificado.`;
-        const resumen = document.createElement("div"); resumen.className = "haiku-incorporacion-resumen haku-incorporacion-resultado-resumen";
-        for (const [cantidad, etiqueta] of [
-            [Number(data?.servicios_creados || 0), "Servicios"],
-            [Number(data?.notas_creadas || 0), "Notas"],
-            [omitidos, "Omitidos"]
-        ]) {
-            const indicador = document.createElement("div"); indicador.className = "haiku-incorporacion-indicador haku-incorporacion-resultado-indicador";
-            const valor = document.createElement("strong"); valor.textContent = String(cantidad);
-            const label = document.createElement("span"); label.textContent = etiqueta;
-            indicador.append(valor, label); resumen.append(indicador);
-        }
-        card.append(cabecera, mensaje, resumen);
-
-        if (detalleAnterior) {
-            const detalle = document.createElement("details");
-            detalle.className = "haiku-comparacion-acordeon haku-franja--normal haku-icono--servicio haku-incorporacion-resultado-detalle";
-            const summary = document.createElement("summary");
-            summary.textContent = "Ver detalle de la revisión anterior";
-            detalle.append(summary, detalleAnterior);
-            card.append(detalle);
-        }
-
-        const acciones = document.createElement("div");
-        acciones.className = "haiku-incorporacion-acciones";
-        const revisar = botonSecundario("Revisar de nuevo");
-        revisar.addEventListener("click", () => {
-            const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
-            if (!api?.procesar || !textoOriginal) return;
-            revisar.disabled = true;
-            Promise.resolve(api.procesar(textoOriginal)).finally(() => {
-                if (revisar.isConnected) {
-                    revisar.disabled = false;
-                }
-            });
-        });
-        acciones.append(revisar);
-        card.append(acciones);
     }
 
     function uuid() {
@@ -275,7 +204,6 @@
         const confirmar = root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
         if (!confirmar) return;
 
-        const detalleAnterior = prepararDetalleAnterior(card);
         const estados = guardarEstadosControles(card);
         deshabilitarControles(estados);
         try {
@@ -286,7 +214,7 @@
             });
             if (error) throw error;
             if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
-            mostrarExito(card, data, textoOriginal, detalleAnterior);
+            api.renderizarResultadoServicios(card, data, actual, elegidos, textoOriginal);
         } catch (error) {
             restaurarControles(estados);
             throw error;
@@ -315,11 +243,18 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         const texto = textoAnteriorDelCard(card);
+        const etiqueta = boton.textContent;
         boton.disabled = true;
+        boton.textContent = "Revalidando…";
+        boton.setAttribute("aria-busy", "true");
         importarSeguro(card, texto).catch(error => {
             mostrarError(card, mensajeErrorIncorporacion(error));
             bloquearRevision(card);
-            if (boton.isConnected) boton.disabled = false;
+        }).finally(() => {
+            if (!boton.isConnected || !card.classList.contains("haku-libro-servicios")) return;
+            boton.removeAttribute?.("aria-busy");
+            boton.textContent = etiqueta;
+            boton.disabled = card.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').length === 0;
         });
     }, true);
 

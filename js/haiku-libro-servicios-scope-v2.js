@@ -756,7 +756,7 @@
 
     function stat(etiqueta, valor) {
         const box = document.createElement("div"); box.className = "haku-libro-servicios__stat";
-        const s = document.createElement("span"); s.textContent = etiqueta; const strong = document.createElement("strong"); strong.textContent = String(valor); box.append(s, strong); return box;
+        const s = document.createElement("span"); s.textContent = etiqueta; const strong = document.createElement("strong"); strong.textContent = String(valor); box.append(strong, s); return box;
     }
 
     function nombreItem(item) {
@@ -772,9 +772,9 @@
         if (check.checked) seleccionados.add(item.item_id); check.addEventListener("change", () => check.checked ? seleccionados.add(item.item_id) : seleccionados.delete(item.item_id));
         const cuerpo = document.createElement("div"), nombre = document.createElement("div"); nombre.className = "haku-libro-servicios__nombre"; nombre.textContent = nombreItem(item);
         const meta = document.createElement("div"); meta.className = "haku-libro-servicios__meta";
-        if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera servicio ni cargo`;
+        if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera servicio ni cargo${item.payload?.fecha_operacion ? ` · Fecha ${item.payload.fecha_operacion}` : ""}`;
         else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${item.hora ? ` · ${item.hora}` : ""} · ${item.cortesia ? "cortesía" : "cobrable"} · omitido`;
-        else meta.textContent = `${item.semantica === "AMBIGUO" ? "Fragmento ambiguo" : item.completitud === "COMPLETO" ? "Servicio preparable" : "Servicio que requiere revisión"} · ${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""} · ${item.intencion_cobro === "cortesia" ? "cortesía" : item.intencion_cobro === "cobrable" ? "cobrable" : "cobro por definir"}`;
+        else meta.textContent = `${item.semantica === "AMBIGUO" ? "Fragmento ambiguo" : item.completitud === "COMPLETO" ? "Servicio preparable" : "Servicio que requiere revisión"} · ${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}${item.hora_fin ? `–${item.hora_fin}` : ""}` : ""}${Number.isInteger(item.servicio?.cantidad) && item.servicio.cantidad > 1 ? ` · ${item.servicio.cantidad} unidades` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""} · ${item.intencion_cobro === "cortesia" ? "cortesía" : item.intencion_cobro === "cobrable" ? "cobrable" : "cobro por definir"}`;
         const texto = document.createElement("div"); texto.className = "haku-libro-servicios__texto"; texto.textContent = item.kind === "nota" ? item.texto : (item.servicio.texto_original || "Servicio indicado en el Libro");
         cuerpo.append(nombre, meta, texto);
         if (item.nocheManual && item.estado === 'listo') meta.textContent += ' · Listo · fecha confirmada manualmente';
@@ -797,16 +797,35 @@
             });
             label.append(select); linea.append(label, boton); cuerpo.append(linea);
         }
-        if (item.asociacion.nota) { const n = document.createElement("div"); n.className = "haku-libro-servicios__nota"; n.textContent = item.asociacion.nota; cuerpo.append(n); }
+        if (item.asociacion.nota || item.asociacion.estado === "asociada") {
+            const n = document.createElement("div"); n.className = "haku-libro-servicios__nota";
+            n.textContent = item.asociacion.nota || "Reserva y estadía verificadas en Proyecto H."; cuerpo.append(n);
+        }
         if (item.inferencias?.length) { const ul = document.createElement("ul"); ul.className = "haku-libro-servicios__inferencias"; item.inferencias.forEach(r => { const li = document.createElement("li"); li.textContent = r; ul.append(li); }); cuerpo.append(ul); }
-        if (item.razones.length) { const ul = document.createElement("ul"); ul.className = "haku-libro-servicios__razones"; item.razones.forEach(r => { const li = document.createElement("li"); li.textContent = r; ul.append(li); }); cuerpo.append(ul); }
+        if (item.razones.length) {
+            const motivos = document.createElement("div"); motivos.className = "haku-libro-servicios-sites__motivos";
+            const titulo = document.createElement("strong"); titulo.textContent = "Antes de incorporar";
+            const ul = document.createElement("ul"); ul.className = "haku-libro-servicios__razones";
+            item.razones.forEach(r => { const li = document.createElement("li"); li.textContent = r; ul.append(li); });
+            motivos.append(titulo, ul); cuerpo.append(motivos);
+        }
         fila.append(check, cuerpo); return fila;
     }
 
-    function seccion(titulo, items, seleccionados, clases, confirmarNoche) {
-        const details = document.createElement("details"); details.className = `haku-libro-servicios__seccion haiku-comparacion-acordeon ${clases}`; details.open = false; const summary = document.createElement("summary");
-        const s1 = document.createElement("span"); s1.textContent = titulo; const s2 = document.createElement("strong"); s2.textContent = String(items.length); summary.append(s1, s2); details.append(summary);
+    function seccion(titulo, items, seleccionados, clases, icono, confirmarNoche) {
+        const details = document.createElement("details"); details.className = `haku-libro-servicios__seccion haku-libro-servicios-sites__seccion ${clases}`; details.open = false;
+        const summary = document.createElement("summary"); summary.className = "haku-libro-servicios-sites__seccion-cabecera";
+        const i = document.createElement("span"); i.className = "haku-libro-servicios-sites__icono"; i.textContent = icono;
+        const s1 = document.createElement("span"); s1.className = "haku-libro-servicios-sites__seccion-titulo"; s1.textContent = titulo;
+        const s2 = document.createElement("strong"); s2.className = "haku-libro-servicios-sites__badge"; s2.textContent = String(items.length);
+        const flecha = document.createElement("span"); flecha.className = "haku-libro-servicios-sites__flecha"; flecha.textContent = "⌄";
+        summary.append(i, s1, s2, flecha); details.append(summary);
         const lista = document.createElement("div"); lista.className = "haku-libro-servicios__lista";
+        if (confirmarNoche) {
+            const aviso = document.createElement("p"); aviso.className = "haku-libro-servicios-sites__revision-aviso";
+            aviso.textContent = "Identifica el dato faltante o la asociación dudosa antes de aprobar cada caso en Proyecto H.";
+            lista.append(aviso);
+        }
         if (!items.length) { const p = document.createElement("div"); p.className = "haku-libro-servicios__nota"; p.textContent = "Sin elementos en esta categoría."; lista.append(p); }
         else items.forEach(i => lista.append(crearItem(i, seleccionados, confirmarNoche)));
         details.append(lista); return details;
@@ -825,6 +844,109 @@
         return texto || "No se pudo completar la incorporación.";
     }
 
+    // El RPC y la última lectura revalidada son las autoridades del resultado.
+    // La revisión anterior se conserva como datos, sin clonar controles del DOM.
+    function renderizarResultadoServicios(card, data, revision, elegidos, textoOriginal) {
+        if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
+        const seleccionados = new Set(elegidos.map(item => item.item_id));
+        const resultados = new Map([...(data.servicios || []), ...(data.notas || [])].map(item => [item.item_id, item]));
+        const omitidos = Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0);
+        const crear = (tag, clase, texto) => {
+            const nodo = document.createElement(tag);
+            if (clase) nodo.className = clase;
+            if (texto !== undefined) nodo.textContent = String(texto);
+            return nodo;
+        };
+
+        const cabecera = crear("header", "haku-libro-resultado-sites__cabecera");
+        const identificacion = crear("div", "haku-libro-resultado-sites__identificacion");
+        identificacion.append(
+            crear("span", "haku-libro-resultado-sites__kicker", "LIBRO · PROYECTO H"),
+            crear("strong", "haku-libro-resultado-sites__titulo", "Servicios y notas")
+        );
+        const accionesCabecera = crear("div", "haku-libro-resultado-sites__cabecera-acciones");
+        accionesCabecera.append(crear("span", "haku-libro-resultado-sites__chip", "Guardado"));
+        const cerrarHaku = document.getElementById("haiku-asistente-cerrar");
+        if (cerrarHaku) {
+            const cerrar = crear("button", "haku-libro-resultado-sites__cerrar", "×");
+            cerrar.type = "button";
+            cerrar.setAttribute("aria-label", "Cerrar Haku");
+            cerrar.addEventListener("click", () => cerrarHaku.click());
+            accionesCabecera.append(cerrar);
+        }
+        cabecera.append(identificacion, accionesCabecera);
+
+        const tarjeta = crear("section", "haku-libro-resultado-sites__tarjeta");
+        const mensaje = crear("div", "haku-libro-resultado-sites__mensaje");
+        const marca = crear("span", "haku-libro-resultado-sites__marca", "✓");
+        marca.setAttribute("aria-hidden", "true");
+        const texto = crear("div", "haku-libro-resultado-sites__mensaje-texto");
+        texto.append(
+            crear("span", "haku-libro-resultado-sites__origen", "LIBRO → PROYECTO H"),
+            crear("strong", "haku-libro-resultado-sites__exito", "Incorporación completada"),
+            crear("p", "haku-libro-resultado-sites__descripcion", "Proyecto H confirmó la incorporación. El Libro original no fue modificado.")
+        );
+        mensaje.append(marca, texto);
+
+        const metricas = crear("div", "haku-libro-resultado-sites__metricas");
+        for (const [etiqueta, cantidad] of [
+            ["Servicios", data.servicios_creados],
+            ["Notas", data.notas_creadas],
+            ["Omitidos", omitidos]
+        ]) {
+            const metrica = crear("div", "haku-libro-resultado-sites__metrica");
+            metrica.append(crear("span", "", etiqueta), crear("strong", "", Number(cantidad || 0)));
+            metricas.append(metrica);
+        }
+
+        const detalle = crear("details", "haku-libro-resultado-sites__detalle");
+        const resumen = crear("summary", "haku-libro-resultado-sites__detalle-cabecera");
+        resumen.append(
+            crear("span", "haku-libro-resultado-sites__detalle-icono", "▤"),
+            crear("span", "", "Ver detalle de la revisión anterior"),
+            crear("span", "haku-libro-resultado-sites__flecha", "⌄")
+        );
+        const contenido = crear("div", "haku-libro-resultado-sites__detalle-contenido");
+        for (const item of revision?.items || []) {
+            const fila = crear("div", "haku-libro-resultado-sites__fila");
+            const resultado = resultados.get(item.item_id);
+            const estado = resultado?.estado === "creado" || resultado?.estado === "creada" ? "Incorporado"
+                : resultado?.estado === "ya_importado" || resultado?.estado === "ya_importada" ? "Ya incorporado · omitido"
+                    : seleccionados.has(item.item_id) ? "Seleccionado para incorporar"
+                        : item.estado === "revisar" ? "Requiere revisión"
+                            : item.estado === "existente" ? "Ya existía en Proyecto H" : "No seleccionado";
+            const cabana = item.reserva?.cabana ? `CAB ${item.reserva.cabana} · ` : "";
+            const titulo = item.kind === "nota" ? "Nota para el resumen" : (item.mapa?.nombre || item.servicio?.concepto || "Servicio");
+            fila.append(
+                crear("strong", "", `${cabana}${item.reserva?.titular || "Reserva"} · ${titulo}`),
+                crear("span", "haku-libro-resultado-sites__estado", estado)
+            );
+            const descripcion = item.kind === "nota" ? item.texto : item.servicio?.texto_original;
+            if (descripcion) fila.append(crear("p", "", descripcion));
+            if (item.asociacion?.nota) fila.append(crear("p", "haku-libro-resultado-sites__asociacion", item.asociacion.nota));
+            for (const razon of item.razones || []) fila.append(crear("p", "haku-libro-resultado-sites__razon", razon));
+            contenido.append(fila);
+        }
+        detalle.append(resumen, contenido);
+
+        const pie = crear("footer", "haku-libro-resultado-sites__pie");
+        const revisar = crear("button", "haku-libro-resultado-sites__revisar", "Revisar de nuevo");
+        revisar.type = "button";
+        revisar.disabled = !textoOriginal;
+        revisar.addEventListener("click", () => {
+            if (revisar.disabled || !textoOriginal) return;
+            revisar.disabled = true;
+            Promise.resolve(procesar(textoOriginal)).finally(() => {
+                if (revisar.isConnected) revisar.disabled = false;
+            });
+        });
+        pie.append(revisar);
+        tarjeta.append(mensaje, metricas, detalle, pie);
+
+        card.className = "haiku-asistente-preview haku-incorporacion-resultado haku-incorporacion-resultado--servicios haku-libro-resultado-sites";
+        card.replaceChildren(cabecera, tarjeta);
+    }
+
     async function importarSeleccionados(seleccionados, card, textoOriginal, overrides = new Map()) {
         const ids = [...seleccionados]; if (!ids.length) return;
         const actual = await construir(textoOriginal, overrides), mapa = new Map(actual.items.filter(x => x.estado === "listo" && x.payload &&
@@ -841,18 +963,7 @@
                 p_operacion_id: uuid(), p_servicios: servicios.map(x => x.payload), p_notas: notas.map(x => x.payload)
             });
             if (error) throw error; if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
-            card.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-resultado haku-incorporacion-resultado--servicios";
-            card.replaceChildren();
-            const cabecera = document.createElement("div"); cabecera.className = "haiku-incorporacion-cabecera haku-incorporacion-resultado-cabecera"; const titulo = document.createElement("div");
-            const k = document.createElement("span"); k.textContent = "LIBRO ↔ PROYECTO H"; const t = document.createElement("strong"); t.textContent = "Incorporación completada"; titulo.append(k, t);
-            const estado = document.createElement("span"); estado.className = "haiku-incorporacion-modo"; estado.textContent = "Guardado"; cabecera.append(titulo, estado);
-            const mensaje = document.createElement("p"); mensaje.className = "haiku-incorporacion-aviso haku-incorporacion-resultado-mensaje"; mensaje.textContent = "Proyecto H confirmó la incorporación completa. El Libro original no fue modificado.";
-            const resumen = document.createElement("div"); resumen.className = "haiku-incorporacion-resumen haku-incorporacion-resultado-resumen";
-            for (const [cantidad, etiqueta] of [[Number(data.servicios_creados || 0), "Servicios"], [Number(data.notas_creadas || 0), "Notas"], [Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0), "Omitidos"]]) {
-                const indicador = document.createElement("div"); indicador.className = "haiku-incorporacion-indicador haku-incorporacion-resultado-indicador";
-                const valor = document.createElement("strong"); valor.textContent = String(cantidad); const label = document.createElement("span"); label.textContent = etiqueta; indicador.append(valor, label); resumen.append(indicador);
-            }
-            card.append(cabecera, mensaje, resumen);
+            renderizarResultadoServicios(card, data, actual, elegidos, textoOriginal);
         } catch (error) {
             const aviso = document.createElement("div"); aviso.className = "haku-libro-servicios__razones"; aviso.textContent = mensajeErrorIncorporacion(error); card.append(aviso);
             botones.forEach(x => x.disabled = false);
@@ -863,9 +974,19 @@
         return construir(texto, nochesPorVista.get(card) || new Map());
     }
 
+    function periodoVisual(desde, hasta) {
+        const inicio = String(desde || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        const fin = String(hasta || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        const meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+        if (inicio && fin && inicio[1] === fin[1] && inicio[2] === fin[2]) {
+            return `${inicio[3]}–${fin[3]} ${meses[Number(inicio[2]) - 1]} ${inicio[1]}`;
+        }
+        return `${desde} → ${hasta}`;
+    }
+
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
         nochesPorVista.set(out, overrides);
-        instalarEstilos(); out.className = "haiku-asistente-preview haku-libro-servicios haku-comparacion-compacta"; out.textContent = "";
+        instalarEstilos(); out.className = "haiku-asistente-preview haku-libro-servicios haku-libro-servicios-sites"; out.textContent = "";
         const confirmarNoche = async (item, indice) => {
             if (!item.puedeElegirNoche || !item.opcionesNoches.some(n => n.noche_indice === indice)) throw new Error('La noche elegida no es válida.');
             overrides.set(item.item_id, { noche_indice: indice, firma: item.firmaNoche });
@@ -876,31 +997,75 @@
         const pendientesServicios = resultado.items.filter(x => x.kind === "servicio" && x.estado === "revisar");
         const notas = resultado.items.filter(x => x.kind === "nota" && x.estado !== "existente");
         const existentes = resultado.items.filter(x => x.estado === "existente"), seleccionados = new Set();
-        const head = document.createElement("div"); head.className = "haku-libro-servicios__head"; const left = document.createElement("div");
-        const kicker = document.createElement("div"); kicker.className = "haku-libro-servicios__kicker"; kicker.textContent = "LIBRO · SERVICIOS + NOTAS";
-        const title = document.createElement("div"); title.className = "haku-libro-servicios__title"; title.textContent = "Interpretación operativa del Libro"; left.append(kicker, title);
-        const chip = document.createElement("span"); chip.className = "haku-libro-servicios__chip"; chip.textContent = `${resultado.desde} → ${resultado.hasta}`; head.append(left, chip); out.append(head);
+        const head = document.createElement("header"); head.className = "haku-libro-servicios__head";
+        const left = document.createElement("div");
+        const kicker = document.createElement("span"); kicker.className = "haku-libro-servicios__kicker"; kicker.textContent = "LIBRO · SERVICIOS Y NOTAS";
+        const title = document.createElement("strong"); title.className = "haku-libro-servicios__title"; title.textContent = "Interpretación operativa";
+        left.append(kicker, title);
+        const headActions = document.createElement("div"); headActions.className = "haku-libro-servicios-sites__head-actions";
+        const chip = document.createElement("span"); chip.className = "haku-libro-servicios__chip"; chip.textContent = "Revisión previa";
+        headActions.append(chip);
+        const cerrarHaku = document.getElementById("haiku-asistente-cerrar");
+        if (cerrarHaku) {
+            const cerrar = document.createElement("button"); cerrar.type = "button";
+            cerrar.className = "haku-libro-servicios-sites__cerrar"; cerrar.textContent = "×";
+            cerrar.setAttribute("aria-label", "Cerrar Haku");
+            cerrar.addEventListener("click", () => cerrarHaku.click()); headActions.append(cerrar);
+        }
+        head.append(left, headActions); out.append(head);
+
+        const resultadoLibro = document.createElement("section"); resultadoLibro.className = "haku-libro-servicios-sites__resultado";
+        const resultadoTop = document.createElement("div"); resultadoTop.className = "haku-libro-servicios-sites__resultado-top";
+        const resultadoTitulo = document.createElement("strong"); resultadoTitulo.textContent = "RESULTADO DEL LIBRO";
+        const periodo = document.createElement("span"); periodo.textContent = periodoVisual(resultado.desde, resultado.hasta);
+        resultadoTop.append(resultadoTitulo, periodo);
+        const descripcion = document.createElement("p");
+        descripcion.textContent = "Servicios, notas y movimientos detectados para Proyecto H. Cada grupo conserva su revisión antes de incorporar.";
+        resultadoLibro.append(resultadoTop, descripcion); out.append(resultadoLibro);
+
         const stats = document.createElement("div"); stats.className = "haku-libro-servicios__stats";
-        stats.append(stat("Preparables", listosServicios.length), stat("Requieren revisión", pendientesServicios.length), stat("Notas", notas.length), stat("Ya existen", existentes.length), stat("Total", resultado.items.length)); out.append(stats);
+        stats.append(stat("servicios preparables", listosServicios.length), stat("requieren revisión", pendientesServicios.length), stat("notas para el resumen", notas.length));
+        out.append(stats);
+        const secundarios = document.createElement("div"); secundarios.className = "haku-libro-servicios-sites__secundarios";
+        const yaExisten = document.createElement("span"); yaExisten.textContent = `${existentes.length} ya existen en Proyecto H`;
+        const hallazgos = document.createElement("span"); hallazgos.textContent = `${resultado.items.length} hallazgos en total`;
+        secundarios.append(yaExisten, hallazgos); out.append(secundarios);
+
+        const reglas = document.createElement("details"); reglas.className = "haku-libro-servicios-sites__reglas";
+        const reglasSummary = document.createElement("summary"); reglasSummary.textContent = "Reglas de lectura del Libro";
+        const reglasTexto = document.createElement("p");
+        reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. La semántica del Libro no cambia después de clasificarse: identidad, completitud y cobro se revisan por separado.";
+        reglas.append(reglasSummary, reglasTexto); out.append(reglas);
         out.append(
-            seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-franja--normal haku-icono--servicio haku-libro-servicios__seccion--servicios"),
-            seccion("Servicios que requieren revisión", pendientesServicios, seleccionados, "haku-franja--revision haku-icono--alerta haku-libro-servicios__seccion--revision", confirmarNoche),
-            seccion("Notas narrativas para el resumen", notas, seleccionados, "haku-franja--neutro haku-icono--archivo haku-libro-servicios__seccion--notas"),
-            seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-franja--normal haku-icono--calendario haku-libro-servicios__seccion--existentes")
+            seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-libro-servicios__seccion--servicios", "✓"),
+            seccion("Servicios que requieren revisión", pendientesServicios, seleccionados, "haku-libro-servicios__seccion--revision", "!", confirmarNoche)
         );
+        if (notas.length) out.append(seccion("Notas para el resumen", notas, seleccionados, "haku-libro-servicios__seccion--notas", "▤"));
+        if (existentes.length) out.append(seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-libro-servicios__seccion--existentes", "✓"));
         // La comparación ya contiene una selección explícita y revalidable. Permitir
         // iniciar la incorporación desde esta misma vista aunque la consulta original
         // haya dicho "comparar": el guard vuelve a leer Libro y Proyecto H antes de
         // pedir confirmación y los ítems dudosos/existentes continúan deshabilitados.
-        if (listosServicios.length || notas.some(x => x.estado === "listo")) {
-            const acciones = document.createElement("div"); acciones.className = "haku-libro-servicios__acciones"; const boton = document.createElement("button"); boton.type = "button"; boton.className = "haku-libro-servicios__boton";
-            boton.dataset.hakuAccion = 'incorporar';
-            const refrescar = () => { const elegidos = resultado.items.filter(x => seleccionados.has(x.item_id)); const s = elegidos.filter(x => x.kind === "servicio").length, n = elegidos.filter(x => x.kind === "nota").length; boton.textContent = `Incorporar ${s} servicio${s === 1 ? "" : "s"} + ${n} nota${n === 1 ? "" : "s"}`; boton.disabled = !elegidos.length; };
-            out.onchange = refrescar; refrescar(); boton.addEventListener("click", async () => { boton.disabled = true; try { await importarSeleccionados(seleccionados, out, textoOriginal, overrides); } catch (e) { const a = document.createElement("div"); a.className = "haku-libro-servicios__razones"; a.textContent = e?.message || "No se pudo revalidar."; out.append(a); boton.disabled = false; } });
-            acciones.append(boton); out.append(acciones);
-        }
-        const pie = document.createElement("div"); pie.className = "haku-libro-servicios__pie";
-        pie.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. La semántica del Libro no cambia después de clasificarse: identidad, completitud y cobro se revisan por separado."; out.append(pie);
+        const acciones = document.createElement("footer"); acciones.className = "haku-libro-servicios__acciones";
+        const seleccion = document.createElement("span"); seleccion.className = "haku-libro-servicios-sites__seleccion";
+        const boton = document.createElement("button"); boton.type = "button"; boton.className = "haku-libro-servicios__boton";
+        boton.dataset.hakuAccion = 'incorporar';
+        const refrescar = () => {
+            const elegidos = resultado.items.filter(x => seleccionados.has(x.item_id));
+            const s = elegidos.filter(x => x.kind === "servicio").length, n = elegidos.filter(x => x.kind === "nota").length;
+            seleccion.textContent = `Seleccionados: ${s} servicio${s === 1 ? "" : "s"} · ${n} nota${n === 1 ? "" : "s"}`;
+            boton.textContent = `Incorporar ${s} servicio${s === 1 ? "" : "s"} + ${n} nota${n === 1 ? "" : "s"}`;
+            boton.disabled = !elegidos.length;
+        };
+        out.onchange = refrescar; refrescar();
+        boton.addEventListener("click", async () => {
+            if (boton.disabled) return;
+            boton.disabled = true; boton.textContent = "Revalidando…"; boton.setAttribute("aria-busy", "true");
+            try { await importarSeleccionados(seleccionados, out, textoOriginal, overrides); }
+            catch (e) { const a = document.createElement("div"); a.className = "haku-libro-servicios__razones"; a.textContent = e?.message || "No se pudo revalidar."; out.append(a); }
+            finally { if (out.className.includes("haku-libro-servicios-sites")) { boton.removeAttribute?.("aria-busy"); refrescar(); } }
+        });
+        acciones.append(seleccion, boton); out.append(acciones);
     }
 
     async function procesar(texto) {
@@ -924,7 +1089,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, revalidarVista, procesar });
+    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, revalidarVista, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;
     root.addEventListener("click", interceptar, true);

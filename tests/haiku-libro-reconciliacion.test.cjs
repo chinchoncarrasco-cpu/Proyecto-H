@@ -496,7 +496,8 @@ test('visual report retains cards, confines coordinates to technical details and
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
  context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,{q,comparacion:c});
  const all=e=>[e,...e.children.flatMap(all)],nodes=all(out);
- assert.equal(out.className,'haiku-asistente-preview haku-comparacion-compacta');assert.ok(nodes.some(e=>e.className==='haiku-asistente-preview-grid'));
+ assert.equal(out.className,'haiku-asistente-preview haku-comparacion-compacta haku-comparacion-sites');
+ assert.ok(nodes.some(e=>e.className==='haiku-asistente-preview-grid haku-comparacion-sites-metricas'));
  const technical=nodes.find(e=>e.tag==='details'&&e.children[0].textContent.startsWith('Detalles técnicos'));
  assert.ok(all(technical).some(e=>e.textContent.includes('Sep26!')));
  const normal=e=>e===technical?[]:[e.textContent,...e.children.flatMap(normal)];
@@ -836,8 +837,9 @@ test('compact comparison preserves data and actions while ordering existing sect
  const before=JSON.stringify(c);h.render({q,comparacion:c});
  assert.equal(JSON.stringify(c),before);
  const titles=h.out.querySelectorAll('summary').map(s=>s.textContent.replace(/ \(\d+\)$/,''));
- assert.deepEqual(titles,['Reservas que faltan','Posibles faltantes / modificaciones','Cancelaciones por verificar','Bloqueos del Libro','Bloqueos sólo en Proyecto H','Reservas con diferencias','Pagos nuevos seguros en esta consulta','Pagos que requieren revisión','Servicios que requieren revisión','Cancelaciones · Ya coincide','Detalles técnicos XLSX']);
- assert.equal(h.out.querySelectorAll('.haiku-asistente-preview-dato').length,6);
+ assert.deepEqual(titles,['Cancelaciones por verificar','Reservas con diferencias','Pagos que requieren revisión','Servicios que requieren revisión','Posibles faltantes / modificaciones','Pagos nuevos seguros en esta consulta','Bloqueos del Libro','Bloqueos sólo en Proyecto H','Cancelaciones · Ya coincide','Reservas que faltan','Detalles técnicos XLSX']);
+ assert.equal(h.out.querySelectorAll('.haiku-asistente-preview-dato').length,3);
+ assert.equal(h.out.querySelectorAll('.haku-comparacion-sites-seccion').length,2);
  const filas=h.out.querySelectorAll('.haku-comparacion-fila');
  assert.ok(filas.length>=6);
  assert.ok(filas.some(f=>f.querySelector('.haku-fila-titulo')?.textContent==='CAB 1 · Marco Iturrieta'));

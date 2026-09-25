@@ -41,6 +41,7 @@
                 html = html.replace('<link rel="stylesheet" href="css/sites-reservas-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-libro-reserva-v1.css">', "");
                 html = html.replace('<link rel="stylesheet" href="css/sites-notificaciones-v1.css">', "");
+                html = html.replace('<link rel="stylesheet" href="css/sites-asistente-v1.css">', "");
                 html = html.replace('<script src="js/sites-pagos-v1.js"><' + '/script>', "");
                 html = html.replace('<script src="js/sites-notificaciones-v1.js"><' + '/script>', "");
                 const estiloArranquePrivado = `<style id="haiku-privacidad-arranque-style">html.haiku-privacidad-arranque::before{content:"";position:fixed;inset:0;z-index:2147483647;display:block;background:#101511;pointer-events:all;}</style>`;
@@ -70,6 +71,7 @@
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-reservas-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-libro-reserva-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-notificaciones-v1.css?v=${version}">\n</head>`);
+                html = html.replace("</head>", `<link rel="stylesheet" href="css/sites-asistente-v1.css?v=${version}">\n</head>`);
                 const marca = "<!-- JAVASCRIPT -->";
                 if (!html.includes(marca)) throw new Error("No se encontró el punto de inserción JAVASCRIPT en index.html");
                 const scriptsSupabaseBase = [

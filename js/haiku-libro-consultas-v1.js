@@ -3329,7 +3329,7 @@
     }
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,revalidarCambiosDetectados,
-        abrirComparacionEstructurada, abrirPreparacionComparacion});
+        abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document) return;
 
@@ -3473,23 +3473,34 @@
         const details = document.createElement("details");
         if (tono) details.className = `haiku-comparacion-acordeon haku-franja--${tono}`;
         if (tono) details.className += claseIconoSeccion(titulo);
-        details.style.marginTop = "9px";
-        details.style.paddingTop = "8px";
-        details.style.borderTop = "1px solid #e5ebe7";
         const summary = elemento("summary", "", `${titulo} (${items.length})`);
-        summary.style.cursor = "pointer";
-        summary.style.fontWeight = "800";
-        summary.style.fontSize = ".68rem";
-        summary.style.color = "#425048";
         details.append(summary);
         const ul = document.createElement("ul");
-        ul.style.margin = "8px 0 0";
-        ul.style.paddingLeft = "18px";
-        ul.style.fontSize = ".67rem";
-        ul.style.lineHeight = "1.45";
         items.forEach(item => ul.append(filaComparacion(item, formato)));
         details.append(ul);
         contenedor.append(details);
+    }
+
+    // La decoración sólo cambia los encabezados; conserva cada <details>, su contenido y sus listeners.
+    function decorarAcordeonesComparacion(contenedor) {
+        const visitar = nodo => {
+            for (const hijo of Array.from(nodo.children || [])) {
+                if (String(hijo.tagName || hijo.tag).toLowerCase() === "details" &&
+                    String(hijo.className || "").includes("haiku-comparacion-acordeon")) {
+                    const resumen = Array.from(hijo.children || []).find(x => String(x.tagName || x.tag).toLowerCase() === "summary");
+                    const match = resumen?.textContent?.match(/^(.*) \((\d+)\)$/);
+                    if (match) {
+                        resumen.setAttribute("aria-label", `${match[1]} (${match[2]})`);
+                        resumen.replaceChildren(
+                            elemento("span", "haku-comparacion-fila-titulo", match[1]),
+                            elemento("span", "haku-comparacion-fila-cantidad", match[2])
+                        );
+                    }
+                }
+                visitar(hijo);
+            }
+        };
+        visitar(contenedor);
     }
 
     function franjaDiferenciaPago(x, comp) {
@@ -3606,96 +3617,104 @@
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
         else {
-        out.className = "haiku-asistente-preview haku-comparacion-compacta";
+        out.className = "haiku-asistente-preview haku-comparacion-compacta haku-comparacion-sites";
         out.replaceChildren();
+        if (result.q.texto) out.dataset.haikuLibroConsulta = result.q.texto;
+        else delete out.dataset.haikuLibroConsulta;
 
-        const cabecera = elemento("div", "haiku-asistente-preview-cabecera");
+        const cabecera = elemento("header", "haku-comparacion-sites-cabecera");
         const textoCab = document.createElement("div");
         textoCab.append(
-            elemento("span", "", "LIBRO · COMPARACIÓN SEGURA"),
-            elemento("strong", "", "Libro de Reserva ↔ Proyecto H")
+            elemento("span", "haku-comparacion-sites-ceja", "LIBRO · COMPARACIÓN SEGURA"),
+            elemento("strong", "haku-comparacion-sites-titulo", "Libro de Reserva ↔ Proyecto H"),
+            elemento("span", "haku-comparacion-sites-periodo", `Período comparado · ${result.q.desde} al ${result.q.hasta}`)
         );
-        cabecera.append(textoCab, elemento("span", "haiku-asistente-confianza haiku-asistente-confianza--alta", "Sólo lectura"));
+        cabecera.append(textoCab, elemento("span", "haku-comparacion-sites-lectura", "Sólo lectura"));
         out.append(cabecera);
 
-        const resumen = elemento("p", "haiku-asistente-preview-resumen");
-        resumen.textContent = `Periodo ${result.q.desde} al ${result.q.hasta}. Encontré ${meta.libro ?? 0} reservas lógicas (${meta.estadias_libro ?? 0} estadías) en el Libro y ${meta.proyecto ?? 0} reservas visibles en Proyecto H. ${meta.faltantes ?? 0} faltan claramente; ${meta.ambiguas ?? 0} requieren una decisión. La comparación considera los registros accesibles con tu sesión.`;
+        const resumen = elemento("section", "haku-comparacion-sites-resumen");
+        const coincidencias = elemento("div", "haku-comparacion-sites-coincidencias");
+        coincidencias.append(
+            elemento("strong", "haku-comparacion-sites-fraccion", `${comp.filter(x => x.estado === "asociada").length} / ${meta.estadias_libro ?? 0}`),
+            elemento("span", "", "Estancias del Libro coinciden"),
+            elemento("small", "", `${meta.estadias_libro ?? 0} estadías · ${meta.ambiguas ?? 0} por decidir`)
+        );
+        resumen.append(coincidencias);
+        const grid = elemento("div", "haiku-asistente-preview-grid haku-comparacion-sites-metricas");
+        agregarDato(grid, "Libro", `${meta.libro ?? 0} reservas`);
+        agregarDato(grid, "Proyecto H", `${meta.proyecto ?? 0} visibles`);
+        agregarDato(grid, "Faltan", `${meta.faltantes ?? 0} reservas`);
+        resumen.append(grid);
         out.append(resumen);
+        out.append(elemento("p", "haku-comparacion-sites-alcance", "La comparación considera los registros accesibles con tu sesión."));
         if (ui.revalidado) {
-            const estado = elemento("p", "haiku-asistente-preview-resumen", `Revalidación completada · ${ui.revalidado}. ${meta.asociadas ?? 0} reservas asociadas; ${meta.pagos_faltantes ?? 0} pagos nuevos seguros; ${meta.ambiguas ?? 0} por decidir. Las decisiones recordadas que sigan siendo compatibles se vuelven a validar. Sólo vista previa.`);
+            const estado = elemento("p", "haku-comparacion-sites-estado", `Revalidación completada · ${ui.revalidado}. ${meta.asociadas ?? 0} reservas asociadas; ${meta.pagos_faltantes ?? 0} pagos nuevos seguros; ${meta.ambiguas ?? 0} por decidir. Las decisiones recordadas que sigan siendo compatibles se vuelven a validar. Sólo vista previa.`);
             estado.setAttribute("role", "status");
             out.append(estado);
         }
 
-        const grid = elemento("div", "haiku-asistente-preview-grid");
-        agregarDato(grid, "Libro", `${meta.libro ?? 0} reservas`);
-        agregarDato(grid, "Proyecto H", `${meta.proyecto ?? 0} reservas`);
-        agregarDato(grid, "Faltan", `${meta.faltantes ?? 0}`);
-        agregarDato(grid, "Coinciden", `${meta.asociadas ?? 0}`);
-        agregarDato(grid, "Por decidir", `${meta.ambiguas ?? 0}`);
-        agregarDato(grid, "Pagos a revisar", `${(meta.pagos_faltantes ?? 0) + (meta.pagos_revisar ?? 0)}`);
-        out.append(grid);
+        const avisoPagos = elemento("div", "haku-comparacion-sites-aviso-pagos");
+        avisoPagos.append(
+            elemento("strong", "", `${meta.pagos_revisar ?? 0} pagos requieren revisión`),
+            elemento("span", "", "La coincidencia de reservas no cierra la revisión de pagos."),
+            elemento("small", "", `Nuevos seguros: ${meta.pagos_faltantes ?? 0} · Requieren decisión: ${meta.pagos_revisar ?? 0}`)
+        );
+        out.append(avisoPagos);
 
-        if (advertenciasInformativas.length) agregarLista(out, "Advertencias informativas",
-            [...new Set(advertenciasInformativas)], { vacio: "" });
-
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, result, result.generacion);
-
-        if (!meta.libro && meta.libro_detectadas) {
-            agregarLista(out, "Revisar lectura del Libro", [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
+        if (advertenciasInformativas.length) {
+            const avisos = elemento("section", "haku-comparacion-sites-avisos");
+            const encabezado = elemento("div", "haku-comparacion-sites-seccion-cabecera");
+            encabezado.append(elemento("strong", "", "Advertencias informativas"));
+            const detalles = elemento("details", "haku-comparacion-sites-advertencias");
+            detalles.append(elemento("summary", "", "Ver advertencia"));
+            const lista = document.createElement("ul");
+            [...new Set(advertenciasInformativas)].forEach(aviso => lista.append(elemento("li", "", aviso)));
+            detalles.append(lista);
+            encabezado.append(detalles);
+            avisos.append(encabezado);
+            out.append(avisos);
         }
 
-        agregarLista(
-            out,
-            `Reservas que faltan (${faltantes.length})`,
+        const revision = elemento("section", "haku-comparacion-sites-seccion");
+        const revisionTitulo = elemento("div", "haku-comparacion-sites-seccion-cabecera");
+        revisionTitulo.append(elemento("strong", "", "Requieren revisión"), elemento("small", "", "Abre una categoría para ver su detalle"));
+        revision.append(revisionTitulo);
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(revision, result);
+        agregarDetalles(revision, "Reservas con diferencias",
+            diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
+        agregarDetalles(revision, "Pagos que requieren revisión",
+            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`), "revision", "pago");
+        agregarDetalles(revision, "Servicios que requieren revisión",
+            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`), "revision", "servicio");
+        if (!meta.libro && meta.libro_detectadas) agregarLista(revision, "Revisar lectura del Libro",
+            [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
+        agregarDetalles(revision, "Posibles faltantes / modificaciones",
+            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`), "revision", "reserva");
+        if (pagosFaltan.length) agregarLista(revision,
+            `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
+            pagosFaltan.map(descripcionPagoNuevoSeguro), { alerta: true, tono: "normal", formato: "pago" });
+        out.append(revision);
+
+        const contexto = elemento("section", "haku-comparacion-sites-seccion");
+        const contextoTitulo = elemento("div", "haku-comparacion-sites-seccion-cabecera");
+        contextoTitulo.append(elemento("strong", "", "Contexto y trazabilidad"), elemento("small", "", "Registros complementarios"));
+        contexto.append(contextoTitulo);
+        const bloqueos = elemento("div", "haku-comparacion-sites-bloqueos");
+        contexto.append(bloqueos);
+        root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(bloqueos, result.bloqueos_comparacion, result.generacion);
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(contexto, result);
+        agregarLista(contexto, `Reservas que faltan (${faltantes.length})`,
             faltantes.map(g => `${descripcionGrupo(g)} · confianza ${g.confianza}`),
-            { alerta: true, vacio: "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" }
-        );
-
-        agregarDetalles(
-            out,
-            "Posibles faltantes / modificaciones",
-            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`),
-            "revision", "reserva"
-        );
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(out, result);
-        root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(out, result.bloqueos_comparacion, result.generacion);
-        agregarDetalles(
-            out,
-            "Reservas con diferencias",
-            diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`),
-            "normal", "reserva"
-        );
-
-        if (pagosFaltan.length) {
-            agregarLista(
-                out,
-                `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
-                pagosFaltan.map(descripcionPagoNuevoSeguro),
-                { alerta: true, tono: "normal", formato: "pago" }
-            );
-        }
-
-        agregarDetalles(
-            out,
-            "Pagos que requieren revisión",
-            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`),
-            "revision", "pago"
-        );
-        agregarDetalles(
-            out,
-            "Servicios que requieren revisión",
-            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`),
-            "revision", "servicio"
-        );
-
-        agregarDetalles(out, "Grupos / multicabaña", grupos.filter(g => g.cabanas.length > 1).map(g =>
-            descripcionGrupo(g) + " · " + g.categoria.replaceAll("_", " ") + " · confianza " + g.confianza), "revision", "reserva");
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(out, result);
-        agregarDetalles(out, "Detalles técnicos XLSX", grupos.flatMap(g => g.items.flatMap(x => [
+            { alerta: true, vacio: "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" });
+        agregarDetalles(contexto, "Detalles técnicos XLSX", grupos.flatMap(g => g.items.flatMap(x => [
             x.libro.titular + " · " + source(x.libro.coordenadas_origen),
             ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
         ])), "neutro");
+        agregarDetalles(contexto, "Grupos / multicabaña", grupos.filter(g => g.cabanas.length > 1).map(g =>
+            descripcionGrupo(g) + " · " + g.categoria.replaceAll("_", " ") + " · confianza " + g.confianza), "revision", "reserva");
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(contexto, result, result.generacion);
+        out.append(contexto);
+        decorarAcordeonesComparacion(out);
         }
         const decisiones = ui.decisiones || new Map();
         const aprobados = ui.aprobados || new Set();
@@ -3745,6 +3764,7 @@
         const preparar = elemento("button", "libro-reserva-boton secundario", "Preparar incorporación");
         preparar.type = "button";
         preparar.addEventListener("click", async () => {
+            if (preparar.disabled) return;
             const sinDecision = ambiguas.filter(g => (g.pagos || []).length && !decisiones.get(g.clave)?.valor);
             if (sinDecision.length) {
                 root.HAIKU_LIBRO_RECONCILIACION_UX_V1?.aplicar?.(preguntas);
@@ -3755,7 +3775,9 @@
                 vista.replaceChildren(elemento("p", "", `Paso 1: elige la reserva existente para ${sinDecision.length === 1 ? "este caso" : "estos casos"}. Haku actualizará primero el titular y RUT; recién después habilitará sus pagos.`));
                 return;
             }
-            preparar.disabled = true; refrescar.disabled = true;
+            preparar.disabled = true; preparar.textContent = "Preparando…";
+            preparar.setAttribute("aria-busy", "true");
+            refrescar.disabled = true;
             out.querySelectorAll("select").forEach(s => s.disabled = true);
             vista.replaceChildren(elemento("p", "", "Revalidando reservas y pagos contra Proyecto H…"));
             try {
@@ -3803,11 +3825,11 @@
                 renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
             } catch (error) {
                 vista.replaceChildren(elemento("p", "", "No se pudo preparar: " + error.message + ". Reintenta; no hay una propuesta actualizada."));
-                preparar.disabled = false; refrescar.disabled = false;
+                preparar.disabled = false; preparar.textContent = "Preparar incorporación";
+                preparar.removeAttribute?.("aria-busy"); refrescar.disabled = false;
                 out.querySelectorAll("select").forEach(s => s.disabled = false);
             }
         });
-        out.append(preparar, vista);
         const refrescar = elemento("button", "libro-reserva-boton secundario", "Revalidar contra Proyecto H");
         refrescar.type = "button";
         refrescar.addEventListener("click", async () => {
@@ -3815,7 +3837,9 @@
                 const clases = ` ${d.className || ""} `;
                 const tipo = clases.includes(" haiku-comparacion-acordeon ") ? "seccion" :
                     clases.includes(" haku-pregunta-caso ") ? "caso" : null;
-                const titulo = d.querySelector("summary")?.textContent.replace(/ \(\d+\)$/, "");
+                const summary = d.querySelector("summary");
+                const titulo = summary?.querySelector(".haku-comparacion-fila-titulo")?.textContent ||
+                    summary?.textContent.replace(/ \(\d+\)$/, "");
                 return tipo && titulo ? `${tipo}:${titulo}` : null;
             };
             const abiertos = new Set(Array.from(out.querySelectorAll("details[open]")).map(claveDetalle).filter(Boolean));
@@ -3852,11 +3876,35 @@
                 refrescar.disabled = false;
             }
         });
-        out.append(refrescar);
+        if (result.q.solo_pagos) {
+            out.append(preparar, vista, refrescar);
+            const pie = elemento("div", "haiku-asistente-preview-pie");
+            pie.append(elemento("span", "", "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
+            out.append(pie);
+        } else {
+            out.append(vista);
+            const pie = elemento("footer", "haku-comparacion-sites-pie");
+            pie.append(elemento("span", "", "Revisa los casos antes de continuar."));
+            const acciones = elemento("div", "haku-comparacion-sites-acciones");
+            preparar.className = "libro-reserva-boton haku-comparacion-sites-preparar";
+            acciones.append(refrescar, preparar);
+            pie.append(acciones);
+            out.append(pie);
+            out.append(elemento("p", "haku-comparacion-sites-seguridad",
+                "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
+        }
+    }
 
-        const pie = elemento("div", "haiku-asistente-preview-pie");
-        pie.append(elemento("span", "", "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
-        out.append(pie);
+    async function reanudarComparacionHistorica(out, texto) {
+        if (!out?.isConnected || !out.matches(".haku-comparacion-sites")) {
+            throw new Error("El informe anterior ya no está disponible. Genera el informe nuevamente.");
+        }
+        const result = await consultar(texto);
+        if (!result.q.comparar || result.q.solo_pagos) {
+            throw new Error("La consulta anterior ya no corresponde a esta comparación. Genera el informe nuevamente.");
+        }
+        renderizarComparacion(out, result);
+        out.querySelector(".haku-comparacion-sites-preparar").click();
     }
 
     function fechaBreve(fecha) {
@@ -4003,6 +4051,25 @@
         return { titular, cabana, monto, concepto, periodo, tipo, estado, detalle, estadias, reserva };
     }
 
+    async function ejecutarAprobacionVisual(boton, accion, contenedor) {
+        if (boton.disabled) return;
+        const etiqueta = boton.textContent;
+        boton.disabled = true;
+        boton.textContent = "Aprobando…";
+        boton.setAttribute("aria-busy", "true");
+        try {
+            await accion();
+        } catch (error) {
+            contenedor.append(elemento("p", "haiku-incorporacion-error", "No se pudo aprobar: " + (error.message || "error desconocido")));
+        } finally {
+            if (boton.isConnected !== false) {
+                boton.disabled = false;
+                boton.textContent = etiqueta;
+                boton.removeAttribute?.("aria-busy");
+            }
+        }
+    }
+
     function renderizarItemIncorporacion(item, controles, actualizar, aprobar, comparacion) {
         const vista = presentacionIncorporacion(item);
         const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
@@ -4098,7 +4165,7 @@
         if (item.aprobable && aprobar) {
             const boton = elemento("button", "haiku-incorporacion-aprobar", item.etiquetaAprobacion || "Aprobar este pago");
             boton.type = "button";
-            boton.addEventListener("click", async () => { boton.disabled = true; await aprobar(item.id); });
+            boton.addEventListener("click", () => ejecutarAprobacionVisual(boton, () => aprobar(item.id), fila));
             fila.append(boton);
         }
         return fila;
@@ -4135,32 +4202,63 @@
     }
 
     function renderizarIncorporacion(out, plan, volver, aprobar, incorporar) {
-        out.className = "haiku-asistente-preview haiku-incorporacion haku-comparacion-compacta haku-incorporacion-compacta";
-        const cabecera = elemento("div", "haiku-incorporacion-cabecera haiku-asistente-preview-cabecera");
-        const titulo = elemento("div");
+        out.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-sites";
+        const cabecera = elemento("header", "haku-incorporacion-sites-cabecera");
+        const titulo = elemento("div", "haku-incorporacion-sites-titulos");
         const etapaIdentidad = plan.etapa === 'actualizar_identidad';
         const etapaPagos = plan.etapaAnteriorCompletada || plan.focoPagos;
-        titulo.append(elemento("span", "", "LIBRO ↔ PROYECTO H"), elemento("strong", "", etapaIdentidad ? "Paso 1 de 2 · Actualizar titular y RUT" : plan.etapaAnteriorCompletada ? "Paso 2 de 2 · Aprobar pagos" : plan.focoPagos ? "Aprobar comprobante de pago" : "Confirmar incorporación"));
-        cabecera.append(titulo, elemento("span", "haiku-incorporacion-modo", etapaIdentidad ? "Primero los datos" : etapaPagos ? "Pagos primero" : "Escritura habilitada"));
+        const escrituraActiva = plan.escrituraHabilitada === true &&
+            !plan.permisos.some(permiso => root.haikuTienePermiso?.(permiso) === false);
+        titulo.append(elemento("span", "haku-incorporacion-sites-ceja", "LIBRO · INCORPORACIÓN SEGURA"),
+            elemento("strong", "haku-incorporacion-sites-titulo", etapaIdentidad ? "Paso 1 de 2 · Actualizar titular y RUT" :
+                plan.etapaAnteriorCompletada ? "Paso 2 de 2 · Aprobar pagos" : plan.focoPagos ? "Aprobar comprobante de pago" : "Confirmar incorporación"));
+        const controlesCabecera = elemento("div", "haku-incorporacion-sites-cabecera-controles");
+        controlesCabecera.append(elemento("span", "haiku-incorporacion-modo haku-incorporacion-sites-modo" +
+            (escrituraActiva ? "" : " haku-incorporacion-sites-modo--bloqueado"), escrituraActiva ? "Escritura habilitada" : "Escritura bloqueada"));
+        const cerrarHaku = document.getElementById?.("haiku-asistente-cerrar");
+        let cerrarVista = null;
+        if (cerrarHaku) {
+            cerrarVista = elemento("button", "haku-incorporacion-sites-cerrar", "×");
+            cerrarVista.type = "button";
+            cerrarVista.setAttribute("aria-label", "Cerrar Haku");
+            cerrarVista.addEventListener("click", () => cerrarHaku.click());
+            controlesCabecera.append(cerrarVista);
+        }
+        cabecera.append(titulo, controlesCabecera);
+        const preparacion = elemento("section", "haku-incorporacion-sites-preparacion");
+        preparacion.append(elemento("span", "haku-incorporacion-sites-ceja", "PREPARACIÓN"),
+            elemento("strong", "", "Confirmar incorporación"));
         const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", etapaIdentidad ?
             "El Libro tiene prioridad. Confirma primero el cambio de titular y RUT en las reservas exactas. Los pagos relacionados permanecen bloqueados hasta que Proyecto H guarde estos datos y Haku vuelva a comprobarlos." :
             plan.etapaAnteriorCompletada ? "Titular y RUT actualizados. Haku volvió a leer Proyecto H: los abonos que ya existen quedan omitidos y ahora puedes revisar únicamente los pagos pendientes." :
             plan.focoPagos ? "El titular y RUT ya coinciden. Si Karina continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
             "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
-        const resumen = elemento("div", "haiku-incorporacion-resumen haiku-asistente-preview-grid");
-        out.replaceChildren(cabecera, aviso, resumen);
+        preparacion.append(aviso);
+        const cifras = elemento("div", "haku-incorporacion-sites-cifras");
+        const cifraListos = elemento("strong", "", "0");
+        const cifraRevision = elemento("strong", "", "0");
+        const listos = elemento("div", "haku-incorporacion-sites-cifra haku-incorporacion-sites-cifra--listos");
+        listos.append(cifraListos, elemento("span", "", "elementos listos"));
+        const revision = elemento("div", "haku-incorporacion-sites-cifra haku-incorporacion-sites-cifra--revision");
+        revision.append(cifraRevision, elemento("span", "", "pagos para revisar"));
+        cifras.append(listos, revision);
+        const resumen = elemento("div", "haiku-incorporacion-resumen haku-incorporacion-sites-matriz");
+        out.replaceChildren(cabecera, preparacion, cifras, resumen);
 
-        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(out, plan, plan.generacion);
+        const cancelaciones = elemento("section", "haku-incorporacion-sites-cancelaciones");
+        root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(cancelaciones, plan, plan.generacion);
 
         const indicadores = {};
         for (const [clave, etiqueta] of [["nuevas", "Reservas"], ["estadias", "Estadías"], ["actualizaciones", "Actualizaciones"], ["pagos", "Pagos"], ["dudosos", "Dudosos"], ["pendientes", "Pendientes"]]) {
-            const tarjeta = elemento("div", "haiku-incorporacion-indicador haiku-asistente-preview-dato");
+            const tarjeta = elemento("div", "haiku-incorporacion-indicador haku-incorporacion-sites-metrica");
             indicadores[clave] = elemento("strong", "", "0");
             tarjeta.append(indicadores[clave], elemento("span", "", etiqueta));
             resumen.append(tarjeta);
         }
 
         const controles = new Map();
+        const contenidosCategoria = new Map();
+        let conteoGrupoListos = null;
         let confirmar = null, guardando = false, volverAComparar = false;
         const idsEtapa = new Set(plan.actualizacionesIdentidad || []);
         const correspondeEtapa = item => !etapaIdentidad || idsEtapa.has(item.id);
@@ -4173,7 +4271,7 @@
                 if (!control) continue;
                 const dependencia = item.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
                 const noElegible = !!item.motivos.length || dependencia || !correspondeEtapa(item) || !CATEGORIAS_GUARDABLES.includes(item.categoria);
-                control.disabled = guardando || noElegible;
+                control.disabled = guardando || !escrituraActiva || noElegible;
                 if (noElegible) { control.checked = false; item.seleccionado = false; }
             }
             indicadores.nuevas.textContent = plan.items.filter(i => i.categoria === "nuevas" && i.seleccionado).length;
@@ -4182,10 +4280,13 @@
             indicadores.pagos.textContent = plan.items.filter(i => i.categoria === "pagos" && i.seleccionado).length;
             indicadores.dudosos.textContent = plan.items.filter(i => i.categoria === "dudosos").length;
             indicadores.pendientes.textContent = plan.items.filter(i => i.categoria === "pendientes" || i.motivos.length && i.categoria !== "dudosos").length;
+            cifraListos.textContent = String(plan.items.filter(esElegible).length);
+            cifraRevision.textContent = indicadores.dudosos.textContent;
+            if (conteoGrupoListos) conteoGrupoListos.textContent = `${cifraListos.textContent} elemento${cifraListos.textContent === "1" ? "" : "s"}`;
             if (confirmar) {
                 const cantidad = seleccionados().length;
                 const comprobanteFoco = plan.focoComprobanteId ? plan.items.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
-                confirmar.disabled = guardando || (!volverAComparar && cantidad === 0);
+                confirmar.disabled = guardando || !escrituraActiva || (!volverAComparar && cantidad === 0);
                 if (!guardando) confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : etapaIdentidad && cantidad ? "Actualizar titular y RUT" :
                     comprobanteFoco && cantidad ? `Registrar comprobante de ${money(comprobanteFoco.total)}` :
                     cantidad ? `Continuar con ${cantidad} elemento${cantidad === 1 ? "" : "s"} listo${cantidad === 1 ? "" : "s"}` :
@@ -4193,25 +4294,52 @@
             }
         };
 
-        const secciones = plan.focoPagos ?
-            [["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["actualizaciones", "Otros cambios del Libro (opcionales)"], ["nuevas", "Reservas nuevas"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]] :
-            [["nuevas", "Reservas nuevas"], ["actualizaciones", "Actualizar Proyecto H con el Libro"], ["estadias", "Estadías a añadir"], ["asociadas", "Reservas ya asociadas"], ["pagos", "Pagos preparados"], ["dudosos", "Pagos para revisar"], ["pendientes", "Casos pendientes"], ["omitidos", "Ya existe / omitido"]];
-        for (const [categoria, tituloSeccion] of secciones) {
-            const items = plan.items.filter(i => i.categoria === categoria);
-            const estilo = {nuevas:"normal haku-icono--nuevo",actualizaciones:"normal haku-icono--intercambio",estadias:"normal haku-icono--calendario",asociadas:"normal haku-icono--calendario",pagos:"normal haku-icono--pago",dudosos:"faltante haku-icono--pago",pendientes:"revision haku-icono--alerta",omitidos:"neutro haku-icono--archivo"}[categoria];
-            const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria} haiku-comparacion-acordeon haku-franja--${estilo}`);
-            const summary = elemento("summary");
-            summary.append(elemento("span", "", tituloSeccion), elemento("strong", "", String(items.length)));
-            seccion.append(summary);
-            const contenido = elemento("div", "haiku-incorporacion-lista");
-            if (!items.length) contenido.append(elemento("p", "haiku-incorporacion-vacio", "Sin elementos en esta categoría."));
-            else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar, contextoVisualPlanes.get(plan))));
-            seccion.append(contenido);
-            out.append(seccion);
+        const grupos = [
+            ["listos", "Listos para incorporar", [
+                ["nuevas", "Reservas nuevas", "＋"],
+                ["actualizaciones", "Actualizar Proyecto H con el Libro", "⇄"],
+                ["estadias", "Estadías a añadir", "▣"],
+                ["pagos", "Pagos preparados", "▤"]
+            ]],
+            ["decision", "Requieren decisión", [
+                ["dudosos", "Pagos para revisar", "!"],
+                ["pendientes", "Casos pendientes", "!"]
+            ]],
+            ["trazabilidad", "Ya conciliados y trazabilidad", [
+                ["asociadas", "Reservas ya asociadas", "✓"],
+                ["omitidos", "Ya existe / omitido", "⊘"]
+            ]]
+        ];
+        const subtitulos = {listos:"0 elementos",decision:"Revisión manual",trazabilidad:"Sin duplicar registros"};
+        for (const [claveGrupo, tituloGrupo, categorias] of grupos) {
+            const grupo = elemento("section", `haku-incorporacion-sites-grupo haku-incorporacion-sites-grupo--${claveGrupo}`);
+            const cabeceraGrupo = elemento("div", "haku-incorporacion-sites-grupo-cabecera");
+            const subtitulo = elemento("span", "", subtitulos[claveGrupo]);
+            if (claveGrupo === "listos") conteoGrupoListos = subtitulo;
+            cabeceraGrupo.append(elemento("strong", "", tituloGrupo), subtitulo);
+            grupo.append(cabeceraGrupo);
+            for (const [categoria, tituloSeccion, icono] of categorias) {
+                const items = plan.items.filter(i => i.categoria === categoria);
+                const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria} haku-incorporacion-sites-fila`);
+                const summary = elemento("summary", "haku-incorporacion-sites-fila-cabecera");
+                summary.append(elemento("span", "haku-incorporacion-sites-fila-icono", icono),
+                    elemento("span", "haku-incorporacion-sites-fila-titulo", tituloSeccion),
+                    elemento("strong", "haku-incorporacion-sites-fila-cantidad", String(items.length)),
+                    elemento("span", "haku-incorporacion-sites-fila-flecha", "⌄"));
+                seccion.append(summary);
+                const contenido = elemento("div", "haiku-incorporacion-lista haku-incorporacion-sites-fila-detalle");
+                if (!items.length) contenido.append(elemento("p", "haiku-incorporacion-vacio", "Sin elementos en esta categoría."));
+                else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar, contextoVisualPlanes.get(plan))));
+                seccion.append(contenido);
+                contenidosCategoria.set(categoria, contenido);
+                grupo.append(seccion);
+            }
+            out.append(grupo);
         }
+        if (cancelaciones.children.length) out.querySelector(".haku-incorporacion-sites-grupo--decision")?.append(cancelaciones);
         actualizar();
 
-        const ayuda = elemento("details", "haiku-incorporacion-ayuda haiku-comparacion-acordeon haku-franja--neutro haku-icono--archivo");
+        const ayuda = elemento("details", "haiku-incorporacion-ayuda haku-incorporacion-sites-fila");
         const permisos = plan.permisos.map(p => p + " · " + (root.haikuTienePermiso?.(p) === true ? "disponible" : "por verificar"));
         ayuda.append(elemento("summary", "", "Información de la incorporación"));
         const listaAyuda = elemento("ul");
@@ -4219,7 +4347,15 @@
         listaAyuda.append(elemento("li", "", "Los datos desconocidos permanecen como “sin dato”."));
         permisos.forEach(p => listaAyuda.append(elemento("li", "", `Permiso ${p}`)));
         ayuda.append(listaAyuda);
-        out.append(ayuda);
+        const infoSummary = ayuda.querySelector("summary");
+        if (infoSummary) {
+            infoSummary.className = "haku-incorporacion-sites-fila-cabecera";
+            infoSummary.replaceChildren(elemento("span", "haku-incorporacion-sites-fila-icono", "▤"),
+                elemento("span", "haku-incorporacion-sites-fila-titulo", "Información de la incorporación"),
+                elemento("strong", "haku-incorporacion-sites-fila-cantidad", "i"),
+                elemento("span", "haku-incorporacion-sites-fila-flecha", "⌄"));
+        }
+        out.querySelector(".haku-incorporacion-sites-grupo--trazabilidad")?.append(ayuda);
 
         const elegiblesAhora = plan.items.filter(item => !item.motivos.length && correspondeEtapa(item) && CATEGORIAS_GUARDABLES.includes(item.categoria) &&
             (!plan.focoPagos || item.categoria === 'pagos') &&
@@ -4234,7 +4370,8 @@
             grupo.items.every(item => item.payload?.aprobado_manualmente === true || item.aprobable) &&
             grupo.items.some(item => item.aprobable));
         const pendientes = plan.items.filter(item => item.categoria === "pendientes" || item.motivos.length && item.categoria !== "dudosos");
-        const atajos = elemento("div", "haiku-incorporacion-atajos");
+        const atajosListos = elemento("div", "haiku-incorporacion-atajos haku-incorporacion-sites-atajos-listos");
+        const atajos = elemento("div", "haiku-incorporacion-atajos haku-incorporacion-sites-atajos-revision");
         if (elegiblesAhora.length) {
             const seleccionar = elemento("button", "haiku-incorporacion-atajo", "Seleccionar todo lo listo");
             seleccionar.type = "button";
@@ -4242,7 +4379,7 @@
                 elegiblesAhora.forEach(item => { item.seleccionado = true; });
                 actualizar();
             });
-            atajos.append(seleccionar);
+            atajosListos.append(seleccionar);
         }
         if (aprobar) for (const grupo of comprobantesAprobables) {
             const aprobarComprobante = elemento("button", "haiku-incorporacion-atajo haiku-incorporacion-atajo--aprobar",
@@ -4251,32 +4388,31 @@
             aprobarComprobante.title = grupo.distribucion.tipo === 'grupo_alojamiento_penalidad' ?
                 "Aprueba juntas las dos partes de alojamiento y la penalidad; el servidor volverá a validar el saldo exacto." :
                 "Aprueba juntas todas las partes del mismo comprobante.";
-            aprobarComprobante.addEventListener("click", async () => {
-                aprobarComprobante.disabled = true;
-                await aprobar(grupo.items.filter(item => item.aprobable).map(item => item.id));
-            });
+            aprobarComprobante.addEventListener("click", () => ejecutarAprobacionVisual(aprobarComprobante,
+                () => aprobar(grupo.items.filter(item => item.aprobable).map(item => item.id)), atajos));
             atajos.append(aprobarComprobante);
         }
         if (aprobables.length && aprobar) {
             const aprobarTodos = elemento("button", "haiku-incorporacion-atajo haiku-incorporacion-atajo--aprobar", `Aprobar ${aprobables.length} pago${aprobables.length === 1 ? "" : "s"} revisable${aprobables.length === 1 ? "" : "s"}`);
             aprobarTodos.type = "button";
             aprobarTodos.title = "Incluye sólo pagos cuyo único requisito pendiente es tu aprobación manual.";
-            aprobarTodos.addEventListener("click", async () => {
-                aprobarTodos.disabled = true;
-                await aprobar(aprobables.map(item => item.id));
-            });
+            aprobarTodos.addEventListener("click", () => ejecutarAprobacionVisual(aprobarTodos,
+                () => aprobar(aprobables.map(item => item.id)), atajos));
             atajos.append(aprobarTodos);
         }
-        if (atajos.children.length) out.append(atajos);
-        if (pendientes.length) out.append(elemento("p", "haiku-incorporacion-continuar", `${pendientes.length} caso${pendientes.length === 1 ? "" : "s"} pendiente${pendientes.length === 1 ? "" : "s"} quedará${pendientes.length === 1 ? "" : "n"} fuera. Puedes continuar con los elementos listos.`));
+        if (atajosListos.children.length) out.querySelector(".haku-incorporacion-sites-grupo--listos")?.append(atajosListos);
+        if (atajos.children.length) contenidosCategoria.get("dudosos")?.append(atajos);
+        if (pendientes.length) out.querySelector(".haku-incorporacion-sites-grupo--decision")?.append(
+            elemento("p", "haiku-incorporacion-continuar", `${pendientes.length} caso${pendientes.length === 1 ? "" : "s"} pendiente${pendientes.length === 1 ? "" : "s"} quedará${pendientes.length === 1 ? "" : "n"} fuera. Puedes continuar con los elementos listos.`));
 
-        const acciones = elemento("div", "haiku-incorporacion-acciones");
+        const acciones = elemento("footer", "haiku-incorporacion-acciones haku-incorporacion-sites-pie");
         const atras = elemento("button", "libro-reserva-boton secundario", "Volver");
         atras.type = "button";
         atras.addEventListener("click", volver);
         confirmar = elemento("button", "libro-reserva-boton", "Continuar con los elementos listos");
         confirmar.type = "button";
         confirmar.addEventListener("click", async () => {
+            if (guardando || confirmar.disabled) return;
             if (volverAComparar) {
                 confirmar.disabled = true;
                 confirmar.textContent = 'Actualizando comparación…';
@@ -4294,7 +4430,10 @@
                 comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
                 `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s), además de ${seleccion.filter(i => i.categoria === "actualizaciones").length} actualización(es) con los datos del Libro. Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
             if (typeof root.confirm === "function" && !root.confirm(texto)) return;
-            guardando = true; atras.disabled = true; actualizar();
+            guardando = true; atras.disabled = true;
+            if (cerrarVista) cerrarVista.disabled = true;
+            confirmar.setAttribute("aria-busy", "true");
+            actualizar();
             confirmar.textContent = "Revalidando y guardando…";
             aviso.textContent = etapaIdentidad ? "Guardando titular y RUT antes de volver a comprobar los pagos…" : "Comprobando cambios recientes y ejecutando la incorporación completa…";
             try {
@@ -4308,6 +4447,8 @@
                 else renderizarResultadoIncorporacion(out, ejecucion, volver);
             } catch (error) {
                 guardando = false; atras.disabled = false;
+                if (cerrarVista) cerrarVista.disabled = false;
+                confirmar.removeAttribute?.("aria-busy");
                 volverAComparar = error.haikuConflictoDatos === true;
                 confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : "Reintentar confirmación";
                 aviso.textContent = volverAComparar

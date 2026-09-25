@@ -48,22 +48,28 @@
 
         let ocupado = false;
 
-        function instalarEstilos() {
-            if (document.getElementById("haku-resumen-dia-v1-css")) return;
+        const panel = mensajes.closest(".haiku-asistente-panel");
+        const tituloPanel = panel?.querySelector("#haiku-asistente-titulo");
+        const subtituloPanel = panel?.querySelector(".haiku-asistente-titulo span");
+        const cerrarPanel = panel?.querySelector("#haiku-asistente-cerrar");
+        const accionesPanel = panel?.querySelector(".haiku-asistente-cabecera-acciones");
+        const tituloOriginal = tituloPanel?.textContent || "Haku";
+        const subtituloOriginal = subtituloPanel?.textContent || "Asistente operativo";
+        const chipLectura = document.createElement("span");
+        chipLectura.className = "haku-dia-sites__cabecera-chip";
+        chipLectura.textContent = "Solo lectura";
+        chipLectura.hidden = true;
+        accionesPanel?.insertBefore(chipLectura, cerrarPanel || null);
 
-            const style = document.createElement("style");
-            style.id = "haku-resumen-dia-v1-css";
-            style.textContent = `
-                .haku-dia-card{--haku-dia-verde:#1f7650;--haku-dia-borde:#cadfd1;border:1px solid var(--haku-dia-borde);border-radius:16px;background:linear-gradient(180deg,#fbfdfb 0%,#f7faf8 100%);padding:14px;display:flex;flex-direction:column;gap:11px;box-shadow:0 5px 16px rgba(28,69,47,.055)}
-                .haku-dia-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:9px;border-bottom:1px solid #deebe2}.haku-dia-kicker{margin:0 0 2px;font-size:10px;line-height:1.2;font-weight:850;letter-spacing:.09em;text-transform:uppercase;color:var(--haku-dia-verde)}.haku-dia-title{margin:0;font-size:19px;line-height:1.15;font-weight:850;color:#17251c}.haku-dia-fecha{flex:0 0 auto;display:inline-flex;align-items:center;min-height:26px;padding:4px 9px;border:1px solid var(--haku-dia-borde);border-radius:999px;background:#edf7f0;color:var(--haku-dia-verde);font-size:10px;font-weight:850;white-space:nowrap}
-                .haku-dia-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.haku-dia-stat{min-width:0;padding:8px 7px;border:1px solid #dfe9e2;border-radius:11px;background:#fff;text-align:center}.haku-dia-stat strong{display:block;font-size:17px;line-height:1.05;color:#203128}.haku-dia-stat span{display:block;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:8px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:#76827a}.haku-dia-stat--pagos{border-color:#ead8bc;background:#fffaf1}.haku-dia-stat--pagos strong{color:#9a611d}
-                .haku-dia-seccion{display:flex;flex-direction:column;gap:6px}.haku-dia-seccion-titulo{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 1px;color:#3d5547;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.04em}.haku-dia-seccion-titulo em{font-style:normal;color:#879089;font-size:9px;font-weight:750;text-transform:none;letter-spacing:0}.haku-dia-lista{display:flex;flex-direction:column;gap:5px;max-height:225px;overflow-y:auto;padding-right:2px;scrollbar-width:thin}.haku-dia-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;min-height:41px;padding:6px 8px;border:1px solid #e1e9e4;border-radius:10px;background:#fff}.haku-dia-cab{display:inline-flex;align-items:center;justify-content:center;min-width:46px;min-height:24px;padding:3px 6px;border-radius:8px;background:#edf7f0;color:var(--haku-dia-verde);font-size:9px;font-weight:900;white-space:nowrap}.haku-dia-main{min-width:0}.haku-dia-main strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#26342c;font-size:11px}.haku-dia-main span{display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#7a857e;font-size:9px}.haku-dia-meta{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#617068;font-size:9px;font-weight:800;text-align:right}.haku-dia-vacio{padding:10px;border:1px dashed #cfddd4;border-radius:10px;background:#f4f8f5;color:#68766e;font-size:10px}.haku-dia-alerta{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #ead8bc;border-radius:11px;background:#fffaf1;color:#76501f;font-size:10px;line-height:1.4}.haku-dia-pie{padding-top:7px;border-top:1px solid #e0e9e3;color:#758078;font-size:9px;line-height:1.35}
-                @media(max-width:620px){.haku-dia-card{padding:11px;gap:9px}.haku-dia-title{font-size:17px}.haku-dia-stats{grid-template-columns:repeat(3,minmax(0,1fr))}.haku-dia-item{grid-template-columns:auto minmax(0,1fr)}.haku-dia-meta{grid-column:2;max-width:none;text-align:left}}
-            `;
-            document.head.appendChild(style);
+        function actualizarCabecera() {
+            const activa = mensajes.lastElementChild?.classList.contains("haku-dia-sites") === true;
+            panel?.classList.toggle("haiku-asistente-panel--resumen-dia", activa);
+            if (tituloPanel) tituloPanel.textContent = activa ? "Resumen del día" : tituloOriginal;
+            if (subtituloPanel) subtituloPanel.textContent = activa ? "HAKU · ASISTENTE OPERATIVO" : subtituloOriginal;
+            chipLectura.hidden = !activa;
         }
-
-        instalarEstilos();
+        new MutationObserver(actualizarCabecera).observe(mensajes, { childList: true });
+        actualizarCabecera();
 
         function quitarHaku(valor) {
             const fn = window.haikuQuitarVocativoAsistente;
@@ -263,64 +269,116 @@
             try { const lista = api.obtener?.(fecha); return Array.isArray(lista) ? lista : []; } catch { return []; }
         }
 
+        function crearNodo(etiqueta, clase, texto) {
+            const nodo = document.createElement(etiqueta);
+            nodo.className = clase;
+            if (texto !== undefined) nodo.textContent = texto;
+            return nodo;
+        }
+
         function crearEstadistica(valor, etiqueta, clase = "") {
-            const div = document.createElement("div");
-            div.className = `haku-dia-stat${clase ? ` ${clase}` : ""}`;
-            const strong = document.createElement("strong"); strong.textContent = String(valor);
-            const span = document.createElement("span"); span.textContent = etiqueta;
-            div.append(strong, span); return div;
+            const metrica = crearNodo("div", `haku-dia-sites__metrica ${clase}`.trim());
+            metrica.append(
+                crearNodo("strong", "haku-dia-sites__valor", String(valor)),
+                crearNodo("span", "haku-dia-sites__etiqueta", etiqueta)
+            );
+            return metrica;
         }
 
         function crearItem(cabana, titular, detalle, meta = "") {
-            const item = document.createElement("div"); item.className = "haku-dia-item";
-            const cab = document.createElement("span"); cab.className = "haku-dia-cab"; cab.textContent = cabana ? `CAB ${cabana}` : "CAB —";
-            const main = document.createElement("div"); main.className = "haku-dia-main";
-            const strong = document.createElement("strong"); strong.textContent = titular || "Sin titular";
-            const span = document.createElement("span"); span.textContent = detalle || ""; main.append(strong, span);
-            const final = document.createElement("span"); final.className = "haku-dia-meta"; final.textContent = meta || "";
-            item.append(cab, main, final); return item;
+            const item = crearNodo("div", "haku-dia-sites__fila");
+            const cab = crearNodo("span", "haku-dia-sites__cab", cabana ? `CAB ${cabana}` : "CAB —");
+            const principal = crearNodo("div", "haku-dia-sites__principal");
+            principal.append(
+                crearNodo("strong", "", titular || "Sin titular"),
+                crearNodo("span", "", detalle || "")
+            );
+            const final = crearNodo("span", "haku-dia-sites__meta", meta || "");
+            item.append(cab, principal, final);
+            return item;
         }
 
         function agregarSeccion(card, titulo, items, crearFila) {
             if (!items.length) return;
-            const seccion = document.createElement("section"); seccion.className = "haku-dia-seccion";
-            const cabecera = document.createElement("div"); cabecera.className = "haku-dia-seccion-titulo";
-            const nombre = document.createElement("span"); nombre.textContent = titulo;
-            const cantidad = document.createElement("em"); cantidad.textContent = `${items.length}`; cabecera.append(nombre, cantidad);
-            const lista = document.createElement("div"); lista.className = "haku-dia-lista"; items.forEach(item => lista.appendChild(crearFila(item)));
-            seccion.append(cabecera, lista); card.appendChild(seccion);
+            const seccion = crearNodo("section", "haku-dia-sites__seccion");
+            const cabecera = crearNodo("h4", "haku-dia-sites__seccion-titulo");
+            cabecera.append(
+                crearNodo("span", "", titulo),
+                crearNodo("span", "", String(items.length))
+            );
+            const lista = crearNodo("div", "haku-dia-sites__lista");
+            items.forEach(item => lista.appendChild(crearFila(item)));
+            seccion.append(cabecera, lista);
+            card.appendChild(seccion);
         }
 
-        function renderizar(fecha, operacion, servicios, pagos) {
-            const card = document.createElement("div"); card.className = "haiku-asistente-preview haku-dia-card";
-            const head = document.createElement("div"); head.className = "haku-dia-head";
-            const izq = document.createElement("div"); const kicker = document.createElement("p"); kicker.className = "haku-dia-kicker"; kicker.textContent = "Resumen operativo · sólo lectura";
-            const titulo = document.createElement("h3"); titulo.className = "haku-dia-title"; titulo.textContent = "Resumen del día"; izq.append(kicker, titulo);
-            const fechaChip = document.createElement("span"); fechaChip.className = "haku-dia-fecha"; fechaChip.textContent = fechaVisible(fecha); head.append(izq, fechaChip); card.appendChild(head);
-            const stats = document.createElement("div"); stats.className = "haku-dia-stats";
-            stats.append(crearEstadistica(operacion.ingresan.length, "Ingresan"), crearEstadistica(operacion.salen.length, "Salen"), crearEstadistica(operacion.continuan.length, "Continúan"), crearEstadistica(servicios.length, "Servicios"), crearEstadistica(pagos.length, "Pagos", "haku-dia-stat--pagos"));
-            card.appendChild(stats);
+        function renderizar(fecha, operacion, servicios, pagos, mensajeUsuario) {
+            const vista = crearNodo("article", "haiku-asistente-preview haku-dia-sites");
+            if (mensajeUsuario) {
+                mensajeUsuario.classList.add("haku-dia-sites__mensaje-usuario");
+                vista.appendChild(mensajeUsuario);
+            }
+
+            const card = crearNodo("section", "haku-dia-card haku-dia-sites__tarjeta");
+            const head = crearNodo("header", "haku-dia-sites__tarjeta-head");
+            const titulo = crearNodo("div", "haku-dia-sites__tarjeta-titulos");
+            titulo.append(
+                crearNodo("span", "", "RESUMEN OPERATIVO · SOLO LECTURA"),
+                crearNodo("h3", "", "Resumen del día")
+            );
+            head.append(titulo, crearNodo("span", "haku-dia-sites__fecha", fechaVisible(fecha)));
+            card.appendChild(head);
+
+            const metricas = crearNodo("div", "haku-dia-sites__metricas");
+            metricas.append(
+                crearEstadistica(operacion.ingresan.length, "Ingresan"),
+                crearEstadistica(operacion.salen.length, "Salen"),
+                crearEstadistica(operacion.continuan.length, "Continúan"),
+                crearEstadistica(servicios.length, "Servicios"),
+                crearEstadistica(pagos.length, "Pagos", pagos.length ? "haku-dia-sites__metrica--pagos" : "")
+            );
+            card.appendChild(metricas);
+
             const todoVacio = !operacion.ingresan.length && !operacion.salen.length && !operacion.continuan.length && !servicios.length && !pagos.length;
-            if (todoVacio) { const vacio = document.createElement("div"); vacio.className = "haku-dia-vacio"; vacio.textContent = "No encontré movimientos operativos para esta fecha."; card.appendChild(vacio); }
+            if (todoVacio) card.appendChild(crearNodo("p", "haku-dia-sites__vacio", "No encontré movimientos operativos para esta fecha."));
             agregarSeccion(card, "Ingresan", operacion.ingresan, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
             agregarSeccion(card, "Salen", operacion.salen, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
             agregarSeccion(card, "Continúan", operacion.continuan, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
-            agregarSeccion(card, "Servicios programados", servicios, servicio => { const detalle = [servicio?.hora || "Sin hora", servicio?.nombre || "Servicio"].join(" · "); const estado = servicio?.estadoServicio === "realizado" ? "Realizado" : "Pendiente"; return crearItem(servicio?.numeroCabana, servicio?.titular, detalle, servicio?.cortesia ? `${estado} · Cortesía` : estado); });
+            agregarSeccion(card, "Servicios", servicios, servicio => {
+                const detalle = [servicio?.hora || "Sin hora", servicio?.nombre || "Servicio"].join(" · ");
+                const estado = servicio?.estadoServicio === "realizado" ? "Realizado" : "Pendiente";
+                return crearItem(servicio?.numeroCabana, servicio?.titular, detalle, servicio?.cortesia ? `${estado} · Cortesía` : estado);
+            });
             agregarSeccion(card, "Pagos pendientes", pagos, pago => crearItem(pago?.numeroCabana, pago?.titular, pago?.titulo || "Pago pendiente", moneda(pago?.monto)));
-            if (pagos.length) { const totalPendiente = pagos.reduce((suma, pago) => suma + Number(pago?.monto || 0), 0); const alerta = document.createElement("div"); alerta.className = "haku-dia-alerta"; alerta.textContent = `💳 Hay ${pagos.length} ${pagos.length === 1 ? "pago pendiente" : "pagos pendientes"} por un total operativo de ${moneda(totalPendiente)}.`; card.appendChild(alerta); }
-            const pie = document.createElement("div"); pie.className = "haku-dia-pie"; pie.textContent = "Datos leídos desde Proyecto H / Supabase · esta consulta no modificó ninguna reserva, pago ni servicio."; card.appendChild(pie);
-            mensajes.appendChild(card); requestAnimationFrame(() => { mensajes.scrollTop = mensajes.scrollHeight; });
+
+            if (pagos.length) {
+                const totalPendiente = pagos.reduce((suma, pago) => suma + Number(pago?.monto || 0), 0);
+                const alerta = crearNodo("div", "haku-dia-sites__alerta");
+                alerta.append(
+                    crearNodo("span", "haku-dia-sites__alerta-icono", "▣"),
+                    crearNodo("span", "", `Hay ${pagos.length} ${pagos.length === 1 ? "pago pendiente" : "pagos pendientes"} por un total operativo de ${moneda(totalPendiente)}.`)
+                );
+                card.appendChild(alerta);
+            }
+
+            card.appendChild(crearNodo("p", "haku-dia-sites__pie", "Datos leídos desde Proyecto H / Supabase · esta consulta no modificó ninguna reserva, pago ni servicio."));
+            vista.appendChild(card);
+            mensajes.appendChild(vista);
+            actualizarCabecera();
+            requestAnimationFrame(() => {
+                mensajes.scrollTop += vista.getBoundingClientRect().top - mensajes.getBoundingClientRect().top;
+            });
         }
 
         async function procesar(textoOriginal) {
             if (ocupado || !esConsultaResumen(textoOriginal)) return;
             const fecha = fechaDesdeTexto(textoOriginal);
-            campo.value = ""; limpiarAdjuntos(); agregarMensaje("usuario", textoOriginal);
+            campo.value = ""; limpiarAdjuntos(); const mensajeUsuario = agregarMensaje("usuario", textoOriginal);
             ocupado = true;
             const espera = agregarMensaje("asistente", `Preparando el resumen operativo del ${fechaVisible(fecha)}…`);
             try {
                 const [filas, servicios, pagos] = await Promise.all([consultarOperacion(fecha), consultarServicios(fecha), consultarPagos(fecha)]);
-                espera.remove(); renderizar(fecha, separarOperacion(filas), servicios, pagos);
+                espera.remove(); renderizar(fecha, separarOperacion(filas), servicios, pagos, mensajeUsuario);
             } catch (error) {
                 console.error("HAKU · Resumen operativo del día:", error);
                 espera.textContent = error?.message || "No pude preparar el resumen operativo de esa fecha.";

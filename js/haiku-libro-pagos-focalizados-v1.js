@@ -278,7 +278,7 @@
 
     function asegurarAviso(out, scope) {
         if (out.querySelector(":scope > .haku-pagos-focalizados-aviso")) return;
-        const cabecera = out.querySelector(":scope > .haiku-asistente-preview-cabecera, :scope > .haiku-incorporacion-cabecera");
+        const cabecera = out.querySelector(":scope > .haiku-asistente-preview-cabecera, :scope > .haiku-incorporacion-cabecera, :scope > .haku-incorporacion-sites-cabecera");
         const aviso = crearAvisoScope(scope);
         if (cabecera) cabecera.after(aviso);
         else out.prepend(aviso);
@@ -329,12 +329,15 @@
     function focalizarIncorporacion(out, scope) {
         asegurarAviso(out, scope);
 
-        asignarTextoSiCambia(out.querySelector(".haiku-incorporacion-modo"), "Sólo pagos");
+        if (!out.classList.contains("haku-incorporacion-sites")) {
+            asignarTextoSiCambia(out.querySelector(".haiku-incorporacion-modo"), "Sólo pagos");
+        }
         const aviso = conservarMovimientosRelacionados(scope)
             ? "Esta preparación conserva los movimientos financieros relacionados con la persona y reserva solicitadas. Los datos de reserva, estadía y servicios no se reemplazarán desde este modo."
             : "Esta preparación está limitada a pagos faltantes de las reservas y fecha solicitadas. Los datos de reserva, estadía, servicios y pagos ya existentes no se reemplazarán desde este modo.";
         asignarTextoSiCambia(
-            out.querySelector(":scope > .haiku-incorporacion-aviso"),
+            out.querySelector(":scope > .haiku-incorporacion-aviso") ||
+                out.querySelector(":scope > .haku-incorporacion-sites-preparacion > .haiku-incorporacion-aviso"),
             aviso
         );
 

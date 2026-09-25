@@ -72,7 +72,7 @@
             toast?.remove();toast=doc.createElement('aside');toast.className='haku-libro-auto'+(revision?' haku-libro-auto--revision':'');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');
             const titulo=doc.createElement('strong');titulo.textContent='Haku';toast.appendChild(titulo);
             const contenido=doc.createElement('p');contenido.textContent=texto;toast.appendChild(contenido);
-            let insertado=false;
+            let insertado=false,mensajeInforme=null;
             function botonInforme(contenedor) {
                 const boton=doc.createElement('button');boton.type='button';
                 boton.textContent=typeof root.HAIKU_ASISTENTE?.abrir==='function'?'Ver informe':'Abre Haku para ver el informe';
@@ -80,6 +80,7 @@
                     if (boton.disabled) return;
                     if (!insertado) {root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado(resultado);insertado=true;}
                     root.HAIKU_ASISTENTE?.abrir?.();
+                    mensajeInforme?.remove();mensajeInforme=null;
                     toast?.remove();toast=null;
                 });
                 contenedor.appendChild(boton);acciones.push(boton);
@@ -93,6 +94,7 @@
                     const mensaje=doc.createElement('div');mensaje.className='haiku-asistente-mensaje haiku-asistente-mensaje--asistente';mensaje.textContent=texto;
                     if (resultado) botonInforme(mensaje);
                     mensajes.appendChild(mensaje);
+                    if (resultado) mensajeInforme=mensaje;
                 }
             }
         }

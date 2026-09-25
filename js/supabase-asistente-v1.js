@@ -25,66 +25,71 @@
     root.className = "haiku-asistente-root";
     root.hidden = true;
     root.innerHTML = `
-        <section class="haiku-asistente-panel" id="haiku-asistente-panel" hidden aria-label="Asistente operativo">
+        <div class="haiku-asistente-overlay" id="haiku-asistente-overlay" hidden></div>
+        <section class="haiku-asistente-panel" id="haiku-asistente-panel" role="dialog" aria-modal="true" aria-labelledby="haiku-asistente-titulo" hidden>
             <header class="haiku-asistente-cabecera">
+                <span class="haiku-asistente-marca" aria-hidden="true">H</span>
                 <div class="haiku-asistente-titulo">
-                    <strong>Haku</strong>
-                    <span>Asistente operativo · capturas, reservas y tareas</span>
+                    <strong id="haiku-asistente-titulo">Haku</strong>
+                    <span>Asistente operativo</span>
                 </div>
-                <button type="button" class="haiku-asistente-cerrar" id="haiku-asistente-cerrar" aria-label="Cerrar asistente">×</button>
+                <div class="haiku-asistente-cabecera-acciones">
+                    <button type="button" class="haiku-asistente-cerrar" id="haiku-asistente-cerrar" aria-label="Cerrar Haku">×</button>
+                </div>
             </header>
 
-            <div class="haiku-asistente-mensajes" id="haiku-asistente-mensajes" aria-live="polite">
-                <div class="haiku-asistente-mensaje haiku-asistente-mensaje--asistente">
-                    Envíame capturas y dime qué necesitas hacer. Leeré los datos y te mostraré una vista previa antes de cualquier cambio.
+            <div class="haiku-asistente-conversacion">
+                <div class="haiku-asistente-bienvenida" id="haiku-asistente-bienvenida">
+                    <strong>¿En qué te ayudo durante el turno?</strong>
+                    <p>Consulta reservas y tareas, comparte una captura o adjunta un documento de apoyo.</p>
+                    <div class="haiku-asistente-bienvenida-acciones" aria-label="Empezar con Haku">
+                        <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
+                        <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
+                        <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
+                    </div>
                 </div>
+                <div class="haiku-asistente-mensajes" id="haiku-asistente-mensajes" role="log" aria-label="Conversación con Haku" aria-live="polite" aria-relevant="additions text"></div>
             </div>
 
-            <div class="haiku-asistente-adjuntos" id="haiku-asistente-adjuntos"></div>
-
-            <details class="haiku-asistente-rapidas" id="haiku-asistente-rapidas">
-                <summary>
-                    <span class="haiku-asistente-rapidas-titulo">
-                        <span class="haiku-asistente-rapidas-icono" aria-hidden="true">⚡</span>
-                        <span>Acciones rápidas</span>
-                    </span>
-                    <span class="haiku-asistente-rapidas-flecha" aria-hidden="true"></span>
-                </summary>
-                <div class="haiku-asistente-rapidas-lista" aria-label="Acciones rápidas de Haku">
-                    <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
-                    <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
-                    <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
-                </div>
-            </details>
-
-            <div class="haiku-asistente-compositor">
+            <div class="haiku-asistente-pie">
+                <details class="haiku-asistente-rapidas" id="haiku-asistente-rapidas">
+                    <summary>Acciones rápidas<span class="haiku-asistente-rapidas-flecha" aria-hidden="true">⌄</span></summary>
+                    <div class="haiku-asistente-rapidas-lista" aria-label="Acciones rápidas de Haku">
+                        <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
+                        <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
+                        <button type="button" data-haiku-accion-rapida="consultar-documento">Consultar PDF Cloudbeds</button>
+                        <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
+                        <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
+                        <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
+                        <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
+                    </div>
+                </details>
+                <div class="haiku-asistente-compositor">
+                <div class="haiku-asistente-adjuntos" id="haiku-asistente-adjuntos"></div>
                 <textarea
                     class="haiku-asistente-texto"
                     id="haiku-asistente-texto"
-                    placeholder="Ej: Agrega esta reserva a la fecha correspondiente. Ojo que es Full Day."
+                    placeholder="Escribe una consulta o instrucción…"
                     aria-label="Mensaje para el asistente"
                 ></textarea>
 
                 <div class="haiku-asistente-acciones">
-                    <button type="button" class="haiku-asistente-adjuntar" id="haiku-asistente-adjuntar">📎 Adjuntar</button>
+                    <button type="button" class="haiku-asistente-adjuntar" id="haiku-asistente-adjuntar">Adjuntar</button>
+                    <span class="haiku-asistente-pista">Puedes pegar una captura aquí.</span>
                     <button type="button" class="haiku-asistente-enviar" id="haiku-asistente-enviar">Enviar</button>
                 </div>
 
-                <div class="haiku-asistente-aviso">
-                    Adjunta imágenes o pega capturas con Ctrl+V. PDF Cloudbeds: informe de sólo lectura. Una reserva sólo se crea después de pulsar “Confirmar” y aceptar la confirmación final.
-                </div>
-
                 <input id="haiku-asistente-archivos" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>
+                </div>
             </div>
         </section>
 
-        <button type="button" class="haiku-asistente-boton" id="haiku-asistente-boton" aria-label="Abrir asistente" aria-expanded="false">
-            <img class="haiku-asistente-avatar" src="assets/img/avatar-haku.png" alt="" aria-hidden="true">
-        </button>
+        <button type="button" class="haiku-asistente-boton" id="haiku-asistente-boton" aria-label="Abrir Haku" aria-haspopup="dialog" aria-expanded="false"><span aria-hidden="true">H</span></button>
     `;
     document.body.appendChild(root);
 
     const panel = root.querySelector("#haiku-asistente-panel");
+    const overlay = root.querySelector("#haiku-asistente-overlay");
     const boton = root.querySelector("#haiku-asistente-boton");
     const cerrar = root.querySelector("#haiku-asistente-cerrar");
     const mensajes = root.querySelector("#haiku-asistente-mensajes");
@@ -95,28 +100,39 @@
     const enviar = root.querySelector("#haiku-asistente-enviar");
     const rapidas = root.querySelector("#haiku-asistente-rapidas");
     const botonesRapidos = [...root.querySelectorAll("[data-haiku-accion-rapida]")];
+    let focoAnterior = null;
+    let overflowAnterior = "";
 
     function estaAutenticado() {
         return Boolean(window.haikuSesion?.auth || window.haikuSesion?.usuario);
     }
 
     function mostrarSiCorresponde() {
-        root.hidden = !estaAutenticado();
-        if (root.hidden) cerrarPanel();
+        const autenticado = estaAutenticado();
+        if (!autenticado) cerrarPanel();
+        root.hidden = !autenticado;
     }
 
     function abrirPanel() {
         if (root.hidden) return;
+        if (!panel.hidden) return;
+        focoAnterior = document.activeElement;
+        overflowAnterior = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        overlay.hidden = false;
         panel.hidden = false;
         boton.setAttribute("aria-expanded", "true");
-        boton.setAttribute("aria-label", "Cerrar asistente");
-        requestAnimationFrame(() => campo.focus());
+        requestAnimationFrame(() => { if (!panel.hidden) campo.focus(); });
     }
 
     function cerrarPanel() {
+        if (panel.hidden) return;
         panel.hidden = true;
+        overlay.hidden = true;
+        document.body.style.overflow = overflowAnterior;
         boton.setAttribute("aria-expanded", "false");
-        boton.setAttribute("aria-label", "Abrir asistente");
+        (focoAnterior?.isConnected ? focoAnterior : boton).focus?.();
+        focoAnterior = null;
     }
 
     function alternarPanel() {
@@ -150,16 +166,23 @@
             item.className = "haiku-asistente-adjunto";
 
             const esPDF = adjunto.file.type === "application/pdf";
-            const img = document.createElement(esPDF ? "span" : "img");
-            if (esPDF) img.textContent = `PDF · ${adjunto.file.name} · sólo lectura`;
-            else img.src = adjunto.url;
-            img.alt = adjunto.file.name || `Imagen ${indice + 1}`;
+            const icono = document.createElement(esPDF ? "span" : "img");
+            if (esPDF) {
+                icono.className = "haiku-asistente-adjunto-icono";
+                icono.textContent = "PDF";
+            } else {
+                icono.src = adjunto.url;
+                icono.alt = "";
+            }
+            const nombre = document.createElement("span");
+            nombre.className = "haiku-asistente-adjunto-nombre";
+            nombre.textContent = adjunto.file.name || `Imagen ${indice + 1}`;
 
             const quitar = document.createElement("button");
             quitar.type = "button";
             quitar.className = "haiku-asistente-quitar";
             quitar.textContent = "×";
-            quitar.setAttribute("aria-label", `Quitar ${img.alt}`);
+            quitar.setAttribute("aria-label", `Quitar ${nombre.textContent}`);
             quitar.addEventListener("click", () => {
                 if (procesando || guardandoReserva) return;
                 const [eliminado] = adjuntos.splice(indice, 1);
@@ -168,7 +191,7 @@
                 actualizarEnviar();
             });
 
-            item.append(img, quitar);
+            item.append(icono, nombre, quitar);
             adjuntosWrap.appendChild(item);
         });
     }
@@ -203,6 +226,7 @@
     }
 
     function textoAccionRapida(accion) {
+        if (accion === "tareas-hoy") return "Haku, resumen del día";
         if (accion === "actualizacion") return "Haku, informe de actualización";
         const periodo = periodoActualChile();
         if (accion === "libro") return `Libro: compara las reservas de ${periodo} con Proyecto H`;
@@ -212,6 +236,21 @@
 
     function ejecutarAccionRapida(accion) {
         if (procesando || guardandoReserva) return;
+        if (accion === "revisar-captura" || accion === "consultar-documento") {
+            archivosInput.accept = accion === "consultar-documento"
+                ? "application/pdf"
+                : "image/png,image/jpeg,image/webp";
+            rapidas.open = false;
+            archivosInput.click();
+            return;
+        }
+        if (accion === "preparar-reserva") {
+            campo.value = "Haku, prepara una nueva reserva con la información que te indicaré.";
+            campo.dispatchEvent(new Event("input", { bubbles: true }));
+            rapidas.open = false;
+            campo.focus();
+            return;
+        }
         const texto = textoAccionRapida(accion);
         if (!texto) return;
         campo.value = texto;
@@ -257,7 +296,8 @@
         if (omitidos) {
             agregarMensaje(
                 "asistente",
-                `No adjunté ${omitidos} archivos. Se admiten PNG/JPG/WEBP (5 MB por imagen) y un PDF Cloudbeds de sólo lectura (12 MB). Máximo 12 MB en total.`
+                `No adjunté ${omitidos} archivos. Se admiten PNG/JPG/WEBP (5 MB por imagen) y un PDF Cloudbeds de sólo lectura (12 MB). Máximo 12 MB en total.`,
+                "haiku-asistente-mensaje--error"
             );
         }
     }
@@ -1465,11 +1505,11 @@
         const archivosActuales = adjuntos.map(item => item.file);
         if (archivosActuales.some(file => file.type === "application/pdf")) {
             if (archivosActuales.length !== 1) {
-                agregarMensaje("asistente", "Para revisar Cloudbeds, deja sólo un PDF adjunto, sin imágenes.");
+                agregarMensaje("asistente", "Para revisar Cloudbeds, deja sólo un PDF adjunto, sin imágenes.", "haiku-asistente-mensaje--error");
                 return;
             }
             const lector = window.HAIKU_CLOUDBEDS_PDF_V1;
-            if (!lector) { agregarMensaje("asistente", "No se cargó el lector local de PDF. Recarga el panel."); return; }
+            if (!lector) { agregarMensaje("asistente", "No se cargó el lector local de PDF. Recarga el panel.", "haiku-asistente-mensaje--error"); return; }
             procesando = true; actualizarEnviar();
             agregarMensaje("usuario", texto || "Revisar PDF Cloudbeds");
             const estadoPDF = agregarMensaje("asistente", "Leyendo PDF Cloudbeds localmente…");
@@ -1481,7 +1521,10 @@
                 estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";
                 const informe = await Promise.race([lector.consultar(entradas, cliente), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La consulta tardó demasiado. Vuelve a intentarlo.")), 30000); })]);
                 estadoPDF.innerHTML = lector.renderizar(informe);
-            } catch (error) { estadoPDF.textContent = `No pude completar el informe: ${error?.message || "PDF no soportado"}`; }
+            } catch (error) {
+                estadoPDF.classList.add("haiku-asistente-mensaje--error");
+                estadoPDF.textContent = `No pude completar el informe: ${error?.message || "PDF no soportado"}`;
+            }
             finally { clearTimeout(limite); procesando = false; actualizarEnviar(); scrollFinal(); }
             return;
         }
@@ -1496,7 +1539,7 @@
         } catch (error) {
             procesando = false;
             actualizarEnviar();
-            agregarMensaje("asistente", error?.message || "No pude preparar una de las imágenes.");
+            agregarMensaje("asistente", error?.message || "No pude preparar una de las imágenes.", "haiku-asistente-mensaje--error");
             return;
         }
 
@@ -1525,6 +1568,7 @@
         } catch (error) {
             console.error("HAIKU · Asistente IA:", error);
             estado.classList.remove("haiku-asistente-mensaje--procesando");
+            estado.classList.add("haiku-asistente-mensaje--error");
 
             if (error?.code === "OPENAI_API_KEY_NOT_CONFIGURED") {
                 estado.textContent = "El asistente ya está conectado, pero falta configurar su clave privada de OpenAI en Supabase. No se envió ni guardó ninguna reserva.";
@@ -1540,11 +1584,33 @@
 
     boton.addEventListener("click", alternarPanel);
     cerrar.addEventListener("click", cerrarPanel);
+    overlay.addEventListener("click", cerrarPanel);
+    document.addEventListener("keydown", evento => {
+        if (panel.hidden) return;
+        if (evento.key === "Escape") {
+            evento.preventDefault();
+            cerrarPanel();
+        } else if (evento.key === "Tab") {
+            const elementos = [...panel.querySelectorAll("button:not(:disabled), textarea:not(:disabled), summary")]
+                .filter(elemento => elemento.getClientRects().length > 0);
+            if (!elementos.length) return;
+            const primero = elementos[0];
+            const ultimo = elementos[elementos.length - 1];
+            if (evento.shiftKey && document.activeElement === primero) {
+                evento.preventDefault(); ultimo.focus();
+            } else if (!evento.shiftKey && document.activeElement === ultimo) {
+                evento.preventDefault(); primero.focus();
+            }
+        }
+    });
     botonesRapidos.forEach(botonRapido => {
         botonRapido.addEventListener("click", () => ejecutarAccionRapida(botonRapido.dataset.haikuAccionRapida));
     });
     adjuntar.addEventListener("click", () => {
-        if (!procesando && !guardandoReserva) archivosInput.click();
+        if (!procesando && !guardandoReserva) {
+            archivosInput.accept = "image/png,image/jpeg,image/webp,application/pdf";
+            archivosInput.click();
+        }
     });
     archivosInput.addEventListener("change", () => incorporarArchivos(archivosInput.files || []));
     campo.addEventListener("input", actualizarEnviar);
@@ -1581,8 +1647,8 @@
     if (cliente?.auth?.onAuthStateChange) {
         cliente.auth.onAuthStateChange(evento => {
             if (evento === "SIGNED_OUT") {
-                root.hidden = true;
                 cerrarPanel();
+                root.hidden = true;
             } else if (evento === "SIGNED_IN") {
                 window.setTimeout(mostrarSiCorresponde, 0);
             }

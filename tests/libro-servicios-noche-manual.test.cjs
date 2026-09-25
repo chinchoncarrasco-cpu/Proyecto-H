@@ -238,7 +238,7 @@ test('rendered confirmation rebuilds the card into ready services without invoki
     assert.deepEqual(e.calls, []);
 });
 
-test('a comparison renders four compact sections and its incorporation button', async () => {
+test('interpretación operativa Sites renders real groups, reasons and selection without changing writer', async () => {
     const e = entorno(), out = new e.Element('div');
     const built = await e.api.construir(consulta), original = built.items.find(x => x.kind === 'servicio');
     const ready = { ...copy(original), item_id: 'ready', estado: 'listo', semantica: 'SERVICIO_REAL', completitud: 'COMPLETO', clasificacion: 'servicio_confirmado', razones: [], inferencias: [], payload: { reserva_id: 'r1' } };
@@ -248,38 +248,48 @@ test('a comparison renders four compact sections and its incorporation button', 
     const result = { ...built, items: [ready, note, existing, review], quiereIncorporar: false };
 
     e.api.renderizar(result, out, consulta);
-    let sections = out.querySelectorAll(':scope > details');
+    let sections = out.querySelectorAll(':scope > details').filter(x => x.classList.contains('haku-libro-servicios__seccion'));
     assert.equal(sections.length, 4);
-    assert.deepEqual(sections.map(x => x.children[0].children[0].textContent), [
+    assert.deepEqual(sections.map(x => x.children[0].children[1].textContent), [
         'Servicios preparables para incorporar',
         'Servicios que requieren revisión',
-        'Notas narrativas para el resumen',
+        'Notas para el resumen',
         'Ya existen en Proyecto H'
     ]);
-    assert.deepEqual(sections.map(x => x.children[0].children[1].textContent), ['1', '1', '1', '1']);
+    assert.deepEqual(sections.map(x => x.children[0].children[2].textContent), ['1', '1', '1', '1']);
     assert.ok(sections.every(x => x.open === false));
     assert.ok(sections.every(x => x.classList.contains('haku-libro-servicios__seccion')));
-    assert.ok(sections.every(x => x.classList.contains('haiku-comparacion-acordeon')));
-    for (const icon of ['haku-icono--servicio', 'haku-icono--archivo', 'haku-icono--calendario', 'haku-icono--alerta']) {
-        assert.ok(sections.some(x => x.classList.contains(icon)), icon);
-    }
-    assert.ok(out.classList.contains('haku-comparacion-compacta'));
+    assert.ok(sections.every(x => x.classList.contains('haku-libro-servicios-sites__seccion')));
+    assert.ok(out.classList.contains('haku-libro-servicios-sites'));
+    assert.equal(out.querySelectorAll(':scope > details')[0].children[0].textContent, 'Reglas de lectura del Libro');
+    assert.match(out.querySelectorAll(':scope > details')[0].textContent, /Full Day 09:30→21:30/);
+    assert.match(sections[1].textContent, /Requiere revisión manual/);
+    assert.match(sections[1].textContent, /Antes de incorporar/);
+    assert.match(sections[2].textContent, /Dejar batas en recepción/);
     assert.equal(out.querySelectorAll('input[type=checkbox]').length, 4);
     assert.equal(out.querySelectorAll('input[type=checkbox]:not(:disabled)').length, 2);
     const incorporar = out.querySelectorAll('button').find(x => x.dataset.hakuAccion === 'incorporar');
     assert.ok(incorporar);
     assert.equal(incorporar.textContent, 'Incorporar 1 servicio + 1 nota');
     assert.equal(incorporar.disabled, false);
+    assert.match(out.textContent, /Seleccionados: 1 servicio · 1 nota/);
+    assert.ok(out.children.some(x => x.tag === 'header'));
+    assert.ok(out.children.some(x => x.tag === 'footer'));
 
     sections[0].open = true;
     e.api.renderizar(result, out, consulta);
-    sections = out.querySelectorAll(':scope > details');
+    sections = out.querySelectorAll(':scope > details').filter(x => x.classList.contains('haku-libro-servicios__seccion'));
     assert.ok(sections.every(x => x.open === false));
 
-    const css = e.document.head.children.at(-1).textContent;
-    assert.match(css, /\.haiku-asistente-panel \.haku-libro-servicios\.haiku-asistente-preview>\.haku-libro-servicios__seccion>\.haku-libro-servicios__lista\{[^}]*width:100%;max-width:none;max-height:none;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible/);
-    assert.doesNotMatch(css, /max-height:250px|overflow:auto/);
-    assert.match(css, /\.haku-libro-servicios__item\{[^}]*border-bottom:1px solid #e3eae5;[^}]*border-radius:0/);
+    const css = fs.readFileSync(path.join(__dirname, '../css/sites-asistente-v1.css'), 'utf8');
+    assert.match(css, /\.haku-libro-servicios-sites > \.haku-libro-servicios-sites__seccion/);
+    assert.match(css, /\.haku-libro-servicios-sites > \.haku-libro-servicios__acciones/);
+    assert.doesNotMatch(css.slice(css.indexOf('Interpretación operativa del Libro:')), /overflow:\s*auto/);
+
+    e.api.renderizar({ ...built, items: [review] }, out, consulta);
+    const categoriasSinDatos = out.querySelectorAll(':scope > details').filter(x => x.classList.contains('haku-libro-servicios__seccion'));
+    assert.equal(categoriasSinDatos.length, 2, 'notas y existentes no crean secciones vacías');
+    assert.equal(out.querySelectorAll('button').find(x => x.dataset.hakuAccion === 'incorporar').disabled, true);
 });
 
 test('an invalidated confirmation stays invalid even when the old data reappears', async () => {
@@ -333,7 +343,8 @@ test('completed service incorporation uses the current saved-result design', asy
     out.previousElementSibling = previous;
     e.cargarGuard(); e.api.renderizar(await e.api.construir(consultaComparacion), out, consultaComparacion);
     e.state.confirmar = true;
-    e.state.rpcResult = { ok: true, servicios_creados: 1, notas_creadas: 0, servicios_omitidos: 0, notas_omitidas: 0 };
+    e.state.rpcResult = { ok: true, servicios_creados: 1, notas_creadas: 0, servicios_omitidos: 1, notas_omitidas: 0,
+        servicios: [{ item_id: 'resultado-incorporado', estado: 'creado' }, { item_id: 'resultado-omitido', estado: 'ya_importado' }], notas: [] };
 
     const all = el => [el, ...el.children.flatMap(all)];
     await e.click(all(out).find(x => x.dataset.hakuAccion === 'incorporar'));
@@ -341,23 +352,25 @@ test('completed service incorporation uses the current saved-result design', asy
     assert.deepEqual(e.calls, ['confirm', 'rpc']);
     assert.ok(out.classList.contains('haku-incorporacion-resultado'));
     assert.ok(out.classList.contains('haku-incorporacion-resultado--servicios'));
-    assert.ok(out.children[0].classList.contains('haku-incorporacion-resultado-cabecera'));
-    assert.equal(out.children[0].children[0].children[0].textContent, 'LIBRO ↔ PROYECTO H');
-    assert.equal(out.children[0].children[0].children[1].textContent, 'Incorporación completada');
-    assert.equal(out.children[0].children[1].className, 'haiku-incorporacion-modo');
-    assert.equal(out.children[0].children[1].textContent, 'Guardado');
-    const indicadores = out.children[2].children;
-    assert.deepEqual(indicadores.map(x => [x.children[1].textContent, x.children[0].textContent]), [
-        ['Servicios', '1'], ['Notas', '0'], ['Omitidos', '0']
+    assert.ok(out.classList.contains('haku-libro-resultado-sites'));
+    assert.ok(out.children[0].classList.contains('haku-libro-resultado-sites__cabecera'));
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__kicker').textContent, 'LIBRO · PROYECTO H');
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__titulo').textContent, 'Servicios y notas');
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__chip').textContent, 'Guardado');
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__exito').textContent, 'Incorporación completada');
+    const indicadores = out.querySelector('.haku-libro-resultado-sites__metricas').children;
+    assert.deepEqual(indicadores.map(x => [x.children[0].textContent, x.children[1].textContent]), [
+        ['Servicios', '1'], ['Notas', '0'], ['Omitidos', '1']
     ]);
     const detalle = out.children.find(x => x.tag === 'details');
-    assert.ok(detalle.classList.contains('haku-incorporacion-resultado-detalle'));
-    assert.equal(detalle.children[0].textContent, 'Ver detalle de la revisión anterior');
-    const acciones = out.children.find(x => x.classList.contains('haiku-incorporacion-acciones'));
-    assert.ok(acciones);
-    assert.equal(acciones.children[0].className, 'libro-reserva-boton secundario');
-    assert.equal(acciones.children[0].textContent, 'Revisar de nuevo');
+    assert.equal(detalle, undefined);
+    const revision = out.querySelector('.haku-libro-resultado-sites__detalle');
+    assert.ok(revision);
+    assert.match(revision.children[0].textContent, /Ver detalle de la revisión anterior/);
+    assert.ok(revision.querySelectorAll('.haku-libro-resultado-sites__fila').length > 0);
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__revisar').textContent, 'Revisar de nuevo');
     assert.equal(out.children.some(x => x.classList.contains('haku-libro-servicios__head')), false);
+    assert.doesNotMatch(out.textContent, /Ejemplo del estado final|esta vista no guardó datos reales/);
 });
 
 test('active capture guard blocks obsolete overrides instead of selecting another row by position', async () => {

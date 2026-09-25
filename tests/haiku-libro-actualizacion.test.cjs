@@ -152,10 +152,11 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
     const r=resultado({modificadas:[{actual:reserva,cambios:[{campo:'notas_importantes',antes:['Nota extensa'],ahora:[]}]}],advertencias:[{hoja:'Sep26',motivo:'Revisar origen'},{hoja:'Sep26',motivo:'Revisar origen'}],no_comparables:[{hoja:'Oct26',motivo:'Cobertura parcial'}]});
     const antes=JSON.stringify(r),html=A.renderizar(r);
     assert.equal(JSON.stringify(r),antes);
-    assert.match(html,/<summary>Modificadas \(1\)<\/summary>/);
+    assert.match(html,/haku-actualizacion-sites__grupo--modificadas/);
+    assert.match(html,/<span>Modificadas \(1\)<\/span>/);
     assert.match(html,/class="haku-libro-item haku-pregunta-caso"/);
     assert.match(html,/Nota extensa → Ninguno/);
-    assert.match(html,/<summary>Advertencias de interpretación \/ cobertura \(3\)<\/summary>/);
+    assert.match(html,/<span>Advertencias de interpretación \/ cobertura \(3\)<\/span>/);
     assert.equal((html.match(/Revisar origen/g)||[]).length,2);
     assert.match(html,/Cobertura parcial/);
     assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
@@ -164,7 +165,7 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
 test('sin cambios históricos pendientes muestra sincronización y oculta preparar',()=>{
     const html=A.renderizarPendientes({items:[],generacion:7,preparacion:{reservas:[reserva]}});
     assert.match(html,/Cambios detectados aún pendientes de aplicar/);
-    assert.match(html,/haku-comparacion-compacta haku-pendientes-compactos/);
+    assert.match(html,/haku-pendientes-compactos haku-actualizacion-sites__historial/);
     assert.match(html,/Todos los cambios detectados ya están sincronizados con Proyecto H/);
     assert.match(html,/Revalidar contra Proyecto H/);
     assert.doesNotMatch(html,/Preparar incorporación/);
@@ -177,9 +178,9 @@ test('un cambio histórico accionable muestra valores y habilita preparar sin ex
     const html=A.renderizarPendientes(pendientes);
     assert.match(html,/CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE/);
     assert.match(html,/Anterior: confirmada/);assert.match(html,/Nuevo valor del Libro: hospedada/);assert.match(html,/Proyecto H actual: confirmada/);
-    assert.match(html,/class="haiku-comparacion-acordeon haku-pendiente-item/);
+    assert.match(html,/class="haku-pendiente-item haku-actualizacion-sites__pendiente/);
     assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
-    assert.match(html,/class="libro-reserva-boton haku-libro-preparar"/);
+    assert.match(html,/data-haku-preparar-pendientes/);
     assert.match(html,/Preparar incorporación/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
 });
 

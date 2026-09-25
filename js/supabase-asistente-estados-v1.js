@@ -49,18 +49,12 @@
         const panel = document.getElementById("haiku-asistente-panel");
         const abrir = document.getElementById("haiku-asistente-boton");
         const cerrar = document.getElementById("haiku-asistente-cerrar");
-        const saludo = mensajes.querySelector(".haiku-asistente-mensaje--asistente");
-
         if (titulo) titulo.textContent = "Haku";
-        if (subtitulo) subtitulo.textContent = "Asistente operativo · capturas, reservas y tareas";
+        if (subtitulo) subtitulo.textContent = "Asistente operativo";
         panel?.setAttribute("aria-label", "Haku · Asistente operativo");
         abrir?.setAttribute("aria-label", "Abrir Haku");
         cerrar?.setAttribute("aria-label", "Cerrar Haku");
-        campo.placeholder = "Ej: Haku, marca las reservas de hoy como Hospedado.";
-
-        if (saludo && mensajes.children.length === 1) {
-            saludo.textContent = "Hola, soy Haku. Envíame capturas o dime qué necesitas hacer; siempre te mostraré una vista previa antes de cualquier cambio.";
-        }
+        campo.placeholder = "Escribe una consulta o instrucción…";
 
         window.HAIKU_ASISTENTE_IDENTIDAD = Object.freeze({
             nombre: "Haku",

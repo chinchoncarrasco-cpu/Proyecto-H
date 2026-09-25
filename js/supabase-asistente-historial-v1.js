@@ -184,6 +184,48 @@
         return template.content;
     }
 
+    function reactivarPreparacionActual() {
+        mensajes.querySelectorAll(".haku-comparacion-sites").forEach(card => {
+            const preparar = card.querySelector(".haku-comparacion-sites-preparar");
+            if (!preparar) return;
+            const texto = card.dataset.haikuLibroConsulta ||
+                (card.previousElementSibling?.matches(".haiku-asistente-mensaje--usuario")
+                    ? card.previousElementSibling.textContent.trim() : "");
+            const vista = card.querySelector(":scope > .haku-comparacion-sites-pie")?.previousElementSibling;
+            const informar = mensaje => {
+                if (!vista) return;
+                const aviso = document.createElement("p");
+                aviso.textContent = mensaje;
+                vista.replaceChildren(aviso);
+            };
+            if (!texto) {
+                informar("No hay una consulta del Libro asociada a este informe. Genera el informe nuevamente antes de preparar cambios en Proyecto H.");
+                return;
+            }
+            preparar.disabled = false;
+            preparar.removeAttribute("aria-disabled");
+            preparar.textContent = "Preparar incorporación";
+            let enCurso = false;
+            preparar.addEventListener("click", async () => {
+                if (enCurso || preparar.disabled) return;
+                enCurso = true;
+                preparar.disabled = true;
+                preparar.textContent = "Preparando…";
+                preparar.setAttribute("aria-busy", "true");
+                informar("Revalidando reservas y pagos contra Proyecto H…");
+                try {
+                    await window.HAIKU_LIBRO_CONSULTAS.reanudarComparacionHistorica(card, texto);
+                } catch (error) {
+                    informar("No se pudo preparar: " + (error.message || "error desconocido"));
+                    preparar.disabled = false;
+                    preparar.textContent = "Preparar incorporación";
+                    preparar.removeAttribute("aria-busy");
+                    enCurso = false;
+                }
+            });
+        });
+    }
+
     function restaurar() {
         let registro = null;
         try {
@@ -198,10 +240,20 @@
 
         try {
             const fragmento = fragmentoSeguroDesdeHtml(registro.html);
-            if (!fragmento.childNodes.length) return false;
+            // Las conversaciones previas guardaban el saludo de la interfaz
+            // antigua como si fuera un mensaje. La bienvenida Sites vive fuera
+            // del log y se muestra sólo cuando no hay conversación real.
+            const primero = fragmento.firstElementChild;
+            if (primero?.matches(".haiku-asistente-mensaje--asistente") &&
+                /^(?:Hola, soy Haku\.|Envíame capturas)/.test(primero.textContent.trim()) &&
+                !primero.children.length) {
+                primero.remove();
+            }
+            if (!fragmento.firstElementChild) return false;
 
             mensajes.replaceChildren(fragmento);
             mensajes.dataset.haikuHistorialRestaurado = "1";
+            reactivarPreparacionActual();
             requestAnimationFrame(() => {
                 mensajes.scrollTop = mensajes.scrollHeight;
             });
