@@ -34,6 +34,77 @@ let fechaCalendario = new Date();
 let fechaCalendarioSeleccionadaMovil =
     `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
 let reservasCalendarioMes = [];
+const CLAVE_CONTEXTO_FECHAS = "haikuContextoFechasPestanaV1";
+let usuarioContextoFechas = "";
+
+function fechaContextoValida(valor) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(valor || ""))) return false;
+    const fecha = new Date(`${valor}T12:00:00Z`);
+    return !Number.isNaN(fecha.getTime()) &&
+        `${fecha.getUTCFullYear()}`.padStart(4, "0") === valor.slice(0, 4) &&
+        String(fecha.getUTCMonth() + 1).padStart(2, "0") === valor.slice(5, 7) &&
+        String(fecha.getUTCDate()).padStart(2, "0") === valor.slice(8, 10);
+}
+
+function usuarioActualContextoFechas() {
+    return String(window.haikuSesion?.auth?.id || "");
+}
+
+function fechaInicialContextoFechas() {
+    if (!/\/panel\.html$/.test(window.location?.pathname || "")) return "";
+    try {
+        const contexto = JSON.parse(sessionStorage.getItem(CLAVE_CONTEXTO_FECHAS) || "null");
+        return fechaContextoValida(contexto?.fechaOperativa) ? contexto.fechaOperativa : "";
+    } catch (_) { return ""; }
+}
+
+function guardarContextoFechas() {
+    const usuarioId = usuarioActualContextoFechas();
+    if (!usuarioId || !fechaContextoValida(fechaSeleccionada) ||
+        typeof sessionStorage === "undefined") return;
+    try {
+        sessionStorage.setItem(CLAVE_CONTEXTO_FECHAS, JSON.stringify({
+            usuarioId,
+            fechaOperativa: fechaSeleccionada,
+            mesCalendario: `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}`,
+            fechaCalendarioMovil: fechaCalendarioSeleccionadaMovil
+        }));
+    } catch (_) {}
+}
+
+function restaurarContextoFechas() {
+    const usuarioId = usuarioActualContextoFechas();
+    if (!usuarioId || usuarioId === usuarioContextoFechas) return;
+    usuarioContextoFechas = usuarioId;
+    let contexto = null;
+    try {
+        const guardado = typeof sessionStorage !== "undefined"
+            ? sessionStorage.getItem(CLAVE_CONTEXTO_FECHAS) : null;
+        if (guardado) {
+            const candidato = JSON.parse(guardado);
+            if (candidato?.usuarioId === usuarioId &&
+                fechaContextoValida(candidato.fechaOperativa)) contexto = candidato;
+            else sessionStorage.removeItem(CLAVE_CONTEXTO_FECHAS);
+        }
+    } catch (_) {
+        try { sessionStorage.removeItem(CLAVE_CONTEXTO_FECHAS); } catch (_) {}
+    }
+
+    fechaSeleccionada = contexto?.fechaOperativa || fechaHoy;
+    const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(contexto?.mesCalendario || "")
+        ? contexto.mesCalendario : "";
+    fechaCalendario = mes
+        ? new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1, 1)
+        : new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    fechaCalendarioSeleccionadaMovil = mes &&
+        fechaContextoValida(contexto?.fechaCalendarioMovil) &&
+        contexto.fechaCalendarioMovil.startsWith(`${mes}-`)
+        ? contexto.fechaCalendarioMovil
+        : mes ? `${mes}-01` : fechaHoy;
+    const fechaVisible = formatoFecha.format(new Date(`${fechaSeleccionada}T12:00:00`));
+    fechaActual.textContent = fechaVisible.charAt(0).toUpperCase() + fechaVisible.slice(1);
+    generarCalendario();
+}
 
 function esCalendarioMovil() {
     return window.matchMedia?.("(max-width: 780px)").matches === true;
@@ -163,6 +234,7 @@ function seleccionarFechaCalendarioMovil(fecha) {
     if (fechaCalendario.getFullYear() !== año || fechaCalendario.getMonth() !== mes - 1) {
         fechaCalendario = new Date(año, mes - 1, 1);
         generarCalendario();
+        guardarContextoFechas();
         return;
     }
     calendarioGrid.querySelectorAll(".dia-calendario").forEach(celda => {
@@ -171,6 +243,7 @@ function seleccionarFechaCalendarioMovil(fecha) {
         celda.setAttribute("aria-pressed", String(seleccionada));
     });
     pintarAgendaCalendarioMovil();
+    guardarContextoFechas();
 }
 
 const seccionCalendario =
@@ -2149,6 +2222,7 @@ botonAnterior.addEventListener("click", () => {
             `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}-01`;
     }
     generarCalendario();
+    guardarContextoFechas();
 });
 
 
@@ -2164,6 +2238,7 @@ botonSiguiente.addEventListener("click", () => {
             `${fechaCalendario.getFullYear()}-${String(fechaCalendario.getMonth() + 1).padStart(2, "0")}-01`;
     }
     generarCalendario();
+    guardarContextoFechas();
 });
 
 if (botonHoyCalendario) {
@@ -2175,6 +2250,7 @@ if (botonHoyCalendario) {
                 `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, "0")}-${String(hoy.getDate()).padStart(2, "0")}`;
         }
         generarCalendario();
+        guardarContextoFechas();
     });
 }
 
@@ -2215,23 +2291,33 @@ const fechaHoy =
 // FECHA OPERATIVA AL INICIAR
 // ========================================
 
-// Al abrir Haiku, siempre comenzamos en el día actual.
-// Los días anteriores siguen guardados y pueden
-// consultarse manualmente desde el calendario.
+// La sesión autenticada restaura su fecha antes del primer snapshot.
 
-let fechaSeleccionada = fechaHoy;
+// panel.html monta vistas locales antes de auth-ready: evitar pintar Hoy si
+// esta pestaña tiene una fecha pendiente de validar contra el usuario.
+let fechaSeleccionada = fechaInicialContextoFechas() || fechaHoy;
 
-localStorage.setItem(
-    "haikuFechaSeleccionada",
-    fechaSeleccionada
-);
+// La clave heredada no se consulta; retiramos su fecha persistente antigua.
+try { localStorage.removeItem?.("haikuFechaSeleccionada"); } catch (_) {}
+window.HAIKU_CONTEXTO_FECHAS_V1 = Object.freeze({
+    guardarFechaActual: guardarContextoFechas
+});
+// Corre en captura: ninguna fuente auth-ready debe pedir Hoy antes de restaurar.
+window.addEventListener?.("haiku:auth-ready", restaurarContextoFechas, true);
+window.haikuSupabase?.auth?.onAuthStateChange?.(evento => {
+    if (evento !== "SIGNED_OUT") return;
+    usuarioContextoFechas = "";
+    fechaSeleccionada = fechaHoy;
+    try { sessionStorage.removeItem(CLAVE_CONTEXTO_FECHAS); } catch (_) {}
+});
+if (window.haikuSesion) restaurarContextoFechas();
 
 function seleccionarDia(año, mes, dia, fechaISO, origenResumen) {
 
     const refrescoResumen = window.HAIKU_RESUMEN_REFRESH_V1;
     if (refrescoResumen?.activo() && !refrescoResumen.publicando()) {
         fechaSeleccionada = fechaISO;
-        localStorage.setItem("haikuFechaSeleccionada", fechaSeleccionada);
+        guardarContextoFechas();
         if (typeof renderizarAgendaServicios === "function") renderizarAgendaServicios();
         if (typeof cargarAbonosPagos === "function") cargarAbonosPagos();
         if (typeof cargarCierreDia === "function") cargarCierreDia(fechaSeleccionada);
@@ -2251,10 +2337,7 @@ function seleccionarDia(año, mes, dia, fechaISO, origenResumen) {
 
     fechaSeleccionada = fechaISO;
 
-    localStorage.setItem(
-        "haikuFechaSeleccionada",
-        fechaSeleccionada
-    );
+    guardarContextoFechas();
 
     cargarDatosDia(fechaSeleccionada);
 cargarCabanasDia(fechaSeleccionada);

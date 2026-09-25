@@ -40,11 +40,13 @@ function nodo() {
     return elemento;
 }
 
-function arnes(cabanas = {}, almacenamientoInicial = {}) {
+function arnes(cabanas = {}, almacenamientoInicial = {}, opciones = {}) {
     const nodos = new Map();
     const seccion = nodo();
     const escuchas = new Map();
     const eventosDocumento = new Map();
+    const eventosVentana = new Map();
+    const temporizadores = [];
     const tabs = ["operation", "review"].map(cabTab => {
         const boton = nodo();
         boton.dataset.cabTab = cabTab;
@@ -65,6 +67,12 @@ function arnes(cabanas = {}, almacenamientoInicial = {}) {
     seccion.querySelectorAll = selector => selector === "[data-cab-tab]" ? tabs : [];
     seccion.addEventListener = (tipo, fn) => escuchas.set(tipo, fn);
     const almacenamiento = new Map(Object.entries(almacenamientoInicial));
+    const sesion = opciones.sesion || new Map();
+    const sessionStorage = {
+        getItem: clave => sesion.get(clave) ?? null,
+        setItem: (clave, valor) => sesion.set(clave, String(valor)),
+        removeItem: clave => sesion.delete(clave)
+    };
     let menuCabanasClick = null;
     const menuCabanas = nodo();
     menuCabanas.addEventListener = (tipo, fn) => {
@@ -76,15 +84,24 @@ function arnes(cabanas = {}, almacenamientoInicial = {}) {
         removeItem: clave => almacenamiento.delete(clave)
     };
     const aperturas = [];
-    const datosPorFecha = { [FECHA]: { cabanas, notasOperativas: [] } };
+    const fecha = opciones.fecha || FECHA;
+    const datosPorFecha = { [fecha]: { cabanas, notasOperativas: [] } };
     const document = {
+        documentElement: nodo(),
+        readyState: opciones.esperarModulos ? "loading" : "complete",
         activeElement: null,
         getElementById: id => id === "seccion-cabanas" ? seccion : null,
         querySelector: selector => selector === '.menu-item[data-seccion="cabanas"]' ? menuCabanas : null,
         addEventListener: (tipo, fn) => eventosDocumento.set(tipo, fn),
         createElement: () => nodo()
     };
+    if (opciones.panel) document.documentElement.classList.add("haiku-cabanas-pendiente");
     const window = {
+        haikuSesion: opciones.usuario ? { auth: { id: opciones.usuario } } : null,
+        addEventListener: (tipo, fn) => {
+            if (!eventosVentana.has(tipo)) eventosVentana.set(tipo, []);
+            eventosVentana.get(tipo).push(fn);
+        },
         abrirRevisionCabana: numero => {
             aperturas.push(["completa", String(numero)]);
             localStorage.setItem("haikuRevisionCabana", numero);
@@ -94,15 +111,33 @@ function arnes(cabanas = {}, almacenamientoInicial = {}) {
             localStorage.setItem("haikuAseoExpressCabana", numero);
         }
     };
+    if (opciones.panel && !opciones.esperarModulos) {
+        window.HAIKU_REVISION_SUPABASE_V1 = {};
+        window.HAIKU_ASEO_OPERACION_V1 = {};
+    }
     const contexto = vm.createContext({
-        window, document, localStorage, fechaSeleccionada: FECHA,
+        window, document, localStorage, sessionStorage, fechaSeleccionada: fecha,
         obtenerDatosDia: fecha => datosPorFecha[fecha], checklistsCabanas,
-        Date, Intl, console, alert() {}, setTimeout: fn => { fn(); return 1; },
+        Date, Intl, console, alert() {}, setTimeout: (fn, ms) => {
+            if (ms >= 1000) temporizadores.push(fn);
+            else fn();
+            return 1;
+        },
         MutationObserver: class { observe() {} }
     });
     vm.runInContext(source, contexto, { filename: "sites-cabanas-v1.js" });
     return { api: window.HAIKU_CABANAS_SITES_V1, nodos, tabs, seccion,
-        escuchas, aperturas, localStorage, almacenamiento, datosPorFecha, window, contexto,
+        escuchas, aperturas, localStorage, sessionStorage, sesion, almacenamiento,
+        datosPorFecha, window, contexto, document,
+        authReady(usuario) {
+            window.haikuSesion = { auth: { id: usuario } };
+            for (const fn of eventosVentana.get("haiku:auth-ready") || []) fn();
+        },
+        pulsarTab(tab) {
+            const boton = tabs.find(item => item.dataset.cabTab === tab);
+            escuchas.get("click")({ target: { closest: () => boton } });
+        },
+        vencerRestauracion() { temporizadores.splice(0).forEach(fn => fn()); },
         pulsarMenuCabanas: () => menuCabanasClick?.(),
         emitirDocumento: (tipo, detalle) => eventosDocumento.get(tipo)?.({ detail: detalle }) };
 }
@@ -526,6 +561,189 @@ test("F5 restaura ficha y writer de la misma cabaña o descarta llaves contradic
     assert.deepEqual(contradictoria.aperturas, []);
     assert.equal(contradictoria.localStorage.getItem("haikuRevisionCabana"), null);
     assert.equal(contradictoria.localStorage.getItem("haikuAseoExpressCabana"), null);
+});
+
+test("panel restaura Operación y Revisión de cabañas en la fecha de la pestaña", () => {
+    const fecha = "2026-09-10";
+    const sesion = new Map();
+    const primero = arnes({}, {}, { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(primero.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+    assert.equal(JSON.parse(sesion.get("haikuCabanasContextoPestanaV1")).tab, "operation");
+    const operacion = arnes({}, {}, { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(operacion.nodos.get("#cabinsOperation").hidden, false);
+    assert.equal(operacion.nodos.get("#cabinsDetail").hidden, true);
+    assert.match(operacion.nodos.get("#cabinsDate").textContent, /10 de septiembre de 2026/i);
+
+    operacion.pulsarTab("review");
+    assert.equal(JSON.parse(sesion.get("haikuCabanasContextoPestanaV1")).tab, "review");
+    const revision = arnes({}, {}, { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(revision.nodos.get("#cabinsReview").hidden, false);
+    assert.equal(revision.nodos.get("#cabinsOperation").hidden, true);
+    assert.equal(revision.aperturas.length, 0);
+});
+
+test("panel restaura ficha y revisión completa de la misma cabaña con un solo writer", () => {
+    const fecha = "2026-09-10";
+    const datos = { 1: { revisionCompletaCiclo: {
+        fecha, verificado: true, id: "revision-1", estado: "en_proceso"
+    } } };
+    const sesion = new Map();
+    const primero = arnes(datos, {}, { panel: true, fecha, usuario: "usuario-a", sesion });
+    primero.api.abrir(1, "operation", "completa");
+    const ficha = arnes(datos, Object.fromEntries(primero.almacenamiento),
+        { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(ficha.nodos.get("#cabinsDetail").hidden, false);
+    assert.equal(ficha.nodos.get("#revision-individual").classList.contains("activa"), true);
+    assert.deepEqual(ficha.aperturas, [["completa", "1"]]);
+    assert.equal(ficha.localStorage.getItem("haikuRevisionCabana"), "1");
+    assert.equal(ficha.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+
+    ficha.api.cerrar();
+    ficha.pulsarTab("review");
+    ficha.api.abrir(1, "review", "completa");
+    const recarga = arnes(datos, Object.fromEntries(ficha.almacenamiento),
+        { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(recarga.nodos.get("#cabinsDetail").hidden, false);
+    assert.equal(recarga.nodos.get("#revision-individual").classList.contains("activa"), true);
+    assert.equal(recarga.nodos.get("#volver-cabanas").textContent.includes("Revisión de cabañas"), true);
+    assert.deepEqual(recarga.aperturas, [["completa", "1"]]);
+    recarga.authReady("usuario-a");
+    assert.deepEqual(recarga.aperturas, [["completa", "1"]],
+        "un segundo auth-ready no abre otra vez el writer");
+});
+
+test("panel espera autenticación y revisión verificada sin mostrar Hoy ni otra subvista", () => {
+    const fecha = "2026-09-10";
+    const sesion = new Map([["haikuCabanasContextoPestanaV1", JSON.stringify({
+        usuarioId: "usuario-a", fecha, tab: "review", numero: "1", origen: "review",
+        modo: "completa", revisionId: "revision-1"
+    })]]);
+    const datos = { 1: { revisionCompletaCiclo: { fecha, verificado: false, id: "revision-1" } } };
+    const h = arnes(datos, { haikuRevisionCabana: "9" }, { panel: true, fecha, sesion });
+    assert.equal(h.nodos.has("#cabinsDate"), false, "no se pinta Hoy antes de auth-ready");
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), true);
+    h.authReady("usuario-a");
+    assert.deepEqual(h.aperturas, [["completa", "1"]]);
+    assert.equal(h.localStorage.getItem("haikuRevisionCabana"), "1");
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), true);
+    datos[1].revisionCompletaCiclo.verificado = true;
+    h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha });
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+    assert.equal(h.nodos.get("#cabinsDetail").hidden, false);
+});
+
+test("auth-ready temprano espera el puente real antes de abrir un checklist", () => {
+    const fecha = "2026-09-10";
+    const sesion = new Map([["haikuCabanasContextoPestanaV1", JSON.stringify({
+        usuarioId: "usuario-a", fecha, tab: "review", numero: "1", origen: "review",
+        modo: "completa", revisionId: "revision-1"
+    })]]);
+    const datos = { 1: { revisionCompletaCiclo: { fecha, verificado: false } } };
+    const h = arnes(datos, {}, { panel: true, fecha, sesion, esperarModulos: true });
+    h.authReady("usuario-a");
+    assert.deepEqual(h.aperturas, []);
+    h.window.HAIKU_REVISION_SUPABASE_V1 = {};
+    h.emitirDocumento("DOMContentLoaded");
+    assert.deepEqual(h.aperturas, [["completa", "1"]]);
+    datos[1].revisionCompletaCiclo = { fecha, verificado: true, id: "revision-1" };
+    h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha });
+    assert.equal(h.nodos.get("#cabinsDetail").hidden, false);
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+});
+
+test("Aseo Express se reabre sólo después de verificar el ciclo de esa fecha", () => {
+    const fecha = "2026-09-10";
+    const sesion = new Map([["haikuCabanasContextoPestanaV1", JSON.stringify({
+        usuarioId: "usuario-a", fecha, tab: "review", numero: "2", origen: "review",
+        modo: "aseo_express", revisionId: "express-2"
+    })]]);
+    const datos = { 2: { aseoExpressCiclo: {
+        fecha, verificado: false, existe: true, revisionId: "express-2"
+    } } };
+    const h = arnes(datos, {}, { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.deepEqual(h.aperturas, [], "no abre un writer completo mientras Express se verifica");
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), true);
+    datos[2].aseoExpressCiclo.verificado = true;
+    h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha });
+    assert.deepEqual(h.aperturas, [["aseo_express", "2"]]);
+    assert.equal(h.nodos.get("#cabinsDetail").hidden, false);
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+});
+
+test("una revisión que no logra verificarse abandona la espera en Operación de la misma fecha", () => {
+    const fecha = "2026-09-10";
+    const sesion = new Map([["haikuCabanasContextoPestanaV1", JSON.stringify({
+        usuarioId: "usuario-a", fecha, tab: "review", numero: "1", origen: "review",
+        modo: "completa", revisionId: "revision-1"
+    })]]);
+    const h = arnes({ 1: { revisionCompletaCiclo: { fecha, verificado: false } } }, {},
+        { panel: true, fecha, usuario: "usuario-a", sesion });
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), true);
+    h.vencerRestauracion();
+    assert.equal(h.nodos.get("#cabinsOperation").hidden, false);
+    assert.equal(h.nodos.get("#cabinsDetail").hidden, true);
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+    assert.equal(JSON.parse(sesion.get("haikuCabanasContextoPestanaV1")).fecha, fecha);
+});
+
+test("contexto inválido, revisión cambiada o usuario nuevo vuelven a Operación de la fecha vigente", () => {
+    const fecha = "2026-09-10";
+    const contexto = { usuarioId: "usuario-a", fecha, tab: "review", numero: "1",
+        origen: "review", modo: "completa", revisionId: "revision-vieja" };
+    for (const variante of [
+        { contexto: { ...contexto, fecha: "2026-09-09" }, usuario: "usuario-a" },
+        { contexto, usuario: "usuario-b" },
+        { contexto: { ...contexto, numero: "99" }, usuario: "usuario-a" }
+    ]) {
+        const sesion = new Map([["haikuCabanasContextoPestanaV1", JSON.stringify(variante.contexto)]]);
+        const h = arnes({}, { haikuRevisionCabana: "1" },
+            { panel: true, fecha, usuario: variante.usuario, sesion });
+        assert.equal(h.nodos.get("#cabinsOperation").hidden, false);
+        assert.equal(h.nodos.get("#cabinsDetail").hidden, true);
+        assert.equal(h.aperturas.length, 0);
+        assert.equal(h.localStorage.getItem("haikuRevisionCabana"), null);
+        assert.equal(JSON.parse(sesion.get("haikuCabanasContextoPestanaV1")).fecha, fecha);
+    }
+    const distinta = arnes({ 1: { revisionCompletaCiclo: {
+        fecha, verificado: true, id: "revision-nueva"
+    } } }, {}, { panel: true, fecha, usuario: "usuario-a", sesion: new Map([
+        ["haikuCabanasContextoPestanaV1", JSON.stringify(contexto)]
+    ]) });
+    assert.equal(distinta.nodos.get("#cabinsDetail").hidden, true);
+    assert.equal(distinta.nodos.get("#cabinsOperation").hidden, false);
+});
+
+test("pestaña nueva no reutiliza writer legacy ni una ficha de la sesión anterior", () => {
+    const h = arnes({}, { haikuRevisionCabana: "1" },
+        { panel: true, fecha: "2026-09-10", usuario: "usuario-a", sesion: new Map() });
+    assert.equal(h.nodos.get("#cabinsDetail").hidden, true);
+    assert.equal(h.localStorage.getItem("haikuRevisionCabana"), null);
+    assert.equal(h.document.documentElement.classList.contains("haiku-cabanas-pendiente"), false);
+});
+
+test("panel no ejecuta la reapertura legacy antes del contexto validado", () => {
+    const cabanas = fs.readFileSync(path.join(root, "js/cabanas.js"), "utf8");
+    const inicio = cabanas.indexOf("const revisionCabanaGuardada =");
+    const fin = cabanas.indexOf("// RESUMEN DE ASEO", inicio);
+    assert.ok(inicio > 0 && fin > inicio);
+    const arranque = cabanas.slice(inicio, fin);
+    for (const [panel, esperadas] of [[true, 0], [false, 1]]) {
+        const aperturas = [];
+        vm.runInNewContext(arranque, {
+            localStorage: { getItem: () => "1" },
+            document: { documentElement: { classList: {
+                contains: clase => panel && clase === "haiku-cabanas-pendiente"
+            } } },
+            abrirRevisionCabana: numero => aperturas.push(numero)
+        });
+        assert.equal(aperturas.length, esperadas);
+    }
+});
+
+test("panel mantiene Cabañas oculta hasta validar fecha y subvista", () => {
+    const panel = fs.readFileSync(path.join(root, "panel.html"), "utf8");
+    assert.match(panel, /haiku-cabanas-pendiente #seccion-cabanas\{visibility:hidden\}/);
+    assert.match(panel, /haiku-resumen-pendiente haiku-pagos-pendiente haiku-cabanas-pendiente/);
 });
 
 test("al cambiar la fecha operativa se cierra la ficha antes de mostrar el nuevo día", () => {

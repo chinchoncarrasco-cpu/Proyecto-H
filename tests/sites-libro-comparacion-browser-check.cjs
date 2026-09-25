@@ -47,6 +47,7 @@ const server = http.createServer((request, response) => {
             comparacion.serviciosDetalle = [{ estado: 'revisar', reserva: libro, servicio: { concepto: 'Tinaja', texto_original: 'Servicio por revisar' } }];
             comparacion.meta = { libro: 1, estadias_libro: 1, proyecto: 2, asociadas: 1, faltantes: 0, ambiguas: 0,
                 pagos_faltantes: 0, pagos_revisar: 1, servicios_revisar: 1 };
+            window.__comparacionDePrueba = comparacion;
             const out = document.createElement('div');
             window.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out, { q: { desde: '2026-09-01', hasta: '2026-09-30' }, comparacion });
             document.getElementById('mensajes').append(out);
@@ -79,6 +80,12 @@ const server = http.createServer((request, response) => {
             assert.ok(fit.scroll <= fit.client + 1, `${width}: desborde horizontal ${fit.scroll}/${fit.client}`);
             if (width === 390 && process.env.HAKU_COMPARACION_SCREENSHOT) await page.screenshot({ path: process.env.HAKU_COMPARACION_SCREENSHOT, fullPage: true });
         }
+        await page.evaluate(() => window.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(
+            document.querySelector('.haku-comparacion-sites'),
+            { q: { desde: '2026-10-01', hasta: '2026-10-31' }, comparacion: window.__comparacionDePrueba }));
+        assert.match(await report.locator('.haku-comparacion-sites-periodo').innerText(),
+            /2026-10-01 al 2026-10-31/);
+        assert.equal(await report.locator('button', { hasText: 'Preparar incorporación' }).count(), 1);
         assert.deepEqual(errors, []);
         console.log('Comparación Sites: primer render, contenido, acordeones, preparación y responsive OK');
     } finally {

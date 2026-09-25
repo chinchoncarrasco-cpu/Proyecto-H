@@ -89,6 +89,17 @@ const server = http.createServer((request, response) => {
         assert.equal(await card.count(), 1, 'Sites desde el primer render');
         assert.equal(await card.locator('.haku-libro-servicios__head').innerText().then(x => x.includes('Interpretación operativa')), true);
         assert.match(await card.locator('.haku-libro-servicios-sites__resultado').innerText(), /01–30 septiembre 2026/);
+        const periodoSiguiente = await page.evaluate(() => {
+            const muestra = document.createElement('div');
+            document.getElementById('haiku-asistente-mensajes').append(muestra);
+            window.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.renderizar(
+                { ...window.__resultadoActual, desde: '2026-10-01', hasta: '2026-10-31' },
+                muestra, 'Libro: compara servicios de octubre 2026 con Proyecto H');
+            const texto = muestra.querySelector('.haku-libro-servicios-sites__resultado').textContent;
+            muestra.remove();
+            return texto;
+        });
+        assert.match(periodoSiguiente, /01–31 octubre 2026/);
         assert.deepEqual(await card.locator('.haku-libro-servicios__stat strong').allInnerTexts(), ['1', '1', '1']);
         assert.match(await card.locator('.haku-libro-servicios-sites__secundarios').innerText(), /1 ya existen.*4 hallazgos/s);
         const groups = card.locator('.haku-libro-servicios-sites__seccion');

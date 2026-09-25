@@ -113,6 +113,10 @@
         ultimoEvento = Date.now();
         const tabla = payload?.table || payload?.schema || "operacion";
         console.info("HAIKU · Cambio Realtime recibido:", tabla);
+        if (tabla === "revision_items" || tabla === "revisiones_cabana") {
+            window.HAIKU_REVISION_SUPABASE_V1?.refrescarChecklistAbierto?.(payload)
+                ?.catch(error => console.error("HAIKU · No fue posible actualizar el checklist Realtime:", error));
+        }
         programarRefresco(70);
     }
 
@@ -188,6 +192,8 @@
 
                 if (status === "SUBSCRIBED") {
                     console.info("HAIKU · Aseo Realtime conectado.");
+                    window.HAIKU_REVISION_SUPABASE_V1?.refrescarChecklistAbierto?.()
+                        ?.catch(error => console.error("HAIKU · No fue posible recuperar el checklist Realtime:", error));
                     programarRefresco(0);
                     return;
                 }

@@ -497,7 +497,7 @@
             console.warn("HAIKU · No fue posible cambiar fecha global desde atajo:", error);
         }
 
-        localStorage.setItem("haikuFechaSeleccionada", iso);
+        window.HAIKU_CONTEXTO_FECHAS_V1?.guardarFechaActual();
     }
 
     function cerrarFicha() {

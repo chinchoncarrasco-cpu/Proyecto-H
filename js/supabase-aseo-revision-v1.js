@@ -17,6 +17,7 @@
     let resumenSincronizando = false;
     let temporizadorDetalles = null;
     let detallesEditandoHasta = 0;
+    let lecturaChecklistRemoto = 0;
 
     function cliente() {
         return window.haikuSupabase || null;
@@ -440,6 +441,64 @@
         ) {
             detalles.value = revision?.observaciones || "";
         }
+    }
+
+    async function refrescarChecklistAbierto(payload = null, intento = 0) {
+        const fecha = fechaOperativa();
+        const numero = String(numeroRevisionAbierta());
+        const panel = document.getElementById("revision-individual");
+        const revisionIdEvento = payload?.table === "revisiones_cabana"
+            ? (payload?.new?.id || payload?.old?.id)
+            : (payload?.new?.revision_id || payload?.old?.revision_id);
+        if (!cliente() || !fecha || !numero || !panel?.classList.contains("activa")) {
+            return false;
+        }
+
+        const lectura = ++lecturaChecklistRemoto;
+        const cabana = await obtenerCabana(numero);
+        if (!cabana?.id) return false;
+
+        // El evento sólo contiene revision_id: la fecha y la cabaña se
+        // verifican contra la revisión completa vigente antes de tocar la UI.
+        const { data: revision, error } = await cliente()
+            .from("revisiones_cabana")
+            .select("id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en")
+            .eq("fecha", fecha)
+            .eq("cabana_id", cabana.id)
+            .eq("tipo_revision", TIPO_REVISION)
+            .neq("estado", "cancelada")
+            .order("creado_en", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (error) throw error;
+        if (revisionIdEvento && String(revision?.id) !== String(revisionIdEvento)) {
+            return false;
+        }
+
+        const config = await obtenerConfiguracion(numero, cabana.id);
+        const optimista = window.HAIKU_CHECKLIST_OPTIMISTA_V1;
+        const version = optimista?.version();
+        const items = await obtenerItemsRevision(revision?.id);
+
+        if (lectura !== lecturaChecklistRemoto || fecha !== fechaOperativa() ||
+            numero !== String(numeroRevisionAbierta()) ||
+            !panel.classList.contains("activa")) {
+            return false;
+        }
+        // Si una escritura local terminó durante la lectura, releemos el
+        // snapshot; una respuesta anterior al commit no debe pisar el clic.
+        if (version !== optimista?.version()) {
+            return intento < 2 ? refrescarChecklistAbierto(payload, intento + 1) : false;
+        }
+
+        cacheRevisiones.set(claveRevision(fecha, numero), revision || null);
+        actualizarCacheLocal(fecha, numero, config, revision, items);
+        aplicarRevisionEnPantalla(numero, config, revision, items);
+        const sites = window.HAIKU_CABANAS_SITES_V1;
+        sites?.actualizarConteos?.();
+        sites?.pintarRevision?.(fecha);
+        sites?.pintarDetalle?.(fecha);
+        return true;
     }
 
     function refrescarVistasLegacy() {
@@ -1097,6 +1156,7 @@
 
         window.HAIKU_REVISION_SUPABASE_V1 = Object.freeze({
             prepararRevision,
+            refrescarChecklistAbierto,
             sincronizarResumenFecha,
             limpiarCache() {
                 cacheRevisiones.clear();

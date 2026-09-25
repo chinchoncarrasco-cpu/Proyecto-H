@@ -61,7 +61,9 @@
                         <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
                         <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
                         <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
+                        <button type="button" data-haiku-accion-rapida="libro-siguiente">Comparar Libro mes siguiente con Proyecto H</button>
                         <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
+                        <button type="button" data-haiku-accion-rapida="servicios-siguiente">Comparar servicios mes siguiente con Proyecto H</button>
                     </div>
                 </details>
                 <div class="haiku-asistente-compositor">
@@ -214,23 +216,36 @@
         enviar.textContent = procesando ? "Analizando…" : "Enviar";
     }
 
-    function periodoActualChile() {
+    function periodoCalendarioChile(desplazamiento = 0, instante = new Date()) {
         const partes = new Intl.DateTimeFormat("es-CL", {
             timeZone: "America/Santiago",
-            month: "long",
+            month: "numeric",
             year: "numeric"
-        }).formatToParts(new Date());
-        const mes = partes.find(parte => parte.type === "month")?.value || "";
-        const anio = partes.find(parte => parte.type === "year")?.value || "";
-        return `${mes} ${anio}`.trim().toLocaleLowerCase("es-CL");
+        }).formatToParts(instante);
+        const mesActual = Number(partes.find(parte => parte.type === "month")?.value);
+        const anioActual = Number(partes.find(parte => parte.type === "year")?.value);
+        const primero = new Date(Date.UTC(anioActual, mesActual - 1 + desplazamiento, 1));
+        const anio = primero.getUTCFullYear();
+        const mes = primero.getUTCMonth() + 1;
+        const iso = dia => `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+        const ultimoDia = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+        const nombreMes = new Intl.DateTimeFormat("es-CL", { timeZone: "UTC", month: "long" })
+            .format(primero).toLocaleLowerCase("es-CL");
+        return { inicioPeriodo: iso(1), finPeriodo: iso(ultimoDia), anio, mes,
+            etiqueta: `${nombreMes} ${anio}` };
     }
 
     function textoAccionRapida(accion) {
         if (accion === "tareas-hoy") return "Haku, resumen del día";
         if (accion === "actualizacion") return "Haku, informe de actualización";
-        const periodo = periodoActualChile();
-        if (accion === "libro") return `Libro: compara las reservas de ${periodo} con Proyecto H`;
-        if (accion === "servicios") return `Libro: compara servicios de ${periodo} con Proyecto H`;
+        const tipo = accion === "libro" || accion === "libro-siguiente" ? "libro"
+            : accion === "servicios" || accion === "servicios-siguiente" ? "servicios" : null;
+        if (!tipo) return "";
+        const periodo = periodoCalendarioChile(accion.endsWith("-siguiente") ? 1 : 0);
+        const fechaVisible = iso => iso.split("-").reverse().join("-");
+        const rango = `(del ${fechaVisible(periodo.inicioPeriodo)} al ${fechaVisible(periodo.finPeriodo)})`;
+        if (tipo === "libro") return `Libro: compara las reservas de ${periodo.etiqueta} ${rango} con Proyecto H`;
+        if (tipo === "servicios") return `Libro: compara servicios de ${periodo.etiqueta} ${rango} con Proyecto H`;
         return "";
     }
 

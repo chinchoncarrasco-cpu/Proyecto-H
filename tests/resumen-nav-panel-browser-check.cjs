@@ -46,7 +46,7 @@ const modulos = new Set([
             window.HAIKU_RESUMEN_REFRESH_V1?.activo());
         assert.equal(await page.evaluate(() => Boolean(window.HAIKU_RESUMEN_NAV_DIAG_V1)), false);
         assert.equal(await page.locator('#resumen-nav-diagnostico-temporal').count(), 0);
-        await page.evaluate(() => {
+        const registrarFuentes = () => page.evaluate(() => {
             const coordinador = window.HAIKU_RESUMEN_REFRESH_V1;
             for (const nombre of ['reservas', 'servicios', 'pagos', 'checkout',
                 'checkoutAutoridad', 'operacion', 'autoridadVisual']) {
@@ -63,6 +63,7 @@ const modulos = new Set([
                 });
             }
         });
+        await registrarFuentes();
         await page.waitForFunction(() => window.HAIKU_RESUMEN_REFRESH_V1.publicaciones() >= 1);
         const fechaInicial = await page.evaluate(() => String(fechaSeleccionada));
         const anterior = await page.evaluate(fecha => {
@@ -91,6 +92,22 @@ const modulos = new Set([
         await page.waitForFunction(fecha => window.HAIKU_RESUMEN_REFRESH_V1.ultimo().fecha === fecha,
             anterior);
         assert.equal(await page.locator('#resumen-dia-anterior').getAttribute('aria-busy'), null);
+        assert.equal(await page.evaluate(() =>
+            JSON.parse(sessionStorage.getItem('haikuContextoFechasPestanaV1')).fechaOperativa), anterior);
+
+        await page.reload();
+        await page.waitForFunction(() => window.HAIKU_RESUMEN_REFRESH_V1?.activo());
+        assert.equal(await page.evaluate(() => String(fechaSeleccionada)), anterior);
+        await registrarFuentes();
+        await page.waitForFunction(fecha => window.HAIKU_RESUMEN_REFRESH_V1.ultimo()?.fecha === fecha,
+            anterior);
+        const generacionesTrasF5 = await page.evaluate(() =>
+            window.HAIKU_RESUMEN_REFRESH_V1.historialGeneraciones()
+                .filter(generacion => generacion.generacion !== null));
+        assert.ok(generacionesTrasF5.length >= 1);
+        assert.ok(generacionesTrasF5.every(generacion => generacion.fecha === anterior));
+        assert.equal(generacionesTrasF5.filter(generacion =>
+            generacion.resultado === 'PUBLICADA').length, 1);
 
         await page.locator('#resumen-dia-siguiente').click();
         await page.waitForFunction(fecha => window.HAIKU_RESUMEN_REFRESH_V1.ultimo().fecha === fecha,

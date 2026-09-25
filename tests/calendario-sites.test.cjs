@@ -60,10 +60,12 @@ class Element {
     setAttribute(name, value) { this[name] = value; }
 }
 
-function harness(cache = {}, mobile = false) {
+function harness(cache = {}, mobile = false, opciones = {}) {
     const body = new Element('body');
     const ids = new Map();
     const store = new Map([['haikuDatos', JSON.stringify(cache)]]);
+    const sesion = opciones.sesion || new Map();
+    const eventosVentana = new Map();
     let mobileViewport = mobile;
     const mediaListeners = [];
     const document = {
@@ -84,7 +86,14 @@ function harness(cache = {}, mobile = false) {
     };
     const context = vm.createContext({
         document,
+        location: {pathname: '/panel.html'},
         localStorage: {getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value)},
+        sessionStorage: {
+            getItem: key => sesion.get(key) ?? null,
+            setItem: (key, value) => sesion.set(key, value),
+            removeItem: key => sesion.delete(key)
+        },
+        haikuSesion: opciones.usuario ? {auth: {id: opciones.usuario}} : null,
         datosPorFecha: {},
         obtenerDatosDia(fecha) { return context.datosPorFecha[fecha] ||= {cabanas: {}}; },
         guardarDatos() {},
@@ -94,12 +103,24 @@ function harness(cache = {}, mobile = false) {
             get matches() { return mobileViewport; },
             addEventListener: (_event, callback) => mediaListeners.push(callback)
         }),
-        addEventListener() {}
+        addEventListener(nombre, fn, captura = false) {
+            if (!eventosVentana.has(nombre)) eventosVentana.set(nombre, []);
+            eventosVentana.get(nombre).push({fn, captura: Boolean(captura)});
+        }
     });
     context.window = context;
+    opciones.antesCalendario?.(context);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'calendario.js'), 'utf8'), context, {filename: 'calendario.js'});
-    vm.runInContext('fechaCalendario = new Date(2026, 8, 1); fechaSeleccionada = "2026-09-03"; generarCalendario();', context);
-    return {body, document, context, setMobile(value) {
+    if (opciones.semilla !== false) {
+        vm.runInContext('fechaCalendario = new Date(2026, 8, 1); fechaSeleccionada = "2026-09-03"; generarCalendario();', context);
+    }
+    return {body, document, context, sesion, store,
+        emitir(nombre) {
+            const eventos = eventosVentana.get(nombre) || [];
+            for (const evento of [...eventos.filter(item => item.captura),
+                ...eventos.filter(item => !item.captura)]) evento.fn();
+        },
+        setMobile(value) {
         mobileViewport = value;
         mediaListeners.forEach(callback => callback());
     }};
@@ -230,6 +251,84 @@ test('mes sin reservas conserva sus días y navegación anterior/siguiente sin +
     const hoy = vm.runInContext('fechaHoy', h.context);
     assert.equal(grid.querySelector('.dia-calendario.hoy')?.dataset.fecha, hoy);
     assert.equal(h.document.getElementById('calendario-hoy').hidden, true);
+});
+
+test('Resumen conserva el 24/09 tras F5 y sólo solicita esa fecha', () => {
+    const sesion = new Map();
+    const primero = harness({}, false, {usuario: 'usuario-a', sesion, semilla: false});
+    const solicitudes = [];
+    primero.context.HAIKU_RESUMEN_REFRESH_V1 = {
+        activo: () => true, publicando: () => false,
+        solicitar: fecha => solicitudes.push(fecha)
+    };
+    vm.runInContext('seleccionarDia(2026, 8, 24, "2026-09-24")', primero.context);
+    assert.deepEqual(solicitudes, ['2026-09-24']);
+    assert.equal(JSON.parse(sesion.get('haikuContextoFechasPestanaV1')).fechaOperativa, '2026-09-24');
+    assert.equal(primero.store.has('haikuFechaSeleccionada'), false);
+
+    const cargas = [];
+    const recarga = harness({}, false, {sesion, semilla: false,
+        antesCalendario(context) {
+            context.addEventListener('haiku:auth-ready', () =>
+                cargas.push(vm.runInContext('fechaSeleccionada', context)));
+        }
+    });
+    assert.equal(vm.runInContext('fechaSeleccionada', recarga.context), '2026-09-24',
+        'los módulos que montan antes de auth-ready no deben pintar Hoy');
+    recarga.context.haikuSesion = {auth: {id: 'usuario-a'}};
+    recarga.emitir('haiku:auth-ready');
+    assert.deepEqual(cargas, ['2026-09-24']);
+    assert.equal(vm.runInContext('fechaSeleccionada', recarga.context), '2026-09-24');
+    assert.match(recarga.document.getElementById('fecha-actual').textContent, /24 de septiembre de 2026/i);
+});
+
+test('Anterior, Siguiente y Hoy guardan la fecha operativa elegida', () => {
+    const h = harness({}, false, {usuario: 'usuario-a', semilla: false});
+    h.context.HAIKU_RESUMEN_REFRESH_V1 = {activo: () => true, publicando: () => false, solicitar() {}};
+    const guardada = () => JSON.parse(h.sesion.get('haikuContextoFechasPestanaV1')).fechaOperativa;
+    vm.runInContext('seleccionarDia(2026, 8, 24, "2026-09-24")', h.context);
+    assert.equal(guardada(), '2026-09-24');
+    vm.runInContext('seleccionarDia(2026, 8, 23, "2026-09-23")', h.context);
+    assert.equal(guardada(), '2026-09-23');
+    vm.runInContext('seleccionarDia(2026, 8, 24, "2026-09-24")', h.context);
+    assert.equal(guardada(), '2026-09-24');
+    vm.runInContext('const partesHoy = fechaHoy.split("-").map(Number); seleccionarDia(partesHoy[0], partesHoy[1] - 1, partesHoy[2], fechaHoy)', h.context);
+    assert.equal(guardada(), vm.runInContext('fechaHoy', h.context));
+    const recarga = harness({}, false, {usuario: 'usuario-a', sesion: h.sesion, semilla: false});
+    assert.equal(vm.runInContext('fechaSeleccionada', recarga.context), guardada());
+});
+
+test('sin fecha, fecha inválida o usuario distinto se inicia en Hoy', () => {
+    const ausente = harness({}, false, {usuario: 'usuario-a', semilla: false});
+    assert.equal(vm.runInContext('fechaSeleccionada === fechaHoy', ausente.context), true);
+    const sesion = new Map([['haikuContextoFechasPestanaV1', JSON.stringify({
+        usuarioId: 'usuario-a', fechaOperativa: '2026-02-30'
+    })]]);
+    const invalida = harness({}, false, {usuario: 'usuario-a', sesion, semilla: false});
+    assert.equal(vm.runInContext('fechaSeleccionada === fechaHoy', invalida.context), true);
+    assert.equal(sesion.has('haikuContextoFechasPestanaV1'), false);
+    sesion.set('haikuContextoFechasPestanaV1', JSON.stringify({
+        usuarioId: 'usuario-a', fechaOperativa: '2026-09-24'
+    }));
+    const otro = harness({}, false, {usuario: 'usuario-b', sesion, semilla: false});
+    assert.equal(vm.runInContext('fechaSeleccionada === fechaHoy', otro.context), true);
+    assert.equal(sesion.has('haikuContextoFechasPestanaV1'), false);
+});
+
+test('Calendario restaura su mes y día móvil sin sustituir la fecha operativa', () => {
+    const sesion = new Map();
+    const primero = harness({}, true, {usuario: 'usuario-a', sesion, semilla: false});
+    vm.runInContext('fechaCalendario = new Date(2026, 8, 1); generarCalendario()', primero.context);
+    primero.document.getElementById('mes-siguiente').click();
+    primero.document.getElementById('calendario-grid')
+        .querySelector('[data-fecha="2026-10-15"]').click();
+    const guardado = JSON.parse(sesion.get('haikuContextoFechasPestanaV1'));
+    assert.equal(guardado.mesCalendario, '2026-10');
+    assert.equal(guardado.fechaCalendarioMovil, '2026-10-15');
+    const recarga = harness({}, true, {usuario: 'usuario-a', sesion, semilla: false});
+    assert.equal(vm.runInContext('fechaCalendario.getFullYear() === 2026 && fechaCalendario.getMonth() === 9', recarga.context), true);
+    assert.equal(vm.runInContext('fechaCalendarioSeleccionadaMovil', recarga.context), '2026-10-15');
+    assert.equal(vm.runInContext('fechaSeleccionada', recarga.context), guardado.fechaOperativa);
 });
 
 test('entrypoint carga la capa Sites y preserva IDs funcionales del Calendario', () => {

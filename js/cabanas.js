@@ -5536,7 +5536,10 @@ if (btnCancelarServicioResumen) {
 const revisionCabanaGuardada =
     localStorage.getItem("haikuRevisionCabana");
 
-if (revisionCabanaGuardada) {
+// En panel.html la ficha se restaura una sola vez, después de validar
+// usuario, fecha y subvista desde el contexto de la pestaña Sites.
+if (revisionCabanaGuardada &&
+    !document.documentElement.classList.contains("haiku-cabanas-pendiente")) {
 
     abrirRevisionCabana(
         revisionCabanaGuardada

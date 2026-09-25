@@ -85,10 +85,11 @@ function harness({grupo=true,cargos,pagos,aplicaciones,servicios}={}){
     };
     const window={haikuSupabase:cliente,innerWidth:900,innerHeight:700,
         addEventListener(t,f){(windowListeners[t]??=[]).push(f)},
-        haikuCargarSaldosCheckinSupabase:async()=>{calls.push(['saldo'])}
+        haikuCargarSaldosCheckinSupabase:async()=>{calls.push(['saldo'])},
+        HAIKU_CONTEXTO_FECHAS_V1:{guardarFechaActual:()=>calls.push(['guardar-fecha'])}
     };
     const reloj=(fn,ms)=>{const t=setTimeout(fn,ms);if(ms>=1000)t.unref();return t};
-    const context={window,document,MutationObserver:class{observe(){}},localStorage:{setItem(){}},CSS:{escape:x=>x},
+    const context={window,document,fechaSeleccionada:'2026-09-25',MutationObserver:class{observe(){}},localStorage:{setItem(){}},CSS:{escape:x=>x},
         Date:{now:()=>ahora},requestAnimationFrame:f=>f(),setTimeout:reloj,clearTimeout,console:{info(){},warn(){},error(){}},alert(){}};
     vm.runInNewContext(`${resumenSource}\n${source}`,context);
     const fire=async(type,event={})=>{
@@ -97,7 +98,8 @@ function harness({grupo=true,cargos,pagos,aplicaciones,servicios}={}){
         for(const fn of listeners[type]||[])await fn(e);
         return e;
     };
-    return {window,document,body,modal,cuadro,valor,calls,fire,advance:ms=>{ahora+=ms}};
+    return {window,document,body,modal,cuadro,valor,calls,fire,
+        fecha:()=>context.fechaSeleccionada,advance:ms=>{ahora+=ms}};
 }
 
 test('the four summaries use current read-only data, including grouped payments and pending services',async()=>{
@@ -166,6 +168,8 @@ test('a short click retains the existing navigation to the corresponding payment
     assert.equal(h.calls.filter(x=>x[0]==='rpc'&&x[1]==='haiku_ficha_reserva_core').length,1);
     assert.equal(h.calls.filter(x=>x[0]==='rpc'&&x[1]==='haiku_finanzas_grupo').length,0);
     assert.ok(h.calls.some(x=>x[0]==='menu'));
+    assert.equal(h.fecha(),'2026-09-17');
+    assert.equal(h.calls.filter(x=>x[0]==='guardar-fecha').length,1);
 });
 
 test('mouse and touch holds open the read-only popup and consume only their generated click',async()=>{
