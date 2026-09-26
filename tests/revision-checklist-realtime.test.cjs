@@ -7,19 +7,21 @@ const vm = require("node:vm");
 const raiz = path.resolve(__dirname, "..");
 const optimista = fs.readFileSync(path.join(raiz, "js/checklist-optimista-v1.js"), "utf8");
 const revision = fs.readFileSync(path.join(raiz, "js/supabase-aseo-revision-v1.js"), "utf8")
-    .replace("    function iniciar() {", "    window.__revisionTest = { instalarListenerItemsRevision, cacheCabanas, cacheConfig, cacheRevisiones, refrescarChecklistAbierto };\n    function iniciar() {");
+    .replace("    function iniciar() {", "    window.__revisionTest = { instalarListenerItemsRevision, guardarDetalleSeccionRevision, cacheCabanas, cacheConfig, cacheRevisiones, refrescarChecklistAbierto };\n    function iniciar() {");
 const realtime = fs.readFileSync(path.join(raiz, "js/supabase-aseo-realtime-v1.js"), "utf8");
 const fecha = "2026-09-24";
 
 function arnes() {
     const filas = new Map();
     const revisiones = new Map([
-        ["rev-1", { id: "rev-1", fecha, cabana_id: "cab-1", tipo_revision: "completa", estado: "en_proceso", observaciones: "" }],
+        ["rev-1", { id: "rev-1", fecha, cabana_id: "cab-1", tipo_revision: "completa", estado: "en_proceso", observaciones: "",
+            detalle_cocina: "", detalle_bano: "", detalle_living_cama: "", detalle_terraza: "" }],
         ["rev-2", { id: "rev-2", fecha: "2026-09-25", cabana_id: "cab-1", tipo_revision: "completa", estado: "en_proceso" }],
         ["rev-3", { id: "rev-3", fecha, cabana_id: "cab-2", tipo_revision: "completa", estado: "en_proceso" }]
     ]);
     const canales = [];
     const pendientes = [];
+    const actualizacionesRevision = [];
     let escrituras = 0;
 
     function emitir(payload) {
@@ -34,10 +36,20 @@ function arnes() {
         const listeners = new Map();
         const checks = ["a", "b"].map(id => ({ checked: false, dataset: { checklistId: id },
             closest() { return this; }, matches() { return true; } }));
+        const detallesSeccion = Object.fromEntries([
+            "detalle_cocina", "detalle_bano", "detalle_living_cama", "detalle_terraza"
+        ].map(campo => [campo, { value: "", dataset: { revisionDetalleSeccion: campo },
+            closest() { return this; }, matches() { return true; } }]));
+        const camposDetalle = Object.values(detallesSeccion);
         const datos = { cabanas: { 1: { checklist: {} } } };
         const abierto = { haikuRevisionCabana: "1" };
         const panel = { classList: { contains: clase => clase === "activa" && abierto.haikuRevisionCabana === "1" } };
-        const contenedor = { contains: check => checks.includes(check), querySelectorAll: () => checks };
+        const contenedor = {
+            contains: control => checks.includes(control) || camposDetalle.includes(control),
+            querySelectorAll(selector) {
+                return selector.includes("data-revision-detalle-seccion") ? camposDetalle : checks;
+            }
+        };
         const estado = { value: "en_revision" };
         const detalles = { value: "" };
         const conteos = { general: "0/2", sector: "0/2", actualizaciones: 0 };
@@ -61,7 +73,7 @@ function arnes() {
             getElementById(id) {
                 return { "revision-individual": panel, "revision-checklist": contenedor,
                     "revision-estado": estado, "revision-detalles": detalles,
-                    "seccion-cabanas": { contains: check => checks.includes(check) } }[id] || null;
+                    "seccion-cabanas": { contains: control => checks.includes(control) || camposDetalle.includes(control) } }[id] || null;
             },
             querySelectorAll(selector) {
                 return selector.includes("aseo-express") ? [] : checks;
@@ -75,11 +87,17 @@ function arnes() {
             },
             from(tabla) {
                 const filtros = new Map();
+                let actualizacion = null;
                 const consulta = {
                     select() { return this; },
                     eq(campo, valor) { filtros.set(campo, valor); return this; },
                     neq() { return this; }, not() { return this; },
                     order() { return this; }, limit() { return this; },
+                    update(payload) {
+                        assert.equal(tabla, "revisiones_cabana");
+                        actualizacion = { ...payload };
+                        return this;
+                    },
                     async single() { return this.maybeSingle(); },
                     async maybeSingle() {
                         if (tabla === "revisiones_cabana") {
@@ -93,6 +111,11 @@ function arnes() {
                         let data = [];
                         if (tabla === "revision_items") {
                             data = [...filas.values()].filter(fila => fila.revision_id === filtros.get("revision_id"));
+                        }
+                        if (tabla === "revisiones_cabana" && actualizacion) {
+                            const revision = revisiones.get(filtros.get("id"));
+                            if (revision) Object.assign(revision, actualizacion);
+                            actualizacionesRevision.push(actualizacion);
                         }
                         return Promise.resolve({ data, error: null }).then(resolve, reject);
                     },
@@ -136,7 +159,8 @@ function arnes() {
         window.HAIKU_REVISION_SUPABASE_V1 = { refrescarChecklistAbierto: api.refrescarChecklistAbierto };
         api.instalarListenerItemsRevision();
         vm.runInContext(realtime, contexto);
-        return { nombre, window, contexto, checks, datos, conteos, abierto, listeners,
+        return { nombre, window, contexto, checks, detallesSeccion, datos, conteos, abierto, listeners,
+            guardarDetalle: api.guardarDetalleSeccionRevision,
             async click(indice, valor) {
                 checks[indice].checked = valor;
                 const escritor = listeners.get("change").find(fn => fn.toString().includes("guardarItem"));
@@ -148,7 +172,7 @@ function arnes() {
     async function vaciar() {
         for (let i = 0; i < 12; i++) await new Promise(setImmediate);
     }
-    return { A, B, filas, revisiones, pendientes, emitir, vaciar,
+    return { A, B, filas, revisiones, pendientes, actualizacionesRevision, emitir, vaciar,
         get escrituras() { return escrituras; },
         get canalesActivos() { return canales.filter(canal => !canal.removido); } };
 }
@@ -235,5 +259,50 @@ test("el estado de la revisión abierta actualiza también el progreso derivado"
     await h.vaciar();
     assert.equal(h.A.conteos.progreso, "lista");
     assert.equal(h.B.conteos.progreso, "lista");
+    assert.equal(h.escrituras, 0);
+});
+
+test("Realtime hidrata los cuatro detalles de sección sin generar escrituras", async () => {
+    const h = arnes(); await h.vaciar();
+    Object.assign(h.revisiones.get("rev-1"), {
+        detalle_cocina: "Reponer té",
+        detalle_bano: "Revisar ducha",
+        detalle_living_cama: "Cambiar manta",
+        detalle_terraza: "Limpiar fogón"
+    });
+    h.emitir({ table: "revisiones_cabana", eventType: "UPDATE", new: { id: "rev-1" } });
+    await h.vaciar();
+
+    for (const cliente of [h.A, h.B]) {
+        assert.equal(cliente.detallesSeccion.detalle_cocina.value, "Reponer té");
+        assert.equal(cliente.detallesSeccion.detalle_bano.value, "Revisar ducha");
+        assert.equal(cliente.detallesSeccion.detalle_living_cama.value, "Cambiar manta");
+        assert.equal(cliente.detallesSeccion.detalle_terraza.value, "Limpiar fogón");
+    }
+    assert.equal(h.escrituras, 0);
+});
+
+test("cada detalle actualiza sólo su columna y conserva observaciones y los otros sectores", async () => {
+    const h = arnes();
+    const revisionInicial = h.revisiones.get("rev-1");
+    Object.assign(revisionInicial, {
+        observaciones: "Observación general",
+        detalle_cocina: "Cocina original",
+        detalle_bano: "Baño original",
+        detalle_living_cama: "Living original",
+        detalle_terraza: "Terraza original"
+    });
+
+    await h.A.guardarDetalle("1", "detalle_bano", "  Revisar ducha  ", fecha);
+
+    assert.deepEqual(h.actualizacionesRevision, [
+        { detalle_bano: "Revisar ducha" }
+    ]);
+    assert.equal(revisionInicial.observaciones, "Observación general");
+    assert.equal(revisionInicial.detalle_cocina, "Cocina original");
+    assert.equal(revisionInicial.detalle_bano, "Revisar ducha");
+    assert.equal(revisionInicial.detalle_living_cama, "Living original");
+    assert.equal(revisionInicial.detalle_terraza, "Terraza original");
+    assert.equal(h.A.datos.cabanas[1].detallesRevisionSeccion.detalle_bano, "Revisar ducha");
     assert.equal(h.escrituras, 0);
 });

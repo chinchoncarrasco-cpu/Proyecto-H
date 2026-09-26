@@ -464,6 +464,194 @@ test("la pestaña de revisión usa el checklist completo y muestra Express sólo
     assert.match(html, /id="aseo-express-checklist"[\s\S]*?data-aseo-express-item=/);
 });
 
+test("cada checklist agrega cuatro detalles con copia aislada fuera del conteo", async () => {
+    function elemento(etiqueta) {
+        const hijos = [];
+        const listeners = new Map();
+        let html = "";
+        return {
+            tagName: String(etiqueta || "").toUpperCase(),
+            children: hijos,
+            parentElement: null,
+            dataset: {},
+            style: {},
+            value: "",
+            textContent: "",
+            className: "",
+            appendChild(hijo) {
+                hijo.parentElement = this;
+                hijos.push(hijo);
+                return hijo;
+            },
+            addEventListener(tipo, fn) {
+                if (!listeners.has(tipo)) listeners.set(tipo, []);
+                listeners.get(tipo).push(fn);
+            },
+            listener(tipo) {
+                return listeners.get(tipo)?.[0] || null;
+            },
+            querySelector(selector) {
+                const clase = selector.startsWith(".")
+                    ? selector.slice(1)
+                    : "";
+                for (const hijo of hijos) {
+                    if (clase && hijo.className.split(/\s+/).includes(clase)) {
+                        return hijo;
+                    }
+                    const encontrado = hijo.querySelector?.(selector);
+                    if (encontrado) return encontrado;
+                }
+                return null;
+            },
+            setAttribute(nombre, valor) {
+                this[nombre] = String(valor);
+            },
+            get innerHTML() {
+                return html;
+            },
+            set innerHTML(valor) {
+                html = String(valor);
+                if (!html) hijos.length = 0;
+            }
+        };
+    }
+
+    function descendientes(raiz) {
+        return raiz.children.flatMap(hijo => [
+            hijo,
+            ...descendientes(hijo)
+        ]);
+    }
+
+    const contenedor = elemento("section");
+    const body = elemento("body");
+    const copiados = [];
+    let temporizador = 0;
+    const datos = { cabanas: {} };
+    for (let numero = 1; numero <= 11; numero++) {
+        datos.cabanas[numero] = {
+            checklist: {},
+            detallesRevisionSeccion: numero === 1
+                ? {
+                    detalle_cocina: "Cocina guardada",
+                    detalle_bano: "Baño guardado",
+                    detalle_living_cama: "Living guardado",
+                    detalle_terraza: "Terraza guardada"
+                }
+                : {}
+        };
+    }
+
+    const contexto = vm.createContext({
+        document: {
+            body,
+            getElementById: id => id === "revision-checklist" ? contenedor : null,
+            createElement: etiqueta => elemento(etiqueta)
+        },
+        navigator: {
+            clipboard: {
+                async writeText(texto) {
+                    copiados.push(texto);
+                }
+            }
+        },
+        fechaSeleccionada: FECHA,
+        obtenerDatosDia: () => datos,
+        guardarDatos() {},
+        setTimeout() { return ++temporizador; },
+        clearTimeout() {},
+        numeroCabanaPrueba: "1"
+    });
+    vm.runInContext(checklistSource, contexto);
+
+    for (let numero = 1; numero <= 11; numero++) {
+        contexto.numeroCabanaPrueba = String(numero);
+        vm.runInContext("mostrarChecklistCabana(numeroCabanaPrueba)", contexto);
+
+        const controles = descendientes(contenedor);
+        const detalles = controles.filter(control =>
+            control.tagName === "TEXTAREA" &&
+            control.dataset.revisionDetalleSeccion
+        );
+        const checks = controles.filter(control =>
+            control.tagName === "INPUT" &&
+            control.type === "checkbox" &&
+            control.dataset.checklistId
+        );
+        const botonesCopiar = controles.filter(control =>
+            control.tagName === "BUTTON" &&
+            control.dataset.copiarDetalleSeccion
+        );
+        const totalEsperado = checklistsCabanas[numero].reduce(
+            (total, bloque) => total +
+                (bloque.items?.length || 0) +
+                (bloque.subareas || []).reduce(
+                    (subtotal, subarea) => subtotal + subarea.items.length,
+                    0
+                ),
+            0
+        );
+
+        assert.deepEqual(
+            detalles.map(detalle => detalle.dataset.revisionDetalleSeccion),
+            [
+                "detalle_cocina",
+                "detalle_bano",
+                "detalle_living_cama",
+                "detalle_terraza"
+            ]
+        );
+        assert.equal(checks.length, totalEsperado);
+        assert.ok(detalles.every(detalle => detalle.dataset.checklistId === undefined));
+        assert.deepEqual(
+            botonesCopiar.map(boton => boton.dataset.copiarDetalleSeccion),
+            [
+                "detalle_cocina",
+                "detalle_bano",
+                "detalle_living_cama",
+                "detalle_terraza"
+            ]
+        );
+        assert.ok(botonesCopiar.every(boton => boton.dataset.checklistId === undefined));
+
+        if (numero === 1) {
+            assert.deepEqual(
+                detalles.map(detalle => detalle.value),
+                [
+                    "Cocina guardada",
+                    "Baño guardado",
+                    "Living guardado",
+                    "Terraza guardada"
+                ]
+            );
+
+            const evento = {
+                preventDefault() {},
+                stopPropagation() {}
+            };
+
+            await botonesCopiar[0].listener("click")(evento);
+            assert.deepEqual(copiados, ["Cocina guardada"]);
+            assert.equal(botonesCopiar[0].dataset.estadoCopia, "copiado");
+            assert.equal(botonesCopiar[0].dataset.feedback, "Copiado");
+
+            detalles[1].value = "";
+            await botonesCopiar[1].listener("click")(evento);
+            assert.deepEqual(copiados, ["Cocina guardada"]);
+            assert.equal(botonesCopiar[1].dataset.estadoCopia, "vacio");
+            assert.equal(botonesCopiar[1].dataset.feedback, "Sin texto");
+
+            detalles[1].value = "  Revisar ducha  ";
+            await botonesCopiar[1].listener("click")(evento);
+            assert.deepEqual(copiados, [
+                "Cocina guardada",
+                "  Revisar ducha  "
+            ]);
+            assert.equal(botonesCopiar[1].dataset.estadoCopia, "copiado");
+        }
+    }
+});
+
 test("Express exige autoridad real para la fecha de la ficha y permite abrir/cerrar sin crear ciclo", () => {
     const dato = { aseoExpressCiclo: { fecha: "2026-09-22", verificado: true, existe: true } };
     const h = arnes({ 1: dato });

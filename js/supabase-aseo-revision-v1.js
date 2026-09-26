@@ -8,16 +8,39 @@
     "use strict";
 
     const TIPO_REVISION = "completa";
+    const CAMPOS_DETALLE_SECCION = Object.freeze([
+        "detalle_cocina",
+        "detalle_bano",
+        "detalle_living_cama",
+        "detalle_terraza"
+    ]);
+    const COLUMNAS_REVISION = [
+        "id",
+        "fecha",
+        "cabana_id",
+        "tipo_revision",
+        "estado",
+        "resultado",
+        "observaciones",
+        ...CAMPOS_DETALLE_SECCION,
+        "revisado_por",
+        "iniciado_en",
+        "finalizado_en",
+        "creado_en"
+    ].join(", ");
 
     const cacheCabanas = new Map();
     const cacheConfig = new Map();
     const cacheRevisiones = new Map();
+    const temporizadoresDetallesSeccion = new Map();
+    const detallesSeccionEditandoHasta = new Map();
 
     let usuarioIdCache = null;
     let resumenSincronizando = false;
     let temporizadorDetalles = null;
     let detallesEditandoHasta = 0;
     let lecturaChecklistRemoto = 0;
+    let listenerDetallesSeccionInstalado = false;
 
     function cliente() {
         return window.haikuSupabase || null;
@@ -42,6 +65,53 @@
 
     function claveRevision(fecha, numeroCabana) {
         return `${fecha}::${numeroCabana}`;
+    }
+
+    function esCampoDetalleSeccion(campo) {
+        return CAMPOS_DETALLE_SECCION.includes(String(campo || ""));
+    }
+
+    function claveDetalleSeccion(fecha, numeroCabana, campo) {
+        return `${fecha}::${numeroCabana}::${campo}`;
+    }
+
+    function detallesSeccionDesdeRevision(revision) {
+        return CAMPOS_DETALLE_SECCION.reduce((detalles, campo) => {
+            detalles[campo] = revision?.[campo] || "";
+            return detalles;
+        }, {});
+    }
+
+    function actualizarCacheDetallesSeccion(
+        datosCabana,
+        revision,
+        fecha = "",
+        numeroCabana = ""
+    ) {
+        const remotos = detallesSeccionDesdeRevision(revision);
+        const actuales = datosCabana.detallesRevisionSeccion || {};
+
+        datosCabana.detallesRevisionSeccion =
+            CAMPOS_DETALLE_SECCION.reduce((detalles, campo) => {
+                detalles[campo] =
+                    fecha && numeroCabana &&
+                    detalleSeccionEnEdicion(fecha, numeroCabana, campo)
+                        ? (actuales[campo] || "")
+                        : remotos[campo];
+                return detalles;
+            }, {});
+    }
+
+    function detalleSeccionEnEdicion(fecha, numeroCabana, campo) {
+        const clave = claveDetalleSeccion(fecha, numeroCabana, campo);
+        const limite = detallesSeccionEditandoHasta.get(clave) || 0;
+
+        if (Date.now() < limite) {
+            return true;
+        }
+
+        detallesSeccionEditandoHasta.delete(clave);
+        return false;
     }
 
     async function obtenerUsuarioId() {
@@ -142,9 +212,7 @@
 
         const { data, error } = await supabase
             .from("revisiones_cabana")
-            .select(
-                "id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en"
-            )
+            .select(COLUMNAS_REVISION)
             .eq("fecha", fecha)
             .eq("cabana_id", cabanaId)
             .eq("tipo_revision", TIPO_REVISION)
@@ -197,9 +265,7 @@
                 iniciado_en: ahora,
                 observaciones: null
             })
-            .select(
-                "id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en"
-            )
+            .select(COLUMNAS_REVISION)
             .single();
 
         if (error) {
@@ -373,6 +439,12 @@
             cicloRevision(fecha, revision);
         datosCabana.detallesRevision =
             revision?.observaciones || "";
+        actualizarCacheDetallesSeccion(
+            datosCabana,
+            revision,
+            fecha,
+            numeroCabana
+        );
         actualizarEstadoFinalDerivado(datosCabana);
 
         if (typeof guardarDatos === "function") {
@@ -441,6 +513,29 @@
         ) {
             detalles.value = revision?.observaciones || "";
         }
+
+        contenedor
+            .querySelectorAll(
+                "textarea[data-revision-detalle-seccion]"
+            )
+            .forEach(textarea => {
+                const campo = String(
+                    textarea.dataset.revisionDetalleSeccion || ""
+                );
+
+                if (
+                    !esCampoDetalleSeccion(campo) ||
+                    detalleSeccionEnEdicion(
+                        fechaOperativa(),
+                        numeroCabana,
+                        campo
+                    )
+                ) {
+                    return;
+                }
+
+                textarea.value = revision?.[campo] || "";
+            });
     }
 
     async function refrescarChecklistAbierto(payload = null, intento = 0) {
@@ -462,7 +557,7 @@
         // verifican contra la revisión completa vigente antes de tocar la UI.
         const { data: revision, error } = await cliente()
             .from("revisiones_cabana")
-            .select("id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en")
+            .select(COLUMNAS_REVISION)
             .eq("fecha", fecha)
             .eq("cabana_id", cabana.id)
             .eq("tipo_revision", TIPO_REVISION)
@@ -781,6 +876,167 @@
         }
     }
 
+    async function guardarDetalleSeccionRevision(
+        numeroCabana,
+        campo,
+        valor,
+        fecha = fechaOperativa()
+    ) {
+        const supabase = cliente();
+
+        if (!supabase) {
+            return;
+        }
+
+        if (!esCampoDetalleSeccion(campo)) {
+            throw new Error(`Campo de detalle no reconocido: ${campo}`);
+        }
+
+        const revision = await asegurarRevision(numeroCabana, fecha);
+        const payload = {
+            [campo]: String(valor || "").trim() || null
+        };
+
+        const { error } = await supabase
+            .from("revisiones_cabana")
+            .update(payload)
+            .eq("id", revision.id);
+
+        if (error) {
+            throw error;
+        }
+
+        Object.assign(revision, payload);
+
+        if (
+            revision.fecha === fechaOperativa() &&
+            typeof obtenerDatosDia === "function"
+        ) {
+            const datos = obtenerDatosDia(revision.fecha);
+
+            if (!datos.cabanas[numeroCabana]) {
+                datos.cabanas[numeroCabana] = {};
+            }
+
+            const datosCabana = datos.cabanas[numeroCabana];
+
+            if (!datosCabana.detallesRevisionSeccion) {
+                datosCabana.detallesRevisionSeccion = {};
+            }
+
+            datosCabana.detallesRevisionSeccion[campo] =
+                payload[campo] || "";
+
+            if (typeof guardarDatos === "function") {
+                guardarDatos();
+            }
+        }
+
+        document.dispatchEvent(
+            new CustomEvent("haiku:revision-detalle-seccion-guardado", {
+                detail: {
+                    fecha: revision.fecha,
+                    numeroCabana: String(numeroCabana),
+                    revisionId: revision.id,
+                    campo
+                }
+            })
+        );
+    }
+
+    function instalarListenerDetallesSeccion() {
+        if (listenerDetallesSeccionInstalado) {
+            return;
+        }
+
+        listenerDetallesSeccionInstalado = true;
+
+        document.addEventListener("input", evento => {
+            const textarea = evento.target?.closest?.(
+                "textarea[data-revision-detalle-seccion]"
+            );
+            const contenedor =
+                document.getElementById("revision-checklist");
+
+            if (!textarea || !contenedor?.contains(textarea)) {
+                return;
+            }
+
+            const campo = String(
+                textarea.dataset.revisionDetalleSeccion || ""
+            );
+            const numeroCabana = numeroRevisionAbierta();
+            const fecha = fechaOperativa();
+
+            if (
+                !esCampoDetalleSeccion(campo) ||
+                !numeroCabana ||
+                !fecha
+            ) {
+                return;
+            }
+
+            const clave = claveDetalleSeccion(
+                fecha,
+                numeroCabana,
+                campo
+            );
+            const valor = textarea.value;
+
+            detallesSeccionEditandoHasta.set(
+                clave,
+                Date.now() + 1600
+            );
+
+            if (typeof obtenerDatosDia === "function") {
+                const datos = obtenerDatosDia(fecha);
+
+                if (!datos.cabanas[numeroCabana]) {
+                    datos.cabanas[numeroCabana] = {};
+                }
+
+                const datosCabana = datos.cabanas[numeroCabana];
+
+                if (!datosCabana.detallesRevisionSeccion) {
+                    datosCabana.detallesRevisionSeccion = {};
+                }
+
+                datosCabana.detallesRevisionSeccion[campo] = valor;
+
+                if (typeof guardarDatos === "function") {
+                    guardarDatos();
+                }
+            }
+
+            clearTimeout(temporizadoresDetallesSeccion.get(clave));
+
+            const temporizador = setTimeout(async () => {
+                try {
+                    await guardarDetalleSeccionRevision(
+                        numeroCabana,
+                        campo,
+                        valor,
+                        fecha
+                    );
+                } catch (error) {
+                    console.error(
+                        "HAIKU · No fue posible guardar detalle de sección en Supabase:",
+                        error
+                    );
+                } finally {
+                    if (
+                        temporizadoresDetallesSeccion.get(clave) ===
+                        temporizador
+                    ) {
+                        temporizadoresDetallesSeccion.delete(clave);
+                    }
+                }
+            }, 450);
+
+            temporizadoresDetallesSeccion.set(clave, temporizador);
+        }, true);
+    }
+
     function instalarListenerItemsRevision() {
         document.addEventListener("change", async evento => {
             const checkbox = evento.target?.closest?.('input[type="checkbox"][data-checklist-id]');
@@ -989,9 +1245,7 @@
             const { data: revisiones, error: errorRevisiones } =
                 await supabase
                     .from("revisiones_cabana")
-                    .select(
-                        "id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en"
-                    )
+                    .select(COLUMNAS_REVISION)
                     .eq("fecha", fecha)
                     .eq("tipo_revision", TIPO_REVISION)
                     .neq("estado", "cancelada")
@@ -1039,6 +1293,12 @@
                         cicloRevision(fecha, revision);
                     datos.cabanas[numero].detallesRevision =
                         revision?.observaciones || "";
+                    actualizarCacheDetallesSeccion(
+                        datos.cabanas[numero],
+                        revision,
+                        fecha,
+                        numero
+                    );
                     actualizarEstadoFinalDerivado(datos.cabanas[numero]);
 
                     const key = claveRevision(fecha, numero);
@@ -1111,7 +1371,7 @@
                 const cabanas = cabanasR.data || [];
                 if (!cabanas.length) return { cabanas, revisiones: [] };
                 const revisionesR = await supabase.from("revisiones_cabana")
-                    .select("id, fecha, cabana_id, tipo_revision, estado, resultado, observaciones, revisado_por, iniciado_en, finalizado_en, creado_en")
+                    .select(COLUMNAS_REVISION)
                     .eq("fecha", fecha).eq("tipo_revision", TIPO_REVISION)
                     .neq("estado", "cancelada")
                     .in("cabana_id", cabanas.map(cabana => cabana.id))
@@ -1139,6 +1399,12 @@
                     datos.cabanas[numero].revisionCompletaCiclo =
                         cicloRevision(snapshot.fecha, revision);
                     datos.cabanas[numero].detallesRevision = revision?.observaciones || "";
+                    actualizarCacheDetallesSeccion(
+                        datos.cabanas[numero],
+                        revision,
+                        snapshot.fecha,
+                        numero
+                    );
                     actualizarEstadoFinalDerivado(datos.cabanas[numero]);
                     cacheRevisiones.set(claveRevision(snapshot.fecha, numero), revision || null);
                 });
@@ -1149,6 +1415,7 @@
         invalidarCiclosPersistidos();
         instalarPuenteMostrarChecklist();
         instalarListenerItemsRevision();
+        instalarListenerDetallesSeccion();
 
         // El puente V2 observa Resumen y Cabañas, e invoca
         // sincronizarResumenFecha al entrar. Evitamos otro observer y otra
