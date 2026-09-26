@@ -80,13 +80,8 @@
         return Object.hasOwn(REVISIONES, dato?.estadoRevision) ? dato.estadoRevision : "pendiente";
     };
     const estadoAseo = dato => {
-        if (dato?.aseoEstado === "no_requiere") return "no_requiere";
-        if (dato?.aseoEstado === "cancelado") return "cancelado";
-        if (dato?.aseoEstado === "pendiente" || dato?.aseoEstado === "asignado") return "pendiente";
-        if (dato?.aseoEstado === "en_proceso") return "en_curso";
-        if (dato?.aseoEstado === "completado") return "lista_para_revisar";
-        if (dato?.aseoOut) return "lista_para_revisar";
-        if (dato?.aseoIn) return "en_curso";
+        if (dato?.aseoIn) return dato.aseoOut ? "lista_para_revisar" : "en_curso";
+        if (!dato?.aseoOut && dato?.aseoEstado === "no_requiere") return "no_requiere";
         return "pendiente";
     };
     const estadoFinal = (dato, fecha = fechaActual()) => {
@@ -102,9 +97,14 @@
         : valor === "con-detalles" || valor === "CON DETALLES" || valor === "cancelado" ? "issue" : "pending";
     const etiqueta = valor => valor === "cancelado" ? "Cancelado (histórico)"
         : ESTADOS.find(([codigo]) => codigo === valor)?.[1] || "Pendiente";
-    const opcionesAseo = seleccionado => (seleccionado === "cancelado"
-        ? '<option value="cancelado" selected disabled>Cancelado (histórico)</option>' : "") + ESTADOS.map(([codigo, texto]) =>
-        `<option value="${codigo}"${codigo === seleccionado ? " selected" : ""}>${texto}</option>`).join("");
+    function aseoHTML(dato, numero) {
+        const aseo = estadoAseo(dato);
+        const accion = !dato.aseoIn && !dato.aseoOut
+            ? `<button type="button" class="cb-text-action cb-no-requiere" data-cb-no-requiere data-cabana="${numero}" aria-label="${aseo === "no_requiere" ? "Restablecer a Pendiente" : "Marcar No requiere"} · Cabaña ${numero}">${aseo === "no_requiere" ? "Restablecer" : "No requiere"}</button>` : "";
+        const conflicto = dato.aseoOut && !dato.aseoIn ? "Revisar: OUT sin IN"
+            : dato.aseoEstado === "no_requiere" && (dato.aseoIn || dato.aseoOut) ? "Revisar: No requiere con horas" : "";
+        return `<span class="cb-aseo-indicator"><span class="cb-badge ${tono(aseo)}" data-cb-aseo-state>${etiqueta(aseo)}</span>${accion}</span>${conflicto ? `<small class="cb-aseo-conflict">${conflicto}</small>` : ""}`;
+    }
     const expressReal = (dato, fecha) => dato?.aseoExpressCiclo?.fecha === fecha
         && dato.aseoExpressCiclo.verificado === true && dato.aseoExpressCiclo.existe === true;
     const fechaLarga = fecha => fecha ? new Intl.DateTimeFormat("es-CL", {
@@ -173,17 +173,19 @@
     }
     function filaOperacion(fecha, numero) {
         const dato = cabana(fecha, numero);
-        const aseo = estadoAseo(dato);
+        const rev = revision(dato, fecha);
+        const final = estadoFinal(dato, fecha);
         const solicitudes = listaSolicitudes(fecha, numero, dato);
-        const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ") || "Sin solicitudes";
+        const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small>${escapar(trabajo(dato))}</small></div>
+          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small>${escapar(trabajo(dato))}</small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
-          <label class="cb-cell"><span>Revisión</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
+          <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
-          <label class="cb-cell"><span>OUT</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="${numero}" value="${escapar(dato.aseoOut || "")}" aria-label="Hora OUT de cabaña ${numero}"></label>
-          <label class="cb-cell cb-state"><span>Estado aseo</span><select data-cb-clean-status data-cabana="${numero}" class="${tono(aseo)}" aria-label="Estado de aseo de cabaña ${numero}">${opcionesAseo(aseo)}</select></label>
-          <div class="cb-pending"><span class="cb-mobile-label">Solicitudes y pendientes</span><span title="${escapar(pendiente)}">${escapar(pendiente)}</span>${solicitudesHTML(fecha, numero, dato)}</div>
+          <label class="cb-cell"><span>OUT</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="${numero}" value="${escapar(dato.aseoOut || "")}"${!dato.aseoIn && !dato.aseoOut ? " disabled" : ""} aria-label="Hora OUT de cabaña ${numero}"></label>
+          <div class="cb-state cb-status cb-aseo-status" aria-live="polite"><small>Estado aseo</small>${aseoHTML(dato, numero)}</div>
+          <div class="cb-state cb-status cb-revision-status" aria-live="polite"><small>Estado revisión</small><span class="cb-badge ${tono(rev)}" data-cb-revision-state>${REVISIONES[rev]}</span></div>
+          <div class="cb-state cb-status cb-final-status" aria-live="polite"><small>Estado final</small><span class="cb-badge ${tono(final)}" data-cb-final-state>${FINALES[final]}</span></div>
           <button type="button" class="cb-open" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button>
         </article>`;
     }
@@ -193,7 +195,7 @@
         if (enfocado && $("#aseo-resumen")?.contains(enfocado) && enfocado.matches?.("input, select, textarea")) return;
         const numeros = Array.from({ length: 11 }, (_, i) => i + 1).filter(numero => filtro(fecha, numero));
         $("#cabinsOperationDescription").textContent = `Asignación, horarios y coordinación del turno · ${numeros.length} cabañas visibles`;
-        $("#aseo-resumen").innerHTML = `<div class="cb-operation-head" aria-hidden="true"><span>Cabaña / trabajo</span><span>Encargado</span><span>Revisión</span><span>IN</span><span>OUT</span><span>Estado aseo</span><span>Solicitudes y pendientes</span><span></span></div>${numeros.map(n => filaOperacion(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas con este filtro.</p>'}`;
+        $("#aseo-resumen").innerHTML = `<div class="cb-operation-head" aria-hidden="true"><span>Cabaña / trabajo</span><span>Encargado</span><span>Revisor</span><span>IN</span><span>OUT</span><span>Estado aseo</span><span>Estado revisión</span><span>Estado final</span><span>Abrir</span></div>${numeros.map(n => filaOperacion(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas con este filtro.</p>'}`;
     }
     function totalChecklist(numero) {
         try {
@@ -246,7 +248,8 @@
             if (campo?.dataset.revisionCabana !== undefined) campo.dataset.revisionCabana = numero;
             if (campo?.dataset.cabana !== undefined) campo.dataset.cabana = numero;
         }
-        if (document.activeElement !== $("#cabinsDetailAseo")) $("#cabinsDetailAseo").innerHTML = opcionesAseo(aseo);
+        $("#cabinsDetailAseo").innerHTML = aseoHTML(dato, numero);
+        $("#cabinsDetailOut").disabled = !dato.aseoIn && !dato.aseoOut;
         $("#cabinsDetailRequests").innerHTML = solicitudesHTML(fecha, numero, dato) || "<p>Sin solicitudes registradas.</p>";
         $("#cabinsAseoProgress").textContent = etiqueta(aseo);
         $("#cabinsRevisionProgress").textContent = REVISIONES[revision(dato, fecha)];
@@ -399,26 +402,20 @@
         const fecha = fechaActual();
         const dato = cabana(fecha, numero);
         const previo = estadoAseo(dato);
-        const nuevo = control.value;
-        if (nuevo === previo) return;
+        if (control.disabled) return;
+        const nuevo = previo === "no_requiere" ? "pendiente" : "no_requiere";
         const api = window.HAIKU_ASEO_OPERACION_V1;
-        if (!api?.guardarEstadoAseo) { control.value = previo; alert("No fue posible verificar la autoridad de Aseo. Intenta nuevamente."); return; }
-        if (["pendiente", "en_curso", "no_requiere"].includes(nuevo) && (dato.aseoOut || (nuevo === "no_requiere" && dato.aseoIn))) {
-            control.value = previo; alert("La cabaña ya tiene horas de aseo registradas. Revisa IN/OUT antes de retroceder el estado."); return;
-        }
-        if (["lista", "con-detalles"].includes(revision(dato, fecha)) && ["pendiente", "en_curso"].includes(nuevo)) {
-            control.value = previo; alert("La revisión ya terminó. Cambia primero su estado en la ficha."); return;
+        if (!api?.guardarEstadoAseo) { alert("No fue posible verificar la autoridad de Aseo. Intenta nuevamente."); return; }
+        if (dato.aseoIn || dato.aseoOut) {
+            alert("La cabaña ya tiene horas de aseo registradas. Revisa IN/OUT antes de cambiar No requiere."); return;
         }
         control.disabled = true;
         try {
-            const canonico = nuevo === "no_requiere" ? "no_requiere" : nuevo === "en_curso" ? "en_proceso"
-                : nuevo === "pendiente" ? "pendiente" : "completado";
-            await api.guardarEstadoAseo(numero, canonico);
+            await api.guardarEstadoAseo(numero, nuevo);
             pintar();
         } catch (error) {
             console.error("HAIKU · No fue posible cambiar el estado de aseo:", error);
             await api.hidratar?.(fecha, { pintar: true });
-            control.value = previo;
             alert("No fue posible guardar el estado de aseo. Se releyeron los datos.");
         } finally { control.disabled = false; }
     }
@@ -541,6 +538,7 @@
     raiz.addEventListener("click", evento => {
         const boton = evento.target.closest("button");
         if (!boton) return;
+        if (boton.dataset.cbNoRequiere !== undefined) { cambiarEstadoAseo(boton); return; }
         if (boton.dataset.cabTab) { estado.tab = boton.dataset.cabTab; estado.filtro = "todas"; pintar(); guardarContexto(); return; }
         if (boton.dataset.cbFilter) { estado.filtro = boton.dataset.cbFilter; pintar(); return; }
         if (boton.dataset.cbOpen) { abrir(boton.dataset.cbOpen, boton.dataset.cbOrigin || estado.tab); return; }
@@ -568,7 +566,6 @@
     });
     raiz.addEventListener("change", evento => {
         const campo = evento.target;
-        if (campo.matches("[data-cb-clean-status]")) { cambiarEstadoAseo(campo); return; }
         if (campo.id === "cabinsReviewMode") { cambiarModo(campo.value); return; }
         if (campo.matches(".aseo-encargado-input, .aseo-revision-input, .aseo-hora-input")) {
             setTimeout(() => {
@@ -605,7 +602,7 @@
     observador.observe($("#revision-checklist"), { childList: true });
     observador.observe($("#aseo-express-checklist"), { childList: true });
     window.HAIKU_CABANAS_SITES_V1 = Object.freeze({ pintar, pintarOperacion, pintarRevision, pintarDetalle, abrir, cerrar,
-        actualizarConteos, estadoAseo, estadoFinal, revision, opcionesAseo, trabajo, titular, expressReal });
+        actualizarConteos, estadoAseo, estadoFinal, revision, trabajo, titular, expressReal });
     if (panelAutenticado) {
         window.addEventListener("haiku:auth-ready", restaurarContexto, true);
         if (window.haikuSesion) restaurarContexto();

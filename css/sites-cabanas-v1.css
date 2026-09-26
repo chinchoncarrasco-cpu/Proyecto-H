@@ -1235,3 +1235,47 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head small { font-size:10px; color:#7b8b7e; }
 #seccion-cabanas #revision-checklist .checklist-area>.cb-sector-head>span:last-child,
 #seccion-cabanas #aseo-express-checklist .revision-area>.cb-sector-head>span:last-child { font-size:20px; font-weight:350; }
+
+/* Operación conserva la fila Sites compacta; cada estado tiene su columna. */
+#seccion-cabanas .cb-status { display:grid; gap:3px; justify-items:start; min-width:0; }
+#seccion-cabanas .cb-status > small { font-size:10px; color:#65776c; }
+#seccion-cabanas .cb-status .cb-badge { max-width:100%; font-size:11px; }
+#seccion-cabanas .cb-revision-status > small { color:#243e30; font-weight:750; }
+#seccion-cabanas .cb-revision-status .cb-badge { font-size:12px; font-weight:750; padding:4px 7px; border:1px solid currentColor; }
+#seccion-cabanas .cb-no-requiere { padding:0; font-size:10px; line-height:12px; text-decoration:underline; }
+#seccion-cabanas .cb-aseo-indicator { display:contents; }
+#seccion-cabanas .cb-operation-row .cb-aseo-indicator { display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; max-width:100%; }
+#seccion-cabanas .cb-status > .cb-aseo-conflict { color:#9b452d; }
+#seccion-cabanas .aseo-hora-input:disabled { background:#f3f5f3; color:#768279; }
+#seccion-cabanas .cb-cabin .cb-requests { flex-wrap:nowrap; margin-top:0; overflow:hidden; }
+#seccion-cabanas .cb-cabin .cb-requests > span { min-width:0; }
+@media(min-width:781px) {
+  #seccion-cabanas .cb-operation-table { overflow-x:auto; }
+  #seccion-cabanas .cb-operation-head,
+  #seccion-cabanas .cb-operation-row { display:grid; min-width:758px; grid-template-columns:minmax(90px,1.25fr) minmax(60px,.9fr) minmax(60px,.9fr) 68px 68px minmax(106px,1fr) minmax(96px,.95fr) minmax(106px,1fr) 36px; gap:6px; padding-left:10px; padding-right:10px; }
+  #seccion-cabanas .cb-operation-row { min-height:73px; padding-top:10px; padding-bottom:10px; }
+  #seccion-cabanas .cb-operation-row > :is(.cb-cabin,.cb-cell,.cb-state,.cb-open):nth-child(n) { grid-column:auto; grid-row:1; }
+  #seccion-cabanas .cb-operation-row > .cb-state { position:relative; display:flex; align-items:center; align-self:center; min-width:0; height:32px; }
+  #seccion-cabanas .cb-operation-row > .cb-state > small:not(.cb-aseo-conflict),
+  #seccion-cabanas .cb-operation-row > .cb-cell > span { display:none; }
+  #seccion-cabanas .cb-operation-row .cb-no-requiere,
+  #seccion-cabanas .cb-operation-row .cb-aseo-conflict { position:absolute; top:28px; left:0; }
+  #seccion-cabanas .cb-operation-row .cb-aseo-indicator { position:relative; }
+  #seccion-cabanas .cb-operation-row .cb-aseo-indicator .cb-no-requiere { top:calc(100% + 4px); left:50%; transform:translateX(-50%); white-space:nowrap; }
+  #seccion-cabanas .cb-operation-row > .cb-open { justify-self:end; padding:6px 0; }
+  #seccion-cabanas .cb-operation-head { font-size:9px; letter-spacing:.02em; }
+}
+@media(max-width:780px) {
+  #seccion-cabanas .cb-operation-row { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #seccion-cabanas .cb-operation-row > .cb-cabin { grid-column:1; grid-row:1; }
+  #seccion-cabanas .cb-operation-row > .cb-state { min-width:0; align-self:start; }
+  #seccion-cabanas .cb-operation-row > .cb-aseo-status { grid-column:1; grid-row:2; }
+  #seccion-cabanas .cb-operation-row > .cb-revision-status { grid-column:2; grid-row:1; }
+  #seccion-cabanas .cb-operation-row > .cb-final-status { grid-column:2; grid-row:2; }
+  #seccion-cabanas .cb-operation-row > .cb-cell:nth-child(2),
+  #seccion-cabanas .cb-operation-row > .cb-cell:nth-child(3) { grid-row:3; }
+  #seccion-cabanas .cb-operation-row > .cb-cell:nth-child(4),
+  #seccion-cabanas .cb-operation-row > .cb-cell:nth-child(5) { grid-row:4; }
+  #seccion-cabanas .cb-operation-row > .cb-open { grid-row:5; }
+  #seccion-cabanas .cb-cabin .cb-requests { flex-wrap:wrap; }
+}

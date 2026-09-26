@@ -296,26 +296,29 @@ test("eliminar una solicitud registra historial sólo después de cancelarla en 
     assert.equal(fallo.actividad.length, 0);
 });
 
-test("Aseo expone cuatro estados canónicos y no confunde cancelado histórico con No requiere", () => {
+test("Aseo deriva cuatro estados de IN/OUT sin iniciar por encargado ni por estados antiguos", () => {
     const h = arnes();
     const casos = [
         [{}, "pendiente"],
+        [{ aseo: "Aura" }, "pendiente"],
+        [{ aseo: "Aura", aseoEstado: "asignado" }, "pendiente"],
+        [{ aseoEstado: "en_proceso" }, "pendiente"],
+        [{ aseoEstado: "completado" }, "pendiente"],
         [{ aseoIn: "09:35" }, "en_curso"],
-        [{ aseoOut: "10:02" }, "lista_para_revisar"],
-        [{ aseoOut: "10:02", estadoRevision: "lista" }, "lista_para_revisar"],
+        [{ aseoIn: "09:35", aseoEstado: "pendiente" }, "en_curso"],
+        [{ aseoIn: "09:35", aseoOut: "10:02" }, "lista_para_revisar"],
+        [{ aseoIn: "09:35", aseoOut: "10:02", aseoEstado: "en_proceso" }, "lista_para_revisar"],
+        [{ aseoOut: "10:02" }, "pendiente"],
         [{ aseoEstado: "no_requiere" }, "no_requiere"],
-        [{ aseoEstado: "cancelado" }, "cancelado"]
+        [{ aseoEstado: "cancelado" }, "pendiente"]
     ];
     for (const [datos, esperado] of casos) assert.equal(h.api.estadoAseo(datos), esperado);
-    const opciones = h.api.opcionesAseo("lista_para_revisar");
-    assert.deepEqual([...opciones.matchAll(/<option value="([^"]+)"/g)].map(x => x[1]),
-        ["pendiente", "en_curso", "lista_para_revisar", "no_requiere"]);
-    assert.match(opciones, /value="lista_para_revisar" selected>Lista para revisar/);
-    assert.match(h.api.opcionesAseo("cancelado"), /value="cancelado" selected disabled>Cancelado \(histórico\)/);
+    assert.doesNotMatch(h.nodos.get("#aseo-resumen").innerHTML, /<select/);
+    assert.doesNotMatch(html, /<select[^>]*id="cabinsDetailAseo"/);
 });
 
-test("No requiere y Lista para revisar guardan sólo en Aseo, sin escribir revisión", async () => {
-    const h = arnes({ 6: {}, 7: { aseoEstado: "en_proceso" } });
+test("la acción No requiere se revierte a Pendiente y guarda sólo Aseo", async () => {
+    const h = arnes({ 6: {} });
     const escrituras = [];
     h.window.HAIKU_ASEO_OPERACION_V1 = {
         async guardarEstadoAseo(numero, valor) {
@@ -329,24 +332,24 @@ test("No requiere y Lista para revisar guardan sólo en Aseo, sin escribir revis
             h.datosPorFecha[FECHA].cabanas[numero].estadoRevision = "lista";
         }
     };
-    const cambiar = h.escuchas.get("change");
-    for (const [numero, valor] of [["6", "no_requiere"], ["7", "lista_para_revisar"]]) {
-        const control = { dataset: { cabana: numero }, value: valor, disabled: false,
-            matches: selector => selector === "[data-cb-clean-status]" };
-        cambiar({ target: control });
+    const cambiar = h.escuchas.get("click");
+    for (const valor of ["no_requiere", "pendiente"]) {
+        const control = { dataset: { cabana: "6", cbNoRequiere: "" }, disabled: false };
+        cambiar({ target: { closest: () => control } });
         await new Promise(resolve => setImmediate(resolve));
         assert.equal(control.disabled, false);
+        assert.equal(h.api.estadoAseo(h.datosPorFecha[FECHA].cabanas[6]), valor);
+        assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 6),
+            valor === "no_requiere" ? /Restablecer/ : /Marcar No requiere/);
     }
     assert.deepEqual(escrituras, [
         ["aseo", "6", "no_requiere"],
-        ["aseo", "7", "completado"]
+        ["aseo", "6", "pendiente"]
     ]);
-    assert.equal(h.api.estadoAseo(h.datosPorFecha[FECHA].cabanas[6]), "no_requiere");
-    assert.equal(h.api.estadoAseo(h.datosPorFecha[FECHA].cabanas[7]), "lista_para_revisar");
 });
 
-test("una revisión Lista impide retroceder Aseo y no convierte Aseo en Lista", async () => {
-    const h = arnes({ 1: { aseoOut: "10:02", estadoRevision: "lista" } });
+test("un ciclo con horas no ofrece No requiere ni permite aplicarlo desde un botón obsoleto", async () => {
+    const h = arnes({ 1: { aseoIn: "09:00", aseoOut: "10:02", estadoRevision: "lista" } });
     const escrituras = [];
     h.window.HAIKU_ASEO_OPERACION_V1 = {
         async guardarEstadoAseo(numero, valor) { escrituras.push(["aseo", numero, valor]); }
@@ -354,17 +357,14 @@ test("una revisión Lista impide retroceder Aseo y no convierte Aseo en Lista", 
     h.window.HAIKU_REVISION_RESUMEN_SYNC_V2 = {
         async guardarDesdeResumen(numero, valor) { escrituras.push(["revision", numero, valor]); }
     };
-    for (const nuevo of ["pendiente", "en_curso", "no_requiere"]) {
-        const selector = { dataset: { cabana: "1" }, value: nuevo, disabled: false,
-            matches: patron => patron === "[data-cb-clean-status]" };
-        h.escuchas.get("change")({ target: selector });
-        await new Promise(resolve => setImmediate(resolve));
-        assert.equal(selector.value, "lista_para_revisar", `${nuevo}: el selector vuelve a Lista para revisar`);
-        assert.equal(selector.disabled, false);
-        assert.equal(h.api.estadoAseo(h.datosPorFecha[FECHA].cabanas[1]), "lista_para_revisar");
-        assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 1),
-            /<option value="lista_para_revisar" selected>Lista para revisar<\/option>/);
-    }
+    const boton = { dataset: { cabana: "1", cbNoRequiere: "" }, disabled: false };
+    h.escuchas.get("click")({ target: { closest: () => boton } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(boton.disabled, false);
+    assert.equal(h.api.estadoAseo(h.datosPorFecha[FECHA].cabanas[1]), "lista_para_revisar");
+    const contenido = fila(h.nodos.get("#aseo-resumen").innerHTML, 1);
+    assert.match(contenido, /data-cb-aseo-state>Lista para revisar/);
+    assert.doesNotMatch(contenido, /data-cb-no-requiere/);
     assert.deepEqual(escrituras, []);
 });
 
@@ -372,10 +372,10 @@ test("Estado final deriva seis estados sin tomar solicitudes operativas como aut
     const h = arnes();
     const casos = [
         [{}, "pendiente"],
-        [{ aseoEstado: "en_proceso" }, "en_curso"],
-        [{ aseoEstado: "completado" }, "lista_para_revisar"],
-        [{ aseoEstado: "completado", estadoRevision: "con-detalles" }, "con-detalles"],
-        [{ aseoEstado: "completado", estadoRevision: "lista" }, "lista"],
+        [{ aseoIn: "09:00" }, "en_curso"],
+        [{ aseoIn: "09:00", aseoOut: "10:02" }, "lista_para_revisar"],
+        [{ aseoIn: "09:00", aseoOut: "10:02", estadoRevision: "con-detalles" }, "con-detalles"],
+        [{ aseoIn: "09:00", aseoOut: "10:02", estadoRevision: "lista" }, "lista"],
         [{ aseoEstado: "no_requiere", estadoRevision: "lista" }, "no_requiere"]
     ];
     for (const [dato, esperado] of casos) {
@@ -390,7 +390,7 @@ test("Estado final deriva seis estados sin tomar solicitudes operativas como aut
 test("la revisión autenticada pertenece al ciclo completo de la fecha y no hereda un resultado antiguo", () => {
     const h = arnes();
     h.window.haikuSesion = { usuario: { id: "u1" } };
-    const dato = { aseoEstado: "completado", estadoRevision: "lista" };
+    const dato = { aseoIn: "09:00", aseoOut: "10:02", estadoRevision: "lista" };
     assert.equal(h.api.revision(dato, FECHA), "pendiente",
         "el estado local no sustituye un ciclo completo sin verificar");
     assert.equal(h.api.estadoFinal(dato, FECHA), "lista_para_revisar");
@@ -417,7 +417,7 @@ test("tabla y ficha comparten los selectores originales que guardan en Supabase"
         'class="aseo-revision-input" data-revision-cabana="1"',
         'class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="1"',
         'class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="1"',
-        'data-cb-clean-status data-cabana="1"'
+        'data-cb-aseo-state>Lista para revisar'
     ]) assert.ok(actual.includes(contrato), contrato);
     h.api.abrir(1);
     assert.deepEqual(h.aperturas, [["completa", "1"]]);

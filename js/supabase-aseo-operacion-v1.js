@@ -209,15 +209,18 @@
     }
 
     function estadoAseo(cabana) {
-        // "no_requiere" es un estado canónico futuro. "cancelado" conserva
-        // su significado histórico y nunca se reinterpreta como sin aseo.
-        if (["pendiente", "asignado", "en_proceso", "completado", "cancelado", "no_requiere"].includes(cabana?.aseoEstado)) {
-            return cabana.aseoEstado;
-        }
-        if (cabana?.aseoOut) return "completado";
-        if (cabana?.aseoIn) return "en_proceso";
-        if (String(cabana?.aseo || "").trim()) return "asignado";
+        if (cabana?.aseoIn) return cabana.aseoOut ? "completado" : "en_proceso";
+        if (!cabana?.aseoOut && cabana?.aseoEstado === "no_requiere") return "no_requiere";
         return "pendiente";
+    }
+
+    function validarHorasAseo(cabana) {
+        if (cabana?.aseoOut && !cabana?.aseoIn) {
+            throw new Error("Registra IN antes de OUT. No se pueden dejar horas OUT sin IN.");
+        }
+        if (cabana?.aseoEstado === "no_requiere" && (cabana.aseoIn || cabana.aseoOut)) {
+            throw new Error("No requiere es incompatible con horas de aseo. Revisa IN/OUT sin borrar el ciclo.");
+        }
     }
 
     function tieneAseoLegacy(cabana) {
@@ -263,6 +266,7 @@
         const cabana = cabanaCache(fecha, numero);
         const ref = cabanasPorNumero.get(String(numero));
         if (!cabana || !ref) return null;
+        validarHorasAseo(cabana);
 
         return {
             fecha,
@@ -302,35 +306,79 @@
         const fecha = fechaOperativa();
         if (!fecha || !numero) return Promise.resolve();
 
+        const cabana = cabanaCache(fecha, String(numero));
+        if (!cabana) return Promise.resolve();
+        try {
+            validarHorasAseo({ ...cabana, [campo]: valor });
+        } catch (error) {
+            return Promise.reject(error);
+        }
+        const anterior = cabana[campo];
         actualizarCampoLocal(fecha, String(numero), campo, valor);
-        const cabana = cabanaCache(fecha, String(numero));
-        if (cabana && (["aseoIn", "aseoOut"].includes(campo) || (campo === "aseo" && String(valor).trim()))) {
-            delete cabana.aseoEstado;
-            guardarCache();
-        }
-        return encolar(`aseo:${fecha}:${numero}`, () =>
-            guardarAseoCompleto(fecha, String(numero))
-        );
-    }
-
-    function guardarEstadoAseo(numero, estado) {
-        const fecha = fechaOperativa();
-        const valor = String(estado || "");
-        if (!fecha || !numero || !["pendiente", "en_proceso", "completado", "cancelado", "no_requiere"].includes(valor)) {
-            return Promise.reject(new Error("Estado de aseo no reconocido."));
-        }
-        const cabana = cabanaCache(fecha, String(numero));
-        const anterior = cabana.aseoEstado;
-        cabana.aseoEstado = valor;
-        guardarCache();
         return encolar(`aseo:${fecha}:${numero}`, () => guardarAseoCompleto(fecha, String(numero)))
             .then(resultado => {
                 avisarResumenActualizado(fecha);
                 return resultado;
             })
             .catch(error => {
-                if (anterior === undefined) delete cabana.aseoEstado;
-                else cabana.aseoEstado = anterior;
+                if (cabana[campo] === valor) {
+                    if (anterior === undefined) delete cabana[campo];
+                    else cabana[campo] = anterior;
+                    guardarCache();
+                }
+                throw error;
+            });
+    }
+
+    function guardarEstadoAseo(numero, estado) {
+        const fecha = fechaOperativa();
+        const valor = String(estado || "");
+        if (!fecha || !numero || !["pendiente", "no_requiere"].includes(valor)) {
+            return Promise.reject(new Error("El estado de aseo se deriva de IN/OUT. Sólo No requiere es manual."));
+        }
+        const cabana = cabanaCache(fecha, String(numero));
+        if (!cabana || cabana.aseoIn || cabana.aseoOut) {
+            return Promise.reject(new Error("La cabaña tiene horas de aseo. Revisa IN/OUT antes de cambiar No requiere."));
+        }
+        if (cabana.aseoEstado === valor) return Promise.resolve();
+        if (valor === "pendiente" && cabana.aseoEstado !== "no_requiere") {
+            return Promise.reject(new Error("Pendiente sólo permite revertir No requiere sin un ciclo iniciado."));
+        }
+        const anterior = cabana.aseoEstado;
+        cabana.aseoEstado = valor;
+        guardarCache();
+        return encolar(`aseo:${fecha}:${numero}`, async () => {
+            await cargarReferencias();
+            const ref = cabanasPorNumero.get(String(numero));
+            if (!ref) throw new Error("Cabaña de aseo no reconocida.");
+            const { data: existente, error: errorLectura } = await cliente().from("aseos")
+                .select("id,iniciado_en,completado_en")
+                .eq("fecha", fecha).eq("cabana_id", ref.id).maybeSingle();
+            errorSiExiste(errorLectura);
+            if (existente?.iniciado_en || existente?.completado_en) {
+                throw new Error("La cabaña tiene horas de aseo en Supabase. Actualiza IN/OUT antes de cambiar No requiere.");
+            }
+            // La excepción manual sólo cambia estado; nunca sobreescribe horas.
+            // El filtro protege también un IN registrado por otro dispositivo
+            // entre la lectura anterior y esta escritura.
+            const consulta = existente
+                ? cliente().from("aseos").update({ estado: valor })
+                    .eq("id", existente.id).is("iniciado_en", null).is("completado_en", null)
+                : cliente().from("aseos").insert({ ...payloadAseo(fecha, String(numero)), estado: valor });
+            const { data, error } = await consulta.select("id,estado").single();
+            errorSiExiste(error);
+            if (!data) throw new Error("El ciclo de aseo cambió. Actualiza los datos antes de continuar.");
+            return data;
+        })
+            .then(resultado => {
+                avisarResumenActualizado(fecha);
+                return resultado;
+            })
+            .catch(error => {
+                if (cabana.aseoEstado === valor) {
+                    if (anterior === undefined) delete cabana.aseoEstado;
+                    else cabana.aseoEstado = anterior;
+                }
                 guardarCache();
                 throw error;
             });
@@ -559,17 +607,28 @@
 
     async function migrarLegacySiCorresponde(fecha, filasAseo) {
         const aseosPorCabana = new Map((filasAseo || []).map(fila => [String(fila.cabana_id), fila]));
+        const incompatibles = [];
 
         for (const [numero, ref] of cabanasPorNumero) {
             const local = cabanaCache(fecha, numero, false);
             if (!local) continue;
 
             if (!aseosPorCabana.has(String(ref.id)) && tieneAseoLegacy(local)) {
+                try {
+                    validarHorasAseo(local);
+                } catch (error) {
+                    // Conservar el registro local para corrección explícita sin
+                    // impedir la lectura de las otras cabañas ni de Express.
+                    incompatibles.push(numero);
+                    console.warn("HAIKU · Horas de aseo legacy incompatibles:", { fecha, numero, error });
+                    continue;
+                }
                 const creada = await guardarAseoCompleto(fecha, numero);
                 if (creada) aseosPorCabana.set(String(ref.id), creada);
             }
 
         }
+        return incompatibles;
     }
 
     async function leerFecha(fecha) {
@@ -599,7 +658,7 @@
         errorSiExiste(solicitudesResp.error);
         errorSiExiste(revisionesResp.error);
 
-        await migrarLegacySiCorresponde(
+        const aseosLegacyIncompatibles = await migrarLegacySiCorresponde(
             fecha,
             aseosResp.data || []
         );
@@ -649,6 +708,7 @@
 
         return {
             aseos: aseosFinal.data || [],
+            aseosLegacyIncompatibles,
             solicitudes: solicitudesFinal.data || [],
             revisiones,
             items
@@ -681,11 +741,13 @@
             if (!local) continue;
 
             const aseo = aseos.get(cabanaId);
-            local.aseoEstado = aseo?.estado || "";
-            local.aseo = aseo?.encargado_nombre || "";
-            local.revisionAseo = aseo?.revisor_nombre || "";
-            local.aseoIn = horaSantiago(aseo?.iniciado_en);
-            local.aseoOut = horaSantiago(aseo?.completado_en);
+            if (aseo || !remoto.aseosLegacyIncompatibles?.includes(numero)) {
+                local.aseoEstado = aseo?.estado || "";
+                local.aseo = aseo?.encargado_nombre || "";
+                local.revisionAseo = aseo?.revisor_nombre || "";
+                local.aseoIn = horaSantiago(aseo?.iniciado_en);
+                local.aseoOut = horaSantiago(aseo?.completado_en);
+            }
 
             const solicitudVigente = solicitudes.get(cabanaId) || null;
             if (solicitudVigente) {
@@ -851,22 +913,24 @@
             const objetivo = evento.target;
 
             const encargado = objetivo?.closest?.(".aseo-encargado-input");
-            if (encargado) {
-                guardarCampoAseo(
-                    encargado.dataset.aseoEncargado,
-                    "aseo",
-                    encargado.value.trim()
-                );
-                return;
-            }
-
             const hora = objetivo?.closest?.(".aseo-hora-input");
-            if (hora) {
-                guardarCampoAseo(
-                    hora.dataset.cabana,
-                    hora.dataset.aseoHora,
-                    hora.value
-                );
+            if (encargado || hora) {
+                // Este writer valida antes de tocar el caché. Los handlers legacy
+                // no deben volver a aplicar una hora rechazada ni duplicar cambios.
+                evento.stopImmediatePropagation?.();
+                const input = encargado || hora;
+                const fecha = fechaOperativa();
+                const numero = encargado ? input.dataset.aseoEncargado : input.dataset.cabana;
+                const campo = encargado ? "aseo" : input.dataset.aseoHora;
+                const valor = encargado ? input.value.trim() : input.value;
+                input.disabled = true;
+                guardarCampoAseo(numero, campo, valor).catch(error => {
+                    input.value = cabanaCache(fecha, numero, false)?.[campo] || "";
+                    window.alert?.(error.message || "No fue posible guardar el cambio de Aseo.");
+                }).finally(() => {
+                    input.disabled = false;
+                    if (fecha === fechaOperativa()) pintarAseo();
+                });
                 return;
             }
 
@@ -945,7 +1009,9 @@
                 temporizadorRevisor = setTimeout(() => {
                     encolar(`aseo:${fecha}:${numero}`, () =>
                         guardarAseoCompleto(fecha, numero)
-                    );
+                    ).catch(error => {
+                        window.alert?.(error.message || "No fue posible guardar el revisor de Aseo.");
+                    });
                 }, 350);
                 return;
             }
@@ -1068,6 +1134,9 @@
     }
 
     function iniciar() {
+        if (inicializado || !cliente() || document.readyState === "loading") return;
+        inicializado = true;
+
         window.HAIKU_RESUMEN_REFRESH_V1?.registrar("aseo", {
             orden: 60, obligatoria: false,
             preparar: async ({ fecha }) => {
@@ -1083,9 +1152,6 @@
                 window.HAIKU_ASEO_RESUMEN_SYNC_V1?.pintar?.(snapshot.fecha);
             }
         });
-        if (inicializado || !cliente()) return;
-        inicializado = true;
-
         // El caché local puede venir de otra sesión. Una proyección Express
         // sólo vuelve a estar verificada tras la lectura remota de este arranque.
         invalidarExpressEnCache();
@@ -1111,11 +1177,17 @@
         });
 
         if (window.haikuSesion) hidratar(fechaOperativa());
-        window.addEventListener("haiku:auth-ready", () => hidratar(fechaOperativa()));
 
         console.info("HAIKU · Aseo Operación Supabase V1 activo.");
     }
 
+    // Se instalan antes del primer intento: el cliente emite en document y
+    // auth en window. Ningún orden de esos eventos puede perder el arranque.
+    document.addEventListener("haiku:supabase-ready", iniciar);
+    window.addEventListener("haiku:auth-ready", () => {
+        if (!inicializado) iniciar();
+        else programarRefresco(0);
+    });
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", iniciar, { once: true });
     } else {

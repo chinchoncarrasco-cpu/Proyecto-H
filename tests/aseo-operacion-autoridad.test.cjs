@@ -9,9 +9,26 @@ const fuenteOptimista = fs.readFileSync(path.join(__dirname, "../js/checklist-op
 const FECHA = "2026-09-24";
 
 function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fallar = false,
-    optimista = false, demorarItems = false } = {}) {
+    optimista = false, demorarItems = false, clienteInicial = true, readyState = "complete",
+    sesionInicial = false, autenticarDespues = true, fallarEscritura = false, antesDeActualizarAseo } = {}) {
     const escrituras = [];
     const listeners = new Map();
+    const listenersDocumento = new Map();
+    const listenersWindow = new Map();
+    const temporizadores = new Map();
+    let siguienteTemporizador = 0;
+    let intervalos = 0;
+    let registros = 0;
+    const escuchar = (mapa, tipo, fn, opciones) => {
+        if (!mapa.has(tipo)) mapa.set(tipo, []);
+        mapa.get(tipo).push({ fn, once: opciones?.once });
+    };
+    const emitir = (mapa, tipo, evento = {}) => {
+        for (const escucha of [...(mapa.get(tipo) || [])]) {
+            if (escucha.once) mapa.set(tipo, mapa.get(tipo).filter(item => item !== escucha));
+            escucha.fn(evento);
+        }
+    };
     const eventos = [];
     let lecturaFalla = fallar;
     const checks = [];
@@ -35,6 +52,7 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
             const consulta = {
                 select() { return consulta; },
                 eq(campo, valor) { filtros.set(campo, valor); return consulta; },
+                is(campo, valor) { filtros.set(campo, valor); return consulta; },
                 neq(campo, valor) { filtros.set(`no:${campo}`, valor); return consulta; },
                 order() { return consulta; },
                 limit() { return consulta; },
@@ -58,6 +76,20 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
                     return consulta;
                 },
                 single() {
+                    if (fallarEscritura) return Promise.resolve({ data: null, error: new Error("Escritura rechazada") });
+                    if (tabla === "aseos" && mutacion === "update") {
+                        antesDeActualizarAseo?.(filas.aseos);
+                        const data = filas.aseos.find(fila => [...filtros].every(([campo, valor]) =>
+                            (fila[campo] ?? null) === valor));
+                        if (data) Object.assign(data, payloadMutacion);
+                        return Promise.resolve({ data: data || null, error: data ? null : new Error("El ciclo de aseo cambió") });
+                    }
+                    if (tabla === "aseos" && ["upsert", "insert"].includes(mutacion)) {
+                        let data = filas.aseos.find(fila => fila.cabana_id === payloadMutacion.cabana_id);
+                        if (!data) { data = { id: "aseo-9" }; filas.aseos.push(data); }
+                        Object.assign(data, payloadMutacion);
+                        return Promise.resolve({ data, error: null });
+                    }
                     if (tabla === "revisiones_cabana" && mutacion === "insert") {
                         const data = { id: "rev-nueva-9", ...payloadMutacion };
                         filas.revisiones_cabana.push(data);
@@ -89,12 +121,18 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
             return consulta;
         }
     };
-    const window = { haikuSupabase: supabase, haikuSesion: null, addEventListener() {},
+    const sesion = { usuario: { id: "usuario-1" } };
+    const window = { haikuSupabase: clienteInicial ? supabase : null, haikuSesion: sesionInicial ? sesion : null,
+        addEventListener(tipo, fn, opciones) { escuchar(listenersWindow, tipo, fn, opciones); },
+        HAIKU_RESUMEN_REFRESH_V1: { registrar() { registros++; }, activo: () => false, enCurso: () => false },
         HAIKU_CABANAS_SITES_V1: {
             actualizarConteos() { contadorExpress = checks.filter(check => check.checked).length; }
         } };
-    const document = { readyState: "complete", hidden: false,
-        addEventListener(tipo, listener) { listeners.set(tipo, listener); },
+    const document = { readyState, hidden: false,
+        addEventListener(tipo, listener, opciones) {
+            listeners.set(tipo, listener);
+            escuchar(listenersDocumento, tipo, listener, opciones);
+        },
         dispatchEvent(evento) { eventos.push(evento); },
         querySelector: () => null, getElementById: () => null,
         querySelectorAll(selector) { return selector.includes("aseo-express-item") ? checks : []; } };
@@ -105,13 +143,23 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
         window, document, CustomEvent,
         localStorage: { getItem: llave => llave === "haikuAseoExpressCabana" ? "9" : null },
         fechaSeleccionada: FECHA, obtenerDatosDia: () => datos,
-        guardarDatos() {}, setTimeout: () => 1, clearTimeout() {}, setInterval: () => 1,
+        guardarDatos() {},
+        setTimeout(fn) { const id = ++siguienteTemporizador; temporizadores.set(id, fn); return id; },
+        clearTimeout(id) { temporizadores.delete(id); }, setInterval() { return ++intervalos; },
         Date, Intl, Promise, console: { info() {}, error() {}, warn() {} }
     });
     if (optimista) vm.runInContext(fuenteOptimista, contexto, { filename: "checklist-optimista-v1.js" });
     vm.runInContext(fuente, contexto, { filename: "supabase-aseo-operacion-v1.js" });
-    window.haikuSesion = { usuario: { id: "usuario-1" } };
-    return { api: window.HAIKU_ASEO_OPERACION_V1, local, escrituras, listeners, eventos,
+    if (autenticarDespues) window.haikuSesion = sesion;
+    return { get api() { return window.HAIKU_ASEO_OPERACION_V1; }, local, escrituras, listeners, eventos,
+        window, document, listenersDocumento, listenersWindow,
+        get intervalos() { return intervalos; }, get registros() { return registros; },
+        conectarCliente() { window.haikuSupabase = supabase; },
+        autenticar() { window.haikuSesion = sesion; emitir(listenersWindow, "haiku:auth-ready"); },
+        emitirDocumento(tipo, evento) { emitir(listenersDocumento, tipo, evento); },
+        ejecutarTemporizadores() {
+            const tareas = [...temporizadores.values()]; temporizadores.clear(); tareas.forEach(fn => fn());
+        },
         checks, resolucionesItems, get contadorExpress() { return contadorExpress; },
         optimista: window.HAIKU_CHECKLIST_OPTIMISTA_V1,
         fallarSiguienteLectura() { lecturaFalla = true; } };
@@ -306,4 +354,188 @@ test("writer Express revierte sólo el ítem cuyo upsert falló", async () => {
     assert.equal(check.checked, false);
     assert.equal(h.contadorExpress, 0);
     assert.equal(h.local.checklistAseoExpress.losa, false);
+});
+
+
+test("asignar encargado sin IN sigue Pendiente; IN y OUT derivan y persisten el ciclo", async () => {
+    const h = arnes({ local: { aseoEstado: "completado" } });
+    await h.api.guardarCampoAseo("9", "aseo", "Aura");
+    assert.equal(h.escrituras.at(-1).payload.estado, "pendiente");
+    assert.equal(h.escrituras.at(-1).payload.iniciado_en, null);
+    await h.api.guardarCampoAseo("9", "aseoIn", "09:00");
+    assert.equal(h.escrituras.at(-1).payload.estado, "en_proceso");
+    await h.api.guardarCampoAseo("9", "aseoOut", "10:00");
+    const ultimo = h.escrituras.at(-1).payload;
+    assert.equal(ultimo.estado, "completado");
+    assert.equal(h.api.horaSantiago(ultimo.iniciado_en), "09:00");
+    assert.equal(h.api.horaSantiago(ultimo.completado_en), "10:00");
+    await h.api.hidratar(FECHA, { pintar: false });
+    assert.equal(h.local.aseoEstado, "completado");
+    assert.equal(h.local.aseoIn, "09:00");
+    assert.equal(h.local.aseoOut, "10:00");
+    assert.equal(h.escrituras.length, 3, "la relectura no reescribe el ciclo");
+});
+
+test("OUT exige IN y borrar IN con OUT conserva todos los datos", async () => {
+    const h = arnes();
+    await assert.rejects(h.api.guardarCampoAseo("9", "aseoOut", "10:00"), /IN antes de OUT/);
+    assert.equal(h.local.aseoOut, undefined);
+    assert.equal(h.escrituras.length, 0);
+    await h.api.guardarCampoAseo("9", "aseoIn", "09:00");
+    await h.api.guardarCampoAseo("9", "aseoOut", "10:00");
+    await assert.rejects(h.api.guardarCampoAseo("9", "aseoIn", ""), /IN antes de OUT/);
+    assert.equal(h.local.aseoIn, "09:00");
+    assert.equal(h.local.aseoOut, "10:00");
+    assert.equal(h.escrituras.length, 2);
+    await h.api.guardarCampoAseo("9", "aseoOut", "");
+    assert.equal(h.escrituras.at(-1).payload.estado, "en_proceso");
+    await h.api.guardarCampoAseo("9", "aseoIn", "");
+    assert.equal(h.escrituras.at(-1).payload.estado, "pendiente");
+});
+
+test("No requiere es la única excepción manual; asignar no la revierte y se puede volver a Pendiente", async () => {
+    const h = arnes();
+    for (const manual of ["en_proceso", "completado", "cancelado"]) {
+        await assert.rejects(h.api.guardarEstadoAseo("9", manual), /se deriva/);
+    }
+    await h.api.guardarEstadoAseo("9", "no_requiere");
+    await h.api.guardarEstadoAseo("9", "no_requiere");
+    assert.equal(h.escrituras.length, 1, "repetir el mismo estado no escribe otra vez");
+    await h.api.guardarCampoAseo("9", "aseo", "Aura");
+    assert.equal(h.escrituras.at(-1).payload.estado, "no_requiere");
+    await assert.rejects(h.api.guardarCampoAseo("9", "aseoIn", "09:00"), /incompatible/);
+    assert.equal(h.local.aseoIn, undefined);
+    await h.api.guardarEstadoAseo("9", "pendiente");
+    assert.equal(h.escrituras.at(-1).payload.estado, "pendiente");
+    await h.api.guardarCampoAseo("9", "aseoIn", "09:00");
+    assert.equal(h.escrituras.at(-1).payload.estado, "en_proceso");
+});
+
+test("No requiere nunca borra horas existentes, incluso en un registro antiguo incompatible", async () => {
+    for (const horas of [{ aseoIn: "09:00" }, { aseoOut: "10:00" },
+        { aseoIn: "09:00", aseoOut: "10:00" }]) {
+        const local = { ...horas };
+        const h = arnes({ local });
+        await assert.rejects(h.api.guardarEstadoAseo("9", "no_requiere"), /horas de aseo/);
+        assert.deepEqual(local, horas);
+        local.aseoEstado = "no_requiere";
+        await assert.rejects(h.api.guardarEstadoAseo("9", "pendiente"), /horas de aseo/);
+        assert.deepEqual(local, { ...horas, aseoEstado: "no_requiere" });
+        assert.equal(h.escrituras.length, 0);
+    }
+});
+
+test("un rechazo al guardar OUT restaura el ciclo IN sin OUT", async () => {
+    const h = arnes({ local: { aseoIn: "09:00", aseoEstado: "en_proceso" }, fallarEscritura: true });
+    await assert.rejects(h.api.guardarCampoAseo("9", "aseoOut", "10:00"), /Escritura rechazada/);
+    assert.equal(h.local.aseoIn, "09:00");
+    assert.equal(h.local.aseoOut, undefined);
+    assert.equal(h.local.aseoEstado, "en_proceso");
+});
+
+test("No requiere no sobrescribe horas remotas que aún no estaban en el caché", async () => {
+    const remoto = { id: "aseo-9", fecha: FECHA, cabana_id: "cab-9", estado: "en_proceso",
+        iniciado_en: "2026-09-24T12:00:00Z", completado_en: null };
+    const h = arnes({ aseos: [remoto] });
+    await assert.rejects(h.api.guardarEstadoAseo("9", "no_requiere"), /horas de aseo en Supabase/);
+    assert.equal(remoto.estado, "en_proceso");
+    assert.equal(remoto.iniciado_en, "2026-09-24T12:00:00Z");
+    assert.equal(h.local.aseoEstado, undefined);
+    assert.equal(h.escrituras.length, 0);
+});
+
+test("un IN concurrente impide No requiere incluso después de la lectura previa", async () => {
+    const remoto = { id: "aseo-9", fecha: FECHA, cabana_id: "cab-9", estado: "pendiente" };
+    const h = arnes({ aseos: [remoto], antesDeActualizarAseo(filas) {
+        filas[0].iniciado_en = "2026-09-24T12:00:00Z";
+        filas[0].estado = "en_proceso";
+    } });
+    await assert.rejects(h.api.guardarEstadoAseo("9", "no_requiere"), /ciclo de aseo cambió/);
+    assert.equal(remoto.estado, "en_proceso");
+    assert.equal(remoto.iniciado_en, "2026-09-24T12:00:00Z");
+    assert.deepEqual({ ...h.escrituras[0].payload }, { estado: "no_requiere" });
+    assert.equal(h.local.aseoEstado, undefined);
+});
+
+test("horas legacy incompatibles se conservan sin migrarlas ni bloquear la lectura Express", async () => {
+    for (const horas of [{ aseoOut: "10:00" }, { aseoEstado: "no_requiere", aseoIn: "09:00" }]) {
+        const local = { ...horas };
+        const h = arnes({ local, solicitudes: [{ id: "sol-9", cabana_id: "cab-9", estado: "pendiente" }] });
+        await h.api.hidratar(FECHA, { pintar: false });
+        for (const [campo, valor] of Object.entries(horas)) assert.equal(local[campo], valor);
+        assert.equal(local.aseoExpressCiclo.verificado, true);
+        assert.equal(local.aseoExpressCiclo.existe, true);
+        assert.equal(h.escrituras.length, 0);
+    }
+});
+
+test("el evento OUT inválido no alcanza handlers legacy ni modifica caché o Supabase", async () => {
+    const h = arnes();
+    const input = { value: "10:00", dataset: { cabana: "9", aseoHora: "aseoOut" },
+        closest: selector => selector === ".aseo-hora-input" ? input : null };
+    let detenido = 0;
+    h.emitirDocumento("change", { target: input, stopImmediatePropagation() { detenido++; } });
+    await new Promise(setImmediate);
+    assert.equal(detenido, 1);
+    assert.equal(input.value, "");
+    assert.equal(input.disabled, false);
+    assert.equal(h.local.aseoOut, undefined);
+    assert.equal(h.escrituras.length, 0);
+});
+
+for (const orden of ["cliente-auth", "auth-cliente", "todo-antes-dom", "dom-antes-cliente"]) {
+    test("la autoridad se recupera sin cliente inicial: " + orden, async () => {
+        const conDOM = orden.includes("dom");
+        const h = arnes({ clienteInicial: false, autenticarDespues: false,
+            readyState: conDOM ? "loading" : "complete" });
+        assert.equal(h.api, undefined);
+        if (orden === "dom-antes-cliente") {
+            h.document.readyState = "interactive";
+            h.emitirDocumento("DOMContentLoaded");
+            assert.equal(h.api, undefined);
+        }
+        if (orden === "auth-cliente") h.autenticar();
+        h.conectarCliente();
+        h.emitirDocumento("haiku:supabase-ready");
+        if (orden !== "auth-cliente") h.autenticar();
+        if (orden === "todo-antes-dom") {
+            assert.equal(h.api, undefined);
+            h.document.readyState = "interactive";
+            h.emitirDocumento("DOMContentLoaded");
+        }
+        assert.ok(h.api);
+        h.ejecutarTemporizadores();
+        await h.api.hidratar(FECHA, { pintar: false });
+        assert.equal(h.local.aseoExpressCiclo.verificado, true);
+        assert.equal(h.escrituras.length, 0);
+        assert.equal(h.registros, 1);
+        assert.equal(h.intervalos, 1);
+    });
+}
+
+test("eventos de reinicialización no duplican autoridad, listeners, intervalos ni escrituras", async () => {
+    const h = arnes({ clienteInicial: false, autenticarDespues: false });
+    h.conectarCliente();
+    h.autenticar(); // Tambi?n recupera el arranque si supabase-ready ya pas?.
+    const api = h.api;
+    for (let i = 0; i < 5; i++) {
+        h.emitirDocumento("haiku:supabase-ready");
+        h.autenticar();
+    }
+    h.ejecutarTemporizadores();
+    await api.hidratar(FECHA, { pintar: false });
+    assert.equal(h.api, api);
+    assert.equal(h.registros, 1);
+    assert.equal(h.intervalos, 1);
+    for (const tipo of ["change", "input", "click", "visibilitychange", "haiku:supabase-ready"]) {
+        assert.equal(h.listenersDocumento.get(tipo).length, 1, tipo);
+    }
+    assert.equal(h.listenersWindow.get("haiku:auth-ready").length, 1);
+    assert.equal(h.listenersWindow.get("focus").length, 1);
+    const input = { value: "Aura", dataset: { aseoEncargado: "9" },
+        closest: selector => selector === ".aseo-encargado-input" ? input : null };
+    h.emitirDocumento("change", { target: input, stopImmediatePropagation() {} });
+    await api.esperarEscrituras();
+    assert.equal(h.escrituras.length, 1);
+    assert.equal(h.escrituras[0].payload.estado, "pendiente");
 });
