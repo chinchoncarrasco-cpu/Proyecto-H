@@ -1308,3 +1308,18 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas .cb-sack-edit input { width:76px; padding:4px 6px; border:1px solid #dce6de; border-radius:4px; font:inherit; }
 #seccion-cabanas [data-insumos-error] { color:#9b4534; font-size:11px; }
 #seccion-cabanas [data-insumos-error]:empty { display:none; }
+
+/* Destinos: el total permanece principal; el detalle diario se abre a demanda. */
+#seccion-cabanas .cb-sack-entry select { max-width:100%; min-width:0; padding:6px 8px; border:1px solid #dce6de; border-radius:4px; background:#fff; color:#245a49; font:inherit; }
+#seccion-cabanas .cb-sack-destination { display:block; margin:2px 0 5px; font-size:10px; color:#61766a; }
+#seccion-cabanas .cb-sacks li > span { min-width:0; }
+#seccion-cabanas .cb-sack-actions { flex-shrink:0; }
+#seccion-cabanas .cb-carbon-destinations { margin-top:6px; padding-left:8px; border-left:2px solid #e2eae5; }
+#seccion-cabanas .cb-carbon-destinations [hidden] { display:none; }
+#seccion-cabanas [data-carbon-historico] { color:#738579; }
+#seccion-cabanas [data-carbon-historico] .cb-quantity { padding-right:33px; }
+#seccion-cabanas .cb-supplies-destinations { font-size:11px; }
+#seccion-cabanas .cb-supplies-destinations[hidden] { display:none; }
+#seccion-cabanas .cb-supplies-destinations summary { cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+#seccion-cabanas .cb-supplies-destinations[open] { flex-basis:100%; }
+#seccion-cabanas .cb-supplies-destinations p { margin:6px 0 0; line-height:1.5; }

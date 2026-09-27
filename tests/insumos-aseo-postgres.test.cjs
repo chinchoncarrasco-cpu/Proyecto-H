@@ -10,11 +10,11 @@ const permisos = 'aseos.ver_todos,aseos.gestionar_todos,reservas.ver';
 test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t => {
     const db = new PGlite();
     const one = async (sql, args = []) => (await db.query(sql, args)).rows[0];
-    const run = async (delta = 1, esperada = 0, insumo = 'carbon', cabana = id(1), fecha = '2026-09-26') =>
-        (await one('select * from public.haiku_reponer_insumo_aseo_v1($1,$2,$3,$4,$5)', [fecha, cabana, insumo, delta, esperada]));
+    const run = async (delta = 1, esperada = 0, insumo = 'carbon', cabana = id(1), fecha = '2026-09-26', destino = 'aseo_full', esperadaDestino = esperada) =>
+        (await one('select * from public.haiku_reponer_insumo_aseo_v2($1,$2,$3,$4,$5,$6,$7)', [fecha, cabana, insumo, delta, esperada, destino, esperadaDestino]));
     const cantidad = async () => (await db.query('select * from movimientos_insumos order by id')).rows;
-    const saco = (peso = 18.4, sacoId = id(100), cabana = id(1), fecha = '2026-09-26') =>
-        one('select * from public.haiku_agregar_saco_lena_v1($1,$2,$3,$4)', [fecha,cabana,sacoId,peso]);
+    const saco = (peso = 18.4, sacoId = id(100), cabana = id(1), fecha = '2026-09-26', destino = 'aseo_full') =>
+        one('select * from public.haiku_agregar_saco_lena_v2($1,$2,$3,$4,$5)', [fecha,cabana,sacoId,peso,destino]);
     const anular = sacoId => one('select * from public.haiku_anular_saco_lena_v1($1)', [sacoId]);
     const editar = (peso = 18.7, version = 1, sacoId = id(100)) =>
         one('select * from public.haiku_editar_peso_saco_lena_v1($1,$2,$3)', [sacoId,peso,version]);
@@ -31,7 +31,8 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
     }
     try {
         await db.exec(read('tests/fixtures/insumos-schema.sql'));
-        await db.exec(read('supabase/migrations/20260926210137_movimientos_insumos_aseo.sql'));
+        await db.exec(read('supabase/migrations/20260927150418_movimientos_insumos_aseo.sql'));
+        await db.exec(read('supabase/migrations/20260927182654_destinos_reposicion_insumos_aseo.sql'));
         await db.query('insert into usuarios values($1),($2)', [id(90), id(91)]);
         await db.query('insert into cabanas(id,numero) values($1,1),($2,2)', [id(1), id(2)]);
         await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('test.permisos',$2,false),set_config('test.activo','true',false)", [id(90), permisos]);
@@ -160,11 +161,11 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
             await run();
             await db.exec('reset role'); // Probar CHECK reales, sin confundirlos con la falta de GRANT.
             for (const valor of [1, 0]) {
-                await db.query('update movimientos_insumos set cantidad=$1', [valor]);
+                await db.query('update movimientos_insumos set cantidad=$1, carbon_aseo_full=0', [valor]);
                 assert.equal(Number((await cantidad())[0].cantidad), valor);
             }
             for (const valor of [-1, 1.5, '1.0000000001', '-0.0001', 'NaN', 'Infinity', '-Infinity', '1000000000']) {
-                await rechaza(() => db.query('update movimientos_insumos set cantidad=$1', [valor]), /movimientos_insumos_cantidad_v1/);
+                await rechaza(() => db.query('update movimientos_insumos set cantidad=$1', [valor]), /movimientos_insumos_(cantidad_v1|carbon_destinos_v1)/);
             }
             assert.equal(Number((await cantidad())[0].cantidad), 0);
         });
@@ -188,7 +189,7 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
             await rechaza(() => db.exec("update movimientos_insumos set unidad='kg'"), /identidad/);
         });
         await caso('RPC definer con search_path cerrado, EXECUTE restringido y publicación existente', async () => {
-            const firma = 'public.haiku_reponer_insumo_aseo_v1(date,uuid,text,integer,numeric)';
+            const firma = 'public.haiku_reponer_insumo_aseo_v2(date,uuid,text,integer,numeric,text,numeric)';
             const fn = await one('select prosecdef,proconfig from pg_proc where oid=$1::regprocedure', [firma]);
             assert.equal(fn.prosecdef, true);
             assert.deepEqual(fn.proconfig, ['search_path=pg_catalog, pg_temp']);
@@ -231,7 +232,7 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
             const mov = await saco();
             for (const peso of [null,0,-1,'NaN','Infinity','-Infinity']) await rechaza(() => saco(peso,id(101)), /peso/);
             await db.exec('reset role');
-            const insertar = peso => db.query('insert into movimientos_insumos_unidades(movimiento_id,peso_kg) values($1,$2)', [mov.id,peso]);
+            const insertar = peso => db.query("insert into movimientos_insumos_unidades(movimiento_id,peso_kg,destino) values($1,$2,'aseo_full')", [mov.id,peso]);
             for (const peso of [null,0,-1,'NaN','Infinity']) await rechaza(() => insertar(peso), /not-null|peso_v1/);
             await insertar('0.125');
             assert.equal(Number((await one('select peso_total_kg from movimientos_insumos_resumen')).peso_total_kg),18.525);
@@ -362,5 +363,85 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
                 assert.equal(p.permiso,rol==='authenticated');
             }
         });
+        await caso('destinos de Leña: obligatorios, válidos e inmutables; retry valida destino', async () => {
+            for(const destino of [null,'','otro','sin_especificar']) await rechaza(()=>saco(18.4,id(100),id(1),'2026-09-26',destino),/destino/);
+            await saco(); await saco(17.9,id(101),id(1),'2026-09-26','aseo_express');
+            const resultado=await saco(20,id(102),id(1),'2026-09-26','venta_huesped');
+            assert.deepEqual(resultado.destinos,{aseo_full:1,aseo_express:1,venta_huesped:1,sin_especificar:0});
+            await rechaza(()=>saco(18.4,id(100),id(1),'2026-09-26','venta_huesped'),/identidad/);
+            await editar(); assert.equal((await one('select destino from movimientos_insumos_unidades where id=$1',[id(100)])).destino,'aseo_full');
+            assert.equal((await anular(id(101))).destinos.aseo_express,0);
+            await db.exec('reset role');
+            await rechaza(()=>db.query('insert into movimientos_insumos_unidades(movimiento_id,peso_kg) values($1,18)',[resultado.id]),/destino/);
+            await rechaza(()=>db.query("update movimientos_insumos_unidades set destino='venta_huesped' where id=$1",[id(100)]),/inmutable/);
+        });
+        await caso('Carbón por destino conserva cabecera y suma; no descuenta otro destino', async () => {
+            const primera=await run();
+            await run(1,1,'carbon',id(1),'2026-09-26','aseo_express',0);
+            const r=await run(1,2,'carbon',id(1),'2026-09-26','venta_huesped',0);
+            assert.equal(r.id,primera.id);assert.equal(Number(r.cantidad),3);
+            assert.deepEqual(r.destinos,{aseo_full:1,aseo_express:1,venta_huesped:1,sin_especificar:0});
+            const menos=await run(-1,3,'carbon',id(1),'2026-09-26','aseo_express',1);
+            assert.equal(Number(menos.cantidad),2);assert.equal(menos.destinos.aseo_full,1);
+            await rechaza(()=>run(-1,2,'carbon',id(1),'2026-09-26','aseo_express',0),/incompatible/);
+            assert.equal((await cantidad()).length,1);
+        });
+        await caso('Carbón valida destino, saldo esperado del destino y restricciones físicas', async () => {
+            await run();
+            for(const destino of [null,'','otro','sin_especificar']) await rechaza(()=>run(1,1,'carbon',id(1),'2026-09-26',destino,0),/destino/);
+            for(const esperada of [null,-1,0.5,'NaN','Infinity']) await rechaza(()=>run(1,1,'carbon',id(1),'2026-09-26','aseo_express',esperada),/válida/);
+            await rechaza(()=>run(1,1,'carbon',id(1),'2026-09-26','aseo_full',0),/otro dispositivo/);
+            await db.exec('reset role');
+            await rechaza(()=>db.exec('update movimientos_insumos set carbon_aseo_express=2'),/carbon_destinos_v1/);
+            await rechaza(()=>db.exec('update movimientos_insumos set carbon_aseo_full=-1'),/carbon_destinos_v1/);
+            await db.exec('set role authenticated');
+            await rechaza(()=>db.exec('update movimientos_insumos set carbon_aseo_express=1'),/permission denied/);
+        });
+        await caso('RPC nuevas con privilegios mínimos; v1 sin destino no permite escrituras', async () => {
+            const firmas=[
+                'public.haiku_agregar_saco_lena_v2(date,uuid,uuid,numeric,text)',
+                'public.haiku_reponer_insumo_aseo_v2(date,uuid,text,integer,numeric,text,numeric)'];
+            for(const firma of firmas){
+                const f=await one('select prosecdef,proconfig from pg_proc where oid=$1::regprocedure',[firma]);
+                assert.equal(f.prosecdef,true);assert.ok(f.proconfig.includes('search_path=pg_catalog, pg_temp'));
+                for(const rol of ['anon','authenticated']) assert.equal((await one("select has_function_privilege($1,$2,'EXECUTE') ok",[rol,firma])).ok,rol==='authenticated');
+            }
+            await rechaza(()=>one("select * from public.haiku_agregar_saco_lena_v1('2026-09-26',$1,$2,18)",[id(1),id(100)]),/permission denied/);
+            await rechaza(()=>one("select * from public.haiku_reponer_insumo_aseo_v1('2026-09-26',$1,'carbon',1,0)",[id(1)]),/permission denied/);
+            assert.equal((await cantidad()).length,0);
+        });
     } finally { await db.close(); }
+});
+
+test('actualización del esquema conserva históricos, RLS, publication y corrección/anulación', async () => {
+    const db=new PGlite();
+    const one=async(sql,args=[]) => (await db.query(sql,args)).rows[0];
+    try{
+        await db.exec(read('tests/fixtures/insumos-schema.sql'));
+        await db.exec(read('supabase/migrations/20260927150418_movimientos_insumos_aseo.sql'));
+        await db.query('insert into usuarios values($1)',[id(90)]);
+        await db.query('insert into cabanas(id,numero) values($1,1)',[id(1)]);
+        await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('test.permisos',$2,false)",[id(90),permisos]);
+        await db.exec('set role authenticated');
+        await one("select * from haiku_agregar_saco_lena_v1('2026-09-26',$1,$2,18.4)",[id(1),id(100)]);
+        await one("select * from haiku_reponer_insumo_aseo_v1('2026-09-26',$1,'carbon',1,0)",[id(1)]);
+        const antes=(await db.query('select * from movimientos_insumos order by id')).rows;
+        const snapshot=await one("select (select jsonb_agg(p order by p.policyname) from pg_policies p where tablename like 'movimientos_insumos%') policies, (select jsonb_agg(jsonb_build_object('publication',p.pubname,'schema',p.schemaname,'table',p.tablename,'filter',p.rowfilter) order by p.tablename) from pg_publication_tables p where pubname='supabase_realtime') publication");
+        await db.exec('reset role');
+        await db.exec(read('supabase/migrations/20260927182654_destinos_reposicion_insumos_aseo.sql'));
+        await db.exec('set role authenticated');
+        const despues=(await db.query('select * from movimientos_insumos order by id')).rows;
+        for(let i=0;i<antes.length;i++) for(const campo of Object.keys(antes[i])) assert.deepEqual(despues[i][campo],antes[i][campo]);
+        assert.deepEqual(await one("select (select jsonb_agg(p order by p.policyname) from pg_policies p where tablename like 'movimientos_insumos%') policies, (select jsonb_agg(jsonb_build_object('publication',p.pubname,'schema',p.schemaname,'table',p.tablename,'filter',p.rowfilter) order by p.tablename) from pg_publication_tables p where pubname='supabase_realtime') publication"),snapshot);
+        const resumen=(await db.query('select * from movimientos_insumos_resumen')).rows;
+        assert.ok(resumen.every(r=>r.destinos.sin_especificar===1));
+        assert.equal((await one('select destino from movimientos_insumos_unidades')).destino,null);
+        await one('select * from haiku_editar_peso_saco_lena_v1($1,19,1)',[id(100)]);
+        assert.equal((await one('select destino from movimientos_insumos_unidades')).destino,null);
+        await one('select * from haiku_anular_saco_lena_v1($1)',[id(100)]);
+        const r=await one("select * from haiku_reponer_insumo_aseo_v2('2026-09-26',$1,'carbon',1,1,'venta_huesped',0)",[id(1)]);
+        assert.equal(Number(r.cantidad),2);assert.equal(r.destinos.sin_especificar,1);assert.equal(r.destinos.venta_huesped,1);
+        const menos=await one("select * from haiku_reponer_insumo_aseo_v2('2026-09-26',$1,'carbon',-1,2,'sin_especificar',1)",[id(1)]);
+        assert.equal(Number(menos.cantidad),1);assert.equal(menos.destinos.sin_especificar,0);assert.equal(menos.destinos.venta_huesped,1);
+    }finally{await db.close();}
 });

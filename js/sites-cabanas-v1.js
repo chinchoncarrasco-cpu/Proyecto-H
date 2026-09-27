@@ -162,6 +162,10 @@
     const pesoTexto = valor => String(Number(Number(valor || 0).toPrecision(12)));
     const sacosTexto = cantidad => `${cantidad} ${cantidad === 1 ? "saco" : "sacos"}`;
     const lenaTexto = (cantidad, peso) => `${sacosTexto(cantidad)} · ${pesoTexto(peso)} kg`;
+    const destinosInsumos = { aseo_full: "Aseo Full", aseo_express: "Aseo Express", venta_huesped: "Venta / compra huésped", sin_especificar: "Sin especificar" };
+    const destinoTexto = destino => destinosInsumos[destino] || destinosInsumos.sin_especificar;
+    const desgloseTexto = destinos => Object.entries(destinosInsumos).filter(([destino]) => destinos?.[destino] > 0)
+        .map(([destino, nombre]) => `${nombre}: ${sacosTexto(destinos[destino])}`).join(" · ");
     let edicionSaco = null;
     let contextoInsumos = "";
     function textoInsumos(fecha, numero) {
@@ -180,6 +184,14 @@
             resumenInsumos.querySelector("[data-insumos-error]").textContent = totales?.error ? "No se pudieron actualizar los insumos." : "";
             resumenInsumos.querySelector(".cb-supplies-feedback").hidden = !totales?.error;
             resumenInsumos.querySelector("[data-insumos-reintentar]").hidden = !totales?.error;
+            const detalle = resumenInsumos.querySelector("[data-insumos-destinos]");
+            detalle.hidden = !totales?.listo || !(totales.lena || totales.carbon);
+            for (const insumo of ["lena", "carbon"]) {
+                const linea = resumenInsumos.querySelector(`[data-insumos-desglose=${insumo}]`);
+                const texto = desgloseTexto(totales?.destinos?.[insumo]);
+                linea.textContent = `${insumo === "lena" ? "Leña" : "Carbón"} · ${texto}`;
+                linea.hidden = !texto || !totales?.listo;
+            }
         }
         raiz.querySelectorAll("[data-cb-insumos]").forEach(nodo => {
             const texto = textoInsumos(fecha, nodo.dataset.cbInsumos);
@@ -191,18 +203,25 @@
         const datos = api?.obtener(fecha, estado.numero);
         const contexto = `${fecha}:${estado.numero}`;
         const entradaSaco = bloque.querySelector("[data-saco-peso]");
-        if (contextoInsumos !== contexto) { edicionSaco = null; entradaSaco.value = ""; contextoInsumos = contexto; }
+        const destinoSaco = bloque.querySelector("[data-saco-destino]");
+        if (contextoInsumos !== contexto) { edicionSaco = null; entradaSaco.value = ""; destinoSaco.value = ""; contextoInsumos = contexto; }
         for (const insumo of ["carbon"]) {
             const valor = datos?.[insumo];
             bloque.querySelector(`[data-insumo-cantidad=${insumo}]`).textContent = datos?.listo ? valor.cantidad : "—";
             bloque.querySelectorAll(`[data-insumo=${insumo}]`).forEach(boton => {
-                boton.disabled = !datos?.listo || valor.guardando || (boton.dataset.insumoDelta === "-1" && valor.cantidad === 0);
+                boton.disabled = !datos?.listo || valor.guardando || (boton.dataset.insumoDelta === "-1" && !(valor.destinos[boton.dataset.insumoDestino] > 0));
             });
+            bloque.querySelectorAll("[data-carbon-destino]").forEach(nodo => {
+                nodo.textContent = datos?.listo ? valor.destinos[nodo.dataset.carbonDestino] : "—";
+            });
+            bloque.querySelector("[data-carbon-historico]").hidden = !datos?.listo || !valor.destinos.sin_especificar;
         }
         bloque.querySelector("[data-insumo-cantidad=lena]").textContent = datos?.listo ? lenaTexto(datos.lena.confirmada, datos.lena.pesoKg) : "—";
         const alta = datos?.lena.alta;
         entradaSaco.disabled = !datos?.listo || datos.lena.guardando || Boolean(alta);
         if (alta) entradaSaco.value = alta.pesoKg;
+        destinoSaco.disabled = !datos?.listo || datos.lena.guardando || Boolean(alta && (alta.destino || alta.estado !== "reintentar"));
+        if (alta?.destino) destinoSaco.value = alta.destino;
         const agregar = bloque.querySelector("[data-saco-agregar]");
         agregar.disabled = (!datos?.listo && !alta) || datos?.lena.guardando;
         agregar.textContent = alta?.estado === "verificando" ? "Verificando registro…" : alta?.estado === "incierto"
@@ -211,12 +230,12 @@
         if (datos?.listo && edicionSaco && !datos.lena.sacos.some(saco => saco.id === edicionSaco.id)) edicionSaco = null;
         const listaHTML = (datos?.lena.sacos || []).map((saco, i) => {
             const deshabilitado = !datos.listo || datos.lena.guardando ? "disabled" : "";
-            if (edicionSaco?.id === saco.id) return `<li><span>Saco ${i + 1}</span><div class="cb-sack-actions">
+            if (edicionSaco?.id === saco.id) return `<li><span>Saco ${i + 1}<small class="cb-sack-destination">${destinoTexto(saco.destino)}</small></span><div class="cb-sack-actions">
                 <label class="cb-sack-edit">kg<input type="number" min="0" step="any" inputmode="decimal" data-saco-editar-peso
                     aria-label="Peso de saco ${i + 1} en kg" value="${escapar(edicionSaco.peso)}" ${deshabilitado}></label>
                 <button type="button" class="cb-text-action" data-saco-guardar="${escapar(saco.id)}" ${deshabilitado}>Guardar</button>
                 <button type="button" class="cb-text-action" data-saco-cancelar ${deshabilitado}>Cancelar</button></div></li>`;
-            return `<li><span>Saco ${i + 1} · ${escapar(pesoTexto(saco.peso_kg))} kg</span><div class="cb-sack-actions">
+            return `<li><span>Saco ${i + 1} · ${escapar(pesoTexto(saco.peso_kg))} kg<small class="cb-sack-destination">${destinoTexto(saco.destino)}</small></span><div class="cb-sack-actions">
                 <button type="button" class="cb-text-action" data-saco-editar="${escapar(saco.id)}" ${deshabilitado}>Corregir</button>
                 <button type="button" class="cb-text-action" data-saco-anular="${escapar(saco.id)}" ${deshabilitado}>Anular</button></div></li>`;
         }).join("");
@@ -234,7 +253,7 @@
         if (boton.disabled || !estado.numero || estado.fecha !== fechaActual()) return;
         try {
             await window.HAIKU_INSUMOS_ASEO_V1?.cambiar(fechaActual(), estado.numero,
-                boton.dataset.insumo, Number(boton.dataset.insumoDelta));
+                boton.dataset.insumo, Number(boton.dataset.insumoDelta), boton.dataset.insumoDestino);
         } catch (error) {
             console.error("HAIKU · No fue posible confirmar la reposición:", error);
         }
@@ -242,6 +261,7 @@
     async function cambiarSaco(boton) {
         if (boton.disabled || !estado.numero || estado.fecha !== fechaActual()) return;
         const entrada = $("#cabinsReplenishment [data-saco-peso]");
+        const destino = $("#cabinsReplenishment [data-saco-destino]");
         const fecha = fechaActual(), numero = estado.numero;
         try {
             if (boton.dataset.sacoAnular) {
@@ -249,7 +269,8 @@
             } else {
                 entrada.setCustomValidity(Number(entrada.value) > 0 ? "" : "Ingresa un peso mayor que cero.");
                 if (!entrada.reportValidity()) return;
-                const resultado = await window.HAIKU_INSUMOS_ASEO_V1.agregarSaco(fecha, numero, entrada.value);
+                if (!destino.disabled && !destino.reportValidity()) return;
+                const resultado = await window.HAIKU_INSUMOS_ASEO_V1.agregarSaco(fecha, numero, entrada.value, destino.value);
                 if (resultado && fecha === fechaActual() && numero === estado.numero) entrada.value = "";
             }
         } catch (error) {

@@ -1,11 +1,14 @@
 # Reposición de insumos desde Aseo — etapa 1
 
+Este documento describe la implementación original. La extensión actual de destinos,
+sus decisiones y validación están en [README-insumos-destinos.md](README-insumos-destinos.md).
+
 Base: `main`/`origin/main` verificados en `f757203b434bcb33888957ea0a188f87635ae1ec`.
 Rama: `feat/consumo-insumos-aseo`. Sin commit, push ni migración remota.
 
 ## Modelo y seguridad
 
-Migración: `supabase/migrations/20260926210137_movimientos_insumos_aseo.sql`,
+Migración base actualmente versionada: `supabase/migrations/20260927150418_movimientos_insumos_aseo.sql`,
 creada con `supabase migration new movimientos_insumos_aseo` (CLI 2.118.0).
 
 `movimientos_insumos` guarda fecha operativa, cabaña, aseo, reserva opcional,

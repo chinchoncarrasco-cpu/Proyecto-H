@@ -16,7 +16,6 @@ function iniciarDemo() {
             setTimeout(preparar, 20); return;
         }
         fechaSeleccionada = '2026-09-26';
-        window.HAIKU_CONTEXTO_FECHAS_V1.guardarFechaActual();
         const remoto = window.__insumosDemo = crearSupabaseInsumos();
         remoto.filas.aseos = [{ id:'aseo-1',fecha:fechaSeleccionada,cabana_id:'cab-1',estado:'completado',
             encargado_nombre:'Aura',iniciado_en:'2026-09-26T18:30:00Z',completado_en:'2026-09-26T19:30:00Z' },
@@ -35,6 +34,9 @@ function iniciarDemo() {
         window.haikuSupabase = remoto.cliente;
         document.dispatchEvent(new CustomEvent('haiku:supabase-ready'));
         window.haikuSesion = { usuario: { id:'operador-demo' }, auth: { id:'operador-demo' } };
+        // El contexto de fecha pertenece al usuario: guardarlo antes de auth-ready,
+        // pero después de establecer su identidad, evita depender del día del equipo.
+        window.HAIKU_CONTEXTO_FECHAS_V1.guardarFechaActual();
         window.dispatchEvent(new CustomEvent('haiku:auth-ready'));
         await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
         await window.HAIKU_INSUMOS_ASEO_V1.hidratar(fechaSeleccionada);

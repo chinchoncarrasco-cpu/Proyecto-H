@@ -90,6 +90,7 @@ const modulos = new Set([
             // El módulo se evaluó antes del cliente y después de DOMContentLoaded.
             document.dispatchEvent(new CustomEvent('haiku:supabase-ready'));
             window.haikuSesion = { usuario: { id: 'prueba-aseo' }, auth: { id: 'prueba-aseo' } };
+            window.HAIKU_CONTEXTO_FECHAS_V1.guardarFechaActual();
             window.dispatchEvent(new CustomEvent('haiku:auth-ready'));
             await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
             for (const [numero, resultado] of [[3, 'lista'], [4, 'con_detalles']]) {

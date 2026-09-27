@@ -18,11 +18,12 @@ const { crearServidor } = require('./insumos-aseo-localhost.cjs');
         const cantidad = insumo => page.locator(`[data-insumo-cantidad=${insumo}]`);
         const total = insumo => page.locator(`[data-insumos-total=${insumo}]`);
         const cambiar = async (insumo,delta,valor) => {
-            await page.locator(`[data-insumo=${insumo}][data-insumo-delta="${delta}"]`).click();
+            await page.locator(`[data-insumo=${insumo}][data-insumo-destino="aseo_full"][data-insumo-delta="${delta}"]`).click();
             await page.waitForFunction(({insumo,valor}) => document.querySelector(`[data-insumo-cantidad=${insumo}]`)?.textContent === String(valor)
                 && document.getElementById('cabinsReplenishment').getAttribute('aria-busy') === 'false', {insumo,valor});
         };
         const agregarSaco = async (peso, texto) => {
+            await page.locator('[data-saco-destino]').selectOption('aseo_full');
             await page.locator('[data-saco-peso]').fill(String(peso));
             await page.locator('[data-saco-agregar]').click();
             await page.waitForFunction(texto => document.querySelector('[data-insumo-cantidad=lena]')?.textContent === texto

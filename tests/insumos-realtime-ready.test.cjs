@@ -125,8 +125,8 @@ test('invalidar al recibir system/ok descarta una lectura anterior que estaba en
 
 test('un evento anterior a ready rehidrata sin marcar listo ni generar escrituras derivadas', async () => {
     const h = arnes(); await h.cargar();
-    await h.cliente.rpc('haiku_reponer_insumo_aseo_v1', { p_fecha: fecha, p_cabana_id: 'cab-1',
-        p_insumo: 'carbon', p_delta: 1, p_cantidad_esperada: 0 });
+    await h.cliente.rpc('haiku_reponer_insumo_aseo_v2', { p_fecha: fecha, p_cabana_id: 'cab-1',
+        p_insumo: 'carbon', p_delta: 1, p_cantidad_esperada: 0, p_destino: 'aseo_full', p_cantidad_destino_esperada: 0 });
     await siguiente();
     assert.equal(h.rt.postgres_changes_ready, false);
     assert.equal(h.api.obtener(fecha, 1).carbon.cantidad, 1);
@@ -219,8 +219,8 @@ test('reinicializaciones simultáneas no duplican canales, listeners ni temporiz
 test('las cuatro operaciones locales funcionan antes de ready y releen después', async () => {
     const h = arnes(); await h.cargar();
     const lecturas = h.control.lecturas.filter(t => t === 'movimientos_insumos_resumen').length;
-    await h.api.cambiar(fecha, 1, 'carbon', 1);
-    await h.api.agregarSaco(fecha, 1, 12.3);
+    await h.api.cambiar(fecha, 1, 'carbon', 1,'aseo_full');
+    await h.api.agregarSaco(fecha, 1, 12.3,'aseo_full');
     const saco = h.api.obtener(fecha, 1).lena.sacos[0];
     await h.api.editarSaco(fecha, 1, saco.id, 12.4, saco.version);
     await h.api.anularSaco(fecha, 1, saco.id); await siguiente();
@@ -234,8 +234,8 @@ test('las cuatro operaciones locales funcionan antes de ready y releen después'
 for (const operacion of ['carbon', 'peso']) for (const code of ['40001', 'XX000']) {
     test(operacion + ': HTTP 500 / ' + code + ' distingue conflicto por código y relee sin reintentar RPC', async () => {
         const h = arnes(); await h.cargar();
-        if (operacion === 'carbon') await h.api.cambiar(fecha, 1, 'carbon', 1);
-        else await h.api.agregarSaco(fecha, 1, 12.3);
+        if (operacion === 'carbon') await h.api.cambiar(fecha, 1, 'carbon', 1,'aseo_full');
+        else await h.api.agregarSaco(fecha, 1, 12.3,'aseo_full');
         await siguiente();
         const saco = h.api.obtener(fecha, 1).lena.sacos[0];
         // Cambio remoto sin evento: la relectura del catch/finally debe recuperarlo.
@@ -246,7 +246,7 @@ for (const operacion of ['carbon', 'peso']) for (const code of ['40001', 'XX000'
             llamadas++;
             return { status: 500, data: null, error: Object.assign(new Error('RPC rechazada'), { code }) };
         };
-        const pendiente = operacion === 'carbon' ? h.api.cambiar(fecha, 1, 'carbon', 1)
+        const pendiente = operacion === 'carbon' ? h.api.cambiar(fecha, 1, 'carbon', 1,'aseo_full')
             : h.api.editarSaco(fecha, 1, saco.id, 20, saco.version);
         await assert.rejects(pendiente, error => error.code === code); await siguiente();
         const estado = h.api.obtener(fecha, 1);

@@ -4,6 +4,17 @@
     if (window.HAIKU_INSUMOS_ASEO_V1) return;
 
     const INSUMOS = ["lena", "carbon"];
+    const DESTINOS = ["aseo_full", "aseo_express", "venta_huesped"];
+    const destinosVacios = () => ({ aseo_full: 0, aseo_express: 0, venta_huesped: 0, sin_especificar: 0 });
+    function destinosFila(fila) {
+        const resultado = destinosVacios();
+        if (fila?.destinos) {
+            for (const destino of Object.keys(resultado)) resultado[destino] = Number(fila.destinos[destino] || 0);
+        } else if (fila?.insumo === "lena") {
+            for (const saco of fila.sacos || []) resultado[DESTINOS.includes(saco.destino) ? saco.destino : "sin_especificar"]++;
+        } else resultado.sin_especificar = Number(fila?.cantidad || 0);
+        return resultado;
+    }
     const dias = new Map();
     const lecturas = new Map();
     const pendientes = new Map();
@@ -28,7 +39,7 @@
         // Una clave por intento evita sobrescribir pendientes de otra fecha/pestaña.
         const valor = JSON.stringify({ id: alta.id, usuario: alta.usuario, fecha: alta.fecha, numero: alta.numero,
             cabanaId: alta.cabanaId, aseoId: alta.aseoId, movimientoId: alta.movimientoId,
-            insumo: "lena", pesoKg: alta.pesoKg, creadoEn: alta.creadoEn });
+            insumo: "lena", pesoKg: alta.pesoKg, destino: alta.destino ?? null, creadoEn: alta.creadoEn });
         try {
             window.localStorage.setItem(claveAlta(alta), valor);
             if (window.localStorage.getItem(claveAlta(alta)) !== valor) throw new Error("Persistencia no confirmada");
@@ -51,6 +62,7 @@
         return alta && alta.usuario === usuarioActual() && typeof alta.id === "string" && alta.id &&
             typeof alta.cabanaId === "string" && alta.cabanaId && /^[1-9]\d*$/.test(alta.numero) &&
             /^\d{4}-\d{2}-\d{2}$/.test(alta.fecha) && alta.insumo === "lena" &&
+            (alta.destino == null || DESTINOS.includes(alta.destino)) &&
             Number.isFinite(Number(alta.pesoKg)) && Number(alta.pesoKg) > 0 && Number.isFinite(Date.parse(alta.creadoEn));
     }
     function restaurarAltas() {
@@ -118,12 +130,14 @@
             const fila = filaActual(fecha, numero, insumo);
             const confirmada = Number((insumo === "lena" ? fila?.cantidad_actual : fila?.cantidad) || 0);
             cantidades[insumo] = { cantidad: pendiente?.cantidad ?? confirmada, confirmada,
+                destinos: destinosFila(fila),
                 guardando: Boolean(pendiente), error: datos[clave(fecha, numero, insumo)] || "" };
+            if (insumo === "carbon" && pendiente?.destino) cantidades.carbon.destinos[pendiente.destino] += pendiente.delta;
             if (insumo === "lena") {
                 cantidades.lena.pesoKg = Number(fila?.peso_total_kg || 0);
                 cantidades.lena.sacos = (fila?.sacos || []).map(saco => ({ ...saco }));
                 const alta = altas.get(clave(fecha, numero, "lena"));
-                cantidades.lena.alta = alta ? { estado: alta.estado, pesoKg: alta.pesoKg } : null;
+                cantidades.lena.alta = alta ? { estado: alta.estado, pesoKg: alta.pesoKg, destino: alta.destino ?? null } : null;
                 cantidades.lena.guardando ||= verificaciones.has(clave(fecha, numero, "lena"));
                 cantidades.lena.error ||= errorAltas;
             }
@@ -132,12 +146,15 @@
     }
     function total(fecha) {
         const datos = dia(fecha);
-        const resultado = { listo: datos.listo, error: datos.error, lena: 0, lenaKg: 0, carbon: 0 };
+        const resultado = { listo: datos.listo, error: datos.error, lena: 0, lenaKg: 0, carbon: 0,
+            destinos: { lena: destinosVacios(), carbon: destinosVacios() } };
         // Sumar únicamente filas confirmadas por Supabase, incluso mientras la ficha es optimista.
         for (const fila of datos.filas) {
             if (fila.origen === "aseo" && fila.fecha_operativa === fecha && INSUMOS.includes(fila.insumo)) {
                 resultado[fila.insumo] += Number(fila.insumo === "lena" ? fila.cantidad_actual : fila.cantidad);
                 if (fila.insumo === "lena") resultado.lenaKg += Number(fila.peso_total_kg);
+                const destinos = destinosFila(fila);
+                for (const destino of Object.keys(destinos)) resultado.destinos[fila.insumo][destino] += destinos[destino];
             }
         }
         return resultado;
@@ -179,7 +196,7 @@
                 const version = datos.version;
                 await cargarReferencias();
                 const { data, error } = await cliente().from("movimientos_insumos_resumen")
-                    .select("id,fecha_operativa,cabana_id,aseo_id,insumo,cantidad,cantidad_actual,peso_total_kg,sacos,unidad,origen,actualizado_en")
+                    .select("id,fecha_operativa,cabana_id,aseo_id,insumo,cantidad,cantidad_actual,peso_total_kg,sacos,destinos,unidad,origen,actualizado_en")
                     .eq("fecha_operativa", fecha).eq("origen", "aseo");
                 comprobar(error);
                 if (sesion !== generacionSesion) return;
@@ -205,31 +222,55 @@
         });
         return lectura.promesa;
     }
-    function cambiar(fecha, numero, insumo, delta) {
+    function cambiar(fecha, numero, insumo, delta, destino) {
         if (insumo !== "carbon" || ![-1, 1].includes(delta)) return Promise.reject(new Error("Leña requiere registrar cada saco con su peso."));
-        const anterior = Number(filaActual(fecha, numero, insumo)?.cantidad || 0);
-        if (anterior + delta < 0) return Promise.resolve();
-        return escribir(fecha, numero, insumo, "haiku_reponer_insumo_aseo_v1", {
+        if (!DESTINOS.includes(destino) && !(destino === "sin_especificar" && delta === -1)) {
+            return Promise.reject(new Error("Selecciona un destino válido para Carbón."));
+        }
+        const enCurso = pendientes.get(clave(fecha, numero, insumo));
+        if (enCurso && (enCurso.destino !== destino || enCurso.delta !== delta)) {
+            return Promise.reject(new Error("Espera a que termine el cambio de Carbón antes de editar otro destino."));
+        }
+        const fila = filaActual(fecha, numero, insumo), anterior = Number(fila?.cantidad || 0);
+        const anteriorDestino = destinosFila(fila)[destino];
+        if (anteriorDestino + delta < 0) return Promise.resolve();
+        return escribir(fecha, numero, insumo, "haiku_reponer_insumo_aseo_v2", {
             p_fecha: fecha, p_cabana_id: referencias.get(String(numero)), p_insumo: insumo,
-            p_delta: delta, p_cantidad_esperada: anterior
+            p_delta: delta, p_cantidad_esperada: anterior, p_destino: destino, p_cantidad_destino_esperada: anteriorDestino
         }, anterior + delta);
     }
-    function agregarSaco(fecha, numero, pesoKg, unidadId) {
+    function agregarSaco(fecha, numero, pesoKg, destino, unidadId) {
         const id = clave(fecha, numero, "lena");
+        const enCurso = altas.get(id);
+        if (enCurso && (Number(enCurso.pesoKg) !== Number(pesoKg) ||
+            (enCurso.destino && enCurso.destino !== destino) || (unidadId && enCurso.id !== unidadId))) {
+            return Promise.reject(new Error("Primero verifica el saco pendiente antes de registrar otro."));
+        }
         if (pendientes.has(id)) return pendientes.get(id).promesa;
         if (verificaciones.has(id)) return verificaciones.get(id).promesa;
         if (!Number.isFinite(Number(pesoKg)) || Number(pesoKg) <= 0) return Promise.reject(new Error("Ingresa un peso mayor que cero."));
         if (!restaurarAltas()) { avisar(fecha); return Promise.reject(new Error(errorAltas)); }
         let alta = altas.get(id);
-        if (alta && (Number(alta.pesoKg) !== Number(pesoKg) || (unidadId && alta.id !== unidadId))) {
+        if (alta && (Number(alta.pesoKg) !== Number(pesoKg) || (alta.destino && alta.destino !== destino) || (unidadId && alta.id !== unidadId))) {
             return Promise.reject(new Error("Primero verifica el saco pendiente antes de registrar otro."));
+        }
+        if ((!alta || alta.estado === "reintentar") && !DESTINOS.includes(destino)) {
+            return Promise.reject(new Error("Selecciona un destino para el saco."));
+        }
+        // Un intento anterior sin destino sólo se completa tras verificar su ausencia.
+        // Conserva UUID y peso; nunca atribuir destino a un saco histórico ya guardado.
+        if (alta && !alta.destino && alta.estado === "reintentar") {
+            alta = { ...alta, destino };
+            try { guardarAlta(alta); }
+            catch (error) { dia(fecha)[id] = error.message; avisar(fecha); return Promise.reject(error); }
+            altas.set(id, alta);
         }
         if (!alta) {
             if (!cliente() || !usuarioActual() || !dia(fecha).listo || !referencias.has(String(numero))) {
                 return Promise.reject(new Error("Espera a que se verifique la reposición antes de editar."));
             }
             const fila = filaActual(fecha, numero, "lena");
-            alta = { id: unidadId || window.crypto.randomUUID(), fecha, numero: String(numero), pesoKg,
+            alta = { id: unidadId || window.crypto.randomUUID(), fecha, numero: String(numero), pesoKg, destino,
                 cabanaId: referencias.get(String(numero)), movimientoId: fila?.id || null,
                 aseoId: fila?.aseo_id || null, usuario: usuarioActual(), estado: "nuevo", insumo: "lena", creadoEn: new Date().toISOString() };
             try { guardarAlta(alta); }
@@ -241,9 +282,10 @@
     async function buscarAlta(alta) {
         // Consultar por UUID, incluyendo anulados: la lista activa no demuestra ausencia.
         const { data: saco, error } = await cliente().from("movimientos_insumos_unidades")
-            .select("id,movimiento_id,peso_kg,version,anulado_en").eq("id", alta.id).maybeSingle();
+            .select("id,movimiento_id,peso_kg,version,anulado_en,destino").eq("id", alta.id).maybeSingle();
         comprobar(error);
         if (!saco) { await validarContextoAlta(alta); return null; }
+        if ((saco.destino ?? null) !== (alta.destino ?? null)) throw new Error("Destino incompatible con el intento pendiente.");
         const { data: movimiento, error: errorMovimiento } = await cliente().from("movimientos_insumos")
             .select("id,fecha_operativa,cabana_id,aseo_id,insumo,origen").eq("id", saco.movimiento_id).maybeSingle();
         comprobar(errorMovimiento);
@@ -288,8 +330,8 @@
             try {
                 await validarContextoAlta(alta);
                 if (sesion !== generacionSesion) return;
-                const { data, error } = await cliente().rpc("haiku_agregar_saco_lena_v1", {
-                    p_fecha: alta.fecha, p_cabana_id: alta.cabanaId, p_unidad_id: alta.id, p_peso_kg: alta.pesoKg
+                const { data, error } = await cliente().rpc("haiku_agregar_saco_lena_v2", {
+                    p_fecha: alta.fecha, p_cabana_id: alta.cabanaId, p_unidad_id: alta.id, p_peso_kg: alta.pesoKg, p_destino: alta.destino
                 });
                 comprobar(error);
                 return confirmar(Array.isArray(data) ? data[0] : data);
@@ -305,7 +347,7 @@
             if (sesion !== generacionSesion) return;
             alta.estado = "incierto";
             if (/incompatible|verificar el movimiento/.test(error.message)) {
-                throw new Error("Conflicto con el registro del saco pendiente. Revisa su contexto y peso antes de volver a verificar.");
+                throw new Error("Conflicto con el registro del saco pendiente. Revisa su contexto, peso y destino antes de volver a verificar.");
             }
             throw new Error("No se pudo verificar el registro. Vuelve a verificar este saco.");
         }
@@ -384,7 +426,7 @@
             return Promise.reject(new Error("Espera a que se verifique la reposición antes de editar."));
         }
         const sesion = generacionSesion;
-        const pendiente = { fecha, cantidad, promesa: null };
+        const pendiente = { fecha, cantidad, destino: parametros?.p_destino, delta: parametros?.p_delta, promesa: null };
         pendientes.set(id, pendiente);
         datos[id] = "";
         datos.version++;
