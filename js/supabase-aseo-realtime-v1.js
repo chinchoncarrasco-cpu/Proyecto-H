@@ -7,11 +7,17 @@
 (() => {
     "use strict";
 
-    const cliente = window.haikuSupabase;
-    if (!cliente) return;
+    if (window.HAIKU_ASEO_REALTIME_V1) return;
+    let cliente = window.haikuSupabase;
+    let authInstalado = false;
 
     let canal = null;
+    let conexionActual = null;
     let estadoCanal = "DESCONECTADO";
+    let postgresChangesReady = false;
+    let estadoPostgresChanges = "DESCONECTADO";
+    let timerPostgresChanges = null;
+    const ESPERA_POSTGRES_CHANGES_MS = 10000;
     let timer = null;
     let timerReconexion = null;
     let refrescando = false;
@@ -82,6 +88,8 @@
             const apiAseo = window.HAIKU_ASEO_OPERACION_V1;
             const apiRevision = window.HAIKU_REVISION_RESUMEN_SYNC_V2;
 
+            const hidratacionInsumos = window.HAIKU_INSUMOS_ASEO_V1?.hidratar(fecha);
+
             if (apiAseo?.hidratar) {
                 await apiAseo.hidratar(fecha, { pintar: true });
             }
@@ -89,6 +97,8 @@
             if (apiRevision?.resincronizar) {
                 await apiRevision.resincronizar();
             }
+
+            await hidratacionInsumos;
 
             ultimoRefresco = Date.now();
             console.info("HAIKU · Aseo Realtime actualizado:", fecha);
@@ -109,10 +119,66 @@
         timer = setTimeout(refrescarDesdeSupabase, delay);
     }
 
+    function reiniciarPostgresChanges(estado) {
+        clearTimeout(timerPostgresChanges);
+        timerPostgresChanges = null;
+        postgresChangesReady = false;
+        estadoPostgresChanges = estado;
+    }
+
+    function reconciliarInsumos() {
+        const fecha = fechaActual();
+        if (!window.haikuSesion || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+        const api = window.HAIKU_INSUMOS_ASEO_V1;
+        // Invalidar también una lectura en vuelo: no debe publicar una foto
+        // anterior al hueco de suscripción. La hidratación sólo hace lecturas.
+        api?.invalidar(fecha);
+        Promise.resolve(api?.hidratar(fecha, { forzar: true }))
+            .catch(error => console.error("HAIKU · No fue posible reconciliar Insumos Realtime:", error));
+    }
+
+    function degradarPostgresChanges(actual, motivo) {
+        if (canal !== actual || estadoPostgresChanges === "DEGRADADO") return;
+        reiniciarPostgresChanges("DEGRADADO");
+        console.warn("HAIKU · Postgres Changes no está listo; Insumos se verifica por lectura:", motivo);
+        reconciliarInsumos();
+    }
+
+    function eventoSistema(actual, payload) {
+        if (canal !== actual || estadoCanal !== "SUBSCRIBED" ||
+            payload?.extension !== "postgres_changes") return;
+        if (payload.status === "ok") {
+            if (postgresChangesReady) return;
+            clearTimeout(timerPostgresChanges);
+            timerPostgresChanges = null;
+            postgresChangesReady = true;
+            estadoPostgresChanges = "LISTO";
+            // SUBSCRIBED sólo confirma el canal. Esta lectura recupera los
+            // cambios cuyo evento pudo perderse antes de activar la escucha PG.
+            reconciliarInsumos();
+        } else if (payload.status === "error" || payload.status === "timeout") {
+            degradarPostgresChanges(actual, payload.message || payload.status);
+        }
+    }
+
     function eventoRealtime(payload) {
         ultimoEvento = Date.now();
         const tabla = payload?.table || payload?.schema || "operacion";
         console.info("HAIKU · Cambio Realtime recibido:", tabla);
+        if (tabla === "movimientos_insumos" || tabla === "movimientos_insumos_unidades") {
+            // Su propia lectura no escribe ni rehidrata los checklists/estados.
+            const api = window.HAIKU_INSUMOS_ASEO_V1;
+            const fechas = new Set([payload?.new?.fecha_operativa, payload?.old?.fecha_operativa,
+                api?.fechaMovimiento(payload?.new?.movimiento_id || payload?.old?.movimiento_id)]
+                .filter(fecha => /^\d{4}-\d{2}-\d{2}$/.test(fecha || "")));
+            if (fechas.size) {
+                for (const fecha of fechas) api?.invalidar(fecha);
+            } else {
+                api?.invalidar(); // Payload sin fecha: no conservar días potencialmente obsoletos.
+            }
+            if (!fechas.size || fechas.has(fechaActual())) api?.hidratar(fechaActual());
+            return;
+        }
         if (tabla === "revision_items" || tabla === "revisiones_cabana") {
             window.HAIKU_REVISION_SUPABASE_V1?.refrescarChecklistAbierto?.(payload)
                 ?.catch(error => console.error("HAIKU · No fue posible actualizar el checklist Realtime:", error));
@@ -126,6 +192,7 @@
         const actual = canal;
         canal = null;
         estadoCanal = "DESCONECTADO";
+        reiniciarPostgresChanges("DESCONECTADO");
 
         if (!actual) return;
 
@@ -151,38 +218,63 @@
         }, delay);
     }
 
-    async function conectar() {
-        if (!window.haikuSesion) return;
-        if (canal && estadoCanal === "SUBSCRIBED") return;
+    function conectar() {
+        if (!window.haikuSupabase || !window.haikuSesion) return Promise.resolve();
+        if (conexionActual) return conexionActual;
+        conexionActual = conectarUnaVez().finally(() => { conexionActual = null; });
+        return conexionActual;
+    }
+
+    async function conectarUnaVez() {
+        cliente = window.haikuSupabase;
+        if (!cliente || !window.haikuSesion) return;
+        if (canal && ["SUBSCRIBED", "CONECTANDO"].includes(estadoCanal)) return;
 
         if (canal) {
             await desconectar();
         }
+        if (!window.haikuSesion) return;
 
         estadoCanal = "CONECTANDO";
+        reiniciarPostgresChanges("ESPERANDO");
 
-        const nuevoCanal = cliente
-            .channel(`haiku-aseo-operacion-${Date.now()}`)
+        const nuevoCanal = cliente.channel(`haiku-aseo-operacion-${Date.now()}`);
+        const cambioActual = payload => {
+            if (canal === nuevoCanal) eventoRealtime(payload);
+        };
+        canal = nuevoCanal;
+        nuevoCanal
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "aseos" },
-                eventoRealtime
+                cambioActual
             )
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "solicitudes" },
-                eventoRealtime
+                cambioActual
             )
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "revisiones_cabana" },
-                eventoRealtime
+                cambioActual
             )
             .on(
                 "postgres_changes",
                 { event: "*", schema: "public", table: "revision_items" },
-                eventoRealtime
+                cambioActual
             )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "movimientos_insumos" },
+                cambioActual
+            )
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "movimientos_insumos_unidades" },
+                cambioActual
+            )
+            .on("system", {}, payload => eventoSistema(nuevoCanal, payload))
             .subscribe((status, error) => {
                 // removeChannel() también emite CLOSED. Si este canal ya no
                 // es el activo, fue cerrado por nosotros y no es una caída.
@@ -191,6 +283,12 @@
                 estadoCanal = status;
 
                 if (status === "SUBSCRIBED") {
+                    // También se ejecuta al reingresar al mismo canal tras una
+                    // caída: cada suscripción necesita su propio system/ok.
+                    reiniciarPostgresChanges("ESPERANDO");
+                    timerPostgresChanges = setTimeout(() => {
+                        degradarPostgresChanges(nuevoCanal, "No llegó system/postgres_changes/ok");
+                    }, ESPERA_POSTGRES_CHANGES_MS);
                     console.info("HAIKU · Aseo Realtime conectado.");
                     window.HAIKU_REVISION_SUPABASE_V1?.refrescarChecklistAbierto?.()
                         ?.catch(error => console.error("HAIKU · No fue posible recuperar el checklist Realtime:", error));
@@ -203,6 +301,7 @@
                     status === "TIMED_OUT" ||
                     status === "CLOSED"
                 ) {
+                    reiniciarPostgresChanges("DEGRADADO");
                     console.warn(
                         "HAIKU · Aseo Realtime perdió conexión:",
                         status,
@@ -212,7 +311,6 @@
                 }
             });
 
-        canal = nuevoCanal;
     }
 
     async function recuperarConexion(forzar = false) {
@@ -246,14 +344,21 @@
     }
 
     window.addEventListener("haiku:auth-ready", () => {
+        prepararAuth();
         conectar();
         programarRefresco(100);
     });
 
     window.addEventListener("focus", () => {
-        if (window.haikuSesion && estadoCanal !== "SUBSCRIBED") {
+        if (window.haikuSesion && (estadoCanal !== "SUBSCRIBED" || !postgresChangesReady)) {
             recuperarConexion();
         }
+    });
+
+    window.addEventListener("offline", () => {
+        // El navegador puede notificar la caída antes que el SDK.
+        estadoCanal = "DESCONECTADO";
+        reiniciarPostgresChanges("DEGRADADO");
     });
 
     window.addEventListener("pageshow", evento => {
@@ -284,10 +389,17 @@
         }, 0);
     }, true);
 
-    cliente.auth.onAuthStateChange(evento => {
-        if (evento === "SIGNED_OUT") {
-            desconectar();
-        }
+    function prepararAuth() {
+        cliente = window.haikuSupabase;
+        if (authInstalado || !cliente?.auth?.onAuthStateChange) return;
+        authInstalado = true;
+        cliente.auth.onAuthStateChange(evento => {
+            if (evento === "SIGNED_OUT") desconectar();
+        });
+    }
+    document.addEventListener("haiku:supabase-ready", () => {
+        prepararAuth();
+        conectar();
     });
 
     // Respaldo móvil: si el sistema durmió el WebSocket, comprobamos Supabase
@@ -312,9 +424,16 @@
         reconectar: recuperarConexion,
         estado() {
             return estadoCanal;
+        },
+        get postgres_changes_ready() {
+            return postgresChangesReady;
+        },
+        estadoPostgresChanges() {
+            return estadoPostgresChanges;
         }
     });
 
+    prepararAuth();
     if (window.haikuSesion) {
         conectar();
         programarRefresco(100);

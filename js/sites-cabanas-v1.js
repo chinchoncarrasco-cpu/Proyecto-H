@@ -159,6 +159,132 @@
         const listas = datos.filter(dato => estadoFinal(dato, fecha) === "lista").length;
         $("#cabinsSummary").innerHTML = `<span><strong>${pendientes}</strong> En trabajo o pendientes</span><span><strong>${porRevisar}</strong> Por revisar</span><span><strong>${listas}</strong> Listas para operar</span>`;
     }
+    const pesoTexto = valor => String(Number(Number(valor || 0).toPrecision(12)));
+    const sacosTexto = cantidad => `${cantidad} ${cantidad === 1 ? "saco" : "sacos"}`;
+    const lenaTexto = (cantidad, peso) => `${sacosTexto(cantidad)} · ${pesoTexto(peso)} kg`;
+    let edicionSaco = null;
+    let contextoInsumos = "";
+    function textoInsumos(fecha, numero) {
+        const dato = window.HAIKU_INSUMOS_ASEO_V1?.obtener(fecha, numero);
+        if (!dato?.listo) return "";
+        return [["lena", "Leña"], ["carbon", "Carbón"]].filter(([insumo]) => dato[insumo].confirmada > 0)
+            .map(([insumo, nombre]) => `${nombre} ${insumo === "lena" ? lenaTexto(dato.lena.confirmada, dato.lena.pesoKg) : sacosTexto(dato.carbon.confirmada)}`).join(" · ");
+    }
+    function pintarInsumos(fecha = fechaActual()) {
+        const api = window.HAIKU_INSUMOS_ASEO_V1;
+        const totales = api?.total(fecha);
+        const resumenInsumos = $("#cabinsSuppliesSummary");
+        if (resumenInsumos) {
+            resumenInsumos.querySelector("[data-insumos-total=lena]").textContent = totales?.listo ? lenaTexto(totales.lena, totales.lenaKg) : "—";
+            resumenInsumos.querySelector("[data-insumos-total=carbon]").textContent = totales?.listo ? sacosTexto(totales.carbon) : "—";
+            resumenInsumos.querySelector("[data-insumos-error]").textContent = totales?.error ? "No se pudieron actualizar los insumos." : "";
+            resumenInsumos.querySelector(".cb-supplies-feedback").hidden = !totales?.error;
+            resumenInsumos.querySelector("[data-insumos-reintentar]").hidden = !totales?.error;
+        }
+        raiz.querySelectorAll("[data-cb-insumos]").forEach(nodo => {
+            const texto = textoInsumos(fecha, nodo.dataset.cbInsumos);
+            nodo.textContent = texto ? ` · ${texto}` : "";
+            nodo.parentElement.title = nodo.parentElement.textContent;
+        });
+        const bloque = $("#cabinsReplenishment");
+        if (!bloque || !estado.numero) return;
+        const datos = api?.obtener(fecha, estado.numero);
+        const contexto = `${fecha}:${estado.numero}`;
+        const entradaSaco = bloque.querySelector("[data-saco-peso]");
+        if (contextoInsumos !== contexto) { edicionSaco = null; entradaSaco.value = ""; contextoInsumos = contexto; }
+        for (const insumo of ["carbon"]) {
+            const valor = datos?.[insumo];
+            bloque.querySelector(`[data-insumo-cantidad=${insumo}]`).textContent = datos?.listo ? valor.cantidad : "—";
+            bloque.querySelectorAll(`[data-insumo=${insumo}]`).forEach(boton => {
+                boton.disabled = !datos?.listo || valor.guardando || (boton.dataset.insumoDelta === "-1" && valor.cantidad === 0);
+            });
+        }
+        bloque.querySelector("[data-insumo-cantidad=lena]").textContent = datos?.listo ? lenaTexto(datos.lena.confirmada, datos.lena.pesoKg) : "—";
+        const alta = datos?.lena.alta;
+        entradaSaco.disabled = !datos?.listo || datos.lena.guardando || Boolean(alta);
+        if (alta) entradaSaco.value = alta.pesoKg;
+        const agregar = bloque.querySelector("[data-saco-agregar]");
+        agregar.disabled = (!datos?.listo && !alta) || datos?.lena.guardando;
+        agregar.textContent = alta?.estado === "verificando" ? "Verificando registro…" : alta?.estado === "incierto"
+            ? "Verificar registro" : alta?.estado === "reintentar" ? "Reintentar saco" : "Agregar saco";
+        const listaSacos = bloque.querySelector("[data-sacos-lena]");
+        if (datos?.listo && edicionSaco && !datos.lena.sacos.some(saco => saco.id === edicionSaco.id)) edicionSaco = null;
+        const listaHTML = (datos?.lena.sacos || []).map((saco, i) => {
+            const deshabilitado = !datos.listo || datos.lena.guardando ? "disabled" : "";
+            if (edicionSaco?.id === saco.id) return `<li><span>Saco ${i + 1}</span><div class="cb-sack-actions">
+                <label class="cb-sack-edit">kg<input type="number" min="0" step="any" inputmode="decimal" data-saco-editar-peso
+                    aria-label="Peso de saco ${i + 1} en kg" value="${escapar(edicionSaco.peso)}" ${deshabilitado}></label>
+                <button type="button" class="cb-text-action" data-saco-guardar="${escapar(saco.id)}" ${deshabilitado}>Guardar</button>
+                <button type="button" class="cb-text-action" data-saco-cancelar ${deshabilitado}>Cancelar</button></div></li>`;
+            return `<li><span>Saco ${i + 1} · ${escapar(pesoTexto(saco.peso_kg))} kg</span><div class="cb-sack-actions">
+                <button type="button" class="cb-text-action" data-saco-editar="${escapar(saco.id)}" ${deshabilitado}>Corregir</button>
+                <button type="button" class="cb-text-action" data-saco-anular="${escapar(saco.id)}" ${deshabilitado}>Anular</button></div></li>`;
+        }).join("");
+        if (listaSacos.innerHTML !== listaHTML) {
+            const enfocada = document.activeElement?.matches?.("[data-saco-editar-peso]");
+            listaSacos.innerHTML = listaHTML;
+            if (enfocada) listaSacos.querySelector("[data-saco-editar-peso]")?.focus();
+        }
+        bloque.setAttribute("aria-busy", String(Boolean(datos?.lena.guardando || datos?.carbon.guardando)));
+        bloque.querySelector("[data-insumos-error]").textContent = alta?.estado === "verificando" ? "Verificando registro…"
+            : datos?.error || datos?.lena.error || datos?.carbon.error || "";
+        bloque.querySelector("[data-insumos-reintentar]").hidden = !datos?.error;
+    }
+    async function cambiarInsumo(boton) {
+        if (boton.disabled || !estado.numero || estado.fecha !== fechaActual()) return;
+        try {
+            await window.HAIKU_INSUMOS_ASEO_V1?.cambiar(fechaActual(), estado.numero,
+                boton.dataset.insumo, Number(boton.dataset.insumoDelta));
+        } catch (error) {
+            console.error("HAIKU · No fue posible confirmar la reposición:", error);
+        }
+    }
+    async function cambiarSaco(boton) {
+        if (boton.disabled || !estado.numero || estado.fecha !== fechaActual()) return;
+        const entrada = $("#cabinsReplenishment [data-saco-peso]");
+        const fecha = fechaActual(), numero = estado.numero;
+        try {
+            if (boton.dataset.sacoAnular) {
+                await window.HAIKU_INSUMOS_ASEO_V1.anularSaco(fecha, numero, boton.dataset.sacoAnular);
+            } else {
+                entrada.setCustomValidity(Number(entrada.value) > 0 ? "" : "Ingresa un peso mayor que cero.");
+                if (!entrada.reportValidity()) return;
+                const resultado = await window.HAIKU_INSUMOS_ASEO_V1.agregarSaco(fecha, numero, entrada.value);
+                if (resultado && fecha === fechaActual() && numero === estado.numero) entrada.value = "";
+            }
+        } catch (error) {
+            console.error("HAIKU · No fue posible confirmar el saco:", error);
+        }
+    }
+    async function corregirSaco(boton) {
+        if (boton.disabled || !estado.numero || estado.fecha !== fechaActual()) return;
+        const api = window.HAIKU_INSUMOS_ASEO_V1, fecha = fechaActual(), numero = estado.numero;
+        if (boton.dataset.sacoCancelar !== undefined) { edicionSaco = null; pintarInsumos(fecha); return; }
+        if (boton.dataset.sacoEditar) {
+            const saco = api.obtener(fecha, numero).lena.sacos.find(s => s.id === boton.dataset.sacoEditar);
+            if (!saco) return;
+            edicionSaco = { id: saco.id, peso: String(saco.peso_kg), version: saco.version };
+            pintarInsumos(fecha);
+            $("#cabinsReplenishment [data-saco-editar-peso]")?.focus();
+            return;
+        }
+        const edicion = edicionSaco, entrada = $("#cabinsReplenishment [data-saco-editar-peso]");
+        if (!edicion || !entrada) return;
+        entrada.setCustomValidity(Number(entrada.value) > 0 ? "" : "Ingresa un peso mayor que cero.");
+        if (!entrada.reportValidity()) return;
+        try {
+            await api.editarSaco(fecha, numero, edicion.id, entrada.value, edicion.version);
+            if (edicionSaco === edicion) edicionSaco = null;
+        } catch (error) {
+            await api.hidratar(fecha);
+            if (edicionSaco === edicion) {
+                const actual = api.obtener(fecha, numero).lena.sacos.find(s => s.id === edicion.id);
+                edicionSaco = actual ? { id: actual.id, peso: String(actual.peso_kg), version: actual.version } : null;
+            }
+            console.error("HAIKU · No fue posible corregir el peso:", error);
+        }
+        if (fecha === fechaActual() && numero === estado.numero) pintarInsumos(fecha);
+    }
     function filtro(fech, numero) {
         const valor = estadoFinal(cabana(fech, numero), fech);
         return estado.filtro === "todas" || (estado.filtro === "pendientes" && !["lista", "no_requiere"].includes(valor))
@@ -178,7 +304,7 @@
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small>${escapar(trabajo(dato))}</small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
+          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
           <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
@@ -267,6 +393,7 @@
         const modoExpress = $("#cabinsReviewMode").querySelector('option[value="aseo_express"]');
         if (modoExpress) modoExpress.disabled = !hayExpress;
         $("#volver-cabanas").textContent = `‹ Volver a ${estado.origen === "review" ? "Revisión de cabañas" : "Operación de hoy"}`;
+        pintarInsumos(fecha);
         actualizarConteos();
     }
     function actualizarConteos() {
@@ -360,6 +487,8 @@
         $("#cabinsDate").textContent = fechaLarga(fecha);
         pintarPersonal(fecha); resumen(fecha); pintarFiltros(fecha);
         pintarOperacion(fecha); pintarRevision(fecha);
+        pintarInsumos(fecha);
+        window.HAIKU_INSUMOS_ASEO_V1?.hidratar(fecha, { forzar: false });
         if (estado.numero) pintarDetalle(fecha);
         aplicarVista();
     }
@@ -538,6 +667,10 @@
     raiz.addEventListener("click", evento => {
         const boton = evento.target.closest("button");
         if (!boton) return;
+        if (boton.dataset.sacoEditar || boton.dataset.sacoGuardar || boton.dataset.sacoCancelar !== undefined) { corregirSaco(boton); return; }
+        if (boton.dataset.sacoAgregar !== undefined || boton.dataset.sacoAnular) { cambiarSaco(boton); return; }
+        if (boton.dataset.insumoDelta) { cambiarInsumo(boton); return; }
+        if (boton.dataset.insumosReintentar !== undefined) { window.HAIKU_INSUMOS_ASEO_V1?.hidratar(fechaActual()); return; }
         if (boton.dataset.cbNoRequiere !== undefined) { cambiarEstadoAseo(boton); return; }
         if (boton.dataset.cabTab) { estado.tab = boton.dataset.cabTab; estado.filtro = "todas"; pintar(); guardarContexto(); return; }
         if (boton.dataset.cbFilter) { estado.filtro = boton.dataset.cbFilter; pintar(); return; }
@@ -563,6 +696,17 @@
             boton.setAttribute("aria-expanded", String(!cuerpo.hidden));
             boton.lastElementChild.textContent = cuerpo.hidden ? "+" : "−";
         }
+    });
+    raiz.addEventListener("input", evento => {
+        if (evento.target.matches("[data-saco-editar-peso]") && edicionSaco) edicionSaco.peso = evento.target.value;
+        if (evento.target.matches("[data-saco-editar-peso], [data-saco-peso]")) evento.target.setCustomValidity("");
+    });
+    raiz.addEventListener("keydown", evento => {
+        if (evento.key !== "Enter" || !evento.target.matches("[data-saco-editar-peso], [data-saco-peso]")) return;
+        evento.preventDefault();
+        if (evento.repeat) return;
+        const selector = evento.target.matches("[data-saco-peso]") ? "[data-saco-agregar]" : "[data-saco-guardar]";
+        $("#cabinsReplenishment")?.querySelector(selector)?.click();
     });
     raiz.addEventListener("change", evento => {
         const campo = evento.target;
@@ -595,6 +739,9 @@
         if (revisionPendiente && confirmarRevisionRestaurada()) return;
         pintar(evento.detail.fecha);
         if (estado.numero) guardarContexto();
+    });
+    document.addEventListener("haiku:insumos-actualizados", evento => {
+        if (evento.detail?.fecha === fechaActual()) pintarInsumos(evento.detail.fecha);
     });
     const observador = new MutationObserver(() => {
         if (estado.numero) { decorarChecklist(); window.HAIKU_CHECKLIST_OPTIMISTA_V1?.repintar(); actualizarConteos(); }

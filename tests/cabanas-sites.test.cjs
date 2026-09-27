@@ -60,6 +60,13 @@ function arnes(cabanas = {}, almacenamientoInicial = {}, opciones = {}) {
             if (["#cabinsDetailIn", "#cabinsDetailOut", "#cabinsDetailAseo"].includes(selector)) {
                 elemento.dataset.cabana = "";
             }
+            if (["#cabinsSuppliesSummary", "#cabinsReplenishment"].includes(selector)) {
+                const hijos = new Map();
+                elemento.querySelector = hijo => {
+                    if (!hijos.has(hijo)) hijos.set(hijo, nodo());
+                    return hijos.get(hijo);
+                };
+            }
             nodos.set(selector, elemento);
         }
         return nodos.get(selector);
