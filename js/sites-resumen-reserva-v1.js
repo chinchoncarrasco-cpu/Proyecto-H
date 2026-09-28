@@ -128,6 +128,7 @@
         drawer.id = "sites-resumen-reserva-drawer";
         drawer.className = "sites-resumen-drawer sites-resumen-reserva-drawer";
         drawer.dataset.sitesDrawer = "";
+        drawer.dataset.haikuInspectorSuperficie = "reserva";
         drawer.hidden = true;
         drawer.innerHTML = `
             <section class="sites-resumen-drawer-panel" role="dialog" aria-modal="true"
@@ -560,6 +561,7 @@
         estado.estadia = null;
         cerrarCambioEstado();
         drawer.hidden = true;
+        delete drawer.dataset.haikuInspectorEntidadId;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();
     }
 
@@ -574,6 +576,8 @@
         estado.identidad = identidad;
         estado.ficha = null;
         estado.estadia = null;
+        if (estado.reservaId) drawer.dataset.haikuInspectorEntidadId = estado.reservaId;
+        else delete drawer.dataset.haikuInspectorEntidadId;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.marcarDisparador?.(drawer, boton);
         drawer.hidden = false;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();
@@ -670,6 +674,7 @@
         estado.identidad = null;
         estado.ficha = null;
         estado.estadia = null;
+        drawer.dataset.haikuInspectorEntidadId = estado.reservaId;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.marcarDisparador?.(drawer, disparador);
         drawer.hidden = false;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();

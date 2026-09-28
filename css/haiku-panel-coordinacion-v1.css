@@ -1,0 +1,146 @@
+/* HAIKU · INSPECTOR CENTRAL + PANEL HAKU V1 */
+
+.haiku-asistente-root .haiku-asistente-overlay {
+    display: none !important;
+    pointer-events: none !important;
+}
+
+body.haiku-panel-abierto .haiku-asistente-root {
+    pointer-events: none;
+}
+
+body.haiku-panel-abierto .haiku-asistente-root :is(.haiku-asistente-panel, .haiku-asistente-boton) {
+    pointer-events: auto;
+}
+
+.haiku-volver-haku {
+    display: none;
+}
+
+@media (min-width: 901px) {
+    body {
+        --haiku-panel-coordinado-ancho: 0px;
+        --haiku-inspector-coordinado-ancho: 0px;
+        --haiku-superficies-ancho: calc(
+            var(--haiku-panel-coordinado-ancho) + var(--haiku-inspector-coordinado-ancho)
+        );
+    }
+
+    body.haiku-panel-abierto {
+        --haiku-panel-coordinado-ancho: clamp(320px, 34vw, 486px);
+    }
+
+    body.haiku-inspector-abierto {
+        --haiku-inspector-coordinado-ancho: clamp(380px, 38vw, 570px);
+    }
+
+    body.haiku-paneles-convivencia {
+        --haiku-panel-coordinado-ancho: clamp(230px, 26vw, 420px);
+        --haiku-inspector-coordinado-ancho: clamp(260px, 30vw, 500px);
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) {
+        padding-right: var(--haiku-superficies-ancho);
+    }
+
+    body.haiku-panel-abierto .haiku-asistente-root .haiku-asistente-panel {
+        width: var(--haiku-panel-coordinado-ancho) !important;
+    }
+
+    body.haiku-inspector-abierto [data-haiku-inspector-superficie] {
+        inset: 0 var(--haiku-panel-coordinado-ancho) 0 auto;
+        z-index: 89990;
+        width: var(--haiku-inspector-coordinado-ancho);
+        justify-content: flex-end;
+        padding: 0;
+        background: #ffffff;
+        opacity: 1;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        pointer-events: auto;
+        overscroll-behavior: contain;
+    }
+
+    body.haiku-inspector-abierto #sites-resumen-reserva-drawer > .sites-resumen-drawer-panel {
+        width: 100%;
+        max-width: none;
+    }
+
+    body.haiku-inspector-abierto #ficha-reserva-modal > .ficha-reserva {
+        width: 100%;
+        max-width: none;
+        height: 100dvh;
+        margin: 0;
+        border-radius: 0;
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) .sites-shell-topbar {
+        width: calc(100% - var(--sites-shell-sidebar-width));
+    }
+}
+
+@media (max-width: 900px) {
+    body.haiku-panel-abierto,
+    body.haiku-inspector-abierto {
+        overflow: hidden;
+    }
+
+    body.haiku-paneles-convivencia .haiku-asistente-root .haiku-asistente-panel {
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    body.haiku-paneles-convivencia [data-haiku-inspector-superficie] {
+        inset: 0;
+        z-index: 90010;
+        width: 100vw;
+    }
+
+    body.haiku-paneles-convivencia .haiku-volver-haku {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        min-height: 34px;
+        margin-left: auto;
+        padding: 6px 10px;
+        border: 1px solid #bfd3c5;
+        border-radius: 8px;
+        background: #edf5ef;
+        color: #28553e;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    body.haiku-paneles-convivencia .haiku-volver-haku:focus-visible {
+        outline: 3px solid #93bca9;
+        outline-offset: 2px;
+    }
+}
+
+@media (max-width: 600px) {
+    body.haiku-paneles-convivencia :is(.sites-resumen-drawer-head, .ficha-reserva-cabecera) {
+        flex-wrap: wrap;
+    }
+
+    body.haiku-paneles-convivencia .haiku-volver-haku {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    body.haiku-paneles-convivencia #ficha-reserva-modal {
+        padding: 0;
+    }
+
+    body.haiku-paneles-convivencia #ficha-reserva-modal > .ficha-reserva {
+        min-height: 100dvh;
+        border-radius: 0;
+    }
+
+}

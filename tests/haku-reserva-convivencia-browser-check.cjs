@@ -1,0 +1,474 @@
+// Browser check local con Edge + CDP nativo. No instala dependencias ni conecta con Supabase.
+const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
+const root = path.resolve(__dirname, "..");
+const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+const fixture = path.join(root, "tests", "fixtures", "haku-reserva-convivencia", "index.html");
+const coordinator = fs.readFileSync(path.join(root, "js", "haiku-panel-coordinacion-v1.js"), "utf8");
+const artifacts = path.join(root, "tests", "artifacts", "haku-reserva-convivencia");
+
+class CdpClient {
+    constructor(url) {
+        this.url = url;
+        this.socket = null;
+        this.sequence = 0;
+        this.pending = new Map();
+        this.waiters = new Map();
+        this.listeners = new Map();
+    }
+
+    async connect() {
+        this.socket = new WebSocket(this.url);
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error(`Timeout conectando CDP: ${this.url}`)), 10000);
+            this.socket.addEventListener("open", () => { clearTimeout(timeout); resolve(); }, { once: true });
+            this.socket.addEventListener("error", error => { clearTimeout(timeout); reject(error); }, { once: true });
+        });
+        this.socket.addEventListener("message", event => this.receive(JSON.parse(String(event.data))));
+        this.socket.addEventListener("close", () => {
+            for (const pending of this.pending.values()) {
+                clearTimeout(pending.timeout);
+                pending.reject(new Error(`CDP cerró la conexión durante ${pending.method}`));
+            }
+            this.pending.clear();
+        });
+    }
+
+    receive(message) {
+        if (message.id) {
+            const pending = this.pending.get(message.id);
+            if (!pending) return;
+            this.pending.delete(message.id);
+            clearTimeout(pending.timeout);
+            if (message.error) pending.reject(new Error(`${pending.method}: ${message.error.message}`));
+            else pending.resolve(message.result || {});
+            return;
+        }
+        for (const listener of this.listeners.get(message.method) || []) listener(message.params || {});
+        const waiter = this.waiters.get(message.method)?.shift();
+        if (waiter) waiter(message.params || {});
+    }
+
+    call(method, params = {}) {
+        const id = ++this.sequence;
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                this.pending.delete(id);
+                reject(new Error(`Timeout CDP durante ${method}`));
+            }, 30000);
+            this.pending.set(id, { method, resolve, reject, timeout });
+            this.socket.send(JSON.stringify({ id, method, params }));
+        });
+    }
+
+    waitEvent(method) {
+        return new Promise(resolve => {
+            if (!this.waiters.has(method)) this.waiters.set(method, []);
+            this.waiters.get(method).push(resolve);
+        });
+    }
+
+    on(method, listener) {
+        if (!this.listeners.has(method)) this.listeners.set(method, []);
+        this.listeners.get(method).push(listener);
+    }
+
+    close() { this.socket?.close(); }
+}
+
+function launchEdge(profile) {
+    assert.equal(fs.existsSync(edge), true, `Edge disponible en ${edge}`);
+    const process = childProcess.spawn(edge, [
+        "--headless=new", "--disable-gpu", "--disable-gpu-sandbox",
+        "--hide-scrollbars", "--allow-file-access-from-files",
+        "--no-first-run", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"
+    ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+
+    const endpoint = new Promise((resolve, reject) => {
+        let output = "";
+        const timeout = setTimeout(() => reject(new Error(`Edge no publicó CDP. ${output}`)), 15000);
+        process.stderr.setEncoding("utf8");
+        process.stderr.on("data", chunk => {
+            output += chunk;
+            const match = output.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+            if (match) { clearTimeout(timeout); resolve(match[1]); }
+        });
+        process.once("exit", code => {
+            clearTimeout(timeout);
+            reject(new Error(`Edge terminó antes de iniciar CDP (${code}). ${output}`));
+        });
+    });
+    return { process, endpoint };
+}
+
+async function pageEndpoint(browserEndpoint) {
+    const { port } = new URL(browserEndpoint);
+    const deadline = Date.now() + 5000;
+    do {
+        const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(response => response.json());
+        const page = targets.find(target => target.type === "page");
+        if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl;
+        await new Promise(resolve => setTimeout(resolve, 30));
+    } while (Date.now() < deadline);
+    throw new Error("Edge no expuso una página CDP");
+}
+
+async function evaluate(client, expression) {
+    const result = await client.call("Runtime.evaluate", {
+        expression, awaitPromise: true, returnByValue: true
+    });
+    if (result.exceptionDetails) {
+        throw new Error(result.exceptionDetails.exception?.description
+            || result.exceptionDetails.text
+            || "Error evaluando JavaScript en la fixture");
+    }
+    return result.result?.value;
+}
+
+async function waitFor(client, expression, message) {
+    const deadline = Date.now() + 4000;
+    do {
+        if (await evaluate(client, `Boolean(${expression})`)) return;
+        await new Promise(resolve => setTimeout(resolve, 20));
+    } while (Date.now() < deadline);
+    throw new Error(`Timeout: ${message}`);
+}
+
+async function viewport(client, width, height) {
+    await client.call("Emulation.setDeviceMetricsOverride", {
+        width, height, deviceScaleFactor: 1, mobile: width <= 600
+    });
+    await evaluate(client, "window.dispatchEvent(new Event('resize'))");
+}
+
+async function click(client, selector) {
+    const clicked = await evaluate(client, `(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!element) return false;
+        element.click();
+        return true;
+    })()`);
+    assert.equal(clicked, true, `elemento disponible para click: ${selector}`);
+}
+
+async function pointerClick(client, selector) {
+    const point = await evaluate(client, `(() => {
+        const rect = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+        return rect && { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`);
+    assert.ok(point, `elemento visible para click real: ${selector}`);
+    await client.call("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
+    await client.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+}
+
+async function escape(client) {
+    await evaluate(client, `document.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape", bubbles: true, cancelable: true
+    }))`);
+}
+
+async function openHaku(client) {
+    if (!await evaluate(client, "window.HAIKU_ASISTENTE.abierta()")) {
+        await click(client, "#haiku-asistente-boton");
+    }
+    await waitFor(client, "document.body.classList.contains('haiku-panel-abierto')", "Haku abierto");
+}
+
+async function openReservation(client, id) {
+    await evaluate(client, `window.HAIKU_PANELES_V1.abrirReserva(${JSON.stringify(id)})`);
+    await waitFor(client, "document.body.classList.contains('haiku-ficha-reserva-abierta')", "ficha abierta");
+}
+
+async function closeReservation(client) {
+    await click(client, "[data-reserva-cerrar]");
+    await waitFor(client, "!document.body.classList.contains('haiku-ficha-reserva-abierta')", "ficha cerrada");
+}
+
+async function sideBySide(client, label) {
+    const boxes = await evaluate(client, `(() => {
+        const haku = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
+        const wrapper = document.getElementById("sites-resumen-reserva-drawer");
+        const ficha = wrapper.querySelector(":scope > .sites-resumen-drawer-panel").getBoundingClientRect();
+        const principal = document.getElementById("contenido-principal").getBoundingClientRect();
+        const point = document.elementFromPoint(haku.left + 20, 80);
+        const puntoPrincipal = document.elementFromPoint(Math.max(4, principal.right - 20), 120);
+        const estilosWrapper = getComputedStyle(wrapper);
+        const estilosPrincipal = getComputedStyle(document.getElementById("contenido-principal"));
+        return {
+            haku: { left: haku.left, right: haku.right, width: haku.width },
+            ficha: { left: ficha.left, right: ficha.right, width: ficha.width },
+            principal: { left: principal.left, right: principal.right, width: principal.width },
+            hakuReceivesPointer: Boolean(point?.closest("#haiku-asistente-panel")),
+            principalReceivesPointer: Boolean(puntoPrincipal?.closest("#contenido-principal")),
+            wrapperBackground: estilosWrapper.backgroundColor,
+            wrapperOpacity: estilosWrapper.opacity,
+            wrapperBackdrop: estilosWrapper.backdropFilter || estilosWrapper.webkitBackdropFilter,
+            principalBackground: estilosPrincipal.backgroundColor,
+            bodyOverflow: document.body.style.overflow,
+            mode: window.HAIKU_PANELES_V1.estado().modo
+        };
+    })()`);
+    assert.equal(boxes.mode, "lado-a-lado", `${label}: modo coordinado`);
+    assert.ok(boxes.ficha.right <= boxes.haku.left + 1,
+        `${label}: ficha (${boxes.ficha.right}) a la izquierda de Haku (${boxes.haku.left})`);
+    assert.ok(boxes.principal.right <= boxes.ficha.left + 1,
+        `${label}: contenido (${boxes.principal.right}) termina antes de la ficha (${boxes.ficha.left})`);
+    assert.ok(boxes.ficha.width >= 260, `${label}: ficha con ancho útil`);
+    assert.ok(boxes.principal.width >= 300, `${label}: contenido principal conserva espacio útil`);
+    assert.equal(boxes.hakuReceivesPointer, true, `${label}: backdrop no cubre Haku`);
+    assert.equal(boxes.principalReceivesPointer, true, `${label}: ningún backdrop intercepta el contenido`);
+    assert.equal(boxes.wrapperBackground, "rgb(255, 255, 255)", `${label}: sin capa oscura`);
+    assert.equal(boxes.wrapperOpacity, "1", `${label}: sin atenuación por opacity`);
+    assert.ok(boxes.wrapperBackdrop === "none" || boxes.wrapperBackdrop === "",
+        `${label}: sin backdrop-filter`);
+    assert.equal(boxes.principalBackground, "rgb(238, 243, 239)", `${label}: colores normales del contenido`);
+    assert.notEqual(boxes.bodyOverflow, "hidden", `${label}: scroll principal desbloqueado`);
+    assert.equal(await evaluate(client,
+        "document.querySelector('#sites-resumen-reserva-drawer > [role=dialog]').getAttribute('aria-modal')"),
+    "false", `${label}: ambas superficies siguen accesibles`);
+}
+
+async function screenshot(client, name) {
+    fs.mkdirSync(artifacts, { recursive: true });
+    const result = await client.call("Page.captureScreenshot", {
+        format: "png", fromSurface: true, captureBeyondViewport: false
+    });
+    fs.writeFileSync(path.join(artifacts, name), Buffer.from(result.data, "base64"));
+}
+
+(async () => {
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "haiku-paneles-cdp-"));
+    const launched = launchEdge(profile);
+    let page;
+    let browser;
+    const runtimeErrors = [];
+    try {
+        const browserUrl = await launched.endpoint;
+        browser = new CdpClient(browserUrl);
+        await browser.connect();
+        page = new CdpClient(await pageEndpoint(browserUrl));
+        await page.connect();
+        page.on("Runtime.exceptionThrown", params => runtimeErrors.push(
+            params.exceptionDetails?.exception?.description || params.exceptionDetails?.text || "Error de página"
+        ));
+        await page.call("Runtime.enable");
+        await page.call("Page.enable");
+        await viewport(page, 1500, 900);
+
+        const loaded = page.waitEvent("Page.loadEventFired");
+        await page.call("Page.navigate", { url: pathToFileURL(fixture).href });
+        await loaded;
+        await waitFor(page, "window.HAIKU_PANELES_V1 && window.HAIKU_ASISTENTE", "módulos cargados");
+        assert.equal(await evaluate(page, "window.HAIKU_INSPECTOR_V1 === window.HAIKU_PANELES_V1"), true,
+            "la API general y el alias compatible comparten una sola autoridad");
+        assert.deepEqual(await evaluate(page, "[...window.HAIKU_PANELES_V1.TIPOS_INSPECTOR]"),
+            ["reserva", "pago", "servicio", "solicitud", "aseo"]);
+
+        // La ficha sola también se acopla: contenido activo, sin backdrop oscuro.
+        await openReservation(page, "SIN-HAKU");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().modo"), "independiente");
+        assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length"), 0);
+        assert.equal(await evaluate(page,
+            "document.querySelector('#sites-resumen-reserva-drawer > [role=dialog]').getAttribute('aria-modal')"), "false");
+        const fichaSola = await evaluate(page, `(() => {
+            const ficha = document.getElementById("sites-resumen-reserva-drawer").getBoundingClientRect();
+            const principal = document.getElementById("contenido-principal").getBoundingClientRect();
+            const style = getComputedStyle(document.getElementById("sites-resumen-reserva-drawer"));
+            return {
+                ficha: { left: ficha.left, right: ficha.right, width: ficha.width },
+                principal: { left: principal.left, right: principal.right, width: principal.width },
+                background: style.backgroundColor,
+                overflow: document.body.style.overflow
+            };
+        })()`);
+        assert.ok(fichaSola.ficha.width >= 500 && fichaSola.ficha.width <= 571);
+        assert.ok(fichaSola.principal.right <= fichaSola.ficha.left + 1);
+        assert.equal(fichaSola.background, "rgb(255, 255, 255)");
+        assert.notEqual(fichaSola.overflow, "hidden");
+        await pointerClick(page, "#demo-accion-principal");
+        assert.equal(await evaluate(page, "document.getElementById('demo-accion-conteo').value"), "1");
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        await closeReservation(page);
+
+        // Haku fijado no intercepta el contenido principal.
+        await openHaku(page);
+        await pointerClick(page, "#demo-accion-principal");
+        assert.equal(await evaluate(page, "document.getElementById('demo-accion-conteo').value"), "2");
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-overlay').hidden"), true);
+
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').textContent.includes('Contexto ficticio de Haku 28')",
+            "contexto ficticio de Haku preparado");
+        await evaluate(page, `(() => {
+            const messages = document.getElementById("haiku-asistente-mensajes");
+            messages.scrollTop = Math.min(173, messages.scrollHeight - messages.clientHeight);
+            document.getElementById("haiku-asistente-texto").value = "Borrador ficticio conservado";
+        })()`);
+        const initialScroll = await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop");
+
+        await pointerClick(page, "[data-demo-reserva='A']");
+        await waitFor(page, "document.body.classList.contains('haiku-ficha-reserva-abierta')", "reserva A abierta desde contenido");
+        await sideBySide(page, "escritorio ancho");
+        assert.equal(await evaluate(page, "document.body.classList.contains('haiku-inspector-abierto')"), true);
+        assert.deepEqual(await evaluate(page, "window.HAIKU_PANELES_V1.estado().inspector"),
+            { tipo: "reserva", entidadId: "A" });
+        await pointerClick(page, "#demo-accion-principal");
+        assert.equal(await evaluate(page, "document.getElementById('demo-accion-conteo').value"), "3");
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        const mensajePagoNoDisponible = await evaluate(page, `window.HAIKU_PANELES_V1
+            .abrirInspector({ tipo: "pago", entidadId: "PAGO-DEMO" })
+            .then(() => "").catch(error => error.message)`);
+        assert.match(mensajePagoNoDisponible, /todavía no tiene una vista registrada/,
+            "pago está preparado sin inventar un detalle financiero");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"), "A");
+
+        // La navegación principal cambia sólo la zona izquierda y conserva Inspector + Haku.
+        await pointerClick(page, "[data-demo-seccion='pagos']");
+        assert.equal(await evaluate(page, "document.getElementById('demo-seccion-actual').textContent"), "Pagos");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"), "A");
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        await screenshot(page, "desktop-pagos-inspector-1500x900.png");
+        await pointerClick(page, "[data-demo-vista='pagos'] [data-demo-accion-seccion]");
+        await pointerClick(page, "[data-demo-seccion='servicios']");
+        assert.equal(await evaluate(page, "document.getElementById('demo-seccion-actual').textContent"), "Servicios");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"), "A");
+        await pointerClick(page, "[data-demo-vista='servicios'] [data-demo-accion-seccion]");
+        await pointerClick(page, "[data-demo-seccion='libro']");
+        assert.equal(await evaluate(page, "document.getElementById('demo-seccion-actual').textContent"), "Libro");
+        assert.equal(await evaluate(page, "document.getElementById('demo-accion-conteo').value"), "5");
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-inspector-superficie]:not([hidden])').length"), 1);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), "Borrador ficticio conservado");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), initialScroll);
+
+        await evaluate(page, `(() => {
+            const libro = document.getElementById("demo-libro-scroll");
+            libro.scrollTop = 210;
+            libro.scrollLeft = 320;
+            window.scrollTo(0, 130);
+            document.querySelector("[data-demo-fila='R-03']").click();
+        })()`);
+        assert.ok(await evaluate(page, "document.getElementById('demo-libro-scroll').scrollTop") > 100,
+            "scroll vertical del Libro disponible");
+        assert.ok(await evaluate(page, "document.getElementById('demo-libro-scroll').scrollLeft") > 100,
+            "scroll horizontal del Libro disponible");
+        assert.ok(await evaluate(page, "window.scrollY") > 50, "scroll vertical principal disponible");
+        assert.match(await evaluate(page, "document.getElementById('demo-seleccion').textContent"), /R-03/);
+        assert.equal(await evaluate(page, `(() => {
+            const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+            document.dispatchEvent(event);
+            return event.defaultPrevented;
+        })()`), false, "Tab queda libre entre ficha y Haku en escritorio");
+        await screenshot(page, "desktop-1500x900.png");
+
+        // A -> B reutiliza el mismo drawer y no altera conversación, borrador ni scroll de Haku.
+        await pointerClick(page, "[data-demo-reserva='B']");
+        assert.match(await evaluate(page, "document.getElementById('demo-reserva-id').textContent"), /B/);
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer') === window.__demoDrawerIdentity"), true);
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-inspector-superficie]:not([hidden])').length"), 1);
+        assert.deepEqual(await evaluate(page, "window.HAIKU_PANELES_V1.estado().inspector"),
+            { tipo: "reserva", entidadId: "B" });
+        assert.match(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').textContent"), /Contexto ficticio de Haku 28/);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), "Borrador ficticio conservado");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), initialScroll);
+        await evaluate(page, "window.HAIKU_PANELES_V1.abrirInspector({ tipo: 'reserva', entidadId: 'C' }, { recordarActual: true })");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"), "C");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().historialInspector"), 1);
+        await evaluate(page, "window.HAIKU_PANELES_V1.volverInspector()");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"), "B");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().historialInspector"), 0);
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer') === window.__demoDrawerIdentity"), true);
+        await closeReservation(page);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+
+        // Cerrar Haku conserva la ficha, expande el contenido y mantiene ambas superficies activas.
+        await openReservation(page, "C");
+        const anchoPrincipalConAmbos = await evaluate(page, "document.getElementById('contenido-principal').getBoundingClientRect().width");
+        await click(page, "#haiku-asistente-cerrar");
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().modo"), "independiente");
+        assert.ok(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer').getBoundingClientRect().width") >= 500);
+        assert.ok(await evaluate(page, "document.getElementById('contenido-principal').getBoundingClientRect().width") > anchoPrincipalConAmbos);
+        await pointerClick(page, "#demo-accion-principal");
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+
+        // Escape cierra primero la ficha. Otro modal activo protege a Haku.
+        await openHaku(page);
+        await escape(page);
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        await escape(page);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), false);
+
+        await openHaku(page);
+        await evaluate(page, `(() => {
+            const modal = document.createElement("div");
+            modal.id = "modal-prioritario-prueba";
+            modal.setAttribute("role", "dialog");
+            modal.setAttribute("aria-modal", "true");
+            Object.assign(modal.style, { position: "fixed", inset: "20px", display: "block" });
+            document.body.appendChild(modal);
+        })()`);
+        await escape(page);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        await evaluate(page, "document.getElementById('modal-prioritario-prueba').remove()");
+
+        // Reinserción defensiva: un solo retorno y un solo listener de Escape.
+        await evaluate(page, coordinator);
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-volver-haku]').length"), 1);
+        await openReservation(page, "ESCAPE-UNICO");
+        const closuresBefore = await evaluate(page, "window.__demoCloseCalls");
+        await escape(page);
+        assert.equal(await evaluate(page, "window.__demoCloseCalls"), closuresBefore + 1);
+
+        // Escritorio angosto conserva dos superficies reales sin solaparlas.
+        await viewport(page, 1024, 768);
+        await openReservation(page, "ANGOSTA");
+        await sideBySide(page, "escritorio angosto");
+        await pointerClick(page, "#demo-accion-principal");
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        await closeReservation(page);
+
+        // Móvil alterna las vistas, mantiene Haku montado y ofrece retorno claro.
+        await viewport(page, 390, 844);
+        await openReservation(page, "MOVIL");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().modo"), "alternado");
+        assert.equal(await evaluate(page,
+            "document.querySelector('#sites-resumen-reserva-drawer > [role=dialog]').getAttribute('aria-modal')"), "true");
+        assert.equal(await evaluate(page, `(() => {
+            const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+            document.dispatchEvent(event);
+            return event.defaultPrevented;
+        })()`), true, "Tab permanece dentro de la ficha modal en móvil");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-panel').hidden"), false);
+        assert.equal(await evaluate(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility"), "hidden");
+        assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length > 0"), true);
+        assert.match(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').textContent"), /Contexto ficticio de Haku 28/);
+        await screenshot(page, "mobile-390x844.png");
+        await click(page, "[data-haiku-volver-haku]");
+        await waitFor(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility === 'visible'", "retorno a Haku");
+        await waitFor(page, "document.activeElement === document.getElementById('haiku-asistente-texto')", "foco devuelto a Haku");
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+
+        await openReservation(page, "MOVIL-SIN-HAKU");
+        await evaluate(page, "window.HAIKU_ASISTENTE.cerrar()");
+        await waitFor(page, "!document.body.classList.contains('haiku-paneles-convivencia')", "Haku cerrado con ficha activa");
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), false);
+        assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length"), 0);
+
+        assert.deepEqual(runtimeErrors, []);
+        console.log("Inspector + Haku: navegación persistente, desktop ancho/angosto, móvil y estado OK");
+    } finally {
+        try { await browser?.call("Browser.close"); } catch { launched.process.kill(); }
+        page?.close();
+        browser?.close();
+        try { fs.rmSync(profile, { recursive: true, force: true }); } catch {}
+    }
+})().catch(error => { console.error(error); process.exitCode = 1; });

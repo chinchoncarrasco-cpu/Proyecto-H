@@ -26,7 +26,7 @@
     root.hidden = true;
     root.innerHTML = `
         <div class="haiku-asistente-overlay" id="haiku-asistente-overlay" hidden></div>
-        <section class="haiku-asistente-panel" id="haiku-asistente-panel" role="dialog" aria-modal="true" aria-labelledby="haiku-asistente-titulo" hidden>
+        <section class="haiku-asistente-panel" id="haiku-asistente-panel" role="dialog" aria-modal="false" aria-labelledby="haiku-asistente-titulo" hidden>
             <header class="haiku-asistente-cabecera">
                 <span class="haiku-asistente-marca" aria-hidden="true">H</span>
                 <div class="haiku-asistente-titulo">
@@ -103,7 +103,28 @@
     const rapidas = root.querySelector("#haiku-asistente-rapidas");
     const botonesRapidos = [...root.querySelectorAll("[data-haiku-accion-rapida]")];
     let focoAnterior = null;
-    let overflowAnterior = "";
+
+    function notificarEstadoPanel() {
+        window.dispatchEvent(new CustomEvent("haiku:panel-estado", {
+            detail: { abierto: !panel.hidden }
+        }));
+    }
+
+    function puedeCerrarConEscape() {
+        const coordinador = window.HAIKU_PANELES_V1;
+        if (typeof coordinador?.puedeCerrarHakuConEscape === "function") {
+            return coordinador.puedeCerrarHakuConEscape();
+        }
+
+        const ficha = document.getElementById("ficha-reserva-modal");
+        if (ficha && !ficha.hidden) return false;
+
+        return ![...document.querySelectorAll('[role="dialog"][aria-modal="true"]')]
+            .some(dialogo => dialogo !== panel
+                && !dialogo.hidden
+                && dialogo.getAttribute("aria-hidden") !== "true"
+                && dialogo.getClientRects().length > 0);
+    }
 
     function estaAutenticado() {
         return Boolean(window.haikuSesion?.auth || window.haikuSesion?.usuario);
@@ -119,11 +140,10 @@
         if (root.hidden) return;
         if (!panel.hidden) return;
         focoAnterior = document.activeElement;
-        overflowAnterior = document.body.style.overflow;
-        document.body.style.overflow = "hidden";
-        overlay.hidden = false;
+        overlay.hidden = true;
         panel.hidden = false;
         boton.setAttribute("aria-expanded", "true");
+        notificarEstadoPanel();
         requestAnimationFrame(() => { if (!panel.hidden) campo.focus(); });
     }
 
@@ -131,8 +151,8 @@
         if (panel.hidden) return;
         panel.hidden = true;
         overlay.hidden = true;
-        document.body.style.overflow = overflowAnterior;
         boton.setAttribute("aria-expanded", "false");
+        notificarEstadoPanel();
         (focoAnterior?.isConnected ? focoAnterior : boton).focus?.();
         focoAnterior = null;
     }
@@ -1599,23 +1619,11 @@
 
     boton.addEventListener("click", alternarPanel);
     cerrar.addEventListener("click", cerrarPanel);
-    overlay.addEventListener("click", cerrarPanel);
     document.addEventListener("keydown", evento => {
         if (panel.hidden) return;
-        if (evento.key === "Escape") {
+        if (evento.key === "Escape" && !evento.defaultPrevented && puedeCerrarConEscape()) {
             evento.preventDefault();
             cerrarPanel();
-        } else if (evento.key === "Tab") {
-            const elementos = [...panel.querySelectorAll("button:not(:disabled), textarea:not(:disabled), summary")]
-                .filter(elemento => elemento.getClientRects().length > 0);
-            if (!elementos.length) return;
-            const primero = elementos[0];
-            const ultimo = elementos[elementos.length - 1];
-            if (evento.shiftKey && document.activeElement === primero) {
-                evento.preventDefault(); ultimo.focus();
-            } else if (!evento.shiftKey && document.activeElement === ultimo) {
-                evento.preventDefault(); primero.focus();
-            }
         }
     });
     botonesRapidos.forEach(botonRapido => {
@@ -1676,6 +1684,7 @@
         abrir: abrirPanel,
         cerrar: cerrarPanel,
         visible: () => !root.hidden,
+        abierta: () => !panel.hidden,
         procesando: () => procesando || guardandoReserva,
         ultimaPreview: () => ultimaPreview,
         adjuntos: () => adjuntos.map(item => ({

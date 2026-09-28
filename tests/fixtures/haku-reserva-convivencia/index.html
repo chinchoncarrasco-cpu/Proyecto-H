@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Demo local · Haku + Ver reserva</title>
+    <link rel="stylesheet" href="../../../css/styles.css">
+    <link rel="stylesheet" href="../../../css/supabase-asistente-v1.css">
+    <link rel="stylesheet" href="../../../css/sites-resumen-v1.css">
+    <link rel="stylesheet" href="../../../css/sites-asistente-v1.css">
+    <link rel="stylesheet" href="../../../css/haiku-panel-coordinacion-v1.css">
+    <style>
+        body { margin: 0; font-family: system-ui, sans-serif; color: #20332b; }
+        .demo-contenido { min-width: 0; min-height: 125vh; box-sizing: border-box; padding: 42px; background: #eef3ef; }
+        .demo-contenido h1 { margin: 0 0 8px; }
+        .demo-contenido p { max-width: 620px; color: #587064; }
+        .demo-nav { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0; padding: 6px; border-radius: 9px; background: #dce9e0; }
+        .demo-nav button { min-height: 38px; padding: 7px 13px; border: 0; border-radius: 7px; background: transparent; color: #315743; font: inherit; font-weight: 700; cursor: pointer; }
+        .demo-nav button[aria-pressed="true"] { background: #fff; box-shadow: 0 1px 5px #20382a1f; }
+        .demo-vista[hidden] { display: none; }
+        .demo-acciones { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0; padding: 12px; border: 1px solid #d0ddd4; border-radius: 9px; background: #f7faf8; }
+        .demo-acciones button,
+        .demo-libro button { min-height: 38px; padding: 7px 12px; border: 1px solid #b9cec0; border-radius: 7px; background: #fff; color: #28553e; font: inherit; cursor: pointer; }
+        .demo-estado { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; color: #466154; font-size: 13px; }
+        .demo-estado output { min-width: 24px; padding: 3px 8px; border-radius: 999px; background: #28553e; color: #fff; text-align: center; }
+        .demo-libro { min-width: 0; padding: 18px; border: 1px solid #d0ddd4; border-radius: 10px; background: #fff; }
+        .demo-libro-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .demo-libro-cabecera input { width: min(310px, 100%); min-height: 38px; padding: 8px 10px; border: 1px solid #b9cec0; border-radius: 7px; font: inherit; }
+        .demo-libro-scroll { width: 100%; max-height: 430px; overflow: auto; border: 1px solid #d9e3dc; border-radius: 7px; }
+        .demo-libro table { width: 1120px; border-collapse: collapse; }
+        .demo-libro th,
+        .demo-libro td { padding: 10px 12px; border-bottom: 1px solid #e4ebe6; text-align: left; white-space: nowrap; }
+        .demo-libro th { position: sticky; top: 0; z-index: 1; background: #e8f1eb; color: #315743; }
+        .demo-libro tbody tr { cursor: pointer; }
+        .demo-libro tbody tr:hover,
+        .demo-libro tbody tr[aria-selected="true"] { background: #edf6f0; }
+        .demo-vista-simulada { min-height: 560px; padding: 24px; border: 1px solid #d0ddd4; border-radius: 10px; background: #fff; }
+        .demo-vista-simulada h2 { margin-bottom: 8px; }
+        .demo-vista-simulada button { margin-top: 18px; min-height: 38px; padding: 7px 12px; border: 1px solid #b9cec0; border-radius: 7px; background: #fff; color: #28553e; font: inherit; cursor: pointer; }
+        .demo-pie { height: 280px; padding-top: 32px; color: #60756a; }
+        @media (max-width: 600px) { .demo-contenido { padding: 28px 18px; } }
+    </style>
+</head>
+<body>
+    <main class="demo-contenido" id="contenido-principal">
+        <small>FIXTURE LOCAL · SIN SUPABASE</small>
+        <h1>Operación Proyecto H</h1>
+        <p>Abre Haku y una reserva. Después navega entre Libro, Pagos y Servicios: la zona izquierda cambia sin desmontar el Inspector ni Haku.</p>
+        <nav class="demo-nav" aria-label="Secciones principales simuladas">
+            <button type="button" data-demo-seccion="libro" aria-pressed="true">Libro</button>
+            <button type="button" data-demo-seccion="pagos" aria-pressed="false">Pagos</button>
+            <button type="button" data-demo-seccion="servicios" aria-pressed="false">Servicios</button>
+        </nav>
+        <div class="demo-estado" role="status">
+            Sección activa: <strong id="demo-seccion-actual">Libro</strong>
+            · Acciones recibidas: <output id="demo-accion-conteo">0</output>
+            <span id="demo-seleccion">Ninguna fila seleccionada</span>
+        </div>
+        <section class="demo-vista" data-demo-vista="libro">
+        <div class="demo-acciones">
+            <button type="button" data-demo-reserva="A">Ver reserva A</button>
+            <button type="button" data-demo-reserva="B">Ver reserva B</button>
+            <button type="button" id="demo-accion-principal">Acción en contenido principal</button>
+        </div>
+        <section class="demo-libro" aria-labelledby="demo-libro-titulo">
+            <div class="demo-libro-cabecera">
+                <div>
+                    <small>SUPERFICIE ACTIVA</small>
+                    <h2 id="demo-libro-titulo">Libro de Reservas</h2>
+                </div>
+                <input id="demo-buscar" type="search" placeholder="Buscar huésped o reserva" aria-label="Buscar en Libro de Reservas">
+            </div>
+            <div class="demo-libro-scroll" id="demo-libro-scroll" tabindex="0" aria-label="Libro con scroll vertical y horizontal">
+                <table>
+                    <thead><tr><th>Reserva</th><th>Huésped</th><th>Cabaña</th><th>Entrada</th><th>Salida</th><th>Estado</th><th>Canal</th><th>Acción</th></tr></thead>
+                    <tbody id="demo-libro-filas"></tbody>
+                </table>
+            </div>
+        </section>
+        <div class="demo-pie">Este bloque permite comprobar también el scroll vertical de la página.</div>
+        </section>
+        <section class="demo-vista demo-vista-simulada" data-demo-vista="pagos" hidden>
+            <small>PÁGINA PRINCIPAL SIMULADA</small>
+            <h2>Pagos</h2>
+            <p>Esta vista sólo demuestra la navegación persistente. No contiene lógica ni datos financieros.</p>
+            <button type="button" data-demo-accion-seccion>Probar interacción en Pagos</button>
+        </section>
+        <section class="demo-vista demo-vista-simulada" data-demo-vista="servicios" hidden>
+            <small>PÁGINA PRINCIPAL SIMULADA</small>
+            <h2>Servicios</h2>
+            <p>El Inspector de reserva y Haku deben permanecer exactamente como estaban al entrar.</p>
+            <button type="button" data-demo-accion-seccion>Probar interacción en Servicios</button>
+        </section>
+    </main>
+
+    <div id="sites-resumen-reserva-drawer" class="sites-resumen-drawer sites-resumen-reserva-drawer"
+        data-sites-drawer data-haiku-inspector-superficie="reserva" hidden>
+        <section class="sites-resumen-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="demo-reserva-titulo">
+            <header class="sites-resumen-drawer-head">
+                <div>
+                    <p class="sites-resumen-drawer-kicker">RESERVA</p>
+                    <h3 id="demo-reserva-titulo">Ver reserva · <span id="demo-reserva-id">A</span></h3>
+                </div>
+                <button class="sites-resumen-drawer-close" data-reserva-cerrar type="button" aria-label="Cerrar ficha">×</button>
+            </header>
+            <div class="sites-resumen-drawer-body">
+                <section class="rd-section">
+                    <div class="rd-section-head"><h4>Estadía</h4></div>
+                    <p>2 huéspedes · CAB 4 · 28–30 septiembre</p>
+                </section>
+                <section class="rd-section">
+                    <div class="rd-section-head"><h4>Contacto</h4></div>
+                    <p>Contenido simulado para comprobar dimensiones, scroll y convivencia visual.</p>
+                </section>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        window.haikuSesion = { usuario: { id: "demo-local" } };
+        window.haikuSupabase = {
+            auth: { onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; } }
+        };
+        const fichaDemo = document.getElementById("sites-resumen-reserva-drawer");
+        window.__demoCloseCalls = 0;
+        window.__demoOpenCalls = 0;
+        window.__demoDrawerIdentity = fichaDemo;
+        function cerrarFichaDemo() {
+            window.__demoCloseCalls++;
+            fichaDemo.hidden = true;
+            delete fichaDemo.dataset.haikuInspectorEntidadId;
+        }
+        fichaDemo.querySelector("[data-reserva-cerrar]").addEventListener("click", cerrarFichaDemo);
+        window.HAIKU_RESUMEN_RESERVA_SITES_V1 = {
+            abrirPorId(id) {
+                window.__demoOpenCalls++;
+                fichaDemo.dataset.reservaId = String(id);
+                fichaDemo.dataset.haikuInspectorEntidadId = String(id);
+                document.getElementById("demo-reserva-id").textContent = String(id);
+                fichaDemo.hidden = false;
+            },
+            cerrar: cerrarFichaDemo
+        };
+
+        const filas = document.getElementById("demo-libro-filas");
+        const huespedes = ["Ana Silva", "Bruno Rojas", "Camila Soto", "Diego Pérez", "Elena Díaz"];
+        for (let indice = 0; indice < 32; indice++) {
+            const id = indice === 0 ? "A" : indice === 1 ? "B" : `R-${String(indice + 1).padStart(2, "0")}`;
+            const fila = document.createElement("tr");
+            fila.dataset.demoFila = id;
+            fila.innerHTML = `<td>${id}</td><td>${huespedes[indice % huespedes.length]}</td><td>CAB ${(indice % 8) + 1}</td><td>${(indice % 27) + 1} sep</td><td>${(indice % 27) + 3} sep</td><td>Confirmada</td><td>Directa</td><td><button type="button" data-demo-reserva="${id}">Ver reserva</button></td>`;
+            fila.addEventListener("click", evento => {
+                if (evento.target.closest("button")) return;
+                filas.querySelectorAll("tr").forEach(item => item.removeAttribute("aria-selected"));
+                fila.setAttribute("aria-selected", "true");
+                document.getElementById("demo-seleccion").textContent = `Fila ${id} seleccionada`;
+            });
+            filas.appendChild(fila);
+        }
+
+        document.getElementById("demo-buscar").addEventListener("input", evento => {
+            const consulta = evento.target.value.trim().toLowerCase();
+            filas.querySelectorAll("tr").forEach(fila => {
+                fila.hidden = Boolean(consulta) && !fila.textContent.toLowerCase().includes(consulta);
+            });
+        });
+        function registrarAccionPrincipal() {
+            const salida = document.getElementById("demo-accion-conteo");
+            salida.value = String(Number(salida.value || salida.textContent || 0) + 1);
+            salida.textContent = salida.value;
+        }
+        document.getElementById("demo-accion-principal").addEventListener("click", registrarAccionPrincipal);
+        document.querySelectorAll("[data-demo-accion-seccion]").forEach(boton =>
+            boton.addEventListener("click", registrarAccionPrincipal));
+        document.querySelectorAll("[data-demo-seccion]").forEach(boton => {
+            boton.addEventListener("click", () => {
+                const seccion = boton.dataset.demoSeccion;
+                document.querySelectorAll("[data-demo-vista]").forEach(vista => {
+                    vista.hidden = vista.dataset.demoVista !== seccion;
+                });
+                document.querySelectorAll("[data-demo-seccion]").forEach(item =>
+                    item.setAttribute("aria-pressed", String(item === boton)));
+                document.getElementById("demo-seccion-actual").textContent =
+                    seccion === "libro" ? "Libro" : seccion === "pagos" ? "Pagos" : "Servicios";
+                document.body.dataset.demoSeccion = seccion;
+            });
+        });
+        document.querySelectorAll("[data-demo-reserva]").forEach(boton => {
+            boton.addEventListener("click", () => window.HAIKU_PANELES_V1.abrirReserva(boton.dataset.demoReserva, boton));
+        });
+    </script>
+    <script src="../../../js/sites-resumen-drawer-v1.js"></script>
+    <script src="../../../js/supabase-asistente-v1.js"></script>
+    <script src="../../../js/haiku-panel-coordinacion-v1.js"></script>
+    <script>
+        window.HAIKU_SITES_RESUMEN_DRAWER_V1.registrar(fichaDemo, {
+            cerrar: cerrarFichaDemo,
+            focoInicial: () => fichaDemo.querySelector("[data-reserva-cerrar]")
+        });
+        let contextoHakuPreparado = false;
+        function prepararContextoHaku() {
+            if (contextoHakuPreparado || !window.HAIKU_ASISTENTE.abierta()) return;
+            contextoHakuPreparado = true;
+            const mensajes = document.getElementById("haiku-asistente-mensajes");
+            for (let indice = 1; indice <= 28; indice++) {
+                const contexto = document.createElement("div");
+                contexto.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente";
+                contexto.textContent = `Contexto ficticio de Haku ${indice}: conversación conservada.`;
+                mensajes.appendChild(contexto);
+            }
+            requestAnimationFrame(() => { mensajes.scrollTop = Math.max(0, mensajes.scrollHeight - mensajes.clientHeight - 90); });
+        }
+        window.addEventListener("haiku:panel-estado", prepararContextoHaku);
+        const parametrosDemo = new URLSearchParams(location.search);
+        if (parametrosDemo.get("haku") === "1") {
+            window.HAIKU_ASISTENTE.abrir();
+            prepararContextoHaku();
+        }
+        if (parametrosDemo.has("reserva")) {
+            window.HAIKU_PANELES_V1.abrirReserva(parametrosDemo.get("reserva"));
+        }
+    </script>
+</body>
+</html>

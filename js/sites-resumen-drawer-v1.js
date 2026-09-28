@@ -11,6 +11,7 @@
     const disparadores = new WeakMap();
     const abiertos = new Set();
     let overflowAnterior = "";
+    let gestionandoOverflow = false;
 
     function abierto(panel) {
         return panel === nota ? panel.classList.contains("activo") : !panel.hidden;
@@ -32,23 +33,40 @@
                 elemento.getClientRects().length > 0);
     }
 
+    function comparteEscritorio(panel) {
+        return panel?.hasAttribute?.("data-haiku-inspector-superficie")
+            && window.matchMedia?.("(min-width: 901px)").matches;
+    }
+
+    function sincronizarBloqueoScroll() {
+        if (!abiertos.size) {
+            if (gestionandoOverflow) document.body.style.overflow = overflowAnterior;
+            gestionandoOverflow = false;
+            return;
+        }
+        const requiereBloqueo = [...abiertos].some(panel => !comparteEscritorio(panel));
+        document.body.style.overflow = requiereBloqueo ? "hidden" : overflowAnterior;
+    }
+
     function sincronizar() {
         for (const panel of paneles) {
             const visible = abierto(panel);
             if (visible && !abiertos.has(panel)) {
-                if (!abiertos.size) overflowAnterior = document.body.style.overflow;
+                if (!abiertos.size) {
+                    overflowAnterior = document.body.style.overflow;
+                    gestionandoOverflow = true;
+                }
                 abiertos.add(panel);
-                document.body.style.overflow = "hidden";
                 const inicio = opciones.get(panel)?.focoInicial?.() ||
                     (panel === nota ? panel.querySelector("#nota-texto") :
                         panel.querySelector("#resumen-servicio-producto"));
                 requestAnimationFrame(() => inicio?.focus());
             } else if (!visible && abiertos.delete(panel)) {
-                if (!abiertos.size) document.body.style.overflow = overflowAnterior;
                 const disparador = disparadores.get(panel);
                 requestAnimationFrame(() => disparador?.isConnected && disparador.focus());
             }
         }
+        sincronizarBloqueoScroll();
     }
 
     document.addEventListener("click", evento => {
@@ -65,7 +83,7 @@
         const observador = new MutationObserver(sincronizar);
         observador.observe(panel, { attributes: true, attributeFilter: ["class", "hidden"] });
         panel.addEventListener("click", evento => {
-            if (evento.target === panel) cerrar(panel);
+            if (evento.target === panel && !comparteEscritorio(panel)) cerrar(panel);
         });
         sincronizar();
     }
@@ -81,7 +99,7 @@
             cerrar(panel);
             return;
         }
-        if (evento.key !== "Tab") return;
+        if (evento.key !== "Tab" || comparteEscritorio(panel)) return;
         const elementos = elementosFoco(panel);
         if (!elementos.length) return;
         const primero = elementos[0];
@@ -94,6 +112,9 @@
             primero.focus();
         }
     }, true);
+
+    window.addEventListener?.("resize", sincronizar, { passive: true });
+    window.addEventListener?.("haiku:paneles-estado", sincronizar);
 
     window.HAIKU_SITES_RESUMEN_DRAWER_V1 = Object.freeze({
         abierto, sincronizar, registrar,
