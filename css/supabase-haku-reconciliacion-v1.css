@@ -951,6 +951,42 @@
     cursor: pointer;
 }
 
+.haiku-pago-reserva-acciones {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin-top: 7px;
+}
+
+.haiku-pago-ver-reserva {
+    min-height: 29px;
+    padding: 5px 9px;
+    border: 1px solid #b8cbbf;
+    border-radius: 7px;
+    background: #fff;
+    color: #28553e;
+    font: inherit;
+    font-size: .58rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.haiku-pago-ver-reserva:hover { background: #f1f7f3; }
+.haiku-pago-ver-reserva:focus-visible { outline: 2px solid #4b8a68; outline-offset: 2px; }
+
+.haiku-pago-reserva-no-verificada,
+.haiku-pago-reserva-estado {
+    margin: 0;
+    color: #77837c;
+    font-size: .57rem;
+    line-height: 1.35;
+}
+
+.haiku-pago-reserva-estado:empty { display: none; }
+.haiku-pago-reserva-estado[data-error="true"] { color: #8a4c3f; }
+
 .haiku-incorporacion-vacio {
     margin: 0;
     padding: 5px;

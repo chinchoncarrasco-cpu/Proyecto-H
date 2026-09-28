@@ -3524,6 +3524,111 @@
         return franja;
     }
 
+    const UUID_INSPECTOR_RESERVA = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    function identidadInspectorMovimiento(movimiento, comparacion) {
+        if (!movimiento || !comparacion) return null;
+        const resultado = Array.from(comparacion).find(item => item.libro === movimiento.reserva);
+        const estadia = resultado?.estado === 'asociada' ? resultado.sistema : null;
+        const candidatos = [
+            estadia?.reserva_id,
+            movimiento.reserva_sistema_id,
+            ['en_sistema','diferente'].includes(movimiento.estado) ? movimiento.sistema?.reserva_id : null,
+            movimiento.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO
+                ? movimiento.resolucionPago.pagoSistema?.reserva_id : null
+        ].filter(valor => valor !== null && valor !== undefined && String(valor).trim() !== '')
+            .map(String);
+        if (!candidatos.length || candidatos.some(id => !UUID_INSPECTOR_RESERVA.test(id))) return null;
+        const ids = [...new Set(candidatos)];
+        if (ids.length !== 1) return null;
+        const identidad = { reservaId: ids[0], seleccion: null };
+        if (estadia?.reserva_id === identidad.reservaId &&
+            UUID_INSPECTOR_RESERVA.test(String(estadia.id || '')) &&
+            /^\d{1,2}$/.test(String(estadia.cabana || ''))) {
+            identidad.seleccion = { estadiaId:String(estadia.id), numeroCabana:String(estadia.cabana) };
+        }
+        return identidad;
+    }
+
+    function identidadInspectorItem(item, comparacion) {
+        if (!item?.pagoLibro) return null;
+        const componentes = item.distribucionManual?.componentes || [];
+        const componentesItem = componentes.filter(componente => componente.item_id === item.id);
+        if (componentesItem.length === 1) {
+            const componente = componentesItem[0];
+            const reservaId = String(componente.reserva_id || '');
+            if (!UUID_INSPECTOR_RESERVA.test(reservaId)) return null;
+            const estadiaId = String(componente.estadia_id || '');
+            const numeroCabana = String(componente.cabana || '');
+            return {
+                reservaId,
+                seleccion: UUID_INSPECTOR_RESERVA.test(estadiaId) && /^\d{1,2}$/.test(numeroCabana)
+                    ? { estadiaId, numeroCabana } : null
+            };
+        }
+
+        const movimiento = comparacion?.pagosDetalle?.find(x => x.pago === item.pagoLibro);
+        const desdeMovimiento = identidadInspectorMovimiento(movimiento, comparacion);
+        const directos = [item.payload?.argumentos?.p_reserva_id, item.payload?.reserva_id]
+            .filter(valor => valor !== null && valor !== undefined && String(valor).trim() !== '')
+            .map(String);
+        if (directos.some(id => !UUID_INSPECTOR_RESERVA.test(id))) return null;
+        const ids = [...new Set([
+            ...(desdeMovimiento ? [desdeMovimiento.reservaId] : []),
+            ...directos
+        ])];
+        if (ids.length !== 1) return null;
+        return { reservaId:ids[0], seleccion:desdeMovimiento?.seleccion || null };
+    }
+
+    async function abrirReservaPago(identidad, disparador, estadoAccion) {
+        if (!identidad || !UUID_INSPECTOR_RESERVA.test(String(identidad.reservaId || ''))) return false;
+        const inspector = root.HAIKU_INSPECTOR_V1 || root.HAIKU_PANELES_V1;
+        try {
+            let resultado;
+            if (typeof inspector?.abrirReserva === 'function') {
+                resultado = await inspector.abrirReserva(identidad.reservaId, disparador, identidad.seleccion);
+            } else if (typeof inspector?.abrirInspector === 'function') {
+                resultado = await inspector.abrirInspector({
+                    tipo:'reserva', entidadId:identidad.reservaId, seleccion:identidad.seleccion
+                }, { origen:disparador });
+            } else {
+                throw new Error('El Inspector de reservas todavía no está disponible.');
+            }
+            if (resultado === false) throw new Error('No se pudo verificar la reserva seleccionada.');
+            if (estadoAccion) estadoAccion.textContent = '';
+            return true;
+        } catch (error) {
+            if (estadoAccion) {
+                estadoAccion.textContent = error?.message || 'No se pudo abrir la reserva verificada.';
+                estadoAccion.dataset.error = 'true';
+            }
+            return false;
+        }
+    }
+
+    function accionInspectorReserva(identidad) {
+        const bloque = elemento('div', 'haiku-pago-reserva-acciones');
+        if (!identidad) {
+            bloque.append(elemento('p', 'haiku-pago-reserva-no-verificada',
+                'No se pudo verificar una reserva única para este movimiento.'));
+            return bloque;
+        }
+        const boton = elemento('button', 'haiku-pago-ver-reserva', 'Ver reserva');
+        const estadoAccion = elemento('span', 'haiku-pago-reserva-estado', '');
+        boton.type = 'button';
+        boton.dataset.haikuReservaId = identidad.reservaId;
+        boton.addEventListener('click', evento => {
+            evento?.preventDefault?.();
+            evento?.stopPropagation?.();
+            abrirReservaPago(identidad, boton, estadoAccion);
+        });
+        estadoAccion.setAttribute('role', 'status');
+        estadoAccion.setAttribute('aria-live', 'polite');
+        bloque.append(boton, estadoAccion);
+        return bloque;
+    }
+
     function gruposVistaPagos(comp) {
         const items = comp.pagosDetalle || [];
         const existentes = items.filter(x => x.estado === 'en_sistema' && x.sistema?.id);
@@ -3593,6 +3698,7 @@
                     `Proyecto H: ${money(x.sistema.monto)} · ${x.sistema.medio_pago || 'Medio sin dato'} · ${x.sistema.fecha_pago || 'Fecha sin dato'}`));
                 if (x.estado==='en_sistema' && x.sistema?.id) detalle.append(elemento('p','haiku-versiones-aviso','No se volverá a incorporar. No requiere aprobación.'));
                 if (titulo==='Sin asociación segura') detalle.append(elemento('p','haiku-versiones-aviso','Requiere resolver su asociación antes de incorporar.'));
+                detalle.append(accionInspectorReserva(identidadInspectorMovimiento(x, result.comparacion)));
                 fila.append(detalle);
                 section.append(fila);
             }
@@ -4168,6 +4274,7 @@
             boton.addEventListener("click", () => ejecutarAprobacionVisual(boton, () => aprobar(item.id), fila));
             fila.append(boton);
         }
+        if (esPagoLibro) fila.append(accionInspectorReserva(identidadInspectorItem(item, comparacion)));
         return fila;
     }
 

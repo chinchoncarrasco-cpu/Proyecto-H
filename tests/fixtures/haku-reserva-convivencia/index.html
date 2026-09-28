@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../../../css/supabase-asistente-v1.css">
     <link rel="stylesheet" href="../../../css/sites-resumen-v1.css">
     <link rel="stylesheet" href="../../../css/sites-asistente-v1.css">
+    <link rel="stylesheet" href="../../../css/supabase-haku-reconciliacion-v1.css">
     <link rel="stylesheet" href="../../../css/haiku-panel-coordinacion-v1.css">
     <style>
         body { margin: 0; font-family: system-ui, sans-serif; color: #20332b; }
@@ -45,7 +46,7 @@
     <main class="demo-contenido" id="contenido-principal">
         <small>FIXTURE LOCAL · SIN SUPABASE</small>
         <h1>Operación Proyecto H</h1>
-        <p>Abre Haku y una reserva. Después navega entre Libro, Pagos y Servicios: la zona izquierda cambia sin desmontar el Inspector ni Haku.</p>
+        <p>Abre Haku y usa “Ver reserva” desde los pagos ficticios. El Resumen simulado está en otra fecha: la ficha debe abrir por UUID sin depender de sus filas.</p>
         <nav class="demo-nav" aria-label="Secciones principales simuladas">
             <button type="button" data-demo-seccion="libro" aria-pressed="true">Libro</button>
             <button type="button" data-demo-seccion="pagos" aria-pressed="false">Pagos</button>
@@ -106,7 +107,13 @@
             <div class="sites-resumen-drawer-body">
                 <section class="rd-section">
                     <div class="rd-section-head"><h4>Estadía</h4></div>
-                    <p>2 huéspedes · CAB 4 · 28–30 septiembre</p>
+                    <p id="demo-reserva-estadia">2 huéspedes · CAB 4 · 28–30 septiembre</p>
+                    <label id="demo-reserva-selector" hidden>Elegir estadía
+                        <select aria-label="Seleccionar estadía ficticia">
+                            <option>CAB 2 · 20–22 septiembre</option>
+                            <option>CAB 7 · 20–23 septiembre</option>
+                        </select>
+                    </label>
                 </section>
                 <section class="rd-section">
                     <div class="rd-section-head"><h4>Contacto</h4></div>
@@ -121,9 +128,22 @@
         window.haikuSupabase = {
             auth: { onAuthStateChange() { return { data: { subscription: { unsubscribe() {} } } }; } }
         };
+        window.__demoReservasHaku = Object.freeze({
+            A: {
+                reservaId: "11111111-1111-4111-8111-111111111111",
+                estadiaId: "22222222-2222-4222-8222-222222222222",
+                numeroCabana: "1",
+                etiqueta: "Reserva ficticia A"
+            },
+            B: {
+                reservaId: "33333333-3333-4333-8333-333333333333",
+                etiqueta: "Reserva ficticia B · multiestadía"
+            }
+        });
         const fichaDemo = document.getElementById("sites-resumen-reserva-drawer");
         window.__demoCloseCalls = 0;
         window.__demoOpenCalls = 0;
+        window.__demoOpenArgs = [];
         window.__demoDrawerIdentity = fichaDemo;
         function cerrarFichaDemo() {
             window.__demoCloseCalls++;
@@ -132,11 +152,20 @@
         }
         fichaDemo.querySelector("[data-reserva-cerrar]").addEventListener("click", cerrarFichaDemo);
         window.HAIKU_RESUMEN_RESERVA_SITES_V1 = {
-            abrirPorId(id) {
+            abrirPorId(id, disparador, seleccion) {
                 window.__demoOpenCalls++;
+                window.__demoOpenArgs.push({ id:String(id), seleccion:seleccion || null,
+                    origenHaku:Boolean(disparador?.closest?.("#haiku-asistente-panel")) });
                 fichaDemo.dataset.reservaId = String(id);
                 fichaDemo.dataset.haikuInspectorEntidadId = String(id);
-                document.getElementById("demo-reserva-id").textContent = String(id);
+                const reservaDemo = Object.values(window.__demoReservasHaku).find(item => item.reservaId === String(id));
+                document.getElementById("demo-reserva-id").textContent = reservaDemo?.etiqueta || String(id);
+                const selector = document.getElementById("demo-reserva-selector");
+                selector.hidden = Boolean(seleccion) || !reservaDemo || reservaDemo !== window.__demoReservasHaku.B;
+                document.getElementById("demo-reserva-estadia").textContent = seleccion
+                    ? `Estadía exacta ${seleccion.estadiaId.slice(0, 8)} · CAB ${seleccion.numeroCabana}`
+                    : reservaDemo === window.__demoReservasHaku.B
+                        ? "Reserva verificada; elige una de sus estadías." : "2 huéspedes · CAB 4 · 28–30 septiembre";
                 fichaDemo.hidden = false;
             },
             cerrar: cerrarFichaDemo
@@ -208,6 +237,34 @@
                 contexto.textContent = `Contexto ficticio de Haku ${indice}: conversación conservada.`;
                 mensajes.appendChild(contexto);
             }
+            const pagos = document.createElement("div");
+            pagos.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente haiku-incorporacion haku-incorporacion-sites";
+            pagos.dataset.demoHakuPagos = "1";
+            pagos.innerHTML = `
+                <strong>Pagos ficticios · Resumen visible en otra fecha</strong>
+                <article class="haiku-incorporacion-item haiku-incorporacion-item--dudosos">
+                    <div class="haiku-incorporacion-item-cabecera"><span class="haiku-incorporacion-identidad"><strong>Reserva ficticia A</strong><small>CAB 1 · Check-in 20/09/26 · $88.000 CLP</small></span><span class="haiku-incorporacion-estado haiku-incorporacion-estado--dudosos">Revisar pago</span></div>
+                    <p class="haiku-incorporacion-propuesta">La tarjeta conserva un reserva_id y una estadía verificados.</p>
+                    <div class="haiku-pago-reserva-acciones"><button type="button" class="haiku-pago-ver-reserva" data-demo-haku-reserva="A">Ver reserva</button></div>
+                </article>
+                <article class="haiku-incorporacion-item haiku-incorporacion-item--pagos">
+                    <div class="haiku-incorporacion-item-cabecera"><span class="haiku-incorporacion-identidad"><strong>Reserva ficticia B</strong><small>Reserva multiestadía · $120.000 CLP</small></span><span class="haiku-incorporacion-estado">Pago preparado</span></div>
+                    <p class="haiku-incorporacion-propuesta">Sólo existe un reserva_id fuerte; el Inspector debe ofrecer la selección segura.</p>
+                    <div class="haiku-pago-reserva-acciones"><button type="button" class="haiku-pago-ver-reserva" data-demo-haku-reserva="B">Ver reserva</button></div>
+                </article>
+                <article class="haiku-incorporacion-item haiku-incorporacion-item--dudosos">
+                    <strong>Movimiento sin identidad fuerte</strong>
+                    <div class="haiku-pago-reserva-acciones"><p class="haiku-pago-reserva-no-verificada">No se pudo verificar una reserva única para este movimiento.</p></div>
+                </article>`;
+            pagos.querySelectorAll("[data-demo-haku-reserva]").forEach(boton => {
+                boton.addEventListener("click", () => {
+                    const reserva = window.__demoReservasHaku[boton.dataset.demoHakuReserva];
+                    const seleccion = reserva.estadiaId
+                        ? { estadiaId:reserva.estadiaId, numeroCabana:reserva.numeroCabana } : null;
+                    window.HAIKU_PANELES_V1.abrirReserva(reserva.reservaId, boton, seleccion);
+                });
+            });
+            mensajes.appendChild(pagos);
             requestAnimationFrame(() => { mensajes.scrollTop = Math.max(0, mensajes.scrollHeight - mensajes.clientHeight - 90); });
         }
         window.addEventListener("haiku:panel-estado", prepararContextoHaku);

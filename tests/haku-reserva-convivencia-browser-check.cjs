@@ -306,10 +306,46 @@ async function screenshot(client, name) {
             "contexto ficticio de Haku preparado");
         await evaluate(page, `(() => {
             const messages = document.getElementById("haiku-asistente-mensajes");
-            messages.scrollTop = Math.min(173, messages.scrollHeight - messages.clientHeight);
             document.getElementById("haiku-asistente-texto").value = "Borrador ficticio conservado";
+            document.querySelector('[data-demo-haku-reserva="A"]').scrollIntoView({ block: "center" });
         })()`);
         const initialScroll = await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop");
+
+        // El pago ficticio abre por reserva_id aunque no exista fila activa del Resumen.
+        assert.equal(await evaluate(page, "document.querySelectorAll('.sites-resumen-cabana').length"), 0);
+        await pointerClick(page, "[data-demo-haku-reserva='A']");
+        const reservaHakuA = await evaluate(page, "window.__demoReservasHaku.A");
+        await waitFor(page, `window.HAIKU_PANELES_V1.estado().entidadInspector === ${JSON.stringify("11111111-1111-4111-8111-111111111111")}`,
+            "reserva A abierta desde el pago de Haku");
+        assert.deepEqual(reservaHakuA, {
+            reservaId: "11111111-1111-4111-8111-111111111111",
+            estadiaId: "22222222-2222-4222-8222-222222222222",
+            numeroCabana: "1",
+            etiqueta: "Reserva ficticia A"
+        });
+        assert.deepEqual(await evaluate(page, "window.__demoOpenArgs.at(-1)"), {
+            id: reservaHakuA.reservaId,
+            seleccion: { estadiaId:reservaHakuA.estadiaId, numeroCabana:"1" },
+            origenHaku: true
+        });
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), "Borrador ficticio conservado");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), initialScroll);
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-inspector-superficie]:not([hidden])').length"), 1);
+
+        // A -> B reemplaza contenido en la misma instancia; B conserva el selector multiestadía.
+        await evaluate(page, "document.querySelector('[data-demo-haku-reserva=\"B\"]').scrollIntoView({ block: 'center' })");
+        const scrollAntesB = await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop");
+        await pointerClick(page, "[data-demo-haku-reserva='B']");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"),
+            "33333333-3333-4333-8333-333333333333");
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer') === window.__demoDrawerIdentity"), true);
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-inspector-superficie]:not([hidden])').length"), 1);
+        assert.equal(await evaluate(page, "document.getElementById('demo-reserva-selector').hidden"), false);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), scrollAntesB);
+        await closeReservation(page);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        await evaluate(page, `document.getElementById('haiku-asistente-mensajes').scrollTop = ${initialScroll}`);
 
         await pointerClick(page, "[data-demo-reserva='A']");
         await waitFor(page, "document.body.classList.contains('haiku-ficha-reserva-abierta')", "reserva A abierta desde contenido");
@@ -435,9 +471,11 @@ async function screenshot(client, name) {
         assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
         await closeReservation(page);
 
-        // Móvil alterna las vistas, mantiene Haku montado y ofrece retorno claro.
+        // Móvil abre desde el pago de Haku, alterna vistas y ofrece retorno claro.
         await viewport(page, 390, 844);
-        await openReservation(page, "MOVIL");
+        await evaluate(page, "document.querySelector('[data-demo-haku-reserva=\"A\"]').scrollIntoView({ block: 'center' })");
+        await pointerClick(page, "[data-demo-haku-reserva='A']");
+        await waitFor(page, "window.HAIKU_PANELES_V1.estado().inspectorAbierto", "reserva abierta desde Haku en móvil");
         assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().modo"), "alternado");
         assert.equal(await evaluate(page,
             "document.querySelector('#sites-resumen-reserva-drawer > [role=dialog]').getAttribute('aria-modal')"), "true");

@@ -722,6 +722,92 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
   texts:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' '),button:t=>out.querySelectorAll('button').find(e=>e.textContent===t)};
 }
 
+test('Haku abre por UUID la reserva exacta de un pago en revisión sin depender del Resumen',async()=>{
+ const reservaId='11111111-1111-4111-8111-111111111111';
+ const estadiaId='22222222-2222-4222-8222-222222222222';
+ const pago=readyPay({codigo_autorizacion:null,folio:null,bovtar:null,medio_pago:'transferencia',monto:160000,
+  fecha_comprobante:'2026-09-07',texto_original:'Transferencia ficticia para revisar'});
+ const reserva=readyBook({titular:'Caso Ficticio',pagos:[pago]});
+ const sistemaPago={id:'pago-ficticio',reserva_id:reservaId,monto:160000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-09-05'};
+ const db=client([stay(reserva,{id:estadiaId,reserva_id:reservaId})],[sistemaPago]);
+ const comparacion=await Q.compararSistema([reserva],db,q);
+ assert.equal(comparacion.pagosDetalle[0].estado,'revisar');
+ const h=renderHarness(null,db),plan=h.Q.crearPlanIncorporacion([reserva],comparacion);
+ const itemRevision=plan.items.find(item=>item.pagoLibro===pago);
+ assert.equal(itemRevision.categoria,'dudosos');assert.equal(itemRevision.aprobable,true);
+ const clasificacionAntes=plan.items.map(item=>[item.id,item.categoria,item.aprobable,item.seleccionado]);
+ const aperturas=[];let aprobado=null;
+ h.context.HAIKU_INSPECTOR_V1={abrirReserva:(id,origen,seleccion)=>aperturas.push({id,origen,seleccion})};
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},id=>{aprobado=id;},()=>{});
+ h.button('Aprobar este pago').events.click();assert.equal(aprobado,itemRevision.id);
+ const boton=h.button('Ver reserva');assert.ok(boton);
+ boton.events.click();
+ assert.equal(aperturas.length,1);
+ assert.equal(aperturas[0].id,reservaId);
+ assert.equal(aperturas[0].origen,boton);
+ assert.deepEqual(JSON.parse(JSON.stringify(aperturas[0].seleccion)),{estadiaId,numeroCabana:'1'});
+ assert.deepEqual(plan.items.map(item=>[item.id,item.categoria,item.aprobable,item.seleccionado]),clasificacionAntes);
+ const planAprobado=h.Q.crearPlanIncorporacion([reserva],comparacion,new Map(),new Set([itemRevision.id]));
+ assert.equal(planAprobado.items.find(item=>item.id===itemRevision.id).categoria,'pagos');
+ h.Q.renderizarIncorporacion(h.out,planAprobado,()=>{},()=>{},()=>{});
+ h.button('Ver reserva').events.click();assert.equal(aperturas.length,2);
+ assert.equal(db.calls.some(nombre=>nombre.startsWith('haiku_')),false,'abrir la ficha no ejecuta RPC ni escribe pagos');
+});
+
+test('Pagos del Libro y Pagos preparados reutilizan la misma apertura segura del Inspector',async()=>{
+ const reservaId='33333333-3333-4333-8333-333333333333';
+ const estadiaId='44444444-4444-4444-8444-444444444444';
+ const pago=readyPay({codigo_autorizacion:'AUT-DEMO',monto:95000});
+ const reserva=readyBook({titular:'Reserva A',pagos:[pago]});
+ const db=client([stay(reserva,{id:estadiaId,reserva_id:reservaId})]);
+ const comparacion=await Q.compararSistema([reserva],db,q);
+ const h=renderHarness(null,db),aperturas=[];
+ h.context.HAIKU_PANELES_V1={abrirReserva:(...args)=>aperturas.push(args)};
+ h.render({q:{...q,solo_pagos:true},comparacion});
+ h.button('Ver reserva').events.click();
+ const plan=h.Q.crearPlanIncorporacion([reserva],comparacion);
+ assert.ok(plan.items.some(item=>item.categoria==='pagos'));
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},()=>{});
+ h.button('Ver reserva').events.click();
+ assert.equal(aperturas.length,2);
+ assert.deepEqual(aperturas.map(args=>args[0]),[reservaId,reservaId]);
+ assert.deepEqual(JSON.parse(JSON.stringify(aperturas.map(args=>args[2]))),[
+  {estadiaId,numeroCabana:'1'},
+  {estadiaId,numeroCabana:'1'}
+ ]);
+});
+
+test('una reserva UUID sin estadía inequívoca abre sin selección para conservar el selector seguro',()=>{
+ const reservaId='55555555-5555-4555-8555-555555555555';
+ const pago=readyPay({codigo_autorizacion:'MULTI-DEMO'});
+ const plan={escrituraHabilitada:false,permisos:[],items:[{
+  categoria:'dudosos',id:'pago:multi',texto:'Caso multiestadía',pagoLibro:pago,
+  payload:{argumentos:{p_reserva_id:reservaId}},motivos:['Requiere revisión'],dependeDe:[],seleccionado:false,aprobable:false
+ }]};
+ const h=renderHarness(),aperturas=[];
+ h.context.HAIKU_INSPECTOR_V1={abrirReserva:(...args)=>aperturas.push(args)};
+ h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},()=>{});
+ h.button('Ver reserva').events.click();
+ assert.equal(aperturas[0][0],reservaId);
+ assert.equal(aperturas[0][2],null);
+});
+
+test('UUID inválido o identidad ausente no abre ni hace matching por nombre, CAB, fecha o monto',()=>{
+ const pago=readyPay({codigo_autorizacion:'FUZZY-DEMO',monto:88000});
+ const base={escrituraHabilitada:false,permisos:[]};
+ for(const payload of [{argumentos:{p_reserva_id:'reserva-no-uuid'}},null]){
+  const plan={...base,items:[{categoria:'dudosos',id:'pago:sin-identidad',
+   texto:'Persona Parecida · CAB 1 · $88.000 · 17/09/2026',pagoLibro:pago,payload,
+   motivos:['Requiere revisión'],dependeDe:[],seleccionado:false,aprobable:false}]};
+  const h=renderHarness();let aperturas=0;
+  h.context.HAIKU_INSPECTOR_V1={abrirReserva:()=>{aperturas++;}};
+  h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},()=>{});
+  assert.equal(h.button('Ver reserva'),undefined);
+  assert.match(h.texts(),/No se pudo verificar una reserva única para este movimiento/);
+  assert.equal(aperturas,0);
+ }
+});
+
 test('exact ambiguous stay offers association review, never modify or duplicate stay',async()=>{
  const r=book(),c=await compare([r,book({id:'copy'})],[stay(r)]),h=renderHarness();
  h.render({q,comparacion:c});
