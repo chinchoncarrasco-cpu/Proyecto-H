@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Haiku · Demo visual de estado de reserva</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="/css/sites-resumen-v1.css">
+    <link rel="stylesheet" href="/demo.css">
+    <script defer src="/js/haiku-reserva-estado-manual-v1.js"></script>
+    <script defer src="/demo.js"></script>
+    <script defer src="/js/supabase-finanzas-resumen-v1.js"></script>
+    <script defer src="/js/sites-resumen-drawer-v1.js"></script>
+    <script defer src="/js/sites-resumen-reserva-v1.js"></script>
+</head>
+<body class="demo-body">
+    <main class="demo-main">
+        <header class="demo-header">
+            <span class="demo-eyebrow">HAIKU · DEMO VISUAL LOCAL</span>
+            <a href="/movil" target="_top">Vista móvil</a>
+        </header>
+        <h1>Cambio manual de estado</h1>
+        <p class="demo-intro">Abre la reserva TEST y pulsa su badge para elegir un estado.
+            Hospedado y Check-out cambian directamente; los demás piden confirmación.</p>
+        <aside class="demo-notice">
+            <strong>Datos ficticios · Sin conexión a Supabase</strong>
+            <p>Esta demo permite recorrer todas las transiciones para revisar la interfaz.
+                No valida reglas operativas. Los cambios viven sólo en esta pestaña;
+                recargar o reiniciar restaura la reserva inicial.</p>
+        </aside>
+        <section class="demo-card" aria-labelledby="demo-reserva-titulo">
+            <div class="demo-card-top"><span class="demo-eyebrow">CABAÑA 02 · H-TEST-001</span>
+                <span class="demo-state" data-demo-badge>Confirmada</span></div>
+            <h2 id="demo-reserva-titulo">Familia TEST</h2>
+            <p>27 → 29 sept. 2026 · 2 adultos y 1 niño</p>
+            <p>Tinaja programada · Solicitud de desayuno · Pagos y notas ficticios</p>
+            <button type="button" id="demo-abrir">Ver reserva</button>
+        </section>
+        <div class="demo-controls"><button type="button" id="demo-reiniciar">Reiniciar demo</button>
+            <span data-demo-contador role="status">0 cambios simulados</span></div>
+        <ol class="demo-log" data-demo-log aria-label="Cambios simulados en esta pestaña"></ol>
+        <p class="demo-hint">El estado actual se identifica en el selector. En los cambios con confirmación,
+            Cancelar o Escape no cambia el badge.</p>
+        <p class="demo-error" data-demo-error role="alert" hidden></p>
+    </main>
+</body>
+</html>

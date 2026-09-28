@@ -57,7 +57,7 @@
                 html = html.replace('src="js/cabanas.js"', `src="js/cabanas.js?v=${version}"`);
                 // La prueba visual del Resumen debe cargar siempre los drawers y sus puentes vigentes.
                 for (const modulo of ["app", "calendario", "sites-resumen-drawer-v1", "sites-resumen-reserva-v1",
-                    "sites-resumen-nota-v1", "sites-resumen-servicio-v1", "sites-resumen-pago-v1",
+                    "haiku-reserva-estado-manual-v1", "sites-resumen-nota-v1", "sites-resumen-servicio-v1", "sites-resumen-pago-v1",
                     "supabase-resumen-tablero-v1", "checklist-optimista-v1", "sites-cabanas-v1", "sites-cierre-v1", "sites-servicios-v1"]) {
                     html = html.replace(`src="js/${modulo}.js"`, `src="js/${modulo}.js?v=${version}"`);
                 }

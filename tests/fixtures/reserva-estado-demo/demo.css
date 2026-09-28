@@ -1,0 +1,40 @@
+.demo-body, .demo-mobile-shell {
+    margin: 0; background: #f3f6f2; color: #284033;
+    font-family: "Segoe UI", Arial, sans-serif; line-height: 1.5;
+}
+.demo-main { max-width: 830px; margin: 0 auto; padding: 48px 28px; }
+.demo-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 34px; }
+.demo-eyebrow { color: #688471; font-size: 11px; font-weight: 750; letter-spacing: .09em; }
+.demo-header a, .demo-mobile-head a { color: #32684c; font-size: 13px; text-underline-offset: 3px; }
+.demo-main h1 { margin: 0 0 10px; font-size: clamp(26px, 4vw, 34px); line-height: 1.15; letter-spacing: -.03em; }
+.demo-intro { max-width: 630px; margin-bottom: 24px; color: #5f7566; font-size: 15px; }
+.demo-notice { margin-bottom: 24px; padding: 16px 18px; border: 1px solid #d3e3d4; border-radius: 10px; background: #eaf2e8; }
+.demo-notice strong { font-size: 13px; }
+.demo-notice p { margin-top: 5px; color: #5b7362; font-size: 12px; }
+.demo-card { padding: 26px; border: 1px solid #dce6dc; border-radius: 14px; background: white; box-shadow: 0 5px 20px #28403307; }
+.demo-card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+.demo-state { padding: 5px 10px; border-radius: 6px; background: #eaf3ec; color: #386149; font-size: 12px; font-weight: 650; }
+.demo-card h2 { margin: 0 0 7px; font-size: 23px; }
+.demo-card p { margin: 4px 0; color: #6c7e71; font-size: 13px; }
+.demo-main button { padding: 10px 17px; border: 1px solid #cfddcf; border-radius: 7px; background: white; color: #3e6249; font: 650 13px "Segoe UI", Arial, sans-serif; cursor: pointer; }
+.demo-main button:focus-visible, .demo-header a:focus-visible { outline: 2px solid #438866; outline-offset: 3px; }
+.demo-main #demo-abrir { margin-top: 22px; border-color: #326d4f; background: #326d4f; color: white; }
+.demo-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 15px; margin-top: 18px; }
+.demo-controls span, .demo-log, .demo-hint { color: #708375; font-size: 12px; }
+.demo-log { margin: 14px 0 0; padding-left: 21px; }
+.demo-hint { margin-top: 24px; }
+.demo-error { color: #a34f3f; margin-top: 15px; }
+/* Sólo la demo: el foco de revisión es el badge, no el editor/historial completos. */
+#sites-resumen-reserva-drawer [data-reserva-editar],
+#sites-resumen-reserva-drawer [data-reserva-historial] { display: none; }
+.demo-drawer-notice { margin: 0; color: #6d8072; font-size: 11px; line-height: 1.4; }
+.demo-mobile-shell { display: grid; justify-items: center; padding: 18px; gap: 16px; box-sizing: border-box; }
+.demo-mobile-head { width: min(700px, 100%); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 12px; }
+.demo-mobile-frame { width: min(390px, 100%); height: 844px; max-height: calc(100dvh - 80px); border: 0; border-radius: 12px; box-shadow: 0 8px 40px #28403325; background: #f3f6f2; }
+@media (max-width: 600px) {
+    .demo-main { padding: 26px 18px; }
+    .demo-header { margin-bottom: 28px; }
+    .demo-card { padding: 20px; }
+    .demo-card-top { align-items: flex-start; flex-direction: column; gap: 8px; }
+    .demo-mobile-head { flex-wrap: wrap; }
+}

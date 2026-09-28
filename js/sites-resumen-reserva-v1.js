@@ -1,5 +1,5 @@
-// Ficha de reserva del Resumen Sites. Sólo lee Proyecto H; edición e historial
-// siguen en sus flujos oficiales y se abren por la identidad exacta de la fila.
+// Ficha compartida de Resumen, Reservas y Calendario. Los cambios de estado
+// se escriben sólo mediante la RPC segura; Hospedado/Check-out omiten el aviso.
 (() => {
     "use strict";
 
@@ -9,7 +9,8 @@
     const FECHA = /^\d{4}-\d{2}-\d{2}$/;
     const OMITIDOS = new Set(["cancelado", "cancelada", "anulado", "anulada", "no_show"]);
     const estado = { version: 0, reservaId: null, identidad: null, ficha: null,
-        estadia: null, ocupado: false, drawer: null };
+        estadia: null, ocupado: false, drawer: null, cambio: null };
+    const manual = window.HAIKU_RESERVA_ESTADO_MANUAL_V1;
 
     function fechaActiva() {
         try { return String(fechaSeleccionada || "").slice(0, 10); }
@@ -146,7 +147,22 @@
                     </div>
                     <div data-reserva-contenido hidden>
                         <div class="rd-top"><div class="rd-topline"><span class="rd-reference" data-reserva-codigo></span>
-                            <span class="rd-status" data-reserva-estado-operativo></span></div>
+                            <div class="rd-state-control">
+                                <button type="button" class="rd-status" data-reserva-estado-operativo
+                                    aria-label="Cambiar estado de la reserva" aria-haspopup="menu"
+                                    aria-expanded="false" aria-controls="reserva-estado-opciones"></button>
+                                <div id="reserva-estado-opciones" class="rd-state-menu" data-reserva-estado-menu
+                                    role="menu" aria-label="Estado de la reserva" hidden></div>
+                            </div></div>
+                            <section class="rd-state-confirm" data-reserva-estado-confirmacion hidden
+                                role="alertdialog" aria-labelledby="reserva-estado-confirmacion-titulo"
+                                aria-describedby="reserva-estado-confirmacion-mensaje reserva-estado-confirmacion-nota">
+                                <h4 id="reserva-estado-confirmacion-titulo">Cambiar estado de la reserva</h4>
+                                <p id="reserva-estado-confirmacion-mensaje" data-reserva-estado-mensaje></p>
+                                <p id="reserva-estado-confirmacion-nota" data-reserva-estado-nota></p>
+                                <div><button type="button" data-reserva-estado-cancelar>Cancelar</button>
+                                    <button type="button" data-reserva-estado-confirmar>Confirmar cambio</button></div>
+                            </section>
                             <div class="rd-facts"><div class="rd-fact"><span>Ingreso</span><strong data-reserva-ingreso></strong></div>
                                 <div class="rd-fact"><span>Salida</span><strong data-reserva-salida></strong></div>
                                 <div class="rd-fact"><span data-reserva-duracion-etiqueta>Noches</span>
@@ -192,8 +208,37 @@
         drawer.querySelector("[data-reserva-estadia-select]").addEventListener("change", evento => {
             seleccionarEstadia(evento.target.value);
         });
+        drawer.querySelector("[data-reserva-estado-operativo]").addEventListener("click", abrirMenuEstado);
+        drawer.querySelector("[data-reserva-estado-menu]").addEventListener("click", evento => {
+            const opcion = evento.target.closest?.("[data-reserva-nuevo-estado]");
+            if (opcion && !opcion.disabled) proponerEstado(opcion.dataset.reservaNuevoEstado);
+        });
+        drawer.querySelector("[data-reserva-estado-cancelar]").addEventListener("click", () => cerrarCambioEstado(true));
+        drawer.querySelector("[data-reserva-estado-confirmar]").addEventListener("click", confirmarEstado);
+        drawer.addEventListener("keydown", evento => {
+            const menu = drawer.querySelector("[data-reserva-estado-menu]");
+            if (evento.key === "Escape" && (!menu.hidden || estado.cambio)) {
+                evento.preventDefault(); evento.stopPropagation();
+                cerrarCambioEstado(true);
+            }
+            if (!menu.hidden && ["ArrowDown", "ArrowUp", "Home", "End"].includes(evento.key)) {
+                evento.preventDefault();
+                const opciones = [...menu.querySelectorAll("button:not(:disabled)")];
+                const actual = opciones.indexOf(document.activeElement);
+                const indice = evento.key === "Home" ? 0 : evento.key === "End" ? opciones.length - 1 :
+                    (actual + (evento.key === "ArrowUp" ? -1 : 1) + opciones.length) % opciones.length;
+                opciones[indice]?.focus();
+            }
+        });
+        document.addEventListener?.("click", evento => {
+            if (!evento.target.closest?.(".rd-state-control")) cerrarMenuEstado();
+        });
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.registrar?.(drawer, {
-            cerrar,
+            cerrar: () => {
+                if (estado.cambio || !drawer.querySelector("[data-reserva-estado-menu]").hidden)
+                    cerrarCambioEstado(true);
+                else cerrar();
+            },
             focoInicial: () => drawer.querySelector("[data-reserva-cerrar]")
         });
         estado.drawer = drawer;
@@ -238,7 +283,175 @@
         mensaje.dataset.error = error ? "true" : "false";
     }
 
+    function cerrarMenuEstado() {
+        if (!estado.drawer) return;
+        estado.drawer.querySelector("[data-reserva-estado-menu]").hidden = true;
+        estado.drawer.querySelector("[data-reserva-estado-operativo]").setAttribute?.("aria-expanded", "false");
+    }
+
+    function cerrarCambioEstado(foco = false) {
+        if (estado.guardandoEstado) return;
+        estado.cambio = null;
+        if (!estado.drawer) return;
+        cerrarMenuEstado();
+        estado.drawer.querySelector("[data-reserva-estado-confirmacion]").hidden = true;
+        if (foco) estado.drawer.querySelector("[data-reserva-estado-operativo]").focus();
+    }
+
+    function abrirMenuEstado() {
+        if (!manual || estado.ocupado || !estado.ficha || !estado.estadia) return;
+        const menu = estado.drawer.querySelector("[data-reserva-estado-menu]");
+        if (!menu.hidden) { cerrarMenuEstado(); return; }
+        cerrarCambioEstado();
+        menu.replaceChildren();
+        for (const opcion of manual.opciones(estado.ficha, estado.estadia,
+            permiso => window.haikuTienePermiso?.(permiso) === true)) {
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.dataset.reservaNuevoEstado = opcion.valor;
+            boton.setAttribute("role", "menuitemradio");
+            boton.setAttribute("aria-checked", String(opcion.actual));
+            boton.disabled = Boolean(opcion.motivo);
+            boton.textContent = opcion.etiqueta;
+            if (opcion.motivo) {
+                const nota = document.createElement("small");
+                nota.textContent = opcion.actual ? "✓ Estado actual" : opcion.motivo;
+                boton.appendChild(nota);
+            }
+            menu.appendChild(boton);
+        }
+        menu.hidden = false;
+        estado.drawer.querySelector("[data-reserva-estado-operativo]").setAttribute("aria-expanded", "true");
+        menu.querySelector("button:not(:disabled)")?.focus();
+    }
+
+    function proponerEstado(destino) {
+        if (estado.ocupado || !manual || !estado.identidad || !estado.ficha || !estado.estadia) return false;
+        const opcion = manual.opciones(estado.ficha, estado.estadia,
+            permiso => window.haikuTienePermiso?.(permiso) === true).find(e => e.valor === destino);
+        if (!opcion || opcion.motivo) return false;
+        const anterior = manual.actual(estado.ficha, estado.estadia);
+        estado.cambio = { destino, anterior, esperado: manual.esperado(estado.ficha), version: estado.version };
+        cerrarMenuEstado();
+        if (["hospedada", "checked_out"].includes(destino)) {
+            // Sólo omite el aviso: conserva el flujo seguro y todas sus validaciones.
+            estadoVisible("Actualizando estado…");
+            return confirmarEstado();
+        }
+        colocar("[data-reserva-estado-mensaje]", `${manual.etiqueta(anterior)} → ${opcion.etiqueta}. ` +
+            "¿Estás seguro de que quieres realizar este cambio?");
+        colocar("[data-reserva-estado-nota]", manual.aviso(estado.ficha, estado.estadia, destino));
+        const aviso = estado.drawer.querySelector("[data-reserva-estado-confirmacion]");
+        aviso.dataset.importante = ["cancelada", "no_show"].includes(destino) ? "true" : "false";
+        aviso.hidden = false;
+        estado.drawer.querySelector("[data-reserva-estado-cancelar]").focus();
+        return true;
+    }
+
+    async function refrescarTrasEstado(evento = "estado manual de reserva confirmado") {
+        const tareas = [
+            () => window.haikuSincronizarReservasSupabase?.(),
+            () => window.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.(),
+            () => window.haikuCargarPagosPendientesSupabase?.(),
+            () => window.HAIKU_RESERVAS_V1?.recargar?.(),
+            () => window.HistorialSupabase?.cargar?.()
+        ];
+        const resultados = await Promise.allSettled(tareas.map(tarea => Promise.resolve().then(tarea)));
+        try {
+            if (typeof cargarCabanasDia === "function") cargarCabanasDia(fechaActiva(), {
+                evento, tipo: "externo"
+            });
+            await window.HAIKU_CHECKOUT_AUTORIDAD_V1?.refrescar?.();
+            await window.HAIKU_CHECKOUT_RESUMEN_V2?.refrescar?.();
+            if (typeof generarCalendario === "function") generarCalendario();
+            if (typeof actualizarResumenDia === "function") actualizarResumenDia(fechaActiva());
+            if (typeof generarResumenOperativo === "function") generarResumenOperativo(fechaActiva());
+        } catch (error) { resultados.push({ status: "rejected", reason: error }); }
+        return resultados.every(r => r.status === "fulfilled");
+    }
+
+    async function confirmarEstado() {
+        const cambio = estado.cambio;
+        if (estado.ocupado || !cambio || cambio.version !== estado.version) return false;
+        const identidad = estado.identidad;
+        const version = estado.version;
+        estado.ocupado = true;
+        estado.guardandoEstado = true;
+        const confirmar = estado.drawer.querySelector("[data-reserva-estado-confirmar]");
+        const cancelar = estado.drawer.querySelector("[data-reserva-estado-cancelar]");
+        confirmar.disabled = cancelar.disabled = true;
+        confirmar.textContent = "Guardando…";
+        let guardado = false;
+        try {
+            await revalidar(identidad);
+            const ficha = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+            const estadia = elegirEstadia(ficha, identidad);
+            if (version !== estado.version || !estadia ||
+                JSON.stringify(manual.esperado(ficha)) !== JSON.stringify(cambio.esperado))
+                throw new Error("La reserva cambió desde que elegiste el estado. Reabre la ficha antes de confirmar.");
+            const opcion = manual.opciones(ficha, estadia,
+                permiso => window.haikuTienePermiso?.(permiso) === true).find(e => e.valor === cambio.destino);
+            if (!opcion || opcion.motivo) throw new Error(opcion?.motivo || "Cambio de estado no permitido.");
+            const { data, error } = await window.haikuSupabase.rpc("haiku_cambiar_estado_reserva_manual_v1", {
+                p_reserva_id: identidad.reservaId, p_estadia_id: identidad.estadiaId,
+                p_estado: cambio.destino, p_esperado: cambio.esperado
+            });
+            if (error) throw error;
+            guardado = true;
+            if (!data?.ok || data.estado !== cambio.destino)
+                throw new Error("La operación respondió sin un resultado verificable. Actualiza la ficha para comprobar el estado.");
+            estado.cambio = null;
+            estado.drawer.querySelector("[data-reserva-estado-confirmacion]").hidden = true;
+            estadoVisible("Cambio guardado. Actualizando la ficha…");
+            const refrescado = await refrescarTrasEstado();
+            const actualizada = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+            const seleccionada = elegirEstadia(actualizada, identidad);
+            if (!seleccionada || manual.actual(actualizada, seleccionada) !== cambio.destino)
+                throw new Error("No se pudo verificar el estado guardado. Actualiza la ficha.");
+            estado.ficha = actualizada;
+            estado.estadia = seleccionada;
+            estado.identidad = identidadEstadia(identidad.reservaId, actualizada, seleccionada);
+            pintar(actualizada, seleccionada, estado.identidad);
+            estadoVisible(refrescado ? "Estado actualizado." : "Estado guardado. Alguna vista no pudo actualizarse; recárgala.");
+            return true;
+        } catch (error) {
+            if (!guardado && error?.code === "40001") {
+                try {
+                    const refrescado = await refrescarTrasEstado("conflicto concurrente de estado de reserva");
+                    const reconciliada = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+                    const seleccionada = elegirEstadia(reconciliada, identidad);
+                    if (version !== estado.version || !seleccionada ||
+                        String(reconciliada?.reserva?.id || "") !== identidad.reservaId ||
+                        !window.haikuSesion || window.haikuTienePermiso?.("reservas.ver") !== true)
+                        throw new Error("La ficha ya no corresponde a la reserva autorizada.");
+                    estado.ficha = reconciliada;
+                    estado.estadia = seleccionada;
+                    estado.identidad = identidadEstadia(identidad.reservaId, reconciliada, seleccionada);
+                    pintar(reconciliada, seleccionada, estado.identidad);
+                    estadoVisible("El cambio fue rechazado porque la reserva cambió en otro proceso. " +
+                        "Se releyó su estado actual; revísalo antes de volver a confirmar." +
+                        (refrescado ? "" : " Alguna vista no pudo actualizarse; recárgala."), true);
+                } catch (_) {
+                    estadoVisible("El cambio fue rechazado porque la reserva cambió en otro proceso. " +
+                        "No se pudo releer su estado actual; vuelve a abrir la ficha.", true);
+                }
+                return false;
+            }
+            estadoVisible((guardado ? "El servidor recibió el cambio. " : "No se pudo confirmar el cambio. ") +
+                (error?.message || "Inténtalo nuevamente."), true);
+            // No hay pintura optimista: ante un fallo conserva el badge previo.
+            return false;
+        } finally {
+            estado.ocupado = false;
+            estado.guardandoEstado = false;
+            confirmar.disabled = cancelar.disabled = false;
+            confirmar.textContent = "Confirmar cambio";
+            cerrarCambioEstado(true);
+        }
+    }
+
     function estadoReserva(ficha, estadia) {
+        if (manual) return manual.etiqueta(manual.actual(ficha, estadia));
         const reserva = String(ficha.reserva?.estado_reserva || "").toLowerCase();
         const actual = String(estadia.estado_estadia || "").toLowerCase();
         if (reserva === "cancelada") return "Cancelada";
@@ -250,6 +463,7 @@
     }
 
     function pintar(ficha, estadia, identidad) {
+        cerrarCambioEstado();
         const reserva = ficha.reserva;
         const huespedes = Array.isArray(ficha.huespedes) ? ficha.huespedes : [];
         const titularHuesped = huespedes.find(h => h.es_titular) || {};
@@ -272,6 +486,8 @@
         colocar("[data-reserva-kicker]", `CABAÑA ${identidad.numeroCabana} · ${codigo}`);
         colocar("[data-reserva-codigo]", codigo);
         colocar("[data-reserva-estado-operativo]", estadoActual);
+        estado.drawer.querySelector("[data-reserva-estado-operativo]").disabled = !manual ||
+            (!["reservas.editar", "reservas.cancelar"].some(p => window.haikuTienePermiso?.(p) === true));
         colocar("[data-reserva-ingreso]", fechaVisible(estadia.fecha_ingreso));
         colocar("[data-reserva-salida]", fechaVisible(estadia.fecha_salida));
         colocar("[data-reserva-duracion-etiqueta]", fullday ? "Estadía" : "Noches");
@@ -334,6 +550,7 @@
     }
 
     function cerrar() {
+        if (estado.guardandoEstado) return;
         const drawer = estado.drawer;
         if (!drawer || drawer.hidden) return;
         estado.version++;
@@ -341,11 +558,14 @@
         estado.identidad = null;
         estado.ficha = null;
         estado.estadia = null;
+        cerrarCambioEstado();
         drawer.hidden = true;
         window.HAIKU_SITES_RESUMEN_DRAWER_V1?.sincronizar?.();
     }
 
     async function abrirDesdeBoton(boton) {
+        if (estado.ocupado) return false;
+        cerrarCambioEstado();
         if (!window.haikuSesion || window.haikuTienePermiso?.("reservas.ver") !== true) return false;
         const drawer = crearDrawer();
         const version = ++estado.version;
@@ -439,6 +659,8 @@
     }
 
     async function abrirPorId(reservaId, disparador = null, seleccion = null) {
+        if (estado.ocupado) return false;
+        cerrarCambioEstado();
         if (!window.haikuSesion || !window.haikuSupabase ||
             window.haikuTienePermiso?.("reservas.ver") !== true ||
             !UUID.test(String(reservaId || ""))) return false;
