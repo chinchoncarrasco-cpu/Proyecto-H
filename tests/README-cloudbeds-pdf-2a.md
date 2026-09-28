@@ -1,109 +1,230 @@
-# Cloudbeds / TOTAL 2 — etapa 2A, sólo lectura
+# Cloudbeds PDF 2C — certeza y propuestas de tarifa (sólo lectura)
 
-## Revisión previa y alcance
+## 1. Archivos y alcance
 
-- `js/supabase-asistente-v1.js` crea el input `haiku-asistente-archivos`, mantiene
-  adjuntos en memoria y atiende Adjuntar/Enviar/Ctrl+Enter. Antes sólo imágenes.
-- `js/supabase-asistente-listado-cloudbeds-v2.js` interpreta capturas mediante Edge
-  Function y confirma creación usando `haiku_crear_lote_listado_cloudbeds_asistente_v2`.
-  El campo `Reserva` del listado se guarda como `reservas.cloudbeds_id`; Habitación
-  ID puede tener sufijos y NO se usa como sustituto automático de ese identificador.
-- Creación individual usa las RPC oficiales existentes del asistente/reservas.
-  Ninguna se llama desde el PDF; no se añadieron writers ni migraciones.
-- TOTAL 1 usa `haiku_cambiar_totales_lote_v1`, con preview/revalidación/confirmación.
-  Es la vía prevista para una etapa futura; 2A no la invoca ni cambia sus reglas.
-- Resolución existente de TOTAL 1: nombre exacto normalizado y CAB con rechazo
-  de ambigüedades. El PDF añade evidencia de ID Cloudbeds exacto, sin fuzzy.
+2C extiende el parser flexible 2B en `js/haiku-cloudbeds-pdf-v1.js`, sus pruebas
+y el fixture local. No añade RPC, migración, upload, escritura Supabase ni acción
+de UI que cambie datos. `actualizacion.disponible` y
+`propuesta.actualizacion_disponible` siempre son `false`.
 
-## Lectura y normalización
+El PDF se procesa localmente. `consultar()` sólo hace `SELECT` paginados sobre
+`reservas` y `vista_saldos_alojamiento_reserva`; un error de lectura aborta antes
+de clasificar registros como ausentes.
 
-PDF.js 5.6.205 local (`vendor/pdfjs/`, licencia incluida); no había lector PDF
-en el proyecto. Se explicó la dependencia antes de incorporarla. Extracción de
-texto/posiciones en worker local; no OCR, subida, storage ni persistencia del PDF.
-Hasta 12 MB/50 páginas, con límite de tiempo y errores visibles. Un PDF por envío,
-sin mezcla de imágenes. PNG/JPEG/WEBP mantienen la ruta anterior.
+## 2. Motor de clasificación
 
-El parser reconoce encabezados por texto y posición, conserva columnas entre
-páginas, agrupa filas por la columna Reserva y recoge las líneas de cada celda.
-Descarta encabezados/pies de impresión; formatos desconocidos se rechazan, sin
-adivinar columnas. Admite Total de la habitación opcional; no distribuye importes
-multihabitación aunque exista un importe global en esa columna.
+Cada fila produce una `propuesta` explicable con identidad Cloudbeds, reserva
+Proyecto H, cabaña/fechas, cuatro señales financieras separadas, productos,
+diferencia, evidencias, observaciones y una certeza:
 
-Estructura normalizada: reserva_cloudbeds, fecha_reserva, habitaciones_raw,
-habitaciones (código, cantidad, cabana), check_in, check_out, precio_total,
-total_habitacion, estado, noches, adultos, ninos, habitacion_ids, nombre_huesped,
-correo/movil/telefono y sus indicadores de enmascaramiento, contactos_verificados
-(false), saldo_pendiente, origen (página/fila), advertencias y multihabitacion.
-Precio total es el importe de toda la estadía; valor_por_noche_referencia sólo
-divide por noches en una reserva simple. No se redondean ni preparan tarifas.
+- `ALTA_CERTEZA`: hay cambio propuesto y todas las señales mínimas concuerdan.
+- `SIN_CAMBIO`: mismas garantías, pero Depósito y Proyecto H difieren hasta $5.
+- `REVISION_MANUAL`: la fila es legible, pero alguna decisión no es inequívoca.
+- `NO_APLICA`: cancelada; no genera propuesta aunque exista Depósito histórico.
+- `NO_IDENTIFICADA`: no se pudo asociar una reserva accesible.
 
-Fechas DD/MM/YYYY validadas contra calendario; CLP entero con separadores de miles.
-Cero no se confunde con dato ausente. Se conservan contactos enmascarados y sufijo
--2 de Habitación ID. Nunca se usan contactos enmascarados como identidad fuerte.
+Se conserva `clase` como compatibilidad con el informe 2B, pero la decisión 2C se
+expresa en `certeza`. El resumen UI muestra Coinciden, Propuestas seguras,
+Revisión manual, Canceladas/no aplica y No identificadas.
 
-## Mapping cerrado encontrado
+## 3. Reglas exactas de alta certeza
 
-Fuente: `supabase/functions/haiku-asistente-reserva/index.ts`, regla explícita de
-Asignado, y `supabase/functions/haiku-asistente-pago-existente/index.ts`.
+Se exige simultáneamente:
 
-LC1→1, LC2→2, LC3→3, LC4→4, LC6→6; CD5→5, CD7→7, CD8→8, CD9→9;
-C10→10, C11→11. Otros códigos se conservan pero no se infieren por su número.
-Cantidad entre paréntesis >1 y varios códigos/IDs marcan multihabitación.
+1. coincidencia única por un identificador Cloudbeds ya vinculado;
+2. una reserva y una estadía, no agrupada;
+3. una sola habitación Cloudbeds, mapeable a una cabaña;
+4. check-in, check-out y cabaña idénticos a Proyecto H;
+5. estado Cloudbeds conocido, no cancelado ni no-show;
+6. Depósito entero CLP positivo;
+7. Precio Total entero CLP positivo;
+8. columna Productos presente;
+9. si Productos está vacío, Precio Total ≈ Depósito (tolerancia $5);
+10. si hay Productos, Precio Total > Depósito + $5;
+11. total efectivo de alojamiento disponible en Proyecto H;
+12. ausencia de contradicciones financieras.
 
-## Matching y consulta
+El nombre no sustituye al identificador fuerte. El fallback exacto de nombre +
+cabaña + ambas fechas sólo permite `REVISION_MANUAL`, aunque sea único.
 
-Sólo SELECT paginado de reservas/estadías/cabañas y
-`vista_saldos_alojamiento_reserva.total_alojamiento` (importe efectivo).
-No se leen contactos completos de Proyecto H ni se reemplazan contactos.
+## 4. Casos que requieren revisión
 
-ID Cloudbeds exacto primero; después CAB + check-in + check-out + nombre exacto
-normalizado (tildes/case/espacios). ID contradictorio, evidencia parcial, duplicados,
-grupo o múltiples estadías quedan para revisión. Un nombre distinto sin ID fuerte
-no se une automáticamente. Fecha/CAB compatibles son obligatorias incluso con ID
-para atribuir el total al segmento. Tolerancia inclusiva de $5 CLP.
+Entre otros: identidad débil o múltiple, identificadores cruzados, ID duplicado
+en el PDF, no-show, multihabitación, reserva agrupada, varias estadías, falta de
+habitación/fechas, Depósito ausente/cero/negativo, Precio Total ausente o menor
+que Depósito, Productos ausente, Productos vacío con diferencia relevante,
+productos declarados sin componente adicional, total Proyecto H no disponible o
+señales financieras contradictorias. No se reparte un total global entre
+cabañas.
 
-Canceladas se clasifican aparte; no se propone creación activa. Faltante significa
-sin coincidencia en las reservas accesibles consultadas, no garantía fuera de RLS.
-Si falla una lectura no se emite un informe de falsas reservas faltantes.
+## 5. Productos ausente frente a vacío
 
-## PDF real validado
+`productos_columna_presente` se deriva de la cabecera, no del texto de la celda.
+Por tanto:
 
-Archivo usado: “Haiku Cabañas Panorámicas Mes Sep - Reservas.pdf”, 3 páginas,
-55 entradas, sin columna Total de la habitación. Validado con el mismo PDF.js y
-parser usados por el navegador, además de inspección visual de la primera página.
-El otro PDF “Septimebre” es un formato anterior que no aporta las columnas exigidas.
-No se copió ningún PDF real ni contacto real a fixtures.
+- columna presente + celda vacía: evidencia explícita de que el export no declara
+  extras; puede alcanzar alta certeza si Precio Total ≈ Depósito;
+- columna ausente: no permite asumir que no existan extras y obliga revisión.
 
-Comparación con lectura de 55 reservas y 55 saldos de Proyecto H:
+`productos_lista` sólo separa rótulos para mostrarlos. No asigna precios por
+producto ni afirma que la diferencia corresponda a un desglose individual.
 
-| Clasificación | Entradas |
-|---|---:|
-| COINCIDE | 24 |
-| TOTAL_DIFERENTE | 7 |
-| FALTA_EN_PROYECTO_H | 5 |
-| CANCELADA | 11 |
-| MULTIHABITACION_REQUIERE_REVISION | 2 |
-| AMBIGUA | 6 |
-| NO_SOPORTADA | 0 |
+## 6. Uso de Depósito
 
-Ejemplos anonimizados: A, CAB9, 11→12 septiembre, 160000, coincide por contexto
-exacto. B, CAB5/CAB10, 03→05 septiembre, 313000, multihabitación sin reparto.
-C, CAB5, 04→07 septiembre, 459000, ambiguo: el nombre del PDF difiere del nombre
-en Proyecto H y no hay ID Cloudbeds coincidente. Este último corresponde al caso
-Bruno que el usuario pidió comprobar: no se fuerza el matching por similitud.
+Por regla específica confirmada para Haiku Cabañas, Depósito representa 100% del
+alojamiento bruto final con IVA y puede cubrir una o varias noches. Es el único
+candidato 2C: `deposito_100_alojamiento_haiku_cabanas`. Nunca se reconstruye a
+partir de otra columna. Fuera de `ALTA_CERTEZA`/`SIN_CAMBIO`,
+`total_alojamiento_propuesto` queda `null`.
 
-## Pruebas
+## 7. Uso de Precio Total
 
-- `node --test tests/*.test.cjs`: suite del proyecto + regresiones 2A.
-- `tests/cloudbeds-pdf.test.cjs`: normalización, fechas, multilinea, páginas,
-  encabezados, dinero/cero, contactos, canceladas, múltiples habitaciones, -2,
-  tolerancia, ID/contexto/ambigüedad, mapping, fallos/timeouts, sólo SELECT y XSS.
-- `node tests/cloudbeds-pdf-browser.cjs` con NODE_PATH del runtime que incluye
-  playwright/pdf-lib: PDF sintético de dos páginas, upload real al input, extracción
-  real en worker y tarjeta sin botones de escritura. PDF inválido termina con error;
-  PNG/JPEG/WEBP siguen llegando a la ruta anterior. Backend completamente simulado:
-  cualquier RPC está prohibida. No se generó ni guardó una reserva real.
+Precio Total se trata como alojamiento + productos/extras. Sin productos debe
+coincidir con Depósito dentro de $5. Con productos debe ser superior; su
+diferencia con Depósito se muestra como `componente_no_alojamiento_observable`.
+Nunca se propone Precio Total como alojamiento.
 
-El informe usa un bloque propio, sin la clase de preview que activa interceptores
-de creación. PDF se reclama en captura antes de la ruta de imágenes; sólo lectura
-también si el texto del mensaje pide una creación/cambio. No inicia etapa 2B/2C.
+## 8. Uso de Productos
+
+Productos es evidencia de conceptos adicionales y permanece fuera del total de
+alojamiento. La UI muestra los rótulos y la diferencia global observable, sin
+inventar importes individuales.
+
+## 9. Uso de Total habitación e IVA
+
+Total habitación es una señal secundaria, aproximadamente neta en los casos
+observados. `round(total_habitacion × 1,19)` puede corroborar Depósito con
+tolerancia de $5, pero no es requisito universal, no se convierte en fuente y no
+se usa para escribir. Si no coincide y el resto sí, se explica la falta de
+corroboración sin degradar automáticamente. Si es no positivo o supera el
+Depósito de forma material, sí constituye contradicción. Su ausencia no invalida
+una propuesta inequívoca.
+
+Saldo Pendiente es únicamente deuda restante y nunca participa como tarifa.
+
+## 10. Canceladas y no-show
+
+Una cancelada es `NO_APLICA`: conserva datos históricos, pero no presenta total
+propuesto. Un no-show queda en `REVISION_MANUAL`, porque su tratamiento financiero
+no se presume.
+
+## 11. Multihabitación y grupos
+
+Filas como `LC4(1), C10(1)` o `LC2(1), CD7(1)` siempre quedan en revisión, incluso
+si Precio Total y Depósito coinciden. Lo mismo ocurre con grupos o múltiples
+estadías de Proyecto H. 2C no inventa una distribución por segmento.
+
+## 12. Auditoría ID versus Reserva
+
+Cloudbeds exporta `ID` (Reservation ID) y `Reserva` (Reservation Number) como
+campos distintos; el parser los conserva como `id_cloudbeds` y
+`reserva_cloudbeds`. Que sus textos sean diferentes no es por sí mismo un error.
+Ambos se contrastan contra vínculos existentes; si apuntan a reservas distintas,
+el caso se revisa. No se crean vínculos nuevos.
+
+Referencias Cloudbeds:
+
+- [Data Fields: definitions and calculations](https://myfrontdesk.cloudbeds.com/hc/en-us/articles/6621695765531-Cloudbeds-Data-Fields-CDFs-definitions-and-calculations)
+- [Reservations Management: flexible exports](https://myfrontdesk.cloudbeds.com/hc/en-us/articles/43663431474715-Reservations-Management-Filtering-and-Flexible-Exports)
+
+## 13. Qué guarda `reservas.cloudbeds_id`
+
+La ruta de importación de listado
+`supabase/functions/haiku-asistente-listado-reservas-cloudbeds-v2/index.ts`
+copia explícitamente la columna `Reserva` a `cloudbeds_id`; el comentario del
+cliente histórico confirma la misma decisión. Otros flujos antiguos presentan
+el campo sólo como “ID Cloudbeds”, y el esquema tiene una sola columna sin tipo.
+Por ello 2C prioriza una coincidencia exacta de `Reserva`, acepta un vínculo
+histórico exacto por `ID` como evidencia legada y bloquea cruces ambiguos.
+
+## 14. Modelo financiero actual
+
+`vista_saldos_alojamiento_reserva` agrupa `vista_estado_cargos` por reserva y sólo
+incluye cargos activos de tipo `alojamiento`:
+
+- `total_alojamiento = sum(monto_ajustado)`;
+- `pagado_alojamiento = sum(aplicado_neto)`;
+- `saldo_alojamiento = max(total_alojamiento - pagado_alojamiento, 0)`.
+
+Servicios quedan fuera. Cambiar tarifa modifica el total contractual materializado
+en noches/cargos. Cambiar saldo no es equivalente: el saldo también depende de
+pagos y aplicaciones. 2C compara el Depósito con `total_alojamiento`, nunca con
+`saldo_alojamiento`.
+
+## 15. Situación de TOTAL 1 / v31
+
+La migración rastreada vigente es
+`20260910235134_haiku_total_financiero_v31_guard_servicios.sql`; la documentación
+de la fase registra v31 como desplegada. Esta auditoría fue sólo local y no
+consultó producción.
+
+v31 mantiene un writer transaccional por lote con locks, expected total,
+permisos, plan previo, auditoría e invariantes. Requiere una sola estadía y una
+estructura financiera inequívoca. Para alojamiento sin ajustes, una noche recibe
+el total objetivo completo. Varias noches uniformes/completas reciben cociente y
+residuo determinista, ordenado por fecha/id; tarifas variables o noches
+incompletas se bloquean. En casos con IVA usa el plan financiero/IVA vigente.
+
+Los pagos originales se conservan; las `pago_aplicaciones` pueden liberarse y
+reaplicarse dentro de la transacción para respetar capacidad, con guards de
+sobrepago, devoluciones, servicios y destinos ambiguos. Esto confirma que cambiar
+un total no equivale a editar pagos ni a imponer un saldo.
+
+`supabase/preparadas/` contiene antecedentes históricos y quedó completamente
+fuera de esta fase. No debe usarse para reemplazar v31.
+
+## 16. Diseño recomendado para una futura escritura
+
+Una fase posterior debería tomar sólo propuestas `ALTA_CERTEZA`, exigir revisión
+humana y acción explícita, volver a leer identidad/estructura/total, obtener la
+capacidad y preview v31, comparar un snapshot inmutable y recién entonces llamar
+al writer vigente una sola vez. El payload futuro debe usar Depósito como
+`total_objetivo`, no Precio Total ni Total habitación, y registrar fuente,
+identificadores Cloudbeds, evidencia, versión del parser/writer y usuario.
+
+## 17. Riesgos pendientes
+
+- `cloudbeds_id` legado no declara si contiene Reservation ID o Number.
+- La regla Depósito=100% es contractual de esta propiedad, no genérica.
+- Faltan validaciones con una muestra operativa amplia de tratamientos fiscales.
+- Multihabitación/grupos no tienen distribución Cloudbeds inequívoca.
+- Una futura escritura deberá revalidar concurrencia, permisos, pagos,
+  aplicaciones, servicios, IVA e invariantes de v31.
+
+## 18. Pruebas
+
+La suite cubre los 23 puntos pedidos: casos A–G, contradicciones, Productos
+presente/ausente, Depósito/Total habitación ausentes, IVA corroborativo y no
+corroborativo, ID/Reserva, fallbacks único/ambiguo, una/múltiples noches, orden,
+alias `Núm. habitación`, convivencia Haku+Inspector y prohibición de writes.
+También conserva regresiones 2B de PDF ancho, columnas desconocidas, varias
+páginas, timeout, XSS y paginación.
+
+Comandos principales:
+
+```powershell
+node --test tests/cloudbeds-pdf.test.cjs
+node --test tests/haku-reserva-convivencia-v1.test.cjs
+node tests/cloudbeds-pdf-demo-browser-check.cjs
+```
+
+Las regresiones TOTAL/pagos/Inspector se ejecutan con los tests locales
+correspondientes; los scripts PostgreSQL dependientes de un runtime efímero sólo
+se ejecutan cuando ese runtime está disponible. Ninguna prueba 2C conecta a
+Supabase real.
+
+## 19. Demo local
+
+Se reutiliza el fixture 2B, actualizado a 2C:
+
+```powershell
+node tests/cloudbeds-pdf-demo-server.cjs 4174
+```
+
+Abrir `http://127.0.0.1:4174/tests/fixtures/cloudbeds-pdf-flexible/`.
+
+Permite recorrer diez casos ficticios, ver certeza, propuesta, componente no
+alojamiento, evidencias, parser compacto/ancho y presentación responsive. No
+incluye cliente Supabase. El browser check guarda capturas únicamente en la
+carpeta temporal del sistema (`haiku-cloudbeds-pdf-2c-capturas`), nunca en
+`tests/artifacts/`.

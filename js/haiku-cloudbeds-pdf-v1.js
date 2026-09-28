@@ -1,105 +1,773 @@
-/* Cloudbeds PDF 2A: extracción local y comparación de sólo lectura. */
-(function(root){
- 'use strict';
- const MAPA=Object.freeze({LC1:1,LC2:2,LC3:3,LC4:4,LC6:6,CD5:5,CD7:7,CD8:8,CD9:9,C10:10,C11:11});
- const CLASES=['COINCIDE','TOTAL_DIFERENTE','FALTA_EN_PROYECTO_H','CANCELADA','MULTIHABITACION_REQUIERE_REVISION','AMBIGUA','NO_SOPORTADA'];
- const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
- const canon=v=>norm(v).replace(/[^a-z0-9]/g,'');
- const HEAD={reserva:'reserva_cloudbeds',fechadelareserva:'fecha_reserva',numerodehabitacion:'habitaciones_raw',checkin:'check_in',checkout:'check_out',preciototal:'precio_total',totaldelahabitacion:'total_habitacion',estado:'estado',noches:'noches',adultos:'adultos',ninos:'ninos',habitacionid:'habitacion_ids',nombreyapellido:'nombre_huesped',correoelectronico:'correo',movil:'movil',telefono:'telefono',saldopendiente:'saldo_pendiente'};
- const REQUERIDAS=['reserva_cloudbeds','habitaciones_raw','check_in','check_out','precio_total','estado','noches','nombre_huesped','habitacion_ids'];
- function dinero(v){const s=String(v??'').trim().replace(/^(?:CLP\s*\$?|\$)\s*/i,'');if(!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(s))return null;const n=Number(s.replace(/\./g,''));return Number.isSafeInteger(n)?n:null;}
- function fecha(v){const m=String(v??'').trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(!m)return null;const [d,mo,y]=m.slice(1).map(Number),t=new Date(Date.UTC(y,mo-1,d));return t.getUTCFullYear()===y&&t.getUTCMonth()===mo-1&&t.getUTCDate()===d?`${m[3]}-${m[2]}-${m[1]}`:null;}
- const entero=v=>/^\d+$/.test(String(v??'').trim())?Number(v):null;
- const contacto=v=>String(v??'').trim()||null;
- const mascara=v=>/[*•●]|[xX]{3,}/.test(v||'');
- function normalizar(raw,origen={}){
-  const codigos=String(raw.habitaciones_raw||'').replace(/\s+/g,'').split(',').filter(Boolean);
-  const habitaciones=codigos.map(raw=>{const m=raw.toUpperCase().match(/^([A-Z]+\d+)(?:\((\d+)\))?$/);return {raw,codigo:m?.[1]||null,cantidad:m?Number(m[2]||1):null,cabana:m?MAPA[m[1]]??null:null};});
-  const r={reserva_cloudbeds:String(raw.reserva_cloudbeds||'').replace(/\s/g,''),fecha_reserva:fecha(raw.fecha_reserva),habitaciones_raw:raw.habitaciones_raw||'',habitaciones,check_in:fecha(raw.check_in),check_out:fecha(raw.check_out),precio_total:dinero(raw.precio_total),total_habitacion:dinero(raw.total_habitacion),estado:norm(raw.estado),noches:entero(raw.noches),adultos:entero(raw.adultos),ninos:entero(raw.ninos),habitacion_ids:String(raw.habitacion_ids||'').split(/[\s,;]+/).filter(Boolean),nombre_huesped:contacto(raw.nombre_huesped),correo:contacto(raw.correo),movil:contacto(raw.movil),telefono:contacto(raw.telefono),saldo_pendiente:dinero(raw.saldo_pendiente),origen,advertencias:[]};
-  r.correo_enmascarado=mascara(r.correo);r.movil_enmascarado=mascara(r.movil);r.telefono_enmascarado=mascara(r.telefono);r.contactos_verificados=false;
-  r.multihabitacion=habitaciones.length>1||habitaciones.some(h=>h.cantidad>1)||r.habitacion_ids.length>1;
-  const dias=r.check_in&&r.check_out?(Date.parse(r.check_out)-Date.parse(r.check_in))/86400000:null;
-  if(dias===null||dias<0||r.noches===null||r.noches!==dias)r.advertencias.push('Fechas/noches incompletas o incompatibles.');
-  if(!r.reserva_cloudbeds||!r.nombre_huesped||r.precio_total===null||r.precio_total<0)r.advertencias.push('Identificación o precio incompletos.');
-  if(!['confirmada','confirmado','confirmacion pendiente','pendiente','checked out','checked in','cancelada','cancelado','no show'].includes(r.estado))r.advertencias.push('Estado no soportado.');
-  if(!r.multihabitacion&&r.total_habitacion!==null&&r.precio_total!==null&&Math.abs(r.total_habitacion-r.precio_total)>5)r.advertencias.push('Precio total y total de habitación no coinciden: revisar alcance.');
-  r.valor_por_noche_referencia=!r.multihabitacion&&r.noches>0&&r.precio_total!==null?r.precio_total/r.noches:null;
-  return r;
- }
- function columnas(page){
-  const candidatos=page.items.filter(i=>canon(i.str)==='reserva').sort((a,b)=>a.x-b.x||a.y-b.y);if(!candidatos.length)return null;
-  const a=candidatos[0],h=Math.max(a.h||4,2),items=page.items.filter(i=>Math.abs(i.y-a.y)<=h*2.5);
-  const grupos=[];for(const i of items){let g=grupos.find(g=>Math.abs(g.x-i.x)<h*.35);if(!g)grupos.push(g={x:i.x,items:[]});g.items.push(i);}
-  const cols=grupos.map(g=>({x:g.x,key:HEAD[canon(g.items.sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.str).join(' '))]})).filter(c=>c.key).sort((a,b)=>a.x-b.x);
-  if(REQUERIDAS.some(k=>!cols.some(c=>c.key===k))||new Set(cols.map(c=>c.key)).size!==cols.length)return null;
-  return {cols,width:page.width,fin:Math.max(...items.filter(i=>i.y<=a.y+h*2.5).map(i=>i.y)),alto:h};
- }
- function parsearPaginas(pages){
-  if(!Array.isArray(pages)||!pages.length)throw Error('PDF vacío o inválido.');
-  let cab=null;const entradas=[];
-  for(let p=0;p<pages.length;p++){
-   const page=pages[p],propia=columnas(page);if(propia)cab=propia;
-   if(!cab||Math.abs(page.width-cab.width)>1)throw Error('PDF no Cloudbeds o columnas no reconocidas. Exporta el listado con Estado, Noches y Habitación ID.');
-   const col=i=>{let c=null;for(const k of cab.cols){if(i.x>=k.x-cab.alto*.5)c=k;else break;}return c?.key;};
-   const items=page.items.filter(i=>i.str.trim()&&i.y>(propia?propia.fin+cab.alto:30)&&i.y<page.height-22);
-   const anchors=items.filter(i=>col(i)==='reserva_cloudbeds'&&/^\d{8,}(?:-\d+)?$/.test(i.str.trim())).sort((a,b)=>a.y-b.y);
-   if(!anchors.length)throw Error(`Página ${p+1}: no se encontraron filas inequívocas.`);
-   anchors.forEach((a,n)=>{
-    const top=n?(anchors[n-1].y+a.y)/2:(propia?propia.fin+cab.alto:30),bottom=n+1<anchors.length?(a.y+anchors[n+1].y)/2:page.height-22;
-    const cells={};for(const i of items.filter(i=>i.y>=top&&i.y<bottom)){const k=col(i);if(k)(cells[k]??=[]).push(i);}
-    const raw={};for(const [k,list]of Object.entries(cells))raw[k]=list.sort((a,b)=>a.y-b.y||a.x-b.x).map(i=>i.str.trim()).join(' ').replace(/\s+/g,' ').trim();
-    entradas.push(normalizar(raw,{pagina:p+1,fila:n+1}));
-   });
-  }
-  return entradas;
- }
- async function leerPDF(bytes,{pdfjs,timeout=30000}={}){
-  const data=bytes instanceof Uint8Array?bytes:new Uint8Array(bytes);
-  if(data.length>12*1024*1024)throw Error('El PDF supera 12 MB.');
-  if(new TextDecoder().decode(data.slice(0,5))!=='%PDF-')throw Error('Archivo PDF inválido.');
-  if(!pdfjs){pdfjs=await import('../vendor/pdfjs/pdf.mjs');pdfjs.GlobalWorkerOptions.workerSrc=new URL('vendor/pdfjs/pdf.worker.mjs',root.document.baseURI).href;}
-  const task=pdfjs.getDocument({data,isEvalSupported:false,useSystemFonts:true,stopAtErrors:true,disableAutoFetch:true});
-  let timer;try{return await Promise.race([(async()=>{const doc=await task.promise;if(doc.numPages>50)throw Error('El PDF supera 50 páginas.');const pages=[];for(let n=1;n<=doc.numPages;n++){const p=await doc.getPage(n),viewport=p.getViewport({scale:1}),text=await p.getTextContent();pages.push({width:viewport.width,height:viewport.height,items:text.items.filter(i=>i.str?.trim()).map(i=>({str:i.str,x:i.transform[4],y:viewport.height-i.transform[5],w:i.width,h:i.height}))});}return parsearPaginas(pages);})(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('El PDF tardó demasiado. Intenta con un archivo más pequeño.')),timeout);})]);}finally{clearTimeout(timer);await task.destroy();}
- }
- function comparar(entradas,reservas,saldos){
-  const montos=new Map(saldos.map(s=>[s.reserva_id,s.total_alojamiento]));
-  const counts=Object.fromEntries(CLASES.map(k=>[k,0]));const repetidos=new Set(entradas.filter((r,i)=>entradas.some((o,j)=>j!==i&&o.reserva_cloudbeds===r.reserva_cloudbeds)).map(r=>r.reserva_cloudbeds));
-  const filas=entradas.map(r=>{
-   let clase,motivo,candidatas=[],evidencia=null;
-   if(['cancelada','cancelado'].includes(r.estado)){clase='CANCELADA';motivo='Cancelada en Cloudbeds. No se propone crear una reserva activa.';}
-   else if(repetidos.has(r.reserva_cloudbeds)){clase='AMBIGUA';motivo='Identificador repetido en el PDF: revisar segmentos.';}
-   else if(r.multihabitacion){clase='MULTIHABITACION_REQUIERE_REVISION';motivo='Total global de varias habitaciones. No se reparte por CAB ni se asume correspondencia de segmentos.';}
-   else if(r.advertencias.length||r.habitaciones.length!==1||!r.habitaciones[0].cabana||r.estado==='no show'){clase='NO_SOPORTADA';motivo=r.advertencias.join(' ')||'Habitación o estado sin correspondencia segura.';}
-   else{
-    const cab=r.habitaciones[0].cabana;
-    candidatas=reservas.filter(x=>String(x.cloudbeds_id||'').trim()===r.reserva_cloudbeds);
-    const exactas=reservas.filter(x=>norm(x.titular_nombre)===norm(r.nombre_huesped)&&x.estadias?.some(e=>Number(e.cabanas?.numero)===cab&&e.fecha_ingreso===r.check_in&&e.fecha_salida===r.check_out));
-    if(candidatas.length){evidencia='ID Cloudbeds';if(exactas.some(e=>!candidatas.some(c=>c.id===e.id))){clase='AMBIGUA';motivo='ID Cloudbeds y contexto apuntan a reservas distintas.';}}
-    else {candidatas=exactas;evidencia='CAB + fechas + nombre exactos';}
-    if(!clase){if(candidatas.length>1){clase='AMBIGUA';motivo='Más de una reserva compatible.';}
-     else if(!candidatas.length){
-      const parcial=reservas.filter(x=>norm(x.titular_nombre)===norm(r.nombre_huesped)||x.estadias?.some(e=>Number(e.cabanas?.numero)===cab&&e.fecha_ingreso===r.check_in));
-      clase=parcial.length?'AMBIGUA':'FALTA_EN_PROYECTO_H';motivo=parcial.length?'Existe evidencia parcial, insuficiente para unir o declarar faltante.':'Sin coincidencia en las reservas accesibles consultadas.';
-     }else{const x=candidatas[0],e=x.estadias?.[0],total=montos.get(x.id);
-      if(x.estadias?.length!==1||x.grupo_reserva_id||!e||Number(e.cabanas?.numero)!==cab||e.fecha_ingreso!==r.check_in||e.fecha_salida!==r.check_out||['cancelada','no_show'].includes(x.estado_reserva)) {clase='AMBIGUA';motivo='ID o contexto encontrado, pero estado/segmentos/fechas/CAB requieren revisión.';}
-      else if(total===null||total===undefined||!Number.isSafeInteger(Number(total))){clase='NO_SOPORTADA';motivo='Total efectivo de alojamiento no disponible.';}
-      else{clase=Math.abs(r.precio_total-Number(total))<=5?'COINCIDE':'TOTAL_DIFERENTE';motivo=clase==='COINCIDE'?'Diferencia de hasta $5 CLP.':'Diferencia mayor a $5 CLP; sólo informativa.';}
-     }
+/* Cloudbeds PDF 2C: extracción flexible y propuestas conservadoras de sólo lectura. */
+(function (root) {
+    "use strict";
+
+    const MAPA = Object.freeze({ LC1: 1, LC2: 2, LC3: 3, LC4: 4, LC6: 6, CD5: 5, CD7: 7, CD8: 8, CD9: 9, C10: 10, C11: 11 });
+    const CLASES = [
+        "COINCIDE", "TOTAL_DIFERENTE", "REVISION_FINANCIERA",
+        "FALTA_EN_PROYECTO_H", "CANCELADA", "MULTIHABITACION_REQUIERE_REVISION",
+        "AMBIGUA", "NO_SOPORTADA"
+    ];
+    const CERTEZAS = ["SIN_CAMBIO", "ALTA_CERTEZA", "REVISION_MANUAL", "NO_APLICA", "NO_IDENTIFICADA"];
+    const TOLERANCIA_CLP = 5;
+    const IVA_REFERENCIAL = 1.19;
+    const ESTADOS = new Set([
+        "confirmada", "confirmado", "confirmed", "confirmacion pendiente", "pendiente",
+        "checked out", "checked in", "hospedado", "cancelada", "cancelado", "no show"
+    ]);
+
+    const norm = valor => String(valor ?? "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase().replace(/\s+/g, " ").trim();
+    const canon = valor => norm(valor).replace(/[^a-z0-9]/g, "");
+
+    const DEFINICIONES_COLUMNAS = Object.freeze([
+        ["nombre", ["Nombre", "First name", "Nombre del huésped principal de la habitación"]],
+        ["apellido", ["Apellido", "Surname", "Last name", "Apellido del huésped principal de la habitación"]],
+        ["habitaciones_raw", ["Número De Habitación", "Numero de habitacion", "Número de habitación", "Núm. habitación", "Num. habitacion", "Room number", "Habitación"]],
+        ["check_in", ["Check-In", "Check in", "Fecha de check-in", "Fecha de check-in de la habitación"]],
+        ["check_out", ["Check-Out", "Check out", "Fecha de check-out", "Fecha de check-out de la habitación"]],
+        ["noches", ["Noches", "Room length of stay", "Duración de la estancia en la habitación"]],
+        ["precio_total", ["Precio Total", "Total price", "Grand total", "Total general"]],
+        ["estado_generico", ["Estado", "Status"]],
+        ["saldo_pendiente", ["Saldo Pendiente", "Balance due", "Reservation balance due", "Saldo pendiente de la reserva"]],
+        ["total_habitacion", ["Total De La Habitación", "Total de la habitación", "Room total price", "Precio total de la habitación"]],
+        ["ingresos_habitacion", ["Total de ingresos por habitación", "Room revenue total", "Ingresos por reserva de habitación", "Room reservation revenue"]],
+        ["deposito", ["Depósito", "Deposito", "Deposit", "Suggested deposit", "Depósito sugerido"]],
+        ["nombre_propiedad", ["Nombre de la propiedad", "Property name"]],
+        ["hotel_collect_booking", ["Hotel Collect Booking", "Hotel collect"]],
+        ["id_cloudbeds", ["ID", "Reservation ID", "ID de reserva", "Identificador de reserva"]],
+        ["reserva_cloudbeds", ["Reserva", "Reservation", "Número de reserva", "Numero de reserva", "Res #"]],
+        ["fuente", ["Fuente", "Source", "Reservation source"]],
+        ["fecha_reserva", ["Fecha de la reserva", "Reservation date"]],
+        ["fecha_reserva_huso", ["Fecha de la reserva (Huso horario)", "Fecha de reserva (Huso horario)", "Reservation date (Timezone)"]],
+        ["adultos", ["Adultos", "Adults"]],
+        ["ninos", ["Niños", "Ninos", "Children"]],
+        ["habitacion_ids", ["Habitación ID", "Habitacion ID", "Room ID", "Identificador de la habitación"]],
+        ["categoria_habitacion", ["Categoría de habitación", "Categoria de habitacion", "Room category", "Room type category"]],
+        ["plan_comidas", ["Plan de comidas", "Meal plan"]],
+        ["productos", ["Productos", "Products", "Additional items", "Productos adicionales"]],
+        ["confirmacion_terceros", ["Número de confirmación de terceros", "Numero de confirmacion de terceros", "Third-party confirmation number"]],
+        ["procedencia", ["Procedencia", "Origin"]],
+        ["hora_estimada", ["Hora estimada", "Estimated arrival time", "ETA"]],
+        ["cancelado_por_usuario", ["Canceled by user", "Cancelled by user", "Cancelado por usuario"]],
+        ["origen_cancelacion", ["Origen de la cancelación", "Origen de la cancelacion", "Cancellation source"]],
+        ["fecha_cancelacion", ["Fecha de cancelación", "Fecha de cancelacion", "Cancellation date"]],
+        ["cargo_cancelacion", ["Cargo por cancelación", "Cargo por cancelacion", "Cancellation fee"]],
+        ["etiquetas", ["Etiquetas", "Tags"]],
+        ["nombre_huesped", ["Nombre y apellido", "Nombre completo", "Full name", "Room primary guest full name"]],
+        ["fecha_nacimiento", ["Fecha de nacimiento", "Date of birth"]],
+        ["genero", ["Género", "Genero", "Gender"]],
+        ["correo", ["Correo electrónico", "Correo electronico", "Email", "E-mail"]],
+        ["movil", ["Móvil", "Movil", "Mobile", "Cell phone"]],
+        ["telefono", ["Teléfono", "Telefono", "Phone"]],
+        ["tipo_documento", ["Tipo de documento", "Document type"]],
+        ["pais_emisor_documento", ["País emisor del documento", "Pais emisor del documento", "Document issuing country"]],
+        ["pais_emisor_documento_codigo", ["País emisor del documento Código", "Pais emisor del documento Codigo", "Document issuing country code"]],
+        ["fecha_caducidad_documento", ["Fecha de caducidad del documento", "Document expiration date"]],
+        ["fecha_emision_documento", ["Fecha de emisión del documento", "Fecha de emision del documento", "Document issue date"]],
+        ["direccion", ["Dirección", "Direccion", "Address"]],
+        ["apartamento", ["Apartamento, suite, piso, etc.", "Apartamento suite piso", "Address line 2"]],
+        ["ciudad", ["Ciudad", "City"]],
+        ["estado_direccion", ["Estado/Provincia", "Provincia", "State/Province", "Region"]],
+        ["pais", ["País", "Pais", "Country"]],
+        ["pais_codigo", ["País Código", "Pais Codigo", "Country code"]],
+        ["codigo_postal", ["Código postal", "Codigo postal", "Postal code", "ZIP"]],
+        ["nombre_perfil_grupo", ["Nombre del perfil del grupo", "Group profile name"]],
+        ["tipo_perfil_grupo", ["Tipo de perfil de grupo", "Group profile type"]],
+        ["plan_tarifa_interno", ["Nombre del plan de tarifas (interno)", "Rate plan private name", "Room rate plans - private names"]],
+        ["plan_tarifa_publico", ["Nombre del plan de tarifas (público)", "Nombre del plan de tarifas (publico)", "Rate plan public name", "Room rate plans - public names"]],
+        ["tipo_tarjeta", ["Tipo de tarjeta", "Card type"]]
+    ].map(([key, aliases]) => Object.freeze({ key, aliases: Object.freeze(aliases) })));
+
+    const ALIASES = new Map();
+    DEFINICIONES_COLUMNAS.forEach(definicion => definicion.aliases.forEach(alias => ALIASES.set(canon(alias), definicion.key)));
+    const HEAD = Object.freeze(Object.fromEntries([...ALIASES.entries()]));
+    const MATRIZ_CAPACIDADES = Object.freeze({
+        parsear: Object.freeze({ minimo: "Dos encabezados Cloudbeds conocidos y una fila delimitable", escritura: false }),
+        identificar_fuerte: Object.freeze({ requiere: Object.freeze(["reserva_cloudbeds o id_cloudbeds inequívoco"]), escritura: false }),
+        identificar_fallback: Object.freeze({ requiere: Object.freeze(["nombre exacto", "habitación", "check_in", "check_out", "coincidencia única"]), solo_revision: true, escritura: false }),
+        comparar_alojamiento: Object.freeze({ requiere: Object.freeze(["identidad asociada", "Depósito válido", "Precio Total", "Productos presente", "total_alojamiento Proyecto H"]), escritura: false }),
+        proponer_total: Object.freeze({ regla_propiedad: "Depósito = alojamiento bruto final con IVA; Productos queda fuera", tolerancia_clp: TOLERANCIA_CLP, escritura: false }),
+        actualizar_tarifa: Object.freeze({ implementada: false, escritura: false })
+    });
+
+    function dinero(valor) {
+        const texto = String(valor ?? "").trim().replace(/^(?:CLP\s*\$?|\$)\s*/i, "");
+        if (!/^-?(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(texto)) return null;
+        const numero = Number(texto.replace(/\./g, ""));
+        return Number.isSafeInteger(numero) ? numero : null;
     }
-   }
-   counts[clase]++;return {clase,motivo,evidencia,entrada:r,reserva_id:candidatas.length===1?candidatas[0].id:null,total_proyecto_h:candidatas.length===1?montos.get(candidatas[0].id)??null:null};
-  });return {solo_lectura:true,total:filas.length,conteos:counts,filas};
- }
- async function consultar(entradas,cliente){
-  async function leer(tabla,campos,orden){const result=[];for(let i=0;i<20000;i+=500){const {data,error}=await cliente.from(tabla).select(campos).order(orden).range(i,i+499);if(error)throw Error('No se pudo consultar Proyecto H. No se clasifican reservas como faltantes.');if(!Array.isArray(data))throw Error('Respuesta incompleta de Proyecto H.');result.push(...data);if(data.length<500)return result;}throw Error('Consulta demasiado amplia; requiere revisión.');}
-  const [rs,ss]=await Promise.all([leer('reservas','id,cloudbeds_id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,cabanas(numero))','id'),leer('vista_saldos_alojamiento_reserva','reserva_id,total_alojamiento','reserva_id')]);
-  return comparar(entradas,rs,ss);
- }
- function renderizar(informe){
-  const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const moneda=v=>v===null||v===undefined?'No disponible':'$'+Number(v).toLocaleString('es-CL');
-  const labels={COINCIDE:'Coinciden',TOTAL_DIFERENTE:'Total diferente',FALTA_EN_PROYECTO_H:'Sin coincidencia en Proyecto H',CANCELADA:'Canceladas',MULTIHABITACION_REQUIERE_REVISION:'Multihabitación · revisar',AMBIGUA:'Ambiguas',NO_SOPORTADA:'No soportadas'};
-  return `<section class="haiku-cloudbeds-informe"><strong>Cloudbeds · informe de sólo lectura</strong><p>Revisé ${informe.total} entradas. Precio total corresponde a todas las noches de alojamiento.</p><p>Comparación con reservas accesibles en Proyecto H. No se crean ni modifican datos.</p>${CLASES.map(k=>`<details><summary>${esc(labels[k])} · ${informe.conteos[k]}</summary>${informe.filas.filter(f=>f.clase===k).map(f=>{const r=f.entrada;return `<article style="border-top:1px solid #dce6e0;padding:10px 0;overflow-wrap:anywhere"><strong>${esc(r.nombre_huesped)}</strong><p>${esc(r.habitaciones_raw)} · ${esc(r.check_in)} → ${esc(r.check_out)} · ${esc(r.noches)} noches</p><p>Cloudbeds: ${esc(moneda(r.precio_total))} · Proyecto H: ${esc(moneda(f.total_proyecto_h))}</p><p>${esc(f.motivo)} ${f.evidencia?'Evidencia: '+esc(f.evidencia):''}</p><small>Reserva Cloudbeds: ${esc(r.reserva_cloudbeds)} · Página ${esc(r.origen.pagina)}<br>Habitación ID: ${esc(r.habitacion_ids.join(', '))}<br>Correo: ${esc(r.correo)}${r.correo_enmascarado?' (enmascarado)':''}<br>Móvil: ${esc(r.movil)}${r.movil_enmascarado?' (enmascarado)':''}<br>Teléfono: ${esc(r.telefono)}${r.telefono_enmascarado?' (enmascarado)':''}<br>Contactos no verificados.</small></article>`;}).join('')}</details>`).join('')}</section>`;
- }
- const api=Object.freeze({MAPA,CLASES,dinero,fecha,normalizar,parsearPaginas,leerPDF,comparar,consultar,renderizar});root.HAIKU_CLOUDBEDS_PDF_V1=api;if(typeof module!=='undefined')module.exports=api;
-})(typeof window==='undefined'?globalThis:window);
+
+    function fecha(valor) {
+        const match = String(valor ?? "").trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!match) return null;
+        const [dia, mes, ano] = match.slice(1).map(Number);
+        const fechaUtc = new Date(Date.UTC(ano, mes - 1, dia));
+        return fechaUtc.getUTCFullYear() === ano && fechaUtc.getUTCMonth() === mes - 1 && fechaUtc.getUTCDate() === dia
+            ? `${match[3]}-${match[2]}-${match[1]}` : null;
+    }
+
+    const entero = valor => /^\d+$/.test(String(valor ?? "").trim()) ? Number(valor) : null;
+    const contacto = valor => String(valor ?? "").trim() || null;
+    const mascara = valor => /[*•●]|[xX]{3,}/.test(valor || "");
+    const lista = valor => Array.isArray(valor) ? valor : valor === undefined ? [] : [valor];
+    const primero = valor => lista(valor).map(contacto).find(Boolean) || null;
+    const presente = (raw, key) => (raw._columnas_presentes || Object.keys(raw)).includes(key);
+
+    function habitacionesDesde(raw) {
+        const codigos = String(raw || "").replace(/\s+/g, "").split(",").filter(Boolean);
+        return codigos.map(valor => {
+            const match = valor.toUpperCase().match(/^([A-Z]+\d+)(?:\((\d+)\))?$/);
+            return {
+                raw: valor,
+                codigo: match?.[1] || null,
+                cantidad: match ? Number(match[2] || 1) : null,
+                cabana: match ? MAPA[match[1]] ?? null : null
+            };
+        });
+    }
+
+    function normalizar(raw, origen = {}) {
+        const habitacionesRaw = primero(raw.habitaciones_raw) || "";
+        const habitaciones = habitacionesDesde(habitacionesRaw);
+        const reservaCloudbeds = String(primero(raw.reserva_cloudbeds) || "").replace(/\s/g, "");
+        const idCloudbeds = String(primero(raw.id_cloudbeds) || "").replace(/\s/g, "");
+        const estadosGenericos = lista(raw.estado_generico).map(valor => norm(valor)).filter(Boolean);
+        const estadoDirecto = norm(primero(raw.estado));
+        const estado = estadoDirecto || estadosGenericos.find(valor => ESTADOS.has(valor)) || "";
+        const estadoDireccion = primero(raw.estado_direccion) || lista(raw.estado_generico)
+            .map(contacto).find(valor => valor && norm(valor) !== estado) || null;
+        const nombreHuesped = primero(raw.nombre_huesped) || [primero(raw.nombre), primero(raw.apellido)].filter(Boolean).join(" ") || null;
+        const precioTotal = dinero(primero(raw.precio_total));
+        const totalHabitacion = dinero(primero(raw.total_habitacion));
+        const ingresosHabitacion = dinero(primero(raw.ingresos_habitacion));
+        const saldoPendiente = dinero(primero(raw.saldo_pendiente));
+        const deposito = dinero(primero(raw.deposito));
+        const checkInRaw = primero(raw.check_in);
+        const checkOutRaw = primero(raw.check_out);
+        const checkIn = fecha(checkInRaw);
+        const checkOut = fecha(checkOutRaw);
+        const noches = entero(primero(raw.noches));
+        const habitacionIds = String(primero(raw.habitacion_ids) || "").split(/[\s,;]+/).filter(Boolean);
+        const columnasPresentes = [...new Set(raw._columnas_presentes || Object.keys(raw).filter(key => !key.startsWith("_")))];
+        const productos = primero(raw.productos);
+        const productosColumnaPresente = columnasPresentes.includes("productos");
+        const productosLista = productos
+            ? String(productos).split(/[,;|]/).map(valor => valor.trim()).filter(Boolean)
+            : [];
+        const resultado = {
+            reserva_cloudbeds: reservaCloudbeds,
+            id_cloudbeds: idCloudbeds,
+            identificador_cloudbeds: reservaCloudbeds || idCloudbeds || null,
+            tipo_identificador_cloudbeds: reservaCloudbeds ? "reserva" : idCloudbeds ? "id" : null,
+            identificadores_cloudbeds: Object.freeze({ reserva: reservaCloudbeds || null, id: idCloudbeds || null }),
+            identificador_conflictivo: false,
+            fecha_reserva: fecha(primero(raw.fecha_reserva)),
+            fecha_reserva_huso: contacto(primero(raw.fecha_reserva_huso)),
+            habitaciones_raw: habitacionesRaw,
+            habitaciones,
+            check_in: checkIn,
+            check_out: checkOut,
+            precio_total: precioTotal,
+            total_habitacion: totalHabitacion,
+            ingresos_habitacion: ingresosHabitacion,
+            saldo_pendiente: saldoPendiente,
+            deposito,
+            productos,
+            productos_lista: productosLista,
+            productos_columna_presente: productosColumnaPresente,
+            productos_celda_vacia: productosColumnaPresente && productosLista.length === 0,
+            estado,
+            estado_direccion: estadoDireccion,
+            noches,
+            adultos: entero(primero(raw.adultos)),
+            ninos: entero(primero(raw.ninos)),
+            habitacion_ids: habitacionIds,
+            nombre: contacto(primero(raw.nombre)),
+            apellido: contacto(primero(raw.apellido)),
+            nombre_huesped: contacto(nombreHuesped),
+            correo: contacto(primero(raw.correo)),
+            movil: contacto(primero(raw.movil)),
+            telefono: contacto(primero(raw.telefono)),
+            fuente: contacto(primero(raw.fuente)),
+            categoria_habitacion: contacto(primero(raw.categoria_habitacion)),
+            plan_comidas: contacto(primero(raw.plan_comidas)),
+            plan_tarifa_interno: contacto(primero(raw.plan_tarifa_interno)),
+            plan_tarifa_publico: contacto(primero(raw.plan_tarifa_publico)),
+            columnas_presentes: columnasPresentes,
+            columnas_desconocidas: raw._columnas_desconocidas || [],
+            columnas_duplicadas: raw._columnas_duplicadas || [],
+            origen,
+            advertencias: []
+        };
+
+        resultado.correo_enmascarado = mascara(resultado.correo);
+        resultado.movil_enmascarado = mascara(resultado.movil);
+        resultado.telefono_enmascarado = mascara(resultado.telefono);
+        resultado.contactos_verificados = false;
+        resultado.multihabitacion = habitaciones.length > 1 || habitaciones.some(item => item.cantidad > 1) || habitacionIds.length > 1;
+        const dias = checkIn && checkOut ? (Date.parse(checkOut) - Date.parse(checkIn)) / 86400000 : null;
+
+        if (checkInRaw && !checkIn) resultado.advertencias.push("Check-in inválido.");
+        if (checkOutRaw && !checkOut) resultado.advertencias.push("Check-out inválido.");
+        if (noches !== null && dias !== null && noches !== dias) resultado.advertencias.push("Check-in, Check-out y Noches no coinciden.");
+        if (presente(raw, "precio_total") && primero(raw.precio_total) && precioTotal === null) resultado.advertencias.push("Precio Total inválido.");
+        if (presente(raw, "total_habitacion") && primero(raw.total_habitacion) && totalHabitacion === null) resultado.advertencias.push("Total de la habitación inválido.");
+        if (presente(raw, "saldo_pendiente") && primero(raw.saldo_pendiente) && saldoPendiente === null) resultado.advertencias.push("Saldo Pendiente inválido.");
+        if (presente(raw, "deposito") && primero(raw.deposito) && deposito === null) resultado.advertencias.push("Depósito inválido.");
+        if (estado && !ESTADOS.has(estado)) resultado.advertencias.push("Estado de reserva no reconocido; se conserva como dato informativo.");
+        if (totalHabitacion !== null && precioTotal !== null && Math.abs(totalHabitacion - precioTotal) > 5) {
+            resultado.advertencias.push("Precio Total y Total de la habitación tienen alcances distintos.");
+        }
+
+        resultado.fuente_tarifa_propuesta = deposito !== null ? "deposito_100_alojamiento_haiku_cabanas" : null;
+        resultado.valor_alojamiento_propuesto = deposito;
+        resultado.valor_por_noche_referencia = !resultado.multihabitacion && noches > 0 && deposito !== null
+            ? deposito / noches : null;
+        const fallbackCompleto = Boolean(resultado.nombre_huesped && habitaciones.length === 1 && habitaciones[0].cabana && checkIn && checkOut);
+        resultado.capacidades = Object.freeze({
+            parsear: "disponible",
+            identificar: resultado.identificador_cloudbeds ? "fuerte" : fallbackCompleto ? "fallback_revision" : "no_verificable",
+            comparar_alojamiento: deposito !== null ? "candidato_deposito_regla_propiedad" : "requiere_deposito",
+            actualizar_tarifa: "no_disponible_solo_lectura"
+        });
+        return resultado;
+    }
+
+    function agruparX(items, tolerancia) {
+        const grupos = [];
+        [...items].sort((a, b) => a.x - b.x || a.y - b.y).forEach(item => {
+            let grupo = grupos.find(actual => Math.abs(actual.x - item.x) <= tolerancia);
+            if (!grupo) {
+                grupo = { x: item.x, items: [] };
+                grupos.push(grupo);
+            }
+            grupo.items.push(item);
+            grupo.x = Math.min(grupo.x, item.x);
+        });
+        return grupos.sort((a, b) => a.x - b.x);
+    }
+
+    function columnas(page) {
+        if (!Array.isArray(page?.items) || !page.items.length) return null;
+        let mejor = null;
+        for (const ancla of page.items) {
+            const alto = Math.max(Number(ancla.h) || 4, 2);
+            const radio = Math.max(alto * 3, 12);
+            const banda = page.items.filter(item => Math.abs(item.y - ancla.y) <= radio);
+            const grupos = agruparX(banda, Math.max(alto * 1.25, 2.5));
+            const cols = grupos.map((grupo, indice) => {
+                const etiqueta = grupo.items.sort((a, b) => a.y - b.y || a.x - b.x)
+                    .map(item => String(item.str || "").trim()).filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+                return { id: `col-${indice}`, x: grupo.x, etiqueta, key: ALIASES.get(canon(etiqueta)) || null };
+            });
+            const conocidas = cols.filter(columna => columna.key);
+            const claves = new Set(conocidas.map(columna => columna.key));
+            const util = [...claves].some(key => [
+                "reserva_cloudbeds", "id_cloudbeds", "nombre_huesped", "nombre", "habitaciones_raw",
+                "check_in", "check_out", "precio_total", "total_habitacion", "saldo_pendiente", "deposito"
+            ].includes(key));
+            if (conocidas.length < 2 || !util) continue;
+            const puntaje = conocidas.length * 100 + claves.size * 10 - banda.length;
+            if (!mejor || puntaje > mejor.puntaje || (puntaje === mejor.puntaje && ancla.y < mejor.y)) {
+                mejor = {
+                    cols,
+                    width: page.width,
+                    inicio: Math.min(...banda.map(item => item.y)),
+                    fin: Math.max(...banda.map(item => item.y)),
+                    alto,
+                    y: ancla.y,
+                    puntaje,
+                    reconocidas: conocidas.map(columna => columna.key),
+                    desconocidas: cols.filter(columna => !columna.key).map(columna => columna.etiqueta).filter(Boolean)
+                };
+            }
+        }
+        if (!mejor) return null;
+        delete mejor.y;
+        delete mejor.puntaje;
+        return mejor;
+    }
+
+    function columnaDe(item, cabecera) {
+        const cols = cabecera.cols;
+        for (let indice = 0; indice < cols.length; indice++) {
+            const izquierda = indice === 0 ? -Infinity : (cols[indice - 1].x + cols[indice].x) / 2;
+            const derecha = indice === cols.length - 1 ? Infinity : (cols[indice].x + cols[indice + 1].x) / 2;
+            if (item.x >= izquierda && item.x < derecha) return cols[indice];
+        }
+        return null;
+    }
+
+    function valorAnclaValido(key, valor) {
+        const texto = String(valor || "").trim();
+        if (!texto) return false;
+        if (["reserva_cloudbeds", "id_cloudbeds"].includes(key)) return /^[A-Za-z0-9][A-Za-z0-9-]{2,}$/.test(texto);
+        if (["check_in", "check_out"].includes(key)) return Boolean(fecha(texto));
+        if (["precio_total", "total_habitacion", "saldo_pendiente", "deposito", "ingresos_habitacion"].includes(key)) return dinero(texto) !== null;
+        if (key === "habitaciones_raw") return Boolean(habitacionesDesde(texto).length) || /^N\/?A$/i.test(texto);
+        return texto.length >= 2;
+    }
+
+    function agruparAnclas(items, distancia) {
+        const grupos = [];
+        [...items].sort((a, b) => a.y - b.y).forEach(item => {
+            const ultimo = grupos.at(-1);
+            if (!ultimo || item.y - ultimo.at(-1).y > distancia) grupos.push([item]);
+            else ultimo.push(item);
+        });
+        return grupos.map(grupo => ({ y: grupo.reduce((suma, item) => suma + item.y, 0) / grupo.length, items: grupo }));
+    }
+
+    function anclasDe(items, cabecera) {
+        const prioridades = [
+            "reserva_cloudbeds", "id_cloudbeds", "check_in", "check_out", "habitaciones_raw",
+            "total_habitacion", "precio_total", "nombre_huesped", "nombre", "correo"
+        ];
+        for (const key of prioridades) {
+            for (const columna of cabecera.cols.filter(item => item.key === key)) {
+                const candidatas = items.filter(item => columnaDe(item, cabecera)?.id === columna.id && valorAnclaValido(key, item.str));
+                if (candidatas.length) return { key, columna, grupos: agruparAnclas(candidatas, Math.max(cabecera.alto * 3, 12)) };
+            }
+        }
+        return null;
+    }
+
+    function rawDesdeCeldas(celdas, cabecera) {
+        const raw = { _columnas_presentes: [], _columnas_desconocidas: [], _columnas_duplicadas: [] };
+        const vistos = new Set();
+        cabecera.cols.forEach(columna => {
+            const valor = (celdas.get(columna.id) || []).sort((a, b) => a.y - b.y || a.x - b.x)
+                .map(item => String(item.str || "").trim()).filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+            if (!columna.key) {
+                if (valor) raw._columnas_desconocidas.push({ encabezado: columna.etiqueta, valor });
+                return;
+            }
+            raw._columnas_presentes.push(columna.key);
+            if (!vistos.has(columna.key)) {
+                raw[columna.key] = valor;
+                vistos.add(columna.key);
+            } else {
+                raw[columna.key] = lista(raw[columna.key]).concat(valor);
+                if (!raw._columnas_duplicadas.includes(columna.key)) raw._columnas_duplicadas.push(columna.key);
+            }
+        });
+        raw._columnas_presentes = [...new Set(raw._columnas_presentes)];
+        return raw;
+    }
+
+    function parsearPaginas(pages) {
+        if (!Array.isArray(pages) || !pages.length) throw new Error("PDF vacío o inválido.");
+        let cabecera = null;
+        const entradas = [];
+        for (let paginaIndice = 0; paginaIndice < pages.length; paginaIndice++) {
+            const page = pages[paginaIndice];
+            const propia = columnas(page);
+            if (propia) cabecera = propia;
+            if (!cabecera || Math.abs(Number(page.width) - Number(cabecera.width)) > 1) {
+                throw new Error("PDF no Cloudbeds o sin una estructura tabular reconocible.");
+            }
+            const limiteSuperior = propia ? propia.fin + cabecera.alto : 30;
+            const items = page.items.filter(item => String(item.str || "").trim() && item.y > limiteSuperior && item.y < page.height - 22);
+            const anclas = anclasDe(items, cabecera);
+            if (!anclas?.grupos?.length) continue;
+            anclas.grupos.forEach((grupo, indice) => {
+                const top = indice ? (anclas.grupos[indice - 1].y + grupo.y) / 2 : limiteSuperior;
+                const bottom = indice + 1 < anclas.grupos.length ? (grupo.y + anclas.grupos[indice + 1].y) / 2 : page.height - 22;
+                const celdas = new Map();
+                items.filter(item => item.y >= top && item.y < bottom).forEach(item => {
+                    const columna = columnaDe(item, cabecera);
+                    if (!columna) return;
+                    if (!celdas.has(columna.id)) celdas.set(columna.id, []);
+                    celdas.get(columna.id).push(item);
+                });
+                const raw = rawDesdeCeldas(celdas, cabecera);
+                entradas.push(normalizar(raw, {
+                    pagina: paginaIndice + 1,
+                    fila: indice + 1,
+                    columna_ancla: anclas.key,
+                    encabezados_reconocidos: [...new Set(cabecera.reconocidas)],
+                    encabezados_desconocidos: cabecera.desconocidas
+                }));
+            });
+        }
+        if (!entradas.length) throw new Error("PDF Cloudbeds reconocido, pero no contiene filas delimitables.");
+        return entradas;
+    }
+
+    async function leerPDF(bytes, { pdfjs, timeout = 30000 } = {}) {
+        const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        if (data.length > 12 * 1024 * 1024) throw new Error("El PDF supera 12 MB.");
+        if (new TextDecoder().decode(data.slice(0, 5)) !== "%PDF-") throw new Error("Archivo PDF inválido.");
+        if (!pdfjs) {
+            pdfjs = await import("../vendor/pdfjs/pdf.mjs");
+            pdfjs.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.mjs", root.document.baseURI).href;
+        }
+        const task = pdfjs.getDocument({ data, isEvalSupported: false, useSystemFonts: true, stopAtErrors: true, disableAutoFetch: true });
+        let timer;
+        try {
+            return await Promise.race([
+                (async () => {
+                    const doc = await task.promise;
+                    if (doc.numPages > 50) throw new Error("El PDF supera 50 páginas.");
+                    const pages = [];
+                    for (let numero = 1; numero <= doc.numPages; numero++) {
+                        const pagina = await doc.getPage(numero);
+                        const viewport = pagina.getViewport({ scale: 1 });
+                        const contenido = await pagina.getTextContent();
+                        pages.push({
+                            width: viewport.width,
+                            height: viewport.height,
+                            items: contenido.items.filter(item => item.str?.trim()).map(item => ({
+                                str: item.str,
+                                x: item.transform[4],
+                                y: viewport.height - item.transform[5],
+                                w: item.width,
+                                h: item.height
+                            }))
+                        });
+                    }
+                    return parsearPaginas(pages);
+                })(),
+                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("El PDF tardó demasiado. Intenta con un archivo más pequeño.")), timeout); })
+            ]);
+        } finally {
+            clearTimeout(timer);
+            await task.destroy();
+        }
+    }
+
+    function contextoExacto(reserva, entrada, cabana) {
+        const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
+        if (!entrada.habitaciones_raw && !entrada.check_in && !entrada.check_out) return estadias.length === 1 ? estadias[0] : null;
+        return estadias.find(estadia =>
+            (!cabana || Number(estadia.cabanas?.numero) === cabana) &&
+            (!entrada.check_in || estadia.fecha_ingreso === entrada.check_in) &&
+            (!entrada.check_out || estadia.fecha_salida === entrada.check_out)
+        ) || null;
+    }
+
+    function comparar(entradas, reservas, saldos) {
+        const montos = new Map(saldos.map(saldo => [saldo.reserva_id, Number(saldo.total_alojamiento)]));
+        const conteos = Object.fromEntries(CLASES.map(clase => [clase, 0]));
+        const conteosCerteza = Object.fromEntries(CERTEZAS.map(certeza => [certeza, 0]));
+        const numeros = entradas.map(entrada => entrada.reserva_cloudbeds).filter(Boolean);
+        const ids = entradas.map(entrada => entrada.id_cloudbeds).filter(Boolean);
+        const numerosRepetidos = new Set(numeros.filter((valor, indice) => numeros.indexOf(valor) !== indice));
+        const idsRepetidos = new Set(ids.filter((valor, indice) => ids.indexOf(valor) !== indice));
+
+        const filas = entradas.map(entrada => {
+            const evidencias = [];
+            const revisiones = [];
+            let certeza = null;
+            let candidatas = [];
+            let identidad = null;
+            const cabana = entrada.habitaciones.length === 1 ? entrada.habitaciones[0].cabana : null;
+            const fallbackCompleto = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
+            const canceladaCloudbeds = ["cancelada", "cancelado"].includes(entrada.estado);
+
+            if (canceladaCloudbeds) {
+                certeza = "NO_APLICA";
+                revisiones.push("La reserva está cancelada en Cloudbeds; el Depósito histórico no genera propuesta.");
+            } else if (entrada.estado === "no show") {
+                certeza = "REVISION_MANUAL";
+                revisiones.push("No-show requiere revisión porque su semántica financiera no es inequívoca.");
+            } else if (entrada.multihabitacion) {
+                certeza = "REVISION_MANUAL";
+                revisiones.push("La fila contiene varias habitaciones o segmentos; no se distribuye el Depósito automáticamente.");
+            } else if (numerosRepetidos.has(entrada.reserva_cloudbeds) || idsRepetidos.has(entrada.id_cloudbeds)) {
+                certeza = "REVISION_MANUAL";
+                revisiones.push("Un mismo ID o Reserva aparece en más de una fila del PDF.");
+            } else if (entrada.reserva_cloudbeds || entrada.id_cloudbeds) {
+                const porReserva = entrada.reserva_cloudbeds
+                    ? reservas.filter(reserva => String(reserva.cloudbeds_id || "").trim() === entrada.reserva_cloudbeds) : [];
+                const porId = entrada.id_cloudbeds
+                    ? reservas.filter(reserva => String(reserva.cloudbeds_id || "").trim() === entrada.id_cloudbeds) : [];
+                const unicas = new Map([...porReserva, ...porId].map(reserva => [reserva.id, reserva]));
+                if (porReserva.length > 1 || porId.length > 1 || (porReserva.length && porId.length && unicas.size > 1)) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("ID y Reserva de Cloudbeds no identifican una única reserva de Proyecto H.");
+                } else if (!unicas.size) {
+                    certeza = "NO_IDENTIFICADA";
+                    revisiones.push("ID/Reserva no aparece entre las reservas accesibles de Proyecto H.");
+                } else {
+                    candidatas = [[...unicas.values()][0]];
+                    identidad = porReserva.length ? "Reserva Cloudbeds exacta" : "ID Cloudbeds exacto";
+                    evidencias.push(identidad);
+                    if (porReserva.length) evidencias.push("El importador de listado conserva la columna Reserva en reservas.cloudbeds_id.");
+                    else evidencias.push("Coincidencia con vínculo histórico; el campo legado no distingue tipo de identificador.");
+                    if (fallbackCompleto) {
+                        const contextoAlternativo = reservas.filter(reserva =>
+                            norm(reserva.titular_nombre) === norm(entrada.nombre_huesped) && Boolean(contextoExacto(reserva, entrada, cabana))
+                        );
+                        if (contextoAlternativo.some(reserva => reserva.id !== candidatas[0].id)) {
+                            certeza = "REVISION_MANUAL";
+                            revisiones.push("El identificador fuerte y el fallback contextual apuntan a reservas distintas.");
+                        }
+                    }
+                }
+            } else if (fallbackCompleto) {
+                candidatas = reservas.filter(reserva =>
+                    norm(reserva.titular_nombre) === norm(entrada.nombre_huesped) && Boolean(contextoExacto(reserva, entrada, cabana))
+                );
+                identidad = "Nombre exacto + habitación + fechas";
+                if (candidatas.length === 1) {
+                    certeza = "REVISION_MANUAL";
+                    evidencias.push(`${identidad}; fallback informativo, nunca alta certeza.`);
+                } else if (candidatas.length > 1) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("El fallback exacto coincide con más de una reserva.");
+                } else {
+                    certeza = "NO_IDENTIFICADA";
+                    revisiones.push("El contexto exacto no identifica una reserva accesible.");
+                }
+            } else {
+                certeza = "NO_IDENTIFICADA";
+                revisiones.push("Faltan ID/Reserva y el contexto completo nombre + habitación + fechas.");
+            }
+
+            const reserva = candidatas.length === 1 ? candidatas[0] : null;
+            const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
+            const totalProyectoH = reserva ? montos.get(reserva.id) : null;
+            const totalValido = Number.isSafeInteger(totalProyectoH);
+
+            if (reserva && !certeza) {
+                if (reserva.grupo_reserva_id || estadias.length !== 1) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Proyecto H contiene un grupo o más de una estadía; v31 no debe recibir una distribución inferida.");
+                } else if (norm(reserva.estado_reserva).replace(/ /g, "_") === "cancelada") {
+                    certeza = "NO_APLICA";
+                    revisiones.push("La reserva asociada está cancelada en Proyecto H.");
+                } else if (norm(reserva.estado_reserva).replace(/ /g, "_") === "no_show") {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("La reserva asociada es no-show y requiere revisión financiera.");
+                }
+            }
+
+            if (reserva && !certeza) {
+                const contexto = contextoExacto(reserva, entrada, cabana);
+                if (!cabana || !entrada.check_in || !entrada.check_out) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Para alta certeza se requieren habitación, check-in y check-out.");
+                } else if (!contexto) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("El vínculo existe, pero habitación o fechas contradicen Proyecto H.");
+                } else {
+                    evidencias.push(`Contexto exacto: cabaña ${cabana}, ${entrada.check_in} → ${entrada.check_out}.`);
+                }
+                if (!certeza && (!entrada.estado || !ESTADOS.has(entrada.estado))) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Falta un estado Cloudbeds reconocido para confirmar que la reserva es operable.");
+                }
+            }
+
+            if (reserva && !certeza) {
+                if (!Number.isSafeInteger(entrada.deposito) || entrada.deposito <= 0) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Depósito falta, es inválido o no es un entero CLP positivo.");
+                } else {
+                    evidencias.push("Regla Haiku Cabañas: Depósito representa 100% del alojamiento bruto final con IVA.");
+                }
+                if (!certeza && (!Number.isSafeInteger(entrada.precio_total) || entrada.precio_total <= 0)) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Precio Total falta o es inválido; no se puede corroborar la separación de productos.");
+                }
+                if (!certeza && !entrada.productos_columna_presente) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("La columna Productos está ausente; no se asume que no existan extras.");
+                }
+                if (!certeza && entrada.precio_total < entrada.deposito - TOLERANCIA_CLP) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Precio Total es menor que Depósito; contradicción financiera.");
+                }
+                if (!certeza && entrada.productos_celda_vacia && Math.abs(entrada.precio_total - entrada.deposito) > TOLERANCIA_CLP) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Productos está presente y vacío, pero Precio Total no coincide con Depósito.");
+                }
+                if (!certeza && entrada.productos_lista.length && entrada.precio_total <= entrada.deposito + TOLERANCIA_CLP) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("Hay productos declarados, pero Precio Total no contiene un componente adicional observable.");
+                }
+                if (!certeza && entrada.productos_lista.length) {
+                    evidencias.push(`Productos declarados; componente no alojamiento observable: $${(entrada.precio_total - entrada.deposito).toLocaleString("es-CL")}.`);
+                } else if (!certeza) {
+                    evidencias.push("Productos presente y vacío; Precio Total coincide con Depósito dentro de tolerancia.");
+                }
+                if (!certeza && entrada.total_habitacion !== null) {
+                    if (!Number.isSafeInteger(entrada.total_habitacion) || entrada.total_habitacion <= 0 || entrada.total_habitacion > entrada.deposito + TOLERANCIA_CLP) {
+                        certeza = "REVISION_MANUAL";
+                        revisiones.push("Total habitación contradice el Depósito bruto final.");
+                    } else {
+                        const brutoReferencial = Math.round(entrada.total_habitacion * IVA_REFERENCIAL);
+                        const corroboraIva = Math.abs(brutoReferencial - entrada.deposito) <= TOLERANCIA_CLP;
+                        evidencias.push(corroboraIva
+                            ? "Total habitación × 1,19 corrobora el Depósito (señal referencial, no regla universal)."
+                            : "Total habitación se conserva como referencia neta aproximada; el IVA 1,19 no corrobora este caso y no reemplaza al Depósito.");
+                    }
+                }
+                if (!certeza && !totalValido) {
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("El total efectivo de alojamiento de Proyecto H no está disponible como entero CLP.");
+                }
+            }
+
+            const candidato = Number.isSafeInteger(entrada.deposito) && entrada.deposito > 0 ? entrada.deposito : null;
+            const diferencia = candidato !== null && totalValido ? candidato - totalProyectoH : null;
+            if (reserva && !certeza) {
+                certeza = Math.abs(diferencia) <= TOLERANCIA_CLP ? "SIN_CAMBIO" : "ALTA_CERTEZA";
+                evidencias.push(certeza === "SIN_CAMBIO"
+                    ? "Depósito y alojamiento efectivo coinciden dentro de $5 CLP."
+                    : "Todas las señales mínimas son coherentes; existe una propuesta informativa.");
+            }
+
+            const clase = certeza === "SIN_CAMBIO" ? "COINCIDE"
+                : certeza === "ALTA_CERTEZA" ? "TOTAL_DIFERENTE"
+                    : certeza === "NO_APLICA" ? "CANCELADA"
+                        : certeza === "NO_IDENTIFICADA" ? (entrada.identificador_cloudbeds ? "FALTA_EN_PROYECTO_H" : "NO_SOPORTADA")
+                            : entrada.multihabitacion || reserva?.grupo_reserva_id || estadias.length > 1
+                                ? "MULTIHABITACION_REQUIERE_REVISION" : "REVISION_FINANCIERA";
+            const motivo = revisiones[0] || evidencias.at(-1) || "Revisión conservadora de sólo lectura.";
+            const componenteNoAlojamiento = candidato !== null && entrada.precio_total !== null
+                ? entrada.precio_total - candidato : null;
+            const propuesta = {
+                reserva_id: reserva?.id || null,
+                cloudbeds_id: reserva?.cloudbeds_id || null,
+                reservation_id: entrada.id_cloudbeds || null,
+                reservation_number: entrada.reserva_cloudbeds || null,
+                cabana,
+                check_in: entrada.check_in,
+                check_out: entrada.check_out,
+                total_actual_haku: totalValido ? totalProyectoH : null,
+                precio_total_cloudbeds: entrada.precio_total,
+                total_habitacion_cloudbeds: entrada.total_habitacion,
+                deposito_cloudbeds: entrada.deposito,
+                productos: entrada.productos_lista,
+                productos_columna_presente: entrada.productos_columna_presente,
+                total_alojamiento_propuesto: certeza === "ALTA_CERTEZA" || certeza === "SIN_CAMBIO" ? candidato : null,
+                componente_no_alojamiento_observable: componenteNoAlojamiento,
+                diferencia,
+                certeza,
+                evidencias,
+                revisiones,
+                distribucion_v31: estadias.length === 1
+                    ? "Una estadía: el total canónico corresponde al alojamiento completo; una futura escritura exigiría revalidación v31."
+                    : "Sin distribución automática.",
+                solo_lectura: true,
+                actualizacion_disponible: false
+            };
+
+            conteos[clase]++;
+            conteosCerteza[certeza]++;
+            return {
+                clase,
+                certeza,
+                motivo,
+                evidencia: identidad,
+                evidencias,
+                revisiones,
+                entrada,
+                reserva_id: propuesta.reserva_id,
+                total_proyecto_h: propuesta.total_actual_haku,
+                total_cloudbeds_alojamiento: propuesta.total_alojamiento_propuesto,
+                fuente_financiera: candidato !== null ? "deposito_100_alojamiento_haiku_cabanas" : null,
+                diferencia,
+                propuesta,
+                actualizacion: { disponible: false, estado: "solo_lectura_2c" }
+            };
+        });
+        return {
+            solo_lectura: true,
+            total: filas.length,
+            conteos,
+            conteos_certeza: conteosCerteza,
+            filas,
+            matriz_capacidades: MATRIZ_CAPACIDADES
+        };
+    }
+
+    function filtrarInforme(informe, filtro = {}) {
+        const dia = filtro.fecha || null;
+        const desde = filtro.desde || dia;
+        const hasta = filtro.hasta || (dia ? dia : null);
+        const buscada = norm(filtro.reserva);
+        const filas = informe.filas.filter(fila => {
+            const entrada = fila.entrada;
+            const coincideReserva = !buscada || [fila.reserva_id, entrada.reserva_cloudbeds, entrada.id_cloudbeds]
+                .some(valor => norm(valor) === buscada);
+            const finRango = hasta || desde;
+            const coincideFecha = !desde || !finRango || Boolean(
+                entrada.check_in && entrada.check_out && entrada.check_in <= finRango && entrada.check_out > desde
+            );
+            return coincideReserva && coincideFecha;
+        });
+        const conteos = Object.fromEntries(CLASES.map(clase => [clase, filas.filter(fila => fila.clase === clase).length]));
+        const conteosCerteza = Object.fromEntries(CERTEZAS.map(certeza => [certeza, filas.filter(fila => fila.certeza === certeza).length]));
+        return { ...informe, total: filas.length, filas, conteos, conteos_certeza: conteosCerteza, filtro: { fecha: dia, desde, hasta, reserva: filtro.reserva || null } };
+    }
+
+    async function consultar(entradas, cliente) {
+        async function leer(tabla, campos, orden) {
+            const resultado = [];
+            for (let inicio = 0; inicio < 20000; inicio += 500) {
+                const { data, error } = await cliente.from(tabla).select(campos).order(orden).range(inicio, inicio + 499);
+                if (error) throw new Error("No se pudo consultar Proyecto H. No se clasifican reservas como faltantes.");
+                if (!Array.isArray(data)) throw new Error("Respuesta incompleta de Proyecto H.");
+                resultado.push(...data);
+                if (data.length < 500) return resultado;
+            }
+            throw new Error("Consulta demasiado amplia; requiere revisión.");
+        }
+        const [reservas, saldos] = await Promise.all([
+            leer("reservas", "id,cloudbeds_id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,cabanas(numero))", "id"),
+            leer("vista_saldos_alojamiento_reserva", "reserva_id,total_alojamiento", "reserva_id")
+        ]);
+        return comparar(entradas, reservas, saldos);
+    }
+
+    function renderizar(informe) {
+        const esc = valor => String(valor ?? "—").replace(/[&<>"']/g, caracter => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[caracter]);
+        const moneda = valor => valor === null || valor === undefined
+            ? "No disponible"
+            : `${Number(valor) < 0 ? "-" : ""}$${Math.abs(Number(valor)).toLocaleString("es-CL")}`;
+        const labels = {
+            SIN_CAMBIO: "Coinciden", ALTA_CERTEZA: "Propuestas seguras",
+            REVISION_MANUAL: "Revisión manual", NO_APLICA: "Canceladas / no aplica",
+            NO_IDENTIFICADA: "No identificadas"
+        };
+        const resumen = `<div class="haiku-cloudbeds-resumen">${CERTEZAS.map(certeza =>
+            `<span><strong>${esc(informe.conteos_certeza?.[certeza] || 0)}</strong> ${esc(labels[certeza])}</span>`).join("")}</div>`;
+        const detalles = CERTEZAS.map(certeza => `<details data-certeza="${certeza}"><summary>${esc(labels[certeza])} · ${informe.conteos_certeza?.[certeza] || 0}</summary>${informe.filas
+            .filter(fila => fila.certeza === certeza).map(fila => {
+                const entrada = fila.entrada;
+                const identidad = entrada.nombre_huesped || entrada.identificador_cloudbeds || "Fila Cloudbeds";
+                const diferencia = fila.diferencia === null ? "No calculable" : `${fila.diferencia > 0 ? "+" : ""}${moneda(fila.diferencia)}`;
+                const propuesta = fila.propuesta;
+                return `<article style="border-top:1px solid #dce6e0;padding:10px 0;overflow-wrap:anywhere"><strong>${esc(identidad)}</strong>
+                    <p>${esc(entrada.habitaciones_raw || "Habitación no incluida")} · ${esc(entrada.check_in)} → ${esc(entrada.check_out)} · ${esc(entrada.noches)} noches</p>
+                    <p>Proyecto H: ${esc(moneda(propuesta.total_actual_haku))} · Depósito candidato: ${esc(moneda(propuesta.total_alojamiento_propuesto))} · Diferencia: ${esc(diferencia)}</p>
+                    <p>Precio Total: ${esc(moneda(entrada.precio_total))} · Productos: ${esc(entrada.productos_columna_presente ? entrada.productos || "Sin productos" : "Columna ausente")} · Componente no alojamiento: ${esc(moneda(propuesta.componente_no_alojamiento_observable))}</p>
+                    <p>Total habitación (referencial): ${esc(moneda(entrada.total_habitacion))} · Saldo (nunca tarifa): ${esc(moneda(entrada.saldo_pendiente))} · Depósito: ${esc(moneda(entrada.deposito))}</p>
+                    <p><strong>${esc(fila.certeza)}</strong> · ${esc(fila.motivo)}</p>
+                    ${fila.evidencias.length ? `<ul>${fila.evidencias.map(item => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
+                    ${fila.revisiones.length ? `<ul>${fila.revisiones.map(item => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
+                    <small>Reserva Cloudbeds: ${esc(entrada.reserva_cloudbeds)} · ID Cloudbeds: ${esc(entrada.id_cloudbeds)} · Página ${esc(entrada.origen.pagina)}<br>
+                    Capacidad de identidad: ${esc(entrada.capacidades.identificar)} · Tarifa: ${esc(entrada.capacidades.comparar_alojamiento)}<br>
+                    Columnas reconocidas: ${esc(entrada.columnas_presentes.join(", "))}<br>
+                    Columnas desconocidas conservadas: ${esc(entrada.columnas_desconocidas.map(item => item.encabezado).join(", ") || "ninguna")}<br>
+                    SOLO LECTURA · no existe acción de escritura.</small></article>`;
+            }).join("")}</details>`).join("");
+        return `<section class="haiku-cloudbeds-informe"><strong>Cloudbeds · propuestas conservadoras de sólo lectura</strong>
+            <p>Revisé ${informe.total} entradas. Depósito es el único candidato a alojamiento según la regla de esta propiedad.</p>
+            <p>Precio Total incluye alojamiento y productos; Total habitación sólo puede corroborar; Saldo nunca es tarifa. No se crean ni modifican datos.</p>
+            ${resumen}${detalles}</section>`;
+    }
+
+    const api = Object.freeze({
+        MAPA, CLASES, CERTEZAS, HEAD, COLUMNAS: DEFINICIONES_COLUMNAS, MATRIZ_CAPACIDADES,
+        TOLERANCIA_CLP, IVA_REFERENCIAL,
+        dinero, fecha, normalizar, columnas, parsearPaginas, leerPDF, comparar, filtrarInforme, consultar, renderizar
+    });
+    root.HAIKU_CLOUDBEDS_PDF_V1 = api;
+    if (typeof module !== "undefined") module.exports = api;
+})(typeof window === "undefined" ? globalThis : window);

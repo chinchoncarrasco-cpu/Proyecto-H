@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo local · Cloudbeds PDF 2C</title>
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">PROYECTO H · FIXTURE LOCAL</p>
+      <h1>Cloudbeds PDF · certeza y propuestas</h1>
+      <p>Diez casos ficticios, procesados por el motor 2C real. Sin Supabase, RPC, uploads ni escrituras.</p>
+    </div>
+    <span class="safe">Sólo lectura</span>
+  </header>
+
+  <main>
+    <section class="controls" aria-label="Selector de escenario">
+      <label for="escenario">Caso de prueba</label>
+      <select id="escenario"></select>
+      <button id="anterior" type="button">← Anterior</button>
+      <button id="siguiente" type="button">Siguiente →</button>
+    </section>
+
+    <section class="summary" aria-live="polite">
+      <article><span>Resultado</span><strong id="clase">—</strong></article>
+      <article><span>Cloudbeds · alojamiento</span><strong id="cloudbeds">—</strong></article>
+      <article><span>Proyecto H · alojamiento</span><strong id="proyecto">—</strong></article>
+      <article><span>Diferencia</span><strong id="diferencia">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <article class="surface source">
+        <div class="surface-title">
+          <div><span>PDF ficticio</span><h2 id="titulo">—</h2></div>
+          <span id="identidad" class="pill">—</span>
+        </div>
+        <p id="descripcion"></p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr id="encabezados"></tr></thead>
+            <tbody><tr id="valores"></tr></tbody>
+          </table>
+        </div>
+        <details>
+          <summary>Ver diagnóstico del parser</summary>
+          <pre id="diagnostico"></pre>
+        </details>
+      </article>
+
+      <article class="surface result">
+        <div class="surface-title">
+          <div><span>Informe Haku</span><h2>Comparación local</h2></div>
+          <span class="pill neutral">Sin acción de escritura</span>
+        </div>
+        <div id="informe"></div>
+      </article>
+    </section>
+  </main>
+
+  <footer>Todos los nombres, IDs, fechas e importes de esta página son ficticios.</footer>
+  <script src="../../../js/haiku-cloudbeds-pdf-v1.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>
