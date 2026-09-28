@@ -311,6 +311,60 @@ async function screenshot(client, name) {
         })()`);
         const initialScroll = await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop");
 
+        // El buscador superior abre la reserva histórica exacta, no la reserva actual de la misma CAB 1.
+        await evaluate(page, `(() => {
+            const input = document.getElementById("busqueda-reservas");
+            input.value = "Antonia";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        })()`);
+        assert.equal(await evaluate(page, "!document.querySelector('[data-demo-buscador=\"A\"]').hidden"), true);
+        assert.equal(await evaluate(page, "document.querySelector('[data-demo-buscador=\"ACTUAL\"]').hidden"), true);
+        await pointerClick(page, "[data-demo-buscador='A']");
+        await waitFor(page, `window.HAIKU_PANELES_V1.estado().entidadInspector === ${JSON.stringify("11111111-1111-4111-8111-111111111111")}`,
+            "reserva histórica abierta desde el buscador");
+        assert.deepEqual(await evaluate(page, "window.__demoOpenArgs.at(-1)"), {
+            id: "11111111-1111-4111-8111-111111111111",
+            seleccion: { estadiaId:"22222222-2222-4222-8222-222222222222", numeroCabana:"1" },
+            origenHaku: false
+        });
+        assert.match(await evaluate(page, "document.getElementById('demo-reserva-id').textContent"), /febrero 2024/);
+        assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), "Borrador ficticio conservado");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), initialScroll);
+        await screenshot(page, "desktop-buscador-historico-1500x900.png");
+
+        // A -> B desde el buscador reutiliza la ficha y deja la multiestadía al selector seguro.
+        await evaluate(page, `(() => {
+            const input = document.getElementById("busqueda-reservas");
+            input.value = "Bruno";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        })()`);
+        await pointerClick(page, "[data-demo-buscador='B']");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"),
+            "33333333-3333-4333-8333-333333333333");
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer') === window.__demoDrawerIdentity"), true);
+        assert.equal(await evaluate(page, "document.querySelectorAll('[data-haiku-inspector-superficie]:not([hidden])').length"), 1);
+        assert.equal(await evaluate(page, "document.getElementById('demo-reserva-selector').hidden"), false);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop"), initialScroll);
+
+        // La reserva actual de la misma CAB 1 también abre por su propio UUID, nunca por la cabaña compartida.
+        await evaluate(page, `(() => {
+            const input = document.getElementById("busqueda-reservas");
+            input.value = "Carolina";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        })()`);
+        await pointerClick(page, "[data-demo-buscador='ACTUAL']");
+        assert.equal(await evaluate(page, "window.HAIKU_PANELES_V1.estado().entidadInspector"),
+            "66666666-6666-4666-8666-666666666666");
+        assert.deepEqual(await evaluate(page, "window.__demoOpenArgs.at(-1)"), {
+            id: "66666666-6666-4666-8666-666666666666",
+            seleccion: { estadiaId:"77777777-7777-4777-8777-777777777777", numeroCabana:"1" },
+            origenHaku: false
+        });
+        assert.equal(await evaluate(page, "document.getElementById('sites-resumen-reserva-drawer') === window.__demoDrawerIdentity"), true);
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), "Borrador ficticio conservado");
+        await closeReservation(page);
+
         // El pago ficticio abre por reserva_id aunque no exista fila activa del Resumen.
         assert.equal(await evaluate(page, "document.querySelectorAll('.sites-resumen-cabana').length"), 0);
         await pointerClick(page, "[data-demo-haku-reserva='A']");
@@ -321,7 +375,7 @@ async function screenshot(client, name) {
             reservaId: "11111111-1111-4111-8111-111111111111",
             estadiaId: "22222222-2222-4222-8222-222222222222",
             numeroCabana: "1",
-            etiqueta: "Reserva ficticia A"
+            etiqueta: "Antonia Histórica · febrero 2024"
         });
         assert.deepEqual(await evaluate(page, "window.__demoOpenArgs.at(-1)"), {
             id: reservaHakuA.reservaId,

@@ -2815,8 +2815,13 @@ function obtenerReservasParaBusqueda() {
                                     cabana.codigoHaiku ||
                                     ficha.codigoHaiku ||
                                     "",
+                                cloudbedsId:
+                                    cabana.cloudbedsId ||
+                                    ficha.cloudbedsId ||
+                                    "",
                                 numeroCabana,
                                 fechaIngreso,
+                                estadias: [],
 
                                 titular:
                                     cabana.titular ||
@@ -2849,6 +2854,27 @@ function obtenerReservasParaBusqueda() {
                                 .join(" ")
                             }
                         );
+                    }
+
+                    const reservaBusqueda =
+                        reservas.get(reservaId);
+
+                    if (reservaBusqueda) {
+                        const estadiaId =
+                            String(cabana.estadiaId || "");
+                        const claveEstadia =
+                            `${estadiaId}|${numeroCabana}`;
+                        const existeEstadia =
+                            reservaBusqueda.estadias.some(estadia =>
+                                `${estadia.estadiaId}|${estadia.numeroCabana}` === claveEstadia
+                            );
+
+                        if (!existeEstadia) {
+                            reservaBusqueda.estadias.push({
+                                estadiaId,
+                                numeroCabana: String(numeroCabana)
+                            });
+                        }
                     }
 
                 }
@@ -3041,6 +3067,7 @@ function buscarReservas(texto) {
                     [
                         reserva.titular,
                         reserva.codigoHaiku,
+                        reserva.cloudbedsId,
                         reserva.rut,
                         reserva.telefono,
                         reserva.correo,
@@ -3082,11 +3109,8 @@ function buscarReservas(texto) {
             boton.className =
                 "resultado-reserva-item";
 
-            boton.dataset.reservaId =
-                reserva.reservaId;
-
-            boton.dataset.cabana =
-                reserva.numeroCabana;
+            window.HAIKU_BUSCADOR_RESERVAS_V1
+                ?.prepararResultado?.(boton, reserva);
 
             boton.dataset.fecha =
                 reserva.fechaIngreso;
@@ -3108,7 +3132,9 @@ function buscarReservas(texto) {
                 </strong>
 
                 <span>
-                    CAB ${reserva.numeroCabana}
+                    ${reserva.estadias?.length > 1
+                        ? "Varias estadías"
+                        : `CAB ${reserva.numeroCabana}`}
                     ·
                     ${reserva.codigoHaiku || "Sin código Haiku"}
                 </span>
@@ -3181,7 +3207,7 @@ if (resultadosBusquedaReservas) {
 
     resultadosBusquedaReservas.addEventListener(
         "click",
-        evento => {
+        async evento => {
 
             const resultado =
                 evento.target.closest(
@@ -3192,12 +3218,6 @@ if (resultadosBusquedaReservas) {
                 return;
             }
 
-
-            const numeroCabana =
-                resultado.dataset.cabana;
-
-            const fechaReserva =
-                resultado.dataset.fecha;
 
             const reservaId =
                 resultado.dataset.reservaId;
@@ -3231,39 +3251,14 @@ if (resultadosBusquedaReservas) {
             }
 
 
-            const fechaAnterior =
-                fechaSeleccionada;
+            evento.preventDefault();
+            const abierta = await window.HAIKU_BUSCADOR_RESERVAS_V1
+                ?.abrirResultado?.(resultado);
 
-
-            // El modal actual busca la reserva
-            // usando fechaSeleccionada.
-            fechaSeleccionada =
-                fechaReserva;
-
-
-            const botonCabana =
-                document.querySelector(
-                    `[data-ficha-cabana="${numeroCabana}"]`
-                );
-
-
-            if (botonCabana) {
-
-                botonCabana.click();
-
+            if (abierta) {
+                resultadosBusquedaReservas.hidden = true;
+                buscadorReservas.value = "";
             }
-
-
-            // Dejamos al usuario en el día
-            // que estaba mirando originalmente.
-            fechaSeleccionada =
-                fechaAnterior;
-
-
-            resultadosBusquedaReservas.hidden =
-                true;
-
-            buscadorReservas.value = "";
 
         }
     );

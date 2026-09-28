@@ -281,6 +281,7 @@
             reservaId: reserva.id,
             estadiaId: estadia.id,
             codigoHaiku: reserva.codigo_haiku || "",
+            cloudbedsId: reserva.cloudbeds_id || "",
             titular: reserva.titular_nombre || "",
             adultos: Number(estadia.adultos || 0),
             ninos: Number(estadia.ninos || 0),
@@ -378,6 +379,7 @@
 
         fichas[reserva.id] = {
             codigoHaiku: reserva.codigo_haiku || "",
+            cloudbedsId: reserva.cloudbeds_id || "",
             titular: reserva.titular_nombre || "",
             rut: base.rut,
             telefono: base.telefono,

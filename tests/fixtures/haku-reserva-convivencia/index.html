@@ -24,6 +24,13 @@
         .demo-libro button { min-height: 38px; padding: 7px 12px; border: 1px solid #b9cec0; border-radius: 7px; background: #fff; color: #28553e; font: inherit; cursor: pointer; }
         .demo-estado { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; color: #466154; font-size: 13px; }
         .demo-estado output { min-width: 24px; padding: 3px 8px; border-radius: 999px; background: #28553e; color: #fff; text-align: center; }
+        .demo-buscador-superior { position: relative; display: block; max-width: 620px; margin: 20px 0; padding: 16px; border: 1px solid #c9d9ce; border-radius: 10px; background: #fff; }
+        .demo-buscador-superior label { display: block; margin-bottom: 7px; font-weight: 800; }
+        .demo-buscador-superior input { width: 100%; min-height: 42px; box-sizing: border-box; padding: 8px 11px; border: 1px solid #aac3b3; border-radius: 7px; font: inherit; }
+        .demo-resultados-buscador { display: grid; gap: 7px; margin-top: 9px; }
+        .demo-resultados-buscador[hidden] { display: none; }
+        .demo-resultados-buscador .resultado-reserva-item { display: grid; gap: 2px; width: 100%; padding: 10px 12px; border: 1px solid #d4e1d8; border-radius: 7px; background: #f8fbf9; color: #284b39; text-align: left; cursor: pointer; }
+        .demo-resultados-buscador small { color: #60756a; }
         .demo-libro { min-width: 0; padding: 18px; border: 1px solid #d0ddd4; border-radius: 10px; background: #fff; }
         .demo-libro-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
         .demo-libro-cabecera input { width: min(310px, 100%); min-height: 38px; padding: 8px 10px; border: 1px solid #b9cec0; border-radius: 7px; font: inherit; }
@@ -57,6 +64,22 @@
             · Acciones recibidas: <output id="demo-accion-conteo">0</output>
             <span id="demo-seleccion">Ninguna fila seleccionada</span>
         </div>
+        <section class="demo-buscador-superior" aria-labelledby="demo-buscador-titulo">
+            <label id="demo-buscador-titulo" for="busqueda-reservas">Buscador superior de reservas</label>
+            <input id="busqueda-reservas" type="search" placeholder="Prueba: Antonia, Bruno o Carolina" autocomplete="off">
+            <small>La fecha visible simulada es 28/09/2026; Antonia corresponde al 04/02/2024 en CAB 1.</small>
+            <div id="resultados-busqueda-reservas" class="demo-resultados-buscador" hidden>
+                <button type="button" class="resultado-reserva-item" data-demo-buscador="A">
+                    <strong>Antonia Histórica</strong><span>CAB 1 · H-2024-014</span><small>04–07 febrero 2024</small>
+                </button>
+                <button type="button" class="resultado-reserva-item" data-demo-buscador="B">
+                    <strong>Bruno Grupo</strong><span>Varias estadías · H-2025-208</span><small>Reserva multiestadía</small>
+                </button>
+                <button type="button" class="resultado-reserva-item" data-demo-buscador="ACTUAL">
+                    <strong>Carolina Actual</strong><span>CAB 1 · H-2026-411</span><small>28–30 septiembre 2026</small>
+                </button>
+            </div>
+        </section>
         <section class="demo-vista" data-demo-vista="libro">
         <div class="demo-acciones">
             <button type="button" data-demo-reserva="A">Ver reserva A</button>
@@ -123,6 +146,7 @@
         </section>
     </div>
 
+    <script src="../../../js/haiku-buscador-reservas-v1.js"></script>
     <script>
         window.haikuSesion = { usuario: { id: "demo-local" } };
         window.haikuSupabase = {
@@ -133,11 +157,21 @@
                 reservaId: "11111111-1111-4111-8111-111111111111",
                 estadiaId: "22222222-2222-4222-8222-222222222222",
                 numeroCabana: "1",
-                etiqueta: "Reserva ficticia A"
+                etiqueta: "Antonia Histórica · febrero 2024"
             },
             B: {
                 reservaId: "33333333-3333-4333-8333-333333333333",
-                etiqueta: "Reserva ficticia B · multiestadía"
+                etiqueta: "Bruno Grupo · multiestadía",
+                estadias: [
+                    { estadiaId: "44444444-4444-4444-8444-444444444444", numeroCabana: "2" },
+                    { estadiaId: "55555555-5555-4555-8555-555555555555", numeroCabana: "7" }
+                ]
+            },
+            ACTUAL: {
+                reservaId: "66666666-6666-4666-8666-666666666666",
+                estadiaId: "77777777-7777-4777-8777-777777777777",
+                numeroCabana: "1",
+                etiqueta: "Carolina Actual · septiembre 2026"
             }
         });
         const fichaDemo = document.getElementById("sites-resumen-reserva-drawer");
@@ -170,6 +204,30 @@
             },
             cerrar: cerrarFichaDemo
         };
+
+        const inputBuscador = document.getElementById("busqueda-reservas");
+        const resultadosBuscador = document.getElementById("resultados-busqueda-reservas");
+        resultadosBuscador.querySelectorAll("[data-demo-buscador]").forEach(boton => {
+            const reserva = window.__demoReservasHaku[boton.dataset.demoBuscador];
+            window.HAIKU_BUSCADOR_RESERVAS_V1.prepararResultado(boton, reserva);
+        });
+        inputBuscador.addEventListener("input", () => {
+            const consulta = inputBuscador.value.trim().toLowerCase();
+            resultadosBuscador.querySelectorAll("[data-demo-buscador]").forEach(boton => {
+                boton.hidden = consulta.length < 2 || !boton.textContent.toLowerCase().includes(consulta);
+            });
+            resultadosBuscador.hidden = consulta.length < 2 ||
+                ![...resultadosBuscador.querySelectorAll("[data-demo-buscador]")].some(boton => !boton.hidden);
+        });
+        resultadosBuscador.addEventListener("click", async evento => {
+            const resultado = evento.target.closest("[data-demo-buscador]");
+            if (!resultado) return;
+            evento.preventDefault();
+            if (await window.HAIKU_BUSCADOR_RESERVAS_V1.abrirResultado(resultado)) {
+                resultadosBuscador.hidden = true;
+                inputBuscador.value = "";
+            }
+        });
 
         const filas = document.getElementById("demo-libro-filas");
         const huespedes = ["Ana Silva", "Bruno Rojas", "Camila Soto", "Diego Pérez", "Elena Díaz"];
