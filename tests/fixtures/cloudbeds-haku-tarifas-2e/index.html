@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo local · Cloudbeds Tarifas 2E en Haku</title>
+  <link rel="stylesheet" href="../../../css/supabase-asistente-v1.css">
+  <link rel="stylesheet" href="../../../css/haiku-panel-coordinacion-v1.css">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+  <header class="demo-topbar">
+    <div><span>PROYECTO H · FIXTURE LOCAL</span><strong>Cloudbeds · Tarifas 2E</strong></div>
+    <p>Datos ficticios · sin Supabase · writer deshabilitado</p>
+  </header>
+  <main>
+    <section class="demo-intro">
+      <span>LIBRO DE RESERVAS</span>
+      <h1>Superficies operativas activas</h1>
+      <p>Usa el Haku abierto a la derecha. Selecciona propuestas, simula el lote y abre “Ver reserva”. El borrador inferior debe conservarse.</p>
+    </section>
+    <section class="demo-metricas">
+      <article><span>Ocupación</span><strong>8 / 11</strong></article>
+      <article><span>Ingresos ficticios</span><strong>$1.920.000</strong></article>
+      <article><span>Por revisar</span><strong>3</strong></article>
+    </section>
+    <section class="demo-tabla-wrap" aria-label="Contenido principal ficticio">
+      <table>
+        <thead><tr><th>Cabaña</th><th>Huésped</th><th>Ingreso</th><th>Salida</th><th>Estado</th><th>Total</th></tr></thead>
+        <tbody>
+          <tr><td>CAB 5</td><td>Héctor Ficticio</td><td>20/09/2026</td><td>21/09/2026</td><td>Confirmada</td><td>$160.000</td></tr>
+          <tr><td>CAB 7</td><td>Elena Ficticia</td><td>22/09/2026</td><td>24/09/2026</td><td>Confirmada</td><td>$300.000</td></tr>
+          <tr><td>CAB 4 + CAB 10</td><td>Grupo Ficticio</td><td>25/09/2026</td><td>27/09/2026</td><td>Revisar</td><td>$288.000</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="sites-resumen-reserva-drawer" data-haiku-inspector-superficie="reserva" hidden>
+    <section class="demo-inspector-panel" role="dialog" aria-modal="false" aria-labelledby="demo-inspector-titulo">
+      <header data-inspector-cabecera>
+        <div><span>VER RESERVA</span><strong id="demo-inspector-titulo">Reserva ficticia</strong></div>
+        <button type="button" data-reserva-cerrar aria-label="Cerrar reserva">×</button>
+      </header>
+      <div class="demo-inspector-contenido">
+        <dl>
+          <div><dt>ID Proyecto H</dt><dd id="demo-inspector-id">—</dd></div>
+          <div><dt>Estado</dt><dd>Confirmada</dd></div>
+          <div><dt>Origen</dt><dd>Cloudbeds · propuesta 2E</dd></div>
+        </dl>
+        <p>Este Inspector es la superficie única existente. No se creó un drawer Cloudbeds adicional.</p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    window.haikuSesion = { auth: true, usuario: { id: 'demo-local' } };
+    window.haikuSupabase = {
+      async rpc(nombre) {
+        if (nombre !== 'haiku_capacidad_totales_v1') throw new Error('RPC no permitida en demo');
+        return { data: { version: 'total1_financiero_v31', writer_disponible: true } };
+      }
+    };
+    window.HAIKU_RESUMEN_RESERVA_SITES_V1 = {
+      async abrirPorId(id) {
+        const drawer = document.getElementById('sites-resumen-reserva-drawer');
+        drawer.hidden = false;
+        drawer.dataset.haikuInspectorEntidadId = id;
+        document.getElementById('demo-inspector-id').textContent = id;
+        document.getElementById('demo-inspector-titulo').textContent = id === 'r-hector' ? 'Héctor Ficticio · CAB 5' : 'Reserva ficticia';
+        return true;
+      },
+      cerrar() { document.getElementById('sites-resumen-reserva-drawer').hidden = true; }
+    };
+  </script>
+  <script src="../../../js/haiku-cloudbeds-pdf-v1.js"></script>
+  <script src="../../../js/haiku-cloudbeds-tarifas-v1.js"></script>
+  <script src="../../../js/supabase-asistente-v1.js"></script>
+  <script src="../../../js/haiku-panel-coordinacion-v1.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>

@@ -57,7 +57,7 @@
                     <div class="haiku-asistente-rapidas-lista" aria-label="Acciones rápidas de Haku">
                         <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
                         <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
-                        <button type="button" data-haiku-accion-rapida="consultar-documento">Consultar PDF Cloudbeds</button>
+                        <button type="button" data-haiku-accion-rapida="consultar-documento">Cloudbeds · Tarifas</button>
                         <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
                         <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
                         <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
@@ -1555,7 +1555,14 @@
                 clearTimeout(limite);
                 estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";
                 const informe = await Promise.race([lector.consultar(entradas, cliente), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La consulta tardó demasiado. Vuelve a intentarlo.")), 30000); })]);
-                estadoPDF.innerHTML = lector.renderizar(informe);
+                const tarifas = window.HAIKU_CLOUDBEDS_TARIFAS_V1;
+                if (tarifas && typeof tarifas.preparar === "function" && typeof tarifas.montar === "function") {
+                    estadoPDF.textContent = "Preparando Cloudbeds · Tarifas y comprobando TOTAL v31…";
+                    const modelo = await tarifas.preparar(informe, cliente);
+                    tarifas.montar(estadoPDF, modelo);
+                } else {
+                    estadoPDF.innerHTML = lector.renderizar(informe);
+                }
             } catch (error) {
                 estadoPDF.classList.add("haiku-asistente-mensaje--error");
                 estadoPDF.textContent = `No pude completar el informe: ${error?.message || "PDF no soportado"}`;
