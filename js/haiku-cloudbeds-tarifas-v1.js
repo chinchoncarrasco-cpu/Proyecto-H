@@ -343,6 +343,20 @@
     }
 
     function renderIdentidadContextual(fila) {
+        if (["CONTEXTO_NOMBRE_PARCIAL_UNICO", "CONTEXTO_TYPO_UNICO"].includes(fila?.identidad_tipo)) {
+            const propuesta = fila.propuesta || {};
+            const esParcial = fila.identidad_tipo === "CONTEXTO_NOMBRE_PARCIAL_UNICO";
+            const detalle = esParcial
+                ? propuesta.nombre_parcial_origen === "cloudbeds"
+                    ? "Cloudbeds contiene una versión abreviada del nombre"
+                    : "Proyecto H contiene una versión abreviada del nombre"
+                : "Los nombres difieren en un único carácter";
+            return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="${esc(fila.identidad_tipo)}">
+                <strong><span aria-hidden="true">✓</span> Reserva identificada por contexto único</strong>
+                <span><span aria-hidden="true">≈</span> ${esc(detalle)}</span>
+                <small><b>Cloudbeds:</b> ${esc(propuesta.nombre_cloudbeds || fila.entrada?.nombre_huesped || "—")}<br><b>Proyecto H:</b> ${esc(propuesta.nombre_proyecto_h || "—")}</small>
+            </div>`;
+        }
         if (fila?.identidad_tipo === "CONTEXTO_FULLDAY_UNICO") {
             const nombreExacto = !(fila.revisiones || []).some(item => /nombre no coincide|nombre.*no coincide/i.test(String(item)));
             return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="CONTEXTO_FULLDAY_UNICO">
@@ -396,9 +410,12 @@
         const cabana = propuesta.cabana ? `CAB ${propuesta.cabana}` : "Cabaña no identificada";
         const diferencia = propuesta.diferencia;
         const evidencias = (fila.evidencias || propuesta.evidencias || [])
-            .filter(evidencia => !["CONTEXTO_EXACTO_UNICO", "CONTEXTO_FULLDAY_UNICO"].includes(fila.identidad_tipo)
+            .filter(evidencia => !["CONTEXTO_EXACTO_UNICO", "CONTEXTO_FULLDAY_UNICO", "CONTEXTO_TYPO_UNICO", "CONTEXTO_NOMBRE_PARCIAL_UNICO"].includes(fila.identidad_tipo)
                 || (!String(evidencia).startsWith("Reserva identificada por contexto exacto")
+                    && !String(evidencia).startsWith("Reserva identificada por contexto único")
                     && !String(evidencia).startsWith("Reserva Full Day identificada por contexto único")
+                    && !String(evidencia).includes("versión abreviada del nombre")
+                    && !String(evidencia).startsWith("Los nombres difieren en un único carácter")
                     && !String(evidencia).startsWith("Proyecto H aún no tiene vínculo Cloudbeds guardado")))
             .slice(0, 12);
         const revisiones = fila.revisiones || propuesta.revisiones || [];

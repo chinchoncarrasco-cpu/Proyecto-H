@@ -22,6 +22,88 @@
         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
         .toLowerCase().replace(/\s+/g, " ").trim();
     const canon = valor => norm(valor).replace(/[^a-z0-9]/g, "");
+    const PARTICULAS_NOMBRE = new Set(["da", "das", "de", "del", "do", "dos", "el", "la", "las", "los", "y"]);
+
+    function tokensNombre(valor) {
+        const normalizado = norm(valor).replace(/[^a-z0-9]+/g, " ").trim();
+        return normalizado ? normalizado.split(/\s+/) : [];
+    }
+
+    function esTokenSignificativo(token) {
+        return Boolean(token) && !PARTICULAS_NOMBRE.has(token);
+    }
+
+    function esSubsecuenciaTokens(cortos, largos) {
+        let indice = 0;
+        for (const token of largos) {
+            if (token === cortos[indice]) indice++;
+            if (indice === cortos.length) return true;
+        }
+        return false;
+    }
+
+    function distanciaEdicionUno(izquierda, derecha) {
+        if (izquierda === derecha || Math.abs(izquierda.length - derecha.length) > 1) return false;
+        let i = 0;
+        let j = 0;
+        let cambios = 0;
+        while (i < izquierda.length && j < derecha.length) {
+            if (izquierda[i] === derecha[j]) {
+                i++;
+                j++;
+                continue;
+            }
+            cambios++;
+            if (cambios > 1) return false;
+            if (izquierda.length > derecha.length) i++;
+            else if (derecha.length > izquierda.length) j++;
+            else {
+                i++;
+                j++;
+            }
+        }
+        if (i < izquierda.length || j < derecha.length) cambios++;
+        return cambios === 1;
+    }
+
+    function clasificarNombres(nombreProyectoH, nombreCloudbeds) {
+        const proyecto = tokensNombre(nombreProyectoH);
+        const cloudbeds = tokensNombre(nombreCloudbeds);
+        if (!proyecto.length || !cloudbeds.length) return null;
+        if (proyecto.length === cloudbeds.length && proyecto.every((token, indice) => token === cloudbeds[indice])) {
+            return { tipo: "exacto", origen_corto: null, tokens_coincidentes: proyecto.length };
+        }
+
+        if (proyecto.length === cloudbeds.length) {
+            const diferentes = proyecto
+                .map((token, indice) => ({ proyecto: token, cloudbeds: cloudbeds[indice] }))
+                .filter(par => par.proyecto !== par.cloudbeds);
+            const significativosAlineados = proyecto.filter((token, indice) =>
+                esTokenSignificativo(token) && esTokenSignificativo(cloudbeds[indice])
+            ).length;
+            if (diferentes.length === 1 && significativosAlineados >= 2
+                && distanciaEdicionUno(diferentes[0].proyecto, diferentes[0].cloudbeds)) {
+                return { tipo: "typo", origen_corto: null, tokens_coincidentes: proyecto.length - 1 };
+            }
+        }
+
+        if (proyecto.length === cloudbeds.length) return null;
+        const proyectoEsCorto = proyecto.length < cloudbeds.length;
+        const cortos = proyectoEsCorto ? proyecto : cloudbeds;
+        const largos = proyectoEsCorto ? cloudbeds : proyecto;
+        const significativos = cortos.filter(esTokenSignificativo).length;
+        if (significativos < 2 || !esSubsecuenciaTokens(cortos, largos)) return null;
+        return {
+            tipo: "parcial",
+            origen_corto: proyectoEsCorto ? "proyecto_h" : "cloudbeds",
+            tokens_coincidentes: cortos.length
+        };
+    }
+
+    function comparteTokenSignificativo(nombreProyectoH, nombreCloudbeds) {
+        const proyecto = new Set(tokensNombre(nombreProyectoH).filter(esTokenSignificativo));
+        return tokensNombre(nombreCloudbeds).some(token => esTokenSignificativo(token) && proyecto.has(token));
+    }
 
     const DEFINICIONES_COLUMNAS = Object.freeze([
         ["nombre", ["Nombre", "First name", "Nombre del huésped principal de la habitación"]],
@@ -89,6 +171,8 @@
         parsear: Object.freeze({ minimo: "Dos encabezados Cloudbeds conocidos y una fila delimitable", escritura: false }),
         identificar_fuerte: Object.freeze({ requiere: Object.freeze(["reserva_cloudbeds o id_cloudbeds inequívoco"]), escritura: false }),
         identificar_fallback: Object.freeze({ requiere: Object.freeze(["nombre exacto", "habitación", "check_in", "check_out", "coincidencia única"]), identidad_tipo: "CONTEXTO_EXACTO_UNICO", solo_revision: false, escritura: false }),
+        identificar_typo: Object.freeze({ requiere: Object.freeze(["un carácter distinto en un único token", "al menos dos tokens significativos", "habitación y fechas exactas", "coincidencia única", "sin conflicto de identificadores"]), identidad_tipo: "CONTEXTO_TYPO_UNICO", solo_revision: false, escritura: false }),
+        identificar_nombre_parcial: Object.freeze({ requiere: Object.freeze(["tokens completos en subsecuencia", "al menos dos tokens significativos", "habitación y fechas exactas", "coincidencia única", "sin conflicto de identificadores"]), identidad_tipo: "CONTEXTO_NOMBRE_PARCIAL_UNICO", solo_revision: false, escritura: false }),
         identificar_fullday: Object.freeze({ requiere: Object.freeze(["nombre exacto", "una habitación", "Cloudbeds D→D+1", "Proyecto H fullday D→D", "coincidencia única"]), identidad_tipo: "CONTEXTO_FULLDAY_UNICO", solo_revision: false, escritura: false }),
         comparar_alojamiento: Object.freeze({ requiere: Object.freeze(["identidad asociada", "Depósito válido", "Precio Total", "Productos presente", "total_alojamiento Proyecto H"]), escritura: false }),
         proponer_total: Object.freeze({ regla_propiedad: "Depósito = alojamiento bruto final con IVA; Productos queda fuera", tolerancia_clp: TOLERANCIA_CLP, escritura: false }),
@@ -488,19 +572,31 @@
 
     function resolverContexto(reservas, entrada, cabana) {
         const completo = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
-        if (!completo) return { completo: false, candidatas: [], ambiguas_estadia: [], con_coincidencia: [], coincidencias: [] };
-        const nombre = norm(entrada.nombre_huesped);
+        if (!completo) return { completo: false, candidatas: [], ambiguas_estadia: [], con_coincidencia: [], coincidencias: [], coincidencias_geometricas: [], nombres_inseguros: [] };
         const candidatas = [];
         const ambiguasEstadia = [];
         const conCoincidencia = [];
         const coincidencias = [];
+        const coincidenciasGeometricas = [];
+        const nombresInseguros = [];
         reservas.forEach(reserva => {
-            const nombreExacto = norm(reserva.titular_nombre) === nombre;
-            const compatibles = coincidenciasContexto(reserva, entrada, cabana)
-                .filter(item => item.tipo === "fullday" || nombreExacto);
+            const geometricas = coincidenciasContexto(reserva, entrada, cabana);
+            if (!geometricas.length) return;
+            coincidenciasGeometricas.push(...geometricas.map(item => ({ ...item, reserva })));
+            const nombre = clasificarNombres(reserva.titular_nombre, entrada.nombre_huesped);
+            if (!nombre && comparteTokenSignificativo(reserva.titular_nombre, entrada.nombre_huesped)) {
+                nombresInseguros.push(...geometricas.map(item => ({ ...item, reserva })));
+            }
+            const compatibles = geometricas.filter(item => item.tipo === "fullday" || nombre);
             if (!compatibles.length) return;
             conCoincidencia.push(reserva);
-            coincidencias.push(...compatibles.map(item => ({ ...item, reserva, nombre_exacto: nombreExacto })));
+            coincidencias.push(...compatibles.map(item => ({
+                ...item,
+                reserva,
+                nombre_tipo: nombre?.tipo || null,
+                nombre_exacto: nombre?.tipo === "exacto",
+                nombre_corto_origen: nombre?.origen_corto || null
+            })));
             if (compatibles.length === 1) candidatas.push(reserva);
             else ambiguasEstadia.push(reserva);
         });
@@ -509,7 +605,9 @@
             candidatas,
             ambiguas_estadia: ambiguasEstadia,
             con_coincidencia: conCoincidencia,
-            coincidencias
+            coincidencias,
+            coincidencias_geometricas: coincidenciasGeometricas,
+            nombres_inseguros: nombresInseguros
         };
     }
 
@@ -542,7 +640,11 @@
             const canceladaCloudbeds = ["cancelada", "cancelado"].includes(entrada.estado);
 
             const aplicarContexto = () => {
-                const ambiguo = contexto.ambiguas_estadia.length > 0 || contexto.coincidencias.length > 1 || contexto.candidatas.length > 1;
+                const usaNombreFlexible = contexto.coincidencias.some(item => ["typo", "parcial"].includes(item.nombre_tipo));
+                const ambiguo = contexto.ambiguas_estadia.length > 0
+                    || contexto.coincidencias.length > 1
+                    || contexto.candidatas.length > 1
+                    || (usaNombreFlexible && contexto.coincidencias_geometricas.length !== 1);
                 if (ambiguo) {
                     identidadTipo = "AMBIGUA";
                     certeza = "REVISION_MANUAL";
@@ -560,22 +662,44 @@
                     }
                     candidatas = [candidata];
                     const esFullDay = coincidencia?.tipo === "fullday";
-                    identidadTipo = esFullDay ? "CONTEXTO_FULLDAY_UNICO" : "CONTEXTO_EXACTO_UNICO";
-                    identidad = esFullDay ? "Reserva Full Day identificada por contexto único" : "Reserva identificada por contexto exacto";
-                    evidencias.push(esFullDay ? "Reserva Full Day identificada por contexto único." : "Reserva identificada por contexto exacto.");
+                    const identidadNombre = coincidencia?.nombre_tipo === "typo"
+                        ? "CONTEXTO_TYPO_UNICO"
+                        : coincidencia?.nombre_tipo === "parcial" ? "CONTEXTO_NOMBRE_PARCIAL_UNICO" : null;
+                    identidadTipo = identidadNombre || (esFullDay ? "CONTEXTO_FULLDAY_UNICO" : "CONTEXTO_EXACTO_UNICO");
+                    identidad = identidadNombre
+                        ? "Reserva identificada por contexto único"
+                        : esFullDay ? "Reserva Full Day identificada por contexto único" : "Reserva identificada por contexto exacto";
+                    evidencias.push(`${identidad}.`);
+                    if (identidadTipo === "CONTEXTO_NOMBRE_PARCIAL_UNICO") {
+                        evidencias.push(coincidencia.nombre_corto_origen === "proyecto_h"
+                            ? "Proyecto H contiene una versión abreviada del nombre."
+                            : "Cloudbeds contiene una versión abreviada del nombre.");
+                    } else if (identidadTipo === "CONTEXTO_TYPO_UNICO") {
+                        evidencias.push("Los nombres difieren en un único carácter de un único token.");
+                    }
                     evidencias.push(esFullDay
                         ? "Proyecto H aún no tiene vínculo Cloudbeds guardado. Cabaña, patrón de fechas Full Day y estadía única sostienen la identidad."
-                        : "Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre, cabaña, check-in y check-out identifican una única reserva.");
+                        : identidadNombre
+                            ? "Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre compatible, cabaña, check-in y check-out identifican una única reserva."
+                            : "Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre, cabaña, check-in y check-out identifican una única reserva.");
                     vinculoCloudbedsSugerido = {
                         reserva_id: candidatas[0].id,
                         reservation_number: entrada.reserva_cloudbeds || null,
                         reservation_id: entrada.id_cloudbeds || null,
-                        evidencia: esFullDay ? "contexto_fullday_unico" : "contexto_exacto_unico"
+                        evidencia: identidadTipo.toLowerCase()
                     };
                     if (esFullDay && !coincidencia.nombre_exacto) {
-                        certeza = "REVISION_MANUAL";
-                        revisiones.push("La cabaña y las fechas Full Day identifican una única estadía, pero el nombre no coincide exactamente; no se usa coincidencia difusa.");
+                        if (!identidadNombre) {
+                            certeza = "REVISION_MANUAL";
+                            revisiones.push("La cabaña y las fechas Full Day identifican una única estadía, pero el nombre no coincide exactamente ni satisface una regla controlada.");
+                        }
                     }
+                    return;
+                }
+                if (contexto.coincidencias_geometricas.length === 1 && contexto.nombres_inseguros.length === 1) {
+                    identidadTipo = "AMBIGUA";
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("La cabaña y las fechas coinciden, pero el nombre sólo comparte evidencia insuficiente para identificar la reserva.");
                     return;
                 }
                 identidadTipo = "NO_IDENTIFICADA";
@@ -683,7 +807,7 @@
                     certeza = "REVISION_MANUAL";
                     revisiones.push("El vínculo existe, pero habitación o fechas contradicen Proyecto H.");
                 } else {
-                    if (esFullDay) {
+                    if (esFullDay && !["CONTEXTO_TYPO_UNICO", "CONTEXTO_NOMBRE_PARCIAL_UNICO"].includes(identidadTipo)) {
                         if (norm(reserva.titular_nombre) !== norm(entrada.nombre_huesped)) {
                             certeza = "REVISION_MANUAL";
                             revisiones.push("El nombre Cloudbeds no coincide exactamente con Proyecto H; no se usa coincidencia difusa.");
@@ -787,6 +911,9 @@
                 tipo_estadia_proyecto_h: estadiaContextual?.tipo_estadia || null,
                 fecha_ingreso_proyecto_h: estadiaContextual?.fecha_ingreso || null,
                 fecha_salida_proyecto_h: estadiaContextual?.fecha_salida || null,
+                nombre_cloudbeds: entrada.nombre_huesped || null,
+                nombre_proyecto_h: reserva?.titular_nombre || null,
+                nombre_parcial_origen: contexto.coincidencias[0]?.nombre_corto_origen || null,
                 es_full_day: esFullDay,
                 adultos_proyecto_h: adultosProyectoH,
                 ninos_proyecto_h: ninosProyectoH,
@@ -929,7 +1056,7 @@
     const api = Object.freeze({
         MAPA, CLASES, CERTEZAS, HEAD, COLUMNAS: DEFINICIONES_COLUMNAS, MATRIZ_CAPACIDADES,
         TOLERANCIA_CLP, IVA_REFERENCIAL, TARIFA_FULLDAY_PERSONA_CLP, MIN_PERSONAS_FULLDAY,
-        dinero, fecha, normalizar, columnas, parsearPaginas, leerPDF, esVentanaFullDay, comparar, filtrarInforme, consultar, renderizar
+        dinero, fecha, tokensNombre, clasificarNombres, normalizar, columnas, parsearPaginas, leerPDF, esVentanaFullDay, comparar, filtrarInforme, consultar, renderizar
     });
     root.HAIKU_CLOUDBEDS_PDF_V1 = api;
     if (typeof module !== "undefined") module.exports = api;

@@ -132,10 +132,10 @@ test('tildes, mayúsculas y espacios usan la normalización exacta existente', (
   assert.equal(fila.certeza, 'ALTA_CERTEZA');
 });
 
-test('nombre parecido pero no exacto nunca usa fuzzy match', () => {
+test('un único carácter distinto usa el typo controlado, no fuzzy general', () => {
   const fila = compararUna(entrada({ nombre_huesped: 'José Peres' }), [reserva()]);
-  assert.equal(fila.identidad_tipo, 'NO_IDENTIFICADA');
-  assert.equal(fila.reserva_id, null);
+  assert.equal(fila.identidad_tipo, 'CONTEXTO_TYPO_UNICO');
+  assert.equal(fila.reserva_id, 'r-historica');
 });
 
 test('cabaña distinta no identifica por contexto', () => {
