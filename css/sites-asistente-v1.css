@@ -182,11 +182,16 @@
     min-height: 0 !important;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: none;
+    overflow-anchor: none;
+    scrollbar-width: thin;
+    scrollbar-color: #a9b9af transparent;
+    scrollbar-gutter: stable;
     padding: 18px 20px 24px;
     background: #fbfcfb;
 }
-.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes::-webkit-scrollbar { display: none; }
+.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes::-webkit-scrollbar { display: block; width: 9px; }
+.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes::-webkit-scrollbar-track { background: transparent; }
+.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #a9b9af; background-clip: padding-box; }
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > * { flex-shrink: 0; }
 .haiku-asistente-root .haiku-asistente-mensajes:empty { flex: 0 0 0; padding: 0; }
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje {

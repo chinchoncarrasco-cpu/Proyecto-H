@@ -63,6 +63,7 @@
     bottom: 72px;
     width: min(490px, calc(100vw - 36px));
     max-height: min(720px, calc(100vh - 116px));
+    max-height: min(720px, calc(100dvh - 116px));
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -81,6 +82,7 @@
 
 .haiku-asistente-cabecera {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: space-between;
     gap: 14px;
@@ -88,6 +90,21 @@
     padding: 11px 13px;
     border-bottom: 1px solid #dbe3de;
     background: #fbfcfb;
+}
+
+.haiku-asistente-conversacion {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.haiku-asistente-pie {
+    min-height: 0;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .haiku-asistente-titulo { min-width: 0; }
@@ -101,9 +118,15 @@
 }
 
 .haiku-asistente-mensajes {
-    min-height: 190px; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px;
-    overflow-y: auto; padding: 14px 12px; background: #f1f5f2;
+    min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto; overscroll-behavior-y: contain; overflow-anchor: none; scrollbar-gutter: stable;
+    scrollbar-width: thin; scrollbar-color: #a9b9af transparent;
+    padding: 14px 12px; background: #f1f5f2;
 }
+
+.haiku-asistente-mensajes::-webkit-scrollbar { width: 9px; }
+.haiku-asistente-mensajes::-webkit-scrollbar-track { background: transparent; }
+.haiku-asistente-mensajes::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: #a9b9af; background-clip: padding-box; }
 
 .haiku-asistente-mensaje {
     max-width: 82%; padding: 9px 11px; border-radius: 0; font-size: .78rem;
@@ -255,8 +278,7 @@
     .haiku-asistente-root { right: 12px; bottom: 12px; }
     .haiku-asistente-boton { width: 32px; height: 32px; }
     .haiku-asistente-boton::after { inset: -7px; }
-    .haiku-asistente-panel { right: 0; bottom: 45px; width: calc(100vw - 28px); max-height: calc(100vh - 102px); border-radius: 7px; }
-    .haiku-asistente-mensajes { min-height: 150px; }
+    .haiku-asistente-panel { right: 0; bottom: 45px; width: calc(100vw - 28px); max-height: calc(100vh - 102px); max-height: calc(100dvh - 102px); border-radius: 7px; }
     .haiku-asistente-preview-grid { grid-template-columns: 1fr; }
 }
 
@@ -684,12 +706,34 @@
 .haiku-cloudbeds-tarifas dd.es-negativa { color: #a44438; }
 
 .haiku-cloudbeds-tarifas-productos,
+.haiku-cloudbeds-tarifas-identidad-contextual,
 .haiku-cloudbeds-tarifas-evidencias,
 .haiku-cloudbeds-tarifas-revision {
     padding: 8px;
     border: 1px solid #e0e7e2;
     background: #f8faf8;
 }
+
+.haiku-cloudbeds-tarifas-identidad-contextual {
+    display: grid;
+    gap: 3px;
+    border-color: #c9ddcf;
+    background: #f2f8f4;
+    color: #385447;
+    font-size: .61rem;
+    line-height: 1.4;
+}
+
+.haiku-cloudbeds-tarifas-identidad-contextual strong,
+.haiku-cloudbeds-tarifas-identidad-contextual > span {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+}
+
+.haiku-cloudbeds-tarifas-identidad-contextual strong { color: #235f40; }
+.haiku-cloudbeds-tarifas-identidad-contextual > span { color: #745f2a; }
+.haiku-cloudbeds-tarifas-identidad-contextual small { color: #66776e; font-size: .58rem; }
 
 .haiku-cloudbeds-tarifas-productos > strong,
 .haiku-cloudbeds-tarifas-evidencias > strong,

@@ -19,12 +19,12 @@
     base('CB-OK', 'Amelia Ficticia'),
     manual,
     base('CB-CANCEL', 'Camila Ficticia', { estado: 'Cancelada', precio_total: '$0' }),
-    base('CB-SIN-VINCULO', 'Damián Ficticio'),
+    base('CB-RODRIGO', 'Rodrigo Control'),
     base('CB-MULTI', 'Grupo Ficticio', { habitaciones_raw: 'LC4(1), C10(1)', precio_total: '$288.000', deposito: '$288.000' })
   ].map(item => pdf.normalizar(item));
   const reservas = [
-    reserva('r-hector', 'CB-HECTOR', 'Héctor Ficticio'),
-    reserva('r-elena', 'CB-ELENA', 'Elena Ficticia'),
+    reserva('r-hector', null, 'Héctor Ficticio'),
+    reserva('r-elena', null, 'Elena Ficticia'),
     reserva('r-ok', 'CB-OK', 'Amelia Ficticia'),
     reserva('r-revision', 'CB-REV', 'Bruno Ficticio'),
     reserva('r-cancel', 'CB-CANCEL', 'Camila Ficticia'),

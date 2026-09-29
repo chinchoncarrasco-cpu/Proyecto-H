@@ -9,6 +9,7 @@ const { pathToFileURL } = require("node:url");
 const root = path.resolve(__dirname, "..");
 const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const fixture = path.join(root, "tests", "fixtures", "haku-reserva-convivencia", "index.html");
+const cloudbedsFixture = path.join(root, "tests", "fixtures", "cloudbeds-haku-tarifas-2e", "index.html");
 const coordinator = fs.readFileSync(path.join(root, "js", "haiku-panel-coordinacion-v1.js"), "utf8");
 const artifacts = path.join(root, "tests", "artifacts", "haku-reserva-convivencia");
 
@@ -84,8 +85,9 @@ class CdpClient {
 function launchEdge(profile) {
     assert.equal(fs.existsSync(edge), true, `Edge disponible en ${edge}`);
     const process = childProcess.spawn(edge, [
-        "--headless=new", "--disable-gpu", "--disable-gpu-sandbox",
-        "--hide-scrollbars", "--allow-file-access-from-files",
+        "--headless", "--no-sandbox", "--disable-gpu", "--disable-gpu-sandbox",
+        "--disable-dev-shm-usage", "--enable-unsafe-swiftshader", "--use-angle=swiftshader",
+        "--allow-file-access-from-files",
         "--no-first-run", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "about:blank"
     ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
 
@@ -164,6 +166,33 @@ async function pointerClick(client, selector) {
     assert.ok(point, `elemento visible para click real: ${selector}`);
     await client.call("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button: "left", clickCount: 1 });
     await client.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", clickCount: 1 });
+}
+
+async function wheel(client, selector, deltaY) {
+    const point = await evaluate(client, `(() => {
+        const rect = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+        return rect && { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    })()`);
+    assert.ok(point, `elemento visible para rueda: ${selector}`);
+    await client.call("Input.dispatchMouseEvent", {
+        type: "mouseWheel", x: point.x, y: point.y, deltaX: 0, deltaY, pointerType: "mouse"
+    });
+}
+
+async function dragScrollbar(client, selector) {
+    const track = await evaluate(client, `(() => {
+        const rect = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
+        return rect && {
+            x: rect.right - 3,
+            fromY: rect.top + 12,
+            toY: rect.top + rect.height * .72
+        };
+    })()`);
+    assert.ok(track, `scrollbar disponible para arrastre: ${selector}`);
+    await client.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: track.x, y: track.fromY });
+    await client.call("Input.dispatchMouseEvent", { type: "mousePressed", x: track.x, y: track.fromY, button: "left", clickCount: 1 });
+    await client.call("Input.dispatchMouseEvent", { type: "mouseMoved", x: track.x, y: track.toY, button: "left" });
+    await client.call("Input.dispatchMouseEvent", { type: "mouseReleased", x: track.x, y: track.toY, button: "left", clickCount: 1 });
 }
 
 async function escape(client) {
@@ -304,6 +333,56 @@ async function screenshot(client, name) {
 
         await waitFor(page, "document.getElementById('haiku-asistente-mensajes').textContent.includes('Contexto ficticio de Haku 28')",
             "contexto ficticio de Haku preparado");
+        const hakuCorto = await evaluate(page, `(() => {
+            const messages = document.getElementById("haiku-asistente-mensajes");
+            [...messages.children].slice(1).forEach(child => { child.hidden = true; });
+            messages.scrollTop = 0;
+            return { scrollHeight: messages.scrollHeight, clientHeight: messages.clientHeight };
+        })()`);
+        assert.ok(hakuCorto.scrollHeight <= hakuCorto.clientHeight + 1,
+            "el contenido corto no crea un segundo desplazamiento");
+        await evaluate(page, `[...document.getElementById("haiku-asistente-mensajes").children]
+            .forEach(child => { child.hidden = false; })`);
+        const hakuScrollLayout = await evaluate(page, `(() => {
+            const messages = document.getElementById("haiku-asistente-mensajes");
+            const panel = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
+            const header = document.querySelector(".haiku-asistente-cabecera").getBoundingClientRect();
+            const footer = document.querySelector(".haiku-asistente-pie").getBoundingClientRect();
+            const style = getComputedStyle(messages);
+            return {
+                overflowY: style.overflowY,
+                scrollbarWidth: style.scrollbarWidth,
+                scrollHeight: messages.scrollHeight,
+                clientHeight: messages.clientHeight,
+                panelTop: panel.top,
+                panelBottom: panel.bottom,
+                headerTop: header.top,
+                footerBottom: footer.bottom,
+                pageTop: window.scrollY
+            };
+        })()`);
+        assert.equal(hakuScrollLayout.overflowY, "auto");
+        assert.equal(hakuScrollLayout.scrollbarWidth, "thin");
+        assert.ok(hakuScrollLayout.scrollHeight > hakuScrollLayout.clientHeight + 500,
+            "la conversaciÃ³n larga excede el scrollport de Haku");
+        assert.ok(hakuScrollLayout.panelTop >= 0 && hakuScrollLayout.panelBottom <= 900,
+            "Haku respeta el viewport de escritorio");
+
+        await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop = 0");
+        await wheel(page, "#haiku-asistente-mensajes", 620);
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop > 100", "rueda desplaza Haku");
+        assert.equal(await evaluate(page, "window.scrollY"), hakuScrollLayout.pageTop,
+            "la rueda sobre Haku no desplaza la pÃ¡gina principal");
+        assert.equal(await evaluate(page, "document.querySelector('.haiku-asistente-cabecera').getBoundingClientRect().top"), hakuScrollLayout.headerTop,
+            "el encabezado permanece fijo al desplazar Haku");
+        assert.equal(await evaluate(page, "document.querySelector('.haiku-asistente-pie').getBoundingClientRect().bottom"), hakuScrollLayout.footerBottom,
+            "acciones rÃ¡pidas y compositor permanecen accesibles");
+        await wheel(page, "#haiku-asistente-mensajes", -620);
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop < 100", "rueda vuelve al inicio de Haku");
+
+        await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop = 0");
+        await dragScrollbar(page, "#haiku-asistente-mensajes");
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop > 100", "barra arrastrable desplaza Haku");
         await evaluate(page, `(() => {
             const messages = document.getElementById("haiku-asistente-mensajes");
             document.getElementById("haiku-asistente-texto").value = "Borrador ficticio conservado";
@@ -407,6 +486,19 @@ async function screenshot(client, name) {
         assert.equal(await evaluate(page, "document.body.classList.contains('haiku-inspector-abierto')"), true);
         assert.deepEqual(await evaluate(page, "window.HAIKU_PANELES_V1.estado().inspector"),
             { tipo: "reserva", entidadId: "A" });
+        const superficiesAntesScrollHaku = await evaluate(page, `(() => ({
+            pagina: window.scrollY,
+            inspector: document.querySelector(".sites-resumen-drawer-body").scrollTop
+        }))()`);
+        await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop = 0");
+        await wheel(page, "#haiku-asistente-mensajes", 420);
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop > 80", "Haku desplaza con Inspector abierto");
+        assert.deepEqual(await evaluate(page, `(() => ({
+            pagina: window.scrollY,
+            inspector: document.querySelector(".sites-resumen-drawer-body").scrollTop
+        }))()`), superficiesAntesScrollHaku, "principal e Inspector no se desplazan con la rueda sobre Haku");
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        await evaluate(page, `document.getElementById('haiku-asistente-mensajes').scrollTop = ${initialScroll}`);
         await pointerClick(page, "#demo-accion-principal");
         assert.equal(await evaluate(page, "document.getElementById('demo-accion-conteo').value"), "3");
         assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), true);
@@ -554,6 +646,60 @@ async function screenshot(client, name) {
         assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
         assert.equal(await evaluate(page, "window.HAIKU_ASISTENTE.abierta()"), false);
         assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length"), 0);
+
+        // Fixture Cloudbeds real del encargo: contenido largo, Inspector simultÃ¡neo y retorno mÃ³vil.
+        await viewport(page, 1500, 900);
+        const cloudbedsLoaded = page.waitEvent("Page.loadEventFired");
+        await page.call("Page.navigate", { url: `${pathToFileURL(cloudbedsFixture).href}?inspector=1` });
+        await cloudbedsLoaded;
+        await waitFor(page, "window.DEMO_CLOUDBEDS_2E && window.HAIKU_ASISTENTE?.abierta()", "fixture Cloudbeds preparada");
+        await waitFor(page, "document.body.classList.contains('haiku-inspector-abierto')", "Inspector Cloudbeds abierto");
+        const cloudbedsScroll = await evaluate(page, `(() => {
+            const messages = document.getElementById("haiku-asistente-mensajes");
+            const panel = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
+            return {
+                overflowY: getComputedStyle(messages).overflowY,
+                scrollHeight: messages.scrollHeight,
+                clientHeight: messages.clientHeight,
+                panelTop: panel.top,
+                panelBottom: panel.bottom,
+                pageTop: window.scrollY,
+                draft: document.getElementById("haiku-asistente-texto").value
+            };
+        })()`);
+        assert.equal(cloudbedsScroll.overflowY, "auto");
+        assert.ok(cloudbedsScroll.scrollHeight > cloudbedsScroll.clientHeight + 500,
+            "la propuesta Cloudbeds extensa desborda el scrollport");
+        assert.ok(cloudbedsScroll.panelTop >= 0 && cloudbedsScroll.panelBottom <= 900,
+            "Haku Cloudbeds respeta la altura visible");
+        assert.match(cloudbedsScroll.draft, /Borrador ficticio/);
+        await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop = 0");
+        for (let index = 0; index < 10; index++) await wheel(page, "#haiku-asistente-mensajes", 900);
+        await waitFor(page, `(() => {
+            const messages = document.getElementById("haiku-asistente-mensajes");
+            return messages.scrollTop >= messages.scrollHeight - messages.clientHeight - 2;
+        })()`, "Cloudbeds llega al final de Haku");
+        assert.equal(await evaluate(page, "window.scrollY"), cloudbedsScroll.pageTop);
+        assert.equal(await evaluate(page, "!document.getElementById('sites-resumen-reserva-drawer').hidden"), true);
+        assert.equal(await evaluate(page, "document.querySelector('.haiku-asistente-pie').getClientRects().length > 0"), true);
+        for (let index = 0; index < 10; index++) await wheel(page, "#haiku-asistente-mensajes", -900);
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop <= 1", "Cloudbeds vuelve al inicio de Haku");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), cloudbedsScroll.draft);
+
+        await viewport(page, 390, 844);
+        assert.equal(await evaluate(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility"), "hidden");
+        assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length > 0"), true);
+        await click(page, "[data-haiku-volver-haku]");
+        await waitFor(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility === 'visible'", "Cloudbeds vuelve a Haku en mÃ³vil");
+        const cloudbedsMobile = await evaluate(page, `(() => {
+            const panel = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
+            return { top: panel.top, bottom: panel.bottom, viewport: innerHeight };
+        })()`);
+        assert.ok(cloudbedsMobile.top >= 0 && cloudbedsMobile.bottom <= cloudbedsMobile.viewport,
+            "Haku mÃ³vil queda dentro del viewport");
+        await wheel(page, "#haiku-asistente-mensajes", 500);
+        await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop > 50", "Cloudbeds desplaza Haku en mÃ³vil");
+        assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), cloudbedsScroll.draft);
 
         assert.deepEqual(runtimeErrors, []);
         console.log("Inspector + Haku: navegación persistente, desktop ancho/angosto, móvil y estado OK");

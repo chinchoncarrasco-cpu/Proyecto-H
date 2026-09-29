@@ -86,7 +86,7 @@
     const MATRIZ_CAPACIDADES = Object.freeze({
         parsear: Object.freeze({ minimo: "Dos encabezados Cloudbeds conocidos y una fila delimitable", escritura: false }),
         identificar_fuerte: Object.freeze({ requiere: Object.freeze(["reserva_cloudbeds o id_cloudbeds inequívoco"]), escritura: false }),
-        identificar_fallback: Object.freeze({ requiere: Object.freeze(["nombre exacto", "habitación", "check_in", "check_out", "coincidencia única"]), solo_revision: true, escritura: false }),
+        identificar_fallback: Object.freeze({ requiere: Object.freeze(["nombre exacto", "habitación", "check_in", "check_out", "coincidencia única"]), identidad_tipo: "CONTEXTO_EXACTO_UNICO", solo_revision: false, escritura: false }),
         comparar_alojamiento: Object.freeze({ requiere: Object.freeze(["identidad asociada", "Depósito válido", "Precio Total", "Productos presente", "total_alojamiento Proyecto H"]), escritura: false }),
         proponer_total: Object.freeze({ regla_propiedad: "Depósito = alojamiento bruto final con IVA; Productos queda fuera", tolerancia_clp: TOLERANCIA_CLP, escritura: false }),
         actualizar_tarifa: Object.freeze({ implementada: false, escritura: false })
@@ -228,7 +228,7 @@
         const fallbackCompleto = Boolean(resultado.nombre_huesped && habitaciones.length === 1 && habitaciones[0].cabana && checkIn && checkOut);
         resultado.capacidades = Object.freeze({
             parsear: "disponible",
-            identificar: resultado.identificador_cloudbeds ? "fuerte" : fallbackCompleto ? "fallback_revision" : "no_verificable",
+            identificar: resultado.identificador_cloudbeds ? "fuerte_o_contextual" : fallbackCompleto ? "contexto_exacto_posible" : "no_verificable",
             comparar_alojamiento: deposito !== null ? "candidato_deposito_regla_propiedad" : "requiere_deposito",
             actualizar_tarifa: "no_disponible_solo_lectura"
         });
@@ -438,14 +438,42 @@
         }
     }
 
-    function contextoExacto(reserva, entrada, cabana) {
+    function estadiasContextoExacto(reserva, entrada, cabana) {
         const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
-        if (!entrada.habitaciones_raw && !entrada.check_in && !entrada.check_out) return estadias.length === 1 ? estadias[0] : null;
-        return estadias.find(estadia =>
-            (!cabana || Number(estadia.cabanas?.numero) === cabana) &&
-            (!entrada.check_in || estadia.fecha_ingreso === entrada.check_in) &&
-            (!entrada.check_out || estadia.fecha_salida === entrada.check_out)
-        ) || null;
+        if (!cabana || !entrada.check_in || !entrada.check_out) return [];
+        return estadias.filter(estadia =>
+            Number(estadia.cabanas?.numero) === cabana &&
+            estadia.fecha_ingreso === entrada.check_in &&
+            estadia.fecha_salida === entrada.check_out
+        );
+    }
+
+    function contextoExacto(reserva, entrada, cabana) {
+        const coincidencias = estadiasContextoExacto(reserva, entrada, cabana);
+        return coincidencias.length === 1 ? coincidencias[0] : null;
+    }
+
+    function resolverContextoExacto(reservas, entrada, cabana) {
+        const completo = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
+        if (!completo) return { completo: false, candidatas: [], ambiguas_estadia: [], con_coincidencia: [] };
+        const nombre = norm(entrada.nombre_huesped);
+        const candidatas = [];
+        const ambiguasEstadia = [];
+        const conCoincidencia = [];
+        reservas.forEach(reserva => {
+            if (norm(reserva.titular_nombre) !== nombre) return;
+            const estadias = estadiasContextoExacto(reserva, entrada, cabana);
+            if (!estadias.length) return;
+            conCoincidencia.push(reserva);
+            if (estadias.length === 1) candidatas.push(reserva);
+            else ambiguasEstadia.push(reserva);
+        });
+        return {
+            completo: true,
+            candidatas,
+            ambiguas_estadia: ambiguasEstadia,
+            con_coincidencia: conCoincidencia
+        };
     }
 
     function comparar(entradas, reservas, saldos) {
@@ -463,9 +491,48 @@
             let certeza = null;
             let candidatas = [];
             let identidad = null;
+            let identidadTipo = "NO_IDENTIFICADA";
+            let vinculoCloudbedsSugerido = null;
             const cabana = entrada.habitaciones.length === 1 ? entrada.habitaciones[0].cabana : null;
             const fallbackCompleto = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
+            const contexto = resolverContextoExacto(reservas, entrada, cabana);
             const canceladaCloudbeds = ["cancelada", "cancelado"].includes(entrada.estado);
+
+            const aplicarContexto = () => {
+                const ambiguo = contexto.ambiguas_estadia.length > 0 || contexto.candidatas.length > 1;
+                if (ambiguo) {
+                    identidadTipo = "AMBIGUA";
+                    certeza = "REVISION_MANUAL";
+                    revisiones.push("El contexto exacto coincide con más de una reserva o estadía compatible.");
+                    return;
+                }
+                if (contexto.candidatas.length === 1) {
+                    const candidata = contexto.candidatas[0];
+                    if (String(candidata.cloudbeds_id || "").trim()) {
+                        identidadTipo = "AMBIGUA";
+                        certeza = "REVISION_MANUAL";
+                        revisiones.push("El contexto exacto apunta a una reserva que ya tiene otro vínculo Cloudbeds guardado.");
+                        return;
+                    }
+                    candidatas = [candidata];
+                    identidadTipo = "CONTEXTO_EXACTO_UNICO";
+                    identidad = "Reserva identificada por contexto exacto";
+                    evidencias.push("Reserva identificada por contexto exacto.");
+                    evidencias.push("Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre, cabaña, check-in y check-out identifican una única reserva.");
+                    vinculoCloudbedsSugerido = {
+                        reserva_id: candidatas[0].id,
+                        reservation_number: entrada.reserva_cloudbeds || null,
+                        reservation_id: entrada.id_cloudbeds || null,
+                        evidencia: "contexto_exacto_unico"
+                    };
+                    return;
+                }
+                identidadTipo = "NO_IDENTIFICADA";
+                certeza = "NO_IDENTIFICADA";
+                revisiones.push(entrada.identificador_cloudbeds
+                    ? "ID/Reserva no aparece en Proyecto H y el contexto exacto tampoco identifica una reserva accesible."
+                    : "El contexto exacto no identifica una reserva accesible.");
+            };
 
             if (canceladaCloudbeds) {
                 certeza = "NO_APLICA";
@@ -474,9 +541,11 @@
                 certeza = "REVISION_MANUAL";
                 revisiones.push("No-show requiere revisión porque su semántica financiera no es inequívoca.");
             } else if (entrada.multihabitacion) {
+                identidadTipo = "AMBIGUA";
                 certeza = "REVISION_MANUAL";
                 revisiones.push("La fila contiene varias habitaciones o segmentos; no se distribuye el Depósito automáticamente.");
             } else if (numerosRepetidos.has(entrada.reserva_cloudbeds) || idsRepetidos.has(entrada.id_cloudbeds)) {
+                identidadTipo = "AMBIGUA";
                 certeza = "REVISION_MANUAL";
                 revisiones.push("Un mismo ID o Reserva aparece en más de una fila del PDF.");
             } else if (entrada.reserva_cloudbeds || entrada.id_cloudbeds) {
@@ -486,43 +555,31 @@
                     ? reservas.filter(reserva => String(reserva.cloudbeds_id || "").trim() === entrada.id_cloudbeds) : [];
                 const unicas = new Map([...porReserva, ...porId].map(reserva => [reserva.id, reserva]));
                 if (porReserva.length > 1 || porId.length > 1 || (porReserva.length && porId.length && unicas.size > 1)) {
+                    identidadTipo = "AMBIGUA";
                     certeza = "REVISION_MANUAL";
                     revisiones.push("ID y Reserva de Cloudbeds no identifican una única reserva de Proyecto H.");
                 } else if (!unicas.size) {
-                    certeza = "NO_IDENTIFICADA";
-                    revisiones.push("ID/Reserva no aparece entre las reservas accesibles de Proyecto H.");
+                    aplicarContexto();
                 } else {
                     candidatas = [[...unicas.values()][0]];
+                    identidadTipo = porReserva.length ? "CLOUDBEDS_RESERVA_EXACTA" : "CLOUDBEDS_ID_EXACTO";
                     identidad = porReserva.length ? "Reserva Cloudbeds exacta" : "ID Cloudbeds exacto";
                     evidencias.push(identidad);
                     if (porReserva.length) evidencias.push("El importador de listado conserva la columna Reserva en reservas.cloudbeds_id.");
                     else evidencias.push("Coincidencia con vínculo histórico; el campo legado no distingue tipo de identificador.");
                     if (fallbackCompleto) {
-                        const contextoAlternativo = reservas.filter(reserva =>
-                            norm(reserva.titular_nombre) === norm(entrada.nombre_huesped) && Boolean(contextoExacto(reserva, entrada, cabana))
-                        );
-                        if (contextoAlternativo.some(reserva => reserva.id !== candidatas[0].id)) {
+                        if (contexto.con_coincidencia.some(reserva => reserva.id !== candidatas[0].id)) {
+                            candidatas = [];
+                            identidadTipo = "AMBIGUA";
                             certeza = "REVISION_MANUAL";
                             revisiones.push("El identificador fuerte y el fallback contextual apuntan a reservas distintas.");
                         }
                     }
                 }
             } else if (fallbackCompleto) {
-                candidatas = reservas.filter(reserva =>
-                    norm(reserva.titular_nombre) === norm(entrada.nombre_huesped) && Boolean(contextoExacto(reserva, entrada, cabana))
-                );
-                identidad = "Nombre exacto + habitación + fechas";
-                if (candidatas.length === 1) {
-                    certeza = "REVISION_MANUAL";
-                    evidencias.push(`${identidad}; fallback informativo, nunca alta certeza.`);
-                } else if (candidatas.length > 1) {
-                    certeza = "REVISION_MANUAL";
-                    revisiones.push("El fallback exacto coincide con más de una reserva.");
-                } else {
-                    certeza = "NO_IDENTIFICADA";
-                    revisiones.push("El contexto exacto no identifica una reserva accesible.");
-                }
+                aplicarContexto();
             } else {
+                identidadTipo = "NO_IDENTIFICADA";
                 certeza = "NO_IDENTIFICADA";
                 revisiones.push("Faltan ID/Reserva y el contexto completo nombre + habitación + fechas.");
             }
@@ -648,6 +705,8 @@
                 componente_no_alojamiento_observable: componenteNoAlojamiento,
                 diferencia,
                 certeza,
+                identidad_tipo: identidadTipo,
+                vinculo_cloudbeds_sugerido: vinculoCloudbedsSugerido,
                 evidencias,
                 revisiones,
                 distribucion_v31: estadias.length === 1
@@ -662,10 +721,12 @@
             return {
                 clase,
                 certeza,
+                identidad_tipo: identidadTipo,
                 motivo,
                 evidencia: identidad,
                 evidencias,
                 revisiones,
+                vinculo_cloudbeds_sugerido: vinculoCloudbedsSugerido,
                 entrada,
                 reserva_id: propuesta.reserva_id,
                 total_proyecto_h: propuesta.total_actual_haku,

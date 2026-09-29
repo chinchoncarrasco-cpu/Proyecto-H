@@ -85,6 +85,8 @@ test('catálogo flexible supera las 50 columnas y no expone REQUERIDAS global', 
   assert.ok(api.COLUMNAS.length >= 50);
   assert.equal(api.REQUERIDAS, undefined);
   assert.equal(api.MATRIZ_CAPACIDADES.actualizar_tarifa.implementada, false);
+  assert.equal(api.MATRIZ_CAPACIDADES.identificar_fallback.identidad_tipo, 'CONTEXTO_EXACTO_UNICO');
+  assert.equal(api.MATRIZ_CAPACIDADES.identificar_fallback.solo_revision, false);
 });
 
 test('dinero chileno conserva cero y rechaza formatos ambiguos', () => {
@@ -163,11 +165,15 @@ test('ID Cloudbeds exacto prima sobre un nombre distinto, con contexto compatibl
   assert.equal(comparar(raw(), [reserva({ titular_nombre: 'Otro nombre' })]).filas[0].clase, 'COINCIDE');
 });
 
-test('fallback sólo de revisión exige nombre exacto, habitación y ambas fechas', () => {
+test('contexto exacto único identifica y exige nombre, habitación y ambas fechas', () => {
   const entrada = api.normalizar(raw({ reserva_cloudbeds: '', id_cloudbeds: '' }));
   const informe = api.comparar([entrada], [reserva({ cloudbeds_id: null })], [{ reserva_id: 'r1', total_alojamiento: 459000 }]);
-  assert.equal(informe.filas[0].certeza, 'REVISION_MANUAL');
-  assert.match(informe.filas[0].evidencias.join(' '), /fallback informativo/);
+  assert.equal(informe.filas[0].certeza, 'SIN_CAMBIO');
+  assert.equal(informe.filas[0].identidad_tipo, 'CONTEXTO_EXACTO_UNICO');
+  assert.match(informe.filas[0].evidencias.join(' '), /aún no tiene vínculo Cloudbeds guardado/);
+  assert.deepEqual(informe.filas[0].vinculo_cloudbeds_sugerido, {
+    reserva_id: 'r1', reservation_number: null, reservation_id: null, evidencia: 'contexto_exacto_unico'
+  });
   assert.equal(informe.filas[0].actualizacion.disponible, false);
   for (const incompleto of [
     raw({ reserva_cloudbeds: '', nombre_huesped: '' }),
@@ -357,7 +363,7 @@ test('filtros revisan todo, día, rango y reserva concreta sin depender del Resu
   assert.equal(api.filtrarInforme(informe, { reserva: '9000000000002' }).filas[0].reserva_id, 'r2');
 });
 
-test('E: subconjunto sin ID se parsea y usa fallback exacto sólo para revisión', () => {
+test('E: subconjunto sin ID identifica por contexto, pero finanzas incompletas exigen revisión', () => {
   const columnas = [
     ['Nombre y apellido', 'nombre_huesped'], ['Número de habitación', 'habitaciones_raw'],
     ['Check-in', 'check_in'], ['Check-out', 'check_out'], ['Total De La Habitación', 'total_habitacion']
@@ -366,7 +372,8 @@ test('E: subconjunto sin ID se parsea y usa fallback exacto sólo para revisión
   assert.equal(entrada.identificador_cloudbeds, null);
   const fila = api.comparar([entrada], [reserva({ cloudbeds_id: null })], [{ reserva_id: 'r1', total_alojamiento: 459000 }]).filas[0];
   assert.equal(fila.certeza, 'REVISION_MANUAL');
-  assert.match(fila.evidencias.join(' '), /fallback informativo/);
+  assert.equal(fila.identidad_tipo, 'CONTEXTO_EXACTO_UNICO');
+  assert.match(fila.evidencias.join(' '), /Reserva identificada por contexto exacto/);
 });
 
 test('F: ID + campo financiero sin contexto no se eleva a alta certeza', () => {

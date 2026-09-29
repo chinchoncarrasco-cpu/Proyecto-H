@@ -174,7 +174,7 @@ const server = http.createServer((request, response) => {
         const fit = await report.evaluate(element => ({ scroll: element.scrollWidth, client: element.clientWidth, overflow: getComputedStyle(element).overflowY }));
         assert.ok(fit.scroll <= fit.client + 1, `móvil sin scroll horizontal: ${fit.scroll}/${fit.client}`);
         assert.equal(fit.overflow, 'visible');
-        assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth), 'none');
+        assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth), 'thin');
         const area = page.locator('#haiku-asistente-mensajes');
         await area.evaluate(element => { element.scrollTop = 0; });
         const box = await report.boundingBox();

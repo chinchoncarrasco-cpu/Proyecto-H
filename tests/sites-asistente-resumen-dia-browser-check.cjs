@@ -120,7 +120,7 @@ const fila = (numero, tipo) => ({
                 listaOverflow: getComputedStyle(lista).overflowY, height: el.scrollHeight, client: el.clientHeight };
         });
         assert.equal(scroll.overflow, 'auto');
-        assert.equal(scroll.scrollbar, 'none');
+        assert.equal(scroll.scrollbar, 'thin');
         assert.notEqual(scroll.listaOverflow, 'auto', 'sin scroll anidado en filas');
         assert.ok(scroll.height > scroll.client + 500);
         await area.evaluate(el => { el.scrollTop = 0; });

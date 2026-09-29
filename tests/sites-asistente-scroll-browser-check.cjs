@@ -33,7 +33,10 @@ async function setup(page) {
     const insert = async kind => page.evaluate(type => {
         const messages = document.getElementById('haiku-asistente-mensajes');
         messages.replaceChildren();
-        if (type === 'comparison') {
+        if (type === 'short') {
+            messages.append(Object.assign(document.createElement('div'), {
+                className: 'haiku-asistente-mensaje haiku-asistente-mensaje--asistente', textContent: 'Respuesta breve de Haku' }));
+        } else if (type === 'comparison') {
             const report = document.createElement('article');
             report.className = 'haiku-asistente-preview haku-comparacion-compacta haku-comparacion-sites';
             report.append(Object.assign(document.createElement('header'), { className: 'haku-comparacion-sites-cabecera', textContent: 'Libro de Reserva ↔ Proyecto H' }));
@@ -65,11 +68,14 @@ async function position(page, messages) {
         const composer = page.locator('.haiku-asistente-pie');
         const headerBefore = await header.boundingBox();
         const composerBefore = await composer.boundingBox();
-        await insert('comparison');
+        await insert('short');
         let state = await position(page, messages);
+        assert.ok(state.height <= state.client + 1, `el contenido corto no crea scroll innecesario: ${JSON.stringify(state)}`);
+        await insert('comparison');
+        state = await position(page, messages);
         assert.equal(state.overflow, 'auto');
-        assert.equal(state.scrollbar, 'none');
-        assert.equal(state.webkit, 'none');
+        assert.equal(state.scrollbar, 'thin');
+        assert.equal(state.webkit, 'block');
         assert.ok(state.height > state.client + 500, `la comparación aporta su altura al área central: ${JSON.stringify(state)}`);
         const box = await messages.boundingBox();
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -86,6 +92,14 @@ async function position(page, messages) {
         assert.equal((await composer.boundingBox()).y, composerBefore.y, 'compositor fijo');
         assert.equal(await page.locator('#haiku-asistente-texto').isVisible(), true);
         assert.equal(await page.locator('#haiku-asistente-rapidas').isVisible(), true);
+
+        await messages.evaluate(el => { el.scrollTop = 0; });
+        const scrollbarBox = await messages.boundingBox();
+        await page.mouse.move(scrollbarBox.x + scrollbarBox.width - 3, scrollbarBox.y + 12);
+        await page.mouse.down();
+        await page.mouse.move(scrollbarBox.x + scrollbarBox.width - 3, scrollbarBox.y + scrollbarBox.height * .72, { steps: 8 });
+        await page.mouse.up();
+        await page.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 50);
 
         await insert('conversation');
         state = await position(page, messages);
@@ -111,7 +125,7 @@ async function position(page, messages) {
             assert.equal((await position(touchPage, mobileMessages)).page, 0);
             assert.equal(await touchPage.locator('#haiku-asistente-texto').isVisible(), true);
         } finally { await mobile.close(); }
-        console.log('Haku Sites: wheel, trackpad, touch, comparación y conversación largas, footer fijo y scrollbar oculta OK');
+        console.log('Haku Sites: contenido corto/largo, wheel, trackpad, touch, footer fijo y scrollbar arrastrable OK');
     } finally {
         await browser.close();
         await new Promise(resolve => server.close(resolve));

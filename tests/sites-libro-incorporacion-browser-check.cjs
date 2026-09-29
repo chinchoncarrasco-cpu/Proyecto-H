@@ -128,7 +128,7 @@ const server = http.createServer((request, response) => {
             card: getComputedStyle(document.querySelector('.haku-incorporacion-sites')).overflowY,
             scrollbar: getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth
         }));
-        assert.deepEqual(scrollStyle, { area: 'auto', card: 'visible', scrollbar: 'none' }, 'una sola superficie de scroll sin barra');
+        assert.deepEqual(scrollStyle, { area: 'auto', card: 'visible', scrollbar: 'thin' }, 'una sola superficie de scroll con barra arrastrable');
         await scrollArea.evaluate(element => { element.scrollTop = 0; });
         const box = await card.boundingBox();
         await page.mouse.move(box.x + 60, Math.min(box.y + 260, 500));

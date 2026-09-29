@@ -193,6 +193,15 @@
         </div>`;
     }
 
+    function renderIdentidadContextual(fila) {
+        if (fila?.identidad_tipo !== "CONTEXTO_EXACTO_UNICO") return "";
+        return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="CONTEXTO_EXACTO_UNICO">
+            <strong><span aria-hidden="true">✓</span> Reserva identificada por contexto exacto</strong>
+            <span><span aria-hidden="true">○</span> Vínculo Cloudbeds aún no guardado</span>
+            <small>Nombre, cabaña, check-in y check-out identifican una única reserva de Proyecto H.</small>
+        </div>`;
+    }
+
     function renderItem(item) {
         const fila = item.fila;
         const propuesta = fila.propuesta || {};
@@ -200,7 +209,11 @@
         const nombre = entrada.nombre_huesped || [entrada.nombre, entrada.apellido].filter(Boolean).join(" ") || "Reserva Cloudbeds";
         const cabana = propuesta.cabana ? `CAB ${propuesta.cabana}` : "Cabaña no identificada";
         const diferencia = propuesta.diferencia;
-        const evidencias = (fila.evidencias || propuesta.evidencias || []).slice(0, 8);
+        const evidencias = (fila.evidencias || propuesta.evidencias || [])
+            .filter(evidencia => fila.identidad_tipo !== "CONTEXTO_EXACTO_UNICO"
+                || (!String(evidencia).startsWith("Reserva identificada por contexto exacto")
+                    && !String(evidencia).startsWith("Proyecto H aún no tiene vínculo Cloudbeds guardado")))
+            .slice(0, 8);
         const revisiones = fila.revisiones || propuesta.revisiones || [];
         const seleccion = item.seleccionable
             ? `<button type="button" class="haiku-cloudbeds-tarifas-simular-item" data-cloudbeds-seleccionar="${esc(item.id)}" aria-pressed="${item.seleccionado}">${item.seleccionado ? "Quitar de simulación" : "Simular actualización"}</button>`
@@ -215,6 +228,7 @@
                 <div><dt>Cloudbeds</dt><dd>${esc(moneda(propuesta.total_alojamiento_propuesto || propuesta.deposito_cloudbeds))}</dd></div>
                 <div><dt>Diferencia</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
             </dl>
+            ${renderIdentidadContextual(fila)}
             ${renderProductos(propuesta)}
             ${evidencias.length ? `<div class="haiku-cloudbeds-tarifas-evidencias"><strong>Evidencias</strong><ul>${evidencias.map(evidencia => `<li>${esc(evidencia)}</li>`).join("")}</ul></div>` : ""}
             ${revisiones.length ? `<div class="haiku-cloudbeds-tarifas-revision"><strong>Revisar</strong><ul>${revisiones.map(revision => `<li>${esc(revision)}</li>`).join("")}</ul></div>` : ""}
@@ -228,6 +242,8 @@
                 <button type="button" class="haiku-cloudbeds-tarifas-writer" disabled>Escritura aún no habilitada</button>
             </footer>
             <details class="haiku-cloudbeds-tarifas-tecnico"><summary>Detalles técnicos</summary><pre>${esc(JSON.stringify({
+                identidad_tipo: fila.identidad_tipo,
+                vinculo_cloudbeds_sugerido: fila.vinculo_cloudbeds_sugerido,
                 certeza_cloudbeds: item.certeza_cloudbeds,
                 compatibilidad_financiera: item.compatibilidad_financiera,
                 propuesta

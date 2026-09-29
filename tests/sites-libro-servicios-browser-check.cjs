@@ -142,7 +142,7 @@ const server = http.createServer((request, response) => {
             card: getComputedStyle(document.querySelector('.haku-libro-servicios-sites')).overflowY,
             scrollbar: getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth
         }));
-        assert.deepEqual(style, { area: 'auto', card: 'visible', scrollbar: 'none' });
+        assert.deepEqual(style, { area: 'auto', card: 'visible', scrollbar: 'thin' });
         const scrollArea = page.locator('#haiku-asistente-mensajes');
         await scrollArea.evaluate(element => { element.scrollTop = 0; });
         const box = await card.boundingBox();
@@ -218,7 +218,7 @@ const server = http.createServer((request, response) => {
         assert.ok(resultFit.scroll <= resultFit.client + 1, 'resultado móvil sin scroll horizontal');
         assert.equal(resultFit.overflow, 'visible');
         assert.equal(await saved.locator('.haku-libro-resultado-sites__revisar').isVisible(), true);
-        assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth), 'none');
+        assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth), 'thin');
         const resultBox = await previousReview.boundingBox();
         await page.mouse.move(resultBox.x + 30, Math.min(resultBox.y + 30, 360));
         await page.mouse.wheel(0, 300);
