@@ -73,8 +73,29 @@ const capacidadV31 = Object.freeze({
   writer_disponible: true,
   v31_disponible: true,
   motivo: 'Disponible globalmente; requiere revalidación.',
-  escritura_habilitada: false
+  escritura_habilitada: true
 });
+
+function aplicarPreviewSeleccionada(modelo) {
+  modelo.items.filter(item => item.seleccionado).forEach(item => {
+    const propuesta = item.fila.propuesta;
+    tarifas.aplicarPreview(item, {
+      solo_lectura: true,
+      version: tarifas.VERSION_PREVIEW,
+      autoridad_financiera_version: modelo.capacidad.version,
+      reserva_id: propuesta.reserva_id,
+      estadia_id: propuesta.estadia_id,
+      tipo_estadia: propuesta.es_full_day ? 'fullday' : propuesta.tipo_estadia_proyecto_h,
+      cabana_numero: propuesta.cabana,
+      total_actual: propuesta.total_actual_haku,
+      total_objetivo: propuesta.total_alojamiento_propuesto,
+      pagado_actual: propuesta.pagado_actual_haku || 0,
+      saldo_actual: propuesta.saldo_actual_haku ?? propuesta.total_actual_haku,
+      saldo_esperado: propuesta.saldo_esperado_haku ?? propuesta.total_alojamiento_propuesto,
+      elegible: true
+    });
+  });
+}
 
 test('PDF compacto realista se parsea y termina en el resumen operativo de Haku', () => {
   const columnas = [
@@ -125,7 +146,8 @@ test('caso tipo Héctor muestra descuento, evidencia y capas separadas', () => {
   assert.match(html, /\$160\.000/);
   assert.match(html, /\$144\.000/);
   assert.match(html, /-\$16\.000/);
-  assert.match(html, /Escritura aún no habilitada/);
+  assert.match(html, /data-cloudbeds-actualizar[^>]*>Actualizar tarifa<\/button>/);
+  assert.match(html, /Writer auditado/);
 });
 
 test('productos se explican sin crear servicios ni inferir precios individuales', () => {
@@ -157,7 +179,7 @@ test('capacidad v31 disponible y no disponible permanecen globales, no por reser
     async rpc(nombre) { llamadas.push(nombre); return { data: { version: 'total1_financiero_v31', writer_disponible: true } }; }
   });
   assert.equal(disponible.v31_disponible, true);
-  assert.equal(disponible.escritura_habilitada, false);
+  assert.equal(disponible.escritura_habilitada, true);
   const versionVieja = await tarifas.consultarCapacidad({
     async rpc(nombre) { llamadas.push(nombre); return { data: { version: 'total1_financiero_v3', writer_disponible: true } }; }
   });
@@ -167,14 +189,14 @@ test('capacidad v31 disponible y no disponible permanecen globales, no por reser
   assert.deepEqual(llamadas, ['haiku_capacidad_totales_v1', 'haiku_capacidad_totales_v1']);
 });
 
-test('flag false impide absolutamente cualquier RPC de escritura', async () => {
+test('flag true conserva la simulación local sin ejecutar el writer', async () => {
   const llamadas = [];
   const cliente = { async rpc(nombre) { llamadas.push(nombre); return { data: { version: 'total1_financiero_v31', writer_disponible: true } }; } };
   const modelo = await tarifas.preparar(informeRealista(), cliente);
   tarifas.seleccionarTodo(modelo, true);
   const resultado = tarifas.confirmarSimulacion(modelo);
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
-  assert.equal(global.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
+  assert.equal(global.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
   assert.equal(resultado.escrituras, 0);
   assert.deepEqual(llamadas, ['haiku_capacidad_totales_v1']);
   assert.doesNotMatch(read('js/haiku-cloudbeds-tarifas-v1.js'), /haiku_cambiar_totales_lote_v1/);
@@ -184,6 +206,7 @@ test('payload futuro usa el contrato Cloudbeds W1 completo', () => {
   const modelo = tarifas.prepararModelo(informeRealista(), capacidadV31);
   const hector = modelo.items.find(item => item.fila.propuesta.reserva_id === 'r-a');
   tarifas.seleccionar(modelo, hector.id, true);
+  aplicarPreviewSeleccionada(modelo);
   assert.deepEqual(tarifas.construirPayload(modelo), [{
     reserva_id: 'r-a', estadia_id: 'e-r-a', tipo_estadia: 'alojamiento',
     total_actual_esperado: 160000, total_objetivo: 144000,
@@ -197,8 +220,13 @@ test('selección individual y seleccionar todo operan sólo sobre propuestas seg
   const seguras = modelo.items.filter(item => item.seleccionable);
   assert.equal(seguras.length, 1);
   assert.equal(tarifas.seleccionar(modelo, seguras[0].id, true), true);
+  assert.equal(tarifas.solicitudesPreview(modelo).length, 1);
+  assert.equal(tarifas.construirPayload(modelo).length, 0);
+  aplicarPreviewSeleccionada(modelo);
   assert.equal(tarifas.construirPayload(modelo).length, 1);
   assert.equal(tarifas.seleccionarTodo(modelo, true), 1);
+  assert.equal(tarifas.solicitudesPreview(modelo).length, 1);
+  aplicarPreviewSeleccionada(modelo);
   assert.equal(tarifas.construirPayload(modelo).length, 1);
   tarifas.seleccionarTodo(modelo, false);
   assert.equal(tarifas.construirPayload(modelo).length, 0);
@@ -242,16 +270,13 @@ test('contratos visuales cubren escritorio y móvil sin drawer adicional', () =>
   assert.match(fixtureJs, /URLSearchParams[\s\S]*inspector[\s\S]*HAIKU_PANELES_V1\.abrirReserva\('r-hector'\)/);
 });
 
-test('panel de confirmación futura muestra el detalle y mantiene el writer bloqueado', () => {
+test('panel de confirmación inicia bloqueado hasta recibir la preview backend', () => {
   const modelo = tarifas.prepararModelo(informeRealista(), capacidadV31);
   tarifas.seleccionarTodo(modelo, true);
-  const resultado = tarifas.confirmarSimulacion(modelo);
-  assert.equal(resultado.simulado, true);
-  assert.equal(resultado.escrituras, 0);
-  assert.match(resultado.mensaje, /No se escribió ningún dato/);
   const html = tarifas.renderizar(modelo);
   assert.match(html, /Los pagos existentes no serán modificados/);
   assert.match(html, /Alojamiento actual/);
   assert.match(html, /Saldo esperado/);
+  assert.match(html, /data-cloudbeds-confirmacion[^>]*hidden/);
   assert.match(html, /data-cloudbeds-confirmar disabled>Confirmar actualización/);
 });

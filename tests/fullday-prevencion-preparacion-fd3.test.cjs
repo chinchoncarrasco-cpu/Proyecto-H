@@ -184,17 +184,21 @@ test('Cloudbeds conserva Deposit como candidato, productos separados y añade es
   assert.equal(fila.propuesta.componente_no_alojamiento_observable, 30000);
 });
 
-test('certeza Cloudbeds y capacidad futura de edición permanecen separadas', () => {
+test('la preparación FD-3 sigue sin escritura directa y W1 v32 ofrece una única acción auditada', () => {
   const fila = filaFullDay();
   const capacidad = tarifas.capacidadCorreccionFullDay(fila);
   assert.equal(capacidad.certeza_cloudbeds, 'ALTA_CERTEZA');
   assert.equal(capacidad.estado, 'PREPARADA_SIN_ESCRITURA');
   assert.equal(capacidad.escritura_autorizada, false);
   const html = tarifas.renderizar(tarifas.prepararModelo({ filas: [fila] }, {
-    v31_disponible: true, version: 'total1_financiero_v31', motivo: 'Prueba'
+    writer_disponible: true,
+    v32_disponible: true,
+    servicios_separados: true,
+    version: 'total1_financiero_v32',
+    motivo: 'Prueba v32'
   }));
-  assert.match(html, /Actualizar tarifa Full Day/);
-  assert.match(html, /haiku-cloudbeds-tarifas-fd3" disabled/);
+  assert.match(html, /data-cloudbeds-actualizar="r-fd-3"[^>]*>Actualizar tarifa<\/button>/);
+  assert.doesNotMatch(html, /haiku-cloudbeds-tarifas-fd3|Actualizar tarifa Full Day/);
 });
 
 test('la preparación relee Proyecto H y conserva el snapshot completo para el RPC canónico', async () => {
@@ -229,9 +233,9 @@ test('una segunda estadía activa invalida la preparación antes de cualquier es
   );
 });
 
-test('la preparación FD-3 no llama al editor ni habilita el writer Cloudbeds', () => {
+test('la preparación FD-3 no llama al editor directo y conserva el writer W1 activo', () => {
   const source = read('js/haiku-cloudbeds-tarifas-v1.js');
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
   assert.doesNotMatch(source, /\.rpc\(\s*["']haiku_modificar_reserva_completa/);
   assert.doesNotMatch(source, /\.update\(|\.insert\(/);
 });

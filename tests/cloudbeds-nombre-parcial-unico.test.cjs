@@ -147,14 +147,14 @@ test('CAB o fechas distintas no habilitan la identidad parcial', () => {
   assert.equal(fecha.identidad_tipo, 'NO_IDENTIFICADA');
 });
 
-test('Haku muestra la explicación y ambos nombres sin habilitar writer', () => {
+test('Haku muestra la explicación y ambos nombres con el writer global activo', () => {
   const fila = compararUna('Yerko Andres Baeza valenzuela', reserva('r-yerko', 'Yerko Baeza'));
   const html = tarifas.renderizar(tarifas.prepararModelo({ filas: [fila] }, capacidadV31));
   assert.match(html, /✓<\/span> Reserva identificada por contexto único/);
   assert.match(html, /≈<\/span> Proyecto H contiene una versión abreviada del nombre/);
   assert.match(html, /<b>Cloudbeds:<\/b> Yerko Andres Baeza valenzuela/);
   assert.match(html, /<b>Proyecto H:<\/b> Yerko Baeza/);
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
   assert.equal(fila.propuesta.solo_lectura, true);
   assert.equal(fila.propuesta.actualizacion_disponible, false);
 });

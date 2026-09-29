@@ -1,6 +1,6 @@
 # Cloudbeds Full Day FD-1 · diagnóstico y auditoría de solo lectura
 
-Esta etapa no cambia SQL, migraciones, RPC, Supabase ni writers. La comparación local sigue siendo informativa y `CLOUDBEDS_TARIFAS_WRITER_HABILITADO` permanece en `false`.
+FD-1 no cambió SQL, migraciones, RPC, Supabase ni writers. La activación frontend posterior de W1 reutiliza esta comparación sin alterar sus reglas Full Day.
 
 ## Causa exacta de identidad
 

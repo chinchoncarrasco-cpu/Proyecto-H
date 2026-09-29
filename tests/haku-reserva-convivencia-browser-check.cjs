@@ -11,7 +11,8 @@ const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
 const fixture = path.join(root, "tests", "fixtures", "haku-reserva-convivencia", "index.html");
 const cloudbedsFixture = path.join(root, "tests", "fixtures", "cloudbeds-haku-tarifas-2e", "index.html");
 const coordinator = fs.readFileSync(path.join(root, "js", "haiku-panel-coordinacion-v1.js"), "utf8");
-const artifacts = path.join(root, "tests", "artifacts", "haku-reserva-convivencia");
+const artifacts = process.env.HAIKU_BROWSER_ARTIFACTS
+    || path.join(root, "tests", "artifacts", "haku-reserva-convivencia");
 
 class CdpClient {
     constructor(url) {
@@ -686,25 +687,99 @@ async function screenshot(client, name) {
         await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop <= 1", "Cloudbeds vuelve al inicio de Haku");
         assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), cloudbedsScroll.draft);
 
-        // W1: payload y confirmación reales preparados, pero sin writer ejecutable.
+        // W1: la preview simulada habilita la confirmación; cancelar no ejecuta el writer.
         await evaluate(page, "document.querySelector('[data-cloudbeds-seleccionar]').scrollIntoView({ block: 'center' })");
         await pointerClick(page, "[data-cloudbeds-seleccionar]");
         await evaluate(page, "document.querySelector('[data-cloudbeds-abrir-confirmacion]').scrollIntoView({ block: 'center' })");
         await pointerClick(page, "[data-cloudbeds-abrir-confirmacion]");
         assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').hidden"), false);
         assert.match(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').textContent"),
-            /Actualizar tarifa[\s\S]*Proyecto H actual[\s\S]*Cloudbeds[\s\S]*Pagado actual[\s\S]*Saldo esperado/);
-        assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmar]').disabled"), true);
-        assert.equal(await evaluate(page, "window.CLOUDBEDS_TARIFAS_WRITER_HABILITADO"), false);
+            /Actualizar tarifa[\s\S]*Alojamiento actual[\s\S]*Alojamiento Cloudbeds[\s\S]*Pagado actual[\s\S]*Saldo esperado/);
+        assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmar]').disabled"), false);
+        assert.equal(await evaluate(page, "window.CLOUDBEDS_TARIFAS_WRITER_HABILITADO"), true);
         await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').scrollIntoView({ block: 'center' })");
         await screenshot(page, "cloudbeds-w1-confirmacion-desktop-1500x900.png");
         await pointerClick(page, "[data-cloudbeds-cancelar]");
+
+        // Post-write: usa la reconsulta real del fixture, conserva un único Inspector y persiste hasta cerrar.
+        await evaluate(page, "document.querySelector('[data-cloudbeds-item=\"r-fd-a\"] [data-cloudbeds-actualizar]').scrollIntoView({ block: 'center' })");
+        await pointerClick(page, "[data-cloudbeds-item=\"r-fd-a\"] [data-cloudbeds-actualizar]");
+        await waitFor(page, `(() => {
+            const confirmacion = document.querySelector("[data-cloudbeds-confirmacion]");
+            const confirmar = document.querySelector("[data-cloudbeds-confirmar]");
+            return confirmacion && !confirmacion.hidden && confirmar && !confirmar.disabled;
+        })()`, "preview Full Day lista para confirmar");
+        const escritoresAntes = await evaluate(page, "window.DEMO_CLOUDBEDS_2E.llamadas.filter(item => item === 'rpc:haiku_aplicar_tarifas_cloudbeds_v1').length");
+        await evaluate(page, `(() => {
+            const confirmar = document.querySelector("[data-cloudbeds-confirmar]");
+            confirmar.click();
+            confirmar.click();
+            return true;
+        })()`);
+        await waitFor(page, "document.querySelector('[data-cloudbeds-post-write].haiku-cloudbeds-tarifas-post-write--exito')", "confirmación post-write visible");
+        const postWrite = await evaluate(page, `(() => {
+            const tarjeta = document.querySelector("[data-cloudbeds-post-write]");
+            const panel = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
+            const rect = tarjeta.getBoundingClientRect();
+            const saldo = window.DEMO_CLOUDBEDS_2E.saldos.find(item => item.reserva_id === "r-fd-a");
+            return {
+                texto: tarjeta.textContent,
+                panelLeft: panel.left,
+                panelRight: panel.right,
+                left: rect.left,
+                right: rect.right,
+                total: saldo.total_alojamiento,
+                pagado: saldo.pagado_alojamiento,
+                saldo: saldo.saldo_alojamiento,
+                escritores: window.DEMO_CLOUDBEDS_2E.llamadas.filter(item => item === "rpc:haiku_aplicar_tarifas_cloudbeds_v1").length,
+                coincide: Boolean(document.querySelector('[data-cloudbeds-categoria="SIN_CAMBIO"] [data-cloudbeds-item="r-fd-a"]')),
+                drawers: document.querySelectorAll("#sites-resumen-reserva-drawer").length
+            };
+        })()`);
+        assert.match(postWrite.texto, /Tarifa actualizada correctamente/);
+        assert.match(postWrite.texto, /Proyecto H[\s\S]*\$160\.000[\s\S]*\$120\.000/);
+        assert.match(postWrite.texto, /Pagado[\s\S]*\$120\.000/);
+        assert.match(postWrite.texto, /Saldo[\s\S]*\$0/);
+        assert.match(postWrite.texto, /La reserva fue reconsultada y el cambio quedó registrado/);
+        assert.equal(postWrite.total, 120000);
+        assert.equal(postWrite.pagado, 120000);
+        assert.equal(postWrite.saldo, 0);
+        assert.equal(postWrite.escritores, escritoresAntes + 1, "el doble clic ejecuta una sola escritura");
+        assert.equal(postWrite.coincide, true, "SIN_CAMBIO proviene de la reconstrucción del informe");
+        assert.equal(postWrite.drawers, 1, "se conserva el Inspector único");
+        assert.ok(postWrite.left >= postWrite.panelLeft && postWrite.right <= postWrite.panelRight,
+            "la tarjeta de éxito cabe dentro de Haku");
+        await evaluate(page, "document.querySelector('[data-cloudbeds-post-write]').scrollIntoView({ block: 'center' })");
+        await screenshot(page, "cloudbeds-w1-exito-desktop-1500x900.png");
+
+        await pointerClick(page, "[data-cloudbeds-post-write-ver-reserva]");
+        await waitFor(page, "document.getElementById('sites-resumen-reserva-drawer').dataset.haikuInspectorEntidadId === 'r-fd-a'", "éxito abre el Inspector existente");
+
+        await viewport(page, 980, 850);
+        const postWriteAngosto = await evaluate(page, `(() => {
+            const tarjeta = document.querySelector("[data-cloudbeds-post-write]");
+            return { clientWidth: tarjeta.clientWidth, scrollWidth: tarjeta.scrollWidth, visible: tarjeta.getClientRects().length > 0 };
+        })()`);
+        assert.equal(postWriteAngosto.visible, true);
+        assert.ok(postWriteAngosto.scrollWidth <= postWriteAngosto.clientWidth + 1,
+            "la tarjeta no desborda en panel angosto");
 
         await viewport(page, 390, 844);
         assert.equal(await evaluate(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility"), "hidden");
         assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length > 0"), true);
         await click(page, "[data-haiku-volver-haku]");
         await waitFor(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility === 'visible'", "Cloudbeds vuelve a Haku en mÃ³vil");
+        assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-post-write]').getClientRects().length > 0"), true);
+        const postWriteMobile = await evaluate(page, `(() => {
+            const tarjeta = document.querySelector("[data-cloudbeds-post-write]");
+            return { clientWidth: tarjeta.clientWidth, scrollWidth: tarjeta.scrollWidth };
+        })()`);
+        assert.ok(postWriteMobile.scrollWidth <= postWriteMobile.clientWidth + 1,
+            "la tarjeta no desborda en móvil");
+        await evaluate(page, "document.querySelector('[data-cloudbeds-post-write]').scrollIntoView({ block: 'center' })");
+        await screenshot(page, "cloudbeds-w1-exito-mobile-390x844.png");
+        await pointerClick(page, "[data-cloudbeds-post-write-cerrar]");
+        assert.equal(await evaluate(page, "Boolean(document.querySelector('[data-cloudbeds-post-write]'))"), false);
         const cloudbedsMobile = await evaluate(page, `(() => {
             const panel = document.getElementById("haiku-asistente-panel").getBoundingClientRect();
             return { top: panel.top, bottom: panel.bottom, viewport: innerHeight };

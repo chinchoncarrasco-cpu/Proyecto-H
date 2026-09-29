@@ -206,11 +206,26 @@ test('Haku muestra el contexto sin moverlo a No identificadas y Ver reserva usa 
   assert.deepEqual(aperturas, ['r-historica']);
 });
 
-test('writer 2E permanece apagado y el vínculo sugerido no entra en el payload', () => {
+test('writer activo mantiene fuera del payload el vínculo sugerido', () => {
   const fila = compararUna(entrada(), [reserva()]);
   const modelo = tarifas.prepararModelo({ filas: [fila] }, capacidadV31);
   tarifas.seleccionarTodo(modelo, true);
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
+  tarifas.aplicarPreview(modelo.items[0], {
+    solo_lectura: true,
+    version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: 'total1_financiero_v31',
+    reserva_id: fila.propuesta.reserva_id,
+    estadia_id: fila.propuesta.estadia_id,
+    tipo_estadia: 'alojamiento',
+    cabana_numero: fila.propuesta.cabana,
+    total_actual: 160000,
+    total_objetivo: 144000,
+    pagado_actual: 0,
+    saldo_actual: 160000,
+    saldo_esperado: 144000,
+    elegible: true
+  });
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
   assert.deepEqual(tarifas.construirPayload(modelo), [{
     reserva_id: 'r-historica', estadia_id: 'e-r-historica', tipo_estadia: 'alojamiento',
     total_actual_esperado: 160000, total_objetivo: 144000,

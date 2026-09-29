@@ -54,6 +54,33 @@ function modeloSeleccionado(tarifas, extra = {}) {
   return modelo;
 }
 
+function previewElegible(tarifas, modelo, extra = {}) {
+  const item = modelo.items.find(actual => actual.seleccionado);
+  const propuesta = item.fila.propuesta;
+  return {
+    solo_lectura: true,
+    version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: modelo.capacidad.version,
+    reserva_id: propuesta.reserva_id,
+    estadia_id: propuesta.estadia_id,
+    tipo_estadia: propuesta.es_full_day ? 'fullday' : propuesta.tipo_estadia_proyecto_h,
+    cabana_numero: propuesta.cabana,
+    total_actual: propuesta.total_actual_haku,
+    total_objetivo: propuesta.total_alojamiento_propuesto,
+    pagado_actual: propuesta.pagado_actual_haku,
+    saldo_actual: propuesta.saldo_actual_haku,
+    saldo_esperado: propuesta.saldo_esperado_haku,
+    elegible: true,
+    ...extra
+  };
+}
+
+function aplicarPreviewElegible(tarifas, modelo, extra = {}) {
+  const item = modelo.items.find(actual => actual.seleccionado);
+  tarifas.aplicarPreview(item, previewElegible(tarifas, modelo, extra));
+  return item;
+}
+
 test('la migración crea preview de lectura y writer Cloudbeds', () => {
   assert.match(migration, /create function public\.haiku_previsualizar_tarifa_cloudbeds_v1\([\s\S]*p_reserva_id uuid[\s\S]*p_estadia_id uuid[\s\S]*p_total_objetivo bigint/i);
   assert.match(migration, /create function public\.haiku_aplicar_tarifas_cloudbeds_v1\(p_operaciones jsonb\)/i);
@@ -196,15 +223,37 @@ test('W1 no agrega compatibilidad de esquema para columnas vigentes de producci�
   }
 });
 
-test('el writer frontend continúa literalmente deshabilitado', () => {
+test('el writer frontend queda activado exclusivamente por su bandera', () => {
   const tarifas = cargarTarifas();
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
-  assert.match(frontendSource, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false/);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
+  assert.match(frontendSource, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true/);
+});
+
+test('sólo una propuesta elegible muestra la acción de escritura', () => {
+  const tarifas = cargarTarifas();
+  const elegible = tarifas.renderizar(modeloSeleccionado(tarifas));
+  assert.match(elegible, /data-cloudbeds-actualizar[^>]*>Actualizar tarifa<\/button>/);
+  assert.doesNotMatch(elegible, /data-cloudbeds-actualizar[^>]*disabled/);
+
+  const bloqueada = tarifas.prepararModelo({ filas: [fila({ certeza: 'REVISION_MANUAL' })] }, {
+    v31_disponible: true,
+    version: tarifas.VERSION_VIGENTE
+  });
+  assert.doesNotMatch(tarifas.renderizar(bloqueada), /data-cloudbeds-actualizar/);
+
+  const sinCapacidad = tarifas.prepararModelo({ filas: [fila({ propuesta: { productos: ['Tinaja ficticia'] } })] }, {
+    v31_disponible: false,
+    version: null,
+    motivo: 'TOTAL v31 no disponible.'
+  });
+  assert.doesNotMatch(tarifas.renderizar(sinCapacidad), /data-cloudbeds-actualizar/);
 });
 
 test('el payload frontend coincide con el contrato RPC W1', () => {
   const tarifas = cargarTarifas();
-  const payload = tarifas.construirPayload(modeloSeleccionado(tarifas));
+  const modelo = modeloSeleccionado(tarifas);
+  aplicarPreviewElegible(tarifas, modelo);
+  const payload = tarifas.construirPayload(modelo);
   assert.deepEqual(Object.keys(payload[0]), [
     'reserva_id', 'estadia_id', 'tipo_estadia', 'total_actual_esperado', 'total_objetivo',
     'cloudbeds_reservation_number', 'cloudbeds_reservation_id', 'certeza', 'evidencia'
@@ -213,25 +262,120 @@ test('el payload frontend coincide con el contrato RPC W1', () => {
   assert.equal(payload[0].total_objetivo, 144000);
 });
 
-test('una llamada programática no alcanza Supabase mientras el flag sea false', async () => {
+test('la preview bloqueada impide construir payload y nunca llama al writer', async () => {
   const tarifas = cargarTarifas();
-  let llamadas = 0;
-  const resultado = await tarifas.ejecutarActualizacion(modeloSeleccionado(tarifas), {
-    async rpc() { llamadas++; return { data: { ok: true, resultados: [] } }; }
-  });
-  assert.equal(resultado.codigo, 'WRITER_DESHABILITADO');
+  const modelo = modeloSeleccionado(tarifas);
+  const llamadas = [];
+  const cliente = {
+    async rpc(nombre) {
+      llamadas.push(nombre);
+      assert.equal(nombre, tarifas.RPC_PREVIEW);
+      return { data: previewElegible(tarifas, modelo, {
+        elegible: false,
+        motivo_bloqueo: 'La reserva requiere revisión manual.'
+      }) };
+    }
+  };
+  const preview = await tarifas.previsualizarSeleccion(modelo, cliente);
+  const resultado = await tarifas.ejecutarActualizacion(modelo, cliente);
+  assert.equal(preview.ok, false);
+  assert.equal(preview.mensaje, 'La reserva requiere revisión manual.');
+  assert.equal(resultado.codigo, 'RESERVA_NO_ELEGIBLE');
   assert.equal(resultado.escrituras, 0);
-  assert.equal(llamadas, 0);
+  assert.deepEqual(llamadas, [tarifas.RPC_PREVIEW]);
+  assert.deepEqual(tarifas.construirPayload(modelo), []);
 });
 
-test('la preview tampoco alcanza Supabase mientras el writer sea false', async () => {
+test('preview precede al writer y el éxito obliga a reconsultar Proyecto H', async () => {
   const tarifas = cargarTarifas();
-  let llamadas = 0;
-  const resultado = await tarifas.previsualizarSeleccion(modeloSeleccionado(tarifas), {
-    async rpc() { llamadas++; return { data: {} }; }
+  const modelo = modeloSeleccionado(tarifas);
+  const llamadas = [];
+  const lectorAnterior = global.HAIKU_CLOUDBEDS_PDF_V1;
+  global.HAIKU_CLOUDBEDS_PDF_V1 = {
+    async consultar(entradas) {
+      llamadas.push('reconsulta-proyecto-h');
+      assert.deepEqual(entradas, [modelo.informe.filas[0].entrada]);
+      return {
+        filas: [fila({
+          certeza: 'SIN_CAMBIO',
+          propuesta: {
+            total_actual_haku: 144000,
+            total_alojamiento_propuesto: 144000,
+            diferencia: 0,
+            pagado_actual_haku: 100000,
+            saldo_actual_haku: 44000
+          }
+        })]
+      };
+    }
+  };
+  const cliente = {
+    from() { return {}; },
+    async rpc(nombre, parametros) {
+      llamadas.push(nombre);
+      if (nombre === tarifas.RPC_PREVIEW) {
+        assert.equal(parametros.p_total_objetivo, 144000);
+        return { data: previewElegible(tarifas, modelo, { firma_iva: 'firma-canario' }) };
+      }
+      if (nombre === tarifas.RPC_WRITER) {
+        assert.equal(parametros.p_operaciones.length, 1);
+        return { data: { ok: true, cambios: 1, resultados: [{ operacion_id: 'op-canario' }] } };
+      }
+      if (nombre === tarifas.RPC_CAPACIDAD) {
+        return { data: { version: tarifas.VERSION_VIGENTE, writer_disponible: true } };
+      }
+      throw new Error(`RPC inesperada: ${nombre}`);
+    }
+  };
+  try {
+    const preview = await tarifas.previsualizarSeleccion(modelo, cliente);
+    const resultado = await tarifas.ejecutarActualizacion(modelo, cliente);
+    assert.equal(preview.ok, true);
+    assert.equal(resultado.ok, true);
+    assert.equal(resultado.estado_final_confirmado, true);
+    assert.deepEqual(resultado.confirmacion_post_write.actualizaciones[0], {
+      reserva_id: modelo.items[0].fila.propuesta.reserva_id,
+      estadia_id: modelo.items[0].fila.propuesta.estadia_id,
+      nombre: 'Héctor Ficticio',
+      total_anterior: 160000,
+      total_nuevo: 144000,
+      pagado: 100000,
+      saldo: 44000,
+      certeza: 'SIN_CAMBIO',
+      operacion_id: 'op-canario'
+    });
+    assert.equal(resultado.reconsulta.modelo.conteos.SIN_CAMBIO, 1);
+    assert.equal(modelo.items[0].fila.propuesta.total_actual_haku, 160000);
+    assert.deepEqual(llamadas, [
+      tarifas.RPC_PREVIEW,
+      tarifas.RPC_WRITER,
+      'reconsulta-proyecto-h',
+      tarifas.RPC_CAPACIDAD
+    ]);
+  } finally {
+    if (lectorAnterior === undefined) delete global.HAIKU_CLOUDBEDS_PDF_V1;
+    else global.HAIKU_CLOUDBEDS_PDF_V1 = lectorAnterior;
+  }
+});
+
+test('un error writer conserva el modelo local y no intenta una reconsulta', async () => {
+  const tarifas = cargarTarifas();
+  const modelo = modeloSeleccionado(tarifas);
+  aplicarPreviewElegible(tarifas, modelo);
+  const antes = JSON.stringify(modelo);
+  const llamadas = [];
+  const resultado = await tarifas.ejecutarActualizacion(modelo, {
+    from() { return {}; },
+    async rpc(nombre) {
+      llamadas.push(nombre);
+      return { error: { message: 'ESTADO_DESACTUALIZADO' } };
+    }
   });
-  assert.equal(resultado.codigo, 'WRITER_DESHABILITADO');
-  assert.equal(llamadas, 0);
+  assert.equal(resultado.ok, false);
+  assert.equal(resultado.confirmacion_post_write, undefined);
+  assert.equal(resultado.codigo, 'ESTADO_DESACTUALIZADO');
+  assert.equal(JSON.stringify(modelo), antes);
+  assert.deepEqual(llamadas, [tarifas.RPC_WRITER]);
 });
 
 test('snapshot preview alimenta modal y payload W1, incluida firma IVA opcional', () => {
@@ -281,6 +425,28 @@ test('preview sin plan IVA no inventa firma en payload', () => {
   assert.equal('firma_iva' in tarifas.construirPayload(modelo)[0], false);
 });
 
+test('alojamiento normal y Full Day conservan el tipo revalidado por preview', () => {
+  const tarifas = cargarTarifas();
+  const alojamiento = modeloSeleccionado(tarifas);
+  aplicarPreviewElegible(tarifas, alojamiento);
+  assert.equal(tarifas.construirPayload(alojamiento)[0].tipo_estadia, 'alojamiento');
+
+  const fullDay = modeloSeleccionado(tarifas, {
+    propuesta: {
+      tipo_estadia_proyecto_h: 'fullday',
+      es_full_day: true,
+      total_alojamiento_propuesto: 120000,
+      saldo_esperado_haku: 20000
+    }
+  });
+  aplicarPreviewElegible(tarifas, fullDay, {
+    tipo_estadia: 'fullday',
+    total_objetivo: 120000,
+    saldo_esperado: 20000
+  });
+  assert.equal(tarifas.construirPayload(fullDay)[0].tipo_estadia, 'fullday');
+});
+
 test('los errores backend se traducen a los textos UX acordados', () => {
   const tarifas = cargarTarifas();
   assert.equal(tarifas.mapearErrorWriter({ message: 'ESTADO_DESACTUALIZADO' }).mensaje,
@@ -304,6 +470,148 @@ test('el modal humano muestra montos, pagado, saldos y acciones acordadas', () =
   }
   assert.match(html, /Confirmar actualización<\/button>/);
   assert.match(html, /data-cloudbeds-confirmar disabled/);
+});
+
+test('la confirmación post-write usa exclusivamente montos previsualizados y reconsultados', () => {
+  const tarifas = cargarTarifas();
+  const modeloAnterior = modeloSeleccionado(tarifas, { propuesta: {
+    es_full_day: true,
+    tipo_estadia_proyecto_h: 'fullday',
+    total_actual_haku: 160000,
+    total_alojamiento_propuesto: 120000,
+    diferencia: -40000,
+    pagado_actual_haku: 120000,
+    saldo_actual_haku: 40000,
+    saldo_esperado_haku: 0
+  } });
+  aplicarPreviewElegible(tarifas, modeloAnterior);
+  const modeloReconsultado = tarifas.prepararModelo({ filas: [fila({
+    certeza: 'SIN_CAMBIO',
+    propuesta: {
+      es_full_day: true,
+      tipo_estadia_proyecto_h: 'fullday',
+      total_actual_haku: 120000,
+      total_alojamiento_propuesto: 120000,
+      diferencia: 0,
+      pagado_actual_haku: 120000,
+      saldo_actual_haku: 0,
+      saldo_esperado_haku: 0
+    }
+  })] }, modeloAnterior.capacidad);
+  const resultado = tarifas.construirResultadoPostWrite(
+    modeloAnterior,
+    { modelo: modeloReconsultado },
+    { resultados: [{ operacion_id: 'op-no-visible' }] }
+  );
+  assert.equal(resultado.confirmado, true);
+  assert.deepEqual(resultado.actualizaciones[0], {
+    reserva_id: modeloAnterior.items[0].fila.propuesta.reserva_id,
+    estadia_id: modeloAnterior.items[0].fila.propuesta.estadia_id,
+    nombre: 'Héctor Ficticio',
+    total_anterior: 160000,
+    total_nuevo: 120000,
+    pagado: 120000,
+    saldo: 0,
+    certeza: 'SIN_CAMBIO',
+    operacion_id: 'op-no-visible'
+  });
+
+  modeloReconsultado.resultado_post_write = { tipo: 'exito', actualizaciones: resultado.actualizaciones };
+  const html = tarifas.renderizar(modeloReconsultado);
+  assert.match(html, /✓<\/span> Tarifa actualizada correctamente/);
+  assert.match(html, /Proyecto H[\s\S]*\$160\.000[\s\S]*→[\s\S]*\$120\.000/);
+  assert.match(html, /Pagado[\s\S]*\$120\.000/);
+  assert.match(html, /Saldo[\s\S]*\$0/);
+  assert.match(html, /La reserva fue reconsultada y el cambio quedó registrado\./);
+  assert.match(html, /data-cloudbeds-post-write-ver-reserva/);
+  assert.match(html, /data-cloudbeds-post-write-cerrar/);
+  assert.doesNotMatch(html, /op-no-visible/);
+
+  const otroAnalisis = modeloSeleccionado(tarifas);
+  otroAnalisis.resultado_post_write = { tipo: 'exito', actualizaciones: resultado.actualizaciones };
+  assert.equal(tarifas.seleccionar(otroAnalisis, otroAnalisis.items[0].id, false), true);
+  assert.equal(otroAnalisis.resultado_post_write, null, 'iniciar otra actualización descarta el éxito anterior');
+  assert.equal(tarifas.prepararModelo({ filas: [fila()] }, otroAnalisis.capacidad).resultado_post_write, null,
+    'cargar un informe nuevo no hereda el éxito anterior');
+});
+
+test('un total reconsultado distinto del objetivo nunca produce tarjeta verde', () => {
+  const tarifas = cargarTarifas();
+  const modeloAnterior = modeloSeleccionado(tarifas);
+  aplicarPreviewElegible(tarifas, modeloAnterior);
+  const modeloReconsultado = tarifas.prepararModelo({ filas: [fila({ propuesta: {
+    total_actual_haku: 143000,
+    total_alojamiento_propuesto: 144000,
+    pagado_actual_haku: 100000,
+    saldo_actual_haku: 43000
+  } })] }, modeloAnterior.capacidad);
+  const resultado = tarifas.construirResultadoPostWrite(modeloAnterior, { modelo: modeloReconsultado }, { resultados: [{}] });
+  assert.equal(resultado.confirmado, false);
+  assert.match(resultado.motivo, /no coincide con el objetivo/);
+  assert.doesNotMatch(tarifas.renderResultadoPostWrite({ resultado_post_write: {
+    tipo: 'advertencia',
+    mensaje: 'Proyecto H confirmó la operación, pero no fue posible refrescar la reserva.'
+  } }), /Tarifa actualizada correctamente/);
+  modeloReconsultado.resultado_post_write = {
+    tipo: 'advertencia',
+    mensaje: 'Proyecto H confirmó la operación, pero no fue posible refrescar la reserva.'
+  };
+  modeloReconsultado.actualizaciones_bloqueadas = true;
+  const htmlAdvertencia = tarifas.renderizar(modeloReconsultado);
+  assert.match(htmlAdvertencia, /Actualización registrada; refresco pendiente/);
+  assert.match(htmlAdvertencia, /data-cloudbeds-actualizar[^>]*disabled/);
+  assert.equal(tarifas.seleccionar(modeloReconsultado, modeloReconsultado.items[0].id, true), false,
+    'una reconsulta no confirmada impide repetir la escritura dentro del mismo análisis');
+});
+
+test('writer ok con reconsulta fallida avisa sin éxito falso ni segundo intento de escritura', async () => {
+  const tarifas = cargarTarifas();
+  const modelo = modeloSeleccionado(tarifas);
+  aplicarPreviewElegible(tarifas, modelo);
+  const lectorAnterior = global.HAIKU_CLOUDBEDS_PDF_V1;
+  const llamadas = [];
+  global.HAIKU_CLOUDBEDS_PDF_V1 = { async consultar() { throw new Error('lectura ficticia fallida'); } };
+  try {
+    const resultado = await tarifas.ejecutarActualizacion(modelo, {
+      from() { return {}; },
+      async rpc(nombre) {
+        llamadas.push(nombre);
+        assert.equal(nombre, tarifas.RPC_WRITER);
+        return { data: { ok: true, cambios: 1, resultados: [{}] } };
+      }
+    });
+    assert.equal(resultado.ok, true);
+    assert.equal(resultado.estado_final_confirmado, false);
+    assert.equal(resultado.confirmacion_post_write, null);
+    assert.equal(resultado.requiere_reapertura, true);
+    assert.match(resultado.mensaje, /no fue posible refrescar la reserva/);
+    assert.deepEqual(llamadas, [tarifas.RPC_WRITER]);
+  } finally {
+    if (lectorAnterior === undefined) delete global.HAIKU_CLOUDBEDS_PDF_V1;
+    else global.HAIKU_CLOUDBEDS_PDF_V1 = lectorAnterior;
+  }
+});
+
+test('la interacción exige preview, cancelar no escribe y el doble clic queda bloqueado', () => {
+  const inicioModal = frontendSource.indexOf('async function abrirConfirmacion');
+  const finModal = frontendSource.indexOf('function montar', inicioModal);
+  const modal = frontendSource.slice(inicioModal, finModal);
+  assert.ok(modal.indexOf('await previsualizarSeleccion') < modal.indexOf('confirmacion.hidden = false'));
+  assert.match(modal, /disabled = !resultadoPreview\.ok/);
+
+  const montaje = frontendSource.slice(frontendSource.indexOf('function montar'));
+  assert.match(montaje, /if \(!boton \|\| ejecutando\) return/);
+  assert.ok(montaje.indexOf('ejecutando = true') < montaje.indexOf('await ejecutarActualizacion'));
+  const cancelar = montaje.slice(montaje.indexOf('data-cloudbeds-cancelar'), montaje.indexOf('data-cloudbeds-confirmar'));
+  assert.match(cancelar, /\.hidden = true;[\s\S]*return;/);
+  assert.doesNotMatch(cancelar, /ejecutarActualizacion|RPC_WRITER/);
+  assert.match(montaje, /data-cloudbeds-post-write-ver-reserva[\s\S]*abrirReserva/);
+  assert.match(montaje, /data-cloudbeds-post-write-cerrar[\s\S]*resultado_post_write = null[\s\S]*\.remove\(\)/);
+});
+
+test('los controles recuperan su estado después de una respuesta o error', () => {
+  const montaje = frontendSource.slice(frontendSource.indexOf('function montar'));
+  assert.match(montaje, /finally\s*\{[\s\S]*ejecutando = false;[\s\S]*elemento\.disabled = estabaDeshabilitado/);
 });
 
 test('el post-write está preparado para reconsultar Proyecto H e Inspector', () => {

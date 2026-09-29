@@ -77,13 +77,78 @@
     { reserva_id: 'r-fd-d', total_alojamiento: 160000, pagado_alojamiento: 120000, saldo_alojamiento: 40000 },
     { reserva_id: 'r-fd-revision', total_alojamiento: 160000, pagado_alojamiento: 120000, saldo_alojamiento: 40000 }
   ];
+  const llamadas = [];
+  window.haikuSupabase = {
+    from(tabla) {
+      const data = tabla === 'reservas' ? reservas : tabla === 'vista_saldos_alojamiento_reserva' ? saldos : [];
+      return {
+        select() { return this; },
+        order() { return this; },
+        async range(inicio, fin) {
+          llamadas.push(`select:${tabla}`);
+          return { data: data.slice(inicio, fin + 1) };
+        }
+      };
+    },
+    async rpc(nombre, parametros = {}) {
+      llamadas.push(`rpc:${nombre}`);
+      if (nombre === tarifas.RPC_CAPACIDAD) {
+        return { data: { version: tarifas.VERSION_V32, writer_disponible: true, servicios_separados: true } };
+      }
+      if (nombre === tarifas.RPC_PREVIEW) {
+        const reservaActual = reservas.find(item => item.id === parametros.p_reserva_id);
+        const estadia = reservaActual?.estadias?.find(item => item.id === parametros.p_estadia_id);
+        const saldo = saldos.find(item => item.reserva_id === parametros.p_reserva_id);
+        const totalActual = Number(saldo?.total_alojamiento);
+        const pagado = Number(saldo?.pagado_alojamiento || 0);
+        const objetivo = Number(parametros.p_total_objetivo);
+        const elegible = Boolean(reservaActual && estadia && Number.isSafeInteger(objetivo) && objetivo > 0 && pagado <= objetivo);
+        const filaInforme = informe.filas.find(item => item.propuesta?.reserva_id === parametros.p_reserva_id);
+        const servicios = Number(filaInforme?.propuesta?.componente_no_alojamiento_observable || 0);
+        const tieneServicios = servicios > 0;
+        return { data: {
+          solo_lectura: true,
+          version: tarifas.VERSION_PREVIEW,
+          autoridad_financiera_version: tarifas.VERSION_V32,
+          reserva_id: parametros.p_reserva_id,
+          estadia_id: parametros.p_estadia_id,
+          tipo_estadia: estadia?.tipo_estadia || null,
+          cabana_numero: estadia?.cabanas?.numero || null,
+          total_actual: totalActual,
+          total_objetivo: objetivo,
+          pagado_actual: pagado,
+          saldo_actual: Number(saldo?.saldo_alojamiento ?? totalActual - pagado),
+          saldo_esperado: objetivo - pagado,
+          ...(elegible && tieneServicios ? {
+            servicios_sin_cambios: true,
+            total_servicios_sin_cambio: servicios,
+            total_reserva_actual: totalActual + servicios,
+            total_reserva_esperado: objetivo + servicios
+          } : {}),
+          elegible,
+          motivo_bloqueo: elegible ? null : 'La reserva ficticia requiere revisión manual.'
+        } };
+      }
+      if (nombre === tarifas.RPC_WRITER) {
+        const operaciones = Array.isArray(parametros.p_operaciones) ? parametros.p_operaciones : [];
+        operaciones.forEach(operacion => {
+          const saldo = saldos.find(item => item.reserva_id === operacion.reserva_id);
+          if (!saldo) return;
+          saldo.total_alojamiento = Number(operacion.total_objetivo);
+          saldo.saldo_alojamiento = saldo.total_alojamiento - Number(saldo.pagado_alojamiento || 0);
+        });
+        return { data: { ok: true, cambios: operaciones.length, resultados: operaciones.map(() => ({ ok: true })) } };
+      }
+      throw new Error(`RPC no permitida en demo: ${nombre}`);
+    }
+  };
   const informe = pdf.comparar(entradas, reservas, saldos);
   const modelo = await tarifas.preparar(informe, window.haikuSupabase);
   const mensajes = document.getElementById('haiku-asistente-mensajes');
   const mensaje = document.createElement('div');
   mensaje.className = 'haiku-asistente-mensaje haiku-asistente-mensaje--asistente';
   mensajes.appendChild(mensaje);
-  tarifas.montar(mensaje, modelo);
+  tarifas.montar(mensaje, modelo, window.haikuSupabase);
   window.HAIKU_ASISTENTE.abrir();
   const campo = document.getElementById('haiku-asistente-texto');
   campo.value = 'Borrador ficticio: revisar descuento con recepción';
@@ -95,7 +160,7 @@
   if (new URLSearchParams(window.location.search).get('inspector') === '1') {
     await window.HAIKU_PANELES_V1.abrirReserva('r-hector');
   }
-  window.DEMO_CLOUDBEDS_2E = { informe, modelo };
+  window.DEMO_CLOUDBEDS_2E = { informe, modelo, llamadas, reservas, saldos };
 }()).catch(error => {
   document.body.insertAdjacentHTML('beforeend', `<pre class="demo-error">${String(error?.stack || error)}</pre>`);
 });

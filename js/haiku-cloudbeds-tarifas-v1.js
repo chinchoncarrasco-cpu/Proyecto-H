@@ -1,10 +1,10 @@
-/* Cloudbeds Tarifas 2E: UI Haku, selección y simulación. Nunca escribe datos. */
+/* Cloudbeds Tarifas: UI Haku, preview backend y confirmación humana auditada. */
 (function (root) {
     "use strict";
 
     if (root.HAIKU_CLOUDBEDS_TARIFAS_V1) return;
 
-    const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false;
+    const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true;
     const RPC_CAPACIDAD = "haiku_capacidad_totales_v1";
     const RPC_PREVIEW = "haiku_previsualizar_tarifa_cloudbeds_v1";
     const RPC_WRITER = "haiku_aplicar_tarifas_cloudbeds_v1";
@@ -302,7 +302,9 @@
             conteos,
             items,
             ultima_simulacion: null,
-            diagnostico_writer: null
+            diagnostico_writer: null,
+            resultado_post_write: null,
+            actualizaciones_bloqueadas: false
         };
     }
 
@@ -316,16 +318,19 @@
     }
 
     function seleccionar(modelo, id, seleccionado = true) {
+        if (modelo.actualizaciones_bloqueadas) return false;
         const item = buscarItem(modelo, id);
         if (!item || !item.seleccionable) return false;
         item.seleccionado = Boolean(seleccionado);
         item.preview = null;
         modelo.ultima_simulacion = null;
         modelo.diagnostico_writer = null;
+        modelo.resultado_post_write = null;
         return true;
     }
 
     function seleccionarTodo(modelo, seleccionado = true) {
+        if (modelo.actualizaciones_bloqueadas) return 0;
         modelo.items.forEach(item => {
             if (item.seleccionable) {
                 item.seleccionado = Boolean(seleccionado);
@@ -334,6 +339,7 @@
         });
         modelo.ultima_simulacion = null;
         modelo.diagnostico_writer = null;
+        modelo.resultado_post_write = null;
         return modelo.items.filter(item => item.seleccionado).length;
     }
 
@@ -561,6 +567,54 @@
         return Object.freeze({ informe, modelo: modeloActualizado, vistas });
     }
 
+    function construirResultadoPostWrite(modeloAnterior, reconsulta, data) {
+        const payload = construirPayload(modeloAnterior);
+        const itemsReconsultados = reconsulta?.modelo?.items;
+        if (!payload.length || !Array.isArray(itemsReconsultados)) {
+            return Object.freeze({ confirmado: false, motivo: "La reconsulta no entregó un modelo verificable." });
+        }
+
+        const actualizaciones = [];
+        for (const [indice, esperado] of payload.entries()) {
+            const itemAnterior = modeloAnterior.items.find(item => {
+                const propuesta = item.fila?.propuesta || {};
+                return String(propuesta.reserva_id || "") === String(esperado.reserva_id)
+                    && String(propuesta.estadia_id || "") === String(esperado.estadia_id);
+            });
+            const itemActual = itemsReconsultados.find(item => {
+                const propuesta = item.fila?.propuesta || {};
+                return String(propuesta.reserva_id || "") === String(esperado.reserva_id)
+                    && String(propuesta.estadia_id || "") === String(esperado.estadia_id);
+            });
+            const propuestaActual = itemActual?.fila?.propuesta || {};
+            const totalAnterior = Number(itemAnterior?.preview?.total_actual ?? esperado.total_actual_esperado);
+            const totalNuevo = Number(propuestaActual.total_actual_haku);
+            const pagado = Number(propuestaActual.pagado_actual_haku);
+            const saldo = Number(propuestaActual.saldo_actual_haku);
+            if (![totalAnterior, totalNuevo, pagado, saldo].every(Number.isSafeInteger)
+                || totalNuevo !== Number(esperado.total_objetivo)) {
+                return Object.freeze({
+                    confirmado: false,
+                    motivo: "El estado reconsultado no coincide con el objetivo confirmado."
+                });
+            }
+            actualizaciones.push(Object.freeze({
+                reserva_id: String(esperado.reserva_id),
+                estadia_id: String(esperado.estadia_id),
+                nombre: itemActual.fila?.entrada?.nombre_huesped
+                    || itemAnterior?.fila?.entrada?.nombre_huesped
+                    || "Reserva Cloudbeds",
+                total_anterior: totalAnterior,
+                total_nuevo: totalNuevo,
+                pagado,
+                saldo,
+                certeza: itemActual.certeza_cloudbeds,
+                operacion_id: data?.resultados?.[indice]?.operacion_id || null
+            }));
+        }
+        return Object.freeze({ confirmado: true, actualizaciones: Object.freeze(actualizaciones) });
+    }
+
     async function ejecutarActualizacion(modelo, cliente) {
         if (!CLOUDBEDS_TARIFAS_WRITER_HABILITADO) {
             return Object.freeze({
@@ -606,15 +660,30 @@
         }
         try {
             const reconsulta = await reconsultarDespuesDeEscritura(modelo, cliente);
-            return Object.freeze({ ok: true, escrituras: Number(data.cambios || 0), data, reconsulta });
+            const resultadoPostWrite = construirResultadoPostWrite(modelo, reconsulta, data);
+            return Object.freeze({
+                ok: true,
+                escrituras: Number(data.cambios || 0),
+                data,
+                reconsulta,
+                estado_final_confirmado: resultadoPostWrite.confirmado,
+                confirmacion_post_write: resultadoPostWrite.confirmado ? resultadoPostWrite : null,
+                requiere_reapertura: !resultadoPostWrite.confirmado,
+                mensaje: resultadoPostWrite.confirmado
+                    ? "Tarifa actualizada correctamente."
+                    : "Proyecto H confirmó la operación, pero no fue posible refrescar la reserva. Vuelve a cargarla antes de continuar.",
+                error_reconsulta: resultadoPostWrite.confirmado ? null : resultadoPostWrite.motivo
+            });
         } catch (errorReconsulta) {
             return Object.freeze({
                 ok: true,
                 escrituras: Number(data.cambios || 0),
                 data,
                 reconsulta: null,
+                estado_final_confirmado: false,
+                confirmacion_post_write: null,
                 requiere_reapertura: true,
-                mensaje: "La tarifa se confirmó, pero alguna vista no pudo releerse. Vuelve a abrirla antes de continuar.",
+                mensaje: "Proyecto H confirmó la operación, pero no fue posible refrescar la reserva. Vuelve a cargarla antes de continuar.",
                 error_reconsulta: errorReconsulta?.message || "Reconsulta no disponible."
             });
         }
@@ -776,7 +845,7 @@
         }).join("");
     }
 
-    function renderItem(item) {
+    function renderItem(item, actualizacionesBloqueadas = false) {
         const fila = item.fila;
         const propuesta = fila.propuesta || {};
         const entrada = fila.entrada || {};
@@ -794,10 +863,10 @@
             .slice(0, 12);
         const revisiones = fila.revisiones || propuesta.revisiones || [];
         const seleccion = item.seleccionable
-            ? `<button type="button" class="haiku-cloudbeds-tarifas-simular-item" data-cloudbeds-seleccionar="${esc(item.id)}" aria-pressed="${item.seleccionado}">${item.seleccionado ? "Quitar de actualización" : "Preparar actualización"}</button>`
+            ? `<button type="button" class="haiku-cloudbeds-tarifas-simular-item" data-cloudbeds-seleccionar="${esc(item.id)}" aria-pressed="${item.seleccionado}" ${actualizacionesBloqueadas ? "disabled" : ""}>${item.seleccionado ? "Quitar de actualización" : "Preparar actualización"}</button>`
             : "";
         const preparacionFullDay = capacidadCorreccionFullDay(fila);
-        const accionFullDayFutura = preparacionFullDay.preparada
+        const accionFullDayFutura = !CLOUDBEDS_TARIFAS_WRITER_HABILITADO && preparacionFullDay.preparada
             ? `<button type="button" class="haiku-cloudbeds-tarifas-fd3" disabled title="Preparada para una etapa futura; no ejecuta escrituras">Actualizar tarifa Full Day</button>`
             : "";
         return `<article class="haiku-cloudbeds-tarifas-tarjeta" data-cloudbeds-item="${esc(item.id)}">
@@ -824,7 +893,7 @@
                 ${seleccion}
                 ${accionFullDayFutura}
                 ${item.seleccionable
-                    ? `<button type="button" class="haiku-cloudbeds-tarifas-writer" data-cloudbeds-actualizar="${esc(item.id)}" ${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "" : "disabled"}>${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "Actualizar tarifa" : "Escritura aún no habilitada"}</button>`
+                    ? `<button type="button" class="haiku-cloudbeds-tarifas-writer" data-cloudbeds-actualizar="${esc(item.id)}" ${CLOUDBEDS_TARIFAS_WRITER_HABILITADO && !actualizacionesBloqueadas ? "" : "disabled"}>${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "Actualizar tarifa" : "Escritura aún no habilitada"}</button>`
                     : ""}
             </footer>
             <details class="haiku-cloudbeds-tarifas-tecnico"><summary>Detalles técnicos</summary><pre>${esc(JSON.stringify({
@@ -841,8 +910,36 @@
         const items = modelo.items.filter(item => item.certeza_cloudbeds === certeza);
         return `<details class="haiku-cloudbeds-tarifas-categoria" data-cloudbeds-categoria="${certeza}" ${certeza === "ALTA_CERTEZA" && items.length ? "open" : ""}>
             <summary><span>${esc(CATEGORIAS[certeza])}</span><b>${items.length}</b></summary>
-            <div>${items.length ? items.map(renderItem).join("") : "<p>No hay reservas en esta categoría.</p>"}</div>
+            <div>${items.length ? items.map(item => renderItem(item, modelo.actualizaciones_bloqueadas)).join("") : "<p>No hay reservas en esta categoría.</p>"}</div>
         </details>`;
+    }
+
+    function renderResultadoPostWrite(modelo) {
+        const resultado = modelo.resultado_post_write;
+        if (!resultado) return `<section class="haiku-cloudbeds-tarifas-post-write" data-cloudbeds-post-write hidden></section>`;
+        if (resultado.tipo === "advertencia") {
+            return `<section class="haiku-cloudbeds-tarifas-post-write haiku-cloudbeds-tarifas-post-write--advertencia" data-cloudbeds-post-write role="status">
+                <strong>Actualización registrada; refresco pendiente</strong>
+                <p>${esc(resultado.mensaje)}</p>
+            </section>`;
+        }
+        const actualizaciones = Array.isArray(resultado.actualizaciones) ? resultado.actualizaciones : [];
+        return `<section class="haiku-cloudbeds-tarifas-post-write haiku-cloudbeds-tarifas-post-write--exito" data-cloudbeds-post-write role="status" aria-live="polite">
+            <strong><span aria-hidden="true">✓</span> Tarifa actualizada correctamente</strong>
+            <div class="haiku-cloudbeds-tarifas-post-write-lista">${actualizaciones.map(actualizacion => `<article>
+                <span class="haiku-cloudbeds-tarifas-post-write-nombre">${esc(actualizacion.nombre)}</span>
+                <dl>
+                    <div><dt>Proyecto H</dt><dd>${esc(moneda(actualizacion.total_anterior))} <span aria-hidden="true">→</span> ${esc(moneda(actualizacion.total_nuevo))}</dd></div>
+                    <div><dt>Pagado</dt><dd>${esc(moneda(actualizacion.pagado))}</dd></div>
+                    <div><dt>Saldo</dt><dd>${esc(moneda(actualizacion.saldo))}</dd></div>
+                </dl>
+            </article>`).join("")}</div>
+            <p>La reserva fue reconsultada y el cambio quedó registrado.</p>
+            <div class="haiku-cloudbeds-tarifas-post-write-acciones">
+                ${actualizaciones.map((actualizacion, indice) => `<button type="button" data-cloudbeds-post-write-ver-reserva="${esc(actualizacion.reserva_id)}">${actualizaciones.length === 1 ? "Ver reserva" : `Ver reserva ${indice + 1}`}</button>`).join("")}
+                <button type="button" data-cloudbeds-post-write-cerrar>Cerrar</button>
+            </div>
+        </section>`;
     }
 
     function renderizar(modelo) {
@@ -850,18 +947,19 @@
         const seleccionados = cantidadSeleccionada(modelo);
         return `<section class="haiku-cloudbeds-tarifas" data-cloudbeds-tarifas-2e>
             <header class="haiku-cloudbeds-tarifas-cabecera">
-                <div><span>CLOUDBEDS</span><strong>Tarifas</strong><p>Propuestas de alojamiento · sólo lectura</p></div>
-                <span class="haiku-cloudbeds-tarifas-seguro">Writer deshabilitado</span>
+                <div><span>CLOUDBEDS</span><strong>Tarifas</strong><p>Propuestas de alojamiento · preview backend antes de confirmar</p></div>
+                <span class="haiku-cloudbeds-tarifas-seguro">Writer auditado</span>
             </header>
             <div class="haiku-cloudbeds-tarifas-resumen">${CERTEZAS.map(certeza => `<span><b>${modelo.conteos[certeza]}</b>${esc(CATEGORIAS[certeza])}</span>`).join("")}</div>
             <div class="haiku-cloudbeds-tarifas-capacidad ${capacidadTotalDisponible(capacidad) ? "es-disponible" : "es-bloqueada"}">
                 <strong>Capacidad financiera global</strong>
                 <span>${esc(capacidad.version || "Sin versión")} · ${esc(capacidad.motivo)}</span>
             </div>
+            ${renderResultadoPostWrite(modelo)}
             <div class="haiku-cloudbeds-tarifas-lote">
-                <button type="button" data-cloudbeds-seleccionar-todo>Seleccionar todo lo listo</button>
+                <button type="button" data-cloudbeds-seleccionar-todo ${modelo.actualizaciones_bloqueadas ? "disabled" : ""}>Seleccionar todo lo listo</button>
                 <span data-cloudbeds-seleccion-conteo>${seleccionados} seleccionadas</span>
-                <button type="button" data-cloudbeds-abrir-confirmacion ${seleccionados ? "" : "disabled"}>Revisar ${seleccionados || ""} ${seleccionados === 1 ? "actualización" : "actualizaciones"}</button>
+                <button type="button" data-cloudbeds-abrir-confirmacion ${seleccionados && !modelo.actualizaciones_bloqueadas ? "" : "disabled"}>Revisar ${seleccionados || ""} ${seleccionados === 1 ? "actualización" : "actualizaciones"}</button>
             </div>
             <div class="haiku-cloudbeds-tarifas-categorias">${CERTEZAS.map(certeza => renderCategoria(modelo, certeza)).join("")}</div>
             <section class="haiku-cloudbeds-tarifas-confirmacion" data-cloudbeds-confirmacion role="dialog" aria-modal="false" aria-labelledby="cloudbeds-confirmacion-titulo" hidden>
@@ -869,9 +967,13 @@
                 <p data-cloudbeds-confirmacion-texto></p>
                 <div class="haiku-cloudbeds-tarifas-confirmacion-detalle" data-cloudbeds-confirmacion-detalle>${renderConfirmacionDetalle(modelo)}</div>
                 <p>Este cambio modificará el total de alojamiento en Proyecto H.<br>Los pagos existentes no serán modificados.</p>
-                <div class="haiku-cloudbeds-tarifas-confirmacion-acciones"><button type="button" data-cloudbeds-cancelar>Cancelar</button><button type="button" data-cloudbeds-confirmar ${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "" : "disabled"}>Confirmar actualización</button></div>
+                <div class="haiku-cloudbeds-tarifas-confirmacion-acciones"><button type="button" data-cloudbeds-cancelar>Cancelar</button><button type="button" data-cloudbeds-confirmar disabled>Confirmar actualización</button></div>
             </section>
-            <p class="haiku-cloudbeds-tarifas-estado" data-cloudbeds-estado role="status">Escritura aún no habilitada. Las acciones sólo preparan una simulación local.</p>
+            <p class="haiku-cloudbeds-tarifas-estado" data-cloudbeds-estado role="status">${modelo.resultado_post_write?.tipo === "advertencia"
+                ? esc(modelo.resultado_post_write.mensaje)
+                : modelo.resultado_post_write?.tipo === "exito"
+                    ? "Estado final confirmado con datos reconsultados de Proyecto H."
+                    : "Selecciona una propuesta segura para reconsultar Proyecto H antes de confirmar."}</p>
             <details class="haiku-cloudbeds-tarifas-payload"><summary>Payload W1 · diagnóstico</summary><pre data-cloudbeds-payload>${esc(JSON.stringify(contenidoDiagnostico(modelo), null, 2))}</pre></details>
         </section>`;
     }
@@ -892,9 +994,11 @@
         if (conteo) conteo.textContent = `${cantidad} ${cantidad === 1 ? "seleccionada" : "seleccionadas"}`;
         const abrir = contenedor.querySelector("[data-cloudbeds-abrir-confirmacion]");
         if (abrir) {
-            abrir.disabled = cantidad === 0;
+            abrir.disabled = cantidad === 0 || modelo.actualizaciones_bloqueadas;
             abrir.textContent = `Revisar ${cantidad || ""} ${cantidad === 1 ? "actualización" : "actualizaciones"}`;
         }
+        const postWrite = contenedor.querySelector("[data-cloudbeds-post-write]");
+        if (postWrite) postWrite.outerHTML = renderResultadoPostWrite(modelo);
         actualizarDiagnosticoDOM(contenedor, modelo);
         const confirmacion = contenedor.querySelector("[data-cloudbeds-confirmacion]");
         if (confirmacion && !modelo.ultima_simulacion) confirmacion.hidden = true;
@@ -941,6 +1045,21 @@
         contenedor.addEventListener("click", async evento => {
             const boton = evento.target.closest?.("button");
             if (!boton || ejecutando) return;
+            if (boton.matches("[data-cloudbeds-post-write-ver-reserva]")) {
+                evento.preventDefault();
+                Promise.resolve(abrirReserva(boton.dataset.cloudbedsPostWriteVerReserva, boton)).catch(error => {
+                    const estado = contenedor.querySelector("[data-cloudbeds-estado]");
+                    if (estado) estado.textContent = error?.message || "No fue posible abrir la reserva.";
+                });
+                return;
+            }
+            if (boton.matches("[data-cloudbeds-post-write-cerrar]")) {
+                modelo.resultado_post_write = null;
+                boton.closest("[data-cloudbeds-post-write]")?.remove();
+                const estado = contenedor.querySelector("[data-cloudbeds-estado]");
+                if (estado) estado.textContent = "Selecciona una propuesta segura para reconsultar Proyecto H antes de confirmar.";
+                return;
+            }
             if (boton.matches("[data-cloudbeds-ver-reserva]")) {
                 const item = buscarItem(modelo, boton.dataset.cloudbedsVerReserva);
                 if (!item?.fila?.propuesta?.reserva_id) return;
@@ -952,6 +1071,7 @@
                 return;
             }
             if (boton.matches("[data-cloudbeds-actualizar]")) {
+                if (modelo.actualizaciones_bloqueadas) return;
                 seleccionarTodo(modelo, false);
                 seleccionar(modelo, boton.dataset.cloudbedsActualizar, true);
                 actualizarDOM(contenedor, modelo);
@@ -959,12 +1079,14 @@
                 return;
             }
             if (boton.matches("[data-cloudbeds-seleccionar]")) {
+                if (modelo.actualizaciones_bloqueadas) return;
                 const item = buscarItem(modelo, boton.dataset.cloudbedsSeleccionar);
                 seleccionar(modelo, boton.dataset.cloudbedsSeleccionar, !item?.seleccionado);
                 actualizarDOM(contenedor, modelo);
                 return;
             }
             if (boton.matches("[data-cloudbeds-seleccionar-todo]")) {
+                if (modelo.actualizaciones_bloqueadas) return;
                 const listas = modelo.items.filter(item => item.seleccionable);
                 seleccionarTodo(modelo, !listas.length || listas.some(item => !item.seleccionado));
                 actualizarDOM(contenedor, modelo);
@@ -998,12 +1120,23 @@
                         estado.textContent = resultado.mensaje;
                         return;
                     }
-                    if (resultado.reconsulta?.modelo) {
-                        modelo = resultado.reconsulta.modelo;
-                        contenedor.innerHTML = renderizar(modelo);
+                    modelo = resultado.reconsulta?.modelo || modelo;
+                    if (resultado.estado_final_confirmado && resultado.confirmacion_post_write) {
+                        modelo.resultado_post_write = Object.freeze({
+                            tipo: "exito",
+                            actualizaciones: resultado.confirmacion_post_write.actualizaciones
+                        });
+                        modelo.actualizaciones_bloqueadas = false;
                     } else {
-                        estado.textContent = resultado.mensaje;
+                        modelo.items.forEach(item => {
+                            item.seleccionado = false;
+                            item.preview = null;
+                        });
+                        modelo.resultado_post_write = Object.freeze({ tipo: "advertencia", mensaje: resultado.mensaje });
+                        modelo.actualizaciones_bloqueadas = true;
                     }
+                    contenedor.innerHTML = renderizar(modelo);
+                    contenedor.querySelector("[data-cloudbeds-post-write]")?.scrollIntoView?.({ block: "nearest" });
                 } catch (error) {
                     const mapeado = mapearErrorWriter(error);
                     modelo.diagnostico_writer = crearDiagnosticoWriter("writer", error);
@@ -1050,7 +1183,9 @@
         crearDiagnosticoWriter,
         ejecutarActualizacion,
         reconsultarDespuesDeEscritura,
+        construirResultadoPostWrite,
         abrirReserva,
+        renderResultadoPostWrite,
         renderizar,
         montar
     });

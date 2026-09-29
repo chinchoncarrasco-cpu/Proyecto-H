@@ -1,6 +1,6 @@
 # Demo local: Cloudbeds Tarifas 2E en Haku
 
-La fixture usa exclusivamente datos ficticios. No conecta con Supabase: el cliente local sólo acepta `haiku_capacidad_totales_v1` y rechaza cualquier otra RPC. El writer permanece deshabilitado mediante `CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false`.
+La fixture usa exclusivamente datos ficticios. No conecta con Supabase: el cliente local simula capacidad, preview y writer W1 en memoria, y permite revisar la activación sin escrituras reales.
 
 ## Abrir la demo
 
@@ -32,9 +32,9 @@ http://127.0.0.1:4175/tests/fixtures/cloudbeds-haku-tarifas-2e/?inspector=1
 6. Confirmar que Héctor y Elena siguen en `Propuestas seguras` como `CONTEXTO_EXACTO_UNICO`; Rodrigo sigue como control negativo en `No identificadas`.
 7. En una propuesta segura, pulsar `Ver reserva`; debe reutilizarse el Inspector existente por el `reserva_id` interno. También puede abrirse otra reserva desde la tabla principal.
 8. Cerrar la ficha y comprobar que el borrador y el scroll de Haku siguen intactos.
-9. Seleccionar una propuesta o `Seleccionar todo lo listo`.
-10. Abrir la confirmación y confirmar la simulación. El resultado debe indicar cero escrituras.
-11. Revisar `Payload futuro · diagnóstico`; sólo contiene `reserva_id`, `total_actual` y `total_objetivo`.
-12. Reducir el viewport a 390 px, abrir `Ver reserva` y usar `← Volver a Haku`.
+9. Pulsar `Actualizar tarifa`; la preview local debe completar los valores antes de habilitar la confirmación.
+10. Confirmar la actualización simulada. La fixture modifica sólo sus datos ficticios en memoria y reconsulta el informe.
+11. Comprobar que aparece la tarjeta verde persistente con anterior → nuevo, pagado, saldo, `Ver reserva` y `Cerrar`; la propuesta actualizada debe reconstruirse como `SIN_CAMBIO`.
+12. Repetir en panel angosto y a 390 px, abrir `Ver reserva` y usar `← Volver a Haku`; la tarjeta debe permanecer legible y no desbordar.
 
 La variante `?inspector=1` facilita comparar el modo lado a lado de escritorio y el modo alternado móvil.

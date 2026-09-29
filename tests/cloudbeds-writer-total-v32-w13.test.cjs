@@ -22,7 +22,7 @@ const capacidad = version => Object.freeze({
   v32_disponible: version === 'total1_financiero_v32',
   servicios_separados: version === 'total1_financiero_v32',
   motivo: 'fixture transición W1.3',
-  escritura_habilitada: false
+  escritura_habilitada: true
 });
 
 function informeServicio({ nombre = 'Daniel', actual = 320000, objetivo = 288000 } = {}) {
@@ -130,7 +130,7 @@ test('cadena planner v32 propaga VOLATILE y explicita las inicializaciones JSONB
   }
 });
 
-test('capacidad frontend acepta exactamente v31/v32 y conserva writer false', async () => {
+test('capacidad frontend acepta exactamente v31/v32 y conserva writer true', async () => {
   const tarifas = cargar();
   for (const version of tarifas.VERSIONES_COMPATIBLES) {
     const data = await tarifas.consultarCapacidad({ async rpc() { return { data: {
@@ -143,8 +143,8 @@ test('capacidad frontend acepta exactamente v31/v32 y conserva writer false', as
     return { data: { version: 'total1_financiero_v999', writer_disponible: true } };
   } });
   assert.equal(rechazada.total_disponible, false);
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
-  assert.match(frontend, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false/);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
+  assert.match(frontend, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true/);
 });
 
 test('Daniel queda en revisión con v31 y pendiente de preview con v32', () => {

@@ -21,7 +21,7 @@ efímero.
 2. Para alojamiento normal reutiliza
    `private.haiku_plan_total_financiero_v3` y devuelve `firma_iva` solamente
    cuando el plan la contiene.
-3. El modal futuro muestra el snapshot devuelto por la preview.
+3. El modal muestra el snapshot devuelto por la preview antes de habilitar la confirmación.
 4. La confirmación reenvía `total_actual` como `total_actual_esperado` y la
    misma `firma_iva` opcional a W1.
 5. W1 revalida el total bajo locks y entrega la firma recibida a TOTAL v31.
@@ -30,4 +30,4 @@ efímero.
 `certeza`, `evidencia` y las referencias Cloudbeds son metadata de origen y
 auditoría. La autorización backend depende de sesión, permisos internos,
 estructura actual de la reserva, snapshot vigente y autoridades financieras.
-El frontend conserva `CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false`.
+El frontend activa el flujo auditado con `CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true`.

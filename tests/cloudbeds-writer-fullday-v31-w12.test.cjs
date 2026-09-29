@@ -108,18 +108,14 @@ test('no-op no entra al lote financiero y auditoría W1 sólo se inserta con cam
   assert.match(writerSql, /if v_esperado <> v_objetivo then[\s\S]*insert into public\.eventos_auditoria/);
 });
 
-test('writer frontend permanece deshabilitado en W1.2', () => {
+test('writer frontend activado conserva el contrato W1.2', () => {
   const tarifas = cargarTarifas();
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
-  assert.match(frontendSource, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false/);
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
+  assert.match(frontendSource, /const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true/);
 });
 
 test('error backend real produce diagnóstico W1 no vacío y conserva detail sanitizado', async () => {
-  const activadoSoloEnMemoria = frontendSource.replace(
-    'const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = false;',
-    'const CLOUDBEDS_TARIFAS_WRITER_HABILITADO = true;'
-  );
-  const tarifas = cargarTarifas(activadoSoloEnMemoria);
+  const tarifas = cargarTarifas();
   const modelo = modeloSeleccionado(tarifas);
   const resultado = await tarifas.ejecutarActualizacion(modelo, {
     async rpc(nombre) {

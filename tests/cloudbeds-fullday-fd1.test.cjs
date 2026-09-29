@@ -218,11 +218,27 @@ test('UI Haku muestra FULL DAY, fechas, personas, saldos y Ver reserva interno',
   assert.deepEqual(aperturas, ['r-fd-1']);
 });
 
-test('writer permanece false y el vínculo sugerido nunca entra en payload', () => {
+test('writer activo conserva el tipo Full Day y el vínculo sugerido nunca entra en payload', () => {
   const fila = compararUna();
   const modelo = tarifas.prepararModelo({ filas: [fila] }, capacidadV31);
   tarifas.seleccionarTodo(modelo, true);
-  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
+  const item = modelo.items[0];
+  tarifas.aplicarPreview(item, {
+    solo_lectura: true,
+    version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: 'total1_financiero_v31',
+    reserva_id: fila.propuesta.reserva_id,
+    estadia_id: fila.propuesta.estadia_id,
+    tipo_estadia: 'fullday',
+    cabana_numero: fila.propuesta.cabana,
+    total_actual: 160000,
+    total_objetivo: 120000,
+    pagado_actual: 120000,
+    saldo_actual: 40000,
+    saldo_esperado: 0,
+    elegible: true
+  });
+  assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, true);
   assert.deepEqual(tarifas.construirPayload(modelo), [{
     reserva_id: 'r-fd-1', estadia_id: 'e-r-fd-1', tipo_estadia: 'fullday',
     total_actual_esperado: 160000, total_objetivo: 120000,
