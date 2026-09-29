@@ -240,6 +240,7 @@ test('snapshot preview alimenta modal y payload W1, incluida firma IVA opcional'
   tarifas.aplicarPreview(modelo.items[0], {
     solo_lectura: true,
     version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: 'total1_financiero_v31',
     reserva_id: modelo.items[0].fila.propuesta.reserva_id,
     estadia_id: modelo.items[0].fila.propuesta.estadia_id,
     tipo_estadia: 'alojamiento',
@@ -266,6 +267,7 @@ test('preview sin plan IVA no inventa firma en payload', () => {
   tarifas.aplicarPreview(modelo.items[0], {
     solo_lectura: true,
     version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: 'total1_financiero_v31',
     reserva_id: modelo.items[0].fila.propuesta.reserva_id,
     estadia_id: modelo.items[0].fila.propuesta.estadia_id,
     tipo_estadia: 'alojamiento',
@@ -296,7 +298,7 @@ test('los errores backend se traducen a los textos UX acordados', () => {
 test('el modal humano muestra montos, pagado, saldos y acciones acordadas', () => {
   const tarifas = cargarTarifas();
   const html = tarifas.renderizar(modeloSeleccionado(tarifas));
-  for (const texto of ['Actualizar tarifa', 'Héctor Ficticio', 'CAB 5', 'Proyecto H actual', 'Cloudbeds',
+  for (const texto of ['Actualizar tarifa', 'Héctor Ficticio', 'CAB 5', 'Alojamiento actual', 'Alojamiento Cloudbeds',
     'Diferencia', 'Pagado actual', 'Saldo actual', 'Saldo esperado', 'Cancelar', 'Confirmar actualización']) {
     assert.match(html, new RegExp(texto));
   }

@@ -47,6 +47,7 @@ function modeloSeleccionado(tarifas) {
   tarifas.aplicarPreview(modelo.items[0], {
     solo_lectura: true,
     version: tarifas.VERSION_PREVIEW,
+    autoridad_financiera_version: 'total1_financiero_v31',
     reserva_id: modelo.items[0].fila.propuesta.reserva_id,
     estadia_id: modelo.items[0].fila.propuesta.estadia_id,
     tipo_estadia: 'fullday',

@@ -118,7 +118,7 @@ test('caso tipo Héctor muestra descuento, evidencia y capas separadas', () => {
   assert.equal(item.seleccionable, true);
   const html = tarifas.renderizar(modelo);
   assert.match(html, /Héctor Ficticio · CAB 5/);
-  assert.match(html, /<dt>Proyecto H<\/dt>/);
+  assert.match(html, /<dt>Alojamiento actual<\/dt>/);
   assert.match(html, /<dt>Alojamiento Cloudbeds<\/dt>/);
   assert.match(html, /<dt>Diferencia alojamiento<\/dt>/);
   assert.doesNotMatch(html, /<dt>Cloudbeds<\/dt>|<dt>Diferencia<\/dt>/);
@@ -195,11 +195,11 @@ test('payload futuro usa el contrato Cloudbeds W1 completo', () => {
 test('selección individual y seleccionar todo operan sólo sobre propuestas seguras', () => {
   const modelo = tarifas.prepararModelo(informeRealista(), capacidadV31);
   const seguras = modelo.items.filter(item => item.seleccionable);
-  assert.equal(seguras.length, 2);
+  assert.equal(seguras.length, 1);
   assert.equal(tarifas.seleccionar(modelo, seguras[0].id, true), true);
   assert.equal(tarifas.construirPayload(modelo).length, 1);
-  assert.equal(tarifas.seleccionarTodo(modelo, true), 2);
-  assert.equal(tarifas.construirPayload(modelo).length, 2);
+  assert.equal(tarifas.seleccionarTodo(modelo, true), 1);
+  assert.equal(tarifas.construirPayload(modelo).length, 1);
   tarifas.seleccionarTodo(modelo, false);
   assert.equal(tarifas.construirPayload(modelo).length, 0);
 });
@@ -251,7 +251,7 @@ test('panel de confirmación futura muestra el detalle y mantiene el writer bloq
   assert.match(resultado.mensaje, /No se escribió ningún dato/);
   const html = tarifas.renderizar(modelo);
   assert.match(html, /Los pagos existentes no serán modificados/);
-  assert.match(html, /Proyecto H actual/);
+  assert.match(html, /Alojamiento actual/);
   assert.match(html, /Saldo esperado/);
   assert.match(html, /data-cloudbeds-confirmar disabled>Confirmar actualización/);
 });

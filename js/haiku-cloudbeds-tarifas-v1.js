@@ -9,7 +9,10 @@
     const RPC_PREVIEW = "haiku_previsualizar_tarifa_cloudbeds_v1";
     const RPC_WRITER = "haiku_aplicar_tarifas_cloudbeds_v1";
     const VERSION_PREVIEW = "cloudbeds_writer_w1_preview_v1";
-    const VERSION_VIGENTE = "total1_financiero_v31";
+    const VERSION_V31 = "total1_financiero_v31";
+    const VERSION_V32 = "total1_financiero_v32";
+    const VERSION_VIGENTE = VERSION_V31;
+    const VERSIONES_COMPATIBLES = Object.freeze([VERSION_V31, VERSION_V32]);
     const CERTEZAS = ["SIN_CAMBIO", "ALTA_CERTEZA", "REVISION_MANUAL", "NO_APLICA", "NO_IDENTIFICADA"];
     const CATEGORIAS = Object.freeze({
         SIN_CAMBIO: "Coinciden",
@@ -35,7 +38,10 @@
             consultada: Boolean(data),
             version: data?.version || null,
             writer_disponible: false,
+            total_disponible: false,
             v31_disponible: false,
+            v32_disponible: false,
+            servicios_separados: false,
             motivo,
             escritura_habilitada: false
         });
@@ -47,22 +53,38 @@
         }
         try {
             const { data, error } = await cliente.rpc(RPC_CAPACIDAD);
-            if (error) return capacidadNoDisponible("No fue posible comprobar la capacidad v31.", data);
-            if (!data || data.version !== VERSION_VIGENTE || data.writer_disponible !== true) {
-                return capacidadNoDisponible("TOTAL v31 no está disponible globalmente.", data);
+            if (error) return capacidadNoDisponible("No fue posible comprobar la capacidad financiera.", data);
+            if (!data || !VERSIONES_COMPATIBLES.includes(data.version) || data.writer_disponible !== true) {
+                return capacidadNoDisponible("TOTAL v31/v32 no está disponible globalmente.", data);
             }
+            const esV32 = data.version === VERSION_V32;
             return Object.freeze({
                 consultada: true,
                 version: data.version,
                 writer_disponible: true,
-                v31_disponible: true,
-                motivo: "TOTAL v31 está disponible globalmente; cada reserva aún requiere revalidación final.",
+                total_disponible: true,
+                v31_disponible: data.version === VERSION_V31,
+                v32_disponible: esV32,
+                servicios_separados: esV32 && data.servicios_separados === true,
+                motivo: `TOTAL ${esV32 ? "v32" : "v31"} está disponible globalmente; cada reserva aún requiere revalidación final.`,
                 escritura_habilitada: CLOUDBEDS_TARIFAS_WRITER_HABILITADO && true
             });
         } catch {
-            return capacidadNoDisponible("La comprobación global de TOTAL v31 falló.");
+            return capacidadNoDisponible("La comprobación global de TOTAL v31/v32 falló.");
         }
     }
+
+    function propuestaTieneServicios(propuesta) {
+        if (propuesta?.tiene_servicios === true) return true;
+        if (Array.isArray(propuesta?.productos)) return propuesta.productos.length > 0;
+        return typeof propuesta?.productos === "string" && propuesta.productos.trim().length > 0;
+    }
+
+    const capacidadEsV31 = capacidad => capacidad?.version === VERSION_V31
+        && (capacidad?.writer_disponible === true || capacidad?.v31_disponible === true);
+    const capacidadEsV32 = capacidad => capacidad?.version === VERSION_V32
+        && (capacidad?.writer_disponible === true || capacidad?.v32_disponible === true);
+    const capacidadTotalDisponible = capacidad => capacidadEsV31(capacidad) || capacidadEsV32(capacidad);
 
     function payloadValido(fila) {
         const propuesta = fila?.propuesta || {};
@@ -82,9 +104,15 @@
     function estadoFinanciero(fila, capacidad) {
         if (fila?.certeza !== "ALTA_CERTEZA") return "NO_EVALUADA";
         if (!payloadValido(fila)) return "REQUIERE_REVISION_FINANCIERA";
-        return capacidad.v31_disponible
+        if (propuestaTieneServicios(fila?.propuesta)) {
+            return capacidadEsV32(capacidad)
+                ? "REQUIERE_REVALIDACION_V32"
+                : "REQUIERE_REVISION_V32";
+        }
+        if (capacidadEsV32(capacidad)) return "REQUIERE_REVALIDACION_V32";
+        return capacidadEsV31(capacidad)
             ? "REQUIERE_REVALIDACION_V31"
-            : "CAPACIDAD_V31_NO_DISPONIBLE";
+            : "CAPACIDAD_TOTAL_NO_DISPONIBLE";
     }
 
     function capacidadCorreccionFullDay(fila) {
@@ -248,10 +276,13 @@
             let sufijo = 1;
             while (ids.has(id)) id = `${base}-${++sufijo}`;
             ids.add(id);
-            const seleccionable = fila.certeza === "ALTA_CERTEZA" && payloadValido(fila);
+            const requiereV32 = propuestaTieneServicios(propuesta);
+            const seleccionable = fila.certeza === "ALTA_CERTEZA" && payloadValido(fila)
+                && (!requiereV32 || capacidadEsV32(capacidad));
             return {
                 id,
                 fila,
+                tiene_servicios: requiereV32,
                 certeza_cloudbeds: fila.certeza,
                 compatibilidad_financiera: estadoFinanciero(fila, capacidad),
                 seleccionable,
@@ -309,7 +340,11 @@
     function construirPayload(modelo) {
         return modelo.items
             .filter(item => item.seleccionable && item.seleccionado
-                && (!CLOUDBEDS_TARIFAS_WRITER_HABILITADO || item.preview?.elegible === true))
+                && (item.tiene_servicios
+                    ? item.preview?.elegible === true
+                        && item.preview?.autoridad_financiera_version === VERSION_V32
+                        && item.preview?.servicios_sin_cambios === true
+                    : (!CLOUDBEDS_TARIFAS_WRITER_HABILITADO || item.preview?.elegible === true)))
             .map(item => {
                 const propuesta = item.fila.propuesta;
                 const preview = item.preview;
@@ -356,6 +391,9 @@
             || Number(data.total_objetivo) !== Number(propuesta.total_alojamiento_propuesto)) {
             throw new Error("La preview backend no coincide con la propuesta seleccionada.");
         }
+        if (!VERSIONES_COMPATIBLES.includes(data.autoridad_financiera_version)) {
+            throw new Error("La preview backend no entregó una autoridad financiera permitida.");
+        }
         if (data.elegible === true) {
             for (const campo of ["total_actual", "total_objetivo", "pagado_actual", "saldo_actual", "saldo_esperado"]) {
                 if (!Number.isSafeInteger(Number(data[campo]))) {
@@ -368,6 +406,17 @@
             if (data.firma_iva !== undefined && (typeof data.firma_iva !== "string" || !data.firma_iva)) {
                 throw new Error("La firma IVA de la preview backend es inválida.");
             }
+            if (item.tiene_servicios) {
+                if (data.autoridad_financiera_version !== VERSION_V32
+                    || data.servicios_sin_cambios !== true) {
+                    throw new Error("La preview no certificó la separación de servicios con TOTAL v32.");
+                }
+                for (const campo of ["total_servicios_sin_cambio", "total_reserva_actual", "total_reserva_esperado"]) {
+                    if (!Number.isSafeInteger(Number(data[campo]))) {
+                        throw new Error(`La preview backend no entregó ${campo} verificable.`);
+                    }
+                }
+            }
         }
         return Object.freeze({
             ...data,
@@ -379,6 +428,11 @@
     function aplicarPreview(item, data) {
         const preview = normalizarPreview(item, data);
         item.preview = preview;
+        if (item.tiene_servicios) {
+            item.compatibilidad_financiera = preview.elegible === true
+                ? "SERVICIOS_CERTIFICADOS_V32"
+                : "REQUIERE_REVISION_MANUAL_SERVICIOS";
+        }
         return preview;
     }
 
@@ -406,7 +460,14 @@
                 if (error) throw error;
                 return { item: solicitud.item, preview: normalizarPreview(solicitud.item, data) };
             }));
-            preparadas.forEach(({ item, preview }) => { item.preview = preview; });
+            preparadas.forEach(({ item, preview }) => {
+                item.preview = preview;
+                if (item.tiene_servicios) {
+                    item.compatibilidad_financiera = preview.elegible === true
+                        ? "SERVICIOS_CERTIFICADOS_V32"
+                        : "REQUIERE_REVISION_MANUAL_SERVICIOS";
+                }
+            });
             const bloqueada = preparadas.find(({ preview }) => preview.elegible !== true);
             return Object.freeze({
                 ok: !bloqueada,
@@ -583,7 +644,11 @@
     function etiquetaCompatibilidad(item) {
         const etiquetas = {
             REQUIERE_REVALIDACION_V31: "Pendiente de revalidación v31",
-            CAPACIDAD_V31_NO_DISPONIBLE: "Capacidad v31 no disponible",
+            REQUIERE_REVALIDACION_V32: "Pendiente de revalidación v32",
+            REQUIERE_REVISION_V32: "Servicios detectados · revisión manual hasta disponer de TOTAL v32",
+            SERVICIOS_CERTIFICADOS_V32: "Servicios separados certificados por v32",
+            REQUIERE_REVISION_MANUAL_SERVICIOS: "Servicios o pagos ambiguos · revisión manual",
+            CAPACIDAD_TOTAL_NO_DISPONIBLE: "Capacidad TOTAL no disponible",
             REQUIERE_REVISION_FINANCIERA: "Requiere revisión financiera",
             NO_EVALUADA: "No corresponde evaluar"
         };
@@ -683,15 +748,25 @@
                 : Number.isSafeInteger(Number(propuesta.saldo_esperado_haku))
                     ? Number(propuesta.saldo_esperado_haku)
                 : Number.isSafeInteger(pagado) ? objetivo - pagado : null;
+            const serviciosCertificados = item.tiene_servicios
+                && preview?.elegible === true
+                && preview?.autoridad_financiera_version === VERSION_V32
+                && preview?.servicios_sin_cambios === true;
+            const serviciosBloqueados = item.tiene_servicios && preview?.elegible === false;
             return `<article class="haiku-cloudbeds-tarifas-confirmacion-item">
                 <strong>${esc(nombre)}</strong>
                 ${preview?.cambio_desde_pdf ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">Proyecto H cambió desde que se cargó el PDF. Estos son los valores reconsultados antes de confirmar.</p>` : ""}
-                ${preview?.elegible === false ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">${esc(preview.motivo_bloqueo || "La reserva ya no es elegible.")}</p>` : ""}
+                ${serviciosBloqueados ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">Hay pagos o cargos mezclados entre alojamiento y servicios. Revisión manual requerida.</p>` : ""}
+                ${preview?.elegible === false && !serviciosBloqueados ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">${esc(preview.motivo_bloqueo || "La reserva ya no es elegible.")}</p>` : ""}
+                ${serviciosCertificados ? `<p class="haiku-cloudbeds-tarifas-servicios-info">Los servicios se conservarán sin cambios.</p>` : ""}
                 <dl>
                     <div><dt>Cabaña</dt><dd>${preview?.cabana_numero || propuesta.cabana ? `CAB ${esc(preview?.cabana_numero || propuesta.cabana)}` : "—"}</dd></div>
                     <div><dt>Tipo</dt><dd>${(preview?.tipo_estadia || (propuesta.es_full_day ? "fullday" : propuesta.tipo_estadia_proyecto_h)) === "fullday" ? "Full Day" : "Alojamiento"}</dd></div>
-                    <div><dt>Proyecto H actual</dt><dd>${esc(moneda(totalActual))}</dd></div>
-                    <div><dt>Cloudbeds</dt><dd>${esc(moneda(objetivo))}</dd></div>
+                    <div><dt>Alojamiento actual</dt><dd>${esc(moneda(totalActual))}</dd></div>
+                    <div><dt>Alojamiento Cloudbeds</dt><dd>${esc(moneda(objetivo))}</dd></div>
+                    ${serviciosCertificados ? `<div><dt>Servicios sin cambios</dt><dd>${esc(moneda(preview.total_servicios_sin_cambio))}</dd></div>
+                    <div><dt>Total reserva actual</dt><dd>${esc(moneda(preview.total_reserva_actual))}</dd></div>
+                    <div><dt>Total reserva esperado</dt><dd>${esc(moneda(preview.total_reserva_esperado))}</dd></div>` : ""}
                     <div><dt>Diferencia</dt><dd>${esc(moneda(objetivo - totalActual))}</dd></div>
                     <div><dt>Pagado actual</dt><dd>${esc(moneda(pagado))}</dd></div>
                     <div><dt>Saldo actual</dt><dd>${esc(moneda(saldoActual))}</dd></div>
@@ -731,7 +806,7 @@
                 <span class="haiku-cloudbeds-tarifas-certeza haiku-cloudbeds-tarifas-certeza--${esc(fila.certeza.toLowerCase())}">${esc(fila.certeza.replaceAll("_", " "))}</span>
             </header>
             <dl class="haiku-cloudbeds-tarifas-montos">
-                <div><dt>Proyecto H</dt><dd>${esc(moneda(propuesta.total_actual_haku))}</dd></div>
+                <div><dt>Alojamiento actual</dt><dd>${esc(moneda(propuesta.total_actual_haku))}</dd></div>
                 <div><dt>Alojamiento Cloudbeds</dt><dd>${esc(moneda(propuesta.total_alojamiento_propuesto || propuesta.deposito_cloudbeds))}</dd></div>
                 <div><dt>Diferencia alojamiento</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
             </dl>
@@ -779,7 +854,7 @@
                 <span class="haiku-cloudbeds-tarifas-seguro">Writer deshabilitado</span>
             </header>
             <div class="haiku-cloudbeds-tarifas-resumen">${CERTEZAS.map(certeza => `<span><b>${modelo.conteos[certeza]}</b>${esc(CATEGORIAS[certeza])}</span>`).join("")}</div>
-            <div class="haiku-cloudbeds-tarifas-capacidad ${capacidad.v31_disponible ? "es-disponible" : "es-bloqueada"}">
+            <div class="haiku-cloudbeds-tarifas-capacidad ${capacidadTotalDisponible(capacidad) ? "es-disponible" : "es-bloqueada"}">
                 <strong>Capacidad financiera global</strong>
                 <span>${esc(capacidad.version || "Sin versión")} · ${esc(capacidad.motivo)}</span>
             </div>
@@ -952,9 +1027,13 @@
         RPC_WRITER,
         VERSION_PREVIEW,
         VERSION_VIGENTE,
+        VERSION_V31,
+        VERSION_V32,
+        VERSIONES_COMPATIBLES,
         CERTEZAS,
         CATEGORIAS,
         consultarCapacidad,
+        propuestaTieneServicios,
         prepararModelo,
         preparar,
         capacidadCorreccionFullDay,

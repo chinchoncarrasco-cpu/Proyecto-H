@@ -830,6 +830,7 @@
 .haiku-cloudbeds-tarifas-confirmacion-item { padding: 8px; border: 1px solid #d6e3da; background: #fff; }
 .haiku-cloudbeds-tarifas-confirmacion-item > strong { display: block; margin-bottom: 6px; font-size: .66rem; }
 .haiku-cloudbeds-tarifas-confirmacion-item .haiku-cloudbeds-tarifas-preview-alerta { padding: 6px 7px; border-left: 3px solid #b77a16; background: #fff7e8; color: #6d4b14; }
+.haiku-cloudbeds-tarifas-confirmacion-item .haiku-cloudbeds-tarifas-servicios-info { padding: 6px 7px; border-left: 3px solid #3c8b5d; background: #f2faf5; color: #285d3f; }
 .haiku-cloudbeds-tarifas-confirmacion-item dl { display: grid; gap: 3px; margin: 0; }
 .haiku-cloudbeds-tarifas-confirmacion-item dl > div { display: flex; justify-content: space-between; gap: 10px; }
 .haiku-cloudbeds-tarifas-confirmacion-acciones { display: flex; justify-content: flex-end; gap: 6px; }
