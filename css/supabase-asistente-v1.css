@@ -686,14 +686,16 @@
 .haiku-cloudbeds-tarifas-certeza--no_identificada { background: #f0f1f0; color: #68736d; }
 
 .haiku-cloudbeds-tarifas-montos,
-.haiku-cloudbeds-tarifas-productos dl {
+.haiku-cloudbeds-tarifas-productos dl,
+.haiku-cloudbeds-tarifas-fullday dl {
     display: grid;
     gap: 4px;
     margin: 0;
 }
 
 .haiku-cloudbeds-tarifas-montos > div,
-.haiku-cloudbeds-tarifas-productos dl > div {
+.haiku-cloudbeds-tarifas-productos dl > div,
+.haiku-cloudbeds-tarifas-fullday dl > div {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -704,8 +706,11 @@
 .haiku-cloudbeds-tarifas dt { color: #6c7972; font-size: .62rem; }
 .haiku-cloudbeds-tarifas dd { color: #1e3528; font-size: .7rem; font-weight: 790; text-align: right; }
 .haiku-cloudbeds-tarifas dd.es-negativa { color: #a44438; }
+.haiku-cloudbeds-tarifas-montos dt { min-width: 0; overflow-wrap: anywhere; }
+.haiku-cloudbeds-tarifas-montos dd { flex: 0 0 auto; white-space: nowrap; }
 
 .haiku-cloudbeds-tarifas-productos,
+.haiku-cloudbeds-tarifas-fullday,
 .haiku-cloudbeds-tarifas-identidad-contextual,
 .haiku-cloudbeds-tarifas-evidencias,
 .haiku-cloudbeds-tarifas-revision {
@@ -734,6 +739,31 @@
 .haiku-cloudbeds-tarifas-identidad-contextual strong { color: #235f40; }
 .haiku-cloudbeds-tarifas-identidad-contextual > span { color: #745f2a; }
 .haiku-cloudbeds-tarifas-identidad-contextual small { color: #66776e; font-size: .58rem; }
+
+.haiku-cloudbeds-tarifas-fullday {
+    padding: 8px;
+    border-color: #c9dced;
+    background: #f3f8fc;
+}
+
+.haiku-cloudbeds-tarifas-fullday > strong {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    color: #234f70;
+    font-size: .64rem;
+}
+
+.haiku-cloudbeds-tarifas-fullday > strong > span {
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: #dcecf8;
+    letter-spacing: .07em;
+    font-size: .54rem;
+}
+
+.haiku-cloudbeds-tarifas-fullday > p { margin: 0 0 7px; color: #526d80; font-size: .6rem; }
 
 .haiku-cloudbeds-tarifas-productos > strong,
 .haiku-cloudbeds-tarifas-evidencias > strong,

@@ -117,6 +117,10 @@ test('caso tipo Héctor muestra descuento, evidencia y capas separadas', () => {
   assert.equal(item.seleccionable, true);
   const html = tarifas.renderizar(modelo);
   assert.match(html, /Héctor Ficticio · CAB 5/);
+  assert.match(html, /<dt>Proyecto H<\/dt>/);
+  assert.match(html, /<dt>Alojamiento Cloudbeds<\/dt>/);
+  assert.match(html, /<dt>Diferencia alojamiento<\/dt>/);
+  assert.doesNotMatch(html, /<dt>Cloudbeds<\/dt>|<dt>Diferencia<\/dt>/);
   assert.match(html, /\$160\.000/);
   assert.match(html, /\$144\.000/);
   assert.match(html, /-\$16\.000/);
@@ -223,6 +227,8 @@ test('contratos visuales cubren escritorio y móvil sin drawer adicional', () =>
   const fixtureJs = read('tests/fixtures/cloudbeds-haku-tarifas-2e/demo.js');
   assert.match(css, /\.haiku-cloudbeds-tarifas-resumen\s*\{[\s\S]*grid-template-columns:\s*repeat\(5/);
   assert.match(css, /@media \(max-width: 520px\)[\s\S]*\.haiku-cloudbeds-tarifas-resumen/);
+  assert.match(css, /\.haiku-cloudbeds-tarifas-montos dt\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.haiku-cloudbeds-tarifas-montos dd\s*\{[^}]*white-space:\s*nowrap/);
   assert.match(fuente, /HAIKU_INSPECTOR_V1 \|\| root\.HAIKU_PANELES_V1/);
   assert.doesNotMatch(fuente, /createElement\(["'](?:dialog|aside)["']\)|drawer/i);
   assert.match(fixture, /data-inspector-cabecera/);

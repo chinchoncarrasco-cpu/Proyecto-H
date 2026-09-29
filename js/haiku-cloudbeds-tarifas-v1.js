@@ -194,11 +194,48 @@
     }
 
     function renderIdentidadContextual(fila) {
-        if (fila?.identidad_tipo !== "CONTEXTO_EXACTO_UNICO") return "";
-        return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="CONTEXTO_EXACTO_UNICO">
-            <strong><span aria-hidden="true">✓</span> Reserva identificada por contexto exacto</strong>
-            <span><span aria-hidden="true">○</span> Vínculo Cloudbeds aún no guardado</span>
-            <small>Nombre, cabaña, check-in y check-out identifican una única reserva de Proyecto H.</small>
+        if (fila?.identidad_tipo === "CONTEXTO_FULLDAY_UNICO") {
+            const nombreExacto = !(fila.revisiones || []).some(item => /nombre no coincide|nombre.*no coincide/i.test(String(item)));
+            return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="CONTEXTO_FULLDAY_UNICO">
+                <strong><span aria-hidden="true">${nombreExacto ? "✓" : "!"}</span> Full Day identificado por contexto único</strong>
+                <span><span aria-hidden="true">○</span> Vínculo Cloudbeds sugerido, no guardado</span>
+                <small>${nombreExacto
+                    ? "Nombre exacto, misma cabaña y patrón Cloudbeds D → D+1 contra Proyecto H D → D identifican una única estadía Full Day."
+                    : "La cabaña y el patrón de fechas identifican una única estadía Full Day, pero el nombre distinto exige revisión manual."}</small>
+            </div>`;
+        }
+        if (fila?.identidad_tipo === "CONTEXTO_EXACTO_UNICO") {
+            return `<div class="haiku-cloudbeds-tarifas-identidad-contextual" data-cloudbeds-identidad="CONTEXTO_EXACTO_UNICO">
+                <strong><span aria-hidden="true">✓</span> Reserva identificada por contexto exacto</strong>
+                <span><span aria-hidden="true">○</span> Vínculo Cloudbeds aún no guardado</span>
+                <small>Nombre, cabaña, check-in y check-out identifican una única reserva de Proyecto H.</small>
+            </div>`;
+        }
+        return "";
+    }
+
+    function renderFullDay(propuesta) {
+        if (!propuesta?.es_full_day) return "";
+        const personas = [
+            `${propuesta.adultos_proyecto_h ?? "—"} adultos`,
+            `${propuesta.ninos_proyecto_h ?? "—"} niños`,
+            `${propuesta.mascotas_proyecto_h ?? "—"} mascotas`
+        ].join(" · ");
+        const referencia = propuesta.referencia_fullday_clp === null || propuesta.referencia_fullday_clp === undefined
+            ? "No generalizable para esta composición"
+            : moneda(propuesta.referencia_fullday_clp);
+        return `<div class="haiku-cloudbeds-tarifas-fullday" data-cloudbeds-fullday>
+            <strong><span>FULL DAY</span> Proyecto H D → D · Cloudbeds D → D+1</strong>
+            <p>${esc(fechaCorta(propuesta.fecha_ingreso_proyecto_h))} → ${esc(fechaCorta(propuesta.fecha_salida_proyecto_h))} en Proyecto H · ${esc(fechaCorta(propuesta.check_in))} → ${esc(fechaCorta(propuesta.check_out))} en Cloudbeds</p>
+            <dl>
+                <div><dt>Personas Proyecto H</dt><dd>${esc(personas)}</dd></div>
+                <div><dt>Referencia FD</dt><dd>${esc(referencia)}</dd></div>
+                <div><dt>Precio Total Cloudbeds</dt><dd>${esc(moneda(propuesta.precio_total_cloudbeds))}</dd></div>
+                <div><dt>Depósito / alojamiento</dt><dd>${esc(moneda(propuesta.deposito_cloudbeds))}</dd></div>
+                <div><dt>Pagado actual</dt><dd>${esc(moneda(propuesta.pagado_actual_haku))}</dd></div>
+                <div><dt>Saldo actual</dt><dd>${esc(moneda(propuesta.saldo_actual_haku))}</dd></div>
+                <div><dt>Saldo esperado</dt><dd>${esc(moneda(propuesta.saldo_esperado_haku))}</dd></div>
+            </dl>
         </div>`;
     }
 
@@ -210,10 +247,11 @@
         const cabana = propuesta.cabana ? `CAB ${propuesta.cabana}` : "Cabaña no identificada";
         const diferencia = propuesta.diferencia;
         const evidencias = (fila.evidencias || propuesta.evidencias || [])
-            .filter(evidencia => fila.identidad_tipo !== "CONTEXTO_EXACTO_UNICO"
+            .filter(evidencia => !["CONTEXTO_EXACTO_UNICO", "CONTEXTO_FULLDAY_UNICO"].includes(fila.identidad_tipo)
                 || (!String(evidencia).startsWith("Reserva identificada por contexto exacto")
+                    && !String(evidencia).startsWith("Reserva Full Day identificada por contexto único")
                     && !String(evidencia).startsWith("Proyecto H aún no tiene vínculo Cloudbeds guardado")))
-            .slice(0, 8);
+            .slice(0, 12);
         const revisiones = fila.revisiones || propuesta.revisiones || [];
         const seleccion = item.seleccionable
             ? `<button type="button" class="haiku-cloudbeds-tarifas-simular-item" data-cloudbeds-seleccionar="${esc(item.id)}" aria-pressed="${item.seleccionado}">${item.seleccionado ? "Quitar de simulación" : "Simular actualización"}</button>`
@@ -225,10 +263,11 @@
             </header>
             <dl class="haiku-cloudbeds-tarifas-montos">
                 <div><dt>Proyecto H</dt><dd>${esc(moneda(propuesta.total_actual_haku))}</dd></div>
-                <div><dt>Cloudbeds</dt><dd>${esc(moneda(propuesta.total_alojamiento_propuesto || propuesta.deposito_cloudbeds))}</dd></div>
-                <div><dt>Diferencia</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
+                <div><dt>Alojamiento Cloudbeds</dt><dd>${esc(moneda(propuesta.total_alojamiento_propuesto || propuesta.deposito_cloudbeds))}</dd></div>
+                <div><dt>Diferencia alojamiento</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
             </dl>
             ${renderIdentidadContextual(fila)}
+            ${renderFullDay(propuesta)}
             ${renderProductos(propuesta)}
             ${evidencias.length ? `<div class="haiku-cloudbeds-tarifas-evidencias"><strong>Evidencias</strong><ul>${evidencias.map(evidencia => `<li>${esc(evidencia)}</li>`).join("")}</ul></div>` : ""}
             ${revisiones.length ? `<div class="haiku-cloudbeds-tarifas-revision"><strong>Revisar</strong><ul>${revisiones.map(revision => `<li>${esc(revision)}</li>`).join("")}</ul></div>` : ""}

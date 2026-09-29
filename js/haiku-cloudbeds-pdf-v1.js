@@ -11,6 +11,8 @@
     const CERTEZAS = ["SIN_CAMBIO", "ALTA_CERTEZA", "REVISION_MANUAL", "NO_APLICA", "NO_IDENTIFICADA"];
     const TOLERANCIA_CLP = 5;
     const IVA_REFERENCIAL = 1.19;
+    const TARIFA_FULLDAY_PERSONA_CLP = 60000;
+    const MIN_PERSONAS_FULLDAY = 2;
     const ESTADOS = new Set([
         "confirmada", "confirmado", "confirmed", "confirmacion pendiente", "pendiente",
         "checked out", "checked in", "hospedado", "cancelada", "cancelado", "no show"
@@ -87,6 +89,7 @@
         parsear: Object.freeze({ minimo: "Dos encabezados Cloudbeds conocidos y una fila delimitable", escritura: false }),
         identificar_fuerte: Object.freeze({ requiere: Object.freeze(["reserva_cloudbeds o id_cloudbeds inequívoco"]), escritura: false }),
         identificar_fallback: Object.freeze({ requiere: Object.freeze(["nombre exacto", "habitación", "check_in", "check_out", "coincidencia única"]), identidad_tipo: "CONTEXTO_EXACTO_UNICO", solo_revision: false, escritura: false }),
+        identificar_fullday: Object.freeze({ requiere: Object.freeze(["nombre exacto", "una habitación", "Cloudbeds D→D+1", "Proyecto H fullday D→D", "coincidencia única"]), identidad_tipo: "CONTEXTO_FULLDAY_UNICO", solo_revision: false, escritura: false }),
         comparar_alojamiento: Object.freeze({ requiere: Object.freeze(["identidad asociada", "Depósito válido", "Precio Total", "Productos presente", "total_alojamiento Proyecto H"]), escritura: false }),
         proponer_total: Object.freeze({ regla_propiedad: "Depósito = alojamiento bruto final con IVA; Productos queda fuera", tolerancia_clp: TOLERANCIA_CLP, escritura: false }),
         actualizar_tarifa: Object.freeze({ implementada: false, escritura: false })
@@ -438,46 +441,86 @@
         }
     }
 
+    function sumarDiasIso(valor, dias) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(valor || ""))) return null;
+        const fechaUtc = new Date(`${valor}T00:00:00Z`);
+        if (Number.isNaN(fechaUtc.getTime())) return null;
+        fechaUtc.setUTCDate(fechaUtc.getUTCDate() + dias);
+        return fechaUtc.toISOString().slice(0, 10);
+    }
+
+    function esVentanaFullDay(entrada) {
+        return Boolean(entrada?.check_in && entrada?.check_out && sumarDiasIso(entrada.check_in, 1) === entrada.check_out);
+    }
+
+    function esEstadiaFullDay(estadia) {
+        return norm(estadia?.tipo_estadia).replace(/[ _-]/g, "") === "fullday";
+    }
+
     function estadiasContextoExacto(reserva, entrada, cabana) {
         const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
         if (!cabana || !entrada.check_in || !entrada.check_out) return [];
         return estadias.filter(estadia =>
+            !esEstadiaFullDay(estadia) &&
             Number(estadia.cabanas?.numero) === cabana &&
             estadia.fecha_ingreso === entrada.check_in &&
             estadia.fecha_salida === entrada.check_out
         );
     }
 
-    function contextoExacto(reserva, entrada, cabana) {
-        const coincidencias = estadiasContextoExacto(reserva, entrada, cabana);
-        return coincidencias.length === 1 ? coincidencias[0] : null;
+    function estadiasContextoFullDay(reserva, entrada, cabana) {
+        const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
+        if (!cabana || !esVentanaFullDay(entrada)) return [];
+        return estadias.filter(estadia =>
+            esEstadiaFullDay(estadia) &&
+            Number(estadia.cabanas?.numero) === cabana &&
+            estadia.fecha_ingreso === entrada.check_in &&
+            estadia.fecha_salida === entrada.check_in
+        );
     }
 
-    function resolverContextoExacto(reservas, entrada, cabana) {
+    function coincidenciasContexto(reserva, entrada, cabana) {
+        return [
+            ...estadiasContextoExacto(reserva, entrada, cabana).map(estadia => ({ estadia, tipo: "exacto" })),
+            ...estadiasContextoFullDay(reserva, entrada, cabana).map(estadia => ({ estadia, tipo: "fullday" }))
+        ];
+    }
+
+    function resolverContexto(reservas, entrada, cabana) {
         const completo = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
-        if (!completo) return { completo: false, candidatas: [], ambiguas_estadia: [], con_coincidencia: [] };
+        if (!completo) return { completo: false, candidatas: [], ambiguas_estadia: [], con_coincidencia: [], coincidencias: [] };
         const nombre = norm(entrada.nombre_huesped);
         const candidatas = [];
         const ambiguasEstadia = [];
         const conCoincidencia = [];
+        const coincidencias = [];
         reservas.forEach(reserva => {
-            if (norm(reserva.titular_nombre) !== nombre) return;
-            const estadias = estadiasContextoExacto(reserva, entrada, cabana);
-            if (!estadias.length) return;
+            const nombreExacto = norm(reserva.titular_nombre) === nombre;
+            const compatibles = coincidenciasContexto(reserva, entrada, cabana)
+                .filter(item => item.tipo === "fullday" || nombreExacto);
+            if (!compatibles.length) return;
             conCoincidencia.push(reserva);
-            if (estadias.length === 1) candidatas.push(reserva);
+            coincidencias.push(...compatibles.map(item => ({ ...item, reserva, nombre_exacto: nombreExacto })));
+            if (compatibles.length === 1) candidatas.push(reserva);
             else ambiguasEstadia.push(reserva);
         });
         return {
             completo: true,
             candidatas,
             ambiguas_estadia: ambiguasEstadia,
-            con_coincidencia: conCoincidencia
+            con_coincidencia: conCoincidencia,
+            coincidencias
         };
     }
 
+    function enteroSeguroCampo(valor) {
+        if (valor === null || valor === undefined || valor === "") return null;
+        const numero = Number(valor);
+        return Number.isSafeInteger(numero) ? numero : null;
+    }
+
     function comparar(entradas, reservas, saldos) {
-        const montos = new Map(saldos.map(saldo => [saldo.reserva_id, Number(saldo.total_alojamiento)]));
+        const saldosPorReserva = new Map(saldos.map(saldo => [saldo.reserva_id, saldo]));
         const conteos = Object.fromEntries(CLASES.map(clase => [clase, 0]));
         const conteosCerteza = Object.fromEntries(CERTEZAS.map(certeza => [certeza, 0]));
         const numeros = entradas.map(entrada => entrada.reserva_cloudbeds).filter(Boolean);
@@ -495,19 +538,20 @@
             let vinculoCloudbedsSugerido = null;
             const cabana = entrada.habitaciones.length === 1 ? entrada.habitaciones[0].cabana : null;
             const fallbackCompleto = Boolean(entrada.nombre_huesped && cabana && entrada.check_in && entrada.check_out);
-            const contexto = resolverContextoExacto(reservas, entrada, cabana);
+            const contexto = resolverContexto(reservas, entrada, cabana);
             const canceladaCloudbeds = ["cancelada", "cancelado"].includes(entrada.estado);
 
             const aplicarContexto = () => {
-                const ambiguo = contexto.ambiguas_estadia.length > 0 || contexto.candidatas.length > 1;
+                const ambiguo = contexto.ambiguas_estadia.length > 0 || contexto.coincidencias.length > 1 || contexto.candidatas.length > 1;
                 if (ambiguo) {
                     identidadTipo = "AMBIGUA";
                     certeza = "REVISION_MANUAL";
-                    revisiones.push("El contexto exacto coincide con más de una reserva o estadía compatible.");
+                    revisiones.push("El contexto coincide con más de una reserva o estadía compatible.");
                     return;
                 }
                 if (contexto.candidatas.length === 1) {
                     const candidata = contexto.candidatas[0];
+                    const coincidencia = contexto.coincidencias[0];
                     if (String(candidata.cloudbeds_id || "").trim()) {
                         identidadTipo = "AMBIGUA";
                         certeza = "REVISION_MANUAL";
@@ -515,16 +559,23 @@
                         return;
                     }
                     candidatas = [candidata];
-                    identidadTipo = "CONTEXTO_EXACTO_UNICO";
-                    identidad = "Reserva identificada por contexto exacto";
-                    evidencias.push("Reserva identificada por contexto exacto.");
-                    evidencias.push("Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre, cabaña, check-in y check-out identifican una única reserva.");
+                    const esFullDay = coincidencia?.tipo === "fullday";
+                    identidadTipo = esFullDay ? "CONTEXTO_FULLDAY_UNICO" : "CONTEXTO_EXACTO_UNICO";
+                    identidad = esFullDay ? "Reserva Full Day identificada por contexto único" : "Reserva identificada por contexto exacto";
+                    evidencias.push(esFullDay ? "Reserva Full Day identificada por contexto único." : "Reserva identificada por contexto exacto.");
+                    evidencias.push(esFullDay
+                        ? "Proyecto H aún no tiene vínculo Cloudbeds guardado. Cabaña, patrón de fechas Full Day y estadía única sostienen la identidad."
+                        : "Proyecto H aún no tiene vínculo Cloudbeds guardado. Nombre, cabaña, check-in y check-out identifican una única reserva.");
                     vinculoCloudbedsSugerido = {
                         reserva_id: candidatas[0].id,
                         reservation_number: entrada.reserva_cloudbeds || null,
                         reservation_id: entrada.id_cloudbeds || null,
-                        evidencia: "contexto_exacto_unico"
+                        evidencia: esFullDay ? "contexto_fullday_unico" : "contexto_exacto_unico"
                     };
+                    if (esFullDay && !coincidencia.nombre_exacto) {
+                        certeza = "REVISION_MANUAL";
+                        revisiones.push("La cabaña y las fechas Full Day identifican una única estadía, pero el nombre no coincide exactamente; no se usa coincidencia difusa.");
+                    }
                     return;
                 }
                 identidadTipo = "NO_IDENTIFICADA";
@@ -586,8 +637,30 @@
 
             const reserva = candidatas.length === 1 ? candidatas[0] : null;
             const estadias = Array.isArray(reserva?.estadias) ? reserva.estadias : [];
-            const totalProyectoH = reserva ? montos.get(reserva.id) : null;
+            const saldoProyectoH = reserva ? saldosPorReserva.get(reserva.id) : null;
+            const totalProyectoH = enteroSeguroCampo(saldoProyectoH?.total_alojamiento);
             const totalValido = Number.isSafeInteger(totalProyectoH);
+            const pagadoProyectoH = enteroSeguroCampo(saldoProyectoH?.pagado_alojamiento);
+            const saldoActualProyectoH = enteroSeguroCampo(saldoProyectoH?.saldo_alojamiento);
+            const coincidenciasReserva = reserva ? coincidenciasContexto(reserva, entrada, cabana) : [];
+            const coincidenciaReserva = coincidenciasReserva.length === 1 ? coincidenciasReserva[0] : null;
+            const estadiaContextual = coincidenciaReserva?.estadia || null;
+            const esFullDay = coincidenciaReserva?.tipo === "fullday";
+            const adultosProyectoH = enteroSeguroCampo(estadiaContextual?.adultos);
+            const ninosProyectoH = enteroSeguroCampo(estadiaContextual?.ninos);
+            const mascotasProyectoH = enteroSeguroCampo(estadiaContextual?.mascotas);
+            const referenciaFullDay = esFullDay && adultosProyectoH === 2 && ninosProyectoH === 0
+                ? TARIFA_FULLDAY_PERSONA_CLP * MIN_PERSONAS_FULLDAY : null;
+            if (reserva && esFullDay) {
+                evidencias.push(`Proyecto H: Full Day ${estadiaContextual.fecha_ingreso} → ${estadiaContextual.fecha_salida}.`);
+                evidencias.push(`Cloudbeds: ${entrada.check_in} → ${entrada.check_out}, representación D → D+1 de Full Day.`);
+                evidencias.push(`Misma cabaña: CAB ${cabana}.`);
+                if (referenciaFullDay !== null) {
+                    evidencias.push(`Referencia Full Day comprobable: 2 × $${TARIFA_FULLDAY_PERSONA_CLP.toLocaleString("es-CL")} = $${referenciaFullDay.toLocaleString("es-CL")}.`);
+                } else {
+                    evidencias.push("La composición de personas no permite generalizar una tarifa infantil; Depósito sigue siendo la fuente primaria.");
+                }
+            }
 
             if (reserva && !certeza) {
                 if (reserva.grupo_reserva_id || estadias.length !== 1) {
@@ -603,15 +676,21 @@
             }
 
             if (reserva && !certeza) {
-                const contexto = contextoExacto(reserva, entrada, cabana);
                 if (!cabana || !entrada.check_in || !entrada.check_out) {
                     certeza = "REVISION_MANUAL";
                     revisiones.push("Para alta certeza se requieren habitación, check-in y check-out.");
-                } else if (!contexto) {
+                } else if (!coincidenciaReserva) {
                     certeza = "REVISION_MANUAL";
                     revisiones.push("El vínculo existe, pero habitación o fechas contradicen Proyecto H.");
                 } else {
-                    evidencias.push(`Contexto exacto: cabaña ${cabana}, ${entrada.check_in} → ${entrada.check_out}.`);
+                    if (esFullDay) {
+                        if (norm(reserva.titular_nombre) !== norm(entrada.nombre_huesped)) {
+                            certeza = "REVISION_MANUAL";
+                            revisiones.push("El nombre Cloudbeds no coincide exactamente con Proyecto H; no se usa coincidencia difusa.");
+                        }
+                    } else {
+                        evidencias.push(`Contexto exacto: cabaña ${cabana}, ${entrada.check_in} → ${entrada.check_out}.`);
+                    }
                 }
                 if (!certeza && (!entrada.estado || !ESTADOS.has(entrada.estado))) {
                     certeza = "REVISION_MANUAL";
@@ -625,6 +704,14 @@
                     revisiones.push("Depósito falta, es inválido o no es un entero CLP positivo.");
                 } else {
                     evidencias.push("Regla Haiku Cabañas: Depósito representa 100% del alojamiento bruto final con IVA.");
+                }
+                if (!certeza && referenciaFullDay !== null) {
+                    if (Math.abs(entrada.deposito - referenciaFullDay) > TOLERANCIA_CLP) {
+                        certeza = "REVISION_MANUAL";
+                        revisiones.push("El Depósito no coincide con la referencia Full Day comprobable de 2 adultos y 0 niños.");
+                    } else {
+                        evidencias.push("El Depósito Cloudbeds coincide con la tarifa Full Day de la propiedad.");
+                    }
                 }
                 if (!certeza && (!Number.isSafeInteger(entrada.precio_total) || entrada.precio_total <= 0)) {
                     certeza = "REVISION_MANUAL";
@@ -671,6 +758,7 @@
 
             const candidato = Number.isSafeInteger(entrada.deposito) && entrada.deposito > 0 ? entrada.deposito : null;
             const diferencia = candidato !== null && totalValido ? candidato - totalProyectoH : null;
+            const saldoEsperado = candidato !== null && pagadoProyectoH !== null ? candidato - pagadoProyectoH : null;
             if (reserva && !certeza) {
                 certeza = Math.abs(diferencia) <= TOLERANCIA_CLP ? "SIN_CAMBIO" : "ALTA_CERTEZA";
                 evidencias.push(certeza === "SIN_CAMBIO"
@@ -695,7 +783,20 @@
                 cabana,
                 check_in: entrada.check_in,
                 check_out: entrada.check_out,
+                tipo_estadia_proyecto_h: estadiaContextual?.tipo_estadia || null,
+                fecha_ingreso_proyecto_h: estadiaContextual?.fecha_ingreso || null,
+                fecha_salida_proyecto_h: estadiaContextual?.fecha_salida || null,
+                es_full_day: esFullDay,
+                adultos_proyecto_h: adultosProyectoH,
+                ninos_proyecto_h: ninosProyectoH,
+                mascotas_proyecto_h: mascotasProyectoH,
+                tarifa_fullday_persona_clp: esFullDay ? TARIFA_FULLDAY_PERSONA_CLP : null,
+                minimo_personas_fullday: esFullDay ? MIN_PERSONAS_FULLDAY : null,
+                referencia_fullday_clp: referenciaFullDay,
                 total_actual_haku: totalValido ? totalProyectoH : null,
+                pagado_actual_haku: pagadoProyectoH,
+                saldo_actual_haku: saldoActualProyectoH,
+                saldo_esperado_haku: saldoEsperado,
                 precio_total_cloudbeds: entrada.precio_total,
                 total_habitacion_cloudbeds: entrada.total_habitacion,
                 deposito_cloudbeds: entrada.deposito,
@@ -780,8 +881,8 @@
             throw new Error("Consulta demasiado amplia; requiere revisión.");
         }
         const [reservas, saldos] = await Promise.all([
-            leer("reservas", "id,cloudbeds_id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,cabanas(numero))", "id"),
-            leer("vista_saldos_alojamiento_reserva", "reserva_id,total_alojamiento", "reserva_id")
+            leer("reservas", "id,cloudbeds_id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,tipo_estadia,adultos,ninos,mascotas,cabanas(numero))", "id"),
+            leer("vista_saldos_alojamiento_reserva", "reserva_id,total_alojamiento,pagado_alojamiento,saldo_alojamiento", "reserva_id")
         ]);
         return comparar(entradas, reservas, saldos);
     }
@@ -826,8 +927,8 @@
 
     const api = Object.freeze({
         MAPA, CLASES, CERTEZAS, HEAD, COLUMNAS: DEFINICIONES_COLUMNAS, MATRIZ_CAPACIDADES,
-        TOLERANCIA_CLP, IVA_REFERENCIAL,
-        dinero, fecha, normalizar, columnas, parsearPaginas, leerPDF, comparar, filtrarInforme, consultar, renderizar
+        TOLERANCIA_CLP, IVA_REFERENCIAL, TARIFA_FULLDAY_PERSONA_CLP, MIN_PERSONAS_FULLDAY,
+        dinero, fecha, normalizar, columnas, parsearPaginas, leerPDF, esVentanaFullDay, comparar, filtrarInforme, consultar, renderizar
     });
     root.HAIKU_CLOUDBEDS_PDF_V1 = api;
     if (typeof module !== "undefined") module.exports = api;

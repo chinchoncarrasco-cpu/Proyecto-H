@@ -17,7 +17,7 @@
     <section class="demo-intro">
       <span>LIBRO DE RESERVAS</span>
       <h1>Superficies operativas activas</h1>
-      <p>Héctor y Elena simulan reservas históricas sin cloudbeds_id guardado; Rodrigo es el control negativo. Revisa identidad contextual, simula el lote y abre “Ver reserva”.</p>
+      <p>Héctor y Elena simulan reservas históricas; Amanda, Beatriz, Carla y Diana cubren Full Day FD-1 con datos ficticios. Revisa identidad contextual, saldos, producto separado y “Ver reserva”.</p>
     </section>
     <section class="demo-metricas">
       <article><span>Ocupación</span><strong>8 / 11</strong></article>
@@ -26,11 +26,14 @@
     </section>
     <section class="demo-tabla-wrap" aria-label="Contenido principal ficticio">
       <table>
-        <thead><tr><th>Cabaña</th><th>Huésped</th><th>Ingreso</th><th>Salida</th><th>Estado</th><th>Total</th></tr></thead>
+        <thead><tr><th>Cabaña</th><th>Huésped</th><th>Ingreso</th><th>Salida</th><th>Estado</th><th>Total</th><th>Acción</th></tr></thead>
         <tbody>
-          <tr><td>CAB 5</td><td>Héctor Ficticio</td><td>20/09/2026</td><td>21/09/2026</td><td>Confirmada</td><td>$160.000</td></tr>
-          <tr><td>CAB 7</td><td>Elena Ficticia</td><td>22/09/2026</td><td>24/09/2026</td><td>Confirmada</td><td>$300.000</td></tr>
-          <tr><td>CAB 4 + CAB 10</td><td>Grupo Ficticio</td><td>25/09/2026</td><td>27/09/2026</td><td>Revisar</td><td>$288.000</td></tr>
+          <tr><td>CAB 5</td><td>Héctor Ficticio</td><td>20/09/2026</td><td>21/09/2026</td><td>Confirmada</td><td>$160.000</td><td><button type="button" data-demo-ver-reserva="r-hector">Ver reserva</button></td></tr>
+          <tr><td>CAB 5</td><td>Amanda Full Day</td><td>28/09/2026</td><td>28/09/2026</td><td>FULL DAY · propuesta $120.000</td><td>$160.000</td><td><button type="button" data-demo-ver-reserva="r-fd-a">Ver reserva</button></td></tr>
+          <tr><td>CAB 7</td><td>Beatriz Full Day</td><td>29/09/2026</td><td>29/09/2026</td><td>FULL DAY · propuesta $120.000</td><td>$150.000</td><td><button type="button" data-demo-ver-reserva="r-fd-b">Ver reserva</button></td></tr>
+          <tr><td>CAB 8</td><td>Carla Full Day</td><td>30/09/2026</td><td>30/09/2026</td><td>FULL DAY · sin cambio</td><td>$120.000</td><td><button type="button" data-demo-ver-reserva="r-fd-c">Ver reserva</button></td></tr>
+          <tr><td>CAB 9</td><td>Diana Full Day</td><td>01/10/2026</td><td>01/10/2026</td><td>FULL DAY · producto $30.000</td><td>$160.000</td><td><button type="button" data-demo-ver-reserva="r-fd-d">Ver reserva</button></td></tr>
+          <tr><td>CAB 4 + CAB 10</td><td>Grupo Ficticio</td><td>25/09/2026</td><td>27/09/2026</td><td>Revisar</td><td>$288.000</td><td>—</td></tr>
         </tbody>
       </table>
     </section>
@@ -67,7 +70,15 @@
         drawer.hidden = false;
         drawer.dataset.haikuInspectorEntidadId = id;
         document.getElementById('demo-inspector-id').textContent = id;
-        document.getElementById('demo-inspector-titulo').textContent = id === 'r-hector' ? 'Héctor Ficticio · CAB 5' : 'Reserva ficticia';
+        const titulos = {
+          'r-hector': 'Héctor Ficticio · CAB 5',
+          'r-fd-a': 'Amanda Full Day · CAB 5',
+          'r-fd-b': 'Beatriz Full Day · CAB 7',
+          'r-fd-c': 'Carla Full Day · CAB 8',
+          'r-fd-d': 'Diana Full Day · CAB 9',
+          'r-fd-revision': 'Nombre Proyecto H · CAB 1'
+        };
+        document.getElementById('demo-inspector-titulo').textContent = titulos[id] || 'Reserva ficticia';
         return true;
       },
       cerrar() { document.getElementById('sites-resumen-reserva-drawer').hidden = true; }
