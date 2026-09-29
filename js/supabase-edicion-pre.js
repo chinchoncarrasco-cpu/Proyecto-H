@@ -8,7 +8,8 @@
     "use strict";
 
     const cliente = window.haikuSupabase;
-    if (!cliente) return;
+    const reglaTarifa = window.HAIKU_FULLDAY_TARIFA_V1;
+    if (!cliente || !reglaTarifa) return;
 
     let guardando = false;
     let tipoEdicion = "alojamiento";
@@ -49,46 +50,37 @@
         return `${d}-${m}-${a}`;
     }
 
-    function precioCabana(numero) {
-        try {
-            return Number(catalogoCabanasReserva?.[String(numero)]?.precio || 0);
-        } catch {
-            return 0;
-        }
-    }
-
     function llegadaActual() {
         try { return String(fechaLlegadaReserva || "").slice(0, 10); }
         catch { return ""; }
     }
 
-    function cabanaActual() {
-        try { return Number(cabanaSeleccionadaReserva || 0); }
-        catch { return 0; }
+    function ocupacionActual() {
+        let adultos = 1;
+        let ninos = 0;
+        try { adultos = Number(adultosReserva ?? 1); } catch {}
+        try { ninos = Number(ninosReserva ?? 0); } catch {}
+        return { adultos, ninos };
     }
 
-    function tarifaFullDayPara(fecha, cabana) {
-        try {
-            const guardada = Number(tarifasNochesReserva?.[fecha] || 0);
-            if (guardada > 0) return guardada;
-        } catch {}
-        if (tarifaFullDayActual > 0) return tarifaFullDayActual;
-        return precioCabana(cabana);
+    function resolverTarifaFullDay(fecha) {
+        let guardada = 0;
+        try { guardada = Number(tarifasNochesReserva?.[fecha] || 0); } catch {}
+        return reglaTarifa.resolver({
+            ...ocupacionActual(),
+            tarifaManual: tarifaFullDayManual
+                ? (guardada || tarifaFullDayActual)
+                : null
+        });
     }
 
-    function fijarTarifaFullDay(fecha, cabana, forzarBase = false) {
-        if (!fecha) return 0;
-        const valor = forzarBase && !tarifaFullDayManual
-            ? precioCabana(cabana)
-            : tarifaFullDayPara(fecha, cabana);
-
-        if (valor > 0) {
-            tarifaFullDayActual = valor;
-            try {
-                tarifasNochesReserva = { [fecha]: valor };
-            } catch {}
+    function fijarTarifaFullDay(fecha) {
+        const resultado = resolverTarifaFullDay(fecha);
+        tarifaFullDayActual = Number(resultado.tarifa || 0);
+        if (fecha) {
+            try { tarifasNochesReserva = { [fecha]: tarifaFullDayActual }; } catch {}
         }
-        return valor;
+        return resultado;
     }
 
     function datosFormulario() {
@@ -121,7 +113,7 @@
         if (tipoEdicion === "fullday") {
             salida = llegada;
             tarifaFullDay = Number(
-                tarifas[llegada] || tarifaFullDayActual || precioCabana(cabana) || 0
+                tarifas[llegada] || tarifaFullDayActual || 0
             );
             tarifas = tarifaFullDay > 0 && llegada
                 ? { [llegada]: tarifaFullDay }
@@ -168,6 +160,20 @@
         return editor;
     }
 
+    function mostrarAyudaTarifa(resultado = resolverTarifaFullDay(llegadaActual())) {
+        const editor = prepararSelectorTipo();
+        if (!editor) return;
+        let ayuda = editor.querySelector("[data-haiku-fullday-tarifa-ayuda]");
+        if (!ayuda) {
+            ayuda = document.createElement("small");
+            ayuda.dataset.haikuFulldayTarifaAyuda = "";
+            editor.appendChild(ayuda);
+        }
+        ayuda.hidden = tipoEdicion !== "fullday";
+        ayuda.textContent = resultado.mensaje;
+        ayuda.classList.toggle("es-bloqueada", resultado.bloqueada);
+    }
+
     function ajustarVisualTipo() {
         const editor = prepararSelectorTipo();
         if (!editor || editor.hidden) return;
@@ -176,6 +182,8 @@
         const tituloFechas = document.querySelector("#reserva-paso-fechas .nueva-reserva-titulo strong");
         if (tituloFechas) tituloFechas.textContent = esFullDay ? "Selecciona la fecha" : "Selecciona las fechas";
 
+        const ayudaRegla = editor.querySelector("[data-haiku-fullday-tarifa-ayuda]");
+        if (ayudaRegla) ayudaRegla.hidden = !esFullDay;
         if (esFullDay) {
             const salida = document.getElementById("reserva-fecha-salida");
             if (salida && llegadaActual()) salida.textContent = "Mismo día";
@@ -200,6 +208,7 @@
             if (detalle && llegadaActual()) {
                 detalle.textContent = `${fechaBonita(llegadaActual())} · Full Day`;
             }
+            mostrarAyudaTarifa();
         }
     }
 
@@ -211,7 +220,7 @@
             const llegada = llegadaActual();
             if (llegada) {
                 try { fechaSalidaReserva = fechaMasUno(llegada); } catch {}
-                fijarTarifaFullDay(llegada, cabanaActual(), !desdeCarga);
+                fijarTarifaFullDay(llegada);
                 try {
                     if (typeof actualizarSeleccionCalendarioReserva === "function") {
                         actualizarSeleccionCalendarioReserva();
@@ -285,7 +294,11 @@
             throw new Error("Faltan datos obligatorios para guardar la edición.");
         }
         if (datos.tipoEstadia === "fullday" && Number(datos.tarifaFullDay || 0) <= 0) {
-            throw new Error("El Full Day necesita una tarifa válida.");
+            const resultado = reglaTarifa.resolver({
+                adultos: datos.adultos,
+                ninos: datos.ninos
+            });
+            throw new Error(resultado.mensaje);
         }
 
         const { data, error } = await cliente.rpc(
@@ -374,8 +387,7 @@
             try {
                 fechaLlegadaReserva = fecha;
                 fechaSalidaReserva = fechaMasUno(fecha);
-                tarifaFullDayManual = false;
-                fijarTarifaFullDay(fecha, cabanaActual(), true);
+                fijarTarifaFullDay(fecha);
                 if (typeof actualizarSeleccionCalendarioReserva === "function") {
                     actualizarSeleccionCalendarioReserva();
                 }
@@ -389,7 +401,7 @@
         const tarjeta = evento.target.closest?.(".reserva-cabana-opcion[data-cabana]");
         if (!tarjeta) return;
         setTimeout(() => {
-            fijarTarifaFullDay(llegadaActual(), Number(tarjeta.dataset.cabana || 0), true);
+            fijarTarifaFullDay(llegadaActual());
             ajustarVisualTipo();
         }, 0);
     });
@@ -402,7 +414,17 @@
             try {
                 tarifaFullDayActual = Number(tarifasNochesReserva?.[fecha] || tarifaFullDayActual || 0);
                 tarifaFullDayManual = tarifaFullDayActual > 0;
+                fijarTarifaFullDay(fecha);
             } catch {}
+            ajustarVisualTipo();
+        }, 0);
+    });
+
+    document.addEventListener("change", evento => {
+        if (modoActual() !== "editar" || tipoEdicion !== "fullday") return;
+        if (!evento.target.closest?.(".reserva-ocupacion-adultos, .reserva-ocupacion-ninos")) return;
+        setTimeout(() => {
+            fijarTarifaFullDay(llegadaActual());
             ajustarVisualTipo();
         }, 0);
     });
@@ -484,6 +506,15 @@
             margin-top: 7px;
             line-height: 1.35;
             color: #718077;
+        }
+        .haiku-tipo-estadia-editor [data-haiku-fullday-tarifa-ayuda] {
+            padding-top: 7px;
+            border-top: 1px solid #dbe3de;
+            color: #2f6b4b;
+            font-weight: 650;
+        }
+        .haiku-tipo-estadia-editor [data-haiku-fullday-tarifa-ayuda].es-bloqueada {
+            color: #9d3b27;
         }
     `;
     document.head.appendChild(estilo);

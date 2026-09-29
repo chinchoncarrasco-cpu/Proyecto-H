@@ -777,6 +777,7 @@
                 ? entrada.precio_total - candidato : null;
             const propuesta = {
                 reserva_id: reserva?.id || null,
+                estadia_id: estadiaContextual?.id || null,
                 cloudbeds_id: reserva?.cloudbeds_id || null,
                 reservation_id: entrada.id_cloudbeds || null,
                 reservation_number: entrada.reserva_cloudbeds || null,

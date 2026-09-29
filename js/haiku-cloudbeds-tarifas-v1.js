@@ -80,6 +80,155 @@
             : "CAPACIDAD_V31_NO_DISPONIBLE";
     }
 
+    function capacidadCorreccionFullDay(fila) {
+        const propuesta = fila?.propuesta || {};
+        const preparada = Boolean(
+            fila?.certeza === "ALTA_CERTEZA" &&
+            propuesta.es_full_day === true &&
+            propuesta.reserva_id &&
+            propuesta.estadia_id &&
+            Number.isSafeInteger(Number(propuesta.total_alojamiento_propuesto)) &&
+            Number(propuesta.total_alojamiento_propuesto) > 0 &&
+            Number(propuesta.total_alojamiento_propuesto) !== Number(propuesta.total_actual_haku)
+        );
+        return Object.freeze({
+            certeza_cloudbeds: fila?.certeza || null,
+            estado: preparada ? "PREPARADA_SIN_ESCRITURA" : "NO_PREPARADA",
+            preparada,
+            escritura_autorizada: false,
+            motivo: preparada
+                ? "La identidad y la tarifa candidata permiten preparar una revalidación futura; todavía no autorizan una escritura."
+                : "La fila no reúne identidad, diferencia y certeza suficientes para preparar la edición."
+        });
+    }
+
+    async function consultarPreparacionFullDay(fila, cliente) {
+        const capacidad = capacidadCorreccionFullDay(fila);
+        if (!capacidad.preparada) throw new Error(capacidad.motivo);
+        if (!cliente || typeof cliente.from !== "function") {
+            throw new Error("Cliente de lectura de Proyecto H no disponible.");
+        }
+
+        const propuesta = fila.propuesta;
+        const reservaId = String(propuesta.reserva_id);
+        const estadiaId = String(propuesta.estadia_id);
+        const [reservaRespuesta, estadiasRespuesta, huespedesRespuesta, saldoRespuesta] = await Promise.all([
+            cliente.from("reservas")
+                .select("id,titular_nombre,titular_huesped_id,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,observaciones,grupo_reserva_id")
+                .eq("id", reservaId)
+                .maybeSingle(),
+            cliente.from("reserva_estadias")
+                .select("id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,adultos,ninos,mascotas,estado_estadia,cabanas(numero)")
+                .eq("reserva_id", reservaId)
+                .not("estado_estadia", "in", "(cancelada,no_show)")
+                .order("creado_en", { ascending: false }),
+            cliente.from("reserva_huespedes")
+                .select("huesped_id,huespedes(id,nombre,apellido)")
+                .eq("reserva_id", reservaId),
+            cliente.from("vista_saldos_alojamiento_reserva")
+                .select("reserva_id,total_alojamiento,pagado_alojamiento,saldo_alojamiento")
+                .eq("reserva_id", reservaId)
+                .maybeSingle()
+        ]);
+
+        for (const respuesta of [reservaRespuesta, estadiasRespuesta, huespedesRespuesta, saldoRespuesta]) {
+            if (respuesta?.error) throw respuesta.error;
+        }
+
+        const reserva = reservaRespuesta?.data;
+        const saldo = saldoRespuesta?.data;
+        const estadias = Array.isArray(estadiasRespuesta?.data) ? estadiasRespuesta.data : [];
+        const estadia = estadias.find(item => String(item?.id || "") === estadiaId);
+        if (!reserva || String(reserva.id) !== reservaId) {
+            throw new Error("La reserva de Proyecto H ya no está disponible para revalidación.");
+        }
+        if (reserva.grupo_reserva_id || estadias.length !== 1 || !estadia) {
+            throw new Error("La reserva ya no tiene una única estadía activa coincidente. Revisa la ficha antes de continuar.");
+        }
+        if (estadia.tipo_estadia !== "fullday" || estadia.fecha_ingreso !== estadia.fecha_salida) {
+            throw new Error("La estadía verificada ya no conserva la estructura Full Day D → D.");
+        }
+        if (reserva.titular_numero_documento && reserva.titular_tipo_documento !== "rut") {
+            throw new Error("El documento actual del titular no puede preservarse con el contrato canónico vigente.");
+        }
+        const cabanaNumero = Number(estadia.cabanas?.numero || 0);
+        if (!cabanaNumero) throw new Error("La cabaña vigente no pudo revalidarse.");
+
+        const acompanantes = (Array.isArray(huespedesRespuesta?.data) ? huespedesRespuesta.data : [])
+            .filter(item => String(item?.huesped_id || "") !== String(reserva.titular_huesped_id || ""))
+            .map(item => Array.isArray(item.huespedes) ? item.huespedes[0] : item.huespedes)
+            .map(huesped => [huesped?.nombre, huesped?.apellido].filter(Boolean).join(" ").trim())
+            .filter(Boolean);
+        const totalNuevo = Number(propuesta.total_alojamiento_propuesto);
+        const totalActual = Number(saldo?.total_alojamiento);
+        const pagadoActual = Number(saldo?.pagado_alojamiento);
+        const saldoActual = Number(saldo?.saldo_alojamiento);
+        if (!Number.isSafeInteger(totalActual) || totalActual <= 0) {
+            throw new Error("El total vigente de alojamiento no pudo revalidarse.");
+        }
+        if (!Number.isSafeInteger(pagadoActual) || !Number.isSafeInteger(saldoActual)) {
+            throw new Error("Pagado y saldo vigentes no pudieron revalidarse.");
+        }
+        if (totalActual !== Number(propuesta.total_actual_haku)) {
+            throw new Error("La tarifa de Proyecto H cambió desde el análisis Cloudbeds. Vuelve a analizar antes de continuar.");
+        }
+        if (totalNuevo < pagadoActual) {
+            throw new Error("La tarifa candidata no puede quedar por debajo del alojamiento pagado.");
+        }
+
+        return Object.freeze({
+            solo_lectura: true,
+            ejecutar: false,
+            certeza_cloudbeds: capacidad.certeza_cloudbeds,
+            capacidad_edicion: {
+                estado: "REVALIDADA_PARA_CONFIRMACION_FUTURA",
+                escritura_autorizada: false,
+                rpc_canonica: "public.haiku_modificar_reserva_completa"
+            },
+            identidad_verificada: {
+                reserva_id: reservaId,
+                estadia_id: estadiaId
+            },
+            estado_financiero_verificado: {
+                total_alojamiento: totalActual,
+                pagado_alojamiento: pagadoActual,
+                saldo_alojamiento: saldoActual
+            },
+            argumentos_rpc_futura: {
+                p_reserva_id: reservaId,
+                p_titular_nombre: reserva.titular_nombre,
+                p_cabana_numero: cabanaNumero,
+                p_fecha_ingreso: estadia.fecha_ingreso,
+                p_fecha_salida: estadia.fecha_salida,
+                p_tipo_estadia: "fullday",
+                p_adultos: Number(estadia.adultos || 0),
+                p_ninos: Number(estadia.ninos || 0),
+                p_mascotas: Number(estadia.mascotas || 0),
+                p_correo_contacto: reserva.correo_contacto || null,
+                p_telefono_contacto: reserva.telefono_contacto || null,
+                p_rut: reserva.titular_tipo_documento === "rut"
+                    ? (reserva.titular_numero_documento || null)
+                    : null,
+                p_observaciones: reserva.observaciones || null,
+                p_tarifas: {},
+                p_tarifa_fullday: totalNuevo,
+                p_acompanantes: acompanantes
+            },
+            trazabilidad_requerida: {
+                reserva_id: reservaId,
+                estadia_id: estadiaId,
+                total_anterior: totalActual,
+                total_nuevo: totalNuevo,
+                fuente: "cloudbeds_pdf",
+                reservation_number: propuesta.reservation_number || null,
+                reservation_id: propuesta.reservation_id || null,
+                usuario_id: "auth.uid() al confirmar",
+                confirmado_en: "now() al confirmar",
+                evidencias: [...(fila.evidencias || [])]
+            }
+        });
+    }
+
     function prepararModelo(informe, capacidad) {
         const filas = Array.isArray(informe?.filas) ? informe.filas : [];
         const ids = new Set();
@@ -256,6 +405,10 @@
         const seleccion = item.seleccionable
             ? `<button type="button" class="haiku-cloudbeds-tarifas-simular-item" data-cloudbeds-seleccionar="${esc(item.id)}" aria-pressed="${item.seleccionado}">${item.seleccionado ? "Quitar de simulación" : "Simular actualización"}</button>`
             : "";
+        const preparacionFullDay = capacidadCorreccionFullDay(fila);
+        const accionFullDayFutura = preparacionFullDay.preparada
+            ? `<button type="button" class="haiku-cloudbeds-tarifas-fd3" disabled title="Preparada para una etapa futura; no ejecuta escrituras">Actualizar tarifa Full Day</button>`
+            : "";
         return `<article class="haiku-cloudbeds-tarifas-tarjeta" data-cloudbeds-item="${esc(item.id)}">
             <header>
                 <div><strong>${esc(nombre)} · ${esc(cabana)}</strong><span>${esc(fechaCorta(propuesta.check_in))} → ${esc(fechaCorta(propuesta.check_out))}</span></div>
@@ -278,6 +431,7 @@
             <footer>
                 <button type="button" data-cloudbeds-ver-reserva="${esc(item.id)}" ${propuesta.reserva_id ? "" : "disabled"}>Ver reserva</button>
                 ${seleccion}
+                ${accionFullDayFutura}
                 <button type="button" class="haiku-cloudbeds-tarifas-writer" disabled>Escritura aún no habilitada</button>
             </footer>
             <details class="haiku-cloudbeds-tarifas-tecnico"><summary>Detalles técnicos</summary><pre>${esc(JSON.stringify({
@@ -410,6 +564,8 @@
         consultarCapacidad,
         prepararModelo,
         preparar,
+        capacidadCorreccionFullDay,
+        consultarPreparacionFullDay,
         seleccionar,
         seleccionarTodo,
         construirPayload,
