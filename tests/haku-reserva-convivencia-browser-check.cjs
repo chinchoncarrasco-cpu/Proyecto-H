@@ -686,6 +686,20 @@ async function screenshot(client, name) {
         await waitFor(page, "document.getElementById('haiku-asistente-mensajes').scrollTop <= 1", "Cloudbeds vuelve al inicio de Haku");
         assert.equal(await evaluate(page, "document.getElementById('haiku-asistente-texto').value"), cloudbedsScroll.draft);
 
+        // W1: payload y confirmación reales preparados, pero sin writer ejecutable.
+        await evaluate(page, "document.querySelector('[data-cloudbeds-seleccionar]').scrollIntoView({ block: 'center' })");
+        await pointerClick(page, "[data-cloudbeds-seleccionar]");
+        await evaluate(page, "document.querySelector('[data-cloudbeds-abrir-confirmacion]').scrollIntoView({ block: 'center' })");
+        await pointerClick(page, "[data-cloudbeds-abrir-confirmacion]");
+        assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').hidden"), false);
+        assert.match(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').textContent"),
+            /Actualizar tarifa[\s\S]*Proyecto H actual[\s\S]*Cloudbeds[\s\S]*Pagado actual[\s\S]*Saldo esperado/);
+        assert.equal(await evaluate(page, "document.querySelector('[data-cloudbeds-confirmar]').disabled"), true);
+        assert.equal(await evaluate(page, "window.CLOUDBEDS_TARIFAS_WRITER_HABILITADO"), false);
+        await evaluate(page, "document.querySelector('[data-cloudbeds-confirmacion]').scrollIntoView({ block: 'center' })");
+        await screenshot(page, "cloudbeds-w1-confirmacion-desktop-1500x900.png");
+        await pointerClick(page, "[data-cloudbeds-cancelar]");
+
         await viewport(page, 390, 844);
         assert.equal(await evaluate(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility"), "hidden");
         assert.equal(await evaluate(page, "document.querySelector('[data-haiku-volver-haku]').getClientRects().length > 0"), true);

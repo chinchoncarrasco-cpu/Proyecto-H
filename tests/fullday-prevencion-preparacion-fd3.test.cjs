@@ -211,7 +211,7 @@ test('la preparación relee Proyecto H y conserva el snapshot completo para el R
   assert.equal(payload.argumentos_rpc_futura.p_fecha_salida, '2026-09-28');
   assert.equal(payload.argumentos_rpc_futura.p_correo_contacto, 'amanda@example.test');
   assert.equal(payload.argumentos_rpc_futura.p_rut, '12345678K');
-  assert.deepEqual(payload.argumentos_rpc_futura.p_acompanantes, ['Persona Ficticia']);
+  assert.deepEqual(payload.argumentos_rpc_futura.p_acompanantes, ['Persona']);
   assert.deepEqual(cliente.consultas.map(item => item.tabla),
     ['reservas', 'reserva_estadias', 'reserva_huespedes', 'vista_saldos_alojamiento_reserva']);
 });

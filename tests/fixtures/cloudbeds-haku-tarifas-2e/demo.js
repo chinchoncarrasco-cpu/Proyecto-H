@@ -10,7 +10,8 @@
   });
   const reserva = (id, numero, nombre, extra = {}) => ({
     id, cloudbeds_id: numero, titular_nombre: nombre, estado_reserva: 'confirmada', grupo_reserva_id: null,
-    estadias: [{ fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21', cabanas: { numero: 5 } }], ...extra
+    estadias: [{ id: `e-${id}`, fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21',
+      tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0, cabanas: { numero: 5 } }], ...extra
   });
   const fullDay = (numero, nombre, habitacion, ingreso, extra = {}) => {
     const siguiente = new Date(`${ingreso}T00:00:00Z`);

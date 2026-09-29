@@ -224,7 +224,10 @@ test('writer permanece false y el vínculo sugerido nunca entra en payload', () 
   tarifas.seleccionarTodo(modelo, true);
   assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
   assert.deepEqual(tarifas.construirPayload(modelo), [{
-    reserva_id: 'r-fd-1', total_actual: 160000, total_objetivo: 120000
+    reserva_id: 'r-fd-1', estadia_id: 'e-r-fd-1', tipo_estadia: 'fullday',
+    total_actual_esperado: 160000, total_objetivo: 120000,
+    cloudbeds_reservation_number: 'CB-FD-1', cloudbeds_reservation_id: 'RID-FD-1',
+    certeza: 'ALTA_CERTEZA', evidencia: fila.evidencias
   }]);
   assert.equal(tarifas.confirmarSimulacion(modelo).escrituras, 0);
   assert.doesNotMatch(read('js/haiku-cloudbeds-tarifas-v1.js'), /p_cloudbeds_id|\.update\(|\.insert\(/);

@@ -34,7 +34,8 @@ function reserva(id, numero, nombre, extra = {}) {
     titular_nombre: nombre,
     estado_reserva: 'confirmada',
     grupo_reserva_id: null,
-    estadias: [{ fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21', cabanas: { numero: 5 } }],
+    estadias: [{ id: `e-${id}`, fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21',
+      tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0, cabanas: { numero: 5 } }],
     ...extra
   };
 }
@@ -91,7 +92,7 @@ test('PDF compacto realista se parsea y termina en el resumen operativo de Haku'
   assert.equal(informe.filas[0].certeza, 'ALTA_CERTEZA');
   assert.match(html, /Héctor Ficticio · CAB 5/);
   assert.match(html, /Propuestas seguras/);
-  assert.match(html, /Simular actualización/);
+  assert.match(html, /Preparar actualización/);
 });
 
 test('PDF realista produce las cinco categorías del resumen Haku', () => {
@@ -179,11 +180,16 @@ test('flag false impide absolutamente cualquier RPC de escritura', async () => {
   assert.doesNotMatch(read('js/haiku-cloudbeds-tarifas-v1.js'), /haiku_cambiar_totales_lote_v1/);
 });
 
-test('payload futuro usa sólo reserva, total actual y total objetivo', () => {
+test('payload futuro usa el contrato Cloudbeds W1 completo', () => {
   const modelo = tarifas.prepararModelo(informeRealista(), capacidadV31);
   const hector = modelo.items.find(item => item.fila.propuesta.reserva_id === 'r-a');
   tarifas.seleccionar(modelo, hector.id, true);
-  assert.deepEqual(tarifas.construirPayload(modelo), [{ reserva_id: 'r-a', total_actual: 160000, total_objetivo: 144000 }]);
+  assert.deepEqual(tarifas.construirPayload(modelo), [{
+    reserva_id: 'r-a', estadia_id: 'e-r-a', tipo_estadia: 'alojamiento',
+    total_actual_esperado: 160000, total_objetivo: 144000,
+    cloudbeds_reservation_number: 'CB-A', cloudbeds_reservation_id: 'RID-CB-A',
+    certeza: 'ALTA_CERTEZA', evidencia: hector.fila.evidencias
+  }]);
 });
 
 test('selección individual y seleccionar todo operan sólo sobre propuestas seguras', () => {
@@ -236,7 +242,7 @@ test('contratos visuales cubren escritorio y móvil sin drawer adicional', () =>
   assert.match(fixtureJs, /URLSearchParams[\s\S]*inspector[\s\S]*HAIKU_PANELES_V1\.abrirReserva\('r-hector'\)/);
 });
 
-test('panel de confirmación futura siempre termina en simulación local', () => {
+test('panel de confirmación futura muestra el detalle y mantiene el writer bloqueado', () => {
   const modelo = tarifas.prepararModelo(informeRealista(), capacidadV31);
   tarifas.seleccionarTodo(modelo, true);
   const resultado = tarifas.confirmarSimulacion(modelo);
@@ -244,7 +250,8 @@ test('panel de confirmación futura siempre termina en simulación local', () =>
   assert.equal(resultado.escrituras, 0);
   assert.match(resultado.mensaje, /No se escribió ningún dato/);
   const html = tarifas.renderizar(modelo);
-  assert.match(html, /Los pagos existentes no se eliminarán/);
-  assert.match(html, /Proyecto H recalculará saldos mediante TOTAL v31/);
-  assert.doesNotMatch(html, />Confirmar actualización</);
+  assert.match(html, /Los pagos existentes no serán modificados/);
+  assert.match(html, /Proyecto H actual/);
+  assert.match(html, /Saldo esperado/);
+  assert.match(html, /data-cloudbeds-confirmar disabled>Confirmar actualización/);
 });

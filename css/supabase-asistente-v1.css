@@ -826,7 +826,13 @@
 .haiku-cloudbeds-tarifas-confirmacion[hidden] { display: none !important; }
 .haiku-cloudbeds-tarifas-confirmacion > strong { font-size: .7rem; }
 .haiku-cloudbeds-tarifas-confirmacion p { margin: 6px 0; color: #506158; font-size: .62rem; line-height: 1.4; }
-.haiku-cloudbeds-tarifas-confirmacion > div { display: flex; justify-content: flex-end; gap: 6px; }
+.haiku-cloudbeds-tarifas-confirmacion-detalle { display: grid; gap: 7px; margin-top: 8px; }
+.haiku-cloudbeds-tarifas-confirmacion-item { padding: 8px; border: 1px solid #d6e3da; background: #fff; }
+.haiku-cloudbeds-tarifas-confirmacion-item > strong { display: block; margin-bottom: 6px; font-size: .66rem; }
+.haiku-cloudbeds-tarifas-confirmacion-item .haiku-cloudbeds-tarifas-preview-alerta { padding: 6px 7px; border-left: 3px solid #b77a16; background: #fff7e8; color: #6d4b14; }
+.haiku-cloudbeds-tarifas-confirmacion-item dl { display: grid; gap: 3px; margin: 0; }
+.haiku-cloudbeds-tarifas-confirmacion-item dl > div { display: flex; justify-content: space-between; gap: 10px; }
+.haiku-cloudbeds-tarifas-confirmacion-acciones { display: flex; justify-content: flex-end; gap: 6px; }
 .haiku-cloudbeds-tarifas-estado { margin: 0; color: #74571e; font-size: .61rem; line-height: 1.4; }
 
 @media (max-width: 520px) {

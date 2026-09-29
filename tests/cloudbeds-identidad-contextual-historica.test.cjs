@@ -34,7 +34,8 @@ function reserva(id = 'r-historica', extra = {}) {
     titular_nombre: 'José Pérez',
     estado_reserva: 'confirmada',
     grupo_reserva_id: null,
-    estadias: [{ fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21', cabanas: { numero: 5 } }],
+    estadias: [{ id: `e-${id}`, fecha_ingreso: '2026-09-20', fecha_salida: '2026-09-21',
+      tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0, cabanas: { numero: 5 } }],
     ...extra
   };
 }
@@ -211,7 +212,10 @@ test('writer 2E permanece apagado y el vínculo sugerido no entra en el payload'
   tarifas.seleccionarTodo(modelo, true);
   assert.equal(tarifas.CLOUDBEDS_TARIFAS_WRITER_HABILITADO, false);
   assert.deepEqual(tarifas.construirPayload(modelo), [{
-    reserva_id: 'r-historica', total_actual: 160000, total_objetivo: 144000
+    reserva_id: 'r-historica', estadia_id: 'e-r-historica', tipo_estadia: 'alojamiento',
+    total_actual_esperado: 160000, total_objetivo: 144000,
+    cloudbeds_reservation_number: 'CB-HIST-1', cloudbeds_reservation_id: 'RID-HIST-1',
+    certeza: 'ALTA_CERTEZA', evidencia: fila.evidencias
   }]);
   assert.equal(tarifas.confirmarSimulacion(modelo).escrituras, 0);
   assert.doesNotMatch(read('js/haiku-cloudbeds-tarifas-v1.js'), /haiku_cambiar_totales_lote_v1/);

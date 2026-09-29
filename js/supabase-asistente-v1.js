@@ -1559,7 +1559,7 @@
                 if (tarifas && typeof tarifas.preparar === "function" && typeof tarifas.montar === "function") {
                     estadoPDF.textContent = "Preparando Cloudbeds · Tarifas y comprobando TOTAL v31…";
                     const modelo = await tarifas.preparar(informe, cliente);
-                    tarifas.montar(estadoPDF, modelo);
+                    tarifas.montar(estadoPDF, modelo, cliente);
                 } else {
                     estadoPDF.innerHTML = lector.renderizar(informe);
                 }
