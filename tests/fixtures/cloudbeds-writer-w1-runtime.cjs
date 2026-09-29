@@ -27,6 +27,7 @@ module.exports = async () => {
     await db.exec(read('supabase/migrations/20260910235134_haiku_total_financiero_v31_guard_servicios.sql'));
     await db.exec(read('supabase/migrations/20260902051904_haiku_modificacion_reserva_completa_v1.sql'));
     await db.exec(read('supabase/migrations/20260929043150_cloudbeds_writer_audit_w1.sql'));
+    await db.exec(read('supabase/migrations/20260929170344_cloudbeds_writer_fullday_v31_w12.sql'));
     return db;
   } catch (error) {
     await db.close();

@@ -270,7 +270,8 @@
             informe,
             conteos,
             items,
-            ultima_simulacion: null
+            ultima_simulacion: null,
+            diagnostico_writer: null
         };
     }
 
@@ -289,6 +290,7 @@
         item.seleccionado = Boolean(seleccionado);
         item.preview = null;
         modelo.ultima_simulacion = null;
+        modelo.diagnostico_writer = null;
         return true;
     }
 
@@ -300,6 +302,7 @@
             }
         });
         modelo.ultima_simulacion = null;
+        modelo.diagnostico_writer = null;
         return modelo.items.filter(item => item.seleccionado).length;
     }
 
@@ -414,7 +417,12 @@
                     : "Preview backend vigente. Revisa los valores antes de confirmar."
             });
         } catch (error) {
-            return Object.freeze({ ok: false, previews: [], ...mapearErrorWriter(error) });
+            return Object.freeze({
+                ok: false,
+                previews: [],
+                ...mapearErrorWriter(error),
+                diagnostico: crearDiagnosticoWriter("preview", error)
+            });
         }
     }
 
@@ -433,6 +441,33 @@
         return codigo
             ? { codigo, mensaje: MENSAJES_WRITER[codigo] }
             : { codigo: "CONFLICTO_FINANCIERO", mensaje: MENSAJES_WRITER.CONFLICTO_FINANCIERO };
+    }
+
+    function sanitizarDetalleWriter(valor) {
+        if (valor === undefined || valor === null) return null;
+        const texto = String(valor).trim();
+        if (!texto) return null;
+        return texto
+            .replace(/(["']?(?:authorization|api[-_ ]?key|apikey|password|passwd|secret|access[-_ ]?token|refresh[-_ ]?token)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|Bearer\s+[A-Za-z0-9._~+\/-]+=*|[^,;\s}\]]+)/gi, "$1[REDACTADO]")
+            .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTADO]")
+            .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, "[REDACTADO]")
+            .replace(/\b(?:sbp_|sk_live_|sk_test_|service_role_)[A-Za-z0-9._-]{8,}\b/gi, "[REDACTADO]")
+            .slice(0, 1200);
+    }
+
+    function crearDiagnosticoWriter(etapa, error) {
+        const mapeado = mapearErrorWriter(error);
+        const detalle = sanitizarDetalleWriter(error?.details ?? error?.detail ?? error?.hint);
+        return Object.freeze({
+            etapa: etapa === "preview" ? "preview" : "writer",
+            codigo: mapeado.codigo,
+            mensaje: mapeado.mensaje,
+            ...(detalle ? { detalle_backend: detalle } : {})
+        });
+    }
+
+    function contenidoDiagnostico(modelo) {
+        return modelo.diagnostico_writer || construirPayload(modelo);
     }
 
     async function reconsultarDespuesDeEscritura(modelo, cliente) {
@@ -487,16 +522,25 @@
         try {
             respuesta = await cliente.rpc(RPC_WRITER, { p_operaciones: payload });
         } catch (error) {
-            return Object.freeze({ ok: false, escrituras: 0, ...mapearErrorWriter(error) });
+            const diagnostico = crearDiagnosticoWriter("writer", error);
+            return Object.freeze({ ok: false, escrituras: 0, ...mapearErrorWriter(error), diagnostico });
         }
         const { data, error } = respuesta || {};
-        if (error) return Object.freeze({ ok: false, escrituras: 0, ...mapearErrorWriter(error) });
+        if (error) {
+            const diagnostico = crearDiagnosticoWriter("writer", error);
+            return Object.freeze({ ok: false, escrituras: 0, ...mapearErrorWriter(error), diagnostico });
+        }
         if (data?.ok !== true || !Array.isArray(data.resultados) || data.resultados.length !== payload.length) {
+            const errorContrato = {
+                message: "CONFLICTO_FINANCIERO",
+                details: "La respuesta del writer no coincide con el lote confirmado."
+            };
             return Object.freeze({
                 ok: false,
                 codigo: "CONFLICTO_FINANCIERO",
                 escrituras: 0,
-                mensaje: MENSAJES_WRITER.CONFLICTO_FINANCIERO
+                mensaje: MENSAJES_WRITER.CONFLICTO_FINANCIERO,
+                diagnostico: crearDiagnosticoWriter("writer", errorContrato)
             });
         }
         try {
@@ -753,12 +797,16 @@
                 <div class="haiku-cloudbeds-tarifas-confirmacion-acciones"><button type="button" data-cloudbeds-cancelar>Cancelar</button><button type="button" data-cloudbeds-confirmar ${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "" : "disabled"}>Confirmar actualización</button></div>
             </section>
             <p class="haiku-cloudbeds-tarifas-estado" data-cloudbeds-estado role="status">Escritura aún no habilitada. Las acciones sólo preparan una simulación local.</p>
-            <details class="haiku-cloudbeds-tarifas-payload"><summary>Payload futuro · diagnóstico</summary><pre data-cloudbeds-payload>${esc(JSON.stringify(construirPayload(modelo), null, 2))}</pre></details>
+            <details class="haiku-cloudbeds-tarifas-payload"><summary>Payload W1 · diagnóstico</summary><pre data-cloudbeds-payload>${esc(JSON.stringify(contenidoDiagnostico(modelo), null, 2))}</pre></details>
         </section>`;
     }
 
+    function actualizarDiagnosticoDOM(contenedor, modelo) {
+        const pre = contenedor.querySelector("[data-cloudbeds-payload]");
+        if (pre) pre.textContent = JSON.stringify(contenidoDiagnostico(modelo), null, 2);
+    }
+
     function actualizarDOM(contenedor, modelo) {
-        const payload = construirPayload(modelo);
         const cantidad = cantidadSeleccionada(modelo);
         contenedor.querySelectorAll("[data-cloudbeds-seleccionar]").forEach(boton => {
             const item = buscarItem(modelo, boton.dataset.cloudbedsSeleccionar);
@@ -772,8 +820,7 @@
             abrir.disabled = cantidad === 0;
             abrir.textContent = `Revisar ${cantidad || ""} ${cantidad === 1 ? "actualización" : "actualizaciones"}`;
         }
-        const pre = contenedor.querySelector("[data-cloudbeds-payload]");
-        if (pre) pre.textContent = JSON.stringify(payload, null, 2);
+        actualizarDiagnosticoDOM(contenedor, modelo);
         const confirmacion = contenedor.querySelector("[data-cloudbeds-confirmacion]");
         if (confirmacion && !modelo.ultima_simulacion) confirmacion.hidden = true;
         const detalle = contenedor.querySelector("[data-cloudbeds-confirmacion-detalle]");
@@ -788,6 +835,14 @@
         if (CLOUDBEDS_TARIFAS_WRITER_HABILITADO) {
             estado.textContent = "Reconsultando Proyecto H antes de confirmar…";
             const resultadoPreview = await previsualizarSeleccion(modelo, cliente);
+            modelo.diagnostico_writer = resultadoPreview.ok
+                ? null
+                : (resultadoPreview.diagnostico || Object.freeze({
+                    etapa: "preview",
+                    codigo: resultadoPreview.codigo,
+                    mensaje: resultadoPreview.mensaje
+                }));
+            actualizarDiagnosticoDOM(contenedor, modelo);
             confirmacion.hidden = false;
             confirmacion.querySelector("[data-cloudbeds-confirmacion-detalle]").innerHTML =
                 renderConfirmacionDetalle(modelo);
@@ -859,6 +914,12 @@
                 try {
                     const resultado = await ejecutarActualizacion(modelo, cliente);
                     if (!resultado.ok) {
+                        modelo.diagnostico_writer = resultado.diagnostico || Object.freeze({
+                            etapa: "writer",
+                            codigo: resultado.codigo,
+                            mensaje: resultado.mensaje
+                        });
+                        actualizarDiagnosticoDOM(contenedor, modelo);
                         estado.textContent = resultado.mensaje;
                         return;
                     }
@@ -869,7 +930,10 @@
                         estado.textContent = resultado.mensaje;
                     }
                 } catch (error) {
-                    estado.textContent = mapearErrorWriter(error).mensaje;
+                    const mapeado = mapearErrorWriter(error);
+                    modelo.diagnostico_writer = crearDiagnosticoWriter("writer", error);
+                    actualizarDiagnosticoDOM(contenedor, modelo);
+                    estado.textContent = mapeado.mensaje;
                 } finally {
                     ejecutando = false;
                     controles.forEach(([elemento, estabaDeshabilitado]) => {
@@ -903,6 +967,8 @@
         construirPayload,
         confirmarSimulacion,
         mapearErrorWriter,
+        sanitizarDetalleWriter,
+        crearDiagnosticoWriter,
         ejecutarActualizacion,
         reconsultarDespuesDeEscritura,
         abrirReserva,
