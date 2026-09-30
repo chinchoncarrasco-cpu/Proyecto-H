@@ -451,16 +451,23 @@
         }
     }
 
-    function estadoReserva(ficha, estadia) {
-        if (manual) return manual.etiqueta(manual.actual(ficha, estadia));
+    function codigoEstadoReserva(ficha, estadia) {
+        if (manual) return manual.actual(ficha, estadia);
         const reserva = String(ficha.reserva?.estado_reserva || "").toLowerCase();
         const actual = String(estadia.estado_estadia || "").toLowerCase();
-        if (reserva === "cancelada") return "Cancelada";
-        if (reserva === "no_show") return "No-Show";
-        if (actual === "checked_out" || estadia.checkout_realizado_en) return "Checked Out";
-        if (actual === "hospedada" || estadia.checkin_realizado_en) return "Hospedado";
-        if (actual === "confirmada") return "Confirmada";
-        return "Confirmación pendiente";
+        if (reserva === "cancelada") return "cancelada";
+        if (reserva === "no_show") return "no_show";
+        if (actual === "checked_out" || estadia.checkout_realizado_en) return "checked_out";
+        if (actual === "hospedada" || estadia.checkin_realizado_en) return "hospedada";
+        if (actual === "confirmada") return "confirmada";
+        return "pendiente";
+    }
+
+    function estadoReserva(ficha, estadia) {
+        const actual = codigoEstadoReserva(ficha, estadia);
+        if (manual) return manual.etiqueta(actual);
+        return ({ cancelada: "Cancelada", no_show: "No-Show", checked_out: "Checked Out",
+            hospedada: "Hospedado", confirmada: "Confirmada", pendiente: "Confirmación pendiente" })[actual];
     }
 
     function pintar(ficha, estadia, identidad) {
@@ -473,6 +480,7 @@
         const ocupacion = Number(estadia.adultos || 0) + Number(estadia.ninos || 0);
         const nombre = String(reserva.titular_nombre || "").trim() || "Sin titular";
         const codigo = reserva.codigo_haiku || reserva.cloudbeds_id || reserva.id;
+        const codigoEstadoActual = codigoEstadoReserva(ficha, estadia);
         const estadoActual = estadoReserva(ficha, estadia);
         const fullday = estadia.tipo_estadia === "fullday";
         const inicio = new Date(`${String(estadia.fecha_ingreso).slice(0, 10)}T12:00:00`);
@@ -487,7 +495,9 @@
         colocar("[data-reserva-kicker]", `CABAÑA ${identidad.numeroCabana} · ${codigo}`);
         colocar("[data-reserva-codigo]", codigo);
         colocar("[data-reserva-estado-operativo]", estadoActual);
-        estado.drawer.querySelector("[data-reserva-estado-operativo]").disabled = !manual ||
+        const botonEstado = estado.drawer.querySelector("[data-reserva-estado-operativo]");
+        botonEstado.dataset.reservaEstado = codigoEstadoActual;
+        botonEstado.disabled = !manual ||
             (!["reservas.editar", "reservas.cancelar"].some(p => window.haikuTienePermiso?.(p) === true));
         colocar("[data-reserva-ingreso]", fechaVisible(estadia.fecha_ingreso));
         colocar("[data-reserva-salida]", fechaVisible(estadia.fecha_salida));

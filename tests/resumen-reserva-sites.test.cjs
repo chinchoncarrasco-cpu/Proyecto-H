@@ -140,6 +140,26 @@ test("Ver reserva usa UUID y estadía exactos, muestra lectura real y cálculo c
     assert.equal(caso.drawer.get("[data-reserva-saldo]").textContent, "$80.000");
     assert.equal(caso.drawer.get("[data-reserva-servicios-pendientes]").textContent, "$30.000");
     assert.equal(caso.drawer.get("[data-reserva-comentarios]").textContent, "Llegada confirmada");
+    assert.equal(caso.drawer.get("[data-reserva-estado-operativo]").dataset.reservaEstado, "hospedada");
+});
+
+test("la ficha asigna el tono visual de cada estado sin cambiar el flujo del selector", async () => {
+    for (const [codigo, reserva, estadia] of [
+        ["pendiente", "pendiente", "pendiente"],
+        ["confirmada", "confirmada", "confirmada"],
+        ["hospedada", "confirmada", "hospedada"],
+        ["checked_out", "confirmada", "checked_out"],
+        ["cancelada", "cancelada", "confirmada"],
+        ["no_show", "no_show", "confirmada"]
+    ]) {
+        const datos = fixture();
+        datos.reserva.estado_reserva = reserva;
+        datos.estadias[0].estado_estadia = estadia;
+        const caso = montar({ ficha: datos });
+        assert.equal(await caso.api.abrirDesdeBoton(caso.boton), true, codigo);
+        assert.equal(caso.drawer.get("[data-reserva-estado-operativo]").dataset.reservaEstado,
+            codigo, codigo);
+    }
 });
 
 test("Resumen y Calendario muestran la misma reserva simple en el drawer compartido", async () => {

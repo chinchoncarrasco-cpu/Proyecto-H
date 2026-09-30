@@ -16,7 +16,7 @@ function api({ document, sesion = true, permisos = [], datos = {}, checkoutDispo
     const cierre = fuente.lastIndexOf("})();");
     assert.ok(cierre > 0);
     const codigo = `${fuente.slice(0, cierre)}\n` +
-        "globalThis.__api={alternarDetalle,reservaExacta,habilitarAcciones,resumenFila,titularVisible,listaLectura,servicioParaLectura,pintarFlujo,cargarHistorial,invalidarHistorial,iniciar};\n})();";
+        "globalThis.__api={alternarDetalle,reservaExacta,habilitarAcciones,resumenFila,titularVisible,listaLectura,servicioParaLectura,pintarFlujo,cargarHistorial,invalidarHistorial,iniciar,estadoReservaDeDatos,indiceEstadosReserva,identidadDelDia,estadoReservaDelDia,aplicarEstadoReservaDia,operacionLocal};\n})();";
     const documento = document || { readyState: "loading", addEventListener() {} };
     const contexto = vm.createContext({
         document: documento,
@@ -441,8 +441,90 @@ test("Ayer, Hoy y Mañana se repintan con datos de sus fechas", () => {
     datos["2026-09-24"].cabanas["1"].titular = "Tomás";
     controles['[data-campo="estado"]'].value = "sale-libre";
     modulo.pintarFlujo(fila, "2026-09-23");
-    assert.equal(valor.actual.textContent, "Sale · Valentina");
+    assert.equal(valor.actual.textContent, "Libre");
     assert.equal(valor.siguiente.textContent, "Ingresa · Tomás");
+});
+
+test("recambio: AYER referencia la salida y HOY/MAÑANA sólo la reserva entrante", () => {
+    const datos = {
+        "2026-09-22": { cabanas: { "1": { estado: "continua", reservaId: "r-salida",
+            estadiaId: "e-salida", titular: "Andrés", estadoReserva: "confirmada",
+            estadoEstadia: "checked_out" } } },
+        "2026-09-23": { cabanas: { "1": { estado: "sale-ingresa", reservaId: "r-ingreso",
+            estadiaId: "e-ingreso", ingresoReservaId: "r-ingreso", ingresoEstadiaId: "e-ingreso",
+            salidaReservaId: "r-salida", salidaEstadiaId: "e-salida",
+            titular: "Sofía", estadoReserva: "pendiente", estadoEstadia: "pendiente" } } },
+        "2026-09-24": { cabanas: { "1": { estado: "continua", reservaId: "r-ingreso",
+            estadiaId: "e-ingreso", titular: "Sofía", estadoReserva: "pendiente",
+            estadoEstadia: "pendiente" } } }
+    };
+    const modulo = api({ datos, sesion: false });
+    const valor = { anterior: { textContent: "" }, actual: { textContent: "" },
+        siguiente: { textContent: "" } };
+    const dia = { anterior: { dataset: {} }, actual: { dataset: {} }, siguiente: { dataset: {} } };
+    const { fila } = filaFalsa(1, "sale-ingresa", {
+        ".titular-cabana": { textContent: "Sofía" },
+        ".sites-resumen-dia--anterior": dia.anterior,
+        ".sites-resumen-dia--actual": dia.actual,
+        ".sites-resumen-dia--siguiente": dia.siguiente,
+        ".sites-resumen-dia--anterior .sites-resumen-dia-valor": valor.anterior,
+        ".sites-resumen-dia--actual .sites-resumen-dia-valor": valor.actual,
+        ".sites-resumen-dia--siguiente .sites-resumen-dia-valor": valor.siguiente
+    });
+    modulo.pintarFlujo(fila, "2026-09-23");
+    assert.equal(valor.anterior.textContent, "Ocupada · Andrés");
+    assert.equal(valor.actual.textContent, "Ingresa · Sofía");
+    assert.equal(valor.siguiente.textContent, "Ocupada · Sofía");
+    assert.equal(dia.anterior.dataset.reservaEstado, "checked_out");
+    assert.equal(dia.actual.dataset.reservaEstado, "pendiente");
+    assert.equal(dia.siguiente.dataset.reservaEstado, "pendiente");
+    assert.equal("reservaEstadoSecundario" in dia.actual.dataset, false);
+    assert.doesNotMatch(valor.actual.textContent, /Andrés|Sale|salida/i);
+    assert.deepEqual({ ...modulo.identidadDelDia(modulo.operacionLocal(datos["2026-09-23"].cabanas["1"])) },
+        { estadiaId: "e-ingreso", reservaId: "r-ingreso" });
+});
+
+test("una reserva hospedada que continúa conserva una identidad y un color por tramo", () => {
+    const cabana = { estado: "continua", reservaId: "r-continua", estadiaId: "e-continua",
+        titular: "Camila", estadoReserva: "confirmada", estadoEstadia: "hospedada" };
+    const datos = {
+        "2026-09-22": { cabanas: { "1": { ...cabana } } },
+        "2026-09-23": { cabanas: { "1": { ...cabana } } },
+        "2026-09-24": { cabanas: { "1": { ...cabana } } }
+    };
+    const modulo = api({ datos, sesion: false });
+    const valor = { anterior: { textContent: "" }, actual: { textContent: "" },
+        siguiente: { textContent: "" } };
+    const dia = { anterior: { dataset: {} }, actual: { dataset: {} }, siguiente: { dataset: {} } };
+    const { fila } = filaFalsa(1, "continua", {
+        ".titular-cabana": { textContent: "Camila" },
+        ".sites-resumen-dia--anterior": dia.anterior,
+        ".sites-resumen-dia--actual": dia.actual,
+        ".sites-resumen-dia--siguiente": dia.siguiente,
+        ".sites-resumen-dia--anterior .sites-resumen-dia-valor": valor.anterior,
+        ".sites-resumen-dia--actual .sites-resumen-dia-valor": valor.actual,
+        ".sites-resumen-dia--siguiente .sites-resumen-dia-valor": valor.siguiente
+    });
+    modulo.pintarFlujo(fila, "2026-09-23");
+    assert.deepEqual(Object.values(valor).map(item => item.textContent), [
+        "Ocupada · Camila", "Ocupada · Camila", "Ocupada · Camila"
+    ]);
+    assert.deepEqual(Object.values(dia).map(item => ({ ...item.dataset })), [
+        { reservaEstado: "hospedada" }, { reservaEstado: "hospedada" },
+        { reservaEstado: "hospedada" }
+    ]);
+});
+
+test("libre y bloqueo sin reserva no reciben falsamente un estado visual", () => {
+    const modulo = api({ datos: {}, sesion: false });
+    const indice = modulo.indiceEstadosReserva();
+    assert.equal(modulo.estadoReservaDelDia({ estado_operativo: "libre-libre" }, indice), "");
+    assert.equal(modulo.estadoReservaDelDia({ estado_operativo: "sale-libre",
+        salida_reserva_id: "r-anterior", salida_estadia_id: "e-anterior" }, indice), "");
+    assert.equal(modulo.estadoReservaDelDia({ estado_operativo: "bloqueada" }, indice), "");
+    const elemento = { dataset: { reservaEstado: "confirmada" } };
+    modulo.aplicarEstadoReservaDia(elemento, "");
+    assert.deepEqual({ ...elemento.dataset }, {});
 });
 
 test("el historial reintenta fallos y descarta la caché al actualizar datos", async () => {

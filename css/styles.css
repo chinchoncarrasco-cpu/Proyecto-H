@@ -32,6 +32,26 @@
 
     --gris-suave: #edf0ee;
 
+    /* Paleta histórica de estados de reserva. */
+    --haiku-reserva-pendiente-fondo: #8ec2df;
+    --haiku-reserva-pendiente-texto: #ffffff;
+    --haiku-reserva-pendiente-acento: #8ec2df;
+    --haiku-reserva-confirmada-fondo: #2349b8;
+    --haiku-reserva-confirmada-texto: #ffffff;
+    --haiku-reserva-confirmada-acento: #2349b8;
+    --haiku-reserva-hospedada-fondo: #dff0e4;
+    --haiku-reserva-hospedada-texto: #205d3a;
+    --haiku-reserva-hospedada-acento: #45b16d;
+    --haiku-reserva-checkout-fondo: #a0a0a0;
+    --haiku-reserva-checkout-texto: #ffffff;
+    --haiku-reserva-checkout-acento: #a0a0a0;
+    --haiku-reserva-cancelada-fondo: #fde2e2;
+    --haiku-reserva-cancelada-texto: #b42318;
+    --haiku-reserva-cancelada-acento: #b42318;
+    --haiku-reserva-no-show-fondo: #eee9e4;
+    --haiku-reserva-no-show-texto: #694b3b;
+    --haiku-reserva-no-show-acento: #694b3b;
+
     --radio: 12px;
 }
 
@@ -5868,13 +5888,13 @@ tr.cabana-libre .info-cabana {
    ========================================= */
 
 .ficha-estado.ficha-estado-hospedado {
-    background: #dff0e4;
-    color: #205d3a;
+    background: var(--haiku-reserva-hospedada-fondo);
+    color: var(--haiku-reserva-hospedada-texto);
 }
 
 .ficha-estado.ficha-estado-checkout {
-    background: #e3f0f8;
-    color: #2f6685;
+    background: var(--haiku-reserva-checkout-fondo);
+    color: var(--haiku-reserva-checkout-texto);
 }
 
 .ficha-estado.ficha-estado-pendiente {
@@ -5883,23 +5903,23 @@ tr.cabana-libre .info-cabana {
 }
 
 .ficha-estado.ficha-estado-confirmada {
-    background: #2349b8;
-    color: #ffffff;
+    background: var(--haiku-reserva-confirmada-fondo);
+    color: var(--haiku-reserva-confirmada-texto);
 }
 
 .ficha-estado.ficha-estado-confirmacion-pendiente {
-    background: #8ec2df;
-    color: #ffffff;
+    background: var(--haiku-reserva-pendiente-fondo);
+    color: var(--haiku-reserva-pendiente-texto);
 }
 
 .ficha-estado-cancelada {
-    background: #fde2e2;
-    color: #b42318;
+    background: var(--haiku-reserva-cancelada-fondo);
+    color: var(--haiku-reserva-cancelada-texto);
 }
 
 .ficha-estado.ficha-estado-no-show {
-    background: #eee9e4;
-    color: #694b3b;
+    background: var(--haiku-reserva-no-show-fondo);
+    color: var(--haiku-reserva-no-show-texto);
 }
 
 

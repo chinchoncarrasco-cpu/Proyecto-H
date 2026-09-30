@@ -141,17 +141,17 @@ test("continúa: titular y reserva siguen unidos en la fecha seleccionada", () =
     assert.equal(item.hoy.textContent, "Ocupada · Valentina Araya");
 });
 
-test("sale hoy: muestra el titular saliente de esa reserva", () => {
+test("sale hoy sin entrada deja HOY libre sin repetir al titular saliente", () => {
     const item = renderProyectado({ numero: 5, estado: "sale-libre",
         operacion: { salida_reserva_id: ids.salida, salida_titular: "Martín López" },
         datos: { reservaId: ids.salida, codigoHaiku: "H-PRUEBA-SALIDA",
             titular: "", adultos: 2 } });
     assert.equal(item.elemento.dataset.resumenTitularReservaId, ids.salida);
     assert.equal(item.principal.textContent, "Martín López");
-    assert.equal(item.hoy.textContent, "Sale · Martín López");
+    assert.equal(item.hoy.textContent, "Libre");
 });
 
-test("CAB 3: sale e ingresa muestra a Luis y no al huésped saliente", () => {
+test("CAB 3: en recambio HOY muestra sólo el ingreso de Luis", () => {
     const item = renderProyectado({ numero: 3, estado: "sale-ingresa",
         operacion: { salida_reserva_id: ids.saliente,
             salida_titular: "Huésped saliente", ingreso_reserva_id: ids.luis,
@@ -161,7 +161,7 @@ test("CAB 3: sale e ingresa muestra a Luis y no al huésped saliente", () => {
     assert.equal(item.elemento.dataset.resumenTitularReservaId, ids.luis);
     assert.equal(item.elemento.dataset.salidaReservaId, ids.saliente);
     assert.equal(item.principal.textContent, "Luis Rosales");
-    assert.equal(item.hoy.textContent, "Sale e ingresa · Luis Rosales");
+    assert.equal(item.hoy.textContent, "Ingresa · Luis Rosales");
     assert.doesNotMatch(`${item.principal.textContent} ${item.hoy.textContent}`, /Huésped saliente/);
 });
 

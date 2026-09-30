@@ -59,6 +59,103 @@
         }
     }
 
+    function normalizarEstadoReserva(valor) {
+        const estado = String(valor || "").trim().toLowerCase()
+            .replace(/[\s-]+/g, "_");
+        if (["pendiente", "confirmacion_pendiente"].includes(estado)) return "pendiente";
+        if (["confirmada", "hospedada", "checked_out", "cancelada", "no_show"].includes(estado)) {
+            return estado;
+        }
+        return "";
+    }
+
+    function estadoReservaDeDatos(datos) {
+        if (!datos) return "";
+        const reserva = normalizarEstadoReserva(datos.estadoReserva || datos.estado_reserva);
+        const estadia = normalizarEstadoReserva(datos.estadoEstadia || datos.estado_estadia);
+        if (!reserva && !estadia && !datos.checkinRealizado && !datos.checkin_realizado_en &&
+            !datos.checkoutRealizado && !datos.checkout_realizado_en) return "";
+        if (["cancelada", "no_show"].includes(reserva)) return reserva;
+        if (datos.checkoutRealizado || datos.checkout_realizado_en || estadia === "checked_out") {
+            return "checked_out";
+        }
+        if (datos.checkinRealizado || datos.checkin_realizado_en || estadia === "hospedada") {
+            return "hospedada";
+        }
+        if (estadia === "confirmada") return "confirmada";
+        if (estadia === "pendiente" || reserva === "pendiente") return "pendiente";
+        return "";
+    }
+
+    function indiceEstadosReserva() {
+        const estadias = new Map();
+        const reservas = new Map();
+        try {
+            Object.values(datosPorFecha || {}).forEach(dia => {
+                Object.values(dia?.cabanas || {}).forEach(datos => {
+                    const estado = estadoReservaDeDatos(datos);
+                    if (!estado) return;
+                    const estadiaId = String(datos.estadiaId || datos.estadia_id || "").trim();
+                    const reservaId = String(datos.reservaId || datos.reserva_id || "").trim();
+                    if (estadiaId) estadias.set(estadiaId, estado);
+                    if (!reservaId) return;
+                    if (!reservas.has(reservaId)) reservas.set(reservaId, estado);
+                    else if (reservas.get(reservaId) !== estado) reservas.set(reservaId, "");
+                });
+            });
+        } catch (_) {}
+        return { estadias, reservas };
+    }
+
+    function identidadEstado(operacion, prefijo) {
+        const estadiaId = String(operacion?.[`${prefijo}_estadia_id`] ||
+            operacion?.[`${prefijo}EstadiaId`] || "").trim();
+        const reservaId = String(operacion?.[`${prefijo}_reserva_id`] ||
+            operacion?.[`${prefijo}ReservaId`] || "").trim();
+        return estadiaId || reservaId ? { estadiaId, reservaId } : null;
+    }
+
+    function identidadDelDia(operacion) {
+        const estado = String(operacion?.estado_operativo || operacion?.estado || "");
+        const identidad = prefijo => identidadEstado(operacion, prefijo);
+        if (["sale-ingresa", "libre-ingresa"].includes(estado)) return identidad("ingreso");
+        if (estado === "continua") return identidad("continua");
+        if (estado === "fullday") return identidad("fullday");
+        return null;
+    }
+
+    function operacionLocal(datos) {
+        if (!datos) return null;
+        const estado = String(datos.estado || "");
+        const salida = {
+            estado_operativo: estado,
+            ingreso_reserva_id: datos.ingresoReservaId ||
+                (["libre-ingresa", "sale-ingresa"].includes(estado) ? datos.reservaId : ""),
+            ingreso_estadia_id: datos.ingresoEstadiaId ||
+                (["libre-ingresa", "sale-ingresa"].includes(estado) ? datos.estadiaId : ""),
+            salida_reserva_id: datos.salidaReservaId || "",
+            salida_estadia_id: datos.salidaEstadiaId || "",
+            continua_reserva_id: estado === "continua" ? datos.reservaId : "",
+            continua_estadia_id: estado === "continua" ? datos.estadiaId : "",
+            fullday_reserva_id: estado === "fullday" ? datos.reservaId : "",
+            fullday_estadia_id: estado === "fullday" ? datos.estadiaId : ""
+        };
+        return salida;
+    }
+
+    function estadoReservaDelDia(operacion, indice) {
+        const identidad = identidadDelDia(operacion);
+        if (!identidad) return "";
+        return indice.estadias.get(identidad.estadiaId) ||
+            indice.reservas.get(identidad.reservaId) || "";
+    }
+
+    function aplicarEstadoReservaDia(elemento, estado) {
+        if (!elemento) return;
+        delete elemento.dataset.reservaEstado;
+        if (estado) elemento.dataset.reservaEstado = estado;
+    }
+
     function texto(elemento, valor) {
         if (elemento && elemento.textContent !== valor) elemento.textContent = valor;
     }
@@ -310,12 +407,13 @@
 
     function descripcionDia(estado, titular) {
         const accion = {
-            "libre-libre": "Libre", "libre-ingresa": "Ingresa", "sale-libre": "Sale",
-            "sale-ingresa": "Sale e ingresa", "sale-bloqueada": "Sale · bloqueada",
+            "libre-libre": "Libre", "libre-ingresa": "Ingresa", "sale-libre": "Libre",
+            "sale-ingresa": "Ingresa", "sale-bloqueada": "Bloqueada",
             continua: "Ocupada", bloqueada: "Bloqueada",
             fullday: "Full day"
         }[estado] || "Sin datos";
-        return [accion, titular].filter(Boolean).join(" · ");
+        const muestraTitular = ["libre-ingresa", "sale-ingresa", "continua", "fullday"].includes(estado);
+        return [accion, muestraTitular ? titular : ""].filter(Boolean).join(" · ");
     }
 
     function resumenDiaLocal(fecha, numero) {
@@ -324,22 +422,33 @@
         return descripcionDia(String(datos.estado || ""), String(datos.titular || "").trim());
     }
 
-    function pintarFlujo(fila, fecha) {
+    function pintarFlujo(fila, fecha, indice = indiceEstadosReserva()) {
         const numero = String(fila.dataset.cabana || "");
         const anterior = sumarDias(fecha, -1);
         const siguiente = sumarDias(fecha, 1);
         for (const [tipo, dia] of [["anterior", anterior], ["siguiente", siguiente]]) {
             const filaRemota = historial.get(dia)?.get(numero);
+            const datos = !window.haikuSesion ? datosLocales(dia, numero) : null;
             const valor = filaRemota
                 ? descripcionDia(String(filaRemota.estado_operativo || ""), titularOperacion(filaRemota))
-                : (!window.haikuSesion ? resumenDiaLocal(dia, numero) : "Sin datos");
+                : (datos ? resumenDiaLocal(dia, numero) : "Sin datos");
             texto(fila.querySelector(`.sites-resumen-dia--${tipo} .sites-resumen-dia-valor`), valor);
+            aplicarEstadoReservaDia(
+                fila.querySelector(`.sites-resumen-dia--${tipo}`),
+                estadoReservaDelDia(filaRemota || operacionLocal(datos), indice)
+            );
         }
         const estado = String(campo(fila, "estado")?.value || "");
+        const datosActuales = datosLocales(fecha, numero);
         const titular = titularVisible(fila, fecha, estado,
-            !window.haikuSesion ? datosLocales(fecha, numero) : null);
+            !window.haikuSesion ? datosActuales : null);
         texto(fila.querySelector(".sites-resumen-dia--actual .sites-resumen-dia-valor"),
             descripcionDia(estado, titular === "Sin titular" ? "" : titular));
+        aplicarEstadoReservaDia(
+            fila.querySelector(".sites-resumen-dia--actual"),
+            estadoReservaDelDia(historial.get(fecha)?.get(numero) ||
+                operacionLocal(datosActuales), indice)
+        );
     }
 
     function operacionParaFiltro(fila, fecha) {
@@ -553,9 +662,10 @@
         actualizacionPendiente = false;
         const fecha = fechaActiva();
         if (!fecha) return;
+        const indice = indiceEstadosReserva();
         document.querySelectorAll(selectorFila).forEach(fila => {
             resumenFila(fila, fecha);
-            pintarFlujo(fila, fecha);
+            pintarFlujo(fila, fecha, indice);
         });
         aplicarFiltro(fecha);
         if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) cargarHistorial(fecha);

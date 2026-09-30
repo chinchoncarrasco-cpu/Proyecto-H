@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Estados de reserva · demo visual</title>
+  <link rel="stylesheet" href="../../../css/styles.css">
+  <link rel="stylesheet" href="../../../css/sites-resumen-v1.css">
+  <style>
+    body { min-height: 100vh; background: #f4f6f4; }
+    .demo { width: min(1120px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 56px; }
+    .demo h1 { margin: 0; color: #203028; font-size: 28px; }
+    .demo-intro { margin: 7px 0 25px; color: #68766e; font-size: 14px; }
+    .demo-panel { margin-bottom: 18px; padding: 22px; background: #fff; border: 1px solid #dfe7e1; border-radius: 12px; box-shadow: 0 5px 18px #203c2a0d; }
+    .demo-panel h2 { margin: 0 0 6px; color: #2b4235; font-size: 16px; }
+    .demo-panel > p { margin: 0 0 16px; color: #728078; font-size: 12px; }
+    .demo-badges { display: flex; flex-wrap: wrap; gap: 10px; }
+    .demo-control { display: grid; grid-template-columns: minmax(210px, 1fr) auto; align-items: end; gap: 18px; }
+    .demo-control label { display: grid; gap: 7px; color: #56645c; font-size: 12px; font-weight: 700; }
+    .demo-control select { min-height: 40px; padding: 0 11px; border: 1px solid #cad7ce; border-radius: 7px; background: #fff; color: #26372d; }
+    .demo-ficha { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 290px; padding: 14px 16px; background: #fbfcfb; border: 1px solid #e3e9e5; border-radius: 9px; }
+    .demo-ficha div { display: grid; gap: 4px; }
+    .demo-ficha small { color: #718078; }
+    .demo-lista { display: grid; gap: 11px; }
+    .demo-caso { padding: 13px 15px 15px; background: #fcfdfc; border: 1px solid #e3e9e5; border-radius: 9px; }
+    .demo-caso h3 { margin: 0 0 9px; color: #34483d; font-size: 13px; }
+    .demo-caso .sites-resumen-flujo { margin-top: 0 !important; }
+    @media (max-width: 680px) {
+      .demo { width: min(100% - 20px, 520px); padding-top: 20px; }
+      .demo-panel { padding: 16px; }
+      .demo-control { grid-template-columns: 1fr; }
+      .demo-ficha { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo" id="seccion-resumen">
+    <h1>Estados de reserva</h1>
+    <p class="demo-intro">Fixture local con datos ficticios. No consulta ni escribe Supabase.</p>
+
+    <section class="demo-panel">
+      <h2>Paleta histórica recuperada</h2>
+      <p>Comparación directa de los seis estados canónicos.</p>
+      <div class="demo-badges">
+        <span class="ficha-estado ficha-estado-confirmacion-pendiente">● Confirmación pendiente</span>
+        <span class="ficha-estado ficha-estado-confirmada">● Confirmada</span>
+        <span class="ficha-estado ficha-estado-hospedado">● Hospedado</span>
+        <span class="ficha-estado ficha-estado-checkout">● Checked Out</span>
+        <span class="ficha-estado ficha-estado-cancelada">● Cancelada</span>
+        <span class="ficha-estado ficha-estado-no-show">● No Show</span>
+      </div>
+    </section>
+
+    <section class="demo-panel">
+      <h2>Ficha interactiva</h2>
+      <p>El selector sólo cambia este mock visual y permite revisar todos los colores.</p>
+      <div class="demo-control">
+        <label>Estado ficticio
+          <select id="demo-estado">
+            <option value="pendiente">Confirmación pendiente</option>
+            <option value="confirmada">Confirmada</option>
+            <option value="hospedada">Hospedado</option>
+            <option value="checked_out">Checked Out</option>
+            <option value="cancelada">Cancelada</option>
+            <option value="no_show">No Show</option>
+          </select>
+        </label>
+        <div class="demo-ficha"><div><strong>Reserva ficticia · CAB 4</strong><small>12–15 oct · 3 noches</small></div><span id="demo-badge" class="ficha-estado ficha-estado-confirmacion-pendiente">● Confirmación pendiente</span></div>
+      </div>
+    </section>
+
+    <section class="demo-panel">
+      <h2>Franjas independientes</h2>
+      <p>Cada tramo representa una sola reserva del día; en un recambio Hoy prioriza a quien ingresa.</p>
+      <div class="demo-lista">
+        <article class="demo-caso">
+          <h3>AYER Hospedado · HOY Libre · MAÑANA Confirmada</h3>
+          <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+            <div class="sites-resumen-dia sites-resumen-dia--anterior" data-reserva-estado="hospedada"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">Ocupada · Daniela</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">Libre</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--siguiente" data-reserva-estado="confirmada"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">Ingresa · Tomás</span></div>
+          </div>
+        </article>
+        <article class="demo-caso">
+          <h3>Una reserva confirmada continúa varios días</h3>
+          <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+            <div class="sites-resumen-dia sites-resumen-dia--anterior" data-reserva-estado="confirmada"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">Ocupada · Camila</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--actual" data-reserva-estado="confirmada"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">Ocupada · Camila</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--siguiente" data-reserva-estado="confirmada"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">Ocupada · Camila</span></div>
+          </div>
+        </article>
+        <article class="demo-caso">
+          <h3>Recambio: Hoy representa sólo a la reserva entrante</h3>
+          <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+            <div class="sites-resumen-dia sites-resumen-dia--anterior" data-reserva-estado="hospedada"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">Ocupada · Andrés</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--actual" data-reserva-estado="pendiente"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">Ingresa · Sofía</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--siguiente" data-reserva-estado="pendiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">Ocupada · Sofía</span></div>
+          </div>
+        </article>
+        <article class="demo-caso">
+          <h3>Libre y bloqueo sin reserva: sin color de estado</h3>
+          <div class="sites-resumen-flujo" aria-label="Ayer, hoy y mañana">
+            <div class="sites-resumen-dia sites-resumen-dia--anterior"><span class="sites-resumen-dia-etiqueta">Ayer</span><span class="sites-resumen-dia-valor">Libre</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--actual"><span class="sites-resumen-dia-etiqueta">Hoy</span><span class="sites-resumen-dia-valor">Bloqueada · Mantención</span></div>
+            <div class="sites-resumen-dia sites-resumen-dia--siguiente"><span class="sites-resumen-dia-etiqueta">Mañana</span><span class="sites-resumen-dia-valor">Libre</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const select = document.getElementById("demo-estado");
+      const badge = document.getElementById("demo-badge");
+      const clases = {
+        pendiente: "ficha-estado-confirmacion-pendiente", confirmada: "ficha-estado-confirmada",
+        hospedada: "ficha-estado-hospedado", checked_out: "ficha-estado-checkout",
+        cancelada: "ficha-estado-cancelada", no_show: "ficha-estado-no-show"
+      };
+      const etiquetas = {
+        pendiente: "Confirmación pendiente", confirmada: "Confirmada", hospedada: "Hospedado",
+        checked_out: "Checked Out", cancelada: "Cancelada", no_show: "No Show"
+      };
+      select.addEventListener("change", () => {
+        badge.className = `ficha-estado ${clases[select.value]}`;
+        badge.textContent = `● ${etiquetas[select.value]}`;
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -776,12 +776,14 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
 #seccion-resumen .sites-resumen-lista :is(button, input, select):focus-visible { outline: 2px solid #72ad89; outline-offset: 2px; }
 
 #seccion-resumen .sites-resumen-flujo {
+  --flow-slant: 8px;
   display: grid;
   grid-template-columns: 1fr 1.22fr 1.38fr;
   align-items: stretch;
   gap: 0;
   min-width: 0;
   overflow: hidden;
+  isolation: isolate;
   margin-top: 7px;
   border: 1px solid #e0ebe3;
   border-radius: 3px;
@@ -799,31 +801,68 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
   line-height: 1.25;
 }
 
-#seccion-resumen .sites-resumen-dia--anterior::after,
-#seccion-resumen .sites-resumen-dia--actual::after {
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="pendiente"] { --franja-estado-acento: var(--haiku-reserva-pendiente-acento); }
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="confirmada"] { --franja-estado-acento: var(--haiku-reserva-confirmada-acento); }
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="hospedada"] { --franja-estado-acento: var(--haiku-reserva-hospedada-acento); }
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="checked_out"] { --franja-estado-acento: var(--haiku-reserva-checkout-acento); }
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="cancelada"] { --franja-estado-acento: var(--haiku-reserva-cancelada-acento); }
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="no_show"] { --franja-estado-acento: var(--haiku-reserva-no-show-acento); }
+
+#seccion-resumen .sites-resumen-dia[data-reserva-estado] {
+  --franja-estado-bg: color-mix(in srgb, var(--franja-estado-acento) 12%, #ffffff);
+  background: var(--franja-estado-bg);
+}
+
+#seccion-resumen .sites-resumen-dia--anterior {
+  z-index: 3;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--flow-slant)) 0,
+    100% 100%,
+    0 100%
+  );
+}
+
+#seccion-resumen :is(.sites-resumen-dia--actual, .sites-resumen-dia--siguiente) {
+  width: calc(100% + var(--flow-slant));
+  margin-left: calc(0px - var(--flow-slant));
+}
+
+#seccion-resumen .sites-resumen-dia--actual {
+  z-index: 2;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--flow-slant)) 0,
+    100% 100%,
+    var(--flow-slant) 100%
+  );
+  background: var(--franja-estado-bg, #e8f3eb);
+}
+
+#seccion-resumen .sites-resumen-dia--siguiente {
+  z-index: 1;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    var(--flow-slant) 100%
+  );
+}
+
+#seccion-resumen :is(.sites-resumen-dia--actual, .sites-resumen-dia--siguiente)::before {
   position: absolute;
   z-index: 2;
-  top: -5%;
-  right: 0;
-  bottom: -5%;
-  width: 1px;
-  transform: skewX(18deg);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--flow-slant) + 1px);
+  clip-path: polygon(0 0, 1px 0, 100% 100%, calc(100% - 1px) 100%);
   background: #b9d0c0;
   content: "";
   pointer-events: none;
 }
 
-#seccion-resumen .sites-resumen-dia--actual::before {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 100%, 9px 100%);
-  background: #e8f3eb;
-  content: "";
-  pointer-events: none;
-}
-
-#seccion-resumen .sites-resumen-dia--actual > * { position: relative; z-index: 1; }
+#seccion-resumen .sites-resumen-dia > * { position: relative; z-index: 1; }
 
 #seccion-resumen .sites-resumen-dia-etiqueta {
   flex: none;
@@ -1327,6 +1366,12 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
 #sites-resumen-reserva-drawer .rd-topline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 #sites-resumen-reserva-drawer .rd-reference { color: #567565; font-size: 12px; font-weight: 690; font-variant-numeric: tabular-nums; }
 #sites-resumen-reserva-drawer .rd-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 4px; background: #e8f3ec; color: #276447; font-size: 11px; font-weight: 730; white-space: nowrap; }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="pendiente"] { background: var(--haiku-reserva-pendiente-fondo); color: var(--haiku-reserva-pendiente-texto); }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="confirmada"] { background: var(--haiku-reserva-confirmada-fondo); color: var(--haiku-reserva-confirmada-texto); }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="hospedada"] { background: var(--haiku-reserva-hospedada-fondo); color: var(--haiku-reserva-hospedada-texto); }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="checked_out"] { background: var(--haiku-reserva-checkout-fondo); color: var(--haiku-reserva-checkout-texto); }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="cancelada"] { background: var(--haiku-reserva-cancelada-fondo); color: var(--haiku-reserva-cancelada-texto); }
+#sites-resumen-reserva-drawer .rd-status[data-reserva-estado="no_show"] { background: var(--haiku-reserva-no-show-fondo); color: var(--haiku-reserva-no-show-texto); }
 #sites-resumen-reserva-drawer .rd-status.pending { background: #fff1df; color: #915d23; }
 #sites-resumen-reserva-drawer .rd-status.free { background: #eef2ef; color: #5c7564; }
 #sites-resumen-reserva-drawer button.rd-status { border: 0; font-family: inherit; cursor: pointer; }
