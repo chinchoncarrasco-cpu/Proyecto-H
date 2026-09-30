@@ -823,12 +823,15 @@
                 && preview?.servicios_sin_cambios === true;
             const serviciosBloqueados = item.tiene_servicios && preview?.elegible === false;
             return `<article class="haiku-cloudbeds-tarifas-confirmacion-item">
-                <strong>${esc(nombre)}</strong>
+                <header class="haiku-cloudbeds-tarifas-confirmacion-reserva">
+                    <strong>${esc(nombre)}</strong>
+                    <span>${preview?.cabana_numero || propuesta.cabana ? `CAB ${esc(preview?.cabana_numero || propuesta.cabana)}` : "Cabaña no identificada"} · ${(preview?.tipo_estadia || (propuesta.es_full_day ? "fullday" : propuesta.tipo_estadia_proyecto_h)) === "fullday" ? "Full Day" : "Alojamiento"}</span>
+                </header>
                 ${preview?.cambio_desde_pdf ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">Proyecto H cambió desde que se cargó el PDF. Estos son los valores reconsultados antes de confirmar.</p>` : ""}
                 ${serviciosBloqueados ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">Hay pagos o cargos mezclados entre alojamiento y servicios. Revisión manual requerida.</p>` : ""}
                 ${preview?.elegible === false && !serviciosBloqueados ? `<p class="haiku-cloudbeds-tarifas-preview-alerta">${esc(preview.motivo_bloqueo || "La reserva ya no es elegible.")}</p>` : ""}
                 ${serviciosCertificados ? `<p class="haiku-cloudbeds-tarifas-servicios-info">Los servicios se conservarán sin cambios.</p>` : ""}
-                <dl>
+                <dl class="haiku-cloudbeds-tarifas-confirmacion-valores">
                     <div><dt>Cabaña</dt><dd>${preview?.cabana_numero || propuesta.cabana ? `CAB ${esc(preview?.cabana_numero || propuesta.cabana)}` : "—"}</dd></div>
                     <div><dt>Tipo</dt><dd>${(preview?.tipo_estadia || (propuesta.es_full_day ? "fullday" : propuesta.tipo_estadia_proyecto_h)) === "fullday" ? "Full Day" : "Alojamiento"}</dd></div>
                     <div><dt>Alojamiento actual</dt><dd>${esc(moneda(totalActual))}</dd></div>
@@ -871,24 +874,15 @@
             : "";
         return `<article class="haiku-cloudbeds-tarifas-tarjeta" data-cloudbeds-item="${esc(item.id)}">
             <header>
-                <div><strong>${esc(nombre)} · ${esc(cabana)}</strong><span>${esc(fechaCorta(propuesta.check_in))} → ${esc(fechaCorta(propuesta.check_out))}</span></div>
+                <div class="haiku-cloudbeds-tarifas-identidad"><strong title="${esc(nombre)} · ${esc(cabana)}">${esc(nombre)} · ${esc(cabana)}</strong><span>${esc(fechaCorta(propuesta.check_in))} → ${esc(fechaCorta(propuesta.check_out))}</span></div>
                 <span class="haiku-cloudbeds-tarifas-certeza haiku-cloudbeds-tarifas-certeza--${esc(fila.certeza.toLowerCase())}">${esc(fila.certeza.replaceAll("_", " "))}</span>
             </header>
             <dl class="haiku-cloudbeds-tarifas-montos">
-                <div><dt>Alojamiento actual</dt><dd>${esc(moneda(propuesta.total_actual_haku))}</dd></div>
+                <div><dt>Proyecto H</dt><dd>${esc(moneda(propuesta.total_actual_haku))}</dd></div>
                 <div><dt>Alojamiento Cloudbeds</dt><dd>${esc(moneda(propuesta.total_alojamiento_propuesto || propuesta.deposito_cloudbeds))}</dd></div>
-                <div><dt>Diferencia alojamiento</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
+                <div><dt>Diferencia</dt><dd class="${Number(diferencia) < 0 ? "es-negativa" : ""}">${diferencia === null || diferencia === undefined ? "No calculable" : esc(moneda(diferencia))}</dd></div>
             </dl>
-            ${renderIdentidadContextual(fila)}
-            ${renderFullDay(propuesta)}
-            ${renderProductos(propuesta)}
-            ${evidencias.length ? `<div class="haiku-cloudbeds-tarifas-evidencias"><strong>Evidencias</strong><ul>${evidencias.map(evidencia => `<li>${esc(evidencia)}</li>`).join("")}</ul></div>` : ""}
-            ${revisiones.length ? `<div class="haiku-cloudbeds-tarifas-revision"><strong>Revisar</strong><ul>${revisiones.map(revision => `<li>${esc(revision)}</li>`).join("")}</ul></div>` : ""}
-            <div class="haiku-cloudbeds-tarifas-capas">
-                <span><b>Certeza Cloudbeds</b>${esc(fila.certeza.replaceAll("_", " "))}</span>
-                <span><b>Compatibilidad financiera</b>${esc(etiquetaCompatibilidad(item))}</span>
-            </div>
-            <footer>
+            <footer class="haiku-cloudbeds-tarifas-acciones">
                 <button type="button" data-cloudbeds-ver-reserva="${esc(item.id)}" ${propuesta.reserva_id ? "" : "disabled"}>Ver reserva</button>
                 ${seleccion}
                 ${accionFullDayFutura}
@@ -896,21 +890,47 @@
                     ? `<button type="button" class="haiku-cloudbeds-tarifas-writer" data-cloudbeds-actualizar="${esc(item.id)}" ${CLOUDBEDS_TARIFAS_WRITER_HABILITADO && !actualizacionesBloqueadas ? "" : "disabled"}>${CLOUDBEDS_TARIFAS_WRITER_HABILITADO ? "Actualizar tarifa" : "Escritura aún no habilitada"}</button>`
                     : ""}
             </footer>
-            <details class="haiku-cloudbeds-tarifas-tecnico"><summary>Detalles técnicos</summary><pre>${esc(JSON.stringify({
-                identidad_tipo: fila.identidad_tipo,
-                vinculo_cloudbeds_sugerido: fila.vinculo_cloudbeds_sugerido,
-                certeza_cloudbeds: item.certeza_cloudbeds,
-                compatibilidad_financiera: item.compatibilidad_financiera,
-                propuesta
-            }, null, 2))}</pre></details>
+            <details class="haiku-cloudbeds-tarifas-detalle">
+                <summary><span>Ver detalle</span><span class="haiku-cloudbeds-tarifas-chevron" aria-hidden="true"></span></summary>
+                <div class="haiku-cloudbeds-tarifas-detalle-cuerpo">
+                    <div class="haiku-cloudbeds-tarifas-capas">
+                        <span><b>Certeza Cloudbeds</b>${esc(fila.certeza.replaceAll("_", " "))}</span>
+                        <span><b>Compatibilidad financiera</b>${esc(etiquetaCompatibilidad(item))}</span>
+                    </div>
+                    ${renderIdentidadContextual(fila)}
+                    ${renderFullDay(propuesta)}
+                    ${renderProductos(propuesta)}
+                    ${evidencias.length ? `<div class="haiku-cloudbeds-tarifas-evidencias"><strong>Evidencias</strong><ul>${evidencias.map(evidencia => `<li>${esc(evidencia)}</li>`).join("")}</ul></div>` : ""}
+                    ${revisiones.length ? `<div class="haiku-cloudbeds-tarifas-revision"><strong>Revisar</strong><ul>${revisiones.map(revision => `<li>${esc(revision)}</li>`).join("")}</ul></div>` : ""}
+                    <details class="haiku-cloudbeds-tarifas-tecnico"><summary>Detalles técnicos <span aria-hidden="true">⌄</span></summary><pre>${esc(JSON.stringify({
+                        identidad_tipo: fila.identidad_tipo,
+                        vinculo_cloudbeds_sugerido: fila.vinculo_cloudbeds_sugerido,
+                        certeza_cloudbeds: item.certeza_cloudbeds,
+                        compatibilidad_financiera: item.compatibilidad_financiera,
+                        propuesta
+                    }, null, 2))}</pre></details>
+                </div>
+            </details>
         </article>`;
     }
 
     function renderCategoria(modelo, certeza) {
         const items = modelo.items.filter(item => item.certeza_cloudbeds === certeza);
+        const presentacion = {
+            ALTA_CERTEZA: { simbolo: "✓", tono: "segura", subtitulo: "Revisión previa, lista para preparar" },
+            SIN_CAMBIO: { simbolo: "=", tono: "neutral", subtitulo: "Sin actualización propuesta" },
+            REVISION_MANUAL: { simbolo: "!", tono: "manual", subtitulo: "Resolver antes de preparar" },
+            NO_APLICA: { simbolo: "—", tono: "atenuada", subtitulo: "Fuera de esta actualización" },
+            NO_IDENTIFICADA: { simbolo: "?", tono: "atenuada", subtitulo: "Identidad sin resolver" }
+        }[certeza];
         return `<details class="haiku-cloudbeds-tarifas-categoria" data-cloudbeds-categoria="${certeza}" ${certeza === "ALTA_CERTEZA" && items.length ? "open" : ""}>
-            <summary><span>${esc(CATEGORIAS[certeza])}</span><b>${items.length}</b></summary>
-            <div>${items.length ? items.map(item => renderItem(item, modelo.actualizaciones_bloqueadas)).join("") : "<p>No hay reservas en esta categoría.</p>"}</div>
+            <summary>
+                <span class="haiku-cloudbeds-tarifas-categoria-simbolo haiku-cloudbeds-tarifas-categoria-simbolo--${presentacion.tono}" aria-hidden="true">${presentacion.simbolo}</span>
+                <span class="haiku-cloudbeds-tarifas-categoria-nombre"><b>${esc(CATEGORIAS[certeza])}</b><small>${esc(presentacion.subtitulo)}</small></span>
+                <strong>${items.length}</strong>
+                <span class="haiku-cloudbeds-tarifas-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="haiku-cloudbeds-tarifas-categoria-cuerpo">${items.length ? items.map(item => renderItem(item, modelo.actualizaciones_bloqueadas)).join("") : "<p>No hay reservas en esta categoría.</p>"}</div>
         </details>`;
     }
 
@@ -925,9 +945,9 @@
         }
         const actualizaciones = Array.isArray(resultado.actualizaciones) ? resultado.actualizaciones : [];
         return `<section class="haiku-cloudbeds-tarifas-post-write haiku-cloudbeds-tarifas-post-write--exito" data-cloudbeds-post-write role="status" aria-live="polite">
-            <strong><span aria-hidden="true">✓</span> Tarifa actualizada correctamente</strong>
+            <header class="haiku-cloudbeds-tarifas-post-write-cabecera"><span aria-hidden="true">✓</span><div><strong>Tarifa actualizada correctamente</strong><small>Estado final verificado</small></div></header>
             <div class="haiku-cloudbeds-tarifas-post-write-lista">${actualizaciones.map(actualizacion => `<article>
-                <span class="haiku-cloudbeds-tarifas-post-write-nombre">${esc(actualizacion.nombre)}</span>
+                <header><strong class="haiku-cloudbeds-tarifas-post-write-nombre">${esc(actualizacion.nombre)}</strong><span>Proyecto H</span></header>
                 <dl>
                     <div><dt>Proyecto H</dt><dd>${esc(moneda(actualizacion.total_anterior))} <span aria-hidden="true">→</span> ${esc(moneda(actualizacion.total_nuevo))}</dd></div>
                     <div><dt>Pagado</dt><dd>${esc(moneda(actualizacion.pagado))}</dd></div>
@@ -945,28 +965,36 @@
     function renderizar(modelo) {
         const capacidad = modelo.capacidad;
         const seleccionados = cantidadSeleccionada(modelo);
-        return `<section class="haiku-cloudbeds-tarifas" data-cloudbeds-tarifas-2e>
+        const totalResultados = CERTEZAS.reduce((total, certeza) => total + Number(modelo.conteos[certeza] || 0), 0);
+        const totalSeleccionables = modelo.items.filter(item => item.seleccionable).length;
+        const writerAuditado = modelo.writer_habilitado === true && capacidadTotalDisponible(capacidad);
+        return `<section class="haiku-cloudbeds-tarifas haiku-cloudbeds-tarifas-v1" data-cloudbeds-tarifas-2e>
             <header class="haiku-cloudbeds-tarifas-cabecera">
-                <div><span>CLOUDBEDS</span><strong>Tarifas</strong><p>Propuestas de alojamiento · preview backend antes de confirmar</p></div>
-                <span class="haiku-cloudbeds-tarifas-seguro">Writer auditado</span>
+                <div><span>CLOUDBEDS · REVISIÓN DE PDF</span><strong>Tarifas</strong><p>Propuestas de alojamiento · ${totalResultados} ${totalResultados === 1 ? "resultado" : "resultados"}</p></div>
+                ${writerAuditado ? `<span class="haiku-cloudbeds-tarifas-seguro">Writer auditado</span>` : ""}
             </header>
-            <div class="haiku-cloudbeds-tarifas-resumen">${CERTEZAS.map(certeza => `<span><b>${modelo.conteos[certeza]}</b>${esc(CATEGORIAS[certeza])}</span>`).join("")}</div>
+            <section class="haiku-cloudbeds-tarifas-resumen" aria-label="Resumen de resultados">
+                <div class="haiku-cloudbeds-tarifas-decision">
+                    <div class="haiku-cloudbeds-tarifas-decision-principal"><strong>${modelo.conteos.ALTA_CERTEZA}</strong><span>propuestas seguras<small>listas para revisar</small></span></div>
+                    <div class="haiku-cloudbeds-tarifas-decision-manual"><strong>${modelo.conteos.REVISION_MANUAL}</strong><span>requieren revisión manual</span></div>
+                </div>
+                <div class="haiku-cloudbeds-tarifas-otros" aria-label="Otros resultados">
+                    <span><b>${modelo.conteos.SIN_CAMBIO}</b> coinciden</span>
+                    <span><b>${modelo.conteos.NO_APLICA}</b> canceladas / no aplica</span>
+                    <span><b>${modelo.conteos.NO_IDENTIFICADA}</b> no identificadas</span>
+                </div>
+            </section>
             <div class="haiku-cloudbeds-tarifas-capacidad ${capacidadTotalDisponible(capacidad) ? "es-disponible" : "es-bloqueada"}">
-                <strong>Capacidad financiera global</strong>
-                <span>${esc(capacidad.version || "Sin versión")} · ${esc(capacidad.motivo)}</span>
+                <span class="haiku-cloudbeds-tarifas-capacidad-icono" aria-hidden="true">ⓘ</span>
+                <div><strong>Capacidad financiera global ${capacidadTotalDisponible(capacidad) ? "disponible" : "no disponible"}</strong>
+                <span><code>${esc(capacidad.version || "Sin versión")}</code> · ${esc(capacidad.motivo)}</span></div>
             </div>
             ${renderResultadoPostWrite(modelo)}
-            <div class="haiku-cloudbeds-tarifas-lote">
-                <button type="button" data-cloudbeds-seleccionar-todo ${modelo.actualizaciones_bloqueadas ? "disabled" : ""}>Seleccionar todo lo listo</button>
-                <span data-cloudbeds-seleccion-conteo>${seleccionados} seleccionadas</span>
-                <button type="button" data-cloudbeds-abrir-confirmacion ${seleccionados && !modelo.actualizaciones_bloqueadas ? "" : "disabled"}>Revisar ${seleccionados || ""} ${seleccionados === 1 ? "actualización" : "actualizaciones"}</button>
-            </div>
             <div class="haiku-cloudbeds-tarifas-categorias">${CERTEZAS.map(certeza => renderCategoria(modelo, certeza)).join("")}</div>
             <section class="haiku-cloudbeds-tarifas-confirmacion" data-cloudbeds-confirmacion role="dialog" aria-modal="false" aria-labelledby="cloudbeds-confirmacion-titulo" hidden>
-                <strong id="cloudbeds-confirmacion-titulo">Actualizar tarifa</strong>
-                <p data-cloudbeds-confirmacion-texto></p>
+                <header class="haiku-cloudbeds-tarifas-confirmacion-cabecera"><span aria-hidden="true">↗</span><div><strong id="cloudbeds-confirmacion-titulo">Actualizar tarifa</strong><p data-cloudbeds-confirmacion-texto></p></div><span>Por confirmar</span></header>
                 <div class="haiku-cloudbeds-tarifas-confirmacion-detalle" data-cloudbeds-confirmacion-detalle>${renderConfirmacionDetalle(modelo)}</div>
-                <p>Este cambio modificará el total de alojamiento en Proyecto H.<br>Los pagos existentes no serán modificados.</p>
+                <p class="haiku-cloudbeds-tarifas-confirmacion-impacto">Este cambio modificará el total de alojamiento en Proyecto H. Los pagos existentes no serán modificados.</p>
                 <div class="haiku-cloudbeds-tarifas-confirmacion-acciones"><button type="button" data-cloudbeds-cancelar>Cancelar</button><button type="button" data-cloudbeds-confirmar disabled>Confirmar actualización</button></div>
             </section>
             <p class="haiku-cloudbeds-tarifas-estado" data-cloudbeds-estado role="status">${modelo.resultado_post_write?.tipo === "advertencia"
@@ -975,6 +1003,11 @@
                     ? "Estado final confirmado con datos reconsultados de Proyecto H."
                     : "Selecciona una propuesta segura para reconsultar Proyecto H antes de confirmar."}</p>
             <details class="haiku-cloudbeds-tarifas-payload"><summary>Payload W1 · diagnóstico</summary><pre data-cloudbeds-payload>${esc(JSON.stringify(contenidoDiagnostico(modelo), null, 2))}</pre></details>
+            <div class="haiku-cloudbeds-tarifas-lote">
+                <button type="button" data-cloudbeds-seleccionar-todo aria-pressed="${totalSeleccionables > 0 && seleccionados === totalSeleccionables}" ${modelo.actualizaciones_bloqueadas ? "disabled" : ""}>Seleccionar todo lo listo</button>
+                <span data-cloudbeds-seleccion-conteo><b>${seleccionados}</b> de ${totalSeleccionables} propuestas seleccionadas</span>
+                <button type="button" data-cloudbeds-abrir-confirmacion ${seleccionados && !modelo.actualizaciones_bloqueadas ? "" : "disabled"}>Revisar actualizaciones</button>
+            </div>
         </section>`;
     }
 
@@ -985,17 +1018,20 @@
 
     function actualizarDOM(contenedor, modelo) {
         const cantidad = cantidadSeleccionada(modelo);
+        const totalSeleccionables = modelo.items.filter(item => item.seleccionable).length;
         contenedor.querySelectorAll("[data-cloudbeds-seleccionar]").forEach(boton => {
             const item = buscarItem(modelo, boton.dataset.cloudbedsSeleccionar);
             boton.setAttribute("aria-pressed", String(Boolean(item?.seleccionado)));
             boton.textContent = item?.seleccionado ? "Quitar de actualización" : "Preparar actualización";
         });
         const conteo = contenedor.querySelector("[data-cloudbeds-seleccion-conteo]");
-        if (conteo) conteo.textContent = `${cantidad} ${cantidad === 1 ? "seleccionada" : "seleccionadas"}`;
+        if (conteo) conteo.innerHTML = `<b>${cantidad}</b> de ${totalSeleccionables} propuestas seleccionadas`;
+        const seleccionarTodoBoton = contenedor.querySelector("[data-cloudbeds-seleccionar-todo]");
+        if (seleccionarTodoBoton) seleccionarTodoBoton.setAttribute("aria-pressed", String(totalSeleccionables > 0 && cantidad === totalSeleccionables));
         const abrir = contenedor.querySelector("[data-cloudbeds-abrir-confirmacion]");
         if (abrir) {
             abrir.disabled = cantidad === 0 || modelo.actualizaciones_bloqueadas;
-            abrir.textContent = `Revisar ${cantidad || ""} ${cantidad === 1 ? "actualización" : "actualizaciones"}`;
+            abrir.textContent = "Revisar actualizaciones";
         }
         const postWrite = contenedor.querySelector("[data-cloudbeds-post-write]");
         if (postWrite) postWrite.outerHTML = renderResultadoPostWrite(modelo);

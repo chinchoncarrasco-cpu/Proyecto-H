@@ -518,7 +518,7 @@ test('la confirmación post-write usa exclusivamente montos previsualizados y re
 
   modeloReconsultado.resultado_post_write = { tipo: 'exito', actualizaciones: resultado.actualizaciones };
   const html = tarifas.renderizar(modeloReconsultado);
-  assert.match(html, /✓<\/span> Tarifa actualizada correctamente/);
+  assert.match(html, /✓<\/span><div><strong>Tarifa actualizada correctamente/);
   assert.match(html, /Proyecto H[\s\S]*\$160\.000[\s\S]*→[\s\S]*\$120\.000/);
   assert.match(html, /Pagado[\s\S]*\$120\.000/);
   assert.match(html, /Saldo[\s\S]*\$0/);

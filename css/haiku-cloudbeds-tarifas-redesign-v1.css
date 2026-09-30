@@ -1,0 +1,722 @@
+/* Cloudbeds · Tarifas — capa visual Sites, aislada del shell y la lógica Haku. */
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 {
+    --cloudbeds-linea: #dce7df;
+    --cloudbeds-verde: #285b43;
+    --cloudbeds-verde-suave: #edf6ef;
+    --cloudbeds-texto: #20372a;
+    --cloudbeds-muted: #63766a;
+    display: block;
+    min-width: 0;
+    border: 1px solid #d3e2d6;
+    border-radius: 9px;
+    background: #fff;
+    color: var(--cloudbeds-texto);
+    box-shadow: 0 2px 10px rgba(30, 59, 41, .06);
+    container-type: inline-size;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 button {
+    min-height: 29px;
+    padding: 5px 9px;
+    border: 1px solid #cddfd2;
+    border-radius: 5px;
+    background: #fff;
+    color: #306246;
+    font-size: .64rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 button:hover:not(:disabled) { background: #edf5ef; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 button:disabled { opacity: .5; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 :is(button, summary):focus-visible {
+    outline: 3px solid rgba(80, 145, 100, .32);
+    outline-offset: 2px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 15px 15px 12px;
+    border: 0;
+    border-radius: 9px 9px 0 0;
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera > div { min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera > div > span {
+    color: #336f4e;
+    font-size: .58rem;
+    font-weight: 850;
+    letter-spacing: .13em;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera > div > strong {
+    margin-top: 3px;
+    color: #20372a;
+    font-size: 1.23rem;
+    letter-spacing: -.035em;
+    line-height: 1.15;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera p {
+    margin-top: 3px;
+    color: #65796a;
+    font-size: .68rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-seguro {
+    flex: none;
+    margin-top: 2px;
+    padding: 5px 7px;
+    border-radius: 999px;
+    background: #fff3e2;
+    color: #87601c;
+    font-size: .58rem;
+    font-weight: 760;
+    white-space: nowrap;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-resumen {
+    display: block;
+    margin: 0 15px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    border-top: 1px solid #e2ebe4;
+    border-bottom: 1px solid #e2ebe4;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision > div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 13px 6px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision > div + div {
+    padding-left: 15px;
+    border-left: 1px solid #e2ebe4;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision strong {
+    flex: none;
+    color: #256b49;
+    font-size: 1.75rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.045em;
+    line-height: 1;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision-manual strong { color: #a56c2b; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision span {
+    min-width: 0;
+    font-size: .68rem;
+    font-weight: 740;
+    line-height: 1.3;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision small {
+    display: block;
+    color: #718376;
+    font-size: .61rem;
+    font-weight: 520;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr 1fr;
+    gap: 8px;
+    padding: 11px 0;
+    color: #647568;
+    font-size: .61rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros span { min-width: 0; line-height: 1.32; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros b {
+    margin-right: 2px;
+    color: #354f3c;
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad {
+    display: flex;
+    gap: 9px;
+    margin: 0 15px 14px;
+    padding: 9px 10px;
+    border: 0;
+    border-left: 3px solid #568b6a;
+    border-radius: 3px;
+    background: #f5f9f6;
+    font-size: .61rem;
+    line-height: 1.4;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad.es-bloqueada {
+    border-left-color: #bd7d35;
+    background: #fff9ef;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad-icono {
+    flex: none;
+    color: #376c4b;
+    font-size: .9rem;
+    line-height: 1;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad div { min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad strong {
+    display: block;
+    color: #355943;
+    font-size: .63rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad div > span {
+    display: block;
+    margin-top: 3px;
+    color: #5d7162;
+    overflow-wrap: anywhere;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad code {
+    color: #345c43;
+    font: .59rem/1.35 ui-monospace, Consolas, monospace;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categorias {
+    display: block;
+    border-top: 1px solid var(--cloudbeds-linea);
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria {
+    border: 0;
+    border-bottom: 1px solid var(--cloudbeds-linea);
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria > summary {
+    display: grid;
+    grid-template-columns: 21px minmax(0, 1fr) 28px 13px;
+    gap: 9px;
+    align-items: center;
+    min-height: 48px;
+    padding: 7px 15px;
+    color: #294536;
+    cursor: pointer;
+    list-style: none;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria > summary:hover { background: #f8faf8; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria > summary::-webkit-details-marker,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle > summary::-webkit-details-marker,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tecnico > summary::-webkit-details-marker,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-payload > summary::-webkit-details-marker { display: none; }
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-simbolo {
+    display: grid;
+    place-items: center;
+    width: 21px;
+    height: 21px;
+    border-radius: 5px;
+    background: #eef3ef;
+    color: #687d6d;
+    font-size: .72rem;
+    font-weight: 850;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-simbolo--segura { background: #e8f4eb; color: #2c714d; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-simbolo--manual { background: #fff1dc; color: #97682e; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-nombre { min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-nombre b {
+    display: block;
+    color: #294536;
+    font-size: .68rem;
+    font-weight: 740;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-nombre small {
+    display: block;
+    margin-top: 2px;
+    color: #79877b;
+    font-size: .57rem;
+    font-weight: 520;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria > summary > strong {
+    justify-self: end;
+    color: #3e664b;
+    font-size: .67rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-chevron {
+    display: inline-block;
+    width: .42rem;
+    height: .42rem;
+    box-sizing: border-box;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    color: #78917d;
+    transform: rotate(-45deg);
+    transform-origin: center;
+    transition: transform .16s ease;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria[open] > summary .haiku-cloudbeds-tarifas-chevron,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle[open] > summary .haiku-cloudbeds-tarifas-chevron { transform: rotate(45deg); }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria-cuerpo > p {
+    margin: 0;
+    padding: 10px 14px;
+    border-top: 1px solid #e3ebe4;
+    background: #fafcfb;
+    color: #798b7b;
+    font-size: .6rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tarjeta {
+    display: block;
+    padding: 0;
+    border: 0;
+    border-top: 1px solid #e3ebe4;
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tarjeta:first-child { border-top: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tarjeta > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 11px 14px 4px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-identidad { flex: 1; min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-identidad strong {
+    display: block;
+    overflow: hidden;
+    color: #243b2c;
+    font-size: .69rem;
+    font-weight: 760;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-identidad > span {
+    display: block;
+    margin-top: 2px;
+    color: #718273;
+    font-size: .61rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-certeza {
+    flex: none;
+    max-width: 96px;
+    padding: 4px 6px;
+    border-radius: 999px;
+    font-size: .49rem !important;
+    font-weight: 820;
+    letter-spacing: .035em;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+    margin: 0;
+    padding: 4px 14px 10px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos > div { display: block; min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos dt {
+    overflow-wrap: anywhere;
+    color: #687b6c;
+    font-size: .56rem;
+    line-height: 1.25;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos dd {
+    display: block;
+    margin-top: 2px;
+    color: #2a4533;
+    font-size: .69rem;
+    font-weight: 790;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos > div:last-child dd { color: #2d704e; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos dd.es-negativa { color: #af584a; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    padding: 0 14px 11px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-acciones .haiku-cloudbeds-tarifas-simular-item {
+    border-color: #2e7654;
+    background: #2e7654 !important;
+    color: #fff !important;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-acciones .haiku-cloudbeds-tarifas-writer {
+    flex: 1 1 125px;
+    border-color: #b5d4bf;
+    background: #eef5ef;
+    color: #285e41;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle {
+    margin: 0 14px 13px;
+    padding-top: 9px;
+    border-top: 1px solid #e0e9e1;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle > summary,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tecnico > summary,
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-payload > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #3d684d;
+    cursor: pointer;
+    font-size: .62rem;
+    font-weight: 720;
+    list-style: none;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle-cuerpo {
+    display: grid;
+    gap: 10px;
+    padding-top: 10px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capas > span {
+    min-width: 0;
+    padding: 7px 8px;
+    border: 1px solid #e1eae2;
+    border-radius: 5px;
+    color: #708173;
+    font-size: .56rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capas b {
+    display: block;
+    margin-bottom: 2px;
+    color: #334d3a;
+    font-size: .61rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 :is(.haiku-cloudbeds-tarifas-identidad-contextual, .haiku-cloudbeds-tarifas-fullday, .haiku-cloudbeds-tarifas-productos, .haiku-cloudbeds-tarifas-evidencias, .haiku-cloudbeds-tarifas-revision) {
+    margin: 0;
+    padding: 8px 10px;
+    border: 0;
+    border-left: 2px solid #80ac8b;
+    border-radius: 0;
+    background: #f6faf7;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-fullday {
+    border-left-color: #8eafc2;
+    background: #f3f8fb;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-productos { border-left-color: #d5e5d9; background: #fafcfb; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-revision { border-left-color: #d9aa65; background: #fff9ef; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tecnico {
+    padding-top: 9px;
+    border-top: 1px solid #e2ebe3;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tecnico[open] > summary span { transform: rotate(180deg); }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 pre {
+    max-width: 100%;
+    max-height: 220px;
+    overflow: auto;
+    margin: 7px 0 0;
+    border-radius: 4px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion {
+    margin: 14px;
+    padding: 14px;
+    border: 1px solid #c9dfcf;
+    border-radius: 8px;
+    background: #f7fbf8;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera > span:first-child {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: #e3f1e7;
+    color: #2a6949;
+    font-size: .9rem;
+    font-weight: 750;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera > div { flex: 1; min-width: 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera strong { font-size: .78rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera p { margin: 2px 0 0; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera > span:last-child {
+    flex: none;
+    padding: 4px 7px;
+    border-radius: 999px;
+    background: #edf3ed;
+    color: #54715b;
+    font-size: .55rem;
+    font-weight: 720;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-detalle { margin-top: 12px; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-item {
+    padding: 10px;
+    border: 1px solid #d6e3da;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-reserva {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid #dbe9dd;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-reserva strong { min-width: 0; font-size: .68rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-reserva span {
+    flex: none;
+    color: #5f7665;
+    font-size: .6rem;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-valores {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    margin: 10px 0 0;
+    border: 1px solid #dce9df;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #dce9df;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-valores > div {
+    display: block;
+    min-width: 0;
+    padding: 8px;
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-valores dt {
+    color: #65786a;
+    font-size: .55rem;
+    line-height: 1.3;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-valores dd {
+    margin-top: 3px;
+    color: #24422e;
+    font-size: .7rem;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-impacto {
+    margin: 10px 0;
+    color: #566d5c;
+    font-size: .61rem;
+    line-height: 1.45;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-acciones {
+    display: flex;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-acciones [data-cloudbeds-confirmar]:not(:disabled) {
+    border-color: #2a6749;
+    background: #2a6749;
+    color: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write {
+    margin: 0 15px 14px;
+    padding: 12px 13px;
+    border: 1px solid #b8d9c2;
+    border-left: 3px solid #329365;
+    border-radius: 7px;
+    background: #f2faf4;
+    box-shadow: none;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-cabecera {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-cabecera > span {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    background: #d7f0df;
+    color: #236e49;
+    font-size: .7rem;
+    font-weight: 850;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-cabecera strong { display: block; color: #215739; font-size: .72rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-cabecera small { display: block; margin-top: 2px; color: #60816b; font-size: .56rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-lista > article {
+    margin-top: 10px;
+    padding: 9px 10px 4px;
+    border: 1px solid #d4e7d8;
+    border-radius: 5px;
+    background: #fff;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-lista > article > header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 9px;
+    padding-bottom: 5px;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-nombre { margin: 0; color: #2a4935; font-size: .67rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-lista header span { color: #667d6c; font-size: .56rem; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write dl > div { padding: 5px 0; border-top: 1px solid #edf2ed; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write--advertencia {
+    border-color: #e1c17c;
+    border-left-color: #c28a25;
+    background: #fff8e8;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-estado {
+    margin: 10px 15px;
+    color: #74571e;
+    font-size: .61rem;
+    line-height: 1.4;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-payload {
+    margin: 0;
+    padding: 11px 15px;
+    border-top: 1px solid var(--cloudbeds-linea);
+    color: #577260;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 14px;
+    border-top: 1px solid #dbe7de;
+    border-radius: 0 0 9px 9px;
+    background: #fff;
+    box-shadow: 0 -5px 15px rgba(25, 62, 38, .07);
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote > span {
+    min-width: 0;
+    margin: 0;
+    color: #5c7362;
+    font-size: .6rem;
+    text-align: center;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote > span b { color: #2d5d41; font-variant-numeric: tabular-nums; }
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote [data-cloudbeds-seleccionar-todo][aria-pressed="true"] {
+    border-color: #a8d1b4;
+    background: #eaf5ed;
+}
+
+.haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote [data-cloudbeds-abrir-confirmacion]:not(:disabled) {
+    border-color: #295f47;
+    background: #295f47;
+    color: #fff;
+}
+
+@container (max-width: 430px) {
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera,
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-categoria > summary { padding-right: 11px; padding-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-resumen { margin-right: 11px; margin-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capacidad,
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write { margin-right: 11px; margin-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision strong { font-size: 1.5rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos { gap: 5px; padding-right: 11px; padding-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos dt { font-size: .51rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-montos dd { font-size: .63rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-tarjeta > header,
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-acciones { padding-right: 11px; padding-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-detalle { margin-right: 11px; margin-left: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-certeza { max-width: 76px; font-size: .44rem !important; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion { margin: 11px; padding: 11px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-reserva { display: block; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-reserva span { display: block; margin-top: 3px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-valores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote { grid-template-columns: 1fr 1fr; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-lote > span { grid-column: 1 / -1; grid-row: 1; text-align: left; }
+}
+
+@media (max-width: 600px) {
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 { border-right: 0; border-left: 0; border-radius: 0; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-seguro { font-size: .52rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision span { font-size: .62rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros { font-size: .56rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-acciones button { white-space: normal; }
+}
+
+@media (max-width: 400px) {
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera { padding-top: 13px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-cabecera > div > span { font-size: .52rem; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision { grid-template-columns: 1fr; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-decision > div + div { padding-left: 6px; border-top: 1px solid #e2ebe4; border-left: 0; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros { grid-template-columns: 1fr 1fr; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-otros span:nth-child(2) { grid-column: span 2; grid-row: 2; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-capas { grid-template-columns: 1fr; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-lista > article > header { display: block; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write-lista header span { display: block; margin-top: 3px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write dl > div { align-items: flex-start; flex-direction: column; gap: 1px; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-post-write dd { max-width: 100%; white-space: normal; }
+    .haiku-cloudbeds-tarifas.haiku-cloudbeds-tarifas-v1 .haiku-cloudbeds-tarifas-confirmacion-cabecera > span:last-child { font-size: .49rem; }
+}

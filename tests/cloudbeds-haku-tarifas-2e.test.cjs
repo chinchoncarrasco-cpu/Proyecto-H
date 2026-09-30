@@ -139,10 +139,10 @@ test('caso tipo Héctor muestra descuento, evidencia y capas separadas', () => {
   assert.equal(item.seleccionable, true);
   const html = tarifas.renderizar(modelo);
   assert.match(html, /Héctor Ficticio · CAB 5/);
-  assert.match(html, /<dt>Alojamiento actual<\/dt>/);
+  assert.match(html, /<dt>Proyecto H<\/dt>/);
   assert.match(html, /<dt>Alojamiento Cloudbeds<\/dt>/);
-  assert.match(html, /<dt>Diferencia alojamiento<\/dt>/);
-  assert.doesNotMatch(html, /<dt>Cloudbeds<\/dt>|<dt>Diferencia<\/dt>/);
+  assert.match(html, /<dt>Diferencia<\/dt>/);
+  assert.doesNotMatch(html, /<dt>Cloudbeds<\/dt>|<dt>Diferencia alojamiento<\/dt>/);
   assert.match(html, /\$160\.000/);
   assert.match(html, /\$144\.000/);
   assert.match(html, /-\$16\.000/);
@@ -249,23 +249,27 @@ test('integración Haku carga 2E después del parser y mantiene diagnóstico col
   const panel = read('panel.html');
   const asistente = read('js/supabase-asistente-v1.js');
   assert.ok(panel.indexOf("'haiku-cloudbeds-pdf-v1','haiku-cloudbeds-tarifas-v1'") >= 0);
+  assert.ok(panel.indexOf('css/supabase-asistente-v1.css') < panel.indexOf('css/haiku-cloudbeds-tarifas-redesign-v1.css'));
   assert.match(asistente, /HAIKU_CLOUDBEDS_PDF_V1/);
   assert.match(asistente, /HAIKU_CLOUDBEDS_TARIFAS_V1/);
   assert.match(tarifas.renderizar(tarifas.prepararModelo(informeRealista(), capacidadV31)), /<details class="haiku-cloudbeds-tarifas-(?:tecnico|payload)"/);
 });
 
 test('contratos visuales cubren escritorio y móvil sin drawer adicional', () => {
-  const css = read('css/supabase-asistente-v1.css');
+  const css = read('css/haiku-cloudbeds-tarifas-redesign-v1.css');
   const fuente = read('js/haiku-cloudbeds-tarifas-v1.js');
   const fixture = read('tests/fixtures/cloudbeds-haku-tarifas-2e/index.html');
   const fixtureJs = read('tests/fixtures/cloudbeds-haku-tarifas-2e/demo.js');
-  assert.match(css, /\.haiku-cloudbeds-tarifas-resumen\s*\{[\s\S]*grid-template-columns:\s*repeat\(5/);
-  assert.match(css, /@media \(max-width: 520px\)[\s\S]*\.haiku-cloudbeds-tarifas-resumen/);
+  assert.match(css, /\.haiku-cloudbeds-tarifas\.haiku-cloudbeds-tarifas-v1/);
+  assert.match(css, /\.haiku-cloudbeds-tarifas-decision\s*\{[\s\S]*grid-template-columns:\s*1\.1fr 1fr/);
+  assert.match(css, /@container \(max-width: 430px\)/);
+  assert.match(css, /@media \(max-width: 600px\)/);
   assert.match(css, /\.haiku-cloudbeds-tarifas-montos dt\s*\{[^}]*overflow-wrap:\s*anywhere/);
   assert.match(css, /\.haiku-cloudbeds-tarifas-montos dd\s*\{[^}]*white-space:\s*nowrap/);
   assert.match(fuente, /HAIKU_INSPECTOR_V1 \|\| root\.HAIKU_PANELES_V1/);
   assert.doesNotMatch(fuente, /createElement\(["'](?:dialog|aside)["']\)|drawer/i);
   assert.match(fixture, /data-inspector-cabecera/);
+  assert.match(fixture, /haiku-cloudbeds-tarifas-redesign-v1\.css/);
   assert.match(fixture, /role="dialog" aria-modal="false"/);
   assert.match(fixtureJs, /URLSearchParams[\s\S]*inspector[\s\S]*HAIKU_PANELES_V1\.abrirReserva\('r-hector'\)/);
 });

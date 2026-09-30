@@ -675,6 +675,7 @@ async function screenshot(client, name) {
             "Haku Cloudbeds respeta la altura visible");
         assert.match(cloudbedsScroll.draft, /Borrador ficticio/);
         await evaluate(page, "document.getElementById('haiku-asistente-mensajes').scrollTop = 0");
+        await screenshot(page, "cloudbeds-redesign-overview-desktop-1500x900.png");
         for (let index = 0; index < 10; index++) await wheel(page, "#haiku-asistente-mensajes", 900);
         await waitFor(page, `(() => {
             const messages = document.getElementById("haiku-asistente-mensajes");
@@ -763,6 +764,7 @@ async function screenshot(client, name) {
         assert.equal(postWriteAngosto.visible, true);
         assert.ok(postWriteAngosto.scrollWidth <= postWriteAngosto.clientWidth + 1,
             "la tarjeta no desborda en panel angosto");
+        await screenshot(page, "cloudbeds-redesign-panel-angosto-980x850.png");
 
         await viewport(page, 390, 844);
         assert.equal(await evaluate(page, "getComputedStyle(document.getElementById('haiku-asistente-panel')).visibility"), "hidden");
