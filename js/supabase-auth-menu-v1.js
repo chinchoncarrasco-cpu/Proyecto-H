@@ -1,314 +1,265 @@
 // ========================================
-// HAIKU · CUENTA DENTRO DEL MENÚ · V1
-// Oculta el chip flotante de sesión y reutiliza
-// el mismo logout real de supabase-auth.js.
+// HAIKU · CUENTA DENTRO DEL MENÚ · V2
+// Presenta la sesión real en un drawer y reutiliza
+// el mismo logout de supabase-auth.js.
 // ========================================
 
 (() => {
     "use strict";
 
-    const STYLE_ID = "haiku-auth-menu-v1-style";
+    const BOTON_ID = "haiku-cuenta-menu-boton";
+    const PANEL_ID = "haiku-cuenta-menu-panel";
+    const FONDO_ID = "haiku-cuenta-fondo";
 
-    function instalarEstilos() {
-        if (document.getElementById(STYLE_ID)) return;
-
-        const style = document.createElement("style");
-        style.id = STYLE_ID;
-        style.textContent = `
-            /* El chip original sigue vivo para que supabase-auth.js
-               pueda actualizarlo, pero deja de ocupar la cabecera. */
-            .haiku-usuario-chip {
-                display: none !important;
-            }
-
-            .haiku-cuenta-menu-boton {
-                position: relative;
-            }
-
-            .haiku-cuenta-menu-boton[aria-expanded="true"] {
-                background: #31483b;
-                color: #fff;
-            }
-
-            .haiku-cuenta-menu-panel {
-                position: fixed;
-                z-index: 99992;
-                width: min(310px, calc(100vw - 24px));
-                padding: 14px;
-                border: 1px solid rgba(255,255,255,.10);
-                border-radius: 16px;
-                background: rgba(24, 34, 29, .98);
-                color: #f4f6f4;
-                box-shadow: 0 18px 45px rgba(0,0,0,.30);
-                backdrop-filter: blur(12px);
-                -webkit-backdrop-filter: blur(12px);
-            }
-
-            .haiku-cuenta-menu-panel[hidden] {
-                display: none !important;
-            }
-
-            .haiku-cuenta-menu-cabecera {
-                display: flex;
-                align-items: center;
-                gap: 10px;
-                padding-bottom: 12px;
-                margin-bottom: 11px;
-                border-bottom: 1px solid rgba(255,255,255,.09);
-            }
-
-            .haiku-cuenta-menu-icono {
-                display: grid;
-                place-items: center;
-                flex: 0 0 36px;
-                width: 36px;
-                height: 36px;
-                border-radius: 11px;
-                background: #31483b;
-                font-size: 17px;
-            }
-
-            .haiku-cuenta-menu-identidad {
-                min-width: 0;
-                flex: 1;
-            }
-
-            .haiku-cuenta-menu-email {
-                display: block;
-                overflow: hidden;
-                color: #fff;
-                font-size: 12px;
-                font-weight: 750;
-                line-height: 1.35;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .haiku-cuenta-menu-rol {
-                display: block;
-                margin-top: 2px;
-                color: #a9bcb0;
-                font-size: 11px;
-                line-height: 1.3;
-            }
-
-            .haiku-cuenta-menu-salir {
-                width: 100%;
-                min-height: 38px;
-                border: 1px solid rgba(255,255,255,.12);
-                border-radius: 11px;
-                background: rgba(255,255,255,.06);
-                color: #f3f5f3;
-                font: inherit;
-                font-size: 12px;
-                font-weight: 700;
-                cursor: pointer;
-                transition: background .15s ease, border-color .15s ease;
-            }
-
-            .haiku-cuenta-menu-salir:hover {
-                border-color: rgba(255,255,255,.22);
-                background: rgba(255,255,255,.11);
-            }
-
-            .haiku-cuenta-menu-salir:disabled {
-                opacity: .55;
-                cursor: wait;
-            }
-
-            /* En escritorio, la cabecera del sidebar queda fija y sólo
-               el listado de secciones se desplaza. Así el menú puede crecer
-               con Reservas y futuras secciones sin ocultar Cuenta. */
-            @media (min-width: 769px) {
-                .sidebar {
-                    overflow: hidden;
-                }
-
-                .sidebar-superior {
-                    flex: 0 0 auto;
-                }
-
-                nav.menu {
-                    flex: 1 1 auto;
-                    min-height: 0;
-                    overflow-y: auto;
-                    overflow-x: hidden;
-                    padding-right: 5px;
-                    padding-bottom: 12px;
-                    overscroll-behavior: contain;
-                    scrollbar-width: thin;
-                    scrollbar-color: rgba(255,255,255,.24) transparent;
-                }
-
-                nav.menu .menu-item {
-                    flex: 0 0 auto;
-                }
-
-                nav.menu::-webkit-scrollbar {
-                    width: 6px;
-                }
-
-                nav.menu::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-
-                nav.menu::-webkit-scrollbar-thumb {
-                    background: rgba(255,255,255,.22);
-                    border-radius: 999px;
-                }
-
-                nav.menu::-webkit-scrollbar-thumb:hover {
-                    background: rgba(255,255,255,.34);
-                }
-            }
-
-            @media (max-width: 768px) {
-                .haiku-cuenta-menu-panel {
-                    width: min(300px, calc(100vw - 20px));
-                    padding: 13px;
-                    border-radius: 15px;
-                }
-
-                .haiku-cuenta-menu-boton {
-                    flex: 0 0 auto;
-                }
-            }
-        `;
-        document.head.appendChild(style);
+    function texto(valor) {
+        return typeof valor === "string" ? valor.trim() : "";
     }
 
-    function nombreRolDesdeSesion() {
-        const roles = window.haikuSesion?.roles;
-        if (Array.isArray(roles) && roles.length) {
-            const texto = roles
-                .map(rol => rol?.nombre || rol?.codigo || "")
-                .filter(Boolean)
-                .join(" · ");
-            if (texto) return texto;
-        }
-
-        return document.getElementById("haiku-usuario-chip-rol")?.textContent?.trim() || "Usuario";
+    function sesionActual() {
+        return window.haikuSesion || {};
     }
 
     function emailDesdeSesion() {
-        return (
-            window.haikuSesion?.auth?.email ||
-            document.getElementById("haiku-usuario-chip-email")?.textContent?.trim() ||
-            "Cuenta HAIKU"
-        );
+        const sesion = sesionActual();
+        return texto(sesion.auth?.email)
+            || texto(document.getElementById("haiku-usuario-chip-email")?.textContent)
+            || "Correo no disponible";
     }
 
-    function instalarCuentaMenu() {
-        instalarEstilos();
+    function nombreDesdeSesion() {
+        const sesion = sesionActual();
+        const usuario = sesion.usuario || {};
+        const metadata = sesion.auth?.user_metadata || {};
+        return texto(usuario.nombre_completo)
+            || [texto(usuario.nombre), texto(usuario.apellido)].filter(Boolean).join(" ")
+            || texto(metadata.full_name)
+            || texto(metadata.name)
+            || "Cuenta Haku";
+    }
 
-        const menu = document.querySelector("nav.menu");
-        if (!menu) return false;
+    function rolesDesdeSesion() {
+        const roles = Array.isArray(sesionActual().roles) ? sesionActual().roles : [];
+        return [...new Set(roles
+            .map(rol => texto(typeof rol === "string" ? rol : rol?.nombre || rol?.codigo))
+            .filter(Boolean))];
+    }
 
-        let boton = document.getElementById("haiku-cuenta-menu-boton");
-        if (!boton) {
-            boton = document.createElement("button");
-            boton.type = "button";
-            boton.id = "haiku-cuenta-menu-boton";
-            boton.className = "menu-item haiku-cuenta-menu-boton";
-            boton.setAttribute("aria-haspopup", "dialog");
-            boton.setAttribute("aria-expanded", "false");
-            boton.innerHTML = "👤 Cuenta";
-            menu.appendChild(boton);
+    function nombreRolDesdeSesion() {
+        return rolesDesdeSesion().join(" · ") || "Sin rol informado";
+    }
+
+    function estadoDesdeSesion() {
+        const activo = sesionActual().usuario?.activo;
+        if (activo === true) return "Activo";
+        if (activo === false) return "Inactivo";
+        return "Estado no disponible";
+    }
+
+    function permisosDesdeSesion() {
+        const permisos = Array.isArray(sesionActual().permisos) ? sesionActual().permisos : [];
+        return [...new Set(permisos
+            .map(permiso => texto(typeof permiso === "string" ? permiso : permiso?.codigo || permiso?.nombre))
+            .filter(Boolean))];
+    }
+
+    function etiquetaPermiso(codigo) {
+        const partes = codigo.replaceAll("_", " ").split(".").filter(Boolean);
+        return partes.map(parte => parte.charAt(0).toUpperCase() + parte.slice(1)).join(" · ");
+    }
+
+    function iniciales(nombre, email) {
+        const palabras = nombre === "Cuenta Haku"
+            ? []
+            : nombre.split(/\s+/).filter(Boolean);
+        const letras = palabras.slice(0, 2).map(parte => parte.charAt(0));
+        if (letras.length) return letras.join("").toLocaleUpperCase("es");
+        const primera = texto(email).charAt(0);
+        return primera ? primera.toLocaleUpperCase("es") : "H";
+    }
+
+    function crearBoton(menu) {
+        let boton = document.getElementById(BOTON_ID);
+        if (boton) return boton;
+
+        boton = document.createElement("button");
+        boton.type = "button";
+        boton.id = BOTON_ID;
+        boton.className = "menu-item haiku-cuenta-menu-boton";
+        boton.setAttribute("aria-haspopup", "dialog");
+        boton.setAttribute("aria-expanded", "false");
+        boton.setAttribute("aria-controls", PANEL_ID);
+        boton.innerHTML = `
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 21c0-5 3-7 8-7s8 2 8 7"></path>
+            </svg>
+            <span>Cuenta</span>
+        `;
+        menu.appendChild(boton);
+        return boton;
+    }
+
+    function crearSuperficies() {
+        let fondo = document.getElementById(FONDO_ID);
+        if (!fondo) {
+            fondo = document.createElement("div");
+            fondo.id = FONDO_ID;
+            fondo.className = "haiku-cuenta-fondo";
+            fondo.hidden = true;
+            document.body.appendChild(fondo);
         }
 
-        let panel = document.getElementById("haiku-cuenta-menu-panel");
+        let panel = document.getElementById(PANEL_ID);
         if (!panel) {
-            panel = document.createElement("div");
-            panel.id = "haiku-cuenta-menu-panel";
+            panel = document.createElement("aside");
+            panel.id = PANEL_ID;
             panel.className = "haiku-cuenta-menu-panel";
             panel.hidden = true;
+            panel.tabIndex = -1;
             panel.setAttribute("role", "dialog");
-            panel.setAttribute("aria-label", "Cuenta HAIKU");
+            panel.setAttribute("aria-modal", "true");
+            panel.setAttribute("aria-labelledby", "haiku-cuenta-titulo");
             panel.innerHTML = `
-                <div class="haiku-cuenta-menu-cabecera">
-                    <div class="haiku-cuenta-menu-icono" aria-hidden="true">👤</div>
-                    <div class="haiku-cuenta-menu-identidad">
-                        <strong id="haiku-cuenta-menu-email" class="haiku-cuenta-menu-email"></strong>
-                        <span id="haiku-cuenta-menu-rol" class="haiku-cuenta-menu-rol"></span>
+                <header class="haiku-cuenta-cabecera">
+                    <button type="button" id="haiku-cuenta-volver" class="haiku-cuenta-volver" aria-label="Volver y cerrar Cuenta">
+                        <span aria-hidden="true">←</span><span>Volver</span>
+                    </button>
+                    <div class="haiku-cuenta-titulos">
+                        <h2 id="haiku-cuenta-titulo">Cuenta</h2>
+                        <small>Haku</small>
                     </div>
+                    <span class="haiku-cuenta-cabecera-espacio" aria-hidden="true"></span>
+                </header>
+                <div class="haiku-cuenta-scroll" id="haiku-cuenta-scroll">
+                    <section class="haiku-cuenta-perfil" aria-label="Perfil de la cuenta">
+                        <div class="haiku-cuenta-avatar" id="haiku-cuenta-avatar" aria-hidden="true"></div>
+                        <h3 id="haiku-cuenta-nombre"></h3>
+                        <p id="haiku-cuenta-email"></p>
+                        <div class="haiku-cuenta-badges">
+                            <span id="haiku-cuenta-badge-rol"></span>
+                            <span id="haiku-cuenta-badge-estado"></span>
+                        </div>
+                    </section>
+
+                    <section class="haiku-cuenta-tarjeta" aria-labelledby="haiku-cuenta-personal-titulo">
+                        <div class="haiku-cuenta-tarjeta-titulo"><h3 id="haiku-cuenta-personal-titulo">Información personal</h3></div>
+                        <dl>
+                            <div><dt>Nombre completo</dt><dd id="haiku-cuenta-personal-nombre"></dd></div>
+                            <div><dt>Correo</dt><dd id="haiku-cuenta-personal-email"></dd></div>
+                        </dl>
+                    </section>
+
+                    <section class="haiku-cuenta-tarjeta" aria-labelledby="haiku-cuenta-acceso-titulo">
+                        <div class="haiku-cuenta-tarjeta-titulo"><h3 id="haiku-cuenta-acceso-titulo">Rol y acceso</h3></div>
+                        <div class="haiku-cuenta-rol">
+                            <div><small>Rol actual</small><strong id="haiku-cuenta-rol"></strong></div>
+                            <span id="haiku-cuenta-estado"></span>
+                        </div>
+                        <div class="haiku-cuenta-permisos">
+                            <small>Permisos habilitados</small>
+                            <div id="haiku-cuenta-permisos-lista"></div>
+                        </div>
+                    </section>
+
+                    <section class="haiku-cuenta-tarjeta" aria-labelledby="haiku-cuenta-seguridad-titulo">
+                        <div class="haiku-cuenta-tarjeta-titulo"><h3 id="haiku-cuenta-seguridad-titulo">Seguridad</h3></div>
+                        <dl>
+                            <div><dt>Sesión</dt><dd id="haiku-cuenta-sesion-estado"></dd></div>
+                            <div><dt>Identidad de acceso</dt><dd id="haiku-cuenta-sesion-email"></dd></div>
+                        </dl>
+                    </section>
+
+                    <section class="haiku-cuenta-tarjeta haiku-cuenta-salida" aria-labelledby="haiku-cuenta-salida-titulo">
+                        <h3 id="haiku-cuenta-salida-titulo">Cuenta</h3>
+                        <p>Tu sesión identifica las acciones realizadas dentro de Haku.</p>
+                        <button type="button" id="haiku-cuenta-menu-salir">Cerrar sesión</button>
+                        <p class="haiku-cuenta-salida-estado" id="haiku-cuenta-salida-estado" role="status" aria-live="polite"></p>
+                    </section>
                 </div>
-                <button type="button" id="haiku-cuenta-menu-salir" class="haiku-cuenta-menu-salir">
-                    Cerrar sesión
-                </button>
             `;
             document.body.appendChild(panel);
         }
 
-        if (boton.dataset.haikuCuentaMenuV1 === "1") {
+        return { fondo, panel };
+    }
+
+    function instalarCuentaMenu() {
+        const menu = document.querySelector("nav.menu");
+        if (!menu) return false;
+
+        const boton = crearBoton(menu);
+        const { fondo, panel } = crearSuperficies();
+
+        function actualizarIdentidad() {
+            const nombre = nombreDesdeSesion();
+            const email = emailDesdeSesion();
+            const rol = nombreRolDesdeSesion();
+            const estado = estadoDesdeSesion();
+            const sesion = sesionActual();
+
+            document.getElementById("haiku-cuenta-avatar").textContent = iniciales(nombre, email);
+            document.getElementById("haiku-cuenta-nombre").textContent = nombre;
+            document.getElementById("haiku-cuenta-email").textContent = email;
+            document.getElementById("haiku-cuenta-badge-rol").textContent = rol;
+            document.getElementById("haiku-cuenta-badge-estado").textContent = estado;
+            document.getElementById("haiku-cuenta-personal-nombre").textContent = nombre;
+            document.getElementById("haiku-cuenta-personal-email").textContent = email;
+            document.getElementById("haiku-cuenta-rol").textContent = rol;
+            document.getElementById("haiku-cuenta-estado").textContent = estado;
+            document.getElementById("haiku-cuenta-sesion-estado").textContent = sesion.auth ? "Sesión autenticada" : "Información no disponible";
+            document.getElementById("haiku-cuenta-sesion-email").textContent = email;
+
+            const lista = document.getElementById("haiku-cuenta-permisos-lista");
+            lista.replaceChildren();
+            const permisos = permisosDesdeSesion();
+            for (const permiso of permisos) {
+                const etiqueta = document.createElement("span");
+                etiqueta.textContent = etiquetaPermiso(permiso);
+                etiqueta.title = permiso;
+                lista.appendChild(etiqueta);
+            }
+            if (!permisos.length) {
+                const vacio = document.createElement("span");
+                vacio.className = "haiku-cuenta-permisos-vacio";
+                vacio.textContent = "Sin permisos informados";
+                lista.appendChild(vacio);
+            }
+        }
+
+        if (boton.dataset.haikuCuentaMenuV2 === "1") {
             actualizarIdentidad();
             return true;
         }
 
-        boton.dataset.haikuCuentaMenuV1 = "1";
-
-        function actualizarIdentidad() {
-            const email = document.getElementById("haiku-cuenta-menu-email");
-            const rol = document.getElementById("haiku-cuenta-menu-rol");
-            if (email) email.textContent = emailDesdeSesion();
-            if (rol) rol.textContent = nombreRolDesdeSesion();
-        }
-
-        function posicionarPanel() {
-            if (panel.hidden) return;
-
-            const rect = boton.getBoundingClientRect();
-            const ancho = panel.offsetWidth;
-            const alto = panel.offsetHeight;
-            const margen = 10;
-
-            let left;
-            let top;
-
-            if (window.innerWidth > 768) {
-                // En escritorio aparece junto al menú lateral.
-                left = Math.min(
-                    window.innerWidth - ancho - margen,
-                    rect.right + 8
-                );
-                top = Math.max(
-                    margen,
-                    Math.min(rect.top, window.innerHeight - alto - margen)
-                );
-            } else {
-                // En celular aparece arriba o abajo del propio botón,
-                // según el espacio disponible.
-                left = Math.max(
-                    margen,
-                    Math.min(rect.left, window.innerWidth - ancho - margen)
-                );
-
-                const cabeDebajo =
-                    window.innerHeight - rect.bottom >= alto + margen;
-
-                top = cabeDebajo
-                    ? rect.bottom + 7
-                    : Math.max(margen, rect.top - alto - 7);
-            }
-
-            panel.style.left = `${Math.round(left)}px`;
-            panel.style.top = `${Math.round(top)}px`;
-        }
+        boton.dataset.haikuCuentaMenuV2 = "1";
+        let focoAnterior = null;
 
         function abrir() {
             actualizarIdentidad();
+            focoAnterior = document.activeElement;
+            fondo.hidden = false;
             panel.hidden = false;
+            document.getElementById("haiku-cuenta-scroll").scrollTop = 0;
+            document.body.classList.add("haiku-cuenta-abierta");
             boton.setAttribute("aria-expanded", "true");
-            requestAnimationFrame(posicionarPanel);
+            requestAnimationFrame(() => document.getElementById("haiku-cuenta-volver")?.focus());
         }
 
-        function cerrar() {
+        function cerrar({ restaurarFoco = false } = {}) {
+            if (panel.hidden) return;
             panel.hidden = true;
+            fondo.hidden = true;
+            document.body.classList.remove("haiku-cuenta-abierta");
             boton.setAttribute("aria-expanded", "false");
+            if (restaurarFoco) {
+                const destino = focoAnterior instanceof HTMLElement ? focoAnterior : boton;
+                destino.focus();
+            }
         }
 
         function alternar() {
             if (panel.hidden) abrir();
-            else cerrar();
+            else cerrar({ restaurarFoco: true });
         }
 
         boton.addEventListener("click", evento => {
@@ -317,67 +268,66 @@
             alternar();
         });
 
-        panel.addEventListener("click", evento => {
-            evento.stopPropagation();
+        document.getElementById("haiku-cuenta-volver")?.addEventListener("click", () => {
+            cerrar({ restaurarFoco: true });
         });
 
-        document.addEventListener("click", cerrar);
+        fondo.addEventListener("click", () => cerrar({ restaurarFoco: true }));
+
+        document.addEventListener("pointerdown", evento => {
+            if (panel.hidden || panel.contains(evento.target) || boton.contains(evento.target)) return;
+            cerrar();
+        });
+
         document.addEventListener("keydown", evento => {
-            if (evento.key === "Escape") cerrar();
-        });
-
-        window.addEventListener("resize", () => {
-            if (!panel.hidden) posicionarPanel();
-        });
-
-        window.addEventListener("scroll", () => {
-            if (!panel.hidden) posicionarPanel();
+            if (evento.key !== "Escape" || panel.hidden) return;
+            evento.preventDefault();
+            evento.stopImmediatePropagation();
+            cerrar({ restaurarFoco: true });
         }, true);
 
         const salir = document.getElementById("haiku-cuenta-menu-salir");
         salir?.addEventListener("click", () => {
             const logoutReal = document.getElementById("haiku-cerrar-sesion");
+            const estado = document.getElementById("haiku-cuenta-salida-estado");
 
             if (!logoutReal) {
-                console.error("HAIKU · No se encontró el logout real de Supabase.");
+                estado.textContent = "No fue posible encontrar la acción de cierre de sesión.";
                 return;
             }
 
             salir.disabled = true;
+            estado.textContent = "Cerrando sesión…";
             cerrar();
             logoutReal.click();
 
             setTimeout(() => {
                 salir.disabled = false;
+                estado.textContent = "";
             }, 900);
         });
 
-        window.addEventListener("haiku:auth-ready", () => {
-            actualizarIdentidad();
-        });
+        window.addEventListener("haiku:auth-ready", actualizarIdentidad);
 
         actualizarIdentidad();
 
         window.HAIKU_AUTH_MENU_V1 = Object.freeze({
             abrir,
-            cerrar,
+            cerrar: () => cerrar({ restaurarFoco: true }),
             actualizar: actualizarIdentidad
         });
 
-        console.info("HAIKU · Cuenta movida al menú V1.");
+        console.info("HAIKU · Cuenta integrada en el menú.");
         return true;
     }
 
     function iniciar() {
         if (instalarCuentaMenu()) return;
 
-        // Respaldo por si la interfaz base todavía se está escribiendo.
         let intentos = 0;
         const timer = setInterval(() => {
             intentos++;
-            if (instalarCuentaMenu() || intentos >= 30) {
-                clearInterval(timer);
-            }
+            if (instalarCuentaMenu() || intentos >= 30) clearInterval(timer);
         }, 100);
     }
 

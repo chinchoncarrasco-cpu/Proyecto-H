@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Cuenta Haku · revisión visual</title>
+    <link rel="stylesheet" href="../../../css/styles.css">
+    <link rel="stylesheet" href="../../../css/sites-shell-v1.css">
+    <link rel="stylesheet" href="../../../css/haiku-cuenta-redesign-v1.css">
+    <link rel="stylesheet" data-haiku-asistente-v1 href="data:text/css,">
+    <style>
+        .cuenta-fixture-main { min-height: 140vh; padding: 38px; background: #f5f7f5; color: #243b31; }
+        .cuenta-fixture-main h2 { margin: 0; font-size: 30px; }
+        .cuenta-fixture-main > p { max-width: 660px; color: #687873; }
+        .cuenta-fixture-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 15px; margin-top: 28px; }
+        .cuenta-fixture-grid article { min-height: 170px; padding: 20px; border: 1px solid #dce5e0; border-radius: 10px; background: #fff; }
+        .cuenta-fixture-grid small { color: #77877f; }
+        .cuenta-fixture-grid strong { display: block; margin-top: 7px; font-size: 18px; }
+        #haiku-asistente-panel-fixture, #sites-resumen-reserva-drawer-fixture { display: none; }
+        @media (max-width: 780px) {
+            .cuenta-fixture-main { padding: 22px 15px; }
+            .cuenta-fixture-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header class="sites-shell-topbar">
+        <div class="sites-shell-topbar-title"><span>Operación</span><span>/</span><strong>Proyecto H</strong></div>
+    </header>
+    <aside class="sidebar sites-shell-sidebar">
+        <div class="sidebar-superior"><div class="logo"><span class="sites-shell-brand-mark">H</span><h1>HAIKU</h1></div></div>
+        <nav class="menu" aria-label="Navegación principal">
+            <span class="sites-shell-nav-label">OPERACIÓN</span>
+            <button type="button" class="menu-item activo"><span>Resumen</span></button>
+            <button type="button" class="menu-item"><span>Calendario</span></button>
+            <span class="sites-shell-nav-label sites-shell-nav-label-gestion">GESTIÓN</span>
+            <button type="button" class="menu-item"><span>Reservas</span></button>
+            <button type="button" class="menu-item"><span>Libro de Reserva</span></button>
+        </nav>
+    </aside>
+    <main class="contenido sites-shell-main cuenta-fixture-main" id="contenido-principal">
+        <h2>Resumen de cabañas</h2>
+        <p>Contenido ficticio para revisar exclusivamente la composición del drawer de Cuenta. No usa Supabase ni datos productivos.</p>
+        <div class="cuenta-fixture-grid">
+            <article><small>Continúan</small><strong>4 cabañas</strong></article>
+            <article><small>Ingresan</small><strong>2 reservas</strong></article>
+            <article><small>Salen</small><strong>3 reservas</strong></article>
+            <article><small>Servicios</small><strong>5 pendientes</strong></article>
+            <article><small>Pagos</small><strong>2 por revisar</strong></article>
+            <article><small>Operación</small><strong>Turno activo</strong></article>
+        </div>
+    </main>
+
+    <button type="button" id="haiku-cerrar-sesion" hidden>Salir real</button>
+    <div id="haiku-asistente-panel-fixture" data-estado="conservado"></div>
+    <div id="sites-resumen-reserva-drawer-fixture" data-estado="conservado"></div>
+
+    <script>
+        window.haikuSesion = {
+            auth: { id: "usuario-fixture", email: "felipe.fixture@example.invalid" },
+            usuario: { nombre: "Felipe", apellido: "Revisión", activo: true },
+            roles: [{ codigo: "operador", nombre: "Operador de turno" }],
+            permisos: [
+                "reservas.ver", "reservas.editar", "reservas.crear", "pagos.ver",
+                "pagos.registrar", "servicios.ver", "servicios.editar", "cabanas.ver",
+                "aseos.ver_todos", "historial.ver", "cierre.ver", "libro_reserva.ver"
+            ]
+        };
+        window.__logoutClicks = 0;
+        document.getElementById("haiku-cerrar-sesion").addEventListener("click", () => window.__logoutClicks++);
+    </script>
+    <script data-haiku-asistente-v1>window.__asistenteFixture = true;</script>
+    <script src="../../../js/supabase-auth-menu-v1.js"></script>
+</body>
+</html>
