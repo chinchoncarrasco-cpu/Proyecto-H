@@ -247,5 +247,6 @@ test('las otras rutas de creación siguen acotadas o envían una tarifa explíci
   assert.match(asistente, /p_tipo_estadia:\s*"alojamiento"/);
   assert.match(cloudbeds, /tarifas:\s*f\.tarifas/);
   assert.match(cloudbeds, /f\.tipo_estadia === "fullday"/);
-  assert.match(libro, /todavía no transporta una tarifa Full Day explícita/);
+  assert.match(libro, /tarifaFullDay\?\.resolverLibro\(r\)/);
+  assert.doesNotMatch(libro, /todavía no transporta una tarifa Full Day explícita/);
 });

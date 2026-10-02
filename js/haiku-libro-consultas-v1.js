@@ -2,6 +2,8 @@
     "use strict";
     const S = root.HAIKU_LIBRO_SEMANTICA;
     const D = root.HAIKU_LIBRO_PAGOS_DESTINOS_V1;
+    const tarifaFullDay = root.HAIKU_FULLDAY_TARIFA_V1 ||
+        (typeof module !== "undefined" && module.exports ? require('./haiku-fullday-tarifa-v1.js') : null);
     if (!S) return;
 
     const money = v => v === null || v === undefined ? "monto no determinado" : `$${Number(v).toLocaleString("es-CL")} CLP`;
@@ -2430,10 +2432,14 @@
                 if (!['alojamiento','full_day'].includes(r.tipo_estadia) || (r.tipo_estadia === 'full_day') !== (r.fecha_checkin === r.fecha_checkout)) motivos.push('Revisa el tipo de estadía y las fechas.');
                 if (!Number.isInteger(r.adultos) || r.adultos < 1) motivos.push('Falta una cantidad válida de adultos.');
                 for (const k of ['ninos','mascotas']) if (r[k] != null && (!Number.isInteger(r[k]) || r[k] < 0)) motivos.push('Cantidad inválida: ' + k);
-                if (r.tipo_estadia === 'full_day') motivos.push('La incorporación desde el Libro todavía no transporta una tarifa Full Day explícita. Crea o edita este Full Day desde la ficha con una tarifa validada.');
+                const tarifa = r.tipo_estadia === 'full_day' ? tarifaFullDay?.resolverLibro(r) : null;
+                if (r.tipo_estadia === 'full_day' && (!tarifa || tarifa.bloqueada)) {
+                    motivos.push(tarifa?.mensaje || 'No está disponible la regla Full Day. Vuelve a cargar y revisar la incorporación.');
+                }
                 estadias.push({ cabana_numero: r.cabana, datos: { fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout,
                     tipo_estadia: r.tipo_estadia === 'full_day' ? 'fullday' : 'alojamiento', adultos: r.adultos ?? null,
                     ninos: r.ninos ?? null, mascotas: r.mascotas ?? null, estado_estadia: estadoLibro(r) || 'pendiente' }, noches: r.tipo_estadia === 'full_day' ? 0 : (Date.parse(r.fecha_checkout)-Date.parse(r.fecha_checkin))/86400000,
+                    ...(tarifa && !tarifa.bloqueada ? { tarifas: { [r.fecha_checkin]: tarifa.tarifa } } : {}),
                     estado_libro: r.estado_operativo || null, notas: r.notas_importantes || [], solicitudes: r.servicios || [] });
             }
             if (categoria === 'estadias' && !reservaId) motivos.push('Falta la reserva destino.');
@@ -4223,6 +4229,9 @@
                     datoIncorporacion("Tipo", tipo),
                     datoIncorporacion("Huéspedes", `${estadia.datos.adultos ?? "?"} ad. · ${estadia.datos.ninos ?? "?"} niñ. · ${estadia.datos.mascotas ?? "?"} masc.`)
                 );
+                if (estadia.datos.tipo_estadia === 'fullday' && estadia.tarifas?.[estadia.datos.fecha_ingreso] != null) {
+                    tarjeta.append(datoIncorporacion('Tarifa Full Day', money(estadia.tarifas[estadia.datos.fecha_ingreso])));
+                }
                 lista.append(tarjeta);
             }
             fila.append(lista);
