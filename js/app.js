@@ -5724,60 +5724,53 @@ if (botonCrearOtraReserva) {
 }
 
 
+async function abrirReservaCreadaPorId() {
+    const reservaId = String(reservaCreadaId || "").trim();
+
+    if (!reservaId) {
+        alert(
+            "No se pudo identificar la reserva creada. Recarga la página e inténtalo nuevamente."
+        );
+        return false;
+    }
+
+    const abrirPorId =
+        window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId;
+
+    if (typeof abrirPorId !== "function") {
+        alert(
+            "La ficha de reserva no está disponible. Recarga la página e inténtalo nuevamente."
+        );
+        return false;
+    }
+
+    cerrarModalNuevaReserva();
+
+    try {
+        const abierta = await abrirPorId(reservaId);
+
+        if (!abierta) {
+            alert(
+                "No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente."
+            );
+        }
+
+        return Boolean(abierta);
+    } catch (error) {
+        console.error("NO SE PUDO ABRIR LA RESERVA CREADA:", error);
+        alert(
+            "No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente."
+        );
+        return false;
+    }
+}
+
+
 if (botonVerReservaCreada) {
 
     botonVerReservaCreada.addEventListener(
         "click",
-        () => {
-
-            if (
-                !reservaCreadaId ||
-                !cabanaSeleccionadaReserva ||
-                !fechaLlegadaReserva
-            ) {
-                return;
-            }
-
-
-            const numeroCabana =
-                cabanaSeleccionadaReserva;
-
-            const fechaReserva =
-                fechaLlegadaReserva;
-
-
-            cerrarModalNuevaReserva();
-
-
-            const fechaAnterior =
-                fechaSeleccionada;
-
-
-            fechaSeleccionada =
-                fechaReserva;
-
-
-            const botonFicha =
-                document.querySelector(
-                    `[data-ficha-cabana="${numeroCabana}"]`
-                );
-
-
-            if (botonFicha) {
-
-                botonFicha.click();
-
-            } else {
-
-                alert(
-                    "La reserva fue creada, pero no se encontró el acceso a su ficha."
-                );
-            }
-
-
-            fechaSeleccionada =
-                fechaAnterior;
-        }
+        abrirReservaCreadaPorId
     );
 
 }
