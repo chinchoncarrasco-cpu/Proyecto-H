@@ -38,6 +38,9 @@
     const cabanasPorNumero = new Map();
     const itemsPorClave = new Map();
     const revisionesExpress = new Map();
+    // Sólo lecturas remotas de esta sesión. No se restaura desde localStorage
+    // y sobrevive a los productores que reconstruyen el objeto de la cabaña.
+    const ciclosExpressVerificados = new Map();
     const colasEscritura = new Map();
 
     let inicializado = false;
@@ -86,6 +89,11 @@
     }
 
     function invalidarExpressEnCache(fecha = "") {
+        if (fecha) {
+            for (const [clave, entrada] of ciclosExpressVerificados) {
+                if (entrada.ciclo.fecha === fecha) ciclosExpressVerificados.delete(clave);
+            }
+        } else ciclosExpressVerificados.clear();
         let dias = [];
         try {
             if (typeof datosPorFecha !== "undefined" && datosPorFecha) {
@@ -435,10 +443,16 @@
         return `${fecha}::${numero}`;
     }
 
+    function obtenerCicloExpress(fecha, numero) {
+        const entrada = ciclosExpressVerificados.get(claveRevision(fecha, numero));
+        if (!cliente() || !usuarioId() || fecha !== fechaOperativa() ||
+            fechaHidratada !== fecha || entrada?.usuarioId !== usuarioId()) return null;
+        return entrada?.ciclo || null;
+    }
+
     function cicloExpressVerificado(fecha, numero) {
-        const ciclo = cabanaCache(fecha, numero, false)?.aseoExpressCiclo;
-        return fecha === fechaOperativa() && fechaHidratada === fecha &&
-            ciclo?.verificado === true && ciclo.fecha === fecha && ciclo.existe === true;
+        const ciclo = obtenerCicloExpress(fecha, numero);
+        return ciclo?.verificado === true && ciclo.fecha === fecha && ciclo.existe === true;
     }
 
     function estadoVisualRevisionExpress(revision) {
@@ -632,6 +646,7 @@
     }
 
     async function leerFecha(fecha) {
+        const usuarioVerificado = usuarioId();
         await cargarReferencias();
         const supabase = cliente();
 
@@ -707,6 +722,7 @@
         }
 
         return {
+            usuarioVerificado,
             aseos: aseosFinal.data || [],
             aseosLegacyIncompatibles,
             solicitudes: solicitudesFinal.data || [],
@@ -757,7 +773,7 @@
             // Una revisión aislada puede pertenecer a un ciclo histórico; sin
             // solicitud vigente no habilita ni se atribuye al bloque actual.
             const revision = solicitudVigente ? revisiones.get(cabanaId) : null;
-            local.aseoExpressCiclo = {
+            local.aseoExpressCiclo = Object.freeze({
                 fecha,
                 verificado: true,
                 existe: Boolean(solicitudVigente),
@@ -766,7 +782,10 @@
                 revisionId: revision?.id || null,
                 estadoRevision: revision?.estado || null,
                 resultadoRevision: revision?.resultado || null
-            };
+            });
+            ciclosExpressVerificados.set(claveRevision(fecha, numero), {
+                usuarioId: remoto.usuarioVerificado, ciclo: local.aseoExpressCiclo
+            });
             local.estadoRevisionExpress = local.aseoExpressCiclo.existe
                 ? estadoVisualRevisionExpress(revision)
                 : null;
@@ -869,7 +888,7 @@
 
             // Si el usuario cambió de fecha durante la consulta, no pintamos
             // datos antiguos sobre la nueva fecha.
-            if (fecha !== fechaOperativa()) return;
+            if (fecha !== fechaOperativa() || remoto.usuarioVerificado !== usuarioId()) return;
             if (version !== undefined &&
                 version !== window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version()) return;
 
@@ -1093,17 +1112,26 @@
         ) return;
 
         const original = window.abrirRevisionAseoExpress;
-        function puente(numeroCabana) {
+        function puente(numeroCabana, opciones = {}) {
             const fecha = fechaOperativa();
+            const usuario = usuarioId();
+            const cicloAnterior = obtenerCicloExpress(fecha, numeroCabana);
             const contexto = this;
             const argumentos = arguments;
             return Promise.resolve()
                 .then(() => hidratar(fecha, { pintar: false }))
                 .then(() => {
-                    if (!cicloExpressVerificado(fecha, numeroCabana)) return;
-                    const resultado = original.apply(contexto, argumentos);
+                    // Una lectura descartada (otra fecha, sesión o versión
+                    // optimista) no puede habilitar una nueva apertura.
+                    if (usuario !== usuarioId() || obtenerCicloExpress(fecha, numeroCabana) === cicloAnterior ||
+                        !cicloExpressVerificado(fecha, numeroCabana) ||
+                        (opciones.puedeAbrir && !opciones.puedeAbrir())) return false;
+                    // El legacy sigue leyendo la proyección; reponerla desde
+                    // la autoridad de sesión si otro productor la reconstruyó.
+                    cabanaCache(fecha, numeroCabana).aseoExpressCiclo = obtenerCicloExpress(fecha, numeroCabana);
+                    original.apply(contexto, argumentos);
                     pintarExpress(numeroCabana);
-                    return resultado;
+                    return true;
                 });
         }
         puente.__haikuAseoOperacionV1 = true;
@@ -1144,7 +1172,7 @@
                 return leerFecha(fecha);
             },
             publicar: snapshot => {
-                if (!snapshot.datos.aseo) return;
+                if (!snapshot.datos.aseo || snapshot.datos.aseo.usuarioVerificado !== usuarioId()) return;
                 aplicarEnCache(snapshot.fecha, snapshot.datos.aseo);
                 fechaHidratada = snapshot.fecha;
                 ultimaActualizacion = Date.now();
@@ -1162,6 +1190,7 @@
 
         window.HAIKU_ASEO_OPERACION_V1 = Object.freeze({
             hidratar,
+            obtenerCicloExpress,
             guardarCampoAseo,
             guardarEstadoAseo,
             guardarEstadoRevisionExpress,
@@ -1172,6 +1201,7 @@
                 cabanasPorNumero.clear();
                 itemsPorClave.clear();
                 revisionesExpress.clear();
+                ciclosExpressVerificados.clear();
                 fechaHidratada = "";
             }
         });

@@ -21,6 +21,7 @@
     const panelAutenticado = document.documentElement.classList.contains("haiku-cabanas-pendiente");
     let usuarioRestaurado = "";
     let revisionPendiente = null;
+    let aperturaExpress = null;
     let restaurando = false;
     const $ = selector => raiz.querySelector(selector);
     const escapar = valor => String(valor ?? "").replace(/[&<>"']/g, caracter => ({
@@ -39,8 +40,9 @@
     const usuarioActual = () => String(window.haikuSesion?.auth?.id || "");
     function guardarContexto() {
         if (restaurando || !usuarioActual() || !fechaActual() || typeof sessionStorage === "undefined") return;
-        const ciclo = estado.numero ? cabana(fechaActual(), estado.numero)?.[
-            estado.modo === "aseo_express" ? "aseoExpressCiclo" : "revisionCompletaCiclo"] : null;
+        const dato = cabana(fechaActual(), estado.numero);
+        const ciclo = estado.numero ? estado.modo === "aseo_express"
+            ? cicloExpress(dato, fechaActual(), estado.numero) : dato.revisionCompletaCiclo : null;
         try {
             sessionStorage.setItem(CLAVE_CONTEXTO, JSON.stringify({
                 usuarioId: usuarioActual(), fecha: fechaActual(), tab: estado.tab,
@@ -105,8 +107,13 @@
             : dato.aseoEstado === "no_requiere" && (dato.aseoIn || dato.aseoOut) ? "Revisar: No requiere con horas" : "";
         return `<span class="cb-aseo-indicator"><span class="cb-badge ${tono(aseo)}" data-cb-aseo-state>${etiqueta(aseo)}</span>${accion}</span>${conflicto ? `<small class="cb-aseo-conflict">${conflicto}</small>` : ""}`;
     }
-    const expressReal = (dato, fecha) => dato?.aseoExpressCiclo?.fecha === fecha
-        && dato.aseoExpressCiclo.verificado === true && dato.aseoExpressCiclo.existe === true;
+    const cicloExpress = (dato, fecha, numero) => window.HAIKU_ASEO_OPERACION_V1?.obtenerCicloExpress
+        ? window.HAIKU_ASEO_OPERACION_V1.obtenerCicloExpress(fecha, numero)
+        : panelAutenticado || window.haikuSesion ? null : dato?.aseoExpressCiclo;
+    const expressReal = (dato, fecha, numero) => {
+        const ciclo = cicloExpress(dato, fecha, numero);
+        return ciclo?.fecha === fecha && ciclo.verificado === true && ciclo.existe === true;
+    };
     const fechaLarga = fecha => fecha ? new Intl.DateTimeFormat("es-CL", {
         timeZone: "America/Santiago", weekday: "long", day: "numeric", month: "long", year: "numeric"
     }).format(new Date(`${fecha}T12:00:00`)) : "";
@@ -355,7 +362,7 @@
     function filaRevision(fecha, numero) {
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
-        const tipo = expressReal(dato, fecha) ? "Revisión completa / Aseo Express" : "Revisión completa";
+        const tipo = expressReal(dato, fecha, numero) ? "Revisión completa / Aseo Express" : "Revisión completa";
         const rev = revision(dato, fecha);
         return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${revisadosChecklist(dato)}/${totalChecklist(numero)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small><span class="cb-badge ${tono(rev)}">${REVISIONES[rev]}</span></div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
     }
@@ -379,7 +386,8 @@
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
         const final = estadoFinal(dato, fecha);
-        const hayExpress = expressReal(dato, fecha);
+        const hayExpress = expressReal(dato, fecha, numero);
+        const ciclo = cicloExpress(dato, fecha, numero);
         $("#revision-titulo").textContent = `Cabaña ${numero}`;
         $("#cabinsDetailSubtitle").textContent = `${titular(dato, fecha, numero)} · ${trabajo(dato)}`;
         $("#cabinsDetailDate").textContent = `Operación · ${fecha}`;
@@ -408,8 +416,8 @@
         $("#cabinsFinalBadge").className = `cb-badge ${tono(final)}`;
         $("#cabinsFinalStateDisplay").textContent = FINALES[final];
         $("#cabinsExpressFinalStateDisplay").textContent = FINALES[final];
-        $("#cabinsExpressAvailability").textContent = hayExpress ? "Solicitado"
-            : dato?.aseoExpressCiclo?.fecha === fecha && dato.aseoExpressCiclo.verificado === true
+        $("#cabinsExpressAvailability").textContent = aperturaExpress ? "Verificando…" : hayExpress ? "Solicitado"
+            : ciclo?.fecha === fecha && ciclo.verificado === true
                 ? "No solicitado" : "No verificado";
         const modoExpress = $("#cabinsReviewMode").querySelector('option[value="aseo_express"]');
         if (modoExpress) modoExpress.disabled = !hayExpress;
@@ -458,7 +466,7 @@
     function aplicarVista() {
         const detalle = Boolean(estado.numero);
         const dato = detalle ? cabana(fechaActual(), estado.numero) : null;
-        const hayExpress = detalle && expressReal(dato, fechaActual());
+        const hayExpress = detalle && expressReal(dato, fechaActual(), estado.numero);
         if (detalle && estado.modo === "aseo_express" && !hayExpress) {
             estado.modo = "completa";
             localStorage.removeItem("haikuAseoExpressCabana");
@@ -479,13 +487,16 @@
         const expressAbierto = detalle && hayExpress && estado.modo === "aseo_express";
         $("#aseo-express-individual").classList.toggle("activa", expressAbierto);
         $("#cabinsExpressToggle").setAttribute("aria-expanded", String(expressAbierto));
-        $("#cabinsExpressToggle").setAttribute("aria-disabled", String(!hayExpress));
+        $("#cabinsExpressToggle").setAttribute("aria-disabled", String(!hayExpress || Boolean(aperturaExpress)));
         $("#cabinsExpressToggleIcon").textContent = expressAbierto ? "−" : "+";
         $("#cabinsReviewMode").value = estado.modo;
+        $("#cabinsReviewMode").disabled = Boolean(aperturaExpress);
+        $("#cabinsReviewMode").setAttribute("aria-busy", String(Boolean(aperturaExpress)));
     }
     function pintar(fecha = fechaActual()) {
         if (!fecha) return;
         if (estado.numero && estado.fecha && estado.fecha !== fecha) {
+            aperturaExpress = null;
             // Los checkboxes existentes cierran sobre la fecha en que se abrió
             // la ficha. Salir antes de mostrar otra fecha evita editar ese día.
             estado.numero = "";
@@ -515,15 +526,18 @@
     }
     function abrir(numero, origen = estado.tab, modo = "completa", opciones = {}) {
         if (!numeroValido(numero)) return;
-        if (modo === "aseo_express" && !expressReal(cabana(fechaActual(), numero), fechaActual())) modo = "completa";
+        aperturaExpress = null;
+        if (modo === "aseo_express" && !expressReal(cabana(fechaActual(), numero), fechaActual(), numero)) modo = "completa";
         estado.numero = String(numero);
         estado.origen = origen;
-        estado.modo = modo;
+        estado.modo = "completa";
         estado.fecha = fechaActual();
         localStorage.removeItem(modo === "aseo_express" ? "haikuRevisionCabana" : "haikuAseoExpressCabana");
         if (modo === "aseo_express") {
-            window.abrirRevisionAseoExpress?.(numero);
-            window.HAIKU_CABANAS_FOTOS_V1?.aplicarAseo?.(numero);
+            localStorage.removeItem("haikuAseoExpressCabana");
+            const apertura = cambiarModo(modo);
+            if (!opciones.restaurando) raiz.scrollIntoView({ block: "start" });
+            return apertura;
         } else {
             window.abrirRevisionCabana?.(numero);
             window.HAIKU_CABANAS_FOTOS_V1?.aplicar?.(numero);
@@ -534,6 +548,7 @@
         if (!opciones.restaurando) raiz.scrollIntoView({ block: "start" });
     }
     function cerrar() {
+        aperturaExpress = null;
         if (estado.modo === "aseo_express") $("#volver-aseo")?.click();
         estado.numero = "";
         estado.modo = "completa";
@@ -572,25 +587,62 @@
     function cambiarModo(modo) {
         if (!estado.numero || !["completa", "aseo_express"].includes(modo)) return;
         const numero = estado.numero;
-        if (modo === "aseo_express" && !expressReal(cabana(fechaActual(), numero), fechaActual())) {
-            $("#cabinsReviewMode").value = estado.modo;
-            return;
-        }
-        localStorage.removeItem(modo === "aseo_express" ? "haikuRevisionCabana" : "haikuAseoExpressCabana");
         if (modo === "completa") {
+            aperturaExpress = null;
+            localStorage.removeItem("haikuAseoExpressCabana");
             $("#volver-aseo")?.click();
             window.abrirRevisionCabana?.(numero);
             window.HAIKU_CABANAS_FOTOS_V1?.aplicar?.(numero);
-        } else {
-            $("#revision-individual").classList.remove("activa");
-            window.abrirRevisionAseoExpress?.(numero);
-            window.HAIKU_CABANAS_FOTOS_V1?.aplicarAseo?.(numero);
+            estado.modo = modo;
+            decorarChecklist(); pintarDetalle(); aplicarVista(); guardarContexto();
+            return;
         }
-        estado.modo = modo;
-        decorarChecklist(); pintarDetalle(); aplicarVista();
-        guardarContexto();
+        if (aperturaExpress) return aperturaExpress.promesa;
+        const fecha = fechaActual();
+        if (!expressReal(cabana(fecha, numero), fecha, numero) ||
+            typeof window.abrirRevisionAseoExpress !== "function") {
+            aplicarVista();
+            return false;
+        }
+        const pendiente = { numero, fecha, usuarioId: usuarioActual() };
+        aperturaExpress = pendiente;
+        const vigente = () => aperturaExpress === pendiente && estado.numero === numero &&
+            fechaActual() === fecha && usuarioActual() === pendiente.usuarioId;
+        const liberar = () => {
+            if (aperturaExpress !== pendiente) return;
+            aperturaExpress = null;
+            pintarDetalle(); aplicarVista(); guardarContexto();
+        };
+        const confirmar = resultado => {
+            try {
+                if (!vigente() || resultado === false || !expressReal(cabana(fecha, numero), fecha, numero)) return false;
+                localStorage.removeItem("haikuRevisionCabana");
+                estado.modo = "aseo_express";
+                window.HAIKU_CABANAS_FOTOS_V1?.aplicarAseo?.(numero);
+                decorarChecklist();
+                return true;
+            } finally { liberar(); }
+        };
+        const fallar = error => {
+            if (vigente()) {
+                console.error("HAIKU · No fue posible abrir Aseo Express:", error);
+                alert("No fue posible verificar Aseo Express. Intenta nuevamente.");
+            }
+            liberar();
+            return false;
+        };
+        pintarDetalle(); aplicarVista();
+        try {
+            const resultado = window.abrirRevisionAseoExpress(numero, { puedeAbrir: vigente });
+            if (resultado && typeof resultado.then === "function") {
+                pendiente.promesa = Promise.resolve(resultado).then(confirmar).catch(fallar);
+                return pendiente.promesa;
+            }
+            return confirmar(resultado);
+        } catch (error) { return fallar(error); }
     }
     function volverOperacionRestaurada() {
+        aperturaExpress = null;
         revisionPendiente = null;
         estado.tab = "operation";
         estado.origen = "operation";
@@ -615,10 +667,10 @@
         }
         if (pendiente.modo === "aseo_express") {
             if (!window.HAIKU_ASEO_OPERACION_V1) return false;
-            const cicloExpress = cabana(pendiente.fecha, pendiente.numero)?.aseoExpressCiclo;
-            if (cicloExpress?.fecha !== pendiente.fecha || cicloExpress.verificado !== true) return false;
-            if (!cicloExpress.existe ||
-                (pendiente.revisionId && String(cicloExpress.revisionId || "") !== pendiente.revisionId)) {
+            const ciclo = cicloExpress(cabana(pendiente.fecha, pendiente.numero), pendiente.fecha, pendiente.numero);
+            if (ciclo?.fecha !== pendiente.fecha || ciclo.verificado !== true) return false;
+            if (!ciclo.existe ||
+                (pendiente.revisionId && String(ciclo.revisionId || "") !== pendiente.revisionId)) {
                 volverOperacionRestaurada();
                 return true;
             }
@@ -651,6 +703,7 @@
         const contexto = leerContexto();
         restaurando = true;
         revisionPendiente = null;
+        aperturaExpress = null;
         // Estas llaves identifican el writer legacy; nunca autorizan por sí
         // solas a reabrir una ficha después de F5.
         localStorage.removeItem("haikuRevisionCabana");
@@ -698,8 +751,8 @@
         if (boton.dataset.cbOpen) { abrir(boton.dataset.cbOpen, boton.dataset.cbOrigin || estado.tab); return; }
         if (boton.id === "volver-cabanas") { cerrar(); return; }
         if (boton.id === "cabinsExpressToggle") {
-            if (expressReal(cabana(fechaActual(), estado.numero), fechaActual())) {
-                cambiarModo(estado.modo === "aseo_express" ? "completa" : "aseo_express");
+            if (!aperturaExpress && expressReal(cabana(fechaActual(), estado.numero), fechaActual(), estado.numero)) {
+                return cambiarModo(estado.modo === "aseo_express" ? "completa" : "aseo_express");
             }
             return;
         }
@@ -731,7 +784,7 @@
     });
     raiz.addEventListener("change", evento => {
         const campo = evento.target;
-        if (campo.id === "cabinsReviewMode") { cambiarModo(campo.value); return; }
+        if (campo.id === "cabinsReviewMode") return cambiarModo(campo.value);
         if (campo.matches(".aseo-encargado-input, .aseo-revision-input, .aseo-hora-input")) {
             setTimeout(() => {
                 const numero = campo.dataset.aseoEncargado || campo.dataset.revisionCabana || campo.dataset.cabana;
