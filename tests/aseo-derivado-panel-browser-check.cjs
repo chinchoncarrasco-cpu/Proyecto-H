@@ -50,7 +50,8 @@ const modulos = new Set([
             window.HAIKU_CONTEXTO_FECHAS_V1.guardarFechaActual();
             const filas = {
                 cabanas: Array.from({ length: 11 }, (_, i) => ({ id: 'cab-' + (i + 1), numero: i + 1, activa: true })),
-                checklist_items: [], solicitudes: [], revisiones_cabana: [], revision_items: [],
+                checklist_items: [{ id: 'item-losa', nombre: 'Losa', categoria: '🧹 ASEO EXPRESS', activo: true }],
+                solicitudes: [], revisiones_cabana: [], revision_items: [],
                 aseos: [
                     { cabana_id: 'cab-1', encargado_nombre: 'Aura', estado: 'asignado' },
                     { cabana_id: 'cab-2', iniciado_en: '2026-09-26T12:00:00Z', estado: 'pendiente' },
@@ -60,6 +61,7 @@ const modulos = new Set([
                 ].map(fila => ({ ...fila, id: 'aseo-' + fila.cabana_id, fecha: fechaSeleccionada }))
             };
             window.__escriturasAseo = [];
+            window.__filasAseo = filas;
             window.haikuSupabase = {
                 from(tabla) {
                     const filtros = [];
@@ -82,7 +84,21 @@ const modulos = new Set([
                             return Promise.resolve({ data: fila, error: null });
                         },
                         maybeSingle() { return Promise.resolve({ data: leer()[0] || null, error: null }); },
-                        then(resolve, reject) { return Promise.resolve({ data: leer(), error: null }).then(resolve, reject); }
+                        then(resolve, reject) {
+                            return Promise.resolve().then(async () => {
+                                if (tabla === 'solicitudes' && window.__demoraSolicitudes) {
+                                    window.__lecturaExpressPendiente = true;
+                                    await window.__demoraSolicitudes;
+                                }
+                                if (tabla === 'revision_items' && payload) {
+                                    let fila = filas[tabla].find(fila => fila.revision_id === payload.revision_id &&
+                                        fila.checklist_item_id === payload.checklist_item_id);
+                                    if (!fila) { fila = {}; filas[tabla].push(fila); }
+                                    Object.assign(fila, payload);
+                                }
+                                return { data: leer(), error: null };
+                            }).then(resolve, reject);
+                        }
                     };
                     return consulta;
                 }
@@ -189,8 +205,72 @@ const modulos = new Set([
         await fila(1).locator('[data-cb-open]').click();
         assert.equal(await page.locator('#cabinsDetailAseo select').count(), 0);
         assert.equal(await page.locator('#cabinsDetailAseo [data-cb-aseo-state]').textContent(), 'Lista para revisar');
+        await page.evaluate(async () => {
+            window.__filasAseo.solicitudes.push({ id: 'sol-9', cabana_id: 'cab-9',
+                fecha_operativa: fechaSeleccionada, categoria: 'aseo_express', estado: 'pendiente',
+                descripcion: 'Reponer toallas' });
+            window.__filasAseo.revisiones_cabana.push({ id: 'rev-9', cabana_id: 'cab-9', fecha: fechaSeleccionada,
+                tipo_revision: 'aseo_express', estado: 'en_proceso', observaciones: '' });
+            await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
+            window.HAIKU_CABANAS_SITES_V1.cerrar();
+        });
+        await fila(9).locator('[data-cb-open]').click();
+        assert.equal(await page.locator('#cabinsExpressAvailability').textContent(), 'Solicitado');
+        await page.evaluate(() => {
+            window.__demoraSolicitudes = new Promise(resolve => { window.__liberarSolicitudes = resolve; });
+        });
+        await page.locator('#cabinsReviewMode').selectOption('aseo_express');
+        await page.waitForFunction(() => window.__lecturaExpressPendiente);
+        assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'completa');
+        assert.equal(await page.locator('#cabinsReviewMode').isDisabled(), true);
+        assert.equal(await page.locator('#aseo-express-individual').isVisible(), false);
+        await page.evaluate(() => {
+            const cabana = obtenerDatosDia(fechaSeleccionada).cabanas[9];
+            obtenerDatosDia(fechaSeleccionada).cabanas[9] = { ...cabana };
+            delete obtenerDatosDia(fechaSeleccionada).cabanas[9].aseoExpressCiclo;
+            document.dispatchEvent(new CustomEvent('haiku:resumen-datos-actualizados', {
+                detail: { fecha: fechaSeleccionada }
+            }));
+            window.__demoraSolicitudes = null;
+            window.__liberarSolicitudes();
+        });
+        await page.waitForFunction(() => document.getElementById('cabinsReviewMode').value === 'aseo_express' &&
+            !document.getElementById('cabinsReviewMode').disabled);
+        assert.equal(await page.locator('#aseo-express-individual').isVisible(), true);
+        assert.equal(await page.locator('#cabinsExpressToggle').getAttribute('aria-expanded'), 'true');
+        assert.equal(await page.evaluate(() => localStorage.getItem('haikuRevisionCabana')), null);
+        await page.locator('[data-aseo-express-item="losa"]').check();
+        await page.evaluate(() => window.HAIKU_ASEO_OPERACION_V1.esperarEscrituras());
+        await page.locator('#aseo-express-detalles').fill('Revisar ducha');
+        await page.locator('#aseo-express-detalles').blur();
+        await page.waitForFunction(() => window.__filasAseo.revisiones_cabana[0]?.observaciones === 'Revisar ducha');
+        await page.locator('#aseo-express-estado').selectOption('lista');
+        await page.waitForFunction(() => window.__filasAseo.revisiones_cabana[0]?.estado === 'completada' &&
+            !document.getElementById('aseo-express-estado').disabled);
+        await page.evaluate(async () => {
+            delete obtenerDatosDia(fechaSeleccionada).cabanas[9].aseoExpressCiclo;
+            document.dispatchEvent(new CustomEvent('haiku:resumen-datos-actualizados', {
+                detail: { fecha: fechaSeleccionada }
+            }));
+            await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
+        });
+        assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'aseo_express');
+        assert.equal(await page.locator('#aseo-express-individual').isVisible(), true);
+        assert.equal(await page.locator('[data-aseo-express-item="losa"]').isChecked(), true);
+        assert.equal(await page.locator('#aseo-express-detalles').inputValue(), 'Revisar ducha');
+        await page.evaluate(async () => {
+            window.__filasAseo.solicitudes[0].estado = 'cancelada';
+            await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
+        });
+        assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'completa');
+        assert.equal(await page.locator('#aseo-express-individual').isVisible(), false);
+        assert.equal(await page.locator('#revision-individual').isVisible(), true);
+        assert.equal(await page.evaluate(() => localStorage.getItem('haikuAseoExpressCabana')), null);
+        const escriturasExpress = await page.evaluate(() => window.__escriturasAseo.filter(fila => fila.tabla !== 'aseos'));
+        assert.deepEqual(escriturasExpress.map(fila => fila.tabla), ['revision_items', 'revisiones_cabana', 'revisiones_cabana']);
         assert.deepEqual(errores, []);
         console.log('Panel Aseo: arranque tardío, estados, IN/OUT, No requiere, escritura única y diseño 390–1600px OK.');
+        console.log('Panel Express CAB 9: apertura lenta estable, refresco, checkbox/observaciones/estado y cancelación remota OK.');
     } finally {
         await browser.close();
     }

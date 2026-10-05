@@ -97,9 +97,14 @@ function arnes(cabanas = {}, almacenamientoInicial = {}, opciones = {}) {
         documentElement: nodo(),
         readyState: opciones.esperarModulos ? "loading" : "complete",
         activeElement: null,
-        getElementById: id => id === "seccion-cabanas" ? seccion : null,
+        getElementById: id => id === "seccion-cabanas" ? seccion : nodos.get(`#${id}`) || null,
         querySelector: selector => selector === '.menu-item[data-seccion="cabanas"]' ? menuCabanas : null,
-        addEventListener: (tipo, fn) => eventosDocumento.set(tipo, fn),
+        querySelectorAll: selector => seccion.querySelectorAll(selector),
+        addEventListener: (tipo, fn) => {
+            const anterior = eventosDocumento.get(tipo);
+            eventosDocumento.set(tipo, evento => { anterior?.(evento); fn(evento); });
+        },
+        dispatchEvent: evento => eventosDocumento.get(evento.type)?.(evento),
         createElement: () => nodo()
     };
     if (opciones.panel) document.documentElement.classList.add("haiku-cabanas-pendiente");
@@ -120,11 +125,14 @@ function arnes(cabanas = {}, almacenamientoInicial = {}, opciones = {}) {
     };
     if (opciones.panel && !opciones.esperarModulos) {
         window.HAIKU_REVISION_SUPABASE_V1 = {};
-        window.HAIKU_ASEO_OPERACION_V1 = {};
+        window.HAIKU_ASEO_OPERACION_V1 = {
+            obtenerCicloExpress: (fechaConsulta, numero) => fechaConsulta === fecha
+                ? cabanas[numero]?.aseoExpressCiclo : null
+        };
     }
     const contexto = vm.createContext({
-        window, document, localStorage, sessionStorage, fechaSeleccionada: fecha,
-        obtenerDatosDia: fecha => datosPorFecha[fecha], checklistsCabanas,
+        window, document, localStorage, sessionStorage, fechaSeleccionada: fecha, datosPorFecha,
+        obtenerDatosDia: fecha => contexto.datosPorFecha[fecha], checklistsCabanas,
         Date, Intl, console, alert() {}, setTimeout: (fn, ms) => {
             if (ms >= 1000) temporizadores.push(fn);
             else fn();
@@ -135,7 +143,7 @@ function arnes(cabanas = {}, almacenamientoInicial = {}, opciones = {}) {
     vm.runInContext(source, contexto, { filename: "sites-cabanas-v1.js" });
     return { api: window.HAIKU_CABANAS_SITES_V1, nodos, tabs, seccion,
         escuchas, aperturas, localStorage, sessionStorage, sesion, almacenamiento,
-        datosPorFecha, window, contexto, document,
+        get datosPorFecha() { return contexto.datosPorFecha; }, window, contexto, document,
         authReady(usuario) {
             window.haikuSesion = { auth: { id: usuario } };
             for (const fn of eventosVentana.get("haiku:auth-ready") || []) fn();
@@ -153,6 +161,333 @@ function fila(contenido, numero, tipo) {
     const atributo = tipo === "review" ? "data-cb-review-cabana" : "data-cb-cabin";
     return contenido.match(new RegExp(`<article[^>]*${atributo}="${numero}"[\\s\\S]*?<\\/article>`))?.[0] || "";
 }
+
+// Ejecuta los puentes reales con lecturas controlables, sin red ni otro writer.
+function instalarOperacionExpress(h, solicitudes = [{ id: "sol-9", cabana_id: "cab-9",
+    fecha_operativa: FECHA, categoria: "aseo_express", estado: "pendiente", descripcion: "Reponer toallas" }]) {
+    const fuentes = new Map(), escrituras = [], escuchas = new Map();
+    const filas = {
+        cabanas: [{ id: "cab-9", numero: 9, activa: true }],
+        checklist_items: [{ id: "item-losa", nombre: "Losa", categoria: "🧹 ASEO EXPRESS", activo: true }],
+        solicitudes, aseos: [], revision_items: [],
+        revisiones_cabana: [{ id: "rev-9", cabana_id: "cab-9", fecha: FECHA,
+            tipo_revision: "aseo_express", estado: "en_proceso", observaciones: "" }],
+        reserva_estadias: [{ id: "est-9", reserva_id: "res-9", fecha_ingreso: FECHA,
+            fecha_salida: "2026-09-25", tipo_estadia: "alojamiento", cabanas: { numero: 9 },
+            reservas: { id: "res-9", titular_nombre: "Titular CAB 9" }, estadia_noches: [] }],
+        pagos: [], reserva_huespedes: []
+    };
+    let demora = null, fallar = false;
+    h.window.haikuSupabase = {
+        from(tabla) {
+            const filtros = [], valores = filas[tabla] || [];
+            let mutacion, payload;
+            const consulta = {
+                select() { return this; }, order() { return this; }, limit() { return this; },
+                eq(campo, valor) { filtros.push(fila => fila[campo] === valor); return this; },
+                neq(campo, valor) { filtros.push(fila => fila[campo] !== valor); return this; },
+                in(campo, lista) { filtros.push(fila => lista.includes(fila[campo])); return this; },
+                update(valor) { mutacion = "update"; payload = valor; return this; },
+                insert(valor) { mutacion = "insert"; payload = valor; return this; },
+                upsert(valor) { mutacion = "upsert"; payload = valor; return this; },
+                async ejecutar() {
+                    if (!mutacion && tabla === "solicitudes" && demora) {
+                        demora.iniciar();
+                        await demora.promesa;
+                    }
+                    if (fallar && tabla === "solicitudes") return { data: null, error: new Error("Sin conexión") };
+                    let data = valores.filter(fila => filtros.every(filtro => filtro(fila)));
+                    if (mutacion) {
+                        escrituras.push({ tabla, mutacion, payload: { ...payload } });
+                        if (mutacion === "update") data.forEach(fila => Object.assign(fila, payload));
+                        else {
+                            const existente = mutacion === "upsert" && valores.find(fila =>
+                                fila.revision_id === payload.revision_id && fila.checklist_item_id === payload.checklist_item_id);
+                            const fila = existente || { id: `nuevo-${tabla}`, ...payload };
+                            Object.assign(fila, payload);
+                            if (!existente) valores.push(fila);
+                            data = [fila];
+                        }
+                    }
+                    return { data, error: null };
+                },
+                async single() { const r = await this.ejecutar(); return { ...r, data: r.data?.[0] || null }; },
+                maybeSingle() { return this.single(); },
+                then(resolve, reject) { return this.ejecutar().then(resolve, reject); }
+            };
+            return consulta;
+        }
+    };
+    const agregar = h.document.addEventListener;
+    h.document.addEventListener = (tipo, fn, opciones) => {
+        if (opciones === true) escuchas.set(tipo, fn);
+        agregar(tipo, fn);
+    };
+    Object.assign(h.contexto, { CustomEvent: class {
+        constructor(type, opciones) { this.type = type; this.detail = opciones.detail; }
+    }, clearTimeout() {}, setInterval() { return 1; }, guardarDatos() {}, structuredClone,
+        actualizarResumenAseo: fecha => h.api.pintar(fecha),
+        cargarCabanasDia: fecha => h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha }),
+        console: { info() {}, log() {}, warn() {}, error() {} } });
+    h.window.HAIKU_RESUMEN_REFRESH_V1 = {
+        activo: () => false, enCurso: () => false,
+        registrar: (nombre, fuente) => fuentes.set(nombre, fuente)
+    };
+    h.window.haikuSesion = null;
+    for (const archivo of ["supabase-aseo-operacion-v1.js", "supabase-sync-v3.js"]) {
+        vm.runInContext(fs.readFileSync(path.join(root, "js", archivo), "utf8"), h.contexto, { filename: archivo });
+    }
+    h.window.haikuSesion = { auth: { id: "usuario-express" } };
+    const abrir = h.window.abrirRevisionAseoExpress;
+    const remoto = { filas, escrituras, escuchas, fuentes,
+        demorarLecturas() {
+            let liberar, iniciar;
+            const promesa = new Promise(resolve => { liberar = resolve; });
+            const iniciada = new Promise(resolve => { iniciar = resolve; });
+            demora = { promesa, iniciar };
+            return { iniciada, liberar() { demora = null; liberar(); } };
+        },
+        fallarLecturas() { fallar = true; },
+        async snapshot() {
+            return { fecha: FECHA, datos: {
+                reservas: await fuentes.get("reservas").preparar({ fecha: FECHA }),
+                aseo: await fuentes.get("aseo").preparar({ fecha: FECHA })
+            } };
+        }
+    };
+    h.window.abrirRevisionAseoExpress = (...args) => {
+        remoto.apertura = abrir(...args);
+        return remoto.apertura;
+    };
+    return remoto;
+}
+
+function seleccionarModo(h, valor) {
+    const selector = h.nodos.get("#cabinsReviewMode");
+    selector.id = "cabinsReviewMode";
+    selector.value = valor;
+    return h.escuchas.get("change")({ target: selector });
+}
+
+function comprobarExpress(h, abierto) {
+    assert.equal(h.nodos.get("#cabinsReviewMode").value, abierto ? "aseo_express" : "completa");
+    assert.equal(h.nodos.get("#aseo-express-individual").classList.contains("activa"), abierto);
+    assert.equal(h.nodos.get("#cabinsExpressToggle").getAttribute("aria-expanded"), String(abierto));
+    assert.equal(h.localStorage.getItem("haikuAseoExpressCabana"), abierto ? "9" : null);
+}
+
+test("Express espera la verificación asíncrona antes de abrir el panel y cambiar el selector", async () => {
+    const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    h.api.abrir(9);
+    const espera = remoto.demorarLecturas();
+    const cambio = seleccionarModo(h, "aseo_express");
+    await espera.iniciada;
+    comprobarExpress(h, false);
+    assert.equal(h.nodos.get("#cabinsReviewMode").disabled, true);
+    h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha: FECHA });
+    comprobarExpress(h, false);
+    espera.liberar();
+    await remoto.apertura;
+    await cambio;
+    comprobarExpress(h, true);
+    assert.equal(h.nodos.get("#cabinsReviewMode").disabled, false);
+    assert.equal(remoto.escrituras.length, 0, "abrir nunca crea una revisión");
+});
+
+test("un refresco legítimo no colapsa Express entre la publicación de Reservas y la de Aseo", async () => {
+    const h = arnes({ 9: { reservaId: "res-9" } }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    h.api.abrir(9);
+    await seleccionarModo(h, "aseo_express");
+    await remoto.apertura;
+    comprobarExpress(h, true);
+    const snapshot = await remoto.snapshot();
+    remoto.fuentes.get("reservas").publicar(snapshot);
+    assert.equal(h.datosPorFecha[FECHA].cabanas[9].aseoExpressCiclo, undefined,
+        "el productor comercial reconstruye el objeto sin la proyección Express");
+    comprobarExpress(h, true);
+    remoto.fuentes.get("aseo").publicar(snapshot);
+    comprobarExpress(h, true);
+    assert.equal(remoto.escrituras.length, 0);
+});
+
+test("un repintado que reconstruye la cabaña durante la apertura no provoca Express → Completa", async () => {
+    const h = arnes({ 9: { reservaId: "res-9" } }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    const snapshot = await remoto.snapshot();
+    h.api.abrir(9);
+    const espera = remoto.demorarLecturas();
+    const cambio = seleccionarModo(h, "aseo_express");
+    await espera.iniciada;
+    remoto.fuentes.get("reservas").publicar(snapshot);
+    comprobarExpress(h, false);
+    assert.equal(h.nodos.get("#cabinsReviewMode").disabled, true);
+    espera.liberar();
+    await cambio;
+    comprobarExpress(h, true);
+    assert.deepEqual(h.aperturas, [["completa", "9"], ["aseo_express", "9"]]);
+});
+
+test("sin solicitud vigente, cancelada, de otra fecha o cabaña, el caché no autoriza Express", async () => {
+    const solicitud = { id: "sol-9", cabana_id: "cab-9", fecha_operativa: FECHA,
+        categoria: "aseo_express", estado: "pendiente" };
+    for (const solicitudes of [[], [{ ...solicitud, estado: "cancelada" }],
+        [{ ...solicitud, fecha_operativa: "2026-09-22" }], [{ ...solicitud, cabana_id: "cab-8" }]]) {
+        const h = arnes({ 9: { solicitudAseoExpress: "Texto viejo", checklistAseoExpress: { losa: true } } });
+        const remoto = instalarOperacionExpress(h, solicitudes);
+        await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+        // Incluso una proyección manipulada en el caché queda subordinada a
+        // la respuesta remota negativa de esta sesión.
+        h.datosPorFecha[FECHA].cabanas[9].aseoExpressCiclo = { fecha: FECHA, verificado: true, existe: true };
+        h.api.abrir(9);
+        await seleccionarModo(h, "aseo_express");
+        comprobarExpress(h, false);
+        assert.equal(await h.window.abrirRevisionAseoExpress(9), false);
+        assert.equal(remoto.escrituras.length, 0);
+        assert.deepEqual(h.aperturas, [["completa", "9"]]);
+    }
+});
+
+test("la cancelación confirmada por Supabase cierra Express aunque quede texto y checklist antiguos", async () => {
+    for (const cancelar of [filas => { filas.solicitudes[0].estado = "cancelada"; },
+        filas => filas.solicitudes.splice(0)]) {
+        const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+        await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+        h.api.abrir(9);
+        await seleccionarModo(h, "aseo_express");
+        comprobarExpress(h, true);
+        h.datosPorFecha[FECHA].cabanas[9].checklistAseoExpress = { losa: true };
+        cancelar(remoto.filas);
+        await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA, { pintar: false });
+        comprobarExpress(h, false);
+        assert.equal(h.nodos.get("#revision-individual").classList.contains("activa"), true);
+        assert.equal(h.localStorage.getItem("haikuRevisionCabana"), "9");
+        assert.equal(h.datosPorFecha[FECHA].cabanas[9].solicitudAseoExpress, "Reponer toallas");
+        assert.equal(h.datosPorFecha[FECHA].cabanas[9].checklistAseoExpress.losa, true);
+        assert.equal(remoto.escrituras.length, 0);
+    }
+});
+
+test("una solicitud cancelada durante la verificación nunca alcanza a abrir Express", async () => {
+    const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    h.api.abrir(9);
+    const espera = remoto.demorarLecturas();
+    const cambio = seleccionarModo(h, "aseo_express");
+    await espera.iniciada;
+    remoto.filas.solicitudes[0].estado = "cancelada";
+    espera.liberar();
+    await cambio;
+    comprobarExpress(h, false);
+    assert.equal(h.nodos.get("#cabinsReviewMode").disabled, false);
+    assert.deepEqual(h.aperturas, [["completa", "9"]]);
+});
+
+test("cerrar, cambiar de cabaña, fecha o usuario invalida una apertura Express pendiente", async () => {
+    for (const navegar of [h => h.api.cerrar(), h => h.api.abrir(1), h => {
+        h.contexto.fechaSeleccionada = "2026-09-24";
+        h.contexto.datosPorFecha["2026-09-24"] = { cabanas: {} };
+        h.api.pintar();
+    }, h => { h.window.haikuSesion = { auth: { id: "otro-usuario" } }; }]) {
+        const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+        await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+        h.api.abrir(9);
+        const espera = remoto.demorarLecturas();
+        const cambio = seleccionarModo(h, "aseo_express");
+        await espera.iniciada;
+        navegar(h);
+        espera.liberar();
+        await cambio;
+        assert.equal(h.localStorage.getItem("haikuAseoExpressCabana"), null);
+        assert.equal(h.nodos.get("#aseo-express-individual").classList.contains("activa"), false);
+        assert.equal(h.nodos.get("#cabinsReviewMode").disabled, false);
+        assert.equal(h.aperturas.some(([tipo]) => tipo === "aseo_express"), false);
+    }
+});
+
+test("un fallo remoto invalida la autoridad de sesión y cierra Express de forma segura", async () => {
+    const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    h.api.abrir(9);
+    await seleccionarModo(h, "aseo_express");
+    remoto.fallarLecturas();
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    comprobarExpress(h, false);
+    assert.equal(h.window.HAIKU_ASEO_OPERACION_V1.obtenerCicloExpress(FECHA, 9), null);
+    assert.equal(remoto.escrituras.length, 0);
+});
+
+test("una sesión autenticada sin el puente remoto no abre Express desde la proyección local", () => {
+    const h = arnes({ 9: { solicitudAseoExpress: "Texto viejo",
+        aseoExpressCiclo: { fecha: FECHA, verificado: true, existe: true } } }, {}, { usuario: "usuario-express" });
+    h.api.abrir(9);
+    seleccionarModo(h, "aseo_express");
+    comprobarExpress(h, false);
+    assert.deepEqual(h.aperturas, [["completa", "9"]]);
+});
+
+test("una lectura descartada por una edición optimista no abre Express con la verificación anterior", async () => {
+    const h = arnes({ 9: {} }), remoto = instalarOperacionExpress(h);
+    let version = 0;
+    h.window.HAIKU_CHECKLIST_OPTIMISTA_V1 = {
+        version: () => version, aplicarCache: (_tipo, _fecha, _numero, cache) => cache
+    };
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    assert.equal(h.window.HAIKU_ASEO_OPERACION_V1.obtenerCicloExpress(FECHA, 9)?.existe, true);
+    h.api.abrir(9);
+    const espera = remoto.demorarLecturas();
+    const cambio = seleccionarModo(h, "aseo_express");
+    await espera.iniciada;
+    version++;
+    espera.liberar();
+    await cambio;
+    comprobarExpress(h, false);
+    assert.equal(h.nodos.get("#cabinsReviewMode").disabled, false);
+    assert.deepEqual(h.aperturas, [["completa", "9"]]);
+    await seleccionarModo(h, "aseo_express");
+    comprobarExpress(h, true);
+});
+
+test("check, observaciones y estado Express conservan los writers Supabase tras un refresco", async () => {
+    const h = arnes({ 9: { reservaId: "res-9" } }), remoto = instalarOperacionExpress(h);
+    await h.window.HAIKU_ASEO_OPERACION_V1.hidratar(FECHA);
+    h.api.abrir(9);
+    await seleccionarModo(h, "aseo_express");
+    const snapshot = await remoto.snapshot();
+    remoto.fuentes.get("reservas").publicar(snapshot);
+    remoto.fuentes.get("aseo").publicar(snapshot);
+    const check = { checked: true, dataset: { aseoExpressItem: "losa" },
+        closest: selector => selector === "[data-aseo-express-item]" ? check : null };
+    remoto.escuchas.get("change")({ target: check });
+    await h.window.HAIKU_ASEO_OPERACION_V1.esperarEscrituras();
+    const detalles = h.seccion.querySelector("#aseo-express-detalles");
+    detalles.id = "aseo-express-detalles";
+    detalles.value = "Revisar ducha";
+    detalles.closest = () => null;
+    remoto.escuchas.get("input")({ target: detalles });
+    await h.window.HAIKU_ASEO_OPERACION_V1.esperarEscrituras();
+    const selector = h.seccion.querySelector("#aseo-express-estado");
+    selector.id = "aseo-express-estado";
+    selector.value = "lista";
+    remoto.escuchas.get("change")({ target: selector });
+    // El listener conserva su promesa interna; se espera el estado que publica.
+    for (let i = 0; i < 12 && selector.disabled; i++) await new Promise(setImmediate);
+    assert.equal(selector.disabled, false);
+    comprobarExpress(h, true);
+    assert.deepEqual(remoto.escrituras.map(({ tabla, mutacion }) => [tabla, mutacion]),
+        [["revision_items", "upsert"], ["revisiones_cabana", "update"], ["revisiones_cabana", "update"]]);
+    assert.equal(remoto.escrituras[0].payload.revision_id, "rev-9");
+    assert.equal(remoto.escrituras[0].payload.estado, "ok");
+    assert.equal(remoto.escrituras[1].payload.observaciones, "Revisar ducha");
+    assert.equal(remoto.escrituras[2].payload.estado, "completada");
+    assert.equal(remoto.escrituras[2].payload.resultado, "lista");
+    assert.equal(remoto.filas.revisiones_cabana.length, 1, "no se crea un segundo ciclo");
+    await seleccionarModo(h, "completa");
+    comprobarExpress(h, false);
+    assert.equal(h.localStorage.getItem("haikuRevisionCabana"), "9");
+    assert.equal(h.nodos.get("#revision-individual").classList.contains("activa"), true);
+});
 
 test("proyecta once cabañas reales y el trabajo operativo de cada estado", () => {
     const h = arnes({
