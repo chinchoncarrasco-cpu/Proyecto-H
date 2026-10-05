@@ -2344,6 +2344,12 @@
             }
             const id = 'reserva:' + g.clave;
             const titulo = descripcionGrupo(g);
+            if (g.items.some(i=>i.libro.resolucion_manual) &&
+                (categoria !== 'nuevas' || g.items.some(i=>i.sistema || i.candidatosDetalle?.length || i.candidatos?.length))) {
+                add('pendientes', id, titulo, null,
+                    ['Requiere revisión manual: la resolución de ocupación V1 sólo permite crear reservas nuevas; no permite asociar, añadir ni modificar estadías de reservas existentes.']);
+                continue;
+            }
             if (categoria === 'pendientes') { add(categoria, id, titulo, null, ['Elige cómo tratar esta reserva en la comparación.']); continue; }
             const existentes = g.items.filter(i => i.sistema).map(i => i.sistema.reserva_id);
             const reservaId = destino?.reserva_id || (new Set(existentes).size === 1 ? existentes[0] : null);
@@ -2430,9 +2436,10 @@
                 usados.add(key);
                 if (!esReservaValida(r)) motivos.push('Faltan titular, CAB o fechas válidas.');
                 if (!['alojamiento','full_day'].includes(r.tipo_estadia) || (r.tipo_estadia === 'full_day') !== (r.fecha_checkin === r.fecha_checkout)) motivos.push('Revisa el tipo de estadía y las fechas.');
-                if (!Number.isInteger(r.adultos) || r.adultos < 1) motivos.push('Falta una cantidad válida de adultos.');
-                for (const k of ['ninos','mascotas']) if (r[k] != null && (!Number.isInteger(r[k]) || r[k] < 0)) motivos.push('Cantidad inválida: ' + k);
-                const tarifa = r.tipo_estadia === 'full_day' ? tarifaFullDay?.resolverLibro(r) : null;
+                if (!Number.isInteger(r.adultos) || r.adultos < 1 || r.adultos > 32767) motivos.push('Falta una cantidad válida de adultos.');
+                for (const k of ['ninos','mascotas']) if (r[k] != null && (!Number.isInteger(r[k]) || r[k] < 0 || r[k] > 32767)) motivos.push('Cantidad inválida: ' + k);
+                const tarifa = r.tipo_estadia === 'full_day'
+                    ? (r.resolucion_manual ? tarifaFullDay?.resolverLibro({adultos:r.adultos}) : tarifaFullDay?.resolverLibro(r)) : null;
                 if (r.tipo_estadia === 'full_day' && (!tarifa || tarifa.bloqueada)) {
                     motivos.push(tarifa?.mensaje || 'No está disponible la regla Full Day. Vuelve a cargar y revisar la incorporación.');
                 }
@@ -2440,7 +2447,8 @@
                     tipo_estadia: r.tipo_estadia === 'full_day' ? 'fullday' : 'alojamiento', adultos: r.adultos ?? null,
                     ninos: r.ninos ?? null, mascotas: r.mascotas ?? null, estado_estadia: estadoLibro(r) || 'pendiente' }, noches: r.tipo_estadia === 'full_day' ? 0 : (Date.parse(r.fecha_checkout)-Date.parse(r.fecha_checkin))/86400000,
                     ...(tarifa && !tarifa.bloqueada ? { tarifas: { [r.fecha_checkin]: tarifa.tarifa } } : {}),
-                    estado_libro: r.estado_operativo || null, notas: r.notas_importantes || [], solicitudes: r.servicios || [] });
+                    estado_libro: r.estado_operativo || null, notas: r.notas_importantes || [], solicitudes: r.servicios || [],
+                    ...(r.resolucion_manual ? {ocupacion_manual:true,libro_origen:r.libro_origen,resolucion_manual:r.resolucion_manual} : {}) });
             }
             if (categoria === 'estadias' && !reservaId) motivos.push('Falta la reserva destino.');
             if (!estadias.length) { add('omitidos', id, titulo + ' · Las estadías ya existen.'); continue; }
@@ -2747,12 +2755,14 @@
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
         const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
         if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        const comparacion = await compararSistema(result.reservas, cliente, result.q);
+        const reservas = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
+            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion, cliente) : result.reservas;
+        const comparacion = await compararSistema(reservas, cliente, result.q);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         const requiereBackendServicios = (comparacion.pagosDetalle || []).some(item => item.destinoFinanciero?.estado === 'destino_unico');
         const capacidadServicios = requiereBackendServicios ? await consultarCapacidadPagosServicio(cliente) : null;
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        const plan = crearPlanIncorporacion(result.reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
+        const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
             plan.cancelaciones_confirmadas = result.cancelaciones_confirmadas;
@@ -2813,6 +2823,11 @@
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        const vigente = () => {
+            if(result.generacion !== undefined && result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
+                throw Error('El Libro cambió; vuelve a comparar antes de incorporar.');
+        };
+        vigente();
         const usaServicios4C = plan.items.some(i => i.seleccionado && i.payload?.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato) ||
             (plan.solicitudPendiente?.servicios || []).length > 0;
         if (usaServicios4C) {
@@ -2849,6 +2864,13 @@
             const seleccionados = new Set(plan.items.filter(i => i.seleccionado).map(i => i.id));
             if (!seleccionados.size) throw new Error('Selecciona al menos una reserva, estadía o pago.');
             const actualizado = await prepararIncorporacion(result, decisiones, aprobados, cliente);
+            const refs = item => JSON.stringify((item?.payload?.estadias || [item?.payload]).map(e => e?.resolucion_manual || null));
+            for (const item of plan.items.filter(i => i.seleccionado)) {
+                const nuevo = actualizado.items.find(i => i.id === item.id);
+                if (nuevo && refs(item) !== refs(nuevo)) throw Object.assign(
+                    Error('La resolución manual cambió desde la preparación. Revisa y vuelve a preparar la incorporación.'),
+                    {code:'HLC01',haikuConflictoDatos:true});
+            }
             for (const item of actualizado.items) {
                 const previo = plan.items.find(i => i.id === item.id);
                 if (seleccionados.has(item.id) && item.categoria === 'actualizaciones' && JSON.stringify(item.payload) !== JSON.stringify(previo?.payload)) {
@@ -2872,12 +2894,13 @@
 
         const conflictoDatos = error => {
             const mensaje = String(error.message || error.details || error);
-            if (/Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
+            if (['HLC01','HLC02'].includes(error.code) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Un conflicto de datos no es un retry de red: el payload y su
                 // snapshot ya no son vigentes. El siguiente paso vuelve a la
                 // comparación y conserva decisiones humanas compatibles.
                 plan.solicitudPendiente = null;
                 const conflicto = new Error(mensaje);
+                conflicto.code = error.code;
                 conflicto.haikuConflictoDatos = true;
                 throw conflicto;
             }
@@ -2885,22 +2908,26 @@
         };
         for (const servicio of solicitud.servicios || []) {
             if (servicio.resultado) continue;
+            vigente();
             const { data, error } = await cliente.rpc(CAPACIDAD_PAGOS_SERVICIO_4C.rpc, {
                 p_operacion_id: servicio.operacionId,
                 p_item: servicio.item
             });
             if (error) conflictoDatos(error);
+            vigente();
             if (!data?.ok) throw new Error('Proyecto H no confirmó el pago de servicios.');
             servicio.resultado = data;
         }
 
         let data = { ok: true, reservas_creadas: 0, estadias_agregadas: 0, pagos_creados: 0, actualizaciones: 0, omitidos: 0 };
         if (solicitud.items.length) {
+            vigente();
             const respuesta = await cliente.rpc('haiku_incorporar_libro_v1', {
                 p_operacion_id: solicitud.operacionId,
                 p_items: solicitud.items
             });
             if (respuesta.error) conflictoDatos(respuesta.error);
+            vigente();
             data = respuesta.data;
         }
         if (!data?.ok) throw new Error('Proyecto H no confirmó la incorporación.');
@@ -3742,7 +3769,7 @@
             elemento("strong", "haku-comparacion-sites-titulo", "Libro de Reserva ↔ Proyecto H"),
             elemento("span", "haku-comparacion-sites-periodo", `Período comparado · ${result.q.desde} al ${result.q.hasta}`)
         );
-        cabecera.append(textoCab, elemento("span", "haku-comparacion-sites-lectura", "Sólo lectura"));
+        cabecera.append(textoCab, elemento("span", "haku-comparacion-sites-lectura", root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.reservas.some(root.HAIKU_LIBRO_RESOLUCIONES_V1.resolvers.ocupacion.necesita) ? "Revisión de datos" : "Sólo lectura"));
         out.append(cabecera);
 
         const resumen = elemento("section", "haku-comparacion-sites-resumen");
@@ -3792,6 +3819,12 @@
         const revisionTitulo = elemento("div", "haku-comparacion-sites-seccion-cabecera");
         revisionTitulo.append(elemento("strong", "", "Requieren revisión"), elemento("small", "", "Abre una categoría para ver su detalle"));
         revision.append(revisionTitulo);
+        root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(revision, result.reservas, result.generacion, async () => {
+            const reservas = await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion);
+            const comparacion = await compararSistema(reservas, root.haikuSupabase, result.q);
+            if (result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) throw Error('El Libro cambió; vuelve a comparar.');
+            renderizarComparacion(out, {...result, comparacion}, ui);
+        },result.comparacion);
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(revision, result);
         agregarDetalles(revision, "Reservas con diferencias",
             diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
@@ -4004,7 +4037,9 @@
             pie.append(acciones);
             out.append(pie);
             out.append(elemento("p", "haku-comparacion-sites-seguridad",
-                "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
+                root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.reservas.some(root.HAIKU_LIBRO_RESOLUCIONES_V1.resolvers.ocupacion.necesita)
+                    ? "El Libro no se modifica. Las resoluciones confirmadas se guardan por separado. Las reservas y pagos sólo se escriben al confirmar su incorporación; los demás conflictos siguen pendientes."
+                    : "No se modificó el Libro ni Supabase. Las asociaciones ambiguas y pagos sin identificador inequívoco quedan para revisión antes de cualquier incorporación."));
         }
     }
 

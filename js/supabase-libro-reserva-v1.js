@@ -152,6 +152,7 @@
     }
 
     let archivoBuffer = null;
+    let archivoVersion = null;
     let archivoNombre = "";
     let libroIndice = null;
     let hojaActual = "";
@@ -345,6 +346,7 @@
         renderId += 1;
         destruirLector();
         archivoBuffer = null;
+        archivoVersion = null;
         archivoNombre = "";
         libroIndice = null;
         hojaActual = "";
@@ -820,6 +822,12 @@
             if (cargaId !== operacionLibro) return;
             archivoBuffer = buffer;
             archivoNombre = archivo.name;
+            // Huella de bytes; no altera el XLSX ni su interpretación semántica.
+            let digest = null;
+            try { digest = window.crypto?.subtle ? await window.crypto.subtle.digest('SHA-256', buffer) : null; }
+            catch (_) { /* La lectura sigue disponible; las resoluciones fallan cerradas sin huella. */ }
+            if (cargaId !== operacionLibro) return;
+            archivoVersion = digest ? Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('') : null;
             const indice = await leerEnSegundoPlano("indice");
             if (cargaId !== operacionLibro) return;
             libroIndice = {
@@ -958,7 +966,7 @@
             consultarHoja,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
             buscarHojasBove: numero => consultarHoja(numero, "actual", "buscar_bove"),
-            estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, cargado: !!libroIndice })
+            estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, version: archivoVersion, cargado: !!libroIndice })
         });
 
         configurarDescarga();
