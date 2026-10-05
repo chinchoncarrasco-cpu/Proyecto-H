@@ -39,6 +39,10 @@
     function adjuntar(contenedor,resultado,generacion) {
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(contenedor,resultado,generacion);
         const entrada=adaptar(resultado,generacion);
+        // Revisiones de campo junto al informe, incluso en elementos que siguen
+        // fuera del lote por identidad/fechas ambiguas. Resolver no los promueve.
+        root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(contenedor,
+            [...entrada.reservas,...lista(resultado.ambiguas).flatMap(x=>lista(x.actuales))],generacion);
         if(!entrada.reservas.length)return;
         const doc=root.document;
         const elemento=(tag,texto)=>{const el=doc.createElement(tag);el.textContent=texto;return el;};
