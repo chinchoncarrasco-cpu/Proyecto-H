@@ -4595,6 +4595,14 @@
                     Promise.resolve().then(() => root.haikuCargarAbonosSupabase?.()),
                     Promise.resolve().then(() => root.haikuCargarSaldosCheckinSupabase?.())
                 ]);
+                // La escritura ya fue confirmada. Publicar una generación nueva
+                // para el día visible, incluso si los refresh anteriores delegaron.
+                await Promise.allSettled([
+                    Promise.resolve().then(() => root.HAIKU_RESUMEN_REFRESH_V1?.activo()
+                        ? root.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined, {
+                            categoria: "Libro", evento: "incorporación confirmada", tipo: "externo"
+                        }) : undefined)
+                ]);
                 if (ejecucion.siguientePlan) renderizarIncorporacion(out, ejecucion.siguientePlan, volver, aprobar, incorporar);
                 else renderizarResultadoIncorporacion(out, ejecucion, volver);
             } catch (error) {
