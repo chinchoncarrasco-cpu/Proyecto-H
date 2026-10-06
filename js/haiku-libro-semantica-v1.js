@@ -77,14 +77,25 @@
     }
     function clasificarFragmentos(texto) {
         let humanoPrevio=false, datosPosteriores=false;
-        return separarCampos(texto).map(texto=>{
+        const clasificar = texto => {
             const t=normalizar(texto);
-            let tipo='otro';
-            if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) tipo='etiqueta';
-            else if (notaDeTitular(texto, datosPosteriores)) tipo='nota_operativa';
-            else if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
-                /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) tipo='dato_estructurado';
-            else if (/^[\p{L}][\p{L}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2) tipo='posible_titular';
+            if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) return 'etiqueta';
+            if (notaDeTitular(texto, datosPosteriores)) return 'nota_operativa';
+            if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
+                /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) return 'dato_estructurado';
+            return /^[\p{L}][\p{L}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2 ? 'posible_titular' : 'otro';
+        };
+        return separarCampos(texto).map(texto=>{
+            let tipo=clasificar(texto);
+            // Sólo FULLDAY/FULL DAY puede compartir fragmento con un nombre.
+            // El sufijo pasa el mismo clasificador, sin retirar otras etiquetas
+            // ni alterar el texto original usado por pagos, servicios y notas.
+            const nombreFullDay=texto.match(/^full\s*day\s+(.+)$/i)?.[1].trim();
+            if (nombreFullDay && clasificar(nombreFullDay)==='posible_titular') {
+                texto=nombreFullDay;
+                tipo='posible_titular';
+            }
+            const t=normalizar(texto);
             if (tipo==='posible_titular') humanoPrevio=true;
             if (humanoPrevio && (tipo==='dato_estructurado' || /^(?:confirmad[oa]|pagad[oa]|reservad[oa])\b/.test(t))) datosPosteriores=true;
             return {texto,tipo};
