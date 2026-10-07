@@ -83,6 +83,49 @@
 
 .haiku-incorporacion-manual-accion:disabled { opacity: .55; cursor: default; }
 
+/* Acciones exteriores de Pagos para revisar; conserva los botones y paneles. */
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 8px;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > * {
+    flex: 1 0 100%;
+    min-width: 0;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > :is(.haiku-incorporacion-manual-pago, .haiku-pago-reserva-acciones) {
+    display: contents;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > .haiku-pago-reserva-acciones > .haiku-pago-ver-reserva {
+    order: 1;
+    flex: 0 0 auto;
+    max-width: 100%;
+    min-height: 30px;
+    margin-top: 7px;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > .haiku-incorporacion-manual-pago > .haiku-incorporacion-manual-accion {
+    order: 2;
+    flex: 0 0 auto;
+    max-width: 100%;
+    min-height: 30px;
+    margin: 7px 0 0 auto;
+    background: var(--sites-shell-green, var(--rec-verde, #22735c));
+    border-color: var(--sites-shell-green, var(--rec-verde, #22735c));
+    color: #fff;
+    font-size: .58rem;
+    line-height: 1.25;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > .haiku-pago-reserva-acciones > :is(.haiku-pago-reserva-estado, .haiku-pago-reserva-no-verificada) {
+    order: 3;
+    flex: 1 0 100%;
+    min-width: 0;
+}
+.haiku-incorporacion-item--dudosos[data-haiku-pago-ui-v1="1"] > .haiku-incorporacion-manual-pago > .haiku-incorporacion-manual-pago-panel {
+    order: 4;
+    flex: 1 0 100%;
+    min-width: 0;
+}
+
 .haiku-incorporacion-manual-pago-panel:not([hidden]) {
     display: grid;
     gap: 8px;
