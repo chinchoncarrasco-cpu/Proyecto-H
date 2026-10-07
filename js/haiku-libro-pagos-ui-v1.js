@@ -17,7 +17,7 @@
         const link = document.createElement("link");
         link.id = "haiku-libro-pagos-ui-v1-css";
         link.rel = "stylesheet";
-        link.href = "css/haiku-libro-pagos-ui-v1.css?v=2";
+        link.href = "css/haiku-libro-pagos-ui-v1.css?v=3";
         document.head.appendChild(link);
     }
 
@@ -174,7 +174,9 @@
     function medioVisual(pago) {
         const medio = normalizar(pago?.medio_pago);
         const texto = normalizar(`${pago?.texto_original || ""} ${pago?.concepto || ""}`);
-        if (/airbnb/.test(medio + " " + texto)) return { tipo: "airbnb", nombre: "Tarjeta AirBnb" };
+        if (pago?.medio_pago === "airbnb_prepaid_card" || /^airbnb\s+prepaid\s+card$/.test(medio) || /\bairbnb\s+prepaid\s+card\b/.test(texto)) {
+            return { tipo: "airbnb", nombre: "Airbnb Prepaid Card" };
+        }
         if (/transfer/.test(medio + " " + texto)) return { tipo: "transferencia", nombre: "Transferencia" };
         if (/efectivo/.test(medio + " " + texto)) return { tipo: "efectivo", nombre: "Efectivo" };
 

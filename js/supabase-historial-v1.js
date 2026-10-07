@@ -130,7 +130,7 @@
             webpay_debito: "WebPay Débito",
             tarjeta_credito: "Tarjeta Crédito",
             tarjeta_debito: "Tarjeta Débito",
-            efectivo: "Efectivo"
+            airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
         };
         return mapa[String(valor || "")] || textoEstado(valor);
     }

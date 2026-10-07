@@ -151,6 +151,8 @@ Ignora sufijos entre paréntesis: LC2(1)=CAB2. No inventes equivalencias para ot
 
 Pagos:
 - pagos es un arreglo. Mantén cada abono separado; nunca consolides varios movimientos.
+- Airbnb Prepaid Card es un medio propio: devuelve medio="Airbnb Prepaid Card" solo ante esa frase completa, sin importar mayúsculas. "Airbnb" solo es un canal, no prueba el medio.
+- Airbnb Prepaid Card requiere monto positivo y fecha real; no requiere Folio, BOVTAR ni COD.AUT. Deja esos tres campos en null. Si existe una referencia externa real Airbnb/Cloudbeds, consérvala en glosa; es opcional y nunca debe inventarse.
 - WebPay Crédito/Débito: referencia obligatoria COD.AUT. Si dice "credito" devuelve medio="WebPay Crédito"; si dice "debito", "WebPay Débito". Conserva ceros iniciales.
 - Transferencia bancaria: referencia obligatoria Glosa COMPLETA. Si aparece "0170274954 Transf de NOMBRE", conserva toda esa cadena incluida la parte numérica inicial.
 - Tarjeta Crédito/Débito (no WebPay): referencias Folio + BOVTAR. Si dice crédito, medio="Tarjeta Crédito"; si dice débito, medio="Tarjeta Débito". No agregues presencial/remoto.

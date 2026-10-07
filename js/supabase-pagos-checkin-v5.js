@@ -22,7 +22,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
-        "Efectivo": "efectivo"
+        "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
     const MEDIOS_UI = Object.freeze({
@@ -31,7 +31,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo"
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
     });
 
     function escapar(valor) {
@@ -69,7 +69,7 @@
         return `
             <option value="" ${!valor ? "selected" : ""}>Seleccionar...</option>
             ${Object.keys(MEDIOS).map(nombre =>
-                `<option value="${nombre}" ${valor === nombre ? "selected" : ""}>${nombre}</option>`
+                `<option value="${valorMedio(nombre)}" ${(valor === nombre || valor === valorMedio(nombre)) ? "selected" : ""}>${nombre}</option>`
             ).join("")}
         `;
     }
@@ -235,7 +235,7 @@
 
     function actualizarCamposEditorPago(editor) {
         const medioUI = editor?.querySelector("[data-haiku-editar-pago-medio]")?.value || "";
-        const req = requisitosMedio(MEDIOS[medioUI] || "");
+        const req = requisitosMedio(codigoMedio(medioUI));
         [
             ["glosa", req.glosa],
             ["folio", req.folio],
@@ -246,6 +246,7 @@
             const input = editor?.querySelector(`[data-haiku-editar-pago-${campo}]`);
             if (fila) fila.hidden = !visible;
             input?.toggleAttribute("required", visible);
+            if (campo === "glosa") referenciaOpcional(fila, input, codigoMedio(medioUI));
         });
     }
 
@@ -290,7 +291,7 @@
 
     function actualizarCamposPorMedio(tarjeta) {
         const medioUI = tarjeta.querySelector("[data-haiku-saldo-medio]")?.value || "";
-        const req = requisitosMedio(MEDIOS[medioUI] || "");
+        const req = requisitosMedio(codigoMedio(medioUI));
         [
             ["glosa", req.glosa],
             ["folio", req.folio],
@@ -301,6 +302,7 @@
             const input = tarjeta.querySelector(`[data-haiku-saldo-${campo}]`);
             if (fila) fila.hidden = !visible;
             input?.toggleAttribute("required", visible);
+            if (campo === "glosa") referenciaOpcional(fila, input, codigoMedio(medioUI));
         });
     }
 
@@ -497,7 +499,7 @@
                 throw new Error("La reserva ya no tiene un saldo de alojamiento cobrable en esta fecha.");
             }
             const monto = Number(datos.monto || 0);
-            const medioDB = MEDIOS[datos.medio] || "";
+            const medioDB = codigoMedio(datos.medio);
             const req = requisitosMedio(medioDB);
             if (!Number.isFinite(monto) || monto <= 0 || monto > contexto.saldo) {
                 throw new Error(`El monto debe estar entre $1 y ${dinero(contexto.saldo)}.`);
@@ -515,9 +517,9 @@
                 p_monto: monto,
                 p_medio_pago: medioDB,
                 p_glosa: datos.glosa || null,
-                p_folio: datos.folio || null,
-                p_bovtar: datos.bovtar || null,
-                p_codigo_autorizacion: datos.codAut || null,
+                p_folio: medioDB === "airbnb_prepaid_card" ? null : (datos.folio || null),
+                p_bovtar: medioDB === "airbnb_prepaid_card" ? null : (datos.bovtar || null),
+                p_codigo_autorizacion: medioDB === "airbnb_prepaid_card" ? null : (datos.codAut || null),
                 p_manager_revisado: true
             });
             if (error) throw error;
@@ -603,7 +605,7 @@
         evento.stopPropagation();
 
         const d = leerEditorPago(editor);
-        const medioDB = MEDIOS[d.medio] || "";
+        const medioDB = codigoMedio(d.medio);
         const req = requisitosMedio(medioDB);
         if (!medioDB) return alert("Selecciona el medio de pago.");
         if (req.glosa && !d.glosa) return alert("Transferencia requiere Glosa.");
@@ -623,9 +625,9 @@
                 p_pago_id: pagoId,
                 p_medio_pago: medioDB,
                 p_glosa: d.glosa || null,
-                p_folio: d.folio || null,
-                p_bovtar: d.bovtar || null,
-                p_codigo_autorizacion: d.codAut || null
+                p_folio: medioDB === "airbnb_prepaid_card" ? null : (d.folio || null),
+                p_bovtar: medioDB === "airbnb_prepaid_card" ? null : (d.bovtar || null),
+                p_codigo_autorizacion: medioDB === "airbnb_prepaid_card" ? null : (d.codAut || null)
             });
             if (error) throw error;
             console.info("HAIKU · Pago confirmado corregido:", data);
@@ -739,7 +741,7 @@
     window.HAIKU_PAGO_CHECKIN_RESUMEN_V1 = Object.freeze({
         contexto: contextoPagoResumen,
         registrar: registrarPagoControlado,
-        requisitos: medio => requisitosMedio(MEDIOS[medio] || ""),
+        requisitos: medio => requisitosMedio(codigoMedio(medio)),
         preparar: ({ fecha, operacion }) => cargarSaldosCheckinMixto({ fecha, operacion, lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
     });
 
@@ -791,4 +793,15 @@
     document.head.appendChild(estilo);
 
     console.info("HAIKU · Saldo Check-in V5 separado preparado.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
+    function referenciaOpcional(fila, input, medio) {
+        if (!fila || !input) return;
+        const airbnb = medio === "airbnb_prepaid_card";
+        const titulo = fila.querySelector("span");
+        if (titulo) titulo.textContent = airbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+        input.placeholder = airbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+        if (airbnb) { fila.hidden = false; input.removeAttribute("required"); }
+    }
 })();

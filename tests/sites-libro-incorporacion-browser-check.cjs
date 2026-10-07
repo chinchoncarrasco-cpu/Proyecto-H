@@ -185,9 +185,50 @@ const server = http.createServer((request, response) => {
         assert.equal(await final.isEnabled(), true, 'error real visible y reintento disponible');
         await final.click();
         await page.waitForFunction(() => window.__writes === 2);
-        await page.evaluate(() => window.__pendingWrite.resolve({ resultado: { reservas_creadas: 1, estadias_agregadas: 1, pagos_creados: 1, actualizaciones: 1, omitidos: 0 } }));
+        await page.evaluate(() => {
+            const reservaId = '11111111-1111-4111-8111-111111111111';
+            window.__opened = [];
+            window.HAIKU_INSPECTOR_V1 = { abrirReserva: (...args) => window.__opened.push(args[0]) };
+            const base = { titular:'Mery Vasquez Carrion',cabana:'CAB 2',periodo:'06/10/26 → 06/10/26',
+                identidad:{reservaId,seleccion:null} };
+            window.__pendingWrite.resolve({
+                resultado:{reservas_creadas:1,estadias_agregadas:1,pagos_creados:1,actualizaciones:1,omitidos:1},
+                detalle:{
+                    reservas:[{...base,estado:'Reserva incorporada'}],
+                    estadias:[{...base,estado:'Estadía añadida'}],
+                    pagos:[{...base,periodo:'',monto:120000,fecha:'2026-10-04',concepto:'Abono Full Day',estado:'Incorporado'}],
+                    actualizaciones:[{...base,estado:'Actualizado',descripcion:'Teléfono: +56912345678'}],
+                    omitidos:[{titular:'Comprobante existente',estado:'Omitido',motivo:'Ya existe en Proyecto H.',identidad:null}]
+                }
+            });
+        });
         await page.waitForFunction(() => document.querySelector('.haku-incorporacion-resultado'));
         assert.equal(await page.evaluate(() => window.__writes), 2, 'cada intento ejecuta exactamente una operación');
+        const resultado = page.locator('.haku-incorporacion-resultado');
+        assert.deepEqual(await resultado.locator('.haku-incorporacion-final-grupo > summary').allTextContents(),[
+            'Reservas incorporadas (1)','Estadías añadidas (1)','Pagos incorporados (1)','Actualizaciones del Libro (1)','Omitidos (1)'
+        ]);
+        assert.equal(await resultado.locator('.haku-incorporacion-final-item').count(),5);
+        assert.equal(await resultado.getByRole('button',{name:'Ver reserva',exact:true}).count(),4);
+        assert.match(await resultado.locator('[data-categoria=pagos]').innerText(),/120\.000.*04\/10\/26.*Abono Full Day/);
+        assert.doesNotMatch(await resultado.innerText(),/Persona pendiente|Persona dudoso/);
+        const pagosFinales = resultado.locator('[data-categoria=pagos]');
+        await pagosFinales.locator('summary').click();
+        assert.equal(await pagosFinales.locator('ul').isVisible(),false);
+        await pagosFinales.locator('summary').click();
+        await pagosFinales.getByRole('button',{name:'Ver reserva',exact:true}).click();
+        assert.deepEqual(await page.evaluate(()=>window.__opened),['11111111-1111-4111-8111-111111111111']);
+        for (const width of [1000,390]) {
+            await page.setViewportSize({width,height:800});
+            assert.ok(await resultado.evaluate(e=>e.scrollWidth<=e.clientWidth+1),`${width}: resultado sin desborde horizontal`);
+            if (process.env.HAKU_INCORPORACION_FINAL_SCREENSHOT) {
+                await page.evaluate(()=>{document.getElementById('haiku-asistente-mensajes').scrollTop=0;});
+                await page.screenshot({path:`${process.env.HAKU_INCORPORACION_FINAL_SCREENSHOT}-${width}.png`,fullPage:true});
+            }
+        }
+        await resultado.getByRole('button',{name:'Volver a la comparación',exact:true}).click();
+        assert.equal(await page.evaluate(()=>window.__back),2,'el resultado conserva el callback de Volver');
+        assert.equal(await page.evaluate(()=>window.__writes),2,'acordeones, Inspector y Volver no incorporan elementos');
 
         await page.evaluate(() => {
             const bloqueado = { ...window.__plan, escrituraHabilitada: false,

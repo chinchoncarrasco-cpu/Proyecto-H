@@ -21,7 +21,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
-        "Efectivo": "efectivo"
+        "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
     const MAPA_MEDIOS_INVERSO = Object.freeze({
@@ -30,7 +30,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo",
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
 
@@ -275,13 +275,13 @@
             "WebPay Débito",
             "Tarjeta Crédito",
             "Tarjeta Débito",
-            "Efectivo"
+            "Airbnb Prepaid Card", "Efectivo"
         ];
 
         return [
             `<option value="" ${valor === "" ? "selected" : ""}>Seleccionar...</option>`,
             ...opciones.map(opcion =>
-                `<option value="${escaparHTML(opcion)}" ${valor === opcion ? "selected" : ""}>${escaparHTML(opcion)}</option>`
+                `<option value="${escaparHTML(valorMedio(opcion))}" ${(valor === opcion || valor === valorMedio(opcion)) ? "selected" : ""}>${escaparHTML(opcion)}</option>`
             )
         ].join("");
     }
@@ -437,7 +437,7 @@
             );
             const medioUI =
                 tarjeta.querySelector(".pago-abono-medio")?.value || "";
-            const medioDB = MAPA_MEDIOS[medioUI] || "";
+            const medioDB = codigoMedio(medioUI);
 
             if (monto <= 0 || !medioDB) {
                 check.checked = false;
@@ -515,4 +515,7 @@
     window.haikuCargarAbonosSupabase = cargarAbonosSupabase;
 
     console.info("HAIKU · Pagos + edición Supabase activos.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MAPA_MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
 })();

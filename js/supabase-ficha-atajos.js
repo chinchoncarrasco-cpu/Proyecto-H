@@ -60,7 +60,7 @@
     function textoMedio(valor) {
         const nombres = {
             transferencia: "Transferencia",
-            efectivo: "Efectivo",
+            airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
             tarjeta_credito: "Tarjeta crédito",
             tarjeta_debito: "Tarjeta débito",
             webpay_credito: "WebPay crédito",

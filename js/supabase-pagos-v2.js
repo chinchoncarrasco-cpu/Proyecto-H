@@ -18,7 +18,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
-        "Efectivo": "efectivo"
+        "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
     const MAPA_INVERSO = Object.freeze({
@@ -27,7 +27,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo"
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
     });
 
     function escapar(valor) {
@@ -57,11 +57,11 @@
     function opcionesMedio(valor = "") {
         const opciones = [
             "Transferencia","WebPay Crédito","WebPay Débito",
-            "Tarjeta Crédito","Tarjeta Débito","Efectivo"
+            "Tarjeta Crédito","Tarjeta Débito","Airbnb Prepaid Card", "Efectivo"
         ];
         return [
             `<option value="" ${!valor ? "selected" : ""}>Seleccionar...</option>`,
-            ...opciones.map(o => `<option value="${o}" ${valor===o?"selected":""}>${o}</option>`)
+            ...opciones.map(o => `<option value="${valorMedio(o)}" ${(valor === o || valor === valorMedio(o)) ?"selected":""}>${o}</option>`)
         ].join("");
     }
 
@@ -294,7 +294,7 @@
         const reservaId = check.dataset.reservaId;
         const monto = Number(tarjeta?.querySelector(".pago-abono-monto")?.value || 0);
         const medioUI = tarjeta?.querySelector(".pago-abono-medio")?.value || "";
-        const medioDB = MAPA_MEDIOS[medioUI] || "";
+        const medioDB = codigoMedio(medioUI);
 
         if (monto <= 0 || !medioDB) {
             check.checked = false;
@@ -347,11 +347,13 @@
         const codAut = tarjeta.querySelector(`[data-pago-checkin-codaut="${numero}"]`)?.value.trim() || "";
         const bove = tarjeta.querySelector(`[data-pago-checkin-bove="${numero}"]`)?.value.trim() || "";
         const manager = tarjeta.querySelector(`[data-pago-checkin-manager="${numero}"]`)?.checked === true;
-        const medioDB = MAPA_MEDIOS[medioUI] || "";
+        const medioDB = codigoMedio(medioUI);
 
-        if (!medioDB || !folio || !codAut || !bove || !manager) {
+        if (!medioDB || (medioDB !== "airbnb_prepaid_card" && (!folio || !codAut || !bove)) || !manager) {
             cobrado.checked = false;
-            alert("Para cerrar el saldo completa Medio de pago, Folio, CodAut, Bove y Manager revisado.");
+            alert(medioDB === "airbnb_prepaid_card"
+                ? "Para cerrar el saldo Airbnb Prepaid Card confirma la revisión de Manager."
+                : "Para cerrar el saldo completa Medio de pago, Folio, CodAut, Bove y Manager revisado.");
             return;
         }
         if (!window.haikuTienePermiso?.("pagos.registrar")) {
@@ -368,7 +370,7 @@
             if (saldo <= 0) throw new Error("La reserva ya no tiene saldo pendiente.");
 
             await registrarPago(reservaId, saldo, medioDB, "saldo", {
-                folio, codAut, bove,
+                folio: medioDB === "airbnb_prepaid_card" ? null : folio, codAut: medioDB === "airbnb_prepaid_card" ? null : codAut, bove: medioDB === "airbnb_prepaid_card" ? null : bove,
                 observaciones: `Saldo de check-in registrado desde HAIKU · CAB ${numero}`
             });
             await Promise.all([cargarAbonosSupabase(), cargarSaldosCheckinSupabase()]);
@@ -490,4 +492,7 @@
     window.haikuCargarSaldosCheckinSupabase = cargarSaldosCheckinSupabase;
 
     console.info("HAIKU · Pagos + Edición Supabase V2 preparados.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MAPA_MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
 })();

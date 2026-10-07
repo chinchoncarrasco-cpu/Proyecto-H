@@ -21,7 +21,7 @@
         "WebPay Débito": "webpay_debito",
         "Tarjeta Crédito": "tarjeta_credito",
         "Tarjeta Débito": "tarjeta_debito",
-        "Efectivo": "efectivo"
+        "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo": "efectivo"
     });
 
     const MEDIOS_UI = Object.freeze({
@@ -30,7 +30,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo"
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo"
     });
 
     function escapar(valor) {
@@ -73,7 +73,7 @@
         return `
             <option value="" ${!valor ? "selected" : ""}>Seleccionar...</option>
             ${Object.keys(MEDIOS).map(nombre =>
-                `<option value="${nombre}" ${valor === nombre ? "selected" : ""}>${nombre}</option>`
+                `<option value="${valorMedio(nombre)}" ${(valor === nombre || valor === valorMedio(nombre)) ? "selected" : ""}>${nombre}</option>`
             ).join("")}
         `;
     }
@@ -333,7 +333,7 @@
 
     function actualizarCamposPorMedio(tarjeta) {
         const medioUI = tarjeta.querySelector("[data-haiku-checkout-medio]")?.value || "";
-        const req = requisitosMedio(MEDIOS[medioUI] || "");
+        const req = requisitosMedio(codigoMedio(medioUI));
 
         [
             ["glosa", req.glosa],
@@ -344,6 +344,7 @@
             const input = tarjeta.querySelector(`[data-haiku-checkout-${campo}]`);
             if (fila) fila.hidden = !visible;
             input?.toggleAttribute("required", visible);
+            if (campo === "glosa") referenciaOpcional(fila, input, codigoMedio(medioUI));
         });
     }
 
@@ -462,7 +463,7 @@
                 throw new Error("La reserva ya no tiene servicios pendientes de cobro en esta fecha.");
             }
             const monto = Number(datos.monto || 0);
-            const medioDB = MEDIOS[datos.medio] || "";
+            const medioDB = codigoMedio(datos.medio);
             const req = requisitosMedio(medioDB);
             if (!Number.isFinite(monto) || monto <= 0 || monto > contexto.saldo) {
                 throw new Error(`El monto debe estar entre $1 y ${dinero(contexto.saldo)}.`);
@@ -478,8 +479,8 @@
                 p_monto: monto,
                 p_medio_pago: medioDB,
                 p_glosa: datos.glosa || null,
-                p_folio: datos.folio || null,
-                p_codigo_autorizacion: datos.codAut || null,
+                p_folio: medioDB === "airbnb_prepaid_card" ? null : (datos.folio || null),
+                p_codigo_autorizacion: medioDB === "airbnb_prepaid_card" ? null : (datos.codAut || null),
                 p_manager_revisado: true
             });
             if (error) throw error;
@@ -798,7 +799,7 @@
     window.HAIKU_PAGO_CHECKOUT_RESUMEN_V1 = Object.freeze({
         contexto: contextoPagoResumen,
         registrar: registrarPagoControlado,
-        requisitos: medio => requisitosMedio(MEDIOS[medio] || ""),
+        requisitos: medio => requisitosMedio(codigoMedio(medio)),
         preparar: ({ fecha, operacion }) => cargarCheckoutSupabase({ fecha, operacion, lista: document.createElement("div"), contador: document.createElement("strong"), preparacion: true })
     });
 
@@ -877,4 +878,15 @@
     }, 420);
 
     console.info("HAIKU · Cobros Check-out Supabase V1 preparado.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
+    function referenciaOpcional(fila, input, medio) {
+        if (!fila || !input) return;
+        const airbnb = medio === "airbnb_prepaid_card";
+        const titulo = fila.querySelector("span");
+        if (titulo) titulo.textContent = airbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+        input.placeholder = airbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+        if (airbnb) { fila.hidden = false; input.removeAttribute("required"); }
+    }
 })();

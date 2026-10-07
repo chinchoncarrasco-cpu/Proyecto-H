@@ -68,6 +68,197 @@
     font-size: .76rem;
 }
 
+.haiku-incorporacion-manual-accion {
+    min-height: 32px;
+    margin-top: 7px;
+    padding: 6px 10px;
+    border: 1px solid #bfd4c6;
+    border-radius: 7px;
+    background: #f2f8f4;
+    color: #2c6548;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.haiku-incorporacion-manual-accion:disabled { opacity: .55; cursor: default; }
+
+.haiku-incorporacion-manual-pago-panel:not([hidden]) {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid #dfe6e1;
+    border-radius: 8px;
+    background: #f6f8f7;
+}
+
+.haiku-incorporacion-manual-pago-panel pre {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font: inherit;
+}
+
+.haiku-incorporacion-manual-campo {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+}
+
+.haiku-incorporacion-manual-campo input,
+.haiku-incorporacion-manual-campo select {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 34px;
+    padding: 6px 8px;
+    border: 1px solid #bfd4c6;
+    border-radius: 6px;
+    background: #fff;
+    color: #203128;
+    font: inherit;
+}
+
+.haiku-incorporacion-manual-campo input[type="checkbox"] {
+    width: 18px;
+    min-height: 18px;
+    margin: 0;
+}
+
+/* Revisión manual: escala compacta de las tarjetas Sites; conserva el shell. */
+.haiku-incorporacion-manual-pago-panel {
+    --manual-verde: var(--sites-shell-green, var(--rec-verde, #22735c));
+    --manual-suave: var(--sites-shell-green-soft, var(--rec-verde-suave, #e6f2eb));
+    --manual-texto: var(--sites-shell-ink, var(--rec-texto, #172522));
+    --manual-muted: var(--sites-shell-muted, var(--rec-muted, #687873));
+    --manual-borde: var(--sites-shell-line, var(--rec-borde, #dce5e0));
+    container-type: inline-size;
+    color: var(--manual-texto); font-size: 11px; line-height: 1.4;
+    text-align: left; white-space: normal; overflow-wrap: anywhere;
+}
+.haiku-incorporacion-manual-pago-panel[hidden] { display: none !important; }
+.haiku-incorporacion-manual-pago-panel:not([hidden]) {
+    display: block; padding: 0; background: #fff; border-color: var(--manual-borde); border-radius: 8px;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-contenido {
+    display: grid; gap: 9px; padding: 12px; min-width: 0;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-contenido > * { min-width: 0; margin: 0; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera { display: grid; gap: 5px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera h3 {
+    margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; color: var(--manual-texto);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera p {
+    margin: 0; font-size: 11px; line-height: 1.4; color: var(--manual-muted);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-estado,
+.haiku-incorporacion-manual-pago-panel .haiku-manual-fila {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px; min-width: 0;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-fila { font-size: 11px; line-height: 1.4; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-fila > span { color: var(--manual-muted); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-fila > strong { font-size: inherit; font-weight: 600; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-badge {
+    display: inline-flex; padding: 2px 6px; border-radius: 999px; background: var(--manual-suave);
+    color: var(--manual-verde) !important; font-size: 9px; font-weight: 600; line-height: 12px;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-badge--revision {
+    background: var(--sites-shell-amber-soft, #fff2df); color: var(--sites-shell-amber, #a36522) !important;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-caption {
+    margin: 0; color: var(--manual-muted); font-size: 10px; line-height: 1.4; font-weight: 400;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-resumen {
+    display: grid; gap: 5px; padding: 10px; border: 1px solid var(--manual-borde); border-radius: 8px;
+    background: var(--sites-shell-canvas, #f5f7f5);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-monto-medio > .haiku-manual-monto {
+    font-size: 21px; line-height: 1.1; letter-spacing: -.02em;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-medio { display: flex; align-items: center; gap: 5px; font-size: 10px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-icono { display: block; flex-shrink: 0; max-width: none; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 6px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso--seguro { background: var(--manual-suave); color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso--revision {
+    background: var(--sites-shell-amber-soft, #fff2df); color: var(--sites-shell-amber, #a36522);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso strong { font-size: 11px; line-height: 1.35; font-weight: 500; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso p { margin: 2px 0 0; font-size: 10px; line-height: 1.4; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-formulario { display: grid; gap: 8px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas {
+    display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; min-width: 0;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo { gap: 4px; color: var(--manual-texto); font-size: 11px; line-height: 1.4; }
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input,select) {
+    height: 36px; min-height: 36px; padding: 7px 8px; border-color: var(--manual-borde); border-radius: 6px; font-size: 11px; line-height: 1.25;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo select {
+    appearance: none; padding-right: 36px; background: #fff url('../assets/icons/haku-pagos-manual/select.svg') right 12px center / 20px 20px no-repeat;
+}
+.haiku-incorporacion-manual-pago-panel input[type="date"]::-webkit-calendar-picker-indicator {
+    width: 20px; height: 20px; margin: 0; background: url('../assets/icons/haku-pagos-manual/date.svg') center / 20px 20px no-repeat;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo:has(input[type="checkbox"]) {
+    display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 6px; font-size: 10px;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo input[type="checkbox"] {
+    width: 15px; height: 15px; min-height: 15px; padding: 0; flex: 0 0 15px;
+}
+.haiku-incorporacion-manual-pago-panel :is(input,select,button,summary):focus-visible { outline: 2px solid var(--manual-verde); outline-offset: 2px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-total { padding: 7px 9px; background: var(--manual-suave); color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-total > span { color: inherit; font-size: 10px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-total > strong { font-size: 12px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia { margin: 0; border: 0; padding: 0; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia > summary {
+    position: relative; padding: 3px 22px 3px 0; list-style: none; color: var(--manual-muted); font-size: 10px; cursor: pointer;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia > summary::-webkit-details-marker { display: none; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia > summary::after {
+    content: ''; position: absolute; right: 0; top: 50%; width: 16px; height: 16px;
+    background: url('../assets/icons/haku-pagos-manual/down.svg') center / 16px 16px no-repeat; transform: translateY(-50%);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia[open] > summary::after { transform: translateY(-50%) rotate(180deg); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia pre { padding-top: 6px; font-size: 10px; line-height: 1.4; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie { display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--manual-borde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-incorporacion-manual-accion {
+    width: 100%; margin: 0; min-height: 35px; padding: 7px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 1.25;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-primario { background: var(--manual-verde); border-color: var(--manual-verde); color: #fff; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-secundario { border-color: transparent; background: #fff; color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-volver {
+    display: flex; align-items: center; gap: 5px; width: fit-content; min-height: 18px; margin: 0; padding: 0;
+    border: 0; background: transparent; color: var(--manual-muted); font-size: 10px; font-weight: 500;
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-progreso { font-size: 10px; color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-ceja { margin: 0 0 6px; color: var(--manual-muted); font-size: 9px; line-height: 1.4; font-weight: 600; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-destinos { display: grid; gap: 6px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-destinos > .haiku-manual-ceja { margin: 0; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-destino { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--manual-borde); border-radius: 8px; background: #fff; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-divider { padding-top: 6px; border-top: 1px solid var(--manual-borde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-servicio-confirmado { display: grid; gap: 4px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante > :is(.haiku-manual-ceja,.haiku-manual-dos-columnas,.haiku-manual-evidencia) { grid-column: 1 / -1; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante .haiku-manual-ceja { margin: 0; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-identificador { display: grid; gap: 2px; font-size: 11px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-identificador span { color: var(--manual-muted); font-size: 10px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-identificador strong { font-weight: 500; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-validacion { margin: 0; padding: 0; border: 0; background: transparent; font-size: 10px; color: var(--manual-muted); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-validacion:empty { display: none; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera--aprobado { justify-items: center; text-align: center; gap: 8px; padding-block: 8px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-sello { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--manual-suave); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-checklist { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-checklist li { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-pago-ver-reserva {
+    width: 100%; min-height: 35px; padding: 7px 10px; border-radius: 6px; color: var(--manual-verde); background: #fff; border: 1px solid var(--manual-borde); font-size: 11px; line-height: 1.25;
+}
+@container (max-width: 350px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas,
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante { grid-template-columns: minmax(0, 1fr); }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-contenido { padding: 10px; }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-pie { padding-inline: 10px; }
+}
+
 @media (max-width: 700px) {
     .haiku-incorporacion-meta-item.haiku-incorporacion-meta-item--pago-detalle {
         grid-template-columns: 1fr;

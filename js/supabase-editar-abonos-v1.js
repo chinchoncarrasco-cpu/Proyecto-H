@@ -15,7 +15,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo",
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
 
@@ -410,7 +410,7 @@
                 p_folio: ["tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.folio || null) : null,
                 p_codigo_autorizacion: ["webpay_credito","webpay_debito","tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.codaut || null) : null,
                 p_bove: ["tarjeta_credito","tarjeta_debito"].includes(datos.medio) ? (datos.bove || null) : null,
-                p_referencia_externa: datos.medio === "transferencia" ? (datos.glosa || null) : null,
+                p_referencia_externa: ["transferencia", "airbnb_prepaid_card"].includes(datos.medio) ? (datos.glosa || null) : null,
                 p_observaciones: datos.observacion || null
             });
 

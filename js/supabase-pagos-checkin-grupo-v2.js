@@ -8,11 +8,11 @@
     const sb=window.haikuSupabase;if(!sb)return;
     let procesando=false,guardando=false,timer=0,observer=null;
     const borradores=new Map();
-    const MEDIOS=Object.freeze({"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Efectivo":"efectivo"});
+    const MEDIOS=Object.freeze({"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"});
     const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
     const money=v=>"$"+Math.round(Number(v||0)).toLocaleString("es-CL");
     const fecha=()=>{try{return String(fechaSeleccionada||"").slice(0,10)}catch{return""}};
-    const opciones=(v="")=>`<option value="">Seleccionar...</option>`+Object.keys(MEDIOS).map(x=>`<option value="${x}" ${v===x?"selected":""}>${x}</option>`).join("");
+    const opciones=(v="")=>`<option value="">Seleccionar...</option>`+Object.keys(MEDIOS).map(x=>`<option value="${valorMedio(x)}" ${(v === x || v === valorMedio(x)) ?"selected":""}>${x}</option>`).join("");
 
     async function ingresosDia(operacion){
         const f=fecha();if(!f)return[];
@@ -30,7 +30,7 @@
     async function finanzas(id){const{data,error}=await sb.rpc("haiku_finanzas_grupo",{p_reserva_id:id});if(error)throw error;return data||{}}
     function requisitos(m){if(m==="transferencia")return{glosa:true,folio:false,codaut:false};if(["webpay_credito","webpay_debito"].includes(m))return{glosa:false,folio:false,codaut:true};if(["tarjeta_credito","tarjeta_debito"].includes(m))return{glosa:false,folio:true,codaut:true};return{glosa:false,folio:false,codaut:false}}
     function guardar(card){const id=card?.dataset?.grupoId;if(!id)return;borradores.set(id,{monto:Number(card.querySelector("[data-grupo-saldo-monto]")?.value||0),medio:card.querySelector("[data-grupo-saldo-medio]")?.value||"",glosa:card.querySelector("[data-grupo-saldo-glosa]")?.value?.trim()||"",folio:card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"",codaut:card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"",manager:card.querySelector("[data-grupo-saldo-manager]")?.checked===true});}
-    function campos(card){const ui=card.querySelector("[data-grupo-saldo-medio]")?.value||"",r=requisitos(MEDIOS[ui]||"");[["glosa",r.glosa],["folio",r.folio],["codaut",r.codaut]].forEach(([k,on])=>{const el=card.querySelector(`[data-grupo-campo-${k}]`);if(el)el.hidden=!on});}
+    function campos(card){const ui=card.querySelector("[data-grupo-saldo-medio]")?.value||"",r=requisitos(codigoMedio(ui));[["glosa",r.glosa],["folio",r.folio],["codaut",r.codaut]].forEach(([k,on])=>{const el=card.querySelector(`[data-grupo-campo-${k}]`);if(el)el.hidden=!on;if(k==="glosa")referenciaOpcional(el,card.querySelector("[data-grupo-saldo-glosa]"),codigoMedio(ui))});}
 
     function htmlGrupo(g,f){
         const total=Number(f.total_alojamiento||0),saldo=Number(f.saldo_alojamiento||0),miembros=(f.miembros||[]).length?f.miembros:g.miembros.map(m=>({cabana:m.numero,reserva_id:m.reservaId})),cabs=miembros.map(m=>Number(m.cabana)).filter(Boolean).sort((a,b)=>a-b),d=borradores.get(g.grupoId)||{monto:saldo,medio:"",glosa:"",folio:"",codaut:"",manager:false},boves=g.miembros.map(m=>m.bove).filter(Boolean),boveComun=boves.length===g.miembros.length&&new Set(boves).size===1?boves[0]:"",servicios=Number(f.servicios_pendientes||0);
@@ -88,7 +88,7 @@
             }
             const contexto=await contextoPagoResumen(reservaId,fechaEsperada);
             if(!contexto||contexto.saldo<=0)throw new Error("La reserva conjunta ya no tiene saldo cobrable en esta fecha.");
-            const monto=Math.round(Number(datos.monto||0)),medio=MEDIOS[datos.medio]||"",r=requisitos(medio);
+            const monto=Math.round(Number(datos.monto||0)),medio=codigoMedio(datos.medio),r=requisitos(medio);
             if(!Number.isFinite(monto)||monto<=0||monto>contexto.saldo)throw new Error(`El monto debe estar entre $1 y ${money(contexto.saldo)}.`);
             if(!medio)throw new Error("Selecciona el medio de pago.");
             if(!datos.manager)throw new Error("El pago debe ser revisado por Manager.");
@@ -98,8 +98,8 @@
             if(fechaEsperada!==fecha())throw new Error("La fecha seleccionada cambió. Vuelve a abrir el pago.");
             const{data,error}=await sb.rpc("haiku_registrar_pago_checkin_grupo",{
                 p_reserva_id:contexto.rpcReservaId,p_monto:monto,p_medio_pago:medio,
-                p_glosa:datos.glosa||null,p_folio:datos.folio||null,
-                p_codigo_autorizacion:datos.codaut||null,p_manager_revisado:true
+                p_glosa:datos.glosa||null,p_folio:medio === "airbnb_prepaid_card" ? null : (datos.folio||null),
+                p_codigo_autorizacion:medio === "airbnb_prepaid_card" ? null : (datos.codaut||null),p_manager_revisado:true
             });
             if(error)throw error;
             borradores.delete(contexto.grupoId);
@@ -142,7 +142,18 @@
         publicar,
         contexto:contextoPagoResumen,
         registrar:registrarPagoControlado,
-        requisitos:medio=>requisitos(MEDIOS[medio]||"")
+        requisitos:medio=>requisitos(codigoMedio(medio))
     });
     console.info("HAIKU · Check-in conjunto V2 preparado.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
+    function referenciaOpcional(fila, input, medio) {
+        if (!fila || !input) return;
+        const airbnb = medio === "airbnb_prepaid_card";
+        const titulo = fila.querySelector("span");
+        if (titulo) titulo.textContent = airbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+        input.placeholder = airbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+        if (airbnb) { fila.hidden = false; input.removeAttribute("required"); }
+    }
 })();

@@ -1522,6 +1522,7 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
   font-size: 12px;
   font-weight: 690;
 }
+.sites-resumen-pago-drawer .sites-resumen-pago-formulario > label[hidden] { display: none; }
 .sites-resumen-pago-drawer .sites-resumen-pago-formulario > label:not(.sites-resumen-pago-manager) > :is(input, select, textarea) { margin-top: 6px; }
 .sites-resumen-pago-drawer .sites-resumen-pago-formulario > label.sites-resumen-pago-manager {
   display: flex;

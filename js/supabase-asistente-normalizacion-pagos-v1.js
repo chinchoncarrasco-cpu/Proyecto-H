@@ -72,6 +72,17 @@
         const medioOriginal = texto(pago.medio);
         const medioClave = clave(medioOriginal);
         const subtipo = subtipoDesdeMedio(medioOriginal);
+        if (medioClave === "airbnb_prepaid_card" || /^airbnb\s+prepaid\s+card$/.test(medioClave)) {
+            if (codaut || folio || bovtar) {
+                pago.medio = "Referencia incompatible · revisar";
+                agregarUnico(advertencias, "Airbnb Prepaid Card contiene identificadores Transbank; revisar la evidencia antes de guardar.");
+                return;
+            }
+            pago.medio = "Airbnb Prepaid Card";
+            pago.glosa = texto(pago.referencia_externa || pago.glosa) || null;
+            pago.codaut = null; pago.folio = null; pago.bovtar = null;
+            return;
+        }
 
         const tieneCodaut = Boolean(codaut);
         const tieneTarjeta = Boolean(folio || bovtar);
@@ -226,6 +237,7 @@
         if (medio.includes("tarjeta") && (medio.includes("credito") || medio.includes("debito"))) {
             return Boolean(texto(p.folio) && texto(p.bovtar));
         }
+        if (medio === "airbnb_prepaid_card" || /^airbnb\s+prepaid\s+card$/.test(medio)) return true;
         if (medio === "efectivo") return true;
         return false;
     }

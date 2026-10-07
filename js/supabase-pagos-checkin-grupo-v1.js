@@ -20,7 +20,7 @@
         "WebPay Débito":"webpay_debito",
         "Tarjeta Crédito":"tarjeta_credito",
         "Tarjeta Débito":"tarjeta_debito",
-        "Efectivo":"efectivo"
+        "Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"
     });
 
     function esc(v){
@@ -29,7 +29,7 @@
     function money(v){ return "$" + Math.round(Number(v||0)).toLocaleString("es-CL"); }
     function fecha(){ try{return String(fechaSeleccionada||"").slice(0,10);}catch{return "";} }
     function opciones(valor=""){
-        return `<option value="">Seleccionar...</option>` + Object.keys(MEDIOS).map(x=>`<option value="${x}" ${valor===x?"selected":""}>${x}</option>`).join("");
+        return `<option value="">Seleccionar...</option>` + Object.keys(MEDIOS).map(x=>`<option value="${valorMedio(x)}" ${(valor === x || valor === valorMedio(x)) ?"selected":""}>${x}</option>`).join("");
     }
 
     async function ingresosDia(){
@@ -88,9 +88,9 @@
 
     function ajustarCampos(card){
         const medioUI=card.querySelector("[data-grupo-saldo-medio]")?.value||"";
-        const req=requisitos(MEDIOS[medioUI]||"");
+        const req=requisitos(codigoMedio(medioUI));
         [["glosa",req.glosa],["folio",req.folio],["codaut",req.codaut]].forEach(([k,on])=>{
-            const el=card.querySelector(`[data-grupo-campo-${k}]`); if(el) el.hidden=!on;
+            const el=card.querySelector(`[data-grupo-campo-${k}]`); if(el) el.hidden=!on; if(k==="glosa") referenciaOpcional(el,card.querySelector("[data-grupo-saldo-glosa]"),codigoMedio(medioUI));
         });
     }
 
@@ -188,7 +188,7 @@
         const reservaId=card.dataset.reservaId||"";
         const monto=Math.round(Number(card.querySelector("[data-grupo-saldo-monto]")?.value||0));
         const medioUI=card.querySelector("[data-grupo-saldo-medio]")?.value||"";
-        const medio=MEDIOS[medioUI]||"";
+        const medio=codigoMedio(medioUI);
         const glosa=card.querySelector("[data-grupo-saldo-glosa]")?.value?.trim()||"";
         const folio=card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"";
         const codaut=card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"";
@@ -205,7 +205,7 @@
         const btn=card.querySelector("[data-grupo-saldo-registrar]"); if(btn){btn.disabled=true;btn.textContent="Registrando...";}
         try{
             const {error}=await sb.rpc("haiku_registrar_pago_checkin_grupo",{
-                p_reserva_id:reservaId,p_monto:monto,p_medio_pago:medio,p_glosa:glosa||null,p_folio:folio||null,p_codigo_autorizacion:codaut||null,p_manager_revisado:true
+                p_reserva_id:reservaId,p_monto:monto,p_medio_pago:medio,p_glosa:glosa||null,p_folio:medio === "airbnb_prepaid_card" ? null : (folio||null),p_codigo_autorizacion:medio === "airbnb_prepaid_card" ? null : (codaut||null),p_manager_revisado:true
             });
             if(error) throw error;
             borradores.delete(card.dataset.grupoId||"");
@@ -256,4 +256,15 @@
     setTimeout(instalar,260);
     window.haikuAplicarCheckinGrupos=aplicar;
     console.info("HAIKU · Check-in conjunto V1 preparado.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : MEDIOS[valor] || ""; }
+    function valorMedio(nombre) { return nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre; }
+    function referenciaOpcional(fila, input, medio) {
+        if (!fila || !input) return;
+        const airbnb = medio === "airbnb_prepaid_card";
+        const titulo = fila.querySelector("span");
+        if (titulo) titulo.textContent = airbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+        input.placeholder = airbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+        if (airbnb) { fila.hidden = false; input.removeAttribute("required"); }
+    }
 })();

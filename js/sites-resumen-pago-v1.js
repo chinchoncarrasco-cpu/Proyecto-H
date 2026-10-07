@@ -4,7 +4,7 @@
     if (window.HAIKU_RESUMEN_PAGO_SITES_V1) return;
 
     const MEDIOS = ["Transferencia", "WebPay Crédito", "WebPay Débito",
-        "Tarjeta Crédito", "Tarjeta Débito", "Efectivo"];
+        "Tarjeta Crédito", "Tarjeta Débito", "Airbnb Prepaid Card", "Efectivo"];
     let drawer = null;
     let actual = null;
     let guardando = false;
@@ -178,9 +178,9 @@
                 ${tipo === "abono" ? `<label>Fecha del pago<input data-pago-fecha type="date" value="${escapar(actual.operador.fechaPagoPredeterminada())}"></label>` : ""}
                 <label>Monto de este pago<input data-pago-monto type="number" min="1" max="${saldo}" step="1" inputmode="numeric" value="${saldo}"></label>
                 <label>Medio de pago<select data-pago-medio><option value="">Seleccionar...</option>
-                    ${medios.map(nombre => `<option value="${escapar(nombre)}">${escapar(nombre)}</option>`).join("")}
+                    ${medios.map(nombre => `<option value="${escapar(nombre === "Airbnb Prepaid Card" ? "airbnb_prepaid_card" : nombre)}">${escapar(nombre)}</option>`).join("")}
                 </select></label>
-                <label data-pago-campo="glosa" hidden>Glosa<input data-pago-glosa type="text" placeholder="Pegar glosa bancaria"></label>
+                <label data-pago-campo="glosa" hidden><span>Glosa</span><input data-pago-glosa type="text" placeholder="Pegar glosa bancaria"></label>
                 <label data-pago-campo="folio" hidden>Folio<input data-pago-folio type="text" placeholder="Folio de transacción"></label>
                 <label data-pago-campo="bovtar" hidden>BOVTAR<input data-pago-bovtar type="text" placeholder="Código BOVTAR"></label>
                 <label data-pago-campo="codaut" hidden>CodAut<input data-pago-codaut type="text" placeholder="Código de autorización"></label>
@@ -204,8 +204,13 @@
         })) {
             const fila = drawer.querySelector(`[data-pago-campo="${campo}"]`);
             if (!fila) continue;
-            fila.hidden = !obligatorio;
+            const referenciaAirbnb = campo === "glosa" && medio === "airbnb_prepaid_card";
+            fila.hidden = !(obligatorio || referenciaAirbnb);
             fila.querySelector("input").required = Boolean(obligatorio);
+            if (campo === "glosa") {
+                fila.querySelector("span").textContent = referenciaAirbnb ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+                fila.querySelector("input").placeholder = referenciaAirbnb ? "Referencia real, si existe" : "Pegar glosa bancaria";
+            }
         }
     }
 
@@ -230,7 +235,7 @@
             return `El monto debe ser un número entero entre $1 y ${dinero(saldo)}.`;
         }
         const medios = pago.tipo === "abono" ? [...MEDIOS, "Otro"] : MEDIOS;
-        if (!medios.includes(datos.medio)) return "Selecciona un medio de pago válido.";
+        if (!medios.includes(datos.medio) && datos.medio !== "airbnb_prepaid_card") return "Selecciona un medio de pago válido.";
         if (pago.tipo === "abono") {
             const fecha = datos.fechaPago;
             const interpretada = /^\d{4}-\d{2}-\d{2}$/.test(fecha)

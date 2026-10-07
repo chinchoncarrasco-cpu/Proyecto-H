@@ -202,6 +202,17 @@
     }
 
     function pagoParaRpc(p) {
+        const medioAirbnb = normalizar(p?.medio);
+        if ((medioAirbnb === "airbnb_prepaid_card" || /^airbnb\s+prepaid\s+card$/.test(medioAirbnb)) && p?.detectado !== false) {
+            const monto = Number(p?.monto), fecha = String(p?.fecha || "");
+            if (!Number.isFinite(monto) || monto <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return null;
+            const interpretada = new Date(`${fecha}T12:00:00Z`);
+            if (Number.isNaN(interpretada.getTime()) || interpretada.toISOString().slice(0,10) !== fecha) return null;
+            const referencia = String(p?.referencia_externa || p?.glosa || "").trim() || null;
+            return { medio: "airbnb_prepaid_card", monto: Math.round(monto), fecha_pago: new Date(`${fecha}T12:00:00`).toISOString(),
+                glosa: referencia, referencia_externa: referencia, codaut: null, folio: null, bovtar: null };
+        }
+
         const w = webpayDesdePago(p);
         if (w && Number.isFinite(w.monto) && w.monto > 0 && w.fecha && w.codaut) {
             return { medio: w.medio, monto: Math.round(w.monto), fecha_pago: new Date(`${w.fecha}T12:00:00`).toISOString(), codaut: w.codaut, glosa: null, folio: null, bovtar: null };
@@ -239,7 +250,7 @@
         const grid = document.createElement("div");
         grid.className = "haiku-asistente-preview-grid";
         agregarDato(grid, "Monto", moneda(p?.monto));
-        agregarDato(grid, "Medio", p?.medio);
+        agregarDato(grid, "Medio", p?.medio === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : p?.medio);
         agregarDato(grid, "Fecha", fechaVisible(p?.fecha));
         agregarDato(grid, "CodAut", p?.codaut);
         agregarDato(grid, "Folio", p?.folio);

@@ -1606,6 +1606,40 @@
 .haiku-asistente-panel .haku-incorporacion-resultado > .haiku-incorporacion-acciones > .libro-reserva-boton {
     flex: 1 1 120px; width: 100%; min-width: 0; white-space: normal;
 }
+.haku-incorporacion-resultado .haku-incorporacion-final-detalle > h4 {
+    margin: 0; padding: 10px; color: #315844; font-size: .78rem;
+}
+.haiku-asistente-panel .haku-incorporacion-resultado .haku-incorporacion-final-grupo {
+    margin: 0 !important; padding: 0 !important; border: 0 !important;
+    border-bottom: 1px solid var(--rec-borde) !important; border-radius: 0; box-shadow: none;
+}
+.haiku-asistente-panel .haku-incorporacion-resultado .haku-incorporacion-final-grupo > summary {
+    min-height: 34px; padding: 8px 35px 8px 10px; border-left: 3px solid #428165;
+    background: #e2efe8; font-size: .75rem !important; font-weight: 600 !important; cursor: pointer;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-grupo > summary:focus-visible {
+    outline: 2px solid var(--rec-verde); outline-offset: -3px;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-lista {
+    margin: 0; padding: 0; list-style: none;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-item {
+    margin: 0; padding: 9px 10px; border-bottom: 1px solid #e6ece8; overflow-wrap: anywhere;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-item:last-child { border-bottom: 0; }
+.haku-incorporacion-resultado .haku-incorporacion-final-item-cabecera {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 9px; font-size: .75rem;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-estado {
+    margin-left: auto; padding: 2px 6px; border-radius: 4px; background: #eaf3ee; color: #286346;
+    font-size: .63rem;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-estado--omitido { background: #f0f2f1; color: #647168; }
+.haku-incorporacion-resultado .haku-incorporacion-final-item > p,
+.haku-incorporacion-resultado .haku-incorporacion-final-vacio {
+    margin: 4px 0 0; color: #5b6c63; font-size: .69rem; line-height: 1.45;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-vacio { padding: 9px 10px; margin: 0; }
 .haiku-asistente-panel .haku-incorporacion-resultado--servicios > .haku-incorporacion-resultado-resumen {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
