@@ -17,6 +17,17 @@
     "use strict";
 
     let instalado = false;
+    const mediosCanonicos = Object.freeze({
+        transferencia:'Transferencia', tarjeta_credito:'Tarjeta de crédito', tarjeta_debito:'Tarjeta de débito',
+        webpay_credito:'WebPay crédito', webpay_debito:'WebPay débito', efectivo:'Efectivo',
+        airbnb_prepaid_card:'Airbnb Prepaid Card'
+    });
+    // La decisión explícita se aplica después de inferir desde el texto. Nunca
+    // convierte una abreviatura en evidencia ni altera el objeto original.
+    function pagoConMedioManual(pago, medio) {
+        if (!Object.hasOwn(mediosCanonicos,medio)) throw Error('Selecciona un medio de pago válido.');
+        return {...corregirPago(structuredClone(pago)),medio_pago:medio};
+    }
 
     function asegurarUiPagos() {
         if (!root.document) return;
@@ -256,6 +267,7 @@
 
         root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(envuelto);
         root.HAIKU_LIBRO_PAGOS_CANON_V1 = Object.freeze({
+            mediosCanonicos, pagoConMedioManual,
             corregirPago,
             corregirResultado,
             medioDesdeTexto,
