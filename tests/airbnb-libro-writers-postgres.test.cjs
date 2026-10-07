@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {randomUUID}=require('node:crypto');
 const {preparar,read}=require('./fixtures/airbnb-libro-writers-sql.cjs');
-const migration=read('supabase/migrations/20261006203958_airbnb_prepaid_card.sql');
+const migration=read('supabase/migrations/20261006231428_airbnb_prepaid_card.sql');
 const method='airbnb_prepaid_card',fecha='2026-10-12',bloque='2026-10-06';
 const count=async db=>(await db.query('select count(*)::int n from pagos')).rows[0].n;
 const batch=async(db,item,op=randomUUID())=>(await db.query('select haiku_incorporar_libro_v1($1,$2::jsonb) r',[op,JSON.stringify([item])])).rows[0].r;

@@ -61,7 +61,7 @@ async function preparar({aplicar=true}={}) {
         const cuerpos=new Map((await db.query(`select n.nspname||'.'||p.proname nombre,p.prosrc from pg_proc p
             join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private')`)).rows.map(r=>[r.nombre,r.prosrc]));
         if(aplicar) {
-            await db.exec(read('supabase/migrations/20261006203958_airbnb_prepaid_card.sql'));
+            await db.exec(read('supabase/migrations/20261006231428_airbnb_prepaid_card.sql'));
             assert.deepEqual(await seguridad(),antes,'owner/ACL/security/search_path preservados en public y private');
         }
         const usuario=randomUUID(),reserva=randomUUID();
