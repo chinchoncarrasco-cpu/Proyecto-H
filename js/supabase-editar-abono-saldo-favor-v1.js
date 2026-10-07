@@ -159,7 +159,7 @@
                 p_folio: ["tarjeta_credito","tarjeta_debito"].includes(medio) ? (folio || null) : null,
                 p_codigo_autorizacion: ["webpay_credito","webpay_debito"].includes(medio) ? (codaut || null) : null,
                 p_bove: ["tarjeta_credito","tarjeta_debito"].includes(medio) ? (bove || null) : null,
-                p_referencia_externa: medio === "transferencia" ? (glosa || null) : null,
+                p_referencia_externa: ["transferencia", "airbnb_prepaid_card"].includes(medio) ? (glosa || null) : null,
                 p_observaciones: observacion || null
             });
             if (error) throw error;

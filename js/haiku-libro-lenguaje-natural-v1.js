@@ -167,7 +167,8 @@
         const copia = { ...pago, webpay_por_confirmar: webpayPorConfirmar };
 
         const webpay = /web\s*pay/.test(texto);
-        if (webpay && /\bdebito\b/.test(texto)) copia.medio_pago = "webpay_debito";
+        if (root.HAIKU_LIBRO_PAGOS_CANON_V1?.medioDesdeTexto(pago) === "airbnb_prepaid_card" || /\bairbnb\s+prepaid\s+card\b/.test(texto)) copia.medio_pago = "airbnb_prepaid_card";
+        else if (webpay && /\bdebito\b/.test(texto)) copia.medio_pago = "webpay_debito";
         else if (webpay && /\bcredito\b/.test(texto)) copia.medio_pago = "webpay_credito";
         else if (/\bdebito\b/.test(texto)) copia.medio_pago = "debito";
         else if (/\bcredito\b/.test(texto)) copia.medio_pago = "credito";
@@ -192,7 +193,7 @@
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
-        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","efectivo"].includes(pago.medio_pago);
+        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
         const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar) || /\b\d{6,}\s*transf\b/.test(texto);
         const fila = pago.evidencia_financiera?.columnas_ocupadas;
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;

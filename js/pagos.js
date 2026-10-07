@@ -150,6 +150,7 @@ tarjeta.innerHTML = `
                         Tarjeta Débito
                     </option>
 
+                    <option value="airbnb_prepaid_card" ${["airbnb_prepaid_card", "Airbnb Prepaid Card"].includes(medioPago) ? "selected" : ""}>Airbnb Prepaid Card</option>
                     <option value="Efectivo" ${medioPago === "Efectivo" ? "selected" : ""}>
                         Efectivo
                     </option>
@@ -925,6 +926,7 @@ tarjeta.innerHTML = `
                         Transferencia
                     </option>
 
+                    <option value="airbnb_prepaid_card">Airbnb Prepaid Card</option>
                     <option value="Efectivo">
                         Efectivo
                     </option>
@@ -1345,7 +1347,7 @@ if (
                 cabana.abono || 0
             ).toLocaleString("es-CL")}${
                 cabana.medioPago
-                    ? ` · ${cabana.medioPago}`
+                    ? ` · ${cabana.medioPago === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : cabana.medioPago}`
                     : ""
             }`,
         cambios

@@ -420,6 +420,8 @@ Reglas de lectura por reserva:
 - Cada elemento de pagos debe llevar detectado=true. No agregues elementos vacíos o con detectado=false.
 - Conserva exactamente códigos de autorización y folios, incluidos ceros iniciales. COD.AUT: 006370 debe devolverse como codaut="006370".
 - Para referencias de cada pago usa este mapeo cerrado:
+- Airbnb Prepaid Card es un medio propio: devuelve medio="Airbnb Prepaid Card" solo ante esa frase completa, sin importar mayúsculas. "Airbnb" solo es un canal, no prueba el medio.
+- Airbnb Prepaid Card requiere monto positivo y fecha real; no requiere Folio, BOVTAR ni COD.AUT. Deja esos tres campos en null. Si existe una referencia externa real Airbnb/Cloudbeds, consérvala en glosa; es opcional y nunca debe inventarse.
   * WebPay crédito o débito: referencia=COD.AUT. Completa codaut y deja glosa, folio y bovtar en null salvo evidencia explícita separada.
   * Transferencia bancaria: referencia=Glosa. Completa glosa y deja codaut, folio y bovtar en null salvo evidencia explícita separada.
   * Tarjeta crédito o débito, cuando NO sea WebPay: referencias=Folio y BOVTAR. Completa folio y bovtar; deja codaut y glosa en null salvo evidencia explícita separada.

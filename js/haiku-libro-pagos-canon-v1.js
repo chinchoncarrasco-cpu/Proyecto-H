@@ -56,8 +56,24 @@
         return String(valor || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     }
 
+    function firmaComprobanteAirbnb(texto) {
+        const t = normalizarTexto(texto);
+        if (!/\bel viajero ha pagado\b/.test(t)) return false;
+        // Dos rótulos distintos del mismo comprobante; ni un canal, un monto
+        // ni repetir una señal acreditan el medio. No agrega fecha o identidad.
+        const desglose = [
+            /\bcomision de servicio del viajero\b/,
+            /\bcomision de servicio del anfitrion\b/,
+            /\bimpuesto sobre el uso de la propiedad\b/,
+            /\bprecio de la habitacion\b/,
+            /\bganas\b/
+        ];
+        return desglose.filter(senal => senal.test(t)).length >= 2;
+    }
+
     function medioDesdeTexto(pago) {
         const t = normalizarTexto(`${pago?.texto_original || ""} ${pago?.concepto || ""}`);
+        if (/\bairbnb\s+prepaid\s+card\b/.test(t) || firmaComprobanteAirbnb(pago?.texto_original)) return "airbnb_prepaid_card";
         const webpay = /\bweb\s*pay\b|\bwebpay\b/.test(t);
         if (webpay && /\bdebito\b/.test(t)) return "webpay_debito";
         if (webpay && /\bcredito\b/.test(t)) return "webpay_credito";
@@ -70,6 +86,7 @@
     }
 
     function claveTransaccionFuerte(pago) {
+        if (medioDesdeTexto(pago) === "airbnb_prepaid_card") return null;
         const codAut = canonId(pago?.codigo_autorizacion);
         if (codAut) return `codaut:${codAut}`;
         const folio = canonId(pago?.folio), bovtar = canonId(pago?.bovtar);
@@ -181,6 +198,13 @@
         copia.bove = pago.bove || null;
         copia.bove_administrativo = pago.bove || null;
         copia.medio_pago = medioDesdeTexto(pago);
+        if (copia.medio_pago === "airbnb_prepaid_card" && !copia.referencia_externa) {
+            const referencias = [...String(pago.texto_original || "").matchAll(
+                /\b(?:referencia\s+(?:airbnb|cloudbeds|externa)|(?:airbnb|cloudbeds)\s+ref(?:erencia)?)\s*[:#]\s*([0-9A-Z][0-9A-Z._-]*)/gi
+            )].map(m => m[1]);
+            const unicas = [...new Set(referencias)];
+            if (unicas.length === 1) copia.referencia_externa = unicas[0];
+        }
         copia.identificador_pago = bovtar ? "bovtar" : (canonId(pago.codigo_autorizacion) ? "codigo_autorizacion" : null);
 
         return copia;

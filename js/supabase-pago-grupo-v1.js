@@ -21,7 +21,7 @@
         webpay_debito: "WebPay Débito",
         tarjeta_credito: "Tarjeta Crédito",
         tarjeta_debito: "Tarjeta Débito",
-        efectivo: "Efectivo",
+        airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: "Efectivo",
         otro: "Otro"
     });
     const MEDIOS_DESDE_UI = Object.freeze(Object.fromEntries(
@@ -155,7 +155,8 @@
                             <option value="webpay_debito">WebPay Débito</option>
                             <option value="tarjeta_credito">Tarjeta Crédito</option>
                             <option value="tarjeta_debito">Tarjeta Débito</option>
-                            <option value="efectivo">Efectivo</option>
+                            <option value="airbnb_prepaid_card" >Airbnb Prepaid Card</option>
+                    <option value="efectivo">Efectivo</option>
                             <option value="otro">Otro</option>
                         </select>
                     </div>
@@ -484,7 +485,7 @@
     }
 
     function requisitosPagoResumen(medioUI) {
-        const medio = MEDIOS_DESDE_UI[medioUI] || "";
+        const medio = MEDIOS_DESDE_UI[medioUI] || (medioUI === "airbnb_prepaid_card" ? medioUI : "");
         return {
             glosa: medio === "transferencia",
             codAut: ["webpay_credito", "webpay_debito"].includes(medio),
@@ -532,9 +533,9 @@
                 p_medio_pago: medio,
                 p_etapa_operativa: "abono",
                 p_fecha_pago: fechaPago,
-                p_folio: datos.folio || null,
-                p_codigo_autorizacion: datos.codAut || null,
-                p_bove: datos.bovtar || null,
+                p_folio: medio === "airbnb_prepaid_card" ? null : (datos.folio || null),
+                p_codigo_autorizacion: medio === "airbnb_prepaid_card" ? null : (datos.codAut || null),
+                p_bove: medio === "airbnb_prepaid_card" ? null : (datos.bovtar || null),
                 p_referencia_externa: datos.glosa || null,
                 p_observaciones: datos.observacion || null
             });
@@ -738,7 +739,7 @@
         const medio = document.getElementById("haiku-pago-medio")?.value || "";
         const visibles = new Set();
 
-        if (medio === "transferencia") visibles.add("glosa");
+        if (["transferencia", "airbnb_prepaid_card"].includes(medio)) visibles.add("glosa");
         if (["webpay_credito","webpay_debito"].includes(medio)) visibles.add("codaut");
         if (["tarjeta_credito","tarjeta_debito"].includes(medio)) {
             visibles.add("folio");
@@ -747,6 +748,12 @@
 
         document.querySelectorAll(".haiku-pago-grupo-extra").forEach(el => {
             el.hidden = !visibles.has(el.dataset.extra || "");
+            if (el.dataset.extra === "glosa") {
+                const label = el.querySelector("span");
+                if (label) label.textContent = medio === "airbnb_prepaid_card" ? "Referencia Airbnb / externa (opcional)" : "Glosa";
+                const input = el.querySelector("input");
+                if (input) input.placeholder = medio === "airbnb_prepaid_card" ? "Referencia real, si existe" : "Pegar glosa bancaria";
+            }
         });
 
         validarFormulario();

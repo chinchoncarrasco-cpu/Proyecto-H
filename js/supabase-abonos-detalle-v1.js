@@ -1,17 +1,18 @@
 (() => {
 "use strict";
 const sb=window.haikuSupabase;if(!sb)return;
-const M={"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Efectivo":"efectivo"};
+const M={"Transferencia":"transferencia","WebPay Crédito":"webpay_credito","WebPay Débito":"webpay_debito","Tarjeta Crédito":"tarjeta_credito","Tarjeta Débito":"tarjeta_debito","Airbnb Prepaid Card": "airbnb_prepaid_card", "Efectivo":"efectivo"};
 const busy=new Set();let timer=0,seq=0;
 const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 const money=v=>"$"+Number(v||0).toLocaleString("es-CL");
 function req(m){
+ if(m==="airbnb_prepaid_card")return[["glosa","Referencia Airbnb / externa (opcional)","Referencia real, si existe"]];
  if(m==="transferencia")return[["glosa","Glosa","Pegar glosa bancaria"]];
  if(["webpay_credito","webpay_debito"].includes(m))return[["codaut","CodAut","Código de autorización WebPay"]];
  if(["tarjeta_credito","tarjeta_debito"].includes(m))return[["folio","Folio","Folio de la transacción"],["bovtar","BOVTAR","Código BOVTAR"]];
  return[];
 }
-function medio(card){return M[card?.querySelector(".pago-abono-medio")?.value||""]||""}
+function medio(card){return codigoMedio(card?.querySelector(".pago-abono-medio")?.value||"")}
 function box(card){
  let b=card.querySelector("[data-haiku-abono-detalles-v1]");
  if(!b){b=document.createElement("div");b.className="haiku-abono-detalles-v1";b.dataset.haikuAbonoDetallesV1="1";card.querySelector(".pago-abono-grid")?.insertAdjacentElement("afterend",b)}
@@ -44,6 +45,7 @@ async function save(id,amount,m,x,cab){
  if(error)throw error;return data;
 }
 function detail(p){
+ if(p.medio_pago==="airbnb_prepaid_card")return p.referencia_externa?`Referencia Airbnb / externa: ${esc(p.referencia_externa)}`:"";
  if(p.medio_pago==="transferencia")return p.referencia_externa?`Glosa: ${esc(p.referencia_externa)}`:"Glosa: no registrada en este abono";
  if(["webpay_credito","webpay_debito"].includes(p.medio_pago))return p.codigo_autorizacion?`CodAut: ${esc(p.codigo_autorizacion)}`:"CodAut: no registrado en este abono";
  if(["tarjeta_credito","tarjeta_debito"].includes(p.medio_pago))return`Folio: ${p.folio?esc(p.folio):"no registrado"} · BOVTAR: ${p.bove?esc(p.bove):"no registrado"}`;
@@ -102,4 +104,6 @@ const style=document.createElement("style");style.textContent=`
 document.head.appendChild(style);
 window.HAIKU_ABONOS_DETALLE_V1=Object.freeze({refrescar:later});
 console.info("HAIKU · Detalle de verificación de abonos V1 preparado.");
+
+    function codigoMedio(valor) { return valor === "airbnb_prepaid_card" ? valor : M[valor] || ""; }
 })();

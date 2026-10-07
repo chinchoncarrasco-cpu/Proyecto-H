@@ -676,7 +676,7 @@
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
                     const ref = re => text.match(re)?.[1]?.trim() || null;
-                    const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno/.test(c) ? "servicio" : "otro";
+                    const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
                     if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
@@ -685,7 +685,7 @@
                     if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
                     const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
-                        monto: money, moneda: "CLP", medio_pago: /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
+                        monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         codigo_autorizacion: ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manager/.test(t),

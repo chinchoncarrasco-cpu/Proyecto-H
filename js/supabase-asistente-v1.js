@@ -646,6 +646,19 @@
         return problemas;
     }
 
+    function airbnbDesdePago(p) {
+        if (!p || p.detectado === false) return null;
+        const medio = normalizarClave(p.medio);
+        if (medio !== "airbnb_prepaid_card" && !/^airbnb\s+prepaid\s+card$/.test(medio)) return null;
+        const monto = Number(p.monto);
+        const fechaTexto = String(p.fecha || "");
+        const interpretada = /^\d{4}-\d{2}-\d{2}$/.test(fechaTexto) ? new Date(`${fechaTexto}T12:00:00Z`) : null;
+        const fecha = interpretada && !Number.isNaN(interpretada.getTime()) && interpretada.toISOString().slice(0,10) === fechaTexto ? fechaTexto : null;
+        return { medioRpc: "airbnb_prepaid_card", medioEtiqueta: "Airbnb Prepaid Card", monto, fecha,
+            referencia: String(p.referencia_externa || p.glosa || "").trim() || null,
+            valido: Number.isFinite(monto) && monto > 0 && !!fecha };
+    }
+
     function problemasParaCrear(preview) {
         const r = preview?.reserva || {};
         const pagos = pagosDesdePreview(preview);
@@ -670,9 +683,13 @@
             const transferencia = transferenciaDesdePago(p);
             const tarjeta = tarjetaDesdePago(p);
             const efectivo = efectivoDesdePago(p);
+            const airbnb = airbnbDesdePago(p);
 
-            if (!webpay && !transferencia && !tarjeta && !efectivo) {
+            if (!airbnb && !webpay && !transferencia && !tarjeta && !efectivo) {
                 problemas.push(`${prefijo}medio de pago no admitido automáticamente.`);
+            } else if (airbnb) {
+                if (!Number.isFinite(Number(p.monto)) || Number(p.monto) <= 0) problemas.push(`${prefijo}falta monto Airbnb Prepaid Card válido.`);
+                if (!airbnb.fecha) problemas.push(`${prefijo}falta fecha válida del pago Airbnb Prepaid Card.`);
             } else if (webpay) {
                 if (!Number.isFinite(Number(p.monto)) || Number(p.monto) <= 0) problemas.push(`${prefijo}falta monto WebPay válido.`);
                 if (!String(p.codaut || "").trim()) problemas.push(`${prefijo}falta COD.AUT del WebPay.`);
@@ -703,6 +720,10 @@
     }
 
     function pagoParaRpc(p) {
+        const airbnb = airbnbDesdePago(p);
+        if (airbnb?.valido) return { medio: airbnb.medioRpc, monto: Math.round(airbnb.monto),
+            fecha_pago: new Date(`${airbnb.fecha}T12:00:00`).toISOString(), glosa: airbnb.referencia,
+            referencia_externa: airbnb.referencia, codaut: null, folio: null, bovtar: null };
         const webpay = webpayDesdePago(p);
         if (webpay?.valido) {
             return {
@@ -923,7 +944,7 @@
         const transferencia = transferenciaDesdePago(pagoUnico);
         const tarjeta = tarjetaDesdePago(pagoUnico);
         const efectivo = efectivoDesdePago(pagoUnico);
-        const usarRpcAbonos = pagos.length > 1 || tarjeta?.valido || efectivo?.valido;
+        const usarRpcAbonos = pagos.length > 1 || tarjeta?.valido || efectivo?.valido || airbnbDesdePago(pagoUnico)?.valido;
 
         if (usarRpcAbonos) {
             if (!window.haikuTienePermiso?.("pagos.registrar")) {
@@ -1192,7 +1213,7 @@
                 const grid = document.createElement("div");
                 grid.className = "haiku-asistente-preview-grid";
                 agregarDato(grid, "Monto", moneda(p.monto, p.moneda));
-                agregarDato(grid, "Medio", p.medio);
+                agregarDato(grid, "Medio", p.medio === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : p.medio);
                 agregarDato(grid, "Fecha", fechaVisible(p.fecha));
                 agregarDato(grid, "Glosa", p.glosa);
                 agregarDato(grid, "CodAut", p.codaut);
@@ -1369,7 +1390,7 @@
             const grid = document.createElement("div");
             grid.className = "haiku-asistente-preview-grid";
             agregarDato(grid, "Monto", moneda(p.monto, p.moneda));
-            agregarDato(grid, "Medio", p.medio);
+            agregarDato(grid, "Medio", p.medio === "airbnb_prepaid_card" ? "Airbnb Prepaid Card" : p.medio);
             agregarDato(grid, "Fecha", fechaVisible(p.fecha));
             agregarDato(grid, "Glosa", p.glosa);
             agregarDato(grid, "CodAut", p.codaut);

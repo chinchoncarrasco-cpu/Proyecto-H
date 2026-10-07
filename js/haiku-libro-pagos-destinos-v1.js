@@ -9,6 +9,12 @@
     function conceptoCanon(valor) {
         const texto = normalizar(valor);
         if (!texto) return null;
+        const alimentos = ['queque', 'pan', 'huevos'].filter(concepto =>
+            new RegExp(`\\b${concepto === 'huevos' ? 'huevos?' : concepto}\\b`).test(texto));
+        if (alimentos.length) {
+            const otroServicio = /\blate\s*(?:check\s*)?out\b|\blateout\b|\bearly\s*(?:check\s*)?in\b|\bearlyin\b|\bcama\s+adicional\b|\blena\b|\bmasaj|\btonel\b|\bjacuzzi\b|\btinaja\b|\bcuna\b/.test(texto);
+            return alimentos.length === 1 && !otroServicio ? alimentos[0] : null;
+        }
         if (/\blate\s*(?:check\s*)?out\b|\blateout\b/.test(texto)) return "late_checkout";
         if (/\bearly\s*(?:check\s*)?in\b|\bearlyin\b/.test(texto)) return "early_checkin";
         if (/\bcama\s+adicional\b/.test(texto)) return "cama_adicional";
@@ -70,7 +76,7 @@
                 .select("cargo_id,reserva_id,estadia_id,servicio_id,tipo_cargo,concepto,monto,monto_ajustado,aplicado_neto,saldo_cargo,estado,estado_pago")
                 .in("reserva_id", ids).eq("tipo_cargo", "servicio").order("cargo_id")),
             paginas(() => cliente.from("servicios")
-                .select("id,reserva_id,estadia_id,fecha_servicio,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
+                .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
                 .in("reserva_id", ids).order("id"))
         ]);
 
