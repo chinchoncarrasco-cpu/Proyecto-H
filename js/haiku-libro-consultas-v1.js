@@ -30,6 +30,10 @@
     }
     const contextoVisualPlanes = new WeakMap();
     const contextoVisualItems = new WeakMap();
+    const mediosManuales = new WeakMap(); // por consulta/decisiones, nunca sobre el Libro
+    const pagosEfectivosMedio = new WeakMap(); // copia efectiva → evidencia original + decisión
+    const usuariosComparacion = new WeakMap();
+    const DEFINIR_MEDIO_PAGO = 'definir_medio_pago';
     const nombresMes = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
     const etiquetas = {
         sin_checkin: "Sin Check-In según texto negro",
@@ -1268,8 +1272,10 @@
 
     function datosOrigenPago(pago, destino = {}, extra = {}) {
         const referencia = textoFinancieroCanon(pago?.referencia_externa || pago?.texto_original);
+        const medioManual = pagosEfectivosMedio.get(pago)?.decision;
         return {
             ...extra,
+            ...(medioManual ? {medio_pago_manual_v1:structuredClone(medioManual.auditoria)} : {}),
             source_fingerprint:huellaFuentePago(pago,destino),
             source_kind:'libro_reserva',
             cabana:Number(pago?.cabana || destino.cabana) || null,
@@ -1796,6 +1802,7 @@
             pagos_revisar: [...pagosUnicos.values()].filter(x => x.estado === "revisar" || x.estado === "diferente").length,
             servicios_revisar: serviciosUnicos.filter(x => x.estado !== "en_sistema").length
         };
+        usuariosComparacion.set(resultados,sesion.session.user.id);
         return resultados;
     }
 
@@ -2106,7 +2113,8 @@
         return plan;
     }
     function idMovimientoIncorporacion(x) {
-        return 'pago:' + claveReserva(x.reserva) + ':' + source(x.pago.origen) + ':' + JSON.stringify(x.pago);
+        const original = pagosEfectivosMedio.get(x.pago)?.original || x.pago;
+        return 'pago:' + claveReserva(x.reserva) + ':' + source(original.origen) + ':' + JSON.stringify(original);
     }
 
     // Sólo preparación: no altera la lectura ni las asociaciones del Libro.
@@ -2343,6 +2351,125 @@
         capacidad.servicio_faltante_manual_v1 === true && (apps || []).every(a =>
             !['queque','pan','huevos'].includes(a.concepto_canon) || capacidad.conceptos_adicionales?.includes(a.concepto_canon));
     const CONFIRMACION_AIRBNB = 'confirmacion_airbnb';
+    function registroMedios(decisiones) {
+        if (!mediosManuales.has(decisiones)) mediosManuales.set(decisiones,new Map());
+        return mediosManuales.get(decisiones);
+    }
+    function invalidarMedioPago(decisiones,aprobados,id,generacion) {
+        registroMedios(decisiones).delete(id);
+        invalidarPagoManual(decisiones,aprobados,id,generacion);
+    }
+    function propuestaMedioPago(item,comp,generacion) {
+        const p = item?.pagoLibro, original = pagosEfectivosMedio.get(p)?.original || p;
+        const x = comp?.pagosDetalle?.find(x => x.pago === p), e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const destino = destinoConfirmacionAirbnb(comp,x);
+        if (!original || medioLibro(original) || !destino || item.pagoSistema || item.payload?.tipo === 'pago_actualizar' ||
+            !root.HAIKU_LIBRO_PAGOS_CANON_V1?.pagoConMedioManual ||
+            !root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1?.clasificarMovimientoFinanciero || !Number.isSafeInteger(generacion) ||
+            !/^[a-f0-9]{64}$/i.test(e?.version || '') || root.haikuTienePermiso?.('pagos.registrar') !== true ||
+            !Number.isSafeInteger(original.monto) || original.monto <= 0 || original.moneda !== 'CLP' ||
+            original.pago_recibido !== true || original.estado_pago !== 'registrado_en_libro' ||
+            original.fecha_bloque !== x.reserva.fecha_checkin || !original.origen?.hoja || !original.origen?.celda ||
+            original.clasificacion_financiera === 'nota_financiera') return null;
+        return {tipo:DEFINIR_MEDIO_PAGO,generacion,version:e.version,reservaId:destino.reserva_id,estadiaId:destino.id,
+            usuario:usuariosComparacion.get(comp),
+            firma:pagosEfectivosMedio.get(p)?.decision.firma || firmaManualPago(comp,x),
+            titular:x.reserva.titular,cabana:x.reserva.cabana,ingreso:x.reserva.fecha_checkin,salida:x.reserva.fecha_checkout,
+            aplicaciones:[],original,medioActual:pagosEfectivosMedio.get(p)?.decision.medio || null};
+    }
+    // Leer dos veces evita aplicar una elección a un snapshot que cambió durante
+    // la reconstrucción. La firma se calcula siempre sobre la evidencia cruda.
+    async function compararConMediosManuales(reservas,result,decisiones,aprobados,cliente,generacion) {
+        const raw = await compararSistema(reservas,cliente,result.q), registros = registroMedios(decisiones);
+        if (!registros.size) return {reservas,comparacion:raw};
+        const {data,error} = await cliente.auth.getSession(), e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const aplicar = new Map();
+        for (const [id,d] of [...registros]) {
+            const x = raw.pagosDetalle.find(x => idMovimientoIncorporacion(x) === id), destino = destinoConfirmacionAirbnb(raw,x);
+            let firma = x && firmaManualPago(raw,x);
+            // Única transición propia permitida: servicio/cargo que acaba de
+            // confirmar el RPC existente. Cualquier otro cambio invalida.
+            const s = d.servicioCreado && raw.snapshot?.finanzas?.servicios.find(s => s.id === d.servicioCreado.id);
+            if (s && destino && s.reserva_id === d.reservaId && s.estadia_id === d.estadiaId &&
+                s.catalogo_servicios?.codigo === d.servicioCreado.codigo && s.fecha_servicio === d.servicioCreado.fecha &&
+                Number(s.total) === d.servicioCreado.total && Number(s.cantidad) === d.servicioCreado.cantidad &&
+                Number(s.personas) === d.servicioCreado.personas && s.tipo_cobro === 'normal' &&
+                Number(s.precio_unitario_aplicado) === d.servicioCreado.precio && Number(s.monto_adicional) === 0 &&
+                String(s.hora_inicio || '').replace(/^(\d{2}:\d{2})$/,'$1:00') === d.servicioCreado.hora &&
+                firmaManualPago(raw,x,s.id) === d.firma) d.firma = firma;
+            delete d.servicioCreado;
+            if (error || !x || d.generacion !== generacion || d.version !== e?.version ||
+                d.usuario !== data?.session?.user?.id || root.haikuTienePermiso?.('pagos.registrar') !== true ||
+                d.reservaId !== destino?.reserva_id || d.estadiaId !== destino?.id || d.firma !== firma ||
+                JSON.stringify(x.pago) !== d.evidencia) {
+                invalidarMedioPago(decisiones,aprobados,id,generacion); continue;
+            }
+            aplicar.set(x.pago,d);
+        }
+        if (!aplicar.size) return {reservas,comparacion:raw};
+        const efectivo = pago => {
+            const d = aplicar.get(pago); if (!d) return pago;
+            const copia = root.HAIKU_LIBRO_PAGOS_CANON_V1.pagoConMedioManual(pago,d.medio);
+            const clasificar = root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1?.clasificarMovimientoFinanciero;
+            if (clasificar) copia.clasificacion_financiera = clasificar(copia);
+            pagosEfectivosMedio.set(copia,{original:pago,decision:d}); return copia;
+        };
+        const copias = reservas.map(r => ({...r,pagos:(r.pagos || []).map(efectivo),pagos_sin_asociacion:(r.pagos_sin_asociacion || []).map(efectivo)}));
+        const comparacion = await compararSistema(copias,cliente,result.q);
+        const sesion = await cliente.auth.getSession(), estado = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const relectura = Object.assign([...raw],raw,{snapshot:comparacion.snapshot});
+        let cambio = false;
+        for (const [p,d] of aplicar) {
+            const x = raw.pagosDetalle.find(x => x.pago === p);
+            if (sesion.error || sesion.data?.session?.user?.id !== d.usuario || estado?.version !== d.version ||
+                estado?.generacion !== generacion || root.haikuTienePermiso?.('pagos.registrar') !== true ||
+                firmaManualPago(relectura,x) !== d.firma) {
+                invalidarMedioPago(decisiones,aprobados,idMovimientoIncorporacion(x),generacion); cambio = true;
+            }
+        }
+        return cambio ? compararConMediosManuales(reservas,result,decisiones,aprobados,cliente,generacion) : {reservas:copias,comparacion};
+    }
+    async function resolverMedioPago(result,decisiones,aprobados,plan,item,accion,cliente) {
+        const p = item.manualPago?.tipo === DEFINIR_MEDIO_PAGO ? item.manualPago : item.resolucionMedio;
+        if (!p || accion.tipo !== DEFINIR_MEDIO_PAGO ||
+            !Object.hasOwn(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos,accion.medio)) throw Error('Selecciona un medio de pago válido.');
+        const vigente = () => {
+            const e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+            if (accion.vigente?.() === false) throw Error('Revisión cancelada; no se guardó el medio.');
+            if (e?.generacion !== p.generacion || e?.version !== p.version || root.haikuTienePermiso?.('pagos.registrar') !== true)
+                throw Error('El Libro o el permiso cambió; vuelve a revisar.');
+        };
+        vigente();
+        const {data,error} = await cliente.auth.getSession(), usuario = data?.session?.user?.id;
+        if (error || !usuario || usuario !== p.usuario) throw Error('La sesión cambió; vuelve a revisar.');
+        const reservas = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
+            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas,result.generacion,cliente) : result.reservas;
+        const crudo = await compararSistema(reservas,cliente,result.q); vigente();
+        const x = crudo.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id), destino = destinoConfirmacionAirbnb(crudo,x);
+        if (!x || !destino || destino.reserva_id !== p.reservaId || destino.id !== p.estadiaId ||
+            JSON.stringify(x.pago) !== JSON.stringify(p.original) ||
+            firmaManualPago(crudo,x) !== p.firma)
+            throw Error('La evidencia o Proyecto H cambió; vuelve a revisar el medio.');
+        const sesion = await cliente.auth.getSession(); vigente();
+        if (sesion.error || sesion.data?.session?.user?.id !== usuario) throw Error('La sesión cambió; vuelve a revisar.');
+        const d = {medio:accion.medio,generacion:p.generacion,version:p.version,usuario,reservaId:p.reservaId,estadiaId:p.estadiaId,
+            evidencia:JSON.stringify(x.pago),firma:firmaManualPago(crudo,x),
+            auditoria:{version:1,medio:accion.medio,usuario,version_libro:p.version,generacion:p.generacion,
+                elegido_en:new Date().toISOString(),origen:structuredClone(x.pago.origen),
+                evidencia_original:{monto:x.pago.monto,moneda:x.pago.moneda,medio:x.pago.medio_pago || null,
+                    fecha_comprobante:x.pago.fecha_comprobante || null,fecha_bloque:x.pago.fecha_bloque}}};
+        invalidarPagoManual(decisiones,aprobados,item.id,p.generacion);
+        revisionesPagoManual.get(decisiones)?.delete(item.id);
+        delete plan.solicitudPendiente;
+        registroMedios(decisiones).set(item.id,d);
+        try {
+            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+            if (registroMedios(decisiones).get(item.id) !== d) throw Error('Proyecto H cambió; vuelve a definir el medio.');
+            return siguiente;
+        } catch (e) {
+            invalidarMedioPago(decisiones,aprobados,item.id,p.generacion); throw e;
+        }
+    }
     function fechaConfirmacionAirbnbValida(fecha) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fecha || ''))) return false;
         const date = new Date(fecha + 'T12:00:00Z');
@@ -2456,11 +2583,57 @@
     function firmaManualPago(comp, movimiento, servicioExcluido = null) {
         const ordenar = valor => Array.isArray(valor) ? valor.map(ordenar).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) :
             valor && typeof valor === 'object' ? Object.fromEntries(Object.keys(valor).sort().map(k => [k,ordenar(valor[k])])) : valor;
-        const snapshot = servicioExcluido ? {...comp.snapshot,finanzas:{...comp.snapshot.finanzas,
-            servicios:comp.snapshot.finanzas.servicios.filter(s => s.id !== servicioExcluido),
-            cargos:comp.snapshot.finanzas.cargos.filter(c => c.servicio_id !== servicioExcluido)}} : comp.snapshot;
-        return JSON.stringify(ordenar({ snapshot, reserva:movimiento.reserva,
-            destino:movimiento.reserva_sistema_id }));
+        // La firma pertenece a un movimiento, no a todos los pagos visibles.
+        // Revalidar otro item no altera su evidencia ni sus dependencias.
+        const {pagos,pagos_sin_asociacion,servicios:solicitudes,...reserva} = movimiento.reserva;
+        const p = movimiento.pago, snapshot = comp.snapshot || {};
+        const resultado = Array.from(comp || []).find(r => claveReserva(r.libro) === claveReserva(movimiento.reserva));
+        const destino = movimiento.reserva_sistema_id || resultado?.sistema?.reserva_id;
+        const aplicacionesLibro = D?.aplicacionesLibro(p) || [];
+        const conceptoCompatible = canon => aplicacionesLibro.some(a => !a.concepto_canon || a.concepto_canon === canon ||
+            a.concepto_canon === 'tinaja' && ['tinaja_tonel','tinaja_jacuzzi'].includes(canon));
+        const finanzas = snapshot.finanzas;
+        const servicios = (finanzas?.servicios || []).filter(s => s.reserva_id === destino && s.id !== servicioExcluido &&
+            conceptoCompatible(D?.conceptoCanon([s.catalogo_servicios?.codigo,s.catalogo_servicios?.nombre,s.catalogo_servicios?.categoria].join(' '))));
+        const serviciosPorId = new Map((finanzas?.servicios || []).map(s => [s.id,s]));
+        const cargos = (finanzas?.cargos || []).filter(c => {
+            const s = serviciosPorId.get(c.servicio_id), catalogo = s?.catalogo_servicios;
+            return c.reserva_id === destino && c.servicio_id !== servicioExcluido && conceptoCompatible(D?.conceptoCanon(
+                [c.concepto,catalogo?.codigo,catalogo?.nombre,catalogo?.categoria].join(' ')));
+        });
+        const cargoIds = new Set(cargos.map(c => c.cargo_id));
+        const aplicaciones = (finanzas?.aplicaciones || []).filter(a => cargoIds.has(a.cargo_id));
+        const efectivo = snapshot.efectivo_aplicado;
+        const cargosEfectivo = (efectivo?.cargos || []).filter(c => c.reserva_id === destino && c.servicio_id !== servicioExcluido &&
+            (c.tipo_cargo === 'alojamiento' ? p.tipo_movimiento === 'alojamiento' : conceptoCompatible(D?.conceptoCanon(c.concepto))));
+        const cargosEfectivoIds = new Set(cargosEfectivo.map(c => c.cargo_id));
+        const aplicacionesEfectivo = (efectivo?.aplicaciones || []).filter(a => cargosEfectivoIds.has(a.cargo_id));
+        const pagosAplicados = new Set([...aplicaciones,...aplicacionesEfectivo].map(a => a.pago_id));
+        const identidad = {p,result:{libro:movimiento.reserva,sistema:resultado?.sistema}};
+        const referencia = String(p.referencia_externa || '').trim();
+        const relacionados = (snapshot.pagos_todos || snapshot.pagos || []).filter(s =>
+            pagoCoincide(p,s) || origenPersistidoCoincide(identidad,s) || pagosAplicados.has(s.id) ||
+            referencia && String(s.referencia_externa || '').trim() === referencia ||
+            s.reserva_id === destino && Number(s.monto) === Number(p.monto) &&
+                !(normalizarId(codAutSistema(s)) || normalizarId(s.folio) && normalizarId(bovtarSistema(s))));
+        // Mantener conflictos globales del mismo identificador/fuente. Las
+        // decisiones de medios de comprobantes independientes quedan fuera.
+        const competidores = (comp.pagosDetalle || []).filter(x => x !== movimiento).map(x => ({
+            pago:pagosEfectivosMedio.get(x.pago)?.original || x.pago,reserva:claveReserva(x.reserva)
+        })).filter(x => (
+            pagoCoincide(p,{...x.pago,datos_origen:{bovtar:x.pago.bovtar}}) ||
+            source(x.pago.origen) === source(p.origen) ||
+            !pagoTieneIdentificadorFuerte(p) && x.reserva === claveReserva(movimiento.reserva) &&
+                Number(x.pago.monto) === Number(p.monto) && medioLibro(x.pago) === medioLibro(p)));
+        const estadias = (snapshot.estadias_todas || snapshot.estadias || []).filter(s =>
+            s.reserva_id === destino || Number(s.cabana) === Number(reserva.cabana) &&
+                s.fecha_checkin <= reserva.fecha_checkout && s.fecha_checkout >= reserva.fecha_checkin ||
+            S.mismaPersona(s.titular,reserva.titular) && mismasFechas(reserva,s));
+        return JSON.stringify(ordenar({reserva,pago:p,destino,estadias,relacionados,competidores,
+            asociado:(pagos || []).includes(p),
+            finanzas:aplicacionesLibro.length ? {disponible:finanzas?.disponible === true,cargos,servicios,aplicaciones} : null,
+            efectivo:cargosEfectivo.length || aplicacionesEfectivo.length ? {disponible:efectivo?.disponible === true,
+                cargos:cargosEfectivo,aplicaciones:aplicacionesEfectivo} : null}));
     }
     function propuestaManualPago(item, comp, generacion) {
         if (!D || !Number.isSafeInteger(generacion) || root.haikuTienePermiso?.('pagos.registrar') !== true ||
@@ -2509,6 +2682,8 @@
     }
     async function resolverAprobacionManualPago(result, decisiones, aprobados, plan, itemId, accion, cliente = root.haikuSupabase) {
         const item = plan.items.find(i => i.id === itemId), propuesta = item?.manualPago;
+        if (item && accion.tipo === DEFINIR_MEDIO_PAGO && contextoVisualPlanes.has(plan))
+            return resolverMedioPago(result,decisiones,aprobados,plan,item,accion,cliente);
         if (!propuesta || !contextoVisualPlanes.has(plan)) throw Error('Este pago no tiene una resolución manual segura.');
         if (propuesta.tipo === CONFIRMACION_AIRBNB)
             return completarConfirmacionAirbnb(result,decisiones,aprobados,plan,item,accion,cliente);
@@ -2590,6 +2765,9 @@
                 if (error) throw error;
                 if (!data?.servicio_id) throw Error('Proyecto H no confirmó el servicio.');
                 servicioId = data.servicio_id;
+                const medio = registroMedios(decisiones).get(itemId);
+                if (medio) medio.servicioCreado = {id:servicioId,codigo:c.codigo,fecha,total:app.monto,
+                    cantidad,personas,precio,hora:hora ? hora+':00' : ''};
                 vigente();
             }
             // Crear un servicio no aprueba ni registra un pago. El motor consulta
@@ -2962,13 +3140,15 @@
             // La revalidación canónica ya decidió si el movimiento sigue siendo
             // nuevo y seguro. Preparación comprueba que el payload todavía sea
             // construible, pero no vuelve a exigir una aprobación intermedia.
-            const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO;
+            const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO && !pagosEfectivosMedio.has(p);
             const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) &&
                 (nuevoSeguroCanonico || Boolean(destino?.reserva_ref));
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
                 x.decisionPagoManual.confirmacionRecibida === true && fechaConfirmacionAirbnbValida(x.decisionPagoManual.fechaPago)
                 ? x.decisionPagoManual : null;
             const manual = aprobados.has(id) && (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
+            if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p))
+                motivos.push('Falta un identificador fuerte del comprobante; definir el medio no resuelve su identidad.');
             if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             if (servicio4C && p.transaccion_distribuida && !manual &&
                 x.destinoFinanciero.aplicaciones.some(a => ['queque','pan','huevos'].includes(a.concepto_canon))) {
@@ -3020,15 +3200,18 @@
         // No se debe reconstruir por titular, cabaña y monto: dos pagos distintos pueden
         // compartir esos tres datos (por ejemplo, un WebPay previo y una transferencia adicional).
         for (const x of comp.pagosDetalle || []) {
-            const id = 'pago:' + claveReserva(x.reserva) + ':' + source(x.pago.origen) + ':' + JSON.stringify(x.pago);
+            const id = idMovimientoIncorporacion(x);
             const item = plan.items.find(i => i.id === id);
             if (!item) continue;
             item.pagoLibro = x.pago;
             item.pagoSistema = x.sistema || null;
             item.decisionPagoManual = x.decisionPagoManual || null;
-            item.manualPago = propuestaConfirmacionAirbnb(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) ||
+            item.resolucionMedio = propuestaMedioPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
+            item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
+            item.manualPago = (!medioLibro(x.pago) ? item.resolucionMedio : null) ||
+                propuestaConfirmacionAirbnb(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) ||
                 propuestaManualPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
-            if (item.manualPago?.tipo !== CONFIRMACION_AIRBNB && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
+            if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
             item.decisionManualInvalidada = x.decisionManualInvalidada === true;
             if (item.decisionManualInvalidada) {
                 item.motivos.push('Proyecto H cambió; la aprobación manual anterior quedó invalidada. Revisa nuevamente.');
@@ -3098,9 +3281,9 @@
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
         const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
         if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        const reservas = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
+        const reservasOriginales = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
             ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion, cliente) : result.reservas;
-        const comparacion = await compararSistema(reservas, cliente, result.q);
+        const {reservas,comparacion} = await compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         for (const decision of [...decisiones.values()].filter(d => d?.tipo === CONFIRMACION_AIRBNB)) {
             const x = comparacion.pagosDetalle?.find(x => source(x.pago.origen) === decision.fuente && x.reserva.id === decision.reservaLibroId);
@@ -3323,9 +3506,31 @@
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        const mediosElegidos = plan.items.filter(i => i.medioPagoManual && (i.seleccionado ||
+            plan.solicitudPendiente?.items.some(x => x.item_id === i.id) ||
+            plan.solicitudPendiente?.servicios.some(x => x.item.item_id === i.id)));
+        if (mediosElegidos.length) {
+            // También se revalida un retry: una solicitud previa no puede dar
+            // autoridad a una decisión de medio modificada o invalidada.
+            const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente);
+            if (mediosElegidos.some(i => registroMedios(decisiones).get(i.id) !== i.medioPagoManual ||
+                JSON.stringify(actual.items.find(x => x.id === i.id)?.payload?.datos_origen?.medio_pago_manual_v1) !==
+                JSON.stringify(i.payload?.datos_origen?.medio_pago_manual_v1))) {
+                delete plan.solicitudPendiente;
+                throw Error('La decisión del medio o Proyecto H cambió; vuelve a revisar antes de incorporar.');
+            }
+            const {data,error} = await cliente.rpc('haiku_libro_medio_pago_manual_capacidad_v1',{});
+            if (error || data?.version !== 1 || data?.auditoria !== true)
+                throw Error('Falta el soporte de auditoría del medio de pago manual en Proyecto H. No se incorporó el pago.');
+        }
         const vigente = () => {
             if(result.generacion !== undefined && result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
                 throw Error('El Libro cambió; vuelve a comparar antes de incorporar.');
+            if (mediosElegidos.some(i => i.medioPagoManual.version !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version ||
+                registroMedios(decisiones).get(i.id) !== i.medioPagoManual)) {
+                delete plan.solicitudPendiente;
+                throw Error('La decisión del medio o el Libro cambió; vuelve a revisar antes de incorporar.');
+            }
             const versionesAirbnb = [...plan.items.filter(i => i.seleccionado).map(i => i.payload?.datos_origen?.confirmacion_airbnb?.version),
                 ...(plan.solicitudPendiente?.items || []).map(i => i.datos_origen?.confirmacion_airbnb?.version)].filter(Boolean);
             if (versionesAirbnb.some(v => v !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version))
@@ -4776,6 +4981,7 @@
     const revisionesVisualesManualPago = new WeakMap();
 
     function continuarVistaManualPago(anterior, nuevo, id, accion) {
+        if (accion.tipo === DEFINIR_MEDIO_PAGO) return;
         const item = nuevo.items.find(i => i.id === id);
         if (!item?.manualPago) return;
         const previa = revisionesVisualesManualPago.get(anterior);
@@ -4956,7 +5162,52 @@
         panel.append(contenido,pie); bloque.append(abrir,panel); return bloque;
     }
 
+    function panelDefinirMedioPago(item,plan,aprobar,cambiar = false) {
+        const p = item.resolucionMedio || item.manualPago;
+        const bloque = elemento('div','haiku-incorporacion-manual-pago');
+        const abrir = elemento('button','haiku-incorporacion-manual-accion',cambiar ? 'Cambiar medio de pago' : 'Aprobación manual');
+        abrir.type = 'button'; abrir.setAttribute('aria-expanded','false');
+        const panel = elemento('section','haiku-incorporacion-manual-pago-panel'); panel.hidden = true; panel.dataset.paso = 'medio';
+        const contenido = elemento('div','haiku-manual-contenido'), pie = elemento('footer','haiku-manual-pie');
+        const cabecera = elemento('header','haiku-manual-cabecera');
+        cabecera.append(elemento('span','haiku-manual-ceja','PASO INICIAL'),elemento('h3','','Definir medio de pago'),
+            elemento('p','haiku-manual-caption',cambiar ? 'Selecciona el medio acreditado por el comprobante. El cambio requiere una nueva aprobación del pago.' :
+                'Falta precisar el medio de pago. Selecciona el medio acreditado por el comprobante.'));
+        contenido.append(cabecera,resumenRevisionManual(item,p),
+            filaRevisionManual('Contexto',fechaRevisionManual(p.ingreso) + ' → ' + fechaRevisionManual(p.salida)));
+        const evidencia = evidenciaRevisionManual({...item,pagoLibro:p.original},'Evidencia original del Libro'); evidencia.open = true;
+        contenido.append(evidencia);
+        const campo = elemento('label','haiku-incorporacion-manual-campo'); campo.append(elemento('span','','Medio de pago'));
+        const selector = elemento('select'); selector.setAttribute('aria-label','Medio de pago'); selector.required = true;
+        const vacio = elemento('option','','Selecciona un medio'); vacio.value = ''; selector.append(vacio);
+        for (const [valor,etiqueta] of Object.entries(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos)) {
+            const opcion = elemento('option','',etiqueta); opcion.value = valor; selector.append(opcion);
+        }
+        selector.value = ''; campo.append(selector); contenido.append(campo,
+            avisoRevisionManual('Revalidación necesaria','Confirmar el medio vuelve a revisar el pago y sus bloqueos. La aprobación del pago se realiza después.','revision'));
+        const aviso = elemento('p','haiku-manual-validacion'); aviso.setAttribute('role','status'); contenido.append(aviso);
+        const confirmar = elemento('button','haiku-incorporacion-manual-accion haiku-manual-primario','Confirmar medio y revalidar');
+        confirmar.type = 'button'; confirmar.disabled = true;
+        const cancelar = elemento('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Cancelar revisión'); cancelar.type = 'button';
+        let activo = false, guardando = false;
+        const cerrar = () => {activo = false; panel.hidden = true; selector.value = ''; confirmar.disabled = true; abrir.setAttribute('aria-expanded','false');};
+        abrir.addEventListener('click',() => {
+            if (activo) cerrar(); else {activo = true; panel.hidden = false; abrir.setAttribute('aria-expanded','true');}
+        });
+        cancelar.addEventListener('click',cerrar);
+        selector.addEventListener('change',() => {confirmar.disabled = guardando || !Object.hasOwn(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos,selector.value);});
+        confirmar.addEventListener('click',async () => {
+            if (guardando || confirmar.disabled || !activo) return;
+            guardando = true; confirmar.disabled = true; selector.disabled = true; confirmar.setAttribute('aria-busy','true');
+            try {await aprobar.manualPago(plan,item.id,{tipo:DEFINIR_MEDIO_PAGO,medio:selector.value,vigente:() => activo});}
+            catch (e) {aviso.textContent = e.message;}
+            finally {guardando = false; selector.disabled = false; confirmar.disabled = !activo || !selector.value; confirmar.removeAttribute?.('aria-busy');}
+        });
+        pie.append(confirmar,cancelar); panel.append(contenido,pie); bloque.append(abrir,panel); return bloque;
+    }
+
     function panelAprobacionManualPago(item, plan, aprobar) {
+        if (item.manualPago.tipo === DEFINIR_MEDIO_PAGO) return panelDefinirMedioPago(item,plan,aprobar);
         if (item.manualPago.tipo === CONFIRMACION_AIRBNB) return panelConfirmacionAirbnb(item,plan,aprobar);
         const p = item.manualPago, bloque = elemento('div','haiku-incorporacion-manual-pago');
         let revision = revisionesVisualesManualPago.get(plan);
@@ -5280,6 +5531,8 @@
             boton.addEventListener("click", () => ejecutarAprobacionVisual(boton, () => aprobar(item.id), fila));
             fila.append(boton);
         }
+        if (item.medioPagoManual && item.resolucionMedio && aprobar?.manualPago)
+            fila.append(panelDefinirMedioPago(item,plan,aprobar,true));
         if (esPagoLibro) fila.append(accionInspectorReserva(identidadInspectorItem(item, comparacion)));
         return fila;
     }
@@ -5424,6 +5677,7 @@
                 const noElegible = !!item.motivos.length || dependencia || !correspondeEtapa(item) || !CATEGORIAS_GUARDABLES.includes(item.categoria);
                 control.disabled = guardando || !escrituraActiva || noElegible;
                 if (noElegible) { control.checked = false; item.seleccionado = false; }
+                else control.checked = item.seleccionado;
             }
             indicadores.nuevas.textContent = plan.items.filter(i => i.categoria === "nuevas" && i.seleccionado).length;
             indicadores.estadias.textContent = plan.items.filter(i => i.categoria === "estadias" && i.seleccionado).reduce((n, i) => n + (i.payload?.estadias?.length || 0), 0);

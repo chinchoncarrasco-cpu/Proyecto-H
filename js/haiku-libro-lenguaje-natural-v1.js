@@ -193,7 +193,7 @@
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
-        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
+        const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","tarjeta_debito","tarjeta_credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
         const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar) || /\b\d{6,}\s*transf\b/.test(texto);
         const fila = pago.evidencia_financiera?.columnas_ocupadas;
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
@@ -491,6 +491,7 @@
         ejecutarConsultaAnual(texto, consulta);
     }
 
+    root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1 = Object.freeze({clasificarMovimientoFinanciero});
     instalarCompatibilidadPagos();
     if (!root.HAIKU_LIBRO_RESERVA_V1 && root.document?.readyState === "loading") {
         root.document.addEventListener("DOMContentLoaded", instalarCompatibilidadPagos, { once: true });
