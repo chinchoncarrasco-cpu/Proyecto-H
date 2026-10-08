@@ -503,12 +503,24 @@
 .haiku-asistente-root .haku-comparacion-sites .haku-comparacion-sites-seccion .haiku-cancelaciones-grupo,
 .haiku-asistente-root .haku-comparacion-sites .haku-comparacion-sites-seccion .haiku-bloqueos-grupo { margin: 0; padding: 0; }
 .haiku-asistente-root .haku-comparacion-sites .haku-comparacion-sites-seccion .haiku-cancelacion-card { border-radius: 0; box-shadow: none; }
-.haku-comparacion-sites > .haku-comparacion-sites-pie { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 18px; padding: 12px 20px; border-top: 1px solid #dce8e0; }
-.haku-comparacion-sites-pie > span { color: #687c6d; font-size: 10px; }
-.haku-comparacion-sites-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.haiku-asistente-root .haku-comparacion-sites-acciones > .libro-reserva-boton { min-height: 32px; margin: 0; padding: 7px 10px; font-size: 10px; line-height: 1.2; }
-.haiku-asistente-root .haku-comparacion-sites-acciones > .haku-comparacion-sites-preparar { background: #215a42; border-color: #215a42; color: #fff; }
-.haiku-asistente-root .haku-comparacion-sites-acciones > .haku-comparacion-sites-preparar:disabled { opacity: .6; cursor: not-allowed; }
+.haiku-asistente-root .haku-comparacion-sites > .haiku-asistente-preview-lista:has(> label) { margin: 16px 16px 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.haiku-asistente-root .haku-comparacion-sites > .haiku-asistente-preview-lista:has(> label) > strong { min-height: 32px; margin: 0; padding: 8px 48px 8px 32px; border-radius: 4px; background: var(--sites-shell-green-soft, #e6f2eb); color: var(--sites-shell-ink-soft, #2a3c37); font-size: 9px; font-weight: 600; line-height: 16px; letter-spacing: 0; }
+.haiku-asistente-root .haku-comparacion-sites > .haiku-asistente-preview-lista:has(> label) > strong::before { left: 6px; }
+.haiku-asistente-root .haku-comparacion-sites > .haiku-asistente-preview-lista:has(> label) > strong::after { top: 50%; right: 8px; transform: translateY(-50%); color: var(--sites-shell-green, #22735c); font-size: 10px; font-weight: 400; line-height: 16px; }
+.haiku-asistente-root .haku-comparacion-sites > .haiku-asistente-preview-lista:has(> label) > .haiku-reconciliacion-meta { margin-top: 12px; padding: 0; border: 0; background: transparent; color: var(--sites-shell-muted, #687873); font-size: 10px; font-weight: 400; line-height: 12px; letter-spacing: 0; }
+.haku-comparacion-sites .haku-comparacion-sites-decision { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 8px; margin: 16px 16px 0; padding: 12px 14px 11px; border: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 8px; background: var(--sites-shell-green-soft, #e6f2eb); color: var(--sites-shell-ink-soft, #2a3c37); }
+.haku-comparacion-sites-decision-icono { width: 18px; height: 18px; }
+.haku-comparacion-sites-decision-texto { display: grid; min-width: 0; gap: 4px; overflow-wrap: anywhere; }
+.haku-comparacion-sites-decision-texto > strong { color: var(--sites-shell-ink-soft, #2a3c37); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.haku-comparacion-sites-decision-texto > span { color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 16px; }
+.haku-comparacion-sites > div:has(> .haku-comparacion-sites-decision) + .haku-comparacion-sites-pie { margin-top: 16px; }
+.haku-comparacion-sites > .haku-comparacion-sites-pie { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 20px; border-top: 1px solid var(--sites-shell-line, #dce5e0); }
+.haku-comparacion-sites-pie > span { flex: 1 1 150px; min-width: 0; color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 1.4; }
+.haku-comparacion-sites-acciones { display: flex; flex: 0 1 208px; flex-direction: column; width: 208px; max-width: 100%; margin-left: auto; gap: 6px; }
+.haiku-asistente-root .haku-comparacion-sites-acciones > .libro-reserva-boton { box-sizing: border-box; width: 100%; min-height: 34px; margin: 0; padding: 7px 10px; border: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 8px; box-shadow: none; font-size: 11px; line-height: 1.2; cursor: pointer; }
+.haiku-asistente-root .haku-comparacion-sites-acciones > .secundario { background: var(--sites-shell-surface, #fff); border-color: var(--sites-shell-line, #dce5e0); color: var(--sites-shell-green, #22735c); }
+.haiku-asistente-root .haku-comparacion-sites-acciones > .haku-comparacion-sites-preparar { background: var(--sites-shell-green, #22735c); border-color: var(--sites-shell-green, #22735c); color: #fff; }
+.haiku-asistente-root .haku-comparacion-sites-acciones > .libro-reserva-boton:disabled { opacity: .6; cursor: not-allowed; }
 .haku-comparacion-sites > .haku-comparacion-sites-seguridad { margin: 0; padding: 9px 20px 13px; color: #829087; font-size: 10px; }
 @media (max-width: 600px) {
     .haiku-asistente-root .haku-comparacion-sites > .haku-comparacion-sites-cabecera { padding: 15px 14px; }
@@ -520,7 +532,8 @@
     .haku-comparacion-sites-coincidencias { padding: 12px; }
     .haku-comparacion-sites-fraccion { font-size: 22px; }
     .haku-comparacion-sites > .haku-comparacion-sites-pie { align-items: stretch; flex-direction: column; padding: 12px 14px; }
-    .haku-comparacion-sites-acciones { justify-content: flex-start; }
+    .haku-comparacion-sites-pie > span { flex-basis: auto; }
+    .haku-comparacion-sites-acciones { flex-basis: auto; width: 100%; margin-left: 0; }
     .haku-comparacion-sites > .haku-comparacion-sites-seguridad { padding-inline: 14px; }
 }
 @media (max-width: 390px) {

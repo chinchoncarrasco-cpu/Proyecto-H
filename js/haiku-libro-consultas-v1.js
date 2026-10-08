@@ -4116,6 +4116,24 @@
         return el;
     }
 
+    function avisoDecisionActualizada() {
+        const aviso = elemento("div", "haku-comparacion-sites-decision");
+        aviso.setAttribute("role", "status");
+        const icono = elemento("img", "haku-comparacion-sites-decision-icono");
+        icono.setAttribute("src", "assets/icons/haku-pagos-manual/check-small.svg");
+        icono.setAttribute("alt", "");
+        icono.setAttribute("aria-hidden", "true");
+        icono.setAttribute("width", "18");
+        icono.setAttribute("height", "18");
+        const texto = elemento("div", "haku-comparacion-sites-decision-texto");
+        texto.append(
+            elemento("strong", "", "Decisión actualizada."),
+            elemento("span", "", " Pulsa Preparar incorporación para actualizar el resumen.")
+        );
+        aviso.append(icono, texto);
+        return aviso;
+    }
+
     function agregarDato(grid, label, valor) {
         const box = elemento("div", "haiku-asistente-preview-dato");
         box.append(elemento("span", "", label), elemento("strong", "", valor));
@@ -4628,7 +4646,7 @@
                 select.selectedIndex = Math.max(0, modelo.opciones.findIndex(o => o.valor === decisiones.get(g.clave)?.valor));
                 select.addEventListener("change", () => {
                     decisiones.set(g.clave, modelo.opciones[select.selectedIndex]);
-                    vista.replaceChildren(elemento("p", "", "Decisión actualizada. Pulsa Preparar incorporación para actualizar el resumen."));
+                    vista.replaceChildren(avisoDecisionActualizada());
                 });
                 label.append(select); preguntas.append(label);
             });
