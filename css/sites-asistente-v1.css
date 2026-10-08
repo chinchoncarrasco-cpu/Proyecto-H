@@ -1086,9 +1086,10 @@
 
 /* Resumen operativo de Haku: presentación Sites sobre la consulta real. */
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haku-dia-sites {
+    --haku-dia-mint: #f3f8f5;
     width: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0;
     overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none;
-    color: #263a2f; font-size: 11px;
+    color: var(--sites-shell-ink, #172522); font-size: 12px;
 }
 .haiku-asistente-root .haiku-asistente-panel--resumen-dia .haiku-asistente-marca { display: none; }
 .haiku-asistente-root .haiku-asistente-panel--resumen-dia .haiku-asistente-titulo {
@@ -1111,9 +1112,13 @@
 .haku-dia-sites__cabecera-chip[hidden] { display: none; }
 .haiku-asistente-root .haiku-asistente-panel--resumen-dia .haiku-asistente-cerrar { font-size: 17px; }
 .haku-dia-sites__tarjeta-titulos > span {
-    color: #426b52; font-size: 10px; font-weight: 750; letter-spacing: .14em;
+    color: var(--sites-shell-green, #22735c); font-size: 10px; font-weight: 750; letter-spacing: .12em;
 }
-.haku-dia-sites__fecha { border: 1px solid #d5e6da; background: #f5fbf7; }
+.haku-dia-sites__fecha {
+    align-self: start; margin-top: 2px; border: 1px solid var(--sites-shell-line, #dce5e0);
+    background: var(--haku-dia-mint, #f3f8f5); color: var(--sites-shell-green, #22735c);
+    font-size: 10px;
+}
 .haiku-asistente-root .haku-dia-sites > .haku-dia-sites__mensaje-usuario {
     display: table; max-width: calc(100% - 34px); margin: 17px 0 16px auto;
     padding: 9px 12px; border: 1px solid #d8e8db; border-radius: 9px 9px 3px 9px;
@@ -1121,65 +1126,91 @@
 }
 .haku-dia-sites__tarjeta {
     display: flex; flex-direction: column; gap: 0; min-width: 0; overflow: visible;
-    border: 1px solid #d5e5da; border-radius: 9px; background: #fff;
+    border: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 9px;
+    background: var(--sites-shell-surface, #fff);
 }
 .haku-dia-sites__tarjeta-head {
-    display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    margin: 0 14px; padding: 14px 0 11px; border-bottom: 1px solid #dce8e0;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 5px 8px;
+    margin: 0 12px; padding: 12px 0 10px; border-bottom: 1px solid var(--sites-shell-line, #dce5e0);
 }
-.haku-dia-sites__tarjeta-titulos { display: grid; gap: 5px; min-width: 0; }
-.haku-dia-sites__tarjeta-titulos > h3 { margin: 0; color: #263a2f; font-size: 16px; line-height: 1.2; }
+.haku-dia-sites__tarjeta-titulos { display: grid; gap: 4px; min-width: 0; }
+.haku-dia-sites__tarjeta-titulos > h3 { margin: 0; color: var(--sites-shell-ink, #172522); font-size: 18px; line-height: 1.2; }
+.haku-dia-sites__descripcion {
+    grid-column: 1 / -1; margin: 0; color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 1.4;
+}
 .haku-dia-sites__metricas {
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;
-    padding: 11px 14px 8px;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 6px;
+    padding: 10px 12px 8px;
 }
 .haku-dia-sites__metrica {
-    display: grid; place-content: center; min-width: 0; min-height: 52px; padding: 6px 3px;
-    border: 1px solid #dce8e0; border-radius: 7px; background: #fff; text-align: center;
+    display: grid; place-content: center; min-width: 0; min-height: 54px; padding: 7px 3px;
+    border: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 7px;
+    background: var(--sites-shell-surface, #fff); text-align: center;
 }
-.haku-dia-sites__metrica--pagos { border-color: #ead8bc; background: #fffaf2; }
-.haku-dia-sites__valor { color: #20372b; font-size: 18px; line-height: 1; }
-.haku-dia-sites__metrica--pagos .haku-dia-sites__valor { color: #a46724; }
+.haku-dia-sites__metrica--pagos { border-color: #ead8bc; background: var(--sites-shell-amber-soft, #fff2df); }
+.haku-dia-sites__valor { color: var(--sites-shell-ink, #172522); font-size: 20px; line-height: 1; }
+.haku-dia-sites__metrica--pagos .haku-dia-sites__valor { color: var(--sites-shell-amber, #a36522); }
 .haku-dia-sites__etiqueta {
-    margin-top: 5px; color: #52665a; font-size: 8px; letter-spacing: .09em; text-transform: uppercase;
+    margin-top: 5px; color: var(--sites-shell-muted, #687873); font-size: 10px; letter-spacing: .025em; text-transform: uppercase;
 }
-.haku-dia-sites__seccion { margin: 0 14px 10px; }
+.haku-dia-sites__ayuda { margin: 0 12px 9px; color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 1.4; }
+.haku-dia-sites__seccion {
+    min-width: 0; margin: 0 12px 6px; border: 1px solid var(--sites-shell-line, #dce5e0);
+    border-radius: 7px; background: var(--sites-shell-surface, #fff);
+}
 .haku-dia-sites__seccion-titulo {
-    display: flex; justify-content: space-between; gap: 10px; margin: 0 0 5px;
-    color: #355b42; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+    display: grid; grid-template-columns: 16px minmax(0, 1fr) auto 14px; align-items: center;
+    gap: 8px; min-height: 39px; margin: 0; padding: 8px 10px; border-radius: inherit;
+    background: var(--haku-dia-mint, #f3f8f5); cursor: pointer; list-style: none;
+    color: var(--sites-shell-ink-soft, #2a3c37); font-size: 12px; font-weight: 650;
 }
-.haku-dia-sites__seccion-titulo > span:last-child { font-weight: 500; letter-spacing: 0; }
-.haku-dia-sites__lista { display: grid; gap: 5px; }
+.haku-dia-sites__seccion-titulo::-webkit-details-marker { display: none; }
+.haku-dia-sites__seccion-titulo::marker { content: ""; }
+.haku-dia-sites__seccion[open] > .haku-dia-sites__seccion-titulo { border-bottom: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 7px 7px 0 0; }
+.haku-dia-sites__seccion-titulo:focus-visible { outline: 2px solid var(--sites-shell-green, #22735c); outline-offset: 2px; }
+.haku-dia-sites__seccion-nombre { min-width: 0; overflow-wrap: anywhere; }
+.haku-dia-sites__seccion-contador { min-width: 18px; color: var(--sites-shell-green, #22735c); font-size: 11px; font-weight: 600; text-align: center; }
+.haku-dia-sites__icono { display: block; flex: 0 0 auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.haku-dia-sites__seccion-titulo > .haku-dia-sites__icono { color: var(--sites-shell-green, #22735c); }
+.haku-dia-sites__chevron { width: 14px; height: 14px; }
+.haku-dia-sites__seccion[open] > summary > .haku-dia-sites__chevron { transform: rotate(180deg); }
+.haku-dia-sites__lista { display: grid; gap: 0; padding: 0 10px; }
 .haku-dia-sites__fila {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px;
-    min-width: 0; min-height: 43px; padding: 7px 9px;
-    border: 1px solid #dce8e0; border-radius: 7px; background: #fff;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px;
+    min-width: 0; min-height: 46px; padding: 8px 0;
+    border: 0; border-bottom: 1px solid var(--sites-shell-line, #dce5e0); border-radius: 0; background: transparent;
 }
+.haku-dia-sites__fila:last-child { border-bottom: 0; }
+.haku-dia-sites__fila--sin-cabana { grid-template-columns: minmax(0, 1fr) auto; }
 .haku-dia-sites__cab {
-    display: inline-flex; justify-content: center; min-width: 44px; padding: 5px 7px;
-    border-radius: 999px; background: #eaf5ee; color: #285f45;
-    font-size: 9px; font-weight: 800; white-space: nowrap;
+    display: inline-flex; justify-content: center; min-width: 40px; padding: 4px 5px;
+    border-radius: 5px; background: var(--sites-shell-green-soft, #e6f2eb); color: var(--sites-shell-green, #22735c);
+    font-size: 9px; font-weight: 750; line-height: 1.2; white-space: nowrap;
 }
 .haku-dia-sites__principal { display: grid; gap: 2px; min-width: 0; }
-.haku-dia-sites__principal > strong { color: #263a2f; font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
-.haku-dia-sites__principal > span { color: #65766a; font-size: 10px; line-height: 1.3; overflow-wrap: anywhere; }
-.haku-dia-sites__meta { color: #486251; font-size: 10px; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
-.haku-dia-sites__vacio { margin: 0 14px 10px; color: #60776a; font-size: 11px; }
+.haku-dia-sites__principal > strong { color: var(--sites-shell-ink, #172522); font-size: 12px; line-height: 1.3; overflow-wrap: anywhere; }
+.haku-dia-sites__principal > span { color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.haku-dia-sites__fila--nota .haku-dia-sites__principal > span { white-space: pre-wrap; }
+.haku-dia-sites__meta { display: grid; gap: 2px; max-width: 90px; color: var(--sites-shell-ink-soft, #2a3c37); font-size: 11px; font-weight: 650; line-height: 1.3; text-align: right; overflow-wrap: anywhere; }
+.haku-dia-sites__meta > strong { font-size: 12px; }
+.haku-dia-sites__meta:has(> strong) > span { color: var(--sites-shell-muted, #687873); font-size: 10px; font-weight: 400; }
+.haku-dia-sites__vacio { margin: 0 12px 9px; color: var(--sites-shell-muted, #687873); font-size: 11px; line-height: 1.4; }
+.haku-dia-sites__lista > .haku-dia-sites__vacio { margin: 0; padding: 9px 0; }
 .haku-dia-sites__alerta {
-    display: flex; align-items: flex-start; gap: 8px; margin: 0 14px 10px; padding: 9px 10px;
-    border: 1px solid #ead8bc; border-radius: 7px; background: #fffaf2;
-    color: #76501f; font-size: 11px; line-height: 1.4;
+    display: flex; align-items: center; gap: 8px; margin: 2px 12px 6px; padding: 8px 10px;
+    border: 1px solid #ead8bc; border-radius: 7px; background: var(--sites-shell-amber-soft, #fff2df);
+    color: var(--sites-shell-amber, #a36522); font-size: 11px; font-weight: 600; line-height: 1.4;
 }
-.haku-dia-sites__alerta-icono { flex: 0 0 auto; font-size: 12px; }
+.haku-dia-sites__alerta > span { min-width: 0; overflow-wrap: anywhere; }
 .haku-dia-sites__pie {
-    margin: 2px 14px 0; padding: 10px 0 11px; border-top: 1px solid #dce8e0;
-    color: #6b7a6e; font-size: 10px; line-height: 1.4;
+    display: flex; align-items: flex-start; gap: 6px; margin: 2px 12px 0; padding: 8px 0 10px;
+    border-top: 1px solid var(--sites-shell-line, #dce5e0);
+    color: var(--sites-shell-muted, #687873); font-size: 10px; line-height: 1.4;
 }
+.haku-dia-sites__pie > .haku-dia-sites__icono { width: 13px; height: 13px; }
 @media (max-width: 440px) {
     .haiku-asistente-root .haiku-asistente-panel--resumen-dia .haiku-asistente-titulo > strong { font-size: 16px; }
-    .haku-dia-sites__metricas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .haku-dia-sites__fila { grid-template-columns: auto minmax(0, 1fr); }
-    .haku-dia-sites__meta { grid-column: 2; text-align: left; }
+    .haku-dia-sites__seccion-titulo { min-height: 42px; }
 }
 /* Servicios usa la base de haiku-libro-pagos-ui-v1.css para aprobación manual. */
 .haku-libro-servicio-manual { margin: 10px 12px; min-width: 0; }

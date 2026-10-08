@@ -10,8 +10,9 @@
 // - haiku_operacion_dia para ingresos/salidas/continuaciones.
 // - Hidratación Supabase de Servicios para la agenda.
 // - API oficial de pagos pendientes para cobros operativos.
+// - Lectura de notas operativas del Resumen para la fecha consultada.
 //
-// No crea, edita ni elimina reservas, pagos o servicios.
+// No crea, edita ni elimina reservas, pagos, servicios o notas.
 // ========================================
 (() => {
     "use strict";
@@ -64,7 +65,7 @@
         function actualizarCabecera() {
             const activa = mensajes.lastElementChild?.classList.contains("haku-dia-sites") === true;
             panel?.classList.toggle("haiku-asistente-panel--resumen-dia", activa);
-            if (tituloPanel) tituloPanel.textContent = activa ? "Resumen del día" : tituloOriginal;
+            if (tituloPanel) tituloPanel.textContent = activa ? "Tareas de hoy" : tituloOriginal;
             if (subtituloPanel) subtituloPanel.textContent = activa ? "HAKU · ASISTENTE OPERATIVO" : subtituloOriginal;
             chipLectura.hidden = !activa;
         }
@@ -269,11 +270,54 @@
             try { const lista = api.obtener?.(fecha); return Array.isArray(lista) ? lista : []; } catch { return []; }
         }
 
+        async function consultarNotas(fecha) {
+            try {
+                const api = window.HAIKU_NOTAS_RESUMEN_SUPABASE_V1;
+                if (typeof api?.consultar !== "function") throw new Error("Lectura de notas no disponible.");
+                const items = await api.consultar(fecha);
+                if (!Array.isArray(items)) throw new Error("Respuesta de notas no disponible.");
+                return { items, error: "" };
+            } catch (error) {
+                console.warn("HAKU · Resumen del día: notas no disponibles:", error);
+                return { items: [], error: "No pude consultar las notas de esta fecha. Vuelve a pedir el resumen para reintentar." };
+            }
+        }
+
         function crearNodo(etiqueta, clase, texto) {
             const nodo = document.createElement(etiqueta);
             nodo.className = clase;
             if (texto !== undefined) nodo.textContent = texto;
             return nodo;
+        }
+
+        // Mismo trazo que los iconos del Resumen y del menú Sites, sin dependencias.
+        function crearIcono(tipo, clase = "") {
+            const trazos = {
+                ingresan: "M12 3v13m0 0-5-5m5 5 5-5M4 20h16",
+                salen: "M12 20V7m0 0-5 5m5-5 5 5M4 4h16",
+                continuan: "m3 10 9-7 9 7v10H3zM9 20v-7h6v7",
+                servicios: "M4 17h16M6 17a6 6 0 0 1 12 0M12 11V8M3 21h18",
+                pagos: "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM2 10h20M6 15h4",
+                notas: "M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM9 8h6M9 12h6M9 16h4",
+                chevron: "m8 10 4 4 4-4",
+                candado: "M7 10V7a5 5 0 0 1 10 0v3M6 10h12a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2ZM12 14v3"
+            };
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute("class", `haku-dia-sites__icono ${clase}`.trim());
+            svg.setAttribute("viewBox", "0 0 24 24");
+            svg.setAttribute("aria-hidden", "true");
+            svg.setAttribute("focusable", "false");
+            const trazo = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            trazo.setAttribute("d", trazos[tipo]);
+            svg.appendChild(trazo);
+            return svg;
+        }
+
+        function fechaEtiqueta(fecha) {
+            const partes = String(fecha || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!partes) return fechaVisible(fecha);
+            const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+            return `${partes[3]} ${meses[Number(partes[2]) - 1]} ${partes[1]}`;
         }
 
         function crearEstadistica(valor, etiqueta, clase = "") {
@@ -285,34 +329,57 @@
             return metrica;
         }
 
-        function crearItem(cabana, titular, detalle, meta = "") {
+        function crearItem(cabana, titular, detalle, meta = "", valor = "") {
             const item = crearNodo("div", "haku-dia-sites__fila");
-            const cab = crearNodo("span", "haku-dia-sites__cab", cabana ? `CAB ${cabana}` : "CAB —");
+            if (cabana) item.appendChild(crearNodo("span", "haku-dia-sites__cab", `CAB ${cabana}`));
+            else item.classList.add("haku-dia-sites__fila--sin-cabana");
             const principal = crearNodo("div", "haku-dia-sites__principal");
             principal.append(
                 crearNodo("strong", "", titular || "Sin titular"),
                 crearNodo("span", "", detalle || "")
             );
-            const final = crearNodo("span", "haku-dia-sites__meta", meta || "");
-            item.append(cab, principal, final);
+            const final = crearNodo("span", "haku-dia-sites__meta");
+            if (valor) final.appendChild(crearNodo("strong", "", valor));
+            final.appendChild(crearNodo("span", "", meta || ""));
+            item.append(principal, final);
             return item;
         }
 
-        function agregarSeccion(card, titulo, items, crearFila) {
-            if (!items.length) return;
-            const seccion = crearNodo("section", "haku-dia-sites__seccion");
-            const cabecera = crearNodo("h4", "haku-dia-sites__seccion-titulo");
+        function agregarSeccion(card, { titulo, icono, items, crearFila, vacio, error }) {
+            const seccion = crearNodo("details", "haku-dia-sites__seccion");
+            const cabecera = crearNodo("summary", "haku-dia-sites__seccion-titulo");
             cabecera.append(
-                crearNodo("span", "", titulo),
-                crearNodo("span", "", String(items.length))
+                crearIcono(icono),
+                crearNodo("span", "haku-dia-sites__seccion-nombre", titulo),
+                crearNodo("span", "haku-dia-sites__seccion-contador", error ? "—" : String(items.length)),
+                crearIcono("chevron", "haku-dia-sites__chevron")
             );
             const lista = crearNodo("div", "haku-dia-sites__lista");
             items.forEach(item => lista.appendChild(crearFila(item)));
+            if (error || !items.length) lista.appendChild(crearNodo("p", "haku-dia-sites__vacio", error || vacio));
             seccion.append(cabecera, lista);
             card.appendChild(seccion);
         }
 
-        function renderizar(fecha, operacion, servicios, pagos, mensajeUsuario) {
+        function renderizar(fecha, operacion, servicios, pagos, notas, mensajeUsuario) {
+            const filaOperacion = item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado);
+            const categorias = [
+                { titulo: "Ingresan", icono: "ingresan", items: operacion.ingresan, crearFila: filaOperacion, vacio: "No hay ingresos para esta fecha." },
+                { titulo: "Salen", icono: "salen", items: operacion.salen, crearFila: filaOperacion, vacio: "No hay salidas para esta fecha." },
+                { titulo: "Continúan", icono: "continuan", items: operacion.continuan, crearFila: filaOperacion, vacio: "No hay estadías que continúen para esta fecha." },
+                { titulo: "Servicios", icono: "servicios", items: servicios, vacio: "No hay servicios para esta fecha.", crearFila: servicio => {
+                    const detalle = servicio?.nombre || "Servicio";
+                    const estado = servicio?.estadoServicio === "realizado" ? "Realizado" : "Pendiente";
+                    return crearItem(servicio?.numeroCabana, servicio?.titular, detalle, servicio?.cortesia ? `${estado} · Cortesía` : estado, servicio?.hora || "Sin hora");
+                } },
+                { titulo: "Pagos", icono: "pagos", items: pagos, vacio: "No hay pagos pendientes para esta fecha.",
+                    crearFila: pago => crearItem(pago?.numeroCabana, pago?.titular, pago?.titulo || "Pago pendiente", moneda(pago?.monto)) },
+                { titulo: "Notas de hoy", icono: "notas", items: notas.items, error: notas.error, vacio: "No hay notas operativas para esta fecha.", crearFila: nota => {
+                    const fila = crearItem(nota.cabana, "Nota operativa", nota.texto, "Operativa");
+                    fila.classList.add("haku-dia-sites__fila--nota");
+                    return fila;
+                } }
+            ];
             const vista = crearNodo("article", "haiku-asistente-preview haku-dia-sites");
             if (mensajeUsuario) {
                 mensajeUsuario.classList.add("haku-dia-sites__mensaje-usuario");
@@ -323,45 +390,40 @@
             const head = crearNodo("header", "haku-dia-sites__tarjeta-head");
             const titulo = crearNodo("div", "haku-dia-sites__tarjeta-titulos");
             titulo.append(
-                crearNodo("span", "", "RESUMEN OPERATIVO · SOLO LECTURA"),
-                crearNodo("h3", "", "Resumen del día")
+                crearNodo("span", "", "RESUMEN OPERATIVO"),
+                crearNodo("h3", "", "Tareas de hoy")
             );
-            head.append(titulo, crearNodo("span", "haku-dia-sites__fecha", fechaVisible(fecha)));
+            head.append(
+                titulo, crearNodo("span", "haku-dia-sites__fecha", fechaEtiqueta(fecha)),
+                crearNodo("p", "haku-dia-sites__descripcion", "Tu operación del día, ordenada por categoría.")
+            );
             card.appendChild(head);
 
             const metricas = crearNodo("div", "haku-dia-sites__metricas");
-            metricas.append(
-                crearEstadistica(operacion.ingresan.length, "Ingresan"),
-                crearEstadistica(operacion.salen.length, "Salen"),
-                crearEstadistica(operacion.continuan.length, "Continúan"),
-                crearEstadistica(servicios.length, "Servicios"),
-                crearEstadistica(pagos.length, "Pagos", pagos.length ? "haku-dia-sites__metrica--pagos" : "")
-            );
+            categorias.forEach(categoria => metricas.appendChild(crearEstadistica(
+                categoria.error ? "—" : categoria.items.length, categoria.titulo,
+                categoria.titulo === "Pagos" && pagos.length ? "haku-dia-sites__metrica--pagos" : ""
+            )));
             card.appendChild(metricas);
+            card.appendChild(crearNodo("p", "haku-dia-sites__ayuda", "Despliega una categoría para ver el detalle."));
 
-            const todoVacio = !operacion.ingresan.length && !operacion.salen.length && !operacion.continuan.length && !servicios.length && !pagos.length;
+            const todoVacio = categorias.every(categoria => !categoria.error && !categoria.items.length);
             if (todoVacio) card.appendChild(crearNodo("p", "haku-dia-sites__vacio", "No encontré movimientos operativos para esta fecha."));
-            agregarSeccion(card, "Ingresan", operacion.ingresan, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
-            agregarSeccion(card, "Salen", operacion.salen, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
-            agregarSeccion(card, "Continúan", operacion.continuan, item => crearItem(item.numeroCabana, item.titular, item.meta, item.estado));
-            agregarSeccion(card, "Servicios", servicios, servicio => {
-                const detalle = [servicio?.hora || "Sin hora", servicio?.nombre || "Servicio"].join(" · ");
-                const estado = servicio?.estadoServicio === "realizado" ? "Realizado" : "Pendiente";
-                return crearItem(servicio?.numeroCabana, servicio?.titular, detalle, servicio?.cortesia ? `${estado} · Cortesía` : estado);
-            });
-            agregarSeccion(card, "Pagos pendientes", pagos, pago => crearItem(pago?.numeroCabana, pago?.titular, pago?.titulo || "Pago pendiente", moneda(pago?.monto)));
+            categorias.forEach(categoria => agregarSeccion(card, categoria));
 
             if (pagos.length) {
                 const totalPendiente = pagos.reduce((suma, pago) => suma + Number(pago?.monto || 0), 0);
                 const alerta = crearNodo("div", "haku-dia-sites__alerta");
                 alerta.append(
-                    crearNodo("span", "haku-dia-sites__alerta-icono", "▣"),
-                    crearNodo("span", "", `Hay ${pagos.length} ${pagos.length === 1 ? "pago pendiente" : "pagos pendientes"} por un total operativo de ${moneda(totalPendiente)}.`)
+                    crearIcono("pagos", "haku-dia-sites__alerta-icono"),
+                    crearNodo("span", "", `${pagos.length} ${pagos.length === 1 ? "pago pendiente" : "pagos pendientes"} · ${moneda(totalPendiente)} CLP`)
                 );
                 card.appendChild(alerta);
             }
 
-            card.appendChild(crearNodo("p", "haku-dia-sites__pie", "Datos leídos desde Proyecto H / Supabase · esta consulta no modificó ninguna reserva, pago ni servicio."));
+            const pie = crearNodo("p", "haku-dia-sites__pie");
+            pie.append(crearIcono("candado"), crearNodo("span", "", "Consulta de solo lectura. No modifica reservas, pagos, servicios ni notas."));
+            card.appendChild(pie);
             vista.appendChild(card);
             mensajes.appendChild(vista);
             actualizarCabecera();
@@ -377,8 +439,8 @@
             ocupado = true;
             const espera = agregarMensaje("asistente", `Preparando el resumen operativo del ${fechaVisible(fecha)}…`);
             try {
-                const [filas, servicios, pagos] = await Promise.all([consultarOperacion(fecha), consultarServicios(fecha), consultarPagos(fecha)]);
-                espera.remove(); renderizar(fecha, separarOperacion(filas), servicios, pagos, mensajeUsuario);
+                const [filas, servicios, pagos, notas] = await Promise.all([consultarOperacion(fecha), consultarServicios(fecha), consultarPagos(fecha), consultarNotas(fecha)]);
+                espera.remove(); renderizar(fecha, separarOperacion(filas), servicios, pagos, notas, mensajeUsuario);
             } catch (error) {
                 console.error("HAKU · Resumen operativo del día:", error);
                 espera.textContent = error?.message || "No pude preparar el resumen operativo de esa fecha.";

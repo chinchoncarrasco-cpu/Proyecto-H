@@ -217,6 +217,31 @@
         };
     }
 
+    function notasLocalesDesdeFilas(filas, estadias) {
+        const porId = new Map(estadias.map(estadia => [String(estadia.id), estadia]));
+        const porReserva = new Map();
+        estadias.forEach(estadia => {
+            const id = String(estadia.reserva_id || "");
+            if (!porReserva.has(id)) porReserva.set(id, []);
+            porReserva.get(id).push(estadia);
+        });
+        const contexto = { porId, porReserva };
+        return filas.map(fila => notaLocalDesdeFila(fila, contexto))
+            .filter(nota => nota.cabana && nota.texto);
+    }
+
+    // Lectura aislada para el asistente: no migra notas ni publica en el Resumen.
+    async function consultarDia(fecha) {
+        const dia = String(fecha || "");
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+            throw new Error("La consulta de notas requiere una fecha YYYY-MM-DD.");
+        }
+        await cargarCabanas();
+        const filas = await consultarNotas(dia);
+        const estadias = await cargarEstadiasDeNotas(filas, false);
+        return notasLocalesDesdeFilas(filas, estadias);
+    }
+
     async function migrarNotasLocales(fecha, existentes) {
         const dia = datosDia(fecha);
         const locales = Array.isArray(dia?.notasOperativas)
@@ -477,7 +502,8 @@
     window.HAIKU_NOTAS_RESUMEN_SUPABASE_V1 = Object.freeze({
         guardar: guardarNota,
         eliminar: eliminarNota,
-        refrescar: cargarFecha
+        refrescar: cargarFecha,
+        consultar: consultarDia
     });
 
     window.HAIKU_RESUMEN_REFRESH_V1?.registrar("notas", {
@@ -491,16 +517,7 @@
                 filas = await consultarNotas(fecha);
             }
             const estadias = await cargarEstadiasDeNotas(filas, false);
-            const porId = new Map(estadias.map(estadia => [String(estadia.id), estadia]));
-            const porReserva = new Map();
-            estadias.forEach(estadia => {
-                const id = String(estadia.reserva_id || "");
-                if (!porReserva.has(id)) porReserva.set(id, []);
-                porReserva.get(id).push(estadia);
-            });
-            const contexto = { porId, porReserva };
-            return filas.map(fila => notaLocalDesdeFila(fila, contexto))
-                .filter(nota => nota.cabana && nota.texto);
+            return notasLocalesDesdeFilas(filas, estadias);
         },
         publicar: snapshot => {
             if (!snapshot.datos.notas) return;
