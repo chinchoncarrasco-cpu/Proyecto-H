@@ -2341,10 +2341,10 @@
 
     const claveDecisionPago = id => 'resolucion-pago:' + id;
     const revisionesPagoManual = new WeakMap();
-    function invalidarPagoManual(decisiones, aprobados, id, generacion) {
+    function invalidarPagoManual(decisiones, aprobados, id, generacion, motivo = null) {
         decisiones.delete(claveDecisionPago(id)); aprobados.delete(id);
         if (!revisionesPagoManual.has(decisiones)) revisionesPagoManual.set(decisiones,new Map());
-        revisionesPagoManual.get(decisiones).set(id,generacion);
+        revisionesPagoManual.get(decisiones).set(id,{generacion,motivo});
     }
     const uuidPagoManual = valor => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(valor || ''));
     const capacidadManualPago = (capacidad, apps) => capacidad?.disponible === true &&
@@ -2635,6 +2635,29 @@
             efectivo:cargosEfectivo.length || aplicacionesEfectivo.length ? {disponible:efectivo?.disponible === true,
                 cargos:cargosEfectivo,aplicaciones:aplicacionesEfectivo} : null}));
     }
+    function firmaDestinoRevalidado(movimiento, comparacion, destinoActual = null) {
+        if (!movimiento) return null;
+        const resultado = Array.from(comparacion || []).find(item =>
+            claveReserva(item.libro) === claveReserva(movimiento.reserva));
+        const financiero = movimiento.destinoFinanciero || null;
+        // El payload reducido sólo contiene cargo_id/monto. La concurrencia
+        // necesita saldo y aplicado reales, incluso si el ID no cambió.
+        const aplicaciones = financiero?.aplicaciones || financiero?.aplicaciones_payload || [];
+        const cargos = new Map((comparacion?.snapshot?.finanzas?.cargos || []).map(c => [c.cargo_id,c]));
+        const numero = valor => valor == null ? null : Number(valor);
+        return JSON.stringify({
+            reserva_id:destinoActual?.reserva_id || movimiento.reserva_sistema_id || resultado?.sistema?.reserva_id || null,
+            estadia_id:resultado?.sistema?.id || null,
+            estado:financiero?.estado || null,
+            aplicaciones:aplicaciones.map(aplicacion => {
+                const cargoId = aplicacion.cargo_id || aplicacion.cargo?.cargo_id || null;
+                const cargo = cargos.get(cargoId) || aplicacion.cargo;
+                return [cargoId,numero(aplicacion.monto),
+                    numero(cargo?.saldo_cargo ?? aplicacion.saldo_esperado),
+                    numero(cargo?.aplicado_neto ?? aplicacion.aplicado_esperado)];
+            }).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+        });
+    }
     function propuestaManualPago(item, comp, generacion) {
         if (!D || !Number.isSafeInteger(generacion) || root.haikuTienePermiso?.('pagos.registrar') !== true ||
             !['dudosos','pagos'].includes(item.categoria) || item.distribucionManual || item.pagoSistema) return null;
@@ -2660,7 +2683,9 @@
             return s.reserva_id === estadia.reserva_id && !/cancelad|no_show/.test(s.estado_servicio || '') &&
                 (canon === a.concepto_canon || a.concepto_canon === 'tinaja' && ['tinaja_tonel','tinaja_jacuzzi'].includes(canon));
         }))) return null;
-        if (item.motivos.some(m => /identificador repetido|Primero resuelve|no pertenece al bloque|cambió el destino|no cumple el contrato|todavía no|no está disponible/i.test(m))) return null;
+        // Un cambio externo bloquea preparación, pero puede admitir una nueva
+        // revisión explícita si el destino actual supera todas las guardas.
+        if (item.motivos.some(m => /identificador repetido|Primero resuelve|no pertenece al bloque|no cumple el contrato|todavía no|no está disponible/i.test(m))) return null;
         return { tipo:p.transaccion_distribuida && !item.decisionPagoManual?.distribucionConfirmada ? 'distribucion_comprobante' :
             apps.some(a => a.estado === 'sin_destino') ? 'crear_servicio_faltante' :
             p.transaccion_distribuida ? 'distribucion_comprobante' : 'asociacion_pago',
@@ -2688,6 +2713,8 @@
         if (propuesta.tipo === CONFIRMACION_AIRBNB)
             return completarConfirmacionAirbnb(result,decisiones,aprobados,plan,item,accion,cliente);
         const vigente = () => {
+            if (accion.vigente?.() === false) throw Object.assign(
+                Error('Revisión cancelada; no se guardó la decisión manual.'),{haikuRevisionCancelada:true});
             if (propuesta.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion ||
                 root.haikuTienePermiso?.('pagos.registrar') !== true) throw Error('El Libro o el permiso cambió; vuelve a revisar.');
         };
@@ -2695,6 +2722,7 @@
         const {data:sesion,error:sesionError} = await cliente.auth.getSession();
         if (sesionError || !sesion?.session?.user?.id) throw Error('Debe iniciar sesión.');
         if (propuesta.usuario && propuesta.usuario !== sesion.session.user.id) throw Error('La sesión cambió; vuelve a revisar la decisión manual.');
+        vigente();
         const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente);
         vigente();
         const nuevo = actual.items.find(i => i.id === itemId), comp = contextoVisualPlanes.get(actual);
@@ -2704,6 +2732,39 @@
             throw Error('Proyecto H no anuncia todas las capacidades de la resolución manual; vuelve a revisar.');
         }
         const distribucionConfirmada = propuesta.distribucionConfirmada === true;
+        const cancelar = async (conservarAnterior = false) => {
+            if (!conservarAnterior) invalidarPagoManual(decisiones,aprobados,itemId,propuesta.generacion,
+                'La revisión manual se canceló; revisa nuevamente este pago.');
+            // Un RPC confirmado no se deshace: releer su estado real sin adoptar
+            // una decisión nueva ni volver a abrir el panel cancelado.
+            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente);
+            siguiente.revisionManualCancelada = true;
+            return siguiente;
+        };
+        const guardarDecision = async (comparacion, x, datos, aprobar) => {
+            vigente();
+            const clave = claveDecisionPago(itemId), previa = decisiones.get(clave), aprobadoAntes = aprobados.has(itemId);
+            const decision = { ...datos, itemId, fuente:source(x.pago.origen), reservaLibroId:x.reserva.id,
+                firma:firmaManualPago(comparacion,x), firmaDestino:firmaDestinoRevalidado(x,comparacion),
+                generacion:propuesta.generacion, usuario:sesion.session.user.id, reservaId:propuesta.reservaId };
+            decisiones.set(clave,decision);
+            if (aprobar) aprobados.add(itemId);
+            revisionesPagoManual.get(decisiones)?.delete(itemId);
+            try {
+                // La siguiente lectura compara este item contra el snapshot
+                // posterior validado; las referencias de los demás no cambian.
+                const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente);
+                vigente();
+                return siguiente;
+            } catch (error) {
+                if (decisiones.get(clave) === decision) {
+                    if (previa) decisiones.set(clave,previa); else decisiones.delete(clave);
+                    if (aprobadoAntes) aprobados.add(itemId); else aprobados.delete(itemId);
+                }
+                if (error.haikuRevisionCancelada) return cancelar(Boolean(previa));
+                throw error;
+            }
+        };
         if (accion.tipo === 'crear_servicio_faltante') {
             if (propuesta.tipo !== accion.tipo || root.haikuTienePermiso?.('servicios.crear') !== true ||
                 !actual.capacidadServicios?.servicio_faltante_manual_v1) throw Error('No está disponible la creación protegida del servicio faltante.');
@@ -2751,7 +2812,7 @@
                 throw Error('Proyecto H cambió mientras resolvías el pago. Vuelve a revisar.');
             }
             let servicioId;
-            {
+            try {
                 const marca = `[HAKU-LIBRO-SERVICIO:pago_manual:${normalizarId(item.pagoLibro.codigo_autorizacion) ||
                     normalizarId(item.pagoLibro.folio)+':'+normalizarId(item.pagoLibro.bovtar)}:${app.concepto_canon}:${app.indice}]`;
                 vigente();
@@ -2769,30 +2830,30 @@
                 if (medio) medio.servicioCreado = {id:servicioId,codigo:c.codigo,fecha,total:app.monto,
                     cantidad,personas,precio,hora:hora ? hora+':00' : ''};
                 vigente();
+                // Crear un servicio no aprueba ni registra un pago. El motor consulta
+                // de nuevo servicio, cargo activo y saldo, y reconstruye el plan.
+                const posterior = await prepararIncorporacion(result,decisiones,aprobados,cliente);
+                vigente();
+                const compPosterior = contextoVisualPlanes.get(posterior);
+                const movimientoPosterior = compPosterior.pagosDetalle.find(x => idMovimientoIncorporacion(x) === itemId);
+                const servicioPosterior = compPosterior.snapshot.finanzas?.servicios.find(s => s.id === servicioId);
+                if (!movimientoPosterior || !servicioPosterior || servicioPosterior.reserva_id !== propuesta.reservaId ||
+                    servicioPosterior.estadia_id !== propuesta.estadiaId || servicioPosterior.catalogo_servicios?.codigo !== c.codigo ||
+                    servicioPosterior.fecha_servicio !== fecha || servicioPosterior.tipo_cobro !== 'normal' ||
+                    Number(servicioPosterior.cantidad) !== cantidad || Number(servicioPosterior.personas) !== personas ||
+                    String(servicioPosterior.hora_inicio || '').replace(/^(\d{2}:\d{2})$/,'$1:00') !== (hora ? hora+':00' : '') ||
+                    Number(servicioPosterior.total) !== app.monto ||
+                    Number(servicioPosterior.precio_unitario_aplicado) !== precio || Number(servicioPosterior.monto_adicional) !== 0 ||
+                    firmaManualPago(compPosterior,movimientoPosterior,servicioId) !== propuesta.firma) {
+                    invalidarPagoManual(decisiones,aprobados,itemId,propuesta.generacion);
+                    return prepararIncorporacion(result,decisiones,aprobados,cliente);
+                }
+                return await guardarDecision(compPosterior,movimientoPosterior,
+                    {tipo:accion.tipo,servicioId,distribucionConfirmada},distribucionConfirmada);
+            } catch (error) {
+                if (error.haikuRevisionCancelada && servicioId) return cancelar();
+                throw error;
             }
-            // Crear un servicio no aprueba ni registra un pago. El motor consulta
-            // de nuevo servicio, cargo activo y saldo, y reconstruye el plan.
-            const posterior = await prepararIncorporacion(result,decisiones,aprobados,cliente);
-            const compPosterior = contextoVisualPlanes.get(posterior);
-            const movimientoPosterior = compPosterior.pagosDetalle.find(x => idMovimientoIncorporacion(x) === itemId);
-            const servicioPosterior = compPosterior.snapshot.finanzas?.servicios.find(s => s.id === servicioId);
-            if (!movimientoPosterior || !servicioPosterior || servicioPosterior.reserva_id !== propuesta.reservaId ||
-                servicioPosterior.estadia_id !== propuesta.estadiaId || servicioPosterior.catalogo_servicios?.codigo !== c.codigo ||
-                servicioPosterior.fecha_servicio !== fecha || servicioPosterior.tipo_cobro !== 'normal' ||
-                Number(servicioPosterior.cantidad) !== cantidad || Number(servicioPosterior.personas) !== personas ||
-                String(servicioPosterior.hora_inicio || '').replace(/^(\d{2}:\d{2})$/,'$1:00') !== (hora ? hora+':00' : '') ||
-                Number(servicioPosterior.total) !== app.monto ||
-                Number(servicioPosterior.precio_unitario_aplicado) !== precio || Number(servicioPosterior.monto_adicional) !== 0 ||
-                firmaManualPago(compPosterior,movimientoPosterior,servicioId) !== propuesta.firma) {
-                invalidarPagoManual(decisiones,aprobados,itemId,propuesta.generacion);
-                return prepararIncorporacion(result,decisiones,aprobados,cliente);
-            }
-            decisiones.set(claveDecisionPago(itemId),{tipo:accion.tipo,
-                firma:firmaManualPago(compPosterior,movimientoPosterior), generacion:propuesta.generacion,
-                usuario:sesion.session.user.id, reservaId:propuesta.reservaId, servicioId, distribucionConfirmada});
-            if (distribucionConfirmada) aprobados.add(itemId);
-            revisionesPagoManual.get(decisiones)?.delete(itemId);
-            return prepararIncorporacion(result,decisiones,aprobados,cliente);
         }
         if (!['distribucion_comprobante','asociacion_pago'].includes(accion.tipo) ||
             propuesta.tipo !== accion.tipo ||
@@ -2803,12 +2864,8 @@
             invalidarPagoManual(decisiones,aprobados,itemId,propuesta.generacion);
             throw Error('Proyecto H cambió o la distribución no es verificable. Vuelve a revisar.');
         }
-        decisiones.set(claveDecisionPago(itemId),{tipo:accion.tipo, firma:propuesta.firma,
-            generacion:propuesta.generacion, usuario:sesion.session.user.id, reservaId:propuesta.reservaId,
-            distribucionConfirmada:accion.tipo === 'distribucion_comprobante'});
-        revisionesPagoManual.get(decisiones)?.delete(itemId);
-        aprobados.add(itemId);
-        return prepararIncorporacion(result,decisiones,aprobados,cliente);
+        return guardarDecision(comp,movimiento,
+            {tipo:accion.tipo,distribucionConfirmada:accion.tipo === 'distribucion_comprobante'},true);
     }
 
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null) {
@@ -2991,23 +3048,6 @@
             huellaFuentePago(movimiento?.pago, {cabana:movimiento?.reserva?.cabana})].join('|');
         const movimientosAnteriores = new Map((anterior?.pagosDetalle || [])
             .map(movimiento => [claveMovimientoRevalidado(movimiento), movimiento]));
-        const firmaDestinoRevalidado = (movimiento, comparacion, destinoActual = null) => {
-            if (!movimiento) return null;
-            const resultado = Array.from(comparacion || []).find(item =>
-                claveReserva(item.libro) === claveReserva(movimiento.reserva));
-            const financiero = movimiento.destinoFinanciero || null;
-            const aplicaciones = financiero?.aplicaciones_payload || financiero?.aplicaciones || [];
-            return JSON.stringify({
-                reserva_id:destinoActual?.reserva_id || movimiento.reserva_sistema_id || resultado?.sistema?.reserva_id || null,
-                estado:financiero?.estado || null,
-                aplicaciones:aplicaciones.map(aplicacion => [
-                    aplicacion.cargo_id || aplicacion.cargo?.cargo_id || null,
-                    Number(aplicacion.monto) || 0,
-                    Number(aplicacion.saldo_esperado ?? aplicacion.cargo?.saldo_cargo) || 0,
-                    Number(aplicacion.aplicado_esperado ?? aplicacion.cargo?.aplicado_neto) || 0
-                ]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
-            });
-        };
         for (const x of comp.pagosDetalle || []) {
             const p = x.pago, r = x.reserva, destino = destinosFinancieros.get(claveReserva(r));
             const id = idMovimientoIncorporacion(x);
@@ -3164,8 +3204,10 @@
             if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');
             if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             const movimientoAnterior = movimientosAnteriores.get(claveMovimientoRevalidado(x));
-            if (nuevoSeguroCanonico && movimientoAnterior?.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO &&
-                firmaDestinoRevalidado(movimientoAnterior, anterior) !== firmaDestinoRevalidado(x, comp, destino)) {
+            const firmaEsperada = x.decisionPagoManual?.firmaDestino ||
+                (movimientoAnterior?.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO ?
+                    firmaDestinoRevalidado(movimientoAnterior,anterior) : null);
+            if (nuevoSeguroCanonico && firmaEsperada && firmaEsperada !== firmaDestinoRevalidado(x,comp,destino)) {
                 motivos.push('Proyecto H cambió el destino financiero, cargo o saldo desde la comparación; vuelve a revisar este pago.');
             }
             const payloadServicio = servicio4C ?
@@ -3214,8 +3256,8 @@
             if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
             item.decisionManualInvalidada = x.decisionManualInvalidada === true;
             if (item.decisionManualInvalidada) {
-                item.motivos.push('Proyecto H cambió; la aprobación manual anterior quedó invalidada. Revisa nuevamente.');
-                item.categoria = 'dudosos'; item.seleccionado = false;
+                item.motivos.push(x.motivoDecisionManualInvalidada || 'Proyecto H cambió; la aprobación manual anterior quedó invalidada. Revisa nuevamente.');
+                item.categoria = 'dudosos'; item.seleccionado = false; item.aprobable = false;
             }
         }
         consolidarActualizacionesReserva(plan);
@@ -3285,7 +3327,7 @@
             ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion, cliente) : result.reservas;
         const {reservas,comparacion} = await compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
-        for (const decision of [...decisiones.values()].filter(d => d?.tipo === CONFIRMACION_AIRBNB)) {
+        for (const decision of [...decisiones.values()].filter(d => d?.itemId)) {
             const x = comparacion.pagosDetalle?.find(x => source(x.pago.origen) === decision.fuente && x.reserva.id === decision.reservaLibroId);
             if (!x || idMovimientoIncorporacion(x) !== decision.itemId) {
                 invalidarPagoManual(decisiones,aprobados,decision.itemId,generacion);
@@ -3299,7 +3341,11 @@
                 decisiones.delete(claveDecisionPago(id)); aprobados.delete(id); revision?.delete(id);
                 continue;
             }
-            if (revision?.has(id) && revision.get(id) === generacion) x.decisionManualInvalidada = true;
+            const marcaRevision = revision?.get(id);
+            if (marcaRevision && marcaRevision.generacion === generacion) {
+                x.decisionManualInvalidada = true;
+                x.motivoDecisionManualInvalidada = marcaRevision.motivo;
+            }
             if (!decision) continue;
             const {data,error} = await cliente.auth.getSession();
             if (decision.tipo === CONFIRMACION_AIRBNB) {
@@ -3314,7 +3360,8 @@
                 continue;
             }
             if (error || decision.generacion !== generacion || decision.usuario !== data?.session?.user?.id ||
-                decision.reservaId !== x.reserva_sistema_id || decision.firma !== firmaManualPago(comparacion,x)) {
+                decision.reservaId !== x.reserva_sistema_id || decision.firma !== firmaManualPago(comparacion,x) ||
+                decision.firmaDestino !== firmaDestinoRevalidado(x,comparacion)) {
                 invalidarPagoManual(decisiones,aprobados,id,generacion); x.decisionManualInvalidada = true;
             } else x.decisionPagoManual = decision;
         }
@@ -4084,6 +4131,7 @@
         incorporar=planActual=>confirmarIncorporacion(result,decisiones,aprobados,planActual);
         aprobar.manualPago = async (planActual,id,accion) => {
             const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
+            if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
             continuarVistaManualPago(planActual,nuevo,id,accion);
             renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
         };
@@ -4716,6 +4764,7 @@
                 };
                 aprobar.manualPago = async (planActual,id,accion) => {
                     const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
+                    if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
                     if (identidadActualizada) nuevo.etapaAnteriorCompletada = true;
                     continuarVistaManualPago(planActual,nuevo,id,accion);
                     renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
@@ -4999,7 +5048,7 @@
     const revisionesVisualesManualPago = new WeakMap();
 
     function continuarVistaManualPago(anterior, nuevo, id, accion) {
-        if (accion.tipo === DEFINIR_MEDIO_PAGO) return;
+        if (accion.tipo === DEFINIR_MEDIO_PAGO || nuevo.revisionManualCancelada) return;
         const item = nuevo.items.find(i => i.id === id);
         if (!item?.manualPago) return;
         const previa = revisionesVisualesManualPago.get(anterior);
@@ -5228,6 +5277,7 @@
         if (item.manualPago.tipo === DEFINIR_MEDIO_PAGO) return panelDefinirMedioPago(item,plan,aprobar);
         if (item.manualPago.tipo === CONFIRMACION_AIRBNB) return panelConfirmacionAirbnb(item,plan,aprobar);
         const p = item.manualPago, bloque = elemento('div','haiku-incorporacion-manual-pago');
+        let versionRevision = 0;
         let revision = revisionesVisualesManualPago.get(plan);
         if (revision?.itemId !== item.id) revision = {itemId:item.id,activo:false,catalogo:[]};
         const confirmado = revision.paso === 'aprobado';
@@ -5243,6 +5293,7 @@
             b.type = 'button'; if (accion) b.addEventListener('click',accion); return b;
         };
         const cerrarPanel = () => {
+            versionRevision++;
             revision.activo = false; panel.hidden = true; abrir.setAttribute('aria-expanded','false');
             for (const input of panel.querySelectorAll('input')) if (input.type === 'checkbox') input.checked = false;
         };
@@ -5284,6 +5335,7 @@
             } catch (e) { aviso.textContent = e.message; }
         };
         abrir.addEventListener('click',async () => {
+            versionRevision++;
             revision.activo = !revision.activo; revisionesVisualesManualPago.set(plan,revision);
             panel.hidden = !revision.activo; abrir.setAttribute('aria-expanded',String(revision.activo));
             if (revision.activo) await cargarCatalogo();
@@ -5422,8 +5474,12 @@
             if (guardar.disabled) return;
             guardandoRevision = true; guardar.disabled = true; aviso.textContent = 'Revalidando Proyecto H…'; guardar.setAttribute('aria-busy','true');
             revisionesVisualesManualPago.set(plan,revision);
-            try { await aprobar.manualPago(plan,item.id,leer()); }
-            catch (e) { aviso.textContent = e.message; guardandoRevision = false; guardar.disabled = false; guardar.removeAttribute?.('aria-busy'); }
+            const version = versionRevision;
+            try { await aprobar.manualPago(plan,item.id,{...leer(),
+                vigente:() => revision.activo && versionRevision === version && bloque.isConnected !== false,
+                vistaVigente:() => bloque.isConnected !== false}); }
+            catch (e) { if (versionRevision === version && bloque.isConnected !== false) aviso.textContent = e.message; }
+            finally { guardandoRevision = false; guardar.disabled = false; guardar.removeAttribute?.('aria-busy'); }
         });
         pie.append(totalPie,guardar,boton(servicioFaltante || distribucion ? 'Cancelar revisión' : 'Volver a editar','haiku-manual-secundario',cerrarPanel));
         contenido.append(aviso); panel.append(contenido,pie); bloque.append(abrir,panel);

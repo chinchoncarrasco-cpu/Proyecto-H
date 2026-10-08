@@ -60,6 +60,15 @@ const server = http.createServer((request, response) => {
             window.HAIKU_INSPECTOR_V1 = { abrirReserva: (...args) => window.__opened.push(args) };
             window.__start = async options => {
                 const h = entorno(options); window.__h = h; window.haikuSupabase = h.db;
+                if (options?.representativo) {
+                    const p = h.r.pagos[0], e = h.tablas.reserva_estadias[0];
+                    h.r.titular = p.titular = e.reservas.titular_nombre = 'Caso representativo CAB 7';
+                    h.r.cabana = p.cabana = e.cabanas.numero = 7;
+                    Object.assign(p, { monto: 40000, medio_pago: 'tarjeta_credito', folio: '482356',
+                        codigo_autorizacion: '000346', texto_original: 'Caso representativo CAB 7 // Tinaja // $40.000 // Folio 482356 // CodAut 000346' });
+                }
+                h.result.comparacion = await Q.compararSistema(h.result.reservas, h.db, h.result.q);
+                window.__comparacionInicial = h.result.comparacion;
                 window.__actions = 0; window.__gate = false; window.__continue = null;
                 const aprobar = async () => { throw Error('Ruta de aprobación inesperada'); };
                 const render = plan => {
@@ -68,6 +77,7 @@ const server = http.createServer((request, response) => {
                     document.getElementById('haiku-asistente-mensajes').replaceChildren(out);
                     Q.renderizarIncorporacion(out, plan, () => {}, aprobar, () => { window.__incorporar++; });
                 };
+                window.__render = render;
                 aprobar.manualPago = async (plan, id, action) => {
                     window.__actions++;
                     if (window.__gate) await new Promise(resolve => { window.__continue = resolve; });
@@ -173,6 +183,27 @@ const server = http.createServer((request, response) => {
         await panel.getByRole('button', { name: 'Volver a revisión', exact: true }).click();
         assert.equal(await page.locator('.haiku-incorporacion-item--pagos').count(), 1);
 
+        await start({ distribuido: false, conServicios: false, representativo: true });
+        assert.equal(await page.evaluate(() => window.__comparacionInicial.pagosDetalle[0].destinoFinanciero.estado), 'revision');
+        await fill(0, 'tinajaTonel', 1, 40000, 2);
+        await panel.getByRole('button', { name: 'Guardar servicio y continuar', exact: true }).click();
+        await page.waitForFunction(() => window.__plan.items.some(i => i.categoria === 'pagos' && i.pagoLibro?.monto === 40000));
+        const representativo = await page.evaluate(() => {
+            const i = window.__plan.items.find(i => i.pagoLibro);
+            return { categoria: i.categoria, motivos: i.motivos, firma: JSON.parse(i.decisionPagoManual.firmaDestino),
+                inicialIntacta: window.__h.result.comparacion === window.__comparacionInicial, pagos: window.__h.tablas.pagos.length };
+        });
+        assert.equal(representativo.categoria, 'pagos'); assert.deepEqual(representativo.motivos, []);
+        assert.deepEqual(representativo.firma.aplicaciones, [['00000000-0000-4000-8000-000000000043', 40000, 40000, 0]]);
+        assert.equal(representativo.inicialIntacta, true); assert.equal(representativo.pagos, 0);
+        await page.evaluate(async () => {
+            window.__h.tablas.vista_estado_cargos[0].saldo_cargo += 1;
+            window.__render(await window.__h.preparar());
+        });
+        assert.equal(await page.locator('.haiku-incorporacion-item--pagos').count(), 0);
+        await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+        assert.equal(await page.getByRole('button', { name: 'Aprobación manual', exact: true }).count(), 1);
+
         await page.setViewportSize({ width: 390, height: 844 });
         await start({ conServicios: false });
         await panel.getByRole('button', { name: 'Confirmar distribución', exact: true }).click();
@@ -201,6 +232,6 @@ const server = http.createServer((request, response) => {
         assert.match(await panel.innerText(), /13\.000 CLP/);
         assert.equal(await page.evaluate(() => window.__incorporar), 0, 'no se incorporan pagos en la prueba de UI');
         assert.deepEqual(errors, []); assert.deepEqual(external, []); assert.deepEqual(missing, []);
-        console.log('OK · aprobación manual: pasos 1/2/éxito, Ignacio, Gastón 0/3→3/3, UUID Inspector, doble clic, escritorio/móvil, SVG y cero operaciones remotas.');
+        console.log('OK · snapshot inicial: CAB 7/$40.000 preparado y revisión recuperada tras cambio de saldo; pasos 1/2/éxito, Ignacio, Gastón 0/3→3/3, UUID Inspector, doble clic, escritorio/móvil, SVG y cero operaciones remotas.');
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

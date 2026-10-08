@@ -4,7 +4,7 @@ const S = require('../../js/haiku-libro-semantica-v1.js');
 const D = require('../../js/haiku-libro-pagos-destinos-v1.js');
 class Element {
     constructor(tag) {this.tag=tag;this.children=[];this.dataset={};this.style={};this.events={};this.textContent='';}
-    append(...xs) {this.children.push(...xs);} appendChild(x) {this.append(x);} replaceChildren(...xs) {this.children=xs;}
+    append(...xs) {xs.forEach(x=>x.parentElement=this);this.children.push(...xs);} appendChild(x) {this.append(x);} replaceChildren(...xs) {this.children=[];this.append(...xs);}
     addEventListener(k,f) {this.events[k]=f;} setAttribute(k,v) {this[k]=v;} removeAttribute(k) {delete this[k];}
     querySelectorAll(s) {return this.children.flatMap(e=>[e,...e.querySelectorAll('*')]).filter(e=>s==='*'||s===e.tag||s.startsWith('.')&&(e.className||'').split(' ').includes(s.slice(1)));}
     querySelector(s) {return this.querySelectorAll(s)[0]||null;}
@@ -13,7 +13,7 @@ const api = 'Object.freeze({ interpretar, consultar, compararSistema, respuesta,
 const consultas = read('js/haiku-libro-consultas-v1.js').replace(api,api.replace(' })',', renderizarItemIncorporacion, renderizarIncorporacion, continuarVistaManualPago, resolucionManualDisponible, contextoVisualPlanes })'));
 const source = read('tests/haiku-libro-pagos-aprobacion-manual.test.cjs');
 const setup = source.slice(source.indexOf('const id ='),source.indexOf('const itemPago=plan'));
-function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='TDC',fuerte=true}={}) {
+function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='TDC',fuerte=true,conComparacion=false}={}) {
     const assert=require('node:assert/strict');
     const ctx={structuredClone,console:{info(){}},HAIKU_LIBRO_SEMANTICA:S,HAIKU_LIBRO_PAGOS_DESTINOS_V1:D,
         document:{readyState:'complete',getElementById:()=>null,createElement:t=>new Element(t),head:{appendChild(){}},querySelector:()=>null},
@@ -40,6 +40,11 @@ function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='
     p.clasificacion_financiera=ctx.HAIKU_LIBRO_LENGUAJE_NATURAL_V1.clasificarMovimientoFinanciero(p);
     h.ctx=ctx;h.Q=ctx.HAIKU_LIBRO_CONSULTAS;h.C=ctx.HAIKU_LIBRO_PAGOS_CANON_V1;
     h.item=plan=>plan.items.find(i=>i.pagoLibro);
+    h.comparar=async()=>h.result.comparacion=await h.Q.compararSistema(h.result.reservas,h.db,h.result.q);
+    h.preparar=async()=>{
+        if(conComparacion&&!h.result.comparacion)await h.comparar();
+        return h.Q.prepararIncorporacion(h.result,h.decisiones,h.aprobados,h.db);
+    };
     h.definir=(plan,medio,extra={})=>h.Q.resolverAprobacionManualPago(h.result,h.decisiones,h.aprobados,plan,h.item(plan).id,{tipo:'definir_medio_pago',medio,...extra},h.db);
     h.render=(plan,item=h.item(plan))=>{
         const aprobar=async id=>{h.aprobados.add(id);};
@@ -118,5 +123,5 @@ function agregarCasosAcumulados(h,{servicioB=true,servicioA=false,mismaReserva=f
     };
     return h;
 }
-function entornoAcumulado(opciones){return agregarCasosAcumulados(entorno(),opciones);}
+function entornoAcumulado(opciones){return agregarCasosAcumulados(entorno({conComparacion:opciones?.conComparacion}),opciones);}
 module.exports={entorno,entornoAcumulado,agregarCasosAcumulados,Element,read,consultas,setup};
