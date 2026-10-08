@@ -1181,3 +1181,40 @@
     .haku-dia-sites__fila { grid-template-columns: auto minmax(0, 1fr); }
     .haku-dia-sites__meta { grid-column: 2; text-align: left; }
 }
+/* Servicios usa la base de haiku-libro-pagos-ui-v1.css para aprobación manual. */
+.haku-libro-servicio-manual { margin: 10px 12px; min-width: 0; }
+.haku-libro-servicio-manual__motivos:empty { display: none; }
+.haku-libro-servicios__cuerpo { min-width: 0; }
+.haiku-asistente-root .haku-libro-servicios-sites .haku-libro-servicios__item--revisar {
+    padding-block: 7px; border-bottom-color: var(--sites-shell-line, #dce5e0);
+    color: var(--sites-shell-ink, #172522); overflow-wrap: anywhere;
+}
+.haku-libro-servicios__item--revisar .haku-libro-servicios__nombre {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px;
+}
+.haku-libro-servicios__item--revisar .haku-libro-servicios__nombre > strong { font-size: 11px; font-weight: 600; }
+.haiku-asistente-root .haku-libro-servicios-sites .haku-libro-servicios__nombre > .haku-libro-servicios-sites__badge {
+    height: 17px; padding: 2px 6px; font-size: 9px;
+    background: var(--sites-shell-green-soft, #e6f2eb); color: var(--sites-shell-green, #22735c);
+}
+.haku-libro-servicios__servicio { margin-top: 2px; color: var(--sites-shell-ink, #172522); font-size: 11px; font-weight: 600; line-height: 1.3; }
+.haku-libro-servicios__item--revisar .haku-libro-servicios__meta { margin-top: 1px; font-size: 9px; }
+.haku-libro-servicios__item--revisar .haku-libro-servicios__texto { margin-top: 2px; }
+.haku-libro-servicios__item--revisar .haku-libro-servicios__nota { padding-top: 4px; }
+.haku-libro-servicios__item--revisar .haku-libro-servicios-sites__motivos {
+    margin-top: 5px; padding: 4px 8px; border: 0; border-radius: 6px;
+    background: var(--sites-shell-amber-soft, #fff2df); color: var(--sites-shell-amber, #a36522);
+}
+.haku-libro-servicios__item--revisar .haku-libro-servicios__razones { margin-top: 3px; line-height: 1.35; }
+.haku-libro-servicios__acciones-item { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: 6px; min-width: 0; }
+.haku-libro-servicios__acciones-item > :is(.haiku-pago-ver-reserva, .haiku-incorporacion-manual-accion) {
+    box-sizing: border-box; flex: 0 0 auto; height: 32px; min-height: 32px; max-width: 100%; margin: 0; padding: 5px 9px;
+    border-radius: 7px; font-size: 10px; font-weight: 600; line-height: 1.25; white-space: nowrap;
+}
+.haku-libro-servicios__acciones-item > .haiku-pago-ver-reserva { border-color: var(--sites-shell-line, #dce5e0); background: #fff; }
+.haku-libro-servicios__acciones-item > .haiku-incorporacion-manual-accion {
+    margin-left: auto; background: var(--sites-shell-green, var(--rec-verde, #22735c));
+    border-color: var(--sites-shell-green, var(--rec-verde, #22735c)); color: #fff;
+}
+.haku-libro-servicios__acciones-item > button:disabled { opacity: .55; cursor: default; }
+@media (max-width: 440px) { .haku-libro-servicio-manual { margin-inline: 10px; } }
