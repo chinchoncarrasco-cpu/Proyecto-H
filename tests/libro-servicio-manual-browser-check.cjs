@@ -62,7 +62,55 @@ const server = http.createServer((req, res) => {
             await page.locator('[data-haku-accion="incorporar"]').click();
             await page.waitForFunction(() => fixtureServicios.escrituras.length === 1);
             assert.equal(await page.evaluate(() => new Set(fixtureServicios.escrituras[0].p_servicios.map(x => x.item_id)).size), 3);
-            await page.close(); console.log(`PASS servicios manual: ${viewport.width}px, A+B+C, cancelación, selección, payload único`);
+            // Javiera: el horario del existente sólo completa evidencia ausente.
+            const mostrarLate = async (horaLibro = '', sinExistente = false) => {
+                await page.evaluate(setup);
+                return page.evaluate(async ({ horaLibro, sinExistente }) => {
+                    const f = fixtureServicios, r = f.reservas[0], estadia = f.db.reserva_estadias[0];
+                    const texto = `X PAGAR LATE OUT CLP$10,000 1 HORA${horaLibro ? ' ' + horaLibro : ''}`;
+                    Object.assign(r, { fecha_checkin: '2026-10-03', fecha_checkout: '2026-10-04', texto_original: texto,
+                        servicios: HAIKU_LIBRO_SEMANTICA.servicios(texto, { origen_campo: 'notas_reserva' }) });
+                    f.reservas.splice(1);
+                    Object.assign(estadia, { fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout });
+                    if (!sinExistente) f.db.servicios.push({ id: 'late-javiera', reserva_id: estadia.reserva_id, estadia_id: estadia.id,
+                        fecha_servicio: '2026-10-04', hora_inicio: '13:00:00', hora_fin: '14:00:00', cantidad: 1,
+                        tipo_cobro: 'normal', total: 10000, estado_servicio: 'programado', personas: 0,
+                        catalogo_servicios: { codigo: 'lateCheckout', nombre: 'Late Check-out' } });
+                    const antes = JSON.stringify(f.db.servicios), out = document.createElement('div'); out.id = 'out';
+                    document.getElementById('out').replaceWith(out);
+                    const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2, resultado = await api.construir(q);
+                    api.renderizar(resultado, out, q);
+                    const item = resultado.items.find(i => i.mapa?.codigo === 'lateCheckout');
+                    return { estado: item.estado, identidad: item.identidad, payload: item.payload, hora: item.hora, hora_fin: item.hora_fin, antes };
+                }, { horaLibro, sinExistente });
+            };
+            for (const horaLibro of ['', '13:00']) {
+                const resultado = await mostrarLate(horaLibro);
+                assert.equal(resultado.estado, 'existente'); assert.equal(resultado.identidad, 'YA_EXISTE'); assert.equal(resultado.payload, null);
+                assert.equal(resultado.hora, '13:00'); assert.equal(resultado.hora_fin, '14:00');
+                const row = page.locator('.haku-libro-servicios__item--existente');
+                await row.locator('..').locator('..').evaluate(el => el.open = true);
+                assert.match(await row.innerText(), /Javiera Barrera/);
+                assert.match(await row.innerText(), /13:00/);
+                assert.match(await row.locator('..').locator('..').innerText(), /Ya existen en Proyecto H/);
+                assert.equal(await page.getByRole('button', { name: 'Aprobación manual', exact: true }).count(), 0);
+                assert.equal(await page.locator('[data-campo-manual="hora"]').count(), 0);
+                assert.equal(await page.locator('.haku-libro-servicios__item--revisar').count(), 0);
+                assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
+                assert.equal(await page.evaluate(() => JSON.stringify(fixtureServicios.db.servicios)), resultado.antes);
+            }
+            const contradictorio = await mostrarLate('12:00');
+            assert.equal(contradictorio.estado, 'revisar'); assert.equal(contradictorio.payload, null);
+            const revision = page.locator('.haku-libro-servicios__item--revisar');
+            await revision.locator('..').locator('..').evaluate(el => el.open = true);
+            assert.match(await revision.innerText(), /contradice.*horario/);
+            assert.equal(await page.evaluate(() => JSON.stringify(fixtureServicios.db.servicios)), contradictorio.antes);
+            const nuevo = await mostrarLate('', true);
+            assert.equal(nuevo.estado, 'revisar'); assert.equal(nuevo.identidad, 'NO_EXISTE'); assert.equal(nuevo.payload, null);
+            await abrir('X PAGAR LATE OUT');
+            assert.equal(await page.locator('[data-campo-manual="hora"]').inputValue(), '');
+            assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
+            await page.close(); console.log(`PASS servicios manual: ${viewport.width}px, A+B+C, cancelación, selección, payload único, Late existente y ausencia/contradicción`);
         }
         assert.deepEqual(errors, []); assert.deepEqual(externos, []);
     } finally { if (browser) await browser.close(); await new Promise(r => server.close(r)); }

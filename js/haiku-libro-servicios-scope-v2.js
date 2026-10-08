@@ -655,6 +655,56 @@
         return new Set();
     }
 
+    function decisionLateExistente(item, activos, estadiaId) {
+        // Late es único por estadía: primero resolver su identidad con evidencia
+        // parcial, sin exigir un payload completo para crear un servicio nuevo.
+        const lates = activos.filter(x => codigoExistente(x) === 'lateCheckout');
+        if (!estadiaId || lates.some(x => !x.estadia_id))
+            return { estado: 'revisar', candidatos: lates, motivo: 'Falta una estadía inequívoca para comprobar el Late Check-out existente; no se creará otro.' };
+        if (lates.length > 1)
+            return { estado: 'revisar', candidatos: lates, motivo: 'Hay más de un Late Check-out activo en la estadía; no se elige ni se crea otro.' };
+        if (!lates.length) return { estado: 'nuevo', candidatos: [], motivo: 'No existe un Late Check-out activo en la estadía.' };
+
+        const candidato = lates[0], s = item.servicio, campos = [];
+        const fechaDeclarada = fechaExplicitaServicio(s, item.reserva);
+        if (!item.fecha || candidato.fecha_servicio !== item.fecha || (fechaDeclarada && fechaDeclarada !== item.fecha)) campos.push('fecha');
+
+        const manual = item.resolucionManual && item.payload;
+        const textoHorario = textoSinFechaNumerica(s.texto_original, item.reserva);
+        const hasta = !manual && horaTexto(textoHorario, true);
+        const finTexto = horaFinTexto(textoHorario);
+        const finEstructurado = fechaDeclarada && s.hora_fin === `${fechaDeclarada.slice(8, 10)}:${fechaDeclarada.slice(5, 7)}` ? null : s.hora_fin;
+        const inicio = hasta ? (finTexto ? horaTexto(textoHorario) : null) : item.hora;
+        const fin = manual ? item.hora_fin : (hasta || finTexto || finEstructurado);
+        const segundos = valor => {
+            const m = String(valor || '').match(/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d(?:\.\d+)?))?$/);
+            return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3] || 0) : null;
+        };
+        const inicioActual = segundos(candidato.hora_inicio), finActual = segundos(candidato.hora_fin);
+        if ((inicio && (inicioActual == null || inicioActual !== segundos(inicio))) ||
+            (fin && (finActual == null || finActual !== segundos(fin)))) campos.push('horario');
+
+        // cantidad=1 puede ser un valor por defecto del parser. Sólo comparar
+        // horas/cantidad cuando el Libro las declara o fueron confirmadas.
+        const horas = normalizar(s.texto_original).match(/\b(\d+)\s*horas?\b/);
+        const cantidad = manual ? manual.cantidad : horas ? Number(horas[1]) : item.proveniencia?.cantidad === 'EXPLICITO' ? s.cantidad : null;
+        if (cantidad != null) {
+            if (!Number.isSafeInteger(cantidad) || cantidad < 1 || Number(candidato.cantidad) !== cantidad) campos.push('cantidad');
+            if (inicioActual == null || finActual == null || finActual - inicioActual !== cantidad * 3600) campos.push('duración');
+        }
+
+        const tipoCobro = item.intencion_cobro === 'cortesia' ? 'cortesia' : item.intencion_cobro === 'cobrable' ? 'normal' : null;
+        if (!['normal', 'cortesia'].includes(candidato.tipo_cobro) || (tipoCobro && candidato.tipo_cobro !== tipoCobro)) campos.push('tipo_cobro');
+        const monto = importeLibro(s), importes = importesTexto(s);
+        if (importes.some(v => v == null) || new Set(importes).size > 1 || /\b(?:usd|eur)\b/i.test(s.texto_original) ||
+            (/(?:\bclp\b|\$)/i.test(s.texto_original) && !importes.length && s.monto == null) || (s.monto != null && monto == null) ||
+            (!manual && monto != null && importes.some(v => v !== monto))) campos.push('importe');
+        if ((monto != null && Number(candidato.total) !== monto) || (tipoCobro === 'cortesia' && Number(candidato.total) !== 0)) campos.push('monto');
+        if (campos.length) return { estado: 'revisar', candidatos: lates, contradicciones: [...new Set(campos)],
+            motivo: `El Late Check-out existente contradice datos explícitos del Libro: ${[...new Set(campos)].join(', ')}; no se creará otro.` };
+        return { estado: 'existente', candidato, candidatos: lates, motivo: 'Late Check-out único compatible con la evidencia declarada del Libro.' };
+    }
+
     function decisionServicioExistente(item, existentes) {
         if (item?.semantica !== "SERVICIO_REAL") return { estado: "no_aplica", motivo: "La identidad sólo se resuelve para SERVICIO_REAL." };
         const reservaId = item.payload?.reserva_id || (item.asociacion?.estado === 'asociada' ? item.asociacion.sistema.reserva_id : null);
@@ -676,6 +726,14 @@
             if (p.codigo_servicio !== 'lateCheckout' && Number(x.personas) !== p.personas) campos.push('personas');
             return campos;
         };
+        // La unicidad y las contradicciones del Late también preceden a una
+        // marca de origen: ésta no debe ocultar otro Late activo o incompatible.
+        if (item.mapa?.codigo === 'lateCheckout') {
+            const decision = decisionLateExistente(item, activos, estadiaId);
+            if (decision.candidatos.length === 1 && contradiccionesManual(decision.candidatos[0]).length)
+                return { estado: 'revisar', candidatos: decision.candidatos, motivo: 'El Late Check-out existente contradice la fecha, horario, cobro, cantidad o precio confirmado.' };
+            return decision;
+        }
         const marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`, porOrigen = activos.filter(x => String(x.observaciones || "").includes(marca));
         if (porOrigen.length === 1) {
             const x = porOrigen[0];
@@ -698,11 +756,6 @@
             return campos;
         };
         const codigos = codigosCompatibles(item), hora = horaCorta(item.hora), horaFin = horaCorta(item.hora_fin);
-        if (item.resolucionManual && item.mapa.codigo === 'lateCheckout') {
-            const lates = activos.filter(x => codigoExistente(x) === 'lateCheckout');
-            if (lates.length === 1 && contradiccionesManual(lates[0]).length)
-                return { estado: 'revisar', candidatos: lates, motivo: 'El Late Check-out existente contradice la fecha, horario, cobro, cantidad o precio confirmado.' };
-        }
         if (codigos.size && hora) {
             const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
                 (!item.fecha || x.fecha_servicio === item.fecha) && horaCorta(x.hora_inicio) === hora);
@@ -753,9 +806,10 @@
         item.fecha = item.fecha || existente?.fecha_servicio || null;
         item.hora = item.hora || horaCorta(existente?.hora_inicio) || null;
         item.hora_fin = item.hora_fin || horaCorta(existente?.hora_fin) || null;
-        if (item.resolucionManual) {
+        if (item.resolucionManual || codigo === 'lateCheckout') {
             item.fecha = existente.fecha_servicio; item.hora = horaCorta(existente.hora_inicio);
-            item.hora_fin = horaCorta(existente.hora_fin); item.personas = Number(existente.personas);
+            item.hora_fin = horaCorta(existente.hora_fin);
+            if (item.resolucionManual) item.personas = Number(existente.personas);
         }
         if ((!Number.isInteger(item.personas) || item.personas <= 0) && Number(existente?.personas) > 0) item.personas = Number(existente.personas);
         item.payload = null;
