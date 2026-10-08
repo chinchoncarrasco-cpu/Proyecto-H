@@ -18,8 +18,10 @@ create or replace function private.haiku_tiene_permiso(text) returns boolean
 language sql stable as $$select true$$;
 
 create or replace function private.haiku_libro_lock_key_v1(p_scope text,p_value text)
-returns bigint language sql immutable
+returns bigint language sql immutable security invoker set search_path=pg_catalog
 as $$select ('x'||substr(md5(coalesce(p_scope,'')||':'||coalesce(p_value,'')),1,16))::bit(64)::bigint$$;
+-- Contrato real: el helper genérico no es ejecutable por operadores.
+revoke all on function private.haiku_libro_lock_key_v1(text,text) from public,anon,authenticated;
 
 create table public.reservas(id uuid primary key);
 create table public.reserva_estadias(
@@ -85,7 +87,7 @@ create table public.cargos(
 );
 
 create or replace function private.haiku_libro_lock_reserva_write_v1()
-returns trigger language plpgsql
+returns trigger language plpgsql security definer set search_path=pg_catalog,public,private
 as $$
 begin
   if not pg_try_advisory_xact_lock(

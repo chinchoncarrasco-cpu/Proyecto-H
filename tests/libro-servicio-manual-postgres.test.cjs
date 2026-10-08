@@ -2,6 +2,11 @@ const test = require('node:test'), assert = require('node:assert/strict'), { ran
 const { PGlite } = require(process.env.HAKU_PGLITE_MODULE || '@electric-sql/pglite');
 const { read, entorno } = require('./fixtures/libro-servicio-manual.cjs');
 const migration = read('supabase/migrations/20261007225155_libro_servicio_manual_v1.sql');
+const lockMigration = read('supabase/migrations/20261008202641_libro_servicios_lock_permission.sql');
+async function aplicarManual(db, fix = true) {
+    await db.exec(migration);
+    if (fix) await db.exec(lockMigration);
+}
 async function preparar(aplicar = true, opciones = {}) {
     const frontend = entorno(); opciones.configurar?.(frontend);
     await frontend.resolver(0, { codigo_servicio: 'tinajaTonel', hora: '18:00' });
@@ -26,7 +31,7 @@ async function preparar(aplicar = true, opciones = {}) {
         const seguridad = async () => (await db.query(`select p.oid,p.proname,p.proowner,p.proacl::text,p.prosecdef,p.proconfig,p.prosrc
           from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private') order by p.oid`)).rows;
         const antes = await seguridad();
-        if (aplicar) await db.exec(migration);
+        if (aplicar) await aplicarManual(db, opciones.fix !== false);
         for (const r of frontend.state.db.reservas) await db.query('insert into reservas(id,estado_reserva) values($1,$2)', [r.id, r.estado_reserva]);
         for (const e of frontend.state.db.reserva_estadias) await db.query('insert into reserva_estadias values($1,$2,$3,$4,$5,$6,$7)', [e.id, e.reserva_id, e.estado_estadia, e.cabana_id, e.fecha_ingreso, e.fecha_salida, e.tipo_estadia]);
         for (const c of frontend.state.db.catalogo_servicios) {
@@ -59,7 +64,7 @@ test('Rocío agrupada genera máximo un servicio/cargo, conserva ambas evidencia
 });
 test('migration preserva ACL/owner/seguridad/search_path y sólo modifica importer de servicios', async () => {
     const h = await preparar(false); try {
-        await h.db.exec(migration); const despues = await h.seguridad();
+        await aplicarManual(h.db); const despues = await h.seguridad();
         for (const a of h.antes) {
             const b = despues.find(x => x.oid === a.oid); assert.ok(b);
             assert.deepEqual({ ...b, prosrc: null }, { ...a, prosrc: null });
@@ -130,7 +135,7 @@ test('una nota inválida revierte también servicios y auditoría; nota normal c
 test('migration rechaza un cuerpo de writer inesperado y revierte la columna nueva', async () => {
     const h = await preparar(false); try {
         await h.db.exec('create or replace function haiku_importar_servicios_libro_v1(p_operacion_id uuid,p_items jsonb) returns jsonb language sql as $$select null::jsonb$$');
-        await assert.rejects(h.db.exec(migration), /Contrato inesperado/); await h.db.exec('rollback');
+        await assert.rejects(aplicarManual(h.db), /Contrato inesperado/); await h.db.exec('rollback');
         assert.equal((await h.db.query("select count(*)::int n from information_schema.columns where table_name='servicios' and column_name='libro_resolucion_manual_v1'")).rows[0].n, 0);
     } finally { await h.db.close(); }
 });
@@ -150,7 +155,7 @@ test('existente previo compatible se reutiliza sin reescribir ni agregarle audit
     const h = await preparar(false); try {
         const previo = { ...h.payload[1] }; delete previo.servicio_manual_v1;
         await h.importar([previo]); const antes = (await h.db.query('select * from servicios')).rows[0];
-        await h.db.exec(migration); await h.importar([h.payload[1]]);
+        await aplicarManual(h.db); await h.importar([h.payload[1]]);
         const despues = (await h.db.query('select * from servicios')).rows[0];
         assert.deepEqual(despues, { ...antes, libro_resolucion_manual_v1: null });
         assert.deepEqual(await h.contar(), { servicios: 1, cargos: 1, notas: 0 });
@@ -161,7 +166,7 @@ test('múltiples históricos y contradicción no autorizan un tercero ni reescri
         const previo = { ...h.payload[1] }; delete previo.servicio_manual_v1;
         await h.importar([previo]);
         await h.db.exec("update servicios set total=20000");
-        await h.db.exec(migration); await assert.rejects(h.importar([h.payload[1]]), /existente contradice/);
+        await aplicarManual(h.db); await assert.rejects(h.importar([h.payload[1]]), /existente contradice/);
         assert.equal((await h.contar()).servicios, 1);
         await h.db.exec(`alter table servicios disable trigger user;
           insert into servicios(reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,hora_inicio,hora_fin,precio_unitario_aplicado,total,tipo_cobro)
@@ -185,7 +190,7 @@ test('Full Day rechaza término fuera de franja incluso con snapshot de destino 
 test('mismo origen y total no permiten reutilizar una prestación distinta', async () => {
     const h = await preparar(false); try {
         const previo = { ...h.payload[0] }; delete previo.servicio_manual_v1;
-        await h.importar([previo]); await h.db.exec(migration);
+        await h.importar([previo]); await aplicarManual(h.db);
         for (const alteracion of ["cantidad=2", "personas=1", "hora_fin='19:30'", "fecha_servicio='2026-10-11'", "hora_inicio='17:00'"]) {
             await h.db.exec(`update servicios set cantidad=1,personas=2,hora_inicio='18:00',hora_fin='19:00',fecha_servicio='2026-10-10';
               update servicios set ${alteracion};`);
@@ -198,7 +203,7 @@ test('mismo origen y total no permiten reutilizar una prestación distinta', asy
 test('Late manual rechaza horario/fecha contradictorios de un único existente y revierte el lote', async () => {
     const h = await preparar(false); try {
         const previo = { ...h.payload[1], hora: '14:00', observaciones: 'Late histórico sin marca del Libro' };
-        delete previo.servicio_manual_v1; await h.importar([previo]); await h.db.exec(migration);
+        delete previo.servicio_manual_v1; await h.importar([previo]); await aplicarManual(h.db);
         for (const alteracion of ["hora_inicio='14:00',hora_fin='15:00'", "fecha_servicio='2026-10-10'",
             "hora_fin='13:45'", "hora_inicio='12:20:01'", "hora_fin='13:20:01'"]) {
             await h.db.exec(`update servicios set fecha_servicio='2026-10-11',hora_inicio='12:20',hora_fin='13:20';
@@ -213,7 +218,7 @@ test('Late manual rechaza horario/fecha contradictorios de un único existente y
 test('Late manual reutiliza existente con checkout e inicio/término exactos conservando su fila', async () => {
     const h = await preparar(false); try {
         const previo = { ...h.payload[1], personas: 3, observaciones: 'Late histórico compatible sin marca del Libro' };
-        delete previo.servicio_manual_v1; await h.importar([previo]); await h.db.exec(migration);
+        delete previo.servicio_manual_v1; await h.importar([previo]); await aplicarManual(h.db);
         const antes = (await h.db.query('select * from servicios')).rows[0];
         assert.equal(antes.fecha_servicio.toISOString().slice(0, 10), h.payload[1].fecha_servicio);
         assert.equal(antes.hora_inicio, '12:20:00'); assert.equal(antes.hora_fin, '13:20:00');
@@ -244,3 +249,171 @@ for (const [campo, asignacion] of [
         } finally { await h.db.close(); }
     });
 }
+
+// La conexión PGlite nace como postgres. Cambiar el rol es indispensable:
+// de otro modo cualquier llamada a un helper cerrado pasa como owner.
+async function permisosOperador(h) {
+    await h.db.exec(`grant usage on schema public,private,auth to authenticated,anon;
+      grant select,update on reservas,reserva_estadias to authenticated;
+      grant select on catalogo_servicios,recursos_servicio to authenticated;
+      grant select,insert,update on servicios,cargos,notas,eventos_fixture to authenticated;`);
+}
+async function conRol(h, rol, accion) {
+    assert.ok(['authenticated','anon'].includes(rol));
+    await h.db.exec('set role ' + rol);
+    try { return await accion(); } finally { await h.db.exec('reset role'); }
+}
+const importarServicios = (h, items = h.payload, op = randomUUID()) => h.db.query(
+    'select public.haiku_importar_servicios_libro_v1($1,$2::jsonb) r', [op, JSON.stringify(items)]);
+async function observarLocks(h) {
+    // PGlite no expone advisory locks en pg_locks ni tiene dos sesiones.
+    // Observar argumentos/orden sin sustituir el lock nativo ni elevar el rol.
+    await h.db.exec(`create table fixture_lock_calls(n bigint generated always as identity,llave bigint);
+      grant insert on fixture_lock_calls to authenticated;
+      create function private.fixture_lock(p_llave bigint) returns void language plpgsql security invoker
+        set search_path=pg_catalog,public,private as $$begin
+          insert into public.fixture_lock_calls(llave) values(p_llave);
+          perform pg_catalog.pg_advisory_xact_lock(p_llave);
+        end$$;`);
+    for (const firma of ['public.haiku_importar_servicios_libro_v1(uuid,jsonb)',
+        'private.haiku_libro_servicio_manual_validar_v1(jsonb)',
+        'public.haiku_registrar_servicio(uuid,text,date,time,integer,smallint,text,bigint,text,text,uuid)']) {
+        const original = (await h.db.query('select pg_get_functiondef($1::regprocedure) cuerpo', [firma])).rows[0].cuerpo;
+        const observado = original.replace('perform pg_advisory_xact_lock(', 'perform private.fixture_lock(');
+        assert.notEqual(observado, original); await h.db.exec(observado);
+    }
+}
+
+test('contrato reproduce ambos permission denied desplegados como authenticated antes del fix', async () => {
+    const h = await preparar(true, { fix: false }); try {
+        await permisosOperador(h);
+        for (const llamar of [() => importarServicios(h), () => h.db.query(
+            'select private.haiku_libro_servicio_manual_validar_v1($1::jsonb)', [JSON.stringify(h.payload[0])])]) {
+            await conRol(h, 'authenticated', () => assert.rejects(llamar(), e =>
+                e.code === '42501' && /permission denied for function haiku_libro_lock_key_v1/.test(e.message)));
+        }
+        assert.deepEqual(await h.contar(), { servicios: 0, cargos: 0, notas: 0 });
+    } finally { await h.db.close(); }
+});
+
+test('fix conserva ACL/owner/INVOKER/search_path: helper cerrado y sólo dos cuerpos modificados', async () => {
+    const h = await preparar(true, { fix: false }); try {
+        const antes = await h.seguridad(); await h.db.exec(lockMigration);
+        const despues = await h.seguridad(); assert.equal(despues.length, antes.length);
+        for (const a of antes) {
+            const b = despues.find(x => x.oid === a.oid);
+            assert.deepEqual({ ...b, prosrc: null }, { ...a, prosrc: null });
+            if (['haiku_importar_servicios_libro_v1','haiku_libro_servicio_manual_validar_v1'].includes(a.proname)) {
+                assert.equal(b.prosecdef, false); assert.doesNotMatch(b.prosrc, /private\.haiku_libro_lock_key_v1/);
+                assert.match(b.prosrc, /pg_advisory_xact_lock/);
+            } else assert.equal(b.prosrc, a.prosrc);
+        }
+        const acl = (await h.db.query(`select p.proname,pg_get_userbyid(p.proowner) owner,p.prosecdef,p.proconfig,
+          has_function_privilege('postgres',p.oid,'EXECUTE') postgres,
+          has_function_privilege('authenticated',p.oid,'EXECUTE') authenticated,
+          has_function_privilege('anon',p.oid,'EXECUTE') anon
+          from pg_proc p where p.oid in (
+            'public.haiku_importar_servicios_libro_v1(uuid,jsonb)'::regprocedure,
+            'private.haiku_libro_servicio_manual_validar_v1(jsonb)'::regprocedure,
+            'private.haiku_libro_lock_key_v1(text,text)'::regprocedure)`)).rows;
+        for (const f of acl) {
+            assert.equal(f.owner, 'postgres'); assert.equal(f.postgres, true); assert.equal(f.prosecdef, false);
+            assert.equal(f.authenticated, f.proname !== 'haiku_libro_lock_key_v1'); assert.equal(f.anon, false);
+        }
+        assert.deepEqual(acl.find(f => f.proname === 'haiku_importar_servicios_libro_v1').proconfig,
+            ['search_path=public, private, pg_temp']);
+    } finally { await h.db.close(); }
+});
+
+test('authenticated importa lote de dos reservas con notas, locks iguales, auditoría manual y retries únicos', async () => {
+    const h = await preparar(); try {
+        await permisosOperador(h); await observarLocks(h);
+        const items = [h.payload[2], h.payload[0]], op = randomUUID();
+        const reservas = [...new Set(items.map(x => x.reserva_id))]; assert.equal(reservas.length, 2);
+        const nota = [{ item_id: 'nota:lock', reserva_id: h.payload[0].reserva_id, estadia_id: h.payload[0].estadia_id,
+            fecha_operacion: '2026-10-10', texto: 'Nota sintética del lote', importante: false }];
+        await h.db.exec('begin');
+        try {
+            const esperado = (await h.db.query(`select private.haiku_libro_lock_key_v1('reserva_finanzas',r) llave,
+              ('x'||substr(md5('reserva_finanzas:'||r),1,16))::bit(64)::bigint directa
+              from unnest($1::text[]) r`, [reservas])).rows;
+            esperado.forEach(x => assert.equal(x.llave, x.directa));
+            const r = await conRol(h, 'authenticated', () => h.importar(items, op, nota));
+            assert.equal(r.rows[0].r.servicios_creados, 2); assert.equal(r.rows[0].r.notas_creadas, 1);
+            const locks = (await h.db.query('select llave::text from fixture_lock_calls order by n')).rows;
+            assert.equal(locks.length, 6); // lote, validador y registrar: dos reservas cada uno.
+            const orden = reservas.slice().sort().map(r => String(esperado[reservas.indexOf(r)].llave));
+            assert.deepEqual(locks.slice(0, 2).map(x => x.llave), orden);
+            assert.deepEqual([...new Set(locks.map(x => x.llave))].sort(), esperado.map(x => String(x.llave)).sort());
+            for (const retry of [op, randomUUID()]) {
+                const repetido = await conRol(h, 'authenticated', () => h.importar(items, retry, nota));
+                assert.equal(repetido.rows[0].r.servicios_creados, 0); assert.equal(repetido.rows[0].r.servicios_omitidos, 2);
+            }
+            await h.db.exec('commit');
+        } catch (e) { await h.db.exec('rollback'); throw e; }
+        assert.deepEqual(await h.contar(), { servicios: 2, cargos: 1, notas: 1 });
+        const rows = (await h.db.query('select * from servicios')).rows;
+        for (const s of rows) {
+            const item = items.find(x => x.reserva_id === s.reserva_id);
+            assert.equal(s.libro_resolucion_manual_v1.item_id, item.item_id);
+            assert.equal(s.libro_resolucion_manual_v1.usuario, h.frontend.state.usuario);
+            assert.deepEqual(s.libro_resolucion_manual_v1.evidencia_original, item.servicio_manual_v1.evidencia_original);
+        }
+        await conRol(h, 'authenticated', () => h.importar(items));
+        assert.deepEqual((await h.db.query('select * from servicios')).rows, rows);
+        assert.equal((await h.db.query('select count(*)::int n from eventos_fixture')).rows[0].n, 3);
+    } finally { await h.db.close(); }
+});
+
+for (const [caso, cambiar, mensaje] of [
+    ['sin servicios.crear', "create or replace function private.haiku_tiene_permiso(text) returns boolean language sql as $$select false$$", /permiso/],
+    ['inactivo', "create or replace function private.haiku_usuario_activo() returns boolean language sql as $$select false$$", /activo|permiso/],
+    ['sin auth.uid', "select set_config('request.jwt.claim.sub','',false)", /sesion|permiso/]
+]) test('authenticated ' + caso + ' no puede importar ni validar un lock manual', async () => {
+    const h = await preparar(); try {
+        await permisosOperador(h); await h.db.exec(cambiar);
+        await conRol(h, 'authenticated', () => assert.rejects(importarServicios(h), mensaje));
+        await conRol(h, 'authenticated', () => assert.rejects(h.db.query(
+            'select private.haiku_libro_servicio_manual_validar_v1($1::jsonb)', [JSON.stringify(h.payload[0])]), mensaje));
+        assert.deepEqual(await h.contar(), { servicios: 0, cargos: 0, notas: 0 });
+    } finally { await h.db.close(); }
+});
+
+test('anon no ejecuta importer/validador y ningún operador ejecuta el helper genérico', async () => {
+    const h = await preparar(); try {
+        await permisosOperador(h);
+        for (const rol of ['authenticated','anon']) await conRol(h, rol, () => assert.rejects(h.db.query(
+            "select private.haiku_libro_lock_key_v1('reserva_finanzas',$1)", [h.payload[0].reserva_id]),
+            e => e.code === '42501' && /permission denied for function haiku_libro_lock_key_v1/.test(e.message)));
+        await conRol(h, 'anon', () => assert.rejects(importarServicios(h), /permission denied for function haiku_importar_servicios_libro_v1/));
+        await conRol(h, 'anon', () => assert.rejects(h.db.query(
+            'select private.haiku_libro_servicio_manual_validar_v1($1::jsonb)', [JSON.stringify(h.payload[0])]),
+            /permission denied for function haiku_libro_servicio_manual_validar_v1/));
+    } finally { await h.db.close(); }
+});
+
+test('migration y retry authenticated conservan íntegro el servicio histórico y su cargo', async () => {
+    const h = await preparar(false); try {
+        const previo = { ...h.payload[1] }; delete previo.servicio_manual_v1;
+        await h.importar([previo]);
+        const servicio = (await h.db.query('select * from servicios')).rows[0];
+        const cargos = (await h.db.query('select * from cargos')).rows;
+        await aplicarManual(h.db); await permisosOperador(h);
+        await conRol(h, 'authenticated', () => h.importar([h.payload[1]]));
+        assert.deepEqual((await h.db.query('select * from servicios')).rows, [{ ...servicio, libro_resolucion_manual_v1: null }]);
+        assert.deepEqual((await h.db.query('select * from cargos')).rows, cargos);
+        assert.equal((await h.db.query('select count(*)::int n from eventos_fixture')).rows[0].n, 1);
+    } finally { await h.db.close(); }
+});
+
+test('fix falla cerrado con fórmula o segundo caller inesperado y revierte el primer reemplazo', async () => {
+    const h = await preparar(true, { fix: false }); try {
+        for (const cambiar of ["alter function private.haiku_libro_servicio_manual_validar_v1(jsonb) security definer",
+            "create or replace function private.haiku_libro_lock_key_v1(p_scope text,p_value text) returns bigint language sql immutable as $$select 1::bigint$$"]) {
+            await h.db.exec('begin'); await h.db.exec(cambiar); await h.db.exec('commit');
+            const antes = await h.seguridad();
+            await assert.rejects(h.db.exec(lockMigration), /Contrato inesperado|fórmula del lock cambió/);
+            await h.db.exec('rollback'); assert.deepEqual(await h.seguridad(), antes);
+        }
+    } finally { await h.db.close(); }
+});
