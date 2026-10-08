@@ -391,8 +391,12 @@ async function editorUnidadUi({indice=2,codigo='huevo',concepto='6 HUEVOS',preci
     await context.HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(out,{reservas:[h.r],generacion:1});
     const boton=t=>out.querySelectorAll('button').find(e=>e.textContent===t);
     await boton('Preparar incorporación').events.click();await boton('Aprobación manual').events.click();
-    await boton('Confirmar distribución').events.click();await boton('Aprobación manual').events.click();
+    await boton('Confirmar distribución').events.click();
     const panel=out.querySelector('.haiku-incorporacion-manual-pago-panel');
+    // Esperar la apertura/carga real del catálogo, incluso si el paso anterior
+    // dejó el panel abierto automáticamente; no confirmar un formulario cerrado.
+    if(!panel.hidden)await boton('Aprobación manual').events.click();
+    await boton('Aprobación manual').events.click();
     const campo=n=>panel.querySelectorAll('*').find(e=>e['aria-label']===n);
     const cambiar=(n,v)=>{const e=campo(n);e.value=v;e.events.change();};
     cambiar('Aplicación a resolver',String(indice));cambiar('Servicio del catálogo',codigo);
