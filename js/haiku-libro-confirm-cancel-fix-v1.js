@@ -84,7 +84,10 @@
         const checksConId = [...card.querySelectorAll('input[data-haku-item-id]')];
         if (checksConId.length) {
             const porId = new Map(resultado.items.map(item => [item.item_id, item]));
+            const vistos = new Set();
             return checksConId.filter(check => check.checked && !check.disabled).flatMap(check => {
+                if (vistos.has(check.dataset.hakuItemId)) throw new Error('La selección contiene un origen repetido. Vuelve a revisar antes de guardar.');
+                vistos.add(check.dataset.hakuItemId);
                 const item = porId.get(check.dataset.hakuItemId);
                 if (item?.estado === 'existente') return [];
                 if (!item || item.estado !== 'listo') throw new Error('Uno o más elementos cambiaron desde la vista previa. Vuelve a revisar antes de guardar.');
