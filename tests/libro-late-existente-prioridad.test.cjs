@@ -77,7 +77,7 @@ test('D: dos Late activos bloquean, aunque sólo uno coincida o tenga la marca d
 
 test('E: total, cobro, fecha, cantidad o duración contradictorios requieren revisión', async () => {
     for (const [cambio, motivo] of [
-        [{ total: 12000 }, /monto/], [{ tipo_cobro: 'cortesia', total: 0 }, /tipo_cobro/],
+        [{ total: 12000 }, /monto/], [{ tipo_cobro: 'cortesia', total: 0 }, /tipo de cobro/],
         [{ fecha_servicio: '2026-10-03' }, /fecha/], [{ cantidad: 2 }, /cantidad/],
         [{ hora_fin: '15:00' }, /duración/]
     ]) esRevision(late(await caso(textoJaviera, cambio).construir()), motivo);
@@ -98,13 +98,15 @@ test('F: sin existente se exige hora antes de poder crear', async () => {
     assert.equal(e.state.escrituras.length, 0);
 });
 
-test('G: la ausencia de hora sigue bloqueando servicios repetibles', async () => {
+test('G: un repetible sin hora muestra un candidato y nunca crea automáticamente', async () => {
     for (const [texto, codigo] of [['X PAGAR TINAJA TONEL 1 HORA', 'tinajaTonel'], ['X PAGAR MASAJE TERAPEUTICO 60 MINUTOS', 'masajeTerapeutico60']]) {
         const e = caso(texto, { catalogo_servicios: { codigo, nombre: codigo } });
         const item = (await e.construir()).items.find(i => i.kind === 'servicio');
         assert.equal(item.estado, 'revisar');
         assert.equal(item.payload, null);
-        assert.match(item.razones.join(' '), /horario|hora/);
+        assert.equal(item.reconciliacion_estado, 'CANDIDATO_EXISTENTE');
+        assert.equal(item.candidatos_existentes.length, 1);
+        assert.match(item.razones.join(' '), /falta evidencia/);
     }
 });
 

@@ -38,6 +38,12 @@
         // Theme colors require the workbook theme. Unknown is safer than guessing.
         return c.tint ? null : base;
     }
+    function colorFuenteServicio(c) {
+        // V1: RGB materializado por el worker, sin adivinar paletas ni tint.
+        if (!c || c.auto || (c.tint !== undefined && c.tint !== 0) ||
+            typeof c.rgb !== 'string' || !/^(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(c.rgb)) return null;
+        return color(c);
+    }
     function fuente(cell, estilos) {
         const estilo = estilos[cell?.estiloId] || {};
         const runs = cell?.runs?.length ? cell.runs : [{ texto: cell?.valor || "", font: estilo.font }];
@@ -45,9 +51,43 @@
         const textosUnicos = valores => [...new Map(valores.map(valor => [normalizar(valor), valor])).values()];
         const principales = new Set(fragmentos.filter(x => /\S/.test(x.texto) && ["000000", "FFFFFF", "0000FF"].includes(x.color)).map(x => x.color));
         const estado = principales.size === 1 ? ({ "000000": "sin_checkin", "FFFFFF": "hospedada", "0000FF": "checked_out" })[[...principales][0]] : "no_determinado";
+        let visual = null;
+        if (cell?.runs?.length) {
+            let cursor = 0;
+            const spans = cell.runs.map(run => {
+                const texto = String(run.texto ?? ''), inicio = cursor;
+                cursor += texto.length;
+                const c = run.font?.color || estilo.font?.color;
+                const color_ooxml = c ? Object.fromEntries(['rgb', 'theme', 'indexed', 'tint', 'auto']
+                    .filter(k => c[k] !== undefined).map(k => [k, c[k]])) : null;
+                return { texto, inicio, fin: cursor, rgb: colorFuenteServicio(c), color_ooxml, heredado: !run.font?.color };
+            });
+            visual = { texto: String(cell.valor || ''), alineado: spans.map(s => s.texto).join('') === String(cell.valor || ''), spans };
+        }
         return { estado, fondo: color(estilo.fill?.fgColor), fragmentos,
+            ...(visual ? { fuente_visual_v1: visual } : {}),
             notas: textosUnicos(fragmentos.filter(x => x.color === "FF0000" && x.texto.trim()).map(x => x.texto.trim())),
             pendientes: textosUnicos(fragmentos.filter(x => x.color === "FFFF00" && x.texto.trim()).map(x => x.texto.trim())) };
+    }
+
+    function evidenciaVisualServicio(texto, rangos, visual, origen) {
+        if (!visual) return null;
+        const atribuible = visual.alineado && visual.texto === texto && rangos.length > 0 && rangos.every(r =>
+            Number.isInteger(r.inicio) && Number.isInteger(r.fin) && r.inicio >= 0 && r.fin > r.inicio &&
+            r.fin <= texto.length && texto.slice(r.inicio, r.fin) === r.texto);
+        const runs = atribuible ? rangos.flatMap(r => visual.spans.filter(s => s.inicio < r.fin && s.fin > r.inicio).map(s => {
+            const inicio = Math.max(r.inicio, s.inicio), fin = Math.min(r.fin, s.fin);
+            return { ...s, inicio, fin, texto: texto.slice(inicio, fin) };
+        })) : [];
+        // Sólo whitespace y separadores de campos carecen de contenido aquí.
+        const relevantes = runs.filter(s => /[^\s/;]/.test(s.texto));
+        const amarillo = atribuible && relevantes.length > 0 && relevantes.every(s => s.rgb === 'FFFF00');
+        return { version: 1, fuente: 'rich_text_font', origen: {
+            hoja: origen?.hoja || null, celda: origen?.celda || null,
+            merge: origen?.merge ? { s: { ...origen.merge.s }, e: { ...origen.merge.e } } : null
+        }, rangos: rangos.map(r => ({ inicio: r.inicio, fin: r.fin })), runs,
+        cobertura: !atribuible ? 'atribucion_ambigua' : amarillo ? 'amarillo_inequivoco' : 'mixta_o_no_resoluble',
+        rgb: amarillo ? 'FFFF00' : null, inferencia: null };
     }
     function notaOperativa(texto) {
         const t = normalizar(texto);
@@ -171,6 +211,11 @@
     function horasDeServicio(texto) {
         const sinFechas = normalizar(texto).replace(/\b\d{1,2}[-/]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/g, " ");
         const horas = [];
+        // El sufijo del término también declara el inicio de un rango horario.
+        // No extender esta regla a duraciones como "de 30 a 60 minutos".
+        for (const m of sinFechas.matchAll(/\b(?:de|desde)\s+(\d{1,2})\s+(?:a|hasta)\s+\d{1,2}\s*(?:hrs?|hs|h)\b/g)) {
+            if (Number(m[1]) <= 23) horas.push({ posicion: m.index, valor: `${m[1].padStart(2, '0')}:00` });
+        }
         // Un solo token consume hora, minutos y sufijo: "7:15 PM" nunca
         // produce 07:15 y otro horario falso desde el minuto "15 PM".
         for (const m of sinFechas.matchAll(/\b(\d{1,2})(?:\s*[:.,]\s*(\d{2}))?(?:\s*(am|pm|hrs?|hs|h))?\b/g)) {
@@ -180,9 +225,9 @@
             const minuto = Number(m[2] || 0), meridiano = m[3] === 'am' || m[3] === 'pm';
             if (minuto > 59 || (meridiano ? hora < 1 || hora > 12 : hora > 23)) continue;
             if (meridiano) hora = hora % 12 + (m[3] === 'pm' ? 12 : 0);
-            horas.push(`${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`);
+            horas.push({ posicion: m.index, valor: `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}` });
         }
-        return [...new Set(horas)];
+        return [...new Set(horas.sort((a, b) => a.posicion - b.posicion).map(x => x.valor))];
     }
 
     function clasificarIntencionFinanciera(texto) {
@@ -349,6 +394,7 @@
             .replace(/\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/g, '')
             .replace(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hrs?|h)\b/g, '')
             .replace(/\b(?:para\s+)?el\s+\d{1,2}(?!\d|[-/.])\b/g, '')
+            .replace(/\bcomenzando(?=\s+a\s+las?\b)/g, '')
             // Consumir el meridiano junto con los minutos antes de buscar dd.mm.
             .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hrs?|hs|h)\b/g,
                 valor => horasDeServicio(valor).length ? '' : valor)
@@ -359,7 +405,7 @@
             // Sólo nombres profesionales ya reconocidos en el parser.
             .replace(/\bcon\s+(?:monica|josefina(?:\s+mellado)?|tessy)(?:\s+y\s+(?:con\s+)?(?:monica|josefina(?:\s+mellado)?|tessy))*\b/g, '')
             .replace(/\b(?:de|a|las?|el|para|y|desde)\b/g, '').replace(/[\s.,:()\-–—]/g, '');
-        return Boolean(t) && !resto && (tipoMasaje(t) || duracionMasaje(t) || horasDeServicio(textoSinDuracionMasaje(t)).length || /\d|\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/.test(t));
+        return Boolean(t) && !resto && (tipoMasaje(t) || duracionMasaje(t) || horasDeServicio(textoSinDuracionMasaje(t)).length || profesionalesMasaje(t).length || /\d|\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/.test(t));
     }
 
     function conflictosMasaje(unidades) {
@@ -457,15 +503,33 @@
         };
         for (const f of fragmentosServicioPosicionales(fuente)) {
             const conceptos = conceptosDeServicio(f.texto);
-            if ((conceptos.length === 1 && conceptos[0] === 'masaje') || (!conceptos.length && esComplementoMasaje(f.texto))) bloque.push(f);
-            else { vaciar(); entradas.push({ parte: f.texto }); }
+            // Una fecha suelta anterior a la glosa en notas de reserva es
+            // contexto de la reserva, no un atributo de una prestación futura.
+            const fechaPreviaReserva = opciones.origen_campo === 'notas_reserva' && !bloque.length &&
+                /^\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{4}|\d{2}))?$/.test(normalizar(f.texto));
+            if ((conceptos.length === 1 && conceptos[0] === 'masaje') || (!conceptos.length && !fechaPreviaReserva && esComplementoMasaje(f.texto))) bloque.push(f);
+            else { vaciar(); entradas.push({ parte: f.texto, inicio: f.inicio, fin: f.fin }); }
         }
         vaciar();
         return entradas;
     }
 
     function ocurrenciasDeServicio(texto) {
-        const t = normalizar(texto), ocurrencias = [];
+        // Los patrones siguen leyendo texto normalizado, pero sus índices deben
+        // apuntar al original: compactar espacios no puede recortar un span.
+        const caracteres = [], posiciones = [];
+        let cursor = 0, espacio = true;
+        for (const caracter of String(texto || '')) {
+            const limpio = normalizarPosicional(caracter);
+            for (let i = 0; i < limpio.length; i++) {
+                if (/\s/.test(limpio[i])) {
+                    if (!espacio) { caracteres.push(' '); posiciones.push(cursor); espacio = true; }
+                } else { caracteres.push(limpio[i]); posiciones.push(cursor); espacio = false; }
+            }
+            cursor += caracter.length;
+        }
+        if (espacio) { caracteres.pop(); posiciones.pop(); }
+        const t = caracteres.join(''), ocurrencias = [];
         const agregar = (concepto, indice) => { if (indice >= 0) ocurrencias.push({ concepto, indice }); };
         const jacuzzi = t.search(/\bjacuzzi\b/), tonel = t.search(/\btonel(?:es)?\b|\btinajas?\b[^.;]{0,28}\bmadera\b/), tinaja = t.search(/\btinajas?\b/);
         if (jacuzzi >= 0) agregar("jacuzzi", tinaja >= 0 ? Math.min(tinaja, jacuzzi) : jacuzzi);
@@ -479,7 +543,9 @@
             .map(m => ({ concepto: "masaje", indice: m.index }));
         const descontracturantes = [...t.matchAll(/\bdescontractur\w*\b/g)].filter(m => !masajes.some(x => x.indice < m.index && m.index - x.indice < 24));
         ocurrencias.push(...masajes, ...descontracturantes.map(m => ({ concepto: "masaje", indice: m.index })));
-        return ocurrencias.sort((a, b) => a.indice - b.indice).filter((x, i, xs) => !i || x.indice !== xs[i - 1].indice || x.concepto !== xs[i - 1].concepto);
+        return ocurrencias.sort((a, b) => a.indice - b.indice)
+            .filter((x, i, xs) => !i || x.indice !== xs[i - 1].indice || x.concepto !== xs[i - 1].concepto)
+            .map(x => ({ ...x, indice: posiciones[x.indice] }));
     }
 
     function unidadesDeServicio(texto) {
@@ -573,13 +639,35 @@
             if (!canon.conceptos.length) continue;
             const unidades = entrada.unidad ? [entrada.unidad] : canon.unidadesServicio.length ? canon.unidadesServicio : [{ concepto: canon.conceptos[0], texto: parte.trim(), cantidad: 1,
                 hora: null, hora_fin: null, intencion_financiera: INTENCION_FINANCIERA.NO_DETERMINADA, evidencias_financieras: [] }];
+            let cursorUnidad = 0;
             for (const [unidad_indice, unidad] of unidades.entries()) {
-                const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera];
+                const posicion = parte.indexOf(unidad.texto, cursorUnidad);
+                if (posicion >= 0) cursorUnidad = posicion + unidad.texto.length;
+                const rangos = unidad.grupo_masaje_v1?.fragmentos || (posicion >= 0 && Number.isInteger(entrada.inicio)
+                    ? [{ texto: unidad.texto, inicio: entrada.inicio + posicion, fin: entrada.inicio + posicion + unidad.texto.length }] : []);
+                const visual = evidenciaVisualServicio(String(texto || ''), rangos, opciones.fuente_visual_v1, opciones.coordenadas_origen);
+                // Clasificación textual primero. Una contradicción explícita no
+                // se resuelve con color ni con la regla cobrable del masaje.
+                const declarada = clasificarIntencionFinanciera(unidad.texto_fuente_completo || unidad.texto);
+                const contradiccion = declarada.intencion === INTENCION_FINANCIERA.NO_DETERMINADA && declarada.evidencias.length > 0;
+                let intencion = unidad.intencion_financiera;
+                if (canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL) {
+                    if (contradiccion) intencion = INTENCION_FINANCIERA.NO_DETERMINADA;
+                    else if (declarada.intencion !== INTENCION_FINANCIERA.NO_DETERMINADA) intencion = declarada.intencion;
+                    else if (visual?.cobertura === 'amarillo_inequivoco') {
+                        intencion = INTENCION_FINANCIERA.COBRABLE; visual.inferencia = 'amarillo_cobrable';
+                    }
+                }
+                const unidadEfectiva = { ...unidad, intencion_financiera: intencion,
+                    evidencias_financieras: [...new Set([...(contradiccion ? declarada.evidencias : unidad.evidencias_financieras || []),
+                        ...(visual?.inferencia ? ['fuente amarilla inequívoca del servicio'] : [])])] };
+                const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[intencion];
                 const pendiente = intencion_cobro === "cobrable", cortesia = intencion_cobro === "cortesia";
                 const incompletoLegado = ["tinaja", "cama_adicional", "cuna"].includes(unidad.concepto) || /\b(?:x|por|sin)\s+confirmar\b|\b(?:por\s+)?coordinar\b/.test(normalizar(unidad.texto));
                 const clasificacion = canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL ? (incompletoLegado ? "servicio_por_confirmar" : "servicio_confirmado") : canon.semantica === SEMANTICA_SERVICIO.AMBIGUO ? "servicio_por_confirmar" : "nota";
                 salida.push({ concepto: unidad.concepto, conceptos: canon.conceptos, texto_original: unidad.texto, fragmento_original: parte.trim(),
-                    origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias, unidad_servicio: unidad,
+                    origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias, unidad_servicio: unidadEfectiva,
+                    ...(visual ? { evidencia_visual_v1: visual } : {}),
                     unidad_indice: entrada.unidad ? salida.filter(s => s.concepto === 'masaje').length : unidad_indice,
                     ...(unidad.grupo_masaje_v1 ? { grupo_masaje_v1: unidad.grupo_masaje_v1 } : {}),
                     intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, clasificacion, intencion_cobro, pendiente, cortesia,
@@ -789,7 +877,8 @@
                 if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
-                const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src });
+                const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src,
+                    fuente_visual_v1: colors.fuente_visual_v1 });
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
                 const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;

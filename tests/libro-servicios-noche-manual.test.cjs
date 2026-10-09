@@ -47,7 +47,7 @@ function entorno() {
     }
     const captures = [], document = { createElement: t => new Element(t), getElementById: () => null, head: new Element('head'),
         addEventListener: (type, fn, capture) => captures.push({ type, fn, capture }), querySelectorAll: selector => document.card?.querySelectorAll(selector) || [] };
-    const c = { document, queueMicrotask, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js'), confirm: () => { state.calls.push('confirm'); return state.confirmar; },
+    const c = { document, queueMicrotask, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js'), HAIKU_SERVICIOS_IDENTIDAD_V1: require('../js/haiku-servicios-identidad-v1.js'), confirm: () => { state.calls.push('confirm'); return state.confirmar; },
         HAIKU_LIBRO_RESERVA_V1: { listo: async () => {}, estado: () => ({ cargado: true, nombre: 'fixture.xlsx', generacion: state.generacion }),
             listarHojas: () => ['Sep26'], consultarHoja: async () => { state.lecturas++; return { reservas: [copy(r)] }; } },
         haikuSupabase: { from: tabla => { const q = { select: () => q, lte: () => q, gte: () => q, in: () => q, eq: () => q,
@@ -132,7 +132,7 @@ test('changes to book, stay, service, identity or night index invalidate evidenc
 
 test('existing service is omitted after choice, and its existing marker works in a fresh query without override', async () => {
     const e = entorno(), { item, overrides } = await elegir(e);
-    e.db.servicios.push({ reserva_id: 'r1', fecha_servicio: '2026-09-05', hora_inicio: '19:15:00', catalogo_servicios: { codigo: 'tinajaTonel' } });
+    e.db.servicios.push({ id: 's1', reserva_id: 'r1', estadia_id: 'e1', fecha_servicio: '2026-09-05', hora_inicio: '19:15:00', tipo_cobro: 'normal', estado_servicio: 'programado', total: 30000, catalogo_servicios: { codigo: 'tinajaTonel' } });
     assert.equal((await e.api.construir(consulta, overrides)).items.find(x => x.kind === 'servicio').estado, 'existente');
     await assert.rejects(e.api.importarSeleccionados(new Set([item.item_id]), new e.Element('div'), consulta, overrides), /cambiaron/);
     assert.deepEqual(e.calls, []);
@@ -179,7 +179,7 @@ test('Catalina bare CAMAADICIONAL from reservation notes remains one Note and ne
     assert.equal(result.items.some(x => x.kind === 'servicio' && x.servicio?.texto_original === 'CAMAADICIONAL'), false);
 });
 
-test('Sara generic tinaja resolves one existing courtesy only after inferring its one-night date', async () => {
+test('Sara generic tinaja presents a candidate when its subtype and charge are absent', async () => {
     const configurar = () => {
         const e = entorno();
         e.r.titular = 'Sara Bertrand';e.r.fecha_checkin = '2026-09-04';e.r.fecha_checkout = '2026-09-05';e.r.noches = 1;e.r.adultos = 2;
@@ -191,16 +191,16 @@ test('Sara generic tinaja resolves one existing courtesy only after inferring it
         return e;
     };
     const existente = { id: 'tinaja-sara', reserva_id: 'r1', estadia_id: 'e1', fecha_servicio: '2026-09-04',
-        hora_inicio: '17:45:00', hora_fin: '18:45:00', personas: 2, tipo_cobro: 'cortesia', estado_servicio: 'programado',
+        hora_inicio: '17:45:00', hora_fin: '18:45:00', cantidad: 1, total: 0, personas: 2, tipo_cobro: 'cortesia', estado_servicio: 'programado',
         catalogo_servicios: { codigo: 'tinajaJacuzzi', nombre: 'Tinaja Jacuzzi' } };
 
     const e = configurar();e.db.servicios.push(existente);
     const item = (await e.api.construir(consulta)).items.find(x => x.kind === 'servicio');
-    assert.equal(item.fecha, '2026-09-04');assert.equal(item.estado, 'existente');assert.equal(item.decision_identidad, 'existente');
-    assert.equal(item.mapa.codigo, 'tinajaJacuzzi');assert.equal(item.intencion_cobro, 'cortesia');assert.equal(item.cortesia, true);
-    assert.equal(item.payload, null);assert.equal(item.razones.length, 0);
+    assert.equal(item.fecha, '2026-09-04');assert.equal(item.estado, 'revisar');assert.equal(item.reconciliacion_estado, 'CANDIDATO_EXISTENTE');
+    assert.equal(item.mapa.codigo, undefined);assert.equal(item.intencion_cobro, 'no_determinada');
+    assert.equal(item.payload, null);assert.equal(item.candidatos_existentes.length, 1);
     const fila = e.api.crearItem(item, new Set()), all = el => [el, ...el.children.flatMap(all)];
-    assert.ok(all(fila).some(x => /Ya existe en Proyecto H.*cortesía.*omitido/.test(x.textContent)));
+    assert.ok(all(fila).some(x => /Proyecto H: Tinaja Jacuzzi/.test(x.textContent)));
     await assert.rejects(e.api.importarSeleccionados(new Set([item.item_id]), new e.Element('div'), consulta), /cambiaron/);
     assert.deepEqual(e.calls, []);
 
@@ -211,18 +211,20 @@ test('Sara generic tinaja resolves one existing courtesy only after inferring it
     const ambiguo = configurar();ambiguo.db.servicios.push(existente, { ...existente, id: 'tinaja-sara-2' });
     const revisar = (await ambiguo.api.construir(consulta)).items.find(x => x.kind === 'servicio');
     assert.equal(revisar.estado, 'revisar');assert.equal(revisar.decision_identidad, 'revisar');
-    assert.ok(revisar.razones.some(x => /más de un servicio existente compatible/i.test(x)));
+    assert.ok(revisar.razones.some(x => /más de un servicio existente relacionado compatible/i.test(x)));
 
     const cobroContradictorio = configurar();cobroContradictorio.r.servicios[0].intencion_cobro = 'cobrable';cobroContradictorio.r.servicios[0].pendiente = true;
+    cobroContradictorio.r.servicios[0].texto_original = 'X PAGAR TINAJA DE 17:45 A 18:45';
     cobroContradictorio.db.servicios.push(existente);
     const conflicto = (await cobroContradictorio.api.construir(consulta)).items.find(x => x.kind === 'servicio');
     assert.equal(conflicto.estado, 'revisar');assert.equal(conflicto.payload, null);
-    assert.ok(conflicto.razones.some(x => /contradice datos explícitos.*tipo_cobro/i.test(x)));
+    assert.ok(conflicto.reconciliacion.contradicciones.includes('tipo_cobro'), conflicto.razones.join(' '));
 
     const especifico = configurar();especifico.r.servicios[0] = { ...especifico.r.servicios[0], concepto: 'jacuzzi', clasificacion: 'servicio_confirmado', intencion_cobro: 'cobrable' };
+    especifico.r.servicios[0].texto_original = 'X PAGAR JACUZZI DE 17:45 A 18:45';
     especifico.db.servicios.push(existente);
     const resueltoPorProyectoH = (await especifico.api.construir(consulta)).items.find(x => x.kind === 'servicio');
-    assert.equal(resueltoPorProyectoH.estado, 'existente');assert.equal(resueltoPorProyectoH.intencion_cobro, 'cortesia');
+    assert.equal(resueltoPorProyectoH.estado, 'revisar');assert.equal(resueltoPorProyectoH.reconciliacion_estado, 'CONFLICTO');
     assert.equal(resueltoPorProyectoH.payload, null);
 });
 

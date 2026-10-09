@@ -5,7 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const S = require('../js/haiku-libro-semantica-v1.js');
 
-const context = { document: {}, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: S };
+const context = { document: {}, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: S,
+  HAIKU_SERVICIOS_IDENTIDAD_V1: require('../js/haiku-servicios-identidad-v1.js') };
 vm.createContext(context);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/haiku-libro-servicios-scope-v2.js'), 'utf8')
   .replace('const api = Object.freeze({', 'const api = Object.freeze({prepararServicio, decisionServicioExistente, aplicarServicioExistente,'), context);
@@ -80,16 +81,16 @@ test('cortesía equivalente es existente y cobro explícito contra cortesía req
 
   const cortesiaConCargo = P.decisionServicioExistente(cortesia, [existente({ total: 30000, tipo_cobro: 'cortesia' })]);
   assert.equal(cortesiaConCargo.estado, 'revisar');
-  assert.deepEqual(Array.from(cortesiaConCargo.contradicciones), ['total']);
+  assert.deepEqual(Array.from(cortesiaConCargo.contradicciones), ['monto']);
 
   const cobrable = preparar('TINAJA TONEL 19.15 HRS POR COBRAR');
   const decision = P.decisionServicioExistente(cobrable, [existente({ total: 0, tipo_cobro: 'cortesia' })]);
   assert.equal(decision.estado, 'revisar');
   assert.deepEqual(Array.from(decision.contradicciones), ['tipo_cobro']);
-  assert.match(decision.motivo, /datos explícitos.*tipo_cobro/i);
+  assert.match(decision.motivo, /datos explícitos.*tipo de cobro/i);
 });
 
-test('Carlos: candidato único por reserva, hora y cortesía se omite sin inventar fecha ni subtipo', () => {
+test('Carlos: candidato único sin fecha ni subtipo requiere vinculación explícita', () => {
   const reservaLarga = { ...reserva, titular: 'Carlos', fecha_checkin: '2026-09-11', fecha_checkout: '2026-09-13', noches: 2 };
   const servicio = S.servicios('tinaja de cortesía 19.15 hrs', { origen_campo: 'notas_reserva' })[0];
   const item = P.prepararServicio(reservaLarga, servicio, asociacion);
@@ -98,7 +99,7 @@ test('Carlos: candidato único por reserva, hora y cortesía se omite sin invent
 
   const candidato = existente({ id: 'servicio-carlos', fecha_servicio: '2026-09-11', catalogo_servicios: { codigo: 'tinajaTonel', nombre: 'Tinaja Tonel de Madera' } });
   const decision = P.decisionServicioExistente(item, [candidato]);
-  assert.equal(decision.estado, 'existente');
+  assert.equal(decision.estado, 'candidato');
   assert.match(decision.motivo, /candidato|equivalente único|fecha ausente/i);
 });
 
@@ -113,7 +114,7 @@ test('Yenny: dos candidatos compatibles en noches distintas mantienen la revisi�
   const decision = P.decisionServicioExistente(item, candidatos);
   assert.equal(decision.estado, 'revisar');
   assert.equal(decision.candidatos.length, 2);
-  assert.match(decision.motivo, /más de un servicio existente compatible/i);
+  assert.match(decision.motivo, /más de un servicio existente relacionado compatible/i);
 });
 
 test('dos candidatos compatibles conservan identidad ambigua', () => {
@@ -121,5 +122,5 @@ test('dos candidatos compatibles conservan identidad ambigua', () => {
   const decision = P.decisionServicioExistente(item, [existente(), existente({ id: 'servicio-catalina-2' })]);
   assert.equal(decision.estado, 'revisar');
   assert.equal(decision.candidatos.length, 2);
-  assert.match(decision.motivo, /más de un servicio existente compatible/i);
+  assert.match(decision.motivo, /más de un servicio existente relacionado compatible/i);
 });

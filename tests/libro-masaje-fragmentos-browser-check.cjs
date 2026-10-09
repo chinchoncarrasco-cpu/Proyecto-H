@@ -3,6 +3,7 @@ const assert = require('node:assert/strict'), fs = require('node:fs'), http = re
 const { chromium } = require('playwright');
 const { read, source, setup, consulta } = require('./fixtures/libro-servicio-manual.cjs');
 const { hoja, fragmentos, delimitadores, textoReal } = require('./fixtures/libro-masaje-fragmentos.cjs');
+const colorServicios = require('./fixtures/libro-servicios-color.cjs');
 const root = path.resolve(__dirname, '..'), errores = [], externos = [];
 const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -37,7 +38,8 @@ const server = http.createServer((req, res) => {
                     window.q = q; document.getElementById('prev').textContent = q;
                     HAIKU_LIBRO_SERVICIOS_SCOPE_V2.renderizar(await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.construir(q), document.getElementById('out'), q);
                 }, consulta);
-                const filaRocio = () => page.locator('.haku-libro-servicios__item').filter({ hasText: 'Rocío Leal' });
+                const titular = await page.evaluate(() => fixtureServicios.reservas[1].titular);
+                const filaRocio = () => page.locator('.haku-libro-servicios__item').filter({ hasText: titular });
                 assert.equal(await filaRocio().count(), 1); assert.equal(await filaRocio().locator('input[type=checkbox]').count(), 1);
                 assert.match(await filaRocio().textContent(), /Masaje Descontracturante 60 min/);
                 const abrir = async nombre => {
@@ -54,7 +56,7 @@ const server = http.createServer((req, res) => {
                     await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' });
                 };
                 const listos = () => page.evaluate(async () => (await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.revalidarVista(document.getElementById('out'), q)).items.filter(x => x.kind === 'servicio' && x.estado === 'listo').length);
-                await abrir('Rocío Leal');
+                await abrir(titular);
                 assert.equal(await page.locator('[data-campo-manual]').count(), 1);
                 assert.equal(await page.locator('[data-campo-manual="hora"]').count(), 1);
                 assert.match(await page.locator('.haku-libro-servicio-manual').innerText(), /2026-10-24/);
@@ -67,7 +69,7 @@ const server = http.createServer((req, res) => {
                 await page.locator('[data-campo-manual="codigo_servicio"]').selectOption('tinajaTonel'); await hora('18:00'); await confirmar();
                 await abrir('X PAGAR LATE OUT'); await hora('12:20'); await confirmar(); assert.equal(await listos(), 3);
                 assert.equal(await filaRocio().locator('input[type=checkbox]').isChecked(), false);
-                await abrir('Rocío Leal'); await hora('18:00'); await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+                await abrir(titular); await hora('18:00'); await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
                 assert.equal(await listos(), 3); assert.equal(await filaRocio().locator('input').getAttribute('data-haku-item-id'), id);
                 assert.equal(await filaRocio().locator('input[type=checkbox]').isChecked(), false);
                 await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
@@ -117,7 +119,7 @@ const server = http.createServer((req, res) => {
                 const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2, out = document.getElementById('out');
                 const resultado = await api.revalidarVista(out, q);
                 return { manuales: api.estadosPorVista.get(out).manuales.size,
-                    rocio: resultado.items.filter(x => x.kind === 'servicio' && x.reserva.titular === 'Rocío Leal')
+                    rocio: resultado.items.filter(x => x.kind === 'servicio' && x.reserva.titular === fixtureServicios.reservas[1].titular)
                         .map(x => ({ concepto: x.servicio.concepto, fecha: x.fecha, hora: x.hora, payload: x.payload })) };
             });
             assert.equal(antes.manuales, 0); assert.equal(antes.rocio.filter(x => x.payload).length, 1);
@@ -143,8 +145,70 @@ const server = http.createServer((req, res) => {
             assert.equal(payload.length, 1); assert.equal(payload[0].codigo_servicio, 'masajeDescontracturante60');
             assert.equal(payload[0].fecha_servicio, '2026-10-24'); assert.equal(payload[0].hora, '11:00');
             assert.equal(payload[0].cantidad, 1); assert.equal(payload[0].servicio_manual_v1, undefined);
+            // Rich text: ambos servicios amarillos son preparables; nota roja aislada.
+            await page.evaluate(setup);
+            await page.evaluate(data => {
+                const r = HAIKU_LIBRO_SEMANTICA.normalizarHoja(data, 'Oct26').reservas[0];
+                fixtureServicios.reservas = [r];
+                const estadia = fixtureServicios.db.reserva_estadias[1];
+                fixtureServicios.db.reservas.find(x => x.id === estadia.reserva_id).titular_nombre = r.titular;
+                Object.assign(fixtureServicios.db.reserva_estadias[1], { fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout });
+                const out = document.createElement('div'); out.id = 'out'; document.getElementById('out').replaceWith(out);
+            }, colorServicios.rocio());
+            const conColor = await page.evaluate(async () => {
+                const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2, resultado = await api.construir(q);
+                api.renderizar(resultado, document.getElementById('out'), q);
+                return resultado.items.filter(i => i.kind === 'servicio').map(i => ({ codigo: i.mapa.codigo, estado: i.estado,
+                    fecha: i.fecha, hora: i.hora, intencion: i.intencion_cobro, payload: i.payload, evidencia: i.servicio.evidencia_visual_v1 }));
+            });
+            assert.equal(conColor.length, 2); assert.ok(conColor.every(i => i.estado === 'listo' && i.intencion === 'cobrable'));
+            const tonelColor = conColor.find(i => i.codigo === 'tinajaTonel');
+            assert.equal(tonelColor.fecha, '2026-10-23'); assert.equal(tonelColor.hora, '19:15'); assert.equal(tonelColor.payload.tipo_cobro, 'normal');
+            const masajeColor = conColor.find(i => i.codigo === 'masajeDescontracturante60');
+            assert.equal(masajeColor.fecha, '2026-10-24'); assert.equal(masajeColor.hora, '11:00');
+            assert.ok(conColor.every(i => i.evidencia.rgb === 'FFFF00' && i.evidencia.runs.every(r => !r.texto.includes(colorServicios.nota))));
+            await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
+            const titularColor = await page.evaluate(() => fixtureServicios.reservas[0].titular);
+            assert.equal(await page.locator('.haku-libro-servicios__item--listo').filter({ hasText: titularColor }).count(), 3);
+            assert.equal(await page.locator('.haku-libro-servicios__item--revisar').count(), 0);
+            assert.equal(await page.getByRole('button', { name: 'Aprobación manual', exact: true }).count(), 0);
+            assert.equal(await page.locator('[data-campo-manual]').count(), 0);
+            assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
+            assert.equal(await page.evaluate(() => HAIKU_LIBRO_SERVICIOS_SCOPE_V2.estadosPorVista.get(document.getElementById('out')).manuales.size), 0);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+            // Jonathan: fecha propia en checkout gana al ingreso inferido por 19:00.
+            await page.evaluate(setup);
+            await page.evaluate(texto => {
+                const r = fixtureServicios.reservas[1];
+                Object.assign(r, { titular: 'Ficticioab Apellidoab', cabana: 6, fecha_checkin: '2026-10-02', fecha_checkout: '2026-10-03',
+                    noches: 1, texto_original: texto, coordenadas_origen: { hoja: 'Oct26', celda: 'C6' } });
+                r.servicios = HAIKU_LIBRO_SEMANTICA.servicios(texto, { origen_campo: 'notas_reserva', coordenadas_origen: r.coordenadas_origen });
+                fixtureServicios.reservas = [r]; fixtureServicios.db.reservas[1].titular_nombre = r.titular;
+                fixtureServicios.db.cabanas[1].numero = 6;
+                Object.assign(fixtureServicios.db.reserva_estadias[1], { fecha_ingreso: r.fecha_checkin, fecha_salida: r.fecha_checkout });
+                const out = document.createElement('div'); out.id = 'out'; document.getElementById('out').replaceWith(out);
+            }, 'X PAGAR 2 MASAJES RELAJANTES DE 30 MINS\nCOMENZANDO A LAS 19.00 HRS\nEL 03/10/26\nCON MONICA');
+            const jonathan = await page.evaluate(async () => {
+                const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2, resultado = await api.construir(q);
+                api.renderizar(resultado, document.getElementById('out'), q);
+                return resultado.items.filter(i => i.kind === 'servicio').map(i => ({ estado: i.estado, fecha: i.fecha,
+                    hora: i.hora, codigo: i.mapa.codigo, payload: i.payload }));
+            });
+            assert.equal(jonathan.length, 1); assert.equal(jonathan[0].estado, 'listo');
+            assert.equal(jonathan[0].codigo, 'masajeTerapeutico30'); assert.equal(jonathan[0].fecha, '2026-10-03');
+            assert.equal(jonathan[0].hora, '19:00'); assert.equal(jonathan[0].payload.cantidad, 2);
+            assert.equal(jonathan[0].payload.tipo_cobro, 'normal'); assert.ok(jonathan[0].payload.observaciones.includes('CON MONICA'));
+            await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
+            const masajeJonathan = page.locator('.haku-libro-servicios__item--listo').filter({ hasText: 'Ficticioab Apellidoab' });
+            assert.equal(await masajeJonathan.count(), 1);
+            assert.doesNotMatch(await masajeJonathan.innerText(), /Fecha por definir|Información contradictoria de fecha|Aprobación manual/);
+            assert.equal(await page.locator('.haku-libro-servicios__item--revisar').count(), 0);
+            assert.equal(await page.getByRole('button', { name: 'Aprobación manual', exact: true }).count(), 0);
+            assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
             await page.close();
-            console.log(`PASS Rocío real: ${viewport.width}px, 11 AM automático, tinaja 19:15 independiente, sin aprobación, un checkbox y payload`);
+            console.log(`PASS Rocío: ${viewport.width}px, sin metadata mantiene revisión de cobro; con rich text amarillo prepara masaje y tinaja sin aprobación, nota roja aislada`);
+            console.log(`PASS Jonathan: ${viewport.width}px, fecha explícita 03/10/26, 19:00, 2 masajes de 30 min cobrables, sin aprobación`);
         }
         assert.deepEqual(errores, []); assert.deepEqual(externos, []);
     } finally { if (browser) await browser.close(); await new Promise(r => server.close(r)); }

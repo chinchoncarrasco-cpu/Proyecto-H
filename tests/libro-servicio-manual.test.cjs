@@ -107,7 +107,7 @@ test('precio de existente contradictorio permanece en revisión aunque sea Late 
         catalogo_servicios: { codigo: 'lateCheckout' }, fecha_servicio: '2026-10-11', hora_inicio: '14:00', total: 20000,
         tipo_cobro: 'normal', cantidad: 1, estado_servicio: 'programado' });
     const B = servicios(await e.construir())[1]; assert.equal(B.estado, 'revisar'); assert.equal(B.payload, null);
-    assert.match(B.razones.join(' '), /precio confirmado/);
+    assert.ok(B.reconciliacion.contradicciones.includes('monto'));
 });
 test('catálogo permitido no abre alimentos/cuna y tipo/duración explícitos no se sustituyen', async () => {
     const e = entorno(); await assert.rejects(e.resolver(2, { codigo_servicio: 'masajeTerapeutico30', hora: '17:00' }), /prestación/);

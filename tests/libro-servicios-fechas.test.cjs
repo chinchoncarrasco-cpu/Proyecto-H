@@ -1,6 +1,6 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
-const context = { document: {}, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js') };
+const context = { document: {}, addEventListener() {}, HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js'), HAIKU_SERVICIOS_IDENTIDAD_V1: require('../js/haiku-servicios-identidad-v1.js') };
 vm.createContext(context);
 // Exponer sólo en memoria las funciones puras; no se invocan consultas ni writers.
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/haiku-libro-servicios-scope-v2.js'), 'utf8')
@@ -71,7 +71,7 @@ test('operational notes and existing-service detection preserve their read-only 
     const nota = P.prepararNota(reserva, texto, asociacion);
     assert.equal(nota.kind, 'nota'); assert.equal(nota.payload.texto, texto);
     const item = P.prepararServicio(reserva, servicio('tonel el 12/09/2026'), asociacion);
-    const existentes = [{ reserva_id: 'fixture-reserva', fecha_servicio: '2026-09-12', hora_inicio: '22:15:00', catalogo_servicios: { codigo: 'tinajaTonel' } }];
+    const existentes = [{ id: 'fixture-servicio', reserva_id: 'fixture-reserva', estadia_id: 'fixture-estadia', fecha_servicio: '2026-09-12', hora_inicio: '22:15:00', tipo_cobro: 'normal', total: 30000, estado_servicio: 'programado', catalogo_servicios: { codigo: 'tinajaTonel' } }];
     const before = JSON.stringify(existentes);
     assert.equal(P.servicioYaExiste(item, existentes), true);
     assert.equal(JSON.stringify(existentes), before);
