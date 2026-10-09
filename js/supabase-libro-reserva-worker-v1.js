@@ -1,14 +1,17 @@
+(function crearLectorLibro(self) {
 "use strict";
 
 const XLSX_CDN = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
 const JSZIP_CDN = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
 
 function asegurarLector() {
+    if (!self.XLSX?.read && typeof importScripts !== "function") throw new Error("Se requiere el lector XLSX canónico suministrado.");
     if (!self.XLSX?.read) importScripts(XLSX_CDN);
     if (!self.XLSX?.read) throw new Error("El lector XLSX no quedó disponible");
 }
 
 function asegurarZip() {
+    if (!self.JSZip?.loadAsync && typeof importScripts !== "function") throw new Error("Se requiere el lector OOXML canónico suministrado.");
     if (!self.JSZip?.loadAsync) importScripts(JSZIP_CDN);
     if (!self.JSZip?.loadAsync) throw new Error("El lector OOXML no quedó disponible");
 }
@@ -587,7 +590,23 @@ async function huellasLibro(buffer, nombresHojas) {
     return {version_huella: 2, nombres: sheets.map(s => s.attrs.name), huellas};
 }
 
-self.addEventListener("message", async (evento) => {
+async function indiceNombres(buffer) {
+    asegurarZip();
+    const zip = await self.JSZip.loadAsync(buffer);
+    const xml = await zip.file('xl/workbook.xml')?.async('text');
+    const nombres = bloques(xml, 'sheet').map(s => s.attrs.name);
+    if (!nombres.length) throw new Error('Índice de nombres no disponible.');
+    return { nombres };
+}
+const lector = Object.freeze({ leerHoja, indiceNombres });
+// Conserva las utilidades globales del worker usadas por sus contratos Web.
+if (typeof self.addEventListener === "function") Object.assign(self, {
+    coloresTemaXml, parsearEstilosXml, parsearTextoEnriquecido, parsearCeldasXml, huellasLibro
+});
+if (typeof module !== "undefined" && module.exports) module.exports = Object.freeze({
+    crearLector: ({ XLSX, JSZip } = {}) => crearLectorLibro({ XLSX, JSZip })
+});
+if (typeof self.addEventListener === "function") self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, nombresHojas, buffer } = evento.data || {};
     try {
         if(tipo==='buscar_bove') {
@@ -595,12 +614,7 @@ self.addEventListener("message", async (evento) => {
             return;
         }
         if (tipo === 'indice_nombres') {
-            asegurarZip();
-            const zip = await self.JSZip.loadAsync(buffer);
-            const xml = await zip.file('xl/workbook.xml')?.async('text');
-            const nombres = bloques(xml, 'sheet').map(s => s.attrs.name);
-            if (!nombres.length) throw new Error('Índice de nombres no disponible.');
-            self.postMessage({id, ok:true, resultado:{nombres}});
+            self.postMessage({id, ok:true, resultado:await indiceNombres(buffer)});
             return;
         }
         if (tipo === 'huellas') {
@@ -625,3 +639,5 @@ self.addEventListener("message", async (evento) => {
         });
     }
 });
+return lector;
+})(typeof self !== "undefined" ? self : {});

@@ -266,19 +266,18 @@
         };
 
         root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(envuelto);
-        root.HAIKU_LIBRO_PAGOS_CANON_V1 = Object.freeze({
-            mediosCanonicos, pagoConMedioManual,
-            corregirPago,
-            corregirResultado,
-            medioDesdeTexto,
-            agruparTransaccionesDistribuidas,
-            montoTotalDeclarado
-        });
         instalado = true;
         asegurarUiPagos();
         console.info("HAKU · Canon de pagos del Libro V1 preparado.");
         return true;
     }
+
+    // El cálculo también se usa sin UI; instalar sólo envuelve la fuente Web.
+    const api = Object.freeze({ mediosCanonicos, pagoConMedioManual, corregirPago,
+        corregirResultado, medioDesdeTexto, agruparTransaccionesDistribuidas, montoTotalDeclarado });
+    root.HAIKU_LIBRO_PAGOS_CANON_V1 = api;
+    if (typeof module !== "undefined" && module.exports) module.exports = api;
+    if (!root.document) return;
 
     // `supabase-libro-reserva-v1.js` puede crear su API recién en
     // DOMContentLoaded. Este módulo se carga inmediatamente después; por eso no

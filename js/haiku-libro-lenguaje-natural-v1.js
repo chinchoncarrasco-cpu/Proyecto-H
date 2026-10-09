@@ -1,7 +1,22 @@
-(function (root) {
+(function inicializarLenguaje(root) {
     "use strict";
-    const base = root.HAIKU_LIBRO_SEMANTICA;
-    if (!base || typeof base.normalizar !== "function") return;
+    const contratoSemantica = Symbol.for("haiku.libro.lenguaje-natural.v1");
+    const semanticasAdaptadas = new WeakMap();
+    function crearSemantica(semantica, pagosCanon) {
+        const adaptada = semantica?.[contratoSemantica]?.version === 1 ? semantica : semanticasAdaptadas.get(semantica);
+        const contexto = { HAIKU_LIBRO_SEMANTICA: adaptada || semantica, HAIKU_LIBRO_PAGOS_CANON_V1: pagosCanon };
+        inicializarLenguaje(contexto);
+        semanticasAdaptadas.set(semantica, contexto.HAIKU_LIBRO_SEMANTICA);
+        return Object.freeze({ semantica: contexto.HAIKU_LIBRO_SEMANTICA,
+            corregirResultado: contexto.HAIKU_LIBRO_LENGUAJE_NATURAL_V1.ajustarResultadoPagos });
+    }
+    const recibida = root.HAIKU_LIBRO_SEMANTICA;
+    const adaptacion = recibida?.[contratoSemantica]?.version === 1 ? recibida[contratoSemantica] : null;
+    const base = adaptacion ? adaptacion.base : recibida;
+    if (!base || typeof base.normalizar !== "function") {
+        if (typeof module !== "undefined" && module.exports) module.exports = Object.freeze({ crearSemantica });
+        return;
+    }
 
     const normalizarBase = base.normalizar.bind(base);
     const meses = {
@@ -153,7 +168,12 @@
         return canonizarPeriodo(texto);
     }
 
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ ...base, normalizar: normalizarConsulta });
+    // Marca contractual no enumerable e inmutable: reutilizar la adaptación
+    // conserva la función original y evita depender de su idempotencia textual.
+    root.HAIKU_LIBRO_SEMANTICA = adaptacion ? recibida : Object.freeze(Object.defineProperty(
+        { ...base, normalizar: normalizarConsulta }, contratoSemantica,
+        { value: Object.freeze({ version: 1, base }) }));
+    semanticasAdaptadas.set(base, root.HAIKU_LIBRO_SEMANTICA);
 
     // Compatibilidad de pagos del Libro real:
     // - una fila del bloque de pagos con monto representa un pago recibido;
@@ -491,7 +511,9 @@
         ejecutarConsultaAnual(texto, consulta);
     }
 
-    root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1 = Object.freeze({clasificarMovimientoFinanciero});
+    root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1 = Object.freeze({clasificarMovimientoFinanciero, ajustarResultadoPagos, crearSemantica});
+    if (typeof module !== "undefined" && module.exports && root === globalThis)
+        module.exports = root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1;
     instalarCompatibilidadPagos();
     if (!root.HAIKU_LIBRO_RESERVA_V1 && root.document?.readyState === "loading") {
         root.document.addEventListener("DOMContentLoaded", instalarCompatibilidadPagos, { once: true });

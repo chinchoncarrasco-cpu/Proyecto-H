@@ -219,6 +219,8 @@
         const proxy = {
             ...original,
             __pagosFocalizadosProxy: true,
+            // La comparación mensual programática no hereda la selección transitoria de la UI.
+            consultarHojaMensual: (...args) => consultarOriginal(...args),
             consultarHoja: async (...args) => {
                 const data = await consultarOriginal(...args);
                 const scope = estado.scope;
