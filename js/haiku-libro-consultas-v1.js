@@ -1,10 +1,19 @@
-(function (root) {
+(function inicializarConsultas(root) {
     "use strict";
+    function crearMotorLectura({ semantica, pagosDestinos, cancelaciones, bloqueos } = {}) {
+        if (!semantica?.normalizar) throw new Error("Semántica canónica del Libro no disponible.");
+        return inicializarConsultas({ __motorLecturaLibro: true, HAIKU_LIBRO_SEMANTICA: semantica,
+            HAIKU_LIBRO_PAGOS_DESTINOS_V1: pagosDestinos, HAIKU_LIBRO_CANCELACIONES_V1: cancelaciones,
+            HAIKU_LIBRO_BLOQUEOS_V1: bloqueos });
+    }
     const S = root.HAIKU_LIBRO_SEMANTICA;
     const D = root.HAIKU_LIBRO_PAGOS_DESTINOS_V1;
     const tarifaFullDay = root.HAIKU_FULLDAY_TARIFA_V1 ||
         (typeof module !== "undefined" && module.exports ? require('./haiku-fullday-tarifa-v1.js') : null);
-    if (!S) return;
+    if (!S) {
+        if (typeof module !== "undefined" && module.exports) module.exports = Object.freeze({ crearMotorLectura });
+        return;
+    }
 
     const money = v => v === null || v === undefined ? "monto no determinado" : `$${Number(v).toLocaleString("es-CL")} CLP`;
     const source = x => `${x?.hoja || ""}!${x?.celda || ""}`;
@@ -4138,8 +4147,28 @@
         renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
         return {result,plan};
     }
+    function modeloPresentacionComparacion(result) {
+        const comp = result.comparacion, meta = comp.meta || {}, grupos = comp.grupos || [];
+        const faltantes = grupos.filter(g => g.estado === "sin_coincidencia");
+        const ambiguas = grupos.filter(g => g.estado === "ambigua");
+        const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
+        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
+        const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
+        const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
+        const advertenciasInformativas = comp.flatMap(x => (x.libro.advertencias_informativas || [])
+            .map(a => `${x.libro.titular} · CAB ${x.libro.cabana}: ${a}`));
+        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, serviciosRevisar, advertenciasInformativas,
+            contadores: { gruposLibro: meta.libro ?? 0, registrosDetectados: meta.libro_detectadas ?? 0,
+                reservasProyecto: meta.proyecto ?? 0, estadiasAsociadas: comp.filter(x => x.estado === "asociada").length,
+                estadiasValidas: meta.estadias_libro ?? 0, gruposAsociados: meta.asociadas ?? 0,
+                faltantes: faltantes.length, ambiguas: ambiguas.length, casosConDiferencias: meta.con_diferencias ?? 0,
+                gruposConDiferencias: diferencias.length, pagosFaltantes: pagosFaltan.length,
+                pagosRevisar: pagosRevisar.length, serviciosRevisar: serviciosRevisar.length,
+                advertencias: (result.advertencias || []).length, advertenciasInformativas: [...new Set(advertenciasInformativas)].length } };
+    }
+    if (root.__motorLecturaLibro) return Object.freeze({ consultar, interpretar, modeloPresentacionComparacion });
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,revalidarCambiosDetectados,
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
         abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
@@ -4539,15 +4568,8 @@
         const comp = result.comparacion;
         const meta = comp.meta || {};
         const grupos = comp.grupos || [];
-        const faltantes = grupos.filter(g => g.estado === "sin_coincidencia");
-        const ambiguas = grupos.filter(g => g.estado === "ambigua");
-        const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
-        const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
-        const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
-        const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
-        const advertenciasInformativas = (comp || []).flatMap(resultado =>
-            (resultado.libro.advertencias_informativas || []).map(aviso =>
-                `${resultado.libro.titular} · CAB ${resultado.libro.cabana}: ${aviso}`));
+        const modelo = modeloPresentacionComparacion(result);
+        const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, serviciosRevisar, advertenciasInformativas } = modelo;
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
         else {
@@ -4569,7 +4591,7 @@
         const resumen = elemento("section", "haku-comparacion-sites-resumen");
         const coincidencias = elemento("div", "haku-comparacion-sites-coincidencias");
         coincidencias.append(
-            elemento("strong", "haku-comparacion-sites-fraccion", `${comp.filter(x => x.estado === "asociada").length} / ${meta.estadias_libro ?? 0}`),
+            elemento("strong", "haku-comparacion-sites-fraccion", `${modelo.contadores.estadiasAsociadas} / ${modelo.contadores.estadiasValidas}`),
             elemento("span", "", "Estancias del Libro coinciden"),
             elemento("small", "", `${meta.estadias_libro ?? 0} estadías · ${meta.ambiguas ?? 0} por decidir`)
         );
