@@ -42,7 +42,7 @@ test('identidad conflictiva: dos altas independientes seleccionables, pagos depe
  // Defaults del paso de identidad intactos. El usuario elige sólo las altas.
  plan.items.forEach(i=>{i.seleccionado=altas.includes(i)});
  const checkboxes=vista.out.querySelectorAll('input').filter(i=>i.type==='checkbox');
- assert.equal(checkboxes.filter(c=>!c.disabled).length,4); // 2 identidades previas + 2 altas independientes.
+ assert.equal(checkboxes.filter(c=>!c.disabled).length,6); // 4 identidades revisables + 2 altas independientes.
  assert.ok(altas.every(i=>i.dependeDe.length===0));
  const enviados=[];h.db.rpc=async(name,args)=>{enviados.push({name,args});return {data:{ok:true,reservas_creadas:2,resultados:[]}}};
  await Q.confirmarIncorporacion(h.result,h.decisiones,new Set(),plan,h.db);
@@ -1562,7 +1562,7 @@ test('confirmation errors keep the existing retry renderer instead of showing su
  db.rpc=async()=>({data:null,error:new Error('fallo controlado')});
  await h.out.querySelectorAll('button').find(e=>e.textContent.startsWith('Continuar con ')).events.click();
  assert.match(h.texts(),/No se pudo confirmar: fallo controlado/);
- assert.ok(h.out.querySelectorAll('button').some(e=>e.textContent.startsWith('Continuar con ')));
+ assert.ok(h.button('Reintentar confirmación'));
  assert.doesNotMatch(h.out.className,/haku-incorporacion-resultado/);
 });
 test('one bulk action approves every eligible manual payment and pending cases do not block ready items',async()=>{

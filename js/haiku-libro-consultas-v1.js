@@ -42,6 +42,7 @@
     const mediosManuales = new WeakMap(); // por consulta/decisiones, nunca sobre el Libro
     const pagosEfectivosMedio = new WeakMap(); // copia efectiva → evidencia original + decisión
     const usuariosComparacion = new WeakMap();
+    const conflictosIdentidad = new WeakMap(); // sólo esta consulta; nunca persistir documentos
     const DEFINIR_MEDIO_PAGO = 'definir_medio_pago';
     const nombresMes = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
     const etiquetas = {
@@ -3279,11 +3280,11 @@
         const identidadPrimero = new Set([...actualizacionesIdentidad].filter(id => dependidasPorPagos.has(id)));
         if (identidadPrimero.size) {
             plan.etapa = 'actualizar_identidad';
-            plan.actualizacionesIdentidad = [...identidadPrimero];
+            plan.actualizacionesIdentidad = [...actualizacionesIdentidad];
             const camposIdentidad = new Set(['titular_nombre','titular_numero_documento','titular_tipo_documento']);
             const etiquetasIdentidad = new Set([...camposIdentidad].map(campo => etiquetasActualizacion[campo]));
             for (const item of plan.items) {
-                if (identidadPrimero.has(item.id)) {
+                if (actualizacionesIdentidad.has(item.id)) {
                     const reserva = item.payload.reserva || { antes:{}, despues:{}, cambios:[] };
                     item.payload.reserva = {
                         antes:Object.fromEntries(Object.entries(reserva.antes || {}).filter(([campo]) => camposIdentidad.has(campo))),
@@ -3294,7 +3295,7 @@
                     item.payload.cambios = [...item.payload.reserva.cambios];
                     item.cambios = [...item.payload.reserva.cambios];
                 }
-                if (!identidadPrimero.has(item.id)) item.seleccionado = false;
+                if (!actualizacionesIdentidad.has(item.id) && item.categoria !== 'pagos') item.seleccionado = false;
                 if (!item.pagoLibro || !(item.dependeDe || []).some(id => identidadPrimero.has(id)) || item.categoria === 'omitidos' ||
                     (!item.aprobable && item.categoria !== 'pagos')) continue;
                 item.etapaSiguiente = true;
@@ -3304,6 +3305,17 @@
                 item.aprobable = false;
                 item.motivos = ['Paso 2: este pago se habilitará después de confirmar el titular y RUT del Libro.'];
             }
+        }
+        // Una actualización necesaria debe estar confirmada en Proyecto H, no
+        // simplemente seleccionada junto al pago. Las altas conservan su vínculo
+        // atómico reserva_ref; los cambios opcionales no añaden dependencias.
+        for (const item of plan.items.filter(i => i.pagoLibro && i.categoria !== 'omitidos')) {
+            if (item.etapaSiguiente || item.categoria !== 'pagos' && !item.aprobable) continue;
+            if (!(item.dependeDe || []).some(id => plan.items.find(i => i.id === id)?.payload?.tipo === 'reserva_actualizar')) continue;
+            item.etapaSiguiente = true;
+            item.categoriaAnterior ||= item.categoria;
+            item.categoria = 'dudosos'; item.seleccionado = false; item.aprobable = false;
+            item.motivos = [...item.motivos, 'Confirma primero las actualizaciones necesarias de esta reserva. Los otros pagos independientes pueden continuar.'];
         }
         const gruposComprobante = new Map();
         for (const item of plan.items.filter(item => item.distribucionManual)) {
@@ -3327,6 +3339,29 @@
         contextoVisualPlanes.set(plan, comp);
         plan.items.forEach(item => contextoVisualItems.set(item, comp));
         return plan;
+    }
+
+    function firmaSeleccionIncorporacion(item) {
+        return JSON.stringify([item.categoria, item.payload, item.dependeDe]);
+    }
+
+    function firmaConflictoIdentidad(item) {
+        const p = item.payload, campos = ['titular_nombre','titular_numero_documento','titular_tipo_documento'];
+        const identidad = datos => Object.fromEntries(campos.filter(c => Object.prototype.hasOwnProperty.call(datos || {},c))
+            .map(c => [c,datos[c]]));
+        return JSON.stringify([p?.reserva_id,p?.estadia_id,identidad(p?.reserva?.antes),identidad(p?.reserva?.despues)]);
+    }
+
+    function restaurarSeleccionIncorporacion(nuevo, anterior) {
+        if (!anterior) return nuevo;
+        const mismoContexto = JSON.stringify(nuevo.contextoSeleccion) === JSON.stringify(anterior.contextoSeleccion);
+        for (const item of nuevo.items) {
+            const previo = anterior.items.find(i => i.id === item.id);
+            item.seleccionado = mismoContexto && previo?.seleccionado === true && !item.motivos.length &&
+                CATEGORIAS_GUARDABLES.includes(item.categoria) &&
+                firmaSeleccionIncorporacion(item) === firmaSeleccionIncorporacion(previo);
+        }
+        return nuevo;
     }
 
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
@@ -3387,6 +3422,19 @@
         }
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
         const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
+        plan.contextoSeleccion = { generacion, usuario:usuariosComparacion.get(comparacion) };
+        const conflictos = conflictosIdentidad.get(decisiones);
+        for (const item of plan.items) {
+            const conflicto = conflictos?.get(item.id);
+            if (!conflicto) continue;
+            if (conflicto.firma !== firmaConflictoIdentidad(item) ||
+                conflicto.contexto !== JSON.stringify(plan.contextoSeleccion)) {
+                conflictos.delete(item.id); continue;
+            }
+            item.categoria = 'pendientes'; item.seleccionado = false; item.aprobable = false;
+            item.motivos = [conflicto.motivo];
+            item.conflictoIdentidad = true;
+        }
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
@@ -3560,8 +3608,31 @@
         return detalle;
     }
 
+    function resultadoServicio4CConocido(resultado) {
+        return resultado?.ok === true &&
+            (resultado.pagos_creados === 1 && (resultado.omitidos === 0 || resultado.omitidos === undefined) ||
+                resultado.pagos_creados === 0 && resultado.omitidos === 1);
+    }
+
+    function resumenResultadosServicios4C(servicios = []) {
+        const resumen = { haikuPagosConfirmados: 0, haikuPagosOmitidos: 0, haikuPagosInciertos: 0 };
+        for (const servicio of servicios) {
+            const resultado = servicio.resultado || servicio.respuestaConfirmada;
+            if (resultadoServicio4CConocido(resultado)) {
+                resumen.haikuPagosConfirmados += resultado.pagos_creados;
+                resumen.haikuPagosOmitidos += resultado.omitidos || 0;
+            } else if (servicio.resultadoIncierto) resumen.haikuPagosInciertos++;
+        }
+        return resumen;
+    }
+
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        const seleccionIds = () => plan.items.filter(i => i.seleccionado).map(i => i.id).sort();
+        if (plan.solicitudPendiente?.seleccionIds &&
+            JSON.stringify(plan.solicitudPendiente.seleccionIds) !== JSON.stringify(seleccionIds())) {
+            throw new Error('La confirmación anterior tiene un resultado pendiente. Reintenta la misma operación antes de cambiar la selección.');
+        }
         const mediosElegidos = plan.items.filter(i => i.medioPagoManual && (i.seleccionado ||
             plan.solicitudPendiente?.items.some(x => x.item_id === i.id) ||
             plan.solicitudPendiente?.servicios.some(x => x.item.item_id === i.id)));
@@ -3638,6 +3709,13 @@
             const refs = item => JSON.stringify((item?.payload?.estadias || [item?.payload]).map(e => e?.resolucion_manual || null));
             for (const item of plan.items.filter(i => i.seleccionado)) {
                 const nuevo = actualizado.items.find(i => i.id === item.id);
+                if (nuevo?.conflictoIdentidad || nuevo?.etapaSiguiente && item.pagoLibro) throw Object.assign(
+                    Error('La selección incluye una actualización en revisión o un pago con cambios aún sin confirmar. Revisa la selección antes de continuar.'),
+                    {code:'HLC01',haikuConflictoDatos:true});
+                if (item.pagoLibro && nuevo?.payload && ['pagos','actualizaciones'].includes(nuevo.categoria) &&
+                    JSON.stringify(item.payload) !== JSON.stringify(nuevo.payload)) throw Object.assign(
+                    Error('El destino o los datos financieros del pago cambiaron desde la selección. Vuelve a comparar y confirma el destino actualizado.'),
+                    {code:'HLC01',haikuConflictoDatos:true});
                 if (nuevo?.decisionManualInvalidada) throw Object.assign(
                     Error('Proyecto H cambió; vuelve a revisar la aprobación manual del pago.'), {code:'HLC01',haikuConflictoDatos:true});
                 if (item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
@@ -3650,14 +3728,16 @@
             for (const item of actualizado.items) {
                 const previo = plan.items.find(i => i.id === item.id);
                 if (seleccionados.has(item.id) && item.categoria === 'actualizaciones' && JSON.stringify(item.payload) !== JSON.stringify(previo?.payload)) {
-                    throw new Error('Proyecto H cambió desde la vista previa. Vuelve a preparar para revisar los valores nuevos antes de confirmar.');
+                    throw Object.assign(new Error('Proyecto H cambió desde la vista previa. Vuelve a preparar para revisar los valores nuevos antes de confirmar.'),
+                        {code:'HLC01',haikuConflictoDatos:true});
                 }
                 item.seleccionado = seleccionados.has(item.id) && !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria);
             }
             const vigentes = new Set(actualizado.items.filter(i => i.seleccionado).map(i => i.id));
             omitidosAlRevalidar = [...seleccionados].filter(id => !vigentes.has(id)).length;
             const serializados = serializarIncorporacion(actualizado);
-            if (!serializados.length) throw new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.');
+            if (!serializados.length) throw Object.assign(new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.'),
+                {code:'HLC01',haikuConflictoDatos:true});
             const servicios = serializados.filter(item => item.tipo === 'pago_servicios_4c')
                 .map(item => ({ operacionId: crearIdOperacion(), item, resultado: null }));
             const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c');
@@ -3665,22 +3745,43 @@
                 [...seleccionados].filter(id => !vigentes.has(id)).map(id => ({
                     previo:plan.items.find(i => i.id === id), nuevo:actualizado.items.find(i => i.id === id)
                 })));
-            solicitud = { operacionId: crearIdOperacion(), items, servicios, omitidosAlRevalidar, detalleContexto };
+            solicitud = { operacionId: crearIdOperacion(), items, servicios, omitidosAlRevalidar, detalleContexto,
+                seleccionIds:seleccionIds() };
             // Cada pago protegido conserva su propia operación idempotente. El lote
             // guarda los resultados parciales para que un reintento continúe desde
             // el primer pago pendiente sin repetir los ya confirmados.
             plan.solicitudPendiente = solicitud;
         } else omitidosAlRevalidar = solicitud.omitidosAlRevalidar || 0;
 
-        const conflictoDatos = error => {
+        const conflictoDatos = (error, servicio, inciertoPrevio = false) => {
             // Compatibilidad con el writer anterior mientras la migration local
             // aún no se aplica. Sólo el índice confirmado, nunca cualquier 23505.
             const documentoDuplicado = error.code === '23505' &&
                 error.message === 'duplicate key value violates unique constraint "huespedes_documento_uidx"';
             const codigo = documentoDuplicado ? 'HLI01' : error.code;
-            const mensaje = documentoDuplicado ? 'El documento pertenece a otro huésped; requiere revisión manual. No se guardó el lote' :
+            const mensaje = codigo === 'HLI01' ? 'El documento pertenece a otro huésped; requiere revisión manual. No se guardó el lote' :
+                codigo === 'HLI02' ? 'La identidad compartida o su asociación requiere revisión manual. No se guardó el lote' :
                 String(error.message || error.details || error);
             if (['HLC01','HLC02','HLI01','HLI02'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
+                // Este intento fue rechazado, pero una respuesta perdida anterior
+                // de la misma operación no demuestra ausencia de escrituras.
+                if (servicio) servicio.resultadoIncierto = inciertoPrevio;
+                if (['HLI01','HLI02'].includes(codigo)) {
+                    let detalle;
+                    try { detalle = JSON.parse(error.details || error.detail || '{}'); } catch (_) { /* legado sin item_id */ }
+                    const identidades = solicitud.items.filter(i => i.tipo === 'reserva_actualizar');
+                    const enviado = detalle?.item_id ? identidades.find(i => i.item_id === detalle.item_id) :
+                        solicitud.items.length === 1 && identidades.length === 1 ? identidades[0] : null;
+                    const item = enviado && plan.items.find(i => i.id === enviado.item_id);
+                    if (item) {
+                        if (!conflictosIdentidad.has(decisiones)) conflictosIdentidad.set(decisiones,new Map());
+                        conflictosIdentidad.get(decisiones).set(item.id, {
+                            firma:firmaConflictoIdentidad(item), contexto:JSON.stringify(plan.contextoSeleccion),
+                            motivo:codigo === 'HLI01' ? 'Documento de otro huésped: requiere revisión humana. Esta actualización y sus pagos quedan pendientes.' :
+                                'Identidad compartida o asociación incompatible: requiere revisión humana. Esta actualización y sus pagos quedan pendientes.'
+                        });
+                    }
+                }
                 // Un conflicto de datos no es un retry de red: el payload y su
                 // snapshot ya no son vigentes. El siguiente paso vuelve a la
                 // comparación y conserva decisiones humanas compatibles.
@@ -3692,36 +3793,49 @@
             }
             throw error;
         };
-        for (const servicio of solicitud.servicios || []) {
-            if (servicio.resultado) continue;
-            vigente();
-            const { data, error } = await cliente.rpc(CAPACIDAD_PAGOS_SERVICIO_4C.rpc, {
-                p_operacion_id: servicio.operacionId,
-                p_item: servicio.item
-            });
-            if (error) conflictoDatos(error);
-            vigente();
-            if (!data?.ok) throw new Error('Proyecto H no confirmó el pago de servicios.');
-            servicio.resultado = data;
-        }
+        try {
+            for (const servicio of solicitud.servicios || []) {
+                if (servicio.resultado) continue;
+                vigente();
+                const inciertoPrevio = servicio.resultadoIncierto === true;
+                servicio.resultadoIncierto = true;
+                const { data, error } = await cliente.rpc(CAPACIDAD_PAGOS_SERVICIO_4C.rpc, {
+                    p_operacion_id: servicio.operacionId,
+                    p_item: servicio.item
+                });
+                if (error) conflictoDatos(error, servicio, inciertoPrevio);
+                if (resultadoServicio4CConocido(data)) {
+                    // Sólo evidencia para el aviso; no evita la revalidación ni
+                    // cambia la operación que se conserva para un reintento.
+                    servicio.respuestaConfirmada = data;
+                    servicio.resultadoIncierto = false;
+                }
+                vigente();
+                if (!resultadoServicio4CConocido(data)) throw new Error('Proyecto H no confirmó el resultado del pago de servicios.');
+                servicio.resultado = data;
+            }
 
-        let data = { ok: true, reservas_creadas: 0, estadias_agregadas: 0, pagos_creados: 0, actualizaciones: 0, omitidos: 0 };
-        if (solicitud.items.length) {
-            vigente();
-            const respuesta = await cliente.rpc('haiku_incorporar_libro_v1', {
-                p_operacion_id: solicitud.operacionId,
-                p_items: solicitud.items
-            });
-            if (respuesta.error) conflictoDatos(respuesta.error);
-            vigente();
-            data = respuesta.data;
+            let data = { ok: true, reservas_creadas: 0, estadias_agregadas: 0, pagos_creados: 0, actualizaciones: 0, omitidos: 0 };
+            if (solicitud.items.length) {
+                vigente();
+                const respuesta = await cliente.rpc('haiku_incorporar_libro_v1', {
+                    p_operacion_id: solicitud.operacionId,
+                    p_items: solicitud.items
+                });
+                if (respuesta.error) conflictoDatos(respuesta.error);
+                vigente();
+                data = respuesta.data;
+            }
+            if (!data?.ok) throw new Error('Proyecto H no confirmó la incorporación.');
+            for (const servicio of solicitud.servicios || []) {
+                data.pagos_creados = Number(data.pagos_creados || 0) + Number(servicio.resultado?.pagos_creados || 0);
+                data.omitidos = Number(data.omitidos || 0) + Number(servicio.resultado?.omitidos || 0);
+            }
+            solicitud.confirmada = true;
+            return { resultado: data, omitidosAlRevalidar, detalle:detalleResultadoIncorporacion(solicitud,data) };
+        } catch (error) {
+            throw Object.assign(error, resumenResultadosServicios4C(solicitud.servicios));
         }
-        if (!data?.ok) throw new Error('Proyecto H no confirmó la incorporación.');
-        for (const servicio of solicitud.servicios || []) {
-            data.pagos_creados = Number(data.pagos_creados || 0) + Number(servicio.resultado?.pagos_creados || 0);
-            data.omitidos = Number(data.omitidos || 0) + Number(servicio.resultado?.omitidos || 0);
-        }
-        return { resultado: data, omitidosAlRevalidar, detalle:detalleResultadoIncorporacion(solicitud,data) };
     }
 
 
@@ -4749,12 +4863,14 @@
             out.querySelectorAll("select").forEach(s => s.disabled = true);
             vista.replaceChildren(elemento("p", "", "Revalidando reservas y pagos contra Proyecto H…"));
             try {
-                const plan = await prepararIncorporacion(result, decisiones, aprobados);
+                const plan = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),ui.planAnterior);
                 if (!out.isConnected && out.isConnected !== undefined) return;
+                let planEnVista = plan;
                 const volver = async () => {
                     try {
                         const comparacion = await compararSistema(result.reservas,root.haikuSupabase,result.q);
-                        renderizarComparacion(out,{...result,comparacion},{decisiones,aprobados});
+                        renderizarComparacion(out,{...result,comparacion},{decisiones,aprobados,planAnterior:planEnVista,
+                            revalidado:new Date().toLocaleTimeString('es-CL')});
                     } catch (e) { out.replaceChildren(elemento('p','','No se pudo actualizar la comparación: '+e.message)); }
                 };
                 let incorporar;
@@ -4764,7 +4880,9 @@
                     lista.forEach(id => aprobados.add(id));
                     out.replaceChildren(elemento('p', '', lista.length > 1 ? 'Revalidando los pagos aprobados…' : 'Revalidando el pago aprobado…'));
                     try {
-                        const nuevo = await prepararIncorporacion(result, decisiones, aprobados);
+                        const nuevo = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),planEnVista);
+                        nuevo.items.filter(i => lista.includes(i.id) && i.categoria === 'pagos' && !i.motivos.length && !i.etapaSiguiente)
+                            .forEach(i => { i.seleccionado = true; });
                         if (identidadActualizada) nuevo.etapaAnteriorCompletada = true;
                         const distribucion = nuevo.items.find(item => lista.includes(item.id))?.distribucionManual;
                         if (distribucion && distribucion.ids.every(id => nuevo.items.find(item => item.id === id)?.payload?.aprobado_manualmente === true)) {
@@ -4775,6 +4893,7 @@
                                     item.payload?.aprobado_manualmente === true && !item.motivos.length;
                             });
                         }
+                        planEnVista = nuevo;
                         renderizarIncorporacion(out, nuevo, volver, aprobar, incorporar);
                     } catch (e) {
                         lista.forEach(id => aprobados.delete(id)); volver();
@@ -4783,18 +4902,35 @@
                 };
                 incorporar = async planActual => {
                     const ejecucion = await confirmarIncorporacion(result, decisiones, aprobados, planActual);
-                    if (planActual.etapa !== 'actualizar_identidad') return ejecucion;
+                    const actualizacionesSeleccionadas = planActual.items.some(i => i.seleccionado && i.payload?.tipo === 'reserva_actualizar');
+                    const altasDuranteIdentidad = planActual.etapa === 'actualizar_identidad' && planActual.items.some(i => i.seleccionado && i.categoria === 'nuevas');
+                    if (!actualizacionesSeleccionadas && !altasDuranteIdentidad) return ejecucion;
                     aprobados.clear();
-                    const siguientePlan = await prepararIncorporacion(result, decisiones, aprobados);
-                    identidadActualizada = siguientePlan.etapa !== 'actualizar_identidad';
+                    let siguientePlan;
+                    try {
+                        siguientePlan = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),planActual);
+                    } catch (_) {
+                        return { ...ejecucion, avisoRevalidacion:'Proyecto H ya confirmó la operación. No se pudo volver a leer los pagos; vuelve a la comparación para comprobarlos antes de continuar. No reenvíes las actualizaciones.' };
+                    }
+                    identidadActualizada = planActual.etapa === 'actualizar_identidad' && siguientePlan.etapa !== 'actualizar_identidad' &&
+                        !siguientePlan.items.some(i => i.payload?.tipo === 'reserva_actualizar' &&
+                            ['titular_nombre','titular_numero_documento','titular_tipo_documento'].some(c => c in (i.payload.reserva?.despues || {})));
                     if (identidadActualizada) siguientePlan.etapaAnteriorCompletada = true;
+                    siguientePlan.actualizacionesConfirmadas = Number(ejecucion.resultado.actualizaciones || 0);
+                    planEnVista = siguientePlan;
                     return { ...ejecucion, siguientePlan };
                 };
                 aprobar.manualPago = async (planActual,id,accion) => {
                     const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
+                    const seleccionadoManualmente = nuevo.items.find(i => i.id === id)?.seleccionado;
+                    restaurarSeleccionIncorporacion(nuevo,planActual);
+                    const itemManual = nuevo.items.find(i => i.id === id);
+                    if (seleccionadoManualmente && itemManual && !itemManual.motivos.length && !itemManual.etapaSiguiente)
+                        itemManual.seleccionado = true;
                     if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
                     if (identidadActualizada) nuevo.etapaAnteriorCompletada = true;
                     continuarVistaManualPago(planActual,nuevo,id,accion);
+                    planEnVista = nuevo;
                     renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
                 };
                 renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
@@ -5660,6 +5796,7 @@
             resumen.append(tarjeta);
         }
         out.replaceChildren(cabecera, mensaje, resumen);
+        if (ejecucion.avisoRevalidacion) out.append(elemento('p','haiku-incorporacion-aviso',ejecucion.avisoRevalidacion));
         if (r.reintento) out.append(elemento("p", "haiku-incorporacion-propuesta", "La confirmación ya se había completado; se recuperó el mismo resultado sin duplicar datos."));
         if ((r.omitidos || 0) + (ejecucion.omitidosAlRevalidar || 0) > 0) out.append(elemento("p", "haiku-incorporacion-propuesta", "Los elementos que aparecieron entretanto o coincidían con datos existentes fueron omitidos."));
         const detalle = elemento('section','haku-incorporacion-final-detalle');
@@ -5709,14 +5846,16 @@
 
     function renderizarIncorporacion(out, plan, volver, aprobar, incorporar) {
         out.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-sites";
+        out.replaceChildren();
         const cabecera = elemento("header", "haku-incorporacion-sites-cabecera");
         const titulo = elemento("div", "haku-incorporacion-sites-titulos");
         const etapaIdentidad = plan.etapa === 'actualizar_identidad';
+        const pagosHabilitados = plan.items.some(i => i.categoria === 'pagos' && !i.motivos.length);
         const etapaPagos = plan.etapaAnteriorCompletada || plan.focoPagos;
         const escrituraActiva = plan.escrituraHabilitada === true &&
             !plan.permisos.some(permiso => root.haikuTienePermiso?.(permiso) === false);
         titulo.append(elemento("span", "haku-incorporacion-sites-ceja", "LIBRO · INCORPORACIÓN SEGURA"),
-            elemento("strong", "haku-incorporacion-sites-titulo", etapaIdentidad ? "Paso 1 de 2 · Actualizar titular y RUT" :
+            elemento("strong", "haku-incorporacion-sites-titulo", etapaIdentidad ? pagosHabilitados ? 'Revisar pagos · identidades pendientes' : "Paso 1 de 2 · Actualizar titular y RUT" :
                 plan.etapaAnteriorCompletada ? "Paso 2 de 2 · Aprobar pagos" : plan.focoPagos ? "Aprobar comprobante de pago" : "Confirmar incorporación"));
         const controlesCabecera = elemento("div", "haku-incorporacion-sites-cabecera-controles");
         controlesCabecera.append(elemento("span", "haiku-incorporacion-modo haku-incorporacion-sites-modo" +
@@ -5735,11 +5874,13 @@
         preparacion.append(elemento("span", "haku-incorporacion-sites-ceja", "PREPARACIÓN"),
             elemento("strong", "", "Confirmar incorporación"));
         const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", etapaIdentidad ?
-            "Confirma primero el cambio de titular y RUT en las reservas exactas. Un documento de otro huésped requiere revisión manual. Los pagos relacionados permanecen bloqueados hasta que Proyecto H guarde estos datos y Haku vuelva a comprobarlos. Puedes seleccionar reservas nuevas independientes sin incluir estas actualizaciones." :
+            "Confirma las actualizaciones válidas de cada reserva. Un documento de otro huésped queda pendiente de revisión humana. Cada pago relacionado permanece bloqueado hasta confirmar sus cambios y volver a comprobar su destino; los pagos y las reservas nuevas independientes pueden continuar." :
             plan.etapaAnteriorCompletada ? "Titular y RUT actualizados. Haku volvió a leer Proyecto H: los abonos que ya existen quedan omitidos y ahora puedes revisar únicamente los pagos pendientes." :
             plan.focoPagos ? "El titular y RUT ya coinciden. Si Bofore continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
             "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
         preparacion.append(aviso);
+        if (plan.actualizacionesConfirmadas) preparacion.append(elemento('p','haiku-incorporacion-continuar',
+            `${plan.actualizacionesConfirmadas} actualización(es) confirmada(s). Haku volvió a comprobar los pagos. Los conflictos restantes siguen pendientes; selecciona los pagos habilitados que quieras registrar.`));
         const cifras = elemento("div", "haku-incorporacion-sites-cifras");
         const cifraListos = elemento("strong", "", "0");
         const cifraRevision = elemento("strong", "", "0");
@@ -5765,10 +5906,11 @@
         const controles = new Map();
         const contenidosCategoria = new Map();
         let conteoGrupoListos = null;
-        let confirmar = null, guardando = false, volverAComparar = false;
+        let confirmar = null, guardando = false, volverAComparar = false, seleccionAlConflicto = null;
         const idsEtapa = new Set(plan.actualizacionesIdentidad || []);
-        const correspondeEtapa = item => !etapaIdentidad || idsEtapa.has(item.id) ||
-            (item.categoria === 'nuevas' && item.dependeDe.length === 0);
+        const confirmacionPendiente = () => !!plan.solicitudPendiente && !plan.solicitudPendiente.confirmada;
+        const correspondeEtapa = item => !item.etapaSiguiente;
+        const firmaSeleccionActual = () => JSON.stringify(plan.items.filter(i => i.seleccionado).map(i => i.id).sort());
         const esElegible = item => !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria) &&
             correspondeEtapa(item) && item.dependeDe.every(id => plan.items.find(x => x.id === id)?.seleccionado);
         const seleccionados = () => plan.items.filter(item => item.seleccionado && esElegible(item));
@@ -5778,7 +5920,7 @@
                 if (!control) continue;
                 const dependencia = item.dependeDe.some(id => !plan.items.find(x => x.id === id)?.seleccionado);
                 const noElegible = !!item.motivos.length || dependencia || !correspondeEtapa(item) || !CATEGORIAS_GUARDABLES.includes(item.categoria);
-                control.disabled = guardando || !escrituraActiva || noElegible;
+                control.disabled = guardando || confirmacionPendiente() || !escrituraActiva || noElegible;
                 if (noElegible) { control.checked = false; item.seleccionado = false; }
                 else control.checked = item.seleccionado;
             }
@@ -5792,10 +5934,11 @@
             cifraRevision.textContent = indicadores.dudosos.textContent;
             if (conteoGrupoListos) conteoGrupoListos.textContent = `${cifraListos.textContent} elemento${cifraListos.textContent === "1" ? "" : "s"}`;
             if (confirmar) {
+                if (volverAComparar && seleccionAlConflicto !== firmaSeleccionActual()) volverAComparar = false;
                 const cantidad = seleccionados().length;
                 const comprobanteFoco = plan.focoComprobanteId ? plan.items.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
                 confirmar.disabled = guardando || !escrituraActiva || (!volverAComparar && cantidad === 0);
-                if (!guardando) confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : etapaIdentidad && cantidad && seleccionados().every(i => idsEtapa.has(i.id)) ? "Actualizar titular y RUT" :
+                if (!guardando) confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : confirmacionPendiente() ? 'Reintentar confirmación' : etapaIdentidad && cantidad && seleccionados().every(i => idsEtapa.has(i.id)) ? "Actualizar titular y RUT" :
                     comprobanteFoco && cantidad ? `Registrar comprobante de ${money(comprobanteFoco.total)}` :
                     cantidad ? `Continuar con ${cantidad} elemento${cantidad === 1 ? "" : "s"} listo${cantidad === 1 ? "" : "s"}` :
                     plan.focoPagos ? "Aprueba el comprobante completo" : "Selecciona al menos un elemento listo";
@@ -5886,6 +6029,7 @@
             const seleccionar = elemento("button", "haiku-incorporacion-atajo", "Seleccionar todo lo listo");
             seleccionar.type = "button";
             seleccionar.addEventListener("click", () => {
+                if (guardando || confirmacionPendiente()) return;
                 elegiblesAhora.forEach(item => { item.seleccionado = true; });
                 actualizar();
             });
@@ -5936,7 +6080,7 @@
             if (!seleccion.length) return;
             const comprobanteFoco = plan.focoComprobanteId ? seleccion.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
             const texto = etapaIdentidad ?
-                `Se actualizarán el titular y RUT en ${seleccion.filter(i => idsEtapa.has(i.id)).length} reserva(s) exacta(s) y se incorporarán ${nuevas} reserva(s) nueva(s) independiente(s). Los pagos dependientes siguen bloqueados hasta revalidar la identidad. ¿Confirmas?` :
+                `Se actualizarán el titular y RUT en ${seleccion.filter(i => idsEtapa.has(i.id)).length} reserva(s) exacta(s), se incorporarán ${nuevas} reserva(s) nueva(s) independiente(s) y ${pagos} pago(s) ya habilitado(s). Los pagos con actualizaciones pendientes siguen bloqueados. ¿Confirmas esta selección?` :
                 comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
                 `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s), además de ${seleccion.filter(i => i.categoria === "actualizaciones").length} actualización(es) con los datos del Libro. Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
             if (typeof root.confirm === "function" && !root.confirm(texto)) return;
@@ -5964,14 +6108,23 @@
                 if (ejecucion.siguientePlan) renderizarIncorporacion(out, ejecucion.siguientePlan, volver, aprobar, incorporar);
                 else renderizarResultadoIncorporacion(out, ejecucion, volver);
             } catch (error) {
-                guardando = false; atras.disabled = false;
-                if (cerrarVista) cerrarVista.disabled = false;
+                guardando = false; atras.disabled = confirmacionPendiente();
+                if (cerrarVista) cerrarVista.disabled = confirmacionPendiente();
                 confirmar.removeAttribute?.("aria-busy");
                 volverAComparar = error.haikuConflictoDatos === true;
+                seleccionAlConflicto = firmaSeleccionActual();
                 confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : "Reintentar confirmación";
+                const serviciosParciales = error.haikuPagosConfirmados === undefined
+                    ? resumenResultadosServicios4C(plan.solicitudPendiente?.servicios) : error;
+                const parciales = [];
+                if (serviciosParciales.haikuPagosConfirmados) parciales.push(`${serviciosParciales.haikuPagosConfirmados} pago(s) de servicios creado(s) y confirmado(s)`);
+                if (serviciosParciales.haikuPagosOmitidos) parciales.push(`${serviciosParciales.haikuPagosOmitidos} pago(s) de servicios omitido(s) porque ya existían`);
+                if (serviciosParciales.haikuPagosInciertos) parciales.push(`${serviciosParciales.haikuPagosInciertos} operación(es) de servicios con resultado incierto; podrían haberse ejecutado`);
+                const resumenParcial = parciales.length ? parciales.join('; ') + '. ' : '';
                 aviso.textContent = volverAComparar
-                    ? "No se guardó nada: " + (error.message || "Proyecto H cambió") + ". Vuelve a comparar; Haku conservará las decisiones que sigan siendo compatibles y pedirá una confirmación nueva."
-                    : "No se pudo confirmar: " + (error.message || "error desconocido") + ". No cierres esta vista; el reintento de red usa la misma operación para evitar duplicados.";
+                    ? (resumenParcial ? resumenParcial + 'No se confirmó el lote restante: ' : "No se guardó nada: ") +
+                        (error.message || "Proyecto H cambió") + ". Vuelve a comparar para identificar los casos pendientes, o desmarca las actualizaciones que requieren revisión y confirma una selección independiente. Haku conserva las selecciones compatibles y vuelve a comprobar cada pago."
+                    : "No se pudo confirmar: " + resumenParcial + (error.message || "error desconocido") + ". No cierres esta vista; el reintento de red usa la misma operación para evitar duplicados.";
                 actualizar();
             }
         });
