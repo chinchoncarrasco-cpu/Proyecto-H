@@ -31,6 +31,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
 function documentFor(scripted) {
     const scripts = scripted ? [
         '<script src="/js/supabase-libro-reserva-v1.js" defer></script>',
+        '<script src="/js/haiku-libro-fuente-oficial-v1.js" defer></script>',
         '<script src="/js/supabase-libro-google-readonly-v1.js" defer></script>',
         '<script src="/js/haiku-libro-consultas-v1.js" defer></script>'
     ].join('') : '';

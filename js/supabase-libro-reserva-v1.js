@@ -806,7 +806,7 @@
         }
     }
 
-    async function cargarArchivo(archivo, restaurado = false, origen = "manual") {
+    async function cargarArchivo(archivo, restaurado = false, origen = "manual", avisarActualizacion = true) {
         if (!archivo) return;
         if (!/\.xlsx$/i.test(archivo.name)) {
             mostrarVacio("Formato no compatible", "Selecciona una copia descargada en formato .xlsx.");
@@ -866,7 +866,7 @@
             void actualizarMemoriaVisual();
             notificarVistaLibro(origen, true);
             renderizarHoja(hojaActual);
-            if (!restaurado && actualizacion && persistenciaConfirmada) {
+            if (avisarActualizacion && !restaurado && actualizacion && persistenciaConfirmada) {
                 const cargaGoogle = origen === "google";
                 const detalle = {
                     generacion:cargaId,
@@ -950,12 +950,17 @@
         if (!$("seccion-libro-reserva") || window.HAIKU_LIBRO_RESERVA_V1) return;
         asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
-            version: "1.4.0",
+            version: "1.5.0",
             modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
             limpiar: quitarLibro,
             listo: () => cargaLista,
             cargarDesdeGoogle: archivo => {
                 cargaLista = cargarArchivo(archivo, false, "google");
+                return cargaLista;
+            },
+            // Sólo carga: no inicia el informe automático ni certifica procedencia.
+            cargarDesdeGoogleParaVerificacion: archivo => {
+                cargaLista = cargarArchivo(archivo, false, "google", false);
                 return cargaLista;
             },
             listarHojas: () => [...(libroIndice?.SheetNames || [])],

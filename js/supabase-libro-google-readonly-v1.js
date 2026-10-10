@@ -22,6 +22,44 @@
     let timer = null;
     let sincronizando = false;
     let metadataActual = null;
+    let fuenteControl = null;
+    let revisionAutorizacion = 0;
+    let timerAutorizacion = null;
+
+    function fallo(code) {
+        return new root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.FuenteOficialError(code);
+    }
+
+    function autorizado() {
+        return Boolean(accessToken) && tokenExpiraEn > Date.now();
+    }
+
+    function perderAutorizacion() {
+        accessToken = ""; tokenExpiraEn = 0; revisionAutorizacion++;
+        if (timerAutorizacion) clearTimeout(timerAutorizacion);
+        timerAutorizacion = null;
+        fuenteControl?.invalidar("GOOGLE_NO_AUTORIZADO"); detenerPolling();
+        const conectarBtn = $("haiku-libro-google-conectar"), syncBtn = $("haiku-libro-google-sincronizar");
+        const desconectarBtn = $("haiku-libro-google-desconectar");
+        if (conectarBtn) conectarBtn.hidden = false;
+        if (syncBtn) syncBtn.disabled = true;
+        if (desconectarBtn) desconectarBtn.hidden = true;
+    }
+
+    function controladorFuente() {
+        if (!fuenteControl) {
+            fuenteControl = root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.crearControlador({
+                fileId: FILE_ID, lector: () => root.HAIKU_LIBRO_RESERVA_V1, autorizado,
+                obtenerMetadata: signal => obtenerMetadata({ verificada: true, signal }),
+                descargar: (metadata, signal) => descargar(metadata, { verificada: true, signal }),
+                entregar: entregarAlLibro, crypto: root.crypto
+            });
+            root.addEventListener("haiku:libro-cambio", () => fuenteControl.cambioLibro());
+            root.addEventListener("haiku:libro-vista-actualizada", e => fuenteControl.vistaLibro(e.detail));
+            $("libro-reserva-archivo")?.addEventListener("change", () => fuenteControl.invalidar());
+        }
+        return fuenteControl;
+    }
 
     const $ = id => document.getElementById(id);
 
@@ -167,6 +205,8 @@
     }
 
     function solicitarToken() {
+        const solicitud = ++revisionAutorizacion;
+        fuenteControl?.invalidar();
         return new Promise(async (resolve, reject) => {
             let cliente;
             try {
@@ -175,85 +215,94 @@
                 reject(error);
                 return;
             }
+            if (solicitud !== revisionAutorizacion) { reject(fallo("SOLICITUD_OBSOLETA")); return; }
             cliente.callback = respuesta => {
+                if (solicitud !== revisionAutorizacion) { reject(fallo("SOLICITUD_OBSOLETA")); return; }
                 if (respuesta?.error) {
-                    reject(new Error(respuesta.error_description || respuesta.error));
+                    perderAutorizacion(); reject(fallo("GOOGLE_NO_AUTORIZADO"));
                     return;
                 }
+                perderAutorizacion();
                 accessToken = String(respuesta?.access_token || "");
                 const segundos = Number(respuesta?.expires_in || 0);
                 tokenExpiraEn = Date.now() + Math.max(0, segundos - 60) * 1000;
-                if (!accessToken) {
-                    reject(new Error("Google no devolvió un token de lectura."));
+                if (!autorizado()) {
+                    perderAutorizacion(); reject(fallo("GOOGLE_NO_AUTORIZADO"));
                     return;
                 }
-                resolve(accessToken);
+                timerAutorizacion = setTimeout(() => {
+                    perderAutorizacion(); pintar("neutral", "Libro online", "La sesión de Google expiró. Vuelve a conectar.");
+                }, tokenExpiraEn - Date.now());
+                resolve(revisionAutorizacion);
             };
             cliente.requestAccessToken();
         });
     }
 
-    async function driveFetch(url) {
-        if (!accessToken || (tokenExpiraEn && Date.now() >= tokenExpiraEn)) {
-            accessToken = "";
-            tokenExpiraEn = 0;
-            detenerPolling();
-            throw new Error("La sesión de Google expiró. Vuelve a conectar.");
+    async function driveFetch(url, signal, verificada = false) {
+        if (!autorizado()) {
+            perderAutorizacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
         }
+        const autorizacion = revisionAutorizacion;
         const respuesta = await fetch(url, {
             method: "GET",
             headers: { Authorization: `Bearer ${accessToken}` },
-            cache: "no-store"
+            cache: "no-store",
+            redirect: verificada ? "error" : "follow",
+            signal
         });
+        if (!autorizado() || autorizacion !== revisionAutorizacion) throw fallo("GOOGLE_NO_AUTORIZADO");
         if (respuesta.status === 401) {
-            accessToken = "";
-            tokenExpiraEn = 0;
-            detenerPolling();
-            throw new Error("La sesión de Google expiró. Vuelve a conectar.");
+            perderAutorizacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
         }
-        if (respuesta.status === 403) throw new Error("Esta cuenta no tiene permiso de lectura sobre el Libro oficial.");
-        if (!respuesta.ok) throw new Error(`Google Drive respondió ${respuesta.status}.`);
+        if (respuesta.status === 403) throw fallo("GOOGLE_ACCESO_DENEGADO");
+        if (!respuesta.ok) throw fallo("GOOGLE_ERROR");
         return respuesta;
     }
 
-    async function obtenerMetadata() {
-        const fields = encodeURIComponent("id,name,mimeType,modifiedTime,size,md5Checksum,capabilities(canDownload)");
+    async function obtenerMetadata({ verificada = false, signal } = {}) {
+        const fields = encodeURIComponent("id,name,mimeType,modifiedTime,size,version,md5Checksum,sha256Checksum,capabilities(canDownload),trashed");
         const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?fields=${fields}&supportsAllDrives=true`;
-        const respuesta = await driveFetch(url);
-        const data = await respuesta.json();
-        if (String(data?.id || "") !== FILE_ID) throw new Error("Google devolvió un archivo distinto al Libro configurado.");
-        if (data?.mimeType !== MIME_XLSX) throw new Error("El archivo configurado ya no es un XLSX compatible.");
-        if (data?.capabilities?.canDownload === false) throw new Error("Google no permite descargar este archivo con la cuenta conectada.");
+        const respuesta = await driveFetch(url, signal, verificada);
+        const data = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerJSON(respuesta, signal) : await respuesta.json();
+        if (String(data?.id || "") !== FILE_ID || data?.mimeType !== MIME_XLSX) throw fallo("FUENTE_INVALIDA");
+        if (data?.capabilities?.canDownload === false) throw fallo("GOOGLE_ACCESO_DENEGADO");
         return data;
     }
 
-    async function descargar(metadata) {
+    async function descargar(metadata, { verificada = false, signal } = {}) {
         const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?alt=media&supportsAllDrives=true`;
-        const respuesta = await driveFetch(url);
-        const buffer = await respuesta.arrayBuffer();
-        if (!buffer.byteLength) throw new Error("Google devolvió un archivo vacío.");
+        const respuesta = await driveFetch(url, signal, verificada);
+        const buffer = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerBytes(respuesta, undefined, signal) : await respuesta.arrayBuffer();
+        if (!buffer.byteLength) throw fallo("FUENTE_INVALIDA");
         const nombreBase = String(metadata?.name || "Libro de reservas actual 2025.xlsx");
         const nombre = /\.xlsx$/i.test(nombreBase) ? nombreBase : `${nombreBase}.xlsx`;
         return new File([buffer], nombre, { type: MIME_XLSX, lastModified: Date.parse(metadata?.modifiedTime || "") || Date.now() });
     }
 
-    async function entregarAlLibro(archivo) {
+    async function entregarAlLibro(archivo, lectorEsperado) {
         const lector = root.HAIKU_LIBRO_RESERVA_V1;
+        if (lectorEsperado && lector !== lectorEsperado) throw fallo("FUENTE_CAMBIADA");
+        if (lectorEsperado) {
+            if (typeof lector?.cargarDesdeGoogleParaVerificacion !== "function") throw fallo("LECTOR_NO_CONFIRMADO");
+            await lector.cargarDesdeGoogleParaVerificacion(archivo);
+            if (!lector.estado?.().cargado) throw fallo("LECTOR_NO_CONFIRMADO");
+            return;
+        }
         if (typeof lector?.cargarDesdeGoogle === "function") {
             await lector.cargarDesdeGoogle(archivo);
-            if (!lector.estado?.().cargado) throw new Error("El lector local no confirmó la carga del Libro.");
+            if (!lector.estado?.().cargado) throw fallo("LECTOR_NO_CONFIRMADO");
             return;
         }
 
         const entrada = $("libro-reserva-archivo");
-        if (!entrada) throw new Error("No encontré el cargador del Libro de Reserva.");
-        if (typeof DataTransfer !== "function") throw new Error("Este navegador no permite entregar el XLSX al lector local.");
+        if (!entrada || typeof DataTransfer !== "function") throw fallo("LECTOR_NO_CONFIRMADO");
         const dt = new DataTransfer();
         dt.items.add(archivo);
         entrada.files = dt.files;
         entrada.dispatchEvent(new Event("change", { bubbles: true }));
         await lector?.listo?.();
-        if (!lector?.estado?.().cargado) throw new Error("El lector local no confirmó la carga del Libro.");
+        if (!lector?.estado?.().cargado) throw fallo("LECTOR_NO_CONFIRMADO");
     }
 
     function libroLocalCargado() {
@@ -266,17 +315,23 @@
 
     async function sincronizar(forzar = false) {
         if (sincronizando || !accessToken) return;
+        if (fuenteControl?.enCurso()) {
+            if (!forzar) return;
+            fuenteControl.invalidar();
+        }
         sincronizando = true;
         pintar("trabajando", "Libro online", "Comprobando Google Drive…");
         try {
             const metadata = await obtenerMetadata();
+            const verificadaVigente = fuenteControl?.observarMetadata(metadata) === true;
             metadataActual = metadata;
             const anterior = localStorage.getItem(MODIFIED_KEY) || "";
             const cambio = Boolean(metadata.modifiedTime) && metadata.modifiedTime !== anterior;
             const necesitaArchivo = !libroLocalCargado();
-            const descargarCopia = forzar || cambio || necesitaArchivo;
+            const descargarCopia = forzar || (!verificadaVigente && cambio) || necesitaArchivo;
 
             if (descargarCopia) {
+                fuenteControl?.invalidar();
                 pintar("trabajando", "Libro online", cambio && anterior ? "Nueva versión detectada. Actualizando…" : "Descargando versión oficial…");
                 const archivo = await descargar(metadata);
                 await entregarAlLibro(archivo);
@@ -291,8 +346,9 @@
                     : `Google sin cambios · ${horaChile(metadata.modifiedTime)} · copia local no comparada`
             );
         } catch (error) {
-            console.error("HAIKU · Libro Google solo lectura:", error);
-            pintar("error", "Libro online", error?.message || "No fue posible consultar Google Drive.");
+            fuenteControl?.invalidar();
+            pintar("error", "Libro online", error instanceof root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.FuenteOficialError
+                ? error.message : "No fue posible consultar Google Drive. Vuelve a intentarlo.");
         } finally {
             sincronizando = false;
             const caja = $("haiku-libro-google");
@@ -322,24 +378,22 @@
         }
         pintar("trabajando", "Libro online", "Esperando autorización de Google…");
         try {
-            await solicitarToken();
+            const autorizacion = await solicitarToken();
+            if (!autorizado() || autorizacion !== revisionAutorizacion) return;
             pintar("ok", "Libro online conectado", "Acceso concedido en modo solo lectura.");
             iniciarPolling();
             await sincronizar(false);
         } catch (error) {
-            console.error("HAIKU · Conexión Google:", error);
-            accessToken = "";
-            tokenExpiraEn = 0;
-            detenerPolling();
-            pintar("error", "Libro online", error?.message || "No fue posible conectar Google.");
+            if (error?.code === "SOLICITUD_OBSOLETA") return;
+            perderAutorizacion();
+            pintar("error", "Libro online", "No fue posible autorizar Google. Vuelve a conectar explícitamente.");
         }
     }
 
     function desconectar() {
         detenerPolling();
         const token = accessToken;
-        accessToken = "";
-        tokenExpiraEn = 0;
+        perderAutorizacion();
         metadataActual = null;
         if (token && root.google?.accounts?.oauth2?.revoke) {
             try { root.google.accounts.oauth2.revoke(token, () => {}); } catch (_) {}
@@ -366,13 +420,19 @@
     }
 
     root.HAIKU_LIBRO_GOOGLE_V1 = Object.freeze({
-        version: "1.0.1",
+        version: "1.1.0",
         modo: "google-drive-readonly",
         fileId: FILE_ID,
         scope: DRIVE_SCOPE,
         conectar,
         desconectar,
         sincronizar: () => sincronizar(true),
+        obtenerFuenteVerificada: async () => {
+            if (sincronizando) throw fallo("FUENTE_OCUPADA");
+            return controladorFuente().obtener();
+        },
+        fuenteVerificada: handle => controladorFuente().fuente(handle),
+        verificarVigencia: handle => controladorFuente().verificarVigencia(handle),
         estado: () => ({
             conectado: Boolean(accessToken),
             sincronizando,
