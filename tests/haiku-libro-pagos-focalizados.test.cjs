@@ -56,31 +56,31 @@ function cargarModulo(datosLibro = { reservas: [] }, capas = false) {
 
 test('one holder and one written date activate the focused payment scope without a CAB', () => {
     const h = cargarModulo();
-    const scope = h.api.detectar('haku revisa el Libro los pagos asociados a Macarena Hurtado el Jueves 03 de septiembre para agregarlos al proyecto H');
+    const scope = h.api.detectar("haku revisa el Libro los pagos asociados a Kixitobe Xutiniv el Jueves 03 de septiembre para agregarlos al proyecto H");
     assert.ok(scope);
     assert.equal(scope.fecha, '2026-09-03');
     assert.equal(scope.objetivos.length, 1);
-    assert.equal(scope.objetivos[0].nombre, 'Macarena Hurtado');
+    assert.equal(scope.objetivos[0].nombre, "Kixitobe Xutiniv");
     assert.equal(scope.objetivos[0].cabana, null);
 });
 
-test('the exact Macarena request excludes other holders but preserves every related multi-stay movement', async () => {
+test("the exact Kixitobe request excludes other holders but preserves every related multi-stay movement", async () => {
     const h = cargarModulo({ reservas: [
-        { titular: 'Macarena Hurtado', cabana: 5, pagos: [
+        { titular: "Kixitobe Xutiniv", cabana: 5, pagos: [
             { monto: 160000, fecha_comprobante: '2026-09-03' },
             { monto: 20000, fecha_comprobante: '2026-09-04' }
         ], pagos_sin_asociacion: [], servicios: [{ tipo: 'early_checkin' }] },
-        { titular: 'Macarena Hurtado', cabana: 10, pagos: [
+        { titular: "Kixitobe Xutiniv", cabana: 10, pagos: [
             { monto: 20000, fecha_comprobante: '2026-09-04' }
         ], pagos_sin_asociacion: [], servicios: [] },
-        { titular: 'Pascual Abarca', cabana: 4, pagos: [
+        { titular: "Kevefaf Vivifa", cabana: 4, pagos: [
             { monto: 160000, fecha_comprobante: '2026-09-03' }
         ], pagos_sin_asociacion: [] }
     ] });
-    h.disparar('haku revisa el Libro los pagos asociados a Macarena Hurtado el Jueves 03 de septiembre para agregarlos al proyecto H');
+    h.disparar("haku revisa el Libro los pagos asociados a Kixitobe Xutiniv el Jueves 03 de septiembre para agregarlos al proyecto H");
     const resultado = await h.consultarHoja('Sep26');
     assert.equal(resultado.reservas.length, 2);
-    assert.ok(resultado.reservas.every(r => r.titular === 'Macarena Hurtado'));
+    assert.ok(resultado.reservas.every(r => r.titular === "Kixitobe Xutiniv"));
     assert.deepEqual(resultado.reservas.find(r => r.cabana === 5).pagos.map(p => p.monto), [160000, 20000]);
     assert.deepEqual(resultado.reservas.find(r => r.cabana === 10).pagos.map(p => p.monto), [20000]);
     assert.ok(resultado.reservas.every(r => r.servicios.length === 0));
@@ -88,12 +88,12 @@ test('the exact Macarena request excludes other holders but preserves every rela
 
 test('the existing multi-CAB focused syntax remains supported', () => {
     const h = cargarModulo();
-    const scope = h.api.detectar('Haku revisa los pagos del Libro\nCAB 4 Pascual Abarca\nCAB 10 Macarena Hurtado\nJueves 03 de septiembre');
+    const scope = h.api.detectar("Haku revisa los pagos del Libro\nCAB 4 Kevefaf Vivifa\nCAB 10 Kixitobe Xutiniv\nJueves 03 de septiembre");
     assert.ok(scope);
     assert.equal(scope.fecha, '2026-09-03');
     assert.deepEqual(Array.from(scope.objetivos, x => [x.cabana, x.nombre]), [
-        [4, 'Pascual Abarca'],
-        [10, 'Macarena Hurtado']
+        [4, "Kevefaf Vivifa"],
+        [10, "Kixitobe Xutiniv"]
     ]);
 });
 
@@ -101,7 +101,7 @@ test('exact request without Libro routes through all payment layers and retains 
     const S = require('../js/haiku-libro-semantica-v1.js');
     const raw = require('./fixtures/libro-pagos-sep26.cjs')();
     const h = cargarModulo(S.normalizarHoja(raw, 'Sep26'), true);
-    const texto = 'Haku revisa los pagos de Macarena Hurtado del 03 de septiembre para agregarlos a Proyecto H';
+    const texto = "Haku revisa los pagos de Kixitobe Xutiniv del 03 de septiembre para agregarlos a Proyecto H";
     h.disparar(texto);
     assert.equal(h.textoEnrutado(), 'Libro: ' + texto);
     const out = await h.consultarHoja('Sep26');

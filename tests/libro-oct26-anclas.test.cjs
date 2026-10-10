@@ -11,7 +11,7 @@ function octubre() {
  cell(24,2,'Pagos de arriendos de hoy');
  const bloques=[
   [5,54,56,'AIRBNB // Agustin Rampa Spinelli'],
-  [5,86,96,'Valeria González Vega'],
+  [5,86,96,"Valeria Bufozaki Zomi"],
   [6,7,12,'Flavia Flores Loyola'],
   [6,34,44,'HUESPED FRECUENTE TRATO ESPECIAL // David Sanchez'],
   [6,90,96,'Rocio Leal'],
@@ -31,7 +31,7 @@ test('Oct26: eight real guests, exact displaced anchors and dates, no duplicate 
  const data=octubre(),before=JSON.stringify(data),r=S.normalizarHoja(data,'Oct26');
  assert.deepEqual(r.reservas.map(x=>[x.titular,x.coordenadas_origen.celda,x.fecha_checkin,x.fecha_checkout]),[
   ['Agustin Rampa Spinelli','BC6','2026-10-14','2026-10-15'],
-  ['Valeria González Vega','CI6','2026-10-22','2026-10-25'],
+  ["Valeria Bufozaki Zomi",'CI6','2026-10-22','2026-10-25'],
   ['Flavia Flores Loyola','H7','2026-10-02','2026-10-04'],
   ['David Sanchez','AI7','2026-10-09','2026-10-12'],
   ['Rocio Leal','CM7','2026-10-23','2026-10-25'],
@@ -59,7 +59,7 @@ test('shifted recovery excludes auxiliary columns, other rows, vertical merges a
 
 test('known labels and invalid first fragments are skipped before selecting a guest',()=>{
  const etiquetas=['AIRBNB','BOOKING','FULL DAY','PROMO','VOUCHER','LISTA ARCOIRIS','LIBRE','CLIENTE FRECUENTE',
-  'HUESPED FRECUENTE','HUESPED FRECUENTE TRATO ESPECIAL','LATE CHECK OUT','X HACER','POR HACER','PENDIENTE','SIN TITULAR','123'];
+  'HUESPED FRECUENTE','HUESPED FRECUENTE TRATO ESPECIAL','LATE CHECK OUT','X HACER','POR HACER','PENDIENTE','SIN TITULAR',"637"];
  for(const etiqueta of etiquetas) {
   const data=octubre();data.celdas.find(c=>c.r===5&&c.c===54).valor=etiqueta+' // Ana Pérez';
   assert.equal(S.normalizarHoja(data,'Oct26').reservas[0].titular,'Ana Pérez',etiqueta);
@@ -71,11 +71,11 @@ test('known labels and invalid first fragments are skipped before selecting a gu
 test('reservation labels do not change September payment interpretation or association',()=>{
  const fixture=require('./fixtures/libro-pagos-sep26.cjs');
  const data=fixture(),old=S.normalizarHoja(data,'Sep26');
- for(const c of data.celdas.filter(c=>c.r<24&&c.valor.startsWith('Macarena Hurtado'))) c.valor='AIRBNB // HUESPED FRECUENTE // '+c.valor;
+ for(const c of data.celdas.filter(c=>c.r<24&&c.valor.startsWith("Kixitobe Xutiniv"))) c.valor='AIRBNB // HUESPED FRECUENTE // '+c.valor;
  const now=S.normalizarHoja(data,'Sep26');
  assert.equal(now.pagos.length,4);
  assert.deepEqual(now.reservas.map(r=>[r.titular,r.pagos.length,r.pagos_sin_asociacion.length]),[
-  ['Macarena Hurtado',0,2],['Macarena Hurtado',2,0]
+  ["Kixitobe Xutiniv",0,2],["Kixitobe Xutiniv",2,0]
  ]);
  const financial=r=>JSON.parse(JSON.stringify({pagos:r.pagos,reservas:r.reservas.map(x=>({pagos:x.pagos,pagos_sin_asociacion:x.pagos_sin_asociacion}))}));
  assert.deepEqual(financial(now),financial(old));

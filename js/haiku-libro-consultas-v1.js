@@ -453,7 +453,7 @@
             { valor: "nueva", categoria: "nuevas", texto: "Tratar como reserva nueva", efecto: "propondría crear una nueva reserva" });
         return { comparaciones, opciones, razon: candidatos.length ?
             "Revisa Libro vs Proyecto H y elige cómo tratar esta reserva en la vista previa." :
-            "No hay candidato real en Proyecto H. No se marcó automáticamente como faltante porque el Libro tiene advertencias.", avisos };
+            "No hay candidato real en Proyecto H. No se neviy automáticamente como faltante porque el Libro tiene advertencias.", avisos };
     }
 
     function claveReserva(r) {
@@ -3673,14 +3673,20 @@
         } else omitidosAlRevalidar = solicitud.omitidosAlRevalidar || 0;
 
         const conflictoDatos = error => {
-            const mensaje = String(error.message || error.details || error);
-            if (['HLC01','HLC02'].includes(error.code) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
+            // Compatibilidad con el writer anterior mientras la migration local
+            // aún no se aplica. Sólo el índice confirmado, nunca cualquier 23505.
+            const documentoDuplicado = error.code === '23505' &&
+                error.message === 'duplicate key value violates unique constraint "huespedes_documento_uidx"';
+            const codigo = documentoDuplicado ? 'HLI01' : error.code;
+            const mensaje = documentoDuplicado ? 'El documento pertenece a otro huésped; requiere revisión manual. No se guardó el lote' :
+                String(error.message || error.details || error);
+            if (['HLC01','HLC02','HLI01','HLI02'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Un conflicto de datos no es un retry de red: el payload y su
                 // snapshot ya no son vigentes. El siguiente paso vuelve a la
                 // comparación y conserva decisiones humanas compatibles.
                 plan.solicitudPendiente = null;
                 const conflicto = new Error(mensaje);
-                conflicto.code = error.code;
+                conflicto.code = codigo;
                 conflicto.haikuConflictoDatos = true;
                 throw conflicto;
             }
@@ -4372,9 +4378,9 @@
         if (candidatos.length!==1 || candidatos[0].reserva_id!==fila.sistema.reserva_id) return null;
         const s=candidatos[0], diferencias=[];
         if (p.fecha_comprobante && s.fecha_pago && !mismaFechaCalendario(p.fecha_comprobante,s.fecha_pago)) diferencias.push(`Fecha distinta · Libro ${fechaBreve(p.fecha_comprobante)} · Proyecto H ${fechaBreve(fechaCalendarioChile(s.fecha_pago))}`);
-        if (p.monto!=null && s.monto!=null && Number(p.monto)!==Number(s.monto)) diferencias.push(`Monto distinto · Libro ${money(p.monto)} · Proyecto H ${money(s.monto)}`);
+        if (p.monto!=null && s.monto!=null && Number(p.monto)!==Number(s.monto)) diferencias.push(`Monto mifiriyi · Libro ${money(p.monto)} · Proyecto H ${money(s.monto)}`);
         if (p.moneda && s.moneda && p.moneda!==s.moneda) diferencias.push(`Moneda distinta · Libro ${p.moneda} · Proyecto H ${s.moneda}`);
-        if (medioSistema(s) && medioSistema(s)!==medioLibro(p)) diferencias.push(`Medio distinto · Libro transferencia · Proyecto H ${medioSistema(s).replaceAll('_',' ')}`);
+        if (medioSistema(s) && medioSistema(s)!==medioLibro(p)) diferencias.push(`Medio mifiriyi · Libro transferencia · Proyecto H ${medioSistema(s).replaceAll('_',' ')}`);
         if (!diferencias.length) return null;
         const franja=elemento('div','haiku-pago-diferencia-compacta');
         franja.append(elemento('span','',`⚠ ${diferencias.join(' · ')}`));
@@ -4779,9 +4785,9 @@
                     const ejecucion = await confirmarIncorporacion(result, decisiones, aprobados, planActual);
                     if (planActual.etapa !== 'actualizar_identidad') return ejecucion;
                     aprobados.clear();
-                    identidadActualizada = true;
                     const siguientePlan = await prepararIncorporacion(result, decisiones, aprobados);
-                    siguientePlan.etapaAnteriorCompletada = true;
+                    identidadActualizada = siguientePlan.etapa !== 'actualizar_identidad';
+                    if (identidadActualizada) siguientePlan.etapaAnteriorCompletada = true;
                     return { ...ejecucion, siguientePlan };
                 };
                 aprobar.manualPago = async (planActual,id,accion) => {
@@ -5729,9 +5735,9 @@
         preparacion.append(elemento("span", "haku-incorporacion-sites-ceja", "PREPARACIÓN"),
             elemento("strong", "", "Confirmar incorporación"));
         const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", etapaIdentidad ?
-            "El Libro tiene prioridad. Confirma primero el cambio de titular y RUT en las reservas exactas. Los pagos relacionados permanecen bloqueados hasta que Proyecto H guarde estos datos y Haku vuelva a comprobarlos." :
+            "Confirma primero el cambio de titular y RUT en las reservas exactas. Un documento de otro huésped requiere revisión manual. Los pagos relacionados permanecen bloqueados hasta que Proyecto H guarde estos datos y Haku vuelva a comprobarlos. Puedes seleccionar reservas nuevas independientes sin incluir estas actualizaciones." :
             plan.etapaAnteriorCompletada ? "Titular y RUT actualizados. Haku volvió a leer Proyecto H: los abonos que ya existen quedan omitidos y ahora puedes revisar únicamente los pagos pendientes." :
-            plan.focoPagos ? "El titular y RUT ya coinciden. Si Karina continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
+            plan.focoPagos ? "El titular y RUT ya coinciden. Si Bofore continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
             "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
         preparacion.append(aviso);
         const cifras = elemento("div", "haku-incorporacion-sites-cifras");
@@ -5761,7 +5767,8 @@
         let conteoGrupoListos = null;
         let confirmar = null, guardando = false, volverAComparar = false;
         const idsEtapa = new Set(plan.actualizacionesIdentidad || []);
-        const correspondeEtapa = item => !etapaIdentidad || idsEtapa.has(item.id);
+        const correspondeEtapa = item => !etapaIdentidad || idsEtapa.has(item.id) ||
+            (item.categoria === 'nuevas' && item.dependeDe.length === 0);
         const esElegible = item => !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria) &&
             correspondeEtapa(item) && item.dependeDe.every(id => plan.items.find(x => x.id === id)?.seleccionado);
         const seleccionados = () => plan.items.filter(item => item.seleccionado && esElegible(item));
@@ -5788,7 +5795,7 @@
                 const cantidad = seleccionados().length;
                 const comprobanteFoco = plan.focoComprobanteId ? plan.items.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
                 confirmar.disabled = guardando || !escrituraActiva || (!volverAComparar && cantidad === 0);
-                if (!guardando) confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : etapaIdentidad && cantidad ? "Actualizar titular y RUT" :
+                if (!guardando) confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : etapaIdentidad && cantidad && seleccionados().every(i => idsEtapa.has(i.id)) ? "Actualizar titular y RUT" :
                     comprobanteFoco && cantidad ? `Registrar comprobante de ${money(comprobanteFoco.total)}` :
                     cantidad ? `Continuar con ${cantidad} elemento${cantidad === 1 ? "" : "s"} listo${cantidad === 1 ? "" : "s"}` :
                     plan.focoPagos ? "Aprueba el comprobante completo" : "Selecciona al menos un elemento listo";
@@ -5929,7 +5936,7 @@
             if (!seleccion.length) return;
             const comprobanteFoco = plan.focoComprobanteId ? seleccion.find(item => item.distribucionManual?.id === plan.focoComprobanteId)?.distribucionManual : null;
             const texto = etapaIdentidad ?
-                `Se actualizarán el titular y RUT en ${seleccion.length} reserva(s) exacta(s). Después Haku volverá a consultar Proyecto H antes de habilitar los pagos. ¿Confirmas?` :
+                `Se actualizarán el titular y RUT en ${seleccion.filter(i => idsEtapa.has(i.id)).length} reserva(s) exacta(s) y se incorporarán ${nuevas} reserva(s) nueva(s) independiente(s). Los pagos dependientes siguen bloqueados hasta revalidar la identidad. ¿Confirmas?` :
                 comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
                 `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s), además de ${seleccion.filter(i => i.categoria === "actualizaciones").length} actualización(es) con los datos del Libro. Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
             if (typeof root.confirm === "function" && !root.confirm(texto)) return;
