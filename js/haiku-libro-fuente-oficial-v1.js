@@ -110,12 +110,14 @@
     }
     // La configuración es interna al conector Web; no procede de una request ni de Mobile.
     function crearControlador({ fileId, lector, autorizado, obtenerMetadata, descargar, entregar,
-        crypto = globalThis.crypto, ahora = Date.now, timeoutMs = 60_000 }) {
+        crypto = globalThis.crypto, ahora = Date.now, timeoutMs = 60_000, alInvalidar = () => {} }) {
         const handles = new WeakMap(), operaciones = new Set();
         let revision = 0, actual = null, inicioEntrega = null, entregaEnCurso = null;
         function invalidar(code = "SOLICITUD_OBSOLETA") {
             revision++; actual = null;
             for (const op of operaciones) op.abort(error(code));
+            // Señal sin metadata/PII; el observador no puede impedir la invalidación.
+            try { alInvalidar(code); } catch (_) {}
         }
         function metadata(data) {
             if (!data || typeof data !== "object" || data.id !== fileId || data.mimeType !== MIME ||

@@ -1,0 +1,52 @@
+:root { color-scheme: light; --verde: #245c46; --suave: #edf5f0; --linea: #dbe6df; --texto: #263c32; --muted: #687b70; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f4f7f4; color: var(--texto); font: 12px/1.45 system-ui, sans-serif; }
+[hidden] { display: none !important; }
+button, a { font: inherit; }
+button { min-height: 34px; border: 1px solid var(--linea); border-radius: 7px; padding: 6px 9px; color: var(--verde); background: white; cursor: pointer; }
+button:disabled { opacity: .55; cursor: default; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--verde); outline-offset: 2px; }
+a { color: var(--verde); }
+.informe-pagina { width: min(100%, 680px); margin: 12px auto; padding: 11px; border: 1px solid var(--linea); border-radius: 14px; background: white; display: grid; gap: 5px; min-width: 0; }
+.informe-encabezado { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+.informe-encabezado h1 { margin: 0; font-size: 15px; line-height: 19px; color: var(--verde); }
+.informe-encabezado > span { flex-shrink: 0; border: 1px solid var(--linea); border-radius: 20px; padding: 1px 6px; background: var(--suave); font-size: 9px; }
+.informe-periodo { margin: 0; color: var(--muted); font-size: 11px; }
+.informe-acceso { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.informe-acceso > p { width: 100%; margin: 0; font-size: 11px; }
+.informe-acceso a, .informe-acceso button { font-size: 10px; }
+.informe-pagina .haiku-libro-google { min-width: 0; gap: 5px; flex-wrap: wrap; padding: 6px; border: 1px solid var(--linea); background: var(--suave); margin: 0; border-radius: 8px; }
+.informe-pagina .haiku-libro-google__estado { flex: 1 1 100%; min-width: 0; }
+.informe-pagina .haiku-libro-google__texto { min-width: 0; overflow-wrap: anywhere; }
+.informe-pagina .haiku-libro-google button { min-height: 32px; padding: 5px 7px; font-size: 10px; }
+#informe-comparar { background: var(--verde); color: white; width: 100%; }
+.informe-resumen { display: grid; gap: 5px; }
+.informe-fraccion { text-align: center; padding: 5px; background: var(--suave); border-radius: 9px; }
+.informe-fraccion strong { display: block; font-size: 23px; line-height: 26px; color: var(--verde); }
+.informe-fraccion span { font-size: 10px; }
+.informe-metricas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--linea); border-radius: 9px; background: var(--suave); }
+.informe-metrica { min-width: 0; text-align: center; padding: 5px 3px; }
+.informe-metrica + .informe-metrica { border-left: 1px solid var(--linea); }
+.informe-metrica strong { display: block; font-size: 16px; color: var(--verde); }
+.informe-metrica span { font-size: 9px; }
+.informe-contexto, .informe-pie { margin: 0; font-size: 9px; color: var(--muted); }
+.informe-aviso { margin: 0; padding: 6px 8px; border: 1px solid #eed9b7; border-radius: 8px; background: #fff6e7; color: #815c2b; font-size: 10px; }
+.informe-categorias { display: grid; gap: 5px; margin-top: 5px; }
+.informe-categoria { min-width: 0; border: 1px solid var(--linea); border-radius: 9px; background: var(--suave); }
+.informe-categoria > summary { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 9px; cursor: pointer; list-style: none; font-size: 11px; font-weight: 600; }
+summary::-webkit-details-marker { display: none; }
+.informe-categoria > summary > span:first-child { flex: 1; }
+.informe-categoria > summary::after { content: '⌄'; color: var(--verde); }
+.informe-categoria[open] > summary::after { content: '⌃'; }
+.informe-detalles { border-top: 1px solid var(--linea); padding: 9px; display: grid; gap: 8px; background: white; border-radius: 0 0 9px 9px; }
+.informe-item { min-width: 0; padding-bottom: 8px; border-bottom: 1px solid var(--linea); overflow-wrap: anywhere; }
+.informe-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.informe-item h3 { margin: 0 0 2px; font-size: 12px; }
+.informe-item p { margin: 2px 0; }
+.informe-detalles dl { margin: 3px 0; display: grid; grid-template-columns: minmax(0, 90px) minmax(0, 1fr); gap: 2px 6px; }
+.informe-detalles dt { color: var(--muted); }
+.informe-detalles dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.informe-tecnico { margin-top: 5px; font-size: 10px; color: var(--muted); }
+.informe-tecnico summary { cursor: pointer; }
+.informe-pie { text-align: center; }
+@media (max-width: 390px) { .informe-pagina { margin: 0; border-radius: 0; } .informe-encabezado h1 { font-size: 15px; } }
