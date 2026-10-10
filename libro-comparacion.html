@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es" data-libro-informe-readonly="1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Comparación del Libro · Proyecto H</title>
+  <link rel="stylesheet" href="css/sites-libro-comparacion-readonly-v1.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="js/supabase-client.js"></script>
+  <script defer src="js/supabase-libro-reserva-v1.js"></script>
+  <script defer src="js/haiku-libro-semantica-v1.js"></script>
+  <script defer src="js/haiku-fullday-tarifa-v1.js"></script>
+  <script defer src="js/haiku-libro-pagos-canon-v1.js"></script>
+  <script defer src="js/haiku-libro-lenguaje-natural-v1.js"></script>
+  <script defer src="js/haiku-libro-pagos-destinos-v1.js"></script>
+  <script defer src="js/haiku-libro-cancelaciones-v1.js"></script>
+  <script defer src="js/haiku-libro-bloqueos-v1.js"></script>
+  <script defer src="js/haiku-libro-consultas-v1.js"></script>
+  <script defer src="js/haiku-libro-comparacion-readonly-v1.js"></script>
+  <script defer src="js/haiku-libro-fuente-oficial-v1.js"></script>
+  <script defer src="js/supabase-libro-google-readonly-v1.js"></script>
+  <script defer src="js/sites-libro-comparacion-readonly-v1.js"></script>
+</head>
+<body>
+  <main class="informe-pagina">
+    <header class="informe-encabezado"><h1>COMPARACIÓN DEL LIBRO</h1><span>Sólo lectura</span></header>
+    <p id="informe-periodo" class="informe-periodo"></p>
+    <section class="informe-acceso" aria-label="Acceso al informe">
+      <p id="informe-estado" role="status" aria-live="polite">Comprobando sesión…</p>
+      <a id="informe-login" href="panel.html">Iniciar sesión en Proyecto H</a>
+      <button id="informe-reintentar" type="button">Comprobar acceso</button>
+      <button id="informe-salir" type="button" hidden>Cerrar sesión</button>
+    </section>
+    <section id="seccion-libro-reserva" data-libro-modo="informe-readonly" hidden aria-label="Google autorizado">
+      <div class="libro-reserva-acciones" hidden></div>
+    </section>
+    <button id="informe-comparar" type="button" disabled>Comparar mes actual</button>
+    <section id="informe-resultado" aria-label="Resultado de la comparación" hidden></section>
+    <p class="informe-pie">Consulta de solo lectura.</p>
+  </main>
+</body>
+</html>

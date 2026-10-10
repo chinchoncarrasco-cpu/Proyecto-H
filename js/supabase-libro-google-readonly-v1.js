@@ -13,6 +13,8 @@
     const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
     const POLL_MS = 60_000;
     const MODIFIED_KEY = "haikuLibroGoogleModifiedTimeV1";
+    const informeReadonly = document.getElementById("seccion-libro-reserva")?.dataset?.libroModo === "informe-readonly";
+    let modifiedMemoria = "";
     const CLIENT_ID = "197003685258-9ui24grgj560t2itpknbmcva0rip8129.apps.googleusercontent.com";
 
     let accessToken = "";
@@ -52,7 +54,8 @@
                 fileId: FILE_ID, lector: () => root.HAIKU_LIBRO_RESERVA_V1, autorizado,
                 obtenerMetadata: signal => obtenerMetadata({ verificada: true, signal }),
                 descargar: (metadata, signal) => descargar(metadata, { verificada: true, signal }),
-                entregar: entregarAlLibro, crypto: root.crypto
+                entregar: entregarAlLibro, crypto: root.crypto,
+                alInvalidar: code => root.dispatchEvent(new CustomEvent("haiku:libro-fuente-invalidada", { detail: { code } }))
             });
             root.addEventListener("haiku:libro-cambio", () => fuenteControl.cambioLibro());
             root.addEventListener("haiku:libro-vista-actualizada", e => fuenteControl.vistaLibro(e.detail));
@@ -320,12 +323,17 @@
             fuenteControl.invalidar();
         }
         sincronizando = true;
+        const autorizacionInforme = revisionAutorizacion;
+        const comprobarInforme = () => {
+            if (informeReadonly && (!autorizado() || autorizacionInforme !== revisionAutorizacion)) throw fallo("SOLICITUD_OBSOLETA");
+        };
         pintar("trabajando", "Libro online", "Comprobando Google Drive…");
         try {
             const metadata = await obtenerMetadata();
+            comprobarInforme();
             const verificadaVigente = fuenteControl?.observarMetadata(metadata) === true;
             metadataActual = metadata;
-            const anterior = localStorage.getItem(MODIFIED_KEY) || "";
+            const anterior = informeReadonly ? modifiedMemoria : localStorage.getItem(MODIFIED_KEY) || "";
             const cambio = Boolean(metadata.modifiedTime) && metadata.modifiedTime !== anterior;
             const necesitaArchivo = !libroLocalCargado();
             const descargarCopia = forzar || (!verificadaVigente && cambio) || necesitaArchivo;
@@ -334,8 +342,13 @@
                 fuenteControl?.invalidar();
                 pintar("trabajando", "Libro online", cambio && anterior ? "Nueva versión detectada. Actualizando…" : "Descargando versión oficial…");
                 const archivo = await descargar(metadata);
+                comprobarInforme(); // El body puede terminar después del logout, aunque los headers fueran válidos.
                 await entregarAlLibro(archivo);
-                if (metadata.modifiedTime) localStorage.setItem(MODIFIED_KEY, metadata.modifiedTime);
+                comprobarInforme();
+                if (metadata.modifiedTime) {
+                    if (informeReadonly) modifiedMemoria = metadata.modifiedTime;
+                    else localStorage.setItem(MODIFIED_KEY, metadata.modifiedTime);
+                }
             }
 
             pintar(
@@ -346,6 +359,7 @@
                     : `Google sin cambios · ${horaChile(metadata.modifiedTime)} · copia local no comparada`
             );
         } catch (error) {
+            if (informeReadonly && autorizacionInforme !== revisionAutorizacion) return;
             fuenteControl?.invalidar();
             pintar("error", "Libro online", error instanceof root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.FuenteOficialError
                 ? error.message : "No fue posible consultar Google Drive. Vuelve a intentarlo.");

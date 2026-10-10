@@ -47,7 +47,9 @@
     })();
 
     // Desktop-only, binary storage scoped to this site's browser profile.
-    const persistenciaPC = window.matchMedia("(min-width: 901px)").matches;
+    // La página de informe usa el mismo lector, exclusivamente en memoria, a cualquier ancho.
+    const informeReadonly = document.getElementById?.("seccion-libro-reserva")?.dataset?.libroModo === "informe-readonly";
+    const persistenciaPC = !informeReadonly && window.matchMedia("(min-width: 901px)").matches;
     let operacionLibro = 0;
     let colaLocal = Promise.resolve();
     let cargaLista = Promise.resolve();
@@ -770,6 +772,7 @@
     }
 
     async function renderizarHoja(nombre) {
+        if (informeReadonly) return;
         if (!archivoBuffer || !nombre) return;
         const miRender = ++renderId;
         hojaActual = nombre;
@@ -801,7 +804,7 @@
             dibujarPagina();
         } catch (error) {
             if (miRender !== renderId) return;
-            console.error("LIBRO RESERVA · No fue posible abrir la hoja:", error);
+            if (!informeReadonly) console.error("LIBRO RESERVA · No fue posible abrir la hoja:", error);
             mostrarVacio("No fue posible mostrar esta hoja", "El archivo puede estar protegido, dañado o usar una característica no compatible.");
         }
     }
@@ -815,7 +818,7 @@
 
         limpiarMemoria();
         const cargaId = ++operacionLibro;
-        $("libro-reserva-quitar").disabled = false;
+        if ($("libro-reserva-quitar")) $("libro-reserva-quitar").disabled = false;
         mostrarCargando("Leyendo la copia local del libro…");
         try {
             const buffer = await archivo.arrayBuffer();
@@ -885,7 +888,7 @@
             }
         } catch (error) {
             if (cargaId !== operacionLibro) return;
-            console.error("LIBRO RESERVA · Archivo no válido:", error);
+            if (!informeReadonly) console.error("LIBRO RESERVA · Archivo no válido:", error);
             limpiarMemoria();
             mostrarVacio("No fue posible leer el archivo", "Verifica que sea la copia XLSX correcta e inténtalo otra vez.");
             if (persistenciaPC) {
@@ -951,7 +954,7 @@
         asegurarCssFidelidad();
         window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
             version: "1.5.0",
-            modo: "archivo-local-solo-lectura-estilo-xlsx-richtext",
+            modo: informeReadonly ? "informe-readonly-solo-memoria" : "archivo-local-solo-lectura-estilo-xlsx-richtext",
             limpiar: quitarLibro,
             listo: () => cargaLista,
             cargarDesdeGoogle: archivo => {

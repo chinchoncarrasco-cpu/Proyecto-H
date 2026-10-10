@@ -4172,7 +4172,7 @@
         abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
-    if (!root.document) return;
+    if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
     let ocupado = false;
     const esLibro = texto => /\blibro\b/i.test(texto);
