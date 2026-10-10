@@ -14,13 +14,13 @@ module.exports = function fixture() {
   cell(r,0,'cabaña '+cab);
   combinaciones.push({s:{r,c:0},e:{r:r+4,c:0}});
  }
- cell(6,10,'Macarena Hurtado // 1 noche');
- cell(11,14,'Macarena Hurtado // full day');
+ cell(6,10,"Kixitobe Xutiniv // 1 noche");
+ cell(11,14,"Kixitobe Xutiniv // full day");
  for(const [r,c,d,concepto,monto,texto] of [
-  [45,10,'03','cab1/1noche',153000,'Macarena Hurtado // Luigi Martínez // Bovtar: 173121-Folio: 000235// CREDITO // DG'],
-  [46,10,'03','early check in',40000,'Macarena Hurtado // Luigi Martínez // Bovtar: 173121-Folio: 000235 //CREDITO// DG'],
-  [70,14,'04','cab10/fullday',100000,'Macarena Hurtado // efectivo // $100.000 // CO'],
-  [71,14,'04','cab10/fullday',20000,'Macarena Hurtado // Bovtar: 750453 - Folio: 000242 // debito // CO']]) {
+  [45,10,'03','cab1/1noche',153000,"Kixitobe Xutiniv // Luigi Martínez // Bovtar: 517232-Folio: 000299// CREDITO // DG"],
+  [46,10,'03','early check in',40000,"Kixitobe Xutiniv // Luigi Martínez // Bovtar: 517232-Folio: 000299 //CREDITO// DG"],
+  [70,14,'04','cab10/fullday',100000,"Kixitobe Xutiniv // efectivo // $100.000 // CO"],
+  [71,14,'04','cab10/fullday',20000,"Kixitobe Xutiniv // Bovtar: 692489 - Folio: 000547 // debito // CO"]]) {
   cell(r,c,Number(d)+'-9-2026',{fechaISO:'2026-09-'+d}); cell(r,c+1,texto);
   cell(r,c+2,concepto); cell(r,c+3,'$'+monto.toLocaleString('en-US'),{valorNumero:monto});
  }

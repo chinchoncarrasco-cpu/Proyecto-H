@@ -11,10 +11,10 @@ test('Sep26: blank merged financial heading retains actual K46:N47 as CAB 5 revi
  assert.equal(r.cabana,5); assert.equal(r.fecha_checkin,'2026-09-03');
  const [a,b]=r.pagos_sin_asociacion;
  assert.deepEqual([a.monto,a.medio_pago,a.fecha_comprobante,a.folio,a.bovtar,a.origen.celda],
-  [153000,'credito','2026-09-03','000235','173121','K46:N46']);
+  [153000,'credito','2026-09-03',"000299","517232",'K46:N46']);
  assert.match(a.advertencias.join(' '),/CAB 1.*CAB 5/);
  assert.deepEqual([b.monto,b.tipo_movimiento,b.concepto,b.folio,b.bovtar,b.origen.celda],
-  [40000,'servicio','early check in','000235','173121','K47:N47']);
+  [40000,'servicio','early check in',"000299","517232",'K47:N47']);
  assert.equal(r.cobertura_pagos,false);
 });
 
@@ -24,7 +24,7 @@ test('Sep26: labelled September 04 payments remain byte-for-byte identical',()=>
  const get=d=>S.normalizarHoja(d,'Sep26').reservas.find(r=>r.cabana===10).pagos;
  assert.deepEqual(get(data),get(without));
  assert.deepEqual(get(data).map(p=>[p.monto,p.medio_pago,p.folio,p.bovtar]),
-  [[100000,'efectivo',null,null],[20000,'debito','000242','750453']]);
+  [[100000,'efectivo',null,null],[20000,'debito',"000547","692489"]]);
 });
 
 test('missing heading recovery refuses unknown geometry, another heading and incomplete financial rows',()=>{
@@ -40,7 +40,7 @@ test('missing heading recovery refuses unknown geometry, another heading and inc
 });
 
 test('contradictory cabin with multiple compatible stays never becomes an automatic payment association',()=>{
- const d=fixture(); d.celdas.push({r:7,c:10,valor:'Macarena Hurtado // 1 noche'});
+ const d=fixture(); d.celdas.push({r:7,c:10,valor:"Kixitobe Xutiniv // 1 noche"});
  const out=S.normalizarHoja(d,'Sep26');
  assert.equal(out.reservas.flatMap(r=>r.pagos).filter(p=>p.fecha_bloque==='2026-09-03').length,0);
  assert.equal(out.reservas.find(r=>r.cabana===5).pagos_sin_asociacion.length,2);
