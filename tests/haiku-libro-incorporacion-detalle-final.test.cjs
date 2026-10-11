@@ -126,10 +126,11 @@ const datosEstadia = (cabana=2,fecha='2026-10-06') => ({cabana_numero:cabana,
 
 test('estadías, actualizaciones y omitidos: acciones concretas y contador de revalidación',()=>{
     const h=harness(),items=[{tipo:'estadia',item_id:'estadia',reserva_id:RESERVA,estadias:[datosEstadia()]},
-        {tipo:'reserva_actualizar',item_id:'actualizacion',reserva_id:RESERVA},itemPago('duplicado')];
+        {tipo:'reserva_actualizar',item_id:'actualizacion',reserva_id:RESERVA,
+            reserva:{antes:{telefono_contacto:''},despues:{telefono_contacto:'CONTACTO-FICTICIO'}}},itemPago('duplicado')];
     const fuentes=[{id:'estadia',categoria:'estadias',texto:'CAB 2 · Gastón Soto · 2026-10-06 → 2026-10-06',payload:items[0]},
         {id:'actualizacion',categoria:'actualizaciones',texto:'CAB 2 · Gastón Soto · 2026-10-06',
-            cambios:[{campo:'Teléfono',anterior:'',libro:'+56912345678'}],payload:items[1]},fuentePago('duplicado')];
+            cambios:[{campo:'Teléfono',anterior:'',libro:'CONTACTO-FICTICIO'}],payload:items[1]},fuentePago('duplicado')];
     const s=solicitud(h,items,fuentes);
     s.detalleContexto.omitidos.push({titular:'Seleccionado retirado',motivo:'El pago ya existe.',cabana:'CAB 4'});
     const resultado={ok:true,estadias_agregadas:1,actualizaciones:1,omitidos:1,resultados:[
@@ -138,7 +139,7 @@ test('estadías, actualizaciones y omitidos: acciones concretas y contador de re
         detalle_omitidos:[{item_id:'duplicado',tipo:'pago',pago_id:'existente',motivo:'Ya existe el comprobante.'}]};
     const detalle=h.Q.detalleResultadoIncorporacion(s,resultado);h.render({resultado,detalle,omitidosAlRevalidar:1});
     assert.equal(detalle.estadias.length,1);assert.equal(detalle.actualizaciones.length,1);assert.equal(detalle.omitidos.length,2);
-    assert.match(h.texts(),/Teléfono: \+56912345678/);assert.match(h.texts(),/Omitidos \(2\)/);
+    assert.match(h.texts(),/Teléfono: sin dato → CONTACTO-FICTICIO/);assert.match(h.texts(),/Omitidos \(2\)/);
     assert.match(h.texts(),/Ya existe el comprobante/);assert.match(h.texts(),/Seleccionado retirado/);
     assert.deepEqual(limpio(detalle.estadias[0].identidad.seleccion),{estadiaId:ESTADIA,numeroCabana:'2'});
 });

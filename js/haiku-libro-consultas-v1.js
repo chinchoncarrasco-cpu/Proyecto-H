@@ -43,6 +43,7 @@
     const pagosEfectivosMedio = new WeakMap(); // copia efectiva → evidencia original + decisión
     const usuariosComparacion = new WeakMap();
     const conflictosIdentidad = new WeakMap(); // sólo esta consulta; nunca persistir documentos
+    const comprobantesActualizaciones = new WeakMap(); // evidencia confirmada, sólo en memoria durante este flujo
     const DEFINIR_MEDIO_PAGO = 'definir_medio_pago';
     const nombresMes = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
     const etiquetas = {
@@ -3355,6 +3356,11 @@
     function restaurarSeleccionIncorporacion(nuevo, anterior) {
         if (!anterior) return nuevo;
         const mismoContexto = JSON.stringify(nuevo.contextoSeleccion) === JSON.stringify(anterior.contextoSeleccion);
+        if (mismoContexto && comprobantesActualizaciones.has(anterior)) {
+            comprobantesActualizaciones.set(nuevo, comprobantesActualizaciones.get(anterior));
+            if ((anterior.etapaAnteriorCompletada || anterior.etapa === 'actualizar_identidad') &&
+                nuevo.etapa !== 'actualizar_identidad') nuevo.etapaAnteriorCompletada = true;
+        } else comprobantesActualizaciones.delete(nuevo);
         for (const item of nuevo.items) {
             const previo = anterior.items.find(i => i.id === item.id);
             item.seleccionado = mismoContexto && previo?.seleccionado === true && !item.motivos.length &&
@@ -3517,9 +3523,15 @@
                 concepto:unir(fuentes.map((f,i) => f.pagoLibro?.concepto || vistas[i].concepto)),
                 fecha:enviado.argumentos?.p_fecha_pago || fuentes[0]?.pagoLibro?.fecha_comprobante || null,
                 monto:enviado.argumentos?.p_monto,
-                reservaId:enviado.reserva_id || null, reservaRef:enviado.reserva_ref || null,
+                reservaId:enviado.reserva_id || null, estadiaId:enviado.estadia_id || null, reservaRef:enviado.reserva_ref || null,
                 identidad:fuentes.length === 1 ? identidadInspectorItem(fuentes[0],comparacion) : null,
-                cambios:fuentes.flatMap(f => f.cambios || []) };
+                // El plan puede tener cambios opcionales que no se enviaron. El
+                // comprobante describe exclusivamente el parche de esta solicitud.
+                cambios:enviado.tipo === 'reserva_actualizar' ? [enviado.reserva,enviado.estadia].flatMap(parche =>
+                    Object.entries(parche?.despues || {}).map(([campo,libro]) => ({
+                        campo:etiquetasActualizacion[campo] || campo, libro,
+                        anterior:parche.antes?.[campo], tieneAnterior:Object.hasOwn(parche.antes || {},campo)
+                    }))) : fuentes.flatMap(f => f.cambios || []) };
         };
         const items = serializados.map(enviado => {
             const ids = enviado.datos_origen?.distribucion_manual?.componentes?.map(c => c.item_id) || [enviado.item_id];
@@ -3578,8 +3590,14 @@
                 detalle.estadias.push(filaEstadia(ctx,r,atribuible ? restantes[confirmadas.indexOf(r)] : null));
             } else if (r.tipo === 'pago') detalle.pagos.push(fila(ctx,r,'Incorporado'));
             else if (['reserva_actualizar','pago_actualizar'].includes(r.tipo)) {
-                const cambios = ctx.cambios.map(c => `${c.campo}: ${c.libro ?? 'sin dato'}`).join(' · ');
-                detalle.actualizaciones.push({...fila(ctx,r,'Actualizado'),descripcion:cambios || 'Datos actualizados con el Libro.'});
+                if (r.tipo === 'reserva_actualizar' && (
+                    r.reserva_id && r.reserva_id !== ctx.reservaId ||
+                    r.estadia_id && r.estadia_id !== ctx.estadiaId ||
+                    omitidos.some(o => o.item_id === r.item_id && o.tipo === r.tipo) ||
+                    detalle.actualizaciones.some(i => i.itemId === r.item_id))) continue;
+                const cambios = ctx.cambios.map(descripcionCambioConfirmado).join(' · ');
+                detalle.actualizaciones.push({...fila(ctx,r,'Actualizado'),itemId:r.item_id,
+                    descripcion:cambios || 'Datos actualizados con el Libro.'});
             }
         }
         // Las estadías adicionales de reservas nuevas no tienen filas individuales
@@ -3606,6 +3624,22 @@
         contexto.omitidos.forEach(ctx => detalle.omitidos.push({titular:ctx.titular,cabana:ctx.cabana,
             periodo:ctx.periodo,estado:'Omitido',motivo:ctx.motivo,identidad:null}));
         return detalle;
+    }
+
+    function descripcionCambioConfirmado(cambio) {
+        const valor = v => v == null || v === '' ? 'sin dato' : String(v);
+        return `${cambio.campo}: ${cambio.tieneAnterior ? `${valor(cambio.anterior)} → ` : ''}${valor(cambio.libro)}`;
+    }
+
+    function conservarComprobanteActualizaciones(plan, solicitud, ejecucion) {
+        const cantidad = ejecucion.resultado.actualizaciones;
+        if (ejecucion.resultado.ok !== true || !Number.isSafeInteger(cantidad) || cantidad <= 0) return;
+        const anteriores = comprobantesActualizaciones.get(plan) || [];
+        if (anteriores.some(c => c.operacionId === solicitud.operacionId)) return;
+        const comprobante = JSON.parse(JSON.stringify({ operacionId:solicitud.operacionId, cantidad,
+            omitidos:Number(ejecucion.resultado.omitidos || 0) + (ejecucion.omitidosAlRevalidar || 0),
+            actualizaciones:ejecucion.detalle.actualizaciones.slice(0,cantidad), omitidosDetalle:ejecucion.detalle.omitidos }));
+        comprobantesActualizaciones.set(plan,[...anteriores,comprobante]);
     }
 
     function resultadoServicio4CConocido(resultado) {
@@ -3832,7 +3866,9 @@
                 data.omitidos = Number(data.omitidos || 0) + Number(servicio.resultado?.omitidos || 0);
             }
             solicitud.confirmada = true;
-            return { resultado: data, omitidosAlRevalidar, detalle:detalleResultadoIncorporacion(solicitud,data) };
+            const ejecucion = { resultado:data, omitidosAlRevalidar, detalle:detalleResultadoIncorporacion(solicitud,data) };
+            conservarComprobanteActualizaciones(plan,solicitud,ejecucion);
+            return ejecucion;
         } catch (error) {
             throw Object.assign(error, resumenResultadosServicios4C(solicitud.servicios));
         }
@@ -4843,6 +4879,11 @@
             out.append(preguntas);
             root.HAIKU_LIBRO_RECONCILIACION_UX_V1?.aplicar?.(preguntas);
         }
+        const contextoComprobante = {generacion:root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,usuario:usuariosComparacion.get(comp)};
+        if (ui.planAnterior && JSON.stringify(ui.planAnterior.contextoSeleccion) === JSON.stringify(contextoComprobante)) {
+            const comprobante = renderizarComprobanteActualizaciones(ui.planAnterior);
+            if (comprobante) out.replaceChildren(comprobante,...Array.from(out.children));
+        }
         const preparar = elemento("button", "libro-reserva-boton secundario", "Preparar incorporación");
         preparar.type = "button";
         preparar.addEventListener("click", async () => {
@@ -4866,19 +4907,27 @@
                 const plan = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),ui.planAnterior);
                 if (!out.isConnected && out.isConnected !== undefined) return;
                 let planEnVista = plan;
+                const avisarConComprobante = texto => {
+                    const comprobante = renderizarComprobanteActualizaciones(planEnVista);
+                    out.replaceChildren(...(comprobante ? [comprobante] : []),elemento('p','',texto));
+                };
                 const volver = async () => {
                     try {
                         const comparacion = await compararSistema(result.reservas,root.haikuSupabase,result.q);
                         renderizarComparacion(out,{...result,comparacion},{decisiones,aprobados,planAnterior:planEnVista,
                             revalidado:new Date().toLocaleTimeString('es-CL')});
-                    } catch (e) { out.replaceChildren(elemento('p','','No se pudo actualizar la comparación: '+e.message)); }
+                    } catch (e) {
+                        avisarConComprobante('No se pudo actualizar la comparación: '+e.message+'. Vuelve a comprobar los pagos antes de continuar.');
+                        const reintentar = elemento('button','libro-reserva-boton secundario','Volver a comparar con datos actuales');
+                        reintentar.type = 'button'; reintentar.addEventListener('click',volver); out.append(reintentar);
+                    }
                 };
                 let incorporar;
                 let identidadActualizada = false;
                 const aprobar = async ids => {
                     const lista = Array.isArray(ids) ? ids : [ids];
                     lista.forEach(id => aprobados.add(id));
-                    out.replaceChildren(elemento('p', '', lista.length > 1 ? 'Revalidando los pagos aprobados…' : 'Revalidando el pago aprobado…'));
+                    avisarConComprobante(lista.length > 1 ? 'Revalidando los pagos aprobados…' : 'Revalidando el pago aprobado…');
                     try {
                         const nuevo = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),planEnVista);
                         nuevo.items.filter(i => lista.includes(i.id) && i.categoria === 'pagos' && !i.motivos.length && !i.etapaSiguiente)
@@ -4896,7 +4945,7 @@
                         planEnVista = nuevo;
                         renderizarIncorporacion(out, nuevo, volver, aprobar, incorporar);
                     } catch (e) {
-                        lista.forEach(id => aprobados.delete(id)); volver();
+                        lista.forEach(id => aprobados.delete(id)); await volver();
                         out.append(elemento('p', '', 'No se pudo revalidar: ' + e.message));
                     }
                 };
@@ -4904,7 +4953,10 @@
                     const ejecucion = await confirmarIncorporacion(result, decisiones, aprobados, planActual);
                     const actualizacionesSeleccionadas = planActual.items.some(i => i.seleccionado && i.payload?.tipo === 'reserva_actualizar');
                     const altasDuranteIdentidad = planActual.etapa === 'actualizar_identidad' && planActual.items.some(i => i.seleccionado && i.categoria === 'nuevas');
-                    if (!actualizacionesSeleccionadas && !altasDuranteIdentidad) return ejecucion;
+                    if (!actualizacionesSeleccionadas && !altasDuranteIdentidad) {
+                        comprobantesActualizaciones.delete(planActual); // la operación final ya terminó este flujo
+                        return ejecucion;
+                    }
                     aprobados.clear();
                     let siguientePlan;
                     try {
@@ -4964,7 +5016,8 @@
                     const nuevo = await consultar(result.q.texto);
                     actualizado = nuevo;
                 }
-                renderizarComparacion(out, actualizado, { preguntasAbiertas, revalidado: new Date().toLocaleTimeString("es-CL") });
+                renderizarComparacion(out, actualizado, { preguntasAbiertas, planAnterior:ui.planAnterior,
+                    revalidado: new Date().toLocaleTimeString("es-CL") });
                 if (preguntasAbiertas) {
                     const preguntas = out.querySelector(".haiku-asistente-preview-lista.haiku-reconciliacion-abierto:has(> label)");
                     const cabeceraPreguntas = preguntas?.querySelector(":scope > strong");
@@ -5775,6 +5828,61 @@
         return fila;
     }
 
+    function grupoResultadoIncorporacion(clave, etiqueta, cantidad, items = []) {
+        const grupo = elemento('details','haiku-comparacion-acordeon haku-incorporacion-final-grupo');
+        grupo.dataset.categoria = clave;
+        grupo.open = cantidad > 0;
+        grupo.append(elemento('summary','',`${etiqueta} (${cantidad})`));
+        const lista = elemento('ul','haku-incorporacion-final-lista');
+        for (const item of items) {
+            const fila = elemento('li','haku-incorporacion-final-item');
+            const cabeceraItem = elemento('div','haku-incorporacion-final-item-cabecera');
+            cabeceraItem.append(elemento('strong','',item.titular),
+                elemento('span','haku-incorporacion-final-estado' + (clave === 'omitidos' ? ' haku-incorporacion-final-estado--omitido' : ''),item.estado));
+            fila.append(cabeceraItem);
+            const datos = [item.cabana,item.periodo];
+            if (clave === 'pagos') {
+                if (item.monto != null) datos.push(money(item.monto));
+                if (item.fecha) datos.push(fechaBreve(String(item.fecha).slice(0,10)));
+                if (item.concepto) datos.push(item.concepto);
+            }
+            if (datos.some(Boolean)) fila.append(elemento('p','',datos.filter(Boolean).join(' · ')));
+            if (item.descripcion || item.motivo) fila.append(elemento('p','',item.descripcion || item.motivo));
+            if (item.identidad) fila.append(accionInspectorReserva(item.identidad));
+            lista.append(fila);
+        }
+        if (!cantidad) lista.append(elemento('li','haku-incorporacion-final-vacio','Sin elementos en esta operación.'));
+        else if (items.length < cantidad) lista.append(elemento('li','haku-incorporacion-final-vacio',
+            `${cantidad - items.length} ${cantidad - items.length === 1 ? 'elemento sin detalle individual disponible.' : 'elementos sin detalle individual disponible.'}`));
+        grupo.append(lista);
+        return grupo;
+    }
+
+    function renderizarComprobanteActualizaciones(plan) {
+        const comprobantes = comprobantesActualizaciones.get(plan);
+        if (!comprobantes?.length) return null;
+        const cantidad = comprobantes.reduce((n,c) => n + c.cantidad,0);
+        const omitidos = comprobantes.reduce((n,c) => n + c.omitidos,0);
+        const bloque = elemento('section','haku-incorporacion-resultado haku-incorporacion-actualizacion-completada');
+        const cabecera = elemento('div','haiku-incorporacion-cabecera haku-incorporacion-resultado-cabecera');
+        const titulo = elemento('div');
+        titulo.append(elemento('span','','LIBRO ↔ PROYECTO H'),elemento('strong','','Actualización completada'));
+        cabecera.append(titulo,elemento('span','haiku-incorporacion-modo','Guardado'));
+        const mensaje = elemento('p','haiku-incorporacion-aviso haku-incorporacion-resultado-mensaje',
+            `${cantidad} ${cantidad === 1 ? 'actualización confirmada' : 'actualizaciones confirmadas'} por Proyecto H. Este comprobante corresponde a los datos guardados; los pagos conservan su revisión y confirmación propias.`);
+        const resumen = elemento('div','haiku-incorporacion-resumen haku-incorporacion-resultado-resumen');
+        for (const [numero,etiqueta] of [[cantidad,'Actualizaciones del Libro'],[omitidos,'Omitidos']]) {
+            const tarjeta = elemento('div','haiku-incorporacion-indicador haku-incorporacion-resultado-indicador');
+            tarjeta.append(elemento('strong','',String(numero)),elemento('span','',etiqueta)); resumen.append(tarjeta);
+        }
+        const detalle = elemento('section','haku-incorporacion-final-detalle');
+        detalle.append(elemento('h4','','Detalle de las actualizaciones'),
+            grupoResultadoIncorporacion('actualizaciones','Actualizaciones confirmadas',cantidad,comprobantes.flatMap(c => c.actualizaciones)));
+        if (omitidos) detalle.append(grupoResultadoIncorporacion('omitidos','Omitidos',omitidos,comprobantes.flatMap(c => c.omitidosDetalle)));
+        bloque.append(cabecera,mensaje,resumen,detalle);
+        return bloque;
+    }
+
     function renderizarResultadoIncorporacion(out, ejecucion, volver) {
         const r = ejecucion.resultado;
         out.className = "haiku-asistente-preview haiku-incorporacion haku-incorporacion-resultado";
@@ -5808,33 +5916,7 @@
             ['actualizaciones','Actualizaciones del Libro',r.actualizaciones || 0],
             ['omitidos','Omitidos',(r.omitidos || 0) + (ejecucion.omitidosAlRevalidar || 0)]
         ]) {
-            const items = ejecucion.detalle?.[clave] || [];
-            const grupo = elemento('details','haiku-comparacion-acordeon haku-incorporacion-final-grupo');
-            grupo.dataset.categoria = clave;
-            grupo.open = cantidad > 0;
-            grupo.append(elemento('summary','',`${etiqueta} (${cantidad})`));
-            const lista = elemento('ul','haku-incorporacion-final-lista');
-            for (const item of items) {
-                const fila = elemento('li','haku-incorporacion-final-item');
-                const cabeceraItem = elemento('div','haku-incorporacion-final-item-cabecera');
-                cabeceraItem.append(elemento('strong','',item.titular),
-                    elemento('span','haku-incorporacion-final-estado' + (clave === 'omitidos' ? ' haku-incorporacion-final-estado--omitido' : ''),item.estado));
-                fila.append(cabeceraItem);
-                const datos = [item.cabana,item.periodo];
-                if (clave === 'pagos') {
-                    if (item.monto != null) datos.push(money(item.monto));
-                    if (item.fecha) datos.push(fechaBreve(String(item.fecha).slice(0,10)));
-                    if (item.concepto) datos.push(item.concepto);
-                }
-                if (datos.some(Boolean)) fila.append(elemento('p','',datos.filter(Boolean).join(' · ')));
-                if (item.descripcion || item.motivo) fila.append(elemento('p','',item.descripcion || item.motivo));
-                if (item.identidad) fila.append(accionInspectorReserva(item.identidad));
-                lista.append(fila);
-            }
-            if (!cantidad) lista.append(elemento('li','haku-incorporacion-final-vacio','Sin elementos en esta operación.'));
-            else if (items.length < cantidad) lista.append(elemento('li','haku-incorporacion-final-vacio',
-                `${cantidad - items.length} ${cantidad - items.length === 1 ? 'elemento sin detalle individual disponible.' : 'elementos sin detalle individual disponible.'}`));
-            grupo.append(lista); detalle.append(grupo);
+            detalle.append(grupoResultadoIncorporacion(clave,etiqueta,cantidad,ejecucion.detalle?.[clave]));
         }
         out.append(detalle);
         const acciones = elemento("div", "haiku-incorporacion-acciones");
@@ -5890,7 +5972,8 @@
         revision.append(cifraRevision, elemento("span", "", "pagos para revisar"));
         cifras.append(listos, revision);
         const resumen = elemento("div", "haiku-incorporacion-resumen haku-incorporacion-sites-matriz");
-        out.replaceChildren(cabecera, preparacion, cifras, resumen);
+        const comprobante = renderizarComprobanteActualizaciones(plan);
+        out.replaceChildren(...(comprobante ? [comprobante] : []),cabecera,preparacion,cifras,resumen);
 
         const cancelaciones = elemento("section", "haku-incorporacion-sites-cancelaciones");
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(cancelaciones, plan, plan.generacion);
