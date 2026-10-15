@@ -342,10 +342,16 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     --cal-sites-bar-accent: #bb9452;
 }
 
-#seccion-calendario .calendario-reserva-barra:is(.cal-reserva-checkout, .cal-reserva-confirmada, .cal-reserva-confirmacion-pendiente) {
+#seccion-calendario .calendario-reserva-barra:is(.cal-reserva-confirmada, .cal-reserva-confirmacion-pendiente) {
     --cal-sites-bar-bg: #e5eff3;
     --cal-sites-bar-ink: #2c5969;
     --cal-sites-bar-accent: #84b2be;
+}
+
+#seccion-calendario .calendario-reserva-barra.cal-reserva-checkout {
+    --cal-sites-bar-bg: var(--haiku-reserva-checkout-fondo);
+    --cal-sites-bar-ink: var(--haiku-reserva-checkout-texto);
+    --cal-sites-bar-accent: #727272;
 }
 
 #seccion-calendario .calendario-reserva-barra.cal-reserva-bloqueada {
@@ -503,6 +509,12 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
 .calendario-panel-dia .calendario-panel-reserva:is(.cal-reserva-checkin, .cal-reserva-continua) { --cal-sites-panel-accent: #387d5e; }
 .calendario-panel-dia .calendario-panel-reserva:is(.cal-reserva-fullday, .cal-reserva-ingresa, .cal-reserva-sale) { --cal-sites-panel-accent: #bb9452; }
 .calendario-panel-dia .calendario-panel-reserva.cal-reserva-bloqueada { --cal-sites-panel-accent: #a3877e; }
+.calendario-panel-dia .calendario-panel-reserva.cal-reserva-checkout {
+    --cal-sites-panel-accent: #727272;
+    background: var(--haiku-reserva-checkout-fondo);
+    color: var(--haiku-reserva-checkout-texto);
+    border-color: var(--haiku-reserva-checkout-fondo);
+}
 
 @media (max-width: 1200px) {
     #seccion-calendario { padding-right: 24px; padding-left: 24px; }
@@ -653,7 +665,8 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     }
 
     #seccion-calendario .sites-calendario-agenda-item:is(.cal-reserva-checkin) { --cal-agenda-accent: #387d5e; }
-    #seccion-calendario .sites-calendario-agenda-item:is(.cal-reserva-confirmada, .cal-reserva-checkout, .cal-reserva-confirmacion-pendiente) { --cal-agenda-accent: #84b2be; }
+    #seccion-calendario .sites-calendario-agenda-item:is(.cal-reserva-confirmada, .cal-reserva-confirmacion-pendiente) { --cal-agenda-accent: #84b2be; }
+    #seccion-calendario .sites-calendario-agenda-item.cal-reserva-checkout { --cal-agenda-accent: var(--haiku-reserva-checkout-fondo); }
     #seccion-calendario .sites-calendario-agenda-item.cal-reserva-fullday { --cal-agenda-accent: #bb9452; }
     #seccion-calendario .sites-calendario-agenda-item.cal-reserva-bloqueada { --cal-agenda-accent: #a3877e; }
     #seccion-calendario .sites-calendario-agenda-item:hover { background: #f7faf8; }
