@@ -2,11 +2,12 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {randomUUID}=require('node:crypto');
 const {PGlite}=require(process.env.HAKU_PGLITE_MODULE||'@electric-sql/pglite');
-const read=p=>fs.readFileSync(path.join(__dirname,'../..',p),'utf8');
+// El checkout de Windows usa CRLF; PostgreSQL almacena cuerpos comparados en LF.
+const read=p=>fs.readFileSync(path.join(__dirname,'../..',p),'utf8').replace(/\r\n/g,'\n');
 const rpc=(file,name,schema='public')=>read('supabase/migrations/'+file).match(new RegExp(
     `create or replace function ${schema}\\.${name}\\([\\s\\S]*?(\\$[a-z_]+\\$);`,'i'))[0];
-async function preparar({aplicar=true}={}) {
-    const db=new PGlite();
+async function preparar({aplicar=true,db:provided}={}) {
+    const db=provided||new PGlite();
     try {
         await db.exec(read('tests/fixtures/libro-distribucion-schema.sql'));
         await db.exec(`alter table pagos add column verificado_por uuid,add column verificado_en timestamptz,

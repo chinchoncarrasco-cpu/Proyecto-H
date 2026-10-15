@@ -1862,7 +1862,7 @@
         const reserva = parcheLibro({ titular_nombre:s.titular, titular_numero_documento:s.rut_documento, titular_tipo_documento:s.tipo_documento,
             correo_contacto:s.correo, telefono_contacto:s.telefono, observaciones:s.observaciones, estado_reserva:s.estado_reserva },
             { titular_nombre:r.titular, titular_numero_documento:r.rut_documento,
-                titular_tipo_documento:docCambio ? (/^\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]$/.test(r.rut_documento) ? 'rut' : /[a-z]/i.test(r.rut_documento) ? 'pasaporte' : 'documento') : undefined,
+                titular_tipo_documento:docCambio ? (r.tipo_documento || (/^\d{1,2}(?:\.?\d{3}){2}-?[\dkK]$/.test(r.rut_documento) ? 'rut' : /[a-z]/i.test(r.rut_documento) ? 'pasaporte' : 'documento')) : undefined,
                 correo_contacto:r.correo, telefono_contacto:r.telefono,
                 observaciones:notas && agregaNotas ?
                     [existentes, `[DATOS DEL LIBRO]\n${notas}\n[/DATOS DEL LIBRO]`].filter(Boolean).join('\n\n') : undefined });
@@ -3795,12 +3795,13 @@
             const codigo = documentoDuplicado ? 'HLI01' : error.code;
             const mensaje = codigo === 'HLI01' ? 'El documento pertenece a otro huésped; requiere revisión manual. No se guardó el lote' :
                 codigo === 'HLI02' ? 'La identidad compartida o su asociación requiere revisión manual. No se guardó el lote' :
+                codigo === 'HLI03' ? 'El documento está incompleto o es inválido; requiere revisión manual. No se guardó el lote' :
                 String(error.message || error.details || error);
-            if (['HLC01','HLC02','HLI01','HLI02'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
+            if (['HLC01','HLC02','HLI01','HLI02','HLI03'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Este intento fue rechazado, pero una respuesta perdida anterior
                 // de la misma operación no demuestra ausencia de escrituras.
                 if (servicio) servicio.resultadoIncierto = inciertoPrevio;
-                if (['HLI01','HLI02'].includes(codigo)) {
+                if (['HLI01','HLI02','HLI03'].includes(codigo)) {
                     let detalle;
                     try { detalle = JSON.parse(error.details || error.detail || '{}'); } catch (_) { /* legado sin item_id */ }
                     const identidades = solicitud.items.filter(i => i.tipo === 'reserva_actualizar');
@@ -3812,6 +3813,7 @@
                         conflictosIdentidad.get(decisiones).set(item.id, {
                             firma:firmaConflictoIdentidad(item), contexto:JSON.stringify(plan.contextoSeleccion),
                             motivo:codigo === 'HLI01' ? 'Documento de otro huésped: requiere revisión humana. Esta actualización y sus pagos quedan pendientes.' :
+                                codigo === 'HLI03' ? 'Documento incompleto o inválido: requiere revisión humana. Esta actualización y sus pagos quedan pendientes.' :
                                 'Identidad compartida o asociación incompatible: requiere revisión humana. Esta actualización y sus pagos quedan pendientes.'
                         });
                     }

@@ -1,0 +1,89 @@
+{
+  "reviewDate": "2026-10-15",
+  "status": "READY FOR REVIEW ? NO PRODUCTION CHANGES",
+  "branch": "fix/rut-identidad-supervisada",
+  "baseHead": "34ec003b90915d580ed9b738c3ac96c974a23e23",
+  "tests": {
+    "node": {
+      "files": 62,
+      "pass": 1447,
+      "fail": 0,
+      "skip": 0
+    },
+    "postgresSql": {
+      "files": 4,
+      "new": 25,
+      "regressions": 26,
+      "pass": 51,
+      "fail": 0,
+      "skip": 0
+    },
+    "postgresNative": {
+      "version": "17.6",
+      "connections": "separate",
+      "pass": 8,
+      "fail": 0,
+      "skip": 0,
+      "parentTests": 1,
+      "subtests": 7
+    },
+    "browser": {
+      "widths": [
+        1100,
+        390
+      ],
+      "codes": [
+        "23505",
+        "HLI01",
+        "HLI02",
+        "HLI03"
+      ],
+      "pass": 8,
+      "fail": 0,
+      "externalRequests": 0,
+      "dependentPaymentsSent": 0,
+      "syntheticScreenshotsReviewed": true
+    }
+  },
+  "checks": {
+    "gitDiffCheck": "PASS",
+    "newFileWhitespaceCheck": "PASS",
+    "jsonParse": "PASS",
+    "liveReadonlyPreflight": "5/5 audited bodies match; 2 historical groups; 4 guests",
+    "productionDdl": 0,
+    "productionDml": 0,
+    "productionRepairs": 0,
+    "push": 0,
+    "merge": 0,
+    "deploy": 0
+  },
+  "limits": [
+    "Global normalized guest index deferred; preserved aliases retain original documents.",
+    "Second historical group requires independent review.",
+    "Production execution and installation require separate authorization.",
+    "SQL fixture is representative, not a full production clone."
+  ],
+  "sha256Lf": {
+    "diagnosticos/rut-identidad-manifiesto-20261015.json": "31429c0e18b9b6bb5f7e3e63ea1b9bc793a0a1041cf1f9108eb97a51b496cf86",
+    "diagnosticos/rut-identidad-revision-20261015.md": "e76d31131b4981ce2e7af0ea529a29ba6a2e08617a08ca5ce2e491579e7a8734",
+    "js/haiku-libro-consultas-v1.js": "aa5f03744084f70e4a828856e264087f77665f1c5ec828d734c23437e38dd396",
+    "supabase/candidates/rut-identidad/00-preflight-readonly.sql": "7cd04e388b5ae177222e956275c1aa25bb48366b618cc7a2b41728aea954df5a",
+    "supabase/candidates/rut-identidad/01-registro-y-guard.sql": "e552ebf2cc791c8d2debbf7e408a46a5c1d85052cb39b2fe960b21d5b83d21a9",
+    "supabase/candidates/rut-identidad/02-writers.sql": "930ffb6f88da63f2a0270b48bd35d48662f50fac21157a3196c4de305bbf2dc2",
+    "supabase/candidates/rut-identidad/03-indice-diferido.sql": "0208cd549eee1dc8ca69e21242d861473f6ab01a568d4770ad6bc9cebbedd84b",
+    "supabase/candidates/rut-identidad/04-manifiesto-par-readonly.sql": "bef0626a5cd9e0edc8a0e8d499d8b40c02b8b6e87f4e4aad509422ecddb0db72",
+    "supabase/candidates/rut-identidad/README.md": "41c7ae4604a4f87939f38f1a9ff76aff0cc90ea2be1a6ed550e618afce9fc264",
+    "tests/fixtures/airbnb-libro-writers-sql.cjs": "9184f37536c0f44209021463727de8dd1f167c9284715f76f8a06233d4764827",
+    "tests/fixtures/libro-identidad-documento-sql.cjs": "3c2e28a18aa5bccc19d41ea96888826c72f0b7f9a1a15ef16752f8ebc22730d3",
+    "tests/fixtures/rut-actualizar-reserva-baseline.sql": "0e9e607c5a9f8ed9815781546481697cb9f4a9d24dfbc379475a260196816484",
+    "tests/fixtures/rut-identidad-sql.cjs": "9cb0e906e711510903bebbc283e4c8b268714023b8cdf3855d579ec7298fdef8",
+    "tests/fixtures/rut-incidente-ficticio.cjs": "d33b242fb90b7ff5311cad15106dc3d17bcf0d9a132e346f39042d12705afb94",
+    "tests/fixtures/rut-incorporar-baseline.sql": "566326d65c08730875794d5afbf74f2befc965aac7fe95dbaec06f9a0c791b3a",
+    "tests/haiku-libro-reconciliacion.test.cjs": "fc8088f88122121697c109fde6946354c1c0e631d3e52da1349dc596867ea33f",
+    "tests/libro-identidad-documento-browser-check.cjs": "d0350302ed1e6eaeac60b18b5623f2bc1e419580d77ef3800b61af2bdf25c549",
+    "tests/rut-identidad-concurrencia-postgres.cjs": "8c95dc502b8533e6b3b3fcc34abbd926ff2c3690be80f4e55ec4d521bea6cf47",
+    "tests/rut-identidad-postgres.test.cjs": "009ac6fa24a4582861586c3ac1a49b52d55da14ddab031de43c39ef9a0a40fc8",
+    "tools/rut-identidad-instalar.cjs": "3244aef3ed4c5c40d514c9cbb5cc40f5c52dbdfcaae1bd875bda3ac75ccc8678",
+    "tools/rut-identidad-reparacion.cjs": "3cada51188e5aee12b2fe5fb054549395cd46192da73fe16ccb77504ad58120f"
+  }
+}

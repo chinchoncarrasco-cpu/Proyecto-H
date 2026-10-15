@@ -1,6 +1,7 @@
 // UI real y cliente sintético: todas las conexiones externas están bloqueadas.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright'),fixture=require('./fixtures/libro-identidad-documento.cjs');
+const errorCode=process.env.HAKU_IDENTIDAD_ERROR_CODE||'23505';
 const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const api='Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })';
 const source=read('js/haiku-libro-consultas-v1.js');assert.ok(source.includes(api));
@@ -24,7 +25,7 @@ const server=http.createServer((req,res)=>{
                 window.haikuSupabase={auth:{getSession:async()=>({data:{session:{user:{id:'ficticio'}}}})},from(table){
                     const data=table==='reserva_estadias'?f.estadias:[];
                     const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};return b;
-                },async rpc(name,args){window.__calls.push({name,args});return {error:{code:'23505',
+                },async rpc(name,args){window.__calls.push({name,args});return {error:{code:f.errorCode,
                     message:'duplicate key value violates unique constraint "huespedes_documento_uidx"',details:'Documento FICTICIO-PRIVADO'}}}};
                 const comp=await Q.compararSistema(f.reservas,window.haikuSupabase,f.q),decisiones=new Map();
                 for(const g of comp.grupos){const s=f.estadias.find(s=>s.cabanas.numero===g.items[0].libro.cabana);if(s) decisiones.set(g.clave,{valor:'asociar:'+s.id})}
@@ -32,11 +33,12 @@ const server=http.createServer((req,res)=>{
                 window.__plan=await Q.prepararIncorporacion(result,decisiones,new Set(),window.haikuSupabase);
                 Q.renderizarIncorporacion(document.getElementById('out'),window.__plan,()=>{window.__recomparar=true},()=>{},p=>Q.confirmarIncorporacion(result,decisiones,new Set(),p,window.haikuSupabase));
                 window.__abrirComparacion=()=>Q.renderizarComparacion(document.getElementById('out'),result,{decisiones,aprobados:new Set()});
-            },fixture());
+            },{...fixture(),errorCode});
             await page.getByRole('button',{name:'Actualizar titular y RUT',exact:true}).click();
             await page.getByRole('button',{name:'Volver a comparar con datos actuales',exact:true}).waitFor();
             assert.match(await page.locator('#out').innerText(),/No se guardó nada.*revisión manual/);
             assert.ok(!(await page.locator('#out').innerText()).includes('FICTICIO-PRIVADO'));
+            if(process.env.HAKU_IDENTIDAD_SCREENSHOTS)await page.screenshot({path:path.join(process.env.HAKU_IDENTIDAD_SCREENSHOTS,`${errorCode}-${width}.png`),fullPage:true});
             assert.equal(await page.evaluate(()=>window.__plan.solicitudPendiente),null);
             const fallidas=await page.evaluate(()=>window.__calls);assert.equal(fallidas.length,1);
             assert.ok(fallidas[0].args.p_items.every(i=>i.tipo==='reserva_actualizar'));
@@ -59,7 +61,7 @@ const server=http.createServer((req,res)=>{
             assert.equal(enviadas[0].name,'haiku_incorporar_libro_v1');assert.deepEqual(enviadas[0].args.p_items.map(i=>i.tipo),['reserva_nueva','reserva_nueva']);
             assert.ok(!await page.getByText('Titular y RUT actualizados.',{exact:false}).count());
             assert.deepEqual(externos,[]);assert.deepEqual(errores,[]);
-            console.log(JSON.stringify({width,resultado:'PASS',conflicto:'HLI01',altas_independientes:2,pagos_enviados:0,rpc_externos:0}));
+            console.log(JSON.stringify({width,resultado:'PASS',conflicto:errorCode==='23505'?'HLI01':errorCode,altas_independientes:2,pagos_enviados:0,rpc_externos:0}));
             await context.close();
         }
     } finally {await browser?.close();await new Promise(ok=>server.close(ok))}

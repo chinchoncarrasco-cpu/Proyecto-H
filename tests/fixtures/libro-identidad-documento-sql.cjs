@@ -4,8 +4,8 @@ const {randomUUID}=require('node:crypto');
 const fs=require('node:fs'),path=require('node:path');
 const migration=()=>fs.readdirSync(path.join(__dirname,'../../supabase/migrations'))
     .find(f=>f.endsWith('_libro_identidad_documento_guard.sql'));
-async function preparar({aplicar=true}={}) {
-    const h=await base();const {db}=h;
+async function preparar({aplicar=true,db:provided}={}) {
+    const h=await base({db:provided});const {db}=h;
     try {
         await db.exec(`delete from reservas;
           create table huespedes(id uuid primary key default gen_random_uuid(),nombre text,

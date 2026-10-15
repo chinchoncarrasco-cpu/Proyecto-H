@@ -1,0 +1,493 @@
+{
+  "reviewDate": "2026-10-15",
+  "timezone": "America/Santiago",
+  "git": {
+    "initialBranch": "main",
+    "head": "34ec003b90915d580ed9b738c3ac96c974a23e23",
+    "initialStatus": "clean",
+    "workBranch": "fix/rut-identidad-supervisada"
+  },
+  "production": {
+    "mode": "READ ONLY",
+    "server": "PostgreSQL 17.6",
+    "writes": 0,
+    "ddl": 0,
+    "dml": 0,
+    "deployments": 0
+  },
+  "functions": [
+    {
+      "schema": "public",
+      "name": "haiku_crear_reserva",
+      "args": "p_titular_nombre text, p_cabana_numero smallint, p_fecha_ingreso date, p_fecha_salida date, p_adultos smallint, p_ninos smallint, p_mascotas smallint, p_correo_contacto text, p_telefono_contacto text, p_rut text, p_observaciones text, p_tarifas jsonb, p_acompanantes jsonb, p_tipo_estadia text, p_cloudbeds_id text",
+      "body_md5": "da4196b1493aa6c996ce59e8ae09c2c9",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definer": true,
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "haiku_actualizar_reserva",
+      "args": "p_reserva_id uuid, p_titular_nombre text, p_cabana_numero smallint, p_fecha_ingreso date, p_fecha_salida date, p_adultos smallint, p_ninos smallint, p_mascotas smallint, p_correo_contacto text, p_telefono_contacto text, p_rut text, p_observaciones text, p_tarifas jsonb, p_acompanantes jsonb",
+      "body_md5": "787b9b6cdf45d99257d5a6ff251f533c",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definer": false,
+      "config": [
+        "search_path=public, pg_temp"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "haiku_incorporar_libro_v1",
+      "args": "p_operacion_id uuid, p_items jsonb",
+      "body_md5": "558000300cf1a0b41c7e0bc714435d48",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definer": true,
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "haiku_modificar_reserva_completa_core",
+      "args": "p_reserva_id uuid, p_titular_nombre text, p_cabana_numero smallint, p_fecha_ingreso date, p_fecha_salida date, p_tipo_estadia text, p_adultos smallint, p_ninos smallint, p_mascotas smallint, p_correo_contacto text, p_telefono_contacto text, p_rut text, p_observaciones text, p_tarifas jsonb, p_tarifa_fullday bigint, p_acompanantes jsonb",
+      "body_md5": "3b0e3eaffe7774e6c295fedff01bfe53",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres,authenticated=X/postgres}",
+      "definer": true,
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "haiku_libro_actualizar_v1",
+      "args": "p_item jsonb",
+      "body_md5": "7214c9af409d4c7e04bdc06341c7e68f",
+      "owner": "postgres",
+      "acl": "{postgres=X/postgres}",
+      "definer": false,
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ]
+    }
+  ],
+  "migrationCorrespondence": [
+    {
+      "name": "haiku_modificacion_reserva_completa_v1",
+      "deployed": "20260902051904",
+      "local": "20260902051904",
+      "equalAfterLFTrim": true,
+      "localLength": 20416,
+      "deployedLength": 20416
+    },
+    {
+      "name": "crear_reserva_fullday_con_cargo",
+      "deployed": "20260902053250",
+      "local": "20260902053250",
+      "equalAfterLFTrim": true,
+      "localLength": 7669,
+      "deployedLength": 7669
+    },
+    {
+      "name": "fullday_prevencion_tarifa_explicita_fd3",
+      "deployed": "20260929155720",
+      "local": "20260929023216",
+      "equalAfterLFTrim": true,
+      "localLength": 4285,
+      "deployedLength": 4285
+    },
+    {
+      "name": "libro_identidad_documento_guard",
+      "deployed": "20261010230638",
+      "local": "20261010034622",
+      "equalAfterLFTrim": true,
+      "localLength": 7027,
+      "deployedLength": 7027
+    }
+  ],
+  "evidence": {
+    "groups": 2,
+    "guestRows": 4,
+    "confirmedPair": {
+      "original": {
+        "status": "cancelada",
+        "cabin": 8,
+        "arrival": "2026-10-09",
+        "departure": "2026-10-11",
+        "payments": 1,
+        "guestFormat": "with separators",
+        "titularRefs": 1,
+        "reservationLinks": 1,
+        "stayLinks": 1,
+        "notes": 0,
+        "requests": 0
+      },
+      "subsequent": {
+        "status": "confirmada",
+        "cabin": 8,
+        "arrival": "2026-10-30",
+        "departure": "2026-11-01",
+        "payments": 0,
+        "guestFormat": "compact",
+        "titularRefs": 1,
+        "reservationLinks": 1,
+        "stayLinks": 1,
+        "notes": 0,
+        "requests": 0
+      },
+      "bothRutChecksumsValid": true,
+      "sameNormalizedRut": true,
+      "compatibleNames": true
+    },
+    "otherGroup": {
+      "guests": 2,
+      "titularRefs": 2,
+      "notes": 0,
+      "requests": 0,
+      "status": "INDEPENDENT REVIEW REQUIRED"
+    }
+  },
+  "pairSnapshotMd5": {
+    "original": "b7433c6c20707cd12b21e68bd2e26527",
+    "subsequent": "842f983cad727588c107e57b136ced17",
+    "reproduceWith": "supabase/candidates/rut-identidad/04-manifiesto-par-readonly.sql",
+    "purpose": "Comparison only; MD5 is not identity evidence, approval or a restorable backup."
+  },
+  "privacy": "No names, document numbers, contact details or full personal IDs included. Live data were not copied into fixtures.",
+  "schemaEvidence": {
+    "foreignKeys": [
+      {
+        "name": "estadia_huespedes_estadia_id_fkey",
+        "table": "estadia_huespedes",
+        "definition": "FOREIGN KEY (estadia_id) REFERENCES reserva_estadias(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "estadia_huespedes_huesped_id_fkey",
+        "table": "estadia_huespedes",
+        "definition": "FOREIGN KEY (huesped_id) REFERENCES huespedes(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "estadia_huespedes_pkey",
+        "table": "estadia_huespedes",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "estadia_huespedes_unico",
+        "table": "estadia_huespedes",
+        "definition": "UNIQUE (estadia_id, huesped_id)"
+      },
+      {
+        "name": "huespedes_documento_consistente",
+        "table": "huespedes",
+        "definition": "CHECK ((((tipo_documento IS NULL) AND (numero_documento IS NULL)) OR ((tipo_documento IS NOT NULL) AND (numero_documento IS NOT NULL) AND (btrim(tipo_documento) <> ''::text) AND (btrim(numero_documento) <> ''::text))))"
+      },
+      {
+        "name": "huespedes_nombre_no_vacio",
+        "table": "huespedes",
+        "definition": "CHECK ((btrim(nombre) <> ''::text))"
+      },
+      {
+        "name": "huespedes_pkey",
+        "table": "huespedes",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "notas_huesped_id_fkey",
+        "table": "notas",
+        "definition": "FOREIGN KEY (huesped_id) REFERENCES huespedes(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "reserva_huespedes_huesped_id_fkey",
+        "table": "reserva_huespedes",
+        "definition": "FOREIGN KEY (huesped_id) REFERENCES huespedes(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "reserva_huespedes_pkey",
+        "table": "reserva_huespedes",
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "name": "reserva_huespedes_reserva_id_fkey",
+        "table": "reserva_huespedes",
+        "definition": "FOREIGN KEY (reserva_id) REFERENCES reservas(id) ON DELETE CASCADE"
+      },
+      {
+        "name": "reserva_huespedes_unico",
+        "table": "reserva_huespedes",
+        "definition": "UNIQUE (reserva_id, huesped_id)"
+      },
+      {
+        "name": "reservas_titular_huesped_id_fkey",
+        "table": "reservas",
+        "definition": "FOREIGN KEY (titular_huesped_id) REFERENCES huespedes(id) ON DELETE RESTRICT"
+      },
+      {
+        "name": "solicitudes_huesped_id_fkey",
+        "table": "solicitudes",
+        "definition": "FOREIGN KEY (huesped_id) REFERENCES huespedes(id) ON DELETE RESTRICT"
+      }
+    ],
+    "indexes": [
+      {
+        "indexdef": "CREATE UNIQUE INDEX estadia_huespedes_pkey ON public.estadia_huespedes USING btree (id)",
+        "indexname": "estadia_huespedes_pkey"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX estadia_huespedes_unico ON public.estadia_huespedes USING btree (estadia_id, huesped_id)",
+        "indexname": "estadia_huespedes_unico"
+      },
+      {
+        "indexdef": "CREATE INDEX estadia_huespedes_huesped_id_idx ON public.estadia_huespedes USING btree (huesped_id)",
+        "indexname": "estadia_huespedes_huesped_id_idx"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX huespedes_pkey ON public.huespedes USING btree (id)",
+        "indexname": "huespedes_pkey"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX huespedes_documento_uidx ON public.huespedes USING btree (tipo_documento, numero_documento) WHERE ((tipo_documento IS NOT NULL) AND (numero_documento IS NOT NULL))",
+        "indexname": "huespedes_documento_uidx"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX reserva_huespedes_unico ON public.reserva_huespedes USING btree (reserva_id, huesped_id)",
+        "indexname": "reserva_huespedes_unico"
+      },
+      {
+        "indexdef": "CREATE UNIQUE INDEX reserva_huespedes_pkey ON public.reserva_huespedes USING btree (id)",
+        "indexname": "reserva_huespedes_pkey"
+      },
+      {
+        "indexdef": "CREATE INDEX reserva_huespedes_huesped_id_idx ON public.reserva_huespedes USING btree (huesped_id)",
+        "indexname": "reserva_huespedes_huesped_id_idx"
+      }
+    ],
+    "triggers": [
+      {
+        "name": "huespedes_set_updated_at",
+        "table": "huespedes",
+        "function": "haiku_set_updated_at()",
+        "definition": "CREATE TRIGGER huespedes_set_updated_at BEFORE UPDATE ON public.huespedes FOR EACH ROW EXECUTE FUNCTION haiku_set_updated_at()"
+      },
+      {
+        "name": "auditoria_reservas",
+        "table": "reservas",
+        "function": "haiku_auditar_cambio()",
+        "definition": "CREATE TRIGGER auditoria_reservas AFTER INSERT OR UPDATE ON public.reservas FOR EACH ROW EXECUTE FUNCTION haiku_auditar_cambio()"
+      },
+      {
+        "name": "reservas_set_updated_at",
+        "table": "reservas",
+        "function": "haiku_set_updated_at()",
+        "definition": "CREATE TRIGGER reservas_set_updated_at BEFORE UPDATE ON public.reservas FOR EACH ROW EXECUTE FUNCTION haiku_set_updated_at()"
+      },
+      {
+        "name": "estadia_huespedes_validar_reserva",
+        "table": "estadia_huespedes",
+        "function": "haiku_validar_huesped_en_estadia()",
+        "definition": "CREATE TRIGGER estadia_huespedes_validar_reserva BEFORE INSERT OR UPDATE ON public.estadia_huespedes FOR EACH ROW EXECUTE FUNCTION haiku_validar_huesped_en_estadia()"
+      }
+    ],
+    "rls": [
+      {
+        "tablename": "estadia_huespedes",
+        "rowsecurity": true
+      },
+      {
+        "tablename": "huespedes",
+        "rowsecurity": true
+      },
+      {
+        "tablename": "notas",
+        "rowsecurity": true
+      },
+      {
+        "tablename": "reserva_huespedes",
+        "rowsecurity": true
+      },
+      {
+        "tablename": "reservas",
+        "rowsecurity": true
+      },
+      {
+        "tablename": "solicitudes",
+        "rowsecurity": true
+      }
+    ],
+    "policies": [
+      {
+        "tablename": "estadia_huespedes",
+        "policyname": "estadia_huespedes_delete",
+        "roles": "{authenticated}",
+        "cmd": "DELETE",
+        "qual": "private.haiku_tiene_permiso('huespedes.gestionar'::text)",
+        "with_check": null
+      },
+      {
+        "tablename": "estadia_huespedes",
+        "policyname": "estadia_huespedes_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "estadia_huespedes",
+        "policyname": "estadia_huespedes_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND (private.haiku_tiene_permiso('reservas.ver'::text) OR private.haiku_tiene_permiso('huespedes.ver'::text)))",
+        "with_check": null
+      },
+      {
+        "tablename": "estadia_huespedes",
+        "policyname": "estadia_huespedes_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "private.haiku_tiene_permiso('huespedes.gestionar'::text)",
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "huespedes",
+        "policyname": "huespedes_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "huespedes",
+        "policyname": "huespedes_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND private.haiku_tiene_permiso('huespedes.ver'::text))",
+        "with_check": null
+      },
+      {
+        "tablename": "huespedes",
+        "policyname": "huespedes_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "private.haiku_tiene_permiso('huespedes.gestionar'::text)",
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "notas",
+        "policyname": "notas_delete",
+        "roles": "{authenticated}",
+        "cmd": "DELETE",
+        "qual": "private.haiku_tiene_permiso('notas.gestionar'::text)",
+        "with_check": null
+      },
+      {
+        "tablename": "notas",
+        "policyname": "notas_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('notas.gestionar'::text)"
+      },
+      {
+        "tablename": "notas",
+        "policyname": "notas_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND private.haiku_tiene_permiso('notas.ver'::text))",
+        "with_check": null
+      },
+      {
+        "tablename": "notas",
+        "policyname": "notas_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "private.haiku_tiene_permiso('notas.gestionar'::text)",
+        "with_check": "private.haiku_tiene_permiso('notas.gestionar'::text)"
+      },
+      {
+        "tablename": "reserva_huespedes",
+        "policyname": "reserva_huespedes_delete",
+        "roles": "{authenticated}",
+        "cmd": "DELETE",
+        "qual": "private.haiku_tiene_permiso('huespedes.gestionar'::text)",
+        "with_check": null
+      },
+      {
+        "tablename": "reserva_huespedes",
+        "policyname": "reserva_huespedes_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "reserva_huespedes",
+        "policyname": "reserva_huespedes_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND (private.haiku_tiene_permiso('reservas.ver'::text) OR private.haiku_tiene_permiso('huespedes.ver'::text)))",
+        "with_check": null
+      },
+      {
+        "tablename": "reserva_huespedes",
+        "policyname": "reserva_huespedes_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "private.haiku_tiene_permiso('huespedes.gestionar'::text)",
+        "with_check": "private.haiku_tiene_permiso('huespedes.gestionar'::text)"
+      },
+      {
+        "tablename": "reservas",
+        "policyname": "reservas_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('reservas.crear'::text)"
+      },
+      {
+        "tablename": "reservas",
+        "policyname": "reservas_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND private.haiku_tiene_permiso('reservas.ver'::text))",
+        "with_check": null
+      },
+      {
+        "tablename": "reservas",
+        "policyname": "reservas_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "(private.haiku_tiene_permiso('reservas.editar'::text) OR private.haiku_tiene_permiso('reservas.cancelar'::text))",
+        "with_check": "(((estado_reserva = 'cancelada'::text) AND private.haiku_tiene_permiso('reservas.cancelar'::text)) OR ((estado_reserva <> 'cancelada'::text) AND private.haiku_tiene_permiso('reservas.editar'::text)))"
+      },
+      {
+        "tablename": "solicitudes",
+        "policyname": "solicitudes_insert",
+        "roles": "{authenticated}",
+        "cmd": "INSERT",
+        "qual": null,
+        "with_check": "private.haiku_tiene_permiso('solicitudes.gestionar_todas'::text)"
+      },
+      {
+        "tablename": "solicitudes",
+        "policyname": "solicitudes_select",
+        "roles": "{authenticated}",
+        "cmd": "SELECT",
+        "qual": "(private.haiku_usuario_activo() AND (private.haiku_tiene_permiso('solicitudes.ver_todas'::text) OR (private.haiku_tiene_permiso('solicitudes.ver_asignadas'::text) AND ((asignado_a = ( SELECT auth.uid() AS uid)) OR (creado_por = ( SELECT auth.uid() AS uid))))))",
+        "with_check": null
+      },
+      {
+        "tablename": "solicitudes",
+        "policyname": "solicitudes_update",
+        "roles": "{authenticated}",
+        "cmd": "UPDATE",
+        "qual": "(private.haiku_tiene_permiso('solicitudes.gestionar_todas'::text) OR (private.haiku_tiene_permiso('solicitudes.gestionar_asignadas'::text) AND (asignado_a = ( SELECT auth.uid() AS uid))))",
+        "with_check": "(private.haiku_tiene_permiso('solicitudes.gestionar_todas'::text) OR (private.haiku_tiene_permiso('solicitudes.gestionar_asignadas'::text) AND (asignado_a = ( SELECT auth.uid() AS uid))))"
+      }
+    ]
+  }
+}
