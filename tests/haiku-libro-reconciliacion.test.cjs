@@ -31,6 +31,17 @@ async function prepararIdentidadFicticia() {
  return {...f,db,result,decisiones,plan};
 }
 
+for(const [explicit,wanted] of [['pasaporte','pasaporte'],[undefined,'rut']])test(`tipo documental ${wanted}: compacto con K respeta el tipo explícito del Libro`,async()=>{
+ const r=book({titular:'Persona Sintética',rut_documento:'12345670K',tipo_documento:explicit,adultos:2,ninos:0,mascotas:0});
+ const s=stay(r);s.reservas={...s.reservas,titular_tipo_documento:'documento',titular_numero_documento:'FICTICIO-ANTERIOR'};
+ const db=client([s]),comp=await Q.compararSistema([r],db,q);
+ const decisions=new Map(comp.grupos.map(g=>[g.clave,{valor:'asociar:'+s.id}]));
+ const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion:comp},decisions,new Set(),db);
+ const update=Q.serializarIncorporacion(plan).find(i=>i.tipo==='reserva_actualizar');
+ assert.ok(update);assert.equal(update.reserva.despues.titular_tipo_documento,wanted);
+ assert.equal(update.reserva.despues.titular_numero_documento,'12345670K');
+});
+
 test('identidad conflictiva: dos altas independientes seleccionables, pagos dependientes bloqueados y sin RPC financiero',async()=>{
  const h=await prepararIdentidadFicticia(),{plan}=h;
  assert.equal(plan.etapa,'actualizar_identidad');assert.equal(plan.items.filter(i=>i.payload?.tipo==='reserva_actualizar').length,4);
@@ -51,7 +62,7 @@ test('identidad conflictiva: dos altas independientes seleccionables, pagos depe
  assert.ok(pagos.every(i=>!i.seleccionado));
 });
 
-for(const code of ['HLI01','HLI02','23505']) test(`conflicto de identidad ${code}: invalida solicitud, exige comparar y no ejecuta pagos`,async()=>{
+for(const code of ['HLI01','HLI02','HLI03','23505']) test(`conflicto de identidad ${code}: invalida solicitud, exige comparar y no ejecuta pagos`,async()=>{
  const h=await prepararIdentidadFicticia();const calls=[];
  h.db.rpc=async(name,args)=>{calls.push({name,args});return {error:{code,
   message:code==='23505'?'duplicate key value violates unique constraint "huespedes_documento_uidx"':'La identidad requiere revisión manual',
