@@ -831,7 +831,7 @@
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
                     const ref = re => text.match(re)?.[1]?.trim() || null;
-                    const kind = /penalidad/.test(t) ? "penalidad" : /^(cab\s*\d|alojamiento|arriendo)/.test(c) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
+                    const kind = /penalidad/.test(t) ? "penalidad" : (/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
                     if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
