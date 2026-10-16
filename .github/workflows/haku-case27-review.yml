@@ -1,0 +1,48 @@
+name: Haku massage and reservation actions review
+on:
+  push:
+    branches: [fix/libro-masaje-cuna-acciones-review]
+    paths:
+      - '.haku-case27-review.py'
+      - 'tests/libro-masaje-registro-cuna-acciones.test.cjs'
+      - '.github/workflows/haku-case27-review.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/libro-masaje-cuna-acciones-review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Aplicar sólo los blobs del candidato probado
+        run: |
+          mkdir -p /tmp/haku-case27-review
+          python3 .haku-case27-review.py
+          node --check js/haiku-libro-semantica-v1.js
+          node --check js/haiku-libro-servicios-scope-v2.js
+          git diff --check
+          test "$(git diff --name-only | wc -l)" = 2
+          git diff --exit-code -- . ':!js/haiku-libro-semantica-v1.js' ':!js/haiku-libro-servicios-scope-v2.js'
+          git diff > /tmp/haku-case27-review/candidate.patch
+      - name: Pruebas nativas con fixtures y cero llamadas a producción
+        run: |
+          set -o pipefail
+          node --test tests/libro-semantica.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicios-existentes-finanzas.test.cjs tests/haiku-servicios-identidad-proveniencia.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-servicios-noche-manual.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-masaje-fragmentos.test.cjs tests/libro-masajes-parser.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-beneficio-tinaja-notas.test.cjs tests/libro-masaje-registro-cuna-acciones.test.cjs 2>&1 | tee /tmp/haku-case27-review/tests.tap
+      - name: Guardar sólo los dos módulos verificados en esta rama
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- js/haiku-libro-semantica-v1.js js/haiku-libro-servicios-scope-v2.js
+          git commit -m 'fix(libro): separar fecha de registro, cuna y consulta de fichas ambiguas'
+          git push origin HEAD:refs/heads/fix/libro-masaje-cuna-acciones-review
+          git rev-parse HEAD > /tmp/haku-case27-review/verified-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haku-case27-review
+          path: /tmp/haku-case27-review
+          retention-days: 7
