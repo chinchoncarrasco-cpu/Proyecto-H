@@ -500,7 +500,8 @@
     }
 
     async function finanzasFullDay(cliente, ids) {
-        if (!ids.length) return new Map();
+        // Con RLS, no ver pagos podría significar falta de permiso, no cero pagos.
+        if (!ids.length || root.haikuTienePermiso?.('pagos.ver') !== true) return new Map();
         const cargar = async (tabla, columnas, orden) => {
             const todos = [];
             for (let pagina = 0; pagina < 20; pagina++) {
