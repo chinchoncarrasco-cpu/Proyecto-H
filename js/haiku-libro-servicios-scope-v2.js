@@ -496,7 +496,16 @@
         const texto = [p.concepto,p.referencia_externa,p.observaciones,p.texto_original,
             origen.concepto,origen.evidencia_libro?.concepto,
             JSON.stringify(origen.aplicaciones_servicio_v1?.aplicaciones || [])].filter(Boolean).join(' ');
-        return /\b(?:tinajas?|tonel(?:es)?|jacuzzis?|jacusi|hot\s*tub)\b/.test(normalizar(texto).replace(/[_-]/g,' '));
+        const normalizado = normalizar(texto).replace(/[_-]/g,' ');
+        // Un abono del paquete Full Day que menciona la tinaja incluida no
+        // demuestra un segundo pago por ese servicio.
+        const incluidoEnPaquete = /\b(?:full\s*day|fullday)\b/.test(normalizado) &&
+            /\b(?:incluid[oa]s?|incluye|cortesia)\b/.test(normalizado) &&
+            !/\b(?:adicional|extra|separad[oa]|abono\s+tinaja|pago\s+tinaja)\b/.test(normalizado) &&
+            p.tipo_movimiento !== 'servicio' &&
+            !(origen.aplicaciones_servicio_v1?.aplicaciones||[]).length;
+        return !incluidoEnPaquete &&
+            /\b(?:tinajas?|tonel(?:es)?|jacuzzis?|jacusi|hot\s*tub)\b/.test(normalizado);
     }
 
     async function finanzasFullDay(cliente, ids) {
