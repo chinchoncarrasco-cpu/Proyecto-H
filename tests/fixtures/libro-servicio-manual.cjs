@@ -7,7 +7,8 @@ function setup() {
     const w = globalThis;
     const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
     const copy = x => JSON.parse(JSON.stringify(x));
-    const textos = ['1 HORA DE CORTESIA TINAJA', 'X PAGAR LATE OUT CLP$10,000 1 HORA', '1 MASAJE DE 1 HORA'];
+    // Estos casos prueban prestaciones confirmadas con datos aún incompletos, no beneficios por coordinar.
+    const textos = ['1 HORA DE CORTESIA TINAJA CONFIRMADA', 'X PAGAR LATE OUT CLP$10,000 1 HORA', '1 MASAJE DE 1 HORA'];
     const r = (nombre, cabana, texto) => ({ titular: nombre, cabana, fecha_checkin: '2026-10-10', fecha_checkout: '2026-10-11',
         noches: 1, adultos: 2, tipo_estadia: 'alojamiento', texto_original: texto,
         coordenadas_origen: { hoja: 'Oct26', celda: cabana === 4 ? 'C4' : 'C5' },
