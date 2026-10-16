@@ -3193,6 +3193,25 @@
                 } else if ('monto' in patch.despues) item.aviso='Se corregirá el importe del mismo pago. Si disminuye, se ajustará su distribución entre cargos para no aplicar más que el monto del Libro; quedará registrado el cambio.';
                 continue;
             }
+            // Comprobante independiente por personas EXTRA de una Jacuzzi ya
+            // totalmente pagada. Antes de aprobarlo hay que ampliar el mismo
+            // servicio y liberar únicamente la diferencia del cargo existente.
+            const ampliacionJacuzzi = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO
+                ? D?.proponerAmpliacionJacuzzi?.(p,r,destino,comp) : null;
+            if (ampliacionJacuzzi) {
+                const item=add('dudosos',id,texto,null,
+                    ['La Jacuzzi original ya está pagada. Primero añade las personas adicionales al mismo servicio; después podrás aprobar este segundo comprobante.'],
+                    [],['servicios.editar','pagos.registrar']);
+                item.pagoLibro=p;item.ampliacionJacuzzi=ampliacionJacuzzi;item.aprobable=false;
+                item.aviso='Jacuzzi ya registrada por '+money(ampliacionJacuzzi.totalActual)+
+                    ' (actualmente '+ampliacionJacuzzi.personasActuales+' personas anotadas; incluye hasta 3). '+
+                    'El Libro confirma '+ampliacionJacuzzi.adicionales+' adicionales por '+
+                    money(ampliacionJacuzzi.montoAdicional)+
+                    '. Al ampliar quedará en '+ampliacionJacuzzi.personasFinales+
+                    ' personas por '+money(ampliacionJacuzzi.totalFinal)+
+                    ', conservando el abono previo; el segundo pago NO se registrará automáticamente.';
+                continue;
+            }
             const destinoActual = destino?.reserva_id || destino?.reserva_ref;
             const repetidosIdentificador = fuerte ? vistos.filter(v => pagoCoincide(p, { ...v.pago, datos_origen: { bovtar: v.pago.bovtar } })) : [];
             const conflictoIdentificador = repetidosIdentificador.some(v => Number(v.pago.monto) !== Number(p.monto) || v.pago.moneda !== p.moneda || v.destino !== destinoActual);
@@ -4470,6 +4489,29 @@
             }catch(e){out.append(elemento('p','haiku-incorporacion-error','No se pudo actualizar la revisión: '+e.message));}
             finally {desbloquear();}
         };
+        aprobar.ampliarJacuzzi = async item => {
+            if(out.isConnected===false)return;
+            const vista=capturarVistaAprobaciones(out),desbloquear=bloquearVistaMientrasRevalida(out);
+            let confirmada=false;
+            try {
+                const aplicada=await ampliarJacuzziDesdeLibro(item);
+                if(!aplicada)return;
+                confirmada=true;
+                limpiarRevisionTrasAmpliarJacuzzi(decisiones,aprobados,item.id);
+                const nuevo=await prepararIncorporacion(result,decisiones,aprobados);
+                if(out.isConnected===false)return;
+                renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                restaurarVistaAprobaciones(out,vista);
+                out.querySelector('.haku-incorporacion-sites-preparacion')?.append(
+                    elemento('p','haiku-incorporacion-continuar',
+                        '✓ Jacuzzi ampliada. El segundo pago sigue sin registrarse: revisa y aprueba su comprobante.'));
+            }catch(e) {
+                if(!confirmada)throw e;
+                out.append(elemento('p','haiku-incorporacion-error',
+                    'La Jacuzzi SÍ quedó ampliada, pero no se pudo refrescar la revisión: '+e.message+
+                    '. Vuelve a comparar; no repitas la ampliación.'));
+            }finally{desbloquear();}
+        };
         renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
         return {result,plan};
     }
@@ -5179,6 +5221,31 @@
                     }catch(e){out.append(elemento('p','haiku-incorporacion-error','No se pudo actualizar la revisión: '+e.message));}
                     finally{desbloquear();}
                 };
+                aprobar.ampliarJacuzzi = async item => {
+                    if(out.isConnected===false)return;
+                    const estadoVista=capturarVistaAprobaciones(out),desbloquear=bloquearVistaMientrasRevalida(out);
+                    let confirmada=false;
+                    try {
+                        const aplicada=await ampliarJacuzziDesdeLibro(item);
+                        if(!aplicada)return;
+                        confirmada=true;
+                        limpiarRevisionTrasAmpliarJacuzzi(decisiones,aprobados,item.id);
+                        const nuevo=restaurarSeleccionIncorporacion(
+                            await prepararIncorporacion(result,decisiones,aprobados),planEnVista);
+                        if(out.isConnected===false)return;
+                        planEnVista=nuevo;
+                        renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                        restaurarVistaAprobaciones(out,estadoVista);
+                        out.querySelector('.haku-incorporacion-sites-preparacion')?.append(
+                            elemento('p','haiku-incorporacion-continuar',
+                                '✓ Jacuzzi ampliada. El abono adicional sigue pendiente: revísalo antes de confirmar.'));
+                    }catch(e) {
+                        if(!confirmada)throw e;
+                        out.append(elemento('p','haiku-incorporacion-error',
+                            'La Jacuzzi SÍ quedó ampliada, pero el listado no se actualizó: '+
+                            e.message+'. Vuelve a comparar; no repitas la ampliación.'));
+                    }finally{desbloquear();}
+                };
                 renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
             } catch (error) {
                 vista.replaceChildren(elemento("p", "", "No se pudo preparar: " + error.message + ". Reintenta; no hay una propuesta actualizada."));
@@ -5407,7 +5474,10 @@
         if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
             /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
         let estado = item.etapaSiguiente ? 'Paso 2 · después del titular' : etiquetasEstado[item.categoria] || "Revisar";
-        if (item.penalidadPagoPendiente) {
+        if (item.ampliacionJacuzzi) {
+            estado = 'Ampliar Jacuzzi';
+            detalle = 'Primero actualiza la misma Jacuzzi para reflejar las personas extra y generar el saldo correcto. Después revisa el segundo pago; el primero se conserva.';
+        } else if (item.penalidadPagoPendiente) {
             estado = item.categoria==='pagos' ? 'Pago de penalidad preparado' : 'Aprobar pago de penalidad';
             detalle = item.categoria==='pagos'
                 ? 'Transferencia aprobada. Confirma la incorporación para registrar el abono en Proyecto H.'
@@ -6036,6 +6106,15 @@
             notas.append(elemento("summary", "", "Ver notas y solicitudes"), elemento("p", "", vista.reserva.observaciones));
             fila.append(notas);
         }
+        if (item.ampliacionJacuzzi && aprobar?.ampliarJacuzzi) {
+            const ajuste=item.ampliacionJacuzzi;
+            const revisar=elemento('button','haiku-incorporacion-aprobar',
+                'Añadir '+ajuste.adicionales+' persona'+(ajuste.adicionales===1?'':'s')+' y habilitar pago');
+            revisar.type='button';
+            revisar.addEventListener('click',()=>ejecutarAprobacionVisual(revisar,
+                () => aprobar.ampliarJacuzzi(item),fila,'Actualizando Jacuzzi…'));
+            fila.append(revisar);
+        }
         if (item.penalidadManual) {
             const revisar = elemento('button','haiku-incorporacion-aprobar','Revisar penalidad 10%');
             revisar.type = 'button';
@@ -6171,6 +6250,39 @@
         boton.type = "button";
         boton.addEventListener("click", volver);
         acciones.append(boton); out.append(acciones);
+    }
+
+    async function ampliarJacuzziDesdeLibro(item,cliente=root.haikuSupabase) {
+        const p=item?.ampliacionJacuzzi;
+        if (!p || !cliente?.rpc ||
+            root.haikuTienePermiso?.('servicios.editar')!==true ||
+            root.haikuTienePermiso?.('pagos.registrar')!==true)
+            throw Error('No hay una propuesta vigente o faltan permisos de servicios y pagos.');
+        if(typeof root.confirm==='function' && !root.confirm(
+            '¿Ampliar la misma Jacuzzi a '+p.personasFinales+' personas, con total '+
+            money(p.totalFinal)+'? Se conserva el pago inicial y se genera un saldo de '+
+            money(p.montoAdicional)+'. El segundo pago NO se registrará hasta aprobarlo y confirmar la incorporación.'
+        )) return null;
+        const {data,error}=await cliente.rpc('haiku_libro_ampliar_jacuzzi_v1',{
+            p_reserva_id:p.reservaId,
+            p_estadia_id:p.estadiaId,
+            p_servicio_id:p.servicioId,
+            p_adicionales:p.adicionales,
+            p_estado_esperado:p.esperado,
+            p_origen:p.origen
+        });
+        if(error)throw error;
+        if(data?.ok!==true || data.servicio_id!==p.servicioId ||
+            Number(data.total)!==p.totalFinal || Number(data.personas_finales)!==p.personasFinales)
+            throw Error('La respuesta del ajuste no confirmó los datos esperados. Vuelve a comparar antes de reintentar.');
+        return data;
+    }
+
+    function limpiarRevisionTrasAmpliarJacuzzi(decisiones,aprobados,itemId) {
+        decisiones.delete(claveDecisionPago(itemId));
+        aprobados.delete(itemId);
+        revisionesPagoManual.get(decisiones)?.delete(itemId);
+        registroMedios(decisiones)?.delete(itemId);
     }
 
     // Los desplegables y el scroll son estado visual: no forman parte del pago.
