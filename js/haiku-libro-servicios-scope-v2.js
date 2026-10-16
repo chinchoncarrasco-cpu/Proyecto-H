@@ -1132,7 +1132,7 @@
             const confirmar = contenido.querySelector('[data-servicio-cortesia-confirmar]');
             const cancelarInterno = contenido.querySelector('[data-servicio-cortesia-cancelar]');
             if (!motivo || !confirmar) throw Error('Falta el formulario seguro de cortesía.');
-            cancelarInterno?.addEventListener('click',()=>{estado.apertura++;panel.remove();});
+            if (cancelarInterno) cancelarInterno.hidden = true; // El panel ya tiene un único Cancelar.
             motivo.addEventListener('input',()=>{confirmar.disabled = estado.ocupado || !motivo.value.trim();});
             confirmar.disabled = true;
             aviso.textContent = 'Tinaja y cargo comprobados. Indica el motivo y confirma.';
