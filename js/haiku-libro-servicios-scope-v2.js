@@ -657,6 +657,8 @@
         const razones = [], inferencias = [];
         if (servicio?.semantica !== "SERVICIO_REAL") throw new Error("prepararServicio sólo acepta unidades clasificadas canónicamente como SERVICIO_REAL.");
         const semantica = servicio.semantica, intencion_operativa = true;
+        if (servicio.evidencia_origen?.cobro_color?.regla === 'LETRA_AMARILLA_COBRABLE')
+            inferencias.push('Cobrable por letra amarilla del Libro. El pago actual se comprueba en Proyecto H.');
         const intencionOriginal = intencionCobroServicio(servicio);
         const intencion_cobro = reglaFullDay && intencionOriginal === 'no_determinada'
             ? 'cortesia' : intencionOriginal === 'no_determinada' && resueltos.tipo_cobro
