@@ -187,8 +187,8 @@
         if (minutosHora(horario.hora_fin)-minutosHora(horario.hora) !== 120 ||
             !/\b(?:dos|2)\s*(?:horas?|hrs?)\b/.test(normalizar(horario.texto_original))) return candidatos;
         const importes = [...normalizar(cobro.texto_original)
-            .matchAll(/\b(?:clp\s*\$?\s*|\$\s*)?(\d{1,3}(?:\.\d{3})+|\d{4,6})\b/g)]
-            .map(m=>Number(m[1].replace(/\./g,'')));
+            .matchAll(/\b(?:clp\s*\$?\s*|\$\s*)?(\d{1,3}(?:[.,]\d{3})+|\d{4,6})\b/g)]
+            .map(m=>Number(m[1].replace(/[.,]/g,'')));
         if (importes.length !== 1 || importes[0] !== 30000) return candidatos;
         if (tinajas.some(s => s.cantidad !== 1 || s.monto != null && s.monto !== 0 ||
             s.hora && s !== horario && s.hora !== horario.hora ||
@@ -1459,7 +1459,15 @@
             if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', 'Fecha del servicio', 'date');
             if (calculo.catalogo && /^tinaja/.test(calculo.catalogo.codigo) && (!Number.isInteger(sinOpcionales.personas) || sinOpcionales.personas < 1 || sinOpcionales.personas > Number(calculo.catalogo.capacidad_maxima || Infinity))) campo('personas', 'Personas', 'number');
             if (base.intencion_cobro === 'no_determinada') campo('tipo_cobro', 'Tipo de cobro', 'text', [['normal', 'Cobrable'], ...(calculo.catalogo?.permite_cortesia && /^tinaja/.test(calculo.catalogo.codigo) ? [['cortesia', 'Cortesía']] : [])]);
-            if (actual.precio.distinto) campo('precio_decision', 'Confirmar precio contractual', 'text', [['catalogo', `Usar catálogo: $${actual.precio.precio_catalogo.toLocaleString('es-CL')}`], ...(actual.precio.puedePrecioLibro ? [['libro', `Usar Libro: $${actual.precio.monto_libro.toLocaleString('es-CL')} · unitario $${(actual.precio.monto_libro / calculo.cantidad).toLocaleString('es-CL')}`]] : [])]);
+            if (actual.precio.distinto) {
+                const opcionesPrecio = [
+                    ...(base.servicio.promoTinajaMixta?.version === 1 ? [] :
+                        [['catalogo', `Usar catálogo: $${actual.precio.precio_catalogo.toLocaleString('es-CL')}`]]),
+                    ...(actual.precio.puedePrecioLibro ?
+                        [['libro', `Usar Libro: $${actual.precio.monto_libro.toLocaleString('es-CL')} · unitario técnico $${(actual.precio.monto_libro / calculo.cantidad).toLocaleString('es-CL')}`]] : [])
+                ];
+                campo('precio_decision','Confirmar precio contractual','text',opcionesPrecio);
+            }
             resumen.textContent = `${actual.fecha ? `Fecha ${actual.fecha}` : 'Fecha pendiente'} · ${actual.hora ? `Inicio ${actual.hora}${actual.hora_fin ? ` · término ${actual.hora_fin}` : ''}` : 'Inicio pendiente'} · ${calculo.cantidad} unidad(es) · ${actual.personas || 0} persona(s) · ${actual.cortesia ? 'cortesía · total $0' : `total $${actual.precio.total.toLocaleString('es-CL')}`}`;
             confirmar.disabled = !calculo.catalogo || base.asociacion.estado !== 'asociada' || [...campos.querySelectorAll('input,select')].some(x => !x.value);
         };
@@ -1472,7 +1480,14 @@
             } catch (e) { aviso.textContent = e.message; confirmar.disabled = false; cancelar.disabled = false; }
             finally { estado.ocupado = false; }
         });
-        acciones.append(confirmar, cancelar); contenido.append(cabecera, identidad, evidencia, motivos, campos, resumen, revalidacion, aviso); panel.append(contenido, acciones);
+        const explicacionPromo = base.servicio.promoTinajaMixta?.version === 1
+            ? (() => { const x=document.createElement('p');
+                x.className='haiku-manual-aviso haiku-manual-aviso--revision';
+                x.textContent='Una sola tinaja de 2 horas: primera hora de cortesía ($0), segunda hora por pagar ($30.000). Total $30.000. El unitario $15.000 es sólo un promedio técnico para registrar un único servicio. Confirma el importe del Libro.';
+                return [x]; })() : [];
+        acciones.append(confirmar, cancelar);
+        contenido.append(cabecera, identidad, evidencia, motivos, ...explicacionPromo, campos, resumen, revalidacion, aviso);
+        panel.append(contenido, acciones);
         panel.style.gridColumn = '1 / -1';
         panel.style.minWidth = '0';
         fila.append(panel); actualizar(); panel.scrollIntoView?.({ block: 'nearest' });
@@ -1507,6 +1522,12 @@
             cuerpo.append(servicio);
         }
         cuerpo.append(meta, texto);
+        if (item.servicio?.promoTinajaMixta?.version === 1) {
+            const detalle = document.createElement('p');
+            detalle.className = 'haku-libro-servicios__inferencias';
+            detalle.textContent = 'Una sola tinaja · 2 horas: 1 hora cortesía + 1 hora por pagar $30.000. Requiere aprobación del precio.';
+            cuerpo.append(detalle);
+        }
         let accionesRevision = null;
         if (opciones.abrirManual && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' && (item.estado === 'revisar' || item.resolucionManual)) {
             const acciones = document.createElement('div'); acciones.className = 'haku-libro-servicio-manual__acciones haku-libro-servicios__acciones-item';
