@@ -895,9 +895,15 @@
             if (lates.length === 1 && contradiccionesManual(lates[0]).length)
                 return { estado: 'revisar', candidatos: lates, motivo: 'El Late Check-out existente contradice la fecha, horario, cobro, cantidad o precio confirmado.' };
         }
-        if (codigos.size && hora) {
+        // Ausencia de hora en el Libro no contradice una hora ya registrada.
+        // Sin hora, exigir estadía exacta y un único candidato ANTES de comparar importes.
+        if (codigos.size && (hora || estadiaId && !item.resolucionManual)) {
             const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
-                (!item.fecha || x.fecha_servicio === item.fecha) && horaCorta(x.hora_inicio) === hora);
+                (!item.fecha || x.fecha_servicio === item.fecha) &&
+                (hora ? horaCorta(x.hora_inicio) === hora : x.estadia_id === estadiaId));
+            if (!hora && mismoHechoBase.length > 1)
+                return { estado:'revisar', candidatos:mismoHechoBase,
+                    motivo:'Hay varios servicios del mismo tipo en la estadía; falta un horario que los distinga.' };
             const textoOrigen = normalizar(`${item.servicio?.texto_original || ""} ${item.servicio?.texto_fuente_completo || ""}`);
             const cortesiaExplicita = Boolean(item.reglaFullDay) ||
                 esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
@@ -911,11 +917,24 @@
                 if (cobroExplicito && candidato.tipo_cobro === "cortesia") campos.push("tipo_cobro");
                 return campos;
             };
+            const contradiccionesSinHora = candidato => {
+                if (hora) return [];
+                const campos = [], monto = importeLibro(item.servicio);
+                const importes = importesTexto(item.servicio);
+                if (importes.some(x => x == null) || new Set(importes).size > 1 ||
+                    monto != null && Number(candidato.total) !== monto) campos.push('monto');
+                // Sólo cantidades escritas: no comparar contra el 1 predeterminado del lector.
+                const cantidad = normalizar(item.servicio?.texto_original).match(
+                    /\b(\d+)\s*(?:horas?|servicios?|tinajas?|jacuzzis?|toneles?|masajes?)\b/);
+                if (cantidad && Number(candidato.cantidad) !== Number(cantidad[1])) campos.push('cantidad');
+                return campos;
+            };
             const evaluados = mismoHechoBase.map(candidato => ({ candidato,
-                contradicciones: [...new Set([...contradiccionesExplicitas(candidato, horaFin), ...contradiccionesFinancieras(candidato), ...contradiccionesManual(candidato)])] }));
+                contradicciones: [...new Set([...contradiccionesExplicitas(candidato, horaFin), ...contradiccionesFinancieras(candidato), ...contradiccionesManual(candidato), ...contradiccionesSinHora(candidato)])] }));
             const compatibles = evaluados.filter(x => !x.contradicciones.length).map(x => x.candidato);
             if (compatibles.length === 1) return { estado: "existente", candidato: compatibles[0], candidatos: compatibles,
-                motivo: item.fecha ? "Servicio equivalente único en Proyecto H." : "Servicio equivalente único por reserva, hora e intención financiera; la fecha ausente no se inventa." };
+                motivo: !hora ? "Servicio único por reserva, estadía y tipo; horario recuperado de Proyecto H." :
+                    item.fecha ? "Servicio equivalente único en Proyecto H." : "Servicio equivalente único por reserva, hora e intención financiera; la fecha ausente no se inventa." };
             if (compatibles.length > 1) return { estado: "revisar", candidato: null, candidatos: compatibles, motivo: "Hay más de un servicio existente compatible; no se elige automáticamente." };
             if (mismoHechoBase.length) {
                 const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
@@ -985,6 +1004,68 @@
         if (codigo) item.mapa = { ...item.mapa, codigo, nombre: nombreExistente(existente) };
         item.inferencias = [...new Set([...(item.inferencias || []), `${decision.motivo} Proyecto H conserva la autoridad sobre este servicio${item.cortesia ? " de cortesía" : ""}.`])];
         return item;
+    }
+
+    // Leer el estado del cargo de CADA servicio existente, no el saldo total
+    // de la reserva ni un antiguo texto del Libro que diga "por pagar".
+    async function anexarFinanzasServiciosRegistrados(items, cliente) {
+        const registrados = items.filter(i => i.estado === 'existente' && i.servicio_existente?.id);
+        const desconocido = () => ({ estado:'por_verificar', etiqueta:'Pago por verificar' });
+        for (const item of registrados) item.finanzas_existente = { ...desconocido(),
+            etiqueta: item.cortesia ? 'cortesía · finanzas por verificar' : 'Pago por verificar' };
+        if (!registrados.length || root.haikuTienePermiso?.('pagos.ver') !== true) return;
+        const ids = [...new Set(registrados.map(i => i.servicio_existente.id))];
+        let cargos = [];
+        try {
+            for (let pagina = 0; pagina < 20; pagina++) {
+                let q = cliente.from('vista_estado_cargos').select(
+                    'cargo_id,reserva_id,estadia_id,servicio_id,monto,monto_ajustado,aplicado_neto,saldo_cargo,estado,estado_pago'
+                ).in('servicio_id', ids);
+                if (typeof q.order === 'function') q = q.order('cargo_id');
+                const paginado = typeof q.range === 'function';
+                const r = await (paginado ? q.range(pagina * 500, pagina * 500 + 499) : q);
+                if (r?.error || !Array.isArray(r?.data)) throw Error('No se pudo leer el saldo del servicio');
+                cargos.push(...r.data);
+                if (!paginado || r.data.length < 500) break;
+                if (pagina === 19) throw Error('Lectura financiera incompleta');
+            }
+            if (cargos.some(c => !c.cargo_id) || new Set(cargos.map(c => c.cargo_id)).size !== cargos.length)
+                throw Error('Lectura financiera duplicada o incompleta');
+        } catch (_) { return; } // Sin lectura nunca anunciar pagado ni pendiente cero.
+        const entero = v => v != null && String(v).trim() !== '' &&
+            Number.isSafeInteger(Number(v)) && Number(v) >= 0;
+        const dinero = n => '$' + n.toLocaleString('es-CL');
+        for (const item of registrados) {
+            const s = item.servicio_existente;
+            const filas = cargos.filter(c => c.servicio_id === s.id);
+            if (filas.some(c => c.reserva_id !== s.reserva_id ||
+                s.estadia_id && c.estadia_id !== s.estadia_id ||
+                !['activo','anulado'].includes(c.estado))) continue;
+            const activos = filas.filter(c => c.estado === 'activo');
+            if (!activos.length) {
+                item.finanzas_existente = s.tipo_cobro === 'cortesia' && Number(s.total) === 0
+                    ? { estado:'cortesia', etiqueta:'Cortesía · sin cobro', saldo:0 }
+                    : { estado:'sin_cargo_activo', etiqueta:'Sin cargo activo · revisar finanzas' };
+                continue;
+            }
+            if (activos.length !== 1) continue; // No ocultar cargos duplicados o incoherentes.
+            const c = activos[0];
+            if (![c.monto,c.monto_ajustado,c.aplicado_neto,c.saldo_cargo].every(entero) ||
+                Number(c.monto) !== Number(s.total)) continue;
+            const total = Number(c.monto_ajustado), aplicado = Number(c.aplicado_neto), saldo = Number(c.saldo_cargo);
+            if (aplicado > total || saldo !== total - aplicado) continue;
+            const base = { cargo_id:c.cargo_id, total, aplicado, saldo };
+            if (s.tipo_cobro === 'cortesia' && Number(s.total) === 0 && saldo === 0)
+                item.finanzas_existente = { ...base, estado:'cortesia', etiqueta:'Cortesía · sin cobro' };
+            else if (total === 0)
+                item.finanzas_existente = { ...base, estado:'sin_saldo_ajustado', etiqueta:'Sin saldo · cargo ajustado' };
+            else if (saldo === 0)
+                item.finanzas_existente = { ...base, estado:'pagado', etiqueta:'Pagado ' + dinero(aplicado) + ' · saldo $0' };
+            else if (aplicado > 0)
+                item.finanzas_existente = { ...base, estado:'parcial', etiqueta:'Pago parcial · pendiente ' + dinero(saldo) };
+            else
+                item.finanzas_existente = { ...base, estado:'pendiente', etiqueta:'Pendiente ' + dinero(saldo) };
+        }
     }
 
     function servicioYaExiste(item, existentes) {
@@ -1254,6 +1335,7 @@
             item.razones = [...new Set(item.razones.filter(Boolean))];
             item.estado = item.identidad === "NO_EXISTE" && item.completitud === "COMPLETO" && item.payload ? "listo" : "revisar";
         }
+        await anexarFinanzasServiciosRegistrados(items, cliente);
         return { ...libro, items, quiereIncorporar: quiereIncorporar(texto) };
     }
 
@@ -1511,7 +1593,7 @@
         }
         const meta = document.createElement("div"); meta.className = "haku-libro-servicios__meta";
         if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera servicio ni cargo${item.payload?.fecha_operacion ? ` · Fecha ${item.payload.fecha_operacion}` : ""}`;
-        else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${item.hora ? ` · ${item.hora}` : ""} · ${item.cortesia ? "cortesía" : "cobrable"} · omitido`;
+        else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${item.hora ? ` · ${item.hora}` : ""} · ${item.finanzas_existente?.etiqueta || (item.cortesia ? "cortesía" : "Pago por verificar")} · omitido`;
         else meta.textContent = `${item.semantica === "AMBIGUO" ? "Fragmento ambiguo" : item.completitud === "COMPLETO" ? "Servicio preparable" : "Servicio que requiere revisión"} · ${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}${item.hora_fin ? `–${item.hora_fin}` : ""}` : ""}${Number.isInteger(item.servicio?.cantidad) && item.servicio.cantidad > 1 ? ` · ${item.servicio.cantidad} unidades` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""} · ${item.intencion_cobro === "cortesia" ? "cortesía" : item.intencion_cobro === "cobrable" ? "cobrable" : "cobro por definir"}`;
         // La sección ya indica que requiere revisión; conservar aquí los datos secundarios.
         if (item.kind === 'servicio' && item.estado === 'revisar' && item.semantica !== 'AMBIGUO') meta.textContent = meta.textContent.replace(/^Servicio (?:que requiere revisión|preparable) · /, '');
