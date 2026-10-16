@@ -31,13 +31,15 @@ DECLARE
     v_origen_hash text;
     v_marca text;
     v_servicios_activos integer;
+    v_fecha_ingreso date;
+    v_fecha_salida date;
 BEGIN
     IF auth.uid() IS NULL OR NOT private.haiku_tiene_permiso('servicios.editar')
         OR NOT private.haiku_tiene_permiso('pagos.registrar') THEN
         RAISE EXCEPTION 'La ampliación necesita sesión y permisos de servicios y pagos' USING errcode='42501';
     END IF;
     IF p_reserva_id IS NULL OR p_estadia_id IS NULL OR p_servicio_id IS NULL
-       OR p_adicionales NOT IN (1,2)
+       OR p_adicionales IS NULL OR p_adicionales NOT IN (1,2)
        OR jsonb_typeof(p_estado_esperado) IS DISTINCT FROM 'object'
        OR jsonb_typeof(p_origen) IS DISTINCT FROM 'object' THEN
         RAISE EXCEPTION 'Ampliación incompleta: reserva, servicio o personas adicionales inválidos';
@@ -69,7 +71,8 @@ BEGIN
     PERFORM 1 FROM public.reservas r WHERE r.id=p_reserva_id
         AND r.estado_reserva NOT IN ('cancelada','no_show') FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'La reserva destino ya no está vigente'; END IF;
-    PERFORM 1 FROM public.reserva_estadias e WHERE e.id=p_estadia_id
+    SELECT e.fecha_ingreso,e.fecha_salida INTO v_fecha_ingreso,v_fecha_salida
+       FROM public.reserva_estadias e WHERE e.id=p_estadia_id
         AND e.reserva_id=p_reserva_id
         AND e.estado_estadia NOT IN ('cancelada','no_show')
         AND e.fecha_ingreso=(p_origen->>'fecha_bloque')::date FOR UPDATE;
@@ -104,6 +107,7 @@ BEGIN
 
     IF v_servicio.tipo_cobro IS DISTINCT FROM 'normal'
        OR v_servicio.estado_servicio IN ('cancelado','no_show')
+       OR v_servicio.fecha_servicio NOT BETWEEN v_fecha_ingreso AND v_fecha_salida
        OR v_servicio.cantidad IS DISTINCT FROM 1
        OR v_servicio.precio_unitario_aplicado IS DISTINCT FROM 30000
        OR v_servicio.personas NOT BETWEEN 1 AND 4
