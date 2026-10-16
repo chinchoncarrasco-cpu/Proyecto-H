@@ -209,6 +209,15 @@
                 estado.textContent = `✓ Cargo aplicado. Se añadieron ${dinero(Number(data?.monto_ajuste || monto))}${vinculo ? " al total conjunto" : ""}.`;
             }
 
+            // Sólo tras confirmar Supabase: revalidar la tarjeta del Libro.
+            // Este evento no registra ni aprueba pagos.
+            if (overlay.dataset.haikuLibroMonto &&
+                typeof window.CustomEvent === 'function' && typeof window.dispatchEvent === 'function') {
+                window.dispatchEvent(new window.CustomEvent('haiku:libro-penalidad-registrada',{
+                    detail:{reservaId:reserva.value,monto:Number(data?.monto_ajuste || monto)}
+                }));
+            }
+
             await Promise.allSettled([
                 Promise.resolve().then(() => window.HAIKU_AJUSTES_CARGO_V2?.refrescar?.()),
                 Promise.resolve().then(() => window.haikuCargarAbonosSupabase?.()),
