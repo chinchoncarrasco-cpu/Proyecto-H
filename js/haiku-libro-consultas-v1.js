@@ -3237,7 +3237,14 @@
             // La revalidación canónica ya decidió si el movimiento sigue siendo
             // nuevo y seguro. Preparación comprueba que el payload todavía sea
             // construible, pero no vuelve a exigir una aprobación intermedia.
-            const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO && !pagosEfectivosMedio.has(p);
+            // Un comprobante posterior por personas extra de Jacuzzi siempre
+            // requiere aprobación explícita, aunque tenga folio/BOVTAR fuertes.
+            // El comprobante original permanece conciliado e independiente.
+            const esPagoExtraJacuzzi = p.tipo_movimiento === 'servicio' &&
+                /\b(?:tinaja|jacuzzi)\b/i.test(String(p.concepto || '')) &&
+                /\b[12]\s*(?:adl|adultos?|personas?)\s*(?:extra|adicional(?:es)?)\b/i.test(String(p.concepto || ''));
+            const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO &&
+                !pagosEfectivosMedio.has(p) && !esPagoExtraJacuzzi;
             const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) &&
                 (nuevoSeguroCanonico || Boolean(destino?.reserva_ref));
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
