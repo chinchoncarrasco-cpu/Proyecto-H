@@ -372,9 +372,9 @@ class El {
     click(){assert.fail('No se permiten fake clicks')}
 }
 
-async function editorUnidadUi({indice=2,codigo='huevo',concepto='6 HUEVOS',precioBase=500,catalogo={},origen={}}={}) {
+async function editorUnidadUi({indice=2,codigo='huevo',concepto='6 HUEVOS',precioBase=500,catalogo={},origen={},fechaComprobante='2026-10-04'}={}) {
     const h=entorno({conServicios:false}),p=h.r.pagos[0],aplicacion=p.aplicaciones_libro[indice],intentos=[];
-    aplicacion.fecha_comprobante='2026-10-04';
+    aplicacion.fecha_comprobante=fechaComprobante;
     aplicacion.origen={...aplicacion.origen,...origen};
     p.texto_original=`Gastón // ${concepto} // Folio 00013 // BOVTAR 003013 // TOTAL $13.000`;
     Object.assign(h.tablas.catalogo_servicios.find(c=>c.codigo===codigo),{precio_base:precioBase,...catalogo});
@@ -439,6 +439,22 @@ test('UI evidencia: cantidades ausentes, contradictorias, repetidas o monetarias
     assert.equal(e.campo('Fecha del servicio').value,'2026-10-04');e.sinEscrituras();
     const ambiguo=await editorUnidadUi({origen:{fechaISO:'05-10-2026'}});
     assert.equal(ambiguo.campo('Fecha del servicio').value,'');ambiguo.sinEscrituras();
+});
+
+test('UI comprobante posterior: no precarga fecha fuera de estadía y explica el bloqueo sin relajar controles',async()=>{
+    const e=await editorUnidadUi({fechaComprobante:'2026-10-07'});
+    const fecha=e.campo('Fecha del servicio'),guardar=e.boton('Guardar servicio y continuar');
+    assert.equal(fecha.value,'','la fecha del comprobante no se usa como fecha del servicio');
+    assert.equal(guardar.disabled,true);
+    assert.match(e.panel.querySelector('.haiku-incorporacion-aviso').textContent,
+        /fecha real del servicio.*03 oct 2026.*04 oct 2026.*comprobante/i);
+    e.cambiar('Fecha del servicio','2026-10-07');
+    assert.equal(guardar.disabled,true,'no se permite fecha posterior a la estadía');
+    e.cambiar('Fecha del servicio','2026-10-04');
+    assert.equal(guardar.disabled,false,'datos correctos habilitan el botón');
+    await guardar.events.click();
+    assert.equal(e.intentos.length,1);assert.equal(e.intentos[0].p_fecha_servicio,'2026-10-04');
+    e.sinEscrituras();
 });
 
 test('UI personas: capacidad incluida/máxima o precio por persona conservan la exigencia del campo',async()=>{

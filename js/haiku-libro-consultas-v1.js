@@ -5994,6 +5994,11 @@
                             (aplicacion ? money(aplicacion.monto) : 'este importe') +
                             ', puedes usar Cantidad 1 y ese importe como precio manual. La duración fraccionaria no quedará representada.'
                         : 'Cantidad debe ser un número entero mayor que cero; no se admiten fracciones de unidad.'
+                    : aplicacion && producto && !fechaValida
+                        ? 'Selecciona la fecha real del servicio ' + (p.ingreso === p.salida
+                            ? 'el ' + fechaRevisionManual(p.ingreso)
+                            : 'entre ' + fechaRevisionManual(p.ingreso) + ' y ' + fechaRevisionManual(p.salida)) +
+                            '. La fecha del comprobante puede ser distinta.'
                     : !personasValidas ? 'Completa Personas con un valor válido.' : !horaValida ? 'Completa una hora válida.' :
                     guardar.disabled ? 'Completa los datos y confirma el precio cuando corresponda.' : '';
             };
@@ -6002,7 +6007,10 @@
                     if (input !== confirmarPrecio && input !== cobro) confirmarPrecio.checked = false;
                     if (input === parte) {
                         const evidencia = evidenciaServicioManualPago(item,p.aplicaciones.find(a => String(a.indice) === parte.value));
-                        fecha.value = evidencia.fecha; cantidad.value = evidencia.cantidad === null ? '' : String(evidencia.cantidad);
+                        // La fecha del comprobante puede ser posterior a la estadía:
+                        // no usarla como fecha del servicio si queda fuera del rango.
+                        fecha.value = evidencia.fecha >= p.ingreso && evidencia.fecha <= p.salida ? evidencia.fecha : '';
+                        cantidad.value = evidencia.cantidad === null ? '' : String(evidencia.cantidad);
                     }
                     if (input === precio) precioSugerido = null;
                     if (input === selector) {
