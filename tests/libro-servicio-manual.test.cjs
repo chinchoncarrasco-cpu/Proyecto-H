@@ -378,6 +378,16 @@ test('Full Day: no se regala una segunda tinaja, un tiempo adicional ni una rese
     }
 });
 
+test('Full Day: el abono del paquete con tinaja incluida no es un segundo pago de tinaja',async()=>{
+    const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00');
+    const id=e.state.db.reservas[0].id;
+    e.state.db.pagos.push({id:'alojamiento',reserva_id:id,tipo_movimiento:'pago',
+        estado:'confirmado',monto:120000,observaciones:'Full Day incluye 1 hora de tinaja tonel'});
+    assert.equal(primeraTinaja(await e.construir()).intencion_cobro,'cortesia');
+    e.state.db.pagos[0].observaciones='Full Day incluye tinaja, abono adicional Jacuzzi $20.000';
+    assert.equal(primeraTinaja(await e.construir()).reglaFullDay??null,null);
+});
+
 test('Full Day: un servicio existente cobrable solo ofrece el cambio protegido, nunca duplica',async()=>{
     const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00');
     const id=e.state.db.reservas[0].id,estad=e.state.db.reserva_estadias[0].id;
