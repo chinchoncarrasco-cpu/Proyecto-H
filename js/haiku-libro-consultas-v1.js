@@ -5268,11 +5268,11 @@
         return { titular, cabana, monto, concepto, periodo, tipo, estado, detalle, estadias, reserva };
     }
 
-    async function ejecutarAprobacionVisual(boton, accion, contenedor) {
+    async function ejecutarAprobacionVisual(boton, accion, contenedor, textoProgreso = "Aprobando…") {
         if (boton.disabled) return;
         const etiqueta = boton.textContent;
         boton.disabled = true;
-        boton.textContent = "Aprobando…";
+        boton.textContent = textoProgreso;
         boton.setAttribute("aria-busy", "true");
         try {
             await accion();
@@ -5876,7 +5876,7 @@
                 const abrir = root.HAIKU_AJUSTES_CARGO_V2?.abrirParaReserva;
                 if (typeof abrir !== 'function') throw Error('El formulario de ajustes aún no está disponible. Recarga Haku.');
                 await abrir(item.penalidadManual);
-            },fila));
+            },fila,'Abriendo ajuste…'));
             fila.append(revisar);
         }
         const revisionManualVisible = item.manualPago && item.categoria !== 'dudosos' &&
