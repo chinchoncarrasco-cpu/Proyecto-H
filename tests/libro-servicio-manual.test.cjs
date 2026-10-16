@@ -375,6 +375,37 @@ test('Full Day: un servicio existente cobrable solo ofrece el cambio protegido, 
     assert.equal(e.state.escrituras.length,0);
 });
 
+test('Full Day: pago con concepto canónico o servicio_id vinculado bloquea cortesía',async()=>{
+    for(const tipo of ['canonico','servicio_id']){
+        const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00'),id=e.state.db.reservas[0].id;
+        e.state.db.pagos.push({id:'pago-ext',reserva_id:id,tipo_movimiento:'pago',
+            estado:'confirmado',monto:30000,datos_origen:{
+                aplicaciones_servicio_v1:{aplicaciones:[{servicio_id:'servicio-ya-existente',
+                    ...(tipo==='canonico'?{concepto_canon:'tinaja_tonel'}:{})}]}}});
+        if(tipo==='servicio_id'){
+            e.state.db.servicios.push({id:'servicio-ya-existente',reserva_id:id,
+                estadia_id:e.state.db.reserva_estadias[0].id,fecha_servicio:'2026-10-10',
+                hora_inicio:'18:00:00',hora_fin:'19:00:00',cantidad:1,personas:2,
+                tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+                catalogo_servicios:{codigo:'tinajaTonel'}});
+        }
+        const item=primeraTinaja(await e.construir());
+        assert.equal(item.reglaFullDay??null,null,tipo);
+    }
+});
+
+test('Full Day: un pago nuevo después de la vista previa invalida la cortesía antes de incorporar',async()=>{
+    const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00'),id=e.state.db.reservas[0].id;
+    const primero=primeraTinaja(await e.construir());
+    assert.equal(primero.estado,'listo');assert.equal(primero.payload.tipo_cobro,'cortesia');
+    e.state.db.pagos.push({id:'nuevo-pago',reserva_id:id,tipo_movimiento:'pago',
+        estado:'confirmado',monto:30000,observaciones:'Cobro por tinaja tonel'});
+    const segundo=primeraTinaja(await e.construir());
+    assert.equal(segundo.reglaFullDay??null,null);
+    assert.equal(segundo.estado,'revisar');assert.equal(segundo.payload,null);
+    assert.equal(e.state.escrituras.length,0);
+});
+
 test('Full Day: evidencia explícita cobrable o de cortesía conserva su autoridad',async()=>{
     const cobro=casoFullDayTinaja('TINAJA TONEL X PAGAR CLP$30.000 18:00 A 19:00');
     const pago=primeraTinaja(await cobro.construir());
