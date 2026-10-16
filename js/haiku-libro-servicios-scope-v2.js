@@ -956,6 +956,20 @@
                         `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
         }
+        // Mismo grupo de masajes ya registrado, pero otro subtipo: no crear
+        // uno nuevo ni cambiar un servicio cobrado. Mostrar la discrepancia.
+        if (item.servicio?.concepto === 'masaje' && item.fecha && hora &&
+            /^masaje(?:Terapeutico|Descontracturante)(30|60)$/.test(item.mapa?.codigo || '') &&
+            (item.reserva.servicios || []).filter(s => s.concepto === 'masaje' && s.hora === hora).length === 1) {
+            const duracion = item.servicio.duracion_minutos;
+            const otrosTipos = activos.filter(x => x.estadia_id === estadiaId &&
+                x.fecha_servicio === item.fecha && horaCorta(x.hora_inicio) === hora &&
+                /^masaje(?:Terapeutico|Descontracturante)(30|60)$/.test(codigoExistente(x) || '') &&
+                codigoExistente(x).endsWith(String(duracion)) && !codigos.has(codigoExistente(x)));
+            if (otrosTipos.length) return { estado:'revisar', candidatos:otrosTipos,
+                conflicto_tipo_masaje:true, contradicciones:['tipo_masaje'],
+                motivo:'Ya hay masajes registrados en esa fecha y hora, pero el tipo difiere del Libro. No se crearán otros ni se modificará el cobro.' };
+        }
         const identidad = root.HAIKU_SERVICIOS_IDENTIDAD_V1;
         if (identidad?.resolverServicio && item.payload) {
             return identidad.resolverServicio({
@@ -1022,7 +1036,7 @@
     // Leer el estado del cargo de CADA servicio existente, no el saldo total
     // de la reserva ni un antiguo texto del Libro que diga "por pagar".
     async function anexarFinanzasServiciosRegistrados(items, cliente) {
-        const registrados = items.filter(i => i.estado === 'existente' && i.servicio_existente?.id);
+        const registrados = items.filter(i => (i.estado === 'existente' || i.conflicto_tipo_masaje) && i.servicio_existente?.id);
         const desconocido = () => ({ estado:'por_verificar', etiqueta:'Pago por verificar' });
         for (const item of registrados) item.finanzas_existente = { ...desconocido(),
             etiqueta: item.cortesia ? 'cortesía · finanzas por verificar' : 'Pago por verificar' };
@@ -1359,6 +1373,10 @@
             item.decision_identidad = decision.estado;
             if (decision.estado === "revisar") {
                 item.cambioCortesiaExistente = cambioCortesiaExistente(item, decision);
+                if (decision.conflicto_tipo_masaje && decision.candidatos?.length === 1) {
+                    item.conflicto_tipo_masaje = true;
+                    item.servicio_existente = decision.candidatos[0]; // Referencia de revisión, no identidad aceptada.
+                }
                 item.razones.push(decision.motivo);
                 item.payload = null;
             }
@@ -1540,7 +1558,9 @@
         const resumen = document.createElement('p'); resumen.className = 'haiku-manual-total';
         const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion'; aviso.setAttribute('role', 'alert');
         const revalidacion = document.createElement('p'); revalidacion.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
-        revalidacion.textContent = 'Al confirmar, Haku volverá a validar el servicio antes de dejarlo listo para incorporar.';
+        revalidacion.textContent = item.conflicto_tipo_masaje
+            ? detalleMasajeRegistrado(item) + ' Confirmar aquí sólo revalida; no cambia el tipo del servicio existente.'
+            : 'Al confirmar, Haku volverá a validar el servicio antes de dejarlo listo para incorporar.';
         const acciones = document.createElement('footer'); acciones.className = 'haku-libro-servicio-manual__acciones haiku-manual-pie';
         const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario'; confirmar.textContent = 'Confirmar datos y revalidar';
         const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario'; cancelar.textContent = 'Cancelar';
@@ -1605,6 +1625,11 @@
         fila.append(panel); actualizar(); panel.scrollIntoView?.({ block: 'nearest' });
     }
 
+    function detalleMasajeRegistrado(item) {
+        const s = item.servicio_existente;
+        return `Proyecto H: ${nombreExistente(s)} · ${s.cantidad} unidades · ${s.fecha_servicio} · ${horaCorta(s.hora_inicio)} · ${item.finanzas_existente?.etiqueta || 'Pago por verificar'}. Libro: ${item.mapa.nombre}. El tipo no coincide. Revisa la ficha; no se volverá a cobrar.`;
+    }
+
     function crearItem(item, seleccionados, confirmarNoche, opciones = {}) {
         const fila = document.createElement("div"); fila.className = `haku-libro-servicios__item haku-libro-servicios__item--${item.estado}${item.kind === "nota" ? " haku-libro-servicios__item--nota" : ""}`;
         const seleccionable = item.estado === "listo" && (item.kind === "nota" || (item.semantica === "SERVICIO_REAL" && item.completitud === "COMPLETO")) && Boolean(item.payload);
@@ -1640,14 +1665,24 @@
             detalle.textContent = 'Una sola tinaja · 2 horas: 1 hora cortesía + 1 hora por pagar $30.000. Requiere aprobación del precio.';
             cuerpo.append(detalle);
         }
+        if (item.conflicto_tipo_masaje && item.servicio_existente) {
+            const registrado = document.createElement('p'); registrado.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
+            registrado.textContent = detalleMasajeRegistrado(item); cuerpo.append(registrado);
+        }
         let accionesRevision = null;
-        if (opciones.abrirManual && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' && (item.estado === 'revisar' || item.resolucionManual)) {
+        // Consultar la reserva no aprueba una prestación: también está disponible
+        // para fragmentos ambiguos y notas, sin habilitar escrituras ambiguas.
+        if (item.asociacion?.estado === 'asociada' || item.estado === 'revisar') {
             const acciones = document.createElement('div'); acciones.className = 'haku-libro-servicio-manual__acciones haku-libro-servicios__acciones-item';
             const ver = document.createElement('button'); ver.type = 'button'; ver.className = 'haiku-pago-ver-reserva'; ver.textContent = 'Ver reserva';
             ver.disabled = item.asociacion.estado !== 'asociada';
-            ver.addEventListener('click', () => (root.HAIKU_INSPECTOR_V1 || root.HAIKU_PANELES_V1)?.abrirReserva?.(item.asociacion.sistema.reserva_id, ver));
+            ver.addEventListener('click', () => {
+                if (!ver.disabled && item.asociacion?.sistema?.reserva_id)
+                    (root.HAIKU_INSPECTOR_V1 || root.HAIKU_PANELES_V1)?.abrirReserva?.(item.asociacion.sistema.reserva_id, ver);
+            });
             acciones.append(ver);
-            if (opciones.abrirManual && codigosManual(item.manual_base || item).length) {
+            if (opciones.abrirManual && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
+                (item.estado === 'revisar' || item.resolucionManual) && codigosManual(item.manual_base || item).length) {
                 const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = 'Aprobación manual';
                 manual.addEventListener('click', async () => {
                     manual.disabled = true;
