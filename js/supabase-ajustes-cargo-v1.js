@@ -323,6 +323,8 @@
         tipoSeleccionado = "";
         resumenActual = null;
         guardando = false;
+        const overlay = document.getElementById('haiku-ajuste-cargo-overlay');
+        if (overlay) delete overlay.dataset.haikuLibroMonto;
 
         document.querySelectorAll("[data-haiku-ajuste-tipo]")
             .forEach(item => item.classList.remove("activa"));
@@ -476,6 +478,53 @@
         await cargarReservas();
     }
 
+    // Abre el mismo formulario financiero para una reserva del Libro fuera del día visible.
+    async function abrirParaReserva({reservaId,cabana,fechaIngreso,montoLibro} = {}) {
+        const id=String(reservaId || '');
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ||
+            !Number.isInteger(cabana) || cabana<1 || cabana>11 ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(fechaIngreso || '') ||
+            !Number.isSafeInteger(montoLibro) || montoLibro<=0)
+            throw Error('La penalidad no tiene una reserva, fecha o importe verificable.');
+        await abrirModal();
+        const overlay=document.getElementById('haiku-ajuste-cargo-overlay');
+        if (!overlay || overlay.hidden) return false;
+        try {
+            const {data,error}=await cliente.from('reserva_estadias')
+                .select('id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero),reservas(id,titular_nombre,estado_reserva)')
+                .eq('reserva_id',id).eq('fecha_ingreso',fechaIngreso);
+            if (error) throw error;
+            const compatibles=(data || []).filter(e =>
+                e.reserva_id === id && e.fecha_ingreso === fechaIngreso &&
+                Number(e.cabanas?.numero) === cabana &&
+                !/^(cancelada|no_show)$/.test(String(e.estado_estadia || '')) &&
+                !/^(cancelada|no_show)$/.test(String(e.reservas?.estado_reserva || '')));
+            if (compatibles.length !== 1) throw Error('La reserva cambió o no tiene una estadía única. Vuelve a comparar.');
+            const select=document.getElementById('haiku-ajuste-reserva');
+            if (!select) throw Error('No se pudo abrir el selector de reserva.');
+            const titular=compatibles[0].reservas?.titular_nombre || 'Reserva seleccionada';
+            if (![...select.options].some(opcion => opcion.value === id)) {
+                const opcion=document.createElement('option');
+                opcion.value=id;
+                opcion.textContent=`CAB ${cabana} · ${titular} · ${fechaIngreso} (Libro)`;
+                select.appendChild(opcion);
+            }
+            reservaSeleccionada=id;
+            select.value=id;
+            resumenActual=null;
+            await cargarResumenSeleccionado();
+            if (!resumenActual) throw Error('No se pudo consultar el saldo y los ajustes de esta reserva.');
+            overlay.dataset.haikuLibroMonto=String(montoLibro);
+            const observacion=document.getElementById('haiku-ajuste-observacion');
+            if (observacion) observacion.value=`Libro de Reservas: revisar penalidad indicada de ${dinero(montoLibro)} · CAB ${cabana} · ingreso ${fechaIngreso}. Tipo y monto confirmados por operador.`;
+            // El operador debe elegir el tipo: el Libro no demuestra la causa de la penalidad.
+            return true;
+        } catch (error) {
+            mostrarEstado(error?.message || 'No fue posible verificar la reserva.', 'error');
+            throw error;
+        }
+    }
+
     async function cargarResumenSeleccionado() {
         if (!reservaSeleccionada) {
             resumenActual = null;
@@ -543,7 +592,10 @@
 
         const tipo = TIPOS[tipoSeleccionado];
         const yaExiste = ajustes.some(item =>
-            item?.estado === "activo" && item?.tipo_ajuste === tipoSeleccionado
+            item?.estado === "activo" &&
+            (item?.tipo_ajuste === tipoSeleccionado ||
+             (document.getElementById('haiku-ajuste-cargo-overlay')?.dataset?.haikuLibroMonto &&
+              ['cargo_cancelacion','cargo_modificacion'].includes(item?.tipo_ajuste)))
         );
 
         if (impacto) {
@@ -705,6 +757,7 @@
 
     window.HAIKU_AJUSTES_CARGO_V2 = Object.freeze({
         abrir: abrirModal,
+        abrirParaReserva,
         refrescar: refrescarFinanzas
     });
 })();

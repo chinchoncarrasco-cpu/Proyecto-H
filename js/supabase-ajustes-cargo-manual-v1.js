@@ -117,8 +117,9 @@
         if (!mostrar) return;
 
         const sugerido = sugeridoAutomatico();
-        if (!manualTocado && manual && sugerido > 0) {
-            manual.value = String(sugerido);
+        const montoLibro = numeroDinero(document.getElementById('haiku-ajuste-cargo-overlay')?.dataset?.haikuLibroMonto);
+        if (!manualTocado && manual && (montoLibro > 0 || sugerido > 0)) {
+            manual.value = String(montoLibro > 0 ? montoLibro : sugerido);
         }
 
         const monto = montoManual();
@@ -126,9 +127,11 @@
         const nuevoTotal = actual + monto;
 
         if (ayuda) {
-            ayuda.textContent = monto > 0
-                ? `Sugerencia automática: ${dinero(sugerido)}. El monto ingresado equivale al 10% de una base anterior de ${dinero(monto * 10)}.`
-                : `Sugerencia automática: ${dinero(sugerido)}. Ingresa el 10% correcto de la reserva anterior.`;
+            ayuda.textContent = montoLibro > 0
+                ? `Importe indicado en el Libro: ${dinero(montoLibro)}. Sugerencia del 10% del alojamiento actual: ${dinero(sugerido)}. Confirma motivo e importe antes de aplicar.`
+                : monto > 0
+                    ? `Sugerencia automática: ${dinero(sugerido)}. El monto ingresado equivale al 10% de una base anterior de ${dinero(monto * 10)}.`
+                    : `Sugerencia automática: ${dinero(sugerido)}. Ingresa el 10% correcto de la reserva anterior.`;
         }
 
         if (impacto) {
