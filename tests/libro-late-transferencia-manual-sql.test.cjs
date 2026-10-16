@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 
-const sql=fs.readFileSync('supabase/migrations/20261016164000_libro_transferencia_late_manual_v1.sql','utf8');
+const sql=fs.readFileSync('supabase/migrations/20261016165354_libro_transferencia_late_manual_v1.sql','utf8');
 test('excepción acotada a transferencia Late Check-out y usuario autenticado',()=>{
  assert.match(sql,/v_transferencia_late_manual\s*:=/);
  assert.match(sql,/p_argumentos->>'p_medio_pago'='transferencia' and p_manual is true/);
