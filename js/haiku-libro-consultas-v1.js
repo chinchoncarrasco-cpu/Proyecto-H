@@ -5803,6 +5803,10 @@
             const elegir = elemento('option','','Elige un servicio'); elegir.value = ''; selector.append(elegir);
             const columnas = elemento('div','haiku-manual-dos-columnas'); formulario.append(columnas);
             const fecha = campo('Fecha del servicio','date','',columnas), cantidad = campo('Cantidad','number','',columnas);
+            // La RPC y public.servicios.cantidad utilizan integer, incluso cuando
+            // el catálogo expresa el servicio en horas.
+            cantidad.min = '1';
+            cantidad.step = '1';
             const precio = campo('Precio unitario CLP','number'), personas = campo('Personas','number');
             const hora = campo('Hora cuando corresponda','time');
             const notaPersonas = elemento('p','haiku-manual-caption','Personas: no aplica'); formulario.append(notaPersonas);
@@ -5853,7 +5857,15 @@
                 guardar.disabled = !(aplicacion && producto && fechaValida && entero(cantidad.value) && entero(precio.value) &&
                     Number.isSafeInteger(total) && total === aplicacion.monto && personasValidas && horaValida &&
                     cobro.value === 'normal' && (exacto || confirmarPrecio.checked));
-                aviso.textContent = !personasValidas ? 'Completa Personas con un valor válido.' : !horaValida ? 'Completa una hora válida.' :
+                const cantidadFraccionaria = cantidad.value.trim() !== '' &&
+                    Number.isFinite(Number(cantidad.value)) && !Number.isInteger(Number(cantidad.value));
+                aviso.textContent = cantidadFraccionaria
+                    ? producto?.unidad === 'hora'
+                        ? 'Cantidad ' + cantidad.value + ' no se puede guardar: Haku admite horas enteras. Si necesitas registrar sólo el cobro de ' +
+                            (aplicacion ? money(aplicacion.monto) : 'este importe') +
+                            ', puedes usar Cantidad 1 y ese importe como precio manual. La duración fraccionaria no quedará representada.'
+                        : 'Cantidad debe ser un número entero mayor que cero; no se admiten fracciones de unidad.'
+                    : !personasValidas ? 'Completa Personas con un valor válido.' : !horaValida ? 'Completa una hora válida.' :
                     guardar.disabled ? 'Completa los datos y confirma el precio cuando corresponda.' : '';
             };
             for (const input of [parte,selector,cantidad,precio,personas,fecha,hora,cobro,confirmarPrecio]) {
