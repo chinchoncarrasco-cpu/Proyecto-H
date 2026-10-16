@@ -235,7 +235,7 @@ test('Maximiliano: cancelada histórica + Check-out activo no producen una revis
  assert.equal(h.writes(),0);
 });
 test('dos candidatas activas no se concilian por nombre, fecha y CAB sin certeza',async()=>{
- const h=entorno(),a=r({titular:'Persona Prueba',cabana:7,fecha_checkin:'2026-10-09',fecha_checkout:'2026-10-10'});
+ const h=entorno(),a=r({titular:'Claudia Herrera',cabana:7,fecha_checkin:'2026-10-09',fecha_checkout:'2026-10-10'});
  const otra=sistema(a,{id:'stay-dos',reserva_id:'reserva-dos',adultos:2,ninos:0,mascotas:0,
   reservas:{id:'reserva-dos',titular_nombre:a.titular,estado_reserva:'pendiente'}});
  conSistema(h,[sistema(a,{adultos:2,ninos:0,mascotas:0}),otra]);
@@ -252,7 +252,7 @@ test('una reserva asociada con adultos nulos aún advierte y nunca los inventa',
  conSistema(h,[sistema(a,{adultos:null,ninos:0,mascotas:0})]);
  const comp=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
  assert.equal(comp[0].estado,'asociada');
- h.R.adjuntar(h.out,[a],1,async()=>{},comp);await tick();
+ h.R.adjuntar(h.out,[a],1,async()=>{},comp);await tick();await tick();
  assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,1);
  assert.match(h.texto(),/ocupación allí requiere revisión desde la ficha/);
  assert.equal(h.boton('Completar ocupación').hidden,true);
