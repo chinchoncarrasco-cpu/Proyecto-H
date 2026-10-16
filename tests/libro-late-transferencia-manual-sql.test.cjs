@@ -9,7 +9,7 @@ test('excepción acotada a transferencia Late Check-out y usuario autenticado',(
  assert.match(sql,/v_transferencia_prueba->>'usuario'=auth\.uid\(\)::text/);
  assert.match(sql,/aplicaciones_esperadas->0->>'concepto_canon'='late_checkout'/);
  assert.match(sql,/jsonb_array_length\(aplicaciones_esperadas\)=1/);
- assert.match(sql,/and not v_transferencia_late_manual then/);
+ assert.match(sql,/and v_transferencia_late_manual is distinct from true then/);
  assert.doesNotMatch(sql,/create or replace function public\.haiku_registrar_pago\(/i);
  assert.doesNotMatch(sql,/create or replace function public\.haiku_registrar_servicio\(/i);
 });
