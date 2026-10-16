@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const D=require('../js/haiku-libro-pagos-destinos-v1.js');
 const S=require('../js/haiku-libro-semantica-v1.js');
 const ui=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
-const sql=fs.readFileSync(require.resolve('../supabase/migrations/20261016043000_libro_ampliar_jacuzzi_personas_extra_v1.sql'),'utf8');
+const sql=fs.readFileSync(require.resolve('../supabase/migrations/20261016041158_libro_ampliar_jacuzzi_personas_extra_v1.sql'),'utf8');
 const rid='11111111-1111-4111-8111-111111111111',eid='22222222-2222-4222-8222-222222222222',sid='33333333-3333-4333-8333-333333333333',cid='44444444-4444-4444-8444-444444444444';
 const libro={id:'Oct26!C3',cabana:7,fecha_checkin:'2026-10-10',fecha_checkout:'2026-10-12'};
 const destino={reserva_id:rid,estadia_id:eid,bloqueado:false};
