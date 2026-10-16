@@ -231,7 +231,76 @@
         };
     }
 
-    const api = Object.freeze({ conceptoCanon, aplicacionesLibro, leerSnapshot, resolverAplicacion, resolverTransaccion });
+
+    // TINAJA 1/2 ADL EXTRA: segundo comprobante de una Jacuzzi ya cobrada.
+    // No es un servicio nuevo ni otro pago del cargo original completamente aplicado.
+    function proponerAmpliacionJacuzzi(pago,reserva,destino,comparacion) {
+        const snapshot=comparacion?.snapshot?.finanzas, valor=normalizar(pago?.concepto||'');
+        const extras=valor.match(/(?:^|\s)([12])\s*(?:adl|adultos?|personas?)\s*(?:extra|adicional(?:es)?)(?:\s|$)/);
+        const cantidad=Number(extras?.[1]||0);
+        if (!extras || !/\b(?:tinaja|jacuzzi)\b/.test(valor) ||
+            pago?.tipo_movimiento!=='servicio' ||
+            pago?.pago_recibido!==true || pago?.estado_pago!=='registrado_en_libro' ||
+            pago?.moneda!=='CLP' || pago?.monto!==cantidad*10000 ||
+            !['debito','credito','tarjeta_debito','tarjeta_credito'].includes(pago?.medio_pago) ||
+            !pago?.folio || !pago?.bovtar || pago?.codigo_autorizacion ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(pago?.fecha_comprobante||'') ||
+            !pago?.origen?.hoja || !pago?.origen?.celda ||
+            !reserva?.id || !destino?.reserva_id || !destino?.estadia_id || destino.bloqueado ||
+            pago.fecha_bloque!==reserva.fecha_checkin || Number(pago.cabana)!==Number(reserva.cabana) ||
+            snapshot?.disponible!==true) return null;
+        const asociadas=Array.from(comparacion||[]).filter(x=>x.libro?.id===reserva.id &&
+            x.estado==='asociada' && x.sistema?.reserva_id===destino.reserva_id &&
+            x.sistema?.id===destino.estadia_id && x.sistema.fecha_checkin===reserva.fecha_checkin &&
+            x.sistema.fecha_checkout===reserva.fecha_checkout &&
+            Number(x.sistema.cabana)===Number(reserva.cabana));
+        if (asociadas.length!==1) return null;
+        const servicios=(snapshot.servicios||[]).filter(s=>s.reserva_id===destino.reserva_id &&
+            s.estadia_id===destino.estadia_id && s.catalogo_servicios?.codigo==='tinajaJacuzzi' &&
+            !/cancelad|no.?show|anulad/.test(normalizar(s.estado_servicio||'')));
+        if (servicios.length!==1) return null;
+        const servicio=servicios[0],personas=Number(servicio.personas),
+            total=Number(servicio.total),montoAdicional=Number(servicio.monto_adicional),
+            fin= Math.max(3,personas)+cantidad,incremento=cantidad*10000;
+        if (Number(servicio.cantidad)!==1 || servicio.tipo_cobro!=='normal' ||
+            !Number.isInteger(personas) || personas<1 || personas>4 || fin>5 ||
+            total!==30000+Math.max(0,personas-3)*10000 ||
+            Number(servicio.precio_unitario_aplicado)!==30000 ||
+            montoAdicional!==Math.max(0,personas-3)*10000 ||
+            !(servicio.fecha_servicio>=reserva.fecha_checkin &&
+                servicio.fecha_servicio<=reserva.fecha_checkout) ||
+            !/^\d{2}:\d{2}/.test(servicio.hora_inicio||'')) return null;
+        const cargos=(snapshot.cargos||[]).filter(c=>c.servicio_id===servicio.id &&
+            c.reserva_id===destino.reserva_id && c.estadia_id===destino.estadia_id &&
+            c.tipo_cargo==='servicio' && c.estado==='activo');
+        if (cargos.length!==1 || Number(cargos[0].monto_ajustado)!==total ||
+            Number(cargos[0].aplicado_neto)!==total || Number(cargos[0].saldo_cargo)!==0) return null;
+        const recibos=(comparacion?.snapshot?.pagos_todos||[]).filter(p=>p.tipo_movimiento==='pago' &&
+            p.estado!=='anulado' && String(p.folio||'').replace(/[^0-9a-z]/gi,'').toUpperCase()===
+                String(pago.folio).replace(/[^0-9a-z]/gi,'').toUpperCase() &&
+            String(p.bove||p.codigo_autorizacion||'').replace(/[^0-9a-z]/gi,'').toUpperCase()===
+                String(pago.bovtar).replace(/[^0-9a-z]/gi,'').toUpperCase());
+        if (recibos.length) return null;
+        return {
+            reservaId:destino.reserva_id,estadiaId:destino.estadia_id,servicioId:servicio.id,
+            adicionales:cantidad,personasActuales:personas,personasFinales:fin,
+            totalActual:total,totalFinal:total+incremento,montoAdicional:incremento,
+            esperado:{
+                personas, total, cantidad:1, precio:30000,
+                fecha_servicio:servicio.fecha_servicio,
+                hora:String(servicio.hora_inicio).slice(0,5),
+                aplicado:total,saldo:0
+            },
+            origen:{
+                concepto:pago.concepto,folio:pago.folio,bovtar:pago.bovtar,
+                fecha_pago:pago.fecha_comprobante,fecha_bloque:pago.fecha_bloque,
+                monto:pago.monto,moneda:pago.moneda,
+                hoja:pago.origen.hoja,celda:pago.origen.celda
+            }
+        };
+    }
+
+    const api = Object.freeze({ conceptoCanon, aplicacionesLibro, leerSnapshot, resolverAplicacion, resolverTransaccion, proponerAmpliacionJacuzzi });
     root.HAIKU_LIBRO_PAGOS_DESTINOS_V1 = api;
     if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
