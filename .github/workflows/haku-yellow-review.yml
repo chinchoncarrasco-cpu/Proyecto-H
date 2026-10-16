@@ -1,0 +1,48 @@
+name: Haku yellow font review
+on:
+  push:
+    branches: [fix/libro-letra-amarilla-servicio-cobrable]
+    paths:
+      - '.haku-yellow-review.py'
+      - 'tests/libro-servicios-letra-amarilla.test.cjs'
+      - '.github/workflows/haku-yellow-review.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/libro-letra-amarilla-servicio-cobrable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Aplicar candidato idéntico al probado localmente
+        run: |
+          mkdir -p /tmp/haku-yellow-review
+          python3 .haku-yellow-review.py
+          node --check js/haiku-libro-semantica-v1.js
+          node --check js/haiku-libro-servicios-scope-v2.js
+          git diff --check
+          test "$(git diff --name-only | wc -l)" = 2
+          git diff --exit-code -- . ':!js/haiku-libro-semantica-v1.js' ':!js/haiku-libro-servicios-scope-v2.js'
+          git diff > /tmp/haku-yellow-review/candidate.patch
+      - name: Regresiones nativas - sólo fixtures, sin datos ni credenciales de Supabase
+        run: |
+          set -o pipefail
+          node --test tests/libro-semantica.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicios-existentes-finanzas.test.cjs tests/haiku-servicios-identidad-proveniencia.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-servicios-noche-manual.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-masaje-fragmentos.test.cjs tests/libro-masajes-parser.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs 2>&1 | tee /tmp/haku-yellow-review/tests.tap
+      - name: Guardar únicamente código verificado en la rama de revisión
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- js/haiku-libro-semantica-v1.js js/haiku-libro-servicios-scope-v2.js
+          git commit -m 'fix(libro): trasladar letra amarilla a la intención de cobro del servicio'
+          git push origin HEAD:refs/heads/fix/libro-letra-amarilla-servicio-cobrable
+          git rev-parse HEAD > /tmp/haku-yellow-review/verified-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haku-yellow-font-review
+          path: /tmp/haku-yellow-review
+          retention-days: 7
