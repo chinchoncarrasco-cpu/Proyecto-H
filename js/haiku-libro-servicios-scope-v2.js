@@ -555,7 +555,8 @@
         if (items.filter(otro=>otro.kind==='servicio' && mismaEstadia(otro) &&
             esTinajaServicio(otro.servicio)).length!==1) return null;
         const existentesTinaja = existentes.servicios.filter(x=>x.reserva_id===e.reserva_id &&
-            x.estadia_id===e.id && !/cancelad|no_show|anulad/i.test(String(x.estado_servicio||'')) &&
+            (!x.estadia_id || x.estadia_id===e.id) &&
+            !/cancelad|no_show|anulad/i.test(String(x.estado_servicio||'')) &&
             ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)));
         if (existentesTinaja.length>1 || existentesTinaja.some(x=>
             Number(x.cantidad)!==1 || x.fecha_servicio!==r.fecha_checkin ||
