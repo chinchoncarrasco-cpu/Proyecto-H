@@ -293,6 +293,7 @@ function casoFullDayTinaja(texto='TIN AJA TONEL DE MADERA 18:00 A 19:00') {
     estadia.tipo_estadia='fullday';estadia.fecha_salida=estadia.fecha_ingreso;
     r.servicios[0]=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'notas_reserva'})[0];
     e.state.db.pagos=[];e.state.db.vista_estado_cargos=[];
+    e.c.haikuTienePermiso = permiso => permiso === 'pagos.ver';
     return e;
 }
 const primeraTinaja = r=>r.items.find(i=>i.kind==='servicio' && ['tonel','jacuzzi','tinaja'].includes(i.servicio.concepto));
@@ -336,7 +337,7 @@ test('Full Day: cobro de tinaja en Pagos o Libro impide inferir gratuidad',async
 });
 
 test('Full Day: no se regala una segunda tinaja, un tiempo adicional ni una reserva normal',async()=>{
-    for(const tipo of ['2horas','extra','2servicios','no_full_day','estadia_distinta','tres_adultos_extra','lectura_financiera_fallida']) {
+    for(const tipo of ['2horas','extra','2servicios','no_full_day','estadia_distinta','tres_adultos_extra','sin_permiso_pagos','lectura_financiera_fallida']) {
         const e=casoFullDayTinaja(tipo==='2horas'?'TINAJA TONEL 2 HORAS 18:00':
             tipo==='extra'?'TINAJA TONEL EXTRA 18:00 A 19:00':'TINAJA TONEL 18:00 A 19:00');
         if(tipo==='2servicios')e.state.reservas[0].servicios.push(
@@ -344,6 +345,7 @@ test('Full Day: no se regala una segunda tinaja, un tiempo adicional ni una rese
         if(tipo==='no_full_day')e.state.reservas[0].tipo_estadia='alojamiento';
         if(tipo==='estadia_distinta')e.state.db.reserva_estadias[0].tipo_estadia='alojamiento';
         if(tipo==='tres_adultos_extra')e.state.reservas[0].adultos=4;
+        if(tipo==='sin_permiso_pagos')e.c.haikuTienePermiso = () => false;
         if(tipo==='lectura_financiera_fallida'){
             const old=e.c.haikuSupabase.from.bind(e.c.haikuSupabase);
             e.c.haikuSupabase.from=nombre=>nombre==='pagos'
