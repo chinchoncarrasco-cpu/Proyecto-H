@@ -3398,7 +3398,7 @@
     }
 
 
-    function conciliarPenalidadActiva(item, resumen) {
+    function conciliarPenalidadActiva(item, resumen, contexto = {}) {
         if (!item?.penalidadManual || !Array.isArray(resumen?.ajustes) ||
             String(resumen.reserva_id || '') !== String(item.penalidadManual.reservaId)) return false;
         const activos = resumen.ajustes.filter(a => a?.estado === 'activo' &&
@@ -3407,12 +3407,69 @@
         const exactos=activos.filter(a => Number(a.monto)===Number(item.penalidadManual.montoLibro) &&
             Number(a.porcentaje)===10);
         if (activos.length===1 && exactos.length===1) {
+            const destino=item.penalidadManual.reservaId, p=item.pagoLibro;
             item.penalidadRegistrada={monto:Number(exactos[0].monto),tipo:exactos[0].tipo_ajuste,operacionId:exactos[0].operacion_id};
             item.categoria='omitidos'; item.seleccionado=false; item.aprobable=false;
             item.motivos=[]; item.payload=null;
             item.aviso='✓ Penalidad del 10% registrada en Proyecto H por '+money(item.penalidadRegistrada.monto)+
                 '. El cargo ya existe; no se añadirá otra vez ni se marcará como pago recibido.';
             item.penalidadManual=null;
+            // La penalidad ya es cargo. El pago sólo puede pasar a revisión
+            // si el alojamiento conserva exactamente ese saldo y tiene
+            // respaldo de transferencia en el Libro.
+            if (!p || !Array.isArray(contexto.cargos) || !Array.isArray(contexto.pagos)) return true;
+            const monto=item.penalidadRegistrada.monto;
+            const existentes=contexto.pagos.filter(x=>x.reserva_id===destino &&
+                x.estado!=='anulado' && x.tipo_movimiento==='pago');
+            const mismo=existentes.filter(x=>x.datos_origen?.item_id===item.id);
+            if (mismo.length===1 && mismo[0].estado==='confirmado' && Number(mismo[0].monto)===monto) {
+                item.aviso='✓ Cargo y pago de penalidad '+money(monto)+' ya registrados. No se duplicarán.';
+                return true;
+            }
+            const alojamiento=contexto.cargos.filter(x=>x.reserva_id===destino &&
+                x.tipo_cargo==='alojamiento' && x.estado==='activo');
+            const fecha=String(p.fecha_comprobante||'');
+            const fechaOk=/^\d{4}-\d{2}-\d{2}$/.test(fecha) &&
+                !Number.isNaN(Date.parse(fecha)) && new Date(fecha).toISOString().slice(0,10)===fecha;
+            const prueba=Number(p.monto)===monto && p.moneda==='CLP' &&
+                p.tipo_movimiento==='penalidad' && p.estado_pago==='registrado_en_libro' &&
+                medioLibro(p)==='transferencia' && fechaOk &&
+                p.fecha_bloque===contexto.fechaIngreso && !!p.origen?.hoja && !!p.origen?.celda &&
+                !pagoTieneIdentificadorFuerte(p);
+            const saldoOk=alojamiento.length===1 && Number(alojamiento[0].saldo_cargo)===monto &&
+                Number(alojamiento[0].monto_ajustado)>=monto;
+            const parecido=existentes.some(x=>Number(x.monto)===monto &&
+                medioSistema(x)==='transferencia' && String(x.fecha_pago||'').slice(0,10)===fecha);
+            if (!prueba || !saldoOk || parecido || mismo.length) {
+                item.categoria='dudosos';item.aprobable=false;
+                item.motivos=[parecido||mismo.length
+                    ? 'Ya existe un pago posiblemente correspondiente a esta penalidad. Revisa antes de duplicarlo.'
+                    : !saldoOk ? 'El saldo del alojamiento cambió o ya fue pagado. Revisa antes de registrar otro abono.'
+                    : 'Faltan datos verificables de la transferencia de penalidad.'];
+                item.aviso='Cargo de penalidad registrado; pago todavía por comprobar.';
+                return true;
+            }
+            const aprobado=contexto.aprobados?.has(item.id)===true;
+            item.penalidadPagoPendiente=true;
+            item.categoria=aprobado?'pagos':'dudosos';
+            item.motivos=aprobado?[]:['Requiere aprobación manual del pago de penalidad registrado en el Libro.'];
+            item.aprobable=!aprobado;item.seleccionado=aprobado;
+            item.aviso=aprobado
+                ? '✓ Pago de penalidad '+money(monto)+' aprobado para incorporar. Confirma la incorporación para registrarlo.'
+                : '✓ Cargo registrado. El Libro indica transferencia de '+money(monto)+' del '+fecha+
+                    '. Aprueba este pago y confirma la incorporación; la tinaja no se modifica.';
+            item.payload=aprobado?{
+                contrato:'haiku_incorporar_libro_v1',reserva_ref:null,
+                argumentos:{p_reserva_id:destino,p_monto:monto,p_medio_pago:'transferencia',
+                    p_etapa_operativa:'abono',p_fecha_pago:fecha,p_folio:null,
+                    p_codigo_autorizacion:null,p_bove:null,
+                    p_referencia_externa:p.texto_original||null,
+                    p_observaciones:'Pago penalidad 10% según Libro · '+(p.texto_original||''),
+                    p_aplicaciones:[],p_modo_aplicacion:'alojamiento'},
+                datos_origen:datosOrigenPago(p,{reserva_id:destino,cabana:Number(p.cabana)},
+                    {item_id:item.id,penalidad_ajuste_operacion_id:item.penalidadRegistrada.operacionId}),
+                aprobado_manualmente:true
+            }:null;
             return true;
         }
         item.penalidadManual=null; item.aprobable=false;
@@ -3421,18 +3478,38 @@
         return false;
     }
 
-    async function conciliarPenalidadesEnPlan(plan, cliente) {
+    async function conciliarPenalidadesEnPlan(plan,cliente,comparacion=null,aprobados=new Set()) {
         const items=plan.items.filter(i=>i.penalidadManual?.reservaId);
         if (!items.length || typeof cliente?.rpc!=='function') return;
         const ids=[...new Set(items.map(i=>i.penalidadManual.reservaId))];
-        const resumenes=await Promise.all(ids.map(async id=>{
+        const leidos=await Promise.all(ids.map(async id=>{
+            let resumen=null,cargos=null;
             try {
                 const {data,error}=await cliente.rpc('haiku_resumen_ajustes_unidad',{p_reserva_id:id});
-                return [id,error?null:data];
-            } catch (_) {return [id,null];}
+                if(!error)resumen=data;
+            }catch(_){}
+            if(resumen?.ajustes?.some(a=>a.estado==='activo' &&
+                ['cargo_cancelacion','cargo_modificacion'].includes(a.tipo_ajuste))) {
+                try {
+                    const {data,error}=await cliente.from('vista_estado_cargos')
+                        .select('cargo_id,reserva_id,tipo_cargo,estado,saldo_cargo,monto_ajustado')
+                        .eq('reserva_id',id);
+                    if(!error && Array.isArray(data))cargos=data;
+                }catch(_){}
+            }
+            return [id,{resumen,cargos}];
         }));
-        const porReserva=new Map(resumenes);
-        items.forEach(i=>conciliarPenalidadActiva(i,porReserva.get(i.penalidadManual.reservaId)));
+        const porReserva=new Map(leidos);
+        const pagos=Array.isArray(comparacion?.snapshot?.pagos_todos)
+            ? comparacion.snapshot.pagos_todos:null;
+        for(const item of items) {
+            const datos=porReserva.get(item.penalidadManual.reservaId);
+            const fuente=(comparacion?.pagosDetalle||[])
+                .find(x=>idMovimientoIncorporacion(x)===item.id);
+            conciliarPenalidadActiva(item,datos?.resumen,{
+                cargos:datos?.cargos,pagos,aprobados,fechaIngreso:fuente?.reserva?.fecha_checkin
+            });
+        }
     }
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
         const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
@@ -3505,7 +3582,7 @@
             item.motivos = [conflicto.motivo];
             item.conflictoIdentidad = true;
         }
-        await conciliarPenalidadesEnPlan(plan,cliente);
+        await conciliarPenalidadesEnPlan(plan,cliente,comparacion,aprobados);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion)
             throw new Error('El Libro cambió mientras se comprobaba la penalidad; vuelve a comparar.');
         plan.capacidadServicios = capacidadServicios;
@@ -5330,7 +5407,12 @@
         if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
             /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
         let estado = item.etapaSiguiente ? 'Paso 2 · después del titular' : etiquetasEstado[item.categoria] || "Revisar";
-        if (item.penalidadRegistrada) {
+        if (item.penalidadPagoPendiente) {
+            estado = item.categoria==='pagos' ? 'Pago de penalidad preparado' : 'Aprobar pago de penalidad';
+            detalle = item.categoria==='pagos'
+                ? 'Transferencia aprobada. Confirma la incorporación para registrar el abono en Proyecto H.'
+                : 'El cargo ya existe y el Libro muestra una transferencia. Aprueba el pago y confirma su incorporación.';
+        } else if (item.penalidadRegistrada) {
             estado = 'Penalidad registrada';
             detalle = 'El cargo del 10% ya está guardado en Proyecto H. Su abono sigue pendiente de comprobar; no se genera un pago nuevo.';
         } else if (item.pagoLibro?.tipo_movimiento === 'penalidad') {
