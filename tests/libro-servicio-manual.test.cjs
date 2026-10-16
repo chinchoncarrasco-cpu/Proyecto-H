@@ -509,3 +509,101 @@ test('Full Day: evidencia explícita cobrable o de cortesía conserva su autorid
     assert.equal(gratis.intencion_cobro,'cortesia');
     assert.equal(gratis.reglaFullDay??null,null,'cortesía original explícita, no inferida');
 });
+
+
+function casoPromoTinajaMixta(texto='PROMO HAIKU // 1 HORA DE TINAJA CORTESIA // DEJAR BATAS EN CAB // tinaja de 16:15 a 18:15 hrs DOS HORAS // TINAJA X PAGAR 30.000'){
+    const e=entorno(),r=e.state.reservas[0],sistema=e.state.db.reservas[0];
+    r.titular='Julian Barahona';sistema.titular_nombre='Julian Barahona';
+    r.texto_original=texto;
+    r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'notas_reserva'});
+    return e;
+}
+
+test('Julián: 1h cortesía + 1h cobro + horario continuo se reúnen en una tinaja',async()=>{
+    const e=casoPromoTinajaMixta(),original=JSON.stringify(e.state.reservas);
+    const r=await e.construir(),partidas=r.items.filter(x=>x.kind==='servicio'&&['tinaja','tonel','jacuzzi'].includes(x.servicio.concepto));
+    assert.equal(partidas.length,1,'nunca aparecen tres servicios a incorporar');
+    const item=partidas[0];
+    assert.equal(item.estado,'revisar','requiere aprobación humana del catálogo y descuento');
+    assert.equal(item.payload,null);
+    assert.equal(item.servicio.promoTinajaMixta.version,1);
+    assert.equal(item.servicio.promoTinajaMixta.horas_cortesia,1);
+    assert.equal(item.servicio.promoTinajaMixta.horas_cobrables,1);
+    assert.equal(item.servicio.promoTinajaMixta.total,30000);
+    assert.equal(item.fecha,'2026-10-10');
+    assert.equal(item.hora,'16:15');assert.equal(item.hora_fin,'18:15');
+    assert.equal(item.servicio.cantidad,2);assert.equal(item.servicio.monto,30000);
+    assert.equal(JSON.stringify(e.state.reservas),original,'no cambia ninguna evidencia del Libro');
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('Julián: aprobación del Libro prepara una sola tinaja de 2 horas por 30.000 sin pago ficticio',async()=>{
+    for(const monto of ['30.000','30,000']){
+        const e=casoPromoTinajaMixta('PROMO HAIKU // 1 HORA DE TINAJA CORTESIA // tinaja de 16:15 a 18:15 hrs DOS HORAS // TINAJA X PAGAR '+monto);
+        const r=await e.construir(),i=r.items.find(x=>x.servicio?.promoTinajaMixta);
+        assert.ok(i);
+        const malo=await e.resolver(0,{codigo_servicio:'tinajaTonel',precio_decision:'catalogo'});
+        assert.equal(malo.items.filter(x=>x.servicio?.promoTinajaMixta).length,1);
+        assert.equal(malo.items.find(x=>x.servicio?.promoTinajaMixta).estado,'revisar',
+            'no puede cobrarse $60.000 por las dos horas');
+        const bueno=await e.resolver(0,{codigo_servicio:'tinajaTonel',precio_decision:'libro'});
+        const item=bueno.items.find(x=>x.servicio?.promoTinajaMixta);
+        assert.equal(item.estado,'listo');
+        assert.equal(item.payload.cantidad,2);
+        assert.equal(item.payload.hora,'16:15');assert.equal(item.hora_fin,'18:15');
+        assert.equal(item.payload.tipo_cobro,'normal');
+        assert.equal(item.payload.precio_manual,15000,'unitario técnico de dos horas');
+        assert.equal(item.precio.total,30000,'sólo la hora adicional se cobra');
+        assert.equal(item.payload.servicio_manual_v1.precio_decision,'libro');
+        assert.match(item.payload.observaciones,/CORTESIA.*DOS HORAS.*X PAGAR/);
+        assert.equal(e.state.escrituras.length,0,'revisión sin crear servicio ni pago');
+    }
+});
+
+test('Julián: triple ambiguo o importes distintos NO se agrupan ni se incorporan automáticamente',async()=>{
+    const textos=[
+        '1 HORA DE TINAJA CORTESIA // tinaja de 16:15 a 18:15 hrs DOS HORAS',
+        '1 HORA DE TINAJA CORTESIA // tinaja de 16:15 a 19:15 hrs TRES HORAS // TINAJA X PAGAR 30.000',
+        '1 HORA DE TINAJA CORTESIA // tinaja de 16:15 a 18:15 hrs DOS HORAS // TINAJA X PAGAR 60.000',
+        '1 HORA DE TINAJA CORTESIA // tinaja de 16:15 a 18:15 hrs DOS HORAS // TINAJA X PAGAR 30.000 // JACUZZI 20:00 a 21:00',
+        '1 HORA DE JACUZZI CORTESIA // tinaja de 16:15 a 18:15 hrs DOS HORAS // TONEL X PAGAR 30.000'
+    ];
+    for(const texto of textos) {
+        const e=casoPromoTinajaMixta(texto),r=await e.construir();
+        assert.equal(r.items.filter(x=>x.servicio?.promoTinajaMixta).length,0,texto);
+        assert.equal(e.state.escrituras.length,0,texto);
+    }
+});
+
+test('Julián: servicio previo de tinaja impide crear otro, aunque el horario difiera',async()=>{
+    const e=casoPromoTinajaMixta(),id=e.state.db.reservas[0].id,estadia=e.state.db.reserva_estadias[0].id;
+    e.state.db.servicios.push({id:'servicio-existente',reserva_id:id,estadia_id:estadia,
+        fecha_servicio:'2026-10-10',hora_inicio:'17:15:00',hora_fin:'18:15:00',
+        cantidad:1,personas:2,tipo_cobro:'cortesia',total:0,estado_servicio:'programado',
+        catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tonel de madera'}});
+    const item=(await e.construir()).items.find(x=>x.servicio?.promoTinajaMixta);
+    assert.ok(item);assert.equal(item.estado,'revisar');assert.equal(item.payload,null);
+    assert.match(item.razones.join(' '),/Ya existe una tinaja/);
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('Julián: el formulario explica 1h incluida y 1h pagada, sin opción de cobrar catálogo',async()=>{
+    const e=casoPromoTinajaMixta(),out=new e.Element('div');e.document.card=out;
+    const plan=await e.construir();e.api.renderizar(plan,out,consulta);
+    const row=out.querySelectorAll('.haku-libro-servicios__item')
+        .find(x=>x.textContent.includes('Julian Barahona')&&x.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'));
+    assert.ok(row);
+    await row.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual').listeners.click();
+    const panel=row.querySelector('.haku-libro-servicio-manual');
+    assert.ok(panel);
+    assert.match(panel.textContent,/primera hora de cortesía/i);
+    assert.match(panel.textContent,/segunda hora por pagar/i);
+    assert.match(panel.textContent,/30.000/);
+    const codigo=panel.querySelectorAll('input,select').find(x=>x.dataset.campoManual==='codigo_servicio');
+    assert.ok(codigo);
+    codigo.value='tinajaTonel';codigo.listeners.change();
+    const precio=panel.querySelectorAll('input,select').find(x=>x.dataset.campoManual==='precio_decision');
+    assert.ok(precio);assert.equal(precio.children.filter(c=>c.value==='catalogo').length,0);
+    assert.equal(precio.children.filter(c=>c.value==='libro').length,1);
+    assert.equal(e.state.escrituras.length,0);
+});
