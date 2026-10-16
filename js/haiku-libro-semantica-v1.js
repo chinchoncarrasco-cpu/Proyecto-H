@@ -458,7 +458,7 @@
         for (const f of fragmentosServicioPosicionales(fuente)) {
             const conceptos = conceptosDeServicio(f.texto);
             if ((conceptos.length === 1 && conceptos[0] === 'masaje') || (!conceptos.length && esComplementoMasaje(f.texto))) bloque.push(f);
-            else { vaciar(); entradas.push({ parte: f.texto }); }
+            else { vaciar(); entradas.push({ parte: f.texto, inicio: f.inicio, fin: f.fin }); }
         }
         vaciar();
         return entradas;
@@ -555,9 +555,42 @@
             motivo: resultado.evidencias.join("; ") || "Sin evidencia de una prestación concreta.", semantica: resultado.semantica };
     }
 
+    // El formato viaja con el mismo texto de la celda. No usar el fondo ni
+    // el color de otra glosa como evidencia de cobro de este servicio.
+    function rangosColorServicio(texto, formato) {
+        const fragmentos = formato?.fragmentos;
+        if (!Array.isArray(fragmentos) || !fragmentos.length ||
+            fragmentos.some(f => typeof f?.texto !== 'string') ||
+            fragmentos.map(f => f.texto).join('') !== texto) return [];
+        let inicio = 0;
+        return fragmentos.map(f => {
+            const rango = { inicio, fin:inicio + f.texto.length, texto:f.texto, color:f.color };
+            inicio = rango.fin;
+            return rango;
+        });
+    }
+
+    function evidenciaAmarillaServicio(entrada, unidad, rangos, origen) {
+        if (!rangos.length || !Number.isInteger(entrada.inicio) || entrada.inicio < 0 ||
+            !Number.isInteger(entrada.fin) || !unidad.texto) return null;
+        const relativo = entrada.parte.indexOf(unidad.texto);
+        if (relativo < 0 || entrada.parte.lastIndexOf(unidad.texto) !== relativo) return null;
+        const inicio = entrada.inicio + relativo, fin = inicio + unidad.texto.length;
+        if (fin > entrada.fin) return null;
+        let letras = false;
+        for (const r of rangos) {
+            const a = Math.max(inicio,r.inicio), b = Math.min(fin,r.fin);
+            if (a >= b || !/[\p{L}\p{N}]/u.test(r.texto.slice(a-r.inicio,b-r.inicio))) continue;
+            if (r.color !== 'FFFF00') return null;
+            letras = true;
+        }
+        return letras ? { version:1, regla:'LETRA_AMARILLA_COBRABLE', color:'FFFF00',
+            texto:unidad.texto, inicio, fin, origen:origen || null } : null;
+    }
+
     function servicios(texto, opciones = {}) {
         const origen_campo = opciones?.origen_campo || "servicios";
-        const salida = [];
+        const salida = [], rangosColor = rangosColorServicio(String(texto || ''), opciones.formato);
         for (const entrada of entradasServicios(texto, opciones)) {
             const { parte } = entrada;
             let canon = clasificarFragmentoServicio(parte, { ...opciones, origen_campo });
@@ -573,7 +606,17 @@
             if (!canon.conceptos.length) continue;
             const unidades = entrada.unidad ? [entrada.unidad] : canon.unidadesServicio.length ? canon.unidadesServicio : [{ concepto: canon.conceptos[0], texto: parte.trim(), cantidad: 1,
                 hora: null, hora_fin: null, intencion_financiera: INTENCION_FINANCIERA.NO_DETERMINADA, evidencias_financieras: [] }];
-            for (const [unidad_indice, unidad] of unidades.entries()) {
+            for (const [unidad_indice, unidadOriginal] of unidades.entries()) {
+                // Complementar sólo cobro ausente de un servicio real. La letra
+                // amarilla no crea servicios desde notas, no cobra cortesías
+                // explícitas ni resuelve textos financieramente contradictorios.
+                const cobroColor = canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL &&
+                    unidadOriginal.intencion_financiera === INTENCION_FINANCIERA.NO_DETERMINADA &&
+                    !(unidadOriginal.evidencias_financieras || []).length
+                    ? evidenciaAmarillaServicio(entrada, unidadOriginal, rangosColor, opciones.coordenadas_origen) : null;
+                const unidad = cobroColor ? { ...unidadOriginal,
+                    intencion_financiera:INTENCION_FINANCIERA.COBRABLE,
+                    evidencias_financieras:['letra amarilla del servicio en el Libro'] } : unidadOriginal;
                 const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera];
                 const pendiente = intencion_cobro === "cobrable", cortesia = intencion_cobro === "cortesia";
                 const incompletoLegado = ["tinaja", "cama_adicional", "cuna"].includes(unidad.concepto) || /\b(?:x|por|sin)\s+confirmar\b|\b(?:por\s+)?coordinar\b/.test(normalizar(unidad.texto));
@@ -584,7 +627,8 @@
                     ...(unidad.grupo_masaje_v1 ? { grupo_masaje_v1: unidad.grupo_masaje_v1 } : {}),
                     intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, clasificacion, intencion_cobro, pendiente, cortesia,
                     evidencia_origen: { origen_campo, semantica: canon.semantica, evidencias_semanticas: canon.evidencias,
-                        intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, pendiente_pago: pendiente, cortesia },
+                        intencion_operativa: canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL, pendiente_pago: pendiente, cortesia,
+                        ...(cobroColor ? { cobro_color:cobroColor } : {}) },
                     tipo: unidad.tipo ?? null, duracion_minutos: unidad.duracion_minutos ?? null, cantidad: unidad.cantidad,
                     hora: unidad.hora, hora_fin: unidad.hora_fin, simultaneo: unidad.simultaneo === true,
                     profesionales: Array.isArray(unidad.profesionales) ? [...unidad.profesionales] : [],
@@ -789,7 +833,7 @@
                 if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
-                const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src });
+                const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src, formato:colors });
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
                 const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
