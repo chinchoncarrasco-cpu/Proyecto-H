@@ -188,3 +188,48 @@ test('Late manual omite existente con checkout e inicio/término exactos sin exi
         assert.equal(listos(actual).length, 2); assert.equal(e.state.escrituras.length, 0);
     }
 });
+
+
+async function escenarioCortesiaExistente() {
+    const e = entorno(), r = e.state.reservas[0];
+    r.servicios[0] = e.c.HAIKU_LIBRO_SEMANTICA.servicios(
+        '1 HORA DE CORTESIA TINAJA TONEL DE MADERA 18:00 A 19:00',
+        { origen_campo:'notas_reserva' })[0];
+    e.state.db.servicios.push({
+        id:'tinaja-unica',reserva_id:e.state.db.reservas[0].id,
+        estadia_id:e.state.db.reserva_estadias[0].id,
+        fecha_servicio:'2026-10-10',hora_inicio:'18:00:00',hora_fin:'19:00:00',
+        cantidad:1,personas:2,tipo_cobro:'normal',total:30000,
+        estado_servicio:'programado',catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tonel de madera'}
+    });
+    return e;
+}
+
+test('Ana: aprobación manual identifica misma tinaja, sólo contradicción tipo_cobro, sin preparar otra',async()=>{
+    const e=await escenarioCortesiaExistente(),r=await e.construir(),item=servicios(r)[0];
+    assert.equal(item.estado,'revisar');assert.equal(item.payload,null);
+    assert.deepEqual(Array.from(item.razones),['El servicio existente contradice datos explícitos del Libro: tipo_cobro.']);
+    assert.equal(item.cambioCortesiaExistente?.servicioId,'tinaja-unica');
+    assert.equal(item.cambioCortesiaExistente.total,30000);
+    assert.equal(item.cambioCortesiaExistente.codigo,'tinajaTonel');
+    assert.equal(item.cambioCortesiaExistente.hora,'18:00');
+    assert.equal(item.cambioCortesiaExistente.fin,'19:00');
+    assert.equal(e.state.escrituras.length,0,'la comparación no cambia dinero ni servicios');
+});
+
+test('otras diferencias, múltiples candidatos o cobro ya correcto no ofrecen conversión manual',async()=>{
+    for(const tipo of ['hora_fin','cantidad','personas','varios','ya_cortesia','libro_cobrable']){
+        const e=await escenarioCortesiaExistente(),s=e.state.db.servicios[0];
+        if(tipo==='hora_fin')s.hora_fin='19:30:00';
+        if(tipo==='cantidad')s.cantidad=2;
+        if(tipo==='personas')s.personas=3;
+        if(tipo==='varios')e.state.db.servicios.push({...s,id:'segunda-tinaja'});
+        if(tipo==='ya_cortesia'){s.tipo_cobro='cortesia';s.total=0;}
+        if(tipo==='libro_cobrable')e.state.reservas[0].servicios[0] =
+            e.c.HAIKU_LIBRO_SEMANTICA.servicios('1 HORA DE TINAJA TONEL POR PAGAR 18:00 A 19:00',
+                {origen_campo:'notas_reserva'})[0];
+        const item=servicios(await e.construir())[0];
+        assert.equal(item.cambioCortesiaExistente ?? null,null,tipo);
+        assert.equal(e.state.escrituras.length,0,tipo);
+    }
+});
