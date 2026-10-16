@@ -830,6 +830,16 @@
                     if (!detail?.valor.trim() && !concept?.valor.trim() && !amount?.valor.trim()) continue;
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
+                    // Una nota de reserva reagendada sin importe no es un pago.
+                    // Conservar el texto y la celda para consulta sin crear un movimiento financiero.
+                    if (!amount?.valor?.trim() && amount?.valorNumero == null &&
+                        /\breserva\s+(?:re\s*agendada|reagendada|reprogramada)\b/.test(t) &&
+                        !/\b(?:transferencia|transf|webpay|efectivo|debito|credito|abono|pago|pagado|penalidad|reembolso|cobro)\b/.test(t)) {
+                        const origenNota = detail || concept;
+                        res.anotaciones.push({texto_original:text,origen:origen(origenNota),
+                            fecha:h.fechaISO,cabana,tipo:'reprogramacion_reserva'});
+                        continue;
+                    }
                     const ref = re => text.match(re)?.[1]?.trim() || null;
                     const kind = /penalidad/.test(t) ? "penalidad" : (/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
