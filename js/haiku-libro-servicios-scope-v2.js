@@ -479,13 +479,124 @@
         return { motivo: "No hay una equivalencia segura con el catálogo de servicios de Proyecto H." };
     }
 
-    function prepararServicio(reserva, servicio, asociacion, nocheManual = null, resueltos = {}) {
+
+    // La hora de tinaja está incluida en Full Day. No usar la ausencia
+    // aparente de pago sin comprobar el registro financiero de Proyecto H.
+    function esFullDay(tipo) {
+        return ['fullday','full_day'].includes(normalizar(tipo).replace(/\s+/g,'_'));
+    }
+
+    function esTinajaServicio(servicio) {
+        return ['tinaja','tonel','jacuzzi'].includes(normalizar(servicio?.concepto));
+    }
+
+    function pagoEspecificoTinaja(p) {
+        if (!p || Number(p.monto) <= 0) return false;
+        const origen = p.datos_origen || {};
+        const texto = [p.concepto,p.referencia_externa,p.observaciones,p.texto_original,
+            origen.concepto,origen.evidencia_libro?.concepto,
+            JSON.stringify(origen.aplicaciones_servicio_v1?.aplicaciones || [])].filter(Boolean).join(' ');
+        const normalizado = normalizar(texto).replace(/[_-]/g,' ');
+        // Un abono del paquete Full Day que menciona la tinaja incluida no
+        // demuestra un segundo pago por ese servicio.
+        const incluidoEnPaquete = /\b(?:full\s*day|fullday)\b/.test(normalizado) &&
+            /\b(?:incluid[oa]s?|incluye|cortesia)\b/.test(normalizado) &&
+            !/\b(?:adicional|extra|separad[oa]|abono\s+tinaja|pago\s+tinaja)\b/.test(normalizado) &&
+            p.tipo_movimiento !== 'servicio' &&
+            !(origen.aplicaciones_servicio_v1?.aplicaciones||[]).length;
+        return !incluidoEnPaquete &&
+            /\b(?:tinajas?|tonel(?:es)?|jacuzzis?|jacusi|hot\s*tub)\b/.test(normalizado);
+    }
+
+    async function finanzasFullDay(cliente, ids) {
+        // Con RLS, no ver pagos podría significar falta de permiso, no cero pagos.
+        if (!ids.length || root.haikuTienePermiso?.('pagos.ver') !== true) return new Map();
+        const cargar = async (tabla, columnas, orden) => {
+            const todos = [];
+            for (let pagina = 0; pagina < 20; pagina++) {
+                let q = cliente.from(tabla).select(columnas).in('reserva_id',ids);
+                if (typeof q.order === 'function') q = q.order(orden);
+                const paginado = typeof q.range === 'function';
+                const respuesta = await (paginado ? q.range(pagina*500,pagina*500+499) : q);
+                if (respuesta?.error || !Array.isArray(respuesta?.data))
+                    throw respuesta?.error || Error('Lectura financiera incompleta');
+                todos.push(...respuesta.data);
+                if (!paginado || respuesta.data.length < 500) return todos;
+            }
+            throw Error('La lectura financiera supera el límite verificable');
+        };
+        try {
+            const [pagos,cargos] = await Promise.all([
+                cargar('pagos','id,reserva_id,monto,tipo_movimiento,estado,referencia_externa,observaciones,datos_origen','id'),
+                cargar('vista_estado_cargos','cargo_id,reserva_id,servicio_id,tipo_cargo,aplicado_neto,estado','cargo_id')
+            ]);
+            return new Map(ids.map(id=>[id,{
+                pagos:pagos.filter(p=>p.reserva_id===id && p.tipo_movimiento==='pago' && p.estado==='confirmado'),
+                cargos:cargos.filter(c=>c.reserva_id===id)
+            }]));
+        } catch (_) {
+            return new Map(); // Lectura fallida: conservar la revisión manual anterior.
+        }
+    }
+
+    function reglaTinajaIncluidaFullDay(item, items, existentes, finanzas) {
+        const e = item?.asociacion?.sistema, r = item?.reserva, s = item?.servicio;
+        if (item?.kind !== 'servicio' || item.semantica !== 'SERVICIO_REAL' ||
+            !esTinajaServicio(s) || item.intencion_cobro !== 'no_determinada' ||
+            item.asociacion?.estado !== 'asociada' || !e?.reserva_id || !e?.id ||
+            !esFullDay(r?.tipo_estadia) || !esFullDay(e.tipo_estadia) ||
+            r.fecha_checkin !== r.fecha_checkout || e.fecha_ingreso !== e.fecha_salida ||
+            e.fecha_ingreso !== r.fecha_checkin || !finanzas?.has(e.reserva_id) ||
+            !Number.isInteger(Number(s.cantidad)) || Number(s.cantidad)!==1 ||
+            (s.monto != null && Number(s.monto)>0) ||
+            (item.personas != null && item.personas > 3)) return null;
+
+        const texto = normalizar(s.texto_original);
+        if (/\b(?:adicional|extra|extension|extender|segunda|segundo)\b/.test(texto)) return null;
+        const horas = [...texto.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(?:horas?|hrs?|hr\b|h\b)/g)]
+            .map(x=>Number(x[1].replace(',','.')));
+        const minutos = [...texto.matchAll(/\b(\d+)\s*(?:minutos?|mins?|min\b)/g)].map(x=>Number(x[1]));
+        if (horas.some(n=>n!==1) || minutos.some(n=>n!==60)) return null;
+        const inicio = minutosHora(item.hora), fin = minutosHora(item.hora_fin);
+        if (inicio!==null && (inicio<570 || inicio>1230 || fin!==null && fin!==inicio+60)) return null;
+        if (fin!==null && inicio===null) return null;
+
+        const mismaEstadia = otro=>otro?.asociacion?.sistema?.id===e.id;
+        if (items.filter(otro=>otro.kind==='servicio' && mismaEstadia(otro) &&
+            esTinajaServicio(otro.servicio)).length!==1) return null;
+        const existentesTinaja = existentes.servicios.filter(x=>x.reserva_id===e.reserva_id &&
+            (!x.estadia_id || x.estadia_id===e.id) &&
+            !/cancelad|no_show|anulad/i.test(String(x.estado_servicio||'')) &&
+            ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)));
+        if (existentesTinaja.length>1 || existentesTinaja.some(x=>
+            Number(x.cantidad)!==1 || x.fecha_servicio!==r.fecha_checkin ||
+            (item.hora && horaCorta(x.hora_inicio)!==item.hora) ||
+            (item.hora_fin && horaCorta(x.hora_fin)!==item.hora_fin))) return null;
+
+        const pagosLibro = [...(r.pagos||[]),...(r.pagos_sin_asociacion||[])];
+        const fiscal = finanzas.get(e.reserva_id);
+        const pagoRelacionado = p=>(p.datos_origen?.aplicaciones_servicio_v1?.aplicaciones||[])
+            .some(a=>existentesTinaja.some(srv=>srv.id===a.servicio_id));
+        if (pagosLibro.some(pagoEspecificoTinaja) ||
+            fiscal.pagos.some(p=>pagoEspecificoTinaja(p) || pagoRelacionado(p)) ||
+            fiscal.cargos.some(c=>existentesTinaja.some(srv=>srv.id===c.servicio_id) &&
+                Number(c.aplicado_neto)>0)) return null;
+
+        return Object.freeze({version:1,origen:'full_day_una_hora_tinaja',
+            reservaId:e.reserva_id,estadiaId:e.id,fecha:r.fecha_checkin,
+            pagosRevisados:true});
+    }
+
+    function prepararServicio(reserva, servicio, asociacion, nocheManual = null, resueltos = {}, reglaFullDay = null) {
         const razones = [], inferencias = [];
         if (servicio?.semantica !== "SERVICIO_REAL") throw new Error("prepararServicio sólo acepta unidades clasificadas canónicamente como SERVICIO_REAL.");
         const semantica = servicio.semantica, intencion_operativa = true;
         const intencionOriginal = intencionCobroServicio(servicio);
-        const intencion_cobro = intencionOriginal === 'no_determinada' && resueltos.tipo_cobro
+        const intencion_cobro = reglaFullDay && intencionOriginal === 'no_determinada'
+            ? 'cortesia' : intencionOriginal === 'no_determinada' && resueltos.tipo_cobro
             ? (resueltos.tipo_cobro === 'cortesia' ? 'cortesia' : 'cobrable') : intencionOriginal;
+        if (reglaFullDay && intencionOriginal === 'no_determinada')
+            inferencias.push('Full Day incluye una hora de tinaja de cortesía; en Pagos no hay un cobro específico identificado.');
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
         const efectivo = { ...servicio };
         if (resueltos.codigo_servicio === 'tinajaTonel') efectivo.concepto = 'tonel';
@@ -564,7 +675,8 @@
             personas: provenienciaPersonas,
             cantidad: /\bx\s*\d+\b|\b\d+\s*(?:servicios?|tinajas?|jacuzzis?|toneles?|masajes?|camas?|cunas?)\b/.test(normalizar(servicio?.texto_original))
                 ? "EXPLICITO" : Number.isInteger(servicio?.cantidad) ? "INFERIDO" : "AUSENTE",
-            tipo_cobro: ["cobrable", "cortesia"].includes(intencion_cobro) || servicio?.pendiente === true ||
+            tipo_cobro: reglaFullDay && intencionOriginal === "no_determinada" ? "INFERIDO_FULLDAY_VERIFICADO" :
+                ["cobrable", "cortesia"].includes(intencion_cobro) || servicio?.pendiente === true ||
                 servicio?.cortesia === true || servicio?.evidencia_origen?.pendiente_pago === true ||
                 servicio?.evidencia_origen?.cortesia === true ? "EXPLICITO" : "AUSENTE",
             monto: servicio?.monto != null && Number.isFinite(Number(servicio.monto)) ? "EXPLICITO" : "AUSENTE"
@@ -572,7 +684,7 @@
         return {
             kind: "servicio", semantica, completitud, clasificacion, intencion_operativa, intencion_cobro,
             evidencia_origen: servicio?.evidencia_origen || null,
-            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia, proveniencia,
+            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia, proveniencia, reglaFullDay,
             opcionesNoches, nocheManual,
             puedeElegirNoche: !fecha && !fechaInfo.conflicto && razonesUnicas.length === 1 && razonesUnicas[0].startsWith('Falta una fecha inequívoca') && opcionesNoches.length > 0,
             inferencias: [...new Set(inferencias)], razones: razonesUnicas,
@@ -587,7 +699,9 @@
                 personas: Number.isInteger(personas) ? personas : 0,
                 tipo_cobro: intencion_cobro === "cortesia" ? "cortesia" : "normal",
                 precio_manual: null,
-                motivo_cortesia: cortesia ? `Cortesía indicada en el Libro: ${servicio.texto_original}` : null,
+                motivo_cortesia: reglaFullDay && intencionOriginal === 'no_determinada'
+                    ? 'Full Day: 1 hora de tinaja incluida; pagos de tinaja verificados sin cobro específico.'
+                    : cortesia ? `Cortesía indicada en el Libro: ${servicio.texto_original}` : null,
                 observaciones: `Importado desde Libro de Reserva. ${servicio.texto_original}`
             } : null
         };
@@ -679,6 +793,9 @@
         const marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`, porOrigen = activos.filter(x => String(x.observaciones || "").includes(marca));
         if (porOrigen.length === 1) {
             const x = porOrigen[0];
+            if (item.reglaFullDay && x.tipo_cobro !== 'cortesia')
+                return { estado:'revisar', candidatos:porOrigen, contradicciones:['tipo_cobro'],
+                    motivo:'La tinaja del mismo origen aún figura cobrable; Full Day incluye una hora de cortesía.' };
             if (contradiccionesManual(x).length)
                 return { estado: 'revisar', candidatos: porOrigen, motivo: 'El servicio del mismo origen contradice los datos confirmados; no se creará otro.' };
             return { estado: "existente", candidato: x, candidatos: porOrigen, motivo: "Mismo origen estable." };
@@ -707,7 +824,8 @@
             const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
                 (!item.fecha || x.fecha_servicio === item.fecha) && horaCorta(x.hora_inicio) === hora);
             const textoOrigen = normalizar(`${item.servicio?.texto_original || ""} ${item.servicio?.texto_fuente_completo || ""}`);
-            const cortesiaExplicita = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
+            const cortesiaExplicita = Boolean(item.reglaFullDay) ||
+                esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
             const cobroExplicito = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
                 /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b/.test(textoOrigen));
             const contradiccionesFinancieras = candidato => {
@@ -727,7 +845,8 @@
             if (mismoHechoBase.length) {
                 const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
                 return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, contradicciones,
-                    motivo: `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
+                    motivo: item.reglaFullDay ? "Full Day incluye una hora de cortesía; el servicio existente figura como cobrable." :
+                        `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
         }
         const identidad = root.HAIKU_SERVICIOS_IDENTIDAD_V1;
@@ -751,7 +870,8 @@
         if (decision?.estado !== 'revisar' || candidatos.length !== 1 ||
             decision.contradicciones?.length !== 1 || decision.contradicciones[0] !== 'tipo_cobro' ||
             item?.semantica !== 'SERVICIO_REAL' || item.completitud !== 'COMPLETO' ||
-            item.intencion_cobro !== 'cortesia' || item.proveniencia?.tipo_cobro !== 'EXPLICITO' ||
+            item.intencion_cobro !== 'cortesia' ||
+            !['EXPLICITO','INFERIDO_FULLDAY_VERIFICADO'].includes(item.proveniencia?.tipo_cobro) ||
             item.resolucionManual || item.asociacion?.estado !== 'asociada' ||
             esperado?.tipo_cobro !== 'cortesia' ||
             !['tinajaTonel','tinajaJacuzzi'].includes(codigo) || codigo !== esperado.codigo_servicio ||
@@ -868,7 +988,8 @@
         // La unidad original y su destino, nunca otras glosas de la reserva ni otras reservas.
         return JSON.stringify([item.item_id, evidenciaManual(item), r.coordenadas_origen || null,
             r.adultos ?? null, r.noches, r.fecha_checkin, r.fecha_checkout, r.tipo_estadia,
-            item.asociacion.estado, destinoEsperado(item), libro.archivo, libro.generacion, libro.version_libro]);
+            item.asociacion.estado, destinoEsperado(item), libro.archivo, libro.generacion, libro.version_libro,
+            item.reglaFullDay || null]);
     }
 
     function codigosManual(item) {
@@ -898,7 +1019,7 @@
             throw new Error('La hora explícita del Libro no se puede sustituir.');
         if (datos.hora && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(datos.hora)) throw new Error('Indica una hora de inicio válida.');
         if (datos.fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fecha) || iso(...datos.fecha.split('-')) !== datos.fecha)) throw new Error('Indica una fecha válida.');
-        const item = prepararServicio(base.reserva, base.servicio, base.asociacion, null, datos);
+        const item = prepararServicio(base.reserva, base.servicio, base.asociacion, null, datos, base.reglaFullDay);
         if (!c) razonesExtra.push('El servicio elegido no está activo en el catálogo actual.');
         const horas = base.servicio.concepto === 'lateout' || /^tinaja/.test(codigo || '')
             ? normalizar(base.servicio.texto_original).match(/\b(\d+)\s*horas?\b/) : null;
@@ -999,6 +1120,24 @@
             }
             items.push(...notasCanonicas.values());
         }
+        // Comparar cobros después de leer los servicios, antes de cualquier
+        // firma o decisión manual. La autoridad del Libro no se reescribe.
+        const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id ||
+            (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
+        const existentes = await cargarExistentes(cliente, reservaIds);
+        const posiblesFullDay = [...new Set(items.filter(item =>
+            item.kind === 'servicio' && item.intencion_cobro === 'no_determinada' &&
+            esTinajaServicio(item.servicio) && esFullDay(item.reserva?.tipo_estadia) &&
+            esFullDay(item.asociacion?.sistema?.tipo_estadia) &&
+            item.asociacion?.estado === 'asociada'
+        ).map(item => item.asociacion.sistema.reserva_id))];
+        const verificacionFullDay = await finanzasFullDay(cliente, posiblesFullDay);
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i], regla = reglaTinajaIncluidaFullDay(item, items, existentes, verificacionFullDay);
+            if (regla) items[i] = prepararServicio(item.reserva, item.servicio, item.asociacion,
+                item.nocheManual, {}, regla);
+        }
+
         // Firma exacta, sin persistencia: incluye todos los datos leídos del Libro y la asociación actual.
         const firmaLibro = JSON.stringify([libro.archivo, libro.generacion, libro.reservas]);
         for (let i = 0; i < items.length; i++) {
@@ -1012,8 +1151,7 @@
         }
         for (const [id, eleccion] of overrides) if (!items.some(x => x.item_id === id)) overrides.set(id, { ...eleccion, invalidada: true });
         for (const [id, decision] of manuales) if (!items.some(x => x.item_id === id)) decision.invalidada = true;
-        const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id || (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
-        const existentes = await cargarExistentes(cliente, reservaIds);
+
         for (let indice = 0; indice < items.length; indice++) {
             const item = items[indice];
             if (item.kind === "nota") {
@@ -1575,7 +1713,7 @@
         const reglas = document.createElement("details"); reglas.className = "haku-libro-servicios-sites__reglas";
         const reglasSummary = document.createElement("summary"); reglasSummary.textContent = "Reglas de lectura del Libro";
         const reglasTexto = document.createElement("p");
-        reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. La semántica del Libro no cambia después de clasificarse: identidad, completitud y cobro se revisan por separado.";
+        reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30, con 1 hora de tinaja Tonel o Jacuzzi incluida. Haku comprueba pagos antes de inferir cortesía; horas extra o pagos específicos requieren revisión. En 1 noche puede inferir fecha por horario; en varias noches no adivina. Identidad, completitud y cobro se revisan por separado.";
         reglas.append(reglasSummary, reglasTexto); out.append(reglas);
         out.append(
             seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-libro-servicios__seccion--servicios", "✓", null, opciones),

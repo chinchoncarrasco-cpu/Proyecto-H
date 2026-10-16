@@ -285,3 +285,163 @@ test('cortesía existente: su aprobación manual se muestra debajo de la misma t
     assert.ok(panel);assert.equal(panel.parentElement,fila);assert.equal(panel.style.gridColumn,'1 / -1');
     assert.equal(lecturas,1);assert.equal(escrituras,0);assert.equal(e.state.escrituras.length,0);
 });
+
+
+function casoFullDayTinaja(texto='TIN AJA TONEL DE MADERA 18:00 A 19:00') {
+    const e=entorno(),r=e.state.reservas[0],estadia=e.state.db.reserva_estadias[0];
+    r.tipo_estadia='full_day';r.fecha_checkout=r.fecha_checkin;
+    estadia.tipo_estadia='fullday';estadia.fecha_salida=estadia.fecha_ingreso;
+    r.servicios[0]=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'notas_reserva'})[0];
+    e.state.db.pagos=[];e.state.db.vista_estado_cargos=[];
+    e.c.haikuTienePermiso = permiso => permiso === 'pagos.ver';
+    return e;
+}
+const primeraTinaja = r=>r.items.find(i=>i.kind==='servicio' && ['tonel','jacuzzi','tinaja'].includes(i.servicio.concepto));
+
+test('Full Day: Tonel o Jacuzzi único de 1 hora sin pago se clasifica cortesía sin preguntar',async()=>{
+    for(const texto of ['TINAJA TONEL DE MADERA 18:00 A 19:00',
+        'JACUZZI 18:00 A 19:00','TINAJA TONEL DE MADERA 1 HORA A LAS 18:00']) {
+        const e=casoFullDayTinaja(texto),original=JSON.stringify(e.state.reservas);
+        const item=primeraTinaja(await e.construir());
+        assert.equal(item.intencion_cobro,'cortesia',texto);
+        assert.equal(item.proveniencia.tipo_cobro,'INFERIDO_FULLDAY_VERIFICADO',texto);
+        assert.equal(item.reglaFullDay.pagosRevisados,true,texto);
+        assert.equal(item.payload?.tipo_cobro,'cortesia',texto);
+        assert.match(item.payload?.motivo_cortesia,/Full Day/);
+        assert.equal(item.estado,'listo',texto);
+        assert.deepEqual(JSON.stringify(e.state.reservas),original,'el Libro original no cambia');
+        assert.equal(e.state.escrituras.length,0);
+    }
+});
+
+test('Full Day: una tinaja sin tipo mantiene selección de Tonel/Jacuzzi, sin pedir tipo de cobro',async()=>{
+    const e=casoFullDayTinaja('1 HORA DE TINAJA CALIENTE 18:00 A 19:00');
+    const res=await e.construir(),item=primeraTinaja(res);
+    assert.equal(item.intencion_cobro,'cortesia');
+    assert.equal(item.estado,'revisar','todavía falta escoger Tonel o Jacuzzi');
+    assert.ok(!item.razones.some(x=>/definir si el servicio es cobrable/i.test(x)));
+    const out=new e.Element('div');e.document.card=out;
+    e.api.renderizar(res,out,consulta);
+    const btn=out.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual');
+    assert.ok(btn);
+    await btn.listeners.click();
+    const panel=out.querySelector('.haku-libro-servicio-manual');
+    assert.ok(panel);
+    const inputs=panel.querySelectorAll('input,select');
+    assert.ok(inputs.some(x=>x.dataset.campoManual==='codigo_servicio'));
+    assert.ok(!inputs.some(x=>x.dataset.campoManual==='tipo_cobro'));
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('Full Day: cobro de tinaja en Pagos o Libro impide inferir gratuidad',async()=>{
+    for(const origen of ['pagos','libro','aplicaciones']) {
+        const e=casoFullDayTinaja('TINAJA TONEL DE MADERA 18:00 A 19:00');
+        const reservaId=e.state.db.reservas[0].id,estadia=e.state.db.reserva_estadias[0];
+        if(origen==='pagos')e.state.db.pagos.push({id:'p-1',reserva_id:reservaId,
+            estado:'confirmado',tipo_movimiento:'pago',monto:30000,observaciones:'Pago Jacuzzi'});
+        if(origen==='libro')e.state.reservas[0].pagos=[{monto:30000,concepto:'Tinaja Tonel',tipo_movimiento:'servicio'}];
+        if(origen==='aplicaciones'){
+            e.state.db.servicios.push({id:'s-1',reserva_id:reservaId,estadia_id:estadia.id,
+                fecha_servicio:'2026-10-10',hora_inicio:'18:00:00',hora_fin:'19:00:00',
+                cantidad:1,personas:2,tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+                catalogo_servicios:{codigo:'tinajaTonel'}});
+            e.state.db.vista_estado_cargos.push({cargo_id:'cargo-1',reserva_id:reservaId,
+                servicio_id:'s-1',aplicado_neto:30000,tipo_cargo:'servicio',estado:'activo'});
+        }
+        const item=primeraTinaja(await e.construir());
+        assert.equal(item.reglaFullDay??null,null,origen);
+        assert.notEqual(item.intencion_cobro,'cortesia',origen);
+        assert.equal(e.state.escrituras.length,0,origen);
+    }
+});
+
+test('Full Day: no se regala una segunda tinaja, un tiempo adicional ni una reserva normal',async()=>{
+    for(const tipo of ['2horas','extra','2servicios','no_full_day','estadia_distinta','tres_adultos_extra','sin_permiso_pagos','lectura_financiera_fallida']) {
+        const e=casoFullDayTinaja(tipo==='2horas'?'TINAJA TONEL 2 HORAS 18:00':
+            tipo==='extra'?'TINAJA TONEL EXTRA 18:00 A 19:00':'TINAJA TONEL 18:00 A 19:00');
+        if(tipo==='2servicios')e.state.reservas[0].servicios.push(
+            e.c.HAIKU_LIBRO_SEMANTICA.servicios('JACUZZI 19:00 A 20:00',{origen_campo:'notas_reserva'})[0]);
+        if(tipo==='no_full_day')e.state.reservas[0].tipo_estadia='alojamiento';
+        if(tipo==='estadia_distinta')e.state.db.reserva_estadias[0].tipo_estadia='alojamiento';
+        if(tipo==='tres_adultos_extra')e.state.reservas[0].adultos=4;
+        if(tipo==='sin_permiso_pagos')e.c.haikuTienePermiso = () => false;
+        if(tipo==='lectura_financiera_fallida'){
+            const old=e.c.haikuSupabase.from.bind(e.c.haikuSupabase);
+            e.c.haikuSupabase.from=nombre=>nombre==='pagos'
+                ?{select(){return this;},in(){return Promise.resolve({data:null,error:{message:'Sin acceso'}});}}
+                :old(nombre);
+        }
+        const item=primeraTinaja(await e.construir());
+        assert.equal(item.reglaFullDay??null,null,tipo);
+        assert.notEqual(item.intencion_cobro,'cortesia',tipo);
+        assert.equal(e.state.escrituras.length,0,tipo);
+    }
+});
+
+test('Full Day: el abono del paquete con tinaja incluida no es un segundo pago de tinaja',async()=>{
+    const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00');
+    const id=e.state.db.reservas[0].id;
+    e.state.db.pagos.push({id:'alojamiento',reserva_id:id,tipo_movimiento:'pago',
+        estado:'confirmado',monto:120000,observaciones:'Full Day incluye 1 hora de tinaja tonel'});
+    assert.equal(primeraTinaja(await e.construir()).intencion_cobro,'cortesia');
+    e.state.db.pagos[0].observaciones='Full Day incluye tinaja, abono adicional Jacuzzi $20.000';
+    assert.equal(primeraTinaja(await e.construir()).reglaFullDay??null,null);
+});
+
+test('Full Day: un servicio existente cobrable solo ofrece el cambio protegido, nunca duplica',async()=>{
+    const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00');
+    const id=e.state.db.reservas[0].id,estad=e.state.db.reserva_estadias[0].id;
+    e.state.db.servicios.push({id:'tinaja-existente',reserva_id:id,estadia_id:estad,
+        fecha_servicio:'2026-10-10',hora_inicio:'18:00:00',hora_fin:'19:00:00',
+        cantidad:1,personas:2,tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+        catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tonel de madera'}});
+    const item=primeraTinaja(await e.construir());
+    assert.equal(item.estado,'revisar');
+    assert.equal(item.payload,null);
+    assert.equal(item.intencion_cobro,'cortesia');
+    assert.equal(item.cambioCortesiaExistente?.servicioId,'tinaja-existente');
+    assert.equal(item.cambioCortesiaExistente?.total,30000);
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('Full Day: pago con concepto canónico o servicio_id vinculado bloquea cortesía',async()=>{
+    for(const tipo of ['canonico','servicio_id']){
+        const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00'),id=e.state.db.reservas[0].id;
+        e.state.db.pagos.push({id:'pago-ext',reserva_id:id,tipo_movimiento:'pago',
+            estado:'confirmado',monto:30000,datos_origen:{
+                aplicaciones_servicio_v1:{aplicaciones:[{servicio_id:'servicio-ya-existente',
+                    ...(tipo==='canonico'?{concepto_canon:'tinaja_tonel'}:{})}]}}});
+        if(tipo==='servicio_id'){
+            e.state.db.servicios.push({id:'servicio-ya-existente',reserva_id:id,
+                estadia_id:e.state.db.reserva_estadias[0].id,fecha_servicio:'2026-10-10',
+                hora_inicio:'18:00:00',hora_fin:'19:00:00',cantidad:1,personas:2,
+                tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+                catalogo_servicios:{codigo:'tinajaTonel'}});
+        }
+        const item=primeraTinaja(await e.construir());
+        assert.equal(item.reglaFullDay??null,null,tipo);
+    }
+});
+
+test('Full Day: un pago nuevo después de la vista previa invalida la cortesía antes de incorporar',async()=>{
+    const e=casoFullDayTinaja('TINAJA TONEL 18:00 A 19:00'),id=e.state.db.reservas[0].id;
+    const primero=primeraTinaja(await e.construir());
+    assert.equal(primero.estado,'listo');assert.equal(primero.payload.tipo_cobro,'cortesia');
+    e.state.db.pagos.push({id:'nuevo-pago',reserva_id:id,tipo_movimiento:'pago',
+        estado:'confirmado',monto:30000,observaciones:'Cobro por tinaja tonel'});
+    const segundo=primeraTinaja(await e.construir());
+    assert.equal(segundo.reglaFullDay??null,null);
+    assert.equal(segundo.estado,'revisar');assert.equal(segundo.payload,null);
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('Full Day: evidencia explícita cobrable o de cortesía conserva su autoridad',async()=>{
+    const cobro=casoFullDayTinaja('TINAJA TONEL X PAGAR CLP$30.000 18:00 A 19:00');
+    const pago=primeraTinaja(await cobro.construir());
+    assert.equal(pago.intencion_cobro,'cobrable');
+    assert.equal(pago.reglaFullDay??null,null);
+    const cortesia=casoFullDayTinaja('1 HORA DE CORTESIA TINAJA TONEL 18:00 A 19:00');
+    const gratis=primeraTinaja(await cortesia.construir());
+    assert.equal(gratis.intencion_cobro,'cortesia');
+    assert.equal(gratis.reglaFullDay??null,null,'cortesía original explícita, no inferida');
+});
