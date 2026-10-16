@@ -742,6 +742,33 @@
         return { estado: "nuevo", candidato: null, candidatos: [], motivo: "No existe un servicio operativo compatible." };
     }
 
+    // Sólo el servicio único ya existente: la única discrepancia del Libro
+    // debe ser tipo_cobro. No autoriza crear otro servicio ni aceptar cambios extra.
+    function cambioCortesiaExistente(item, decision) {
+        const candidatos = decision?.candidatos || [], actual = candidatos[0];
+        const codigo = codigoExistente(actual), esperado = item?.payload;
+        const destino = item?.asociacion?.sistema;
+        if (decision?.estado !== 'revisar' || candidatos.length !== 1 ||
+            decision.contradicciones?.length !== 1 || decision.contradicciones[0] !== 'tipo_cobro' ||
+            item?.semantica !== 'SERVICIO_REAL' || item.completitud !== 'COMPLETO' ||
+            item.intencion_cobro !== 'cortesia' || item.proveniencia?.tipo_cobro !== 'EXPLICITO' ||
+            item.resolucionManual || item.asociacion?.estado !== 'asociada' ||
+            esperado?.tipo_cobro !== 'cortesia' ||
+            !['tinajaTonel','tinajaJacuzzi'].includes(codigo) || codigo !== esperado.codigo_servicio ||
+            !actual?.id || !destino?.id || !destino?.reserva_id ||
+            actual.reserva_id !== destino.reserva_id || actual.estadia_id !== destino.id ||
+            actual.tipo_cobro !== 'normal' || !Number.isSafeInteger(Number(actual.total)) ||
+            Number(actual.total) <= 0 || actual.fecha_servicio !== esperado.fecha_servicio ||
+            !item.hora_fin || horaCorta(actual.hora_inicio) !== esperado.hora ||
+            horaCorta(actual.hora_fin) !== item.hora_fin ||
+            Number(actual.cantidad) !== Number(esperado.cantidad) ||
+            Number(actual.personas) !== Number(esperado.personas)) return null;
+        return Object.freeze({ servicioId:actual.id, reservaId:destino.reserva_id,
+            estadiaId:destino.id, codigo, fecha:actual.fecha_servicio,
+            hora:esperado.hora, fin:item.hora_fin, personas:Number(actual.personas),
+            cantidad:Number(actual.cantidad), total:Number(actual.total) });
+    }
+
     function aplicarServicioExistente(item, decision) {
         const existente = decision.candidato, codigo = codigoExistente(existente);
         item.estado = "existente";
@@ -1005,6 +1032,7 @@
             item.identidad = decision.estado === "nuevo" ? "NO_EXISTE" : "IDENTIDAD_AMBIGUA";
             item.decision_identidad = decision.estado;
             if (decision.estado === "revisar") {
+                item.cambioCortesiaExistente = cambioCortesiaExistente(item, decision);
                 item.razones.push(decision.motivo);
                 item.payload = null;
             }
