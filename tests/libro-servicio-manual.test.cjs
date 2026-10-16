@@ -435,6 +435,70 @@ test('Full Day: un pago nuevo después de la vista previa invalida la cortesía 
     assert.equal(e.state.escrituras.length,0);
 });
 
+
+test('Christopher histórico: 12hrs tonel es hora 12:00, Full Day incluye la primera hora',async()=>{
+    const e=casoFullDayTinaja('12hrs tonel');
+    const r=e.state.reservas[0], est=e.state.db.reserva_estadias[0];
+    r.titular='Christopher Zamora';r.fecha_checkin='2026-10-15';r.fecha_checkout='2026-10-15';
+    est.fecha_ingreso='2026-10-15';est.fecha_salida='2026-10-15';
+    e.state.db.reservas[0].titular_nombre=r.titular;
+    e.state.db.pagos.push({id:'pago-full-day',reserva_id:e.state.db.reservas[0].id,
+        estado:'confirmado',tipo_movimiento:'pago',monto:120000,
+        observaciones:'Abono Full Day 2 adultos 120000'});
+    const anterior=JSON.stringify(e.state.db),libro=JSON.stringify(e.state.reservas);
+    const item=primeraTinaja(await e.construir());
+    assert.equal(item.hora,'12:00');
+    assert.equal(item.fecha,'2026-10-15');
+    assert.equal(item.intencion_cobro,'cortesia');
+    assert.equal(item.proveniencia.tipo_cobro,'INFERIDO_FULLDAY_VERIFICADO');
+    assert.equal(item.reglaFullDay?.pagosRevisados,true);
+    assert.equal(item.estado,'listo');
+    assert.equal(item.payload.tipo_cobro,'cortesia');
+    assert.equal(e.state.escrituras.length,0);
+    assert.equal(JSON.stringify(e.state.db),anterior);
+    assert.equal(JSON.stringify(e.state.reservas),libro);
+});
+
+test('Full Day: hora abreviada 12hrs, 12 hrs o 12:00 hrs no representa doce horas de duración',async()=>{
+    for(const [texto,hora] of [
+        ['12hrs tonel','12:00'],
+        ['12 hrs tonel','12:00'],
+        ['12:00 hrs tonel','12:00'],
+        ['1 hora de tinaja tonel 12hrs','12:00'],
+        ['18hrs jacuzzi','18:00']
+    ]){
+        const e=casoFullDayTinaja(texto),item=primeraTinaja(await e.construir());
+        assert.equal(item.hora,hora,texto);
+        assert.equal(item.intencion_cobro,'cortesia',texto);
+        assert.ok(item.reglaFullDay,texto);
+        assert.equal(e.state.escrituras.length,0,texto);
+    }
+});
+
+test('Full Day: duración real de varias horas o marcador ambiguo sigue pidiendo revisión',async()=>{
+    for(const texto of [
+        '2 horas tinaja tonel 12hrs',
+        '2 hrs tonel 12hrs',
+        '12 hrs de tinaja tonel',
+        '12 horas tinaja tonel',
+        '3 horas jacuzzi 18hrs'
+    ]){
+        const e=casoFullDayTinaja(texto),item=primeraTinaja(await e.construir());
+        assert.equal(item.reglaFullDay??null,null,texto);
+        assert.notEqual(item.intencion_cobro,'cortesia',texto);
+        assert.equal(e.state.escrituras.length,0,texto);
+    }
+});
+
+test('Full Day 12hrs: un pago independiente de tinaja o estadía normal impide inferir cortesía',async()=>{
+    const pago=casoFullDayTinaja('12hrs tonel');
+    pago.state.db.pagos.push({id:'pago-tinaja',reserva_id:pago.state.db.reservas[0].id,
+        estado:'confirmado',tipo_movimiento:'pago',monto:30000,observaciones:'Pago tinaja tonel'});
+    assert.equal(primeraTinaja(await pago.construir()).reglaFullDay??null,null);
+    const noFullDay=casoFullDayTinaja('12hrs tonel');
+    noFullDay.state.reservas[0].tipo_estadia='alojamiento';
+    assert.equal(primeraTinaja(await noFullDay.construir()).reglaFullDay??null,null);
+});
 test('Full Day: evidencia explícita cobrable o de cortesía conserva su autoridad',async()=>{
     const cobro=casoFullDayTinaja('TINAJA TONEL X PAGAR CLP$30.000 18:00 A 19:00');
     const pago=primeraTinaja(await cobro.construir());

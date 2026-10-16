@@ -553,7 +553,26 @@
 
         const texto = normalizar(s.texto_original);
         if (/\b(?:adicional|extra|extension|extender|segunda|segundo)\b/.test(texto)) return null;
-        const horas = [...texto.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(?:horas?|hrs?|hr\b|h\b)/g)]
+        // "12hrs tonel" designa las 12:00, no 12 horas contratadas.
+        // Sólo descontar un marcador horario si coincide con la hora ya
+        // reconocida por el lector. Las duraciones reales siguen bloqueadas.
+        const inicioRegistrado = minutosHora(item.hora);
+        const sinRelojConMinutos = texto.replace(
+            /\b([01]?\d|2[0-3])[:.,]([0-5]\d)\s*(?:hrs?|hr|h)\b/g,
+            (valor, hh, mm) => Number(hh)*60+Number(mm) === inicioRegistrado ? ' ' : valor);
+        const horas = [...sinRelojConMinutos.matchAll(
+            /\b(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|hr\b|h\b)/g)]
+            .filter(m => {
+                const numero = Number(m[1].replace(',','.'));
+                if (/^horas?$/.test(m[2])) return true; // Duración expresa, nunca hora de reloj.
+                const prefijo = sinRelojConMinutos.slice(Math.max(0,m.index-28),m.index);
+                const sufijo = sinRelojConMinutos.slice(m.index+m[0].length,m.index+m[0].length+22);
+                const esHoraDelDia = Number.isInteger(numero) && numero>=9 && numero<=20 &&
+                    inicioRegistrado===numero*60 &&
+                    !/\b(?:por|durante|duracion|cantidad|extension|de|x)\s*$/.test(prefijo) &&
+                    !/^\s+de\s+(?:tinaja|tonel|jacuzzi|horas?)\b/.test(sufijo);
+                return !esHoraDelDia;
+            })
             .map(x=>Number(x[1].replace(',','.')));
         const minutos = [...texto.matchAll(/\b(\d+)\s*(?:minutos?|mins?|min\b)/g)].map(x=>Number(x[1]));
         if (horas.some(n=>n!==1) || minutos.some(n=>n!==60)) return null;
