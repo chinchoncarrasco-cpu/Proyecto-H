@@ -145,7 +145,10 @@ function sistema(a=r(),extra={}){return {id:'stay-a',reserva_id:'reserva-a',fech
 function conSistema(h,rows){h.cliente.from=table=>{const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range:async()=>({data:table==='reserva_estadias'?rows:[]})};return b;};}
 test('estadía existente queda fuera del resolver inline y de las actualizaciones con resolución',async()=>{
  const h=entorno(),a=r(),d=await h.R.confirmar(a,{adultos:2,ninos:0,mascotas:0},1);conSistema(h,[sistema(a)]);
- h.R.adjuntar(h.out,[a],1);await tick();assert.equal(h.boton('Completar ocupación').hidden,true);assert.match(h.texto(),/Requiere revisión manual.*sólo permite crear reservas nuevas/);
+ const comparacion=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ assert.equal(comparacion[0].estado,'asociada');
+ h.R.adjuntar(h.out,[a],1,async()=>{},comparacion);
+ assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,0);
  const p=await preparar(h,[a]);assert.ok(p.items.some(i=>i.motivos.some(m=>/sólo permite crear reservas nuevas/.test(m))));
  assert.equal(h.Q.serializarIncorporacion(p).filter(i=>i.tipo==='reserva_actualizar').length,0);assert.equal(h.data[0].id,d.id);
 });
@@ -202,4 +205,64 @@ test('hermanas multicabaña requieren resoluciones propias y conservan sus origi
  const items=h.Q.serializarIncorporacion(await preparar(h,[a,b]));assert.equal(items[0].estadias.length,2);
  assert.deepEqual(copies.map(x=>x.adultos),[2,4]);assert.notEqual(items[0].estadias[0].resolucion_manual.id,items[0].estadias[1].resolucion_manual.id);
  assert.equal(JSON.stringify([a,b]),before);
+});
+
+test('Clayton: Check-out manual con 5 adultos no reaparece como ocupación pendiente',async()=>{
+ const h=entorno(),a=r({titular:'Clayton Parada',cabana:9,fecha_checkin:'2026-10-09',fecha_checkout:'2026-10-10',noches:1});
+ const activa=sistema(a,{id:'stay-clayton',reserva_id:'reserva-clayton',adultos:5,ninos:0,mascotas:0,
+  estado_estadia:'checked_out',reservas:{id:'reserva-clayton',titular_nombre:a.titular,estado_reserva:'checked_out'}});
+ conSistema(h,[activa]);
+ const comp=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ assert.equal(comp[0].estado,'asociada');
+ h.R.adjuntar(h.out,[a],1,async()=>{},comp);
+ assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,0);
+ assert.equal(h.writes(),0);
+ assert.equal(a.adultos,null);
+});
+test('Maximiliano: cancelada histórica + Check-out activo no producen una revisión falsa',async()=>{
+ const h=entorno(),a=r({titular:'Maximiliano Pumarino',cabana:10,fecha_checkin:'2026-10-03',fecha_checkout:'2026-10-04',noches:1});
+ const activa=sistema(a,{id:'stay-pumarino-activa',reserva_id:'reserva-pumarino-activa',adultos:2,ninos:0,mascotas:0,
+  estado_estadia:'checked_out',reservas:{id:'reserva-pumarino-activa',titular_nombre:a.titular,estado_reserva:'checked_out'}});
+ const cancelada=sistema(a,{id:'stay-pumarino-cancelada',reserva_id:'reserva-pumarino-cancelada',adultos:2,ninos:0,mascotas:0,
+  estado_estadia:'cancelada',reservas:{id:'reserva-pumarino-cancelada',titular_nombre:a.titular,estado_reserva:'cancelada'}});
+ conSistema(h,[cancelada,activa]);
+ const comp=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ assert.equal(comp[0].estado,'asociada');
+ assert.equal(comp.snapshot.estadias.length,1);
+ assert.equal(comp.snapshot.estadias_todas.length,2);
+ h.R.adjuntar(h.out,[a],1,async()=>{},comp);
+ assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,0);
+ assert.equal(h.writes(),0);
+});
+test('dos candidatas activas no se concilian por nombre, fecha y CAB sin certeza',async()=>{
+ const h=entorno(),a=r({titular:'Persona Prueba',cabana:7,fecha_checkin:'2026-10-09',fecha_checkout:'2026-10-10'});
+ const otra=sistema(a,{id:'stay-dos',reserva_id:'reserva-dos',adultos:2,ninos:0,mascotas:0,
+  reservas:{id:'reserva-dos',titular_nombre:a.titular,estado_reserva:'pendiente'}});
+ conSistema(h,[sistema(a,{adultos:2,ninos:0,mascotas:0}),otra]);
+ const comp=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ assert.equal(comp[0].estado,'ambigua');
+ h.R.adjuntar(h.out,[a],1,async()=>{},comp);await tick();
+ assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,1);
+ assert.match(h.texto(),/varias estadías candidatas/i);
+ assert.equal(h.boton('Completar ocupación').hidden,true);
+ assert.equal(h.writes(),0);
+});
+test('una reserva asociada con adultos nulos aún advierte y nunca los inventa',async()=>{
+ const h=entorno(),a=r({titular:'Persona Pendiente',cabana:8});
+ conSistema(h,[sistema(a,{adultos:null,ninos:0,mascotas:0})]);
+ const comp=await h.Q.compararSistema([a],h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ assert.equal(comp[0].estado,'asociada');
+ h.R.adjuntar(h.out,[a],1,async()=>{},comp);await tick();
+ assert.equal(h.out.querySelectorAll('.haiku-libro-resolucion').length,1);
+ assert.match(h.texto(),/ocupación allí requiere revisión desde la ficha/);
+ assert.equal(h.boton('Completar ocupación').hidden,true);
+ assert.equal(h.writes(),0);
+});
+test('cuando la comparación llega tarde, el aviso falso desaparece sin escrituras',async()=>{
+ const h=entorno(),a=r({titular:'Persona Ya Registrada',cabana:6});
+ conSistema(h,[sistema(a,{adultos:2,ninos:0,mascotas:0})]);
+ h.R.adjuntar(h.out,[a],1);await tick();
+ const tarjeta=h.out.querySelector('.haiku-libro-resolucion');
+ assert.ok(!tarjeta || tarjeta.hidden === true);
+ assert.equal(h.writes(),0);
 });
