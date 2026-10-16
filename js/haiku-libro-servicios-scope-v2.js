@@ -1086,7 +1086,100 @@
         return `CAB ${item.reserva.cabana} · ${item.reserva.titular} · ${item.mapa.nombre || item.servicio.concepto}`;
     }
 
+    // Reutiliza la RPC protegida normal→cortesía sin crear otra tinaja.
+    async function abrirManualCortesiaExistente(item, out, texto, overrides, estado) {
+        const esperado = item.cambioCortesiaExistente;
+        const api = root.HAIKU_ASISTENTE_SERVICIOS_CORTESIA_V1;
+        if (!api?.preparar || !api?.confirmar || !api?.verificarEstado || !api?.renderizar)
+            throw Error('El cambio seguro a cortesía no está disponible.');
+        const apertura = ++estado.apertura, vigente = () => estado.apertura === apertura;
+        out.querySelector('.haku-libro-servicio-manual')?.remove();
+        const panel = document.createElement('section');
+        panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
+        const titulo = document.createElement('h3');
+        titulo.textContent = 'Aprobación manual · Tinaja existente';
+        const origen = document.createElement('p'); origen.className = 'haiku-manual-caption';
+        origen.textContent = item.reserva.titular + ' · CAB ' + item.reserva.cabana +
+            ' · ' + esperado.fecha + ' · ' + esperado.hora + '–' + esperado.fin;
+        const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion';
+        aviso.setAttribute('role','status'); aviso.textContent = 'Verificando servicio y saldo…';
+        const contenido = document.createElement('div');
+        const cancelar = document.createElement('button'); cancelar.type = 'button';
+        cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario';
+        cancelar.textContent = 'Cancelar';
+        cancelar.addEventListener('click', () => { estado.apertura++; panel.remove(); });
+        panel.append(titulo,origen,aviso,contenido,cancelar);out.append(panel);
+        const consulta = { intencion:'MODIFICAR_SERVICIO_EXISTENTE', accion:'NORMAL_A_CORTESIA',
+            titular:item.reserva.titular, cabana:Number(item.reserva.cabana),
+            concepto:esperado.codigo === 'tinajaTonel' ? 'tinaja tonel' : 'tinaja jacuzzi',
+            codigo_servicio:esperado.codigo, codigos_servicio:[esperado.codigo],
+            fecha:esperado.fecha,hora:esperado.hora,errores:[] };
+        try {
+            const p = await api.preparar(consulta);
+            if (!vigente()) return;
+            const s = p?.candidato;
+            if (p?.estado !== 'propuesta' || s?.id !== esperado.servicioId ||
+                s.reserva_id !== esperado.reservaId || s.estadia_id !== esperado.estadiaId ||
+                s.catalogo?.codigo !== esperado.codigo || s.fecha_servicio !== esperado.fecha ||
+                horaCorta(s.hora_inicio) !== esperado.hora || horaCorta(s.hora_fin) !== esperado.fin ||
+                Number(s.cantidad) !== esperado.cantidad || Number(s.personas) !== esperado.personas ||
+                Number(s.total) !== esperado.total) {
+                aviso.textContent = p?.mensaje || 'El servicio ya no coincide; vuelve a revisar.';
+                return;
+            }
+            contenido.innerHTML = api.renderizar(p);
+            const motivo = contenido.querySelector('[data-servicio-cortesia-motivo]');
+            const confirmar = contenido.querySelector('[data-servicio-cortesia-confirmar]');
+            const cancelarInterno = contenido.querySelector('[data-servicio-cortesia-cancelar]');
+            if (!motivo || !confirmar) throw Error('Falta el formulario seguro de cortesía.');
+            cancelarInterno?.addEventListener('click',()=>{estado.apertura++;panel.remove();});
+            motivo.addEventListener('input',()=>{confirmar.disabled = estado.ocupado || !motivo.value.trim();});
+            confirmar.disabled = true;
+            aviso.textContent = 'Tinaja y cargo comprobados. Indica el motivo y confirma.';
+            const resultado = async r => {
+                if (!vigente()) return;
+                if (r?.estado === 'realizado' || r?.estado === 'already_courtesy') {
+                    const actualizado = await construir(texto,overrides,estado.manuales);
+                    if (vigente()) renderizar(actualizado,out,texto,overrides);
+                    return;
+                }
+                aviso.textContent = r?.mensaje || 'No se pudo verificar el cambio.';
+                contenido.innerHTML = api.renderizar(r);
+                contenido.querySelectorAll('[data-servicio-cortesia-reintentar]')
+                    .forEach(b=>{b.hidden=true;});
+                contenido.querySelector('[data-servicio-cortesia-releer]')?.addEventListener('click', async()=>{
+                    if (estado.ocupado || !vigente()) return;
+                    estado.ocupado=true;
+                    try{await resultado(await api.verificarEstado(p));}
+                    finally{estado.ocupado=false;}
+                });
+            };
+            confirmar.addEventListener('click',async()=>{
+                if(confirmar.disabled || estado.ocupado || !vigente()) return;
+                estado.ocupado=true;confirmar.disabled=true;cancelar.disabled=true;
+                try {
+                    const relectura=await construir(texto,overrides,estado.manuales);
+                    if(!vigente())return;
+                    const coincidencias=relectura.items.filter(x=>x.item_id===item.item_id);
+                    if(coincidencias.length!==1 || coincidencias[0].firmaManual!==item.firmaManual ||
+                        coincidencias[0].cambioCortesiaExistente?.servicioId!==esperado.servicioId)
+                        throw Error('La evidencia o el servicio cambió. Vuelve a abrir la revisión.');
+                    await resultado(await api.confirmar(p,motivo.value.trim(),{
+                        onEstado:mensaje=>{if(vigente())aviso.textContent=mensaje;}
+                    }));
+                }catch(e){
+                    if(vigente()){
+                        aviso.textContent=e.message||'No se pudo comprobar el resultado.';
+                        // Una respuesta perdida nunca permite reintento automático.
+                        await resultado(await api.verificarEstado(p));
+                    }
+                }finally{estado.ocupado=false;if(vigente())cancelar.disabled=false;}
+            });
+        } catch(e) {if(vigente())aviso.textContent=e.message||'No fue posible comprobar la tinaja.';}
+    }
+
     async function abrirManual(item, out, texto, overrides, estado) {
+        if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado);
         const base = item.manual_base || item;
         const apertura = ++estado.apertura;
         const contrato = await cargarContratoManual();
