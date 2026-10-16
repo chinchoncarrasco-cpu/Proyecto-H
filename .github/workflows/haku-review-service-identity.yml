@@ -1,0 +1,54 @@
+name: Haku service identity review
+
+on:
+  push:
+    branches: [fix/libro-servicios-existentes-estado-pago]
+    paths:
+      - '.haku-review-service-fix.py'
+      - 'tests/libro-servicios-existentes-finanzas.test.cjs'
+      - '.github/workflows/haku-review-service-identity.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/libro-servicios-existentes-estado-pago'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Baseline sin nuevas pruebas
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/haku-review
+          node --test tests/libro-servicio-manual.test.cjs 2>&1 | tee /tmp/haku-review/baseline.tap
+      - name: Aplicar sólo el parche revisado
+        run: |
+          python3 .haku-review-service-fix.py
+          node --check js/haiku-libro-servicios-scope-v2.js
+          git diff --check
+          test "$(git diff --name-only)" = 'js/haiku-libro-servicios-scope-v2.js'
+          git diff > /tmp/haku-review/candidate.patch
+      - name: Identidad, finanzas y regresiones - sólo fixtures, sin Supabase
+        run: |
+          set -o pipefail
+          node --test tests/libro-servicio-manual.test.cjs tests/libro-servicios-existentes-finanzas.test.cjs tests/haiku-servicios-identidad-proveniencia.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-servicios-noche-manual.test.cjs 2>&1 | tee /tmp/haku-review/tests.tap
+      - name: Guardar sólo código verificado en la rama de revisión
+        run: |
+          test "$(git diff --name-only)" = 'js/haiku-libro-servicios-scope-v2.js'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- js/haiku-libro-servicios-scope-v2.js
+          git commit -m 'fix(libro): reconocer servicios únicos sin hora y mostrar su saldo real'
+          git push origin HEAD:refs/heads/fix/libro-servicios-existentes-estado-pago
+          git rev-parse HEAD > /tmp/haku-review/verified-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haku-service-identity-review
+          path: /tmp/haku-review
+          retention-days: 7
