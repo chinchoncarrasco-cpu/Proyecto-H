@@ -200,6 +200,61 @@
                 .haiku-ajuste-cargo-resumen { grid-template-columns:1fr; }
             }
         `;
+        style.textContent += `
+            /* Libro: panel a la izquierda de Haku, como «Ver reserva». */
+            .haiku-ajuste-cargo-overlay.haiku-ajuste-cargo-overlay--libro {
+                position: fixed;
+                inset: 0 var(--haiku-panel-coordinado-ancho, clamp(320px, 34vw, 486px)) 0 auto;
+                width: clamp(260px, 30vw, 500px);
+                height: 100dvh;
+                z-index: 90020;
+                display: flex;
+                align-items: stretch;
+                justify-content: stretch;
+                padding: 0;
+                background: #fff;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                box-shadow: -14px 0 42px #172f2229;
+            }
+            .haiku-ajuste-cargo-overlay--libro > .haiku-ajuste-cargo-modal {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                height: 100dvh;
+                max-height: 100dvh;
+                min-height: 0;
+                overflow: hidden;
+                border: 0;
+                border-left: 1px solid #d6e2da;
+                border-radius: 0;
+                box-shadow: none;
+            }
+            .haiku-ajuste-cargo-overlay--libro .haiku-ajuste-cargo-cabecera {
+                flex: 0 0 auto;
+            }
+            .haiku-ajuste-cargo-overlay--libro .haiku-ajuste-cargo-cuerpo {
+                flex: 1 1 auto;
+                min-height: 0;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+            }
+            @media (max-width: 900px) {
+                .haiku-ajuste-cargo-overlay.haiku-ajuste-cargo-overlay--libro {
+                    inset: 0;
+                    width: 100vw;
+                    height: 100dvh;
+                    z-index: 90020;
+                    padding: 0;
+                }
+                .haiku-ajuste-cargo-overlay--libro > .haiku-ajuste-cargo-modal {
+                    width: 100vw;
+                    height: 100dvh;
+                    max-height: 100dvh;
+                    border-radius: 0;
+                }
+            }
+`;
         document.head.appendChild(style);
     }
 
@@ -353,6 +408,8 @@
         const overlay = document.getElementById("haiku-ajuste-cargo-overlay");
         if (!overlay || guardando) return;
         overlay.hidden = true;
+        overlay.classList.remove('haiku-ajuste-cargo-overlay--libro');
+        overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal','true');
         document.body.style.overflow = "";
     }
 
@@ -457,7 +514,7 @@
         }
     }
 
-    async function abrirModal() {
+    async function abrirModal(opciones = {}) {
         if (!window.haikuSesion) {
             alert("Debes iniciar sesión para ajustar cargos.");
             return;
@@ -473,9 +530,27 @@
         if (!overlay) return;
 
         resetModal();
+        const desdeLibro = opciones?.desdeLibro === true;
+        overlay.classList.toggle('haiku-ajuste-cargo-overlay--libro',desdeLibro);
+        overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal',
+            desdeLibro && window.matchMedia?.('(min-width: 901px)')?.matches ? 'false' : 'true');
+        const titulo = document.getElementById('haiku-ajuste-cargo-titulo');
+        if (titulo) titulo.textContent = desdeLibro ? 'Revisar penalidad 10%' : 'Ajustar cargo';
+        const ceja = overlay.querySelector('.haiku-ajuste-cargo-cabecera small');
+        if (ceja) ceja.textContent = desdeLibro ? 'LIBRO · PROYECTO H' : 'Control financiero';
         overlay.hidden = false;
         document.body.style.overflow = "hidden";
-        await cargarReservas();
+        if (desdeLibro) {
+            // Ya conocemos la reserva, no esperar la carga de todas las del día.
+            const select = document.getElementById('haiku-ajuste-reserva');
+            if (select) {
+                select.innerHTML = '<option value="">Verificando reserva del Libro…</option>';
+                select.disabled = true;
+            }
+        } else {
+            await cargarReservas();
+        }
+        return true;
     }
 
     // Abre el mismo formulario financiero para una reserva del Libro fuera del día visible.
@@ -486,7 +561,7 @@
             !/^\d{4}-\d{2}-\d{2}$/.test(fechaIngreso || '') ||
             !Number.isSafeInteger(montoLibro) || montoLibro<=0)
             throw Error('La penalidad no tiene una reserva, fecha o importe verificable.');
-        await abrirModal();
+        await abrirModal({desdeLibro:true});
         const overlay=document.getElementById('haiku-ajuste-cargo-overlay');
         if (!overlay || overlay.hidden) return false;
         try {
@@ -494,6 +569,7 @@
                 .select('id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero),reservas(id,titular_nombre,estado_reserva)')
                 .eq('reserva_id',id).eq('fecha_ingreso',fechaIngreso);
             if (error) throw error;
+            if (overlay.hidden || !overlay.classList.contains('haiku-ajuste-cargo-overlay--libro')) return false;
             const compatibles=(data || []).filter(e =>
                 e.reserva_id === id && e.fecha_ingreso === fechaIngreso &&
                 Number(e.cabanas?.numero) === cabana &&
@@ -503,16 +579,17 @@
             const select=document.getElementById('haiku-ajuste-reserva');
             if (!select) throw Error('No se pudo abrir el selector de reserva.');
             const titular=compatibles[0].reservas?.titular_nombre || 'Reserva seleccionada';
-            if (![...select.options].some(opcion => opcion.value === id)) {
-                const opcion=document.createElement('option');
-                opcion.value=id;
-                opcion.textContent=`CAB ${cabana} · ${titular} · ${fechaIngreso} (Libro)`;
-                select.appendChild(opcion);
-            }
+            select.innerHTML = '';
+            const opcion=document.createElement('option');
+            opcion.value=id;
+            opcion.textContent=`CAB ${cabana} · ${titular} · ${fechaIngreso} (Libro)`;
+            select.appendChild(opcion);
             reservaSeleccionada=id;
             select.value=id;
+            select.disabled=true;
             resumenActual=null;
             await cargarResumenSeleccionado();
+            if (overlay.hidden || !overlay.classList.contains('haiku-ajuste-cargo-overlay--libro')) return false;
             if (!resumenActual) throw Error('No se pudo consultar el saldo y los ajustes de esta reserva.');
             overlay.dataset.haikuLibroMonto=String(montoLibro);
             const observacion=document.getElementById('haiku-ajuste-observacion');
