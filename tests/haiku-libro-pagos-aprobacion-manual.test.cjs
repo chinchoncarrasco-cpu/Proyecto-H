@@ -719,7 +719,7 @@ test('Mery: transferencia Late Check-out sin ID bancario permite crear servicio 
  assert.equal(item.categoria,'dudosos');
  assert.equal(item.manualPago?.tipo,'crear_servicio_faltante');
  assert.equal(item.aprobable,false);assert.equal(item.seleccionado,false);
- assert.equal(item.payload?.aprobado_manualmente,true,false);
+ assert.notEqual(item.payload?.aprobado_manualmente,true);
  const posterior=await h.resolver(plan,item,{tipo:'crear_servicio_faltante',indice:0,
   codigo:'lateCheckout',fecha:FECHA,hora:'12:00',cantidad:2,personas:2,
   precio:10000,tipoCobro:'normal',precioManualConfirmado:true});
