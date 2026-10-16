@@ -435,7 +435,7 @@ $function$
     and p_argumentos->>'p_referencia_externa'=p_origen->'evidencia_libro'->>'texto_original';
 
   if p_argumentos->>'p_medio_pago' is distinct from 'airbnb_prepaid_card'
-     and codaut_norm is null and (folio_norm is null or bovtar_norm is null) and not v_transferencia_late_manual then
+     and codaut_norm is null and (folio_norm is null or bovtar_norm is null) and v_transferencia_late_manual is distinct from true then
     if p_argumentos->>'p_medio_pago'='efectivo' then
       raise exception 'Efectivo sin identificador transaccional fuerte no está habilitado en FASE 4C';
     end if;
