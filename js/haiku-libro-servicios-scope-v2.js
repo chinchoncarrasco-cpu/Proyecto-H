@@ -496,7 +496,7 @@
         const texto = [p.concepto,p.referencia_externa,p.observaciones,p.texto_original,
             origen.concepto,origen.evidencia_libro?.concepto,
             JSON.stringify(origen.aplicaciones_servicio_v1?.aplicaciones || [])].filter(Boolean).join(' ');
-        return /\b(?:tinajas?|tonel(?:es)?|jacuzzis?|jacusi|hot\s*tub)\b/.test(normalizar(texto));
+        return /\b(?:tinajas?|tonel(?:es)?|jacuzzis?|jacusi|hot\s*tub)\b/.test(normalizar(texto).replace(/[_-]/g,' '));
     }
 
     async function finanzasFullDay(cliente, ids) {
@@ -566,7 +566,10 @@
 
         const pagosLibro = [...(r.pagos||[]),...(r.pagos_sin_asociacion||[])];
         const fiscal = finanzas.get(e.reserva_id);
-        if (pagosLibro.some(pagoEspecificoTinaja) || fiscal.pagos.some(pagoEspecificoTinaja) ||
+        const pagoRelacionado = p=>(p.datos_origen?.aplicaciones_servicio_v1?.aplicaciones||[])
+            .some(a=>existentesTinaja.some(srv=>srv.id===a.servicio_id));
+        if (pagosLibro.some(pagoEspecificoTinaja) ||
+            fiscal.pagos.some(p=>pagoEspecificoTinaja(p) || pagoRelacionado(p)) ||
             fiscal.cargos.some(c=>existentesTinaja.some(srv=>srv.id===c.servicio_id) &&
                 Number(c.aplicado_neto)>0)) return null;
 
@@ -1701,7 +1704,7 @@
         const reglas = document.createElement("details"); reglas.className = "haku-libro-servicios-sites__reglas";
         const reglasSummary = document.createElement("summary"); reglasSummary.textContent = "Reglas de lectura del Libro";
         const reglasTexto = document.createElement("p");
-        reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30. En 1 noche Haku puede inferir la fecha por horario; en varias noches no adivina. La semántica del Libro no cambia después de clasificarse: identidad, completitud y cobro se revisan por separado.";
+        reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30, con 1 hora de tinaja Tonel o Jacuzzi incluida. Haku comprueba pagos antes de inferir cortesía; horas extra o pagos específicos requieren revisión. En 1 noche puede inferir fecha por horario; en varias noches no adivina. Identidad, completitud y cobro se revisan por separado.";
         reglas.append(reglasSummary, reglasTexto); out.append(reglas);
         out.append(
             seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-libro-servicios__seccion--servicios", "✓", null, opciones),
