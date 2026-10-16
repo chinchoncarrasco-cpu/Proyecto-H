@@ -208,7 +208,7 @@ async function escenarioCortesiaExistente() {
 test('Ana: aprobación manual identifica misma tinaja, sólo contradicción tipo_cobro, sin preparar otra',async()=>{
     const e=await escenarioCortesiaExistente(),r=await e.construir(),item=servicios(r)[0];
     assert.equal(item.estado,'revisar');assert.equal(item.payload,null);
-    assert.deepEqual(item.razones,['El servicio existente contradice datos explícitos del Libro: tipo_cobro.']);
+    assert.deepEqual(Array.from(item.razones),['El servicio existente contradice datos explícitos del Libro: tipo_cobro.']);
     assert.equal(item.cambioCortesiaExistente?.servicioId,'tinaja-unica');
     assert.equal(item.cambioCortesiaExistente.total,30000);
     assert.equal(item.cambioCortesiaExistente.codigo,'tinajaTonel');
