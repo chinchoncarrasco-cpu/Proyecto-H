@@ -455,7 +455,21 @@
             }
             bloque.length = 0;
         };
-        for (const f of fragmentosServicioPosicionales(fuente)) {
+        const fragmentos = fragmentosServicioPosicionales(fuente);
+        for (const [indice, f] of fragmentos.entries()) {
+            const anteriores = fragmentos.slice(0, indice), previo = anteriores.at(-1)?.texto || '';
+            // Fecha aislada tras operador y datos de la reserva, ANTES de toda
+            // prestación: pertenece a su registro, no al masaje que sigue.
+            // Una fecha suelta de un bloque de masajes conserva su significado.
+            const fechaRegistro = opciones.origen_campo === 'notas_reserva' &&
+                /^\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})$/.test(f.texto) &&
+                /^[A-Z]{2,4}$/.test(previo) && !/^(?:LUN|MAR|MIE|JUE|VIE|SAB|DOM)$/.test(previo) &&
+                anteriores.some(x => /@|\b\d+\s*(?:adl|adultos?|noches?)\b/i.test(x.texto)) &&
+                !anteriores.some(x => conceptosDeServicio(x.texto).length);
+            if (fechaRegistro) {
+                vaciar(); entradas.push({ parte:f.texto, inicio:f.inicio, fin:f.fin });
+                continue;
+            }
             const conceptos = conceptosDeServicio(f.texto);
             if ((conceptos.length === 1 && conceptos[0] === 'masaje') || (!conceptos.length && esComplementoMasaje(f.texto))) bloque.push(f);
             else { vaciar(); entradas.push({ parte: f.texto, inicio: f.inicio, fin: f.fin }); }
@@ -519,6 +533,13 @@
         }
         if (conceptos.length === 1 && conceptos[0] === "cama_adicional" && contextoReserva?.origen_campo !== "servicios") {
             evidencias.push("cama adicional indicada fuera de la estructura de Servicios");
+            return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
+        if (conceptos.length === 1 && conceptos[0] === 'cuna' &&
+            contextoReserva?.origen_campo !== 'servicios' &&
+            /^(?:agregar|dejar|preparar|poner|colocar)\b/.test(t) &&
+            !clasificarIntencionFinanciera(texto).evidencias.length) {
+            evidencias.push('solicitud de cuna para preparar el alojamiento; nota sin cargo');
             return base(SEMANTICA_SERVICIO.NO_SERVICIO);
         }
         const mencionAislada = /^(?:cama\s*adicional|camaadicional|cuna|tinaja|jacuzzi|tonel|masaje)$/i.test(t);
