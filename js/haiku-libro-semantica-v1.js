@@ -833,7 +833,7 @@
                     // Una nota de reserva reagendada sin importe no es un pago.
                     // Conservar el texto y la celda para consulta sin crear un movimiento financiero.
                     if (!amount?.valor?.trim() && amount?.valorNumero == null &&
-                        /\breserva\s+(?:re\s*agendada|reagendada|reprogramada)\b/.test(t) &&
+                        /\breserva\s+(?:re[\s-]*agendada|reprogramada)\b/.test(t) &&
                         !/\b(?:transferencia|transf|webpay|efectivo|debito|credito|abono|pago|pagado|penalidad|reembolso|cobro)\b/.test(t)) {
                         const origenNota = detail || concept;
                         res.anotaciones.push({texto_original:text,origen:origen(origenNota),
