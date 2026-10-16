@@ -88,6 +88,9 @@ const foto = async (locator, nombre) => {
                 assert.deepEqual(await page.evaluate(() => reservasAbiertas.at(-1)), { id, texto: 'Ver reserva' });
                 await row.getByRole('button', { name: 'Aprobación manual', exact: true }).click();
                 const panel = page.locator('.haku-libro-servicio-manual'); await panel.waitFor({ state: 'visible' });
+                assert.equal(await row.locator(':scope > .haku-libro-servicio-manual').count(),1,
+                    'la aprobación manual debe abrirse debajo de la misma ficha, no al final del resultado');
+                assert.equal(await page.locator('#out > .haku-libro-servicio-manual').count(),0);
                 assert.deepEqual(await panel.locator('[data-campo-manual]').evaluateAll(els => els.map(x => x.dataset.campoManual)), campos);
                 assert.match(await panel.innerText(), /Datos conocidos:.*60 minutos|Datos conocidos:.*cortesía|Datos conocidos:.*cobrable/);
                 if (!baseline) {
