@@ -789,6 +789,17 @@
         };
     }
 
+    // Una hora incluida no es una tinaja agendada. El beneficio sin horario
+    // sólo pasa a servicio si hay una prestación confirmada o ya registrada.
+    function esBeneficioTinajaPorCoordinar(item) {
+        const s = item?.servicio, t = normalizar(s?.texto_original);
+        return item?.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
+            item.intencion_cobro === 'cortesia' && esTinajaServicio(s) &&
+            !s.promoTinajaMixta && !s.hora && !s.hora_fin &&
+            /\b(?:1|una)\s*(?:hora|hrs?)\b/.test(t) &&
+            !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|reservo|agendo|confirmo|contrato)\b/.test(t);
+    }
+
     function prepararNota(reserva, texto, asociacion, semantica = "NO_SERVICIO") {
         const razones = [];
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
@@ -1296,6 +1307,23 @@
             const item = items[i], regla = reglaTinajaIncluidaFullDay(item, items, existentes, verificacionFullDay);
             if (regla) items[i] = prepararServicio(item.reserva, item.servicio, item.asociacion,
                 item.nocheManual, {}, regla);
+        }
+
+        // Resolver el beneficio como nota ANTES de aplicar decisiones manuales
+        // o generar propuestas. Primero preservar la autoridad de lo ya agendado.
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (!esBeneficioTinajaPorCoordinar(item)) continue;
+            const decision = decisionServicioExistente(item, existentes.servicios);
+            if (decision.estado === 'existente' || decision.candidatos?.length) continue;
+            const nota = prepararNota(item.reserva,
+                item.servicio.texto_original || item.servicio.fragmento_original,
+                item.asociacion);
+            nota.inferencias.push('Cortesía incluida pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.');
+            // La misma evidencia puede venir también en menciones/Notas: una sola nota.
+            if (items.some(x => x.kind === 'nota' && x.item_id === nota.item_id)) {
+                items.splice(i--, 1);
+            } else items[i] = nota;
         }
 
         // Firma exacta, sin persistencia: incluye todos los datos leídos del Libro y la asociación actual.
