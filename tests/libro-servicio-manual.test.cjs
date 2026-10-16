@@ -314,6 +314,25 @@ test('Full Day: Tonel o Jacuzzi único de 1 hora sin pago se clasifica cortesía
     }
 });
 
+test('Full Day: una tinaja sin tipo mantiene selección de Tonel/Jacuzzi, sin pedir tipo de cobro',async()=>{
+    const e=casoFullDayTinaja('1 HORA DE TINAJA CALIENTE 18:00 A 19:00');
+    const res=await e.construir(),item=primeraTinaja(res);
+    assert.equal(item.intencion_cobro,'cortesia');
+    assert.equal(item.estado,'revisar','todavía falta escoger Tonel o Jacuzzi');
+    assert.ok(!item.razones.some(x=>/definir si el servicio es cobrable/i.test(x)));
+    const out=new e.Element('div');e.document.card=out;
+    e.api.renderizar(res,out,consulta);
+    const btn=out.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual');
+    assert.ok(btn);
+    await btn.listeners.click();
+    const panel=out.querySelector('.haku-libro-servicio-manual');
+    assert.ok(panel);
+    const inputs=panel.querySelectorAll('input,select');
+    assert.ok(inputs.some(x=>x.dataset.campoManual==='codigo_servicio'));
+    assert.ok(!inputs.some(x=>x.dataset.campoManual==='tipo_cobro'));
+    assert.equal(e.state.escrituras.length,0);
+});
+
 test('Full Day: cobro de tinaja en Pagos o Libro impide inferir gratuidad',async()=>{
     for(const origen of ['pagos','libro','aplicaciones']) {
         const e=casoFullDayTinaja('TINAJA TONEL DE MADERA 18:00 A 19:00');
