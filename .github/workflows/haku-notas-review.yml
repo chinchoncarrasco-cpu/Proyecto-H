@@ -1,0 +1,47 @@
+name: Haku courtesy notes review
+on:
+  push:
+    branches: [fix/libro-cortesia-por-coordinar-review]
+    paths:
+      - '.haku-notas-review.py'
+      - 'tests/libro-beneficio-tinaja-notas.test.cjs'
+      - '.github/workflows/haku-notas-review.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/libro-cortesia-por-coordinar-review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Aplicar sólo el candidato ya probado localmente
+        run: |
+          mkdir -p /tmp/haku-notas-review
+          python3 .haku-notas-review.py
+          node --check js/haiku-libro-servicios-scope-v2.js
+          git diff --check
+          test "$(git diff --name-only | wc -l)" = 2
+          git diff --exit-code -- . ':!js/haiku-libro-servicios-scope-v2.js' ':!tests/fixtures/libro-servicio-manual.cjs'
+          git diff > /tmp/haku-notas-review/candidate.patch
+      - name: Regresiones nativas y nuevas notas - sólo fixtures, sin producción
+        run: |
+          set -o pipefail
+          node --test tests/libro-semantica.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicios-existentes-finanzas.test.cjs tests/haiku-servicios-identidad-proveniencia.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-servicios-noche-manual.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-masaje-fragmentos.test.cjs tests/libro-masajes-parser.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-beneficio-tinaja-notas.test.cjs 2>&1 | tee /tmp/haku-notas-review/tests.tap
+      - name: Guardar sólo fuente y fixture verificados en la rama de revisión
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- js/haiku-libro-servicios-scope-v2.js tests/fixtures/libro-servicio-manual.cjs
+          git commit -m 'fix(libro): cortesía sin agendamiento como nota de reserva'
+          git push origin HEAD:refs/heads/fix/libro-cortesia-por-coordinar-review
+          git rev-parse HEAD > /tmp/haku-notas-review/verified-commit.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: haku-courtesy-notes-review
+          path: /tmp/haku-notas-review
+          retention-days: 7
