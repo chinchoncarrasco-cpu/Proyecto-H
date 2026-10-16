@@ -1087,12 +1087,12 @@
     }
 
     // Reutiliza la RPC protegida normal→cortesía sin crear otra tinaja.
-    async function abrirManualCortesiaExistente(item, out, texto, overrides, estado) {
+    async function abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila) {
         const esperado = item.cambioCortesiaExistente;
         const api = root.HAIKU_ASISTENTE_SERVICIOS_CORTESIA_V1;
         if (!api?.preparar || !api?.confirmar || !api?.verificarEstado || !api?.renderizar)
             throw Error('El cambio seguro a cortesía no está disponible.');
-        const apertura = ++estado.apertura, vigente = () => estado.apertura === apertura;
+        const apertura = ++estado.apertura, vigente = () => estado.apertura === apertura && fila.isConnected !== false;
         out.querySelector('.haku-libro-servicio-manual')?.remove();
         const panel = document.createElement('section');
         panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
@@ -1108,7 +1108,10 @@
         cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario';
         cancelar.textContent = 'Cancelar';
         cancelar.addEventListener('click', () => { estado.apertura++; panel.remove(); });
-        panel.append(titulo,origen,aviso,contenido,cancelar);out.append(panel);
+        panel.style.gridColumn = '1 / -1';
+        panel.style.minWidth = '0';
+        panel.append(titulo,origen,aviso,contenido,cancelar);fila.append(panel);
+        panel.scrollIntoView?.({ block:'nearest' });
         const consulta = { intencion:'MODIFICAR_SERVICIO_EXISTENTE', accion:'NORMAL_A_CORTESIA',
             titular:item.reserva.titular, cabana:Number(item.reserva.cabana),
             concepto:esperado.codigo === 'tinajaTonel' ? 'tinaja tonel' : 'tinaja jacuzzi',
@@ -1178,12 +1181,12 @@
         } catch(e) {if(vigente())aviso.textContent=e.message||'No fue posible comprobar la tinaja.';}
     }
 
-    async function abrirManual(item, out, texto, overrides, estado) {
-        if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado);
+    async function abrirManual(item, out, texto, overrides, estado, fila) {
+        if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila);
         const base = item.manual_base || item;
         const apertura = ++estado.apertura;
         const contrato = await cargarContratoManual();
-        if (apertura !== estado.apertura) return;
+        if (apertura !== estado.apertura || fila.isConnected === false) return;
         out.querySelector('.haku-libro-servicio-manual')?.remove();
         const panel = document.createElement('section'); panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
         panel.setAttribute('aria-label', `Aprobación manual de ${base.reserva.titular}`);
@@ -1255,7 +1258,9 @@
             finally { estado.ocupado = false; }
         });
         acciones.append(confirmar, cancelar); contenido.append(cabecera, identidad, evidencia, motivos, campos, resumen, revalidacion, aviso); panel.append(contenido, acciones);
-        out.append(panel); actualizar(); panel.scrollIntoView?.({ block: 'nearest' });
+        panel.style.gridColumn = '1 / -1';
+        panel.style.minWidth = '0';
+        fila.append(panel); actualizar(); panel.scrollIntoView?.({ block: 'nearest' });
     }
 
     function crearItem(item, seleccionados, confirmarNoche, opciones = {}) {
@@ -1298,7 +1303,7 @@
                 const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = 'Aprobación manual';
                 manual.addEventListener('click', async () => {
                     manual.disabled = true;
-                    try { await opciones.abrirManual(item); }
+                    try { await opciones.abrirManual(item, fila); }
                     catch (e) { const aviso = document.createElement('p'); aviso.textContent = e.message; aviso.setAttribute('role', 'alert'); cuerpo.append(aviso); }
                     finally { manual.disabled = false; }
                 });
@@ -1517,9 +1522,9 @@
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
         const estado = estadosPorVista.get(out) || { manuales: new Map(), selecciones: new Map(), apertura: 0, ocupado: false };
         estadosPorVista.set(out, estado);
-        const opciones = { selecciones: estado.selecciones, abrirManual: item => {
+        const opciones = { selecciones: estado.selecciones, abrirManual: (item, fila) => {
             if (estado.ocupado) return;
-            return abrirManual(item, out, textoOriginal, overrides, estado);
+            return abrirManual(item, out, textoOriginal, overrides, estado, fila);
         } };
         nochesPorVista.set(out, overrides);
         instalarEstilos(); out.className = "haiku-asistente-preview haku-libro-servicios haku-libro-servicios-sites"; out.textContent = "";

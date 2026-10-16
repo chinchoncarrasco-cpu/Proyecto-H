@@ -233,3 +233,55 @@ test('otras diferencias, múltiples candidatos o cobro ya correcto no ofrecen co
         assert.equal(e.state.escrituras.length,0,tipo);
     }
 });
+
+test('Aprobación manual queda dentro de su ficha y cambia de tarjeta sin duplicar paneles',async()=>{
+    const e=entorno(),out=new e.Element('div');e.document.card=out;
+    e.api.renderizar(await e.construir(),out,consulta);
+    const filas=out.querySelectorAll('.haku-libro-servicios__item')
+        .filter(f=>f.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'));
+    assert.equal(filas.length,3);
+    for(const fila of filas){
+        const boton=fila.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual');
+        await boton.listeners.click();
+        const panel=out.querySelector('.haku-libro-servicio-manual');
+        assert.ok(panel);
+        assert.equal(panel.parentElement,fila,'no se agrega al pie del resultado');
+        assert.equal(fila.children.at(-1),panel,'se abre después de los datos y botones de su ficha');
+        assert.equal(panel.style.gridColumn,'1 / -1','ocupa el ancho completo de la ficha');
+        assert.equal(out.querySelectorAll('.haku-libro-servicio-manual').length,1);
+        assert.equal(out.children.includes(panel),false);
+    }
+    const cerrar=out.querySelector('.haku-libro-servicio-manual').querySelectorAll('button')
+        .find(b=>b.textContent==='Cancelar');
+    cerrar.listeners.click();
+    assert.equal(out.querySelector('.haku-libro-servicio-manual'),null);
+    assert.equal(e.state.escrituras.length,0);
+});
+
+test('cortesía existente: su aprobación manual se muestra debajo de la misma tinaja sin escribir',async()=>{
+    const e=entorno();
+    e.state.reservas[0].servicios[0]=e.c.HAIKU_LIBRO_SEMANTICA.servicios(
+        '1 HORA DE CORTESIA TINAJA TONEL DE MADERA 18:00 A 19:00',
+        {origen_campo:'notas_reserva'})[0];
+    e.state.db.servicios.push({id:'tonel-existente',reserva_id:e.state.db.reservas[0].id,
+        estadia_id:e.state.db.reserva_estadias[0].id,fecha_servicio:'2026-10-10',
+        hora_inicio:'18:00:00',hora_fin:'19:00:00',cantidad:1,personas:2,
+        tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+        catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tonel de madera'}});
+    let lecturas=0,escrituras=0;
+    e.c.HAIKU_ASISTENTE_SERVICIOS_CORTESIA_V1={
+        preparar:async()=>{lecturas++;return {estado:'bloqueada',mensaje:'Simulación sin escritura'};},
+        confirmar:()=>{escrituras++;throw Error('No se debe ejecutar la escritura al abrir');},
+        verificarEstado:async()=>({estado:'incierto'}),
+        renderizar:()=>''};
+    const out=new e.Element('div');e.document.card=out;
+    const resultado=await e.construir();
+    assert.ok(resultado.items.some(i=>i.cambioCortesiaExistente?.servicioId==='tonel-existente'));
+    e.api.renderizar(resultado,out,consulta);
+    const fila=out.querySelectorAll('.haku-libro-servicios__item')
+        .find(f=>f.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'));
+    await fila.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual').listeners.click();
+    const panel=out.querySelector('.haku-libro-servicio-manual');
+    assert.ok(panel);assert.equal(panel.parentElement,fila);assert.equal(panel.style.gridColumn,'1 / -1');
+    assert.equal(lecturas,1);assert.equal(escrituras,0);assert.equal(e.state.escrituras.length,0);
+});
