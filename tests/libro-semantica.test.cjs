@@ -243,3 +243,32 @@ test('failed SELECT is not reported as absent reservations',async()=>{
  const client={auth:{getSession:async()=>({data:{session:{}}})},from(){const q={select(){return q},lte(){return q},gte(){return q},order(){return q},range:async()=>({error:{message:'denied'}})};return q}};
  await assert.rejects(Q.compararSistema([reserva],client),/No se concluye/);
 });
+
+
+test('Trinidad: reserva reagendada sin importe queda en anotaciones, no en pagos; no descarta pagos reales',()=>{
+ const fabricar=(importe=null,concepto='')=>{
+  const celdas=[],combinaciones=[];
+  const poner=(r,c,valor,extra={})=>celdas.push({r,c,valor,...extra});
+  for(const [c,fecha] of [[10,'2026-10-30'],[14,'2026-10-31']]){
+   poner(1,c,fecha,{fechaISO:fecha});poner(24,c,'Pagos de arriendos de hoy');
+  }
+  for(let cab=1;cab<=11;cab++){
+   poner(cab+1,0,'cabaña '+cab);
+   const fila=25+(cab-1)*5;poner(fila,0,'cabaña '+cab);
+   combinaciones.push({s:{r:fila,c:0},e:{r:fila+4,c:0}});
+  }
+  poner(9,10,'Trinidad Prat // 2 ADL // 2 noches');
+  poner(60,11,'RESERVA RE-AGENDADA/TENIAN RESERVA EL 09-10-2026');
+  if(concepto)poner(60,12,concepto);
+  if(importe!==null)poner(60,13,String(importe),{valorNumero:importe});
+  return S.normalizarHoja({celdas,combinaciones,estilos:[]},'Oct26');
+ };
+ const nota=fabricar(),registro=nota.anotaciones.find(n=>n.tipo==='reprogramacion_reserva');
+ assert.equal(nota.pagos.length,0);
+ assert.ok(registro);assert.equal(registro.cabana,8);assert.equal(registro.fecha,'2026-10-30');
+ assert.match(registro.texto_original,/RESERVA RE-AGENDADA/);
+ assert.equal(registro.origen.hoja,'Oct26');
+ const pago=fabricar(20000,'LATE CHECK OUT');
+ assert.equal(pago.pagos.length,1,'un monto real en la misma zona sigue requiriendo conciliación');
+ assert.equal(pago.pagos[0].monto,20000);
+});

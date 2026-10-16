@@ -2265,7 +2265,8 @@
             }
             return { disponible: true, ...CAPACIDAD_PAGOS_SERVICIO_4C, efectivo_sin_identificador: false,
                 conceptos_adicionales: Array.isArray(data.conceptos_adicionales) ? data.conceptos_adicionales : [],
-                servicio_faltante_manual_v1:data.servicio_faltante_manual_v1 === true };
+                servicio_faltante_manual_v1:data.servicio_faltante_manual_v1 === true,
+                transferencia_late_checkout_sin_identificador_v1:data.transferencia_late_checkout_sin_identificador_v1 === true };
         } catch (_) {
             return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
         }
@@ -2289,7 +2290,7 @@
         return [...(detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.']),...motivosCapacidad];
     }
 
-    function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente) {
+    function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente, itemId = null, decision = null) {
         if (!destino?.reserva_id || resolucion?.estado !== 'destino_unico') return null;
         const pagos = new Map((snapshotFinanciero?.pagos || []).map(item => [item.id, item]));
         const aplicaciones = (resolucion.aplicaciones || []).map(aplicacion => {
@@ -2318,7 +2319,17 @@
             aplicacion.fecha_servicio_esperada);
         const bovtar = pago.bovtar || null;
         const idFuerte = normalizarId(pago.codigo_autorizacion) || (normalizarId(pago.folio) && normalizarId(bovtar));
-        if (!validas || total !== Number(pago.monto) || pago.moneda !== 'CLP' || !idFuerte || !medioLibro(pago) || !pago.fecha_comprobante) return null;
+        // Sólo un Late Check-out pagado por transferencia puede usar aprobación
+        // manual sin código bancario; nunca se convierte el BOVE en BOVTAR.
+        const transferenciaManual = !idFuerte && decision?.tipo === 'asociacion_pago' &&
+            Boolean(decision.usuario && itemId) && aprobadoManualmente === true &&
+            medioLibro(pago) === 'transferencia' && D?.conceptoCanon(pago.concepto) === 'late_checkout' &&
+            !pago.codigo_autorizacion && !pago.folio && !pago.bovtar &&
+            resolucion.aplicaciones?.length === 1 && resolucion.aplicaciones[0].concepto_canon === 'late_checkout' &&
+            pago.pago_recibido === true && pago.estado_pago === 'registrado_en_libro' &&
+            pago.origen?.hoja && pago.origen?.celda;
+        if (!validas || total !== Number(pago.monto) || pago.moneda !== 'CLP' ||
+            (!idFuerte && !transferenciaManual) || !medioLibro(pago) || !pago.fecha_comprobante) return null;
         return {
             contrato: CAPACIDAD_PAGOS_SERVICIO_4C.contrato,
             reserva_ref: null,
@@ -2337,6 +2348,14 @@
                 p_modo_aplicacion: 'ninguno'
             },
             datos_origen: datosOrigenPago(pago,destino,{
+                ...(transferenciaManual ? {
+                    item_id:itemId,
+                    transferencia_late_checkout_sin_identificador_v1:{
+                        version:1,usuario:decision.usuario,item_id:itemId,reserva_id:destino.reserva_id,
+                        monto:Number(pago.monto),fecha_comprobante:pago.fecha_comprobante,
+                        origen:structuredClone(pago.origen)
+                    }
+                } : {}),
                 evidencia_libro: structuredClone(pago),
                 aplicaciones_servicio_v1: {
                     version: CAPACIDAD_PAGOS_SERVICIO_4C.version,
@@ -2669,12 +2688,24 @@
             }).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
         });
     }
-    function propuestaManualPago(item, comp, generacion) {
+    function transferenciaLateManualSinId(p, capacidad) {
+        return capacidad?.disponible === true &&
+            capacidad.transferencia_late_checkout_sin_identificador_v1 === true &&
+            p?.tipo_movimiento === 'servicio' && !p.transaccion_distribuida &&
+            D?.conceptoCanon(p.concepto) === 'late_checkout' &&
+            medioLibro(p) === 'transferencia' && !pagoTieneIdentificadorFuerte(p) &&
+            !normalizarId(p.codigo_autorizacion) && !normalizarId(p.folio) && !normalizarId(p.bovtar) &&
+            p.pago_recibido === true && p.estado_pago === 'registrado_en_libro' &&
+            Number.isSafeInteger(p.monto) && p.monto > 0 && p.moneda === 'CLP' &&
+            /^\d{4}-\d{2}-\d{2}$/.test(String(p.fecha_comprobante || '')) &&
+            Boolean(p.texto_original && p.origen?.hoja && p.origen?.celda);
+    }
+    function propuestaManualPago(item, comp, generacion, capacidad) {
         if (!D || !Number.isSafeInteger(generacion) || root.haikuTienePermiso?.('pagos.registrar') !== true ||
             !['dudosos','pagos'].includes(item.categoria) || item.distribucionManual || item.pagoSistema) return null;
-        const p = item.pagoLibro;
+        const p = item.pagoLibro, transferenciaSinId = transferenciaLateManualSinId(p,capacidad);
         if (!p || p.tipo_movimiento === 'alojamiento' || p.conflicto_distribucion ||
-            !pagoTieneIdentificadorFuerte(p) || p.moneda !== 'CLP' || !medioLibro(p) ||
+            (!pagoTieneIdentificadorFuerte(p) && !transferenciaSinId) || p.moneda !== 'CLP' || !medioLibro(p) ||
             p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro' ||
             !p.fecha_comprobante || !p.texto_original || !p.origen?.hoja || !p.origen?.celda) return null;
         const x = comp?.pagosDetalle?.find(x => x.pago === p);
@@ -2686,6 +2717,21 @@
             !comp.snapshot?.finanzas?.disponible ||
             (comp.snapshot.pagos || []).some(s => pagoCoincide(p,s))) return null;
         const apps = x.destinoFinanciero?.aplicaciones || [];
+        if (transferenciaSinId) {
+            // Evita un segundo abono por una transferencia ya registrada por otra vía.
+            const posibleDuplicado = (comp.snapshot?.pagos_todos || comp.snapshot?.pagos || []).some(s =>
+                s.reserva_id === estadia.reserva_id && s.tipo_movimiento === 'pago' &&
+                s.estado !== 'anulado' && Number(s.monto) === p.monto &&
+                medioSistema(s) === 'transferencia' &&
+                String(s.fecha_pago || '').slice(0,10) === p.fecha_comprobante);
+            const otraFila = (comp.pagosDetalle || []).some(y => y !== x &&
+                y.reserva_sistema_id === estadia.reserva_id &&
+                y.pago?.tipo_movimiento === 'servicio' &&
+                D?.conceptoCanon(y.pago?.concepto) === 'late_checkout' &&
+                medioLibro(y.pago) === 'transferencia' && Number(y.pago?.monto) === p.monto &&
+                y.pago?.fecha_comprobante === p.fecha_comprobante);
+            if (posibleDuplicado || otraFila || apps.length !== 1 || apps[0].concepto_canon !== 'late_checkout') return null;
+        }
         if (!apps.length || apps.some(a => !Number.isSafeInteger(a.monto) || a.monto <= 0) ||
             apps.reduce((s,a) => s+a.monto,0) !== p.monto ||
             apps.some(a => !['destino_unico','sin_destino'].includes(a.estado))) return null;
@@ -2824,8 +2870,12 @@
             }
             let servicioId;
             try {
-                const marca = `[HAKU-LIBRO-SERVICIO:pago_manual:${normalizarId(item.pagoLibro.codigo_autorizacion) ||
-                    normalizarId(item.pagoLibro.folio)+':'+normalizarId(item.pagoLibro.bovtar)}:${app.concepto_canon}:${app.indice}]`;
+                const identificador = normalizarId(item.pagoLibro.codigo_autorizacion) ||
+                    normalizarId(item.pagoLibro.folio)+':'+normalizarId(item.pagoLibro.bovtar);
+                const marcaOrigen = identificador === ':' ?
+                    'transferencia:'+source(item.pagoLibro.origen).replace(/[^a-z0-9]/gi,'_')+
+                    ':'+item.pagoLibro.fecha_comprobante+':'+item.pagoLibro.monto : identificador;
+                const marca = `[HAKU-LIBRO-SERVICIO:pago_manual:${marcaOrigen}:${app.concepto_canon}:${app.indice}]`;
                 vigente();
                 const {data,error} = await cliente.rpc('haiku_registrar_servicio',{
                     p_reserva_id:propuesta.reservaId, p_estadia_id:propuesta.estadiaId,
@@ -3240,6 +3290,7 @@
             // Un comprobante posterior por personas extra de Jacuzzi siempre
             // requiere aprobación explícita, aunque tenga folio/BOVTAR fuertes.
             // El comprobante original permanece conciliado e independiente.
+            const transferenciaSinId = transferenciaLateManualSinId(p,capacidadServicios);
             const esPagoExtraJacuzzi = p.tipo_movimiento === 'servicio' &&
                 /\b(?:tinaja|jacuzzi)\b/i.test(String(p.concepto || '')) &&
                 /\b[12]\s*(?:adl|adultos?|personas?)\s*(?:extra|adicional(?:es)?)\b/i.test(String(p.concepto || ''));
@@ -3279,8 +3330,9 @@
                 // NUEVO_SEGURO la confirmación final del plan satisface esa
                 // guardia sin agregar un segundo botón de aprobación.
                 payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas,
-                    manual || nuevoSeguroCanonico) : null;
-            if (servicio4C && !payloadServicio) motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
+                    manual || nuevoSeguroCanonico, id, transferenciaSinId ? x.decisionPagoManual : null) : null;
+            if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual))
+                motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
             const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: (medio === 'airbnb_prepaid_card' ? confirmacionAirbnb?.referenciaExterna || p.referencia_externa : p.texto_original) || null,
                     p_fecha_pago: confirmacionAirbnb?.fechaPago || p.fecha_comprobante || null, p_folio: confirmacionAirbnb ? null : p.folio || null, p_codigo_autorizacion: confirmacionAirbnb ? null : p.codigo_autorizacion || null,
@@ -3296,7 +3348,7 @@
             const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
             const motivosAprobables = new Set(['Requiere aprobación manual de la asociación y el pago.', 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.',
                 'Confirma la distribución explícita del comprobante antes de preparar el pago.']);
-            item.aprobable = motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
+            item.aprobable = !transferenciaSinId && motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
             item.destinoFinanciero = x.destinoFinanciero || null;
             item.aprobableFinancieramente = x.destinoFinanciero?.estado === 'destino_unico';
             item.backendServiciosDisponible = capacidadServicios?.disponible === true;
@@ -3316,7 +3368,7 @@
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
             item.manualPago = (!medioLibro(x.pago) ? item.resolucionMedio : null) ||
                 propuestaConfirmacionAirbnb(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) ||
-                propuestaManualPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
+                propuestaManualPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,capacidadServicios);
             if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
             item.decisionManualInvalidada = x.decisionManualInvalidada === true;
             if (item.decisionManualInvalidada) {

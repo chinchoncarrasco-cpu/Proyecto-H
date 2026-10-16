@@ -698,3 +698,63 @@ test('comprobante muestra BOVE y BOVTAR según sus propios campos, sin reinterpr
     assert.equal(e.panel().querySelector('pre').textContent,e.h.r.pagos[0].texto_original);
     assert.equal(e.h.tablas.pagos.length,0);
 });
+
+
+test('Mery: transferencia Late Check-out sin ID bancario permite crear servicio y aprobar pago por separado',async()=>{
+ const capacidad={...CAP,transferencia_late_checkout_sin_identificador_v1:true};
+ const h=entorno({distribuido:false,conServicios:false,capacidad});
+ const p=h.r.pagos[0];
+ h.r.titular='Mery Vasquez Carrion';h.r.tipo_estadia='full_day';h.r.fecha_checkout=FECHA;
+ h.tablas.reserva_estadias[0].tipo_estadia='fullday';
+ h.tablas.reserva_estadias[0].fecha_salida=FECHA;
+ h.tablas.reserva_estadias[0].estado_estadia='checked_out';
+ h.tablas.reserva_estadias[0].reservas.titular_nombre=h.r.titular;
+ Object.assign(p,{titular:h.r.titular,concepto:'LATE CHECK OUT',monto:20000,
+  medio_pago:'transferencia',codigo_autorizacion:null,folio:null,bovtar:null,bove:'17100',
+  fecha_comprobante:'2026-10-07',texto_original:'07-10-2026 // Mery Vasquez // Transferencia // BOVE 17100 // late check-out // 20,000'});
+ h.tablas.catalogo_servicios.push({id:id(22),codigo:'lateCheckout',nombre:'Late Check-out',
+  categoria:'servicio',activo:true,unidad:'hora',precio_base:10000,requiere_horario:true,
+  capacidad_incluida:null,capacidad_maxima:null,precio_persona_adicional:null});
+ const plan=await h.preparar(),item=itemPago(plan);
+ assert.equal(item.categoria,'dudosos');
+ assert.equal(item.manualPago?.tipo,'crear_servicio_faltante');
+ assert.equal(item.aprobable,false);assert.equal(item.seleccionado,false);
+ assert.notEqual(item.payload?.aprobado_manualmente,true);
+ const posterior=await h.resolver(plan,item,{tipo:'crear_servicio_faltante',indice:0,
+  codigo:'lateCheckout',fecha:FECHA,hora:'12:00',cantidad:2,personas:2,
+  precio:10000,tipoCobro:'normal',precioManualConfirmado:true});
+ assert.equal(h.llamadas.filter(x=>x.nombre==='haiku_registrar_servicio').length,1);
+ assert.equal(h.llamadas.filter(x=>x.nombre==='haiku_incorporar_pago_servicios_libro_v1').length,0);
+ assert.equal(itemPago(posterior).manualPago?.tipo,'asociacion_pago');
+ const aprobado=await h.resolver(posterior,itemPago(posterior),{tipo:'asociacion_pago'});
+ const preparado=itemPago(aprobado);
+ assert.equal(preparado.categoria,'pagos');assert.equal(preparado.seleccionado,true);
+ const [salida]=Q.serializarIncorporacion(aprobado);
+ assert.equal(salida.tipo,'pago_servicios_4c');
+ assert.equal(salida.argumentos.p_monto,20000);assert.equal(salida.argumentos.p_medio_pago,'transferencia');
+ assert.equal(salida.argumentos.p_folio,null);assert.equal(salida.argumentos.p_bove,null);
+ assert.equal(salida.datos_origen.transferencia_late_checkout_sin_identificador_v1.usuario,id(90));
+ assert.equal(salida.datos_origen.transferencia_late_checkout_sin_identificador_v1.monto,20000);
+ assert.equal(salida.datos_origen.evidencia_libro.bove,'17100');
+ assert.equal(h.llamadas.filter(x=>x.nombre==='haiku_incorporar_pago_servicios_libro_v1').length,0,
+  'aprobar no escribe un pago hasta la confirmación final');
+});
+
+test('sin capacidad, otra categoría o duplicado del día no habilitan excepción de transferencia',async()=>{
+ const construir=capacidad=>{
+  const h=entorno({distribuido:false,conServicios:false,capacidad}),p=h.r.pagos[0];
+  Object.assign(p,{concepto:'LATE CHECK OUT',monto:20000,medio_pago:'transferencia',
+   codigo_autorizacion:null,folio:null,bovtar:null,
+   texto_original:'Transferencia Late Check-out $20.000'});
+  return h;
+ };
+ const v1=construir(CAP);
+ assert.equal(itemPago(await v1.preparar()).manualPago,null);
+ const adaptado={...CAP,transferencia_late_checkout_sin_identificador_v1:true};
+ const otro=construir(adaptado);otro.r.pagos[0].concepto='TIN AJA';
+ assert.equal(itemPago(await otro.preparar()).manualPago,null);
+ const duplicado=construir(adaptado);
+ duplicado.tablas.pagos.push({id:id(80),reserva_id:id(1),monto:20000,moneda:'CLP',
+  medio_pago:'transferencia',fecha_pago:FECHA+'T00:00:00Z',tipo_movimiento:'pago',estado:'confirmado'});
+ assert.equal(itemPago(await duplicado.preparar())?.manualPago,null);
+});
