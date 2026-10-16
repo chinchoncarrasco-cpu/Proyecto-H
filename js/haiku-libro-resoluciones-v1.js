@@ -82,12 +82,32 @@
         aplicar(r,data,estado); // No mostrar resuelto ante una respuesta ajena/incompleta.
         return data;
     }
+    // Si la comparación ya asoció de forma única una estadía activa con
+    // ocupación válida, el dato incompleto del XLSX no es una tarea pendiente.
+    // No se usan nombres/fechas aislados para decidir esta coincidencia.
+    function ocupacionYaRegistrada(r, comparacion) {
+        if (!r?.id || !comparacion) return false;
+        const encontrados = Array.from(comparacion).filter(i => i.libro?.id === r.id);
+        if (encontrados.length !== 1 || encontrados[0].estado !== 'asociada') return false;
+        const s = encontrados[0].sistema;
+        if (!s?.id || !s.reserva_id ||
+            Number(s.cabana) !== Number(r.cabana) ||
+            s.fecha_checkin !== r.fecha_checkin || s.fecha_checkout !== r.fecha_checkout ||
+            /cancelad|no[_ -]?show/i.test(`${s.estado_operativo || ''} ${s.estado_reserva || ''}`) ||
+            (r.tipo_estadia === 'full_day' && !['fullday','full_day'].includes(s.tipo_estadia)) ||
+            (r.tipo_estadia === 'alojamiento' && ['fullday','full_day'].includes(s.tipo_estadia))) return false;
+        try {
+            validarOcupacion({adultos:s.adultos,ninos:s.ninos,mascotas:s.mascotas},r);
+            return true;
+        } catch (_) { return false; }
+    }
     function adjuntar(contenedor, reservas, generacion, alConfirmar = async () => {}, comparacion = null) {
         const doc = root.document;
         if (!doc) return;
         const el = (tag,texto) => {const e=doc.createElement(tag);e.textContent=texto;e.className='haiku-versiones-meta';return e;};
         const vistos = new Set();
-        const pendientes = reservas.filter(resolvers.ocupacion.necesita);
+        const pendientes = reservas.filter(r =>
+            resolvers.ocupacion.necesita(r) && !ocupacionYaRegistrada(r,comparacion));
         if (!pendientes.length) return;
         // V1 sólo completa reservas nuevas sin destino/candidato existente.
         const alcance = comparacion ? Promise.resolve(comparacion)
@@ -95,8 +115,11 @@
         for (const r of pendientes) {
             const key=firma(r);if(vistos.has(key))continue;vistos.add(key);
             const card=el('article','');card.className='haiku-libro-resolucion';
+            // Si la comparación llega después, no mostrar un falso aviso fugaz.
+            card.hidden=!comparacion;
             card.append(el('strong',`${r.titular || 'Sin titular'} · CAB ${r.cabana ?? '—'} · ${r.fecha_checkin || 'Sin fecha'} · ${r.id || 'Sin origen'}`));
-            card.append(el('p','Revisión manual · Acción necesaria: no se pudo identificar una ocupación válida de esta reserva.'));
+            const descripcion=el('p','Revisión manual · Acción necesaria: no se pudo identificar una ocupación válida de esta reserva.');
+            card.append(descripcion);
             const estado=el('p','No incorporable hasta completar la ocupación.');estado.setAttribute('role','status');
             const accion=el('button','Completar ocupación');accion.type='button';accion.className='libro-reserva-boton secundario';
             const editor=el('div','');editor.hidden=true;
@@ -147,6 +170,12 @@
                 if(obsoleto||ocupado||!editor.hidden)return;
                 vigente(generacion);
                 if(!comp)throw Error('Compara con Proyecto H antes de completar la ocupación.');
+                if (ocupacionYaRegistrada(r,comp)) {
+                    card.hidden=true;
+                    card.remove?.();
+                    return;
+                }
+                card.hidden=false;
                 const relacionado = i => i.sistema || i.candidatosDetalle?.length || i.candidatos?.length;
                 const existente = Array.from(comp).some(i=>i.libro?.id===r.id && relacionado(i)) ||
                     (comp.grupos || []).some(g=>g.items.some(i=>i.libro?.id===r.id) && g.items.some(relacionado)) ||
@@ -154,7 +183,15 @@
                         s.fecha_checkin===r.fecha_checkin && s.fecha_checkout===r.fecha_checkout);
                 if(existente) {
                     accion.hidden=true;
-                    estado.textContent='Requiere revisión manual: existe una estadía o candidato en Proyecto H. Completar ocupación V1 sólo permite crear reservas nuevas.';
+                    descripcion.textContent='Revisión de coincidencia con Proyecto H.';
+                    const candidatos = Array.from(comp).filter(i=>i.libro?.id===r.id);
+                    const asociado = candidatos.length===1 && candidatos[0].estado==='asociada';
+                    const varios = candidatos.some(i=>(i.candidatosDetalle?.length || i.candidatos?.length || 0)>1);
+                    estado.textContent = asociado
+                        ? 'La reserva ya existe en Proyecto H, pero su ocupación allí requiere revisión desde la ficha. No se creará otra reserva.'
+                        : varios
+                            ? 'Hay varias estadías candidatas: revisa cuál corresponde. No se creará otra reserva ni se completará ocupación automáticamente.'
+                            : 'Requiere revisión manual: existe una estadía o candidato en Proyecto H. Completar ocupación V1 sólo permite crear reservas nuevas.';
                     return;
                 }
                 habilitada=true;
@@ -163,7 +200,7 @@
                     anteriorPersistido=d.id;
                     aplicar(r,d,vigente(generacion));mostrar(d);
                 }
-            }).catch(e=>{if(!obsoleto)estado.textContent=e.message+' La ocupación sigue pendiente.';})
+            }).catch(e=>{if(!obsoleto){card.hidden=false;estado.textContent=e.message+' La ocupación sigue pendiente.';}})
                 .finally(()=>{if(!obsoleto&&!ocupado)accion.disabled=!habilitada;});
         }
     }
