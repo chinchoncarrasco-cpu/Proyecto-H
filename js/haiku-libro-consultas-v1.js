@@ -4288,19 +4288,29 @@
         };
         let incorporar;
         const aprobar=async ids=>{
-            const listaIds=Array.isArray(ids)?ids:[ids];listaIds.forEach(id=>aprobados.add(id));
-            out.replaceChildren(elemento('p','','Revalidando los pagos aprobados…'));
+            const listaIds=Array.isArray(ids)?ids:[ids];
+            const vista=capturarVistaAprobaciones(out), desbloquear=bloquearVistaMientrasRevalida(out);
+            listaIds.forEach(id=>aprobados.add(id));
             try{
+                // Mantener la lista visible mientras se verifica el pago aprobado.
                 const nuevo=await prepararIncorporacion(result,decisiones,aprobados);
+                if (out.isConnected === false) return;
                 renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                restaurarVistaAprobaciones(out,vista);
             }catch(error){listaIds.forEach(id=>aprobados.delete(id));throw error;}
+            finally {desbloquear();}
         };
         incorporar=planActual=>confirmarIncorporacion(result,decisiones,aprobados,planActual);
         aprobar.manualPago = async (planActual,id,accion) => {
-            const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
-            if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
-            continuarVistaManualPago(planActual,nuevo,id,accion);
-            renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+            const vista=capturarVistaAprobaciones(out), desbloquear=bloquearVistaMientrasRevalida(out);
+            try {
+                const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
+                if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
+                continuarVistaManualPago(planActual,nuevo,id,accion);
+                renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                restaurarVistaAprobaciones(out,vista);
+                return nuevo;
+            } finally {desbloquear();}
         };
         renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
         return {result,plan};
@@ -4928,9 +4938,10 @@
                 let identidadActualizada = false;
                 const aprobar = async ids => {
                     const lista = Array.isArray(ids) ? ids : [ids];
+                    const vista=capturarVistaAprobaciones(out), desbloquear=bloquearVistaMientrasRevalida(out);
                     lista.forEach(id => aprobados.add(id));
-                    avisarConComprobante(lista.length > 1 ? 'Revalidando los pagos aprobados…' : 'Revalidando el pago aprobado…');
                     try {
+                        // No sustituir la vista por «Revalidando» y plegar los pagos.
                         const nuevo = restaurarSeleccionIncorporacion(await prepararIncorporacion(result, decisiones, aprobados),planEnVista);
                         nuevo.items.filter(i => lista.includes(i.id) && i.categoria === 'pagos' && !i.motivos.length && !i.etapaSiguiente)
                             .forEach(i => { i.seleccionado = true; });
@@ -4945,11 +4956,13 @@
                             });
                         }
                         planEnVista = nuevo;
+                        if (out.isConnected === false) return;
                         renderizarIncorporacion(out, nuevo, volver, aprobar, incorporar);
+                        restaurarVistaAprobaciones(out,vista);
                     } catch (e) {
                         lista.forEach(id => aprobados.delete(id)); await volver();
                         out.append(elemento('p', '', 'No se pudo revalidar: ' + e.message));
-                    }
+                    } finally {desbloquear();}
                 };
                 incorporar = async planActual => {
                     const ejecucion = await confirmarIncorporacion(result, decisiones, aprobados, planActual);
@@ -4975,17 +4988,22 @@
                     return { ...ejecucion, siguientePlan };
                 };
                 aprobar.manualPago = async (planActual,id,accion) => {
-                    const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
-                    const seleccionadoManualmente = nuevo.items.find(i => i.id === id)?.seleccionado;
-                    restaurarSeleccionIncorporacion(nuevo,planActual);
-                    const itemManual = nuevo.items.find(i => i.id === id);
-                    if (seleccionadoManualmente && itemManual && !itemManual.motivos.length && !itemManual.etapaSiguiente)
-                        itemManual.seleccionado = true;
-                    if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
-                    if (identidadActualizada) nuevo.etapaAnteriorCompletada = true;
-                    continuarVistaManualPago(planActual,nuevo,id,accion);
-                    planEnVista = nuevo;
-                    renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                    const vista=capturarVistaAprobaciones(out), desbloquear=bloquearVistaMientrasRevalida(out);
+                    try {
+                        const nuevo = await resolverAprobacionManualPago(result,decisiones,aprobados,planActual,id,accion);
+                        const seleccionadoManualmente = nuevo.items.find(i => i.id === id)?.seleccionado;
+                        restaurarSeleccionIncorporacion(nuevo,planActual);
+                        const itemManual = nuevo.items.find(i => i.id === id);
+                        if (seleccionadoManualmente && itemManual && !itemManual.motivos.length && !itemManual.etapaSiguiente)
+                            itemManual.seleccionado = true;
+                        if (out.isConnected === false || accion.vistaVigente?.() === false) return nuevo;
+                        if (identidadActualizada) nuevo.etapaAnteriorCompletada = true;
+                        continuarVistaManualPago(planActual,nuevo,id,accion);
+                        planEnVista = nuevo;
+                        renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                        restaurarVistaAprobaciones(out,vista);
+                        return nuevo;
+                    } finally {desbloquear();}
                 };
                 renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
             } catch (error) {
@@ -5926,6 +5944,53 @@
         boton.type = "button";
         boton.addEventListener("click", volver);
         acciones.append(boton); out.append(acciones);
+    }
+
+    // Los desplegables y el scroll son estado visual: no forman parte del pago.
+    function capturarVistaAprobaciones(out) {
+        const abiertas = Array.from(out.querySelectorAll('details.haiku-incorporacion-seccion'))
+            .filter(seccion => seccion.open)
+            .map(seccion => String(seccion.className || '').match(/\bhaiku-incorporacion-seccion--([a-z]+)\b/)?.[1])
+            .filter(Boolean);
+        const contenedor = out.closest?.('.haiku-asistente-mensajes') || null;
+        const categoriaAncla = abiertas.includes('dudosos') ? 'dudosos' :
+            abiertas.includes('pagos') ? 'pagos' : null;
+        const ancla = categoriaAncla
+            ? out.querySelector('.haiku-incorporacion-seccion--' + categoriaAncla + ' > summary') : null;
+        return {
+            abiertas, contenedor, categoriaAncla,
+            scrollTop: contenedor?.scrollTop ?? null,
+            anclaTop: ancla?.getBoundingClientRect?.().top ?? null
+        };
+    }
+
+    function restaurarVistaAprobaciones(out, vista) {
+        if (!vista) return;
+        const abiertas = new Set(vista.abiertas);
+        out.querySelectorAll('details.haiku-incorporacion-seccion').forEach(seccion => {
+            const categoria = String(seccion.className || '').match(/\bhaiku-incorporacion-seccion--([a-z]+)\b/)?.[1];
+            if (abiertas.has(categoria)) seccion.open = true;
+        });
+        const contenedor = vista.contenedor;
+        if (!contenedor || contenedor.isConnected === false || !Number.isFinite(vista.scrollTop)) return;
+        contenedor.scrollTop = vista.scrollTop;
+        if (!vista.categoriaAncla || !Number.isFinite(vista.anclaTop)) return;
+        const ancla = out.querySelector('.haiku-incorporacion-seccion--' + vista.categoriaAncla + ' > summary');
+        const nuevoTop = ancla?.getBoundingClientRect?.().top;
+        // Compensar los pagos aprobados que ahora aparecen en otra categoría.
+        if (Number.isFinite(nuevoTop)) contenedor.scrollTop += nuevoTop - vista.anclaTop;
+    }
+
+    function bloquearVistaMientrasRevalida(out) {
+        const busyAnterior = out.getAttribute?.('aria-busy') ?? null;
+        const inerteAnterior = out.inert === true;
+        out.inert = true;
+        out.setAttribute('aria-busy', 'true');
+        return () => {
+            out.inert = inerteAnterior;
+            if (busyAnterior === null) out.removeAttribute('aria-busy');
+            else out.setAttribute('aria-busy', busyAnterior);
+        };
     }
 
     function renderizarIncorporacion(out, plan, volver, aprobar, incorporar) {
