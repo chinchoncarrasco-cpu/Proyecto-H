@@ -3397,6 +3397,43 @@
         return nuevo;
     }
 
+
+    function conciliarPenalidadActiva(item, resumen) {
+        if (!item?.penalidadManual || !Array.isArray(resumen?.ajustes) ||
+            String(resumen.reserva_id || '') !== String(item.penalidadManual.reservaId)) return false;
+        const activos = resumen.ajustes.filter(a => a?.estado === 'activo' &&
+            ['cargo_modificacion','cargo_cancelacion'].includes(a.tipo_ajuste) && Number(a.signo) === 1);
+        if (!activos.length) return false;
+        const exactos=activos.filter(a => Number(a.monto)===Number(item.penalidadManual.montoLibro) &&
+            Number(a.porcentaje)===10);
+        if (activos.length===1 && exactos.length===1) {
+            item.penalidadRegistrada={monto:Number(exactos[0].monto),tipo:exactos[0].tipo_ajuste,operacionId:exactos[0].operacion_id};
+            item.categoria='omitidos'; item.seleccionado=false; item.aprobable=false;
+            item.motivos=[]; item.payload=null;
+            item.aviso='✓ Penalidad del 10% registrada en Proyecto H por '+money(item.penalidadRegistrada.monto)+
+                '. El cargo ya existe; no se añadirá otra vez ni se marcará como pago recibido.';
+            item.penalidadManual=null;
+            return true;
+        }
+        item.penalidadManual=null; item.aprobable=false;
+        item.motivos=['Ya existe otro ajuste de penalidad activo en esta reserva: revisa el importe y el motivo antes de continuar.'];
+        item.aviso='Existe un ajuste del 10% que no coincide inequívocamente con el Libro. No se duplicará.';
+        return false;
+    }
+
+    async function conciliarPenalidadesEnPlan(plan, cliente) {
+        const items=plan.items.filter(i=>i.penalidadManual?.reservaId);
+        if (!items.length || typeof cliente?.rpc!=='function') return;
+        const ids=[...new Set(items.map(i=>i.penalidadManual.reservaId))];
+        const resumenes=await Promise.all(ids.map(async id=>{
+            try {
+                const {data,error}=await cliente.rpc('haiku_resumen_ajustes_unidad',{p_reserva_id:id});
+                return [id,error?null:data];
+            } catch (_) {return [id,null];}
+        }));
+        const porReserva=new Map(resumenes);
+        items.forEach(i=>conciliarPenalidadActiva(i,porReserva.get(i.penalidadManual.reservaId)));
+    }
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
         const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
         if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
@@ -3468,6 +3505,9 @@
             item.motivos = [conflicto.motivo];
             item.conflictoIdentidad = true;
         }
+        await conciliarPenalidadesEnPlan(plan,cliente);
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion)
+            throw new Error('El Libro cambió mientras se comprobaba la penalidad; vuelve a comparar.');
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
@@ -4339,6 +4379,20 @@
                 return nuevo;
             } finally {desbloquear();}
         };
+
+        aprobar.refrescarTrasPenalidad = async () => {
+            if (out.isConnected===false) return;
+            const vista=capturarVistaAprobaciones(out), desbloquear=bloquearVistaMientrasRevalida(out);
+            try {
+                const nuevo=await prepararIncorporacion(result,decisiones,aprobados);
+                if(out.isConnected===false) return;
+                renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                restaurarVistaAprobaciones(out,vista);
+                out.querySelector('.haku-incorporacion-sites-preparacion')?.append(
+                    elemento('p','haiku-incorporacion-continuar','✓ Penalidad actualizada desde Proyecto H. No se ha confirmado un pago nuevo.'));
+            }catch(e){out.append(elemento('p','haiku-incorporacion-error','No se pudo actualizar la revisión: '+e.message));}
+            finally {desbloquear();}
+        };
         renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
         return {result,plan};
     }
@@ -5032,6 +5086,22 @@
                         return nuevo;
                     } finally {desbloquear();}
                 };
+
+                aprobar.refrescarTrasPenalidad = async () => {
+                    if(out.isConnected===false) return;
+                    const vista=capturarVistaAprobaciones(out),desbloquear=bloquearVistaMientrasRevalida(out);
+                    try {
+                        const nuevo=restaurarSeleccionIncorporacion(
+                            await prepararIncorporacion(result,decisiones,aprobados),planEnVista);
+                        if(out.isConnected===false)return;
+                        planEnVista=nuevo;
+                        renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+                        restaurarVistaAprobaciones(out,vista);
+                        out.querySelector('.haku-incorporacion-sites-preparacion')?.append(
+                            elemento('p','haiku-incorporacion-continuar','✓ Penalidad registrada en Proyecto H. El pago sigue pendiente de confirmar.'));
+                    }catch(e){out.append(elemento('p','haiku-incorporacion-error','No se pudo actualizar la revisión: '+e.message));}
+                    finally{desbloquear();}
+                };
                 renderizarIncorporacion(out, plan, volver, aprobar, incorporar);
             } catch (error) {
                 vista.replaceChildren(elemento("p", "", "No se pudo preparar: " + error.message + ". Reintenta; no hay una propuesta actualizada."));
@@ -5260,7 +5330,10 @@
         if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
             /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
         let estado = item.etapaSiguiente ? 'Paso 2 · después del titular' : etiquetasEstado[item.categoria] || "Revisar";
-        if (item.pagoLibro?.tipo_movimiento === 'penalidad') {
+        if (item.penalidadRegistrada) {
+            estado = 'Penalidad registrada';
+            detalle = 'El cargo del 10% ya está guardado en Proyecto H. Su abono sigue pendiente de comprobar; no se genera un pago nuevo.';
+        } else if (item.pagoLibro?.tipo_movimiento === 'penalidad') {
             estado = 'Revisar penalidad';
             detalle = 'Es un cargo por confirmar, no un pago. Elige Modificación o Cancelación y revisa el importe antes de aplicar el ajuste.';
         }
@@ -5872,10 +5945,23 @@
         if (item.penalidadManual) {
             const revisar = elemento('button','haiku-incorporacion-aprobar','Revisar penalidad 10%');
             revisar.type = 'button';
+            let avisoPendiente=null;
             revisar.addEventListener('click',()=>ejecutarAprobacionVisual(revisar,async()=>{
-                const abrir = root.HAIKU_AJUSTES_CARGO_V2?.abrirParaReserva;
-                if (typeof abrir !== 'function') throw Error('El formulario de ajustes aún no está disponible. Recarga Haku.');
-                await abrir(item.penalidadManual);
+                const abrir=root.HAIKU_AJUSTES_CARGO_V2?.abrirParaReserva;
+                if(typeof abrir!=='function')throw Error('El formulario de ajustes aún no está disponible. Recarga Haku.');
+                if(avisoPendiente)root.removeEventListener?.('haiku:libro-penalidad-registrada',avisoPendiente);
+                const id=item.penalidadManual.reservaId,monto=item.penalidadManual.montoLibro;
+                avisoPendiente=evento=>{
+                    if(evento.detail?.reservaId!==id || Number(evento.detail?.monto)!==monto)return;
+                    root.removeEventListener?.('haiku:libro-penalidad-registrada',avisoPendiente);
+                    avisoPendiente=null;
+                    if(fila.isConnected!==false)Promise.resolve(aprobar?.refrescarTrasPenalidad?.())
+                        .catch(error=>fila.append(elemento('p','haiku-incorporacion-error',error.message)));
+                };
+                root.addEventListener?.('haiku:libro-penalidad-registrada',avisoPendiente);
+                try{await abrir(item.penalidadManual);}
+                catch(e){root.removeEventListener?.('haiku:libro-penalidad-registrada',avisoPendiente);
+                    avisoPendiente=null;throw e;}
             },fila,'Abriendo ajuste…'));
             fila.append(revisar);
         }
