@@ -3126,6 +3126,33 @@
                     `Comprobante compartido: ${money(distribucion.total)} en total. Aprueba y selecciona ambas partes para confirmar una sola transacción. Early Check-In conserva su concepto; si no hay un cargo de ese servicio, su importe queda sin aplicar hasta regularizarlo.`;
                 continue;
             }
+            // La penalidad del Libro es un cargo a revisar, no un abono ni servicio.
+            if (p.tipo_movimiento === 'penalidad') {
+                const asociadas = Array.from(comp).filter(z => z.libro?.id === r.id &&
+                    z.estado === 'asociada' && z.sistema?.id && z.sistema?.reserva_id === destino?.reserva_id &&
+                    z.sistema.id === destino?.estadia_id &&
+                    Number(z.sistema.cabana) === Number(r.cabana) &&
+                    z.sistema.fecha_checkin === r.fecha_checkin &&
+                    z.sistema.fecha_checkout === r.fecha_checkout);
+                const importeValido = Number.isSafeInteger(p.monto) && p.monto > 0 &&
+                    p.moneda === 'CLP' && (p.monto_penalidad == null || Number(p.monto_penalidad) === p.monto) &&
+                    (p.penalidad_porcentaje == null || Number(p.penalidad_porcentaje) === 10);
+                const asociacionValida = asociadas.length === 1 && !destino?.bloqueado &&
+                    p.fecha_bloque === r.fecha_checkin && Number(p.cabana) === Number(r.cabana);
+                const motivos = ['El Libro indica una penalidad, pero no confirma un pago recibido por ese importe.'];
+                if (!importeValido) motivos.push('Comprueba el importe y el porcentaje de la penalidad antes de aplicar un ajuste.');
+                if (!asociacionValida) motivos.push('No hay una asociación única y vigente con la reserva destino. Revísala antes de añadir un cargo.');
+                const item = add('dudosos',id,texto,null,motivos,[],['pagos.registrar']);
+                item.pagoLibro = p;
+                item.aprobable = false;
+                item.penalidadManual = importeValido && asociacionValida ? {
+                    reservaId:destino.reserva_id, cabana:Number(r.cabana),
+                    fechaIngreso:r.fecha_checkin, montoLibro:p.monto
+                } : null;
+                item.aviso = 'Penalidad indicada en el Libro: revisar el cargo de ajuste del 10%. No se registrará una transferencia nueva.' +
+                    (p.bove_pendiente || p.manager_pendiente ? ' BOVE y Manager pendientes son trámites administrativos por verificar.' : '');
+                continue;
+            }
             if (duplicado) {
                 const patch = actualizacionPagoLibro(p,duplicado);
                 if (coincidencias.length !== 1 || duplicado.reserva_id !== destino?.reserva_id) {
@@ -5232,7 +5259,11 @@
         if (item.categoria === "pendientes") detalle = "No se incorporará mientras siga pendiente.";
         if (item.categoria === "omitidos") detalle = /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
             /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
-        const estado = item.etapaSiguiente ? 'Paso 2 · después del titular' : etiquetasEstado[item.categoria] || "Revisar";
+        let estado = item.etapaSiguiente ? 'Paso 2 · después del titular' : etiquetasEstado[item.categoria] || "Revisar";
+        if (item.pagoLibro?.tipo_movimiento === 'penalidad') {
+            estado = 'Revisar penalidad';
+            detalle = 'Es un cargo por confirmar, no un pago. Elige Modificación o Cancelación y revisa el importe antes de aplicar el ajuste.';
+        }
         if (item.etapaSiguiente) detalle = 'Primero se guardarán el titular y RUT del Libro. Haku revalidará Proyecto H y habilitará este pago en el paso siguiente.';
         return { titular, cabana, monto, concepto, periodo, tipo, estado, detalle, estadias, reserva };
     }
@@ -5768,7 +5799,13 @@
             const datos = datosPagoIncorporacion(item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB
                 ? {...item.pagoLibro,fecha_comprobante:item.decisionPagoManual.fechaPago} : item.pagoLibro);
             const meta = elemento("div", "haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle");
-            meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
+            if (item.pagoLibro.tipo_movimiento === 'penalidad') {
+                meta.append(datoIncorporacion('Cargo indicado',money(item.pagoLibro.monto)),
+                    datoIncorporacion(datos.segundo[0], datos.segundo[1]),
+                    datoIncorporacion('Fecha en Libro',datos.fecha));
+            } else {
+                meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
+            }
             fila.append(meta);
             if (esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, 'Cambios propuestos por el Libro'));
         } else if (vista.estadias.length) {
@@ -5831,6 +5868,16 @@
             const notas = elemento("details", "haiku-incorporacion-notas");
             notas.append(elemento("summary", "", "Ver notas y solicitudes"), elemento("p", "", vista.reserva.observaciones));
             fila.append(notas);
+        }
+        if (item.penalidadManual) {
+            const revisar = elemento('button','haiku-incorporacion-aprobar','Revisar penalidad 10%');
+            revisar.type = 'button';
+            revisar.addEventListener('click',()=>ejecutarAprobacionVisual(revisar,async()=>{
+                const abrir = root.HAIKU_AJUSTES_CARGO_V2?.abrirParaReserva;
+                if (typeof abrir !== 'function') throw Error('El formulario de ajustes aún no está disponible. Recarga Haku.');
+                await abrir(item.penalidadManual);
+            },fila));
+            fila.append(revisar);
         }
         const revisionManualVisible = item.manualPago && item.categoria !== 'dudosos' &&
             revisionesVisualesManualPago.get(plan)?.itemId === item.id;
