@@ -1106,6 +1106,24 @@
             }
             items.push(...notasCanonicas.values());
         }
+        // Comparar cobros después de leer los servicios, antes de cualquier
+        // firma o decisión manual. La autoridad del Libro no se reescribe.
+        const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id ||
+            (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
+        const existentes = await cargarExistentes(cliente, reservaIds);
+        const posiblesFullDay = [...new Set(items.filter(item =>
+            item.kind === 'servicio' && item.intencion_cobro === 'no_determinada' &&
+            esTinajaServicio(item.servicio) && esFullDay(item.reserva?.tipo_estadia) &&
+            esFullDay(item.asociacion?.sistema?.tipo_estadia) &&
+            item.asociacion?.estado === 'asociada'
+        ).map(item => item.asociacion.sistema.reserva_id))];
+        const verificacionFullDay = await finanzasFullDay(cliente, posiblesFullDay);
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i], regla = reglaTinajaIncluidaFullDay(item, items, existentes, verificacionFullDay);
+            if (regla) items[i] = prepararServicio(item.reserva, item.servicio, item.asociacion,
+                item.nocheManual, {}, regla);
+        }
+
         // Firma exacta, sin persistencia: incluye todos los datos leídos del Libro y la asociación actual.
         const firmaLibro = JSON.stringify([libro.archivo, libro.generacion, libro.reservas]);
         for (let i = 0; i < items.length; i++) {
@@ -1119,8 +1137,7 @@
         }
         for (const [id, eleccion] of overrides) if (!items.some(x => x.item_id === id)) overrides.set(id, { ...eleccion, invalidada: true });
         for (const [id, decision] of manuales) if (!items.some(x => x.item_id === id)) decision.invalidada = true;
-        const reservaIds = [...new Set(items.map(x => x.payload?.reserva_id || (x.asociacion.estado === 'asociada' ? x.asociacion.sistema.reserva_id : null)).filter(Boolean))];
-        const existentes = await cargarExistentes(cliente, reservaIds);
+
         for (let indice = 0; indice < items.length; indice++) {
             const item = items[indice];
             if (item.kind === "nota") {
