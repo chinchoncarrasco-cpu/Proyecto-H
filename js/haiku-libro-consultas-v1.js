@@ -1,10 +1,10 @@
 (function inicializarConsultas(root) {
     "use strict";
-    function crearMotorLectura({ semantica, pagosDestinos, cancelaciones, bloqueos } = {}) {
+    function crearMotorLectura({ semantica, pagosDestinos, cancelaciones, bloqueos, serviciosNotas } = {}) {
         if (!semantica?.normalizar) throw new Error("Semántica canónica del Libro no disponible.");
         return inicializarConsultas({ __motorLecturaLibro: true, HAIKU_LIBRO_SEMANTICA: semantica,
             HAIKU_LIBRO_PAGOS_DESTINOS_V1: pagosDestinos, HAIKU_LIBRO_CANCELACIONES_V1: cancelaciones,
-            HAIKU_LIBRO_BLOQUEOS_V1: bloqueos });
+            HAIKU_LIBRO_BLOQUEOS_V1: bloqueos, HAIKU_LIBRO_SERVICIOS_SCOPE_V2: serviciosNotas });
     }
     const S = root.HAIKU_LIBRO_SEMANTICA;
     const D = root.HAIKU_LIBRO_PAGOS_DESTINOS_V1;
@@ -1606,7 +1606,7 @@
                 ...asociacion,
                 diferencias: [],
                 pagosComparacion: [],
-                serviciosComparacion: []
+                serviciosComparacion: [], notasComparacion: []
             };
         });
 
@@ -1633,14 +1633,44 @@
                 .in("reserva_id", grupo)));
         }
 
+        const motorServicios = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
+        const operativa = q.incluirServicios !== false && q.incluirFinanzas !== false && q.focal !== true &&
+            typeof motorServicios?.compararReservas === 'function'
+            ? await motorServicios.compararReservas(validas, {desde, hasta}, cliente) : null;
+        if (operativa && !Array.isArray(operativa.items))
+            throw new Error('La revisión de servicios y notas está incompleta. No se concluye que esté conciliada.');
+        const porReservaOperativa = new Map(validas.map(r => [r, []]));
+        for (const item of operativa?.items || []) {
+            if (!porReservaOperativa.has(item.reserva))
+                throw new Error('La revisión operativa no pertenece a las reservas consultadas.');
+            porReservaOperativa.get(item.reserva).push(item);
+        }
+
         for (const result of resultados) {
             const r = result.libro;
+            if (operativa) {
+                for (const item of porReservaOperativa.get(r)) {
+                    const identidadSegura = result.estado === 'asociada' &&
+                        item.asociacion?.estado === 'asociada' &&
+                        item.asociacion.sistema.reserva_id === result.sistema.reserva_id &&
+                        item.asociacion.sistema.id === result.sistema.id;
+                    const estado = !identidadSegura ? 'revisar' : item.estado === 'existente' ? 'en_sistema' :
+                        item.estado === 'listo' ? 'faltante' : item.servicio_existente ? 'diferente' : 'revisar';
+                    const detalle = { estado, canonico:true, item_id:item.item_id, reserva:r,
+                        servicio:item.servicio, texto:item.texto, sistema:item.servicio_existente,
+                        finanzas:item.finanzas_existente,
+                        razon: !identidadSegura ? 'La asociación de la reserva requiere revisión antes de incorporar.' :
+                            item.razones?.join(' · ') || (estado === 'en_sistema' ? 'Ya existe en Proyecto H.' : 'Preparado para incorporar.'),
+                        estado_operativo:item.estado };
+                    (item.kind === 'nota' ? result.notasComparacion : result.serviciosComparacion).push(detalle);
+                }
+            }
 
             if (result.estado !== "asociada") {
                 const estadoPago = "revisar";
                 result.pagosComparacion.push(...r.pagos.map(p => ({ estado: estadoPago, pago: p, reserva: r })));
                 result.pagosComparacion.push(...r.pagos_sin_asociacion.map(p => ({ estado: "revisar", pago: p, reserva: r })));
-                result.serviciosComparacion.push(...r.servicios.map(s => ({ estado: result.estado === "sin_coincidencia" ? "con_reserva_faltante" : "revisar", servicio: s, reserva: r })));
+                if (!operativa) result.serviciosComparacion.push(...r.servicios.map(s => ({ estado: result.estado === "sin_coincidencia" ? "con_reserva_faltante" : "revisar", servicio: s, reserva: r })));
                 continue;
             }
 
@@ -1693,7 +1723,9 @@
             r.pagos.forEach(registrarPago);
             r.pagos_sin_asociacion.forEach(registrarPago);
 
-            for (const service of r.servicios) {
+            // Compatibilidad de consumidores headless sin el módulo operativo.
+            // La pantalla mensual no usa este criterio si dispone del motor común.
+            if (!operativa) for (const service of r.servicios) {
                 const conceptoLibro=S.normalizar(service.concepto).replace(/_/g," ");
                 const candidatas=servicios.filter(x=>x.reserva_id===s.reserva_id &&
                     !/cancelad|no.?show|anulad/.test(S.normalizar(x.estado_servicio)) &&
@@ -1800,6 +1832,8 @@
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
         resultados.serviciosDetalle = serviciosUnicos;
+        resultados.criterioServiciosNotas = operativa ? 'operativo_v2' : 'no_disponible';
+        resultados.notasDetalle = resultados.flatMap(r => r.notasComparacion);
         resultados.meta = {
             libro: grupos.length,
             estadias_libro: validas.length,
@@ -1811,8 +1845,27 @@
             con_diferencias: resultados.filter(g => g.estado === "asociada" && g.diferencias.length).length,
             pagos_faltantes: [...pagosUnicos.values()].filter(x => x.estado === "nuevo_seguro").length,
             pagos_revisar: [...pagosUnicos.values()].filter(x => x.estado === "revisar" || x.estado === "diferente").length,
-            servicios_revisar: serviciosUnicos.filter(x => x.estado !== "en_sistema").length
+            servicios_revisar: serviciosUnicos.filter(x => operativa ? ['revisar','diferente'].includes(x.estado) : x.estado !== "en_sistema").length,
+            ...(operativa ? {
+                servicios_preparables: serviciosUnicos.filter(x => x.estado === 'faltante').length,
+                notas_preparables: resultados.notasDetalle.filter(x => x.estado === 'faltante').length,
+                notas_revisar: resultados.notasDetalle.filter(x => x.estado === 'revisar').length
+            } : {})
         };
+        // El rótulo de un pago existente procede del MISMO plan que abre
+        // Preparar incorporación. Una actualización no es un pago faltante.
+        if (operativa) {
+            const planPagos = crearPlanIncorporacion(validas, resultados);
+            const itemsPagos = new Map(planPagos.items.map(i => [i.id, i]));
+            for (const movimiento of resultados.pagosDetalle) {
+                const item = itemsPagos.get(idMovimientoIncorporacion(movimiento));
+                if (item?.payload?.tipo === 'pago_actualizar') movimiento.actualizacionExistente = {
+                    cambios:item.cambios || [], motivos:item.motivos || [], categoria:item.categoria
+                };
+            }
+            resultados.meta.pagos_actualizar = resultados.pagosDetalle.filter(x => x.actualizacionExistente).length;
+            resultados.meta.pagos_revisar = resultados.pagosDetalle.filter(x => !x.actualizacionExistente && ['revisar','diferente'].includes(x.estado)).length;
+        }
         usuariosComparacion.set(resultados,sesion.session.user.id);
         return resultados;
     }
@@ -4580,17 +4633,26 @@
         const ambiguas = grupos.filter(g => g.estado === "ambigua");
         const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
         const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
-        const pagosRevisar = (comp.pagosDetalle || []).filter(x => x.estado === "revisar" || x.estado === "diferente");
-        const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => x.estado !== "en_sistema");
+        const pagosActualizar = (comp.pagosDetalle || []).filter(x => x.actualizacionExistente);
+        const pagosRevisar = (comp.pagosDetalle || []).filter(x => !x.actualizacionExistente && (x.estado === "revisar" || x.estado === "diferente"));
+        const criterioOperativo = comp.criterioServiciosNotas === 'operativo_v2';
+        const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => criterioOperativo
+            ? ['revisar','diferente'].includes(x.estado) : x.estado !== "en_sistema");
+        const serviciosPreparables = criterioOperativo ? (comp.serviciosDetalle || []).filter(x => x.estado === 'faltante') : [];
+        const notasPreparables = (comp.notasDetalle || []).filter(x => x.estado === 'faltante');
+        const notasRevisar = (comp.notasDetalle || []).filter(x => x.estado === 'revisar');
         const advertenciasInformativas = comp.flatMap(x => (x.libro.advertencias_informativas || [])
             .map(a => `${x.libro.titular} · CAB ${x.libro.cabana}: ${a}`));
-        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, serviciosRevisar, advertenciasInformativas,
+        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar,
+            serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas,
             contadores: { gruposLibro: meta.libro ?? 0, registrosDetectados: meta.libro_detectadas ?? 0,
                 reservasProyecto: meta.proyecto ?? 0, estadiasAsociadas: comp.filter(x => x.estado === "asociada").length,
                 estadiasValidas: meta.estadias_libro ?? 0, gruposAsociados: meta.asociadas ?? 0,
                 faltantes: faltantes.length, ambiguas: ambiguas.length, casosConDiferencias: meta.con_diferencias ?? 0,
                 gruposConDiferencias: diferencias.length, pagosFaltantes: pagosFaltan.length,
-                pagosRevisar: pagosRevisar.length, serviciosRevisar: serviciosRevisar.length,
+                pagosRevisar: pagosRevisar.length,
+                ...(criterioOperativo ? {pagosActualizar:pagosActualizar.length} : {}),
+                serviciosRevisar: serviciosRevisar.length,
                 advertencias: (result.advertencias || []).length, advertenciasInformativas: [...new Set(advertenciasInformativas)].length } };
     }
     if (root.__motorLecturaLibro) return Object.freeze({ consultar, interpretar, modeloPresentacionComparacion });
@@ -4996,7 +5058,8 @@
         const meta = comp.meta || {};
         const grupos = comp.grupos || [];
         const modelo = modeloPresentacionComparacion(result);
-        const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, serviciosRevisar, advertenciasInformativas } = modelo;
+        const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar,
+            serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas } = modelo;
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
         else {
@@ -5038,9 +5101,9 @@
 
         const avisoPagos = elemento("div", "haku-comparacion-sites-aviso-pagos");
         avisoPagos.append(
-            elemento("strong", "", `${meta.pagos_revisar ?? 0} pagos requieren revisión`),
-            elemento("span", "", "La coincidencia de reservas no cierra la revisión de pagos."),
-            elemento("small", "", `Nuevos seguros: ${meta.pagos_faltantes ?? 0} · Requieren decisión: ${meta.pagos_revisar ?? 0}`)
+            elemento("strong", "", `${pagosRevisar.length} pagos requieren revisión${pagosActualizar.length ? ` · ${pagosActualizar.length} actualizaciones de pagos existentes` : ''}`),
+            elemento("span", "", pagosActualizar.length ? 'Los pagos a actualizar ya están registrados; revisa la diferencia, no los incorpores otra vez.' : "La coincidencia de reservas no cierra la revisión de pagos."),
+            elemento("small", "", `Nuevos seguros: ${meta.pagos_faltantes ?? 0} · Requieren decisión: ${pagosRevisar.length} · Actualizaciones: ${pagosActualizar.length}`)
         );
         out.append(avisoPagos);
 
@@ -5073,8 +5136,22 @@
             diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
         agregarDetalles(revision, "Pagos que requieren revisión",
             pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`), "revision", "pago");
+        if (pagosActualizar.length) agregarDetalles(revision, "Pagos existentes por actualizar",
+            pagosActualizar.map(x => `${x.reserva.titular} · ${money(x.pago.monto)} · Ya registrado; no es un pago nuevo. ` +
+                (x.actualizacionExistente.cambios.map(c => typeof c === 'string' ? c : `${c.campo}: Proyecto H ${c.anterior ?? 'sin dato'} / Libro ${c.libro ?? 'sin dato'}`).join('; ') || 'Revisar datos del comprobante.') +
+                (x.actualizacionExistente.motivos.length ? ' · ' + x.actualizacionExistente.motivos.join(' · ') : '')), "revision", "pago");
         agregarDetalles(revision, "Servicios que requieren revisión",
-            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`), "revision", "servicio");
+            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}` + (x.canonico ? ` · ${x.razon}` : '')), "revision", "servicio");
+        if (serviciosPreparables.length) agregarDetalles(revision, "Servicios preparados para incorporar",
+            serviciosPreparables.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`), "normal", "servicio");
+        if (notasPreparables.length) agregarDetalles(revision, "Notas por incorporar",
+            notasPreparables.map(x => `${x.reserva.titular} · Nota de la reserva · ${x.texto}`), "normal", "servicio");
+        if (notasRevisar.length) agregarDetalles(revision, "Notas que requieren revisión",
+            notasRevisar.map(x => `${x.reserva.titular} · ${x.texto} · ${x.razon}`), "revision", "servicio");
+        if (comp.criterioServiciosNotas === 'operativo_v2') revision.append(elemento('p','haku-comparacion-sites-alcance',
+            'Servicios y notas verificados con el mismo criterio de su revisión operativa. Los ya registrados no se vuelven a proponer.'));
+        else if (comp.criterioServiciosNotas === 'no_disponible') revision.append(elemento('p','haku-comparacion-sites-alcance',
+            'No está disponible la revisión operativa común. Estos avisos de servicios son preliminares; no acreditan que falten registros.'));
         if (!meta.libro && meta.libro_detectadas) agregarLista(revision, "Revisar lectura del Libro",
             [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
         agregarDetalles(revision, "Posibles faltantes / modificaciones",
