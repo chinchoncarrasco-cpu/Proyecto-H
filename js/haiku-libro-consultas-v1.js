@@ -4816,8 +4816,8 @@
         return bloque;
     }
 
-    function agregarDetalles(contenedor, titulo, items, tono = "", formato = "") {
-        if (!items.length) return;
+    function agregarDetalles(contenedor, titulo, items, tono = "", formato = "", vacio = "") {
+        if (!items.length && !vacio) return;
         const details = document.createElement("details");
         if (tono) details.className = `haiku-comparacion-acordeon haku-franja--${tono}`;
         if (tono) details.className += claseIconoSeccion(titulo);
@@ -4825,8 +4825,10 @@
         details.append(summary);
         const ul = document.createElement("ul");
         items.forEach(item => ul.append(filaComparacion(item, formato)));
+        if (!items.length && vacio) ul.append(elemento("li", "", vacio));
         details.append(ul);
         contenedor.append(details);
+        return details;
     }
 
     // La decoración sólo cambia los encabezados; conserva cada <details>, su contenido y sus listeners.
@@ -5140,17 +5142,16 @@
             pagosActualizar.map(x => `${x.reserva.titular} · ${money(x.pago.monto)} · Ya registrado; no es un pago nuevo. ` +
                 (x.actualizacionExistente.cambios.map(c => typeof c === 'string' ? c : `${c.campo}: Proyecto H ${c.anterior ?? 'sin dato'} / Libro ${c.libro ?? 'sin dato'}`).join('; ') || 'Revisar datos del comprobante.') +
                 (x.actualizacionExistente.motivos.length ? ' · ' + x.actualizacionExistente.motivos.join(' · ') : '')), "revision", "pago");
-        agregarDetalles(revision, "Servicios que requieren revisión",
-            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}` + (x.canonico ? ` · ${x.razon}` : '')), "revision", "servicio");
+        const detalleServicios = agregarDetalles(revision, "Servicios que requieren revisión",
+            serviciosRevisar.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}` + (x.canonico ? ` · ${x.razon}` : '')), "revision", "servicio",
+            comp.criterioServiciosNotas === 'operativo_v2' ? 'No hay servicios que requieran revisión.' : 'No hay avisos en la comparación preliminar.');
         if (serviciosPreparables.length) agregarDetalles(revision, "Servicios preparados para incorporar",
             serviciosPreparables.map(x => `${x.reserva.titular} · ${x.servicio.concepto} · ${x.servicio.texto_original}`), "normal", "servicio");
         if (notasPreparables.length) agregarDetalles(revision, "Notas por incorporar",
             notasPreparables.map(x => `${x.reserva.titular} · Nota de la reserva · ${x.texto}`), "normal", "servicio");
         if (notasRevisar.length) agregarDetalles(revision, "Notas que requieren revisión",
             notasRevisar.map(x => `${x.reserva.titular} · ${x.texto} · ${x.razon}`), "revision", "servicio");
-        if (comp.criterioServiciosNotas === 'operativo_v2') revision.append(elemento('p','haku-comparacion-sites-alcance',
-            'Servicios y notas verificados con el mismo criterio de su revisión operativa. Los ya registrados no se vuelven a proponer.'));
-        else if (comp.criterioServiciosNotas === 'no_disponible') revision.append(elemento('p','haku-comparacion-sites-alcance',
+        if (comp.criterioServiciosNotas === 'no_disponible') detalleServicios.append(elemento('p','haku-fila-detalle',
             'No está disponible la revisión operativa común. Estos avisos de servicios son preliminares; no acreditan que falten registros.'));
         if (!meta.libro && meta.libro_detectadas) agregarLista(revision, "Revisar lectura del Libro",
             [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
