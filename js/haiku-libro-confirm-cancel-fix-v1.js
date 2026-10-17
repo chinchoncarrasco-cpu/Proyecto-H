@@ -185,6 +185,99 @@
         });
     }
 
+    // Detalle del recibo: separado por tipo y sólo después del OK del RPC.
+    // No consulta ni modifica reservas, servicios, notas o pagos.
+    function completarRecibo(card, data, elegidos) {
+        if (data?.ok !== true) return;
+        const tarjeta = card.querySelector('.haku-libro-resultado-sites__tarjeta');
+        const detalle = tarjeta?.querySelector('.haku-libro-resultado-sites__detalle');
+        if (!detalle || typeof tarjeta.insertBefore !== 'function') return;
+        tarjeta.querySelectorAll('.haku-libro-resultado-sites__incorporados').forEach(n => n.remove());
+        const crear = (tag, clase, texto) => {
+            const nodo = document.createElement(tag);
+            if (clase) nodo.className = clase;
+            if (texto !== undefined) nodo.textContent = String(texto);
+            return nodo;
+        };
+        // Sólo el resultado por item_id del RPC acredita una incorporación.
+        // No confundir elegidos, ya existentes u omitidos con elementos nuevos.
+        const grupoIncorporados = (kind, titulo, cantidad, respuesta, estadoCreado) => {
+            const grupo = crear("section", "haku-libro-resultado-sites__incorporados");
+            grupo.dataset.tipo = kind;
+            grupo.style.padding = '14px 15px';
+            grupo.style.borderBottom = '1px solid #dce8e0';
+            grupo.style.minWidth = '0';
+            grupo.setAttribute("aria-label", titulo);
+            const encabezado = crear("div", "haku-libro-resultado-sites__grupo-cabecera");
+            encabezado.style.display = 'flex';
+            encabezado.style.alignItems = 'center';
+            encabezado.style.justifyContent = 'space-between';
+            encabezado.style.gap = '8px';
+            const heading = crear("h3", "", titulo);
+            heading.style.margin = '0'; heading.style.fontSize = '12px';
+            heading.style.lineHeight = '1.4'; heading.style.color = '#254531';
+            encabezado.append(heading,
+                crear("span", "haku-libro-resultado-sites__chip", Number(cantidad || 0)));
+            grupo.append(encabezado);
+            const totalValido = Number.isSafeInteger(cantidad) && cantidad >= 0;
+            const recibidos = Array.isArray(respuesta) ? respuesta : [];
+            const nuevos = recibidos.filter(r => r?.estado === estadoCreado);
+            const filas = nuevos.map(r => {
+                const candidatos = elegidos.filter(i => i.item_id === r.item_id && i.kind === kind && i.estado === 'listo');
+                const veces = [...(data.servicios || []), ...(data.notas || [])]
+                    .filter(x => x?.item_id === r.item_id).length;
+                const item = candidatos.length === 1 && veces === 1 ? candidatos[0] : null;
+                if (!r.item_id || !item ||
+                    r.reserva_id != null && r.reserva_id !== item.payload?.reserva_id ||
+                    r.estadia_id != null && r.estadia_id !== item.payload?.estadia_id) return null;
+                return item;
+            });
+            if (!totalValido || nuevos.length !== cantidad || filas.some(i => !i)) {
+                const aviso = crear("p", "haku-libro-resultado-sites__grupo-aviso",
+                    "El total fue confirmado, pero no se pudo identificar con seguridad el detalle. Revisa la reserva antes de repetir la operación.");
+                aviso.setAttribute("role", "status"); grupo.append(aviso);
+            } else if (!cantidad) {
+                grupo.append(crear("p", "haku-libro-resultado-sites__grupo-vacio", kind === 'nota'
+                    ? "No se incorporaron notas en esta operación."
+                    : "No se incorporaron servicios en esta operación."));
+            } else for (const item of filas) {
+                const fila = crear("div", "haku-libro-resultado-sites__fila");
+                fila.dataset.itemId = item.item_id;
+                const cabana = item.reserva?.cabana ? `CAB ${item.reserva.cabana} · ` : '';
+                const nombre = kind === 'nota' ? 'Nota de la reserva'
+                    : item.mapa?.nombre || item.servicio?.concepto || 'Servicio';
+                fila.append(crear("strong", "", `${cabana}${item.reserva?.titular || 'Reserva'} · ${nombre}`),
+                    crear("span", "haku-libro-resultado-sites__estado", kind === 'nota' ? 'Nota incorporada' : 'Servicio incorporado'));
+                const p = item.payload || {};
+                if (kind === 'servicio') {
+                    const datos = [p.fecha_servicio,
+                        p.hora ? `${p.hora}${item.hora_fin ? '–' + item.hora_fin : ''}` : null,
+                        p.cantidad != null ? `Cantidad: ${p.cantidad}` : null,
+                        p.tipo_cobro === 'cortesia' ? 'Cortesía' : p.tipo_cobro === 'normal' ? 'Cobrable' : null].filter(Boolean);
+                    if (datos.length) fila.append(crear("p", "", datos.join(' · ')));
+                }
+                const descripcion = kind === 'nota' ? p.texto || item.texto : item.servicio?.texto_original;
+                if (descripcion) {
+                    const texto = crear("p", "haku-libro-resultado-sites__texto-incorporado", descripcion);
+                    texto.style.whiteSpace = 'pre-wrap'; fila.append(texto);
+                }
+                grupo.append(fila);
+            }
+            grupo.querySelectorAll('.haku-libro-resultado-sites__grupo-aviso,.haku-libro-resultado-sites__grupo-vacio').forEach(p => {
+                p.style.margin = '8px 0 0'; p.style.fontSize = '10px'; p.style.lineHeight = '1.5';
+                p.style.color = p.className.endsWith('aviso') ? '#805e2e' : '#617267';
+            });
+            return grupo;
+        };
+        const serviciosIncorporados = grupoIncorporados('servicio', 'Servicios incorporados',
+            data.servicios_creados, data.servicios, 'creado');
+        const notasIncorporadas = grupoIncorporados('nota', 'Notas incorporadas',
+            data.notas_creadas, data.notas, 'creada');
+
+        tarjeta.insertBefore(serviciosIncorporados, detalle);
+        tarjeta.insertBefore(notasIncorporadas, detalle);
+    }
+
     async function importarSeguro(card, textoOriginal) {
         const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
         if (!api?.construir) throw new Error("La comparación de servicios del Libro no está disponible.");
@@ -218,6 +311,7 @@
             if (error) throw error;
             if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
             api.renderizarResultadoServicios(card, data, actual, elegidos, textoOriginal);
+            completarRecibo(card, data, elegidos);
         } catch (error) {
             restaurarControles(estados);
             throw error;
@@ -269,7 +363,8 @@
     const api = Object.freeze({
         version: "4.0.0",
         reactivar: reactivarBotonLibro,
-        bloquearRevision
+        bloquearRevision,
+        completarRecibo
     });
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1 = api;
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2 = api;
