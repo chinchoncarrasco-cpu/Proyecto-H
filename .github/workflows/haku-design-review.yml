@@ -1,0 +1,37 @@
+name: Haku compact services design review
+on:
+  push:
+    branches: [fix/libro-diseno-acordeon-review]
+    paths:
+      - '.haku-design-review.py'
+      - 'tests/libro-servicios-acordeon-diseno.test.cjs'
+      - '.github/workflows/haku-design-review.yml'
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/fix/libro-diseno-acordeon-review'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Aplicar sólo el cambio visual ya probado
+        run: |
+          python3 .haku-design-review.py
+          node --check js/haiku-libro-consultas-v1.js
+          git diff --check
+          test "$(git diff --name-only)" = 'js/haiku-libro-consultas-v1.js'
+      - name: Pruebas nativas de diseño y reglas existentes sin datos reales
+        run: |
+          node --test tests/libro-servicios-acordeon-diseno.test.cjs tests/libro-comparacion-criterio-unificado.test.cjs tests/libro-semantica.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicios-existentes-finanzas.test.cjs tests/haiku-servicios-identidad-proveniencia.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-servicios-noche-manual.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-masaje-fragmentos.test.cjs tests/libro-masajes-parser.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-beneficio-tinaja-notas.test.cjs tests/libro-masaje-registro-cuna-acciones.test.cjs tests/libro-resultado-incorporados.test.cjs
+      - name: Guardar únicamente el módulo validado en esta rama
+        run: |
+          test "$(git diff --name-only)" = 'js/haiku-libro-consultas-v1.js'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- js/haiku-libro-consultas-v1.js
+          git commit -m 'fix(libro): recuperar acordeón compacto sin alterar el criterio compartido'
+          git push origin HEAD:refs/heads/fix/libro-diseno-acordeon-review
