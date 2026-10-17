@@ -1288,7 +1288,21 @@
     async function construir(texto, overrides = new Map(), manuales = new Map()) {
         const cliente = root.haikuSupabase;
         if (!cliente) throw new Error("No está disponible la conexión con Proyecto H.");
-        const libro = await leerLibro(texto), sistema = await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
+        return construirPlan(await leerLibro(texto), cliente, texto, overrides, manuales);
+    }
+
+    // La comparación mensual consume el mismo plan, con las filas ya leídas
+    // de SU consulta. No vuelve a abrir otro XLSX ni usa resultados anteriores.
+    async function compararReservas(reservas, rango, cliente = root.haikuSupabase) {
+        if (!cliente || !Array.isArray(reservas) || !rango?.desde || !rango?.hasta)
+            throw new Error('No hay una lectura completa para comparar servicios y notas.');
+        return construirPlan({ reservas, desde:rango.desde, hasta:rango.hasta,
+            archivo:rango.archivo || null, generacion:rango.generacion,
+            version_libro:rango.version_libro || null }, cliente, '', new Map(), new Map());
+    }
+
+    async function construirPlan(libro, cliente, texto, overrides, manuales) {
+        const sistema = await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
         const contrato = manuales.size ? await cargarContratoManual() : null;
         for (const reserva of libro.reservas) {
             const asociacion = asociarReserva(reserva, sistema), candidatos = agruparTinajaPromoMixta(reserva, depurarServicios(reserva)), notasCanonicas = new Map();
@@ -2013,7 +2027,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, revalidarVista, procesar, renderizarResultadoServicios });
+    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, compararReservas, revalidarVista, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;
     root.addEventListener("click", interceptar, true);
