@@ -32,6 +32,9 @@
             .trim();
     }
 
+    const promocionReserva = reserva => root.HAIKU_LIBRO_SEMANTICA?.promocionReserva?.(reserva?.texto_original) || null;
+    const descripcionPromo = 'Promo Haku: 10% de descuento y 1 hora de tinaja caliente de cortesía, Jacuzzi o Tonel. El descuento se verifica sobre la tarifa registrada; no se aplica por segunda vez.';
+
     function iso(y, m, d) {
         const yy = Number(y), mm = Number(m), dd = Number(d);
         const fecha = new Date(Date.UTC(yy, mm - 1, dd));
@@ -204,7 +207,7 @@
             evidencia_origen:{...horario.evidencia_origen,pendiente_pago:true,cortesia:false},
             promoTinajaMixta:Object.freeze({version:1,horas_cortesia:1,horas_cobrables:1,
                 total:30000,inicio:horario.hora,fin:horario.hora_fin,fragmentos:partes,
-                promo_haiku:/\bpromo\s+haiku\b/.test(normalizar(reserva.texto_original))})
+                promo_haiku:Boolean(promocionReserva(reserva))})
         };
         const result=[],first=candidatos.indexOf(regalada);
         for(let i=0;i<candidatos.length;i++){
@@ -227,7 +230,7 @@
 
     function esNotaConocida(fragmento) {
         const t = normalizar(fragmento);
-        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|iva\s+descontad|solicita?r?\s+factura|promo\s+haiku|voucher\s+regalo|pedir.{0,30}(?:documento|pasaporte|dni|rut)|presentar.{0,30}(?:documento|pasaporte|dni|rut)|solicitar.{0,30}(?:documento|pasaporte|dni|rut)|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest(?:a|ado|ados|ada|adas)|batas\s+en\s+caba/.test(t);
+        return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|iva\s+descontad|solicita?r?\s+factura|promo\s+(?:haiku|haku)|voucher\s+regalo|pedir.{0,30}(?:documento|pasaporte|dni|rut)|presentar.{0,30}(?:documento|pasaporte|dni|rut)|solicitar.{0,30}(?:documento|pasaporte|dni|rut)|\bno\s+mover\b|sacacorchos|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest(?:a|ado|ados|ada|adas)|batas\s+en\s+caba/.test(t);
     }
 
     function notaImportante(texto) {
@@ -673,18 +676,50 @@
             pagosRevisados:true, ...(cambioHorario ? {cambioHorario} : {})});
     }
 
-    function prepararServicio(reserva, servicio, asociacion, nocheManual = null, resueltos = {}, reglaFullDay = null) {
+    function reglaTinajaIncluidaPromo(item, items, existentes, finanzas) {
+        const r=item?.reserva,s=item?.servicio,e=item?.asociacion?.sistema;
+        if (!promocionReserva(r) || item.kind!=='servicio' || item.semantica!=='SERVICIO_REAL' ||
+            !esTinajaServicio(s) || item.intencion_cobro!=='no_determinada' ||
+            item.asociacion?.estado!=='asociada' || !e?.reserva_id || !e?.id ||
+            !item.fecha || !finanzas.has(e.reserva_id) || Number(s.cantidad)!==1 ||
+            s.monto!=null && Number(s.monto)>0 || !Number.isInteger(item.personas) || item.personas<1 || item.personas>3)
+            return null;
+        const inicio=minutosHora(item.hora),fin=minutosHora(item.hora_fin),texto=normalizar(s.texto_original);
+        // Un inicio sin duración usa la hora incluida. Una duración mayor o una
+        // extensión explícita nunca convierte todo el servicio en cortesía.
+        if (inicio===null || inicio+60>=1440 || fin!==null && fin!==inicio+60 ||
+            /\b(?:adicional|extra|extension|extender|segunda|segundo)\b/.test(texto)) return null;
+        // "1 hr de tinaja" es una duración, no una cita a la 01:00.
+        if (!/\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:a\s+las|desde(?:\s+las)?)\s+(?:[01]?\d|2[0-3])\b|\b(?:0?9|1\d|2[0-3])\s*(?:hrs?|h)\b/.test(texto)) return null;
+        const sinReloj=texto.replace(/\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(?:hrs?|h)\b/g,
+            (valor,hh,mm)=>Number(hh)*60+Number(mm||0)===inicio ? ' ' : valor);
+        if ([...sinReloj.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|h\b|minutos?|mins?|min\b)/g)]
+            .some(m=>Number(m[1].replace(',','.'))!==(/^min/.test(m[2])?60:1))) return null;
+        const mismaEstadia=otro=>otro?.asociacion?.sistema?.id===e.id;
+        if(items.filter(otro=>otro.kind==='servicio' && mismaEstadia(otro) && esTinajaServicio(otro.servicio)).length!==1 ||
+            existentes.servicios.some(x=>x.reserva_id===e.reserva_id && (!x.estadia_id || x.estadia_id===e.id) &&
+                !/cancelad|no_show|anulad/i.test(x.estado_servicio||'') && ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)))) return null;
+        const fiscal=finanzas.get(e.reserva_id);
+        if ([...(r.pagos||[]),...(r.pagos_sin_asociacion||[]),...fiscal.pagos].some(pagoEspecificoTinaja)) return null;
+        return Object.freeze({version:1,origen:'promo_haku_una_hora_tinaja',reservaId:e.reserva_id,
+            estadiaId:e.id,fecha:item.fecha,pagosRevisados:true});
+    }
+
+    function prepararServicio(reserva, servicio, asociacion, nocheManual = null, resueltos = {}, reglaFullDay = null, reglaPromo = null) {
         const razones = [], inferencias = [];
+        const promocion=promocionReserva(reserva),reglaIncluida=reglaFullDay||reglaPromo;
+        if(promocion && esTinajaServicio(servicio))inferencias.push(descripcionPromo);
         if (servicio?.semantica !== "SERVICIO_REAL") throw new Error("prepararServicio sólo acepta unidades clasificadas canónicamente como SERVICIO_REAL.");
         const semantica = servicio.semantica, intencion_operativa = true;
         if (servicio.evidencia_origen?.cobro_color?.regla === 'LETRA_AMARILLA_COBRABLE')
             inferencias.push('Cobrable por letra amarilla del Libro. El pago actual se comprueba en Proyecto H.');
         const intencionOriginal = intencionCobroServicio(servicio);
-        const intencion_cobro = reglaFullDay && intencionOriginal === 'no_determinada'
+        const intencion_cobro = reglaIncluida && intencionOriginal === 'no_determinada'
             ? 'cortesia' : intencionOriginal === 'no_determinada' && resueltos.tipo_cobro
             ? (resueltos.tipo_cobro === 'cortesia' ? 'cortesia' : 'cobrable') : intencionOriginal;
         if (reglaFullDay && intencionOriginal === 'no_determinada')
             inferencias.push('Full Day incluye una hora de tinaja de cortesía; en Pagos no hay un cobro específico identificado.');
+        if(reglaPromo)inferencias.push('Hora incluida en la promoción: duración de 60 minutos y sin pago específico de tinaja.');
         if (asociacion.estado !== "asociada") razones.push(asociacion.motivo);
         const efectivo = { ...servicio };
         if (resueltos.codigo_servicio === 'tinajaTonel') efectivo.concepto = 'tonel';
@@ -747,7 +782,9 @@
         if (mapa.codigo === "tinajaTonel" && Number.isInteger(personas) && (personas < 1 || personas > 3)) razones.push("La cantidad de personas no es válida para Tonel de madera.");
 
         const cortesia = intencion_cobro === "cortesia";
-        if (intencion_cobro === "no_determinada") razones.push("Falta definir si el servicio es cobrable o cortesía; Haku no lo convertirá automáticamente en cobrable.");
+        if (intencion_cobro === "no_determinada") razones.push(promocion && esTinajaServicio(servicio)
+            ? 'La promoción incluye 1 hora de cortesía. Confirma el horario real y los pagos de las horas adicionales antes de incorporar.'
+            : "Falta definir si el servicio es cobrable o cortesía; Haku no lo convertirá automáticamente en cobrable.");
         if (cortesia && mapa.codigo && !mapa.permiteCortesia) razones.push(`Haku no puede preparar automáticamente una cortesía para ${mapa.nombre}; requiere revisión.`);
         const itemId = claveServicio(reserva, servicio);
         const razonesUnicas = [...new Set(razones.filter(Boolean))];
@@ -765,7 +802,7 @@
             personas: provenienciaPersonas,
             cantidad: /\bx\s*\d+\b|\b\d+\s*(?:servicios?|tinajas?|jacuzzis?|toneles?|masajes?|camas?|cunas?)\b/.test(normalizar(servicio?.texto_original))
                 ? "EXPLICITO" : Number.isInteger(servicio?.cantidad) ? "INFERIDO" : "AUSENTE",
-            tipo_cobro: reglaFullDay && intencionOriginal === "no_determinada" ? "INFERIDO_FULLDAY_VERIFICADO" :
+            tipo_cobro: reglaIncluida && intencionOriginal === "no_determinada" ? (reglaPromo ? 'INFERIDO_PROMO_VERIFICADO' : "INFERIDO_FULLDAY_VERIFICADO") :
                 ["cobrable", "cortesia"].includes(intencion_cobro) || servicio?.pendiente === true ||
                 servicio?.cortesia === true || servicio?.evidencia_origen?.pendiente_pago === true ||
                 servicio?.evidencia_origen?.cortesia === true ? "EXPLICITO" : "AUSENTE",
@@ -774,7 +811,7 @@
         return {
             kind: "servicio", semantica, completitud, clasificacion, intencion_operativa, intencion_cobro,
             evidencia_origen: servicio?.evidencia_origen || null,
-            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia, proveniencia, reglaFullDay,
+            item_id: itemId, reserva, servicio, asociacion, mapa, fecha, hora, hora_fin, personas, cortesia, proveniencia, reglaFullDay, reglaPromo, promocion,
             opcionesNoches, nocheManual,
             puedeElegirNoche: !fecha && !fechaInfo.conflicto && razonesUnicas.length === 1 && razonesUnicas[0].startsWith('Falta una fecha inequívoca') && opcionesNoches.length > 0,
             inferencias: [...new Set(inferencias)], razones: razonesUnicas,
@@ -789,8 +826,8 @@
                 personas: Number.isInteger(personas) ? personas : 0,
                 tipo_cobro: intencion_cobro === "cortesia" ? "cortesia" : "normal",
                 precio_manual: null,
-                motivo_cortesia: reglaFullDay && intencionOriginal === 'no_determinada'
-                    ? 'Full Day: 1 hora de tinaja incluida; pagos de tinaja verificados sin cobro específico.'
+                motivo_cortesia: reglaIncluida && intencionOriginal === 'no_determinada'
+                    ? `${reglaPromo ? 'Promo Haku' : 'Full Day'}: 1 hora de tinaja incluida; pagos de tinaja verificados sin cobro específico.`
                     : cortesia ? `Cortesía indicada en el Libro: ${servicio.texto_original}` : null,
                 observaciones: `Importado desde Libro de Reserva. ${servicio.texto_original}`
             } : null
@@ -814,7 +851,7 @@
     function esBeneficioTinajaPorCoordinar(item) {
         const s = item?.servicio, t = normalizar(s?.texto_original);
         const beneficioPromo = item?.intencion_cobro === 'no_determinada' &&
-            s?.origen_campo === 'notas_reserva' && /\bpromo\b/.test(normalizar(item?.reserva?.texto_original)) &&
+            s?.origen_campo === 'notas_reserva' && Boolean(promocionReserva(item?.reserva)) &&
             /^\+\s*1\s*hora\s+de\s+(?:tinaja(?:\s+(?:caliente|tonel|de\s+madera))?|tonel|jacuzzi)\s*\.?$/.test(t);
         return item?.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
             (item.intencion_cobro === 'cortesia' || beneficioPromo) && esTinajaServicio(s) &&
@@ -829,7 +866,8 @@
         const itemId = claveNota(reserva, texto);
         return {
             kind: "nota", semantica, completitud: null, identidad: null, clasificacion: "nota", intencion_cobro: "no_determinada",
-            item_id: itemId, reserva, texto, asociacion, inferencias: [], razones,
+            item_id: itemId, reserva, texto, asociacion,
+            inferencias: promocionReserva(reserva) && /^promo\s+(?:haiku|haku)\b/.test(normalizar(texto)) ? [descripcionPromo] : [], razones,
             payload: asociacion.estado === "asociada" ? {
                 item_id: itemId,
                 reserva_id: asociacion.sistema.reserva_id,
@@ -885,6 +923,14 @@
             return { estado:'revisar', candidatos:activos.filter(x=>x.id===cambio.servicioId),
                 cambio_horario_fullday:true, contradicciones:['horario'],
                 motivo:`Ya existe la hora de tinaja de cortesía (${cambio.anterior}). El Libro indica ${cambio.hora}–${cambio.fin}. Confirma si se modificó el horario de la misma tinaja.` };
+        }
+        if (item.promocion && esTinajaServicio(item.servicio) && item.hora &&
+            intencionCobroServicio(item.servicio)==='no_determinada') {
+            const tinajas=activos.filter(x=>['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)) && x.fecha_servicio===item.fecha);
+            if(tinajas.length && !tinajas.some(x=>(!item.mapa?.codigo || codigoExistente(x)===item.mapa.codigo) &&
+                horaCorta(x.hora_inicio)===item.hora && (!item.hora_fin || horaCorta(x.hora_fin)===item.hora_fin)))
+                return {estado:'revisar',candidatos:tinajas,conflicto_tinaja_promo:true,motivo:
+                    `Ya existe ${nombreExistente(tinajas[0])} ${horaCorta(tinajas[0].hora_inicio)}–${horaCorta(tinajas[0].hora_fin)}. El Libro indica otro tipo u horario de tinaja. ¿Se modificó la tinaja registrada? Revisa el cambio desde Ver reserva antes de incorporar otro servicio.`};
         }
         const contradiccionesManual = x => {
             const p = item.resolucionManual && item.payload, campos = [];
@@ -947,7 +993,7 @@
                 return { estado:'revisar', candidatos:mismoHechoBase,
                     motivo:'Hay varios servicios del mismo tipo en la estadía; falta un horario que los distinga.' };
             const textoOrigen = normalizar(`${item.servicio?.texto_original || ""} ${item.servicio?.texto_fuente_completo || ""}`);
-            const cortesiaExplicita = Boolean(item.reglaFullDay) ||
+            const cortesiaExplicita = Boolean(item.reglaFullDay || item.reglaPromo) ||
                 esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
             const cobroExplicito = esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.pendiente_pago || item.servicio?.pendiente ||
                 /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b/.test(textoOrigen));
@@ -1065,7 +1111,7 @@
     // Leer el estado del cargo de CADA servicio existente, no el saldo total
     // de la reserva ni un antiguo texto del Libro que diga "por pagar".
     async function anexarFinanzasServiciosRegistrados(items, cliente) {
-        const registrados = items.filter(i => (i.estado === 'existente' || i.conflicto_tipo_masaje) && i.servicio_existente?.id);
+        const registrados = items.filter(i => (i.estado === 'existente' || i.conflicto_tipo_masaje || i.conflicto_tinaja_promo) && i.servicio_existente?.id);
         const desconocido = () => ({ estado:'por_verificar', etiqueta:'Pago por verificar' });
         for (const item of registrados) item.finanzas_existente = { ...desconocido(),
             etiqueta: item.cortesia ? 'cortesía · finanzas por verificar' : 'Pago por verificar' };
@@ -1201,7 +1247,7 @@
         return JSON.stringify([item.item_id, evidenciaManual(item), r.coordenadas_origen || null,
             r.adultos ?? null, r.noches, r.fecha_checkin, r.fecha_checkout, r.tipo_estadia,
             item.asociacion.estado, destinoEsperado(item), libro.archivo, libro.generacion, libro.version_libro,
-            item.reglaFullDay || null]);
+            item.reglaFullDay || item.reglaPromo || null]);
     }
 
     function codigosManual(item) {
@@ -1231,7 +1277,7 @@
             throw new Error('La hora explícita del Libro no se puede sustituir.');
         if (datos.hora && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(datos.hora)) throw new Error('Indica una hora de inicio válida.');
         if (datos.fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fecha) || iso(...datos.fecha.split('-')) !== datos.fecha)) throw new Error('Indica una fecha válida.');
-        const item = prepararServicio(base.reserva, base.servicio, base.asociacion, null, datos, base.reglaFullDay);
+        const item = prepararServicio(base.reserva, base.servicio, base.asociacion, null, datos, base.reglaFullDay, base.reglaPromo);
         if (!c) razonesExtra.push('El servicio elegido no está activo en el catálogo actual.');
         const horas = base.servicio.concepto === 'lateout' || /^tinaja/.test(codigo || '')
             ? normalizar(base.servicio.texto_original).match(/\b(\d+)\s*horas?\b/) : null;
@@ -1306,6 +1352,7 @@
         if (!base || actual.items.filter(i => i.item_id === itemId).length !== 1 || base.semantica !== 'SERVICIO_REAL' || base.estado === 'existente' || base.firmaManual !== firma)
             throw new Error('La evidencia o el destino cambiaron; vuelve a abrir la revisión de este servicio.');
         if (base.cambioHorarioExistente) throw new Error('Confirma el cambio de horario de la tinaja existente desde Revisar horario.');
+        if (base.conflicto_tinaja_promo) throw new Error('Revisa el cambio de tipo u horario de la tinaja registrada desde Ver reserva.');
         const contrato = await cargarContratoManual(), calculo = calcularManual(base, campos, contrato);
         if (!calculo.catalogo || !calculo.opciones.includes(calculo.catalogo.codigo)) throw new Error('No hay una equivalencia activa compatible.');
         const decision = { firma, usuario: contrato.usuario, codigo: calculo.catalogo.codigo,
@@ -1356,15 +1403,16 @@
         const existentes = await cargarExistentes(cliente, reservaIds);
         const posiblesFullDay = [...new Set(items.filter(item =>
             item.kind === 'servicio' && item.intencion_cobro === 'no_determinada' &&
-            esTinajaServicio(item.servicio) && esFullDay(item.reserva?.tipo_estadia) &&
-            esFullDay(item.asociacion?.sistema?.tipo_estadia) &&
+            esTinajaServicio(item.servicio) && (promocionReserva(item.reserva) ||
+                esFullDay(item.reserva?.tipo_estadia) && esFullDay(item.asociacion?.sistema?.tipo_estadia)) &&
             item.asociacion?.estado === 'asociada'
         ).map(item => item.asociacion.sistema.reserva_id))];
         const verificacionFullDay = await finanzasFullDay(cliente, posiblesFullDay);
         for (let i = 0; i < items.length; i++) {
             const item = items[i], regla = reglaTinajaIncluidaFullDay(item, items, existentes, verificacionFullDay);
-            if (regla) items[i] = prepararServicio(item.reserva, item.servicio, item.asociacion,
-                item.nocheManual, {}, regla);
+            const promo = !regla && reglaTinajaIncluidaPromo(item,items,existentes,verificacionFullDay);
+            if (regla || promo) items[i] = prepararServicio(item.reserva, item.servicio, item.asociacion,
+                item.nocheManual, {}, regla, promo || null);
         }
 
         // Resolver el beneficio como nota ANTES de aplicar decisiones manuales
@@ -1418,6 +1466,10 @@
             if (decision.estado === "revisar") {
                 item.cambioCortesiaExistente = cambioCortesiaExistente(item, decision);
                 if (decision.cambio_horario_fullday) item.cambioHorarioExistente = item.reglaFullDay.cambioHorario;
+                if (decision.conflicto_tinaja_promo) {
+                    item.conflicto_tinaja_promo = true;
+                    if (decision.candidatos.length === 1) item.servicio_existente = decision.candidatos[0];
+                }
                 if (decision.conflicto_tipo_masaje && decision.candidatos?.length === 1) {
                     item.conflicto_tipo_masaje = true;
                     item.servicio_existente = decision.candidatos[0]; // Referencia de revisión, no identidad aceptada.
@@ -1775,6 +1827,8 @@
         else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${item.hora ? ` · ${item.hora}` : ""} · ${item.finanzas_existente?.etiqueta || (item.cortesia ? "cortesía" : "Pago por verificar")} · omitido`;
         else meta.textContent = `${item.semantica === "AMBIGUO" ? "Fragmento ambiguo" : item.completitud === "COMPLETO" ? "Servicio preparable" : "Servicio que requiere revisión"} · ${item.fecha ? `Fecha ${item.fecha}` : "Fecha por definir"}${item.hora ? ` · ${item.hora}${item.hora_fin ? `–${item.hora_fin}` : ""}` : ""}${Number.isInteger(item.servicio?.cantidad) && item.servicio.cantidad > 1 ? ` · ${item.servicio.cantidad} unidades` : ""}${Number.isInteger(item.personas) && item.personas > 0 ? ` · ${item.personas} pers.` : ""} · ${item.intencion_cobro === "cortesia" ? "cortesía" : item.intencion_cobro === "cobrable" ? "cobrable" : "cobro por definir"}`;
         // La sección ya indica que requiere revisión; conservar aquí los datos secundarios.
+        if (item.promocion && esTinajaServicio(item.servicio) && item.intencion_cobro === 'no_determinada')
+            meta.textContent = meta.textContent.replace('cobro por definir', '1 hora incluida · adicionales por verificar');
         if (item.kind === 'servicio' && item.estado === 'revisar' && item.semantica !== 'AMBIGUO') meta.textContent = meta.textContent.replace(/^Servicio (?:que requiere revisión|preparable) · /, '');
         const texto = document.createElement("div"); texto.className = "haku-libro-servicios__texto"; texto.textContent = item.kind === "nota" ? item.texto : (item.servicio.texto_original || "Servicio indicado en el Libro");
         cuerpo.append(nombre);
@@ -1793,6 +1847,11 @@
             const registrado = document.createElement('p'); registrado.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
             registrado.textContent = detalleMasajeRegistrado(item); cuerpo.append(registrado);
         }
+        if (item.conflicto_tinaja_promo && item.servicio_existente) {
+            const registrado = document.createElement('p'); registrado.className = 'haku-libro-servicios__inferencias';
+            registrado.textContent = `Tinaja registrada: ${item.finanzas_existente?.etiqueta || 'Pago por verificar'}. La promoción incluye 1 hora de cortesía; se conservan el servicio y sus pagos registrados.`;
+            cuerpo.append(registrado);
+        }
         let accionesRevision = null;
         // Consultar la reserva no aprueba una prestación: también está disponible
         // para fragmentos ambiguos y notas, sin habilitar escrituras ambiguas.
@@ -1805,7 +1864,7 @@
                     (root.HAIKU_INSPECTOR_V1 || root.HAIKU_PANELES_V1)?.abrirReserva?.(item.asociacion.sistema.reserva_id, ver);
             });
             acciones.append(ver);
-            if (opciones.abrirManual && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
+            if (opciones.abrirManual && !item.conflicto_tinaja_promo && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
                 (item.estado === 'revisar' || item.resolucionManual) && codigosManual(item.manual_base || item).length) {
                 const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = item.cambioHorarioExistente ? 'Revisar horario' : 'Aprobación manual';
                 manual.addEventListener('click', async () => {

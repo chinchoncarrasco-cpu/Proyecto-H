@@ -4,6 +4,11 @@
     const normalizar = v => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
     const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
     const digitos = v => String(v || "").replace(/\D/g, "");
+    function promocionReserva(texto) {
+        if (!/^promo\s+(?:haiku|haku)\b/.test(normalizar(texto))) return null;
+        return Object.freeze({ version:1,codigo:'PROMO_HAKU',descuento_porcentaje:10,
+            horas_tinaja_cortesia:1,codigos_tinaja:Object.freeze(['tinajaJacuzzi','tinajaTonel']) });
+    }
     // En el Libro el slash es un separador de campos, salvo cuando pertenece a
     // un token léxico conocido. El Libro contiene fechas completas/parciales y
     // las abreviaturas C/U y C/D; proteger el token completo evita mutilar el
@@ -866,6 +871,7 @@
                     geometria_inequivoca: geometriaInequivoca, geometria_resuelta_texto: geometriaResueltaTexto,
                     notas_interpretacion: notasInterpretacion, advertencias_informativas: advertenciasInformativas,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
+                    ...(promocionReserva(cell.valor) ? {promocion:promocionReserva(cell.valor)} : {}),
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,
                     estado_confirmacion: ["B4A7D6", "D9D2E9"].includes(colors.fondo) ? "confirmada_por_color" : ["D5A6BD", "F4CCCC", "EAD1DC"].includes(colors.fondo) ? "pendiente_por_color" : "no_determinado",
@@ -1196,7 +1202,7 @@
         return cambios;
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
-        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);
