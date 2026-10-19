@@ -635,9 +635,29 @@
             !/cancelad|no_show|anulad/i.test(String(x.estado_servicio||'')) &&
             ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)));
         if (existentesTinaja.length>1 || existentesTinaja.some(x=>
-            Number(x.cantidad)!==1 || x.fecha_servicio!==r.fecha_checkin ||
-            (item.hora && horaCorta(x.hora_inicio)!==item.hora) ||
-            (item.hora_fin && horaCorta(x.hora_fin)!==item.hora_fin))) return null;
+            Number(x.cantidad)!==1 || x.fecha_servicio!==r.fecha_checkin)) return null;
+        let cambioHorario = null;
+        const existente = existentesTinaja[0];
+        if (existente && ((item.hora && horaCorta(existente.hora_inicio)!==item.hora) ||
+            (item.hora_fin && horaCorta(existente.hora_fin)!==item.hora_fin))) {
+            // La cortesía ya está acreditada. Un horario distinto requiere
+            // confirmar si se reprogramó ESTA tinaja, nunca regalar otra.
+            const inicioAnterior = minutosHora(horaCorta(existente.hora_inicio));
+            const finAnterior = minutosHora(horaCorta(existente.hora_fin));
+            if (existente.tipo_cobro !== 'cortesia' || Number(existente.total)!==0 ||
+                existente.estado_servicio !== 'programado' || existente.estadia_id !== e.id ||
+                !existente.catalogo_servicio_id || !existente.actualizado_en ||
+                codigoExistente(existente) !== item.mapa?.codigo ||
+                Number(existente.personas) !== item.personas ||
+                inicio===null || inicioAnterior===null || finAnterior!==inicioAnterior+60 ||
+                inicioAnterior<570 || finAnterior>1290) return null;
+            const campos = ['id','reserva_id','estadia_id','catalogo_servicio_id','fecha_servicio',
+                'hora_inicio','hora_fin','cantidad','personas','tipo_cobro','total','estado_servicio','actualizado_en'];
+            cambioHorario = Object.freeze({ servicioId:existente.id,
+                anterior:`${horaCorta(existente.hora_inicio)}–${horaCorta(existente.hora_fin)}`,
+                hora:item.hora, fin:`${String(Math.floor((inicio+60)/60)).padStart(2,'0')}:${String((inicio+60)%60).padStart(2,'0')}`,
+                esperado:Object.fromEntries(campos.map(c=>[c,existente[c]])) });
+        }
 
         const pagosLibro = [...(r.pagos||[]),...(r.pagos_sin_asociacion||[])];
         const fiscal = finanzas.get(e.reserva_id);
@@ -650,7 +670,7 @@
 
         return Object.freeze({version:1,origen:'full_day_una_hora_tinaja',
             reservaId:e.reserva_id,estadiaId:e.id,fecha:r.fecha_checkin,
-            pagosRevisados:true});
+            pagosRevisados:true, ...(cambioHorario ? {cambioHorario} : {})});
     }
 
     function prepararServicio(reserva, servicio, asociacion, nocheManual = null, resueltos = {}, reglaFullDay = null) {
@@ -821,7 +841,7 @@
     async function cargarExistentes(cliente, reservaIds) {
         if (!reservaIds.length) return { servicios: [], notas: [] };
         const [sr, nr] = await Promise.all([
-            cliente.from("servicios").select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
+            cliente.from("servicios").select("id,reserva_id,estadia_id,catalogo_servicio_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,tipo_cobro,estado_servicio,observaciones,actualizado_en,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
             cliente.from("notas").select("id,reserva_id,tipo,texto").in("reserva_id", reservaIds)
         ]);
         if (sr.error) throw sr.error;
@@ -857,6 +877,12 @@
         const estadiaId = item.payload?.estadia_id || item.asociacion?.sistema?.id || null;
         const activos = existentes.filter(x => x.reserva_id === reservaId && !/cancelad|no_show|anulad/i.test(String(x.estado_servicio || "")) &&
             (!estadiaId || !x.estadia_id || x.estadia_id === estadiaId));
+        if (item.reglaFullDay?.cambioHorario) {
+            const cambio = item.reglaFullDay.cambioHorario;
+            return { estado:'revisar', candidatos:activos.filter(x=>x.id===cambio.servicioId),
+                cambio_horario_fullday:true, contradicciones:['horario'],
+                motivo:`Ya existe la hora de tinaja de cortesía (${cambio.anterior}). El Libro indica ${cambio.hora}–${cambio.fin}. Confirma si se modificó el horario de la misma tinaja.` };
+        }
         const contradiccionesManual = x => {
             const p = item.resolucionManual && item.payload, campos = [];
             if (!p) return campos;
@@ -1276,6 +1302,7 @@
         const actual = await construir(texto, overrides), base = actual.items.find(i => i.item_id === itemId);
         if (!base || actual.items.filter(i => i.item_id === itemId).length !== 1 || base.semantica !== 'SERVICIO_REAL' || base.estado === 'existente' || base.firmaManual !== firma)
             throw new Error('La evidencia o el destino cambiaron; vuelve a abrir la revisión de este servicio.');
+        if (base.cambioHorarioExistente) throw new Error('Confirma el cambio de horario de la tinaja existente desde Revisar horario.');
         const contrato = await cargarContratoManual(), calculo = calcularManual(base, campos, contrato);
         if (!calculo.catalogo || !calculo.opciones.includes(calculo.catalogo.codigo)) throw new Error('No hay una equivalencia activa compatible.');
         const decision = { firma, usuario: contrato.usuario, codigo: calculo.catalogo.codigo,
@@ -1387,6 +1414,7 @@
             item.decision_identidad = decision.estado;
             if (decision.estado === "revisar") {
                 item.cambioCortesiaExistente = cambioCortesiaExistente(item, decision);
+                if (decision.cambio_horario_fullday) item.cambioHorarioExistente = item.reglaFullDay.cambioHorario;
                 if (decision.conflicto_tipo_masaje && decision.candidatos?.length === 1) {
                     item.conflicto_tipo_masaje = true;
                     item.servicio_existente = decision.candidatos[0]; // Referencia de revisión, no identidad aceptada.
@@ -1540,7 +1568,86 @@
         } catch(e) {if(vigente())aviso.textContent=e.message||'No fue posible comprobar la tinaja.';}
     }
 
+    async function abrirCambioHorarioExistente(item, out, texto, overrides, estado, fila) {
+        const cambio = item.cambioHorarioExistente, apertura = ++estado.apertura;
+        const vigente = () => estado.apertura === apertura && fila.isConnected !== false;
+        out.querySelector('.haku-libro-servicio-manual')?.remove();
+        const panel = document.createElement('section');
+        panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
+        panel.style.gridColumn = '1 / -1'; panel.style.minWidth = '0';
+        panel.setAttribute('aria-label', `Cambio de horario de ${item.reserva.titular}`);
+        const contenido = document.createElement('div'); contenido.className = 'haiku-manual-contenido';
+        const cabecera = document.createElement('header'); cabecera.className = 'haiku-manual-cabecera';
+        const titulo = document.createElement('h3'); titulo.textContent = 'Revisar cambio de horario';
+        const contexto = document.createElement('p'); contexto.className = 'haiku-manual-caption';
+        contexto.textContent = `${item.reserva.titular} · CAB ${item.reserva.cabana} · ${item.fecha}`;
+        cabecera.append(titulo,contexto);
+        const comparacion = document.createElement('div'); comparacion.className = 'haiku-manual-resumen';
+        for (const [fuente,horario] of [['Registrado en Haku',cambio.anterior],['Horario del Libro',`${cambio.hora}–${cambio.fin}`]]) {
+            const linea = document.createElement('p'); linea.className = 'haiku-manual-fila';
+            const label = document.createElement('span'); label.textContent = fuente;
+            const valor = document.createElement('strong'); valor.textContent = horario;
+            linea.append(label,valor); comparacion.append(linea);
+        }
+        const pregunta = document.createElement('p'); pregunta.textContent = '¿Se modificó el horario de esta misma tinaja?';
+        const detalle = document.createElement('p'); detalle.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
+        detalle.textContent = 'Se actualizará la tinaja ya registrada. Conserva 1 hora de cortesía, total $0. Si es una hora adicional, déjala pendiente para revisarla por separado.';
+        const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion'; aviso.setAttribute('role','status');
+        const acciones = document.createElement('footer'); acciones.className = 'haku-libro-servicio-manual__acciones haiku-manual-pie';
+        const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario';
+        cancelar.textContent = 'Revisar después'; cancelar.addEventListener('click',()=>{ if (!estado.ocupado) {estado.apertura++;panel.remove();} });
+        const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario';
+        confirmar.textContent = 'Sí, actualizar horario'; confirmar.dataset.hakuAccion = 'confirmar-cambio-horario';
+        confirmar.disabled = root.haikuTienePermiso?.('servicios.editar') !== true;
+        if (confirmar.disabled) aviso.textContent = 'Necesitas permiso para editar servicios.';
+        const solicitud = {p_operacion_id:uuid(),p_servicio_id:cambio.servicioId,
+            p_estado_esperado:cambio.esperado,p_hora_inicio:cambio.hora,p_hora_fin:cambio.fin};
+        let enviada = false, confirmada = false, firmaLibroConfirmada;
+        confirmar.addEventListener('click',async()=>{
+            if (confirmar.disabled || estado.ocupado || !vigente()) return;
+            estado.ocupado=true;confirmar.disabled=true;cancelar.disabled=true;
+            aviso.textContent = confirmada ? 'Actualizando revisión…' : 'Comprobando el cambio de horario…';
+            try {
+                const actual = await construir(texto,overrides,estado.manuales);
+                if (!vigente()) return;
+                if (!confirmada) {
+                    const coincidencias = actual.items.filter(x=>x.item_id===item.item_id), observado=coincidencias[0];
+                    const firma = observado && firmaManualServicio({...observado,reglaFullDay:null},actual);
+                    if (coincidencias.length!==1 || (!enviada && (observado.firmaManual!==item.firmaManual ||
+                        JSON.stringify(observado.cambioHorarioExistente)!==JSON.stringify(cambio))) ||
+                        (enviada && firma!==firmaLibroConfirmada))
+                        throw Error('El Libro o la tinaja cambió; vuelve a abrir la revisión del horario.');
+                    firmaLibroConfirmada=firma;enviada=true;
+                    const {data,error} = await root.haikuSupabase.rpc('haiku_libro_reprogramar_tinaja_fullday_v1',solicitud);
+                    if (error) throw error;
+                    if (!data?.ok || data.servicio_id!==cambio.servicioId || data.tipo_cobro!=='cortesia' ||
+                        Number(data.total)!==0 || horaCorta(data.hora_inicio)!==cambio.hora || horaCorta(data.hora_fin)!==cambio.fin)
+                        throw Error('Proyecto H no confirmó el cambio de horario.');
+                    confirmada=true;estado.manuales.delete(item.item_id);
+                }
+                const actualizado = await construir(texto,overrides,estado.manuales);
+                if (vigente()) renderizar(actualizado,out,texto,overrides);
+                await Promise.allSettled([
+                    Promise.resolve().then(()=>root.haikuSincronizarServiciosDesdeSupabase?.()),
+                    Promise.resolve().then(()=>root.HAIKU_RESUMEN_REFRESH_V1?.activo()
+                        ? root.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined,{categoria:'Libro',evento:'cambio de horario de tinaja',tipo:'externo'}) : undefined)
+                ]);
+            } catch(e) {
+                if (vigente()) {
+                    aviso.textContent = confirmada ? 'Horario guardado. Falta actualizar la revisión.' : e.message || 'No se pudo confirmar el cambio.';
+                    confirmar.textContent = confirmada ? 'Actualizar revisión' : 'Reintentar confirmación';
+                }
+            } finally {
+                estado.ocupado=false;
+                if (vigente()) {confirmar.disabled=root.haikuTienePermiso?.('servicios.editar')!==true;cancelar.disabled=false;}
+            }
+        });
+        acciones.append(confirmar,cancelar);contenido.append(cabecera,comparacion,pregunta,detalle,aviso);panel.append(contenido,acciones);
+        fila.append(panel);panel.scrollIntoView?.({block:'center'});
+    }
+
     async function abrirManual(item, out, texto, overrides, estado, fila) {
+        if (item.cambioHorarioExistente) return abrirCambioHorarioExistente(item, out, texto, overrides, estado, fila);
         if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila);
         const base = item.manual_base || item;
         const apertura = ++estado.apertura;
@@ -1697,7 +1804,7 @@
             acciones.append(ver);
             if (opciones.abrirManual && item.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
                 (item.estado === 'revisar' || item.resolucionManual) && codigosManual(item.manual_base || item).length) {
-                const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = 'Aprobación manual';
+                const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = item.cambioHorarioExistente ? 'Revisar horario' : 'Aprobación manual';
                 manual.addEventListener('click', async () => {
                     manual.disabled = true;
                     try { await opciones.abrirManual(item, fila); }
