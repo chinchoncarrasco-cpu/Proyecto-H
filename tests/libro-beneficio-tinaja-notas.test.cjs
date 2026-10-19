@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { entorno, consulta } = require('./fixtures/libro-servicio-manual.cjs');
 const BENEFICIO = '1 HORA DE TINAJA DE CORTESÍA';
+const BENEFICIO_PROMO = '+ 1 hora de tinaja caliente';
 function caso(texto = BENEFICIO, noches = 1) {
     const e = entorno(), r = e.state.reservas[0], estadia = e.state.db.reserva_estadias[0];
     r.titular = 'Huésped de prueba'; e.state.db.reservas[0].titular_nombre = r.titular;
@@ -36,6 +37,38 @@ for (const noches of [1,2]) test('Beneficio sin coordinación es nota de reserva
     assert.equal(nota.firmaManual,undefined);
     assert.equal(JSON.stringify(r),antes); assert.equal(e.state.escrituras.length,0);
     assert.match(nota.inferencias.join(' '),/pendiente de coordinar/);
+});
+for (const texto of [BENEFICIO_PROMO,'+1 HORA DE TINAJA CALIENTE','+ 1 hora de jacuzzi','+ 1 hora de tinaja tonel'])
+test('Beneficio sumado a la promoción sin agenda es nota: '+texto,async()=>{
+    const {e,r,notas,deTinaja}=caso(texto),antes=JSON.stringify(r);
+    const plan=await e.construir(),[nota]=notas(plan);
+    assert.equal(deTinaja(plan).length,0);assert.equal(notas(plan).length,1);
+    assert.equal(nota.semantica,'NO_SERVICIO');assert.equal(nota.estado,'listo');
+    assert.equal(nota.payload.texto,texto);assert.match(nota.inferencias.join(' '),/Beneficio de la promoción pendiente de coordinar/);
+    assert.equal(JSON.stringify(r),antes);assert.equal(e.state.escrituras.length,0);
+});
+for(const texto of ['+ 1 hora de tinaja caliente 19:15','+ 1 hora de tinaja caliente confirmada',
+    '+ 1 hora de tinaja caliente x pagar $30.000','+ 1 hora adicional de tinaja caliente'])
+test('La promoción no oculta una prestación con agenda, confirmación o cobro: '+texto,async()=>{
+    const {e,notas,deTinaja}=caso(texto),plan=await e.construir();
+    assert.equal(notas(plan).length,0);assert.equal(deTinaja(plan).length,1);
+    assert.equal(e.state.escrituras.length,0);
+});
+test('El signo + sin contexto promocional o desde Servicios explícitos no basta para tratarlo como beneficio',async()=>{
+    for(const tipo of ['sin_promo','campo_servicios']){
+        const {e,r,notas,deTinaja}=caso(BENEFICIO_PROMO);
+        if(tipo==='sin_promo')r.texto_original='Reserva // '+BENEFICIO_PROMO;
+        else r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(BENEFICIO_PROMO,{origen_campo:'servicios'});
+        const plan=await e.construir();assert.equal(notas(plan).length,0,tipo);
+        assert.equal(deTinaja(plan).length,1,tipo);
+    }
+});
+test('Una tinaja ya registrada conserva autoridad al releer el beneficio de la promoción',async()=>{
+    const {e,registrar,notas,deTinaja}=caso(BENEFICIO_PROMO);registrar();
+    const plan=await e.construir();assert.equal(notas(plan).length,0);
+    assert.equal(deTinaja(plan).length,1);assert.equal(deTinaja(plan)[0].estado,'existente');
+    assert.equal(deTinaja(plan)[0].servicio_existente.id,'tinaja-previa');
+    assert.equal(e.state.escrituras.length,0);
 });
 for (const texto of [
     '1 HORA DE TINAJA DE CORTESÍA X COORDINAR',
@@ -135,20 +168,20 @@ test('Promo mixta de Julián sigue agrupada como una tinaja de dos horas',async(
     const plan=await e.construir();assert.equal(notas(plan).length,0);
     assert.equal(deTinaja(plan).length,1);assert.equal(deTinaja(plan)[0].servicio.promoTinajaMixta.version,1);
 });
-test('La nota sale en Notas de la reserva, sin Aprobación manual ni formulario de servicios',async()=>{
-    const {e,notas}=caso(),plan=await e.construir(),out=new e.Element('div');e.document.card=out;
+for (const texto of [BENEFICIO,BENEFICIO_PROMO]) test('La nota sale en Notas de la reserva, sin Aprobación manual ni formulario de servicios: '+texto,async()=>{
+    const {e,notas}=caso(texto),plan=await e.construir(),out=new e.Element('div');e.document.card=out;
     e.api.renderizar(plan,out,consulta);
     const seccion=out.querySelector('.haku-libro-servicios__seccion--notas');
-    assert.match(seccion.textContent,/1 HORA DE TINAJA DE CORTESÍA/);
+    assert.ok(seccion.textContent.includes(texto));
     assert.match(seccion.textContent,/no genera servicio ni cargo/);
-    const fila=seccion.querySelectorAll('.haku-libro-servicios__item').find(f=>f.textContent.includes(BENEFICIO));
+    const fila=seccion.querySelectorAll('.haku-libro-servicios__item').find(f=>f.textContent.includes(texto));
     assert.equal(fila.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'),false);
     assert.equal(fila.querySelector('input').disabled,false);
     assert.equal(out.querySelectorAll('.haku-libro-servicio-manual').length,0);
     assert.equal(e.state.escrituras.length,0);
 });
-test('Confirmación final usa sólo p_notas: cero servicios y cero cargos en el simulador',async()=>{
-    const {e,notas}=caso(),plan=await e.construir(),n=notas(plan)[0],out=new e.Element('div');
+for (const texto of [BENEFICIO,BENEFICIO_PROMO]) test('Confirmación final usa sólo p_notas: cero servicios y cero cargos en el simulador: '+texto,async()=>{
+    const {e,notas}=caso(texto),plan=await e.construir(),n=notas(plan)[0],out=new e.Element('div');
     e.document.card=out;e.api.renderizar(plan,out,consulta);
     for(const check of out.querySelectorAll('input[data-haku-item-id]')){
         check.checked=check.dataset.hakuItemId===n.item_id;check.listeners.change();
@@ -160,6 +193,6 @@ test('Confirmación final usa sólo p_notas: cero servicios y cero cargos en el 
     await new Promise(r=>setTimeout(r,70));
     assert.equal(e.state.escrituras.length,1);const args=e.state.escrituras[0];
     assert.equal(args.p_servicios.length,0);assert.equal(args.p_notas.length,1);
-    assert.equal(args.p_notas[0].texto,BENEFICIO);
+    assert.equal(args.p_notas[0].texto,texto);
     assert.equal(e.state.db.servicios.length,0);
 });

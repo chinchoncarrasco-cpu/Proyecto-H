@@ -813,8 +813,11 @@
     // sólo pasa a servicio si hay una prestación confirmada o ya registrada.
     function esBeneficioTinajaPorCoordinar(item) {
         const s = item?.servicio, t = normalizar(s?.texto_original);
+        const beneficioPromo = item?.intencion_cobro === 'no_determinada' &&
+            s?.origen_campo === 'notas_reserva' && /\bpromo\b/.test(normalizar(item?.reserva?.texto_original)) &&
+            /^\+\s*1\s*hora\s+de\s+(?:tinaja(?:\s+(?:caliente|tonel|de\s+madera))?|tonel|jacuzzi)\s*\.?$/.test(t);
         return item?.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
-            item.intencion_cobro === 'cortesia' && esTinajaServicio(s) &&
+            (item.intencion_cobro === 'cortesia' || beneficioPromo) && esTinajaServicio(s) &&
             !s.promoTinajaMixta && !s.hora && !s.hora_fin &&
             /\b(?:1|una)\s*(?:hora|hrs?)\b/.test(t) &&
             !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|reservo|agendo|confirmo|contrato)\b/.test(t);
@@ -1374,7 +1377,7 @@
             const nota = prepararNota(item.reserva,
                 item.servicio.texto_original || item.servicio.fragmento_original,
                 item.asociacion);
-            nota.inferencias.push('Cortesía incluida pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.');
+            nota.inferencias.push(`${item.intencion_cobro === 'cortesia' ? 'Cortesía incluida' : 'Beneficio de la promoción'} pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.`);
             // La misma evidencia puede venir también en menciones/Notas: una sola nota.
             if (items.some(x => x.kind === 'nota' && x.item_id === nota.item_id)) {
                 items.splice(i--, 1);
