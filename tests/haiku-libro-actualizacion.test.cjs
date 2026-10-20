@@ -225,7 +225,7 @@ test('una revisión de servicios mantiene Ver reserva, cuenta cero preparables y
     const html=A.renderizarPendientes({items:[{tipo:'modificacion',actual:reserva,estado:'revision',accionable:false,
         sistema:{reserva_id:'00000000-0000-4000-8000-000000000001'},
         cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'18:00'}],proyecto:'Ya existe a las 17:00; confirma el cambio de horario.'}]}],generacion:3});
-    assert.match(html,/Preparación segura<\/span><strong>0<\/strong>/);
+    assert.match(html,/Preparación de reservas<\/span><strong>0<\/strong>/);
     assert.match(html,/data-haku-ver-reserva="0">Ver reserva/);
     assert.match(html,/confirma el cambio de horario/);
     assert.doesNotMatch(html,/Preparar incorporación|00000000-0000/);

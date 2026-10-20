@@ -143,8 +143,8 @@
         let html='<section class="haku-libro-pendientes haku-pendientes-compactos haku-actualizacion-sites__historial" aria-label="Cambios detectados aún pendientes de aplicar"><header class="haku-actualizacion-sites__historial-head"><div><span>HISTORIAL DE ACTUALIZACIONES → PROYECTO H</span><strong>Cambios detectados aún pendientes de aplicar</strong></div><span class="haku-actualizacion-sites__chip">Revalidación focalizada</span></header>';
         if(!items.length)html+='<p class="haku-libro-sin-pendientes"><strong>Todos los cambios detectados ya están sincronizados con Proyecto H.</strong></p>';
         else{
-            html+=`<div class="haku-actualizacion-sites__historial-metricas"><div><span>Cambios pendientes</span><strong>${items.length}</strong></div><div><span>Preparación segura</span><strong>${accionables}</strong></div></div>`;
-            html+=`<p class="haku-pendientes-resumen">${items.length} cambio${items.length===1?'':'s'} detectado${items.length===1?'':'s'} todavía pendiente${items.length===1?'':'s'}; ${accionables} puede${accionables===1?'':'n'} entrar a preparación segura.</p>`;
+            html+=`<div class="haku-actualizacion-sites__historial-metricas"><div><span>Cambios pendientes</span><strong>${items.length}</strong></div><div><span>Preparación de reservas</span><strong>${accionables}</strong></div></div>`;
+            html+=`<p class="haku-pendientes-resumen">${items.length} cambio${items.length===1?'':'s'} detectado${items.length===1?'':'s'} todavía pendiente${items.length===1?'':'s'}; ${accionables} cambio${accionables===1?'':'s'} de reserva puede${accionables===1?'':'n'} entrar a preparación segura.${pendientes.revisionServicios?.reservas?.length?' Los servicios y las notas se revisan con «Revisar servicios y notas».':''}</p>`;
             for(const [indice,registro] of items.entries()){
                 const item=registro.tipo==='modificacion'&&registro.proyecto&&!registro.sistema?
                     {...registro,cambios:lista(registro.cambios).map(c=>({...c,proyecto:registro.proyecto}))}:registro;
