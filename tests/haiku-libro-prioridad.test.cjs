@@ -65,3 +65,27 @@ test('integración manual, Ver informe y resumen automático consumen proyecció
     assert.match(root.HAIKU_ASISTENTE_LIBRO_AUTO_V1.resumir(result()).texto,/Prioridad operativa/);
     const panel=fs.readFileSync(require.resolve('../panel.html'),'utf8');assert.ok(panel.indexOf("'supabase-asistente-libro-prioridad-v1'")<panel.indexOf("'supabase-asistente-libro-actualizacion-v1'"));
 });
+test('dos avisos de Oct26 muestran motivo y versión, sin aparentar dos reservas sin titular',()=>{
+    const r=result({estado:'sin_cambios',advertencias:['anterior','actual'].map(version=>({version,hoja:'Oct26',
+        detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))}),antes=JSON.stringify(r);
+    const html=P.renderizar(r,opciones);
+    assert.match(html,/Versión anterior · Oct26/);assert.match(html,/Versión actual · Oct26/);
+    assert.equal((html.match(/Las noches escritas no coinciden/g)||[]).length,2);
+    assert.doesNotMatch(html,/Titular no disponible|CAB —|Fechas no determinadas/);
+    assert.equal(clasificar(r).informativos.length,2);assert.equal(JSON.stringify(r),antes);
+});
+test('un aviso de lectura conserva HTML escapado y no vuelca campos de contacto ni objetos',()=>{
+    const r=result({advertencias:[{hoja:'Oct26',motivo:'<script>Revisar lectura</script>',correo:'privado@example.test',telefono:'999999999'}]});
+    const html=P.renderizar(r,opciones);assert.match(html,/&lt;script&gt;Revisar lectura/);
+    assert.doesNotMatch(html,/<script>|privado@example|999999999|\[object Object\]/);
+});
+test('el informe reutiliza el detalle completo de validación también dentro de Informativos',()=>{
+    const root={HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1:P};
+    vm.runInNewContext(fs.readFileSync(require.resolve('../js/supabase-asistente-libro-actualizacion-v1.js'),'utf8'),{window:root});
+    const html=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.renderizar(result({estado:'sin_cambios',
+        advertencias:[{hoja:'Oct26',validacion:[{codigo:'checkout_anterior_al_checkin'}]}]}));
+    const prioridad=html.slice(html.indexOf('<section class="haku-libro-prioridad'),html.indexOf('<p class="haku-actualizacion-sites__sin-cambios'));
+    assert.match(prioridad,/El check-out es anterior al check-in/);
+    assert.doesNotMatch(prioridad,/Titular no disponible|CAB —/);
+    assert.match(html,/Sin cambios operacionales/);
+});

@@ -8,7 +8,15 @@
     const nombres=['🔴 Hoy','🟠 Mañana','🟡 Próximos días','🟢 Informativos'];
     const tipos={nueva:'Reserva nueva',modificada:'Reserva modificada',ausencia:'Ya no aparece',cancelacion:'Cancelación confirmada en Libro',ambigua:'Requiere revisión',advertencia:'Advertencia',cobertura:'Cobertura no comparable'};
     const etiquetasCambios={cabana:'Cabaña',fecha_checkin:'Check-in',fecha_checkout:'Check-out',noches:'Noches',tipo_estadia:'Tipo de estadía',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado operativo',operador:'Operador',rut_documento:'Documento',correo:'Correo',telefono:'Teléfono',notas_importantes:'Notas o solicitudes',pagos_pendientes:'Pagos pendientes',servicios:'Servicios'};
-    function clasificar(resultado,{fechaActual=hoy()}={}) {
+    function detalleAvisoBasico(aviso){
+        if(typeof aviso==='string')return aviso;
+        if(!aviso||typeof aviso!=='object')return '';
+        const detalle=[typeof aviso.motivo==='string'?aviso.motivo:'',
+            ...lista(aviso.detalles).map(detalleAvisoBasico),...lista(aviso.validacion).map(detalleAvisoBasico)].filter(Boolean).join(' · ');
+        const codigo=typeof aviso.tipo==='string'?aviso.tipo:typeof aviso.codigo==='string'?aviso.codigo:'';
+        return detalle||codigo.replace(/_/g,' ')||'Aviso de interpretación sin detalle adicional.';
+    }
+    function clasificar(resultado,{fechaActual=hoy(),formatearAviso=detalleAvisoBasico}={}) {
         const base=dia(fechaActual);if(base===null)throw Error('Fecha de referencia no válida.');
         const salida={fechaActual,horizonte:'2–7 días',grupos:Object.fromEntries(grupos.map(k=>[k,[]]))};
         // Sólo referencias explícitas; no vincular por nombre, celda próxima ni continuidad supuesta.
@@ -31,12 +39,15 @@
             return {nivel,razon:`${accion} ${cuando}${nivel===3?' · fuera del horizonte de 7 días':''}.`};
         }
         const segmento=(s,version)=>({version,titular:s?.titular||null,cabana:s?.cabana??null,fecha_checkin:s?.fecha_checkin??null,fecha_checkout:s?.fecha_checkout??null,tipo_estadia:s?.tipo_estadia??null});
-        function agregar(tipo,partes,referencia,cambios=[]) {
+        function agregar(tipo,partes,referencia,cambios=[],aviso=null) {
             const segmentos=partes.filter(x=>x[0] && typeof x[0]==='object').map(([s,v])=>({...segmento(s,v),...evaluar(s)}));
             const nivel=segmentos.length?Math.min(...segmentos.map(s=>s.nivel)):3;
             salida.grupos[grupos[nivel]].push({tipo,referencia:typeof referencia==='string'?referencia:null,segmentos,
+                ...(aviso!=null?{detalleAviso:formatearAviso(aviso),
+                    versionAviso:aviso?.version==='anterior'?'Versión anterior':aviso?.version==='actual'?'Versión actual':null}:{}),
                 cambios:[...new Set(lista(cambios).map(c=>etiquetasCambios[c?.campo] || (typeof c?.campo==='string'?c.campo.replace(/_/g,' '):'Otro campo')))],
-                explicacion:segmentos.length?segmentos.filter(s=>s.nivel===nivel).map(s=>`${s.version}: ${s.razon}`).join(' '):'Sin fechas de estadía disponibles; prioridad temporal no determinada.'});
+                explicacion:segmentos.length?segmentos.filter(s=>s.nivel===nivel).map(s=>`${s.version}: ${s.razon}`).join(' '):
+                    aviso!=null?'Sin fechas asociadas a este aviso; se conserva en Informativos.':'Sin fechas de estadía disponibles; prioridad temporal no determinada.'});
         }
         for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']]);
         for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']],null,x.cambios);
@@ -50,8 +61,8 @@
                 for(const s of referencias.get(v+':'+ref)||[])partes.push([s,v==='actual'?'Actual':'Anterior']);
             }
             if(x?.fecha_checkin || x?.fecha_checkout)partes.push([x,'Aviso']);
-            for(const validacion of lista(x?.validacion))partes.push([validacion,'Validación']);
-            agregar(tipo,partes,x?.hoja || x?.segmento || x?.actual || x?.anterior || x?.tipo || x?.codigo);
+            for(const validacion of lista(x?.validacion))if(validacion?.fecha_checkin||validacion?.fecha_checkout||validacion?.titular||validacion?.cabana!=null)partes.push([validacion,'Validación']);
+            agregar(tipo,partes,x?.hoja || x?.segmento || x?.actual || x?.anterior || x?.tipo || x?.codigo,[],x);
         }
         return salida;
     }
@@ -63,7 +74,10 @@
     }
     function renderizar(resultado,opciones) {
         const p=clasificar(resultado,opciones);
-        const caso=x=>`<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>${tipos[x.tipo]}</strong>${x.referencia?`<p>${esc(x.referencia)}</p>`:''}${x.segmentos.length?x.segmentos.map(s=>`<p>${esc(s.version)} · ${esc(s.titular||'Titular no disponible')} · CAB ${esc(s.cabana??'—')} · ${fecha(s.fecha_checkin)} → ${fecha(s.fecha_checkout)}</p>`).join(''):'<p>Titular no disponible · CAB — · Fechas no determinadas</p>'}${x.cambios.length?`<p>Cambios detectados: ${x.cambios.map(esc).join(' · ')}</p>`:''}<p>${esc(x.explicacion)}</p></div>`;
+        const caso=x=>{
+            const aviso=['advertencia','cobertura'].includes(x.tipo),referencia=[x.versionAviso,x.referencia].filter(Boolean).join(' · ');
+            return `<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>${tipos[x.tipo]}</strong>${referencia?`<p>${esc(referencia)}</p>`:''}${x.segmentos.length?x.segmentos.map(s=>`<p>${esc(s.version)} · ${esc(s.titular||'Titular no disponible')} · CAB ${esc(s.cabana??'—')} · ${fecha(s.fecha_checkin)} → ${fecha(s.fecha_checkout)}</p>`).join(''):aviso?'<p>Aviso sin una estadía asociada en este informe.</p>':'<p>Titular no disponible · CAB — · Fechas no determinadas</p>'}${x.detalleAviso?`<p>${esc(x.detalleAviso)}</p>`:''}${x.cambios.length?`<p>Cambios detectados: ${x.cambios.map(esc).join(' · ')}</p>`:''}<p>${esc(x.explicacion)}</p></div>`;
+        };
         const filas=grupos.map((k,i)=>{
             const nombre=nombres[i].replace(/^[^A-Za-zÁÉÍÓÚáéíóú]+/,'');
             const contenido=`<span class="haku-actualizacion-sites__punto" aria-hidden="true"></span><span>${nombre}</span><strong>${p.grupos[k].length}</strong>`;

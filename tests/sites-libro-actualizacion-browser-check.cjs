@@ -220,6 +220,27 @@ const server = http.createServer((request, response) => {
         }
         await page.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 0);
         await touch.detach();
+        await page.evaluate(()=>{
+            window.__generation=3;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            window.__pendientesActual={items:[],resueltos:[],reservas:[],comparacion:[],q:null};
+            window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'sin_cambios',libro_actual:{generacion:3},
+                nuevas:[],modificadas:[],ya_no_aparecen:[],ambiguas:[],no_comparables:[],
+                advertencias:['anterior','actual'].map(version=>({hoja:'Oct26',version,
+                    detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))});
+        });
+        const avisos=page.locator('.haku-actualizacion-sites').last().locator('.haku-prioridad--informativos');
+        await avisos.locator(':scope > summary').click();
+        assert.equal(await avisos.locator('.haku-actualizacion-sites__caso').count(),2);
+        const textoAvisos=await avisos.innerText();
+        assert.match(textoAvisos,/Versión anterior · Oct26/);assert.match(textoAvisos,/Versión actual · Oct26/);
+        assert.equal((textoAvisos.match(/Las noches escritas no coinciden/g)||[]).length,2);
+        assert.doesNotMatch(textoAvisos,/Titular no disponible|CAB —|Fechas no determinadas/);
+        for(const width of [1100,390,320]){
+            await page.setViewportSize({width,height:900});
+            assert.equal(await avisos.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${width}: avisos sin desbordes`);
+            if(process.env.HAKU_AVISOS_SCREENSHOT_DIR){fs.mkdirSync(process.env.HAKU_AVISOS_SCREENSHOT_DIR,{recursive:true});
+                await avisos.screenshot({path:path.join(process.env.HAKU_AVISOS_SCREENSHOT_DIR,`avisos-${width}.png`)});}
+        }
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

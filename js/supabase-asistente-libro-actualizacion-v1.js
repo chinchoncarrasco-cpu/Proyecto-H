@@ -72,7 +72,7 @@
             if(items.length) html += `<details class="haku-actualizacion-sites__grupo haku-actualizacion-sites__grupo--${clase}"><summary><span>${titulo} (${items.length})</span><span aria-hidden="true">⌄</span></summary><div class="haku-actualizacion-sites__grupo-contenido">${items.join('')}</div></details>`;
         };
         if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) {
-            html += root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.renderizar(r);
+            html += root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.renderizar(r,{formatearAviso:detalleAviso});
         }
         if (r.estado === 'sin_cambios') html += '<p class="haku-actualizacion-sites__sin-cambios"><strong>Sin cambios operacionales</strong> Haku no detectó cambios operacionales entre ambas versiones del Libro.</p>';
         html += '<div class="haku-libro-contadores haku-actualizacion-sites__metricas">' + [['nuevas','Nuevas'],['modificadas','Modificadas'],['ya_no_aparecen','Ya no aparecen'],['ambiguas','Por revisar']].map(([k,t])=>`<div><strong>${lista(r[k]).length}</strong><span>${t}</span></div>`).join('') + '</div>';
