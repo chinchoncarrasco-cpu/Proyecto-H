@@ -79,8 +79,9 @@ async function configurar(q) {
                         Object.assign(s,{catalogo_servicio_id:c.id,catalogo_servicios:{codigo:c.codigo,nombre:c.nombre},hora_inicio:p.p_inicio+':00',hora_fin:p.p_fin+':00'});
                         Object.assign(estado,{catalogo_servicio_id:c.id,hora_inicio:p.p_inicio,hora_fin:p.p_fin});
                     }
-                    s.libro_revision_admin_v1={version:1,item_id:p.p_item_id,firma:p.p_firma,motivo:p.p_motivo,estado};
-                    s.actualizado_en='2026-10-20T06:00:00Z';return {data:{ok:true,servicio_id:s.id,total:s.total}};
+                    s.libro_revision_admin_v1={version:1,item_id:p.p_item_id,firma:p.p_firma,motivo:p.p_motivo,estado,
+                        modo:p.p_modo,operacion_id:p.p_operacion_id,fecha:'2026-10-20T14:16:00Z'};
+                    s.actualizado_en='2026-10-20T06:00:00Z';return {data:{ok:true,servicio_id:s.id,total:s.total,revision:s.libro_revision_admin_v1}};
                 };
                 await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:e.reservas,generacion:e.generacion});
             });
@@ -111,6 +112,18 @@ async function configurar(q) {
             if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await manual.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`admin-${width}.png`)});
             await manual.getByRole('button',{name:'Confirmar decisión',exact:true}).click();
             await page.waitForFunction(()=>!document.querySelector('.haku-libro-servicio-manual'));
+            const recibo=page.locator('.haku-libro-revision-admin-resultado');
+            assert.equal(await recibo.count(),1);assert.match(await recibo.innerText(),/Aprobación guardada/);
+            const detalleConfirmado=recibo.locator('details');assert.equal(await detalleConfirmado.getAttribute('open'),null);
+            await recibo.getByText('Ver detalle de lo confirmado',{exact:true}).click();
+            assert.match(await recibo.innerText(),/IN: 10\.10\.26/);
+            assert.match(await recibo.innerText(),/Importe acordado: \$30\.000.*Pagado \$30\.000 · saldo \$0/);
+            assert.match(await recibo.innerText(),/Confirmado:.*11:16.*Chile/);
+            assert.match(await recibo.innerText(),width===1100?/Conservar lo registrado/:/Corregir tipo y horario/);
+            assert.match(await recibo.innerText(),width===1100?/16:15–18:15/:/17:15–20:30/);
+            assert.equal(await recibo.locator('input,button').count(),0,'el comprobante no repite la operación');
+            assert.equal(await recibo.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${width}: comprobante sin desborde`);
+            if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await recibo.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`admin-confirmado-${width}.png`)});
             assert.equal(await page.locator('[data-haku-accion="incorporar"]').isVisible(),true);
             assert.equal(await page.evaluate(()=>fixtureServicios.adminCalls.length),1);
             assert.equal(await page.evaluate(()=>fixtureServicios.db.servicios.length),1);

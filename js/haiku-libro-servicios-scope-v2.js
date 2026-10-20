@@ -1637,6 +1637,57 @@
             Object.entries(estadoRevisionAdmin(s)).every(([k,v])=>d.estado?.[k]===v);
     }
 
+    function guardarComprobanteRevisionAdmin(estado,item,revision,fuente,nombre) {
+        if (!revision?.operacion_id || !['conservar','actualizar'].includes(revision.modo)) return;
+        estado.comprobantesAdmin ||= new Map();
+        estado.comprobantesAdmin.set(revision.operacion_id,{
+            revision:JSON.parse(JSON.stringify(revision)),fuente,nombre,
+            reserva:{titular:item.reserva.titular,cabana:item.reserva.cabana,fecha_checkin:item.reserva.fecha_checkin},libro:item.servicio?.texto_original || '',
+            pago:item.finanzas_existente?.etiqueta || 'Pagos conservados'
+        });
+    }
+
+    function mostrarComprobantesRevisionAdmin(out,estado,fuente) {
+        out.querySelectorAll('.haku-libro-revision-admin-resultado').forEach(n=>n.remove());
+        const recibos=[...(estado.comprobantesAdmin?.values() || [])].filter(r=>r.fuente===fuente);
+        if (!recibos.length) return;
+        const crear=(tag,clase,texto)=>{const n=document.createElement(tag);n.className=clase;if(texto!=null)n.textContent=texto;return n;};
+        const recibo=crear('section','haku-libro-resultado-sites haku-libro-revision-admin-resultado');
+        recibo.setAttribute('aria-label','Comprobante de aprobación manual');
+        const cabecera=crear('header','haku-libro-resultado-sites__cabecera');
+        cabecera.append(crear('strong','haku-libro-resultado-sites__titulo','Revisión de servicios'),
+            crear('span','haku-libro-resultado-sites__chip','Guardado'));
+        const tarjeta=crear('div','haku-libro-resultado-sites__tarjeta'),mensaje=crear('div','haku-libro-resultado-sites__mensaje');
+        const marca=crear('span','haku-libro-resultado-sites__marca','✓');marca.setAttribute('aria-hidden','true');
+        const texto=crear('div','haku-libro-resultado-sites__mensaje-texto');texto.setAttribute('role','status');
+        texto.append(crear('strong','haku-libro-resultado-sites__exito',recibos.length===1?'Aprobación guardada':'Aprobaciones guardadas'),
+            crear('p','haku-libro-resultado-sites__descripcion',recibos.length===1?'La decisión quedó registrada sobre el servicio existente.':'Las decisiones quedaron registradas sobre los servicios existentes.'));
+        mensaje.append(marca,texto);
+        const metricas=crear('div','haku-libro-resultado-sites__metricas');
+        for(const [etiqueta,valor] of [['Decisiones',recibos.length],['Servicios nuevos',0],['Cobros nuevos','$0']]){
+            const m=crear('div','haku-libro-resultado-sites__metrica');m.append(crear('span','',etiqueta),crear('strong','',String(valor)));metricas.append(m);
+        }
+        const detalle=crear('details','haku-libro-resultado-sites__detalle'),summary=crear('summary','haku-libro-resultado-sites__detalle-cabecera');
+        summary.append(crear('span','haku-libro-resultado-sites__detalle-icono','▤'),crear('span','','Ver detalle de lo confirmado'),
+            crear('span','haku-libro-resultado-sites__flecha','⌄'));
+        const contenido=crear('div','haku-libro-resultado-sites__detalle-contenido');
+        for(const r of recibos){
+            const d=r.revision,s=d.estado,fila=crear('div','haku-libro-resultado-sites__fila');
+            const fecha=String(s.fecha_servicio || '').split('-').reverse().join('.');
+            const confirmado=new Date(d.fecha),cuando=Number.isFinite(+confirmado)?new Intl.DateTimeFormat('es-CL',{
+                timeZone:'America/Santiago',dateStyle:'short',timeStyle:'short'}).format(confirmado):'Fecha no disponible';
+            fila.append(crear('strong','',`CAB ${r.reserva.cabana} · ${r.reserva.titular} · ${r.nombre}`),
+                crear('p','haku-libro-resultado-sites__ingreso',textoIngresoReserva(r)),
+                crear('span','haku-libro-resultado-sites__estado',d.modo==='conservar'?'Decisión: Conservar lo registrado':'Decisión: Corregir tipo y horario'),
+                crear('p','',`Servicio confirmado: ${fecha} · ${s.hora_inicio}–${s.hora_fin} · ${s.personas} personas`),
+                crear('p','',`Importe acordado: $${Number(s.total).toLocaleString('es-CL')} · ${r.pago}`),
+                crear('p','',`Motivo: ${d.motivo}`),crear('p','',`Confirmado: ${cuando} (Chile)`));
+            if(r.libro)fila.append(crear('p','',`Referencia del Libro: ${r.libro}`));
+            contenido.append(fila);
+        }
+        detalle.append(summary,contenido);tarjeta.append(mensaje,metricas,detalle);recibo.append(cabecera,tarjeta);out.append(recibo);
+    }
+
     async function abrirRevisionAdminExistente(item,out,texto,overrides,estado,fila) {
         if (!esAdministrador()) throw Error('La sesión de administrador cambió. Vuelve a iniciar sesión.');
         const s=item.servicio_existente, apertura=++estado.apertura;
@@ -1690,27 +1741,40 @@
             if(confirmar.disabled || estado.ocupado || !vigente())return;
             estado.ocupado=true;actualizar();cancelar.disabled=true;aviso.textContent=confirmada?'Actualizando revisión…':'Revalidando Libro, servicio y pagos…';
             try{
-                const actual=await construir(texto,overrides,estado.manuales);if(!vigente())return;
-                const observado=actual.items.find(x=>x.item_id===item.item_id);
-                if(!esAdministrador() || !observado || observado.firmaManual!==item.firmaManual || firmaRevisionAdmin(observado)!==firmaRevisionAdmin(item))throw Error('El Libro o la sesión cambió. Vuelve a abrir la aprobación manual.');
-                if(!solicitud){
-                    const candidatos=[observado.servicio_existente,...(observado.candidatosRevision || [])].filter(Boolean);
-                    const vigenteServicio=candidatos.find(x=>x.id===s.id);
-                    if(!vigenteServicio || JSON.stringify(estadoRevisionAdmin(vigenteServicio))!==JSON.stringify(estadoRevisionAdmin(s)) ||
-                        vigenteServicio.actualizado_en!==s.actualizado_en || JSON.stringify(observado.finanzas_existente)!==JSON.stringify(item.finanzas_existente))
-                        throw Error('El servicio o sus pagos cambiaron. Vuelve a abrir la aprobación manual.');
-                    solicitud={p_operacion_id:uuid(),p_servicio_id:s.id,p_item_id:item.item_id,p_firma:firmaRevisionAdmin(item),
-                        p_esperado:{...estadoRevisionAdmin(s),actualizado_en:s.actualizado_en},p_modo:modo.value,
-                        p_codigo:modo.value==='actualizar'?codigo.value:codigoExistente(s),p_inicio:modo.value==='actualizar'?inicio.value:horaCorta(s.hora_inicio),
-                        p_fin:modo.value==='actualizar'?fin.value:horaCorta(s.hora_fin),p_motivo:motivo.value.trim(),p_conservar_importe:true};
-                    for(const el of [modo,codigo,inicio,fin,motivo,aceptar])el.disabled=true;
+                if(!confirmada){
+                    const actual=await construir(texto,overrides,estado.manuales);if(!vigente())return;
+                    const observado=actual.items.find(x=>x.item_id===item.item_id);
+                    if(!esAdministrador() || !observado || observado.firmaManual!==item.firmaManual || firmaRevisionAdmin(observado)!==firmaRevisionAdmin(item))throw Error('El Libro o la sesión cambió. Vuelve a abrir la aprobación manual.');
+                    if(!solicitud){
+                        const candidatos=[observado.servicio_existente,...(observado.candidatosRevision || [])].filter(Boolean);
+                        const vigenteServicio=candidatos.find(x=>x.id===s.id);
+                        if(!vigenteServicio || JSON.stringify(estadoRevisionAdmin(vigenteServicio))!==JSON.stringify(estadoRevisionAdmin(s)) ||
+                            vigenteServicio.actualizado_en!==s.actualizado_en || JSON.stringify(observado.finanzas_existente)!==JSON.stringify(item.finanzas_existente))
+                            throw Error('El servicio o sus pagos cambiaron. Vuelve a abrir la aprobación manual.');
+                        solicitud={p_operacion_id:uuid(),p_servicio_id:s.id,p_item_id:item.item_id,p_firma:firmaRevisionAdmin(item),
+                            p_esperado:{...estadoRevisionAdmin(s),actualizado_en:s.actualizado_en},p_modo:modo.value,
+                            p_codigo:modo.value==='actualizar'?codigo.value:codigoExistente(s),p_inicio:modo.value==='actualizar'?inicio.value:horaCorta(s.hora_inicio),
+                            p_fin:modo.value==='actualizar'?fin.value:horaCorta(s.hora_fin),p_motivo:motivo.value.trim(),p_conservar_importe:true};
+                        for(const el of [modo,codigo,inicio,fin,motivo,aceptar])el.disabled=true;
+                    }
+                    const {data,error}=await root.haikuSupabase.rpc('haiku_libro_revision_servicio_admin_v1',solicitud);if(error)throw error;
+                    const d=data?.revision;
+                    if(!data?.ok || data.servicio_id!==s.id || Number(data.total)!==Number(s.total) || d?.version!==1 ||
+                        d?.operacion_id!==solicitud.p_operacion_id || d.item_id!==item.item_id || d.firma!==solicitud.p_firma ||
+                        d.modo!==solicitud.p_modo || d.estado?.id!==s.id || Number(d.estado?.total)!==Number(s.total))
+                        throw Error('Proyecto H no confirmó la revisión administrativa.');
+                    confirmada=true;
+                    guardarComprobanteRevisionAdmin(estado,item,d,texto,solicitud.p_codigo==='tinajaJacuzzi'?'Tinaja Jacuzzi':'Tinaja Tonel de Madera');
+                    if(vigente())mostrarComprobantesRevisionAdmin(out,estado,texto);
                 }
-                if(!confirmada){const {data,error}=await root.haikuSupabase.rpc('haiku_libro_revision_servicio_admin_v1',solicitud);if(error)throw error;
-                    if(!data?.ok || data.servicio_id!==s.id || Number(data.total)!==Number(s.total))throw Error('Proyecto H no confirmó la revisión administrativa.');confirmada=true;}
-                const actualizado=await construir(texto,overrides,estado.manuales);if(vigente())renderizar(actualizado,out,texto,overrides);
+                const actualizado=await construir(texto,overrides,estado.manuales);
+                if(vigente()){
+                    renderizar(actualizado,out,texto,overrides);
+                    out.querySelector('.haku-libro-revision-admin-resultado')?.scrollIntoView?.({block:'nearest'});
+                }
                 await Promise.allSettled([Promise.resolve().then(()=>root.haikuSincronizarServiciosDesdeSupabase?.()),
                     Promise.resolve().then(()=>root.HAIKU_RESUMEN_REFRESH_V1?.activo()?root.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined,{categoria:'Libro',evento:'revisión administrativa de servicio',tipo:'externo'}):undefined)]);
-            }catch(e){if(vigente()){aviso.textContent=e.message || 'No se pudo confirmar la revisión.';confirmar.textContent=confirmada?'Actualizar revisión':'Reintentar confirmación';}}
+            }catch(e){if(vigente()){aviso.textContent=confirmada?'Aprobación guardada. Falta actualizar la lista; puedes reintentar la actualización.':e.message || 'No se pudo confirmar la revisión.';confirmar.textContent=confirmada?'Actualizar revisión':'Reintentar confirmación';}}
             finally{estado.ocupado=false;if(vigente()){cancelar.disabled=false;actualizar();}}
         });
         acciones.append(confirmar,cancelar);contenido.append(cabecera,comparacion,pago,campos,label,aviso);panel.append(contenido,acciones);fila.append(panel);actualizar();panel.scrollIntoView?.({block:'nearest'});
@@ -2313,6 +2377,11 @@
         } };
         nochesPorVista.set(out, overrides);
         instalarEstilos(); out.className = "haiku-asistente-preview haku-libro-servicios haku-libro-servicios-sites"; out.textContent = "";
+        for(const item of resultado.items){
+            const s=item.servicio_existente;
+            if(s && revisionAdminValida(item,s))guardarComprobanteRevisionAdmin(estado,item,s.libro_revision_admin_v1,textoOriginal,nombreExistente(s));
+        }
+        mostrarComprobantesRevisionAdmin(out,estado,textoOriginal);
         const confirmarNoche = async (item, indice) => {
             if (!item.puedeElegirNoche || !item.opcionesNoches.some(n => n.noche_indice === indice)) throw new Error('La noche elegida no es válida.');
             overrides.set(item.item_id, { noche_indice: indice, firma: item.firmaNoche });

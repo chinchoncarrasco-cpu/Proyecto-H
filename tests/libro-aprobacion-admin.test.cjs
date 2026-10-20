@@ -37,9 +37,10 @@ function writer(e,{perder=false}={}){
             Object.assign(s,{catalogo_servicio_id:c.id,catalogo_servicios:{codigo:c.codigo,nombre:c.nombre},hora_inicio:p.p_inicio+':00',hora_fin:p.p_fin+':00'});
             Object.assign(estado,{catalogo_servicio_id:c.id,hora_inicio:p.p_inicio,hora_fin:p.p_fin});
         }
-        s.libro_revision_admin_v1={version:1,item_id:p.p_item_id,firma:p.p_firma,motivo:p.p_motivo,estado};
+        s.libro_revision_admin_v1={version:1,item_id:p.p_item_id,firma:p.p_firma,motivo:p.p_motivo,estado,
+            modo:p.p_modo,operacion_id:p.p_operacion_id,fecha:'2026-10-20T14:16:00Z'};
         s.actualizado_en='2026-10-20T06:00:00Z';
-        const resultado={ok:true,servicio_id:s.id,total:s.total};operaciones.set(p.p_operacion_id,resultado);
+        const resultado={ok:true,servicio_id:s.id,total:s.total,revision:copy(s.libro_revision_admin_v1)};operaciones.set(p.p_operacion_id,resultado);
         if(perder){perder=false;throw Error('Respuesta perdida');}return {data:resultado};
     };return llamadas;
 }
@@ -62,6 +63,12 @@ test('conservar acepta sólo esa evidencia y no altera servicio ni finanzas; el 
     for(const k of Object.keys(s).filter(k=>k!=='actualizado_en'))assert.deepEqual(e.state.db.servicios[0][k],s[k],k);
     assert.deepEqual(e.state.db.vista_estado_cargos,finanzas);assert.equal(e.state.escrituras.length,0);
     assert.ok(e.out.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'));
+    const recibo=e.out.querySelector('.haku-libro-revision-admin-resultado');assert.ok(recibo);
+    assert.match(recibo.textContent,/Aprobación guardada.*Conservar lo registrado/);
+    assert.match(recibo.textContent,/IN: 10\.10\.26/);assert.match(recibo.textContent,/16:15–18:15/);
+    assert.match(recibo.textContent,/Importe acordado: \$30\.000.*saldo \$0/);
+    assert.match(recibo.textContent,/Motivo: Verificado por el administrador/);assert.match(recibo.textContent,/Confirmado:.*11:16.*Chile/);
+    assert.equal(recibo.querySelectorAll('input,button').length,0);
     e.r.texto_original='PROMO HAKU // JACUZZI A LAS 18:15 HASTA LAS 21:30';
     e.r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(e.r.texto_original,{origen_campo:'notas_reserva'});
     assert.equal((await e.construir()).items.find(x=>x.kind==='servicio').estado,'revisar','otra evidencia exige revisión nueva');
@@ -73,12 +80,56 @@ test('corregir cambia tipo y horario del mismo servicio y conserva cantidad, pre
     assert.equal(s.catalogo_servicios.codigo,'tinajaJacuzzi');assert.equal(s.hora_inicio,'17:15:00');assert.equal(s.hora_fin,'20:30:00');
     assert.equal(s.total,30000);assert.equal(s.cantidad,2);assert.equal(s.precio_unitario_aplicado,15000);
     assert.deepEqual(e.state.db.vista_estado_cargos,finanzas);assert.equal(e.state.escrituras.length,0);
+    const recibo=e.out.querySelector('.haku-libro-revision-admin-resultado');
+    assert.match(recibo.textContent,/Jacuzzi.*Corregir tipo y horario.*17:15–20:30/);
 });
 test('reintento tras respuesta perdida usa la misma operación y conserva una sola tinaja',async()=>{
     const e=caso(),llamadas=writer(e,{perder:true}),f=await abrir(e);completar(f,'actualizar');
     await f.confirmar.listeners.click();assert.match(f.panel.textContent,/Respuesta perdida/);
+    assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,0,'sin respuesta no anuncia éxito');
     await f.confirmar.listeners.click();assert.equal(llamadas.length,2);assert.deepEqual(llamadas[0],llamadas[1]);
     assert.equal(e.state.db.servicios.length,1);assert.equal((await e.construir()).items.find(x=>x.kind==='servicio').estado,'existente');
+    assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,1);
+});
+test('la decisión confirmada reaparece al volver a revisar la ficha y el recibo no provoca otra escritura',async()=>{
+    const e=caso(),llamadas=writer(e),f=await abrir(e);completar(f);await f.confirmar.listeners.click();
+    const nueva=new e.Element('div');e.api.renderizar(await e.construir(),nueva,consulta);
+    assert.equal(nueva.querySelectorAll('.haku-libro-revision-admin-resultado').length,1);
+    assert.match(nueva.textContent,/Conservar lo registrado.*16:15–18:15/);assert.equal(llamadas.length,1);
+    e.r.texto_original='PROMO HAKU // JACUZZI A LAS 18:15 HASTA LAS 21:30';
+    e.r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(e.r.texto_original,{origen_campo:'notas_reserva'});
+    const cambiada=new e.Element('div');e.api.renderizar(await e.construir(),cambiada,consulta);
+    assert.equal(cambiada.querySelectorAll('.haku-libro-revision-admin-resultado').length,0,'otra evidencia no hereda una aprobación');
+    assert.equal(llamadas.length,1);
+});
+test('un fallo del servidor o un recibo de otra operación nunca muestra aprobación guardada',async()=>{
+    for(const respuesta of [{error:{message:'No se guardó'}},{data:{ok:true,servicio_id:'tinaja-existente',total:30000,
+        revision:{version:1,operacion_id:'otra-operacion'}}}]){
+        const e=caso(),f=await abrir(e);e.c.haikuSupabase.rpc=async()=>respuesta;completar(f);await f.confirmar.listeners.click();
+        assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,0);
+        assert.match(f.panel.textContent,/No se guardó|no confirmó/);
+    }
+});
+test('si se guardó pero falla el refresco, muestra el comprobante y reintenta sólo la lectura',async()=>{
+    const e=caso(),llamadas=writer(e),f=await abrir(e),rpc=e.c.haikuSupabase.rpc;
+    const consultar=e.c.HAIKU_LIBRO_RESERVA_V1.consultarHoja;
+    e.c.haikuSupabase.rpc=async(...args)=>{const result=await rpc(...args);
+        e.c.HAIKU_LIBRO_RESERVA_V1.consultarHoja=async()=>{throw Error('Lectura interrumpida');};return result;};
+    completar(f);await f.confirmar.listeners.click();assert.equal(llamadas.length,1);
+    assert.match(f.panel.textContent,/Aprobación guardada\. Falta actualizar la lista/);
+    assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,1);
+    e.c.HAIKU_LIBRO_RESERVA_V1.consultarHoja=consultar;
+    await f.confirmar.listeners.click();assert.equal(llamadas.length,1);
+    assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,1);
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,0);
+});
+test('el comprobante conserva visibles los demás servicios que requieren revisión',async()=>{
+    const e=caso();e.r.texto_original+=' // 1 MASAJE DE 1 HORA';
+    e.r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(e.r.texto_original,{origen_campo:'notas_reserva'});
+    writer(e);const f=await abrir(e);completar(f);await f.confirmar.listeners.click();
+    assert.equal(e.out.querySelectorAll('.haku-libro-revision-admin-resultado').length,1);
+    const pendiente=e.out.querySelector('.haku-libro-servicios__seccion--revision');assert.match(pendiente.textContent,/1 MASAJE DE 1 HORA/);
+    assert.ok(pendiente.querySelectorAll('button').some(b=>b.textContent==='Aprobación manual'));
 });
 test('cambios de evidencia, servicio, pagos o rol impiden confirmar la vista obsoleta',async()=>{
     for(const cambiar of [e=>e.state.generacion++,e=>e.state.db.servicios[0].total=40000,
