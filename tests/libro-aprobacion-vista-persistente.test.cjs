@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
+const source = fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace(/\r\n/g,'\n');
 const inicio = source.indexOf('    function capturarVistaAprobaciones(out) {');
 const fin = source.indexOf('    function renderizarIncorporacion(', inicio);
 assert.ok(inicio !== -1 && fin > inicio);
@@ -75,9 +75,64 @@ test('ambas rutas revalidan sin reemplazar prematuramente el listado',()=>{
     const estructurada=source.slice(i,j);
     assert.doesNotMatch(estructurada,/out\.replaceChildren/);
     assert.match(estructurada,/restaurarVistaAprobaciones\(out,vista\)/);
-    assert.equal((source.match(/aprobar\.manualPago = async \(planActual,id,accion\)/g)||[]).length,2);
-    assert.equal((source.match(/const vista=capturarVistaAprobaciones\(out\), desbloquear=bloquearVistaMientrasRevalida\(out\)/g)||[]).length,4);
 });
+
+// Ejecutar los handlers reales de ambas vistas, sin depender del número de
+// llamadas ni del espaciado de las declaraciones de bloqueo.
+function handlers(patron) {
+    return Array.from(source.matchAll(patron),match=>{
+        const fin=source.indexOf('\n'+match[1]+'};',match.index);
+        assert.ok(fin>match.index,'handler completo');
+        return source.slice(match.index,fin+match[1].length+4);
+    });
+}
+for(const [tipo,patron] of [
+    ['aprobar',/^([ ]*)const aprobar\s*=\s*async ids\s*=>\s*\{/gm],
+    ['manualPago',/^([ ]*)aprobar\.manualPago\s*=\s*async .*=>\s*\{/gm],
+    ['refrescarTrasPenalidad',/^([ ]*)aprobar\.refrescarTrasPenalidad\s*=\s*async .*=>\s*\{/gm]
+]) {
+    const rutas=handlers(patron);
+    assert.equal(rutas.length,2,'handler presente en ambas vistas: '+tipo);
+    for(const [ruta,codigo] of rutas.entries()) for(const falla of [false,true])
+    test(`${tipo}, vista ${ruta+1}: conserva lista y desbloquea tras ${falla?'error':'éxito'}`,async()=>{
+        const f=fake({abiertos:['dudosos','pagos']}),aprobados=new Set();
+        let resolver,rechazar,renders=0,lecturas=0;
+        const pendiente=new Promise((resolve,reject)=>{resolver=resolve;rechazar=reject;});
+        f.out.append=()=>{};
+        f.out.replaceChildren=()=>assert.fail('No sustituir la lista durante la revalidación');
+        const contexto={...vista,out:f.out,result:{},decisiones:new Map(),aprobados,
+            prepararIncorporacion:()=>{lecturas++;return pendiente;},
+            resolverAprobacionManualPago:()=>{lecturas++;return pendiente;},
+            restaurarSeleccionIncorporacion:nuevo=>nuevo,
+            continuarVistaManualPago:()=>{},volver:async()=>{},elemento:()=>({}),
+            renderizarIncorporacion:()=>{
+                renders++;
+                assert.equal(f.out.inert,true);
+                f.cambiar({top:260});
+            }};
+        const cabecera='let planEnVista={items:[]};let identidadActualizada=false;let incorporar;';
+        const inicial=tipo==='aprobar'?'':'const aprobar={};';
+        const ejecutar=vm.runInNewContext(cabecera+inicial+codigo+
+            '\n'+(tipo==='aprobar'?'aprobar':`aprobar.${tipo}`),contexto);
+        const terminado=ejecutar(...(tipo==='manualPago'?[{items:[]},'pago',{}]:['pago']))
+            .catch(error=>{assert.equal(error.message,'sin red');});
+        assert.equal(lecturas,1);
+        assert.equal(renders,0);
+        assert.deepEqual(f.abiertas(),['dudosos','pagos']);
+        assert.equal(f.contenedor.scrollTop,350);
+        assert.equal(f.out.inert,true);
+        assert.equal(f.out.getAttribute('aria-busy'),'true');
+        if(falla) rechazar(Error('sin red'));
+        else resolver({items:[{id:'pago',categoria:'pagos',motivos:[],seleccionado:true}]});
+        await terminado;
+        assert.equal(renders,falla?0:1);
+        assert.equal(f.out.inert,false);
+        assert.equal(f.out.getAttribute('aria-busy'),null);
+        assert.deepEqual(f.abiertas(),['dudosos','pagos']);
+        assert.equal(f.contenedor.scrollTop,falla?350:435);
+        if(falla) assert.equal(aprobados.size,0);
+    });
+}
 
 test('respeta estados inerte y busy que ya estaban activos',()=>{
     const f=fake({inerte:true,busy:'preexistente'});

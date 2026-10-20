@@ -32,7 +32,7 @@ test('movimientos de insumos: PostgreSQL local, atomicidad e identidad', async t
     try {
         await db.exec(read('tests/fixtures/insumos-schema.sql'));
         await db.exec(read('supabase/migrations/20260927150418_movimientos_insumos_aseo.sql'));
-        await db.exec(read('supabase/migrations/20260927182654_destinos_reposicion_insumos_aseo.sql'));
+        await db.exec(read('supabase/migrations/20260927203521_destinos_reposicion_insumos_aseo.sql'));
         await db.query('insert into usuarios values($1),($2)', [id(90), id(91)]);
         await db.query('insert into cabanas(id,numero) values($1,1),($2,2)', [id(1), id(2)]);
         await db.query("select set_config('request.jwt.claim.sub',$1,false),set_config('test.permisos',$2,false),set_config('test.activo','true',false)", [id(90), permisos]);
@@ -428,7 +428,7 @@ test('actualización del esquema conserva históricos, RLS, publication y correc
         const antes=(await db.query('select * from movimientos_insumos order by id')).rows;
         const snapshot=await one("select (select jsonb_agg(p order by p.policyname) from pg_policies p where tablename like 'movimientos_insumos%') policies, (select jsonb_agg(jsonb_build_object('publication',p.pubname,'schema',p.schemaname,'table',p.tablename,'filter',p.rowfilter) order by p.tablename) from pg_publication_tables p where pubname='supabase_realtime') publication");
         await db.exec('reset role');
-        await db.exec(read('supabase/migrations/20260927182654_destinos_reposicion_insumos_aseo.sql'));
+        await db.exec(read('supabase/migrations/20260927203521_destinos_reposicion_insumos_aseo.sql'));
         await db.exec('set role authenticated');
         const despues=(await db.query('select * from movimientos_insumos order by id')).rows;
         for(let i=0;i<antes.length;i++) for(const campo of Object.keys(antes[i])) assert.deepEqual(despues[i][campo],antes[i][campo]);

@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {randomUUID}=require('node:crypto');
 const {PGlite}=require(process.env.HAKU_PGLITE_MODULE||'@electric-sql/pglite');
 const root=path.resolve(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
-const migration='supabase/migrations/20261005051906_libro_resoluciones_ocupacion.sql';
+const migration='supabase/migrations/20261005191959_libro_resoluciones_ocupacion.sql';
 const evidencia=(extra={})=>({id:'Oct26!C3',coordenadas_origen:{hoja:'Oct26',celda:'C3'},titular:'Esperanza Aranda',cabana:1,
  fecha_checkin:'2026-10-02',fecha_checkout:'2026-10-03',tipo_estadia:'alojamiento',adultos:null,ninos:null,mascotas:null,texto_original:'ocupacion por confirmar',...extra});
 const identidad=e=>({version:'a'.repeat(64),elemento:e.id,origen:e.coordenadas_origen,evidencia:e});

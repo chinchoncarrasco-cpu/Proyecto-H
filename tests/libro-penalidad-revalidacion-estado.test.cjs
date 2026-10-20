@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
 const manual=fs.readFileSync(require.resolve('../js/supabase-ajustes-cargo-manual-v1.js'),'utf8');
-const a=source.indexOf('    function conciliarPenalidadActiva(item, resumen) {');
+const a=source.search(/^    function conciliarPenalidadActiva\(/m);
 const b=source.indexOf('    async function prepararIncorporacion(',a);
 assert.ok(a>=0&&b>a);
 const f=new Function('money',source.slice(a,b)+'\nreturn {conciliarPenalidadActiva,conciliarPenalidadesEnPlan};')(n=>'$'+n.toLocaleString('es-CL'));
@@ -62,9 +62,13 @@ test('consulta el RPC existente sólo con penalidades y agrupa por reserva',asyn
 });
 
 test('error de consulta no inventa la confirmación ni registra pago',async()=>{
- const x=item();await f.conciliarPenalidadesEnPlan({items:[x]},{async rpc(){throw Error('sin red')}});
+ const llamadas=[];
+ const cliente={async rpc(nombre){llamadas.push(nombre);throw Error('sin red');},
+  from(tabla){llamadas.push('tabla:'+tabla);assert.fail('Sin resumen no debe consultar ni modificar tablas');}};
+ const x=item();await f.conciliarPenalidadesEnPlan({items:[x]},cliente);
  assert.equal(x.categoria,'dudosos');assert.ok(x.penalidadManual);
- assert.doesNotMatch(source.slice(a,b),/haiku_registrar_pago|haiku_aplicar_ajuste|haiku_incorporar_libro_v1/);
+ assert.equal(x.payload,null);assert.equal(x.pagoLibro.pago_recibido,null);
+ assert.deepEqual(llamadas,['haiku_resumen_ajustes_unidad']);
 });
 
 test('evento sólo se emite tras éxito del RPC con contexto Libro',()=>{
