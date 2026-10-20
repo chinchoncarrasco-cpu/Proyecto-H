@@ -74,3 +74,26 @@ test('la compensación no regala un rango de tres horas ni decide entre dos hora
         assert.equal(e.state.escrituras.length,0);
     }
 });
+
+test('el bloque de tinaja y batas del 24 conserva aparte la tinaja ya registrada del 25',async()=>{
+    const e=caso(),r=e.r,est=e.state.db.reserva_estadias[0];
+    r.fecha_checkin='2026-09-24';r.fecha_checkout='2026-09-26';r.noches=2;
+    est.fecha_ingreso=r.fecha_checkin;est.fecha_salida=r.fecha_checkout;
+    r.texto_original='PROMO HAIKU // Huésped de prueba // 2adl // 2noches // CA // 24-09-26 // WALKIN // '+
+        'JACUZZI A LAS 20 HRS; BATAS OK 24-09 // ESPUMANTE + CHOCOLATES X ANIVERSARIO // '+
+        'JACUZZI A LAS 19,15 HRS VIERNES 25-09 PAGADA';
+    r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+    e.state.db.servicios=[{id:'tinaja-del-25',reserva_id:est.reserva_id,estadia_id:est.id,
+        fecha_servicio:'2026-09-25',hora_inicio:'19:15',hora_fin:'20:15',personas:2,cantidad:1,
+        tipo_cobro:'normal',total:30000,estado_servicio:'programado',catalogo_servicios:{codigo:'tinajaJacuzzi',nombre:'Jacuzzi'}}];
+    const antes=JSON.stringify(e.state.db);
+    const plan=await e.api.compararReservas([r],{desde:'2026-09-01',hasta:'2026-09-30'});
+    const servicios=plan.items.filter(x=>x.kind==='servicio');assert.equal(servicios.length,2);
+    const primera=servicios.find(x=>x.hora==='20:00'),segunda=servicios.find(x=>x.hora==='19:15');
+    assert.equal(primera.fecha,'2026-09-24');assert.equal(primera.proveniencia.fecha,'INFERIDA_SEGURA');
+    assert.ok(primera.inferencias.some(x=>/BATAS OK 24-09/.test(x)));
+    assert.ok(!primera.razones.some(x=>/fecha inequívoca/.test(x)));
+    assert.equal(segunda.fecha,'2026-09-25');assert.equal(segunda.estado,'existente');
+    assert.equal(segunda.servicio_existente.id,'tinaja-del-25');
+    assert.equal(JSON.stringify(e.state.db),antes);assert.equal(e.state.escrituras.length,0);
+});

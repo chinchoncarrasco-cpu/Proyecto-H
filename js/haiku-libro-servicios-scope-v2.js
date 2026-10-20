@@ -411,6 +411,32 @@
         return unicas.length === 1 ? unicas[0] : null;
     }
 
+    function fechaContextualTinaja(servicio, reserva) {
+        if (!esTinajaServicio(servicio) ||
+            (servicio?.origen_campo || servicio?.evidencia_origen?.origen_campo) !== 'notas_reserva') return null;
+        const bloques = root.HAIKU_LIBRO_SEMANTICA?.separarCampos?.(reserva?.texto_original) || [];
+        const evidencia = [], propio = normalizar(servicio?.texto_original);
+        // El punto y coma conserva el contexto de UNA tinaja y sus batas.
+        // Slashes, saltos de línea y otras tareas no prestan fechas al servicio.
+        for (const bloque of bloques) {
+            const partes = bloque.split(';').map(x => x.trim()).filter(Boolean);
+            if (partes.length !== 2) continue;
+            const indice = partes.findIndex(x => normalizar(x) === propio);
+            if (indice < 0) continue;
+            const nota = textoSinHorasParaFecha(partes[1 - indice]);
+            const fecha = nota.match(/^(?:(?:entregar|dejar)\s+)?batas(?:\s+ok)?\s+(\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{4}|\d{2}))?)[.!]?$/);
+            if (fecha) evidencia.push({ fecha:fechaExplicita(fecha[1],reserva), texto:partes[1 - indice] });
+        }
+        if (!evidencia.length) return null;
+        const fechas = [...new Set(evidencia.map(x => x.fecha))], inicio = reserva?.fecha_checkin, fin = reserva?.fecha_checkout;
+        if (fechas.length !== 1 || !fechas[0] ||
+            ![inicio,fin].every(f => /^\d{4}-\d{2}-\d{2}$/.test(f || '') && iso(...f.split('-')) === f) ||
+            fechas[0] < inicio || fechas[0] > fin)
+            return { fecha:null, conflicto:true, detalle:'La fecha del bloque de tinaja y batas es contradictoria, inválida o está fuera de la estadía; revisa ese bloque del Libro.' };
+        return { fecha:fechas[0], inferida:true,
+            detalle:`Fecha por contexto del mismo bloque de tinaja y batas: ${fechas[0]} (${evidencia[0].texto}).` };
+    }
+
     function fechaDiaMasaje(servicio, reserva, fechaConfirmada = null) {
         // El día suelto sólo se resuelve dentro de una estadía válida. Una
         // expresión no resuelta impide recurrir a la inferencia por horario.
@@ -512,7 +538,10 @@
                 return contextual;
             }
         }
-        const explicita = fechaExplicitaServicio(servicio, reserva);
+        const declarada = fechaExplicitaServicio(servicio, reserva);
+        const contextual = declarada ? null : fechaContextualTinaja(servicio, reserva);
+        if (contextual?.conflicto) return contextual;
+        const explicita = declarada || contextual?.fecha;
         const ordinales = nocheOrdinal(servicio?.texto_original);
         if (ordinales) {
             const noche = ordinales.length === 1 && nochesValidas(reserva, hora).find(n => n.noche_indice === ordinales[0]);
@@ -520,7 +549,7 @@
                 detalle: 'La noche indicada es contradictoria, no existe en la estadía o no permite derivar una fecha segura.' };
             return { fecha: noche.fecha, inferida: true, detalle: `Fecha por Noche ${noche.noche_indice}: ${noche.fecha}.` };
         }
-        if (explicita) return { fecha: explicita, inferida: false, detalle: null };
+        if (explicita) return contextual || { fecha: explicita, inferida: false, detalle: null };
         const texto = normalizar(servicio?.texto_original), tipo = normalizar(reserva?.tipo_estadia);
         const mins = minutosHora(hora);
         if (tipo === "full_day" || tipo === "fullday" || reserva?.fecha_checkin === reserva?.fecha_checkout) {

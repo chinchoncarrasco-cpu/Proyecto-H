@@ -74,6 +74,19 @@ async function configurar(q) {
             assert.equal(await page.locator('.haku-libro-servicios__ingreso').count(),await page.locator('.haku-libro-servicios__item').count());
             assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
             if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await sinFecha.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`fecha-in-${width}.png`)});
+            await page.evaluate(async()=>{
+                const e=fixtureServicios,r=e.reservas[0];
+                r.texto_original=r.texto_original.replace('JACUZZI 20 HRS','JACUZZI 20 HRS; BATAS OK 10-10');
+                await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:[r],generacion:e.generacion});
+            });
+            await page.locator('.haku-libro-servicios__seccion--servicios > summary').click();
+            const contextual=page.locator('.haku-libro-servicios__item').filter({hasText:'JACUZZI 20 HRS'});
+            assert.match(await contextual.innerText(),/Fecha 2026-10-10/);
+            assert.match(await contextual.innerText(),/mismo bloque de tinaja y batas.*BATAS OK 10-10/);
+            assert.doesNotMatch(await contextual.innerText(),/Fecha por definir|Falta una fecha inequívoca/);
+            assert.equal(await contextual.locator('.haku-libro-servicios__ingreso').innerText(),'IN: 10.10.26');
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+            if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await contextual.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`fecha-contextual-${width}.png`)});
             // Otra ficha de la auditoría sí está lista: usa el mismo guard y
             // writer con la fuente focal, sin depender de un mensaje anterior.
             await page.evaluate(async()=>{

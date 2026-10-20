@@ -40,6 +40,52 @@ test('partial dates work with weekday variants, Unicode dashes and no weekday', 
     assert.equal(P.fechaExplicita('12-09-2026', {}), '2026-09-12');
 });
 
+test('tinaja y batas del mismo bloque conservan la fecha después del punto y coma', () => {
+    for (const nota of ['BATAS OK 12-09', 'ENTREGAR BATAS 12-09', 'DEJAR BATAS 12/09/26', 'BATAS OK 12–09']) {
+        for (const texto of [`JACUZZI A LAS 20 HRS; ${nota}`, `${nota}; JACUZZI A LAS 20 HRS`]) {
+            const r = { ...reserva, texto_original:texto };
+            const s = S.servicios(texto, { origen_campo:'notas_reserva' }).find(x => x.concepto === 'jacuzzi');
+            const original = JSON.stringify(s), item = P.prepararServicio(r,s,asociacion);
+            assert.equal(item.fecha,'2026-09-12',texto);assert.equal(item.hora,'20:00');
+            assert.equal(item.proveniencia.fecha,'INFERIDA_SEGURA');
+            assert.ok(item.inferencias.some(x => /mismo bloque de tinaja y batas/.test(x)));
+            assert.equal(JSON.stringify(s),original,'la evidencia original no se modifica');
+        }
+    }
+});
+
+test('la fecha de otras tareas, registros o bloques no se presta a la tinaja', () => {
+    for (const texto of ['JACUZZI A LAS 20 HRS // BATAS OK 12-09',
+        'JACUZZI A LAS 20 HRS\nBATAS OK 12-09', 'JACUZZI A LAS 20 HRS; ESPUMANTE 12-09',
+        'JACUZZI A LAS 20 HRS; DEVOLVER BATAS 12-09',
+        'JACUZZI A LAS 20 HRS; BATAS OK 12-09; TONEL A LAS 19 HRS',
+        '2 ADL // 2 NOCHES // CA // 12-09-26 // WALKIN // JACUZZI A LAS 20 HRS']) {
+        const r = { ...reserva, texto_original:texto }, s = S.servicios(texto,{origen_campo:'notas_reserva'}).find(x => x.concepto === 'jacuzzi');
+        assert.equal(P.prepararServicio(r,s,asociacion).fecha,null,texto);
+    }
+    const texto = 'JACUZZI A LAS 20 HRS; BATAS OK 12-09 // TONEL A LAS 19 HRS';
+    const r = { ...reserva, texto_original:texto }, items = S.servicios(texto,{origen_campo:'notas_reserva'}).map(s => P.prepararServicio(r,s,asociacion));
+    assert.equal(items.find(x => x.servicio.concepto === 'jacuzzi').fecha,'2026-09-12');
+    assert.equal(items.find(x => x.servicio.concepto === 'tonel').fecha,null);
+});
+
+test('una fecha inválida, fuera de la estadía o contradictoria del mismo bloque conserva revisión', () => {
+    for (const texto of ['JACUZZI A LAS 20 HRS; BATAS OK 31-02', 'JACUZZI A LAS 20 HRS; BATAS OK 14-09',
+        'JACUZZI A LAS 20 HRS; BATAS OK 11-09 // JACUZZI A LAS 20 HRS; BATAS OK 12-09']) {
+        const r = { ...reserva, texto_original:texto }, s = S.servicios(texto,{origen_campo:'notas_reserva'}).find(x => x.concepto === 'jacuzzi');
+        const item = P.prepararServicio(r,s,asociacion);
+        assert.equal(item.fecha,null,texto);assert.equal(item.payload,null);
+        assert.ok(item.razones.some(x => /bloque de tinaja y batas/.test(x)));
+    }
+});
+
+test('una fecha propia de la tinaja conserva prioridad sobre la fecha operativa de batas', () => {
+    const texto = 'JACUZZI A LAS 20 HRS EL 11-09; BATAS OK 12-09', r = { ...reserva, texto_original:texto };
+    const s = S.servicios(texto,{origen_campo:'notas_reserva'}).find(x => x.concepto === 'jacuzzi');
+    const item = P.prepararServicio(r,s,asociacion);
+    assert.equal(item.fecha,'2026-09-11');assert.equal(item.hora,'20:00');assert.equal(item.proveniencia.fecha,'EXPLICITO');
+});
+
 test('all weekday aliases resolve only a unique day under the existing stay bounds', () => {
     const r = { fecha_checkin: '2026-09-07', fecha_checkout: '2026-09-13' };
     const dias = [['lunes', 'lun'], ['martes', 'mar'], ['miércoles', 'miercoles', 'mie', 'mié'],
