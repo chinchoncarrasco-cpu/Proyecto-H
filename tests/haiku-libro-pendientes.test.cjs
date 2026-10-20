@@ -154,3 +154,20 @@ test('historial: sin motor operativo, una comparación antigua no acredita un fa
     assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
     assert.match(out.items[0].cambios[0].proyecto,/no acredita un faltante/);
 });
+test('operador ya conservado en el último bloque del Libro no queda pendiente por carecer de una columna propia',async()=>{
+    const actual=libro({operador:'CO'}),registro={id:'operador',tipo:'modificacion',anterior:libro({operador:'CA'}),actual,
+        cambios:[{campo:'operador',antes:'CA',ahora:'CO'}]};
+    const s=filaSistema('checked_out');s.reservas.observaciones='Dato anterior // CA\n[DATOS DEL LIBRO]\nPersona Ejemplo // 2adl // CO // 19-09-26\n[/DATOS DEL LIBRO]';
+    const db=clienteFocal({reserva_estadias:[s]},[]),out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],db,{generacion:3});
+    assert.equal(out.items.length,0);assert.equal(out.resueltos.length,1);
+    s.reservas.observaciones='Persona Ejemplo // CO';
+    const sinBloque=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],db,{generacion:3});
+    assert.equal(sinBloque.items.length,1);assert.equal(sinBloque.items[0].accionable,false);
+});
+test('una estadía cancelada se identifica como tal y no habilita su reactivación desde el historial',async()=>{
+    const r=libro(),registro={id:'cancelada',tipo:'modificacion',anterior:r,actual:r,cambios:[{campo:'adultos',antes:3,ahora:2}]};
+    const s=filaSistema('cancelada');s.reservas.estado_reserva='cancelada';
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
+    assert.equal(out.items[0].accionable,false);assert.match(out.items[0].proyecto,/cancelada o No Show/);
+    assert.equal(out.reservas.length,0);assert.equal(out.revisionServicios.reservas.length,0);
+});

@@ -97,6 +97,7 @@ test('historial: un horario distinto de tinaja sigue visible para revisión y no
     const out=await f.Q.revalidarCambiosDetectados([cambioServicios(a.r)],f.c.haikuSupabase,{generacion:1});
     assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
     assert.notEqual(out.items[0].cambios[0].proyecto,'Falta en Proyecto H.');assert.equal(f.state.escrituras.length,0);
+    assert.equal(out.revisionServicios.reservas.length,1);assert.equal(out.revisionServicios.generacion,1);
 });
 test('historial: un error de lectura operativa impide concluir que todo coincide',async()=>{
     const f=fixture(),{r}=f.agregar('Reserva de error sintética','PROMO HAIKU // 18hrs jacuzzi');

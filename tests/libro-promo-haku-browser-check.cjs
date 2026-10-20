@@ -27,7 +27,7 @@ async function configurar(q) {
         servicio_id:'tinaja-registrada',monto:30000,monto_ajustado:30000,aplicado_neto:30000,saldo_cargo:0,estado:'activo'}];
     e.inspecciones=[];window.HAIKU_INSPECTOR_V1={abrirReserva:id=>e.inspecciones.push(id)};
     e.antes=JSON.stringify(e.db);
-    HAIKU_LIBRO_SERVICIOS_SCOPE_V2.renderizar(await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.construir(q),document.getElementById('out'),q);
+    await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:e.reservas,generacion:e.generacion});
 }
 (async()=>{
     await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
@@ -57,9 +57,25 @@ async function configurar(q) {
             if(process.env.HAKU_PROMO_SCREENSHOT_DIR){fs.mkdirSync(process.env.HAKU_PROMO_SCREENSHOT_DIR,{recursive:true});
                 await fila.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`promo-haku-${width}.png`)});}
             assert.equal(await page.evaluate(()=>JSON.stringify(fixtureServicios.db)===fixtureServicios.antes),true);
-            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);await page.close();
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+            // Otra ficha de la auditoría sí está lista: usa el mismo guard y
+            // writer con la fuente focal, sin depender de un mensaje anterior.
+            await page.evaluate(async()=>{
+                const e=fixtureServicios,r=e.reservas[0];e.db.servicios=[];e.db.vista_estado_cargos=[];
+                r.texto_original='PROMO HAIKU // Huésped de prueba // 18hrs jacuzzi';
+                r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('18hrs jacuzzi',{origen_campo:'notas_reserva'});
+                await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:[r],generacion:e.generacion});
+            });
+            await page.addScriptTag({content:read('js/haiku-libro-confirm-cancel-fix-v1.js')});
+            await page.locator('[data-haku-accion="incorporar"]').click();
+            await page.waitForFunction(()=>fixtureServicios.escrituras.length===1);
+            const guardado=await page.evaluate(()=>fixtureServicios.escrituras[0]);
+            assert.equal(guardado.p_servicios.length,1);assert.equal(guardado.p_servicios[0].tipo_cobro,'cortesia');
+            assert.ok(guardado.p_notas.every(n=>n.reserva_id===guardado.p_servicios[0].reserva_id));
+            await page.waitForFunction(()=>document.getElementById('out').textContent.includes('Incorporación completada'));
+            assert.doesNotMatch(await page.locator('#out').innerText(),/\[object Object\]/);await page.close();
         }
         assert.deepEqual(errores,[]);assert.deepEqual(externos,[]);
-        console.log('PASS: promo a 1100/390/320 px, 10% + 1h, cambio de tinaja, pago preservado, sin pedir cobro ni desbordes.');
+        console.log('PASS: auditoría focal a 1100/390/320 px, promo, pago preservado, confirmación con guard existente, sin duplicados ni desbordes.');
     }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

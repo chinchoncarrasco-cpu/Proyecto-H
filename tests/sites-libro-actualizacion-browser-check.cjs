@@ -49,6 +49,10 @@ const server = http.createServer((request, response) => {
             window.__sawLegacy = false;
             window.__reservasAbiertas=[];
             window.HAIKU_INSPECTOR_V1={abrirReserva:id=>window.__reservasAbiertas.push(id)};
+            window.__revisionesServicios=[];
+            window.HAIKU_LIBRO_SERVICIOS_SCOPE_V2={abrirRevisionHistorial:async(el,scope)=>{
+                window.__revisionesServicios.push(scope);el.className='haku-libro-servicios';el.textContent='Servicios y notas auditados';
+            }};
             document.getElementById('haiku-asistente-cerrar').addEventListener('click', () => window.__closed++);
             new MutationObserver(() => {
                 window.__sawLegacy ||= Boolean(document.querySelector('.haku-actualizacion-compacta'));
@@ -116,7 +120,7 @@ const server = http.createServer((request, response) => {
             window.__pendientesActual = {
                 items: [{ tipo: 'modificacion', actual: ahora, detectado_generacion: 2, estado: 'pendiente', accionable: true,
                     sistema:{reserva_id:'reserva-sintetica'},cambios: [{ campo: 'adultos', antes: 2, ahora: 3, proyecto: 2 }] }],
-                resueltos: [], reservas: [ahora], comparacion: [], q: { texto: 'informe' }
+                resueltos: [], reservas: [ahora], comparacion: [], q: { texto: 'informe' },revisionServicios:{reservas:[ahora],generacion:2}
             };
             window.__generation = 2;
             window.dispatchEvent(new Event('haiku:libro-cambio'));
@@ -155,6 +159,11 @@ const server = http.createServer((request, response) => {
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
         await history.locator('[data-haku-preparar-pendientes]').click();
         await page.waitForFunction(() => window.__preparations === 1);
+        await history.getByRole('button',{name:'Revisar servicios y notas',exact:true}).click();
+        await page.waitForFunction(()=>window.__revisionesServicios.length===1);
+        assert.equal(await page.evaluate(()=>window.__revisionesServicios[0].reservas.length),1);
+        await history.getByRole('button',{name:'Revisar servicios y notas',exact:true}).click();
+        assert.equal(await report.locator('.haku-libro-revision-servicios-zona').count(),1,'reabrir sustituye la revisión focal previa');
 
         const before = await page.evaluate(() => window.__revalidations);
         await page.evaluate(() => { window.__revalidationMode = 'pending'; });

@@ -1946,6 +1946,13 @@
     }
     function detalleCambioHistorico(cambio,reserva,sistema,comparacion){
         const campo=cambio.campo,objetivo=reserva?.[campo];
+        if(campo==='operador'){
+            const bloque=separarObservacionesLibro(sistema.observaciones).bloques.at(-1);
+            const codigos=typeof S.separarCampos==='function'?[...new Set(S.separarCampos(bloque||'').map(x=>x.trim()).filter(x=>/^[A-Z]{2,4}$/.test(x)))]:[];
+            const coincide=codigos.length===1&&S.normalizar(codigos[0])===S.normalizar(objetivo);
+            return {pendiente:!coincide,accionable:false,proyecto:coincide?`Operador ya conservado en la glosa del Libro: ${codigos[0]}`:
+                'El operador no tiene un campo propio de actualización; falta verificar su código en la glosa del Libro.'};
+        }
         if(campo==='estado_confirmacion'){
             // El cambio del fondo confirma la reserva; no autoriza adelantar
             // check-in/checkout ni retroceder un estado que ya los superó.
@@ -2066,7 +2073,12 @@
                 const sistemaHistorico=resultado?.estado==='asociada'&&resultado.sistema
                     ?resultado.sistema:asociacionHistoricaSegura(registro,comparacion);
                 if(!sistemaHistorico){
-                    items.push({...registro,estado:'revision',accionable:false,proyecto:'No se pudo asociar de forma segura'});continue;
+                    const canceladas=(comparacion.snapshot?.estadias_todas||[]).filter(s=>
+                        mismasFechas(grupo.reserva,s)&&Number(grupo.reserva.cabana)===Number(s.cabana)&&identidad(grupo.reserva,s).compatible&&
+                        /cancelad|no.?show/.test(S.normalizar(`${s.estado_reserva} ${s.estado_operativo}`)));
+                    items.push({...registro,estado:'revision',accionable:false,proyecto:canceladas.length===1?
+                        'Esta estadía figura cancelada o No Show en Proyecto H. Requiere revisar su estado; no se reactivará ni recibirá servicios automáticamente.':
+                        'No se pudo asociar de forma segura'});continue;
                 }
                 const pendientes=[];
                 for(const cambio of registro.cambios||[]){
@@ -2086,7 +2098,10 @@
         const unicas=[...new Map(filasPreparacion.map(x=>[firmaReservaHistorial(x.libro),x])).values()];
         const prep=comparacionPreparacionHistorial(unicas,comparacion);
         const reservasPrep=[...new Map(reservasPreparacion.map(x=>[firmaReservaHistorial(x),x])).values()];
+        const fichasOperativas=new Map(items.filter(x=>x.sistema&&(x.cambios||[]).some(c=>c.campo==='servicios'))
+            .map(x=>[firmaReservaHistorial(x.actual),x.actual]));
         return {items,resueltos,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
+            revisionServicios:{reservas:[...fichasOperativas.values()],generacion},
             q:{...q,incluirServicios:false,serviciosOperativos:false}};
     }
     function actualizacionPagoLibro(p, s) {

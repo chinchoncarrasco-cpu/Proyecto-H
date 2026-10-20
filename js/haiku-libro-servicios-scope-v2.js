@@ -223,6 +223,23 @@
         return campos.flatMap(x => x.split(';').map(y => y.trim()).filter(Boolean));
     }
 
+    // Una compensación sin agenda y el único horario de tinaja de las mismas
+    // notas describen una prestación. Con dos agendas o duración extra, revisar.
+    function agruparCortesiaConHorario(candidatos){
+        const tinajas=candidatos.filter(s=>s.semantica==='SERVICIO_REAL'&&esTinajaServicio(s));
+        if(tinajas.length!==2||tinajas.some(s=>s.origen_campo!=='notas_reserva'||Number(s.cantidad)!==1))return candidatos;
+        const regalo=tinajas.find(s=>s.intencion_cobro==='cortesia'&&!s.hora&&!s.hora_fin&&
+            !/\b(?:coordinar|pendiente|confirmar|extra|adicional)\b/.test(normalizar(s.texto_original)));
+        const agenda=tinajas.find(s=>s!==regalo&&s.intencion_cobro==='no_determinada'&&s.hora&&!s.hora_fin&&
+            /^(?:jacuzzi|tonel|tinaja)(?:\s+de\s+madera)?\s+(?:a\s+las\s+)?(?:[01]?\d|2[0-3])[:.,][0-5]\d(?:\s*hrs?)?\.?$/.test(normalizar(s.texto_original)));
+        if(!regalo||!agenda||[regalo,agenda].some(s=>s.monto!=null&&Number(s.monto)>0)||
+            regalo.concepto!=='tinaja'&&regalo.concepto!==agenda.concepto)return candidatos;
+        const texto=[regalo.texto_original,agenda.texto_original].join(' // ');
+        const unica={...agenda,texto_original:texto,fragmento_original:texto,cortesia:true,intencion_cobro:'cortesia',
+            evidencia_origen:{...agenda.evidencia_origen,cortesia:true}};
+        return candidatos.filter(s=>s!==regalo).map(s=>s===agenda?unica:s);
+    }
+
     function textoNotaBatas(fragmento) {
         const m = String(fragmento || "").match(/dejar\s+batas(?:\s+en\s+(?:la\s+)?caba(?:n|ñ)a(?:s)?)?/i);
         return m ? m[0].replace(/^./, x => x.toUpperCase()) : null;
@@ -262,13 +279,17 @@
         return [...unicas.values()];
     }
 
+    const entradasHistorial=new WeakMap(),fuentesPorVista=new WeakMap();
+    const claveFicha=r=>[normalizar(r?.titular),Number(r?.cabana),r?.fecha_checkin,r?.fecha_checkout].join('|');
     async function leerLibro(texto) {
         const libro = root.HAIKU_LIBRO_RESERVA_V1;
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
         await libro.listo();
         const estado = libro.estado();
         if (!estado?.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
-        const rango = rangoDesdeTexto(texto);
+        const focal=entradasHistorial.get(texto);
+        if(focal&&estado.generacion!==focal.generacion)throw Error('El Libro cambió; vuelve a revalidar el informe antes de revisar servicios.');
+        const rango = rangoDesdeTexto(focal?.descripcion||texto);
         if (!rango) throw new Error("Indica un mes con año o una fecha para revisar los servicios del Libro.");
         const hojas = hojasDelRango(libro.listarHojas(), rango.desde, rango.hasta);
         const reservas = [];
@@ -276,7 +297,28 @@
             const data = await libro.consultarHoja(hoja);
             for (const r of Array.isArray(data?.reservas) ? data.reservas : []) if (solapa(r, rango.desde, rango.hasta)) reservas.push(r);
         }
+        if(focal){
+            if(libro.estado().generacion!==focal.generacion)throw Error('El Libro cambió durante la revisión. Revalida el informe.');
+            const seleccion=[];
+            for(const clave of focal.claves){
+                const matches=reservas.filter(r=>claveFicha(r)===clave);
+                if(matches.length!==1)throw Error('Una ficha del historial cambió o no es única en el Libro actual. Revalida el informe.');
+                seleccion.push(matches[0]);
+            }
+            reservas.splice(0,reservas.length,...seleccion);
+        }
         return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null };
+    }
+
+    async function abrirRevisionHistorial(out,{reservas,generacion}={}){
+        if(!out||!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
+        const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
+        if(!fechas.length)throw Error('No hay fechas verificables para revisar servicios.');
+        const formato=f=>f.split('-').reverse().join('/');
+        const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
+        const fuente=Object.freeze({descripcion});
+        entradasHistorial.set(fuente,{descripcion,generacion,claves:[...new Set(reservas.map(claveFicha))]});
+        const plan=await construir(fuente);renderizar(plan,out,fuente);return plan;
     }
 
     function canonDocumento(v) { return normalizar(v).replace(/[^a-z0-9]/g, "").replace(/^0+/, ""); }
@@ -853,10 +895,11 @@
         const beneficioPromo = item?.intencion_cobro === 'no_determinada' &&
             s?.origen_campo === 'notas_reserva' && Boolean(promocionReserva(item?.reserva)) &&
             /^\+\s*1\s*hora\s+de\s+(?:tinaja(?:\s+(?:caliente|tonel|de\s+madera))?|tonel|jacuzzi)\s*\.?$/.test(t);
+        const beneficioSinAgenda=s?.origen_campo==='notas_reserva'&&/^(?:tinaja|jacuzzi|tonel)(?:\s+de\s+madera)?\s+(?:de\s+)?cortesia[.!]?$/.test(t);
         return item?.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
             (item.intencion_cobro === 'cortesia' || beneficioPromo) && esTinajaServicio(s) &&
             !s.promoTinajaMixta && !s.hora && !s.hora_fin &&
-            /\b(?:1|una)\s*(?:hora|hrs?)\b/.test(t) &&
+            (/\b(?:1|una)\s*(?:hora|hrs?)\b/.test(t)||beneficioSinAgenda) &&
             !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|reservo|agendo|confirmo|contrato)\b/.test(t);
     }
 
@@ -1382,7 +1425,7 @@
         const sistema = await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
         const contrato = manuales.size ? await cargarContratoManual() : null;
         for (const reserva of libro.reservas) {
-            const asociacion = asociarReserva(reserva, sistema), candidatos = agruparTinajaPromoMixta(reserva, depurarServicios(reserva)), notasCanonicas = new Map();
+            const asociacion = asociarReserva(reserva, sistema), candidatos = agruparCortesiaConHorario(agruparTinajaPromoMixta(reserva, depurarServicios(reserva))), notasCanonicas = new Map();
             for (const candidato of candidatos) {
                 if (candidato.semantica === "SERVICIO_REAL") items.push(prepararServicio(reserva, candidato, asociacion));
                 else if (candidato.semantica === "AMBIGUO") items.push(prepararAmbiguo(reserva, candidato, asociacion));
@@ -2072,7 +2115,7 @@
     }
 
     function revalidarVista(card, texto) {
-        return construir(texto, nochesPorVista.get(card) || new Map(), estadosPorVista.get(card)?.manuales);
+        return construir(fuentesPorVista.get(card)||texto, nochesPorVista.get(card) || new Map(), estadosPorVista.get(card)?.manuales);
     }
 
     function periodoVisual(desde, hasta) {
@@ -2086,6 +2129,7 @@
     }
 
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
+        if(entradasHistorial.has(textoOriginal))fuentesPorVista.set(out,textoOriginal);else fuentesPorVista.delete(out);
         const estado = estadosPorVista.get(out) || { manuales: new Map(), selecciones: new Map(), apertura: 0, ocupado: false };
         estadosPorVista.set(out, estado);
         const opciones = { selecciones: estado.selecciones, abrirManual: (item, fila) => {
@@ -2179,7 +2223,7 @@
         if (ocupado) return; ocupado = true;
         const campo = document.getElementById("haiku-asistente-texto"), boton = document.getElementById("haiku-asistente-enviar");
         if (campo) { campo.value = ""; campo.disabled = true; } if (boton) boton.disabled = true;
-        mensaje("usuario", texto); const out = mensaje("asistente", "Revisando servicios y separando notas operativas…");
+        mensaje("usuario", entradasHistorial.get(texto)?.descripcion||texto); const out = mensaje("asistente", "Revisando servicios y separando notas operativas…");
         try { const resultado = await construir(texto); if (out) renderizar(resultado, out, texto); }
         catch (error) { if (out) out.textContent = error?.message || "No pude revisar los servicios del Libro."; }
         finally { ocupado = false; if (campo) { campo.disabled = false; campo.dispatchEvent(new Event("input", { bubbles: true })); } if (boton) boton.disabled = false; out?.scrollIntoView?.({ block: "nearest" }); }
@@ -2196,7 +2240,8 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, compararReservas, revalidarVista, procesar, renderizarResultadoServicios });
+    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial,
+        consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;
     root.addEventListener("click", interceptar, true);

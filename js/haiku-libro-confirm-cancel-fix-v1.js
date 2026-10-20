@@ -339,7 +339,7 @@
 
         event.preventDefault();
         event.stopImmediatePropagation();
-        const texto = textoAnteriorDelCard(card);
+        const texto = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.consultaVista?.(card)||textoAnteriorDelCard(card);
         const etiqueta = boton.textContent;
         boton.disabled = true;
         boton.textContent = "Revalidando…";
