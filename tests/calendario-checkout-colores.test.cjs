@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const base = fs.readFileSync(require.resolve('../css/styles.css'), 'utf8');
-const sites = fs.readFileSync(require.resolve('../css/sites-calendario-v1.css'), 'utf8');
+const base = fs.readFileSync(require.resolve('../css/styles.css'), 'utf8').replace(/\r\n/g,'\n');
+const sites = fs.readFileSync(require.resolve('../css/sites-calendario-v1.css'), 'utf8').replace(/\r\n/g,'\n');
 const estados = fs.readFileSync(require.resolve('../js/supabase-calendario-estados-v1.js'), 'utf8');
 
 function regla(css, selector) {

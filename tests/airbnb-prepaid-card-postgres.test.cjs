@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { PGlite } = require(process.env.HAKU_PGLITE_MODULE || '@electric-sql/pglite');
-const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+const read = p => fs.readFileSync(path.join(__dirname, '..', p), 'utf8').replace(/\r\n/g,'\n');
 const migration = read('supabase/migrations/20261006231428_airbnb_prepaid_card.sql');
 const rpc = (file, name) => read(`supabase/migrations/${file}`).match(new RegExp(
     `create or replace function public\\.${name}\\([\\s\\S]*?\\$function\\$;`, 'i'))[0];
