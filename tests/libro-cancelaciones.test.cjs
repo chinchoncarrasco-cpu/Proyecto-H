@@ -41,15 +41,79 @@ function visualEnvironment(){
  x.out=new Element('div');x.nodes=(el=x.out)=>[el,...el.children.flatMap(c=>x.nodes(c))];x.text=()=>x.nodes().map(e=>e.textContent).join(' ');
  return x;
 }
-test('visual cancellation card preserves source; original button prepares a read-only preview then completes',async()=>{
+test('review uses real reservation data and only a saved cancellation opens the completed screen',async()=>{
  const x=visualEnvironment(),detected=await x.api.detectarActual(sheet([],[e()]),x.cliente);
  x.api.adjuntar(x.out,detected,1);
  assert.equal(x.nodes().filter(n=>n.className?.includes('haiku-cancelacion-card')).length,1);
  for(const text of ['Carol Vega Ruiz','CAB 1','CANCELACIONES · Sep26 · D16','Proyecto H: Activa','2 noches'])assert.ok(x.text().includes(text),text);
  const button=x.nodes().find(n=>n.tag==='button');assert.equal(button.textContent,'Preparar cancelación');assert.equal(typeof button.events.click,'function');
  await button.events.click();assert.equal(x.calls(),0);
- for(const text of ['PREVISUALIZACIÓN · Sin escritura','01/09/2026 → 03/09/2026','Estado actual: Activa','Nuevo estado: Cancelada','Se revalidará después de confirmar.'])assert.ok(x.text().includes(text),text);
- assert.equal(button.textContent,'Confirmar cancelación');await button.events.click();assert.equal(x.calls(),1);assert.ok(button.disabled);assert.match(x.text(),/✓ Cancelación completada/);
+ for(const text of ['Haku','Asistente operativo','REVISIÓN DEL LIBRO · SEPTIEMBRE 2026','Revisar cancelación','1 sep → 3 sep 2026 · 2 noches','EN EL LIBRO','Cancelación confirmada','CAMBIO EN HAKU','Actual','Activa','Después de confirmar','Cancelada','Pendiente de confirmar','La cancelación se aplicará al confirmar'])assert.ok(x.text().includes(text),text);
+ const confirmar=x.nodes().find(n=>n.textContent==='Confirmar cancelación');await confirmar.events.click();assert.equal(x.calls(),1);
+ for(const text of ['Cancelación completada','La reserva ya está actualizada en Haku','Cambio confirmado','ESTADO ACTUAL EN HAKU','Volver a la revisión'])assert.ok(x.text().includes(text),text);
+ assert.equal(x.nodes().filter(n=>n.textContent==='Confirmar cancelación').length,0);
+ await x.nodes().find(n=>n.textContent==='Volver a la revisión').events.click();assert.match(x.text(),/Proyecto H: Cancelada/);
+ await button.events.click();assert.equal(x.calls(),1,'detached or double-clicked action cannot cancel twice');
+});
+
+test('back and close preserve the original review nodes without applying a cancellation',async()=>{
+ for(const accion of ['Volver','×']){
+  const x=visualEnvironment();x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);
+  const original=x.out.children[1].children[0],button=x.nodes().find(n=>n.tag==='button');
+  await button.events.click();await x.nodes().find(n=>n.tag==='button'&&n.textContent===accion).events.click();
+  assert.equal(x.out.children[1].children[0],original);assert.equal(x.calls(),0);assert.doesNotMatch(x.text(),/Revisar cancelación/);
+ }
+});
+
+test('both screens open the matching reservation through the current inspector',async()=>{
+ const x=visualEnvironment(),ids=[];x.context.HAIKU_INSPECTOR_V1={abrirReserva:async id=>{ids.push(id);return true;}};
+ x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);
+ await x.nodes().find(n=>n.tag==='button').events.click();await x.nodes().find(n=>n.textContent==='Ver reserva').events.click();
+ await x.nodes().find(n=>n.textContent==='Confirmar cancelación').events.click();await x.nodes().find(n=>n.textContent==='Ver reserva').events.click();
+ assert.deepEqual(ids,['r1','r1']);assert.equal(x.calls(),1);
+});
+
+test('refused confirmation, RPC errors and manual-review blockers never display a false completion',async()=>{
+ for(const scenario of ['refused','rpc','permission','identity']){
+  const x=visualEnvironment();x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);
+  await x.nodes().find(n=>n.tag==='button').events.click();
+  if(scenario==='refused')x.rejectConfirm();
+  if(scenario==='rpc')x.context.HAIKU_RESERVA_ESTADOS_SUPABASE_V2.cancelar=async(id,options)=>{await options.antesDeCancelar();throw Error('Error al guardar');};
+  if(scenario==='permission')x.deny();
+  if(scenario==='identity')x.row.titular_nombre='Otra Persona';
+  await x.nodes().find(n=>n.textContent==='Confirmar cancelación').events.click();
+  assert.equal(x.calls(),0);assert.doesNotMatch(x.text(),/Cancelación completada|Cambio confirmado/);
+  assert.match(x.text(),scenario==='refused'?/Cancelación no confirmada/:scenario==='rpc'?/Error al guardar/:scenario==='permission'?/No tienes permiso/:/no se identifica/);
+  assert.equal(x.nodes().find(n=>n.textContent==='Confirmar cancelación').disabled,scenario!=='refused');
+ }
+});
+
+test('a permission blocker during preparation is presented in the review and cannot be confirmed',async()=>{
+ const x=visualEnvironment();x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);x.deny();
+ await x.nodes().find(n=>n.tag==='button').events.click();assert.match(x.text(),/Revisión necesaria.*No tienes permiso/);
+ const button=x.nodes().find(n=>n.textContent==='Confirmar cancelación');assert.ok(button.disabled);await button.events.click();assert.equal(x.calls(),0);
+});
+
+test('review reflects pending or hosted state and computes nights from the verified stay',async()=>{
+ for(const [estado,texto] of [['pendiente','Pendiente'],['hospedada','Hospedada']]){
+  const x=visualEnvironment();x.row.estado_reserva=estado;const detected=await x.api.detectarActual(sheet([],[{...e(),noches:null}]),x.cliente);
+  x.libro.consultarHoja=async()=>sheet([],[{...e(),noches:null}]);x.api.adjuntar(x.out,detected,1);await x.nodes().find(n=>n.tag==='button').events.click();
+  assert.match(x.text(),/2 noches/);assert.equal(x.nodes().find(n=>n['data-estado']===estado).textContent,texto);
+ }
+});
+
+test('concurrent confirmation is single-flight, and returning an already-cancelled result is not a new completion',async()=>{
+ for(const coincide of [false,true]){
+  const x=visualEnvironment();let release,calls=0;
+  x.context.HAIKU_RESERVA_ESTADOS_SUPABASE_V2.cancelar=async(id,options)=>{
+   calls++;await new Promise(ok=>{release=ok;});if(await options.antesDeCancelar()===false)return {estado:'sin_cambios'};return {estado:'cancelada'};
+  };
+  x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);await x.nodes().find(n=>n.tag==='button').events.click();
+  const button=x.nodes().find(n=>n.textContent==='Confirmar cancelación'),saving=button.events.click();await button.events.click();
+  await x.nodes().find(n=>n.textContent==='Volver').events.click();assert.equal(calls,1);
+  if(coincide)x.row.estado_reserva='cancelada';release();await saving;
+  assert.match(x.text(),coincide?/Ya coincide/:/Cambio confirmado/);if(coincide)assert.doesNotMatch(x.text(),/Cancelación completada/);
+ }
 });
 test('resolved and manual-review cards preserve all cases and have no cancellation buttons',async()=>{
  const x=visualEnvironment();x.row.estado_reserva='cancelada';
@@ -66,6 +130,7 @@ test('visual preview invalidation retains existing disabled button and prevents 
  const x=visualEnvironment();const ordinary={reservas:[]};x.api.adjuntar(x.out,ordinary,1);x.api.adjuntarResueltas(x.out,ordinary);x.api.adjuntarRevision(x.out,ordinary);assert.equal(x.out.children.length,0);
  x.api.adjuntar(x.out,await x.api.detectarActual(sheet([],[e()]),x.cliente),1);const button=x.nodes().find(n=>n.tag==='button');
  await button.events.click();x.onChange();assert.ok(button.disabled);assert.match(x.text(),/El Libro cambió/);assert.doesNotMatch(x.text(),/PREVISUALIZACIÓN/);await button.events.click();assert.equal(x.calls(),0);
+ const confirmar=x.nodes().find(n=>n.textContent==='Confirmar cancelación');assert.ok(confirmar.disabled);await confirmar.events.click();assert.equal(x.calls(),0);
 });
 
 test('current cancellation is detected with no previous version or an identical previous version',async()=>{

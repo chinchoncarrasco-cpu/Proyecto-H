@@ -47,6 +47,92 @@
     .haiku-cancelacion-card .haiku-cancelacion-boton { width:100%; }
 }
 
+/* Revisión y resultado de una cancelación: sólo afectan esta vista del Libro. */
+.haiku-cancelacion-flujo { min-width:0; max-width:100%; }
+.haiku-cancelacion-pantalla {
+    box-sizing:border-box; display:flex; flex-direction:column; width:100%; max-width:486px; min-width:0; min-height:820px; margin:0 0 12px;
+    overflow:hidden; border:1px solid var(--sites-shell-line, #dce5e0); border-radius:12px;
+    background:#fbfcfb; color:var(--sites-shell-ink-soft, #2a3c37);
+    font-family:var(--sites-shell-font, "Segoe UI", Arial, sans-serif); font-size:12px; font-weight:400; line-height:1.5; letter-spacing:0;
+    box-shadow:none; overflow-wrap:anywhere;
+}
+.haiku-cancelacion-pantalla *, .haiku-cancelacion-pantalla *::before, .haiku-cancelacion-pantalla *::after { box-sizing:border-box; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__cabecera {
+    display:flex; align-items:center; gap:12px; flex:none; min-height:68px; padding:16px 19px; border-bottom:1px solid var(--sites-shell-line, #dce5e0); background:#fff;
+}
+.haiku-cancelacion-pantalla__marca {
+    display:grid; place-items:center; flex:none; width:34px; height:34px; border-radius:8px;
+    background:#203f32; color:#f2f8f3; font-size:16px; font-weight:600;
+}
+.haiku-cancelacion-pantalla__identidad { flex:1; min-width:0; }
+.haiku-cancelacion-pantalla__identidad > strong { display:block; font-size:16px; font-weight:600; line-height:20px; }
+.haiku-cancelacion-pantalla__identidad > span { display:block; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:14px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__cuerpo { flex:1; padding:24px 23px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__etiqueta {
+    margin:0 0 16px; color:var(--sites-shell-green, #22735c); font-size:11px; font-weight:400; letter-spacing:0; line-height:16px;
+}
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__titulo { margin:0; color:inherit; font-size:20px; font-weight:600; line-height:24px; letter-spacing:0; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__descripcion { margin:8px 0 16px; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:18px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__reserva {
+    min-width:0; margin:0; padding:16px; border:1px solid var(--sites-shell-line, #dce5e0); border-radius:10px; background:#fff;
+}
+.haiku-cancelacion-pantalla__reserva-cabecera { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.haiku-cancelacion-pantalla__datos { min-width:0; flex:1; }
+.haiku-cancelacion-pantalla__datos > h4 { margin:0; color:inherit; font-size:16px; font-weight:600; line-height:24px; }
+.haiku-cancelacion-pantalla__cabana { flex:none; padding:4px 6px; border-radius:999px; background:var(--sites-shell-canvas, #f5f7f5); color:var(--sites-shell-muted, #687873); font-size:12px; font-weight:600; line-height:18px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__fechas { margin:2px 0 0; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:18px; }
+.haiku-cancelacion-pantalla__libro { display:flex; flex-direction:column; align-items:flex-start; gap:4px; margin-top:12px; padding-top:12px; border-top:1px solid var(--sites-shell-line, #dce5e0); font-size:11px; line-height:16px; color:var(--sites-shell-muted, #687873); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__origen { margin:4px 0 0; color:var(--sites-shell-muted, #687873); font-size:11px; line-height:16px; }
+.haiku-cancelacion-pantalla__cambio { margin-top:12px; padding:12px; border-radius:8px; background:#f6faf8; }
+.haiku-cancelacion-pantalla__cambio > .haiku-cancelacion-pantalla__etiqueta { margin-bottom:8px; color:var(--sites-shell-muted, #687873); }
+.haiku-cancelacion-pantalla__estados { display:grid; grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr); align-items:center; gap:12px; }
+.haiku-cancelacion-pantalla__estado { display:flex; flex-direction:column; align-items:flex-start; gap:4px; min-width:0; }
+.haiku-cancelacion-pantalla__estado > span { color:var(--sites-shell-muted, #687873); font-size:11px; line-height:16px; }
+.haiku-cancelacion-pantalla__flecha { margin-top:18px; color:var(--sites-shell-muted, #687873); font-size:18px; }
+.haiku-cancelacion-pantalla__badge { display:inline-block; max-width:100%; padding:4px 6px; border-radius:999px; background:#edf0ee; color:#526457; font-size:12px; font-weight:500; line-height:18px; }
+.haiku-cancelacion-pantalla__badge--libro,
+.haiku-cancelacion-pantalla__badge--confirmada, .haiku-cancelacion-pantalla__badge--hospedada { background:var(--sites-shell-green-soft, #e6f2eb); color:var(--sites-shell-green, #22735c); }
+.haiku-cancelacion-pantalla__estado > .haiku-cancelacion-pantalla__badge--confirmada { padding:4px 0; background:transparent; color:var(--sites-shell-ink-soft, #2a3c37); font-size:14px; font-weight:600; }
+.haiku-cancelacion-pantalla__badge--pendiente { background:var(--sites-shell-amber-soft, #fff2df); color:var(--sites-shell-amber, #a36522); }
+.haiku-cancelacion-pantalla__badge--cancelada { background:var(--sites-shell-red-soft, #f9e9e6); color:var(--sites-shell-red, #aa4e44); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__resultado { margin:8px 0 0; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:18px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__continuidad { margin:16px 0 0; color:var(--sites-shell-muted, #687873); font-size:12px; line-height:18px; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__aviso {
+    display:flex; align-items:flex-start; gap:10px; min-width:0; margin:16px 0 0; padding:12px;
+    border:0; border-radius:8px; background:var(--sites-shell-amber-soft, #fff2df); color:var(--sites-shell-amber, #a36522); font-size:12px;
+}
+.haiku-cancelacion-pantalla__aviso > div { min-width:0; }
+.haiku-cancelacion-pantalla__aviso strong { display:block; font-size:12px; font-weight:600; line-height:18px; }
+.haiku-cancelacion-pantalla__aviso p { margin:4px 0 0; color:inherit; font-size:12px; line-height:18px; }
+.haiku-cancelacion-pantalla__icono { display:grid; place-items:center; flex:none; width:18px; height:18px; margin-top:2px; border:1px solid currentColor; border-radius:50%; font-size:12px; font-weight:600; }
+.haiku-cancelacion-pantalla__aviso--pendiente > .haiku-cancelacion-pantalla__icono { width:4px; border:0; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__aviso--confirmado { margin:0 0 16px; gap:12px; background:var(--sites-shell-green-soft, #e6f2eb); color:var(--sites-shell-green, #22735c); }
+.haiku-cancelacion-pantalla__mensajes .haiku-cancelacion-pantalla__aviso--confirmado { margin:16px 0 0; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__error-reserva { margin:8px 0 0; color:var(--sites-shell-red, #aa4e44); font-size:11px; }
+.haiku-cancelacion-pantalla__error-reserva:empty, .haiku-cancelacion-pantalla__mensajes:empty { display:none; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__pie { display:flex; flex:none; justify-content:flex-end; gap:12px; padding:20px 23px 19px; border-top:1px solid var(--sites-shell-line, #dce5e0); background:#fff; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton {
+    display:inline-flex; justify-content:center; align-items:center; gap:6px; min-width:0; min-height:40px; max-width:100%; margin:0; padding:9px 12px;
+    border:1px solid var(--sites-shell-line, #dce5e0); border-radius:8px; background:#fff; color:var(--sites-shell-ink-soft, #2a3c37);
+    box-shadow:none; font:inherit; font-size:12px; font-weight:600; line-height:20px; white-space:normal; overflow-wrap:anywhere; cursor:pointer;
+}
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--volver { flex:0 0 96px; color:var(--sites-shell-green, #22735c); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--confirmar { flex:1; background:var(--sites-shell-red, #aa4e44); border-color:var(--sites-shell-red, #aa4e44); color:#fff; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--volver-revision { width:100%; background:var(--sites-shell-green, #22735c); border-color:var(--sites-shell-green, #22735c); color:#fff; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--ver { width:100%; margin-top:12px; color:var(--sites-shell-green, #22735c); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--cerrar { flex:none; width:32px; height:32px; min-height:32px; padding:0; border-radius:6px; color:var(--sites-shell-muted, #687873); font-size:16px; font-weight:600; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton:hover:not(:disabled) { filter:brightness(.95); }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton:disabled { opacity:.55; cursor:default; }
+.haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton:focus-visible { outline:3px solid #93bca9; outline-offset:2px; }
+@media (max-width:600px) {
+    .haiku-cancelacion-pantalla { min-height:min(820px, calc(100dvh - 32px)); }
+    .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__cabecera { padding-right:15px; padding-left:15px; }
+    .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__cuerpo { padding-right:15px; padding-left:15px; }
+    .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__reserva { padding:13px; }
+    .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__pie { padding:20px 15px 19px; flex-wrap:wrap; }
+    .haiku-cancelacion-pantalla .haiku-cancelacion-pantalla__boton--volver { flex-basis:80px; }
+}
+
 .haiku-reconciliacion-alerta,
 .haiku-reconciliacion-ayuda-decision {
     min-width: 0;
