@@ -42,6 +42,7 @@ async function configurar(q) {
             await page.evaluate(setup);await page.addScriptTag({content:source});await page.evaluate(configurar,consulta);
             await page.locator('.haku-libro-servicios__seccion--revision > summary').click();
             const fila=page.locator('.haku-libro-servicios__item').filter({hasText:'JACUZZI A LAS 17:15'}),texto=await fila.innerText();
+            assert.equal(await fila.locator('.haku-libro-servicios__ingreso').innerText(),'IN: 10.10.26');
             assert.match(texto,/Promo Haku: 10% de descuento y 1 hora.*Jacuzzi o Tonel/);
             assert.match(texto,/Tinaja Tonel de Madera 16:15–18:15/);
             assert.match(texto,/¿Se modificó la tinaja registrada\?/);
@@ -58,10 +59,26 @@ async function configurar(q) {
                 await fila.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`promo-haku-${width}.png`)});}
             assert.equal(await page.evaluate(()=>JSON.stringify(fixtureServicios.db)===fixtureServicios.antes),true);
             assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+            // El check-in permite ubicar la ficha aunque no se conozca el día del servicio.
+            await page.evaluate(async()=>{
+                const e=fixtureServicios,r=e.reservas[0];r.noches=2;r.fecha_checkout='2026-10-12';
+                e.db.reserva_estadias[0].fecha_salida=r.fecha_checkout;e.db.servicios=[];e.db.vista_estado_cargos=[];
+                r.texto_original='PROMO HAIKU // JACUZZI 20 HRS // DEJAR BATAS';
+                r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('JACUZZI 20 HRS',{origen_campo:'notas_reserva'});
+                await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:[r],generacion:e.generacion});
+            });
+            await page.locator('.haku-libro-servicios__seccion--revision > summary').click();
+            const sinFecha=page.locator('.haku-libro-servicios__item').filter({hasText:'JACUZZI 20 HRS'});
+            assert.match(await sinFecha.innerText(),/Fecha por definir/);
+            assert.equal(await sinFecha.locator('.haku-libro-servicios__ingreso').innerText(),'IN: 10.10.26');
+            assert.equal(await page.locator('.haku-libro-servicios__ingreso').count(),await page.locator('.haku-libro-servicios__item').count());
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+            if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await sinFecha.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`fecha-in-${width}.png`)});
             // Otra ficha de la auditoría sí está lista: usa el mismo guard y
             // writer con la fuente focal, sin depender de un mensaje anterior.
             await page.evaluate(async()=>{
                 const e=fixtureServicios,r=e.reservas[0];e.db.servicios=[];e.db.vista_estado_cargos=[];
+                r.noches=1;r.fecha_checkout='2026-10-11';e.db.reserva_estadias[0].fecha_salida=r.fecha_checkout;
                 r.texto_original='PROMO HAIKU // Huésped de prueba // 18hrs jacuzzi';
                 r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('18hrs jacuzzi',{origen_campo:'notas_reserva'});
                 await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:[r],generacion:e.generacion});
@@ -73,6 +90,9 @@ async function configurar(q) {
             assert.equal(guardado.p_servicios.length,1);assert.equal(guardado.p_servicios[0].tipo_cobro,'cortesia');
             assert.ok(guardado.p_notas.every(n=>n.reserva_id===guardado.p_servicios[0].reserva_id));
             await page.waitForFunction(()=>document.getElementById('out').textContent.includes('Incorporación completada'));
+            await page.locator('.haku-libro-resultado-sites__detalle > summary').click();
+            const ingresos=await page.locator('.haku-libro-resultado-sites__ingreso').allInnerTexts();
+            assert.ok(ingresos.length>0);assert.ok(ingresos.every(x=>x==='IN: 10.10.26'));
             assert.doesNotMatch(await page.locator('#out').innerText(),/\[object Object\]/);await page.close();
         }
         assert.deepEqual(errores,[]);assert.deepEqual(externos,[]);

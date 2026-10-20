@@ -1571,6 +1571,11 @@
         return `CAB ${item.reserva.cabana} · ${item.reserva.titular} · ${item.mapa.nombre || item.servicio.concepto}`;
     }
 
+    function textoIngresoReserva(item) {
+        const fecha = /^(\d{4})-(\d{2})-(\d{2})$/.exec(item.reserva?.fecha_checkin || '');
+        return fecha ? `IN: ${fecha[3]}.${fecha[2]}.${fecha[1].slice(-2)}` : 'IN: por definir';
+    }
+
     // Reutiliza la RPC protegida normal→cortesía sin crear otra tinaja.
     async function abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila) {
         const esperado = item.cambioCortesiaExistente;
@@ -1874,7 +1879,9 @@
             meta.textContent = meta.textContent.replace('cobro por definir', '1 hora incluida · adicionales por verificar');
         if (item.kind === 'servicio' && item.estado === 'revisar' && item.semantica !== 'AMBIGUO') meta.textContent = meta.textContent.replace(/^Servicio (?:que requiere revisión|preparable) · /, '');
         const texto = document.createElement("div"); texto.className = "haku-libro-servicios__texto"; texto.textContent = item.kind === "nota" ? item.texto : (item.servicio.texto_original || "Servicio indicado en el Libro");
-        cuerpo.append(nombre);
+        const ingreso = document.createElement('div'); ingreso.className = 'haku-libro-servicios__meta haku-libro-servicios__ingreso';
+        ingreso.textContent = textoIngresoReserva(item); ingreso.title = 'Fecha de check-in de la reserva en el Libro';
+        cuerpo.append(nombre, ingreso);
         if (item.kind === 'servicio' && item.estado === 'revisar') {
             const servicio = document.createElement('div'); servicio.className = 'haku-libro-servicios__servicio'; servicio.textContent = item.mapa.nombre || item.servicio.concepto;
             cuerpo.append(servicio);
@@ -2063,6 +2070,7 @@
             const titulo = item.kind === "nota" ? "Nota para el resumen" : (item.mapa?.nombre || item.servicio?.concepto || "Servicio");
             fila.append(
                 crear("strong", "", `${cabana}${item.reserva?.titular || "Reserva"} · ${titulo}`),
+                crear("p", "haku-libro-resultado-sites__ingreso", textoIngresoReserva(item)),
                 crear("span", "haku-libro-resultado-sites__estado", estado)
             );
             const descripcion = item.kind === "nota" ? item.texto : item.servicio?.texto_original;
