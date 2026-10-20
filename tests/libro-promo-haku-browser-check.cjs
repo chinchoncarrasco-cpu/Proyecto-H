@@ -20,7 +20,9 @@ async function configurar(q) {
     r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('JACUZZI A LAS 17:15 HASTA LAS 20:30',{origen_campo:'notas_reserva'});
     r.pagos=[];r.pagos_sin_asociacion=[];e.db.pagos=[];window.haikuTienePermiso=p=>p==='pagos.ver';
     e.db.servicios=[{id:'tinaja-registrada',reserva_id:est.reserva_id,estadia_id:est.id,
+        catalogo_servicio_id:e.db.catalogo_servicios.find(c=>c.codigo==='tinajaTonel').id,recurso_id:null,
         fecha_servicio:r.fecha_checkin,hora_inicio:'16:15:00',hora_fin:'18:15:00',cantidad:2,personas:2,
+        precio_unitario_aplicado:15000,monto_adicional:0,actualizado_en:'2026-10-10T10:00:00Z',
         tipo_cobro:'normal',total:30000,estado_servicio:'programado',
         catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tinaja Tonel de Madera'}}];
     e.db.vista_estado_cargos=[{cargo_id:'cargo-adicional',reserva_id:est.reserva_id,estadia_id:est.id,
@@ -59,6 +61,42 @@ async function configurar(q) {
                 await fila.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`promo-haku-${width}.png`)});}
             assert.equal(await page.evaluate(()=>JSON.stringify(fixtureServicios.db)===fixtureServicios.antes),true);
             assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+            await page.evaluate(async()=>{
+                const e=fixtureServicios;window.haikuSesion={auth:{id:e.usuario},usuario:{activo:true},roles:[{codigo:'administrador'}]};
+                window.haikuTienePermiso=()=>true;e.adminCalls=[];const anterior=haikuSupabase.rpc;
+                haikuSupabase.rpc=async(nombre,p)=>{
+                    if(nombre!=='haiku_libro_revision_servicio_admin_v1')return anterior(nombre,p);
+                    e.adminCalls.push(p);const s=e.db.servicios[0],estado={...p.p_esperado};delete estado.actualizado_en;
+                    if(p.p_modo==='actualizar'){
+                        const c=e.db.catalogo_servicios.find(c=>c.codigo===p.p_codigo);
+                        Object.assign(s,{catalogo_servicio_id:c.id,catalogo_servicios:{codigo:c.codigo,nombre:c.nombre},hora_inicio:p.p_inicio+':00',hora_fin:p.p_fin+':00'});
+                        Object.assign(estado,{catalogo_servicio_id:c.id,hora_inicio:p.p_inicio,hora_fin:p.p_fin});
+                    }
+                    s.libro_revision_admin_v1={version:1,item_id:p.p_item_id,firma:p.p_firma,motivo:p.p_motivo,estado};
+                    s.actualizado_en='2026-10-20T06:00:00Z';return {data:{ok:true,servicio_id:s.id,total:s.total}};
+                };
+                await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:e.reservas,generacion:e.generacion});
+            });
+            await page.locator('.haku-libro-servicios__seccion--revision > summary').click();
+            await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+            const manual=page.locator('.haku-libro-servicio-manual');assert.match(await manual.innerText(),/Pagado \$30\.000 · saldo \$0/);
+            assert.equal(await page.locator('[data-haku-accion="incorporar"]').isVisible(),false,'la incorporación general no tapa la confirmación administrativa');
+            if(width!==1100)await manual.locator('[data-revision-admin="modo"]').selectOption('actualizar');
+            await manual.locator('[data-revision-admin="motivo"]').fill('Verificado por el administrador');
+            await manual.locator('[data-revision-admin="aceptar"]').check();
+            const encaja=await manual.evaluate(el=>el.scrollWidth<=el.clientWidth+1);assert.equal(encaja,true,`${width}: aprobación manual sin desborde`);
+            if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await manual.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`admin-${width}.png`)});
+            await manual.getByRole('button',{name:'Confirmar decisión',exact:true}).click();
+            await page.waitForFunction(()=>!document.querySelector('.haku-libro-servicio-manual'));
+            assert.equal(await page.locator('[data-haku-accion="incorporar"]').isVisible(),true);
+            assert.equal(await page.evaluate(()=>fixtureServicios.adminCalls.length),1);
+            assert.equal(await page.evaluate(()=>fixtureServicios.db.servicios.length),1);
+            assert.equal(await page.evaluate(()=>fixtureServicios.db.servicios[0].total),30000);
+            assert.equal(await page.evaluate(()=>fixtureServicios.db.servicios[0].cantidad),2);
+            assert.equal(await page.evaluate(()=>fixtureServicios.db.vista_estado_cargos[0].aplicado_neto),30000);
+            assert.equal(await page.evaluate(()=>fixtureServicios.db.vista_estado_cargos[0].saldo_cargo),0);
+            await page.locator('.haku-libro-servicios__seccion--existentes > summary').click();
+            assert.equal(await page.getByRole('button',{name:'Aprobación manual',exact:true}).isVisible(),true);
             // El check-in permite ubicar la ficha aunque no se conozca el día del servicio.
             await page.evaluate(async()=>{
                 const e=fixtureServicios,r=e.reservas[0];r.noches=2;r.fecha_checkout='2026-10-12';
