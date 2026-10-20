@@ -8,6 +8,7 @@ const id = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const copy = x => JSON.parse(JSON.stringify(x));
 function fixture() {
     const e = entorno(), { c, state } = e;
+    c.structuredClone=structuredClone;
     const original = c.HAIKU_LIBRO_RESERVA_V1.consultarHoja;
     let lecturasLibro = 0;
     c.HAIKU_LIBRO_RESERVA_V1.consultarHoja = async (...args) => { lecturasLibro++;return original(...args); };
@@ -63,6 +64,56 @@ function fixture() {
     const comparar=()=>Q.compararSistema(state.reservas,c.haikuSupabase,q);
     return {...e,Q,db,reads,agregar,servicio,comparar,lecturas:()=>lecturasLibro};
 }
+
+function cambioServicios(r,id='hist-servicios') {
+    const anterior={...r,servicios:[]};
+    return {id,tipo:'modificacion',detectado_generacion:1,anterior,actual:r,
+        cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]};
+}
+test('historial: Late Check-out ya registrado usa la misma identidad que Servicios y queda resuelto',async()=>{
+    const f=fixture(),reserva=f.agregar('Reserva de Late sintética','X PAGAR LATE OUT CLP$10,000 1 HORA 13:00');
+    f.servicio(reserva);const antes=JSON.stringify(f.db);
+    const out=await f.Q.revalidarCambiosDetectados([cambioServicios(reserva.r)],f.c.haikuSupabase,{generacion:1});
+    assert.equal(out.items.length,0);assert.equal(out.resueltos.length,1);assert.equal(out.reservas.length,0);
+    assert.equal(JSON.stringify(f.db),antes);assert.equal(f.lecturas(),0);assert.equal(f.state.escrituras.length,0);
+});
+test('historial: la tinaja de cortesía sin agenda ya anotada no se convierte en servicio faltante',async()=>{
+    const f=fixture(),{r,estancia}=f.agregar('Reserva de beneficio sintética','PROMO HAIKU // 1 HORA DE TINAJA DE CORTESÍA');
+    f.db.notas.push({id:id(777),reserva_id:estancia.reserva_id,tipo:'operativa_resumen',texto:'1 HORA DE TINAJA DE CORTESÍA'});
+    const out=await f.Q.revalidarCambiosDetectados([cambioServicios(r)],f.c.haikuSupabase,{generacion:1});
+    assert.equal(out.items.length,0);assert.equal(out.resueltos.length,1);assert.equal(f.lecturas(),0);
+    assert.equal(f.state.escrituras.length,0);
+});
+test('historial: una nota pendiente se conserva como nota y no habilita la incorporación de reservas',async()=>{
+    const f=fixture(),{r}=f.agregar('Reserva de nota sintética','PROMO HAIKU // + 1 hora de tinaja caliente');
+    const out=await f.Q.revalidarCambiosDetectados([cambioServicios(r)],f.c.haikuSupabase,{generacion:1});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);
+    assert.match(out.items[0].cambios[0].proyecto,/nota|Notas/i);
+    assert.equal(out.reservas.length,0);assert.equal(out.comparacion.length,0);assert.equal(f.state.escrituras.length,0);
+});
+test('historial: un horario distinto de tinaja sigue visible para revisión y no promete una incorporación vacía',async()=>{
+    const f=fixture(),a=f.agregar('Reserva de horario sintética','TINAJA TONEL 1 HORA DE CORTESÍA 19:15 A 20:15');
+    const s=f.servicio(a,'tinajaTonel',0);Object.assign(s,{fecha_servicio:'2026-10-10',hora_inicio:'18:15:00',hora_fin:'19:15:00',tipo_cobro:'cortesia'});
+    const out=await f.Q.revalidarCambiosDetectados([cambioServicios(a.r)],f.c.haikuSupabase,{generacion:1});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
+    assert.notEqual(out.items[0].cambios[0].proyecto,'Falta en Proyecto H.');assert.equal(f.state.escrituras.length,0);
+});
+test('historial: un error de lectura operativa impide concluir que todo coincide',async()=>{
+    const f=fixture(),{r}=f.agregar('Reserva de error sintética','PROMO HAIKU // 18hrs jacuzzi');
+    f.c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2={compararReservas:async()=>{throw Error('Lectura operativa fallida');}};
+    await assert.rejects(f.Q.revalidarCambiosDetectados([cambioServicios(r)],f.c.haikuSupabase,{generacion:1}),/Lectura operativa fallida/);
+    assert.equal(f.state.escrituras.length,0);assert.equal(f.lecturas(),0);
+});
+test('historial: conserva la promo y el pago específico del Libro como evidencia, sin proponer registrar pagos',async()=>{
+    const f=fixture(),{r}=f.agregar('Reserva con pago sintética','PROMO HAIKU // JACUZZI 18:00 A 19:00');
+    r.pagos_sin_asociacion=[{concepto:'tinaja',monto:30000,texto_original:'1 HORA DE JACUZZI PAGADA $30.000'}];
+    const original=f.c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;let leido;
+    f.c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2={compararReservas:async(...args)=>{leido=await original.compararReservas(...args);return leido;}};
+    const out=await f.Q.revalidarCambiosDetectados([cambioServicios(r)],f.c.haikuSupabase,{generacion:1});
+    const i=leido.items.find(x=>x.kind==='servicio');assert.equal(i.promocion.descuento_porcentaje,10);assert.equal(i.reglaPromo,null);
+    assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);assert.equal(out.comparacion.pagosDetalle.length,0);
+    assert.equal(f.state.escrituras.length,0);assert.equal(f.state.llamadas.length,0);
+});
 
 test('7 avisos antiguos: Late existentes y beneficios ya anotados coinciden en ambas pantallas',async()=>{
     const f=fixture();

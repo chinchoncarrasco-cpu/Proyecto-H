@@ -31,7 +31,7 @@ const server = http.createServer((request, response) => {
 
 (async () => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    const browser = await chromium.launch({ executablePath: edge, headless: true });
+    const browser = await chromium.launch({ executablePath: process.env.HAKU_CHROMIUM_PATH || edge, headless: true, args:['--no-sandbox'] });
     try {
         const page = await browser.newPage({ viewport: { width: 600, height: 900 } });
         const errors = [];
@@ -47,6 +47,8 @@ const server = http.createServer((request, response) => {
             window.__pending = null;
             window.__revalidationMode = 'ready';
             window.__sawLegacy = false;
+            window.__reservasAbiertas=[];
+            window.HAIKU_INSPECTOR_V1={abrirReserva:id=>window.__reservasAbiertas.push(id)};
             document.getElementById('haiku-asistente-cerrar').addEventListener('click', () => window.__closed++);
             new MutationObserver(() => {
                 window.__sawLegacy ||= Boolean(document.querySelector('.haku-actualizacion-compacta'));
@@ -113,7 +115,7 @@ const server = http.createServer((request, response) => {
             };
             window.__pendientesActual = {
                 items: [{ tipo: 'modificacion', actual: ahora, detectado_generacion: 2, estado: 'pendiente', accionable: true,
-                    cambios: [{ campo: 'adultos', antes: 2, ahora: 3, proyecto: 2 }] }],
+                    sistema:{reserva_id:'reserva-sintetica'},cambios: [{ campo: 'adultos', antes: 2, ahora: 3, proyecto: 2 }] }],
                 resueltos: [], reservas: [ahora], comparacion: [], q: { texto: 'informe' }
             };
             window.__generation = 2;
@@ -148,6 +150,8 @@ const server = http.createServer((request, response) => {
         assert.match(await history.innerText(), /Cambios detectados aún pendientes de aplicar/);
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
         assert.match(await history.innerText(), /Proyecto H actual: 2/);
+        await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
+        assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica']);
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
         await history.locator('[data-haku-preparar-pendientes]').click();
         await page.waitForFunction(() => window.__preparations === 1);
@@ -166,6 +170,23 @@ const server = http.createServer((request, response) => {
         await page.evaluate(() => { window.__revalidationMode = 'ready'; });
         await report.locator('.haku-libro-pendientes-zona > button').click();
         await report.locator('.haku-actualizacion-sites__historial').waitFor();
+        // Otro operador aplicó el cambio antes de preparar. Refrescar el
+        // informe conserva la revisión de servicios y retira el contador viejo.
+        await page.evaluate(()=>{
+            window.__pendientesActual={items:[{tipo:'modificacion',actual:{titular:'Reserva de horario',cabana:1,
+                fecha_checkin:'2026-10-15',fecha_checkout:'2026-10-15'},estado:'revision',accionable:false,
+                sistema:{reserva_id:'tinaja-sintetica'},cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'18:00'}],
+                    proyecto:'Ya existe a las 17:00. Confirma si se modificó el horario.'}]}],resueltos:[],reservas:[],comparacion:[],q:null};
+            window.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion=async()=>{throw Object.assign(Error('No quedan cambios de reservas'),{haikuSinCambiosPreparables:true});};
+        });
+        await report.locator('[data-haku-preparar-pendientes]').click();
+        await page.waitForFunction(()=>document.querySelectorAll('.haku-actualizacion-sites__historial')[1]?.textContent.includes('Reserva de horario'));
+        assert.deepEqual(await history.locator('.haku-actualizacion-sites__historial-metricas strong').allInnerTexts(),['1','0']);
+        assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(),0);
+        assert.doesNotMatch(await history.innerText(),/Todos los cambios detectados ya están sincronizados|No quedan cambios de reservas/);
+        await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
+        await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
+        assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica','tinaja-sintetica']);
         assert.equal(await page.evaluate(() => window.__sawLegacy), false);
         assert.doesNotMatch(await report.innerText(), /Vista de ejemplo basada en captura|datos de muestra|prototipo|demostración/);
         await report.locator('[data-haku-cerrar-actualizacion]').click();
@@ -174,6 +195,14 @@ const server = http.createServer((request, response) => {
         const fit = await report.evaluate(element => ({ scroll: element.scrollWidth, client: element.clientWidth, overflow: getComputedStyle(element).overflowY }));
         assert.ok(fit.scroll <= fit.client + 1, `móvil sin scroll horizontal: ${fit.scroll}/${fit.client}`);
         assert.equal(fit.overflow, 'visible');
+        for(const width of [1100,390,320]){
+            await page.setViewportSize({width,height:900});
+            const fitHistory=await history.evaluate(el=>({scroll:el.scrollWidth,client:el.clientWidth}));
+            assert.ok(fitHistory.scroll<=fitHistory.client+1,`${width}: historial sin desborde`);
+            if(process.env.HAKU_HISTORIAL_SCREENSHOT_DIR){fs.mkdirSync(process.env.HAKU_HISTORIAL_SCREENSHOT_DIR,{recursive:true});
+                await history.screenshot({path:path.join(process.env.HAKU_HISTORIAL_SCREENSHOT_DIR,`historial-${width}.png`)});}
+        }
+        await page.setViewportSize({width:390,height:420});
         assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById('haiku-asistente-mensajes')).scrollbarWidth), 'thin');
         const area = page.locator('#haiku-asistente-mensajes');
         await area.evaluate(element => { element.scrollTop = 0; });

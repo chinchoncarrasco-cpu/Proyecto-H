@@ -1634,7 +1634,8 @@
         }
 
         const motorServicios = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
-        const operativa = q.incluirServicios !== false && q.incluirFinanzas !== false && q.focal !== true &&
+        const operativa = q.incluirServicios !== false &&
+            (q.serviciosOperativos === true || q.incluirFinanzas !== false && q.focal !== true) &&
             typeof motorServicios?.compararReservas === 'function'
             ? await motorServicios.compararReservas(validas, {desde, hasta}, cliente) : null;
         if (operativa && !Array.isArray(operativa.items))
@@ -1945,6 +1946,15 @@
     }
     function detalleCambioHistorico(cambio,reserva,sistema,comparacion){
         const campo=cambio.campo,objetivo=reserva?.[campo];
+        if(campo==='estado_confirmacion'){
+            // El cambio del fondo confirma la reserva; no autoriza adelantar
+            // check-in/checkout ni retroceder un estado que ya los superó.
+            if(!['confirmada_por_color','pendiente_por_color'].includes(objetivo))
+                return {pendiente:true,proyecto:sistema.estado_operativo,accionable:false};
+            const propuesto=estadoLibroActualizable({...reserva,estado_operativo:'no_determinado'},sistema.estado_operativo);
+            return {pendiente:propuesto!==undefined&&S.normalizar(propuesto)!==S.normalizar(sistema.estado_operativo),
+                proyecto:sistema.estado_operativo,accionable:propuesto!==undefined};
+        }
         if(campo==='estado_operativo'){
             const propuesto=estadoLibroActualizable(reserva,sistema.estado_operativo);
             return {pendiente:propuesto!==undefined&&S.normalizar(propuesto)!==S.normalizar(sistema.estado_operativo),proyecto:sistema.estado_operativo,accionable:propuesto!==undefined};
@@ -1957,9 +1967,17 @@
             return {pendiente:canonHistorial(campo,objetivo)!==canonHistorial(campo,proyecto),proyecto,accionable:false};
         }
         if(campo==='servicios'){
+            if(comparacion.criterioServiciosNotas!=='operativo_v2')return {pendiente:true,accionable:false,
+                proyecto:'Requiere la revisión operativa de servicios y notas; la comparación preliminar no acredita un faltante.'};
             const items=(comparacion.serviciosDetalle||[]).filter(x=>firmaReservaHistorial(x.reserva)===firmaReservaHistorial(reserva));
-            const pendientes=items.filter(x=>x.estado!=='en_sistema');
-            return {pendiente:pendientes.length>0,proyecto:pendientes.map(x=>x.razon||x.estado).join(' · ')||'Ya coincide',accionable:pendientes.every(x=>['faltante','diferente'].includes(x.estado))};
+            const evidencias=new Set([...(reserva.servicios||[]),...(reserva.menciones_servicio||[])]
+                .flatMap(s=>[s.fragmento_original,s.texto_original]).filter(Boolean).map(S.normalizar));
+            const notas=(comparacion.notasDetalle||[]).filter(x=>firmaReservaHistorial(x.reserva)===firmaReservaHistorial(reserva)&&evidencias.has(S.normalizar(x.texto)));
+            const pendientes=items.filter(x=>x.estado!=='en_sistema'),notasPendientes=notas.filter(x=>x.estado!=='en_sistema');
+            // La incorporación de reservas no escribe servicios ni notas. Sus
+            // pendientes conservan la revisión de su propio flujo operativo.
+            return {pendiente:pendientes.length+notasPendientes.length>0,accionable:false,
+                proyecto:[...pendientes.map(x=>x.razon||x.estado),...notasPendientes.map(x=>`Nota por revisar: ${x.texto}`)].join(' · ')||'Ya coincide'};
         }
         if(['notas_importantes','pagos_pendientes'].includes(campo)){
             const observaciones=S.normalizar(sistema.observaciones);
@@ -1976,7 +1994,7 @@
     function reservaPreparacionHistorial(reserva,sistema,campos){
         const r={...reserva,titular:sistema.titular,cabana:sistema.cabana,fecha_checkin:sistema.fecha_checkin,
             fecha_checkout:sistema.fecha_checkout,tipo_estadia:sistema.tipo_estadia,adultos:sistema.adultos,ninos:sistema.ninos,
-            mascotas:sistema.mascotas,estado_operativo:sistema.estado_operativo,rut_documento:sistema.rut_documento,
+            mascotas:sistema.mascotas,estado_operativo:sistema.estado_operativo,estado_confirmacion:'no_determinado',rut_documento:sistema.rut_documento,
             correo:sistema.correo,telefono:sistema.telefono,texto_original:'',notas_importantes:[],pagos_pendientes:[],pagos:[],pagos_sin_asociacion:[],servicios:[]};
         for(const campo of campos)if(campo in reserva)r[campo]=structuredClone(reserva[campo]);
         return r;
@@ -1987,6 +2005,15 @@
         const candidatos=(comparacion.snapshot?.estadias||[]).filter(s=>
             mismasFechas(anterior,s)&&Number(anterior.cabana)===Number(s.cabana)&&identidad(anterior,s).compatible);
         return candidatos.length===1?candidatos[0]:null;
+    }
+    function comparacionPreparacionHistorial(filas,comparacion){
+        const prep=[...filas];prep.grupos=agruparComparacion(filas);prep.pagosDetalle=[];prep.serviciosDetalle=[];
+        prep.snapshot=comparacion.snapshot;prep.meta={...(comparacion.meta||{}),libro:prep.grupos.length,estadias_libro:filas.length};
+        return prep;
+    }
+    function filaHistoricaPreparable(fila,comparacion){
+        const plan=crearPlanIncorporacion([fila.libro],comparacionPreparacionHistorial([fila],comparacion));
+        return plan.items.some(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria));
     }
     async function revalidarCambiosDetectados(registros,cliente,{generacion}={}){
         const lista=Array.isArray(registros)?registros:[];
@@ -2002,15 +2029,20 @@
         const entradas=[...grupos.values()];
         const reservas=entradas.map((grupo,indice)=>{
             const campos=new Set(grupo.registros.flatMap(x=>(x.cambios||[]).map(c=>c.campo)));
-            const r={...structuredClone(grupo.reserva),_historial_indice:indice,pagos:[],pagos_sin_asociacion:[],texto_original:'',
+            const r={...structuredClone(grupo.reserva),_historial_indice:indice,
+                pagos:campos.has('servicios')?grupo.reserva.pagos||[]:[],
+                pagos_sin_asociacion:campos.has('servicios')?grupo.reserva.pagos_sin_asociacion||[]:[],
+                texto_original:campos.has('servicios')?grupo.reserva.texto_original||'':'',
                 notas_importantes:campos.has('notas_importantes')?grupo.reserva.notas_importantes||[]:[],
                 pagos_pendientes:campos.has('pagos_pendientes')?grupo.reserva.pagos_pendientes||[]:[],
+                menciones_servicio:campos.has('servicios')?grupo.reserva.menciones_servicio||[]:[],
                 servicios:campos.has('servicios')?grupo.reserva.servicios||[]:[]};
             return r;
         });
         const fechas=lista.flatMap(x=>[x.anterior?.fecha_checkin,x.anterior?.fecha_checkout,x.actual?.fecha_checkin,x.actual?.fecha_checkout]).filter(Boolean).sort();
+        const incluyeServicios=lista.some(x=>(x.cambios||[]).some(c=>c.campo==='servicios'));
         const q={desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,
-            incluirServicios:lista.some(x=>(x.cambios||[]).some(c=>c.campo==='servicios'))};
+            incluirServicios:incluyeServicios,serviciosOperativos:incluyeServicios};
         const comparacion=await compararSistema(reservas,cliente,q);
         const items=[],resueltos=[],filasPreparacion=[],reservasPreparacion=[];
         for(let indice=0;indice<entradas.length;indice++){
@@ -2018,7 +2050,7 @@
             for(const registro of grupo.registros){
                 if(registro.tipo==='nueva'){
                     if(resultado?.estado==='asociada'){resueltos.push(registro.id);continue;}
-                    const accionable=resultado?.estado==='sin_coincidencia';
+                    const accionable=resultado?.estado==='sin_coincidencia'&&filaHistoricaPreparable(resultado,comparacion);
                     items.push({...registro,estado:accionable?'pendiente':'revision',accionable,proyecto:resultado?.estado||'sin coincidencia'});
                     if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
                     continue;
@@ -2042,18 +2074,20 @@
                     if(detalle.pendiente)pendientes.push({...cambio,proyecto:detalle.proyecto,accionable:detalle.accionable});
                 }
                 if(!pendientes.length){resueltos.push(registro.id);continue;}
-                const accionable=pendientes.every(x=>x.accionable);
+                const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)));
+                const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
+                const accionable=pendientes.every(x=>x.accionable)&&filaHistoricaPreparable(fila,comparacion);
                 items.push({...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico});
                 if(accionable){
-                    const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)));
-                    filasPreparacion.push({...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)});reservasPreparacion.push(libro);
+                    filasPreparacion.push(fila);reservasPreparacion.push(libro);
                 }
             }
         }
         const unicas=[...new Map(filasPreparacion.map(x=>[firmaReservaHistorial(x.libro),x])).values()];
-        const prep=[...unicas];prep.grupos=agruparComparacion(unicas);prep.pagosDetalle=[];prep.serviciosDetalle=[];prep.snapshot=comparacion.snapshot;prep.meta={...(comparacion.meta||{}),libro:prep.grupos.length,estadias_libro:unicas.length};
+        const prep=comparacionPreparacionHistorial(unicas,comparacion);
         const reservasPrep=[...new Map(reservasPreparacion.map(x=>[firmaReservaHistorial(x),x])).values()];
-        return {items,resueltos,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,q};
+        return {items,resueltos,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
+            q:{...q,incluirServicios:false,serviciosOperativos:false}};
     }
     function actualizacionPagoLibro(p, s) {
         const propuesta = { monto:p.monto, moneda:p.moneda, medio_pago:medioLibro(p), folio:p.folio, bovtar:p.bovtar,
@@ -4556,7 +4590,8 @@
         // la fuente vigente. Revalidar nuevamente al pulsar el botón evita abrir
         // una propuesta basada en el snapshot que generó el informe.
         const plan=await prepararIncorporacion(result,decisiones,aprobados);
-        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))throw new Error('Proyecto H ya no tiene diferencias accionables seguras. Revalida el informe.');
+        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))
+            throw Object.assign(new Error('Proyecto H ya no tiene diferencias accionables seguras. Revalida el informe.'),{haikuSinCambiosPreparables:true});
         const volver=async()=>{
             const actualizado=await revalidarEntradaEstructurada(result);
             renderizarComparacion(out,actualizado);

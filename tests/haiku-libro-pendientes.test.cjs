@@ -105,3 +105,52 @@ test('sin historial no consulta Proyecto H ni ofrece preparación',async()=>{
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([],clienteFocal({},llamadas),{generacion:3});
     assert.equal(out.total,0);assert.equal(out.reservas.length,0);assert.deepEqual(llamadas,[]);
 });
+function cambioConfirmacion(extra={}) {
+    const anterior=libro({estado_confirmacion:'pendiente_por_color'}),actual=libro({estado_confirmacion:'confirmada_por_color',...extra});
+    return {id:'hist-confirmacion',tipo:'modificacion',detectado_generacion:2,anterior,actual,
+        cambios:[{campo:'estado_confirmacion',antes:'pendiente_por_color',ahora:'confirmada_por_color'}]};
+}
+test('historial: confirmación por color ya aplicada o superada no queda como cambio imposible de comprobar',async()=>{
+    for(const estado of ['confirmada','hospedada','checked_out']){
+        const llamadas=[],out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([cambioConfirmacion()],
+            clienteFocal({reserva_estadias:[filaSistema(estado)]},llamadas),{generacion:3});
+        assert.equal(out.items.length,0,estado);assert.equal(out.resueltos.length,1,estado);assert.equal(out.reservas.length,0);
+        assert.deepEqual(llamadas,['reserva_estadias']);
+    }
+});
+test('historial: pendiente frente a confirmada por color prepara sólo la confirmación, sin adelantar check-in o checkout',async()=>{
+    const registro=cambioConfirmacion({estado_operativo:'checked_out'});
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],
+        clienteFocal({reserva_estadias:[filaSistema('pendiente')]},[]),{generacion:3});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,true);
+    assert.equal(out.items[0].cambios[0].proyecto,'pendiente');assert.equal(out.reservas.length,1);
+    const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(out.reservas,out.comparacion);
+    const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
+    assert.equal(update.payload.estadia.despues.estado_estadia,'confirmada');
+    assert.deepEqual(Object.keys(update.payload.estadia.despues),['estado_estadia']);
+});
+test('historial: un cambio de adultos no arrastra una confirmación por color ajena al cambio',async()=>{
+    const anterior=libro({adultos:2}),actual=libro({adultos:3}),registro={id:'adultos-sin-color',tipo:'modificacion',anterior,actual,
+        cambios:[{campo:'adultos',antes:2,ahora:3}]};
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],
+        clienteFocal({reserva_estadias:[filaSistema('pendiente')]},[]),{generacion:3});
+    const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(out.reservas,out.comparacion);
+    const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
+    assert.deepEqual(Object.keys(update.payload.estadia.despues),['adultos']);
+});
+test('historial: el contador seguro exige una propuesta seleccionable del plan de incorporación',async()=>{
+    const actual=libro({adultos:0}),registro={id:'adultos-no-validos',tipo:'modificacion',anterior:libro(),actual,
+        cambios:[{campo:'adultos',antes:2,ahora:0}]};
+    const llamadas=[],out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],
+        clienteFocal({reserva_estadias:[filaSistema('confirmada')]},llamadas),{generacion:3});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
+    assert.deepEqual(llamadas,['reserva_estadias']);
+});
+test('historial: sin motor operativo, una comparación antigua no acredita un faltante ni habilita preparación',async()=>{
+    const actual=libro({servicios:[{concepto:'tinaja',texto_original:'1 HORA DE TINAJA DE CORTESÍA'}]}),registro={id:'motor-ausente',tipo:'modificacion',
+        anterior:libro(),actual,cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]};
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],
+        clienteFocal({reserva_estadias:[filaSistema('confirmada')]},[]),{generacion:3});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
+    assert.match(out.items[0].cambios[0].proyecto,/no acredita un faltante/);
+});
