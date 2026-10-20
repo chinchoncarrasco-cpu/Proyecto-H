@@ -7,6 +7,11 @@
 
     const confirmarNativo = root.confirm.bind(root);
     let ultimoTextoServicios = "";
+    // Sólo la selección directa de la tarjeta está bloqueada. Las casillas
+    // dentro del formulario manual confirman la decisión del administrador.
+    const selectorRevision = ".haku-libro-servicios__item--revisar > input[type='checkbox']," +
+        ".haku-libro-servicios__item--existente > input[type='checkbox']";
+    const selectorSeleccionados = "input.haku-libro-servicios__check[type='checkbox']:checked:not(:disabled)";
 
     function esConfirmacionLibro(texto) {
         const t = String(texto || "");
@@ -15,10 +20,7 @@
     }
 
     function bloquearRevision(scope = document) {
-        scope.querySelectorAll?.(
-            ".haku-libro-servicios__item--revisar input[type='checkbox']," +
-            ".haku-libro-servicios__item--existente input[type='checkbox']"
-        ).forEach(check => {
+        scope.querySelectorAll?.(selectorRevision).forEach(check => {
             check.checked = false;
             check.disabled = true;
             check.setAttribute("aria-disabled", "true");
@@ -33,7 +35,7 @@
                 const card = boton.closest(".haku-libro-servicios");
                 if (!card || /Incorporación completada/i.test(card.textContent || "")) return;
                 bloquearRevision(card);
-                const seleccionados = card.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').length;
+                const seleccionados = card.querySelectorAll(selectorSeleccionados).length;
                 boton.disabled = seleccionados === 0;
             });
         });
@@ -319,10 +321,7 @@
     }
 
     document.addEventListener("click", event => {
-        const checkBloqueado = event.target?.closest?.(
-            ".haku-libro-servicios__item--revisar input[type='checkbox']," +
-            ".haku-libro-servicios__item--existente input[type='checkbox']"
-        );
+        const checkBloqueado = event.target?.closest?.(selectorRevision);
         if (checkBloqueado) {
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -351,7 +350,7 @@
             if (!boton.isConnected || !card.classList.contains("haku-libro-servicios")) return;
             boton.removeAttribute?.("aria-busy");
             boton.textContent = etiqueta;
-            boton.disabled = card.querySelectorAll('input[type="checkbox"]:checked:not(:disabled)').length === 0;
+            boton.disabled = card.querySelectorAll(selectorSeleccionados).length === 0;
         });
     }, true);
 

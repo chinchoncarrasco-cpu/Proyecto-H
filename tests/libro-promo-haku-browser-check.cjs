@@ -41,7 +41,9 @@ async function configurar(q) {
             await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():(externos.push(r.request().url()),r.abort()));
             await page.goto(`http://127.0.0.1:${server.address().port}`);
             for(const f of ['haiku-libro-semantica-v1','haiku-servicios-identidad-v1'])await page.addScriptTag({content:read(`js/${f}.js`)});
-            await page.evaluate(setup);await page.addScriptTag({content:source});await page.evaluate(configurar,consulta);
+            await page.evaluate(setup);await page.addScriptTag({content:source});
+            await page.addScriptTag({content:read('js/haiku-libro-confirm-cancel-fix-v1.js')});
+            await page.evaluate(configurar,consulta);
             await page.locator('.haku-libro-servicios__seccion--revision > summary').click();
             const fila=page.locator('.haku-libro-servicios__item').filter({hasText:'JACUZZI A LAS 17:15'}),texto=await fila.innerText();
             assert.equal(await fila.locator('.haku-libro-servicios__ingreso').innerText(),'IN: 10.10.26');
@@ -51,6 +53,11 @@ async function configurar(q) {
             assert.match(texto,/Pagado \$30\.000 · saldo \$0/);
             assert.doesNotMatch(texto,/cobro por definir|Tipo de cobro|Falta definir si el servicio es cobrable/);
             assert.equal(await fila.getByRole('button',{name:'Aprobación manual',exact:true}).count(),0);
+            const seleccionRevision=fila.locator(':scope > input[type="checkbox"]');
+            assert.equal(await seleccionRevision.isDisabled(),true);
+            await seleccionRevision.evaluate(el=>el.disabled=false);await seleccionRevision.click();
+            assert.equal(await seleccionRevision.isDisabled(),true,'el selector del servicio pendiente sigue bloqueado');
+            assert.equal(await seleccionRevision.isChecked(),false);
             await fila.getByRole('button',{name:'Ver reserva',exact:true}).click();
             assert.equal(await page.evaluate(()=>fixtureServicios.inspecciones.length),1);
             const desbordes=await page.evaluate(()=>[...document.querySelectorAll('.haku-libro-servicios,.haku-libro-servicios__item')]
@@ -82,8 +89,24 @@ async function configurar(q) {
             const manual=page.locator('.haku-libro-servicio-manual');assert.match(await manual.innerText(),/Pagado \$30\.000 · saldo \$0/);
             assert.equal(await page.locator('[data-haku-accion="incorporar"]').isVisible(),false,'la incorporación general no tapa la confirmación administrativa');
             if(width!==1100)await manual.locator('[data-revision-admin="modo"]').selectOption('actualizar');
+            const confirmar=manual.getByRole('button',{name:'Confirmar decisión',exact:true});
+            const aceptar=manual.locator('[data-revision-admin="aceptar"]');
+            assert.equal(await confirmar.isDisabled(),true);
             await manual.locator('[data-revision-admin="motivo"]').fill('Verificado por el administrador');
-            await manual.locator('[data-revision-admin="aceptar"]').check();
+            assert.equal(await confirmar.isDisabled(),true,'el motivo solo no confirma el importe');
+            await aceptar.click();
+            assert.equal(await aceptar.isChecked(),true,'el guard de incorporación permite confirmar el formulario');
+            assert.equal(await aceptar.isEnabled(),true);
+            assert.equal(await confirmar.isEnabled(),true);
+            await aceptar.uncheck();assert.equal(await confirmar.isDisabled(),true);
+            await aceptar.locator('..').locator('span').click();
+            assert.equal(await aceptar.isChecked(),true,'el texto de confirmación también marca la casilla');
+            await aceptar.focus();await aceptar.press('Space');assert.equal(await confirmar.isDisabled(),true);
+            await aceptar.press('Space');assert.equal(await confirmar.isEnabled(),true);
+            await page.evaluate(()=>HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4.reactivar());
+            assert.equal(await aceptar.isChecked(),true,'la recuperación de controles conserva la confirmación manual');
+            assert.equal(await aceptar.isEnabled(),true);
+            assert.equal(await confirmar.isEnabled(),true);
             const encaja=await manual.evaluate(el=>el.scrollWidth<=el.clientWidth+1);assert.equal(encaja,true,`${width}: aprobación manual sin desborde`);
             if(process.env.HAKU_PROMO_SCREENSHOT_DIR)await manual.screenshot({path:path.join(process.env.HAKU_PROMO_SCREENSHOT_DIR,`admin-${width}.png`)});
             await manual.getByRole('button',{name:'Confirmar decisión',exact:true}).click();
@@ -97,6 +120,10 @@ async function configurar(q) {
             assert.equal(await page.evaluate(()=>fixtureServicios.db.vista_estado_cargos[0].saldo_cargo),0);
             await page.locator('.haku-libro-servicios__seccion--existentes > summary').click();
             assert.equal(await page.getByRole('button',{name:'Aprobación manual',exact:true}).isVisible(),true);
+            const seleccionExistente=page.locator('.haku-libro-servicios__item--existente > input[type="checkbox"]').first();
+            await seleccionExistente.evaluate(el=>el.disabled=false);await seleccionExistente.click();
+            assert.equal(await seleccionExistente.isDisabled(),true,'el servicio existente no se puede volver a incorporar');
+            assert.equal(await seleccionExistente.isChecked(),false);
             // El check-in permite ubicar la ficha aunque no se conozca el día del servicio.
             await page.evaluate(async()=>{
                 const e=fixtureServicios,r=e.reservas[0];r.noches=2;r.fecha_checkout='2026-10-12';
@@ -134,7 +161,6 @@ async function configurar(q) {
                 r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('18hrs jacuzzi',{origen_campo:'notas_reserva'});
                 await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{reservas:[r],generacion:e.generacion});
             });
-            await page.addScriptTag({content:read('js/haiku-libro-confirm-cancel-fix-v1.js')});
             await page.locator('[data-haku-accion="incorporar"]').click();
             await page.waitForFunction(()=>fixtureServicios.escrituras.length===1);
             const guardado=await page.evaluate(()=>fixtureServicios.escrituras[0]);
