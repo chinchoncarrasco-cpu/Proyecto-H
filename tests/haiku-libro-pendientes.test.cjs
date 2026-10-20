@@ -171,3 +171,39 @@ test('una estadía cancelada se identifica como tal y no habilita su reactivaci�
     assert.equal(out.items[0].accionable,false);assert.match(out.items[0].proyecto,/cancelada o No Show/);
     assert.equal(out.reservas.length,0);assert.equal(out.revisionServicios.reservas.length,0);
 });
+
+test('operador CO → CO del historial se resuelve aunque el último bloque sólo contenga servicios',async()=>{
+    const r=libro({operador:'CO'}),registro={id:'operador-sin-cambio',tipo:'modificacion',anterior:r,actual:r,
+        cambios:[{campo:'operador',antes:'CO',ahora:' co '}]};
+    const s=filaSistema('checked_out');s.reservas.observaciones='Persona Ejemplo // CO\n[DATOS DEL LIBRO]\n2 MASAJES 19:00\n[/DATOS DEL LIBRO]';
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
+    assert.equal(out.items.length,0);assert.deepEqual(Array.from(out.resueltos),[registro.id]);assert.equal(out.reservas.length,0);
+});
+test('checkout y noches coherentes abren una preparación individual sin arrastrar ocupación ni otros campos',async()=>{
+    const anterior=libro({fecha_checkin:'2026-09-12',fecha_checkout:'2026-09-14',noches:2});
+    const actual={...anterior,fecha_checkout:'2026-09-13',noches:1,ninos:1};
+    const registro={id:'salida-una-noche',tipo:'modificacion',anterior,actual,cambios:[
+        {campo:'fecha_checkout',antes:anterior.fecha_checkout,ahora:actual.fecha_checkout},{campo:'noches',antes:2,ahora:1}]};
+    const s=filaSistema('checked_out',{fecha_ingreso:anterior.fecha_checkin,fecha_salida:anterior.fecha_checkout});
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,true);assert.equal(out.reservas.length,1);
+    const prep=out.items[0].preparacion;assert.equal(prep.reservas.length,1);assert.equal(prep.generacion,3);
+    const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(prep.reservas,prep.comparacion);
+    const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
+    assert.deepEqual({...update.payload.estadia.despues},{fecha_salida:'2026-09-13'});
+    assert.match(update.aviso,/cargos de alojamiento/);assert.ok(update.permisos.includes('pagos.verificar'));
+    actual.noches=3;
+    const incoherente=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
+    assert.equal(incoherente.items[0].accionable,false);assert.equal(incoherente.items[0].preparacion,undefined);
+});
+test('un alta histórica que ya existe cancelada se resuelve sin recrearla ni reactivarla; identidades ambiguas siguen pendientes',async()=>{
+    const r=libro(),registro={id:'alta-cancelada',tipo:'nueva',anterior:null,actual:r,cambios:[]};
+    const s=filaSistema('cancelada');s.reservas.estado_reserva='cancelada';
+    const db=clienteFocal({reserva_estadias:[s]},[]),antes=JSON.stringify(s);
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],db,{generacion:3});
+    assert.equal(out.items.length,0);assert.deepEqual(Array.from(out.resueltos),[registro.id]);assert.equal(out.reservas.length,0);
+    assert.equal(JSON.stringify(s),antes);
+    const duplicada={...s,id:'otra-estadia',reserva_id:'otra-reserva',reservas:{...s.reservas,id:'otra-reserva'}};
+    const ambigua=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s,duplicada]},[]),{generacion:3});
+    assert.equal(ambigua.items.length,1);assert.equal(ambigua.items[0].accionable,false);
+});

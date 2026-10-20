@@ -11,6 +11,8 @@
     }
     const escapar = v => String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const lista = v => Array.isArray(v) ? v : [];
+    const esAdministrador=()=>root.haikuSesion?.usuario?.activo===true&&lista(root.haikuSesion.roles).some(r=>
+        /^(administrador|admin)$/.test(normalizar(typeof r==='string'?r:r?.codigo||r?.nombre)));
     const fecha = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v.split('-').reverse().join('-') : (v || 'No determinado');
     const etiquetas = {cabana:'Cabaña',fecha_checkin:'Check-in',fecha_checkout:'Check-out',noches:'Noches',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado',operador:'Operador',telefono:'Teléfono',correo:'Correo',rut_documento:'Documento',notas_importantes:'Notas',pagos_pendientes:'Pagos pendientes',servicios:'Servicios',tipo_estadia:'Tipo de estadía'};
     function valor(v, campo) {
@@ -150,7 +152,7 @@
                     {...registro,cambios:lista(registro.cambios).map(c=>({...c,proyecto:registro.proyecto}))}:registro;
                 const r=item.actual||item.anterior||{};
                 const etiqueta=item.detectado_generacion===pendientes.generacion?'CAMBIO DE ESTA ACTUALIZACIÓN':'CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE';
-                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Titular no determinado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>${escapar(fecha(r.fecha_checkin))} → ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${item.tipo==='nueva'?'<p>La reserva detectada como nueva todavía no tiene una coincidencia segura en Proyecto H.</p>':item.tipo==='cancelacion'?`<p>Cancelación detectada; Proyecto H actual: ${escapar(item.proyecto)}.</p>`:`<dl>${lista(item.cambios).map(cambioPendiente).join('')}</dl>`}<p class="haku-pendiente-estado"><strong>${item.estado==='pendiente'?'Pendiente de aplicar':'Requiere revisión antes de aplicar'}</strong></p>${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}</div></details>`;
+                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Titular no determinado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>${escapar(fecha(r.fecha_checkin))} → ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${item.tipo==='nueva'?'<p>La reserva detectada como nueva todavía no tiene una coincidencia segura en Proyecto H.</p>':item.tipo==='cancelacion'?`<p>Cancelación detectada; Proyecto H actual: ${escapar(item.proyecto)}.</p>`:`<dl>${lista(item.cambios).map(cambioPendiente).join('')}</dl>`}<p class="haku-pendiente-estado"><strong>${item.estado==='pendiente'?'Pendiente de aplicar':'Requiere revisión antes de aplicar'}</strong></p><div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&item.preparacion?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
             }
         }
         html+='<div class="haku-libro-pendientes-acciones haku-actualizacion-sites__historial-acciones"><button type="button" class="haku-libro-revalidar haku-actualizacion-sites__boton" data-haku-revalidar-proyecto>Revalidar contra Proyecto H</button>';
@@ -273,6 +275,26 @@
                         ver.addEventListener('click',()=>{
                             const item=pendientes.items[Number(ver.dataset.hakuVerReserva)];
                             if(item?.sistema?.reserva_id)(root.HAIKU_INSPECTOR_V1||root.HAIKU_PANELES_V1)?.abrirReserva?.(item.sistema.reserva_id,ver);
+                        });
+                    }
+                    for(const manual of zona.querySelectorAll?.('[data-haku-aprobar-pendiente]')||[]){
+                        manual.addEventListener('click',async()=>{
+                            if(manual.disabled)return;
+                            const item=pendientes.items[Number(manual.dataset.hakuAprobarPendiente)];
+                            if(!esAdministrador()||!item?.preparacion)return;
+                            manual.disabled=true;manual.setAttribute?.('aria-busy','true');
+                            const destino=manual.closest('.haku-pendiente-detalle');
+                            destino.querySelector?.('.haku-libro-preparacion-zona')?.remove?.();
+                            const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';
+                            vista.textContent='Revalidando este cambio antes de abrir la confirmación…';destino.appendChild(vista);
+                            try{
+                                if(!root.HAIKU_LIBRO_CONSULTAS?.abrirPreparacionComparacion)throw Error('Recarga Proyecto H para abrir la revisión.');
+                                await root.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion(vista,item.preparacion);
+                                vista.scrollIntoView?.({block:'nearest'});
+                            }catch(error){
+                                if(error?.haikuSinCambiosPreparables){await cargar(true);return;}
+                                vista.textContent=error?.message||'No se pudo abrir la revisión.';vista.setAttribute?.('role','alert');
+                            }finally{manual.disabled=false;manual.removeAttribute?.('aria-busy');}
                         });
                     }
                     const boton=zona.querySelector?.('[data-haku-revalidar-proyecto]');

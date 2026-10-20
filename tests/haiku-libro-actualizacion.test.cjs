@@ -191,6 +191,21 @@ test('un cambio detectado en la generación actual se distingue como cambio de e
     assert.match(html,/CAMBIO DE ESTA ACTUALIZACIÓN/);assert.match(html,/Anterior: 2/);assert.match(html,/Nuevo valor del Libro: 3/);
     assert.match(html,/Proyecto H actual: 2/);assert.match(html,/Preparar incorporación/);
 });
+test('la preparación individual muestra Aprobación manual al administrador y conserva el enlace a la reserva',()=>{
+    const antes=global.haikuSesion;
+    const item={tipo:'modificacion',actual:reserva,estado:'pendiente',accionable:true,sistema:{reserva_id:'reserva-prueba'},
+        cambios:[{campo:'fecha_checkout',antes:'2026-09-14',ahora:'2026-09-13',proyecto:'2026-09-14'}],
+        preparacion:{reservas:[reserva],comparacion:[],generacion:3}};
+    try{
+        global.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
+        const html=A.renderizarPendientes({items:[item]});assert.match(html,/data-haku-aprobar-pendiente="0"/);
+        assert.match(html,/Aprobación manual/);assert.match(html,/Ver reserva/);
+        global.haikuSesion.roles=[{codigo:'recepcion'}];
+        assert.doesNotMatch(A.renderizarPendientes({items:[item]}),/data-haku-aprobar-pendiente/);
+        global.haikuSesion={usuario:{activo:false},roles:[{codigo:'administrador'}]};
+        assert.doesNotMatch(A.renderizarPendientes({items:[item]}),/data-haku-aprobar-pendiente/);
+    }finally{global.haikuSesion=antes;}
+});
 
 test('historial fusiona A→B y B→C sin inventar una auditoría mensual',()=>{
     const a={...reserva,estado_operativo:'confirmada'},b={...reserva,estado_operativo:'hospedada'},c={...b,adultos:3};

@@ -43,6 +43,7 @@ const server = http.createServer((request, response) => {
             window.__opened = 0;
             window.__revalidations = 0;
             window.__preparations = 0;
+            window.__preparationScopes=[];
             window.__registration = { version: 1, cambios: [] };
             window.__pending = null;
             window.__revalidationMode = 'ready';
@@ -71,7 +72,7 @@ const server = http.createServer((request, response) => {
                     if (window.__revalidationMode === 'error') throw new Error('Fallo focal de prueba');
                     return structuredClone(window.__pendientesActual);
                 },
-                abrirPreparacionComparacion: async element => { window.__preparations++; element.textContent = 'Preparación canónica abierta'; }
+                abrirPreparacionComparacion: async (element,scope) => { window.__preparations++;window.__preparationScopes.push(structuredClone(scope));element.textContent = 'Preparación canónica abierta'; }
             };
             const empty = { estado: 'sin_cambios', nuevas: [], modificadas: [], ya_no_aparecen: [], ambiguas: [],
                 cancelaciones_confirmadas: [], advertencias: [], no_comparables: [], libro_actual: { generacion: 1 } };
@@ -110,6 +111,7 @@ const server = http.createServer((request, response) => {
             const nueva = row('new', 0, 'Yervic Enrique');
             const antes = row('changed-old', 1, 'Camila Ortega');
             const ahora = { ...antes, id: 'changed-new', adultos: 3 };
+            window.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
             const ausente = row('gone', 2, 'Martín López');
             const candidato = row('candidate', 10, 'Titular pendiente');
             window.__resultadoActual = {
@@ -119,7 +121,8 @@ const server = http.createServer((request, response) => {
             };
             window.__pendientesActual = {
                 items: [{ tipo: 'modificacion', actual: ahora, detectado_generacion: 2, estado: 'pendiente', accionable: true,
-                    sistema:{reserva_id:'reserva-sintetica'},cambios: [{ campo: 'adultos', antes: 2, ahora: 3, proyecto: 2 }] }],
+                    sistema:{reserva_id:'reserva-sintetica'},cambios: [{ campo: 'adultos', antes: 2, ahora: 3, proyecto: 2 }],
+                    preparacion:{reservas:[ahora],comparacion:[],generacion:2,q:{desde:ahora.fecha_checkin,hasta:ahora.fecha_checkout}} }],
                 resueltos: [], reservas: [ahora], comparacion: [], q: { texto: 'informe' },revisionServicios:{reservas:[ahora],generacion:2}
             };
             window.__generation = 2;
@@ -159,6 +162,22 @@ const server = http.createServer((request, response) => {
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
         await history.locator('[data-haku-preparar-pendientes]').click();
         await page.waitForFunction(() => window.__preparations === 1);
+        const manual=history.getByRole('button',{name:'Aprobación manual',exact:true});
+        for(const width of [1100,390,320]){
+            await page.setViewportSize({width,height:900});await manual.click();
+            assert.equal(await history.locator('.haku-pendiente-detalle .haku-libro-preparacion-zona').count(),1);
+            assert.match(await history.locator('.haku-pendiente-detalle .haku-libro-preparacion-zona').innerText(),/Preparación canónica abierta/);
+            assert.equal(await history.locator('.haku-pendiente-detalle').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+            if(process.env.HAKU_PENDIENTES_SCREENSHOT_DIR){
+                fs.mkdirSync(process.env.HAKU_PENDIENTES_SCREENSHOT_DIR,{recursive:true});
+                await history.locator('.haku-actualizacion-sites__pendiente').screenshot({path:path.join(process.env.HAKU_PENDIENTES_SCREENSHOT_DIR,`revision-${width}.png`)});
+            }
+        }
+        assert.equal(await page.evaluate(()=>__preparationScopes.slice(1).every(x=>x.reservas.length===1&&x.reservas[0].id==='changed-new'&&x.generacion===2)),true);
+        const prev=await page.evaluate(()=>__preparations);
+        await page.evaluate(()=>haikuSesion.roles=[]);await manual.click();assert.equal(await page.evaluate(()=>__preparations),prev,'revalida el rol al abrir');
+        await page.evaluate(()=>haikuSesion.roles=[{codigo:'administrador'}]);
+        await page.setViewportSize({width:600,height:900});
         await history.getByRole('button',{name:'Revisar servicios y notas',exact:true}).click();
         await page.waitForFunction(()=>window.__revisionesServicios.length===1);
         assert.equal(await page.evaluate(()=>window.__revisionesServicios[0].reservas.length),1);

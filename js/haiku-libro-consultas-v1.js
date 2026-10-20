@@ -1944,9 +1944,10 @@
         if(s?.tipo_estadia==='full_day'||s?.fecha_checkin===s?.fecha_checkout)return 0;
         return Math.round((Date.parse(s?.fecha_checkout)-Date.parse(s?.fecha_checkin))/86400000);
     }
-    function detalleCambioHistorico(cambio,reserva,sistema,comparacion){
+    function detalleCambioHistorico(cambio,reserva,sistema,comparacion,cambios=[]){
         const campo=cambio.campo,objetivo=reserva?.[campo];
         if(campo==='operador'){
+            if(S.normalizar(cambio.antes)===S.normalizar(cambio.ahora))return {pendiente:false,accionable:false,proyecto:'El operador no cambió'};
             const bloque=separarObservacionesLibro(sistema.observaciones).bloques.at(-1);
             const codigos=typeof S.separarCampos==='function'?[...new Set(S.separarCampos(bloque||'').map(x=>x.trim()).filter(x=>/^[A-Z]{2,4}$/.test(x)))]:[];
             const coincide=codigos.length===1&&S.normalizar(codigos[0])===S.normalizar(objetivo);
@@ -1971,7 +1972,10 @@
             // Las noches son un valor derivado de las fechas. Se informa la
             // diferencia, pero una discrepancia aislada no tiene escritura
             // propia y por eso no debe habilitar la preparación.
-            return {pendiente:canonHistorial(campo,objetivo)!==canonHistorial(campo,proyecto),proyecto,accionable:false};
+            const fechasCambiadas=cambios.some(c=>['fecha_checkin','fecha_checkout'].includes(c.campo));
+            const derivado=fechasCambiadas&&esReservaValida(reserva)&&Number.isInteger(objetivo)&&
+                objetivo===nochesSistema(reserva);
+            return {pendiente:canonHistorial(campo,objetivo)!==canonHistorial(campo,proyecto),proyecto,accionable:derivado};
         }
         if(campo==='servicios'){
             if(comparacion.criterioServiciosNotas!=='operativo_v2')return {pendiente:true,accionable:false,
@@ -2057,6 +2061,17 @@
             for(const registro of grupo.registros){
                 if(registro.tipo==='nueva'){
                     if(resultado?.estado==='asociada'){resueltos.push(registro.id);continue;}
+                    const canceladas=(comparacion.snapshot?.estadias_todas||[]).filter(s=>
+                        mismasFechas(grupo.reserva,s)&&Number(grupo.reserva.cabana)===Number(s.cabana)&&identidad(grupo.reserva,s).compatible&&
+                        /cancelad|no.?show/.test(S.normalizar(`${s.estado_reserva} ${s.estado_operativo}`)));
+                    // "Nueva" es un alta detectada anteriormente en el Libro,
+                    // no una orden de recrear una reserva que ya fue cancelada.
+                    if(resultado?.estado==='sin_coincidencia'&&canceladas.length){
+                        if(canceladas.length===1)resueltos.push(registro.id);
+                        else items.push({...registro,estado:'revision',accionable:false,
+                            proyecto:'Existen varias reservas canceladas con esa identidad y estadía. Revisa cuál corresponde; no se creará otra reserva.'});
+                        continue;
+                    }
                     const accionable=resultado?.estado==='sin_coincidencia'&&filaHistoricaPreparable(resultado,comparacion);
                     items.push({...registro,estado:accionable?'pendiente':'revision',accionable,proyecto:resultado?.estado||'sin coincidencia'});
                     if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
@@ -2082,14 +2097,17 @@
                 }
                 const pendientes=[];
                 for(const cambio of registro.cambios||[]){
-                    const detalle=detalleCambioHistorico(cambio,grupo.reserva,sistemaHistorico,comparacion);
+                    const detalle=detalleCambioHistorico(cambio,grupo.reserva,sistemaHistorico,comparacion,registro.cambios||[]);
                     if(detalle.pendiente)pendientes.push({...cambio,proyecto:detalle.proyecto,accionable:detalle.accionable});
                 }
                 if(!pendientes.length){resueltos.push(registro.id);continue;}
                 const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)));
                 const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
                 const accionable=pendientes.every(x=>x.accionable)&&filaHistoricaPreparable(fila,comparacion);
-                items.push({...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico});
+                const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico};
+                if(accionable)item.preparacion={reservas:[libro],comparacion:comparacionPreparacionHistorial([fila],comparacion),generacion,
+                    q:{...q,incluirServicios:false,serviciosOperativos:false}};
+                items.push(item);
                 if(accionable){
                     filasPreparacion.push(fila);reservasPreparacion.push(libro);
                 }

@@ -130,7 +130,17 @@
         const candidatos = [
             ...(Array.isArray(reserva?.servicios) ? reserva.servicios : []),
             ...(Array.isArray(reserva?.menciones_servicio) ? reserva.menciones_servicio : [])
-        ];
+        ].map(s=>{
+            // El historial puede conservar la clasificación anterior de una
+            // solicitud de cuna. Releer su evidencia antes de exigir aprobación.
+            if(s?.semantica==='AMBIGUO'&&s.concepto==='cuna'&&
+                (s.monto==null||Number(s.monto)===0)&&s.intencion_cobro!=='cobrable'&&
+                (s.origen_campo||s.evidencia_origen?.origen_campo||'notas_reserva')!=='servicios'){
+                const canon=semantica?.clasificarFragmentoServicio?.(s.fragmento_original||s.texto_original||'',{origen_campo:'notas_reserva'});
+                if(canon?.semantica==='NO_SERVICIO')return {...s,semantica:'NO_SERVICIO',clasificacion:'nota',intencion_operativa:false};
+            }
+            return s;
+        });
         for (const original of candidatos) {
             const texto = original?.fragmento_original || original?.texto_original || "";
             let expandidos = [original];

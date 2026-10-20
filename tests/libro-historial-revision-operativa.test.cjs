@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {entorno}=require('./fixtures/libro-servicio-manual.cjs');
+const {entorno,read}=require('./fixtures/libro-servicio-manual.cjs');
 function caso(){
     const e=entorno(),r=e.state.reservas[0];
     r.texto_original='PROMO HAIKU // 18hrs jacuzzi // DEJAR BATAS';
@@ -56,6 +56,31 @@ test('Tinaja CORTESIA sin agenda desde Notas es una nota preparable, sin crear p
     const plan=await e.abrir();assert.equal(plan.items.filter(x=>x.kind==='servicio').length,0);
     assert.ok(plan.items.some(x=>x.kind==='nota'&&x.texto==='Tinaja CORTESIA'&&x.estado==='listo'));
     assert.equal(e.state.escrituras.length,0);
+});
+test('el historial antiguo de cuna se reconoce como la nota ya incorporada y deja de estar pendiente',async()=>{
+    const e=caso(),r=e.r,est=e.state.db.reserva_estadias[0],texto='AGREGAR CUNA EN EL ALOJAMIENTO BEBE DE 1 AÑO';
+    r.texto_original=texto;r.servicios=[{concepto:'cuna',texto_original:texto,semantica:'AMBIGUO',origen_campo:'notas_reserva',pendiente:false}];
+    e.state.db.notas=[{id:'nota-cuna',reserva_id:est.reserva_id,tipo:'operativa_resumen',texto}];
+    const plan=await e.api.compararReservas([r],{desde:r.fecha_checkin,hasta:r.fecha_checkout});
+    assert.equal(plan.items.filter(x=>x.kind==='servicio').length,0);
+    assert.equal(plan.items.filter(x=>x.kind==='nota'&&x.texto===texto&&x.estado==='existente').length,1);
+    for(const s of e.state.db.reserva_estadias){s.cabanas=e.state.db.cabanas.find(c=>c.id===s.cabana_id);s.reservas=e.state.db.reservas.find(x=>x.id===s.reserva_id);}
+    const from=e.c.haikuSupabase.from;e.c.haikuSupabase.from=n=>{const q=from(n);q.order=()=>q;q.range=(a,z)=>Promise.resolve(q).then(x=>({...x,data:x.data.slice(a,z+1)}));return q;};
+    e.c.haikuSupabase.auth.getSession=async()=>({data:{session:{user:{id:e.state.usuario}}}});
+    e.document.querySelector=()=>null;
+    e.c.structuredClone=structuredClone;
+    require('node:vm').runInContext(read('js/haiku-libro-consultas-v1.js'),e.c);
+    const registro={id:'cuna-historica',tipo:'modificacion',actual:r,anterior:{...r,servicios:[]},cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]};
+    const resultado=await e.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],e.c.haikuSupabase,{generacion:1});
+    assert.equal(resultado.items.length,0);assert.equal(resultado.resueltos[0],registro.id);assert.equal(e.state.escrituras.length,0);
+});
+test('la corrección de cuna no convierte un servicio estructurado o con cobro en nota',async()=>{
+    for(const extra of [{origen_campo:'servicios'},{monto:10000},{intencion_cobro:'cobrable'}]){
+        const e=caso();e.r.texto_original='AGREGAR CUNA';
+        e.r.servicios=[{concepto:'cuna',texto_original:e.r.texto_original,semantica:'AMBIGUO',origen_campo:'notas_reserva',...extra}];
+        const plan=await e.api.compararReservas([e.r],{desde:e.r.fecha_checkin,hasta:e.r.fecha_checkout});
+        assert.ok(plan.items.some(x=>x.kind==='servicio'&&x.estado==='revisar'));assert.equal(e.state.escrituras.length,0);
+    }
 });
 test('la compensación por TV y el único Jacuzzi con horario forman una sola cortesía; sólo queda definir el día',async()=>{
     const e=caso();e.r.noches=2;e.r.fecha_checkout='2026-10-12';e.state.db.reserva_estadias[0].fecha_salida=e.r.fecha_checkout;
