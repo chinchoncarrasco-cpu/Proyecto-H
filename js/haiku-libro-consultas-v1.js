@@ -298,12 +298,12 @@
         return heredados.find(normalizarId) || null;
     }
 
-    function documentoCanon(v) {
-        return normalizarId(v).replace(/^0+/, "");
+    function documentoCanon(v, tipo) {
+        return S.documentoCanon(v, tipo);
     }
 
     function identidad(a, b) {
-        const docA = documentoCanon(a.rut_documento), docB = documentoCanon(b.rut_documento);
+        const docA = documentoCanon(a.rut_documento, a.tipo_documento), docB = documentoCanon(b.rut_documento, b.tipo_documento);
         const correoA = S.normalizar(a.correo), correoB = S.normalizar(b.correo);
         const telA = telefonoCanon(a.telefono), telB = telefonoCanon(b.telefono);
         const conflicto = Boolean(docA && docB && docA !== docB);
@@ -419,7 +419,7 @@
                     ["CAB", r.cabana, c.cabana, (a, b) => Number(a) === Number(b)],
                     ["Check-In", r.fecha_checkin, c.fecha_checkin],
                     ["Check-Out", r.fecha_checkout, c.fecha_checkout],
-                    ["RUT/documento", r.rut_documento, c.rut_documento, (a, b) => documentoCanon(a) === documentoCanon(b)],
+                    ["RUT/documento", r.rut_documento, c.rut_documento, (a, b) => documentoCanon(a, r.tipo_documento || c.tipo_documento) === documentoCanon(b, c.tipo_documento)],
                     ["Correo", r.correo, c.correo, (a, b) => S.normalizar(a) === S.normalizar(b)],
                     ["Teléfono", r.telefono, c.telefono, (a, b) => telefonoCanon(a) === telefonoCanon(b)]
                 ].map(([campo, libro, proyecto, igual = (a, b) => a === b]) => ({ campo, libro, proyecto,
@@ -1681,7 +1681,7 @@
                 const b = key === "cabana" ? Number(s[key]) : S.normalizar(s[key]);
                 if (r[key] && s[key] && a !== b) result.diferencias.push(`${key}: Libro «${r[key]}» / Proyecto H «${s[key]}»`);
             }
-            if (r.rut_documento && s.rut_documento && documentoCanon(r.rut_documento) !== documentoCanon(s.rut_documento)) {
+            if (r.rut_documento && s.rut_documento && documentoCanon(r.rut_documento, r.tipo_documento || s.tipo_documento) !== documentoCanon(s.rut_documento, s.tipo_documento)) {
                 result.diferencias.push(`RUT/documento: Libro «${r.rut_documento}» / Proyecto H «${s.rut_documento}»`);
             }
             if (r.telefono && s.telefono && !telefonoCompatible(r.telefono, s.telefono)) {
@@ -1896,7 +1896,7 @@
         const antes = {}, despues = {}, cambios = [];
         for (const [k,v] of Object.entries(propuesto)) {
             if (v === undefined || v === null || v === '' || v === 'no_determinado') continue;
-            if (S.normalizar(actual[k]) === S.normalizar(v)) continue;
+            if (k === 'titular_numero_documento' ? documentoCanon(actual[k], actual.titular_tipo_documento) === documentoCanon(v, propuesto.titular_tipo_documento || actual.titular_tipo_documento) : S.normalizar(actual[k]) === S.normalizar(v)) continue;
             antes[k] = actual[k] ?? null; despues[k] = v;
             cambios.push({ campo: etiquetasActualizacion[k] || k, anterior: actual[k] ?? null, libro: v });
         }
@@ -1909,13 +1909,13 @@
         const existentes = String(s.observaciones || '').replace(/\[DATOS DEL LIBRO\][\s\S]*?\[\/DATOS DEL LIBRO\]/g, '').trim();
         const clavesExistentes = new Set(fragmentosObservaciones(s.observaciones).map(claveFragmentoObservacion));
         const agregaNotas = fragmentosObservaciones(notas).some(fragmento => !clavesExistentes.has(claveFragmentoObservacion(fragmento)));
-        const docCambio = r.rut_documento && documentoCanon(r.rut_documento) !== documentoCanon(s.rut_documento);
+        const docCambio = r.rut_documento && documentoCanon(r.rut_documento, r.tipo_documento || s.tipo_documento) !== documentoCanon(s.rut_documento, s.tipo_documento);
         // El color del Libro puede confirmar un estado posterior, pero nunca debe
         // deshacer automáticamente un check-in o checkout ya registrado.
         const estado = estadoLibroActualizable(r, s.estado_operativo);
         const reserva = parcheLibro({ titular_nombre:s.titular, titular_numero_documento:s.rut_documento, titular_tipo_documento:s.tipo_documento,
             correo_contacto:s.correo, telefono_contacto:s.telefono, observaciones:s.observaciones, estado_reserva:s.estado_reserva },
-            { titular_nombre:r.titular, titular_numero_documento:r.rut_documento,
+            { titular_nombre:r.titular, titular_numero_documento:S.normalizarDocumento(r.rut_documento, r.tipo_documento),
                 titular_tipo_documento:docCambio ? (r.tipo_documento || (/^\d{1,2}(?:\.?\d{3}){2}-?[\dkK]$/.test(r.rut_documento) ? 'rut' : /[a-z]/i.test(r.rut_documento) ? 'pasaporte' : 'documento')) : undefined,
                 correo_contacto:r.correo, telefono_contacto:r.telefono,
                 observaciones:notas && agregaNotas ?
@@ -2142,7 +2142,9 @@
     }
 
     function claveFragmentoObservacion(valor) {
-        return S.normalizar(valor).replace(/[.,;:]+$/g, '');
+        const texto = S.normalizar(valor).replace(/[.,;:]+$/g, '');
+        const fragmentoRut = texto.match(/^(rut\s*:?\s*)?([\d.\s-]+[\dk])$/);
+        return fragmentoRut ? (fragmentoRut[1] || '') + S.normalizarDocumento(fragmentoRut[2]) : texto;
     }
 
     function fragmentosObservaciones(valor) {
@@ -3126,7 +3128,7 @@
                     const motivos = g.items.length > 1 && destino && !i.sistema && !destinosExactosGrupo.has(i) ?
                         ['Elige por separado la estadía destino de cada cabaña.'] : [];
                     for (const k of ['adultos','ninos','mascotas']) if (i.libro[k] != null && (!Number.isInteger(i.libro[k]) || i.libro[k] < (k === 'adultos' ? 1 : 0))) motivos.push('El Libro contiene una cantidad inválida de '+k+'.');
-                    for (const k of ['rut_documento','correo','telefono']) if (new Set(hermanas.map(r => S.normalizar(r[k])).filter(Boolean)).size>1) motivos.push('El Libro contiene valores incompatibles de '+k+' para la misma reserva.');
+                    for (const k of ['rut_documento','correo','telefono']) if (new Set(hermanas.map(r => k === 'rut_documento' ? documentoCanon(r[k], r.tipo_documento) : S.normalizar(r[k])).filter(Boolean)).size>1) motivos.push('El Libro contiene valores incompatibles de '+k+' para la misma reserva.');
                     const dependeDe = [];
                     if (payload.cambios.length) {
                         const item = add('actualizaciones', updateId, descripcionGrupo({...g, principal:i.libro, cabanas:[i.libro.cabana]}) + ' · Usar los datos del Libro', payload, motivos, [], ['reservas.editar']);
@@ -3188,13 +3190,13 @@
             if (!estadias.length) { add('omitidos', id, titulo + ' · Las estadías ya existen.'); continue; }
             const r = g.principal;
             for (const k of ['rut_documento','correo','telefono']) {
-                const valores = new Set(g.items.map(i => i.libro[k]).filter(Boolean));
+                const valores = new Set(g.items.map(i => k === 'rut_documento' ? documentoCanon(i.libro[k], i.libro.tipo_documento) : i.libro[k]).filter(Boolean));
                 if (valores.size > 1) motivos.push('El grupo contiene datos diferentes en ' + k + '.');
             }
             const conocido = k => g.items.map(i => i.libro[k]).find(v => v != null && v !== '') ?? null;
             const payload = { contrato: 'haiku_incorporar_libro_v1', reserva_id: categoria === 'estadias' ? reservaId : null,
                 reserva_ref: categoria === 'nuevas' ? id : null,
-                reserva: categoria === 'nuevas' ? { titular_nombre: r.titular, titular_numero_documento: conocido('rut_documento'), titular_tipo_documento: null,
+                reserva: categoria === 'nuevas' ? { titular_nombre: r.titular, titular_numero_documento: S.normalizarDocumento(conocido('rut_documento'), r.tipo_documento), titular_tipo_documento: r.tipo_documento || null,
                     correo_contacto: conocido('correo'), telefono_contacto: conocido('telefono'), estado_reserva: 'pendiente',
                     observaciones: [...new Set(g.items.flatMap(i => [i.libro.texto_original, ...(i.libro.notas_importantes || [])]).filter(Boolean))].join('\n') || null } : null,
                 estadias, estado_confirmacion_libro: r.estado_confirmacion || null };

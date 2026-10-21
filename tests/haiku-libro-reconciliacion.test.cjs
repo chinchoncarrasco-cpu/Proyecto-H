@@ -39,7 +39,7 @@ for(const [explicit,wanted] of [['pasaporte','pasaporte'],[undefined,'rut']])tes
  const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion:comp},decisions,new Set(),db);
  const update=Q.serializarIncorporacion(plan).find(i=>i.tipo==='reserva_actualizar');
  assert.ok(update);assert.equal(update.reserva.despues.titular_tipo_documento,wanted);
- assert.equal(update.reserva.despues.titular_numero_documento,'12345670K');
+ assert.equal(update.reserva.despues.titular_numero_documento,wanted === 'rut' ? '12345670-k' : '12345670K');
 });
 
 test('identidad conflictiva: dos altas independientes seleccionables, pagos dependientes bloqueados y sin RPC financiero',async()=>{

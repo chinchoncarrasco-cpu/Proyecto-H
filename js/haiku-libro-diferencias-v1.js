@@ -3,7 +3,8 @@
     'use strict';
     const texto = v => String(v ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
     const nombre = v => texto(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const documento = v => texto(v).replace(/[.\s-]/g, '');
+    const semantica = root.HAIKU_LIBRO_SEMANTICA || (typeof require === 'function' ? require('./haiku-libro-semantica-v1.js') : null);
+    const documento = (v, tipo) => semantica.documentoCanon(v, tipo);
     const telefono = v => String(v ?? '').replace(/\D/g, '');
     const conocido = v => v !== null && v !== undefined && v !== '' && v !== 'no_determinado';
     const copia = v => structuredClone(v);
@@ -12,13 +13,13 @@
         'rut_documento', 'correo', 'telefono', 'notas_importantes', 'pagos_pendientes', 'servicios'];
     const listas = new Set(['notas_importantes', 'pagos_pendientes', 'servicios']);
     const numeros = new Set(['cabana', 'noches', 'adultos', 'ninos', 'mascotas']);
-    function canon(campo, valor) {
+    function canon(campo, valor, tipoDocumento) {
         if (campo === 'servicios') return valor.map(s => JSON.stringify([
             texto(s.concepto), s.pendiente ?? null, s.cortesia ?? null, s.hora ?? null, s.monto ?? null
         ])).sort(); // Texto libre y coordenadas son evidencia, no identidad del servicio.
         if (listas.has(campo)) return [...new Set(valor.map(texto))].sort();
         if (numeros.has(campo)) return Number(valor);
-        if (campo === 'rut_documento') return documento(valor);
+        if (campo === 'rut_documento') return documento(valor, tipoDocumento);
         if (campo === 'telefono') return telefono(valor);
         if (campo === 'titular') return nombre(valor);
         return texto(valor);
@@ -45,7 +46,7 @@
         return respaldo;
     }
     function senales(r) {
-        return {nombre: nombre(r.titular), documento: documento(r.rut_documento), correo: texto(r.correo), telefono: telefono(r.telefono)};
+        return {nombre: nombre(r.titular), documento: documento(r.rut_documento, r.tipo_documento), correo: texto(r.correo), telefono: telefono(r.telefono)};
     }
     function claves(r) {
         const keys = Object.entries(senales(r)).filter(([k,v]) => v && (k !== 'telefono' || v.length >= 9))
@@ -127,7 +128,7 @@
                 if (conocido(av) || conocido(bv)) advertencias.push({campo, motivo: 'Campo no determinado en ambas versiones.', anterior: a.id, actual: b.id});
                 continue;
             }
-            if (JSON.stringify(canon(campo, av)) !== JSON.stringify(canon(campo, bv))) cambios.push({campo, antes: copia(av), ahora: copia(bv)});
+            if (JSON.stringify(canon(campo, av, a.tipo_documento)) !== JSON.stringify(canon(campo, bv, b.tipo_documento))) cambios.push({campo, antes: copia(av), ahora: copia(bv)});
         }
         return cambios;
     }
