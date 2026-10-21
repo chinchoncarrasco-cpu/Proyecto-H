@@ -215,12 +215,20 @@
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
         const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","tarjeta_debito","tarjeta_credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
         const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar) || /\b\d{6,}\s*transf\b/.test(texto);
+        // La ubicación en Pagos, un titular o una fecha no acreditan otro
+        // movimiento. Cada fila aporta sus propios datos; una referencia a
+        // documentación/correo tampoco convierte el medio mencionado en pago.
+        const textoDocumental = /\b(?:facturas?|boletas?|bove|manager|manageer|correo|email|informacion|informativo|info|comprobante)\b/.test(texto);
+        const ingresoExplicito = /\b(?:pago|abono|deposito|transferencia|web\s*pay)\s+(?:recibid[oa]|confirmad[oa]|realizad[oa]|efectuad[oa]|registrad[oa])\b/.test(texto);
+        const importeTextual = /(?:\$|\bclp\b)\s*\d[\d.,]*/.test(texto);
+        const importePropio = pago.monto !== null && pago.monto !== undefined && pago.monto !== '' && Number.isFinite(Number(pago.monto));
+        const evidenciaMovimiento = importePropio || importeTextual || identificadorFuerte || ingresoExplicito || medioValido && !textoDocumental;
+        if (!evidenciaMovimiento) return "nota_financiera";
         const fila = pago.evidencia_financiera?.columnas_ocupadas;
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
         const reembolso = /\b(?:reembolso|reembolsar|devolucion|nota\s+de\s+credito)\b|\bnc\s*\d+\b/.test(texto);
         const obligacion = /\bpenalidad\b|\b(?:por|x)\s+pagar\b|\bsaldo\s+(?:restante|pendiente)\b|\bpor\s+gestionar\b/.test(texto);
-        const notaAdministrativa = /\b(?:observacion|instruccion|informativo)\b/.test(texto) ||
-            (!montoValido && /\b(?:bove|manager|boleta)\b/.test(texto));
+        const notaAdministrativa = /\b(?:observacion|instruccion|informativo)\b/.test(texto);
         const evidenciaIngresoCompleta = montoValido && fechaValida && (medioValido || identificadorFuerte) && estructuraCoherente;
         const colores = Object.values(pago.evidencia_financiera?.colores || {}).map(valor => String(valor || "").toUpperCase());
         const fondoNota = colores.some(valor => ["FF0000", "C00000", "CC0000", "E60000", "FFFF00"].includes(valor));
@@ -234,7 +242,8 @@
         // Una celda roja o amarilla dentro del bloque financiero también es una
         // nota cuando carece de todas las señales estructuradas de un comprobante.
         // El color por sí solo nunca degrada un pago con identidad financiera.
-        if (reembolso || obligacion || notaAdministrativa || notaDestacadaSinComprobante) {
+        if (notaAdministrativa) return "dudoso";
+        if (reembolso || obligacion || notaDestacadaSinComprobante) {
             return evidenciaIngresoCompleta ? "dudoso" : "nota_financiera";
         }
         if (pago.estado_pago === "por_confirmar" || pago.estado_pago === "pendiente") return "dudoso";
