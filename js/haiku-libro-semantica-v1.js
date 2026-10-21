@@ -2,6 +2,14 @@
 (function (root) {
     "use strict";
     const normalizar = v => String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+    // Sólo formato; la validación del RUT permanece en los guards existentes.
+    function normalizarDocumento(valor, tipo) {
+        if (valor == null || (tipo && tipo !== 'rut')) return valor;
+        if (!/^\s*(?:\d{7,8}|\d{1,2}\.\d{3}\.\d{3})\s*-?\s*[\dkK]\s*$/.test(String(valor))) return valor;
+        const compacto = String(valor).replace(/[.\s-]/g, '').toLowerCase();
+        return compacto.slice(0, -1) + '-' + compacto.slice(-1);
+    }
+    const documentoCanon = (valor, tipo) => String(normalizarDocumento(valor, tipo) ?? '');
     const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
     const digitos = v => String(v || "").replace(/\D/g, "");
     function promocionReserva(texto) {
@@ -744,7 +752,7 @@
                 if (!nombre || hs.length !== 1) continue;
                 const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
                 res.cancelaciones.push({titular:nombre,fecha_checkin:hs[0].fechaISO,noches:noches?Number(noches[1]):null,
-                    rut_documento:contenido.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null,
+                    rut_documento:normalizarDocumento(contenido.match(/\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null),
                     correo:contenido.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null,
                     telefono:contenido.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null,
                     texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label)});
@@ -787,7 +795,7 @@
                 if (![1,4].includes(ancho) || headers.some((d,i)=>i && d.c-headers[i-1].c!==ancho) || cabRows.filter(c=>c.r===cab.r).length!==1) { revision('con calendario o cabaña no inequívocos'); continue; }
                 const completo = merge ? merge.e.c >= ultimo.c + Math.max(0,ancho-2) && merge.e.c <= ultimo.c+ancho-1 :
                     fullDay || cell.c === h.c && Array.from({length:Math.max(1,ancho-1)},(_,i)=>at(cab.r,h.c+i)).every(c=>rojo(c)&&(!c.valor?.trim()||c===cell));
-                const estructuraReserva = !fullDay && /\b(?:\d+\s*(?:noches?|adl|adlt|adultos?|pax|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{9}\b|\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[a-z]{2,3}\d{5,}\b/.test(String(cell.valor || '').toLowerCase());
+                const estructuraReserva = !fullDay && /\b(?:\d+\s*(?:noches?|adl|adlt|adultos?|pax|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{9}\b|\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[a-z]{2,3}\d{5,}\b/.test(String(cell.valor || '').toLowerCase());
                 if (!completo || fullDay && dias.length!==1 || estructuraReserva ||
                     cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=ultimo.c+Math.max(0,ancho-2)&&c.valor?.trim()) ||
                     dias.some((d,i)=>i && d.fechaISO !== sumarDias(dias[i-1].fechaISO,1))) { revision(estructuraReserva?'con datos contradictorios de reserva':'con cobertura incompleta, huecos o contenido adicional'); continue; }
@@ -862,7 +870,7 @@
                 const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src, formato:colors });
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
-                const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}-[\dkK]\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
+                const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: fechaCheckin,
@@ -870,7 +878,7 @@
                     noches_extension_texto: nochesExtensionTexto, noches_extension_ambigua: extensionTexto.ambigua, noches_texto_efectivas: nochesTextoEfectivas,
                     geometria_inequivoca: geometriaInequivoca, geometria_resuelta_texto: geometriaResueltaTexto,
                     notas_interpretacion: notasInterpretacion, advertencias_informativas: advertenciasInformativas,
-                    tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: documento, correo, telefono,
+                    tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: normalizarDocumento(documento), correo, telefono,
                     ...(promocionReserva(cell.valor) ? {promocion:promocionReserva(cell.valor)} : {}),
                     adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,
@@ -957,7 +965,7 @@
     function asociar(reserva, candidatas) {
         const scores = candidatas.map(s => {
             const nombre = mismaPersona(reserva.titular, s.titular);
-            const doc = reserva.rut_documento && s.rut_documento && normalizar(reserva.rut_documento).replace(/[.-]/g, "") === normalizar(s.rut_documento).replace(/[.-]/g, "");
+            const doc = reserva.rut_documento && s.rut_documento && documentoCanon(reserva.rut_documento, reserva.tipo_documento) === documentoCanon(s.rut_documento, s.tipo_documento);
             const correo = reserva.correo && s.correo && normalizar(reserva.correo) === normalizar(s.correo);
             const telefono = reserva.telefono && s.telefono && digitos(reserva.telefono) === digitos(s.telefono);
             const fechas = reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
@@ -971,7 +979,7 @@
     }
     // Version comparison is pure. Coordinates are provenance, never identity.
     const canonIdVersion = v => normalizar(v).replace(/[^a-z0-9]/g, "");
-    const senalesVersion = r => [canonIdVersion(r.rut_documento), normalizar(r.correo), digitos(r.telefono)];
+    const senalesVersion = r => [documentoCanon(r.rut_documento, r.tipo_documento), normalizar(r.correo), digitos(r.telefono)];
     const fechasVersion = (a, b) => a.fecha_checkin === b.fecha_checkin && a.fecha_checkout === b.fecha_checkout && a.tipo_estadia === b.tipo_estadia;
     function identidadVersion(a, b) {
         const x = senalesVersion(a), y = senalesVersion(b);
@@ -1120,7 +1128,7 @@
         const dif = [];
         for (const cab of b.cabanas.filter(c => !a.cabanas.includes(c))) dif.push({ campo: 'cabanas', tipo: 'cabana_agregada', cabana: cab });
         for (const cab of a.cabanas.filter(c => !b.cabanas.includes(c))) dif.push({ campo: 'cabanas', tipo: 'cabana_eliminada', cabana: cab });
-        const canon = (k, v) => k === 'rut_documento' ? canonIdVersion(v) : k === 'telefono' ? digitos(v) :
+        const canon = (k, v) => k === 'rut_documento' ? documentoCanon(v) : k === 'telefono' ? digitos(v) :
             Array.isArray(v) ? [...new Set(v.map(x => typeof x === 'object' ? JSON.stringify(x) : normalizar(x)))].sort() : typeof v === 'string' ? normalizar(v) : v ?? null;
         for (const campo of ['fecha_checkin', 'fecha_checkout', 'tipo_estadia', 'rut_documento', 'correo', 'telefono', 'adultos', 'ninos', 'mascotas',
             'estado_confirmacion', 'estado_operativo', 'notas_importantes', 'pagos_pendientes', 'servicios', 'operador', 'fecha_ingreso_libro']) {
@@ -1201,7 +1209,7 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;

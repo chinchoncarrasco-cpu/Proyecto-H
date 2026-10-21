@@ -86,7 +86,7 @@ test('single, double and repeated slash variants all separate reservation fields
  assert.equal(resultado.reservas.length,1);
  const reserva=resultado.reservas[0];
  assert.equal(reserva.titular,'Andrés Ejemplo');
- assert.equal(reserva.rut_documento,'12.345.678-5');
+ assert.equal(reserva.rut_documento,'12345678-5');
  assert.equal(reserva.correo,'andres@example.test');
  assert.equal(reserva.telefono,'+56 9 1234 5678');
  assert.equal(reserva.adultos,2);assert.equal(reserva.mascotas,1);assert.equal(reserva.noches_texto,1);
