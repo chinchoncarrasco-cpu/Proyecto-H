@@ -69,3 +69,60 @@ test('un teléfono sin etiqueta RUT no se convierte en documento',()=>{
  const hoja={celdas:[{r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},{r:2,c:0,valor:'cabana 6'},{r:2,c:2,valor:'Ana Perez // 2 ADL // +56 9 1234 5678'},{r:24,c:2,valor:'Pagos de arriendos de hoy'}],combinaciones:[{s:{r:2,c:2},e:{r:2,c:4}}]};
  assert.equal(S.normalizarHoja(hoja,'Sep26').reservas[0].rut_documento,null);
 });
+
+function hojaConDocumento(fragmentos) {
+ return {celdas:[
+  {r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},
+  {r:2,c:0,valor:'cabana 6'},{r:2,c:2,valor:'Ana Perez // 2 ADL // '+fragmentos},
+  {r:24,c:2,valor:'Pagos de arriendos de hoy'}
+ ],combinaciones:[{s:{r:2,c:2},e:{r:2,c:4}}]};
+}
+for (const [origen,esperado] of [
+ ['RUT 123456785','12345678-5'],['rut:123456785','12345678-5'],['RUT : 123456785','12345678-5'],
+ ['RUT 12345674','1234567-4'],['Telefono 912345678 // RUT 123456785 // Folio 987654321','12345678-5'],
+ ['RUT 123456781','12345678-1'], // La lectura no sustituye ni relaja la validación del DV.
+ ['123456785',null],['Telefono 123456785',null],['+56912345678',null],['Folio 123456785',null],
+ ['CodAut 123456785',null],['Reserva 123456785',null],['SIN RUT 123456785',null],['NRUT 123456785',null],
+ ['RUT 1234567850',null],['RUT 123456785X',null],['RUT +123456785',null],['RUT 12345678 5',null],
+ ['RUT 123456785 Telefono 912345678',null],['Pasaporte 123456785',null],
+ ['Pasaporte AB1234567','AB1234567'],['Pasaporte AB1234567 // Telefono 123456785','AB1234567']
+]) test('lectura real del Libro con contexto: '+origen,()=>{
+ const hoja=hojaConDocumento(origen),antes=structuredClone(hoja);
+ const resultado=S.normalizarHoja(hoja,'Sep26');
+ assert.equal(resultado.reservas.length,1);
+ assert.equal(resultado.reservas[0].rut_documento,esperado);
+ assert.equal(resultado.reservas[0].titular,'Ana Perez');
+ assert.equal(resultado.reservas[0].fecha_checkin,'2026-09-21');
+ assert.equal(resultado.reservas[0].fecha_checkout,'2026-09-22');
+ assert.equal(resultado.reservas[0].texto_original,'Ana Perez // 2 ADL // '+origen);
+ assert.deepEqual(hoja,antes);
+});
+test('lectura real de CANCELACIONES comparte el reconocimiento contextual del RUT compacto',()=>{
+ const hoja=hojaConDocumento('Telefono 912345678');
+ hoja.celdas.push({r:8,c:0,valor:'CANCELACIONES'},
+  {r:8,c:3,valor:'CANCELADA A PETICION // Ana Perez // 1 noche // RUT 123456785'},
+  {r:10,c:0,valor:'OTRAS VENTAS NO ASOCIADAS AL CHECK IN DEL DIA'});
+ const resultado=S.normalizarHoja(hoja,'Sep26');
+ assert.equal(resultado.cancelaciones.length,1);
+ assert.equal(resultado.cancelaciones[0].rut_documento,'12345678-5');
+ assert.equal(resultado.reservas[0].rut_documento,null);
+});
+test('RUT numerico compacto leido del Libro confirma pago contra el formato persistido sin candidata SQL',async()=>{
+ const f=F.crear(),pago={...f.reservas[0].pagos[0],fecha_bloque:'2026-09-21',fecha_comprobante:'2026-09-21'};
+ const r=S.normalizarHoja(hojaConDocumento('RUT 123456785'),'Sep26').reservas[0];
+ assert.equal(r.rut_documento,'12345678-5');
+ r.pagos=[pago]; f.reservas=[r]; f.estadias=[f.estadias[0]]; f.q={desde:'2026-09-01',hasta:'2026-09-30'};
+ const s=f.estadias[0];
+ Object.assign(s,{cabanas:{numero:6},fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout});
+ Object.assign(s.reservas,{titular_nombre:r.titular,titular_numero_documento:'123456785',titular_tipo_documento:'rut',observaciones:r.texto_original.replace('123456785','12345678-5')});
+ const db=F.cliente(f,{conflicto:-1}),aprobados=new Set(),decisiones=new Map();
+ const comparacion=await Q.compararSistema(f.reservas,db,f.q);
+ for(const g of comparacion.grupos) decisiones.set(g.clave,{valor:'asociar:'+s.id});
+ const result={reservas:f.reservas,q:f.q,comparacion};
+ const plan=await Q.prepararIncorporacion(result,decisiones,aprobados,db);
+ assert.equal(plan.items.filter(i=>i.payload?.tipo==='reserva_actualizar').length,0);
+ const item=plan.items.find(i=>i.pagoLibro); assert.ok(item); assert.equal(item.categoria,'pagos'); assert.deepEqual(item.dependeDe,[]);
+ plan.items.forEach(i=>i.seleccionado=i===item);
+ await Q.confirmarIncorporacion(result,decisiones,aprobados,plan,db);
+ assert.equal(db.pagos.length,1);
+});

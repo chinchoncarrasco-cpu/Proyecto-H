@@ -1,5 +1,6 @@
 -- Candidata local: no ejecutar contra datos reales sin revisión independiente.
 -- Sólo modifica el guardado de reservas nuevas del Libro, nunca registros históricos.
+-- Writer vigente verificado por SELECT el 2026-10-21; detener si su cuerpo cambia.
 begin;
 set local lock_timeout='5s';
 do $patch$
@@ -19,6 +20,12 @@ begin
   select * into f from pg_proc where oid=to_regprocedure('public.haiku_incorporar_libro_v1(uuid,jsonb)');
   if not found or to_regprocedure('private.haiku_rut_clave_v1(text)') is null then
     raise exception 'Falta el contrato de identidad del Libro; detener y revisar';
+  end if;
+  if md5(replace(f.prosrc,E'\r','')) <> '1898d46805d4d65f582dada43909b745'
+    or f.proowner <> 'postgres'::regrole or f.prosecdef is distinct from true
+    or f.proacl is distinct from '{postgres=X/postgres,authenticated=X/postgres}'::aclitem[]
+    or regexp_replace(array_to_string(f.proconfig,','),'\s','','g') is distinct from 'search_path=pg_catalog,public,private' then
+    raise exception 'La definición vigente del writer cambió; detener y revisar';
   end if;
   original := replace(pg_get_functiondef(f.oid), E'\r', '');
   if (length(original)-length(replace(original,ancla,'')))/length(ancla) <> 1

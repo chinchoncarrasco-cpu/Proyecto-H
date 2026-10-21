@@ -30,6 +30,16 @@
         return protegido.split(/\s*(?:\/+\*\/+|\/+)\s*|\r?\n/).map(x => x.trim())
             .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => tokens[Number(indice)]));
     }
+    function documentoDelLibro(texto) {
+        for (const fragmento of separarCampos(texto)) {
+            // Sin guion, los números también pueden ser teléfonos o folios.
+            // Exigir una etiqueta RUT y el fragmento completo evita inferir identidad.
+            const compacto = fragmento.match(/^rut(?:\s*:\s*|\s+)(\d{8,9})$/i);
+            const existente = fragmento.match(/\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[A-Z]{2,3}\d{5,}\b/);
+            if (compacto || existente) return normalizarDocumento((compacto || existente)[compacto ? 1 : 0]);
+        }
+        return null;
+    }
     function iso(y, m, d) {
         const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
         return date.getUTCFullYear() === Number(y) && date.getUTCMonth() === Number(m) - 1 && date.getUTCDate() === Number(d) ? date.toISOString().slice(0, 10) : null;
@@ -752,7 +762,7 @@
                 if (!nombre || hs.length !== 1) continue;
                 const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
                 res.cancelaciones.push({titular:nombre,fecha_checkin:hs[0].fechaISO,noches:noches?Number(noches[1]):null,
-                    rut_documento:normalizarDocumento(contenido.match(/\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null),
+                    rut_documento:documentoDelLibro(contenido),
                     correo:contenido.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null,
                     telefono:contenido.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null,
                     texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label)});
@@ -870,7 +880,7 @@
                 const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src, formato:colors });
                 const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
                 const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
-                const documento = cell.valor.match(/\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[A-Z]{2,3}\d{5,}\b/)?.[0] || null;
+                const documento = documentoDelLibro(cell.valor);
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: fechaCheckin,
