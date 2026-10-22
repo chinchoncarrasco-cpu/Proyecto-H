@@ -1070,13 +1070,11 @@
         }
         // Ausencia de hora en el Libro no contradice una hora ya registrada.
         // Sin hora, exigir estadía exacta y un único candidato ANTES de comparar importes.
+        // Fecha y cobro explícitos pueden distinguir una tinaja cobrable de una cortesía.
         if (codigos.size && (hora || estadiaId && !item.resolucionManual)) {
-            const mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
+            let mismoHechoBase = activos.filter(x => codigos.has(codigoExistente(x)) &&
                 (!item.fecha || x.fecha_servicio === item.fecha) &&
                 (hora ? horaCorta(x.hora_inicio) === hora : x.estadia_id === estadiaId));
-            if (!hora && mismoHechoBase.length > 1)
-                return { estado:'revisar', candidatos:mismoHechoBase,
-                    motivo:'Hay varios servicios del mismo tipo en la estadía; falta un horario que los distinga.' };
             const textoOrigen = normalizar(`${item.servicio?.texto_original || ""} ${item.servicio?.texto_fuente_completo || ""}`);
             const cortesiaExplicita = Boolean(item.reglaFullDay || item.reglaPromo) ||
                 esExplicito("tipo_cobro") && Boolean(item.evidencia_origen?.cortesia || item.servicio?.cortesia || /\bcortesia\b|\bregalo\b/.test(textoOrigen));
@@ -1090,6 +1088,13 @@
                 if (cobroExplicito && candidato.tipo_cobro === "cortesia") campos.push("tipo_cobro");
                 return campos;
             };
+            if (!hora && mismoHechoBase.length > 1) {
+                const porCobro = item.fecha && (cortesiaExplicita || cobroExplicito)
+                    ? mismoHechoBase.filter(candidato => !contradiccionesFinancieras(candidato).length) : [];
+                if (porCobro.length === 1) mismoHechoBase = porCobro;
+                else return { estado:'revisar', candidatos:mismoHechoBase,
+                    motivo:'Hay varios servicios del mismo tipo en la estadía; falta un horario que los distinga.' };
+            }
             const contradiccionesSinHora = candidato => {
                 if (hora) return [];
                 const campos = [], monto = importeLibro(item.servicio);
