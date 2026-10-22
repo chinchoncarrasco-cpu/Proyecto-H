@@ -272,13 +272,64 @@ test('un histórico íntegro no vuelve a revisión por requisitos nuevos de glos
  const h=await comparar(casos,[g]);
  assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
 });
-test('un segundo pago sin recibo propio no se oculta por usar otra glosa del mismo remitente',async()=>{
+test('el mismo recibo admite ambos órdenes de la misma glosa bancaria',async()=>{
  const g=reciboHistorico(F.leer());
  const h=await comparar([{pagos:[{glosa:'0177406988 Transf. ALMONACID ERICES EXEQUIEL IGNACIO'}]}],[g]);
- assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
 });
 test('un pago adicional sin recibo impide consumir el histórico como coincidencia única',async()=>{
  const g=reciboHistorico(F.leer());
  const h=await comparar([{}],[g,guardado({id:'pago-adicional',referencia_externa:g.referencia_externa})]);
  assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+
+for(const [antes,despues] of [
+ [' // PEND BOVE Y MANAGER',' // BOVE: 17152'],[' // BOVE:',' // BOVE 17.152'],
+ [' // PENDIENTE 50% BOVE Y MANAGER',''],[' // CO',' // JD // BOVE: 17152']
+]) test('completar trámites administrativos conserva el pago confirmado: '+antes,async()=>{
+ const base=[{pagos:[{glosa:F.glosa+antes}]}],libro=F.leer(base);
+ const h=await comparar([{pagos:[{glosa:F.glosa+despues}]}],[reciboHistorico(libro)]);
+ assert.equal(movimiento(h).estado,'en_sistema');
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ assert.deepEqual(Q.serializarIncorporacion(plan),[]);sinEscrituras(h);
+});
+test('cambiar anotación de noches no crea otra transferencia con el mismo recibo',async()=>{
+ const h=await comparar([{pagos:[{concepto:'cab10/2noches'}]}],[reciboHistorico(F.leer())]);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+});
+test('añadir monto total informativo no invalida el recibo de una parte ya registrada',async()=>{
+ const h=await comparar([{pagos:[{glosa:F.glosa+' // MONTO CLP$150.000 // BOVE: 17152'}]}],[reciboHistorico(F.leer())]);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+});
+test('relectura del writer v2 reconoce el recibo aunque cambie BOVE y se mueva la fila',async()=>{
+ const g=reciboHistorico(F.leer());g.datos_origen.aprobado_manualmente=false;
+ g.datos_origen.evidencia_transferencia={version:2,glosa_original:F.glosa};
+ const h=await comparar([{desplazamiento:2,pagos:[{glosa:F.glosa+' // BOVE:17152'}]}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+});
+for(const pago of [{fecha:'2026-10-22'},{monto:76000},{glosa:'Transf. 0111111111 OTRO REMITENTE'},
+ {glosa:F.glosa+' // Operacion 902'},{concepto:'cab11/1noche'},{glosa:F.glosa+' // por pagar'}])
+ test('una contradicción financiera no queda oculta por un recibo anterior '+JSON.stringify(pago),async()=>{
+  const g=reciboHistorico(F.leer([{pagos:[{glosa:F.glosa+' // Operacion 901'}]}]));
+  const h=await comparar([{pagos:[pago]}],[g]);
+  assert.notEqual(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+ });
+test('dos filas idénticas tras completar BOVE no consumen dos veces el mismo recibo',async()=>{
+ const h=await comparar([{pagos:[{glosa:F.glosa+' // BOVE:17152'},{glosa:F.glosa+' // BOVE:17152'}]}],[reciboHistorico(F.leer())]);
+ assert.ok(h.c.pagosDetalle.every(x=>x.estado==='revisar'));sinEscrituras(h);
+});
+test('misma glosa de check-in con otra fecha requiere revisar esa diferencia concreta',async()=>{
+ const h=await comparar([{}],[guardado({fecha_pago:'2026-10-20',datos_origen:{contexto:'checkin',manager_revisado:true}})]);
+ assert.equal(movimiento(h).estado,'revisar');assert.match(movimiento(h).motivos.join(' '),/fecha.*2026-10-20.*2026-10-21/);sinEscrituras(h);
+});
+test('dos partes históricas de igual monto en la misma reserva conservan su CAB y recibo propio',async()=>{
+ const casos=[{}, {cabana:11}],libro=F.leer(casos);
+ const a=reciboHistorico({pagos:[libro.pagos[0]]}),b=reciboHistorico({pagos:[libro.pagos[1]]},{id:'segundo-componente'});
+ const db=F.cliente(libro.reservas,[a,b]);
+ db.estadias.forEach(e=>{e.reserva_id='reserva-sintetica-0';e.reservas.grupo_reserva_id='grupo-sintetico';});
+ const c=await Q.compararSistema(libro.reservas,db,q);
+ assert.equal(c.pagosDetalle.length,2);assert.ok(c.pagosDetalle.every(x=>x.estado==='en_sistema'));
+ assert.equal(new Set(c.pagosDetalle.map(x=>x.sistema.id)).size,2);
+ const plan=await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion:c},new Map(),new Set(),db);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));sinEscrituras({db});
 });
