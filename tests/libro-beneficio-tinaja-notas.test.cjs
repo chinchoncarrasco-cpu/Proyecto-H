@@ -196,3 +196,38 @@ for (const texto of [BENEFICIO,BENEFICIO_PROMO]) test('Confirmación final usa s
     assert.equal(args.p_notas[0].texto,texto);
     assert.equal(e.state.db.servicios.length,0);
 });
+
+for (const modo of ['cobrable','multiples']) test('Nota de beneficio ya guardada no revive como servicio por otras tinajas: '+modo,async()=>{
+    const {e,notas,deTinaja,registrar}=caso(BENEFICIO,2);
+    const nota=notas(await e.construir())[0];
+    e.state.db.notas.push({id:'nota-operativa-previa',reserva_id:nota.payload.reserva_id,
+        tipo:'operativa_resumen',texto:BENEFICIO});
+    registrar({tipo_cobro:'normal',total:30000});
+    if(modo==='multiples')registrar({id:'segunda-tinaja',hora_inicio:'22:15:00',hora_fin:'23:15:00'});
+    const antes=JSON.stringify(e.state.db),plan=await e.construir();
+    assert.equal(deTinaja(plan).length,0);assert.equal(notas(plan).length,1);
+    assert.equal(notas(plan)[0].estado,'existente');
+    const out=new e.Element('div');e.document.card=out;e.api.renderizar(plan,out,consulta);
+    assert.doesNotMatch(out.querySelector('.haku-libro-servicios__seccion--revision').textContent,/1 HORA DE TINAJA/);
+    assert.ok(!out.querySelector('.haku-libro-servicios__seccion--notas')?.textContent.includes(BENEFICIO));
+    assert.equal(JSON.stringify(e.state.db),antes);assert.equal(e.state.escrituras.length,0);
+});
+test('Una nota de otra reserva no resuelve el beneficio con varias tinajas',async()=>{
+    const {e,notas,deTinaja,registrar}=caso();
+    e.state.db.notas.push({id:'nota-ajena',reserva_id:'otra-reserva',tipo:'operativa_resumen',texto:BENEFICIO});
+    registrar();registrar({id:'segunda-tinaja',hora_inicio:'22:15:00'});
+    const plan=await e.construir();assert.equal(notas(plan).length,0);
+    assert.equal(deTinaja(plan)[0].estado,'revisar');assert.equal(e.state.escrituras.length,0);
+});
+test('La nota guardada no oculta el Tonel cobrable descrito por separado en el Libro',async()=>{
+    const {e,notas,deTinaja,cambiar,registrar}=caso(BENEFICIO,2);
+    const nota=notas(await e.construir())[0];
+    e.state.db.notas.push({id:'beneficio-previo',reserva_id:nota.payload.reserva_id,tipo:'operativa_resumen',texto:BENEFICIO});
+    registrar({tipo_cobro:'normal',total:30000,fecha_servicio:'2026-10-11'});
+    registrar({id:'tinaja-cortesia',hora_inicio:'22:15:00',fecha_servicio:'2026-10-11'});
+    cambiar(BENEFICIO+' // TONEL DOMINGO 11-10 X PAGAR');
+    const plan=await e.construir();
+    assert.equal(notas(plan).find(n=>n.texto===BENEFICIO).estado,'existente');
+    assert.equal(deTinaja(plan).length,1);assert.match(deTinaja(plan)[0].servicio.texto_original,/TONEL DOMINGO/);
+    assert.equal(deTinaja(plan)[0].intencion_cobro,'cobrable');assert.equal(e.state.escrituras.length,0);
+});

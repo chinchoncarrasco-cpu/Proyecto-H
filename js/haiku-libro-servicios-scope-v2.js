@@ -1506,10 +1506,14 @@
             const item = items[i];
             if (!esBeneficioTinajaPorCoordinar(item)) continue;
             const decision = decisionServicioExistente(item, existentes.servicios);
-            if (decision.estado === 'existente' || decision.candidatos?.length) continue;
             const nota = prepararNota(item.reserva,
                 item.servicio.texto_original || item.servicio.fragmento_original,
                 item.asociacion);
+            // Una nota exacta ya guardada demuestra cómo se incorporó el
+            // beneficio sin agenda. Otras tinajas no lo convierten en un alta
+            // ambigua; la prestación única ya identificada conserva autoridad.
+            if (decision.estado === 'existente' ||
+                decision.candidatos?.length && !notaYaExiste(nota, existentes.notas)) continue;
             nota.inferencias.push(`${item.intencion_cobro === 'cortesia' ? 'Cortesía incluida' : 'Beneficio de la promoción'} pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.`);
             // La misma evidencia puede venir también en menciones/Notas: una sola nota.
             if (items.some(x => x.kind === 'nota' && x.item_id === nota.item_id)) {
