@@ -225,13 +225,19 @@
         renderizarAdjuntos();
     }
 
+    function estaOcupado() {
+        return procesando || guardandoReserva || window.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true ||
+            window.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.procesando?.() === true;
+    }
+
     function actualizarEnviar() {
+        const ocupado = estaOcupado();
         const vacio = !campo.value.trim() && adjuntos.length === 0;
-        enviar.disabled = procesando || guardandoReserva || vacio;
-        adjuntar.disabled = procesando || guardandoReserva;
-        campo.disabled = procesando || guardandoReserva;
+        enviar.disabled = ocupado || vacio;
+        adjuntar.disabled = ocupado;
+        campo.disabled = ocupado;
         botonesRapidos.forEach(botonRapido => {
-            botonRapido.disabled = procesando || guardandoReserva;
+            botonRapido.disabled = ocupado;
         });
         enviar.textContent = procesando ? "Analizando…" : "Enviar";
     }
@@ -270,7 +276,7 @@
     }
 
     function ejecutarAccionRapida(accion) {
-        if (procesando || guardandoReserva) return;
+        if (estaOcupado()) return;
         if (accion === "revisar-captura" || accion === "consultar-documento") {
             archivosInput.accept = accion === "consultar-documento"
                 ? "application/pdf"
@@ -1552,7 +1558,7 @@
     }
 
     async function enviarMensaje() {
-        if (procesando || guardandoReserva) return;
+        if (estaOcupado()) return;
 
         const texto = campo.value.trim();
         if (!texto && adjuntos.length === 0) return;
@@ -1713,7 +1719,7 @@
         cerrar: cerrarPanel,
         visible: () => !root.hidden,
         abierta: () => !panel.hidden,
-        procesando: () => procesando || guardandoReserva,
+        procesando: estaOcupado,
         ultimaPreview: () => ultimaPreview,
         adjuntos: () => adjuntos.map(item => ({
             nombre: item.file.name,
