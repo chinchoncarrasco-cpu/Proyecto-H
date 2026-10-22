@@ -1284,8 +1284,12 @@
     function datosOrigenPago(pago, destino = {}, extra = {}) {
         const referencia = textoFinancieroCanon(pago?.referencia_externa || pago?.texto_original);
         const medioManual = pagosEfectivosMedio.get(pago)?.decision;
+        const bancaria = S.evidenciaTransferencia?.(pago);
         return {
             ...extra,
+            ...(bancaria?.glosa_original ? {pagador:bancaria.pagador,evidencia_transferencia:{version:1,
+                glosa_original:bancaria.glosa_original,numero_remitente:bancaria.numero_remitente,
+                fecha_recepcion:bancaria.fecha_recepcion}} : {}),
             ...(medioManual ? {medio_pago_manual_v1:structuredClone(medioManual.auditoria)} : {}),
             source_fingerprint:huellaFuentePago(pago,destino),
             source_kind:'libro_reserva',
@@ -1374,6 +1378,51 @@
             return valor;
         };
         const asociados = items.filter(item => item.result.estado === 'asociada' && item.result.sistema?.reserva_id);
+
+        // La glosa identifica al remitente, nunca una transacción ni al titular.
+        // Las filas bancarias completas se resuelven antes de los rescates históricos
+        // que admitían la misma referencia con otra fecha: un remitente puede repetir.
+        const bancarios = items.map(item => ({...item,banco:S.evidenciaTransferencia?.(item.p)}))
+            .filter(item => item.banco && item.p.evidencia_financiera?.sector === 'pagos' && item.p.tipo_movimiento === 'alojamiento');
+        const mismoRemitente = (a,b) => a?.numero_remitente && a.numero_remitente === b?.numero_remitente &&
+            S.normalizar(a.nombre_remitente) === S.normalizar(b.nombre_remitente);
+        const firmaBancaria = (a,b) => Number(a.monto) === Number(b.monto) &&
+            String(a.moneda || 'CLP').toUpperCase() === String(b.moneda || 'CLP').toUpperCase() &&
+            mismaFechaCalendario(a.fecha_comprobante,b.fecha_comprobante);
+        const glosaGuardada = pago => S.evidenciaTransferencia?.({medio_pago:medioSistema(pago),
+            texto_original:pago.referencia_externa || pago.observaciones || pago.datos_origen?.evidencia_transferencia?.glosa_original});
+        for (const item of bancarios) {
+            const motivos = [...item.banco.motivos], p = item.p, r = item.result.libro;
+            const bloque = (resultados || []).filter(x => Number(x.libro?.cabana) === Number(p.cabana) && x.libro.fecha_checkin === p.fecha_bloque);
+            if (item.result.estado !== 'asociada' || !item.result.sistema?.reserva_id || bloque.length !== 1 ||
+                bloque[0] !== item.result || Number(r.cabana) !== Number(item.result.sistema.cabana) ||
+                r.fecha_checkin !== item.result.sistema.fecha_checkin || r.fecha_checkout !== item.result.sistema.fecha_checkout || r.advertencias?.length)
+                motivos.push('La reserva destino no es inequívoca para la CAB y el bloque de Check-In de la transferencia.');
+            const cabConcepto = Number(String(p.concepto || '').match(/^cab\s*(\d+)\b/i)?.[1]);
+            if (cabConcepto && cabConcepto !== Number(p.cabana)) motivos.push('La CAB del concepto contradice el destino del bloque bancario.');
+            const copias = bancarios.filter(otro => item.banco.numero_remitente && otro.p !== p && firmaBancaria(p,otro.p) &&
+                item.banco.numero_remitente === otro.banco.numero_remitente);
+            if (copias.length) motivos.push('Posible duplicado: el mismo remitente aparece con igual fecha de recepción y monto en varias filas o reservas.');
+            if (motivos.length) { resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',[...new Set(motivos)]); continue; }
+            const posibles = (pagos || []).filter(guardado => {
+                const glosa = glosaGuardada(guardado);
+                const origen = guardado.datos_origen?.origen_libro || guardado.datos_origen?.origen;
+                if (origen?.hoja && origen?.celda && source(origen) === source(p.origen)) return true;
+                return Number(guardado.monto) === Number(p.monto) &&
+                    String(guardado.moneda || 'CLP').toUpperCase() === String(p.moneda || 'CLP').toUpperCase() &&
+                    (!guardado.fecha_pago || mismaFechaCalendario(guardado.fecha_pago,p.fecha_comprobante)) &&
+                    (medioSistema(guardado) === 'transferencia' && guardado.reserva_id === item.result.sistema.reserva_id || mismoRemitente(item.banco,glosa));
+            });
+            const exactos = posibles.filter(guardado => guardado.id && firmaFinancieraCompatible(item,guardado) &&
+                mismoRemitente(item.banco,glosaGuardada(guardado)) && !consumidos.has(guardado.id));
+            if (posibles.length === 1 && exactos.length === 1) {
+                resolver(item,estados.EXISTENTE_SEGURO,exactos[0],'transferencia_bancaria_contextual');
+                consumidos.add(exactos[0].id);
+            } else if (posibles.length) {
+                resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
+                    ['Existe una transferencia posiblemente duplicada o contradictoria: revisa glosa, recepción, monto y reserva destino.']);
+            } else resolver(item,estados.NUEVO_SEGURO,null,'transferencia_bancaria_contextual');
+        }
 
         const asignarUnicos = (evidencia, obtenerCandidatos, { deferirMultiples=false } = {}) => {
             const propuestas = asociados.filter(item=>!resoluciones.has(item.p)).map(item => ({ item,
@@ -3396,6 +3445,10 @@
             }
             if (repetidosIdentificador.length && !conflictoIdentificador) { add('omitidos', id, texto + ' · Omitido porque repite el mismo identificador fuerte.'); continue; }
             const motivos = [];
+            const transferenciaContextualNueva = resolucionPago?.evidencia === 'transferencia_bancaria_contextual' &&
+                resolucionPago.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO;
+            if (resolucionPago?.evidencia === 'transferencia_bancaria_contextual' && resolucionPago.estado === ESTADOS_RESOLUCION_PAGO.AMBIGUO)
+                motivos.push(...(resolucionPago.motivos || []));
             if (!destino || destino.bloqueado) motivos.push('Primero resuelve los datos y la asociación de la reserva.');
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
             if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
@@ -3424,7 +3477,7 @@
                 x.decisionPagoManual.confirmacionRecibida === true && fechaConfirmacionAirbnbValida(x.decisionPagoManual.fechaPago)
                 ? x.decisionPagoManual : null;
             const manual = aprobados.has(id) && (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
-            if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p))
+            if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p) && !transferenciaContextualNueva)
                 motivos.push('Falta un identificador fuerte del comprobante; definir el medio no resuelve su identidad.');
             if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push('Requiere aprobación manual de la asociación y el pago.');
             if (servicio4C && p.transaccion_distribuida && !manual &&
@@ -3435,7 +3488,7 @@
                 snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda)) ||
                 vistos.some(v => v.destino === destinoActual && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda)
             );
-            if (mismoMontoSinIdentificador && !manual) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
+            if (mismoMontoSinIdentificador && !manual && !transferenciaContextualNueva) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
             if (medio === 'airbnb_prepaid_card' && !p.fecha_comprobante && pagosRelacionadosAirbnb(comp,x,confirmacionAirbnb?.referenciaExterna).length)
                 motivos.push('Existe un pago relacionado con este aviso Airbnb; vuelve a comparar y revisar su identidad antes de completar la confirmación.');
             if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');

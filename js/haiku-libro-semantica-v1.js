@@ -40,6 +40,40 @@
         }
         return null;
     }
+    function evidenciaTransferencia(pago) {
+        if (!pago || typeof pago !== 'object') return null;
+        const glosas = separarCampos(pago.detalle_bancario || pago.texto_original).flatMap(fragmento => {
+            const m = fragmento.match(/^(?:(transf(?:erencia)?\.?)\s+)?(\d{7,12}[kK]?)\s+(?:(transf(?:erencia)?\.?)\s+)?([\p{L}][\p{L}\s.'’-]+)$/iu);
+            if (!m || (!m[1] && !m[3] && pago.medio_pago !== 'transferencia')) return [];
+            const nombre = m[4].trim(), palabras = nombre.split(/\s+/);
+            if (palabras.length < 2 || palabras.length > 8 || /\b(?:cab|noches?|saldo|folio|codaut|telefono|factura|bove)\b/.test(normalizar(nombre))) return [];
+            return [{glosa_original:fragmento,numero_remitente:m[2],nombre_remitente:nombre}];
+        });
+        if (!glosas.length && pago.medio_pago !== 'transferencia') return null;
+        const glosa = glosas[0] || null, motivos = [];
+        if (!glosa) motivos.push('Falta la glosa bancaria completa: número y nombre del remitente.');
+        if (glosas.length > 1) motivos.push('La fila contiene más de una glosa bancaria; requiere revisión.');
+        if (pago.medio_pago !== 'transferencia' || /\b(?:web\s*pay|debito|credito|efectivo)\b/.test(normalizar(pago.texto_original)))
+            motivos.push('El medio de la fila no confirma exclusivamente una transferencia.');
+        if (pago.codigo_autorizacion || pago.folio || pago.bovtar)
+            motivos.push('La transferencia contiene identificadores de tarjeta; revisa la contradicción de medio.');
+        const fila = pago.evidencia_financiera?.columnas_ocupadas;
+        if (pago.evidencia_financiera?.sector !== 'pagos' || !['fecha','detalle','concepto','monto'].every(k => fila?.[k]))
+            motivos.push('Falta evidencia propia de la fila bancaria: fecha, detalle, concepto o monto.');
+        if (!pago.origen?.hoja || !pago.origen?.celda) motivos.push('Falta el origen verificable de la fila del Libro.');
+        const fecha = String(pago.fecha_comprobante || ''), partes = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!partes || iso(partes[1],partes[2],partes[3]) !== fecha) motivos.push('Falta una fecha válida de recepción de la transferencia.');
+        if (!Number.isSafeInteger(Number(pago.monto)) || Number(pago.monto) <= 0) motivos.push('Falta un monto válido de la transferencia.');
+        if (String(pago.moneda || '').toUpperCase() !== 'CLP') motivos.push('Falta una moneda CLP compatible para la transferencia.');
+        if (pago.pago_recibido !== true || pago.estado_pago !== 'registrado_en_libro' ||
+            /\b(?:por|x)\s+(?:pagar|confirmar)\b|saldo\s+pendiente|reembols|anulad|rechazad|cancelad/.test(normalizar(pago.texto_original)))
+            motivos.push('La fila no confirma una transferencia recibida.');
+        if (pago.advertencias?.length) motivos.push(...pago.advertencias);
+        if (pago.clasificacion_financiera && pago.clasificacion_financiera !== 'pago_real')
+            motivos.push('La fila bancaria está marcada como incompleta o dudosa en el Libro.');
+        return {...glosa,version:1,valida:motivos.length === 0,motivos,fecha_recepcion:pago.fecha_comprobante || null,
+            pagador:glosa ? {nombre:glosa.nombre_remitente,numero_remitente:glosa.numero_remitente,fuente:'glosa_bancaria'} : null};
+    }
     function iso(y, m, d) {
         const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
         return date.getUTCFullYear() === Number(y) && date.getUTCMonth() === Number(m) - 1 && date.getUTCDate() === Number(d) ? date.toISOString().slice(0, 10) : null;
@@ -955,6 +989,15 @@
                             colores: { detalle: color(estilos[detail?.estiloId]?.fill?.fgColor), concepto: color(estilos[concept?.estiloId]?.fill?.fgColor), monto: color(estilos[amount?.estiloId]?.fill?.fgColor) }
                         },
                         texto_original: [at(r, h.c)?.valor, text, amount?.valor].filter(Boolean).join(" // "), origen: { hoja, celda: `${direccion(r, h.c)}:${direccion(r, h.c + 3)}` } };
+                    const transferencia = evidenciaTransferencia(p);
+                    if (transferencia?.glosa_original) {
+                        p.detalle_bancario = detail?.valor || null;
+                        p.pagador = transferencia.pagador;
+                        p.evidencia_transferencia = {version:1,glosa_original:transferencia.glosa_original,
+                            numero_remitente:transferencia.numero_remitente,fecha_recepcion:transferencia.fecha_recepcion};
+                        if (cabanaConcepto && cabanaConcepto !== cabana && !advertencias.length)
+                            p.advertencias = [`El concepto del Libro indica CAB ${cabanaConcepto}, mientras el bloque corresponde a CAB ${cabana}.`];
+                    }
                     res.pagos.push(p);
                 }
             }
@@ -964,7 +1007,9 @@
             const others = res.reservas.filter(x => x.cabana === r.cabana && x.fecha_checkin === r.fecha_checkin);
             r.cobertura_pagos = res.cobertura.pagos && marker.some(m => headers.find(h => h.fechaISO === r.fecha_checkin)?.c === m.c);
             for (const p of candidates) {
-                if (others.length === 1 && mismaPersona(r.titular, p.titular) && !r.advertencias.length && !p.advertencias?.length) r.pagos.push(p);
+                const transferencia = evidenciaTransferencia(p);
+                const destinoBancario = transferencia?.valida && p.tipo_movimiento === 'alojamiento';
+                if (others.length === 1 && (mismaPersona(r.titular, p.titular) || destinoBancario) && !r.advertencias.length && !p.advertencias?.length) r.pagos.push(p);
                 else r.pagos_sin_asociacion.push(p);
             }
         }
@@ -1219,7 +1264,7 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
