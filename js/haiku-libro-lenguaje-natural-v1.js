@@ -214,7 +214,7 @@
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
         const medioValido = ["transferencia","webpay","webpay_debito","webpay_credito","debito","credito","tarjeta_debito","tarjeta_credito","airbnb_prepaid_card","efectivo"].includes(pago.medio_pago);
-        const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar) || /\b\d{6,}\s*transf\b/.test(texto);
+        const identificadorFuerte = !!pago.codigo_autorizacion || !!(pago.folio && pago.bovtar);
         // La ubicación en Pagos, un titular o una fecha no acreditan otro
         // movimiento. Cada fila aporta sus propios datos; una referencia a
         // documentación/correo tampoco convierte el medio mencionado en pago.
