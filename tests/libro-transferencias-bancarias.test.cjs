@@ -225,3 +225,60 @@ for(const glosa of [F.glosa+' // Operacion 901 // Operacion 902',F.glosa+' // Op
   const h=await comparar([{pagos:[{glosa}]}]);assert.equal(movimiento(h).estado,'revisar');
   assert.match(movimiento(h).motivos.join(' '),/operación bancaria/);sinEscrituras(h);
  });
+
+function reciboHistorico(libro, cambios={}) {
+ const p=libro.pagos[0];
+ return guardado({referencia_externa:p.texto_original,observaciones:p.texto_original,
+  datos_origen:{contexto:'haku_libro_incorporacion',aprobado_manualmente:true,
+   operacion_id:'operacion-historica-sintetica',fecha_bloque:p.fecha_bloque,
+   origen_libro:p.origen,item_id:'pago:reserva-historica:'+p.origen.hoja+'!'+p.origen.celda+':'+JSON.stringify(p)},...cambios});
+}
+test('recibo histórico aprobado se reconoce sin operación bancaria y sin preparar otra inserción',async()=>{
+ const libro=F.leer(),g=reciboHistorico(libro);
+ const h=await comparar([{}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');assert.equal(movimiento(h).sistema.id,g.id);
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ assert.equal(plan.items.find(i=>i.pagoLibro).categoria,'omitidos');
+ assert.deepEqual(Q.serializarIncorporacion(plan),[]);sinEscrituras(h);
+});
+test('recibo histórico conserva identidad al mover la fila, sin usar coordenadas como identidad',async()=>{
+ const g=reciboHistorico(F.leer());const h=await comparar([{desplazamiento:2}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+});
+test('dos filas indistinguibles no consumen un recibo histórico dos veces',async()=>{
+ const h=await comparar([{pagos:[{},{}]}],[reciboHistorico(F.leer())]);
+ assert.ok(h.c.pagosDetalle.every(x=>x.estado==='revisar'));sinEscrituras(h);
+});
+test('dos recibos históricos compatibles requieren revisión en vez de elegir uno',async()=>{
+ const g=reciboHistorico(F.leer());const h=await comparar([{}],[g,{...g,id:'segundo-historico'}]);
+ assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+for(const cambio of [
+ {datos_origen:{}},{datos_origen:{contexto:'haku_libro_incorporacion',aprobado_manualmente:true,operacion_id:'op',item_id:'pago:sin-json'}},
+ {estado:'anulado'},{reserva_id:'otra-reserva'},
+]) test('sin recibo íntegro y destino/estado exactos no rescata un histórico '+JSON.stringify(cambio),async()=>{
+ const h=await comparar([{}],[reciboHistorico(F.leer(),cambio)]);
+ assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+test('reutilizar la celda histórica con otra glosa no reconoce el pago anterior',async()=>{
+ const glosa='Transf. 0123456785 OTRO REMITENTE';
+ const h=await comparar([{pagos:[{glosa}]}],[reciboHistorico(F.leer())]);
+ assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+
+test('un histórico íntegro no vuelve a revisión por requisitos nuevos de glosa o encabezado',async()=>{
+ const casos=[{pagos:[{glosa:'0177406988 Transf.',concepto:'cab10/1noche'}]}];
+ const libro=F.leer(casos),g=reciboHistorico(libro);
+ const h=await comparar(casos,[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+});
+test('un segundo pago sin recibo propio no se oculta por usar otra glosa del mismo remitente',async()=>{
+ const g=reciboHistorico(F.leer());
+ const h=await comparar([{pagos:[{glosa:'0177406988 Transf. ALMONACID ERICES EXEQUIEL IGNACIO'}]}],[g]);
+ assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+test('un pago adicional sin recibo impide consumir el histórico como coincidencia única',async()=>{
+ const g=reciboHistorico(F.leer());
+ const h=await comparar([{}],[g,guardado({id:'pago-adicional',referencia_externa:g.referencia_externa})]);
+ assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
