@@ -1393,13 +1393,32 @@
             texto_original:pago.referencia_externa || pago.observaciones || pago.datos_origen?.evidencia_transferencia?.glosa_original});
         const operacionGuardada = pago => pago.datos_origen?.evidencia_transferencia?.operacion_bancaria || glosaGuardada(pago)?.operacion_bancaria;
         const operacionesDistintas = (a,b) => a && b && a !== b;
-        // Las incorporaciones anteriores a v2 guardaban el movimiento completo
-        // dentro del recibo item_id. Reconocer su relectura no equivale a inferir
-        // identidad sólo por RUT/fecha/monto ni por la posición de una celda.
-        const reciboHistoricoCoincide = (item, guardado) => {
+        // La identidad de un pago confirmado no depende de BOVE/Manager,
+        // operador o anotaciones de noches. El recibo guarda el destino y la
+        // firma financiera; la glosa bancaria conserva al remitente separado.
+        const glosaReciboCanon = texto => {
+            const glosas = S.separarCampos(texto).filter(campo =>
+                /^(?:transf(?:erencia)?\.?\s+(?:de\s+)?)?\d{7,12}[kK]?(?:\s|$)/i.test(campo));
+            if (glosas.length !== 1 || !/transf|[a-záéíóúñ]{2,}/i.test(glosas[0])) return null;
+            return textoFinancieroCanon(glosas[0]).replace(/\btransf\b(?:\s+de\b)?/g,'').trim().replace(/\s+/g,' ');
+        };
+        const contextoExistenteValido = item => item.result.estado === 'asociada' &&
+            Number(item.p.cabana) === Number(item.result.sistema?.cabana) &&
+            item.p.fecha_bloque === item.result.libro.fecha_checkin &&
+            item.result.libro.fecha_checkin === item.result.sistema?.fecha_checkin &&
+            item.result.libro.fecha_checkout === item.result.sistema?.fecha_checkout &&
+            item.p.pago_recibido === true && item.p.estado_pago === 'registrado_en_libro' &&
+            (!/^cab\s*(\d+)\b/i.test(item.p.concepto || '') ||
+                Number(String(item.p.concepto).match(/^cab\s*(\d+)\b/i)[1]) === Number(item.p.cabana)) &&
+            !item.banco.motivos.some(m => /contradict|no confirma|identificadores de tarjeta|más de una glosa|operación bancaria/i.test(m));
+        const reciboPersistidoCoincide = (item, guardado) => {
             const datos = guardado.datos_origen || {};
-            if (datos.contexto !== 'haku_libro_incorporacion' || datos.aprobado_manualmente !== true ||
-                !datos.operacion_id || datos.evidencia_transferencia || !firmaFinancieraCompatible(item,guardado)) return false;
+            if (!contextoExistenteValido(item) || !firmaFinancieraCompatible(item,guardado) ||
+                operacionesDistintas(item.banco.operacion_bancaria,operacionGuardada(guardado))) return false;
+            const glosa = glosaReciboCanon(item.p.texto_original);
+            if (!glosa || glosa !== glosaReciboCanon(guardado.referencia_externa || guardado.observaciones)) return false;
+            if (datos.contexto !== 'haku_libro_incorporacion' || !datos.operacion_id ||
+                !(datos.aprobado_manualmente === true || datos.evidencia_transferencia?.version === 2)) return false;
             const id = datos.item_id;
             if (typeof id !== 'string' || !id.startsWith('pago:')) return false;
             const inicio = id.indexOf(':{');
@@ -1412,29 +1431,54 @@
                 Number(anterior.monto) === Number(p.monto) && anterior.moneda === p.moneda &&
                 anterior.fecha_comprobante === p.fecha_comprobante && anterior.fecha_bloque === p.fecha_bloque &&
                 datos.fecha_bloque === p.fecha_bloque && Number(anterior.cabana) === Number(p.cabana) &&
-                anterior.origen?.hoja === p.origen?.hoja &&
-                textoFinancieroCanon(anterior.texto_original) === textoFinancieroCanon(p.texto_original) &&
-                textoFinancieroCanon(guardado.referencia_externa || guardado.observaciones) === textoFinancieroCanon(p.texto_original) &&
-                textoFinancieroCanon(anterior.concepto) === textoFinancieroCanon(p.concepto);
+                anterior.origen?.hoja === p.origen?.hoja && glosaReciboCanon(anterior.texto_original) === glosa;
         };
-        // Resolver primero recibos históricos completos y 1 ↔ 1. Las exigencias
-        // nuevas para aceptar un alta no deben invalidar una incorporación previa.
+        const reciboDeOtraCabana = (guardado, cabana) => {
+            const datos = guardado.datos_origen || {}, id = datos.item_id;
+            if (datos.contexto !== 'haku_libro_incorporacion' || !datos.operacion_id ||
+                !(datos.aprobado_manualmente === true || datos.evidencia_transferencia?.version === 2) ||
+                typeof id !== 'string' || !id.startsWith('pago:')) return false;
+            const inicio = id.indexOf(':{');
+            if (inicio < 0) return false;
+            try { const p = JSON.parse(id.slice(inicio + 1));
+                return Number(p.cabana) > 0 && Number(p.cabana) !== Number(cabana) && p.pago_recibido === true &&
+                    Number(p.monto) === Number(guardado.monto) && p.fecha_comprobante &&
+                    mismaFechaCalendario(guardado.fecha_pago,p.fecha_comprobante) &&
+                    glosaReciboCanon(p.texto_original) === glosaReciboCanon(guardado.referencia_externa || guardado.observaciones);
+            } catch (_) { return false; }
+        };
         const historicos = new Map(bancarios.map(item => [item.p, (pagos || []).filter(guardado =>
-            reciboHistoricoCoincide(item,guardado))]));
+            reciboPersistidoCoincide(item,guardado))]));
         const reclamosHistoricos = new Map();
-        for (const candidatos of historicos.values()) for (const candidato of candidatos)
+        for (const item of bancarios) for (const candidato of historicos.get(item.p))
             reclamosHistoricos.set(candidato.id,(reclamosHistoricos.get(candidato.id) || 0)+1);
         for (const item of bancarios) {
             const candidatosHistoricos = historicos.get(item.p);
+            const competidores = (pagos || []).filter(guardado => firmaFinancieraCompatible(item,guardado) &&
+                glosaReciboCanon(guardado.referencia_externa || guardado.observaciones) === glosaReciboCanon(item.p.texto_original) &&
+                // Otro componente con recibo propio de otra CAB no compite.
+                !reciboDeOtraCabana(guardado,item.p.cabana));
             if (candidatosHistoricos.length === 1 && reclamosHistoricos.get(candidatosHistoricos[0].id) === 1 &&
-                (pagos || []).filter(guardado => firmaFinancieraCompatible(item,guardado) &&
-                    textoFinancieroCanon(guardado.referencia_externa || guardado.observaciones) ===
-                    textoFinancieroCanon(item.p.texto_original)).length === 1) {
-                resolver(item,estados.EXISTENTE_SEGURO,candidatosHistoricos[0],'recibo_historico_persistido');
+                competidores.length === 1 && !consumidos.has(candidatosHistoricos[0].id)) {
+                resolver(item,estados.EXISTENTE_SEGURO,candidatosHistoricos[0],
+                    'recibo_historico_persistido');
                 consumidos.add(candidatosHistoricos[0].id);
                 continue;
             }
             const motivos = [...item.banco.motivos], p = item.p, r = item.result.libro;
+            const otraFecha = (pagos || []).filter(guardado => guardado.datos_origen?.contexto === 'checkin' &&
+                guardado.datos_origen?.manager_revisado === true && firmaFinancieraCompatible(item,guardado,{fecha:false}) &&
+                guardado.fecha_pago && !mismaFechaCalendario(guardado.fecha_pago,p.fecha_comprobante) &&
+                glosaReciboCanon(p.texto_original) &&
+                glosaReciboCanon(p.texto_original) === glosaReciboCanon(guardado.referencia_externa || guardado.observaciones) &&
+                !operacionesDistintas(item.banco.operacion_bancaria,operacionGuardada(guardado)));
+            if (!candidatosHistoricos.length && otraFecha.length && !(pagos || []).some(guardado => firmaFinancieraCompatible(item,guardado))) {
+                resolver(item,estados.AMBIGUO,null,'transferencia_fecha_discrepante',[
+                    'La glosa coincide con un pago confirmado de esta reserva, pero la fecha difiere: Proyecto H ' +
+                    [...new Set(otraFecha.map(guardado => String(guardado.fecha_pago).slice(0,10)))].join(', ') +
+                    '; Libro ' + p.fecha_comprobante + '. Revisa la fecha antes de registrar otro abono.']);
+                continue;
+            }
             const bloque = (resultados || []).filter(x => Number(x.libro?.cabana) === Number(p.cabana) && x.libro.fecha_checkin === p.fecha_bloque);
             if (item.result.estado !== 'asociada' || !item.result.sistema?.reserva_id || bloque.length !== 1 ||
                 bloque[0] !== item.result || Number(r.cabana) !== Number(item.result.sistema.cabana) ||
