@@ -2476,11 +2476,11 @@
     async function procesar(texto) {
         if (ocupado) return; ocupado = true;
         const campo = document.getElementById("haiku-asistente-texto"), boton = document.getElementById("haiku-asistente-enviar");
-        if (campo) { campo.value = ""; campo.disabled = true; } if (boton) boton.disabled = true;
+        if (campo) { campo.value = ""; campo.disabled = true; campo.dispatchEvent(new Event("input", { bubbles: true })); } if (boton) boton.disabled = true;
         mensaje("usuario", entradasHistorial.get(texto)?.descripcion||texto); const out = mensaje("asistente", "Revisando servicios y separando notas operativas…");
         try { const resultado = await construir(texto); if (out) renderizar(resultado, out, texto); }
         catch (error) { if (out) out.textContent = error?.message || "No pude revisar los servicios del Libro."; }
-        finally { ocupado = false; if (campo) { campo.disabled = false; campo.dispatchEvent(new Event("input", { bubbles: true })); } if (boton) boton.disabled = false; out?.scrollIntoView?.({ block: "nearest" }); }
+        finally { ocupado = false; if (campo) { campo.disabled = false; campo.dispatchEvent(new Event("input", { bubbles: true })); } out?.scrollIntoView?.({ block: "nearest" }); }
     }
 
     function interceptar(event) {
@@ -2494,7 +2494,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial,
+    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;

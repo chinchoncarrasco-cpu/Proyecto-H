@@ -4797,14 +4797,14 @@
                 advertencias: (result.advertencias || []).length, advertenciasInformativas: [...new Set(advertenciasInformativas)].length } };
     }
     if (root.__motorLecturaLibro) return Object.freeze({ consultar, interpretar, modeloPresentacionComparacion });
+    let ocupado = false;
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
-    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
+    root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,procesando:()=>ocupado,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
         abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
-    let ocupado = false;
     const esLibro = texto => /\blibro\b/i.test(texto);
 
     function mensaje(tipo, texto) {
@@ -6914,6 +6914,7 @@
         campo.disabled = true;
         boton.disabled = true;
         campo.value = "";
+        campo.dispatchEvent(new Event("input", { bubbles: true }));
         mensaje("usuario", texto);
         const out = mensaje("asistente", "Leyendo la estructura del Libro local…");
         try {
