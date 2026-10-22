@@ -1,8 +1,8 @@
 // ========================================
 // HAIKU · BLOQUEO VISUAL DE PRIVACIDAD V1
 // - Oscurece inmediatamente al perder foco.
-// - Si vuelve antes de 10 s, restaura sin pedir PIN.
-// - Después de 10 s exige PIN de 4 dígitos.
+// - Si vuelve antes de 1 minuto, restaura sin pedir PIN.
+// - Después de 1 minuto exige PIN de 4 dígitos.
 // - 3 errores activan rescate obligatorio de 6 dígitos.
 // - Es independiente del inicio de sesión de Supabase.
 // ========================================
@@ -12,7 +12,7 @@
     const cliente = window.haikuSupabase;
     if (!cliente) return;
 
-    const GRACIA_MS = 10000;
+    const GRACIA_MS = 60000;
     const MAX_INTENTOS = 3;
     const MAX_HISTORIAL = 8;
 
@@ -294,7 +294,7 @@
             const fallos = Math.min(leerNumeroLocal("fallos"), MAX_INTENTOS);
             const restantes = Math.max(0, MAX_INTENTOS - fallos);
             titulo.textContent = "Acceso bloqueado";
-            descripcion.textContent = "La página estuvo fuera de foco más de 10 segundos. Ingresa tu PIN para volver a operar.";
+            descripcion.textContent = "La página estuvo fuera de foco 1 minuto. Ingresa tu PIN para volver a operar.";
             formPin.hidden = false;
             info.textContent = restantes === MAX_INTENTOS
                 ? "Tienes 3 intentos antes del bloqueo reforzado."
