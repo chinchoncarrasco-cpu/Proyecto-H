@@ -1393,7 +1393,47 @@
             texto_original:pago.referencia_externa || pago.observaciones || pago.datos_origen?.evidencia_transferencia?.glosa_original});
         const operacionGuardada = pago => pago.datos_origen?.evidencia_transferencia?.operacion_bancaria || glosaGuardada(pago)?.operacion_bancaria;
         const operacionesDistintas = (a,b) => a && b && a !== b;
+        // Las incorporaciones anteriores a v2 guardaban el movimiento completo
+        // dentro del recibo item_id. Reconocer su relectura no equivale a inferir
+        // identidad sólo por RUT/fecha/monto ni por la posición de una celda.
+        const reciboHistoricoCoincide = (item, guardado) => {
+            const datos = guardado.datos_origen || {};
+            if (datos.contexto !== 'haku_libro_incorporacion' || datos.aprobado_manualmente !== true ||
+                !datos.operacion_id || datos.evidencia_transferencia || !firmaFinancieraCompatible(item,guardado)) return false;
+            const id = datos.item_id;
+            if (typeof id !== 'string' || !id.startsWith('pago:')) return false;
+            const inicio = id.indexOf(':{');
+            if (inicio < 0) return false;
+            let anterior;
+            try { anterior = JSON.parse(id.slice(inicio + 1)); } catch (_) { return false; }
+            const p = item.p;
+            return anterior.pago_recibido === true && anterior.estado_pago === 'registrado_en_libro' &&
+                anterior.tipo_movimiento === p.tipo_movimiento && medioLibro(anterior) === medioLibro(p) &&
+                Number(anterior.monto) === Number(p.monto) && anterior.moneda === p.moneda &&
+                anterior.fecha_comprobante === p.fecha_comprobante && anterior.fecha_bloque === p.fecha_bloque &&
+                datos.fecha_bloque === p.fecha_bloque && Number(anterior.cabana) === Number(p.cabana) &&
+                anterior.origen?.hoja === p.origen?.hoja &&
+                textoFinancieroCanon(anterior.texto_original) === textoFinancieroCanon(p.texto_original) &&
+                textoFinancieroCanon(guardado.referencia_externa || guardado.observaciones) === textoFinancieroCanon(p.texto_original) &&
+                textoFinancieroCanon(anterior.concepto) === textoFinancieroCanon(p.concepto);
+        };
+        // Resolver primero recibos históricos completos y 1 ↔ 1. Las exigencias
+        // nuevas para aceptar un alta no deben invalidar una incorporación previa.
+        const historicos = new Map(bancarios.map(item => [item.p, (pagos || []).filter(guardado =>
+            reciboHistoricoCoincide(item,guardado))]));
+        const reclamosHistoricos = new Map();
+        for (const candidatos of historicos.values()) for (const candidato of candidatos)
+            reclamosHistoricos.set(candidato.id,(reclamosHistoricos.get(candidato.id) || 0)+1);
         for (const item of bancarios) {
+            const candidatosHistoricos = historicos.get(item.p);
+            if (candidatosHistoricos.length === 1 && reclamosHistoricos.get(candidatosHistoricos[0].id) === 1 &&
+                (pagos || []).filter(guardado => firmaFinancieraCompatible(item,guardado) &&
+                    textoFinancieroCanon(guardado.referencia_externa || guardado.observaciones) ===
+                    textoFinancieroCanon(item.p.texto_original)).length === 1) {
+                resolver(item,estados.EXISTENTE_SEGURO,candidatosHistoricos[0],'recibo_historico_persistido');
+                consumidos.add(candidatosHistoricos[0].id);
+                continue;
+            }
             const motivos = [...item.banco.motivos], p = item.p, r = item.result.libro;
             const bloque = (resultados || []).filter(x => Number(x.libro?.cabana) === Number(p.cabana) && x.libro.fecha_checkin === p.fecha_bloque);
             if (item.result.estado !== 'asociada' || !item.result.sistema?.reserva_id || bloque.length !== 1 ||
@@ -1422,7 +1462,8 @@
             });
             const exactos = posibles.filter(guardado => guardado.id && firmaFinancieraCompatible(item,guardado) &&
                 mismoRemitente(item.banco,glosaGuardada(guardado)) && item.banco.operacion_bancaria &&
-                item.banco.operacion_bancaria === operacionGuardada(guardado) && !consumidos.has(guardado.id));
+                item.banco.operacion_bancaria === operacionGuardada(guardado) &&
+                !consumidos.has(guardado.id));
             if (posibles.length === 1 && exactos.length === 1) {
                 resolver(item,estados.EXISTENTE_SEGURO,exactos[0],'transferencia_bancaria_contextual');
                 consumidos.add(exactos[0].id);
