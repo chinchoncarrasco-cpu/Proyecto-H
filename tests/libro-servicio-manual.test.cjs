@@ -607,3 +607,28 @@ test('Julián: el formulario explica 1h incluida y 1h pagada, sin opción de cob
     assert.equal(precio.children.filter(c=>c.value==='libro').length,1);
     assert.equal(e.state.escrituras.length,0);
 });
+
+test('aprobar un servicio conserva revisión abierta, otros grupos y posición del chat', async () => {
+    const e = entorno(), out = new e.Element('div'), chat = new e.Element('div');
+    chat.className = 'haiku-asistente-mensajes'; chat.append(out); chat.scrollTop = 240;
+    e.document.card = out;
+    e.api.renderizar(await e.construir(), out, consulta);
+    out.querySelector('.haku-libro-servicios__seccion--revision').open = true;
+    out.querySelector('.haku-libro-servicios__seccion--servicios').open = true;
+    out.querySelector('.haku-libro-servicios-sites__reglas').open = true;
+    const estado = e.api.estadosPorVista.get(out), item = servicios(await e.construir())[0];
+    const nuevo = await e.api.confirmarServicioManual(consulta,item.item_id,a,estado.manuales,item.firmaManual);
+    e.api.renderizar(nuevo,out,consulta);
+    assert.equal(out.querySelector('.haku-libro-servicios__seccion--revision').open,true);
+    assert.equal(out.querySelector('.haku-libro-servicios__seccion--servicios').open,true);
+    assert.equal(out.querySelector('.haku-libro-servicios-sites__reglas').open,true);
+    assert.equal(chat.scrollTop,240);
+    assert.equal(listos(nuevo).length,1); assert.equal(e.state.escrituras.length,0);
+});
+test('otra consulta de servicios empieza con sus grupos cerrados', async () => {
+    const e = entorno(), out = new e.Element('div');e.document.card=out;
+    const resultado=await e.construir();e.api.renderizar(resultado,out,consulta);
+    out.querySelector('.haku-libro-servicios__seccion--revision').open=true;
+    e.api.renderizar(resultado,out,'Libro: compara servicios de noviembre 2026 con Proyecto H');
+    assert.ok(out.querySelectorAll('.haku-libro-servicios__seccion').every(s=>s.open===false));
+});

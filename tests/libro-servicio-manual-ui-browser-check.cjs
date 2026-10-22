@@ -118,7 +118,8 @@ const foto = async (locator, nombre) => {
                     const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2, resultado = await api.construir(q), base = resultado.items[0];
                     api.renderizar({ ...resultado, items: [{ ...base, servicio: { ...base.servicio, concepto: 'cuna' }, mapa: { nombre: 'Cuna' } }] }, document.getElementById('out'), q);
                 });
-                await revision.locator(':scope > summary').click();
+                if (baseline) await revision.locator(':scope > summary').click();
+                else assert.equal(await revision.evaluate(el => el.open), true, 'la revisión conserva el desplegable abierto');
                 const single = revision.locator('.haku-libro-servicios__item');
                 assert.equal(await single.getByRole('button').count(), 1);
                 assert.equal(await single.getByRole('button').textContent(), 'Ver reserva');
@@ -128,7 +129,8 @@ const foto = async (locator, nombre) => {
                 await page.evaluate(async () => {
                     const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2; api.renderizar(await api.construir(q), document.getElementById('out'), q);
                 });
-                await revision.locator(':scope > summary').click();
+                if (baseline) await revision.locator(':scope > summary').click();
+                else assert.equal(await revision.evaluate(el => el.open), true, 'la revisión conserva el desplegable abierto');
                 const narrow = revision.locator('.haku-libro-servicios__item').first();
                 await narrow.locator('.haku-libro-servicio-manual__acciones').evaluate(el => el.style.width = '180px');
                 const wrap = await geometria(narrow);
