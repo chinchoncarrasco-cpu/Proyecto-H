@@ -42,6 +42,9 @@
     }
     function evidenciaTransferencia(pago) {
         if (!pago || typeof pago !== 'object') return null;
+        const camposOperacion = separarCampos(pago.texto_original).filter(f => /^(?:n(?:ro|umero|úmero)?\.?\s*(?:de\s*)?)?operaci[oó]n\b/i.test(f));
+        const operaciones = camposOperacion.map(f => f.match(/^(?:n(?:ro|umero|úmero)?\.?\s*(?:de\s*)?)?operaci[oó]n\s*(?:bancaria\s*)?[:#.]?\s*([a-z0-9-]{1,64})$/i)?.[1]?.toUpperCase())
+            .filter(op => op && /\d/.test(op));
         const glosas = separarCampos(pago.detalle_bancario || pago.texto_original).flatMap(fragmento => {
             const m = fragmento.match(/^(?:(transf(?:erencia)?\.?)\s+)?(\d{7,12}[kK]?)\s+(?:(transf(?:erencia)?\.?)\s+)?([\p{L}][\p{L}\s.'’-]+)$/iu);
             if (!m || (!m[1] && !m[3] && pago.medio_pago !== 'transferencia')) return [];
@@ -53,6 +56,8 @@
         const glosa = glosas[0] || null, motivos = [];
         if (!glosa) motivos.push('Falta la glosa bancaria completa: número y nombre del remitente.');
         if (glosas.length > 1) motivos.push('La fila contiene más de una glosa bancaria; requiere revisión.');
+        if (new Set(operaciones).size > 1) motivos.push('La fila contiene números de operación bancaria contradictorios.');
+        if (operaciones.length !== camposOperacion.length) motivos.push('El número de operación bancaria está incompleto o no es inequívoco.');
         if (pago.medio_pago !== 'transferencia' || /\b(?:web\s*pay|debito|credito|efectivo)\b/.test(normalizar(pago.texto_original)))
             motivos.push('El medio de la fila no confirma exclusivamente una transferencia.');
         if (pago.codigo_autorizacion || pago.folio || pago.bovtar)
@@ -71,7 +76,8 @@
         if (pago.advertencias?.length) motivos.push(...pago.advertencias);
         if (pago.clasificacion_financiera && pago.clasificacion_financiera !== 'pago_real')
             motivos.push('La fila bancaria está marcada como incompleta o dudosa en el Libro.');
-        return {...glosa,version:1,valida:motivos.length === 0,motivos,fecha_recepcion:pago.fecha_comprobante || null,
+        return {...glosa,version:2,operacion_bancaria:new Set(operaciones).size === 1 && operaciones.length === camposOperacion.length ? operaciones[0] : null,
+            valida:motivos.length === 0,motivos,fecha_recepcion:pago.fecha_comprobante || null,
             pagador:glosa ? {nombre:glosa.nombre_remitente,numero_remitente:glosa.numero_remitente,fuente:'glosa_bancaria'} : null};
     }
     function iso(y, m, d) {
@@ -993,7 +999,7 @@
                     if (transferencia?.glosa_original) {
                         p.detalle_bancario = detail?.valor || null;
                         p.pagador = transferencia.pagador;
-                        p.evidencia_transferencia = {version:1,glosa_original:transferencia.glosa_original,
+                        p.evidencia_transferencia = {version:2,operacion_bancaria:transferencia.operacion_bancaria,glosa_original:transferencia.glosa_original,
                             numero_remitente:transferencia.numero_remitente,fecha_recepcion:transferencia.fecha_recepcion};
                         if (cabanaConcepto && cabanaConcepto !== cabana && !advertencias.length)
                             p.advertencias = [`El concepto del Libro indica CAB ${cabanaConcepto}, mientras el bloque corresponde a CAB ${cabana}.`];

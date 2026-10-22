@@ -7,7 +7,7 @@ function leer(casos=[{}]) {
  const celdas=[{r:1,c:2,valor:'30 oct',fechaISO:'2026-10-30'},{r:1,c:6,valor:'31 oct',fechaISO:'2026-10-31'},
   {r:24,c:2,valor:'Pagos de arriendos de hoy'}],combinaciones=[];
  casos.forEach((caso,i)=>{
-  const cab=caso.cabana ?? 10+i,fila=2+i,pie=25+i*6;
+  const cab=caso.cabana ?? 10+i,fila=2+i,pie=25+i*6+(caso.desplazamiento || 0);
   celdas.push({r:fila,c:0,valor:'cabana '+cab},
    {r:fila,c:2,valor:(caso.titular || 'Exequiel Almoncid')+' // 2 ADL // RUT '+(caso.rut || '17740698-8')},
    {r:pie,c:0,valor:'cabana '+cab});
@@ -32,6 +32,6 @@ function cliente(reservas,pagos=[]) {
  return {llamadas,estadias,auth:{getSession:async()=>({data:{session:{user:{id:'usuario-sintetico'}}}})},
   from(tabla){llamadas.push(tabla);const data=tabla==='reserva_estadias'?estadias:tabla==='pagos'?pagos:[];
    const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};return b;},
-  rpc(nombre){llamadas.push(nombre);if(/capacidad/.test(nombre))return Promise.resolve({data:null});throw Error('Escritura prohibida en esta prueba: '+nombre);}};
+  rpc(nombre){llamadas.push(nombre);if(nombre==='haiku_libro_transferencias_capacidad_v2')return Promise.resolve({data:{version:2,confirmacion_final:true}});if(/capacidad/.test(nombre))return Promise.resolve({data:null});throw Error('Escritura prohibida en esta prueba: '+nombre);}};
 }
 module.exports={S,leer,cliente,glosa};

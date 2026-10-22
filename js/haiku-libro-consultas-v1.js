@@ -1287,7 +1287,7 @@
         const bancaria = S.evidenciaTransferencia?.(pago);
         return {
             ...extra,
-            ...(bancaria?.glosa_original ? {pagador:bancaria.pagador,evidencia_transferencia:{version:1,
+            ...(bancaria?.glosa_original ? {pagador:bancaria.pagador,evidencia_transferencia:{version:2,operacion_bancaria:bancaria.operacion_bancaria,
                 glosa_original:bancaria.glosa_original,numero_remitente:bancaria.numero_remitente,
                 fecha_recepcion:bancaria.fecha_recepcion}} : {}),
             ...(medioManual ? {medio_pago_manual_v1:structuredClone(medioManual.auditoria)} : {}),
@@ -1363,7 +1363,7 @@
         return diferencias;
     }
 
-    function resolverPagosExistentes(resultados, pagos) {
+    function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false) {
         const estados = ESTADOS_RESOLUCION_PAGO, resoluciones = new Map(), items = [], vistos = new Set(), consumidos = new Set();
         for (const result of resultados || []) {
             for (const p of [...(result.libro?.pagos || []), ...(result.libro?.pagos_sin_asociacion || [])]) {
@@ -1391,6 +1391,8 @@
             mismaFechaCalendario(a.fecha_comprobante,b.fecha_comprobante);
         const glosaGuardada = pago => S.evidenciaTransferencia?.({medio_pago:medioSistema(pago),
             texto_original:pago.referencia_externa || pago.observaciones || pago.datos_origen?.evidencia_transferencia?.glosa_original});
+        const operacionGuardada = pago => pago.datos_origen?.evidencia_transferencia?.operacion_bancaria || glosaGuardada(pago)?.operacion_bancaria;
+        const operacionesDistintas = (a,b) => a && b && a !== b;
         for (const item of bancarios) {
             const motivos = [...item.banco.motivos], p = item.p, r = item.result.libro;
             const bloque = (resultados || []).filter(x => Number(x.libro?.cabana) === Number(p.cabana) && x.libro.fecha_checkin === p.fecha_bloque);
@@ -1401,27 +1403,35 @@
             const cabConcepto = Number(String(p.concepto || '').match(/^cab\s*(\d+)\b/i)?.[1]);
             if (cabConcepto && cabConcepto !== Number(p.cabana)) motivos.push('La CAB del concepto contradice el destino del bloque bancario.');
             const copias = bancarios.filter(otro => item.banco.numero_remitente && otro.p !== p && firmaBancaria(p,otro.p) &&
-                item.banco.numero_remitente === otro.banco.numero_remitente);
+                item.banco.numero_remitente === otro.banco.numero_remitente &&
+                !operacionesDistintas(item.banco.operacion_bancaria,otro.banco.operacion_bancaria));
+            if (bancarios.some(otro => otro.p !== p && item.banco.operacion_bancaria && item.banco.operacion_bancaria === otro.banco.operacion_bancaria))
+                motivos.push('El número de operación bancaria está repetido o contradice otra fila del Libro.');
             if (copias.length) motivos.push('Posible duplicado: el mismo remitente aparece con igual fecha de recepción y monto en varias filas o reservas.');
             if (motivos.length) { resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',[...new Set(motivos)]); continue; }
             const posibles = (pagos || []).filter(guardado => {
                 const glosa = glosaGuardada(guardado);
-                const origen = guardado.datos_origen?.origen_libro || guardado.datos_origen?.origen;
-                if (origen?.hoja && origen?.celda && source(origen) === source(p.origen)) return true;
+                const operacion = operacionGuardada(guardado);
+                if (item.banco.operacion_bancaria && operacion === item.banco.operacion_bancaria) return true;
+                if (operacionesDistintas(item.banco.operacion_bancaria,operacion)) return false;
                 return Number(guardado.monto) === Number(p.monto) &&
                     String(guardado.moneda || 'CLP').toUpperCase() === String(p.moneda || 'CLP').toUpperCase() &&
                     (!guardado.fecha_pago || mismaFechaCalendario(guardado.fecha_pago,p.fecha_comprobante)) &&
-                    (medioSistema(guardado) === 'transferencia' && guardado.reserva_id === item.result.sistema.reserva_id || mismoRemitente(item.banco,glosa));
+                    (medioSistema(guardado) === 'transferencia' && guardado.reserva_id === item.result.sistema.reserva_id ||
+                        item.banco.numero_remitente && item.banco.numero_remitente === glosa?.numero_remitente);
             });
             const exactos = posibles.filter(guardado => guardado.id && firmaFinancieraCompatible(item,guardado) &&
-                mismoRemitente(item.banco,glosaGuardada(guardado)) && !consumidos.has(guardado.id));
+                mismoRemitente(item.banco,glosaGuardada(guardado)) && item.banco.operacion_bancaria &&
+                item.banco.operacion_bancaria === operacionGuardada(guardado) && !consumidos.has(guardado.id));
             if (posibles.length === 1 && exactos.length === 1) {
                 resolver(item,estados.EXISTENTE_SEGURO,exactos[0],'transferencia_bancaria_contextual');
                 consumidos.add(exactos[0].id);
             } else if (posibles.length) {
                 resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
                     ['Existe una transferencia posiblemente duplicada o contradictoria: revisa glosa, recepción, monto y reserva destino.']);
-            } else resolver(item,estados.NUEVO_SEGURO,null,'transferencia_bancaria_contextual');
+            } else if (!capacidadTransferencias) resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
+                ['Falta instalar el contrato SQL de transferencias v2; el writer vigente exige aprobación manual y no conserva la evidencia bancaria.']);
+            else resolver(item,estados.NUEVO_SEGURO,null,'transferencia_bancaria_contextual');
         }
 
         const asignarUnicos = (evidencia, obtenerCandidatos, { deferirMultiples=false } = {}) => {
@@ -1673,7 +1683,14 @@
         const pagos = q.incluirFinanzas===false ? [] : await paginas(() => cliente.from("pagos")
             .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
-        const resolucionesPago = resolverPagosExistentes(resultados, pagos);
+        let capacidadTransferencias = false;
+        if (resultados.some(r => [...(r.libro.pagos || []),...(r.libro.pagos_sin_asociacion || [])].some(p => S.evidenciaTransferencia?.(p)?.valida))) {
+            try {
+                const respuesta = await cliente.rpc('haiku_libro_transferencias_capacidad_v2',{});
+                capacidadTransferencias = !respuesta.error && respuesta.data?.version === 2 && respuesta.data?.confirmacion_final === true;
+            } catch (_) { /* Contrato ausente: mantener revisión, sin escritura. */ }
+        }
+        const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias);
         const servicios = [];
         if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
@@ -1877,7 +1894,7 @@
             }
         }
 
-        resultados.snapshot = { estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero,
+        resultados.snapshot = { capacidadTransferencias, estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero,
             efectivo_aplicado: snapshotEfectivoAplicado };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
@@ -3269,7 +3286,7 @@
         // Comparación y preparación comparten la misma autoridad canónica. Una
         // decisión explícita de reserva cambia el destino de entrada, no las reglas.
         const pagosSnapshotCompletos = snapshot.pagos_todos || snapshot.pagos || [];
-        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos);
+        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos,snapshot.capacidadTransferencias);
         for (const r of reservas.map(normalizarReservaComparacion).filter(r => !esReservaValida(r))) add('pendientes', 'invalida:' + claveReserva(r), (r.titular || 'Sin titular') + ' · CAB ' + (r.cabana || 'sin dato'), null, ['Faltan titular, cabaña o fechas válidas.']);
         const destinosFinancieros = new Map(destinos);
         destinosFinancierosSeguros.forEach((valor,clave) => destinosFinancieros.set(clave,valor));
@@ -3471,8 +3488,8 @@
                 /\b[12]\s*(?:adl|adultos?|personas?)\s*(?:extra|adicional(?:es)?)\b/i.test(String(p.concepto || ''));
             const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO &&
                 !pagosEfectivosMedio.has(p) && !esPagoExtraJacuzzi;
-            const seguro = asociadoLibro && pagoTieneIdentificadorFuerte(p) &&
-                (nuevoSeguroCanonico || Boolean(destino?.reserva_ref));
+            const seguro = asociadoLibro && (pagoTieneIdentificadorFuerte(p) || transferenciaContextualNueva) &&
+                (nuevoSeguroCanonico || transferenciaContextualNueva || Boolean(destino?.reserva_ref));
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
                 x.decisionPagoManual.confirmacionRecibida === true && fechaConfirmacionAirbnbValida(x.decisionPagoManual.fechaPago)
                 ? x.decisionPagoManual : null;
@@ -4171,7 +4188,8 @@
                 {code:'HLC01',haikuConflictoDatos:true});
             const servicios = serializados.filter(item => item.tipo === 'pago_servicios_4c')
                 .map(item => ({ operacionId: crearIdOperacion(), item, resultado: null }));
-            const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c');
+            const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c').map(item =>
+                item.datos_origen?.evidencia_transferencia?.version === 2 ? {...item,confirmacion_final:true} : item);
             const detalleContexto = contextoDetalleIncorporacion(serializados,actualizado,
                 [...seleccionados].filter(id => !vigentes.has(id)).map(id => ({
                     previo:plan.items.find(i => i.id === id), nuevo:actualizado.items.find(i => i.id === id)
