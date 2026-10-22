@@ -166,3 +166,38 @@ test('La ficha pagada aparece sólo en Ya existen, sin botón para incorporarla'
     assert.equal(fila.querySelectorAll('button').filter(b => b.textContent === 'Aprobación manual').length, 0);
     assert.equal(e.state.escrituras.length, 0);
 });
+
+function tinajasConDistintoCobro(texto='TONEL DOMINGO 18-10 X PAGAR') {
+    const e=entorno(),r=e.state.reservas[0],estadia=e.state.db.reserva_estadias[0];
+    e.state.reservas=[r];r.fecha_checkin='2026-10-17';r.fecha_checkout='2026-10-19';r.noches=2;
+    r.texto_original=texto;r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'notas_reserva'});
+    estadia.fecha_ingreso=r.fecha_checkin;estadia.fecha_salida=r.fecha_checkout;
+    const base={reserva_id:estadia.reserva_id,estadia_id:estadia.id,fecha_servicio:'2026-10-18',
+        personas:2,cantidad:1,estado_servicio:'programado',catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tinaja Tonel de Madera'}};
+    const cobrable={...base,id:'tonel-cobrable',hora_inicio:'20:04:00',hora_fin:'21:04:00',tipo_cobro:'normal',total:30000};
+    const cortesia={...base,id:'tonel-cortesia',hora_inicio:'22:15:00',hora_fin:'23:15:00',tipo_cobro:'cortesia',total:0};
+    e.state.db.servicios=[cobrable,cortesia];
+    const leer=async()=>(await e.construir()).items.find(i=>i.kind==='servicio');
+    return {e,r,cobrable,cortesia,leer};
+}
+test('Fecha y cobro explícitos recuperan el Tonel existente sin exigir hora al Libro',async()=>{
+    const {e,cobrable,leer}=tinajasConDistintoCobro(),antes=JSON.stringify(e.state.db);
+    const item=await leer();assert.equal(item.estado,'existente');assert.equal(item.servicio_existente.id,cobrable.id);
+    assert.equal(item.hora,'20:04');assert.equal(item.hora_fin,'21:04');assert.equal(item.payload,null);
+    assert.equal(item.servicio_existente.estado_servicio,'programado');
+    assert.equal(JSON.stringify(e.state.db),antes);assert.equal(e.state.escrituras.length,0);
+});
+test('Dos Toneles cobrables no se distinguen por precio ni por la existencia de una cortesía',async()=>{
+    const {e,cobrable,leer}=tinajasConDistintoCobro('TONEL DOMINGO 18-10 X PAGAR $30.000');
+    e.state.db.servicios.push({...cobrable,id:'otro-cobrable',hora_inicio:'19:15:00',total:45000});
+    assert.equal((await leer()).estado,'revisar');assert.equal(e.state.escrituras.length,0);
+});
+test('Sin intención de cobro explícita las dos tinajas permanecen en revisión',async()=>{
+    const {e,leer}=tinajasConDistintoCobro('TONEL DOMINGO 18-10');
+    assert.equal((await leer()).estado,'revisar');assert.equal(e.state.escrituras.length,0);
+});
+test('La coincidencia de fecha y cobro conserva contradicciones de monto',async()=>{
+    const {e,cobrable,leer}=tinajasConDistintoCobro('TONEL DOMINGO 18-10 X PAGAR $30.000');
+    cobrable.total=45000;const item=await leer();assert.equal(item.estado,'revisar');
+    assert.match(item.razones.join(' '),/monto/);assert.equal(e.state.escrituras.length,0);
+});
