@@ -279,7 +279,8 @@ test('interpretación operativa Sites renders real groups, reasons and selection
     sections[0].open = true;
     e.api.renderizar(result, out, consulta);
     sections = out.querySelectorAll(':scope > details').filter(x => x.classList.contains('haku-libro-servicios__seccion'));
-    assert.ok(sections.every(x => x.open === false));
+    assert.equal(sections[0].open, true);
+    assert.ok(sections.slice(1).every(x => x.open === false));
 
     const css = fs.readFileSync(path.join(__dirname, '../css/sites-asistente-v1.css'), 'utf8');
     assert.match(css, /\.haku-libro-servicios-sites > \.haku-libro-servicios-sites__seccion/);

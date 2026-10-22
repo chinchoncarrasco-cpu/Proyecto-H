@@ -1780,7 +1780,6 @@
                 const actualizado=await construir(texto,overrides,estado.manuales);
                 if(vigente()){
                     renderizar(actualizado,out,texto,overrides);
-                    out.querySelector('.haku-libro-revision-admin-resultado')?.scrollIntoView?.({block:'nearest'});
                 }
                 await Promise.allSettled([Promise.resolve().then(()=>root.haikuSincronizarServiciosDesdeSupabase?.()),
                     Promise.resolve().then(()=>root.HAIKU_RESUMEN_REFRESH_V1?.activo()?root.HAIKU_RESUMEN_REFRESH_V1.solicitar(undefined,{categoria:'Libro',evento:'revisión administrativa de servicio',tipo:'externo'}):undefined)]);
@@ -2377,9 +2376,42 @@
         return `${desde} → ${hasta}`;
     }
 
+    // Igual que Pagos: la revisión conserva sus desplegables y posición.
+    // Este estado es sólo visual y no cambia aprobaciones ni selecciones.
+    function capturarVistaServicios(out) {
+        const secciones = Array.from(out.querySelectorAll('.haku-libro-servicios__seccion'));
+        const clave = seccion => String(seccion.className || '').match(/haku-libro-servicios__seccion--([a-z]+)/)?.[1];
+        const abiertas = secciones.filter(s => s.open).map(clave);
+        const ancla = secciones.find(s => s.open && clave(s) === 'revision') || secciones.find(s => s.open);
+        const contenedor = out.closest?.('.haiku-asistente-mensajes');
+        return { abiertas, categoria:ancla && clave(ancla),
+            anclaTop:ancla?.querySelector('summary')?.getBoundingClientRect?.().top,
+            contenedor, scrollTop:contenedor?.scrollTop,
+            reglas:out.querySelector('.haku-libro-servicios-sites__reglas')?.open === true };
+    }
+
+    function restaurarVistaServicios(out, vista) {
+        if (!vista) return;
+        let ancla;
+        for (const seccion of out.querySelectorAll('.haku-libro-servicios__seccion')) {
+            const categoria = String(seccion.className || '').match(/haku-libro-servicios__seccion--([a-z]+)/)?.[1];
+            seccion.open = vista.abiertas.includes(categoria);
+            if (categoria === vista.categoria) ancla = seccion.querySelector('summary');
+        }
+        const reglas = out.querySelector('.haku-libro-servicios-sites__reglas');
+        if (reglas) reglas.open = vista.reglas;
+        const contenedor = vista.contenedor;
+        if (!contenedor || contenedor.isConnected === false || !Number.isFinite(vista.scrollTop)) return;
+        contenedor.scrollTop = vista.scrollTop;
+        const nuevoTop = ancla?.getBoundingClientRect?.().top;
+        if (Number.isFinite(nuevoTop) && Number.isFinite(vista.anclaTop)) contenedor.scrollTop += nuevoTop - vista.anclaTop;
+    }
+
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
         if(entradasHistorial.has(textoOriginal))fuentesPorVista.set(out,textoOriginal);else fuentesPorVista.delete(out);
         const estado = estadosPorVista.get(out) || { manuales: new Map(), selecciones: new Map(), apertura: 0, ocupado: false };
+        const vista = estadosPorVista.has(out) && estado.textoVista === textoOriginal ? capturarVistaServicios(out) : null;
+        estado.textoVista = textoOriginal;
         estadosPorVista.set(out, estado);
         const opciones = { selecciones: estado.selecciones, abrirManual: (item, fila) => {
             if (estado.ocupado) return;
@@ -2471,6 +2503,7 @@
             finally { if (out.className.includes("haku-libro-servicios-sites")) { boton.removeAttribute?.("aria-busy"); refrescar(); } }
         });
         acciones.append(seleccion, boton); out.append(acciones);
+        restaurarVistaServicios(out, vista);
     }
 
     async function procesar(texto) {
