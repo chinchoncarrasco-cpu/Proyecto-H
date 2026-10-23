@@ -312,3 +312,40 @@
         line-clamp: 3;
     }
 }
+
+/* El panel se carga después del tema general. Mantener aquí sus colores para
+   cubrir también efectivo, transferencia, servicios y revisión confirmada.
+   Figma: LtDuKmtjTHE3hmtPo0wO58 / 32:31. Sólo color; el tema claro queda igual. */
+@media screen {
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel {
+        --manual-verde: #9fd2b3;
+        --manual-suave: #1f2b24;
+        --manual-texto: #e8efea;
+        --manual-muted: #b1c2b7;
+        --manual-borde: #3e5145;
+        --sites-shell-amber-soft: #34271b;
+        --sites-shell-amber: #f2c58d;
+        --sites-shell-canvas: #1f2b24;
+        color-scheme: dark;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel:not([hidden]),
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-manual-destino,
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input,select),
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-manual-pie :is(.haiku-manual-secundario,.haiku-pago-ver-reserva) {
+        background-color: #1b2420;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input,select) {
+        color: var(--manual-texto);
+        accent-color: var(--manual-verde);
+    }
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-primario {
+        background-color: var(--sites-shell-green, #22735c);
+        border-color: var(--sites-shell-green, #22735c);
+        color: #fff;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia > summary::after,
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel .haiku-manual-icono,
+    html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: brightness(1.65);
+    }
+}
