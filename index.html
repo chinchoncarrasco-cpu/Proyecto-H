@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <title>Haiku</title>
+    <script src="js/haiku-tema-v1.js"></script>
 
     <!-- Primer paint de Pagos: los lectores legacy pueden llenar los mismos montajes
          antes de la autoridad final. Esta barrera existe aun sin JS ni observer. -->
@@ -39,6 +40,8 @@
     <link rel="stylesheet" href="css/sites-libro-reserva-v1.css">
     <link rel="stylesheet" href="css/sites-notificaciones-v1.css">
     <link rel="stylesheet" href="css/sites-asistente-v1.css">
+    <link rel="stylesheet" href="css/haiku-tema-oscuro-v1.css">
+    <link rel="stylesheet" href="css/haiku-tema-v1.css">
 </head>
 
 <body>
@@ -158,7 +161,11 @@
         </button>
 
     </nav>
-
+    <div class="haiku-tema-control">
+        <button type="button" id="haiku-tema-boton" hidden aria-label="Cambiar a tema oscuro" title="Cambiar a tema oscuro">
+            <span data-tema-icono aria-hidden="true">☾</span><span data-tema-texto>Tema oscuro</span>
+        </button>
+    </div>
 </aside>
 
 
