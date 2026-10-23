@@ -1402,18 +1402,27 @@
             if (glosas.length !== 1 || !/transf|[a-záéíóúñ]{2,}/i.test(glosas[0])) return null;
             return textoFinancieroCanon(glosas[0]).replace(/\btransf\b(?:\s+de\b)?/g,'').trim().replace(/\s+/g,' ');
         };
-        const contextoExistenteValido = item => item.result.estado === 'asociada' &&
+        const reciboCabanaAdmin = (item,guardado) => {
+            const a = guardado?.datos_origen?.revision_pago_admin_v1, p = item.p;
+            return a?.version === 1 && a.tipo === 'cabana_transferencia' && a.confirmado === true && !!a.validado_en &&
+                uuidPagoManual(a.usuario) && a.reserva_id === item.result.sistema?.reserva_id &&
+                a.estadia_id === item.result.sistema?.id && a.cabana_confirmada === Number(p.cabana) &&
+                a.concepto_original === p.concepto && a.monto === Number(p.monto) && a.fecha_pago === p.fecha_comprobante &&
+                a.fecha_bloque === p.fecha_bloque && a.origen?.hoja === p.origen?.hoja;
+        };
+        const contextoExistenteValido = (item,guardado) => item.result.estado === 'asociada' &&
             Number(item.p.cabana) === Number(item.result.sistema?.cabana) &&
             item.p.fecha_bloque === item.result.libro.fecha_checkin &&
             item.result.libro.fecha_checkin === item.result.sistema?.fecha_checkin &&
             item.result.libro.fecha_checkout === item.result.sistema?.fecha_checkout &&
             item.p.pago_recibido === true && item.p.estado_pago === 'registrado_en_libro' &&
             (!/^cab\s*(\d+)\b/i.test(item.p.concepto || '') ||
-                Number(String(item.p.concepto).match(/^cab\s*(\d+)\b/i)[1]) === Number(item.p.cabana)) &&
-            !item.banco.motivos.some(m => /contradict|no confirma|identificadores de tarjeta|más de una glosa|operación bancaria/i.test(m));
+                Number(String(item.p.concepto).match(/^cab\s*(\d+)\b/i)[1]) === Number(item.p.cabana) || reciboCabanaAdmin(item,guardado)) &&
+            !item.banco.motivos.some(m => /contradict|no confirma|identificadores de tarjeta|más de una glosa|operación bancaria/i.test(m) &&
+                !(motivoCabanaPago(m) && reciboCabanaAdmin(item,guardado)));
         const reciboPersistidoCoincide = (item, guardado) => {
             const datos = guardado.datos_origen || {};
-            if (!contextoExistenteValido(item) || !firmaFinancieraCompatible(item,guardado) ||
+            if (!contextoExistenteValido(item,guardado) || !firmaFinancieraCompatible(item,guardado) ||
                 operacionesDistintas(item.banco.operacion_bancaria,operacionGuardada(guardado))) return false;
             const glosa = glosaReciboCanon(item.p.texto_original);
             if (!glosa || glosa !== glosaReciboCanon(guardado.referencia_externa || guardado.observaciones)) return false;
@@ -2539,7 +2548,8 @@
             return { disponible: true, ...CAPACIDAD_PAGOS_SERVICIO_4C, efectivo_sin_identificador: false,
                 conceptos_adicionales: Array.isArray(data.conceptos_adicionales) ? data.conceptos_adicionales : [],
                 servicio_faltante_manual_v1:data.servicio_faltante_manual_v1 === true,
-                transferencia_late_checkout_sin_identificador_v1:data.transferencia_late_checkout_sin_identificador_v1 === true };
+                transferencia_late_checkout_sin_identificador_v1:data.transferencia_late_checkout_sin_identificador_v1 === true,
+                revision_pago_admin_v1:data.revision_pago_admin_v1 === true };
         } catch (_) {
             return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
         }
@@ -2602,7 +2612,8 @@
             pago.pago_recibido === true && pago.estado_pago === 'registrado_en_libro' &&
             pago.origen?.hoja && pago.origen?.celda;
         if (!validas || total !== Number(pago.monto) || pago.moneda !== 'CLP' ||
-            (!idFuerte && !transferenciaManual) || !medioLibro(pago) || !pago.fecha_comprobante) return null;
+            (!idFuerte && !transferenciaManual && !(decision?.tipo === REVISION_ADMIN_PAGO &&
+                decision.auditoria?.tipo === 'efectivo_servicio' && aprobadoManualmente === true)) || !medioLibro(pago) || !pago.fecha_comprobante) return null;
         return {
             contrato: CAPACIDAD_PAGOS_SERVICIO_4C.contrato,
             reserva_ref: null,
@@ -2629,6 +2640,7 @@
                         origen:structuredClone(pago.origen)
                     }
                 } : {}),
+                ...(decision?.tipo === REVISION_ADMIN_PAGO ? {revision_pago_admin_v1:structuredClone(decision.auditoria),item_id:itemId} : {}),
                 evidencia_libro: structuredClone(pago),
                 aplicaciones_servicio_v1: {
                     version: CAPACIDAD_PAGOS_SERVICIO_4C.version,
@@ -2973,6 +2985,90 @@
             /^\d{4}-\d{2}-\d{2}$/.test(String(p.fecha_comprobante || '')) &&
             Boolean(p.texto_original && p.origen?.hoja && p.origen?.celda);
     }
+    const REVISION_ADMIN_PAGO = 'revision_admin_pago';
+    const esAdminPagos = () => root.haikuSesion?.usuario?.activo === true &&
+        root.haikuSesion?.roles?.some(r => r.codigo === 'administrador') === true;
+    const motivoCabanaPago = m => /^El concepto del Libro indica CAB \d+, mientras el bloque corresponde a CAB \d+\.$/.test(m) ||
+        m === 'La CAB del concepto contradice el destino del bloque bancario.';
+    function casoRevisionAdminPago(comp,x) {
+        const p = x?.pago, destino = destinoConfirmacionAirbnb(comp,x);
+        if (!p || !destino || x.sistema ||
+            p.conflicto_distribucion || p.transaccion_distribuida || pagoTieneIdentificadorFuerte(p) ||
+            p.folio || p.bovtar || p.codigo_autorizacion ||
+            p.moneda !== 'CLP' || !Number.isSafeInteger(p.monto) || p.monto <= 0 ||
+            p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro' ||
+            !fechaConfirmacionAirbnbValida(p.fecha_comprobante) || !p.origen?.hoja || !p.origen?.celda || !p.texto_original ||
+            p.fecha_bloque !== x.reserva.fecha_checkin || Number(p.cabana) !== Number(destino.cabana) ||
+            x.reserva.fecha_checkin !== destino.fecha_checkin || x.reserva.fecha_checkout !== destino.fecha_checkout ||
+            x.reserva.advertencias?.length) return null;
+        const medio = medioLibro(p), cabConcepto = Number(String(p.concepto || '').match(/^cab\s*(\d+)\b/i)?.[1]);
+        const efectivo = medio === 'efectivo' && p.tipo_movimiento === 'servicio';
+        const banco = S.evidenciaTransferencia?.(p);
+        const cabana = medio === 'transferencia' && p.tipo_movimiento === 'alojamiento' && cabConcepto > 0 && cabConcepto !== Number(p.cabana) &&
+            banco?.glosa_original && banco.numero_remitente && banco.pagador?.nombre &&
+            banco.motivos?.length > 0 && banco.motivos.every(motivoCabanaPago) &&
+            (x.resolucionPago?.motivos || x.motivos || []).every(motivoCabanaPago);
+        if (!efectivo && !cabana) return null;
+        const distintos = (a,b) => a && b && a !== b && !/REVISION/.test(a+b);
+        const mismoDiaMonto = q => Number(q.monto) === p.monto &&
+            (!q.fecha_pago || mismaFechaCalendario(q.fecha_pago,p.fecha_comprobante));
+        const relacionados = (comp.snapshot?.pagos_todos || comp.snapshot?.pagos || []).some(q =>
+            q.estado !== 'anulado' && q.tipo_movimiento === 'pago' && medioSistema(q) === medio &&
+            (q.reserva_id === destino.reserva_id || cabana && banco.numero_remitente === q.datos_origen?.pagador?.numero_remitente) &&
+            mismoDiaMonto(q) && !distintos(banco?.operacion_bancaria,q.datos_origen?.evidencia_transferencia?.operacion_bancaria));
+        const otraFila = (comp.pagosDetalle || []).some(y => y !== x && medioLibro(y.pago) === medio &&
+            Number(y.pago.monto) === p.monto && y.pago.fecha_comprobante === p.fecha_comprobante &&
+            (y.reserva_sistema_id === destino.reserva_id || cabana &&
+                S.evidenciaTransferencia?.(y.pago)?.numero_remitente === banco.numero_remitente) &&
+            !distintos(banco?.operacion_bancaria,S.evidenciaTransferencia?.(y.pago)?.operacion_bancaria));
+        const apps = x.destinoFinanciero?.aplicaciones || [];
+        const bloqueo = relacionados || otraFila ? 'Hay otro pago o fila compatible; revisa ambos antes de confirmar.' :
+            efectivo && (x.destinoFinanciero?.estado !== 'destino_unico' || apps.length !== 1 ||
+                !comp.snapshot?.finanzas?.disponible) ? 'Primero registra o resuelve el servicio y vuelve a comparar.' : null;
+        return {caso:efectivo ? 'efectivo_servicio' : 'cabana_transferencia',bloqueo,cabConcepto,
+            reservaId:destino.reserva_id,estadiaId:destino.id,cabana:Number(p.cabana),titular:x.reserva.titular,
+            ingreso:x.reserva.fecha_checkin,salida:x.reserva.fecha_checkout,aplicaciones:apps};
+    }
+    function propuestaRevisionAdminPago(item,comp,generacion,capacidad) {
+        if (!esAdminPagos() || !Number.isSafeInteger(generacion) || !['dudosos','pagos'].includes(item.categoria) ||
+            item.pagoSistema || item.distribucionManual) return null;
+        const x = comp?.pagosDetalle?.find(x => x.pago === item.pagoLibro), caso = casoRevisionAdminPago(comp,x);
+        if (!caso) return null;
+        return {...caso,tipo:REVISION_ADMIN_PAGO,generacion,firma:firmaManualPago(comp,x),usuario:usuariosComparacion.get(comp),
+            bloqueo:caso.bloqueo || (root.haikuTienePermiso?.('pagos.registrar') !== true ? 'Tu sesión no tiene permiso para registrar pagos.' :
+                capacidad?.revision_pago_admin_v1 !== true ? 'La confirmación manual de estos pagos todavía no está habilitada en Proyecto H.' : null)};
+    }
+    async function resolverRevisionAdminPago(result,decisiones,aprobados,plan,item,accion,cliente) {
+        const p = item.manualPago, motivo = String(accion.motivo || '').trim();
+        const vigente = () => {
+            if (accion.vigente?.() === false || !esAdminPagos() || root.haikuTienePermiso?.('pagos.registrar') !== true ||
+                p.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
+                throw Error('La revisión, el Libro o los permisos cambiaron; vuelve a revisar.');
+        };
+        vigente();
+        if (accion.tipo !== REVISION_ADMIN_PAGO || accion.confirmado !== true || motivo.length < 8 || motivo.length > 500 ||
+            Number(accion.cabana) !== p.cabana) throw Error('Confirma el destino y escribe el motivo de la revisión.');
+        const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+        const nuevo = actual.items.find(i => i.id === item.id), propuesta = nuevo?.manualPago;
+        if (propuesta?.tipo !== REVISION_ADMIN_PAGO || propuesta.bloqueo || propuesta.firma !== p.firma ||
+            propuesta.caso !== p.caso || propuesta.reservaId !== p.reservaId || propuesta.estadiaId !== p.estadiaId)
+            throw Error(propuesta?.bloqueo || 'Proyecto H cambió; vuelve a revisar este pago.');
+        const {data,error} = await cliente.auth.getSession(); vigente();
+        const usuario = data?.session?.user?.id;
+        if (error || !usuario || usuario !== p.usuario) throw Error('La sesión cambió; vuelve a revisar.');
+        const comp = contextoVisualPlanes.get(actual), x = comp.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id);
+        const auditoria = {version:1,tipo:p.caso,usuario,reserva_id:p.reservaId,estadia_id:p.estadiaId,
+            cabana_confirmada:p.cabana,cabana_concepto:p.cabConcepto || null,concepto_original:x.pago.concepto,
+            monto:x.pago.monto,fecha_pago:x.pago.fecha_comprobante,fecha_bloque:x.pago.fecha_bloque,
+            origen:structuredClone(x.pago.origen),motivo,confirmado:true};
+        const decision = {tipo:REVISION_ADMIN_PAGO,itemId:item.id,fuente:source(x.pago.origen),reservaLibroId:x.reserva.id,
+            firma:p.firma,firmaDestino:firmaDestinoRevalidado(x,comp),generacion:p.generacion,usuario,reservaId:p.reservaId,auditoria};
+        decisiones.set(claveDecisionPago(item.id),decision); aprobados.add(item.id);
+        revisionesPagoManual.get(decisiones)?.delete(item.id);
+        try { const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente(); return siguiente; }
+        catch(e) { invalidarPagoManual(decisiones,aprobados,item.id,p.generacion); throw e; }
+    }
+
     function propuestaManualPago(item, comp, generacion, capacidad) {
         if (!D || !Number.isSafeInteger(generacion) || root.haikuTienePermiso?.('pagos.registrar') !== true ||
             !['dudosos','pagos'].includes(item.categoria) || item.distribucionManual || item.pagoSistema) return null;
@@ -3040,6 +3136,8 @@
         if (item && accion.tipo === DEFINIR_MEDIO_PAGO && contextoVisualPlanes.has(plan))
             return resolverMedioPago(result,decisiones,aprobados,plan,item,accion,cliente);
         if (!propuesta || !contextoVisualPlanes.has(plan)) throw Error('Este pago no tiene una resolución manual segura.');
+        if (propuesta.tipo === REVISION_ADMIN_PAGO)
+            return resolverRevisionAdminPago(result,decisiones,aprobados,plan,item,accion,cliente);
         if (propuesta.tipo === CONFIRMACION_AIRBNB)
             return completarConfirmacionAirbnb(result,decisiones,aprobados,plan,item,accion,cliente);
         const vigente = () => {
@@ -3550,7 +3648,8 @@
             const transferenciaContextualNueva = resolucionPago?.evidencia === 'transferencia_bancaria_contextual' &&
                 resolucionPago.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO;
             if (resolucionPago?.evidencia === 'transferencia_bancaria_contextual' && resolucionPago.estado === ESTADOS_RESOLUCION_PAGO.AMBIGUO)
-                motivos.push(...(resolucionPago.motivos || []));
+                motivos.push(...(resolucionPago.motivos || []).filter(m =>
+                    !(x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO && x.decisionPagoManual.auditoria.tipo === 'cabana_transferencia' && motivoCabanaPago(m))));
             if (!destino || destino.bloqueado) motivos.push('Primero resuelve los datos y la asociación de la reserva.');
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
             if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
@@ -3607,7 +3706,7 @@
                 // NUEVO_SEGURO la confirmación final del plan satisface esa
                 // guardia sin agregar un segundo botón de aprobación.
                 payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas,
-                    manual || nuevoSeguroCanonico, id, transferenciaSinId ? x.decisionPagoManual : null) : null;
+                    manual || nuevoSeguroCanonico, id, transferenciaSinId || x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? x.decisionPagoManual : null) : null;
             if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual))
                 motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
             const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
@@ -3615,7 +3714,8 @@
                     p_fecha_pago: confirmacionAirbnb?.fechaPago || p.fecha_comprobante || null, p_folio: confirmacionAirbnb ? null : p.folio || null, p_codigo_autorizacion: confirmacionAirbnb ? null : p.codigo_autorizacion || null,
                     // Adaptador de esquema heredado: `p_bove` transporta BOVTAR.
                     p_bove: confirmacionAirbnb ? null : p.bovtar || null, p_observaciones: p.texto_original || null, p_aplicaciones: [], p_modo_aplicacion: 'alojamiento' },
-                datos_origen: {...datosOrigenPago(p,destino,{item_id:id}),...(confirmacionAirbnb ? {
+                datos_origen: {...datosOrigenPago(p,destino,{item_id:id}),...(x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? {
+                    revision_pago_admin_v1:structuredClone(x.decisionPagoManual.auditoria),evidencia_libro:structuredClone(p)} : {}),...(confirmacionAirbnb ? {
                     fecha:confirmacionAirbnb.fechaPago, evidencia_libro:structuredClone(p),
                     confirmacion_airbnb:{fecha_pago:confirmacionAirbnb.fechaPago,referencia_externa:confirmacionAirbnb.referenciaExterna,
                         confirmacion_recibida:true,usuario:confirmacionAirbnb.usuario,version:confirmacionAirbnb.version,
@@ -3643,10 +3743,11 @@
             item.decisionPagoManual = x.decisionPagoManual || null;
             item.resolucionMedio = propuestaMedioPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
-            item.manualPago = (!medioLibro(x.pago) ? item.resolucionMedio : null) ||
+            item.manualPago = propuestaRevisionAdminPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,capacidadServicios) ||
+                (!medioLibro(x.pago) ? item.resolucionMedio : null) ||
                 propuestaConfirmacionAirbnb(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) ||
                 propuestaManualPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,capacidadServicios);
-            if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
+            if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO,REVISION_ADMIN_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
             item.decisionManualInvalidada = x.decisionManualInvalidada === true;
             if (item.decisionManualInvalidada) {
                 item.motivos.push(x.motivoDecisionManualInvalidada || 'Proyecto H cambió; la aprobación manual anterior quedó invalidada. Revisa nuevamente.');
@@ -3905,19 +4006,22 @@
                 } else x.decisionPagoManual = decision;
                 continue;
             }
-            if (error || decision.generacion !== generacion || decision.usuario !== data?.session?.user?.id ||
-                decision.reservaId !== x.reserva_sistema_id || decision.firma !== firmaManualPago(comparacion,x) ||
+            if (error || decision.tipo === REVISION_ADMIN_PAGO && (!esAdminPagos() || root.haikuTienePermiso?.('pagos.registrar') !== true ||
+                    !casoRevisionAdminPago(comparacion,x) || casoRevisionAdminPago(comparacion,x).bloqueo) ||
+                decision.generacion !== generacion || decision.usuario !== data?.session?.user?.id ||
+                decision.reservaId !== (x.reserva_sistema_id || destinoConfirmacionAirbnb(comparacion,x)?.reserva_id) || decision.firma !== firmaManualPago(comparacion,x) ||
                 decision.firmaDestino !== firmaDestinoRevalidado(x,comparacion)) {
                 invalidarPagoManual(decisiones,aprobados,id,generacion); x.decisionManualInvalidada = true;
             } else x.decisionPagoManual = decision;
         }
         const requiereBackendServicios = (comparacion.pagosDetalle || []).some(item =>
             item.estado !== 'en_sistema' && item.resolucionPago?.estado !== ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO &&
-            (item.destinoFinanciero?.estado === 'destino_unico' ||
+            (esAdminPagos() && casoRevisionAdminPago(comparacion,item) || item.destinoFinanciero?.estado === 'destino_unico' ||
                 item.destinoFinanciero?.aplicaciones?.some(a => a.estado === 'sin_destino')));
         const capacidadServicios = requiereBackendServicios ? await consultarCapacidadPagosServicio(cliente) : null;
         for (const x of comparacion.pagosDetalle || []) {
-            if (x.decisionPagoManual && x.decisionPagoManual.tipo !== CONFIRMACION_AIRBNB && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) {
+            if (x.decisionPagoManual && x.decisionPagoManual.tipo !== CONFIRMACION_AIRBNB && (!capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones) ||
+                    x.decisionPagoManual.tipo === REVISION_ADMIN_PAGO && capacidadServicios.revision_pago_admin_v1 !== true)) {
                 invalidarPagoManual(decisiones,aprobados,idMovimientoIncorporacion(x),generacion);
                 delete x.decisionPagoManual; x.decisionManualInvalidada = true;
             }
@@ -6129,7 +6233,66 @@
         pie.append(confirmar,cancelar); panel.append(contenido,pie); bloque.append(abrir,panel); return bloque;
     }
 
+    function panelRevisionAdminPago(item,plan,aprobar) {
+        const p = item.manualPago, d = item.decisionPagoManual;
+        const aprobado = item.categoria === 'pagos' && d?.tipo === REVISION_ADMIN_PAGO;
+        const bloque = elemento('div','haiku-incorporacion-manual-pago');
+        const abrir = elemento('button','haiku-incorporacion-manual-accion','Aprobación manual'); abrir.type = 'button';
+        const panel = elemento('section','haiku-incorporacion-manual-pago-panel');
+        const revision = {itemId:item.id,activo:revisionesVisualesManualPago.get(plan)?.itemId === item.id &&
+            revisionesVisualesManualPago.get(plan)?.activo === true};
+        panel.hidden = !revision.activo; panel.dataset.paso = aprobado ? 'aprobado' : '1';
+        abrir.setAttribute('aria-expanded',String(revision.activo));
+        const contenido = elemento('div','haiku-manual-contenido'), pie = elemento('footer','haiku-manual-pie');
+        const cabecera = elemento('header','haiku-manual-cabecera');
+        cabecera.append(elemento('span','haiku-manual-badge',aprobado ? 'Listo para incorporar' : 'Revisión del administrador'),
+            elemento('h3','',p.caso === 'efectivo_servicio' ? 'Confirmar pago en efectivo' : 'Confirmar cabaña del pago'),
+            elemento('p','',p.titular + ' · Cabaña ' + p.cabana + ' · ' + money(item.pagoLibro.monto)),
+            elemento('p','',p.caso === 'efectivo_servicio' ? 'El efectivo se asociará al servicio pendiente indicado.' :
+                'El concepto indica cabaña ' + p.cabConcepto + '. Confirma que este abono corresponde a cabaña ' + p.cabana + '.'));
+        contenido.append(cabecera,elemento('p','', 'Fecha del pago: ' + fechaRevisionManual(item.pagoLibro.fecha_comprobante)),
+            evidenciaRevisionManual(item,'Ver evidencia original'));
+        for (const a of p.aplicaciones) contenido.append(elemento('p','',
+            (a.cargo?.concepto || a.concepto || 'Servicio') + ' · ' + money(a.monto)));
+        const aviso = elemento('p','haiku-incorporacion-aviso'); aviso.setAttribute('role','status');
+        let motivo, check, guardar, ocupado = false, version = 0;
+        const cerrar = () => { version++; revision.activo = false; panel.hidden = true; abrir.setAttribute('aria-expanded','false');
+            if(check) check.checked = false; validar(); };
+        const validar = () => { if(guardar) guardar.disabled = ocupado || !!p.bloqueo || !check.checked ||
+            motivo.value.trim().length < 8 || motivo.value.trim().length > 500; };
+        abrir.addEventListener('click',() => { if(revision.activo) cerrar(); else {revision.activo = true; panel.hidden = false;
+            abrir.setAttribute('aria-expanded','true'); revisionesVisualesManualPago.set(plan,revision);} });
+        if(aprobado) contenido.append(avisoRevisionManual('Revisión confirmada',
+            d.auditoria.motivo + '. El pago aún debe registrarse mediante la confirmación final de incorporación.'));
+        else {
+            const label = elemento('label','haiku-incorporacion-manual-campo','Motivo de la confirmación');
+            motivo = elemento('input'); motivo.type = 'text'; motivo.value = ''; motivo.maxLength = 500;
+            motivo.setAttribute('aria-label','Motivo de la confirmación'); label.append(motivo); contenido.append(label);
+            const aceptar = elemento('label','haiku-incorporacion-manual-campo'); check = elemento('input'); check.type = 'checkbox';
+            check.setAttribute('aria-label','Confirmo la recepción y el destino del pago');
+            aceptar.append(check,elemento('span','',p.caso === 'efectivo_servicio' ?
+                'Confirmo que se recibió este efectivo y corresponde al servicio indicado.' :
+                'Confirmo que se recibió esta transferencia y corresponde a cabaña ' + p.cabana + '.'));
+            contenido.append(aceptar); guardar = elemento('button','haiku-incorporacion-manual-accion haiku-manual-primario','Confirmar revisión'); guardar.type = 'button';
+            motivo.addEventListener('input',validar); check.addEventListener('change',validar);
+            aviso.textContent = p.bloqueo || 'Se conservará la evidencia original junto con tu aclaración.';
+            guardar.addEventListener('click',async () => {
+                if(guardar.disabled || !revision.activo || ocupado) return;
+                ocupado = true; validar(); const vigente = version;
+                try { await aprobar.manualPago(plan,item.id,{tipo:REVISION_ADMIN_PAGO,motivo:motivo.value.trim(),confirmado:check.checked,cabana:p.cabana,
+                    vigente:() => revision.activo && version === vigente && bloque.isConnected !== false}); }
+                catch(e) { if(version === vigente && bloque.isConnected !== false) aviso.textContent = e.message; }
+                finally { ocupado = false; validar(); }
+            });
+            pie.append(guardar); validar();
+        }
+        const volver = elemento('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Volver a pagos'); volver.type = 'button';
+        volver.addEventListener('click',cerrar); pie.append(volver); contenido.append(aviso);
+        panel.append(contenido,pie); bloque.append(abrir,panel); return bloque;
+    }
+
     function panelAprobacionManualPago(item, plan, aprobar) {
+        if (item.manualPago.tipo === REVISION_ADMIN_PAGO) return panelRevisionAdminPago(item,plan,aprobar);
         if (item.manualPago.tipo === DEFINIR_MEDIO_PAGO) return panelDefinirMedioPago(item,plan,aprobar);
         if (item.manualPago.tipo === CONFIRMACION_AIRBNB) return panelConfirmacionAirbnb(item,plan,aprobar);
         const p = item.manualPago, bloque = elemento('div','haiku-incorporacion-manual-pago');
@@ -7065,3 +7228,4 @@
         acciones.append(boton);
     }
 })(typeof window !== "undefined" ? window : globalThis);
+
