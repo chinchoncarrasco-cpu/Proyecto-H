@@ -72,6 +72,11 @@ test('Jacuzzi ya registrado se omite y el cambio inverso a Tonel también se det
     e.state.leerColor('FFFFFF00','TINAJA TONEL 1 HORA PARA EL 23/10 A LAS 19:15 HRS');
     assert.equal((await e.leer()).conflicto_tinaja_existente,true);
 });
+test('HRS del reloj no se interpreta como duración de quince horas',async()=>{
+    const e=caso();Object.assign(e.state.db.servicios[0],{hora_inicio:'21:15:00',hora_fin:'22:15:00'});
+    e.state.leerColor('FFFF0000','JACUZZI PARA EL 23/10 A LAS 19:15 HRS');
+    assert.equal((await e.leer()).estado,'listo');
+});
 test('cambiar sólo amarillo a rojo no queda oculto por el marcador del mismo origen',async()=>{
     const e=caso('FFFFFF00'),s=e.state.db.servicios[0];s.catalogo_servicios.codigo='tinajaJacuzzi';
     const original=await e.leer();s.observaciones=`[HAKU-LIBRO-SERVICIO:${original.item_id}]`;

@@ -1136,8 +1136,9 @@
         if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora &&
             ['tinajaTonel','tinajaJacuzzi'].includes(item.mapa?.codigo)) {
             const inicio = minutosHora(hora);
-            const horasEscritas = Number(normalizar(item.servicio.texto_original).match(/\b(\d+)\s*(?:horas?|hrs?)\b/)?.[1]);
-            const fin = minutosHora(horaFin) ?? (horasEscritas > 0 && horasEscritas <= 24 ? inicio + horasEscritas * 60 : null);
+            // HRS junto a 19:15 es la unidad del reloj, no quince horas.
+            const horasEscritas = Number(normalizar(item.servicio.texto_original).match(/(?<![\d:.,])\b(\d+)\s*horas?\b/)?.[1]);
+            const fin = minutosHora(horaFin) ?? (horasEscritas > 0 && inicio + horasEscritas * 60 <= 1440 ? inicio + horasEscritas * 60 : null);
             const candidatos = activos.filter(x => (!x.estadia_id || x.estadia_id === estadiaId) &&
                 x.fecha_servicio === item.fecha && ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)) &&
                 codigoExistente(x) !== item.mapa.codigo && (() => {
