@@ -1,0 +1,78 @@
+/* Selector común a ambos temas. Ocupa su propio espacio, nunca flota sobre datos. */
+.sidebar.sites-shell-sidebar .haiku-tema-control {
+    flex: none;
+    padding: 0 12px 20px;
+}
+#haiku-tema-boton {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid #53665b;
+    border-radius: 7px;
+    background: transparent;
+    color: #d9e4dd;
+    font: 400 14px/1.2 var(--sites-shell-font, system-ui, sans-serif);
+    text-align: left;
+    cursor: pointer;
+}
+#haiku-tema-boton[hidden] { display: none; }
+#haiku-tema-boton [data-tema-icono] { width: 18px; flex: none; text-align: center; font-size: 18px; }
+#haiku-tema-boton:hover { background: #24352e; border-color: #9fb8a9; }
+#haiku-tema-boton:focus-visible { outline: 2px solid #d7b88a; outline-offset: 3px; }
+
+@media (max-width: 780px) {
+    .sidebar.sites-shell-sidebar { flex-direction: row; align-items: stretch; }
+    .sidebar.sites-shell-sidebar nav.menu { min-width: 0; }
+    .sidebar.sites-shell-sidebar .haiku-tema-control {
+        display: flex;
+        align-items: center;
+        padding: 3px 8px 3px 4px;
+        background: #172522;
+    }
+    #haiku-tema-boton { width: 44px; min-height: 44px; padding: 8px; justify-content: center; }
+    #haiku-tema-boton [data-tema-texto] { display: none; }
+}
+
+@media screen {
+    html[data-haiku-tema="oscuro"] { color-scheme: dark; background: #101916; }
+    html[data-haiku-tema="oscuro"] body { background-color: #101916; color: #e8efea; }
+    html[data-haiku-tema="oscuro"] :is(.sites-shell-main, .seccion-app) { background-color: #101916 !important; }
+    html[data-haiku-tema="oscuro"] :is(input, textarea)::placeholder { color: #b1c2b7; opacity: 1; }
+    html[data-haiku-tema="oscuro"] #contador-notificaciones { background-color: #8a5128; color: #fff; }
+    html[data-haiku-tema="oscuro"] :is(button, input, select, textarea, a, summary, [tabindex]):focus-visible {
+        outline-color: #9fd2b3;
+    }
+    html[data-haiku-tema="oscuro"] {
+        --haiku-reserva-pendiente-fondo: #243e51;
+        --haiku-reserva-pendiente-texto: #c4e4fa;
+        --haiku-reserva-pendiente-acento: #8ec2df;
+        --haiku-reserva-confirmada-fondo: #223557;
+        --haiku-reserva-confirmada-texto: #d8e5ff;
+        --haiku-reserva-confirmada-acento: #81a8ff;
+        --haiku-reserva-hospedada-fondo: #20392c;
+        --haiku-reserva-hospedada-texto: #b9e6c9;
+        --haiku-reserva-hospedada-acento: #75ce96;
+        --haiku-reserva-checkout-fondo: #323c37;
+        --haiku-reserva-checkout-texto: #d6dfd9;
+        --haiku-reserva-checkout-acento: #afc0b6;
+        --haiku-reserva-cancelada-fondo: #3c2928;
+        --haiku-reserva-cancelada-texto: #f3b2a8;
+        --haiku-reserva-cancelada-acento: #e59c91;
+        --haiku-reserva-no-show-fondo: #342b25;
+        --haiku-reserva-no-show-texto: #e4c4ac;
+        --haiku-reserva-no-show-acento: #c6a48b;
+    }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado] {
+        --franja-estado-bg: color-mix(in srgb, var(--franja-estado-acento) 18%, #101916);
+    }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="hospedada"] { --franja-estado-bg: #20392c; }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="confirmada"] { --franja-estado-bg: #223557; }
+    /* El documento importado conserva los colores y el texto originales de sus celdas. */
+    html[data-haiku-tema="oscuro"] #libro-reserva-visor table { color-scheme: light; }
+}
+
+@media print { .haiku-tema-control { display: none !important; } }
