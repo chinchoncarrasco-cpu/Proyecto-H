@@ -794,6 +794,8 @@
         const semantica = servicio.semantica, intencion_operativa = true;
         if (servicio.evidencia_origen?.cobro_color?.regla === 'LETRA_AMARILLA_COBRABLE')
             inferencias.push('Cobrable por letra amarilla del Libro. El pago actual se comprueba en Proyecto H.');
+        if (servicio.evidencia_origen?.cobro_color?.regla === 'LETRA_ROJA_CORTESIA')
+            inferencias.push('Tinaja de cortesía por letra roja del Libro. No genera un cobro nuevo; se comprueba el servicio ya registrado en Proyecto H.');
         const intencionOriginal = intencionCobroServicio(servicio);
         const intencion_cobro = reglaIncluida && intencionOriginal === 'no_determinada'
             ? 'cortesia' : intencionOriginal === 'no_determinada' && resueltos.tipo_cobro
@@ -1034,6 +1036,13 @@
         const marca = `[HAKU-LIBRO-SERVICIO:${item.item_id}]`, porOrigen = activos.filter(x => String(x.observaciones || "").includes(marca));
         if (porOrigen.length === 1) {
             const x = porOrigen[0];
+            // El identificador depende del texto, no de su color. Una edición
+            // de amarillo a rojo no puede ocultar un cobro que ya existe.
+            if (esTinajaServicio(item.servicio) && item.evidencia_origen?.cobro_color &&
+                ['cortesia','cobrable'].includes(item.intencion_cobro) &&
+                (item.intencion_cobro === 'cortesia') !== (x.tipo_cobro === 'cortesia'))
+                return { estado:'revisar', candidatos:porOrigen, contradicciones:['tipo_cobro'],
+                    motivo:'El color de la tinaja en el Libro no coincide con su cobro registrado. Revisa el servicio existente; no se creará otro ni se cambiará su importe automáticamente.' };
             if (item.reglaFullDay && x.tipo_cobro !== 'cortesia')
                 return { estado:'revisar', candidatos:porOrigen, contradicciones:['tipo_cobro'],
                     motivo:'La tinaja del mismo origen aún figura cobrable; Full Day incluye una hora de cortesía.' };
@@ -1121,6 +1130,26 @@
                         `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
         }
+        // Tonel y Jacuzzi son alternativas de la misma prestación. Antes de
+        // proponer un alta, buscar también el otro tipo en la misma estadía,
+        // fecha y franja horaria. El precio no distingue estas identidades.
+        if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora &&
+            ['tinajaTonel','tinajaJacuzzi'].includes(item.mapa?.codigo)) {
+            const inicio = minutosHora(hora);
+            const horasEscritas = Number(normalizar(item.servicio.texto_original).match(/\b(\d+)\s*(?:horas?|hrs?)\b/)?.[1]);
+            const fin = minutosHora(horaFin) ?? (horasEscritas > 0 && horasEscritas <= 24 ? inicio + horasEscritas * 60 : null);
+            const candidatos = activos.filter(x => (!x.estadia_id || x.estadia_id === estadiaId) &&
+                x.fecha_servicio === item.fecha && ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(x)) &&
+                codigoExistente(x) !== item.mapa.codigo && (() => {
+                    const a = minutosHora(horaCorta(x.hora_inicio)), b = minutosHora(horaCorta(x.hora_fin));
+                    return a === inicio || Number.isInteger(a) && Number.isInteger(b) && b > a &&
+                        (Number.isInteger(fin) && fin > inicio ? inicio < b && a < fin : inicio >= a && inicio < b);
+                })());
+            if (candidatos.length) return { estado:'revisar', candidatos, conflicto_tinaja_existente:true,
+                contradicciones:['tipo_tinaja'], motivo:candidatos.length === 1
+                    ? `Posible modificación: ya existe ${nombreExistente(candidatos[0])} el ${item.fecha} a las ${horaCorta(candidatos[0].hora_inicio)}. El Libro indica ${item.mapa.nombre} a las ${hora}. Revisa si se trasladó la misma tinaja; no se añadirá una segunda.`
+                    : 'Hay varias tinajas registradas en esa fecha y franja horaria. Revisa cuál fue modificada; no se añadirá otra ni se elegirá una automáticamente.' };
+        }
         // Mismo grupo de masajes ya registrado, pero otro subtipo: no crear
         // uno nuevo ni cambiar un servicio cobrado. Mostrar la discrepancia.
         if (item.servicio?.concepto === 'masaje' && item.fecha && hora &&
@@ -1201,7 +1230,7 @@
     // Leer el estado del cargo de CADA servicio existente, no el saldo total
     // de la reserva ni un antiguo texto del Libro que diga "por pagar".
     async function anexarFinanzasServiciosRegistrados(items, cliente) {
-        const registrados = items.filter(i => (i.estado === 'existente' || i.conflicto_tipo_masaje || i.conflicto_tinaja_promo) && i.servicio_existente?.id);
+        const registrados = items.filter(i => (i.estado === 'existente' || i.conflicto_tipo_masaje || i.conflicto_tinaja_promo || i.conflicto_tinaja_existente) && i.servicio_existente?.id);
         const desconocido = () => ({ estado:'por_verificar', etiqueta:'Pago por verificar' });
         for (const item of registrados) item.finanzas_existente = { ...desconocido(),
             etiqueta: item.cortesia ? 'cortesía · finanzas por verificar' : 'Pago por verificar' };
@@ -1443,6 +1472,7 @@
             throw new Error('La evidencia o el destino cambiaron; vuelve a abrir la revisión de este servicio.');
         if (base.cambioHorarioExistente) throw new Error('Confirma el cambio de horario de la tinaja existente desde Revisar horario.');
         if (base.conflicto_tinaja_promo) throw new Error('Revisa el cambio de tipo u horario de la tinaja registrada desde Ver reserva.');
+        if (base.conflicto_tinaja_existente) throw new Error('Revisa la modificación de la tinaja existente desde Aprobación manual; no corresponde preparar un servicio nuevo.');
         const contrato = await cargarContratoManual(), calculo = calcularManual(base, campos, contrato);
         if (!calculo.catalogo || !calculo.opciones.includes(calculo.catalogo.codigo)) throw new Error('No hay una equivalencia activa compatible.');
         const decision = { firma, usuario: contrato.usuario, codigo: calculo.catalogo.codigo,
@@ -1566,6 +1596,11 @@
                     item.conflicto_tinaja_promo = true;
                     if (decision.candidatos.length === 1) item.servicio_existente = decision.candidatos[0];
                 }
+                if (decision.conflicto_tinaja_existente) {
+                    item.conflicto_tinaja_existente = true;
+                    if (decision.candidatos.length === 1 && decision.candidatos[0].estadia_id === item.asociacion?.sistema?.id)
+                        item.servicio_existente = decision.candidatos[0];
+                }
                 if (decision.conflicto_tipo_masaje && decision.candidatos?.length === 1) {
                     item.conflicto_tipo_masaje = true;
                     item.servicio_existente = decision.candidatos[0]; // Referencia de revisión, no identidad aceptada.
@@ -1593,7 +1628,7 @@
         // La misma base visual de aprobaciones de Pagos, sin duplicar su CSS.
         if (!document.getElementById('haiku-libro-pagos-ui-v1-css')) {
             const link = document.createElement('link'); link.id = 'haiku-libro-pagos-ui-v1-css';
-            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=3'; document.head.appendChild(link);
+            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=4'; document.head.appendChild(link);
         }
         if (document.getElementById("haku-libro-servicios-estilos-v2")) return;
         const style = document.createElement("style"); style.id = "haku-libro-servicios-estilos-v2";
@@ -1727,6 +1762,8 @@
         const importe=Number(s.total).toLocaleString('es-CL');
         const pago=crear('p','haiku-manual-aviso haiku-manual-aviso--revision',
             `Valor acordado: $${importe} · ${s.cantidad} unidades registradas. ${item.finanzas_existente?.etiqueta || 'Pago por verificar'}. Se conserva este importe y sus pagos; esta revisión no recalcula el cobro.`);
+        if (item.intencion_cobro === 'cortesia' && s.tipo_cobro !== 'cortesia')
+            pago.textContent += ' El Libro indica cortesía, pero Proyecto H conserva un cobro previo. Esta decisión sólo corrige la agenda o conserva lo registrado. Para pasar a cortesía, usa la acción de cortesía del servicio y confirma su efecto sobre el cargo.';
         const campos=crear('div','haku-libro-servicio-manual__campos haiku-manual-dos-columnas');
         const campo=(clave,titulo,tipo,valor,opciones)=>{
             const label=crear('label','haiku-incorporacion-manual-campo',titulo),input=crear(opciones?'select':'input');input.dataset.revisionAdmin=clave;
@@ -1999,7 +2036,7 @@
         if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila);
         if (esAdministrador() && item.servicio_existente && esTinajaServicio(item.servicio))
             return abrirRevisionAdminExistente(item,out,texto,overrides,estado,fila);
-        if (esAdministrador() && (item.semantica!=='SERVICIO_REAL' || !codigosManual(item.manual_base || item).length || item.conflicto_tinaja_promo))
+        if (esAdministrador() && (item.semantica!=='SERVICIO_REAL' || !codigosManual(item.manual_base || item).length || item.conflicto_tinaja_promo || item.conflicto_tinaja_existente))
             return abrirRevisionAdminPendiente(item,out,texto,overrides,estado,fila);
         const base = item.manual_base || item;
         const apertura = ++estado.apertura;
@@ -2151,6 +2188,14 @@
             registrado.textContent = `Tinaja registrada: ${item.finanzas_existente?.etiqueta || 'Pago por verificar'}. La promoción incluye 1 hora de cortesía; se conservan el servicio y sus pagos registrados.`;
             cuerpo.append(registrado);
         }
+        if (item.conflicto_tinaja_existente && item.servicio_existente) {
+            const registrado = document.createElement('p'); registrado.className = 'haku-libro-servicios__inferencias';
+            const s = item.servicio_existente;
+            registrado.textContent = `Registrado: ${nombreExistente(s)} · ${horaCorta(s.hora_inicio)}–${horaCorta(s.hora_fin)} · ${item.finanzas_existente?.etiqueta || 'Pago por verificar'}.`;
+            if (item.intencion_cobro === 'cortesia' && s.tipo_cobro !== 'cortesia')
+                registrado.textContent += ` El Libro indica cortesía y Proyecto H tiene un cobro previo de $${Number(s.total).toLocaleString('es-CL')}; requiere confirmar esa diferencia.`;
+            cuerpo.append(registrado);
+        }
         let accionesRevision = null;
         // Consultar la reserva no aprueba una prestación: también está disponible
         // para fragmentos ambiguos y notas, sin habilitar escrituras ambiguas.
@@ -2163,7 +2208,7 @@
                     (root.HAIKU_INSPECTOR_V1 || root.HAIKU_PANELES_V1)?.abrirReserva?.(item.asociacion.sistema.reserva_id, ver);
             });
             acciones.append(ver);
-            if (opciones.abrirManual && item.kind === 'servicio' && (esAdministrador() || !item.conflicto_tinaja_promo && item.semantica === 'SERVICIO_REAL' &&
+            if (opciones.abrirManual && item.kind === 'servicio' && (esAdministrador() || !item.conflicto_tinaja_promo && !item.conflicto_tinaja_existente && item.semantica === 'SERVICIO_REAL' &&
                 (item.estado === 'revisar' || item.resolucionManual) && codigosManual(item.manual_base || item).length)) {
                 const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = !esAdministrador() && item.cambioHorarioExistente ? 'Revisar horario' : 'Aprobación manual';
                 manual.addEventListener('click', async () => {

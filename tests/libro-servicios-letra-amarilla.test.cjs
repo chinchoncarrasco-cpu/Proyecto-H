@@ -98,7 +98,7 @@ test('Dos glosas idénticas con distinto color conservan su ubicación: no copia
     assert.equal(r.servicios.length,2);assert.equal(r.servicios[0].intencion_cobro,'cobrable');
     assert.equal(r.servicios[1].intencion_cobro,'no_determinada');
 });
-for(const color of [{rgb:'FFFF0000'},{rgb:'FFFFFFFF'},{rgb:'FF000000'},{theme:4},{auto:true},{rgb:'FFFFFF00',tint:0.5}])
+for(const color of [{rgb:'FFFFFFFF'},{rgb:'FF000000'},{theme:4},{auto:true},{rgb:'FFFFFF00',tint:0.5}])
     test('Una fuente no amarilla o no resuelta no se adivina: '+JSON.stringify(color),()=>{
         const r=leer(hoja([run(INICIO,'FF000000'),{texto:TINAJA,font:{color}}]));
         assert.equal(tinaja(r).intencion_cobro,'no_determinada');
@@ -153,4 +153,30 @@ test('La letra amarilla procede del parser OOXML canónico de rich text, sin usa
     const runs=context.self.parsearTextoEnriquecido('<r><rPr><color rgb="FFFFFF00"/></rPr><t>TINAJA TONEL 1 HORA</t></r>');
     const t='TINAJA TONEL 1 HORA';const parsed=leer(hoja([run(INICIO,'FF000000'),...JSON.parse(JSON.stringify(runs))]));
     assert.equal(tinaja(parsed).texto_original,t);assert.equal(tinaja(parsed).intencion_cobro,'cobrable');
+});
+
+test('Letra roja de tinaja hereda el estilo, ignora el relleno y conserva el texto original',()=>{
+    const raw=hoja([],{font:{color:{rgb:'FFFF0000'}},fill:{fgColor:{rgb:'FFFFFF00'}}},INICIO+TINAJA);
+    const before=JSON.stringify(raw),s=tinaja(leer(raw));
+    assert.equal(s.intencion_cobro,'cortesia');assert.equal(s.pendiente,false);
+    assert.equal(s.evidencia_origen.cobro_color.color,'FF0000');assert.equal(JSON.stringify(raw),before);
+});
+test('Rojo de una nota vecina o sólo de la fecha no convierte en cortesía una tinaja negra',()=>{
+    for(const runs of [[run(INICIO,'FF000000'),run(TINAJA,'FF000000'),run(FIN,'FFFF0000')],
+        [run(INICIO,'FF000000'),run(TINAJA.slice(0,-9),'FF000000'),run(TINAJA.slice(-9),'FFFF0000')]])
+        assert.equal(tinaja(leer(hoja(runs))).intencion_cobro,'no_determinada');
+});
+test('Glosa mezclada roja/amarilla no inventa cortesía ni cobro; cada ocurrencia conserva su color',()=>{
+    const mezclada=leer(hoja([run(INICIO,'FF000000'),run(TINAJA.slice(0,12),'FFFF0000'),run(TINAJA.slice(12))]));
+    assert.equal(tinaja(mezclada).intencion_cobro,'no_determinada');
+    const separadas=leer(hoja([run(INICIO,'FF000000'),run(TINAJA,'FFFF0000'),run(' // ','FF000000'),run(TINAJA)]));
+    assert.equal(separadas.servicios[0].intencion_cobro,'cortesia');assert.equal(separadas.servicios[1].intencion_cobro,'cobrable');
+});
+test('Rojo llega desde OOXML; el texto financiero explícito y sus contradicciones se conservan',()=>{
+    const context={self:{addEventListener(){}},Map,Date,TextDecoder};vm.createContext(context);
+    vm.runInContext(fs.readFileSync('js/supabase-libro-reserva-worker-v1.js','utf8'),context);
+    const runs=context.self.parsearTextoEnriquecido('<r><rPr><color rgb="FFFF0000"/></rPr><t>TINAJA TONEL 1 HORA</t></r>');
+    assert.equal(tinaja(leer(hoja([run(INICIO,'FF000000'),...JSON.parse(JSON.stringify(runs))]))).intencion_cobro,'cortesia');
+    for(const [texto,intencion] of [[TINAJA+' X PAGAR','cobrable'],[TINAJA+' CORTESÍA X PAGAR','no_determinada']])
+        assert.equal(tinaja(leer(hoja([run(INICIO,'FF000000'),run(texto,'FFFF0000')]))).intencion_cobro,intencion);
 });

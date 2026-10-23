@@ -654,22 +654,25 @@
         });
     }
 
-    function evidenciaAmarillaServicio(entrada, unidad, rangos, origen) {
+    function evidenciaColorServicio(entrada, unidad, rangos, origen) {
         if (!rangos.length || !Number.isInteger(entrada.inicio) || entrada.inicio < 0 ||
             !Number.isInteger(entrada.fin) || !unidad.texto) return null;
         const relativo = entrada.parte.indexOf(unidad.texto);
         if (relativo < 0 || entrada.parte.lastIndexOf(unidad.texto) !== relativo) return null;
         const inicio = entrada.inicio + relativo, fin = inicio + unidad.texto.length;
         if (fin > entrada.fin) return null;
-        let letras = false;
+        let color = null;
         for (const r of rangos) {
             const a = Math.max(inicio,r.inicio), b = Math.min(fin,r.fin);
             if (a >= b || !/[\p{L}\p{N}]/u.test(r.texto.slice(a-r.inicio,b-r.inicio))) continue;
-            if (r.color !== 'FFFF00') return null;
-            letras = true;
+            if (!['FFFF00','FF0000'].includes(r.color) || color && color !== r.color) return null;
+            color = r.color;
         }
-        return letras ? { version:1, regla:'LETRA_AMARILLA_COBRABLE', color:'FFFF00',
-            texto:unidad.texto, inicio, fin, origen:origen || null } : null;
+        // Rojo identifica la cortesía de una tinaja. No extender esa regla
+        // a masajes u otros servicios ni deducirla de un formato desconocido.
+        if (!color || color === 'FF0000' && !['tinaja','tonel','jacuzzi'].includes(unidad.concepto)) return null;
+        return { version:1, regla:color === 'FFFF00' ? 'LETRA_AMARILLA_COBRABLE' : 'LETRA_ROJA_CORTESIA', color,
+            texto:unidad.texto, inicio, fin, origen:origen || null };
     }
 
     function servicios(texto, opciones = {}) {
@@ -697,10 +700,10 @@
                 const cobroColor = canon.semantica === SEMANTICA_SERVICIO.SERVICIO_REAL &&
                     unidadOriginal.intencion_financiera === INTENCION_FINANCIERA.NO_DETERMINADA &&
                     !(unidadOriginal.evidencias_financieras || []).length
-                    ? evidenciaAmarillaServicio(entrada, unidadOriginal, rangosColor, opciones.coordenadas_origen) : null;
+                    ? evidenciaColorServicio(entrada, unidadOriginal, rangosColor, opciones.coordenadas_origen) : null;
                 const unidad = cobroColor ? { ...unidadOriginal,
-                    intencion_financiera:INTENCION_FINANCIERA.COBRABLE,
-                    evidencias_financieras:['letra amarilla del servicio en el Libro'] } : unidadOriginal;
+                    intencion_financiera:cobroColor.color === 'FFFF00' ? INTENCION_FINANCIERA.COBRABLE : INTENCION_FINANCIERA.CORTESIA,
+                    evidencias_financieras:[cobroColor.color === 'FFFF00' ? 'letra amarilla del servicio en el Libro' : 'letra roja de la tinaja en el Libro'] } : unidadOriginal;
                 const intencion_cobro = ({ CORTESIA: "cortesia", COBRABLE: "cobrable", NO_DETERMINADA: "no_determinada" })[unidad.intencion_financiera];
                 const pendiente = intencion_cobro === "cobrable", cortesia = intencion_cobro === "cortesia";
                 const incompletoLegado = ["tinaja", "cama_adicional", "cuna"].includes(unidad.concepto) || /\b(?:x|por|sin)\s+confirmar\b|\b(?:por\s+)?coordinar\b/.test(normalizar(unidad.texto));
