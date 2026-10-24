@@ -255,9 +255,10 @@
     function horasDeServicio(texto) {
         const sinFechas = normalizar(texto).replace(/\b\d{1,2}[-/]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/g, " ");
         const horas = [];
+        // HR/HRS y HRA/HRAS son la misma abreviatura; el texto original se conserva.
         // Un solo token consume hora, minutos y sufijo: "7:15 PM" nunca
         // produce 07:15 y otro horario falso desde el minuto "15 PM".
-        for (const m of sinFechas.matchAll(/\b(\d{1,2})(?:\s*[:.,]\s*(\d{2}))?(?:\s*(am|pm|hrs?|hs|h))?\b/g)) {
+        for (const m of sinFechas.matchAll(/\b(\d{1,2})(?:\s*[:.,]\s*(\d{2}))?(?:\s*(am|pm|hra?s?|hs|h))?\b/g)) {
             if (m[2] == null && !m[3]) continue; // Un número suelto no es un horario.
             if (/\d\s*[:.,]\s*$/.test(sinFechas.slice(0, m.index))) continue;
             let hora = Number(m[1]);
@@ -306,14 +307,14 @@
         const original = String(texto || ""), t = normalizar(original);
         const minutos = t.match(/\b(30|60)\s*min(?:uto)?s?\b/);
         if (minutos) return Number(minutos[1]);
-        for (const hora of t.matchAll(/\b(?:1|una)\s*(?:hora|hrs?|h)\b/g)) if (!esHoraProgramada(original, hora.index)) return 60;
+        for (const hora of t.matchAll(/\b(?:1|una)\s*(?:hora|hra?s?|h)\b/g)) if (!esHoraProgramada(original, hora.index)) return 60;
         if (/\bmedia\s+hora\b/.test(t)) return 30;
         return null;
     }
 
     function textoSinDuracionMasaje(texto) {
         const original = String(texto || "");
-        return original.replace(/\b(?:1|una)\s*(?:hora|hrs?|h)\b/gi, (valor, indice) =>
+        return original.replace(/\b(?:1|una)\s*(?:hora|hra?s?|h)\b/gi, (valor, indice) =>
             esHoraProgramada(original, indice) ? valor : " ".repeat(valor.length));
     }
 
@@ -431,14 +432,14 @@
         const t = normalizar(texto);
         const resto = t
             .replace(/\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/g, '')
-            .replace(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hrs?|h)\b/g, '')
+            .replace(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b/g, '')
             .replace(/\b(?:para\s+)?el\s+\d{1,2}(?!\d|[-/.])\b/g, '')
             // Consumir el meridiano junto con los minutos antes de buscar dd.mm.
-            .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hrs?|hs|h)\b/g,
+            .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hra?s?|hs|h)\b/g,
                 valor => horasDeServicio(valor).length ? '' : valor)
             .replace(/\b\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{4}|\d{2}))?\b/g, '')
             .replace(/\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)\b/g, '')
-            .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hrs?|hs|h)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\b/g,
+            .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hra?s?|hs|h)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\b/g,
                 valor => horasDeServicio(valor).length ? '' : valor)
             // Sólo nombres profesionales ya reconocidos en el parser.
             .replace(/\bcon\s+(?:monica|josefina(?:\s+mellado)?|tessy)(?:\s+y\s+(?:con\s+)?(?:monica|josefina(?:\s+mellado)?|tessy))*\b/g, '')
@@ -453,10 +454,10 @@
             if (distintos(campo)) conflictos.push(`Información contradictoria de ${nombre} del masaje.`);
         }
         const texto = normalizar(unidades.map(u => u.texto).join(' '));
-        const duraciones = [...texto.matchAll(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hrs?|h)\b/g)]
+        const duraciones = [...texto.matchAll(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b/g)]
             .filter(m => !esHoraProgramada(texto, m.index)).map(m => duracionMasaje(m[0]));
         if (new Set(duraciones).size > 1 && !conflictos.some(c => c.includes('duración'))) conflictos.push('Información contradictoria de duración del masaje.');
-        const textoFechas = texto.replace(/\b(?:a|desde|hasta)\s+las?\s+\d{1,2}[:.,]\d{2}(?:\s*(?:am|pm|hrs?|hs|h))?\b|\b\d{1,2}[:.,]\d{2}\s*(?:am|pm|hrs?|hs|h)\b/g, ' ');
+        const textoFechas = texto.replace(/\b(?:a|desde|hasta)\s+las?\s+\d{1,2}[:.,]\d{2}(?:\s*(?:am|pm|hra?s?|hs|h))?\b|\b\d{1,2}[:.,]\d{2}\s*(?:am|pm|hra?s?|hs|h)\b/g, ' ');
         const dias = [...textoFechas.matchAll(/\b(?:para\s+)?el\s+(\d{1,2})(?!\d|[-/.])\b|\b(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{4}|\d{2}))?\b/g)];
         if (new Set(dias.map(m => Number(m[1] || m[2]))).size > 1 ||
             new Set(dias.filter(m => m[3]).map(m => Number(m[3]))).size > 1 ||
@@ -631,8 +632,8 @@
             evidencias.push("mención aislada sin intención de prestación"); return base(SEMANTICA_SERVICIO.NO_SERVICIO);
         }
         const pruebas = [
-            [/\b\d+\s*(?:horas?|hrs?|min(?:utos?)?|masaj\w*|personas?|pers\.?|pax|camas?|cunas?)\b/, "cantidad o duración"],
-            [/\b[0-2]?\d\s*[:.,]\s*[0-5]\d\b|\b[0-2]?\d\s*(?:hrs?|am|pm)\b/, "horario"],
+            [/\b\d+\s*(?:horas?|hra?s?|min(?:utos?)?|masaj\w*|personas?|pers\.?|pax|camas?|cunas?)\b/, "cantidad o duración"],
+            [/\b[0-2]?\d\s*[:.,]\s*[0-5]\d\b|\b[0-2]?\d\s*(?:hra?s?|am|pm)\b/, "horario"],
             [/\b\d{1,2}[-/.]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)\b/, "fecha o día"],
             [/\b(?:solicita(?:n|do)?|solicito|pidio|pide(?:n)?|reservo|reservada?|confirmo|confirmada?|agendo|agendar|preparar|dejar|entregar|respetar|requiere(?:n)?|contrato|usar)\b/, "acción operativa"],
             [/\bcon\s+[\p{L}][\p{L}\s.'’-]+/u, "profesional indicado"],

@@ -189,7 +189,7 @@
         if (tinajas.length !== 3 || candidatos.some(s =>
             ['tinaja','tonel','jacuzzi'].includes(normalizar(s?.concepto)) && !esTinaja(s))) return candidatos;
         const cortesia = tinajas.filter(s => s.intencion_cobro === 'cortesia' &&
-            /\b(?:1|una)\s*(?:hora|hr|hrs?)\b/.test(normalizar(s.texto_original)));
+            /\b(?:1|una)\s*(?:hora|hr|hra?s?)\b/.test(normalizar(s.texto_original)));
         const pagados = tinajas.filter(s => s.intencion_cobro === 'cobrable' &&
             /\b(?:x|por)\s+(?:pagar|cobrar)\b/.test(normalizar(s.texto_original)));
         const horarios = tinajas.filter(s => s.intencion_cobro === 'no_determinada' &&
@@ -198,7 +198,7 @@
             new Set([cortesia[0],pagados[0],horarios[0]]).size !== 3) return candidatos;
         const [regalada,cobro,horario] = [cortesia[0],pagados[0],horarios[0]];
         if (minutosHora(horario.hora_fin)-minutosHora(horario.hora) !== 120 ||
-            !/\b(?:dos|2)\s*(?:horas?|hrs?)\b/.test(normalizar(horario.texto_original))) return candidatos;
+            !/\b(?:dos|2)\s*(?:horas?|hra?s?)\b/.test(normalizar(horario.texto_original))) return candidatos;
         const importes = [...normalizar(cobro.texto_original)
             .matchAll(/\b(?:clp\s*\$?\s*|\$\s*)?(\d{1,3}(?:[.,]\d{3})+|\d{4,6})\b/g)]
             .map(m=>Number(m[1].replace(/[.,]/g,'')));
@@ -241,7 +241,7 @@
         const regalo=tinajas.find(s=>s.intencion_cobro==='cortesia'&&!s.hora&&!s.hora_fin&&
             !/\b(?:coordinar|pendiente|confirmar|extra|adicional)\b/.test(normalizar(s.texto_original)));
         const agenda=tinajas.find(s=>s!==regalo&&s.intencion_cobro==='no_determinada'&&s.hora&&!s.hora_fin&&
-            /^(?:jacuzzi|tonel|tinaja)(?:\s+de\s+madera)?\s+(?:a\s+las\s+)?(?:[01]?\d|2[0-3])[:.,][0-5]\d(?:\s*hrs?)?\.?$/.test(normalizar(s.texto_original)));
+            /^(?:jacuzzi|tonel|tinaja)(?:\s+de\s+madera)?\s+(?:a\s+las\s+)?(?:[01]?\d|2[0-3])[:.,][0-5]\d(?:\s*hra?s?)?\.?$/.test(normalizar(s.texto_original)));
         if(!regalo||!agenda||[regalo,agenda].some(s=>s.monto!=null&&Number(s.monto)>0)||
             regalo.concepto!=='tinaja'&&regalo.concepto!==agenda.concepto)return candidatos;
         const texto=[regalo.texto_original,agenda.texto_original].join(' // ');
@@ -380,7 +380,7 @@
         // Un reloj declarado por contexto o sufijo no es una fecha dd.mm.
         return normalizar(texto)
             .replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, "-")
-            .replace(/\b(?:a|desde|hasta)\s+las?\s+(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:1[0-2]|0?[1-9])[:.,][0-5]\d\s*(?:am|pm)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\s*(?:hrs?|hs|h)\b/g, " ");
+            .replace(/\b(?:a|desde|hasta)\s+las?\s+(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:1[0-2]|0?[1-9])[:.,][0-5]\d\s*(?:am|pm)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\s*(?:hra?s?|hs|h)\b/g, " ");
     }
 
     function fechaExplicita(texto, reserva) {
@@ -488,14 +488,14 @@
         const extraer = root.HAIKU_LIBRO_SEMANTICA?.horasDeServicio;
         if (typeof extraer === 'function') {
             if (preferirHasta) {
-                const hasta = t.match(/\bhasta\s+(?:las?\s+)?(\d{1,2}(?:\s*[:.,]\s*\d{2})?(?:\s*(?:am|pm|hrs?|hs|h))?)\b/);
+                const hasta = t.match(/\bhasta\s+(?:las?\s+)?(\d{1,2}(?:\s*[:.,]\s*\d{2})?(?:\s*(?:am|pm|hra?s?|hs|h))?)\b/);
                 return hasta ? extraer(hasta[1])[0] || null : null;
             }
             return extraer(t)[0] || null;
         }
         const patrones = preferirHasta
-            ? [/hasta\s+(?:las?\s+)?([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /hasta\s+(?:las?\s+)?([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/]
-            : [/\b([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /\b([0-2]?\d)\s*(?:h|hr|hrs|hs)\b/];
+            ? [/hasta\s+(?:las?\s+)?([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /hasta\s+(?:las?\s+)?([0-2]?\d)\s*(?:h|hra?s?|hs)\b/]
+            : [/\b([0-2]?\d)[:.,]([0-5]\d)\b(?![-/.]\d)/, /\b([0-2]?\d)\s*(?:h|hra?s?|hs)\b/];
         for (const re of patrones) {
             const m = t.match(re); if (!m) continue;
             const hh = Number(m[1]), mm = m[2] === undefined ? 0 : Number(m[2]);
@@ -689,10 +689,10 @@
         // reconocida por el lector. Las duraciones reales siguen bloqueadas.
         const inicioRegistrado = minutosHora(item.hora);
         const sinRelojConMinutos = texto.replace(
-            /\b([01]?\d|2[0-3])[:.,]([0-5]\d)\s*(?:hrs?|hr|h)\b/g,
+            /\b([01]?\d|2[0-3])[:.,]([0-5]\d)\s*(?:hra?s?|hr|h)\b/g,
             (valor, hh, mm) => Number(hh)*60+Number(mm) === inicioRegistrado ? ' ' : valor);
         const horas = [...sinRelojConMinutos.matchAll(
-            /\b(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|hr\b|h\b)/g)]
+            /\b(\d+(?:[.,]\d+)?)\s*(horas?|hra?s?|hr\b|h\b)/g)]
             .filter(m => {
                 const numero = Number(m[1].replace(',','.'));
                 if (/^horas?$/.test(m[2])) return true; // Duración expresa, nunca hora de reloj.
@@ -771,10 +771,10 @@
         if (inicio===null || inicio+60>=1440 || fin!==null && fin!==inicio+60 ||
             /\b(?:adicional|extra|extension|extender|segunda|segundo)\b/.test(texto)) return null;
         // "1 hr de tinaja" es una duración, no una cita a la 01:00.
-        if (!/\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:a\s+las|desde(?:\s+las)?)\s+(?:[01]?\d|2[0-3])\b|\b(?:0?9|1\d|2[0-3])\s*(?:hrs?|h)\b/.test(texto)) return null;
-        const sinReloj=texto.replace(/\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(?:hrs?|h)\b/g,
+        if (!/\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:a\s+las|desde(?:\s+las)?)\s+(?:[01]?\d|2[0-3])\b|\b(?:0?9|1\d|2[0-3])\s*(?:hra?s?|h)\b/.test(texto)) return null;
+        const sinReloj=texto.replace(/\b([01]?\d|2[0-3])(?::([0-5]\d))?\s*(?:hra?s?|h)\b/g,
             (valor,hh,mm)=>Number(hh)*60+Number(mm||0)===inicio ? ' ' : valor);
-        if ([...sinReloj.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(horas?|hrs?|h\b|minutos?|mins?|min\b)/g)]
+        if ([...sinReloj.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(horas?|hra?s?|h\b|minutos?|mins?|min\b)/g)]
             .some(m=>Number(m[1].replace(',','.'))!==(/^min/.test(m[2])?60:1))) return null;
         const mismaEstadia=otro=>otro?.asociacion?.sistema?.id===e.id;
         if(items.filter(otro=>otro.kind==='servicio' && mismaEstadia(otro) && esTinajaServicio(otro.servicio)).length!==1 ||
@@ -940,7 +940,7 @@
         return item?.kind === 'servicio' && item.semantica === 'SERVICIO_REAL' &&
             (item.intencion_cobro === 'cortesia' || beneficioPromo) && esTinajaServicio(s) &&
             !s.promoTinajaMixta && !s.hora && !s.hora_fin &&
-            (/\b(?:1|una)\s*(?:hora|hrs?)\b/.test(t)||beneficioSinAgenda) &&
+            (/\b(?:1|una)\s*(?:hora|hra?s?)\b/.test(t)||beneficioSinAgenda) &&
             !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|reservo|agendo|confirmo|contrato)\b/.test(t);
     }
 
