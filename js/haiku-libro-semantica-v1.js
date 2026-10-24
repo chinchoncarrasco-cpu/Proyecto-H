@@ -30,6 +30,27 @@
         return protegido.split(/\s*(?:\/+\*\/+|\/+)\s*|\r?\n/).map(x => x.trim())
             .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => tokens[Number(indice)]));
     }
+    // Convención del Libro: un campo de ocupación «N personas» equivale a N
+    // adultos. Un desglose ADL explícito tiene prioridad; nunca sumar el total
+    // otra vez ni tomar capacidades/cantidades de servicios como huéspedes.
+    function adultosPorPersonas(texto) {
+        const normal = normalizar(texto);
+        if (/\b(?:adl|adlt|adult|adult[oa]s?|aldt)\b/.test(normal) ||
+            /\b(?:incluye[n]?|incluid[oa]s?|entre|de (?:ellas|ellos))\b[^/\n]*\b(?:nin[oa]s?|chld|menores?)\b/.test(normal)) return null;
+        const cantidades = new Set();
+        let contextoServicio = false;
+        for (const campo of separarCampos(texto).map(normalizar)) {
+            if (/\b(?:tinajas?|jacuzzi|tonel|masajes?|desayunos?|cenas?)\b/.test(campo)) contextoServicio = true;
+            else if (/^(?:\d+\s*noches?\b|full\s*day\b|rut\b|tel(?:efono)?\s*:|correo\s*:)/.test(campo) || /@/.test(campo)) contextoServicio = false;
+            if (contextoServicio || !/\d\s*personas?\b/.test(campo)) continue;
+            const declaracion = campo.match(/^(\d+)\s*personas?(?:\s*(?:\+|y)\s*\d+\s*(?:nin[oa]s?|chld|mascotas?))*\.?$/);
+            if (!declaracion) return null;
+            const cantidad = Number(declaracion[1]);
+            if (!Number.isSafeInteger(cantidad) || cantidad < 1 || cantidad > 32767) return null;
+            cantidades.add(cantidad);
+        }
+        return cantidades.size === 1 ? [...cantidades][0] : null;
+    }
     function documentoDelLibro(texto) {
         for (const fragmento of separarCampos(texto)) {
             // Sin guion, los números también pueden ser teléfonos o folios.
@@ -933,7 +954,8 @@
                     notas_interpretacion: notasInterpretacion, advertencias_informativas: advertenciasInformativas,
                     tipo_estadia: fd ? "full_day" : "alojamiento", rut_documento: normalizarDocumento(documento), correo, telefono,
                     ...(promocionReserva(cell.valor) ? {promocion:promocionReserva(cell.valor)} : {}),
-                    adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/), ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
+                    adultos: cantidad(/\b(\d+)\s*a(?:dl|dlt|dult|ldt)/) ?? adultosPorPersonas(cell.valor),
+                    ninos: cantidad(/\b(\d+)\s*(?:chld|nin)/), mascotas: cantidad(/\b(\d+)\s*mascota/),
                     operador: partes.find(x => /^[A-Z]{2,4}$/.test(x)) || null, fecha_ingreso_libro: fechaRegistro,
                     estado_confirmacion: ["B4A7D6", "D9D2E9"].includes(colors.fondo) ? "confirmada_por_color" : ["D5A6BD", "F4CCCC", "EAD1DC"].includes(colors.fondo) ? "pendiente_por_color" : "no_determinado",
                     estado_operativo: colors.estado, notas_importantes: colors.notas, pagos_pendientes: [...new Set([...colors.pendientes, ...pendientesTexto])],
@@ -1275,6 +1297,6 @@
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
-        evidenciaIntencionOperativaServicio });
+        evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);

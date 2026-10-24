@@ -60,14 +60,17 @@
         });
     }
 
-    // Incorporacion desde el Libro: ADL explicitos, nunca minimo facturable
+    // Incorporación desde el Libro: adultos explícitos (ADL o el campo personas), nunca mínimo facturable
     // ni tarifa manual. Mantiene resolver() intacto para las otras rutas.
     function resolverLibro({ adultos, texto_original } = {}) {
         // El parser compartido puede extraer la primera cifra. Revalidarla aqui
         // evita alterar las advertencias que consumen pagos y reconciliacion.
         const declaraciones = typeof texto_original === 'string' && texto_original.trim()
             ? [...texto_original.matchAll(/(?<![\d.,/+-])\b(\d+)\s*(?:adl|adlt|adult|adultos?|aldt)\b/gi)] : null;
-        const ambiguo = declaraciones && (declaraciones.length !== 1 || Number(declaraciones[0][1]) !== adultos);
+        const personas = declaraciones?.length === 0
+            ? root.HAIKU_LIBRO_SEMANTICA?.adultosPorPersonas?.(texto_original) ?? null : null;
+        const ambiguo = declaraciones && (personas !== null ? personas !== adultos
+            : declaraciones.length !== 1 || Number(declaraciones[0][1]) !== adultos);
         if (ambiguo || !Number.isSafeInteger(adultos) || adultos < MINIMO_PERSONAS || adultos > 32767) {
             return Object.freeze({ tarifa: null, bloqueada: true,
                 mensaje: "Full Day requiere al menos 2 ADL explícitos y válidos. Revisa la cantidad de adultos; los niños no cuentan para el mínimo." });
