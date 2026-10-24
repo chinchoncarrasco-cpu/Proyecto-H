@@ -45,6 +45,84 @@ function filaSistema(estado,extra={}){
     const r=libro();return {id:'e1',reserva_id:'r1',fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:estado,tipo_estadia:'alojamiento',adultos:2,ninos:0,mascotas:0,
         cabanas:{numero:10},reservas:{id:'r1',grupo_reserva_id:null,titular_nombre:r.titular,titular_tipo_documento:null,titular_numero_documento:null,correo_contacto:null,telefono_contacto:null,estado_reserva:'confirmada',observaciones:''},...extra};
 }
+
+const masajeNota='1 MASAJE DESCONTRACTURANTE PARA EL 24/10 A LAS 11 AM CON TERAPEUTA';
+const jacuzziNota='JACUZZI 1 HORA PARA EL 23/10 A LAS 19:15 HR';
+async function prepararNotasParciales({antes=['batas en cab'],ahora=['batas en cab // 1 carbón 23-10'],observaciones,campo='notas_importantes'}={}){
+    const anterior=libro({[campo]:antes,servicios:[{texto_original:masajeNota}]}),actual={...anterior,[campo]:ahora};
+    const registro={id:'notas-parciales',tipo:'modificacion',anterior,actual,cambios:[{campo,antes,ahora}]};
+    const s=filaSistema('confirmada');
+    s.reservas.observaciones=observaciones??`Comentario manual\n[DATOS DEL LIBRO]\n${masajeNota} // ${jacuzziNota} // batas en cab\n${masajeNota}\n${jacuzziNota}S\n[/DATOS DEL LIBRO]`;
+    const db=clienteFocal({reserva_estadias:[s]},[]),Q=context.HAIKU_LIBRO_CONSULTAS;
+    const out=await Q.revalidarCambiosDetectados([registro],db,{generacion:3});
+    const plan=Q.crearPlanIncorporacion(out.reservas,out.comparacion);
+    return {Q,s,db,registro,out,plan,operaciones:Q.serializarIncorporacion(plan)};
+}
+test('nota parcial del historial conserva masaje y comentario manual al agregar carbón, sin repetir fragmentos',async()=>{
+    const h=await prepararNotasParciales(),op=h.operaciones.find(x=>x.tipo==='reserva_actualizar');
+    assert.ok(op);
+    const texto=op.reserva.despues.observaciones;
+    for(const parte of ['Comentario manual',masajeNota,jacuzziNota,'batas en cab','1 carbón 23-10'])assert.ok(texto.includes(parte),parte);
+    assert.equal(texto.split(masajeNota).length-1,1);
+    assert.equal(texto.split('JACUZZI').length-1,1);
+    assert.equal(texto.split('batas en cab').length-1,1);
+    assert.equal(texto.split('[DATOS DEL LIBRO]').length-1,1);
+    assert.deepEqual(Object.keys(op.reserva.despues),['observaciones']);
+    assert.equal(h.operaciones.length,1);
+    assert.equal(h.out.reservas[0].servicios.length,0);
+    h.s.reservas.observaciones=texto;
+    const repetido=await h.Q.revalidarCambiosDetectados([h.registro],h.db,{generacion:4});
+    assert.equal(repetido.items.length,0);
+});
+test('nota parcial sustituye sólo el fragmento cambiado y conserva los demás',async()=>{
+    const h=await prepararNotasParciales({antes:['Llegada a las 18:00'],ahora:['Llegada a las 20:00'],
+        observaciones:`Manual\n[DATOS DEL LIBRO]\n${masajeNota}\nLlegada a las 18:00\n[/DATOS DEL LIBRO]`});
+    const texto=h.operaciones[0].reserva.despues.observaciones;
+    assert.match(texto,/Llegada a las 20:00/);assert.doesNotMatch(texto,/Llegada a las 18:00/);
+    assert.ok(texto.includes(masajeNota));assert.match(texto,/^Manual\n/);
+});
+test('pago pendiente parcial conserva comentarios ajenos y no escribe pagos',async()=>{
+    const h=await prepararNotasParciales({campo:'pagos_pendientes',antes:[],ahora:['Pendiente factura'],
+        observaciones:`[DATOS DEL LIBRO]\n${masajeNota}\n[/DATOS DEL LIBRO]`});
+    assert.equal(h.operaciones.length,1);assert.equal(h.operaciones[0].tipo,'reserva_actualizar');
+    assert.ok(h.operaciones[0].reserva.despues.observaciones.includes(masajeNota));
+    assert.match(h.operaciones[0].reserva.despues.observaciones,/Pendiente factura/);
+});
+test('nota parcial no copia dentro del bloque del Libro los comentarios manuales que ya existen fuera',async()=>{
+    const h=await prepararNotasParciales({observaciones:`batas en cab\n[DATOS DEL LIBRO]\n${masajeNota}\n[/DATOS DEL LIBRO]`});
+    const texto=h.operaciones[0].reserva.despues.observaciones;
+    assert.equal(texto.split('batas en cab').length-1,1);
+    assert.match(texto,/^batas en cab\n/);assert.ok(texto.includes(masajeNota));
+});
+test('notas parciales pasan por preparación y confirmación sin perder información ni registrar servicios',async()=>{
+    const h=await prepararNotasParciales(),enviados=[];
+    const entrada={reservas:h.out.reservas,q:h.out.q};
+    h.db.rpc=async(nombre,args)=>{enviados.push({nombre,args});return {data:{ok:true,actualizaciones:1}}};
+    const plan=await h.Q.prepararIncorporacion(entrada,new Map(),new Set(),h.db);
+    assert.equal(enviados.length,0);
+    await h.Q.confirmarIncorporacion(entrada,new Map(),new Set(),plan,h.db);
+    assert.equal(enviados.length,1);assert.equal(enviados[0].nombre,'haiku_incorporar_libro_v1');
+    const items=enviados[0].args.p_items;
+    assert.equal(items.length,1);assert.equal(items[0].tipo,'reserva_actualizar');
+    assert.ok(items[0].reserva.despues.observaciones.includes(masajeNota));
+    assert.deepEqual(Object.keys(items[0].reserva.despues),['observaciones']);
+    assert.ok(!JSON.stringify(items).includes('_observacionesLibroParcial'));
+});
+test('notas parciales conservan servicios con horas distintas y fechas con slash completas',async()=>{
+    const h=await prepararNotasParciales({observaciones:`[DATOS DEL LIBRO]\n${jacuzziNota}\nJACUZZI 1 HORA PARA EL 24/10 A LAS 20:15 HRS\nPrecio C/U: $10.000\n[/DATOS DEL LIBRO]`});
+    const texto=h.operaciones[0].reserva.despues.observaciones;
+    assert.equal(texto.split('JACUZZI').length-1,2);
+    assert.match(texto,/23\/10 A LAS 19:15/);assert.match(texto,/24\/10 A LAS 20:15/);
+    assert.match(texto,/Precio C\/U: \$10.000/);
+});
+test('bloques históricos repetidos se consolidan en uno al agregar una nota',async()=>{
+    const bloque=`[DATOS DEL LIBRO]\n${masajeNota}\n[/DATOS DEL LIBRO]`;
+    const h=await prepararNotasParciales({observaciones:`Manual\n${bloque}\n${bloque.toLowerCase()}`});
+    const texto=h.operaciones[0].reserva.despues.observaciones;
+    assert.equal(texto.split(masajeNota).length-1,1);
+    assert.equal(texto.split('[DATOS DEL LIBRO]').length-1,1);
+    assert.equal(texto.split('[/DATOS DEL LIBRO]').length-1,1);
+});
 test('cambio histórico hospedada sigue pendiente si Proyecto H continúa confirmada',async()=>{
     const llamadas=[],registro=cambioEstado();
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[filaSistema('confirmada')]},llamadas),{generacion:3});

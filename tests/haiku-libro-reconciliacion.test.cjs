@@ -2469,6 +2469,20 @@ test('existing Libro notes with different separators do not create a formatting-
  assert.ok(plan.items.some(item=>item.categoria==='asociadas'));
 });
 
+test('lectura completa conserva el cambio Tonel a Jacuzzi sin reintroducir el texto anterior ni duplicar servicios',async()=>{
+ const masaje='Masaje 24/10 a las 11:00 con terapeuta',jacuzzi='Jacuzzi 23/10 a las 19:15 HRS';
+ const r=readyBook({texto_original:`${masaje} // ${jacuzzi} // batas en cab`,notas_importantes:['batas en cab'],
+  servicios:[{texto_original:masaje},{texto_original:'Jacuzzi 23/10 a las 19:15 HR'}]});
+ const s=stay(r,{reservas:{...stay(r).reservas,observaciones:`Manual\n[DATOS DEL LIBRO]\n${masaje}\nTonel 23/10 a las 19:15 HRS\n[/DATOS DEL LIBRO]`}});
+ const plan=await prepare([r],[s]),op=Q.serializarIncorporacion(plan).find(x=>x.tipo==='reserva_actualizar');
+ assert.ok(op);const texto=op.reserva.despues.observaciones;
+ assert.doesNotMatch(texto,/Tonel/);assert.match(texto,/^Manual\n/);
+ assert.equal(texto.split(masaje).length-1,1);assert.equal(texto.split('Jacuzzi').length-1,1);
+ assert.equal(texto.split('batas en cab').length-1,1);
+ applyPreview([s],[],[op]);
+ const repetido=await prepare([r],[s]);assert.ok(!repetido.items.some(x=>x.categoria==='actualizaciones'));
+});
+
 test('different Libro groups targeting one reservation produce one consolidated reservation patch',async()=>{
  const a=readyBook({texto_original:"Neviy Bitaporax // Factura"});
  const b=readyBook({id:'b2',cabana:2,fecha_checkin:'2026-09-20',fecha_checkout:'2026-09-21',texto_original:"Neviy Bitaporax // Llegada tarde"});
