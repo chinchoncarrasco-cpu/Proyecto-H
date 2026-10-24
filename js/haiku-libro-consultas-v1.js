@@ -2066,7 +2066,6 @@
         const original = [r.texto_original, ...(r.notas_importantes || []), ...(r.pagos_pendientes || []),
             ...(r.servicios || []).map(x => x.texto_original)].filter(Boolean);
         const notas = [...new Set(original)].join('\n').replace(/\[\/?DATOS DEL LIBRO\]/g, '');
-        const existentes = String(s.observaciones || '').replace(/\[DATOS DEL LIBRO\][\s\S]*?\[\/DATOS DEL LIBRO\]/g, '').trim();
         const clavesExistentes = new Set(fragmentosObservaciones(s.observaciones).map(claveFragmentoObservacion));
         const agregaNotas = fragmentosObservaciones(notas).some(fragmento => !clavesExistentes.has(claveFragmentoObservacion(fragmento)));
         const docCambio = r.rut_documento && documentoCanon(r.rut_documento, r.tipo_documento || s.tipo_documento) !== documentoCanon(s.rut_documento, s.tipo_documento);
@@ -2078,8 +2077,10 @@
             { titular_nombre:r.titular, titular_numero_documento:S.normalizarDocumento(r.rut_documento, r.tipo_documento),
                 titular_tipo_documento:docCambio ? (r.tipo_documento || (/^\d{1,2}(?:\.?\d{3}){2}-?[\dkK]$/.test(r.rut_documento) ? 'rut' : /[a-z]/i.test(r.rut_documento) ? 'pasaporte' : 'documento')) : undefined,
                 correo_contacto:r.correo, telefono_contacto:r.telefono,
-                observaciones:notas && agregaNotas ?
-                    [existentes, `[DATOS DEL LIBRO]\n${notas}\n[/DATOS DEL LIBRO]`].filter(Boolean).join('\n\n') : undefined });
+                observaciones:notas && agregaNotas ? unirObservacionesLibro(s.observaciones, [notas], {
+                    conservarAnteriores:!!r._observacionesLibroParcial,
+                    retirar:r._observacionesLibroParcial?.retirar || []
+                }) : undefined });
         const estadia = parcheLibro({ cabana_numero:s.cabana, fecha_ingreso:s.fecha_checkin, fecha_salida:s.fecha_checkout,
             tipo_estadia:s.tipo_estadia === 'full_day' ? 'fullday' : s.tipo_estadia, adultos:s.adultos, ninos:s.ninos, mascotas:s.mascotas, estado_estadia:s.estado_operativo },
             { cabana_numero:r.cabana, fecha_ingreso:r.fecha_checkin, fecha_salida:r.fecha_checkout,
@@ -2151,8 +2152,9 @@
                 proyecto:[...pendientes.map(x=>x.razon||x.estado),...notasPendientes.map(x=>`Nota por revisar: ${x.texto}`)].join(' · ')||'Ya coincide'};
         }
         if(['notas_importantes','pagos_pendientes'].includes(campo)){
-            const observaciones=S.normalizar(sistema.observaciones);
-            const faltan=(Array.isArray(objetivo)?objetivo:[]).filter(x=>!observaciones.includes(S.normalizar(x)));
+            const existentes=new Set(fragmentosObservaciones(sistema.observaciones).map(claveFragmentoObservacion));
+            const faltan=(Array.isArray(objetivo)?objetivo:[]).flatMap(fragmentosObservaciones)
+                .filter(x=>!existentes.has(claveFragmentoObservacion(x)));
             return {pendiente:faltan.length>0,proyecto:faltan.length?'Aún no contiene la información detectada':'Ya contiene la información',accionable:true};
         }
         const clave=camposHistoricosDirectos[campo];
@@ -2162,12 +2164,21 @@
         }
         return {pendiente:true,proyecto:'No se puede comprobar automáticamente',accionable:false};
     }
-    function reservaPreparacionHistorial(reserva,sistema,campos){
+    function reservaPreparacionHistorial(reserva,sistema,campos,cambios=[]){
         const r={...reserva,titular:sistema.titular,cabana:sistema.cabana,fecha_checkin:sistema.fecha_checkin,
             fecha_checkout:sistema.fecha_checkout,tipo_estadia:sistema.tipo_estadia,adultos:sistema.adultos,ninos:sistema.ninos,
             mascotas:sistema.mascotas,estado_operativo:sistema.estado_operativo,estado_confirmacion:'no_determinado',rut_documento:sistema.rut_documento,
             correo:sistema.correo,telefono:sistema.telefono,texto_original:'',notas_importantes:[],pagos_pendientes:[],pagos:[],pagos_sin_asociacion:[],servicios:[]};
         for(const campo of campos)if(campo in reserva)r[campo]=structuredClone(reserva[campo]);
+        // Esta preparación contiene sólo los campos pendientes, no una copia
+        // completa del Libro. Conservar el resto del bloque y sustituir sólo
+        // los fragmentos cuyo cambio anterior/actual conocemos explícitamente.
+        const notas=cambios.filter(c=>campos.has(c.campo)&&['notas_importantes','pagos_pendientes'].includes(c.campo));
+        if(notas.length){
+            const actuales=new Set(notas.flatMap(c=>(Array.isArray(c.ahora)?c.ahora:[]).flatMap(fragmentosObservaciones)).map(claveFragmentoObservacion));
+            r._observacionesLibroParcial={retirar:notas.flatMap(c=>(Array.isArray(c.antes)?c.antes:[]).flatMap(fragmentosObservaciones))
+                .filter(x=>!actuales.has(claveFragmentoObservacion(x)))};
+        }
         return r;
     }
     function asociacionHistoricaSegura(registro,comparacion){
@@ -2261,7 +2272,7 @@
                     if(detalle.pendiente)pendientes.push({...cambio,proyecto:detalle.proyecto,accionable:detalle.accionable});
                 }
                 if(!pendientes.length){resueltos.push(registro.id);continue;}
-                const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)));
+                const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)),pendientes);
                 const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
                 const accionable=pendientes.every(x=>x.accionable)&&filaHistoricaPreparable(fila,comparacion);
                 const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico};
@@ -2294,7 +2305,7 @@
 
     function separarObservacionesLibro(valor) {
         const bloques = [];
-        const base = String(valor || '').replace(/\[DATOS DEL LIBRO\]([\s\S]*?)\[\/DATOS DEL LIBRO\]/g, (_, contenido) => {
+        const base = String(valor || '').replace(/\[DATOS DEL LIBRO\]([\s\S]*?)\[\/DATOS DEL LIBRO\]/gi, (_, contenido) => {
             bloques.push(contenido.trim());
             return '';
         }).trim();
@@ -2302,7 +2313,8 @@
     }
 
     function claveFragmentoObservacion(valor) {
-        const texto = S.normalizar(valor).replace(/[.,;:]+$/g, '');
+        const texto = S.normalizar(valor).replace(/[.,;:]+$/g, '')
+            .replace(/\b(\d{1,2}:\d{2})\s*(?:hrs?|horas?)\b/g, '$1');
         const fragmentoRut = texto.match(/^(rut\s*:?\s*)?([\d.\s-]+[\dk])$/);
         return fragmentoRut ? (fragmentoRut[1] || '') + S.normalizarDocumento(fragmentoRut[2]) : texto;
     }
@@ -2320,16 +2332,18 @@
         return [...unicos.values()];
     }
 
-    function unirObservacionesLibro(antes, propuestas) {
-        const base = separarObservacionesLibro(antes).base;
+    function unirObservacionesLibro(antes, propuestas, {conservarAnteriores=false,retirar=[]}={}) {
+        const anterior = separarObservacionesLibro(antes), base = anterior.base;
         const lineas = [];
-        const vistas = new Set();
-        for (const propuesta of propuestas) {
+        const vistas = new Set(fragmentosObservaciones(base).map(claveFragmentoObservacion));
+        const retiradas = new Set(retirar.map(claveFragmentoObservacion));
+        const fuentes = conservarAnteriores ? [...anterior.bloques,...propuestas] : propuestas;
+        for (const propuesta of fuentes) {
             const partes = separarObservacionesLibro(propuesta);
             const contenidos = partes.bloques.length ? partes.bloques : [partes.base].filter(Boolean);
-            for (const linea of contenidos.flatMap(texto => texto.split(/\r?\n/)).map(x => x.trim()).filter(Boolean)) {
-                const clave = S.normalizar(linea);
-                if (!clave || vistas.has(clave)) continue;
+            for (const linea of contenidos.flatMap(fragmentosObservaciones)) {
+                const clave = claveFragmentoObservacion(linea);
+                if (!clave || vistas.has(clave) || retiradas.has(clave)) continue;
                 vistas.add(clave);
                 lineas.push(linea);
             }
@@ -2370,7 +2384,8 @@
                 }
                 const valorAntes = valoresAntes[0];
                 let valorLibro;
-                if (campo === 'observaciones') valorLibro = unirObservacionesLibro(valorAntes, propuestas);
+                if (campo === 'observaciones') valorLibro = unirObservacionesLibro(valorAntes, propuestas,
+                    {retirar:items.flatMap(item=>item.fragmentosNotasRetirados||[])});
                 else {
                     const unicos = [...new Map(propuestas.map(v => [JSON.stringify(v), v])).values()];
                     if (unicos.length !== 1) {
@@ -3373,6 +3388,8 @@
                     const compartido = { ...i.libro, texto_original:[...new Set(hermanas.map(r => r.texto_original).filter(Boolean))].join('\n'),
                         notas_importantes:[...new Set(hermanas.flatMap(r => r.notas_importantes || []))],
                         pagos_pendientes:[...new Set(hermanas.flatMap(r => r.pagos_pendientes || []))], servicios:serviciosReservaUnicos(hermanas) };
+                    if(hermanas.some(r=>r._observacionesLibroParcial))compartido._observacionesLibroParcial={
+                        retirar:hermanas.flatMap(r=>r._observacionesLibroParcial?.retirar||[])};
                     const payload = actualizacionReservaLibro(compartido,s), updateId = 'actualizar:' + (i.libro.id || claveReserva(i.libro)) + ':' + s.id;
                     const motivos = g.items.length > 1 && destino && !i.sistema && !destinosExactosGrupo.has(i) ?
                         ['Elige por separado la estadía destino de cada cabaña.'] : [];
@@ -3382,6 +3399,7 @@
                     if (payload.cambios.length) {
                         const item = add('actualizaciones', updateId, descripcionGrupo({...g, principal:i.libro, cabanas:[i.libro.cabana]}) + ' · Usar los datos del Libro', payload, motivos, [], ['reservas.editar']);
                         item.cambios = payload.cambios; cambios++; dependeDe.push(updateId);
+                        if(compartido._observacionesLibroParcial)item.fragmentosNotasRetirados=compartido._observacionesLibroParcial.retirar;
                         if (avisosInformativos.length) item.aviso = `Advertencia informativa: ${avisosInformativos.join(' ')}`;
                         if (['fecha_ingreso','fecha_salida','tipo_estadia'].some(k => k in payload.estadia.despues)) {
                             item.aviso = [item.aviso, 'Se corregirán las noches y cargos de alojamiento. Las noches nuevas usarán la tarifa del catálogo; los pagos de noches retiradas quedarán como saldo disponible. Los importes de los pagos se conservan.'].filter(Boolean).join(' ');
