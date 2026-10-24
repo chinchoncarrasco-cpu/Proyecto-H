@@ -1379,7 +1379,10 @@ test("Nofuv Kekeko and Nofuv Zupu keep the existing transfer out and only prepar
   assert.equal(comparacion.pagosDetalle.find(x=>x.estado==='en_sistema').coincidencia_debil,true);
   assert.equal(comparacion.pagosDetalle.filter(x=>x.estado==='nuevo_seguro').length,1,caso.titular);
   const texto=Q.respuesta({q:{...q,comparar:true},comparacion});
-  assert.match(texto,/Tarjeta Débito/);assert.doesNotMatch(texto,/Transferencia · alojamiento · \$(?:160\.000|180\.000) CLP/);
+  const [nuevos,registrados]=texto.split('PAGOS YA REGISTRADOS');
+  assert.match(nuevos,/Tarjeta Débito/);assert.doesNotMatch(nuevos,/Transferencia · alojamiento · \$(?:160\.000|180\.000) CLP/);
+  assert.match(registrados,/Transferencia · alojamiento · \$(?:160\.000|180\.000) CLP/);
+  assert.match(registrados,/No se volverá a incorporar/);assert.doesNotMatch(registrados,/Sin identificador fuerte/);
   const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
   assert.equal(plan.items.filter(i=>i.categoria==='omitidos'&&/ya existe/i.test(i.texto)).length,1,caso.titular);
   assert.equal(plan.items.filter(i=>i.categoria==='pagos').length,1,caso.titular);

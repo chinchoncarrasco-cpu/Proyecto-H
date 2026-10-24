@@ -105,7 +105,7 @@
             }
         }
 
-        const guest = t.match(/\b(?:reserva|huesped|titular)\s+(?:de\s+)?(.+?)(?=\s+(?:del?\s+cab|en\s+cab|cab\s*\d|el\s+\d|del?\s+\d|y\s+(?:dime|compara|revisa))|[?.]|$)/)?.[1]?.trim();
+        const guest = t.match(/\b(?:reserva|huesped|titular)\s+(?:de\s+)?(.+?)(?=\s+(?:del?\s+cab|en\s+cab|cab\s*\d|el\s+\d|del?\s+\d|y\s+(?:dime|compara|revisa)|(?:con|contra|vs\.?|en)\s+(?:el\s+)?(?:proyecto\s+h|sistema|supabase)\b)|[?.]|$)/)?.[1]?.trim();
         const nombre = guest && !/^(libro|reservas|que|del|actual|anterior|faltan|nuevas|cancelad)/.test(guest) ? guest : null;
 
         if (!seleccion.length && nombre) {
@@ -4638,7 +4638,7 @@
         ].join(" · ");
     }
 
-    function descripcionPagoNuevoSeguro(item) {
+    function descripcionPago(item, existente = false) {
         const p = item.pago || {};
         const medio = ({
             transferencia: 'Transferencia', debito: 'Tarjeta Débito', credito: 'Tarjeta Crédito',
@@ -4646,8 +4646,18 @@
             webpay_debito: 'WebPay Débito', webpay_credito: 'WebPay Crédito', airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo: 'Efectivo'
         })[p.medio_pago] || String(p.medio_pago || 'Medio sin precisar').replaceAll('_', ' ');
         const identificador = normalizarId(p.codigo_autorizacion) ? `CodAut ${p.codigo_autorizacion}` :
-            normalizarId(p.folio) && normalizarId(p.bovtar) ? `Folio ${p.folio} · Autorización ${p.bovtar}` : 'Sin identificador fuerte';
-        return `${item.reserva.titular} · ${medio} · ${p.tipo_movimiento} · ${money(p.monto)} · ${identificador}`;
+            normalizarId(p.folio) && normalizarId(p.bovtar) ? `Folio ${p.folio} · Autorización ${p.bovtar}` : existente ? null : 'Sin identificador fuerte';
+        return [item.reserva.titular, medio, p.tipo_movimiento, money(p.monto), identificador].filter(Boolean).join(' · ');
+    }
+
+    function descripcionPagoNuevoSeguro(item) {
+        return descripcionPago(item);
+    }
+
+    function descripcionPagoExistente(item) {
+        return `${descripcionPago(item, true)} · CAB ${item.reserva.cabana ?? 'sin dato'} · ` +
+            `Fecha comprobante ${item.pago.fecha_comprobante || 'sin dato'} · ${source(item.pago.origen)} · ` +
+            'Ya registrado en Proyecto H. No se volverá a incorporar. No requiere aprobación.';
     }
 
     function respuestaComparacion(result) {
@@ -4681,6 +4691,11 @@
         if (pagosFaltan.length) {
             lines.push("\nPAGOS NUEVOS SEGUROS EN ESTA CONSULTA");
             pagosFaltan.forEach(x => lines.push(`• ${descripcionPagoNuevoSeguro(x)}`));
+        }
+        const pagosExistentes = modeloPresentacionComparacion(result).pagosExistentes;
+        if (pagosExistentes.length) {
+            lines.push(`\nPAGOS YA REGISTRADOS (${pagosExistentes.length})`);
+            pagosExistentes.forEach(x => lines.push(`• ${descripcionPagoExistente(x)}`));
         }
         if (diferencias.length) {
             lines.push("\nRESERVAS CON DIFERENCIAS");
@@ -4983,6 +4998,7 @@
         const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
         const pagosActualizar = (comp.pagosDetalle || []).filter(x => x.actualizacionExistente);
         const pagosRevisar = (comp.pagosDetalle || []).filter(x => !x.actualizacionExistente && (x.estado === "revisar" || x.estado === "diferente"));
+        const pagosExistentes = (comp.pagosDetalle || []).filter(x => x.estado === 'en_sistema' && x.sistema?.id && !x.actualizacionExistente);
         const criterioOperativo = comp.criterioServiciosNotas === 'operativo_v2';
         const serviciosRevisar = (comp.serviciosDetalle || []).filter(x => criterioOperativo
             ? ['revisar','diferente'].includes(x.estado) : x.estado !== "en_sistema");
@@ -4991,7 +5007,7 @@
         const notasRevisar = (comp.notasDetalle || []).filter(x => x.estado === 'revisar');
         const advertenciasInformativas = comp.flatMap(x => (x.libro.advertencias_informativas || [])
             .map(a => `${x.libro.titular} · CAB ${x.libro.cabana}: ${a}`));
-        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar,
+        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes,
             serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas,
             contadores: { gruposLibro: meta.libro ?? 0, registrosDetectados: meta.libro_detectadas ?? 0,
                 reservasProyecto: meta.proyecto ?? 0, estadiasAsociadas: comp.filter(x => x.estado === "asociada").length,
@@ -5144,7 +5160,7 @@
         const iconos = {
             "Reservas que faltan": "alerta", "Posibles faltantes / modificaciones": "archivo",
             "Reservas con diferencias": "intercambio", "Pagos nuevos seguros en esta consulta": "pago",
-            "Pagos que requieren revisión": "pago", "Servicios que requieren revisión": "servicio",
+            "Pagos que requieren revisión": "pago", "Pagos · Ya registrados": "pago", "Servicios que requieren revisión": "servicio",
             "Grupos / multicabaña": "grupo", "Detalles técnicos XLSX": "archivo"
         };
         return ` haku-icono--${iconos[titulo.replace(/ \(\d+\)$/, "")] || "archivo"}`;
@@ -5408,7 +5424,7 @@
         const meta = comp.meta || {};
         const grupos = comp.grupos || [];
         const modelo = modeloPresentacionComparacion(result);
-        const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar,
+        const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes,
             serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas } = modelo;
 
         if (result.q.solo_pagos) renderizarSoloPagos(out, result);
@@ -5453,7 +5469,7 @@
         avisoPagos.append(
             elemento("strong", "", `${pagosRevisar.length} pagos requieren revisión${pagosActualizar.length ? ` · ${pagosActualizar.length} actualizaciones de pagos existentes` : ''}`),
             elemento("span", "", pagosActualizar.length ? 'Los pagos a actualizar ya están registrados; revisa la diferencia, no los incorpores otra vez.' : "La coincidencia de reservas no cierra la revisión de pagos."),
-            elemento("small", "", `Nuevos seguros: ${meta.pagos_faltantes ?? 0} · Requieren decisión: ${pagosRevisar.length} · Actualizaciones: ${pagosActualizar.length}`)
+            elemento("small", "", `Nuevos seguros: ${meta.pagos_faltantes ?? 0} · Requieren decisión: ${pagosRevisar.length} · Actualizaciones: ${pagosActualizar.length} · Ya registrados: ${pagosExistentes.length}`)
         );
         out.append(avisoPagos);
 
@@ -5518,6 +5534,10 @@
         contexto.append(bloqueos);
         root.HAIKU_LIBRO_BLOQUEOS_V1?.renderizar(bloqueos, result.bloqueos_comparacion, result.generacion);
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarResueltas(contexto, result);
+        const detallePagosExistentes = agregarDetalles(contexto, 'Pagos · Ya registrados',
+            pagosExistentes.map(descripcionPagoExistente), 'normal', 'pago');
+        detallePagosExistentes?.querySelectorAll('li').forEach((fila, i) =>
+            fila.append(accionInspectorReserva(identidadInspectorMovimiento(pagosExistentes[i], comp))));
         agregarLista(contexto, `Reservas que faltan (${faltantes.length})`,
             faltantes.map(g => `${descripcionGrupo(g)} · confianza ${g.confianza}`),
             { alerta: true, vacio: "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" });
