@@ -1363,7 +1363,7 @@
         return diferencias;
     }
 
-    function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false) {
+    function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false, capacidadGlosaSinNombre = false) {
         const estados = ESTADOS_RESOLUCION_PAGO, resoluciones = new Map(), items = [], vistos = new Set(), consumidos = new Set();
         for (const result of resultados || []) {
             for (const p of [...(result.libro?.pagos || []), ...(result.libro?.pagos_sin_asociacion || [])]) {
@@ -1399,7 +1399,7 @@
         const glosaReciboCanon = texto => {
             const glosas = S.separarCampos(texto).filter(campo =>
                 /^(?:transf(?:erencia)?\.?\s+(?:de\s+)?)?\d{7,12}[kK]?(?:\s|$)/i.test(campo));
-            if (glosas.length !== 1 || !/transf|[a-záéíóúñ]{2,}/i.test(glosas[0])) return null;
+            if (glosas.length !== 1 || !(/transf|[a-záéíóúñ]{2,}/i.test(glosas[0]) || /^\d{7,12}[kK]?$/.test(glosas[0]))) return null;
             return textoFinancieroCanon(glosas[0]).replace(/\btransf\b(?:\s+de\b)?/g,'').trim().replace(/\s+/g,' ');
         };
         const reciboCabanaAdmin = (item,guardado) => {
@@ -1525,6 +1525,8 @@
                     ['Existe una transferencia posiblemente duplicada o contradictoria: revisa glosa, recepción, monto y reserva destino.']);
             } else if (!capacidadTransferencias) resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
                 ['Falta instalar el contrato SQL de transferencias v2; el writer vigente exige aprobación manual y no conserva la evidencia bancaria.']);
+            else if (!item.banco.nombre_remitente && !capacidadGlosaSinNombre) resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
+                ['La glosa bancaria está reconocida. Falta habilitar en Proyecto H las transferencias cuyo banco no incluye el nombre del remitente.']);
             else resolver(item,estados.NUEVO_SEGURO,null,'transferencia_bancaria_contextual');
         }
 
@@ -1777,14 +1779,15 @@
         const pagos = q.incluirFinanzas===false ? [] : await paginas(() => cliente.from("pagos")
             .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
-        let capacidadTransferencias = false;
+        let capacidadTransferencias = false, capacidadGlosaSinNombre = false;
         if (resultados.some(r => [...(r.libro.pagos || []),...(r.libro.pagos_sin_asociacion || [])].some(p => S.evidenciaTransferencia?.(p)?.valida))) {
             try {
                 const respuesta = await cliente.rpc('haiku_libro_transferencias_capacidad_v2',{});
                 capacidadTransferencias = !respuesta.error && respuesta.data?.version === 2 && respuesta.data?.confirmacion_final === true;
+                capacidadGlosaSinNombre = capacidadTransferencias && respuesta.data?.glosa_sin_nombre === true;
             } catch (_) { /* Contrato ausente: mantener revisión, sin escritura. */ }
         }
-        const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias);
+        const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias, capacidadGlosaSinNombre);
         const servicios = [];
         if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
@@ -1988,7 +1991,7 @@
             }
         }
 
-        resultados.snapshot = { capacidadTransferencias, estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero,
+        resultados.snapshot = { capacidadTransferencias, capacidadGlosaSinNombre, estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero,
             efectivo_aplicado: snapshotEfectivoAplicado };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
@@ -3487,7 +3490,7 @@
         // Comparación y preparación comparten la misma autoridad canónica. Una
         // decisión explícita de reserva cambia el destino de entrada, no las reglas.
         const pagosSnapshotCompletos = snapshot.pagos_todos || snapshot.pagos || [];
-        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos,snapshot.capacidadTransferencias);
+        const resolucionesPreparacion = resolverPagosExistentes(resultadosConDecision,pagosSnapshotCompletos,snapshot.capacidadTransferencias,snapshot.capacidadGlosaSinNombre);
         for (const r of reservas.map(normalizarReservaComparacion).filter(r => !esReservaValida(r))) add('pendientes', 'invalida:' + claveReserva(r), (r.titular || 'Sin titular') + ' · CAB ' + (r.cabana || 'sin dato'), null, ['Faltan titular, cabaña o fechas válidas.']);
         const destinosFinancieros = new Map(destinos);
         destinosFinancierosSeguros.forEach((valor,clave) => destinosFinancieros.set(clave,valor));

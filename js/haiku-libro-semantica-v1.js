@@ -67,15 +67,17 @@
         const operaciones = camposOperacion.map(f => f.match(/^(?:n(?:ro|umero|úmero)?\.?\s*(?:de\s*)?)?operaci[oó]n\s*(?:bancaria\s*)?[:#.]?\s*([a-z0-9-]{1,64})$/i)?.[1]?.toUpperCase())
             .filter(op => op && /\d/.test(op));
         const glosas = separarCampos(pago.detalle_bancario || pago.texto_original).flatMap(fragmento => {
-            const m = fragmento.match(/^(?:(transf(?:erencia)?\.?)\s+)?(\d{7,12}[kK]?)\s+(?:(transf(?:erencia)?\.?)\s+)?([\p{L}][\p{L}\s.'’-]+)$/iu);
+            const m = fragmento.match(/^(?:(transf(?:erencia)?\.?)\s+)?(\d{7,12}[kK]?)(?:\s+(transf(?:erencia)?\.?))?(?:\s+([\p{L}][\p{L}\s.'’-]+))?$/iu);
             if (!m || (!m[1] && !m[3] && pago.medio_pago !== 'transferencia')) return [];
-            const nombre = m[4].trim(), palabras = nombre.split(/\s+/);
-            if (palabras.length < 2 || palabras.length > 8 || /\b(?:cab|noches?|saldo|folio|codaut|telefono|factura|bove)\b/.test(normalizar(nombre))) return [];
+            // El banco puede mostrar sólo el número. No completar el nombre
+            // con el titular: un tercero también puede realizar el abono.
+            const nombre = m[4]?.trim() || null, palabras = nombre?.split(/\s+/) || [];
+            if (nombre && (palabras.length < 2 || palabras.length > 8 || /\b(?:cab|noches?|saldo|folio|codaut|telefono|factura|bove)\b/.test(normalizar(nombre)))) return [];
             return [{glosa_original:fragmento,numero_remitente:m[2],nombre_remitente:nombre}];
         });
         if (!glosas.length && pago.medio_pago !== 'transferencia') return null;
         const glosa = glosas[0] || null, motivos = [];
-        if (!glosa) motivos.push('Falta la glosa bancaria completa: número y nombre del remitente.');
+        if (!glosa) motivos.push('Falta una glosa bancaria reconocible con el número del remitente.');
         if (glosas.length > 1) motivos.push('La fila contiene más de una glosa bancaria; requiere revisión.');
         if (new Set(operaciones).size > 1) motivos.push('La fila contiene números de operación bancaria contradictorios.');
         if (operaciones.length !== camposOperacion.length) motivos.push('El número de operación bancaria está incompleto o no es inequívoco.');

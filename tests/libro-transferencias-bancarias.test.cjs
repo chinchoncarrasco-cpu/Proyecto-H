@@ -146,10 +146,10 @@ test('si el destino es ambiguo, ni el nombre ni el RUT del remitente eligen la r
  assert.ok(h.c.pagosDetalle.every(x=>x.motivos.some(m=>/destino/.test(m))));sinEscrituras(h);
 });
 for(const glosa of ['0177406988','0177406988 Transf.','Remitente Incompleto // 0177406988 Transf.'])
- test('una glosa incompleta no demuestra una transacción anterior de otra fecha: '+glosa,async()=>{
+ test('sin capacidad para glosa numérica no prepara ni confunde el abono de otra fecha: '+glosa,async()=>{
   const h=await comparar([{pagos:[{glosa,concepto:'cab10/1noche // Transferencia'}]}],
    [guardado({fecha_pago:'2026-10-20',referencia_externa:glosa})]);
-  assert.equal(movimiento(h).estado,'revisar');assert.match(movimiento(h).motivos.join(' '),/glosa bancaria completa/);sinEscrituras(h);
+  assert.equal(movimiento(h).estado,'revisar');assert.match(movimiento(h).motivos.join(' '),/glosa bancaria está reconocida/);sinEscrituras(h);
  });
 
 test('dos transferencias iguales el mismo día con operaciones diferentes se seleccionan independientemente',async()=>{
