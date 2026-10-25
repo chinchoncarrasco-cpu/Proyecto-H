@@ -3,7 +3,8 @@
 
     const FILAS_POR_PAGINA = 120;
     const MAX_COLUMNAS_VISOR = 250;
-    let zoomLibro = 100;
+    const ZOOM_LIBRO_INICIAL = 80;
+    let zoomLibro = ZOOM_LIBRO_INICIAL;
     const visoresConZoom = new WeakSet();
     function instalarZoomLibro(visor, tabla) {
         tabla.style.zoom = String(zoomLibro / 100);
@@ -12,6 +13,7 @@
             if (controles?.length === 3) {
                 controles[0].disabled = zoomLibro === 60;
                 controles[1].disabled = false;
+                controles[1].textContent = `${zoomLibro}%`;
                 controles[2].disabled = zoomLibro === 160;
             }
             return;
@@ -23,15 +25,19 @@
         const menos = document.createElement('button'), indicador = document.createElement('button'), mas = document.createElement('button');
         menos.textContent = '−'; mas.textContent = '+'; indicador.textContent = `${zoomLibro}%`;
         for (const b of [menos, indicador, mas]) { b.type = 'button'; b.className = 'libro-reserva-boton secundario'; }
-        menos.setAttribute('aria-label','Alejar Libro'); mas.setAttribute('aria-label','Acercar Libro'); indicador.setAttribute('aria-label','Restablecer zoom al 100%');
+        menos.setAttribute('aria-label','Alejar Libro'); mas.setAttribute('aria-label','Acercar Libro'); indicador.setAttribute('aria-label',`Restablecer zoom al ${ZOOM_LIBRO_INICIAL}%`);
         function ajustar(valor) {
             zoomLibro = Math.max(60, Math.min(160, valor));
             const actual = visor.querySelector('table');
             if (actual) actual.style.zoom = String(zoomLibro / 100);
             indicador.textContent = `${zoomLibro}%`; menos.disabled = zoomLibro === 60; mas.disabled = zoomLibro === 160;
         }
-        menos.addEventListener('click',()=>ajustar(zoomLibro-10)); mas.addEventListener('click',()=>ajustar(zoomLibro+10)); indicador.addEventListener('click',()=>ajustar(100));
+        menos.addEventListener('click',()=>ajustar(zoomLibro-10)); mas.addEventListener('click',()=>ajustar(zoomLibro+10)); indicador.addEventListener('click',()=>ajustar(ZOOM_LIBRO_INICIAL));
         visor.addEventListener('wheel',e=>{ if (!e.ctrlKey || !e.deltaY) return; e.preventDefault(); ajustar(zoomLibro+(e.deltaY<0?10:-10)); },{passive:false});
+        const seccion = document.getElementById?.('seccion-libro-reserva');
+        if (seccion) new MutationObserver(() => {
+            if (seccion.classList.contains('activa')) ajustar(ZOOM_LIBRO_INICIAL);
+        }).observe(seccion, { attributes: true, attributeFilter: ['class'] });
         barra.append(menos,indicador,mas);
         const espacioSites = document.getElementById?.('sites-libro-zoom-slot');
         if (espacioSites) espacioSites.replaceChildren(barra);
@@ -359,11 +365,11 @@
         combinacionesCargadas = [];
         rangoCargado = null;
         paginaActual = 0;
-        zoomLibro = 100;
+        zoomLibro = ZOOM_LIBRO_INICIAL;
         const controlesZoom = $("sites-libro-zoom-slot")?.querySelectorAll?.("button");
         if (controlesZoom?.length === 3) {
             controlesZoom.forEach(boton => { boton.disabled = true; });
-            controlesZoom[1].textContent = "100%";
+            controlesZoom[1].textContent = `${zoomLibro}%`;
         }
         actualizarDescarga();
         actualizarPieVisor();

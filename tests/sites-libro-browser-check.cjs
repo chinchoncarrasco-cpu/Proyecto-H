@@ -165,7 +165,7 @@ async function upload(page, name, bytes) {
 (async () => {
     const server = await serve();
     const address = server.address();
-    const browser = await chromium.launch({ executablePath: edge, headless: true });
+    const browser = await chromium.launch({ executablePath: process.env.HAKU_CHROMIUM_PATH || edge, headless: true });
     try {
         const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, acceptDownloads: true });
         await mockExternalSources(context);
@@ -216,10 +216,16 @@ async function upload(page, name, bytes) {
         const zoomOut = page.locator('[aria-label="Alejar Libro"]');
         const zoomIn = page.locator('[aria-label="Acercar Libro"]');
         assert.equal(await zoomOut.count(), 1);
+        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '0.8');
         await zoomOut.click();
-        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '0.9');
+        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '0.7');
         await zoomIn.click();
-        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '1');
+        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '0.8');
+        await zoomIn.click();
+        await page.evaluate(() => document.getElementById('seccion-libro-reserva').classList.remove('activa'));
+        await page.evaluate(() => document.getElementById('seccion-libro-reserva').classList.add('activa'));
+        await page.waitForFunction(() => document.querySelector('#libro-reserva-visor table').style.zoom === '0.8');
+        assert.equal(await page.getByRole('button', { name: 'Restablecer zoom al 80%' }).innerText(), '80%');
 
         let versions = await indexedVersions(page);
         assert.deepEqual(versions.current.bytes, [...bytesA]);
@@ -250,6 +256,7 @@ async function upload(page, name, bytes) {
         await page.reload();
         await page.waitForFunction(() => window.HAIKU_LIBRO_RESERVA_V1?.estado().cargado === true);
         await page.locator('#libro-reserva-visor table').waitFor();
+        assert.equal(await page.locator('#libro-reserva-visor table').evaluate(el => el.style.zoom), '0.8');
         assert.equal(await page.evaluate(() => HAIKU_LIBRO_RESERVA_V1.estado().nombre), 'Copia B.xlsx');
         versions = await indexedVersions(page);
         assert.deepEqual(versions.previous.bytes, [...bytesA]);
