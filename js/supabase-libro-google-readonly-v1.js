@@ -11,7 +11,8 @@
     const FILE_ID = "1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk";
     const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
-    const POLL_MS = 60_000;
+    const POLL_MS = 15_000;
+    const SESSION_KEY = "haikuLibroGoogleSesionV1";
     const MODIFIED_KEY = "haikuLibroGoogleModifiedTimeV1";
     const informeReadonly = document.getElementById("seccion-libro-reserva")?.dataset?.libroModo === "informe-readonly";
     let modifiedMemoria = "";
@@ -27,6 +28,73 @@
     let fuenteControl = null;
     let revisionAutorizacion = 0;
     let timerAutorizacion = null;
+    let usuarioAutorizado = null;
+    let clienteAuth = null;
+    let ultimaComprobacion = 0;
+    let ultimaComprobacionCorrecta = 0;
+    let comprobacionAbort = null;
+
+    const usuarioActual = () => root.haikuSesion?.usuario?.activo === true
+        ? root.haikuSesion.auth?.id || null : null;
+
+    // Sólo el permiso temporal, en esta pestaña y ligado al usuario de Haku.
+    // Nunca prolonga su vencimiento ni persiste permisos en el informe readonly.
+    function borrarSesionGuardada() {
+        if (informeReadonly) return;
+        try { root.sessionStorage?.removeItem(SESSION_KEY); } catch (_) {}
+    }
+
+    function guardarSesion() {
+        if (informeReadonly || !usuarioAutorizado) return;
+        try { root.sessionStorage?.setItem(SESSION_KEY, JSON.stringify({
+            usuario: usuarioAutorizado, clientId: CLIENT_ID, fileId: FILE_ID,
+            token: accessToken, expiraEn: tokenExpiraEn
+        })); } catch (_) { /* Sin almacenamiento, la conexión actual sigue funcionando. */ }
+    }
+
+    function programarVencimiento() {
+        if (timerAutorizacion) clearTimeout(timerAutorizacion);
+        timerAutorizacion = setTimeout(avisarRenovacion, Math.max(0, tokenExpiraEn - Date.now()));
+    }
+
+    function avisarRenovacion() {
+        perderAutorizacion();
+        pintar("neutral", "Renovar conexión con Google", "El permiso temporal venció o fue revocado. Pulsa Conectar Google para reanudar los avisos del Libro.");
+    }
+
+    async function restaurarSesion() {
+        const usuario = usuarioActual();
+        if (informeReadonly || !usuario || accessToken) return;
+        let guardada;
+        try { guardada = JSON.parse(root.sessionStorage?.getItem(SESSION_KEY) || "null"); }
+        catch (_) { borrarSesionGuardada(); return; }
+        if (!guardada) return;
+        if (guardada.usuario !== usuario || guardada.clientId !== CLIENT_ID || guardada.fileId !== FILE_ID ||
+            typeof guardada.token !== "string" || !guardada.token || guardada.token.length > 16384 || /\s/.test(guardada.token) ||
+            !Number.isFinite(guardada.expiraEn) || guardada.expiraEn <= Date.now() || guardada.expiraEn > Date.now() + 3600_000) {
+            borrarSesionGuardada();
+            if (guardada.usuario === usuario && Number.isFinite(guardada.expiraEn) && guardada.expiraEn <= Date.now()) avisarRenovacion();
+            return;
+        }
+        accessToken = guardada.token; tokenExpiraEn = guardada.expiraEn;
+        usuarioAutorizado = usuario; revisionAutorizacion++;
+        programarVencimiento(); iniciarPolling();
+        pintar("trabajando", "Recuperando conexión con Google", "Comprobando la última versión del Libro…");
+        // Conservar la versión anterior y no competir con su restauración desde IndexedDB.
+        await sincronizar(false);
+    }
+
+    function instalarSesion() {
+        const auth = root.haikuSupabase?.auth;
+        if (!auth?.onAuthStateChange || clienteAuth === auth) return;
+        clienteAuth = auth;
+        auth.onAuthStateChange((evento, sesion) => {
+            if (evento === "SIGNED_OUT" || (usuarioAutorizado && sesion?.user?.id !== usuarioAutorizado)) {
+                perderAutorizacion(); metadataActual = null;
+                pintar("neutral", "Libro online", "Conexión cerrada con la sesión de Haku.");
+            }
+        });
+    }
 
     function fallo(code) {
         return new root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.FuenteOficialError(code);
@@ -38,6 +106,8 @@
 
     function perderAutorizacion() {
         accessToken = ""; tokenExpiraEn = 0; revisionAutorizacion++;
+        usuarioAutorizado = null; borrarSesionGuardada();
+        comprobacionAbort?.abort();
         if (timerAutorizacion) clearTimeout(timerAutorizacion);
         timerAutorizacion = null;
         fuenteControl?.invalidar("GOOGLE_NO_AUTORIZADO"); detenerPolling();
@@ -149,7 +219,7 @@
         if (tituloEl) tituloEl.textContent = titulo || "Libro online";
         if (detalleEl) detalleEl.textContent = detalle || "";
 
-        const conectado = Boolean(accessToken);
+        const conectado = autorizado();
         const onlineTitulo = $("sites-libro-online-titulo");
         const onlineDetalle = $("sites-libro-online-detalle");
         const syncTitulo = $("sites-libro-sync-titulo");
@@ -163,7 +233,8 @@
             : (sincronizando ? "Comprobando Google…" : estado === "error" ? "Comprobación con incidencias" : "Comprobación automática activa");
         if (syncDetalle) syncDetalle.textContent = !conectado
             ? "Conecta Google para actualizar"
-            : (estado === "error" ? detalle || "Revisa la conexión con Google" : "Cada 60 s; descarga si Google cambia");
+            : (estado === "error" ? detalle || "Revisa la conexión con Google"
+                : `${ultimaComprobacionCorrecta ? `Revisado ${horaChile(ultimaComprobacionCorrecta)}. ` : ""}Cada 15 s y al volver al panel; descarga si Google cambia`);
         const conectarBtn = $("haiku-libro-google-conectar");
         const syncBtn = $("haiku-libro-google-sincronizar");
         const desconectarBtn = $("haiku-libro-google-desconectar");
@@ -209,6 +280,9 @@
 
     function solicitarToken() {
         const solicitud = ++revisionAutorizacion;
+        // También vincular una autorización pendiente: cambiar de usuario mientras
+        // Google muestra su ventana debe invalidar esa respuesta tardía.
+        usuarioAutorizado = usuarioActual();
         fuenteControl?.invalidar();
         return new Promise(async (resolve, reject) => {
             let cliente;
@@ -233,9 +307,8 @@
                     perderAutorizacion(); reject(fallo("GOOGLE_NO_AUTORIZADO"));
                     return;
                 }
-                timerAutorizacion = setTimeout(() => {
-                    perderAutorizacion(); pintar("neutral", "Libro online", "La sesión de Google expiró. Vuelve a conectar.");
-                }, tokenExpiraEn - Date.now());
+                usuarioAutorizado = usuarioActual();
+                guardarSesion(); programarVencimiento();
                 resolve(revisionAutorizacion);
             };
             cliente.requestAccessToken();
@@ -244,7 +317,7 @@
 
     async function driveFetch(url, signal, verificada = false) {
         if (!autorizado()) {
-            perderAutorizacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
+            avisarRenovacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
         }
         const autorizacion = revisionAutorizacion;
         const respuesta = await fetch(url, {
@@ -256,7 +329,7 @@
         });
         if (!autorizado() || autorizacion !== revisionAutorizacion) throw fallo("GOOGLE_NO_AUTORIZADO");
         if (respuesta.status === 401) {
-            perderAutorizacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
+            avisarRenovacion(); throw fallo("GOOGLE_NO_AUTORIZADO");
         }
         if (respuesta.status === 403) throw fallo("GOOGLE_ACCESO_DENEGADO");
         if (!respuesta.ok) throw fallo("GOOGLE_ERROR");
@@ -318,39 +391,62 @@
 
     async function sincronizar(forzar = false) {
         if (sincronizando || !accessToken) return;
+        if (!autorizado()) { avisarRenovacion(); return; }
         if (fuenteControl?.enCurso()) {
             if (!forzar) return;
             fuenteControl.invalidar();
         }
         sincronizando = true;
+        ultimaComprobacion = Date.now();
         const autorizacionInforme = revisionAutorizacion;
         const comprobarInforme = () => {
-            if (informeReadonly && (!autorizado() || autorizacionInforme !== revisionAutorizacion)) throw fallo("SOLICITUD_OBSOLETA");
+            if (!autorizado() || autorizacionInforme !== revisionAutorizacion) throw fallo("SOLICITUD_OBSOLETA");
         };
+        const abort = typeof root.AbortController === "function" ? new root.AbortController() : null;
+        comprobacionAbort = abort;
+        const timeout = abort ? setTimeout(() => abort.abort(), 30_000) : null;
         pintar("trabajando", "Libro online", "Comprobando Google Drive…");
         try {
-            const metadata = await obtenerMetadata();
+            await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
+            comprobarInforme();
+            if (abort?.signal.aborted) throw fallo("GOOGLE_ERROR");
+            const metadata = await obtenerMetadata({ signal: abort?.signal });
             comprobarInforme();
             const verificadaVigente = fuenteControl?.observarMetadata(metadata) === true;
-            metadataActual = metadata;
-            const anterior = informeReadonly ? modifiedMemoria : localStorage.getItem(MODIFIED_KEY) || "";
-            const cambio = Boolean(metadata.modifiedTime) && metadata.modifiedTime !== anterior;
+            const previa = metadataActual;
+            let anterior = modifiedMemoria;
+            if (!informeReadonly && !anterior) {
+                try { anterior = localStorage.getItem(MODIFIED_KEY) || ""; } catch (_) {}
+            }
+            const cambio = Boolean(metadata.modifiedTime) && metadata.modifiedTime !== anterior ||
+                Boolean(previa && ["version", "md5Checksum", "sha256Checksum", "size"].some(k => metadata[k] !== previa[k]));
             const necesitaArchivo = !libroLocalCargado();
-            const descargarCopia = forzar || (!verificadaVigente && cambio) || necesitaArchivo;
+            const huellaLocal = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version;
+            const mismaHuella = typeof metadata.sha256Checksum === "string" && /^[a-f0-9]{64}$/i.test(metadata.sha256Checksum) &&
+                metadata.sha256Checksum.toLowerCase() === huellaLocal;
+            // Después de F5 la fecha guardada sola no prueba que la copia sea la de Google.
+            // Si Drive no ofrece SHA-256, descargar: el lector evita avisos por bytes idénticos.
+            const comprobarCopiaRestaurada = !previa && !mismaHuella;
+            const descargarCopia = forzar || (!verificadaVigente && (cambio || comprobarCopiaRestaurada)) || necesitaArchivo;
 
             if (descargarCopia) {
                 fuenteControl?.invalidar();
                 pintar("trabajando", "Libro online", cambio && anterior ? "Nueva versión detectada. Actualizando…" : "Descargando versión oficial…");
-                const archivo = await descargar(metadata);
+                const archivo = await descargar(metadata, { signal: abort?.signal });
                 comprobarInforme(); // El body puede terminar después del logout, aunque los headers fueran válidos.
+                if (abort?.signal.aborted) throw fallo("GOOGLE_ERROR");
                 await entregarAlLibro(archivo);
                 comprobarInforme();
                 if (metadata.modifiedTime) {
-                    if (informeReadonly) modifiedMemoria = metadata.modifiedTime;
-                    else localStorage.setItem(MODIFIED_KEY, metadata.modifiedTime);
+                    modifiedMemoria = metadata.modifiedTime;
+                    if (!informeReadonly) {
+                        try { localStorage.setItem(MODIFIED_KEY, metadata.modifiedTime); } catch (_) {}
+                    }
                 }
             }
 
+            metadataActual = metadata;
+            ultimaComprobacionCorrecta = Date.now();
             pintar(
                 "ok",
                 "Libro online conectado",
@@ -359,17 +455,19 @@
                     : `Google sin cambios · ${horaChile(metadata.modifiedTime)} · copia local no comparada`
             );
         } catch (error) {
-            if (informeReadonly && autorizacionInforme !== revisionAutorizacion) return;
+            if (autorizacionInforme !== revisionAutorizacion) return;
             fuenteControl?.invalidar();
             pintar("error", "Libro online", error instanceof root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.FuenteOficialError
                 ? error.message : "No fue posible consultar Google Drive. Vuelve a intentarlo.");
         } finally {
+            if (timeout) clearTimeout(timeout);
+            if (comprobacionAbort === abort) comprobacionAbort = null;
             sincronizando = false;
             const caja = $("haiku-libro-google");
             if (caja) pintar(caja.dataset.estado, $("haiku-libro-google-titulo")?.textContent,
                 $("haiku-libro-google-detalle")?.textContent);
             const btn = $("haiku-libro-google-sincronizar");
-            if (btn) btn.disabled = !accessToken;
+            if (btn) btn.disabled = !autorizado();
         }
     }
 
@@ -422,9 +520,21 @@
         } else {
             pintar("neutral", "Libro online", "Listo para conectar con Google.");
         }
-        document.addEventListener("visibilitychange", () => {
-            if (document.visibilityState === "visible" && accessToken) void sincronizar(false);
+        function alVolver() {
+            if (document.visibilityState === "visible" && accessToken && Date.now() - ultimaComprobacion >= 3000) void sincronizar(false);
+        }
+        document.addEventListener("visibilitychange", alVolver);
+        root.addEventListener("focus", alVolver);
+        root.addEventListener("online", alVolver);
+        root.addEventListener("pageshow", alVolver);
+        root.addEventListener("haiku:auth-ready", () => {
+            instalarSesion();
+            if (usuarioAutorizado && usuarioAutorizado !== usuarioActual()) perderAutorizacion();
+            void restaurarSesion();
         });
+        document.addEventListener("haiku:supabase-ready", instalarSesion);
+        instalarSesion();
+        void restaurarSesion();
         root.addEventListener("haiku:libro-vista-actualizada", evento => {
             if (!accessToken || evento.detail?.origen === "google") return;
             pintar("neutral", "Libro online conectado", evento.detail?.cargado
@@ -434,7 +544,7 @@
     }
 
     root.HAIKU_LIBRO_GOOGLE_V1 = Object.freeze({
-        version: "1.1.0",
+        version: "1.2.0",
         modo: "google-drive-readonly",
         fileId: FILE_ID,
         scope: DRIVE_SCOPE,
@@ -448,7 +558,7 @@
         fuenteVerificada: handle => controladorFuente().fuente(handle),
         verificarVigencia: handle => controladorFuente().verificarVigencia(handle),
         estado: () => ({
-            conectado: Boolean(accessToken),
+            conectado: autorizado(),
             sincronizando,
             metadata: metadataActual ? { ...metadataActual } : null,
             archivoLocalCargado: libroLocalCargado()
