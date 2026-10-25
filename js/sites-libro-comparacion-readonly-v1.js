@@ -42,7 +42,9 @@
             // Limpiar antes de publicar cualquier nuevo estado; callbacks recursivos no reentran.
             limpiando = true;
             try {
-                if (cerrarGoogle) google?.desconectar?.();
+                // Cerrar este informe no revoca el consentimiento Google compartido
+                // por otras pestañas del panel. Sí elimina token, handles y datos locales.
+                if (cerrarGoogle) google?.desconectar?.({ revocar: false });
                 Promise.resolve(lector?.limpiar?.()).catch(() => {});
             } finally { limpiando = false; }
             pintar();
