@@ -43,7 +43,9 @@
 
     window.HAIKU_SUPABASE_CONFIG = Object.freeze({
         url: SUPABASE_URL,
-        conectado: true
+        conectado: true,
+        // Activar sólo después de comprobar la clave y el Libro real en el servidor.
+        libroConexionServidor: false
     });
 
     document.dispatchEvent(

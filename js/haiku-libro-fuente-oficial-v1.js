@@ -9,6 +9,9 @@
     const MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     const mensajes = Object.freeze({
         GOOGLE_NO_AUTORIZADO: "Conecta Google explícitamente para verificar el Libro oficial.",
+        HAKU_NO_AUTORIZADO: "Tu sesión de Haku no permite consultar el Libro. Vuelve a iniciar sesión.",
+        SERVIDOR_NO_CONFIGURADO: "La conexión automática del Libro todavía no está configurada.",
+        LIBRO_ENLACE_NO_DISPONIBLE: "El enlace del Libro ya no permite su lectura. Revisa sus permisos de acceso.",
         GOOGLE_ACCESO_DENEGADO: "Esta cuenta no tiene permiso de lectura sobre el Libro oficial.",
         GOOGLE_ERROR: "No fue posible leer Google Drive. Vuelve a intentarlo.",
         GOOGLE_TIMEOUT: "La verificación del Libro excedió su tiempo máximo. Vuelve a intentarlo.",

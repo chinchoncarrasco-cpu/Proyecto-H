@@ -372,7 +372,7 @@ test('M0/M1/M2 estable: bytes íntegros, int64 string, hashes y un solo GET medi
   assert.equal(source.metadata.id, undefined); assert.equal(source.metadata.fileId, undefined);
   assert.ok(Object.isFrozen(source) && Object.isFrozen(source.metadata) && Object.isFrozen(source.stamp));
   assert.ok(!JSON.stringify(source).includes(secret));
-  assert.deepEqual(Object.keys(f.adapter), ['obtain', 'verifyStillCurrent']);
+  assert.deepEqual(Object.keys(f.adapter), ['obtain', 'verifyStillCurrent', 'readMetadata']);
 });
 test('flujo completo con PKCS8 efímero + OAuth falso + XLSX versionado anonimizado', async () => {
   const bytes = fs.readFileSync(path.join(__dirname, 'fixtures/libro-reconciliacion-oct26-real.xlsx'));
