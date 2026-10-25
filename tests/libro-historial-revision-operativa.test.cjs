@@ -10,6 +10,59 @@ function caso(){
     const abrir=(extra={})=>e.api.abrirRevisionHistorial(out,{reservas:[{...r,texto_original:'Evidencia antigua',servicios:[]}],generacion:1,...extra});
     return {...e,r,out,abrir};
 }
+function casoManual(){
+    const e=caso();e.c.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
+    const abrir=e.abrir;e.abrir=(extra={})=>abrir({aprobacionManual:true,...extra});return e;
+}
+test('aprobación directa abre sólo el formulario del servicio sin comparación, notas ni escrituras',async()=>{
+    const e=casoManual();await e.abrir();
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,1);
+    assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Reglas de lectura|DEJAR BATAS|Seleccionados:/);
+    assert.match(e.out.textContent,/Aprobación manual · Jacuzzi|Inicio 18:00/);
+    assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length,0);
+    assert.equal(e.state.escrituras.length,0);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Cancelar').listeners.click();
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,0);
+    assert.equal(e.state.escrituras.length,0);
+});
+test('revalidar la tarjeta directa selecciona sólo ese servicio y conserva la confirmación final',async()=>{
+    const e=casoManual();await e.abrir();
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
+    assert.match(e.out.textContent,/Incorporar este servicio/);assert.doesNotMatch(e.out.textContent,/Interpretación operativa|DEJAR BATAS/);
+    assert.equal(e.state.escrituras.length,0);assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length,1);
+    e.guard();let confirma=false;e.c.confirm=()=>confirma;
+    const click=async()=>{
+        const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
+        e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
+        await new Promise(r=>setTimeout(r,30));
+    };
+    await click();assert.equal(e.state.escrituras.length,0);
+    confirma=true;await click();assert.equal(e.state.escrituras.length,1);
+    const p=e.state.escrituras[0];assert.equal(p.p_servicios.length,1);assert.equal(p.p_notas.length,0);
+    assert.equal(p.p_servicios[0].tipo_cobro,'cortesia');
+});
+test('varios servicios pendientes ofrecen elección breve y sólo abren el elegido',async()=>{
+    const e=casoManual();e.r.texto_original='PROMO HAIKU // 18hrs jacuzzi // X PAGAR LATE OUT CLP$10,000 1 HORA';
+    e.r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(e.r.texto_original,{origen_campo:'notas_reserva'});
+    await e.abrir();assert.match(e.out.textContent,/Hay varios servicios pendientes/);
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,0);
+    const elegir=e.out.querySelectorAll('button').find(b=>b.textContent.includes('Jacuzzi'));
+    await elegir.listeners.click();await new Promise(r=>setTimeout(r,10));
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,1);
+    assert.match(e.out.textContent,/Aprobación manual · (Tinaja )?Jacuzzi/);assert.equal(e.state.escrituras.length,0);
+});
+test('aprobación directa conserva bloqueos por permisos, generación y prestación ya incorporada',async()=>{
+    const sinRol=casoManual();sinRol.c.haikuSesion.roles=[];await assert.rejects(sinRol.abrir(),/administrador/);
+    const cambiado=casoManual();await cambiado.abrir();cambiado.state.generacion++;
+    await cambiado.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
+    assert.match(cambiado.out.textContent,/Libro cambió/);assert.equal(cambiado.state.escrituras.length,0);
+    const e=casoManual(),est=e.state.db.reserva_estadias[0];
+    e.state.db.servicios.push({id:'ya-creado',reserva_id:est.reserva_id,estadia_id:est.id,
+        fecha_servicio:e.r.fecha_checkin,hora_inicio:'18:00',hora_fin:'19:00',personas:2,cantidad:1,
+        tipo_cobro:'cortesia',total:0,estado_servicio:'programado',catalogo_servicios:{codigo:'tinajaJacuzzi',nombre:'Jacuzzi'}});
+    await e.abrir();assert.match(e.out.textContent,/No hay servicios pendientes/);
+    assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,0);assert.equal(e.state.escrituras.length,0);
+});
 test('auditoría focal usa el Libro actual, conserva la promo y excluye las otras fichas del mismo mes',async()=>{
     const e=caso(),plan=await e.abrir();
     assert.equal(plan.reservas.length,1);assert.equal(plan.reservas[0].titular,e.r.titular);

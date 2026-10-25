@@ -320,15 +320,16 @@
         return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null };
     }
 
-    async function abrirRevisionHistorial(out,{reservas,generacion}={}){
+    async function abrirRevisionHistorial(out,{reservas,generacion,aprobacionManual=false}={}){
         if(!out||!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
+        if(aprobacionManual && (!esAdministrador() || reservas.length!==1))throw Error('La aprobación manual requiere un administrador y una sola reserva.');
         const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
         if(!fechas.length)throw Error('No hay fechas verificables para revisar servicios.');
         const formato=f=>f.split('-').reverse().join('/');
         const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
         const fuente=Object.freeze({descripcion});
-        entradasHistorial.set(fuente,{descripcion,generacion,claves:[...new Set(reservas.map(claveFicha))]});
-        const plan=await construir(fuente);renderizar(plan,out,fuente);return plan;
+        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,claves:[...new Set(reservas.map(claveFicha))]});
+        const plan=await construir(fuente);await renderizar(plan,out,fuente);return plan;
     }
 
     function canonDocumento(v) { return normalizar(v).replace(/[^a-z0-9]/g, "").replace(/^0+/, ""); }
@@ -2462,6 +2463,68 @@
         if (Number.isFinite(nuevoTop) && Number.isFinite(vista.anclaTop)) contenedor.scrollTop += nuevoTop - vista.anclaTop;
     }
 
+    function renderizarManualHistorial(resultado, out, texto, overrides, estado) {
+        out.className = 'haiku-asistente-preview haku-libro-servicios haku-libro-servicio-directo';
+        const crear = (tag, clase, texto) => {
+            const el = document.createElement(tag); el.className = clase;
+            if (texto != null) el.textContent = texto;
+            return el;
+        };
+        const pendientes = resultado.items.filter(x => x.kind === 'servicio' && x.estado !== 'existente');
+        // Nunca elegir otra prestación al resolver la que se está revisando.
+        const item = estado.itemHistorial ? pendientes.find(x => x.item_id === estado.itemHistorial)
+            : pendientes.length === 1 ? pendientes[0] : null;
+        if (!esAdministrador()) {
+            out.append(crear('p','haiku-manual-validacion','La aprobación manual requiere un administrador.')); return;
+        }
+        if (!item) {
+            const mensaje = estado.itemHistorial ? 'Este servicio ya no tiene cambios pendientes para incorporar. Vuelve a revisar el informe.'
+                : pendientes.length ? 'Hay varios servicios pendientes en esta reserva. Elige cuál quieres revisar:'
+                    : 'No hay servicios pendientes para incorporar en esta reserva. Vuelve a revisar el informe.';
+            out.append(crear('p','haiku-manual-caption',mensaje));
+            if (!estado.itemHistorial) for (const candidato of pendientes) {
+                const elegir = crear('button','haiku-incorporacion-manual-accion',
+                    `${candidato.mapa.nombre || candidato.servicio.concepto} · ${candidato.fecha || 'Fecha por definir'} · ${candidato.hora || 'Hora por definir'}`);
+                elegir.type = 'button';
+                elegir.addEventListener('click',()=>{
+                    if (estado.ocupado) return;
+                    estado.itemHistorial = candidato.item_id; renderizar(resultado,out,texto,overrides);
+                });
+                out.append(elegir);
+            }
+            return;
+        }
+        estado.itemHistorial = item.item_id;
+        if (!item.resolucionManual || item.estado !== 'listo' || !item.payload) {
+            return Promise.resolve(abrirManual(item,out,texto,overrides,estado,out)).catch(error=>{
+                const aviso=crear('p','haiku-manual-validacion',error.message || 'No se pudo abrir la aprobación manual.');
+                aviso.setAttribute('role','alert');out.append(aviso);
+            });
+        }
+        // Tras revalidar, sólo este servicio queda seleccionado para la confirmación final.
+        const panel=crear('section','haiku-incorporacion-manual-pago-panel');
+        const contenido=crear('div','haiku-manual-contenido');
+        contenido.append(crear('h3','','Servicio revisado'),
+            crear('p','haiku-manual-caption',`CAB ${item.reserva.cabana} · ${item.reserva.titular} · ${item.mapa.nombre}`),
+            crear('p','haiku-manual-total',`${item.fecha} · ${item.hora}–${item.hora_fin} · ${item.personas} personas · ${item.cortesia ? 'cortesía · total $0' : `total $${item.precio.total.toLocaleString('es-CL')}`}`),
+            crear('p','haiku-manual-caption','Los datos están revisados. Falta confirmar su incorporación en Proyecto H.'));
+        const check=crear('input','haku-libro-servicios__check');check.type='checkbox';check.checked=true;check.hidden=true;
+        check.dataset.hakuItemId=item.item_id;contenido.append(check);
+        const acciones=crear('footer','haiku-manual-pie');
+        const incorporar=crear('button','haku-libro-servicios__boton haiku-incorporacion-manual-accion haiku-manual-primario','Incorporar este servicio');
+        incorporar.type='button';incorporar.dataset.hakuAccion='incorporar';
+        incorporar.addEventListener('click',async()=>{
+            if(incorporar.disabled || estado.ocupado)return;
+            estado.ocupado=true;incorporar.disabled=true;
+            try{await importarSeleccionados(new Set([item.item_id]),out,texto,overrides);}
+            catch(error){const aviso=crear('p','haiku-manual-validacion',error.message);aviso.setAttribute('role','alert');contenido.append(aviso);}
+            finally{estado.ocupado=false;incorporar.disabled=false;}
+        });
+        const cancelar=crear('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Cancelar');cancelar.type='button';
+        cancelar.addEventListener('click',()=>{if(!estado.ocupado){estado.apertura++;panel.remove();}});
+        acciones.append(incorporar,cancelar);panel.append(contenido,acciones);out.append(panel);
+    }
+
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
         if(entradasHistorial.has(textoOriginal))fuentesPorVista.set(out,textoOriginal);else fuentesPorVista.delete(out);
         const estado = estadosPorVista.get(out) || { manuales: new Map(), selecciones: new Map(), apertura: 0, ocupado: false };
@@ -2479,6 +2542,8 @@
             if(s && revisionAdminValida(item,s))guardarComprobanteRevisionAdmin(estado,item,s.libro_revision_admin_v1,textoOriginal,nombreExistente(s));
         }
         mostrarComprobantesRevisionAdmin(out,estado,textoOriginal);
+        if(entradasHistorial.get(textoOriginal)?.aprobacionManual)
+            return renderizarManualHistorial(resultado,out,textoOriginal,overrides,estado);
         const confirmarNoche = async (item, indice) => {
             if (!item.puedeElegirNoche || !item.opcionesNoches.some(n => n.noche_indice === indice)) throw new Error('La noche elegida no es válida.');
             overrides.set(item.item_id, { noche_indice: indice, firma: item.firmaNoche });

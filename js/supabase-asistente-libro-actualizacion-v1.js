@@ -335,7 +335,7 @@
                                     const api=root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
                                     if(!api?.abrirRevisionHistorial)throw Error('No está disponible la revisión de servicios y notas. Recarga Proyecto H.');
                                     const card=doc.createElement('div');vista.textContent='';vista.appendChild(card);
-                                    await api.abrirRevisionHistorial(card,revisionServicios);
+                                    await api.abrirRevisionHistorial(card,{...revisionServicios,aprobacionManual:true});
                                 }
                                 vista.scrollIntoView?.({block:'nearest'});
                             }catch(error){
