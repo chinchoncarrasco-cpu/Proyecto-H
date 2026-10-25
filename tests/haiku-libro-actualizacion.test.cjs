@@ -13,12 +13,12 @@ for (const frase of ['cambia la reserva','actualiza el libro','modifica los camb
 }
 test('primera versión no se presenta como altas',()=>{
     const html=A.renderizar(resultado({estado:'sin_linea_base',nuevas:[{actual:reserva}]}));
-    assert.match(html,/primera versión/);assert.doesNotMatch(html,/NUEVA|Persona Prueba/);
+    assert.match(html,/primera versión/);assert.doesNotMatch(html,/AGREGADA AL LIBRO|Persona Prueba/);
 });
-test('sin cambios',()=>assert.match(A.renderizar(resultado({estado:'sin_cambios'})),/no detectó cambios operacionales/));
+test('sin cambios',()=>assert.match(A.renderizar(resultado({estado:'sin_cambios'})),/No encontré cambios en las reservas/));
 test('nueva: fechas y noches legibles, datos personales no visibles',()=>{
     const html=A.renderizar(resultado({nuevas:[{actual:{...reserva,rut_documento:'12345678-9',telefono:'999999999',correo:'privado@example.test'}}]}));
-    assert.match(html,/NUEVA/);assert.match(html,/11-09-2026 → 13-09-2026 · 2 noches/);
+    assert.match(html,/AGREGADA AL LIBRO/);assert.match(html,/Entrada: 11-09-2026 · Salida: 13-09-2026 · 2 noches/);
     assert.doesNotMatch(html,/12345678|999999999|privado@example/);
 });
 test('modificaciones exclusivamente desde cambios; arrays, servicios y privacidad',()=>{
@@ -26,7 +26,7 @@ test('modificaciones exclusivamente desde cambios; arrays, servicios y privacida
         {campo:'adultos',antes:2,ahora:3},{campo:'notas_importantes',antes:['Aniversario'],ahora:['Aniversario','Tinaja']},
         {campo:'servicios',antes:[],ahora:[{concepto:'Tinaja',hora:'20:00',pendiente:true}]},
         {campo:'correo',antes:'old@example.test',ahora:'new@example.test'}]}]}));
-    for(const text of ['Adultos','2 → 3','Aniversario · Tinaja','Tinaja · 20:00 · Pendiente','valores personales ocultos']) assert.ok(html.includes(text));
+    for(const text of ['Adultos','Antes: 2<br>Ahora: 3','Aniversario · Tinaja','Tinaja · 20:00 · Pendiente','No se muestra aquí por privacidad']) assert.ok(html.includes(text));
     assert.doesNotMatch(html,/NO MOSTRAR|example.test|\[object Object\]/);
 });
 test('ya no aparece nunca equivale a cancelada',()=>{
@@ -34,18 +34,18 @@ test('ya no aparece nunca equivale a cancelada',()=>{
 });
 test('ambigüedad conserva candidatos de ambas versiones para revisión',()=>{
     const html=A.renderizar(resultado({ambiguas:[{anteriores:[reserva],actuales:[{...reserva,cabana:10}]}]}));
-    assert.match(html,/Requiere revisión/);assert.match(html,/Versión anterior/);assert.match(html,/Versión actual/);assert.match(html,/CAB 10/);
+    assert.match(html,/Necesita revisión/);assert.match(html,/Versión anterior/);assert.match(html,/Versión actual/);assert.match(html,/CAB 10/);
 });
 test('continuidad sola no suma modificaciones',()=>{
     const html=A.renderizar(resultado({continuidades:[{segmentos:[reserva,{...reserva,cabana:10}]}]}));
-    assert.match(html,/<strong>0<\/strong><span>Modificadas/);assert.doesNotMatch(html,/MODIFICADA/);
+    assert.match(html,/<strong>0<\/strong><span>Con cambios/);assert.doesNotMatch(html,/CON CAMBIOS/);
 });
 test('hoja especial se advierte sin inventar contenido',()=>{
     const html=A.renderizar(resultado({diagnostico:{hojas_especiales_modificadas:['REEMBOLSOS']}}));
-    assert.match(html,/REEMBOLSOS/);assert.match(html,/todavía no tiene interpretación automática/);
+    assert.match(html,/REEMBOLSOS/);assert.match(html,/todavía no puede revisar su contenido en detalle/);
 });
 test('parcial y no comparable se presentan con incertidumbre',()=>{
-    for(const estado of ['parcial','no_comparable']) assert.match(A.renderizar(resultado({estado})),/no pudo compararse con seguridad/);
+    for(const estado of ['parcial','no_comparable']) assert.match(A.renderizar(resultado({estado})),/No pude revisar todo el Libro/);
 });
 test('contenido del Libro se escapa; no inyecta HTML',()=>{
     const html=A.renderizar(resultado({nuevas:[{actual:{...reserva,titular:'<img src=x onerror=alert(1)>'}}]}));
@@ -88,7 +88,7 @@ const tick=()=>new Promise(r=>setImmediate(r));
 test('click capture muestra espera y resultado; evento del Libro invalida cache',async()=>{
     const h=montar(async()=>resultado());assert.equal(h.captures.click,true);
     const e=h.enviar();assert.ok(e.stopped);assert.match(h.mensajes()[1].textContent,/Comparando/);
-    await tick();assert.match(h.mensajes()[1].innerHTML,/Actualización del Libro/);
+    await tick();assert.match(h.mensajes()[1].innerHTML,/Qué cambió en el Libro/);
     h.enviar();await tick();assert.equal(h.llamadas(),1);h.events['haiku:libro-cambio']();h.enviar();await tick();assert.equal(h.llamadas(),2);
 });
 test('doble envío y Enter repetido no crean dos comparaciones ni mensajes duplicados',async()=>{
@@ -124,22 +124,22 @@ test('intenciones del Libro se detienen antes de la ruta general; otros controle
 });
 test('advertencia singular muestra el detalle real y no inventa titular',()=>{
     const html=A.renderizar(resultado({advertencias:[{tipo:'advertencia_de_origen_conservada',anterior:'Sep26!CE8',actual:'Sep26!CE8',detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}]}));
-    assert.match(html,/1 advertencia de interpretación o cobertura requiere revisión\./);
-    assert.match(html,/Sep26!CE8 · Advertencia de origen conservada: Las noches escritas no coinciden/);
+    assert.match(html,/Hay 1 aviso sobre datos que no pude leer o comparar bien\./);
+    assert.match(html,/Sep26!CE8 · Este dato sigue necesitando revisión: La cantidad de noches escrita no coincide/);
     assert.doesNotMatch(html,/1 advertencias|Angelo/);
     assert.match(html,/<strong>0<\/strong><span>Por revisar/);
 });
 test('advertencias plurales conservan contexto explícito y se separan de ambiguas',()=>{
     const html=A.renderizar(resultado({advertencias:[{hoja:'Sep26',titular:'Persona Prueba',motivo:'Noches inconsistentes.'},{hoja:'Oct26',tipo:'huella_no_disponible'}],ambiguas:[{anteriores:[reserva],actuales:[]}]}));
-    assert.match(html,/2 advertencias de interpretación o cobertura requieren revisión\./);
+    assert.match(html,/Hay 2 avisos sobre datos que no pude leer o comparar bien\./);
     assert.match(html,/Sep26 · Persona Prueba: Noches inconsistentes/);
-    assert.match(html,/Oct26 · Huella no disponible/);
+    assert.match(html,/Oct26 · No pude comprobar si cambió esta hoja/);
     assert.match(html,/<strong>1<\/strong><span>Por revisar/);
 });
 test('avisos de validación y cobertura muestran código y motivo sin volcar objetos personales',()=>{
     const html=A.renderizar(resultado({estado:'parcial',advertencias:[{hoja:'Sep26',validacion:[{codigo:'checkout_anterior_al_checkin',origen:{hoja:'Sep26'},rut_documento:'12345678-9',correo:'privado@example.test'}]}],no_comparables:[{hoja:'Oct26',motivo:'Geometría no reconocida o lectura incompleta.'}]}));
-    assert.match(html,/El check-out es anterior al check-in/);
-    assert.match(html,/Oct26: Geometría no reconocida o lectura incompleta/);
+    assert.match(html,/La salida figura antes de la entrada/);
+    assert.match(html,/Oct26: No pude leer todas las reservas o sus fechas en esta hoja/);
     assert.doesNotMatch(html,/12345678|privado@example|\[object Object\]/);
 });
 test('detalle de advertencia escapa HTML y admite código sin explicación adicional',()=>{
@@ -153,10 +153,10 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
     const antes=JSON.stringify(r),html=A.renderizar(r);
     assert.equal(JSON.stringify(r),antes);
     assert.match(html,/haku-actualizacion-sites__grupo--modificadas/);
-    assert.match(html,/<span>Modificadas \(1\)<\/span>/);
+    assert.match(html,/<span>Reservas con cambios \(1\)<\/span>/);
     assert.match(html,/class="haku-libro-item haku-pregunta-caso"/);
-    assert.match(html,/Nota extensa → Ninguno/);
-    assert.match(html,/<span>Advertencias de interpretación \/ cobertura \(3\)<\/span>/);
+    assert.match(html,/Antes: Nota extensa<br>Ahora: Ninguno/);
+    assert.match(html,/<span>Datos del Libro por revisar \(3\)<\/span>/);
     assert.equal((html.match(/Revisar origen/g)||[]).length,2);
     assert.match(html,/Cobertura parcial/);
     assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
@@ -164,11 +164,30 @@ test('informe compacto conserva cambios y avisos sin mutar ni deduplicar casos',
 
 test('sin cambios históricos pendientes muestra sincronización y oculta preparar',()=>{
     const html=A.renderizarPendientes({items:[],generacion:7,preparacion:{reservas:[reserva]}});
-    assert.match(html,/Cambios detectados aún pendientes de aplicar/);
+    assert.match(html,/Qué falta resolver en Proyecto H/);
     assert.match(html,/haku-pendientes-compactos haku-actualizacion-sites__historial/);
-    assert.match(html,/Todos los cambios detectados ya están sincronizados con Proyecto H/);
-    assert.match(html,/Revalidar contra Proyecto H/);
-    assert.doesNotMatch(html,/Preparar incorporación/);
+    assert.match(html,/No quedan cambios pendientes en este informe/);
+    assert.match(html,/Volver a revisar/);
+    assert.doesNotMatch(html,/Revisar cambios/);
+});
+
+test('el texto distingue una reserva faltante de una posible coincidencia sin cambiar datos ni habilitar acciones',()=>{
+    for(const [accionable,proyecto] of [[true,'sin_coincidencia'],[false,'ambigua'],[false,'sin_coincidencia']]){
+        const pendientes={generacion:7,items:[{tipo:'nueva',actual:reserva,detectado_generacion:7,
+            estado:accionable?'pendiente':'revision',accionable,proyecto}],preparacion:{reservas:[reserva]}};
+        const antes=JSON.stringify(pendientes),html=A.renderizarPendientes(pendientes);
+        assert.equal(JSON.stringify(pendientes),antes);
+        assert.match(html,/Entrada: 11-09-2026 · Salida: 13-09-2026/);
+        assert.match(html,/Nada se guarda sin tu confirmación/);
+        if(accionable){
+            assert.match(html,/Falta incorporar esta reserva en Proyecto H/);
+            assert.match(html,/data-haku-preparar-pendientes/);
+        }else{
+            assert.match(html,/Hay que revisar si esta reserva ya está registrada en Proyecto H/);
+            assert.doesNotMatch(html,/Falta incorporar|data-haku-preparar-pendientes/);
+        }
+        assert.doesNotMatch(html,/coincidencia segura|sin_coincidencia|Revalidación focalizada/);
+    }
 });
 
 test('un cambio histórico accionable muestra valores y habilita preparar sin exponer contacto',()=>{
@@ -176,20 +195,20 @@ test('un cambio histórico accionable muestra valores y habilita preparar sin ex
     const pendientes={generacion:7,items:[{tipo:'modificacion',actual,detectado_generacion:6,estado:'pendiente',accionable:true,
         cambios:[{campo:'estado_operativo',antes:'confirmada',ahora:'hospedada',proyecto:'confirmada'}]}],preparacion:{reservas:[actual]}};
     const html=A.renderizarPendientes(pendientes);
-    assert.match(html,/CAMBIO DETECTADO ANTERIORMENTE · PENDIENTE/);
-    assert.match(html,/Anterior: confirmada/);assert.match(html,/Nuevo valor del Libro: hospedada/);assert.match(html,/Proyecto H actual: confirmada/);
+    assert.match(html,/PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR/);
+    assert.match(html,/Antes en el Libro: Confirmada/);assert.match(html,/Ahora en el Libro: Huéspedes alojados/);assert.match(html,/En Proyecto H: Confirmada/);
     assert.match(html,/class="haku-pendiente-item haku-actualizacion-sites__pendiente/);
     assert.doesNotMatch(html,/<details[^>]*\sopen(?:[\s=>])/);
     assert.match(html,/data-haku-preparar-pendientes/);
-    assert.match(html,/Preparar incorporación/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
+    assert.match(html,/Revisar cambios/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
 });
 
 test('un cambio detectado en la generación actual se distingue como cambio de esta actualización',()=>{
     const actual={...reserva,adultos:3};
     const html=A.renderizarPendientes({generacion:7,items:[{tipo:'modificacion',actual,detectado_generacion:7,estado:'pendiente',accionable:true,
         cambios:[{campo:'adultos',antes:2,ahora:3,proyecto:2}]}],preparacion:{reservas:[actual]}});
-    assert.match(html,/CAMBIO DE ESTA ACTUALIZACIÓN/);assert.match(html,/Anterior: 2/);assert.match(html,/Nuevo valor del Libro: 3/);
-    assert.match(html,/Proyecto H actual: 2/);assert.match(html,/Preparar incorporación/);
+    assert.match(html,/DE ESTA ACTUALIZACIÓN/);assert.match(html,/Antes en el Libro: 2/);assert.match(html,/Ahora en el Libro: 3/);
+    assert.match(html,/En Proyecto H: 2/);assert.match(html,/Revisar cambios/);
 });
 test('la preparación individual muestra Aprobación manual al administrador y conserva el enlace a la reserva',()=>{
     const antes=global.haikuSesion;
@@ -240,8 +259,8 @@ test('una revisión de servicios mantiene Ver reserva, cuenta cero preparables y
     const html=A.renderizarPendientes({items:[{tipo:'modificacion',actual:reserva,estado:'revision',accionable:false,
         sistema:{reserva_id:'00000000-0000-4000-8000-000000000001'},
         cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'18:00'}],proyecto:'Ya existe a las 17:00; confirma el cambio de horario.'}]}],generacion:3});
-    assert.match(html,/Preparación de reservas<\/span><strong>0<\/strong>/);
+    assert.match(html,/Listos para tu revisión<\/span><strong>0<\/strong>/);
     assert.match(html,/data-haku-ver-reserva="0">Ver reserva/);
     assert.match(html,/confirma el cambio de horario/);
-    assert.doesNotMatch(html,/Preparar incorporación|00000000-0000/);
+    assert.doesNotMatch(html,/Revisar cambios|00000000-0000/);
 });

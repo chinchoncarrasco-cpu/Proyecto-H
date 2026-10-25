@@ -14,22 +14,22 @@
         } else if (!['ok','sin_cambios'].includes(r.estado)) {
             return {texto:'No pude completar el informe de esta actualización. Puedes solicitarlo en Haku.',revision:true};
         } else if (!total && a) texto=`La actualización contiene ${a} ${a===1?'caso que requiere':'casos que requieren'} revisión.`;
-        else if (!total) texto='Libro actualizado. No detecté cambios operacionales.';
+        else if (!total) texto='Libro actualizado. No encontré cambios en las reservas.';
         else if (total===1 && c===1) texto=`${r.cancelaciones_confirmadas[0].anterior?.titular || 'Una reserva'} aparece en CANCELACIONES del Libro.`;
         else if (total===1 && n===1) {
             const x=r.nuevas[0].actual || {};
-            texto=`Detecté una reserva nueva: ${x.titular || 'Titular no determinado'} · CAB ${x.cabana ?? '—'} · ${fecha(x.fecha_checkin)} → ${fecha(x.fecha_checkout)}.`;
+            texto=`Se agregó una reserva al Libro: ${x.titular || 'Nombre no indicado'} · CAB ${x.cabana ?? '—'} · Entrada: ${fecha(x.fecha_checkin)} · Salida: ${fecha(x.fecha_checkout)}.`;
         } else if (total===1 && m===1) {
-            const x=r.modificadas[0], campos={cabana:'Cabaña',fecha_checkin:'Check-in',fecha_checkout:'Check-out',noches:'Noches',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas'};
+            const x=r.modificadas[0], campos={cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas'};
             const cambios=lista(x.cambios).filter(c=>Object.hasOwn(campos,c.campo)).slice(0,2).map(c=>{
-                const mostrar=v=>c.campo.startsWith('fecha_') ? fecha(v) : typeof v==='number' ? v : /^\d+$/.test(String(v)) ? v : 'No determinado';
-                return `${campos[c.campo]} ${mostrar(c.antes)} → ${mostrar(c.ahora)}`;
+                const mostrar=v=>c.campo.startsWith('fecha_') ? fecha(v) : typeof v==='number' ? v : /^\d+$/.test(String(v)) ? v : 'Sin dato';
+                return `${campos[c.campo]}: antes ${mostrar(c.antes)}, ahora ${mostrar(c.ahora)}`;
             });
-            texto=`Detecté un cambio en una reserva: ${x.actual?.titular || 'Titular no determinado'} · CAB ${x.actual?.cabana ?? '—'}. ${cambios.length?cambios.join(' · '):'Consulta los campos modificados en el informe.'}`;
-        } else texto=`Detecté ${total} ${total===1?'cambio':'cambios'} en la última actualización: ${n} nuevas · ${m} modificadas · ${b} ${b===1?'ya no aparece':'ya no aparecen'}.`;
+            texto=`Cambió una reserva en el Libro: ${x.actual?.titular || 'Nombre no indicado'} · CAB ${x.actual?.cabana ?? '—'}. ${cambios.length?cambios.join(' · '):'Abre el informe para ver qué datos cambiaron.'}`;
+        } else texto=`Encontré ${total} ${total===1?'cambio':'cambios'} en el Libro: ${n} reservas agregadas · ${m} con cambios · ${b} ${b===1?'ya no aparece':'ya no aparecen'}.`;
         if (total && a) texto+=` ${a} ${a===1?'caso requiere':'casos requieren'} revisión.`;
         if (c) texto+=` ${c} cancelación${c===1?'':'es'} confirmada${c===1?'':'s'} en el Libro; pendiente${c===1?'':'s'} de revisión y confirmación en Proyecto H.`;
-        if (avisos) texto+=` Además, hay ${avisos} ${avisos===1?'advertencia':'advertencias'} de interpretación.`;
+        if (avisos) texto+=` Además, hay ${avisos} ${avisos===1?'aviso sobre datos que necesitan':'avisos sobre datos que necesitan'} revisión.`;
         if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) texto+=' '+root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1.resumen(r);
         return {texto,revision};
     }
