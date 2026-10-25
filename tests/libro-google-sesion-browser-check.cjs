@@ -13,7 +13,7 @@ const fileId = read('js/supabase-libro-google-readonly-v1.js').match(/const FILE
 const assets = process.env.HAIKU_LIBRO_WORKER_ASSETS || path.join(os.tmpdir(), 'haiku-pago-visible-assets');
 const html = read('index.html'), start = html.indexOf('<section id="seccion-libro-reserva"'), end = html.indexOf('</main>', start);
 const section = html.slice(start, end).replace(/(<section id="seccion-libro-reserva"[^>]*class=")([^"]+)/, '$1$2 activa');
-const scripts = ['supabase-libro-reserva-v1', 'haiku-libro-fuente-oficial-v1', 'supabase-libro-google-readonly-v1', 'supabase-asistente-libro-auto-v1'];
+const scripts = [...(serverMode ? ['supabase-client'] : []), 'supabase-libro-reserva-v1', 'haiku-libro-fuente-oficial-v1', 'supabase-libro-google-readonly-v1', 'supabase-asistente-libro-auto-v1'];
 const styles = ['css/styles.css', 'css/sites-shell-v1.css', 'css/supabase-libro-reserva-v1.css',
     'css/supabase-libro-reserva-fidelidad-v1.css', 'css/sites-libro-reserva-v1.css', 'css/haiku-tema-oscuro-v1.css', 'css/haiku-tema-v1.css'];
 const server = http.createServer((req, res) => {
@@ -51,7 +51,8 @@ const server = http.createServer((req, res) => {
                 size: String(fixture.bytes.length), version: String(version + 1), modifiedTime: `2026-10-25T0${version}:00:00Z`,
                 md5Checksum: fixture.md5, sha256Checksum: fixture.sha256, capabilities: { canDownload: true }, trashed: false });
             if (serverMode) {
-                window.HAIKU_SUPABASE_CONFIG = { libroConexionServidor: true };
+                // Ejecutar el cliente/configuración real; sólo el SDK y la red se sustituyen.
+                window.supabase = { createClient() { return window.haikuSupabase; } };
                 window.haikuSupabase.functions = { async invoke(name, { body }) {
                     if (name !== 'haku-libro-enlace-readonly' || !window.haikuSesion) throw Error('Solicitud no autorizada');
                     if (body.accion === 'metadata') return { data: metadata(), error: null };
