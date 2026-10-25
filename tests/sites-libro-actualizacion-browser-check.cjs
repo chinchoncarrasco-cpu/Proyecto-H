@@ -93,11 +93,11 @@ const server = http.createServer((request, response) => {
         const first = page.locator('.haku-actualizacion-sites').last();
         assert.equal(await first.count(), 1);
         assert.equal(await page.evaluate(() => window.__opened), 1);
-        assert.match(await first.locator('.haku-actualizacion-sites__mensaje').innerText(), /Libro actualizado.*No detecté cambios operacionales/);
+        assert.match(await first.locator('.haku-actualizacion-sites__mensaje').innerText(), /Libro actualizado.*No encontré cambios en las reservas/);
         assert.deepEqual(await first.locator('.haku-actualizacion-sites__metricas strong').allInnerTexts(), ['0', '0', '0', '0']);
         assert.deepEqual(await first.locator('.haku-prioridad-fila > .haku-actualizacion-sites__fila-vacia strong').allInnerTexts(), ['0', '0', '0', '0']);
         assert.equal(await first.locator('.haku-actualizacion-sites__sin-cambios').count(), 1);
-        await page.waitForFunction(() => document.querySelector('.haku-actualizacion-sites__historial')?.textContent.includes('Todos los cambios detectados ya están sincronizados'));
+        await page.waitForFunction(() => document.querySelector('.haku-actualizacion-sites__historial')?.textContent.includes('No quedan cambios pendientes en este informe'));
         assert.equal(await announcement.count(), 0, 'el aviso previo se integra en el informe abierto');
         assert.equal(await page.locator('.haku-actualizacion-sites').count(), 1);
 
@@ -151,12 +151,12 @@ const server = http.createServer((request, response) => {
         const modified = report.locator('.haku-actualizacion-sites__grupo--modificadas');
         await modified.locator(':scope > summary').click();
         await modified.locator('.haku-pregunta-caso > summary').click();
-        assert.match(await modified.innerText(), /2 → 3/);
+        assert.match(await modified.innerText(), /Antes: 2\s+Ahora: 3/);
         await page.waitForFunction(() => document.querySelectorAll('.haku-actualizacion-sites__historial').length === 2);
         const history = report.locator('.haku-actualizacion-sites__historial');
-        assert.match(await history.innerText(), /Cambios detectados aún pendientes de aplicar/);
+        assert.match(await history.innerText(), /Qué falta resolver en Proyecto H/);
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
-        assert.match(await history.innerText(), /Proyecto H actual: 2/);
+        assert.match(await history.innerText(), /En Proyecto H: 2/);
         await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica']);
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
@@ -190,7 +190,7 @@ const server = http.createServer((request, response) => {
         await refresh.click();
         await page.waitForFunction(count => window.__revalidations === count + 1, before);
         assert.deepEqual(await refresh.evaluate(element => [element.disabled, element.textContent, element.getAttribute('aria-busy')]),
-            [true, 'Revalidando…', 'true']);
+            [true, 'Revisando…', 'true']);
         await refresh.evaluate(element => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         assert.equal(await page.evaluate(() => window.__revalidations), before + 1, 'doble clic no duplica revalidación');
         await page.evaluate(() => window.__pending.reject(new Error('Fallo focal de prueba')));
@@ -211,7 +211,7 @@ const server = http.createServer((request, response) => {
         await page.waitForFunction(()=>document.querySelectorAll('.haku-actualizacion-sites__historial')[1]?.textContent.includes('Reserva de horario'));
         assert.deepEqual(await history.locator('.haku-actualizacion-sites__historial-metricas strong').allInnerTexts(),['1','0']);
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(),0);
-        assert.doesNotMatch(await history.innerText(),/Todos los cambios detectados ya están sincronizados|No quedan cambios de reservas/);
+        assert.doesNotMatch(await history.innerText(),/No quedan cambios pendientes en este informe|No quedan cambios de reservas/);
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
         await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica','tinaja-sintetica']);
@@ -261,7 +261,7 @@ const server = http.createServer((request, response) => {
         assert.equal(await avisos.locator('.haku-actualizacion-sites__caso').count(),2);
         const textoAvisos=await avisos.innerText();
         assert.match(textoAvisos,/Versión anterior · Oct26/);assert.match(textoAvisos,/Versión actual · Oct26/);
-        assert.equal((textoAvisos.match(/Las noches escritas no coinciden/g)||[]).length,2);
+        assert.equal((textoAvisos.match(/La cantidad de noches escrita no coincide/g)||[]).length,2);
         assert.doesNotMatch(textoAvisos,/Titular no disponible|CAB —|Fechas no determinadas/);
         for(const width of [1100,390,320]){
             await page.setViewportSize({width,height:900});

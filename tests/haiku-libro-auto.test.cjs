@@ -78,14 +78,14 @@ test('generación nueva descarta B silenciosamente y procesa C sin paralelo',asy
     resolveB(res());await Promise.all([b,siguiente]);assert.equal(calls,2);assert.equal(mensajes.filter(x=>!x.pendiente).length,1);assert.match(mensajes.at(-1).texto,/Persona Prueba/);
 });
 test('sin cambios, nuevas, modificadas y contadores son resúmenes seguros',()=>{
-    assert.match(A.resumir(res({estado:'sin_cambios'})).texto,/No detecté cambios operacionales/);
-    assert.match(A.resumir(res({nuevas:[{actual:row}]})).texto,/Persona Prueba · CAB 8 · 11-09-2026 → 13-09-2026/);
-    assert.match(A.resumir(res({modificadas:[{actual:row,cambios:[{campo:'fecha_checkout',antes:'2026-09-12',ahora:'2026-09-13'}]}]})).texto,/Check-out 12-09-2026 → 13-09-2026/);
-    assert.match(A.resumir(res({nuevas:[{},{}],modificadas:[{},{}],ya_no_aparecen:[{}]})).texto,/5 cambios.*2 nuevas · 2 modificadas · 1 ya no aparece/);
+    assert.match(A.resumir(res({estado:'sin_cambios'})).texto,/No encontré cambios en las reservas/);
+    assert.match(A.resumir(res({nuevas:[{actual:row}]})).texto,/Persona Prueba · CAB 8 · Entrada: 11-09-2026 · Salida: 13-09-2026/);
+    assert.match(A.resumir(res({modificadas:[{actual:row,cambios:[{campo:'fecha_checkout',antes:'2026-09-12',ahora:'2026-09-13'}]}]})).texto,/Salida: antes 12-09-2026, ahora 13-09-2026/);
+    assert.match(A.resumir(res({nuevas:[{},{}],modificadas:[{},{}],ya_no_aparecen:[{}]})).texto,/5 cambios.*2 reservas agregadas · 2 con cambios · 1 ya no aparece/);
 });
 test('ausencias, ambigüedad, parcial y advertencias nunca se mezclan',()=>{
     assert.doesNotMatch(A.resumir(res({ya_no_aparecen:[{}]})).texto,/cancelada/i);
-    assert.match(A.resumir(res({ambiguas:[{}],advertencias:[{}]})).texto,/1 caso que requiere revisión.*1 advertencia de interpretación/);
+    assert.match(A.resumir(res({ambiguas:[{}],advertencias:[{}]})).texto,/1 caso que requiere revisión.*1 aviso sobre datos que necesitan revisión/);
     assert.match(A.resumir(res({estado:'parcial'})).texto,/una parte requiere revisión/);
 });
 test('resumen no expone contactos ni cambios financieros',()=>{
@@ -143,7 +143,7 @@ test('aviso queda en Haku y sus acciones antiguas se desactivan al cambiar Libro
 test('error obsoleto no se notifica; error vigente es breve y permite una carga posterior',async()=>{
     let rechazar,calls=0;const h=interfaz(()=>{calls++;return calls===1?new Promise((_,r)=>rechazar=r):Promise.resolve(res());});
     h.emitir('haiku:libro-version-cargada',evento(2));await tick();h.cambiar();rechazar(Error('cancelado antiguo'));await tick();assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
-    h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/No detecté cambios/);
+    h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/No encontré cambios/);
     const fallo=interfaz(async()=>{throw Error('detalle técnico secreto');});fallo.emitir('haiku:libro-version-cargada',evento(2));await tick();
     assert.match(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/No pude completar/);assert.doesNotMatch(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/secreto/);
 });

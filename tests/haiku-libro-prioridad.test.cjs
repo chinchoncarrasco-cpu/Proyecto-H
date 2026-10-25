@@ -44,7 +44,7 @@ test('clasificación no muta entrada y se actualiza con el día aunque resultado
 });
 test('presentación escapa texto y no muestra contactos',()=>{
     const html=P.renderizar(result({nuevas:[{actual:row(undefined,undefined,{titular:'<img src=x>',telefono:'999999999',correo:'secreto@test.cl'})}]}),opciones);
-    assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|999999999|secreto@test/);assert.match(html,/Prioridad de los cambios detectados/); assert.ok(html.includes("Esta sección clasifica únicamente los cambios de esta actualización. No representa todas las reservas, ingresos o salidas de los próximos días."));
+    assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|999999999|secreto@test/);assert.match(html,/Qué revisar primero/); assert.ok(html.includes("Aquí aparecen los cambios de esta actualización, ordenados por fecha. Para ver todas las reservas, abre el calendario."));
 });
 test('tarjeta modificada explica campos operativos sin exponer valores sensibles',()=>{
     const anterior=row('2026-09-10','2026-09-11',{titular:'Catalina Sierra',correo:'anterior@test.cl'});
@@ -55,14 +55,14 @@ test('tarjeta modificada explica campos operativos sin exponer valores sensibles
         {campo:'servicios',antes:[],ahora:[{concepto:'tinaja',hora:'19:15'}]},
         {campo:'correo',antes:'anterior@test.cl',ahora:'actual@test.cl'}
     ]}]}),opciones);
-    assert.match(html,/Cambios detectados: Estado operativo · Notas o solicitudes · Servicios · Correo/);
+    assert.match(html,/Qué cambió: Estado de la estadía · Notas o solicitudes · Servicios · Correo/);
     assert.doesNotMatch(html,/sin_checkin|hospedada|19:15|anterior@test|actual@test/);
 });
 test('integración manual, Ver informe y resumen automático consumen proyección sin comparar',()=>{
     const root={HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1:P};
     for(const file of ['supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+file+'.js'),'utf8'),{window:root});
-    assert.match(root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.renderizar(result({nuevas:[{actual:row()}]})),/Prioridad de los cambios detectados/);
-    assert.match(root.HAIKU_ASISTENTE_LIBRO_AUTO_V1.resumir(result()).texto,/Prioridad operativa/);
+    assert.match(root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.renderizar(result({nuevas:[{actual:row()}]})),/Qué revisar primero/);
+    assert.match(root.HAIKU_ASISTENTE_LIBRO_AUTO_V1.resumir(result()).texto,/Para organizar la revisión/);
     const panel=fs.readFileSync(require.resolve('../panel.html'),'utf8');assert.ok(panel.indexOf("'supabase-asistente-libro-prioridad-v1'")<panel.indexOf("'supabase-asistente-libro-actualizacion-v1'"));
 });
 test('dos avisos de Oct26 muestran motivo y versión, sin aparentar dos reservas sin titular',()=>{
@@ -85,7 +85,7 @@ test('el informe reutiliza el detalle completo de validación también dentro de
     const html=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.renderizar(result({estado:'sin_cambios',
         advertencias:[{hoja:'Oct26',validacion:[{codigo:'checkout_anterior_al_checkin'}]}]}));
     const prioridad=html.slice(html.indexOf('<section class="haku-libro-prioridad'),html.indexOf('<p class="haku-actualizacion-sites__sin-cambios'));
-    assert.match(prioridad,/El check-out es anterior al check-in/);
+    assert.match(prioridad,/La salida figura antes de la entrada/);
     assert.doesNotMatch(prioridad,/Titular no disponible|CAB —/);
-    assert.match(html,/Sin cambios operacionales/);
+    assert.match(html,/Sin cambios nuevos/);
 });

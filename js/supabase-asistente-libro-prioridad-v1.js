@@ -6,8 +6,8 @@
     const dia=f=>typeof f==='string' && /^\d{4}-\d{2}-\d{2}$/.test(f) && Number.isFinite(Date.parse(f)) && new Date(f).toISOString().slice(0,10)===f ? Date.parse(f)/86400000 : null;
     const grupos=['hoy','manana','proximos','informativos'];
     const nombres=['🔴 Hoy','🟠 Mañana','🟡 Próximos días','🟢 Informativos'];
-    const tipos={nueva:'Reserva nueva',modificada:'Reserva modificada',ausencia:'Ya no aparece',cancelacion:'Cancelación confirmada en Libro',ambigua:'Requiere revisión',advertencia:'Advertencia',cobertura:'Cobertura no comparable'};
-    const etiquetasCambios={cabana:'Cabaña',fecha_checkin:'Check-in',fecha_checkout:'Check-out',noches:'Noches',tipo_estadia:'Tipo de estadía',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado operativo',operador:'Operador',rut_documento:'Documento',correo:'Correo',telefono:'Teléfono',notas_importantes:'Notas o solicitudes',pagos_pendientes:'Pagos pendientes',servicios:'Servicios'};
+    const tipos={nueva:'Agregada al Libro',modificada:'Reserva con cambios',ausencia:'Ya no aparece en el Libro',cancelacion:'Cancelada en el Libro',ambigua:'Necesita revisión',advertencia:'Dato por revisar',cobertura:'No pude revisar toda la información'};
+    const etiquetasCambios={cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',tipo_estadia:'Tipo de estadía',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado de la estadía',operador:'Responsable de la reserva',rut_documento:'RUT o documento',correo:'Correo',telefono:'Teléfono',notas_importantes:'Notas o solicitudes',pagos_pendientes:'Pagos pendientes',servicios:'Servicios'};
     function detalleAvisoBasico(aviso){
         if(typeof aviso==='string')return aviso;
         if(!aviso||typeof aviso!=='object')return '';
@@ -28,15 +28,15 @@
         for(const x of lista(resultado.ambiguas))for(const version of ['anteriores','actuales'])for(const s of lista(x[version]))recordar(s,version==='anteriores'?'anterior':'actual');
         function evaluar(s) {
             const a=dia(s.fecha_checkin),b=dia(s.fecha_checkout);
-            if ((a!==null&&b!==null&&b<a) || (s.tipo_estadia==='full_day'&&a!==null&&b!==null&&a!==b)) return {nivel:3,razon:'Fechas inconsistentes; no se puede determinar la proximidad.'};
-            if(a===null || b===null)return {nivel:3,razon:'Fechas insuficientes; no se puede determinar la proximidad.'};
+            if ((a!==null&&b!==null&&b<a) || (s.tipo_estadia==='full_day'&&a!==null&&b!==null&&a!==b)) return {nivel:3,razon:'Revisa las fechas: no coinciden con el tipo de estadía o la salida figura antes de la entrada.'};
+            if(a===null || b===null)return {nivel:3,razon:'Falta una fecha válida de entrada o salida. Revisa el Libro.'};
             // Intervalo operativo inclusivo: ingreso, permanencia y salida. No es ocupación nocturna.
             const primero=Math.max(a,base), distancia=primero-base;
             if(b<base)return {nivel:3,razon:'La estadía terminó antes de hoy.'};
             const nivel=distancia===0?0:distancia===1?1:distancia<=7?2:3;
             const cuando=distancia===0?'hoy':distancia===1?'mañana':`en ${distancia} días`;
             const accion=s.tipo_estadia==='full_day'?'Full Day':primero===a?'Ingreso':primero===b?'Salida':'Estadía en curso';
-            return {nivel,razon:`${accion} ${cuando}${nivel===3?' · fuera del horizonte de 7 días':''}.`};
+            return {nivel,razon:`${accion} ${cuando}${nivel===3?' · faltan más de 7 días':''}.`};
         }
         const segmento=(s,version)=>({version,titular:s?.titular||null,cabana:s?.cabana??null,fecha_checkin:s?.fecha_checkin??null,fecha_checkout:s?.fecha_checkout??null,tipo_estadia:s?.tipo_estadia??null});
         function agregar(tipo,partes,referencia,cambios=[],aviso=null) {
@@ -47,7 +47,7 @@
                     versionAviso:aviso?.version==='anterior'?'Versión anterior':aviso?.version==='actual'?'Versión actual':null}:{}),
                 cambios:[...new Set(lista(cambios).map(c=>etiquetasCambios[c?.campo] || (typeof c?.campo==='string'?c.campo.replace(/_/g,' '):'Otro campo')))],
                 explicacion:segmentos.length?segmentos.filter(s=>s.nivel===nivel).map(s=>`${s.version}: ${s.razon}`).join(' '):
-                    aviso!=null?'Sin fechas asociadas a este aviso; se conserva en Informativos.':'Sin fechas de estadía disponibles; prioridad temporal no determinada.'});
+                    aviso!=null?'Este aviso no indica una fecha; aparece en Informativos.':'No hay fechas suficientes para saber cuándo atender este caso.'});
         }
         for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']]);
         for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']],null,x.cambios);
@@ -70,13 +70,13 @@
     const fecha=v=>dia(v)===null?'Fecha no determinada':v.split('-').reverse().join('-');
     function resumen(resultado,opciones) {
         const p=clasificar(resultado,opciones);
-        return 'Prioridad operativa: '+grupos.map((k,i)=>`${nombres[i]} · ${p.grupos[k].length}`).join(' · ');
+        return 'Para organizar la revisión: '+grupos.map((k,i)=>`${nombres[i]} · ${p.grupos[k].length}`).join(' · ');
     }
     function renderizar(resultado,opciones) {
         const p=clasificar(resultado,opciones);
         const caso=x=>{
             const aviso=['advertencia','cobertura'].includes(x.tipo),referencia=[x.versionAviso,x.referencia].filter(Boolean).join(' · ');
-            return `<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>${tipos[x.tipo]}</strong>${referencia?`<p>${esc(referencia)}</p>`:''}${x.segmentos.length?x.segmentos.map(s=>`<p>${esc(s.version)} · ${esc(s.titular||'Titular no disponible')} · CAB ${esc(s.cabana??'—')} · ${fecha(s.fecha_checkin)} → ${fecha(s.fecha_checkout)}</p>`).join(''):aviso?'<p>Aviso sin una estadía asociada en este informe.</p>':'<p>Titular no disponible · CAB — · Fechas no determinadas</p>'}${x.detalleAviso?`<p>${esc(x.detalleAviso)}</p>`:''}${x.cambios.length?`<p>Cambios detectados: ${x.cambios.map(esc).join(' · ')}</p>`:''}<p>${esc(x.explicacion)}</p></div>`;
+            return `<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>${tipos[x.tipo]}</strong>${referencia?`<p>${esc(referencia)}</p>`:''}${x.segmentos.length?x.segmentos.map(s=>`<p>${esc(s.version.replace('Candidato','Posible reserva'))} · ${esc(s.titular||'Nombre no indicado')} · CAB ${esc(s.cabana??'—')} · Entrada: ${fecha(s.fecha_checkin)} · Salida: ${fecha(s.fecha_checkout)}</p>`).join(''):aviso?'<p>Este aviso no corresponde a una reserva identificada en el informe.</p>':'<p>Faltan el nombre, la cabaña o las fechas de la reserva.</p>'}${x.detalleAviso?`<p>${esc(x.detalleAviso)}</p>`:''}${x.cambios.length?`<p>Qué cambió: ${x.cambios.map(esc).join(' · ')}</p>`:''}<p>${esc(x.explicacion.replace(/Candidato/g,'Posible reserva'))}</p></div>`;
         };
         const filas=grupos.map((k,i)=>{
             const nombre=nombres[i].replace(/^[^A-Za-zÁÉÍÓÚáéíóú]+/,'');
@@ -85,7 +85,7 @@
                 ? `<details class="haku-prioridad-fila haku-prioridad--${k}"><summary>${contenido}<span class="haku-actualizacion-sites__flecha" aria-hidden="true">⌄</span></summary><div class="haku-actualizacion-sites__casos">${p.grupos[k].map(caso).join('')}</div></details>`
                 : `<div class="haku-prioridad-fila haku-prioridad--${k} haku-prioridad-fila--vacia"><div class="haku-actualizacion-sites__fila-vacia">${contenido}</div></div>`;
         }).join('');
-        return `<section class="haku-libro-prioridad haku-actualizacion-sites__prioridad"><div class="haku-actualizacion-sites__prioridad-intro"><h4>Prioridad de los cambios detectados</h4><p>Esta sección clasifica únicamente los cambios de esta actualización. No representa todas las reservas, ingresos o salidas de los próximos días.</p><p>Referencia: ${fecha(p.fechaActual)} · America/Santiago · próximos días: 2–7 días. Incluye el día de salida.</p><p>Se cuentan casos, incluidos avisos; los segmentos y candidatos se conservan por separado. Informativos incluye casos sin fechas suficientes.</p></div><div class="haku-actualizacion-sites__prioridad-filas">${filas}</div></section>`;
+        return `<section class="haku-libro-prioridad haku-actualizacion-sites__prioridad"><div class="haku-actualizacion-sites__prioridad-intro"><h4>Qué revisar primero</h4><p>Aquí aparecen los cambios de esta actualización, ordenados por fecha. Para ver todas las reservas, abre el calendario.</p><p>Hoy: ${fecha(p.fechaActual)} · hora de Chile. «Próximos días» incluye del segundo al séptimo día, también las salidas.</p><p>Los números cuentan cambios y avisos, no huéspedes. En «Informativos» también aparecen los casos sin fecha.</p></div><div class="haku-actualizacion-sites__prioridad-filas">${filas}</div></section>`;
     }
     const api=Object.freeze({clasificar,renderizar,resumen});root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=api;
     if(typeof module!=='undefined')module.exports=api;
