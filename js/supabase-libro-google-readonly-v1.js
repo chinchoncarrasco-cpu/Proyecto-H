@@ -502,12 +502,12 @@
         }
     }
 
-    function desconectar() {
+    function desconectar({ revocar = true } = {}) {
         detenerPolling();
         const token = accessToken;
         perderAutorizacion();
         metadataActual = null;
-        if (token && root.google?.accounts?.oauth2?.revoke) {
+        if (revocar && token && root.google?.accounts?.oauth2?.revoke) {
             try { root.google.accounts.oauth2.revoke(token, () => {}); } catch (_) {}
         }
         pintar("neutral", "Libro online", "Desconectado. La copia local del Libro se conserva.");

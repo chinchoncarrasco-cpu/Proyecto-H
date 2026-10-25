@@ -19,7 +19,7 @@ function browser(options = {}) {
     const session = options.session || new Map(), local = options.local || new Map();
     const events = new EventTarget(), docEvents = new EventTarget(), timers = new Map(), intervals = new Map();
     const requests = [], loads = [], bytes = fs.readFileSync(require.resolve('./fixtures/libro-reconciliacion-oct26-real.xlsx'));
-    let now = options.now ?? 1792886400000, seq = 0, oauth = 0, callback, pendingOAuth;
+    let now = options.now ?? 1792886400000, seq = 0, oauth = 0, revokes = 0, callback, pendingOAuth;
     const meta = { id: fileId, name: 'Libro prueba.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         modifiedTime: '2026-10-25T00:00:00Z', version: '1', size: String(bytes.length),
         md5Checksum: createHash('md5').update(bytes).digest('hex'), trashed: false, capabilities: { canDownload: true } };
@@ -45,7 +45,7 @@ function browser(options = {}) {
             initTokenClient(config) { const client = { callback: config.callback, requestAccessToken() {
                 oauth++; pendingOAuth = () => client.callback({ access_token: 'token-ficticio-no-real', expires_in: 3600 });
                 if (!options.delayOAuth) pendingOAuth();
-            } }; return client; }, revoke(_token, done) { done(); }
+            } }; return client; }, revoke(_token, done) { revokes++; done(); }
         } } },
         fetch: async (url, init) => {
             requests.push({ url, init });
@@ -55,7 +55,7 @@ function browser(options = {}) {
     };
     root.window = root; vm.runInNewContext(code, root);
     return { root, api: root.HAIKU_LIBRO_GOOGLE_V1, session, local, requests, loads, timers, intervals, meta,
-        now: () => now, advance: ms => { now += ms; }, oauth: () => oauth, oauthReply: () => pendingOAuth(),
+        now: () => now, advance: ms => { now += ms; }, oauth: () => oauth, revokes: () => revokes, oauthReply: () => pendingOAuth(),
         event: name => events.dispatchEvent(new Event(name)),
         visibility(value) { root.document.visibilityState = value; docEvents.dispatchEvent(new Event('visibilitychange')); },
         auth(event, id) { callback(event, id ? { user: { id } } : null); },
@@ -105,6 +105,15 @@ test('Desconectar elimina el permiso y F5 no lo recupera', async () => {
     const first = browser(); await first.api.conectar(); first.api.desconectar();
     const next = browser({ session: first.session }); await next.idle();
     assert.equal(next.api.estado().conectado, false); assert.equal(next.requests.length, 0);
+    assert.equal(first.revokes(), 1);
+});
+
+test('cerrar localmente el informe elimina su token sin revocar Google ni borrar la sesión del panel', async () => {
+    const panel = browser(); await panel.api.conectar(); const stored = panel.session.get(key);
+    const report = browser({ readonly: true, session: panel.session }); await report.api.conectar();
+    report.api.desconectar({ revocar: false });
+    assert.equal(report.api.estado().conectado, false); assert.equal(report.revokes(), 0);
+    assert.equal(panel.session.get(key), stored); assert.equal(panel.api.estado().conectado, true);
 });
 
 for (const event of ['SIGNED_OUT', 'SIGNED_IN']) test(event + ' de salida/cambio de usuario borra el permiso y detiene polling', async () => {

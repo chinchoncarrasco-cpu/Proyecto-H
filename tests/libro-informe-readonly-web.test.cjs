@@ -9,7 +9,7 @@ const hash = createHash('sha256').update(bytes).digest('hex');
 const gate = () => { let resolve; const promise = new Promise(r => resolve = r); return { promise, resolve }; };
 function escenario({ fixture = F.casos().find(f => f.id === 'asociacion_segura'), ...opts } = {}) {
     let user = 'usuario-ficticio-a', conectado = true, vigente = true, gen = 0, loaded = false, version = null;
-    const capturas = [], llamadas = { fuentes: 0, m2: 0, comparar: 0, rpc: [], limpio: 0 };
+    const capturas = [], llamadas = { fuentes: 0, m2: 0, comparar: 0, rpc: [], limpio: 0, desconexiones: [] };
     const base = F.cliente(fixture.db), session = () => ({ data: { session: user ? { user: { id: user } } : null }, error: null });
     const cliente = { ...base, auth: { getSession: async () => session(), getUser: async () => ({ data: { user: { id: user } }, error: null }),
         signOut: async () => { user = null; } }, rpc: async name => {
@@ -30,7 +30,7 @@ function escenario({ fixture = F.casos().find(f => f.id === 'asociacion_segura')
     const google = { estado: () => ({ conectado, sincronizando: false }),
         obtenerFuenteVerificada: () => { llamadas.fuentes++; return opts.descarga ? opts.descarga(fuente) : fuente.obtener(); },
         fuenteVerificada: h => fuente.fuente(h), verificarVigencia: async h => { llamadas.m2++; if (opts.m2) await opts.m2(); return fuente.verificarVigencia(h); },
-        desconectar: () => { conectado = false; fuente.invalidar('GOOGLE_NO_AUTORIZADO'); } };
+        desconectar: opciones => { llamadas.desconexiones.push(opciones); conectado = false; fuente.invalidar('GOOGLE_NO_AUTORIZADO'); } };
     const real = Core.crearNucleo(), nucleo = { compararMes: async input => { llamadas.comparar++; if (opts.antesComparar) await opts.antesComparar();
         return opts.dto ? opts.dto(input) : real.compararMes(input); } };
     control = API.crearControlador({ cliente, lector, google, nucleo, ahora: () => opts.ahora || F.ahora, emitir: s => capturas.push(s) });
@@ -44,6 +44,16 @@ test('flujo real de DTO: fuente opaca, núcleo canónico, M2 y sesión final ant
     assert.deepEqual(x.capturas.filter(s => ['comparando', 'vigencia'].includes(s.fase)).map(s => !!s.resultado), [false, false]);
     assert.deepEqual(x.dto().periodo, { desde: '2026-10-01', hasta: '2026-10-31', etiqueta: 'octubre 2026', timezone: 'America/Santiago' });
     assert.ok(x.base.lecturas.length); assert.deepEqual(x.base.mutaciones, []); assert.ok(x.llamadas.rpc.every(n => n === 'haiku_sesion_actual'));
+});
+
+for (const action of ['destruir', 'cerrarSesion', 'cambioSesion']) test(action + ' limpia el informe sin revocar el consentimiento Google del panel', async () => {
+    const x = escenario(); await x.control.comprobarSesion(); await x.control.comparar();
+    assert.equal(x.control.estado().tieneResultado, true);
+    if (action === 'cambioSesion') x.control.cambioSesion('SIGNED_OUT', null);
+    else await x.control[action]();
+    assert.equal(x.control.estado().tieneResultado, false); assert.equal(x.google.estado().conectado, false);
+    assert.ok(x.llamadas.desconexiones.length > 0);
+    assert.ok(x.llamadas.desconexiones.every(o => o.revocar === false));
 });
 for (const f of F.casos()) test('paridad exacta de presentación y estados: ' + f.id, async () => {
     const x = escenario({ fixture: f }); await x.control.comprobarSesion(); await x.control.comparar();

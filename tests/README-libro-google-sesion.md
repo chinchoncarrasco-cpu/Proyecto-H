@@ -6,6 +6,9 @@ El conector guardaba `accessToken` y su vencimiento exclusivamente en variables
 JavaScript. F5 los borraba aunque Google aún permitiera usar ese acceso. El polling
 se detenía y Haku dejaba de recibir versiones nuevas para sus avisos.
 La revisión normal ocurría cada 60 segundos.
+Además, cerrar el informe independiente ejecutaba `google.accounts.oauth2.revoke`
+al limpiar su conexión. Esa operación revoca el consentimiento Google del cliente,
+no sólo los datos de la vista que se cierra, y podía interrumpir también el panel.
 
 ## Comportamiento
 
@@ -24,6 +27,9 @@ La revisión normal ocurría cada 60 segundos.
 - Reintenta tras errores temporales conservando el permiso. Un timeout de red de
   30 segundos libera la sincronización. Descargas tardías tras logout se descartan.
 - Muestra la última comprobación y distingue un permiso vencido/revocado.
+- Cerrar/invalidar el informe sólo elimina su conexión local, sus handles y sus
+  datos; no revoca el consentimiento Google compartido por el panel. El botón
+  explícito Desconectar conserva la revocación.
 - Conserva la verificación de fuente y el modo del informe readonly independiente,
   que no lee ni escribe este permiso de sesión. El cambio de persistencia corresponde
   al panel; no activa comparaciones ni registros automáticos de negocio.
@@ -54,7 +60,7 @@ Este cambio no instala ese backend ni presenta el permiso del navegador como per
 
 `node --test tests/libro-google-sesion.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/supabase-libro-google-carga.test.cjs tests/haiku-libro-auto.test.cjs tests/libro-informe-readonly-web.test.cjs`
 
-189 pruebas aprobadas, incluyendo 25 casos nuevos de sesión, expiración, cambio de
+193 pruebas aprobadas, incluyendo 29 casos nuevos de sesión, expiración, cambio de
 usuario, almacenamiento bloqueado, cortes de red, respuestas tardías y sincronización.
 
 `node tests/libro-google-sesion-browser-check.cjs` usa Playwright, un Chromium local
