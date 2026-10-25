@@ -264,3 +264,26 @@ test('una revisión de servicios mantiene Ver reserva, cuenta cero preparables y
     assert.match(html,/confirma el cambio de horario/);
     assert.doesNotMatch(html,/Revisar cambios|00000000-0000/);
 });
+test('el administrador puede abrir la aprobación de servicios pendientes sin convertirlos en cambios de reserva',()=>{
+    const anterior=global.haikuSesion;
+    const item={tipo:'modificacion',actual:reserva,estado:'revision',accionable:false,
+        sistema:{reserva_id:'reserva-de-prueba'},cambios:[{campo:'servicios',antes:[{concepto:'tonel',hora:'19:15',cortesia:true}],
+            ahora:[{concepto:'jacuzzi',hora:'18:00',cortesia:true}],proyecto:'Preparado para incorporar.'}]};
+    const pendientes={items:[item],generacion:3},copia=JSON.stringify(pendientes);
+    try{
+        global.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
+        const html=A.renderizarPendientes(pendientes);
+        assert.match(html,/data-haku-aprobar-pendiente="0">Aprobación manual/);
+        assert.match(html,/data-haku-ver-reserva="0">Ver reserva/);
+        assert.doesNotMatch(html,/data-haku-preparar-pendientes|reserva-de-prueba/);
+        assert.equal(JSON.stringify(pendientes),copia);
+        for(const cambio of [{sistema:null},{actual:null},{tipo:'cancelacion'},{cambios:[{campo:'adultos',antes:2,ahora:3}]}]){
+            assert.doesNotMatch(A.renderizarPendientes({items:[{...item,...cambio}],generacion:3}),/data-haku-aprobar-pendiente/);
+        }
+        assert.doesNotMatch(A.renderizarPendientes({items:[item]}),/data-haku-aprobar-pendiente/);
+        for(const sesion of [{usuario:{activo:true},roles:['recepcion']},{usuario:{activo:false},roles:['administrador']}]){
+            global.haikuSesion=sesion;
+            assert.doesNotMatch(A.renderizarPendientes(pendientes),/data-haku-aprobar-pendiente/);
+        }
+    }finally{global.haikuSesion=anterior;}
+});
