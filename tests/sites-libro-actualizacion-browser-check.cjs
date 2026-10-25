@@ -215,6 +215,37 @@ const server = http.createServer((request, response) => {
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
         await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica','tinaja-sintetica']);
+        const manualServicio=history.getByRole('button',{name:'Aprobación manual',exact:true});
+        const revisionesAntes=await page.evaluate(()=>window.__revisionesServicios.length);
+        const preparacionesAntes=await page.evaluate(()=>window.__preparations);
+        for(const width of [1100,390,320]){
+            await page.setViewportSize({width,height:900});await manualServicio.click();
+            const panel=history.locator('.haku-pendiente-detalle .haku-libro-preparacion-zona');
+            assert.equal(await panel.count(),1,'reabrir conserva un único panel dentro de la tarjeta');
+            assert.match(await panel.innerText(),/Servicios y notas auditados/);
+            assert.equal(await history.locator('.haku-actualizacion-sites__pendiente').getAttribute('open'),'');
+            assert.equal(await history.locator('.haku-pendiente-detalle').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+        }
+        assert.equal(await page.evaluate(()=>window.__preparations),preparacionesAntes,'servicios nunca abre el writer de reservas');
+        const scopesServicios=await page.evaluate(n=>window.__revisionesServicios.slice(n),revisionesAntes);
+        assert.equal(scopesServicios.length,3);
+        assert.ok(scopesServicios.every(s=>s.generacion===2&&s.reservas.length===1&&s.reservas[0].titular==='Reserva de horario'));
+        await page.evaluate(()=>haikuSesion.roles=[]);await manualServicio.click();
+        assert.equal(await page.evaluate(()=>window.__revisionesServicios.length),revisionesAntes+3,'revalida administrador al pulsar');
+        await page.evaluate(()=>{
+            haikuSesion.roles=[{codigo:'administrador'}];
+            window.__serviciosOriginal=HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial;
+            HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial=()=>new Promise((resolve,reject)=>{window.__revisionServicioPendiente={resolve,reject};});
+        });
+        await manualServicio.click();
+        assert.equal(await manualServicio.isDisabled(),true);
+        await page.evaluate(()=>window.__revisionServicioPendiente.reject(Error('El Libro cambió; vuelve a revisar el informe.')));
+        await page.waitForFunction(()=>!document.querySelectorAll('[data-haku-aprobar-pendiente]')[0]?.disabled);
+        assert.match(await history.locator('.haku-libro-preparacion-zona').innerText(),/El Libro cambió/);
+        await page.evaluate(()=>HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial=window.__serviciosOriginal);
+        await manualServicio.click();
+        assert.equal(await history.locator('.haku-pendiente-detalle .haku-libro-preparacion-zona').count(),1);
+        assert.match(await history.locator('.haku-libro-preparacion-zona').innerText(),/Servicios y notas auditados/);
         assert.equal(await page.evaluate(() => window.__sawLegacy), false);
         assert.doesNotMatch(await report.innerText(), /Vista de ejemplo basada en captura|datos de muestra|prototipo|demostración/);
         await report.locator('[data-haku-cerrar-actualizacion]').click();
