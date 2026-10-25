@@ -7,6 +7,7 @@ const F = require('../js/haiku-libro-fuente-oficial-v1.js');
 const code = fs.readFileSync(require.resolve('../js/supabase-libro-google-readonly-v1.js'), 'utf8');
 const fileId = code.match(/const FILE_ID = "([^"]+)"/)[1];
 const key = 'haikuLibroGoogleSesionV1';
+const serverError = (status, code) => ({ data: null, error: { context: new Response(JSON.stringify({ code }), { status }) } });
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const gate = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 const storage = (map, fail = false) => ({
@@ -18,19 +19,21 @@ const storage = (map, fail = false) => ({
 function browser(options = {}) {
     const session = options.session || new Map(), local = options.local || new Map();
     const events = new EventTarget(), docEvents = new EventTarget(), timers = new Map(), intervals = new Map();
-    const requests = [], loads = [], bytes = fs.readFileSync(require.resolve('./fixtures/libro-reconciliacion-oct26-real.xlsx'));
+    const requests = [], serverRequests = [], loads = [], bytes = fs.readFileSync(require.resolve('./fixtures/libro-reconciliacion-oct26-real.xlsx'));
     let now = options.now ?? 1792886400000, seq = 0, oauth = 0, revokes = 0, callback, pendingOAuth;
     const meta = { id: fileId, name: 'Libro prueba.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         modifiedTime: '2026-10-25T00:00:00Z', version: '1', size: String(bytes.length),
-        md5Checksum: createHash('md5').update(bytes).digest('hex'), trashed: false, capabilities: { canDownload: true } };
+        md5Checksum: createHash('md5').update(bytes).digest('hex'), sha256Checksum: createHash('sha256').update(bytes).digest('hex'),
+        trashed: false, capabilities: { canDownload: true } };
     let state = { cargado: !!options.loaded, generacion: 0, version: null };
     const reader = { estado: () => ({ ...state }), listo: () => options.restoration || Promise.resolve(),
         async cargarDesdeGoogle(file) {
-            loads.push(file); state = { cargado: true, generacion: state.generacion + 1,
+            loads.push(file); state = { ...state, generacion: state.generacion + 1 };
+            state = { cargado: true, generacion: state.generacion,
                 version: createHash('sha256').update(new Uint8Array(await file.arrayBuffer())).digest('hex') };
         } };
     reader.cargarDesdeGoogleParaVerificacion = reader.cargarDesdeGoogle;
-    const root = { Date: class extends Date { static now() { return now; } }, File, Event, CustomEvent, AbortController,
+    const root = { Date: class extends Date { static now() { return now; } }, File, Blob, Event, CustomEvent, AbortController,
         crypto: webcrypto, HAIKU_LIBRO_FUENTE_OFICIAL_V1: F, HAIKU_LIBRO_RESERVA_V1: reader,
         haikuSesion: options.user === null ? null : { auth: { id: options.user || 'usuario-a' }, usuario: { activo: true } },
         haikuSupabase: { auth: { onAuthStateChange(cb) { callback = cb; } } },
@@ -53,8 +56,16 @@ function browser(options = {}) {
             return url.includes('alt=media') ? new Response(bytes) : new Response(JSON.stringify(meta));
         }
     };
+    if (options.server) {
+        root.HAIKU_SUPABASE_CONFIG = { libroConexionServidor: true };
+        root.haikuSupabase.functions = { async invoke(name, init) {
+            assert.equal(name, 'haku-libro-enlace-readonly'); serverRequests.push(init);
+            return options.serverFetcher ? options.serverFetcher(init, meta, bytes) :
+                { data: init.body.accion === 'metadata' ? { ...meta } : new Blob([bytes]), error: null };
+        } };
+    }
     root.window = root; vm.runInNewContext(code, root);
-    return { root, api: root.HAIKU_LIBRO_GOOGLE_V1, session, local, requests, loads, timers, intervals, meta,
+    return { root, api: root.HAIKU_LIBRO_GOOGLE_V1, session, local, requests, serverRequests, loads, timers, intervals, meta,
         now: () => now, advance: ms => { now += ms; }, oauth: () => oauth, revokes: () => revokes, oauthReply: () => pendingOAuth(),
         event: name => events.dispatchEvent(new Event(name)),
         visibility(value) { root.document.visibilityState = value; docEvents.dispatchEvent(new Event('visibilitychange')); },
@@ -206,4 +217,86 @@ for (const event of ['SIGNED_OUT', 'SIGNED_IN']) test(event + ' durante autoriza
     const b = browser({ delayOAuth: true }); const connecting = b.api.conectar(); await b.idle();
     b.auth(event, event === 'SIGNED_IN' ? 'usuario-b' : null); b.oauthReply(); await connecting;
     assert.equal(b.api.estado().conectado, false); assert.equal(b.session.has(key), false); assert.equal(b.requests.length, 0);
+});
+
+test('servidor: conexión automática y F5 descargan sin permiso personal ni almacenamiento de credenciales', async () => {
+    const b = browser({ server: true }); await b.idle();
+    assert.equal(b.api.estado().conexion, 'servidor-enlace'); assert.equal(b.api.estado().conectado, true);
+    assert.equal(b.loads.length, 1); assert.equal(b.oauth(), 0); assert.equal(b.requests.length, 0); assert.equal(b.session.size, 0);
+    const reload = browser({ server: true, session: b.session, local: b.local }); await reload.idle();
+    assert.equal(reload.api.estado().conectado, true); assert.equal(reload.loads.length, 1); assert.equal(reload.oauth(), 0);
+});
+test('servidor: sigue conectado tras una jornada y comprueba cambios por versión', async () => {
+    const b = browser({ server: true }); await b.idle(); b.advance(12 * 3600000);
+    b.meta.version = '2'; b.event('focus'); await b.idle();
+    assert.equal(b.api.estado().conectado, true); assert.equal(b.loads.length, 2); assert.equal(b.oauth(), 0);
+    assert.equal([...b.timers.values()].some(t => t.ms > 30000), false);
+});
+test('servidor: espera auth de Haku y restauración del Libro antes de cargarlo', async () => {
+    const restore = gate(); const b = browser({ server: true, user: null, restoration: restore.promise }); await b.idle();
+    assert.equal(b.serverRequests.length, 0);
+    b.root.haikuSesion = { auth: { id: 'usuario-a' }, usuario: { activo: true } };
+    b.event('haiku:auth-ready'); await b.idle(); assert.equal(b.loads.length, 0);
+    restore.resolve(); await b.idle(); assert.equal(b.loads.length, 1); assert.equal(b.oauth(), 0);
+});
+test('servidor: auth-ready y foco con hash idéntico no vuelven a cargar un archivo sin cambios', async () => {
+    const b = browser({ server: true }); await b.idle();
+    b.meta.sha256Checksum = b.root.HAIKU_LIBRO_RESERVA_V1.estado().version;
+    const calls = b.serverRequests.length; b.event('haiku:auth-ready'); await b.idle();
+    assert.equal(b.serverRequests.length, calls); assert.equal(b.loads.length, 1);
+    b.advance(4000); b.event('focus'); await b.idle(); assert.equal(b.loads.length, 1);
+});
+test('servidor: comparación y vigencia conservan handles opacos y checksums', async () => {
+    const b = browser({ server: true }); await b.idle();
+    const handle = await b.api.obtenerFuenteVerificada();
+    assert.ok(b.api.fuenteVerificada(handle)); await b.api.verificarVigencia(handle);
+    b.meta.version = '2'; await assert.rejects(() => b.api.verificarVigencia(handle), { code: 'FUENTE_CAMBIADA' });
+    assert.equal(b.oauth(), 0);
+});
+test('servidor: Pausar detiene consultas y Conectar Libro reanuda sin Google', async () => {
+    const b = browser({ server: true }); await b.idle(); b.api.desconectar();
+    const calls = b.serverRequests.length; b.event('haiku:auth-ready'); b.event('focus'); await b.idle();
+    assert.equal(b.serverRequests.length, calls); assert.equal(b.api.estado().conectado, false); assert.equal(b.intervals.size, 0);
+    await b.api.conectar(); assert.equal(b.api.estado().conectado, true); assert.equal(b.oauth(), 0); assert.equal(b.revokes(), 0);
+});
+test('servidor: logout durante la conexión descarta metadata tardía sin iniciar OAuth', async () => {
+    const wait = gate(); const b = browser({ server: true, serverFetcher: async (_init, meta) => {
+        await wait.promise; return { data: meta, error: null };
+    } });
+    const connecting = b.api.conectar(); await b.idle(); b.root.haikuSesion = null; b.auth('SIGNED_OUT');
+    wait.resolve(); await connecting; await b.idle();
+    assert.equal(b.loads.length, 0); assert.equal(b.api.estado().conectado, false); assert.equal(b.oauth(), 0);
+});
+test('servidor: logout durante descarga descarta bytes tardíos', async () => {
+    const wait = gate(); const b = browser({ server: true, serverFetcher: async (init, meta, bytes) => {
+        if (init.body.accion === 'metadata') return { data: meta, error: null };
+        await wait.promise; return { data: new Blob([bytes]), error: null };
+    } }); await b.idle(); b.root.haikuSesion = null; b.auth('SIGNED_OUT'); wait.resolve(); await b.idle();
+    assert.equal(b.loads.length, 0); assert.equal(b.api.estado().conectado, false); assert.equal(b.intervals.size, 0);
+});
+test('servidor: 401 cierra acceso; 503 de red permite reintentar sin OAuth', async () => {
+    for (const status of [401, 503]) {
+        let failing = false;
+        const b = browser({ server: true, serverFetcher: async (init, meta, bytes) => failing
+            ? serverError(status, 'GOOGLE_TEMPORARY_ERROR') : { data: init.body.accion === 'metadata' ? meta : new Blob([bytes]), error: null } });
+        await b.idle(); failing = true; await b.api.sincronizar();
+        assert.equal(b.api.estado().conectado, status !== 401); assert.equal(b.oauth(), 0);
+        failing = false; await b.api.conectar(); assert.equal(b.api.estado().conectado, true);
+    }
+});
+test('servidor sin configurar conserva conexión Google previa como transición', async () => {
+    const first = browser(); await first.api.conectar();
+    const b = browser({ server: true, session: first.session, serverFetcher: async () => serverError(503, 'CONFIGURACION_PENDIENTE') });
+    await b.idle(); assert.equal(b.api.estado().conexion, 'google-personal'); assert.equal(b.api.estado().conectado, true);
+    assert.equal(b.oauth(), 0);
+});
+test('servidor: acceso al enlace retirado muestra fallo y no intenta obtener permiso personal', async () => {
+    const b = browser({ server: true, serverFetcher: async () => serverError(502, 'GOOGLE_ACCESS_DENIED') });
+    await b.idle(); await b.api.conectar(); assert.equal(b.oauth(), 0); assert.equal(b.loads.length, 0);
+});
+test('servidor: informe readonly no persiste permisos ni afecta al token guardado del panel', async () => {
+    const first = browser(); await first.api.conectar(); const previous = first.session.get(key);
+    const b = browser({ server: true, readonly: true, session: first.session }); await b.idle();
+    assert.equal(b.loads.length, 1); assert.equal(b.local.size, 0); assert.equal(b.session.get(key), previous);
+    b.api.desconectar({ revocar: false }); assert.equal(b.session.get(key), previous); assert.equal(b.revokes(), 0);
 });

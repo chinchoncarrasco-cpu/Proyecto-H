@@ -33,6 +33,11 @@
     let ultimaComprobacion = 0;
     let ultimaComprobacionCorrecta = 0;
     let comprobacionAbort = null;
+    let conexionServidor = false;
+    let servidorPendiente = null;
+    let servidorPausado = false;
+    const servidorDisponible = () => root.HAIKU_SUPABASE_CONFIG?.libroConexionServidor === true &&
+        typeof root.haikuSupabase?.functions?.invoke === "function";
 
     const usuarioActual = () => root.haikuSesion?.usuario?.activo === true
         ? root.haikuSesion.auth?.id || null : null;
@@ -64,6 +69,11 @@
 
     async function restaurarSesion() {
         const usuario = usuarioActual();
+        if (usuario && !servidorPausado && !conexionServidor && servidorDisponible()) {
+            try { if (await conectarServidor()) return; }
+            catch (error) { pintar("error", "Libro online", error.message); return; }
+            if (usuario !== usuarioActual() || servidorPausado) return;
+        }
         if (informeReadonly || !usuario || accessToken) return;
         let guardada;
         try { guardada = JSON.parse(root.sessionStorage?.getItem(SESSION_KEY) || "null"); }
@@ -93,6 +103,7 @@
                 perderAutorizacion(); metadataActual = null;
                 pintar("neutral", "Libro online", "Conexión cerrada con la sesión de Haku.");
             }
+            if (evento === "SIGNED_OUT") servidorPausado = false;
         });
     }
 
@@ -101,10 +112,12 @@
     }
 
     function autorizado() {
+        if (conexionServidor) return Boolean(usuarioAutorizado) && usuarioActual() === usuarioAutorizado;
         return Boolean(accessToken) && tokenExpiraEn > Date.now();
     }
 
     function perderAutorizacion() {
+        conexionServidor = false;
         accessToken = ""; tokenExpiraEn = 0; revisionAutorizacion++;
         usuarioAutorizado = null; borrarSesionGuardada();
         comprobacionAbort?.abort();
@@ -239,8 +252,67 @@
         const syncBtn = $("haiku-libro-google-sincronizar");
         const desconectarBtn = $("haiku-libro-google-desconectar");
         if (conectarBtn) conectarBtn.hidden = conectado;
+        if (conectarBtn) conectarBtn.textContent = servidorDisponible() ? "Conectar Libro" : "Conectar Google";
         if (syncBtn) syncBtn.disabled = !conectado || sincronizando;
         if (desconectarBtn) desconectarBtn.hidden = !conectado;
+        if (desconectarBtn) desconectarBtn.textContent = conexionServidor ? "Pausar" : "Desconectar";
+    }
+
+    async function consultarServidor(accion, version, signal) {
+        const usuario = usuarioActual(), revision = revisionAutorizacion;
+        if (!usuario) throw fallo("HAKU_NO_AUTORIZADO");
+        const body = accion === "metadata" ? { accion } : { accion, version };
+        const { data, error } = await root.haikuSupabase.functions.invoke("haku-libro-enlace-readonly", { body, signal });
+        if (signal?.aborted || revision !== revisionAutorizacion || usuarioActual() !== usuario)
+            throw fallo("SOLICITUD_OBSOLETA");
+        if (error) {
+            let detalle;
+            try { detalle = await error.context?.json(); } catch (_) {}
+            if (revision !== revisionAutorizacion || usuarioActual() !== usuario) throw fallo("SOLICITUD_OBSOLETA");
+            if ([401, 403].includes(error.context?.status) || detalle?.code === "SESION_PERMISOS") {
+                perderAutorizacion();
+                pintar("error", "Libro online", "Tu sesión de Haku no permite consultar el Libro. Vuelve a iniciar sesión.");
+                throw fallo("HAKU_NO_AUTORIZADO");
+            }
+            const codigos = {
+                CONFIGURACION_PENDIENTE: "SERVIDOR_NO_CONFIGURADO", CONFIG_INVALIDA: "SERVIDOR_NO_CONFIGURADO",
+                GOOGLE_ACCESS_DENIED: "LIBRO_ENLACE_NO_DISPONIBLE", GOOGLE_FILE_NOT_FOUND: "LIBRO_ENLACE_NO_DISPONIBLE",
+                FUENTE_CAMBIADA: "FUENTE_CAMBIADA", FUENTE_INVALIDA: "FUENTE_INVALIDA",
+                FUENTE_DEMASIADO_GRANDE: "FUENTE_DEMASIADO_GRANDE", FUENTE_NO_VERIFICABLE: "FUENTE_NO_VERIFICABLE",
+                CHECKSUM_INVALIDO: "CHECKSUM_INVALIDO", GOOGLE_TIMEOUT: "GOOGLE_TIMEOUT"
+            };
+            throw fallo(error.context?.status === 404 ? "SERVIDOR_NO_CONFIGURADO" : codigos[detalle?.code] || "GOOGLE_ERROR");
+        }
+        return data;
+    }
+
+    async function conectarServidor() {
+        if (!servidorDisponible() || !usuarioActual() || servidorPausado) return false;
+        if (conexionServidor && autorizado()) return true;
+        if (servidorPendiente) return servidorPendiente;
+        const usuario = usuarioActual(), revision = revisionAutorizacion;
+        const pendiente = (async () => {
+            const abort = new root.AbortController();
+            const timeout = setTimeout(() => abort.abort(), 30_000);
+            try {
+                const metadata = await consultarServidor("metadata", undefined, abort.signal);
+                if (abort.signal.aborted || revision !== revisionAutorizacion || usuario !== usuarioActual() || servidorPausado) return false;
+                if (metadata?.id !== FILE_ID || metadata?.mimeType !== MIME_XLSX) return false;
+                perderAutorizacion(); // El token de Google deja de ser necesario, sin revocar su concesión.
+                conexionServidor = true; usuarioAutorizado = usuario;
+                iniciarPolling();
+                pintar("trabajando", "Libro online", "Conectando con el Libro compartido…");
+                await sincronizar(false);
+                return true;
+            } catch (error) {
+                // Sólo la falta de instalación/configuración permite el acceso anterior.
+                if (["SERVIDOR_NO_CONFIGURADO", "SOLICITUD_OBSOLETA"].includes(error.code)) return false;
+                throw error;
+            } finally { clearTimeout(timeout); }
+        })();
+        servidorPendiente = pendiente;
+        try { return await pendiente; }
+        finally { if (servidorPendiente === pendiente) servidorPendiente = null; }
     }
 
     function cargarGIS() {
@@ -339,8 +411,12 @@
     async function obtenerMetadata({ verificada = false, signal } = {}) {
         const fields = encodeURIComponent("id,name,mimeType,modifiedTime,size,version,md5Checksum,sha256Checksum,capabilities(canDownload),trashed");
         const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?fields=${fields}&supportsAllDrives=true`;
-        const respuesta = await driveFetch(url, signal, verificada);
-        const data = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerJSON(respuesta, signal) : await respuesta.json();
+        let data;
+        if (conexionServidor) data = await consultarServidor("metadata", undefined, signal);
+        else {
+            const respuesta = await driveFetch(url, signal, verificada);
+            data = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerJSON(respuesta, signal) : await respuesta.json();
+        }
         if (String(data?.id || "") !== FILE_ID || data?.mimeType !== MIME_XLSX) throw fallo("FUENTE_INVALIDA");
         if (data?.capabilities?.canDownload === false) throw fallo("GOOGLE_ACCESO_DENEGADO");
         return data;
@@ -348,8 +424,16 @@
 
     async function descargar(metadata, { verificada = false, signal } = {}) {
         const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(FILE_ID)}?alt=media&supportsAllDrives=true`;
-        const respuesta = await driveFetch(url, signal, verificada);
-        const buffer = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerBytes(respuesta, undefined, signal) : await respuesta.arrayBuffer();
+        let buffer;
+        if (conexionServidor) {
+            const archivo = await consultarServidor("descargar", metadata.version, signal);
+            if (!(archivo instanceof Blob) || archivo.size > root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.MAX_BYTES)
+                throw fallo("FUENTE_INVALIDA");
+            buffer = await archivo.arrayBuffer();
+        } else {
+            const respuesta = await driveFetch(url, signal, verificada);
+            buffer = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerBytes(respuesta, undefined, signal) : await respuesta.arrayBuffer();
+        }
         if (!buffer.byteLength) throw fallo("FUENTE_INVALIDA");
         const nombreBase = String(metadata?.name || "Libro de reservas actual 2025.xlsx");
         const nombre = /\.xlsx$/i.test(nombreBase) ? nombreBase : `${nombreBase}.xlsx`;
@@ -390,7 +474,7 @@
     }
 
     async function sincronizar(forzar = false) {
-        if (sincronizando || !accessToken) return;
+        if (sincronizando || (!conexionServidor && !accessToken)) return;
         if (!autorizado()) { avisarRenovacion(); return; }
         if (fuenteControl?.enCurso()) {
             if (!forzar) return;
@@ -484,6 +568,11 @@
     }
 
     async function conectar() {
+        servidorPausado = false;
+        const usuario = usuarioActual(), revision = revisionAutorizacion;
+        try { if (await conectarServidor()) return; }
+        catch (error) { pintar("error", "Libro online", error.message); return; }
+        if (revision !== revisionAutorizacion || usuario !== usuarioActual()) return;
         if (!CLIENT_ID) {
             pintar("error", "Libro online", "Falta configurar una vez el acceso Google de solo lectura.");
             return;
@@ -503,6 +592,7 @@
     }
 
     function desconectar({ revocar = true } = {}) {
+        servidorPausado = true;
         detenerPolling();
         const token = accessToken;
         perderAutorizacion();
@@ -521,7 +611,8 @@
             pintar("neutral", "Libro online", "Listo para conectar con Google.");
         }
         function alVolver() {
-            if (document.visibilityState === "visible" && accessToken && Date.now() - ultimaComprobacion >= 3000) void sincronizar(false);
+            if (document.visibilityState === "visible" && (conexionServidor || accessToken) && Date.now() - ultimaComprobacion >= 3000) void sincronizar(false);
+            else if (document.visibilityState === "visible" && !autorizado() && servidorDisponible() && !servidorPausado) void restaurarSesion();
         }
         document.addEventListener("visibilitychange", alVolver);
         root.addEventListener("focus", alVolver);
@@ -536,7 +627,7 @@
         instalarSesion();
         void restaurarSesion();
         root.addEventListener("haiku:libro-vista-actualizada", evento => {
-            if (!accessToken || evento.detail?.origen === "google") return;
+            if ((!conexionServidor && !accessToken) || evento.detail?.origen === "google") return;
             pintar("neutral", "Libro online conectado", evento.detail?.cargado
                 ? "Copia local cargada; no verificada frente a Google."
                 : "Sin copia local; Google puede volver a descargarla.");
@@ -544,7 +635,7 @@
     }
 
     root.HAIKU_LIBRO_GOOGLE_V1 = Object.freeze({
-        version: "1.2.0",
+        version: "1.3.0",
         modo: "google-drive-readonly",
         fileId: FILE_ID,
         scope: DRIVE_SCOPE,
@@ -559,6 +650,7 @@
         verificarVigencia: handle => controladorFuente().verificarVigencia(handle),
         estado: () => ({
             conectado: autorizado(),
+            conexion: conexionServidor ? "servidor-enlace" : "google-personal",
             sincronizando,
             metadata: metadataActual ? { ...metadataActual } : null,
             archivoLocalCargado: libroLocalCargado()

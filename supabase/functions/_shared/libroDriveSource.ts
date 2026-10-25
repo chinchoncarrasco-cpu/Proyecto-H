@@ -26,7 +26,9 @@ export type LibroDriveSource = Readonly<{
 }>;
 export type LibroDriveSourceOptions = NetworkOptions & {
   fileId: string;
-  tokenProvider: GoogleTokenProvider;
+  tokenProvider?: GoogleTokenProvider;
+  apiKey?: string;
+  resourceKey?: string;
   crypto?: Crypto;
   maxBytes?: number;
   metadataTimeoutMs?: number;
@@ -35,11 +37,17 @@ export type LibroDriveSourceOptions = NetworkOptions & {
 const stampKeys = ["id", "mimeType", "driveVersion", "modifiedTime", "size", "md5Checksum", "sha256Checksum", "canDownload", "trashed"] as const;
 
 export function createLibroDriveSource(options: LibroDriveSourceOptions) {
-  if (!options || typeof options.fileId !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(options.fileId) ||
-      typeof options.tokenProvider?.getAccessToken !== "function" || typeof options.tokenProvider?.invalidate !== "function")
+  if (!options || typeof options.fileId !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(options.fileId))
     throw new LibroDriveError("CONFIG_INVALIDA");
   const fileId = options.fileId;
   const tokenProvider = options.tokenProvider;
+  const apiKey = options.apiKey;
+  const resourceKey = options.resourceKey;
+  // Exactly one credential: anonymous link access never borrows a user's grant.
+  if (apiKey !== undefined ? tokenProvider !== undefined || typeof apiKey !== "string" || !/^[A-Za-z0-9_-]{20,200}$/.test(apiKey) :
+      typeof tokenProvider?.getAccessToken !== "function" || typeof tokenProvider?.invalidate !== "function")
+    throw new LibroDriveError("CONFIG_INVALIDA");
+  if (resourceKey !== undefined && (typeof resourceKey !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(resourceKey))) throw new LibroDriveError("CONFIG_INVALIDA");
   const crypto = options.crypto ?? globalThis.crypto;
   if (!crypto?.subtle?.digest) throw new LibroDriveError("CONFIG_INVALIDA");
   const transport = createGoogleTransport(options);
@@ -56,19 +64,25 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
     let retries = 0;
     while (true) {
       transport.remaining(op);
-      let token: string;
-      try { token = await transport.wait(op, tokenProvider.getAccessToken({ deadlineMs: op.deadlineMs })); }
-      catch (error) { throw error instanceof LibroDriveError ? error : new LibroDriveError("GOOGLE_AUTH_ERROR"); }
-      if (typeof token !== "string" || !token || /[\s\x00-\x1f\x7f]/.test(token)) throw new LibroDriveError("GOOGLE_AUTH_ERROR");
+      let token = "";
+      const headers: Record<string, string> = {};
+      if (apiKey) headers["X-Goog-Api-Key"] = apiKey;
+      else {
+        try { token = await transport.wait(op, tokenProvider!.getAccessToken({ deadlineMs: op.deadlineMs })); }
+        catch (error) { throw error instanceof LibroDriveError ? error : new LibroDriveError("GOOGLE_AUTH_ERROR"); }
+        if (typeof token !== "string" || !token || /[\s\x00-\x1f\x7f]/.test(token)) throw new LibroDriveError("GOOGLE_AUTH_ERROR");
+        headers.Authorization = `Bearer ${token}`;
+      }
+      if (resourceKey) headers["X-Goog-Drive-Resource-Keys"] = `${fileId}/${resourceKey}`;
       try {
-        return await transport.request(target, { method: "GET", headers: { Authorization: `Bearer ${token}` } }, timeout, op,
+        return await transport.request(target, { method: "GET", headers }, timeout, op,
           async (response, signal) => {
             if (response.status !== 200) throw await httpError(response, false, transport.time(), signal);
             return consume(response, signal);
           });
       } catch (error) {
         const safe = error instanceof LibroDriveError ? error : new LibroDriveError("GOOGLE_TEMPORARY_ERROR");
-        if (safe.code === "GOOGLE_AUTH_ERROR" && !op.authRenewed) {
+        if (safe.code === "GOOGLE_AUTH_ERROR" && tokenProvider && !op.authRenewed) {
           op.authRenewed = true;
           try { tokenProvider.invalidate(token); }
           catch { throw new LibroDriveError("GOOGLE_AUTH_ERROR"); }
@@ -162,5 +176,13 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
     if (!stamp || !issued.has(stamp)) throw new LibroDriveError("CONFIG_INVALIDA");
     await unchanged(stamp, transport.operation()); // M2 only; no download and no comparison.
   }
-  return Object.freeze({ obtain, verifyStillCurrent });
+  async function readMetadata() {
+    const { name, stamp } = await metadata(transport.operation());
+    validateInitial(stamp);
+    // This is a plain observation, never an issued verification capability.
+    return Object.freeze({ id: stamp.id, name, mimeType: stamp.mimeType, version: stamp.driveVersion,
+      modifiedTime: stamp.modifiedTime, size: String(stamp.size), md5Checksum: stamp.md5Checksum,
+      sha256Checksum: stamp.sha256Checksum, trashed: stamp.trashed, capabilities: { canDownload: stamp.canDownload } });
+  }
+  return Object.freeze({ obtain, verifyStillCurrent, readMetadata });
 }
