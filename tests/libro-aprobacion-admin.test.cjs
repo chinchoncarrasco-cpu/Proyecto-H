@@ -49,6 +49,20 @@ function completar(form,modo='conservar'){
     form.campo('motivo').value='Verificado por el administrador';form.campo('aceptar').checked=true;form.campo('aceptar').listeners.change();
     assert.equal(form.confirmar.disabled,false);
 }
+test('el historial directo abre la decisión del servicio existente y conserva sólo su comprobante al confirmar',async()=>{
+    const e=caso(),llamadas=writer(e),finanzas=copy(e.state.db.vista_estado_cargos);
+    await e.api.abrirRevisionHistorial(e.out,{reservas:[e.r],generacion:1,aprobacionManual:true});
+    const panel=e.out.querySelector('.haku-libro-servicio-manual');assert.ok(panel);
+    assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Reglas de lectura/);
+    assert.equal(llamadas.length,0);
+    const form={confirmar:panel.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='confirmar-revision-admin'),
+        campo:k=>panel.querySelectorAll('input,select').find(x=>x.dataset.revisionAdmin===k)};
+    completar(form);await form.confirmar.listeners.click();
+    assert.equal(llamadas.length,1);assert.equal(llamadas[0].p_modo,'conservar');
+    assert.match(e.out.textContent,/Aprobación guardada/);
+    assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Incorporar este servicio/);
+    assert.deepEqual(e.state.db.vista_estado_cargos,finanzas);assert.equal(e.state.escrituras.length,0);
+});
 test('administrador siempre ve aprobación y el conflicto pagado abre comparación, importe y decisión',async()=>{
     const e=caso(),antes=JSON.stringify(e.state.db),f=await abrir(e);
     assert.match(f.panel.textContent,/Tonel de madera.*16:15–18:15/);assert.match(f.panel.textContent,/17:15–20:30/);

@@ -15,6 +15,7 @@ const server = http.createServer((request, response) => {
             '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
             '<link rel="stylesheet" href="/css/styles.css"><link rel="stylesheet" href="/css/supabase-asistente-v1.css">' +
             '<link rel="stylesheet" href="/css/supabase-haku-reconciliacion-v1.css"><link rel="stylesheet" href="/css/sites-asistente-v1.css">' +
+            '<link rel="stylesheet" href="/css/haiku-libro-pagos-ui-v1.css"><link rel="stylesheet" href="/css/haiku-tema-oscuro-v1.css">' +
             '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel">' +
             '<header class="haiku-asistente-cabecera"><span>Haku</span><button id="haiku-asistente-cerrar" type="button">Cerrar</button></header>' +
             '<div id="haiku-asistente-mensajes" class="haiku-asistente-mensajes"></div>' +
@@ -220,6 +221,9 @@ const server = http.createServer((request, response) => {
         const preparacionesAntes=await page.evaluate(()=>window.__preparations);
         for(const width of [1100,390,320]){
             await page.setViewportSize({width,height:900});await manualServicio.click();
+            const medidas=await history.locator('.haku-pendiente-detalle > .haku-actualizacion-sites__historial-acciones > button').evaluateAll(bs=>bs.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height})));
+            assert.ok(Math.abs(medidas[0].width-medidas[1].width)<1,'ambos botones tienen el mismo ancho');
+            assert.ok(Math.abs(medidas[0].height-medidas[1].height)<1,'ambos botones tienen el mismo alto');
             const panel=history.locator('.haku-pendiente-detalle .haku-libro-preparacion-zona');
             assert.equal(await panel.count(),1,'reabrir conserva un único panel dentro de la tarjeta');
             assert.match(await panel.innerText(),/Servicios y notas auditados/);
@@ -229,7 +233,7 @@ const server = http.createServer((request, response) => {
         assert.equal(await page.evaluate(()=>window.__preparations),preparacionesAntes,'servicios nunca abre el writer de reservas');
         const scopesServicios=await page.evaluate(n=>window.__revisionesServicios.slice(n),revisionesAntes);
         assert.equal(scopesServicios.length,3);
-        assert.ok(scopesServicios.every(s=>s.generacion===2&&s.reservas.length===1&&s.reservas[0].titular==='Reserva de horario'));
+        assert.ok(scopesServicios.every(s=>s.aprobacionManual===true&&s.generacion===2&&s.reservas.length===1&&s.reservas[0].titular==='Reserva de horario'));
         await page.evaluate(()=>haikuSesion.roles=[]);await manualServicio.click();
         assert.equal(await page.evaluate(()=>window.__revisionesServicios.length),revisionesAntes+3,'revalida administrador al pulsar');
         await page.evaluate(()=>{

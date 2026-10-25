@@ -1086,6 +1086,13 @@
 }
 .haku-actualizacion-sites__boton--primario { background: #285f49; border-color: #285f49; color: #fff; }
 .haku-actualizacion-sites__boton:disabled { opacity: .6; cursor: default; }
+.haku-pendiente-detalle > .haku-actualizacion-sites__historial-acciones > .haku-actualizacion-sites__boton {
+    margin: 0; min-height: 32px; padding: 6px 10px; border-radius: 7px;
+    box-sizing: border-box; align-self: stretch;
+}
+.haku-pendiente-detalle .haku-libro-servicios.haku-libro-servicio-directo {
+    border: 0; background: transparent; padding: 0; margin: 0;
+}
 .haku-actualizacion-sites .haku-4b-preparar { margin: 0 20px 12px; }
 @media (max-width: 440px) {
     .haku-actualizacion-sites__head { padding: 14px; }
