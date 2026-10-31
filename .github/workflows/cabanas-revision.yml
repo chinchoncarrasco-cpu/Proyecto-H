@@ -1,0 +1,37 @@
+name: Haku revisión directa
+
+on:
+  pull_request:
+    paths:
+      - "js/sites-cabanas-v1.js"
+      - "js/supabase-aseo-revision-v1.js"
+      - "css/sites-cabanas-v1.css"
+      - "tests/cabanas-sites.test.cjs"
+      - "tests/revision-completa-estados.test.cjs"
+      - "tests/aseo-derivado-panel-browser-check.cjs"
+      - ".github/workflows/cabanas-revision.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  revision-y-listado:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Revisión, Aseo, Realtime y edición de horas
+        run: node --test tests/cabanas-sites.test.cjs tests/revision-completa-estados.test.cjs tests/revision-checklist-realtime.test.cjs tests/aseo-operacion-autoridad.test.cjs tests/horas-edicion.test.cjs
+      - name: Navegador aislado de prueba
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          node "$RUNNER_TEMP/haku-ui/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Listado real en escritorio y teléfono
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/aseo-derivado-panel-browser-check.cjs

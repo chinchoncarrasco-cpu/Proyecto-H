@@ -162,6 +162,65 @@ function fila(contenido, numero, tipo) {
     return contenido.match(new RegExp(`<article[^>]*${atributo}="${numero}"[\\s\\S]*?<\\/article>`))?.[0] || "";
 }
 
+test("la etiqueta de revisión ofrece cuatro estados y guarda la cabaña sin abrir la ficha", async () => {
+    const h = arnes({ 5: { aseoIn: "14:27", aseoOut: "14:28", estadoRevision: "pendiente" } });
+    const markup = fila(h.nodos.get("#aseo-resumen").innerHTML, 5);
+    assert.match(markup, /data-cb-revision-select="5"/);
+    for (const valor of ["pendiente", "en_revision", "con-detalles", "lista"]) {
+        assert.match(markup, new RegExp(`<option value="${valor}"`));
+    }
+    const cambios = [];
+    h.window.HAIKU_REVISION_SUPABASE_V1 = { async guardarEstadoRevision(...args) {
+        cambios.push(args);
+        h.datosPorFecha[FECHA].cabanas[5].estadoRevision = args[1];
+    } };
+    const control = nodo();
+    control.dataset = { cbRevisionSelect: "5", cbRevisionFecha: FECHA }; control.value = "lista";
+    h.escuchas.get("change")({ target: control });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(cambios, [["5", "lista", FECHA]]);
+    assert.deepEqual(h.aperturas, []);
+    assert.equal(control.disabled, false);
+    assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 5), /data-cb-final-state>Lista</);
+});
+
+test("mientras guarda bloquea otra selección de la misma cabaña y revierte un fallo", async () => {
+    const h = arnes({ 5: { estadoRevision: "pendiente" } });
+    h.contexto.console = { ...console, error() {} };
+    let rechazar, escrituras = 0;
+    h.window.HAIKU_REVISION_SUPABASE_V1 = { guardarEstadoRevision() {
+        escrituras++;
+        return new Promise((_, reject) => { rechazar = reject; });
+    } };
+    const control = nodo();
+    control.dataset = { cbRevisionSelect: "5", cbRevisionFecha: FECHA }; control.value = "lista";
+    h.escuchas.get("change")({ target: control });
+    assert.equal(control.disabled, true);
+    h.api.pintar();
+    assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 5), /data-cb-revision-select="5"[^>]* disabled/);
+    const segundo = nodo(); segundo.dataset = { ...control.dataset }; segundo.value = "con-detalles";
+    h.escuchas.get("change")({ target: segundo });
+    assert.equal(escrituras, 1);
+    rechazar(new Error("Sin conexión"));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(control.value, "pendiente");
+    assert.equal(control.disabled, false);
+    assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 5), /value="pendiente" selected/);
+});
+
+test("un selector de otra fecha o el mismo estado no crea una revisión", () => {
+    const h = arnes({ 5: { estadoRevision: "pendiente" } });
+    const cambios = [];
+    h.window.HAIKU_REVISION_SUPABASE_V1 = { guardarEstadoRevision: (...args) => cambios.push(args) };
+    const control = nodo(); control.dataset = { cbRevisionSelect: "5", cbRevisionFecha: FECHA };
+    control.value = "pendiente";
+    h.escuchas.get("change")({ target: control });
+    control.value = "lista"; h.contexto.fechaSeleccionada = "2026-09-24";
+    h.escuchas.get("change")({ target: control });
+    assert.deepEqual(cambios, []);
+    assert.equal(control.value, "pendiente");
+});
+
 // Ejecuta los puentes reales con lecturas controlables, sin red ni otro writer.
 function instalarOperacionExpress(h, solicitudes = [{ id: "sol-9", cabana_id: "cab-9",
     fecha_operativa: FECHA, categoria: "aseo_express", estado: "pendiente", descripcion: "Reponer toallas" }]) {
@@ -655,7 +714,8 @@ test("Aseo deriva cuatro estados de IN/OUT sin iniciar por encargado ni por esta
         [{ aseoEstado: "cancelado" }, "pendiente"]
     ];
     for (const [datos, esperado] of casos) assert.equal(h.api.estadoAseo(datos), esperado);
-    assert.doesNotMatch(h.nodos.get("#aseo-resumen").innerHTML, /<select/);
+    assert.doesNotMatch(h.nodos.get("#aseo-resumen").innerHTML, /<select[^>]*(?:aseo-estado|cb-aseo)/);
+    assert.match(h.nodos.get("#aseo-resumen").innerHTML, /data-cb-revision-select/);
     assert.doesNotMatch(html, /<select[^>]*id="cabinsDetailAseo"/);
 });
 
@@ -1328,3 +1388,4 @@ test("Aseo deja el menú, y una sección guardada antigua se restaura como Caba�
     assert.equal(cabañas.classList.contains("activa"), true);
     assert.equal(menu.classList.contains("activo"), true);
 });
+

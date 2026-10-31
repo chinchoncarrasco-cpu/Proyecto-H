@@ -324,6 +324,14 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   background:#f5e9e6;color:#9b584b
 }
 
+#seccion-cabanas .cb-revision-picker { position:relative;gap:5px;cursor:pointer; }
+#seccion-cabanas .cb-revision-picker > select {
+  position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;
+}
+#seccion-cabanas .cb-revision-picker:focus-within { outline:2px solid currentColor;outline-offset:2px; }
+#seccion-cabanas .cb-revision-picker:has(> select:disabled) { opacity:.6;cursor:wait; }
+#seccion-cabanas .cb-revision-chevron { font-size:10px;line-height:1; }
+
 #seccion-cabanas .cb-empty {
   padding:30px 16px;font-size:13px;color:#728076
 }
@@ -1323,3 +1331,4 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas .cb-supplies-destinations summary { cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 #seccion-cabanas .cb-supplies-destinations[open] { flex-basis:100%; }
 #seccion-cabanas .cb-supplies-destinations p { margin:6px 0 0; line-height:1.5; }
+
