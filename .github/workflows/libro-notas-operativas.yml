@@ -1,0 +1,27 @@
+name: Haku notas operativas del Libro
+
+on:
+  pull_request:
+    paths:
+      - "js/haiku-libro-semantica-v1.js"
+      - "js/haiku-libro-servicios-scope-v2.js"
+      - "tests/libro-notas-insumos-tinaja.test.cjs"
+      - "tests/libro-titular-fragmentos.test.cjs"
+      - ".github/workflows/libro-notas-operativas.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  reservas-y-servicios:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Notas, identidad, horarios, cobro y reservas del Libro
+        run: node --test tests/libro-notas-insumos-tinaja.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-semantica.test.cjs
