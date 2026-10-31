@@ -154,12 +154,14 @@
         const estado = /\b(?:pendientes?|por pagar|pagad[oa]s?|confirmar|confirmad[oa]s?)\b/;
         const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
-        const objetos = /^(?:cortesia|articulos?|art\.?|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
+        const objetos = /^(?:cortesia|articulos?|art\.?|utensilios?\s+(?:de|para)\s+asado|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
+        // Reconocer entregas de insumos sin descartar nombres por un apellido aislado.
+        const entregaInsumos = /^(?:se(?:\s+les?)?\s+)?(?:hace\s+)?entr{1,2}ega\s+(?:de\s+)?(?:carbon|lena|utensilios?\s+(?:de|para)\s+asado)\b/;
         const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
         const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
-        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || acompanamientoMascota.test(t) || contextoPosterior;
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || entregaInsumos.test(t) || acompanamientoMascota.test(t) || contextoPosterior;
     }
     function clasificarFragmentos(texto) {
         let humanoPrevio=false, datosPosteriores=false;
@@ -1303,3 +1305,4 @@
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);
+
