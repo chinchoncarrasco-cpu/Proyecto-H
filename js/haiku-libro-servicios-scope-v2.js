@@ -1025,10 +1025,6 @@
         const registrados = activos.filter(s => s.estadia_id === destino.id && s.fecha_servicio === item.fecha &&
             ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(s)));
         if (!registrados.length) return null;
-        // Un servicio agregado fuera del Libro no demuestra que se borró una
-        // instrucción anterior; conserva su tratamiento como prestación distinta.
-        if (!registrados.some(s => s.libro_revision_admin_v1 ||
-            /\[HAKU-LIBRO-SERVICIO:srv:/.test(String(s.observaciones || '')))) return null;
         const actuales = depurarServicios(item.reserva).filter(s => esTinajaServicio(s)).map(s =>
             s.semantica === 'SERVICIO_REAL' ? prepararServicio(item.reserva,s,item.asociacion) : null);
         const mismoTurno = (a,s) => a && (revisionAdminValida(a,s) || a.fecha === s.fecha_servicio &&
@@ -1038,7 +1034,11 @@
         const nuevos = delDia.filter(a => !registrados.some(s => mismoTurno(a,s)));
         if (!nuevos.some(a => a.item_id === item.item_id)) return null;
         const retirados = registrados.filter(s => !actuales.some(a => mismoTurno(a,s)));
-        if (!retirados.length) return null; // El anterior sigue en el Libro: es un servicio adicional.
+        if (!retirados.length) return {candidatos:[], reemplazo:null, adicional:true};
+        // Un servicio agregado fuera del Libro no demuestra que se borró una
+        // instrucción anterior; conserva su tratamiento como prestación distinta.
+        if (!registrados.some(s => s.libro_revision_admin_v1 ||
+            /\[HAKU-LIBRO-SERVICIO:srv:/.test(String(s.observaciones || '')))) return null;
 
         const fuente = retirados.length === 1 && nuevos.length === 1 &&
             actuales.every(a => a?.fecha && a.hora && a.mapa.codigo) &&
@@ -1223,7 +1223,7 @@
         // Tonel y Jacuzzi son alternativas de la misma prestación. Antes de
         // proponer un alta, buscar también el otro tipo en la misma estadía,
         // fecha y franja horaria. El precio no distingue estas identidades.
-        if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora &&
+        if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora && !cambioLibro?.adicional &&
             ['tinajaTonel','tinajaJacuzzi'].includes(item.mapa?.codigo)) {
             const inicio = minutosHora(hora);
             // HRS junto a 19:15 es la unidad del reloj, no quince horas.

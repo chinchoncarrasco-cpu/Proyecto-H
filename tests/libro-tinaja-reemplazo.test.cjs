@@ -73,6 +73,16 @@ test('si el anterior sigue escrito, la nueva tinaja es adicional y el anterior s
     assert.equal(nuevo.estado,'listo');assert.ok(nuevo.payload);assert.equal(nuevo.reemplazoLibro,undefined);
 });
 
+test('Jacuzzi y Tonel explícitos en el mismo turno se conservan como dos servicios',async()=>{
+    const e=caso('JACUZZI 20:45 X PAGAR','JACUZZI 20:45 X PAGAR // TONEL 20:45 X PAGAR');
+    const items=(await e.construir()).items.filter(i=>i.kind==='servicio');
+    assert.equal(items.length,2);
+    assert.equal(items.find(i=>i.mapa.codigo==='tinajaJacuzzi').estado,'existente');
+    const tonel=items.find(i=>i.mapa.codigo==='tinajaTonel');
+    assert.equal(tonel.estado,'listo');assert.ok(tonel.payload);assert.equal(tonel.reemplazoLibro,undefined);
+    assert.equal(e.state.escrituras.length,0);
+});
+
 test('una referencia del Libro incoherente o dos anteriores no eligen un reemplazo ni habilitan un alta',async()=>{
     for(const mutar of [
         e=>e.s.observaciones='Importado desde Libro de Reserva. JACUZZI 22:15 X PAGAR\n[HAKU-LIBRO-SERVICIO:srv:otra]',
