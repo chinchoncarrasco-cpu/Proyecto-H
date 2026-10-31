@@ -129,7 +129,8 @@ const modulos = new Set([
         assert.equal(await fila(3).locator('[data-cb-revision-state]').textContent(), 'Lista');
         assert.equal(await fila(3).locator('[data-cb-final-state]').textContent(), 'Lista');
         assert.equal(await fila(4).locator('[data-cb-final-state]').textContent(), 'Con detalles');
-        assert.equal(await fila(1).locator('select').count(), 0);
+        assert.equal(await fila(1).locator('.cb-aseo-status select').count(), 0);
+        assert.equal(await fila(1).locator('[data-cb-revision-select]').count(), 1);
         assert.equal(await fila(1).locator('[data-aseo-hora="aseoOut"]').isDisabled(), true);
         await fila(1).locator('.aseo-encargado-input').fill('Rodolfo');
         await fila(1).locator('.aseo-encargado-input').blur();
