@@ -13,6 +13,7 @@
     ]);
     const REVISIONES = Object.freeze({ pendiente: "Pendiente", en_revision: "En revisión",
         "con-detalles": "Con detalles", lista: "Lista" });
+    const revisionesGuardando = new Set();
     const FINALES = Object.freeze({ pendiente: "Pendiente", en_curso: "En curso",
         lista_para_revisar: "Lista para revisar", "con-detalles": "Con detalles",
         lista: "Lista", no_requiere: "No requiere" });
@@ -325,9 +326,17 @@
         $("#cabinsFilters").innerHTML = [["todas", "Todas", 11], ["pendientes", "Pendientes", pendientes], ["listas", "Listas", listas]]
             .map(([clave, texto, cantidad]) => `<button type="button" data-cb-filter="${clave}" aria-pressed="${estado.filtro === clave}">${texto} · ${cantidad}</button>`).join("");
     }
+    function selectorRevisionHTML(fecha, numero, dato) {
+        const actual = revision(dato, fecha);
+        const guardando = revisionesGuardando.has(`${fecha}:${numero}`);
+        return `<label class="cb-badge cb-revision-picker ${tono(actual)}" title="${guardando ? "Guardando revisión…" : "Cambiar estado de revisión"}">
+          <span data-cb-revision-state>${REVISIONES[actual]}</span><span class="cb-revision-chevron" aria-hidden="true">▾</span>
+          <select data-cb-revision-select="${numero}" data-cb-revision-fecha="${escapar(fecha)}" aria-label="Estado de revisión de cabaña ${numero}"${guardando ? ' disabled aria-busy="true"' : ""}>
+            ${Object.entries(REVISIONES).map(([valor, texto]) => `<option value="${valor}"${valor === actual ? " selected" : ""}>${texto}</option>`).join("")}
+          </select></label>`;
+    }
     function filaOperacion(fecha, numero) {
         const dato = cabana(fecha, numero);
-        const rev = revision(dato, fecha);
         const final = estadoFinal(dato, fecha);
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
@@ -338,7 +347,7 @@
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
           <label class="cb-cell"><span>OUT</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="${numero}" value="${escapar(dato.aseoOut || "")}"${!dato.aseoIn && !dato.aseoOut ? " disabled" : ""} aria-label="Hora OUT de cabaña ${numero}"></label>
           <div class="cb-state cb-status cb-aseo-status" aria-live="polite"><small>Estado aseo</small>${aseoHTML(dato, numero)}</div>
-          <div class="cb-state cb-status cb-revision-status" aria-live="polite"><small>Estado revisión</small><span class="cb-badge ${tono(rev)}" data-cb-revision-state>${REVISIONES[rev]}</span></div>
+          <div class="cb-state cb-status cb-revision-status" aria-live="polite"><small>Estado revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div>
           <div class="cb-state cb-status cb-final-status" aria-live="polite"><small>Estado final</small><span class="cb-badge ${tono(final)}" data-cb-final-state>${FINALES[final]}</span></div>
           <button type="button" class="cb-open" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button>
         </article>`;
@@ -363,8 +372,7 @@
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
         const tipo = expressReal(dato, fecha, numero) ? "Revisión completa / Aseo Express" : "Revisión completa";
-        const rev = revision(dato, fecha);
-        return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${revisadosChecklist(dato)}/${totalChecklist(numero)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small><span class="cb-badge ${tono(rev)}">${REVISIONES[rev]}</span></div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
+        return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${revisadosChecklist(dato)}/${totalChecklist(numero)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
     }
     function pintarRevision(fecha) {
         if (!fecha) return;
@@ -561,6 +569,38 @@
         $("#aseo-express-individual").classList.remove("activa");
         pintar();
         guardarContexto();
+    }
+    async function cambiarEstadoRevision(control) {
+        const numero = String(control.dataset.cbRevisionSelect || "");
+        const fecha = String(control.dataset.cbRevisionFecha || "");
+        const previo = revision(cabana(fecha, numero), fecha);
+        const nuevo = control.value;
+        const clave = `${fecha}:${numero}`;
+        if (!numeroValido(numero) || fecha !== fechaActual() ||
+            !Object.hasOwn(REVISIONES, nuevo) || revisionesGuardando.has(clave)) {
+            control.value = previo;
+            return;
+        }
+        if (nuevo === previo) return;
+        const api = window.HAIKU_REVISION_SUPABASE_V1;
+        if (!api?.guardarEstadoRevision) {
+            control.value = previo;
+            alert("No fue posible guardar la revisión. Vuelve a intentarlo.");
+            return;
+        }
+        revisionesGuardando.add(clave);
+        control.disabled = true;
+        try {
+            await api.guardarEstadoRevision(numero, nuevo, fecha);
+        } catch (error) {
+            control.value = previo;
+            console.error("HAKU · No fue posible cambiar la revisión:", error);
+            alert("No fue posible guardar el estado de revisión. Se conservó el estado anterior.");
+        } finally {
+            revisionesGuardando.delete(clave);
+            control.disabled = false;
+            pintar();
+        }
     }
     async function cambiarEstadoAseo(control) {
         const numero = String(control.dataset.cabana || "");
@@ -784,6 +824,7 @@
     });
     raiz.addEventListener("change", evento => {
         const campo = evento.target;
+        if (campo.dataset?.cbRevisionSelect) { void cambiarEstadoRevision(campo); return; }
         if (campo.id === "cabinsReviewMode") return cambiarModo(campo.value);
         if (campo.matches(".aseo-encargado-input, .aseo-revision-input, .aseo-hora-input")) {
             setTimeout(() => {
@@ -846,3 +887,4 @@
         pintar();
     }
 })();
+

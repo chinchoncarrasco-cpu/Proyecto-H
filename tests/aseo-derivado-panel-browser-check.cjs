@@ -12,7 +12,8 @@ const modulos = new Set([
 
 (async () => {
     const browser = await chromium.launch({
-        executablePath: process.env.HAIKU_BROWSER_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        executablePath: process.env.HAIKU_BROWSER_PATH || (process.platform === 'win32'
+            ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' : undefined),
         headless: true
     });
     try {
@@ -128,7 +129,8 @@ const modulos = new Set([
         assert.equal(await fila(3).locator('[data-cb-revision-state]').textContent(), 'Lista');
         assert.equal(await fila(3).locator('[data-cb-final-state]').textContent(), 'Lista');
         assert.equal(await fila(4).locator('[data-cb-final-state]').textContent(), 'Con detalles');
-        assert.equal(await fila(1).locator('select').count(), 0);
+        assert.equal(await fila(1).locator('.cb-aseo-status select').count(), 0);
+        assert.equal(await fila(1).locator('[data-cb-revision-select]').count(), 1);
         assert.equal(await fila(1).locator('[data-aseo-hora="aseoOut"]').isDisabled(), true);
         await fila(1).locator('.aseo-encargado-input').fill('Rodolfo');
         await fila(1).locator('.aseo-encargado-input').blur();
@@ -268,10 +270,52 @@ const modulos = new Set([
         assert.equal(await page.evaluate(() => localStorage.getItem('haikuAseoExpressCabana')), null);
         const escriturasExpress = await page.evaluate(() => window.__escriturasAseo.filter(fila => fila.tabla !== 'aseos'));
         assert.deepEqual(escriturasExpress.map(fila => fila.tabla), ['revision_items', 'revisiones_cabana', 'revisiones_cabana']);
+        await page.evaluate(() => {
+            window.HAIKU_CABANAS_SITES_V1.cerrar();
+            window.__cambiosRevisionDirecta = [];
+            window.__fallarRevisionDirecta = false;
+            window.HAIKU_REVISION_SUPABASE_V1.guardarEstadoRevision = async (numero, valor, fecha) => {
+                window.__cambiosRevisionDirecta.push({ numero, valor, fecha });
+                if (window.__fallarRevisionDirecta) throw new Error('Guardado rechazado');
+                const dato = obtenerDatosDia(fecha).cabanas[numero];
+                dato.estadoRevision = valor;
+                dato.revisionCompletaCiclo = { fecha, verificado: true, id: 'revision-' + numero,
+                    estado: valor === 'pendiente' ? 'pendiente' :
+                        valor === 'en_revision' ? 'en_proceso' : 'completada',
+                    resultado: valor === 'lista' ? 'lista' : valor === 'con-detalles' ? 'con_detalles' : null };
+            };
+        });
+        for (const [width, valor, etiqueta] of [[390, 'lista', 'Lista'], [1440, 'con-detalles', 'Con detalles']]) {
+            await page.setViewportSize({ width, height: 900 });
+            const control = fila(1).locator('[data-cb-revision-select]');
+            await control.scrollIntoViewIfNeeded();
+            assert.deepEqual(await control.locator('option').allTextContents(),
+                ['Pendiente', 'En revisión', 'Con detalles', 'Lista']);
+            const cubreRecuadro = await control.evaluate(select => {
+                const rect = select.parentElement.getBoundingClientRect();
+                return document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2) === select;
+            });
+            assert.equal(cubreRecuadro, true, 'Todo el recuadro coloreado abre el selector');
+            await control.selectOption(valor);
+            await page.waitForFunction(({ valor, etiqueta }) => {
+                const fila = document.querySelector('[data-cb-cabin="1"]');
+                return fila.querySelector('[data-cb-revision-select]').value === valor &&
+                    !fila.querySelector('[data-cb-revision-select]').disabled &&
+                    fila.querySelector('[data-cb-revision-state]').textContent === etiqueta;
+            }, { valor, etiqueta });
+            assert.equal(await page.evaluate(() => localStorage.getItem('haikuRevisionCabana')), null);
+        }
+        assert.equal(await page.evaluate(() => window.__cambiosRevisionDirecta.length), 2);
+        await page.evaluate(() => { window.__fallarRevisionDirecta = true; });
+        await fila(1).locator('[data-cb-revision-select]').selectOption('pendiente');
+        await page.waitForFunction(() => document.querySelector('[data-cb-cabin="1"] [data-cb-revision-select]').value === 'con-detalles');
+        assert.equal(await fila(1).locator('[data-cb-revision-state]').textContent(), 'Con detalles');
         assert.deepEqual(errores, []);
         console.log('Panel Aseo: arranque tardío, estados, IN/OUT, No requiere, escritura única y diseño 390–1600px OK.');
         console.log('Panel Express CAB 9: apertura lenta estable, refresco, checkbox/observaciones/estado y cancelación remota OK.');
+        console.log('Revisión directa: recuadro completo, cuatro opciones, guardado en 390/1440px y reversión de error OK.');
     } finally {
         await browser.close();
     }
 })().catch(error => { console.error(error); process.exitCode = 1; });
+

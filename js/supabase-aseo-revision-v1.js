@@ -747,29 +747,32 @@
         }
     }
 
-    async function guardarEstadoRevision(numeroCabana) {
+    async function guardarEstadoRevision(numeroCabana, valorSolicitado, fechaSolicitada = fechaOperativa()) {
+        const directo = valorSolicitado !== undefined;
         const supabase = cliente();
         if (!supabase) {
+            if (directo) throw new Error("No fue posible conectar para guardar la revisión.");
             return;
         }
 
-        const revision = await asegurarRevision(numeroCabana);
         const selector =
             document.getElementById("revision-estado");
-        const detalles =
-            document.getElementById("revision-detalles");
+        const detalles = directo ? null : document.getElementById("revision-detalles");
 
-        if (!selector) {
+        if (!directo && !selector) {
             return;
         }
 
-        const valor = selector.value || "pendiente";
-        const usuarioId = await obtenerUsuarioId();
-        const ahora = new Date().toISOString();
-
+        const valor = directo ? String(valorSolicitado) : selector.value || "pendiente";
         if (!["pendiente", "en_revision", "con-detalles", "lista"].includes(valor)) {
             throw new Error(`Estado de revisión no reconocido: ${valor}`);
         }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaSolicitada || ""))) {
+            throw new Error("No hay una fecha válida para guardar la revisión.");
+        }
+        const revision = await asegurarRevision(numeroCabana, String(fechaSolicitada));
+        const usuarioId = await obtenerUsuarioId();
+        const ahora = new Date().toISOString();
 
         let estado = valor === "pendiente" ? "pendiente" : "en_proceso";
         let resultado = null;
@@ -789,18 +792,22 @@
             estado,
             resultado,
             finalizado_en: finalizadoEn,
-            revisado_por: usuarioId,
-            observaciones:
-                detalles?.value?.trim() || null
+            revisado_por: usuarioId
         };
+        // El selector del listado no pertenece al formulario abierto de otra cabaña.
+        if (!directo) payload.observaciones = detalles?.value?.trim() || null;
 
-        const { error } = await supabase
+        const consulta = supabase
             .from("revisiones_cabana")
             .update(payload)
             .eq("id", revision.id);
+        const { data, error } = await (directo ? consulta.select("id").single() : consulta);
 
         if (error) {
             throw error;
+        }
+        if (directo && data?.id !== revision.id) {
+            throw new Error("No fue posible confirmar el guardado de la revisión.");
         }
 
         Object.assign(revision, payload);
@@ -1422,6 +1429,7 @@
         // lectura simultánea para la misma sección.
 
         window.HAIKU_REVISION_SUPABASE_V1 = Object.freeze({
+            guardarEstadoRevision,
             prepararRevision,
             refrescarChecklistAbierto,
             sincronizarResumenFecha,
@@ -1444,3 +1452,4 @@
         iniciar();
     }
 })();
+
