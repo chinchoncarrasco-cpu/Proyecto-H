@@ -988,6 +988,83 @@
         return String(valor || "").match(/^(\d{1,2}):(\d{2})/)?.slice(1, 3).map((v, i) => i ? v : v.padStart(2, "0")).join(":") || "";
     }
 
+    function fuenteTinajaIncorporada(item, servicio) {
+        let texto, itemId;
+        const revision = servicio.libro_revision_admin_v1;
+        if (revision) {
+            // Después de un cambio, la referencia anterior es la última evidencia
+            // confirmada, aunque las observaciones conserven la primera importación.
+            try {
+                const firma = JSON.parse(revision.firma);
+                if (revision.version !== 1 || revision.modo !== 'actualizar' ||
+                    firma[0] !== 1 || firma[1] !== revision.item_id ||
+                    !Object.entries(estadoRevisionAdmin(servicio)).every(([k,v]) => revision.estado?.[k] === v))
+                    return null;
+                texto = firma[2]?.texto; itemId = revision.item_id;
+            } catch (_) { return null; }
+        } else {
+            const origen = String(servicio.observaciones || '').match(
+                /^Importado desde Libro de Reserva\.\s*([\s\S]*?)\s*\[HAKU-LIBRO-SERVICIO:(srv:[^\]\r\n]+)\]/);
+            if (!origen) return null;
+            texto = origen[1]; itemId = origen[2];
+        }
+        if (!texto || !/^srv:/.test(itemId || '')) return null;
+        const unidades = root.HAIKU_LIBRO_SEMANTICA?.servicios?.(texto, {origen_campo:'notas_reserva'}) || [];
+        if (unidades.length !== 1 || unidades[0].semantica !== 'SERVICIO_REAL' || !esTinajaServicio(unidades[0])) return null;
+        const anterior = prepararServicio({...item.reserva, texto_original:texto}, unidades[0], item.asociacion);
+        if (anterior.mapa.codigo !== codigoExistente(servicio) || anterior.fecha !== servicio.fecha_servicio ||
+            anterior.hora !== horaCorta(servicio.hora_inicio) ||
+            anterior.hora_fin && anterior.hora_fin !== horaCorta(servicio.hora_fin)) return null;
+        return {texto, item_id:itemId};
+    }
+
+    function cambioTinajaLibro(item, activos) {
+        const destino = item.asociacion?.sistema;
+        if (!esTinajaServicio(item.servicio) || !destino?.id || !item.fecha || !item.hora ||
+            !['tinajaTonel','tinajaJacuzzi'].includes(item.mapa?.codigo)) return null;
+        const registrados = activos.filter(s => s.estadia_id === destino.id && s.fecha_servicio === item.fecha &&
+            ['tinajaTonel','tinajaJacuzzi'].includes(codigoExistente(s)));
+        if (!registrados.length) return null;
+        const actuales = depurarServicios(item.reserva).filter(s => esTinajaServicio(s)).map(s =>
+            s.semantica === 'SERVICIO_REAL' ? prepararServicio(item.reserva,s,item.asociacion) : null);
+        const mismoTurno = (a,s) => a && (revisionAdminValida(a,s) || a.fecha === s.fecha_servicio &&
+            a.mapa.codigo === codigoExistente(s) && a.hora === horaCorta(s.hora_inicio) &&
+            (!a.hora_fin || a.hora_fin === horaCorta(s.hora_fin)));
+        const delDia = actuales.filter(a => a?.fecha === item.fecha);
+        const nuevos = delDia.filter(a => !registrados.some(s => mismoTurno(a,s)));
+        if (!nuevos.some(a => a.item_id === item.item_id)) return null;
+        const retirados = registrados.filter(s => !actuales.some(a => mismoTurno(a,s)));
+        if (!retirados.length) return {candidatos:[], reemplazo:null, adicional:true};
+        // Un servicio agregado fuera del Libro no demuestra que se borró una
+        // instrucción anterior; conserva su tratamiento como prestación distinta.
+        if (!registrados.some(s => s.libro_revision_admin_v1 ||
+            /\[HAKU-LIBRO-SERVICIO:srv:/.test(String(s.observaciones || '')))) return null;
+
+        const fuente = retirados.length === 1 && nuevos.length === 1 &&
+            actuales.every(a => a?.fecha && a.hora && a.mapa.codigo) &&
+            fuenteTinajaIncorporada(item,retirados[0]);
+        const textoActual = normalizar(item.reserva.texto_original);
+        if (!fuente || !textoActual || textoActual.includes(normalizar(fuente.texto)))
+            return {candidatos:retirados, reemplazo:null};
+
+        const anterior = retirados[0], inicio = minutosHora(item.hora);
+        const horas = normalizar(item.servicio.texto_original).match(/(?<![\d:.,])\b(\d+)\s*horas?\b/);
+        const cantidad = horas ? Number(horas[1]) : Number(item.servicio.cantidad || 1);
+        const fin = item.hora_fin || (Number.isInteger(inicio) && cantidad > 0 && inicio+cantidad*60 < 1440
+            ? String(Math.floor((inicio+cantidad*60)/60)).padStart(2,'0') + ':' +
+                String((inicio+cantidad*60)%60).padStart(2,'0') : null);
+        const mismoCobro = item.intencion_cobro === (anterior.tipo_cobro === 'cortesia' ? 'cortesia' : 'cobrable');
+        const monto = importeLibro(item.servicio), capacidad = item.mapa.codigo === 'tinajaJacuzzi' ? 5 : 3;
+        const aplicable = item.completitud === 'COMPLETO' && anterior.estado_servicio === 'programado' &&
+            cantidad === Number(anterior.cantidad) && item.personas === Number(anterior.personas) &&
+            item.personas <= capacidad && mismoCobro && (monto == null || monto === Number(anterior.total)) &&
+            fin && minutosHora(fin)-inicio === cantidad*60;
+        return {candidatos:retirados, reemplazo:{
+            servicio_id:anterior.id, fuente_anterior:fuente, codigo:item.mapa.codigo,
+            hora:item.hora, fin, aplicable:Boolean(aplicable)
+        }};
+    }
+
     function codigosCompatibles(item) {
         if (item.resolucionManual && item.payload) return new Set([item.payload.codigo_servicio]);
         if (item.servicio?.concepto === "tinaja") return new Set(["tinajaJacuzzi", "tinajaTonel"]);
@@ -1006,6 +1083,14 @@
         const revisados = activos.filter(s => revisionAdminValida(item,s));
         if (revisados.length === 1) return { estado:'existente',candidato:revisados[0],revision_admin:true,
             motivo:`Revisión del administrador: ${revisados[0].libro_revision_admin_v1.motivo}.` };
+        const cambioLibro = cambioTinajaLibro(item,activos);
+        if (cambioLibro?.reemplazo) return {
+            estado:'revisar', candidatos:cambioLibro.candidatos, conflicto_tinaja_existente:true,
+            reemplazo_libro:cambioLibro.reemplazo, contradicciones:['tipo_u_horario'],
+            motivo:'Tinaja modificada en el Libro: la información anterior fue retirada y reemplazada por ' +
+                item.mapa.nombre + ' a las ' + item.hora + '. Se actualizará el mismo servicio, sin crear otro.' +
+                (cambioLibro.reemplazo.aplicable ? '' : ' Revisa también las diferencias de estado, duración, personas o cobro.')
+        };
         if (item.reglaFullDay?.cambioHorario) {
             const cambio = item.reglaFullDay.cambioHorario;
             return { estado:'revisar', candidatos:activos.filter(x=>x.id===cambio.servicioId),
@@ -1131,10 +1216,14 @@
                         `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
         }
+        if (cambioLibro?.candidatos.length) return {
+            estado:'revisar', candidatos:cambioLibro.candidatos, conflicto_tinaja_existente:true,
+            motivo:'Hay tinajas registradas que no coinciden con el Libro actual. Falta una correspondencia única con la información anterior; revisa el servicio existente antes de agregar otro.'
+        };
         // Tonel y Jacuzzi son alternativas de la misma prestación. Antes de
         // proponer un alta, buscar también el otro tipo en la misma estadía,
         // fecha y franja horaria. El precio no distingue estas identidades.
-        if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora &&
+        if (esTinajaServicio(item.servicio) && estadiaId && item.fecha && hora && !cambioLibro?.adicional &&
             ['tinajaTonel','tinajaJacuzzi'].includes(item.mapa?.codigo)) {
             const inicio = minutosHora(hora);
             // HRS junto a 19:15 es la unidad del reloj, no quince horas.
@@ -1588,8 +1677,9 @@
                 aplicarServicioExistente(item, decision);
                 continue;
             }
-            item.identidad = decision.estado === "nuevo" ? "NO_EXISTE" : "IDENTIDAD_AMBIGUA";
-            item.decision_identidad = decision.estado;
+            item.identidad = decision.reemplazo_libro ? 'MISMO_SERVICIO_MODIFICADO' :
+                decision.estado === "nuevo" ? "NO_EXISTE" : "IDENTIDAD_AMBIGUA";
+            item.decision_identidad = decision.reemplazo_libro ? 'modificado' : decision.estado;
             if (decision.estado === "revisar") {
                 item.candidatosRevision = decision.candidatos || [];
                 item.cambioCortesiaExistente = cambioCortesiaExistente(item, decision);
@@ -1600,6 +1690,7 @@
                 }
                 if (decision.conflicto_tinaja_existente) {
                     item.conflicto_tinaja_existente = true;
+                    if (decision.reemplazo_libro) item.reemplazoLibro = decision.reemplazo_libro;
                     if (decision.candidatos.length === 1 && decision.candidatos[0].estadia_id === item.asociacion?.sistema?.id)
                         item.servicio_existente = decision.candidatos[0];
                 }
@@ -1747,18 +1838,20 @@
     async function abrirRevisionAdminExistente(item,out,texto,overrides,estado,fila) {
         if (!esAdministrador()) throw Error('La sesión de administrador cambió. Vuelve a iniciar sesión.');
         const s=item.servicio_existente, apertura=++estado.apertura;
+        const cambioLibro = item.reemplazoLibro?.aplicable ? item.reemplazoLibro : null;
+        const finLibro = item.reemplazoLibro?.fin || item.hora_fin;
         const vigente=()=>estado.apertura===apertura && fila.isConnected!==false;
         out.querySelector('.haku-libro-servicio-manual')?.remove();
         const crear=(tag,clase,valor)=>{const el=document.createElement(tag);if(clase)el.className=clase;if(valor!=null)el.textContent=valor;return el;};
         const panel=crear('section','haku-libro-servicio-manual haku-libro-servicio-admin haiku-incorporacion-manual-pago-panel');
-        panel.style.gridColumn='1 / -1';panel.style.minWidth='0';panel.setAttribute('aria-label','Aprobación manual del servicio existente');
+        panel.style.gridColumn='1 / -1';panel.style.minWidth='0';panel.setAttribute('aria-label',cambioLibro ? 'Cambio de tinaja desde el Libro' : 'Aprobación manual del servicio existente');
         const contenido=crear('div','haiku-manual-contenido'),cabecera=crear('header','haiku-manual-cabecera');
         cabecera.append(crear('span','haiku-manual-badge haiku-manual-badge--revision','Administrador'),
-            crear('h3','','Aprobación manual · Servicio existente'),
+            crear('h3','',cambioLibro ? 'Tinaja modificada en el Libro' : 'Aprobación manual · Servicio existente'),
             crear('p','haiku-manual-caption',`${item.reserva.titular} · CAB ${item.reserva.cabana} · ${textoIngresoReserva(item)}`));
         const comparacion=crear('div','haiku-manual-resumen');
         for(const [fuente,datos] of [['Registrado en Haku',`${nombreExistente(s)} · ${s.fecha_servicio} · ${horaCorta(s.hora_inicio)}–${horaCorta(s.hora_fin)}`],
-            ['Indicado en el Libro',`${item.mapa.nombre || item.servicio.concepto} · ${item.fecha || 'Fecha por definir'} · ${item.hora || 'Hora por definir'}${item.hora_fin?'–'+item.hora_fin:''}`]]) {
+            ['Indicado en el Libro',`${item.mapa.nombre || item.servicio.concepto} · ${item.fecha || 'Fecha por definir'} · ${item.hora || 'Hora por definir'}${finLibro?'–'+finLibro:''}`]]) {
             const linea=crear('p','haiku-manual-fila');linea.append(crear('span','',fuente),crear('strong','',datos));comparacion.append(linea);
         }
         const importe=Number(s.total).toLocaleString('es-CL');
@@ -1772,22 +1865,25 @@
             if(opciones)for(const [v,t] of opciones){const o=crear('option','',t);o.value=v;input.append(o);}else input.type=tipo;
             input.value=valor;label.append(input);campos.append(label);return input;
         };
-        const modo=campo('modo','Decisión','text','conservar',[
+        const modo=campo('modo','Decisión','text',cambioLibro ? 'actualizar' : 'conservar',[
             ['conservar','Conservar lo registrado'],['actualizar','Corregir tipo y horario']]);
         const codigo=campo('codigo','Tipo de tinaja','text',item.mapa.codigo || codigoExistente(s),[
             ['tinajaTonel','Tonel de madera'],['tinajaJacuzzi','Jacuzzi']]);
         const inicio=campo('inicio','Hora de inicio','time',item.hora || horaCorta(s.hora_inicio));
-        const fin=campo('fin','Hora de término','time',item.hora_fin || horaCorta(s.hora_fin));
-        const motivo=campo('motivo','Motivo de la decisión','text','');motivo.maxLength=1000;
+        const fin=campo('fin','Hora de término','time',finLibro || horaCorta(s.hora_fin));
+        const motivo=campo('motivo','Motivo de la decisión','text',cambioLibro ?
+            'El Libro retiró la tinaja anterior y la reemplazó por ' + item.servicio.texto_original + '. Se actualiza el mismo servicio conservando el importe y sus pagos.' : '');
+        motivo.maxLength=1000;
         const label=crear('label','haiku-manual-caption'),aceptar=crear('input');aceptar.type='checkbox';aceptar.dataset.revisionAdmin='aceptar';
         label.append(aceptar,crear('span','',`Confirmo que es el mismo servicio y que el valor acordado se mantiene en $${importe}.`));
+        if (cambioLibro) { campos.hidden=true; campos.style.display='none'; label.hidden=true; label.style.display='none'; aceptar.checked=true; }
         const aviso=crear('p','haiku-manual-validacion');aviso.setAttribute('role','status');
         const acciones=crear('footer','haku-libro-servicio-manual__acciones haiku-manual-pie');
         const cancelar=crear('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Revisar después');cancelar.type='button';
-        const confirmar=crear('button','haiku-incorporacion-manual-accion haiku-manual-primario','Confirmar decisión');confirmar.type='button';confirmar.dataset.hakuAccion='confirmar-revision-admin';
+        const confirmar=crear('button','haiku-incorporacion-manual-accion haiku-manual-primario',cambioLibro ? 'Aplicar cambio del Libro' : 'Confirmar decisión');confirmar.type='button';confirmar.dataset.hakuAccion='confirmar-revision-admin';
         let solicitud=null,confirmada=false;
         const actualizar=()=>{
-            const cambia=modo.value==='actualizar';for(const el of [codigo,inicio,fin])el.disabled=!cambia || estado.ocupado || Boolean(solicitud);
+            const cambia=modo.value==='actualizar';for(const el of [codigo,inicio,fin])el.disabled=Boolean(cambioLibro) || !cambia || estado.ocupado || Boolean(solicitud);
             const horario=/^\d{2}:\d{2}$/.test(inicio.value) && /^\d{2}:\d{2}$/.test(fin.value) && fin.value>inicio.value;
             confirmar.disabled=estado.ocupado || !esAdministrador() || root.haikuTienePermiso?.('servicios.editar')!==true ||
                 (!solicitud && (!aceptar.checked || !motivo.value.trim() || cambia && !horario));
@@ -1804,6 +1900,8 @@
                     const observado=actual.items.find(x=>x.item_id===item.item_id);
                     if(!esAdministrador() || !observado || observado.firmaManual!==item.firmaManual || firmaRevisionAdmin(observado)!==firmaRevisionAdmin(item))throw Error('El Libro o la sesión cambió. Vuelve a abrir la aprobación manual.');
                     if(!solicitud){
+                        if(cambioLibro && JSON.stringify(observado.reemplazoLibro)!==JSON.stringify(item.reemplazoLibro))
+                            throw Error('La información anterior o su reemplazo cambió. Vuelve a revisar el cambio del Libro.');
                         const candidatos=[observado.servicio_existente,...(observado.candidatosRevision || [])].filter(Boolean);
                         const vigenteServicio=candidatos.find(x=>x.id===s.id);
                         if(!vigenteServicio || JSON.stringify(estadoRevisionAdmin(vigenteServicio))!==JSON.stringify(estadoRevisionAdmin(s)) ||
@@ -2212,7 +2310,7 @@
             acciones.append(ver);
             if (opciones.abrirManual && item.kind === 'servicio' && (esAdministrador() || !item.conflicto_tinaja_promo && !item.conflicto_tinaja_existente && item.semantica === 'SERVICIO_REAL' &&
                 (item.estado === 'revisar' || item.resolucionManual) && codigosManual(item.manual_base || item).length)) {
-                const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = !esAdministrador() && item.cambioHorarioExistente ? 'Revisar horario' : 'Aprobación manual';
+                const manual = document.createElement('button'); manual.type = 'button'; manual.className = 'haiku-incorporacion-manual-accion'; manual.textContent = item.reemplazoLibro?.aplicable ? 'Ver cambio del Libro' : !esAdministrador() && item.cambioHorarioExistente ? 'Revisar horario' : 'Aprobación manual';
                 manual.addEventListener('click', async () => {
                     manual.disabled = true;
                     try { await opciones.abrirManual(item, fila); }
@@ -2551,7 +2649,8 @@
             catch (e) { overrides.delete(item.item_id); throw e; }
         };
         const listosServicios = resultado.items.filter(x => x.estado === "listo" && x.kind === "servicio" && x.semantica === "SERVICIO_REAL" && x.completitud === "COMPLETO");
-        const pendientesServicios = resultado.items.filter(x => x.kind === "servicio" && x.estado === "revisar");
+        const cambiosTinajas = resultado.items.filter(x => x.kind === "servicio" && x.estado === "revisar" && x.reemplazoLibro);
+        const pendientesServicios = resultado.items.filter(x => x.kind === "servicio" && x.estado === "revisar" && !x.reemplazoLibro);
         const notas = resultado.items.filter(x => x.kind === "nota" && x.estado !== "existente");
         const existentes = resultado.items.filter(x => x.estado === "existente"), seleccionados = new Set();
         const head = document.createElement("header"); head.className = "haku-libro-servicios__head";
@@ -2581,7 +2680,7 @@
         resultadoLibro.append(resultadoTop, descripcion); out.append(resultadoLibro);
 
         const stats = document.createElement("div"); stats.className = "haku-libro-servicios__stats";
-        stats.append(stat("servicios preparables", listosServicios.length), stat("requieren revisión", pendientesServicios.length), stat("notas para el resumen", notas.length));
+        stats.append(stat("servicios preparables", listosServicios.length), stat(cambiosTinajas.length ? "cambios y revisión" : "requieren revisión", pendientesServicios.length+cambiosTinajas.length), stat("notas para el resumen", notas.length));
         out.append(stats);
         const secundarios = document.createElement("div"); secundarios.className = "haku-libro-servicios-sites__secundarios";
         const yaExisten = document.createElement("span"); yaExisten.textContent = `${existentes.length} ya existen en Proyecto H`;
@@ -2593,10 +2692,9 @@
         const reglasTexto = document.createElement("p");
         reglasTexto.textContent = "Reglas activas: alojamiento nocturno 15:00→12:00; Full Day 09:30→21:30, con 1 hora de tinaja Tonel o Jacuzzi incluida. Haku comprueba pagos antes de inferir cortesía; horas extra o pagos específicos requieren revisión. En 1 noche puede inferir fecha por horario; en varias noches no adivina. Identidad, completitud y cobro se revisan por separado.";
         reglas.append(reglasSummary, reglasTexto); out.append(reglas);
-        out.append(
-            seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-libro-servicios__seccion--servicios", "✓", null, opciones),
-            seccion("Servicios que requieren revisión", pendientesServicios, seleccionados, "haku-libro-servicios__seccion--revision", "!", confirmarNoche, opciones)
-        );
+        out.append(seccion("Servicios preparables para incorporar", listosServicios, seleccionados, "haku-libro-servicios__seccion--servicios", "✓", null, opciones));
+        if(cambiosTinajas.length)out.append(seccion("Tinajas modificadas en el Libro", cambiosTinajas, seleccionados, "haku-libro-servicios__seccion--cambios", "↻", null, opciones));
+        out.append(seccion("Servicios que requieren revisión", pendientesServicios, seleccionados, "haku-libro-servicios__seccion--revision", "!", confirmarNoche, opciones));
         if (notas.length) out.append(seccion("Notas para el resumen", notas, seleccionados, "haku-libro-servicios__seccion--notas", "▤", null, opciones));
         if (existentes.length) out.append(seccion("Ya existen en Proyecto H", existentes, seleccionados, "haku-libro-servicios__seccion--existentes", "✓", null, esAdministrador()?opciones:undefined));
         // La comparación ya contiene una selección explícita y revalidable. Permitir
@@ -2654,3 +2752,4 @@
     root.addEventListener("click", interceptar, true);
     root.addEventListener("keydown", interceptar, true);
 })(typeof window !== "undefined" ? window : globalThis);
+
