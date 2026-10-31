@@ -11,6 +11,7 @@ const { chromium } = require("playwright");
         const errores = [];
         page.on("pageerror", error => errores.push(error.message));
         async function preparar(valor = "", clase = "aseo-hora-input") {
+            await page.goto("about:blank");
             await page.setContent(`<!doctype html><html lang="es"><head><style>
                 body { background:#1b2822; color:#e5eee8; font:14px system-ui; padding:40px; }
                 input { width:85px; height:40px; box-sizing:border-box; padding:8px;

@@ -100,7 +100,12 @@
 
     document.addEventListener("keydown", evento => {
         const input = campoHora(evento.target);
-        if (!input || evento.isComposing || evento.ctrlKey || evento.metaKey || evento.altKey) return;
+        if (!input || evento.isComposing) return;
+        if (evento.ctrlKey || evento.metaKey || evento.altKey) {
+            if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === "a" &&
+                edicion?.input === input) limpiar();
+            return;
+        }
         if (/^[0-9]$/.test(evento.key)) {
             evento.preventDefault();
             evento.stopImmediatePropagation();
@@ -108,7 +113,7 @@
         } else if (evento.key === "Backspace" || evento.key === "Delete") {
             evento.preventDefault();
             evento.stopImmediatePropagation();
-            if (!edicion) comenzar(input);
+            comenzar(input);
             if (evento.key === "Delete" || !edicion.digitos) {
                 if (!confirmar(input, "")) dibujar(true);
             } else {

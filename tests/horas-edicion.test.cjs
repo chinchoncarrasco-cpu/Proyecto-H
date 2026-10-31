@@ -220,6 +220,13 @@ test("Enter con tres dígitos no confirma; completar el cuarto sí", () => {
     assert.deepEqual(a.guardados, ["11:37"]);
 });
 
+test("Ctrl+A permite empezar de nuevo un borrador incompleto", () => {
+    const a = arnes(), input = a.campo("10:00"); input.focus(); a.escribir(input, "09");
+    a.tecla(input, "a", { ctrlKey: true });
+    a.escribir(input, "1137");
+    assert.deepEqual(a.guardados, ["11:37"]);
+});
+
 test("el módulo se carga antes de los writers y no duplica listeners", () => {
     const a = arnes(), antes = a.listeners.length;
     vm.runInNewContext(fuente, a.contexto);
