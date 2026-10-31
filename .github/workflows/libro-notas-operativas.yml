@@ -1,4 +1,4 @@
-name: Haku notas operativas del Libro
+name: Haku notas y servicios del Libro
 
 on:
   pull_request:
@@ -6,6 +6,8 @@ on:
       - "js/haiku-libro-semantica-v1.js"
       - "js/haiku-libro-servicios-scope-v2.js"
       - "tests/libro-notas-insumos-tinaja.test.cjs"
+      - "tests/libro-tinaja-reemplazo.test.cjs"
+      - "tests/libro-tinaja-reemplazo-browser-check.cjs"
       - "tests/libro-titular-fragmentos.test.cjs"
       - ".github/workflows/libro-notas-operativas.yml"
 
@@ -15,7 +17,7 @@ permissions:
 jobs:
   reservas-y-servicios:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,4 +26,17 @@ jobs:
         with:
           node-version: 24
       - name: Notas, identidad, horarios, cobro y reservas del Libro
-        run: node --test tests/libro-notas-insumos-tinaja.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-semantica.test.cjs
+        run: node --test tests/libro-notas-insumos-tinaja.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-semantica.test.cjs tests/libro-aprobacion-admin.test.cjs tests/libro-tinaja-reemplazo.test.cjs tests/libro-tinaja-cambio-color.test.cjs tests/haiku-servicios-idempotencia.test.cjs
+      - name: Dependencias aisladas de prueba
+        run: npm install --prefix "$RUNNER_TEMP/haku-libro-test" --no-save --ignore-scripts --package-lock=false @electric-sql/pglite@0.5.14 playwright@1.56.1
+      - name: PostgreSQL aislado, auditoría y conservación de pagos
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+        run: node --test tests/libro-aprobacion-admin-postgres.test.cjs
+      - name: Chromium de prueba
+        run: node "$RUNNER_TEMP/haku-libro-test/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Cambio del Libro en escritorio y teléfono
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+        run: node tests/libro-tinaja-reemplazo-browser-check.cjs
+
