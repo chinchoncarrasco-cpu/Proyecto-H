@@ -20,8 +20,6 @@ jobs:
   teclado-y-guardado:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      NODE_PATH: ${{ runner.temp }}/haku-horas/node_modules
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,4 +34,6 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/haku-horas" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
           node "$RUNNER_TEMP/haku-horas/node_modules/playwright/cli.js" install chromium --with-deps
       - name: Escribir cuatro dígitos con teclado real
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-horas/node_modules
         run: node tests/horas-edicion-browser-check.cjs
