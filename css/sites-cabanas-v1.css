@@ -1332,3 +1332,111 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas .cb-supplies-destinations[open] { flex-basis:100%; }
 #seccion-cabanas .cb-supplies-destinations p { margin:6px 0 0; line-height:1.5; }
 
+
+/* Figma aprobado: resumen compacto y seguimiento. Los colores cubren ambos temas. */
+#seccion-cabanas {
+  --cb-surface:#fff; --cb-canvas:#f4f7f5; --cb-text:#17362d; --cb-muted:#728079;
+  --cb-border:#d9e3de; --cb-accent:#173d33; --cb-selected:#dceee4;
+  --cb-progress-bg:#e8f1fa; --cb-progress-text:#356a86;
+}
+html[data-haiku-tema="oscuro"] #seccion-cabanas {
+  --cb-surface:#1b2621; --cb-canvas:#0f1915; --cb-text:#e8efea; --cb-muted:#b1c2b7;
+  --cb-border:#3e5145; --cb-accent:#9fd2b3; --cb-selected:#254736;
+  --cb-progress-bg:#203a41; --cb-progress-text:#a6ccee;
+}
+#seccion-cabanas #cabinsSummary.cb-summary {
+  display:grid; grid-template-columns:minmax(0,31fr) minmax(0,19fr) minmax(0,50fr);
+  align-items:center; gap:4px; min-height:40px; padding:3px; box-sizing:border-box;
+  background:var(--cb-surface); border:1px solid var(--cb-border); border-radius:8px;
+}
+#seccion-cabanas #cabinsSummary .cb-summary-group {
+  display:flex; align-items:center; gap:8px; min-width:0; min-height:30px;
+  margin:0; padding:4px; border:0; border-radius:4px; background:transparent;
+  color:var(--cb-text); text-align:left; cursor:pointer; font:600 12px/18px var(--sites-shell-font,Inter,sans-serif);
+}
+#seccion-cabanas #cabinsSummary .cb-summary-group[aria-pressed="true"] { background:var(--cb-selected); }
+#seccion-cabanas #cabinsSummary .cb-summary-group span { border:0; padding:0; margin:0; }
+#seccion-cabanas #cabinsSummary .cb-summary-count {
+  margin:0; color:var(--cb-accent); font-size:18px; line-height:24px; font-weight:600; flex-shrink:0;
+}
+#seccion-cabanas #cabinsSummary .cb-summary-label { flex-shrink:0; }
+#seccion-cabanas #cabinsSummary .cb-summary-numbers { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+#seccion-cabanas .cb-cabin-number,
+#seccion-cabanas #cabinsSummary .cb-cabin-number {
+  display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+  width:22px; height:20px; box-sizing:border-box; padding:0; border:0; border-radius:4px;
+  background:var(--cb-selected); color:var(--cb-accent); font-size:12px; line-height:18px; font-weight:600;
+}
+#seccion-cabanas #cabinsSummary [aria-pressed="true"] .cb-cabin-number { background:var(--cb-surface); }
+#seccion-cabanas .cb-filters { flex-wrap:wrap; gap:4px; }
+#seccion-cabanas .cb-filters button { padding:10px 12px; border-radius:8px; font-size:14px; line-height:20px; }
+#seccion-cabanas .cb-filters button[aria-pressed="true"] { background:var(--cb-selected); color:var(--cb-accent); box-shadow:none; }
+#seccion-cabanas #cabinsReview .lista-revision-cabanas.cb-review-list {
+  display:block!important; grid-template-columns:none!important; gap:0!important; min-width:0;
+}
+#seccion-cabanas .cb-review-head,
+#seccion-cabanas .cb-review-row {
+  width:100%; box-sizing:border-box;
+  grid-template-columns:minmax(150px,1.6fr) minmax(120px,1.3fr) minmax(160px,1.7fr) minmax(76px,.9fr) minmax(116px,1.25fr) 134px;
+  gap:16px;
+}
+#seccion-cabanas .cb-review-row { min-height:72px; }
+#seccion-cabanas .cb-review-head { font-size:12px; }
+#seccion-cabanas .cb-review-mode>span { font-size:14px; }
+#seccion-cabanas .cb-tracking-head,
+#seccion-cabanas .cb-tracking-row {
+  display:grid; grid-template-columns:minmax(90px,1fr) minmax(120px,1.6fr) minmax(100px,1.2fr) 65px 50px 90px 90px 134px;
+  align-items:center; gap:16px; padding:16px; color:var(--cb-text); box-sizing:border-box;
+}
+#seccion-cabanas .cb-tracking-head { font-size:12px; color:var(--cb-muted); border-bottom:1px solid var(--cb-border); }
+#seccion-cabanas .cb-tracking-row { min-height:72px; border-bottom:1px solid var(--cb-border); font-size:14px; line-height:20px; }
+#seccion-cabanas .cb-tracking-person { display:flex; align-items:center; gap:8px; min-width:0; overflow-wrap:anywhere; font-weight:600; }
+#seccion-cabanas .cb-tracking-avatar { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:var(--cb-selected); color:var(--cb-accent); }
+#seccion-cabanas .cb-tracking-time { color:var(--cb-accent); font-variant-numeric:tabular-nums; }
+#seccion-cabanas #aseo-resumen .cb-tracking-row .cb-badge.progress { background:var(--cb-progress-bg); color:var(--cb-progress-text); justify-self:start; }
+#seccion-cabanas #aseo-resumen .cb-tracking-row .cb-open { display:inline-flex; align-items:center; justify-content:center; min-height:40px; padding:8px 12px; border:1px solid var(--cb-border); border-radius:8px; background:var(--cb-surface); color:var(--cb-accent); font-size:12px; line-height:18px; }
+#seccion-cabanas #cabinsSuppliesSummary {
+  margin:0 0 20px; padding:20px; gap:12px 32px; border:1px solid var(--cb-border); border-radius:12px;
+  background:var(--cb-surface); color:var(--cb-text); font-size:14px; line-height:20px;
+}
+#seccion-cabanas #cabinsSuppliesSummary>strong { flex-basis:100%; font-size:18px; line-height:24px; text-transform:none; letter-spacing:0; color:var(--cb-text); }
+#seccion-cabanas #cabinsOperation>#cabinsSuppliesSummary { margin-top:24px; }
+#seccion-cabanas #cabinsSuppliesSummary b { color:var(--cb-accent); }
+#seccion-cabanas #cabinsSuppliesSummary .cb-supplies-destinations { flex-basis:100%; font-size:14px; }
+#seccion-cabanas #cabinsSuppliesSummary summary { display:flex; align-items:center; gap:8px; width:fit-content; min-height:32px; color:var(--cb-accent); font-weight:600; text-decoration:none; list-style:none; }
+#seccion-cabanas #cabinsSuppliesSummary summary::-webkit-details-marker { display:none; }
+#seccion-cabanas .cb-chevron { display:inline-block; width:9.6px; height:5.6px; flex-shrink:0; background:var(--cb-accent); -webkit-mask:url("../assets/icons/cabanas-chevron.svg") no-repeat center; mask:url("../assets/icons/cabanas-chevron.svg") no-repeat center; }
+#seccion-cabanas .cb-destinations-open,
+#seccion-cabanas [open] .cb-destinations-closed { display:none; }
+#seccion-cabanas [open] .cb-destinations-open { display:inline; }
+#seccion-cabanas [open] .cb-chevron { transform:rotate(180deg); }
+#seccion-cabanas .cb-destinations-list { border-top:1px solid var(--cb-border); margin-top:8px; padding-top:12px; }
+#seccion-cabanas .cb-supply-destination { display:flex; align-items:center; gap:12px; padding:6px 0; }
+#seccion-cabanas .cb-supply-destination>span:last-child { display:flex; flex-direction:column; gap:4px; }
+#seccion-cabanas .cb-supply-destination strong { color:var(--cb-text); font-size:14px; line-height:20px; }
+#seccion-cabanas .cb-supply-destination small { color:var(--cb-muted); font-size:14px; line-height:20px; }
+
+@media(max-width:1100px) {
+  #seccion-cabanas #cabinsSummary.cb-summary { grid-template-columns:1fr; padding:7px; gap:0; }
+  #seccion-cabanas #cabinsSummary .cb-summary-group { display:grid; grid-template-columns:18px minmax(0,1fr) 100px; gap:8px; padding:0 4px; min-height:44px; }
+  #seccion-cabanas #cabinsSummary .cb-summary-label { font-size:14px; line-height:20px; white-space:normal; }
+  #seccion-cabanas #cabinsSummary .cb-summary-numbers { display:grid; grid-template-columns:repeat(4,22px); gap:4px; }
+  #seccion-cabanas .cb-tracking-head { display:none; }
+  #seccion-cabanas .cb-tracking-row { grid-template-columns:repeat(3,minmax(0,1fr)); margin:0 0 12px; padding:16px; border:1px solid var(--cb-border); border-radius:12px; gap:16px 12px; }
+  #seccion-cabanas .cb-tracking-row>strong:first-child { grid-column:1/3; font-size:18px; }
+  #seccion-cabanas .cb-tracking-row .cb-badge { grid-row:1; grid-column:3; justify-self:end; }
+  #seccion-cabanas .cb-tracking-person { grid-column:1/4; grid-row:2; }
+  #seccion-cabanas .cb-tracking-type { grid-column:1/4; grid-row:3; color:var(--cb-muted); }
+  #seccion-cabanas .cb-tracking-in,
+  #seccion-cabanas .cb-tracking-out,
+  #seccion-cabanas .cb-tracking-time { background:var(--cb-canvas); padding:8px; border-radius:4px; }
+  #seccion-cabanas .cb-tracking-row [data-label]::before { content:attr(data-label); display:block; color:var(--cb-muted); font-size:11px; font-weight:400; margin-bottom:4px; }
+  #seccion-cabanas .cb-tracking-row .cb-open { grid-column:1/4; width:100%; min-height:40px; }
+  #seccion-cabanas .cb-review-head { display:none; }
+  #seccion-cabanas .cb-review-row { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:16px; }
+  #seccion-cabanas .cb-review-row>div,#seccion-cabanas .cb-review-row>.cb-open { grid-column:auto; grid-row:auto; min-width:0; }
+  #seccion-cabanas .cb-review-row .cb-review-ident { grid-column:1/-1; }
+  #seccion-cabanas .cb-review-row .cb-open { grid-column:1/-1; width:100%; }
+  #seccion-cabanas #cabinsSuppliesSummary { padding:16px; }
+}
+

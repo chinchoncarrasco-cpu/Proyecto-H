@@ -130,7 +130,7 @@
             const fila = filaActual(fecha, numero, insumo);
             const confirmada = Number((insumo === "lena" ? fila?.cantidad_actual : fila?.cantidad) || 0);
             cantidades[insumo] = { cantidad: pendiente?.cantidad ?? confirmada, confirmada,
-                destinos: destinosFila(fila),
+                destinos: destinosFila(fila), destinosConfirmados: destinosFila(fila),
                 guardando: Boolean(pendiente), error: datos[clave(fecha, numero, insumo)] || "" };
             if (insumo === "carbon" && pendiente?.destino) cantidades.carbon.destinos[pendiente.destino] += pendiente.delta;
             if (insumo === "lena") {
