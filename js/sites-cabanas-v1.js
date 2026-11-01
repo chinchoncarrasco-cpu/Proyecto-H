@@ -160,12 +160,29 @@
         etiquetas.push(...solicitudes.operativas.map(texto => `<span>${escapar(texto)}</span>`));
         return etiquetas.length ? `<div class="cb-requests">${etiquetas.join("")}</div>` : "";
     }
+    function grupoCabana(dato, fecha) {
+        if (dato?.aseoIn && !dato.aseoOut) return "en_curso";
+        const final = estadoFinal(dato, fecha);
+        if (["lista", "no_requiere"].includes(final)) return "listas";
+        return final === "lista_para_revisar" ? "por_revisar" : "pendientes";
+    }
+    function gruposCabanas(fecha) {
+        const grupos = { todas: [], pendientes: [], en_curso: [], por_revisar: [], listas: [], trabajo: [] };
+        for (let numero = 1; numero <= 11; numero++) {
+            const grupo = grupoCabana(cabana(fecha, numero), fecha);
+            grupos.todas.push(numero); grupos[grupo].push(numero);
+            if (grupo === "pendientes" || grupo === "en_curso") grupos.trabajo.push(numero);
+        }
+        return grupos;
+    }
     function resumen(fecha) {
-        const datos = Array.from({ length: 11 }, (_, indice) => cabana(fecha, indice + 1));
-        const pendientes = datos.filter(dato => !["lista", "no_requiere"].includes(estadoFinal(dato, fecha))).length;
-        const porRevisar = datos.filter(dato => estadoFinal(dato, fecha) === "lista_para_revisar").length;
-        const listas = datos.filter(dato => estadoFinal(dato, fecha) === "lista").length;
-        $("#cabinsSummary").innerHTML = `<span><strong>${pendientes}</strong> En trabajo o pendientes</span><span><strong>${porRevisar}</strong> Por revisar</span><span><strong>${listas}</strong> Listas para operar</span>`;
+        const grupos = gruposCabanas(fecha);
+        $("#cabinsSummary").innerHTML = [["trabajo", "En trabajo o pendientes"], ["por_revisar", "Por revisar"], ["listas", "Listas para operar"]]
+            .map(([clave, texto]) => {
+                const numeros = grupos[clave];
+                const activo = estado.filtro === clave || (clave === "trabajo" && ["pendientes", "en_curso"].includes(estado.filtro));
+                return `<button type="button" class="cb-summary-group" data-cb-filter="${clave}" aria-pressed="${activo}" aria-label="${texto}: ${numeros.length}. Cabañas: ${numeros.join(", ") || "ninguna"}"><strong class="cb-summary-count">${numeros.length}</strong><span class="cb-summary-label">${texto}</span><span class="cb-summary-numbers">${numeros.map(n => `<span class="cb-cabin-number">${n}</span>`).join("") || '<span class="cb-summary-none">—</span>'}</span></button>`;
+            }).join("");
     }
     const pesoTexto = valor => String(Number(Number(valor || 0).toPrecision(12)));
     const sacosTexto = cantidad => `${cantidad} ${cantidad === 1 ? "saco" : "sacos"}`;
@@ -196,9 +213,10 @@
             detalle.hidden = !totales?.listo || !(totales.lena || totales.carbon);
             for (const insumo of ["lena", "carbon"]) {
                 const linea = resumenInsumos.querySelector(`[data-insumos-desglose=${insumo}]`);
+                const filas = destinosPorCabana(fecha, insumo);
                 const texto = desgloseTexto(totales?.destinos?.[insumo]);
-                linea.textContent = `${insumo === "lena" ? "Leña" : "Carbón"} · ${texto}`;
-                linea.hidden = !texto || !totales?.listo;
+                linea.innerHTML = filas.length ? filas.map(fila => `<div class="cb-supply-destination"><span class="cb-cabin-number">${fila.numero}</span><span><strong>Cabaña ${fila.numero} · ${destinoTexto(fila.destino)}</strong><small>${insumo === "lena" ? "Leña" : "Carbón"} · ${fila.peso === null ? sacosTexto(fila.cantidad) : lenaTexto(fila.cantidad, fila.peso)}</small></span></div>`).join("") : escapar(`${insumo === "lena" ? "Leña" : "Carbón"} · ${texto}`);
+                linea.hidden = (!filas.length && !texto) || !totales?.listo;
             }
         }
         raiz.querySelectorAll("[data-cb-insumos]").forEach(nodo => {
@@ -314,23 +332,36 @@
         }
         if (fecha === fechaActual() && numero === estado.numero) pintarInsumos(fecha);
     }
+    function destinosPorCabana(fecha, insumo) {
+        const filas = [];
+        for (let numero = 1; numero <= 11; numero++) {
+            const dato = window.HAIKU_INSUMOS_ASEO_V1?.obtener?.(fecha, numero);
+            if (!dato?.listo) continue;
+            const valor = dato[insumo];
+            if (!valor?.confirmada) continue;
+            for (const destino of Object.keys(destinosInsumos)) {
+                const cantidad = Number((valor.destinosConfirmados || valor.destinos)?.[destino] || 0);
+                if (!(cantidad > 0)) continue;
+                const sacos = insumo === "lena" ? (valor.sacos || []).filter(s => (s.destino || "sin_especificar") === destino) : [];
+                const peso = insumo === "lena" && sacos.length === cantidad ? sacos.reduce((suma, s) => suma + Number(s.peso_kg || 0), 0) : null;
+                filas.push({ numero, destino, cantidad, peso });
+            }
+        }
+        return filas;
+    }
     function filtro(fech, numero) {
-        const valor = estadoFinal(cabana(fech, numero), fech);
-        return estado.filtro === "todas" || (estado.filtro === "pendientes" && !["lista", "no_requiere"].includes(valor))
-            || (estado.filtro === "listas" && valor === "lista");
+        return gruposCabanas(fech)[estado.filtro]?.includes(numero) || false;
     }
     function pintarFiltros(fecha) {
-        const pendientes = Array.from({ length: 11 }, (_, i) => i + 1).filter(n =>
-            !["lista", "no_requiere"].includes(estadoFinal(cabana(fecha, n), fecha))).length;
-        const listas = Array.from({ length: 11 }, (_, i) => i + 1).filter(n => estadoFinal(cabana(fecha, n), fecha) === "lista").length;
-        $("#cabinsFilters").innerHTML = [["todas", "Todas", 11], ["pendientes", "Pendientes", pendientes], ["listas", "Listas", listas]]
+        const grupos = gruposCabanas(fecha);
+        $("#cabinsFilters").innerHTML = [["todas", "Todas", grupos.todas.length], ["pendientes", "Pendientes", grupos.pendientes.length], ["en_curso", "En curso", grupos.en_curso.length], ["por_revisar", "Por revisar", grupos.por_revisar.length], ["listas", "Listas", grupos.listas.length]]
             .map(([clave, texto, cantidad]) => `<button type="button" data-cb-filter="${clave}" aria-pressed="${estado.filtro === clave}">${texto} · ${cantidad}</button>`).join("");
     }
     function selectorRevisionHTML(fecha, numero, dato) {
         const actual = revision(dato, fecha);
         const guardando = revisionesGuardando.has(`${fecha}:${numero}`);
         return `<label class="cb-badge cb-revision-picker ${tono(actual)}" title="${guardando ? "Guardando revisión…" : "Cambiar estado de revisión"}">
-          <span data-cb-revision-state>${REVISIONES[actual]}</span><span class="cb-revision-chevron" aria-hidden="true">▾</span>
+          <span data-cb-revision-state>${REVISIONES[actual]}</span><span class="cb-revision-chevron cb-chevron" aria-hidden="true"></span>
           <select data-cb-revision-select="${numero}" data-cb-revision-fecha="${escapar(fecha)}" aria-label="Estado de revisión de cabaña ${numero}"${guardando ? ' disabled aria-busy="true"' : ""}>
             ${Object.entries(REVISIONES).map(([valor, texto]) => `<option value="${valor}"${valor === actual ? " selected" : ""}>${texto}</option>`).join("")}
           </select></label>`;
@@ -352,12 +383,48 @@
           <button type="button" class="cb-open" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button>
         </article>`;
     }
+    function tiempoTranscurrido(fecha, hora, ahora = Date.now()) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return "—";
+        const [ano, mes, dia] = fecha.split("-").map(Number), [h, m] = hora.split(":").map(Number);
+        if (h > 23 || m > 59) return "—";
+        const deseado = Date.UTC(ano, mes - 1, dia, h, m);
+        let inicio = deseado;
+        const formateador = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+        const pared = instante => {
+            const p = Object.fromEntries(formateador.formatToParts(new Date(instante)).map(x => [x.type, x.value]));
+            return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+        };
+        for (let i = 0; i < 3; i++) inicio += deseado - pared(inicio);
+        if (pared(inicio) !== deseado) return "—";
+        const minutos = Math.max(0, Math.floor((ahora - inicio) / 60000));
+        return minutos < 60 ? `${minutos} min` : `${Math.floor(minutos / 60)} h ${minutos % 60} min`;
+    }
+    function filaSeguimiento(fecha, numero) {
+        const dato = cabana(fecha, numero), nombre = String(dato.aseo || "").trim() || "Sin asignar";
+        return `<article class="cb-tracking-row" data-cb-cabin="${numero}" role="listitem"><strong>Cabaña ${numero}</strong><span class="cb-tracking-person"><span class="cb-tracking-avatar" aria-hidden="true">${escapar(Array.from(nombre)[0])}</span>${escapar(nombre)}</span><span class="cb-tracking-type">${expressReal(dato, fecha, numero) ? "Aseo Exprés" : "Aseo Full"}</span><span class="cb-tracking-in" data-label="IN">${escapar(dato.aseoIn)}</span><span class="cb-tracking-out" data-label="OUT">—</span><strong class="cb-tracking-time" data-label="Tiempo" data-cb-elapsed data-cb-day="${escapar(fecha)}" data-cb-in="${escapar(dato.aseoIn)}">${tiempoTranscurrido(fecha, dato.aseoIn)}</strong><span class="cb-badge progress">En curso</span><button type="button" class="cb-open" data-cb-open="${numero}">Abrir cabaña</button></article>`;
+    }
+    function actualizarTiempos() {
+        raiz.querySelectorAll("[data-cb-elapsed]").forEach(n => {
+            n.textContent = tiempoTranscurrido(n.dataset.cbDay, n.dataset.cbIn);
+        });
+    }
+    if (typeof setInterval === "function") setInterval(actualizarTiempos, 60000);
+    document.addEventListener("visibilitychange", actualizarTiempos);
     function pintarOperacion(fecha) {
         if (!fecha) return;
         const enfocado = document.activeElement;
         if (enfocado && $("#aseo-resumen")?.contains(enfocado) && enfocado.matches?.("input, select, textarea")) return;
         const numeros = Array.from({ length: 11 }, (_, i) => i + 1).filter(numero => filtro(fecha, numero));
-        $("#cabinsOperationDescription").textContent = `Asignación, horarios y coordinación del turno · ${numeros.length} cabañas visibles`;
+        const seguimiento = estado.filtro === "en_curso";
+        const titulo = $("#cabinsOperation h2");
+        if (titulo) titulo.textContent = seguimiento ? "Seguimiento de camareros" : "Operación de hoy";
+        $("#cabinsOperationDescription").textContent = seguimiento
+            ? `${numeros.length} cabañas en curso · ${new Set(numeros.map(n => String(cabana(fecha, n).aseo || "").trim().toLocaleLowerCase("es-CL")).filter(Boolean)).size} camareros trabajando`
+            : `Asignación, horarios y coordinación del turno · ${numeros.length} cabañas visibles`;
+        if (seguimiento) {
+            $("#aseo-resumen").innerHTML = `<div class="cb-tracking-head" aria-hidden="true"><span>Cabaña</span><span>Camarero</span><span>Tipo de aseo</span><span>IN</span><span>OUT</span><span>Tiempo</span><span>Estado</span><span></span></div>${numeros.map(n => filaSeguimiento(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas en curso.</p>'}`;
+            return;
+        }
         $("#aseo-resumen").innerHTML = `<div class="cb-operation-head" aria-hidden="true"><span>Cabaña / trabajo</span><span>Encargado</span><span>Revisor</span><span>IN</span><span>OUT</span><span>Estado aseo</span><span>Estado revisión</span><span>Estado final</span><span>Abrir</span></div>${numeros.map(n => filaOperacion(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas con este filtro.</p>'}`;
     }
     function totalChecklist(numero) {
@@ -864,7 +931,8 @@
     observador.observe($("#revision-checklist"), { childList: true });
     observador.observe($("#aseo-express-checklist"), { childList: true });
     window.HAIKU_CABANAS_SITES_V1 = Object.freeze({ pintar, pintarOperacion, pintarRevision, pintarDetalle, abrir, cerrar,
-        actualizarConteos, estadoAseo, estadoFinal, revision, trabajo, titular, expressReal });
+        actualizarConteos, estadoAseo, estadoFinal, revision, trabajo, titular, expressReal,
+        grupoCabana, gruposCabanas, destinosPorCabana, tiempoTranscurrido });
     if (panelAutenticado) {
         window.addEventListener("haiku:auth-ready", restaurarContexto, true);
         if (window.haikuSesion) restaurarContexto();

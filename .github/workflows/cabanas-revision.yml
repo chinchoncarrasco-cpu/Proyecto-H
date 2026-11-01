@@ -5,10 +5,14 @@ on:
     paths:
       - "js/sites-cabanas-v1.js"
       - "js/supabase-aseo-revision-v1.js"
+      - "js/supabase-insumos-aseo-v1.js"
       - "css/sites-cabanas-v1.css"
+      - "index.html"
+      - "assets/icons/cabanas-chevron.svg"
       - "tests/cabanas-sites.test.cjs"
       - "tests/revision-completa-estados.test.cjs"
       - "tests/aseo-derivado-panel-browser-check.cjs"
+      - "tests/cabanas-seguimiento-browser-check.cjs"
       - ".github/workflows/cabanas-revision.yml"
 
 permissions:
@@ -26,7 +30,7 @@ jobs:
         with:
           node-version: 24
       - name: Revisión, Aseo, Realtime y edición de horas
-        run: node --test tests/cabanas-sites.test.cjs tests/revision-completa-estados.test.cjs tests/revision-checklist-realtime.test.cjs tests/aseo-operacion-autoridad.test.cjs tests/horas-edicion.test.cjs
+        run: node --test tests/cabanas-sites.test.cjs tests/revision-completa-estados.test.cjs tests/revision-checklist-realtime.test.cjs tests/aseo-operacion-autoridad.test.cjs tests/horas-edicion.test.cjs tests/insumos-aseo.test.cjs tests/insumos-realtime-ready.test.cjs
       - name: Navegador aislado de prueba
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
@@ -35,3 +39,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/aseo-derivado-panel-browser-check.cjs
+      - name: Seguimiento, resumen compacto y destinos en ambos temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/cabanas-seguimiento-browser-check.cjs

@@ -1389,3 +1389,58 @@ test("Aseo deja el menú, y una sección guardada antigua se restaura como Caba�
     assert.equal(menu.classList.contains("activo"), true);
 });
 
+
+test("el resumen distribuye las once cabañas sin duplicar revisión y enumera las listas", () => {
+    const h = arnes({
+        1: { aseoEstado: "no_requiere" }, 2: { aseoIn: "14:27", estadoRevision: "lista" },
+        3: { aseoIn: "14:00", aseoOut: "14:22" },
+        4: { aseoIn: "11:00", aseoOut: "12:00", estadoRevision: "lista" },
+        5: { estadoRevision: "con-detalles" }
+    });
+    const g = h.api.gruposCabanas(FECHA);
+    assert.equal(g.trabajo.length + g.por_revisar.length + g.listas.length, 11);
+    assert.equal(g.en_curso.join(","), "2");
+    assert.equal(g.por_revisar.join(","), "3");
+    assert.equal(g.listas.join(","), "1,4");
+    assert.equal(new Set([...g.trabajo, ...g.por_revisar, ...g.listas]).size, 11);
+    assert.match(h.nodos.get("#cabinsSummary").innerHTML, /Listas para operar: 2\. Cabañas: 1, 4/);
+    assert.match(h.nodos.get("#cabinsFilters").innerHTML, /En curso · 1/);
+});
+test("En curso sigue IN/OUT y se actualiza al registrar la salida", () => {
+    const h = arnes({ 3: { aseo: "Scarla", aseoIn: "14:27" }, 7: { aseo: "René", aseoIn: "14:40" } });
+    h.escuchas.get("click")({ target: { closest: () => ({ dataset: { cbFilter: "en_curso" } }) } });
+    let contenido = h.nodos.get("#aseo-resumen").innerHTML;
+    assert.equal((contenido.match(/class="cb-tracking-row"/g) || []).length, 2);
+    assert.match(contenido, /Scarla/); assert.match(contenido, /René/);
+    assert.match(contenido, /data-cb-open="3"/);
+    h.datosPorFecha[FECHA].cabanas[3].aseoOut = "15:03";
+    h.api.pintar();
+    contenido = h.nodos.get("#aseo-resumen").innerHTML;
+    assert.equal((contenido.match(/class="cb-tracking-row"/g) || []).length, 1);
+    assert.doesNotMatch(contenido, /data-cb-cabin="3"/);
+    assert.equal(h.api.gruposCabanas(FECHA).por_revisar.join(","), "3");
+});
+test("tiempo de aseo usa la fecha y zona de Chile, incluso al cruzar medianoche", () => {
+    const { tiempoTranscurrido: tiempo } = arnes().api;
+    assert.equal(tiempo("2026-10-31", "14:27", Date.parse("2026-10-31T18:03:00Z")), "36 min");
+    assert.equal(tiempo("2026-10-31", "23:50", Date.parse("2026-11-01T03:10:00Z")), "20 min");
+    assert.equal(tiempo("2026-07-10", "14:27", Date.parse("2026-07-10T19:03:00Z")), "36 min");
+    assert.equal(tiempo("2026-10-31", "16:00", Date.parse("2026-10-31T18:03:00Z")), "0 min");
+    assert.equal(tiempo("2026-10-31", "99:99"), "—");
+});
+test("destinos separa cabaña y tipo, mantiene el peso y no suma carbón pendiente", () => {
+    const h = arnes();
+    const counts = { aseo_full: 0, aseo_express: 0, venta_huesped: 0, sin_especificar: 0 };
+    h.window.HAIKU_INSUMOS_ASEO_V1 = { obtener: (_, n) => ({
+        listo: true,
+        lena: { confirmada: n === 3 ? 1 : 0, destinos: { ...counts, aseo_full: n === 3 ? 1 : 0 },
+            sacos: n === 3 ? [{ destino: "aseo_full", peso_kg: 8 }] : [] },
+        carbon: { confirmada: n === 7 ? 1 : 0, destinos: { ...counts, aseo_full: n === 7 ? 2 : 0 },
+            destinosConfirmados: { ...counts, aseo_full: n === 7 ? 1 : 0 } }
+    }) };
+    const lena = h.api.destinosPorCabana(FECHA, "lena");
+    assert.equal(lena.length, 1); assert.equal(lena[0].numero, 3);
+    assert.equal(lena[0].peso, 8); assert.equal(lena[0].destino, "aseo_full");
+    const carbon = h.api.destinosPorCabana(FECHA, "carbon");
+    assert.equal(carbon.length, 1); assert.equal(carbon[0].numero, 7); assert.equal(carbon[0].cantidad, 1);
+});
