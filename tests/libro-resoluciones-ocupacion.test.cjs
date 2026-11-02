@@ -39,7 +39,7 @@ async function preparar(h,reservas){return h.Q.prepararIncorporacion({reservas,g
 
 test('sin ocupación: revisión inline visible y no incorporable',async()=>{
  const h=entorno();await h.Q.abrirComparacionEstructurada(h.out,{reservas:[r()],generacion:1});await tick();
- assert.ok(h.boton('Completar ocupación'));assert.match(h.texto(),/Revisión manual/);
+ assert.ok(h.boton('Completar ocupación'));assert.match(h.texto(),/Por completar/);
  assert.equal(h.Q.serializarIncorporacion(await preparar(h,[r()])).length,0);
 });
 test('confirmar 2/0/0 habilita preparación efectiva sin mutar origen',async()=>{
@@ -70,7 +70,7 @@ test('otro conflicto sigue presente y bloqueado después de resolver ocupación'
 });
 test('cambio de generación invalida editor/preparación; nueva versión no recupera decisión',async()=>{
  const h=entorno(),a=r();await h.R.confirmar(a,{adultos:2,ninos:0,mascotas:0},1);h.R.adjuntar(h.out,[a],1);await tick();h.cambiar();
- await assert.rejects(h.R.efectivos([a],1),/Libro cambió/);assert.equal(h.boton('Editar resolución').disabled,true);
+ await assert.rejects(h.R.efectivos([a],1),/Libro cambió/);assert.equal(h.boton('Editar ocupación').disabled,true);
  assert.equal((await h.R.efectivos([a],2))[0].adultos,null);
 });
 test('resolución A no afecta B aunque coincidan titular y CAB',async()=>{
@@ -118,7 +118,7 @@ test('recargar Haku: mismo SHA/evidencia y generación nueva recuperan la últim
  const [eff]=await recargado.R.efectivos([a],7);assert.equal(eff.adultos,2);assert.equal(eff.resolucion_manual.id,d.id);
  assert.equal(eff.libro_origen.version,h.estado().version);assert.equal(recargado.writes(),0);assert.equal(h.data.length,1);
  assert.equal(recargado.R.aplicar(a,d,recargado.estado()).adultos,2);
- recargado.R.adjuntar(recargado.out,[a],7);await tick();assert.ok(recargado.boton('Editar resolución'));assert.equal(a.adultos,null);
+ recargado.R.adjuntar(recargado.out,[a],7);await tick();assert.ok(recargado.boton('Editar ocupación'));assert.equal(a.adultos,null);
 });
 test('editar después de preparar exige revisar de nuevo antes de incorporar',async()=>{
  const h=entorno(),a=r(),d=await h.R.confirmar(a,{adultos:2,ninos:0,mascotas:0},1),p=await preparar(h,[a]);
