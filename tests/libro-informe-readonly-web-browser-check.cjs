@@ -45,7 +45,7 @@ async function validarLoginCanonico(browser, origin, width) {
             onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
         }, rpc: async name => {
             await window.__auditarLogin('rpc', name);
-            return { data: { usuario: { activo: true }, roles: [], permisos: ['reservas.ver', 'pagos.ver', 'servicios.ver'] }, error: null };
+            return { data: { usuario: { id: (await window.__sesionFicticia())?.id, activo: true }, roles: [], permisos: ['reservas.ver', 'pagos.ver', 'servicios.ver'] }, error: null };
         }, from: async () => window.__auditarLogin('from') };
         window.google = { accounts: { oauth2: { initTokenClient: () => ({ requestAccessToken: () => window.__auditarLogin('oauth') }), revoke: (_, cb) => cb() } } };
     });
@@ -135,7 +135,7 @@ async function validarLoginCanonico(browser, origin, width) {
                     signOut: async () => { a.sessionUser = null; a.callback('SIGNED_OUT', null); },
                     onAuthStateChange: cb => { a.callback = cb; return { data: { subscription: { unsubscribe() {} } } }; } },
                     rpc: async name => { a.rpc.push(name); if (name !== 'haiku_sesion_actual') throw Error('Writer prohibited');
-                        return { data: { usuario: { activo: true }, permisos: a.perms }, error: null }; } };
+                        return { data: { usuario: { id: a.sessionUser, activo: true }, permisos: a.perms }, error: null }; } };
                 let api; Object.defineProperty(window, 'HAIKU_LIBRO_COMPARACION_READONLY_V1', { configurable: true,
                     get: () => api, set: real => { api = { ...real, crearNucleo: () => { const n = real.crearNucleo(); return { compararMes: async input => {
                         a.compares++; const dto = await n.compararMes(input); a.dto = dto; return dto; } }; } }; } });

@@ -10,11 +10,11 @@ const gate = () => { let resolve; const promise = new Promise(r => resolve = r);
 function escenario({ fixture = F.casos().find(f => f.id === 'asociacion_segura'), ...opts } = {}) {
     let user = 'usuario-ficticio-a', conectado = true, vigente = true, gen = 0, loaded = false, version = null;
     const capturas = [], llamadas = { fuentes: 0, m2: 0, comparar: 0, rpc: [], limpio: 0, desconexiones: [] };
-    const base = F.cliente(fixture.db), session = () => ({ data: { session: user ? { user: { id: user } } : null }, error: null });
+    const base = F.cliente(fixture.db), session = () => ({ data: { session: user ? { user: { id: user }, access_token: 'token-ficticio-no-exportar' } : null }, error: null });
     const cliente = { ...base, auth: { getSession: async () => session(), getUser: async () => ({ data: { user: { id: user } }, error: null }),
         signOut: async () => { user = null; } }, rpc: async name => {
             llamadas.rpc.push(name); assert.equal(name, 'haiku_sesion_actual');
-            return { data: { usuario: { activo: opts.inactivo !== true }, permisos: opts.permisos || ['reservas.ver', 'pagos.ver', 'servicios.ver'] }, error: opts.errorSesion ? { message: 'NO_EXPORTAR_SECRETO' } : null };
+            return { data: { usuario: { id: opts.usuarioRpc || user, activo: opts.inactivo !== true }, permisos: opts.permisos || ['reservas.ver', 'pagos.ver', 'servicios.ver'] }, error: opts.errorSesion ? { message: 'NO_EXPORTAR_SECRETO' } : null };
         } };
     const web = F.web(fixture.data); // Misma adaptación canónica de pagos/lenguaje que el lector Web.
     const lector = { modo: 'informe-readonly-solo-memoria', estado: () => ({ cargado: loaded, version, generacion: gen, nombre: 'Libro ficticio.xlsx' }),
@@ -33,7 +33,8 @@ function escenario({ fixture = F.casos().find(f => f.id === 'asociacion_segura')
         desconectar: opciones => { llamadas.desconexiones.push(opciones); conectado = false; fuente.invalidar('GOOGLE_NO_AUTORIZADO'); } };
     const real = Core.crearNucleo(), nucleo = { compararMes: async input => { llamadas.comparar++; if (opts.antesComparar) await opts.antesComparar();
         return opts.dto ? opts.dto(input) : real.compararMes(input); } };
-    control = API.crearControlador({ cliente, lector, google, nucleo, ahora: () => opts.ahora || F.ahora, emitir: s => capturas.push(s) });
+    control = API.crearControlador({ cliente, lector, google, nucleo, ahora: () => opts.ahora || F.ahora, emitir: s => capturas.push(s),
+        sesionVerificada: opts.sesionVerificada, limpiarSesionVerificada: opts.limpiarSesionVerificada });
     return { control, cliente, lector, fuente, google, capturas, llamadas, base, fixture,
         dto: () => capturas.findLast(s => s.resultado)?.resultado, usuario: id => { user = id; }, cambio: () => { vigente = false; },
         conectado: value => { conectado = value; }, manual: async () => { await lector.limpiar(); fuente.cambioLibro(); } };
