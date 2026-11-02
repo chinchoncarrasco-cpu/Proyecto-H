@@ -1463,3 +1463,8 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas .cb-typed-request>button { flex:0 0 auto; min-height:28px; padding:4px; font-size:11px; color:var(--cb-accent); }
 #seccion-cabanas .cb-typed-request>.cb-badge { font-size:10px; white-space:nowrap; }
 #seccion-cabanas .cb-typed-request-chip { font-size:10px; line-height:14px; }
+
+/* La solicitud abierta desde una ficha conserva esa cabaña como dato fijo. */
+#seccion-cabanas #solicita-cabana-campo[hidden],
+#seccion-cabanas #solicita-cabana-fija[hidden] { display:none; }
+#seccion-cabanas #solicita-cabana-fija { margin:4px 0 0; color:var(--cb-muted); font-size:13px; line-height:18px; font-weight:500; }

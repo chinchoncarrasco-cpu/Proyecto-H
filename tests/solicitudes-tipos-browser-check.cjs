@@ -88,6 +88,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       const modal = page.locator('#panel-agregar-solicita');
       const add = async (category, detail = '') => {
         await page.locator('#cabinsDetailAddRequest').click();
+        assert.equal(await modal.locator('#solicita-cabana').isVisible(), false, 'la ficha ya determina la cabaña');
+        assert.equal(await modal.locator('#solicita-cabana').isDisabled(), true);
+        assert.equal(await modal.locator('#solicita-cabana-fija').textContent(), 'Cabaña 1');
         assert.equal(await modal.locator('[name="solicita-tipo"]').count(), 6);
         await modal.locator(`[value="${category}"]`).check();
         await page.locator('#solicita-texto').fill(detail);
@@ -102,6 +105,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.locator('[data-cb-request-edit="1"][data-cb-request-category="reposicion_lena"]').click();
       assert.equal(await modal.locator('[name="solicita-tipo"]:checked').inputValue(), 'reposicion_lena');
       assert.equal(await modal.locator('[name="solicita-tipo"]:checked').isDisabled(), true);
+      assert.equal(await modal.locator('#solicita-cabana').isVisible(), false, 'editar tampoco permite mover la solicitud a otra cabaña');
       await page.locator('#solicita-texto').fill('2 sacos\nDejar junto al fogón');
       await page.locator('#guardar-solicita').click();
       await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
@@ -128,6 +132,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.waitForFunction(() => document.querySelector('#solicita-error').textContent.includes('sin conexión'));
       assert.equal(await modal.evaluate(node => node.classList.contains('activo')), true);
       assert.equal(await page.locator('#solicita-texto').inputValue(), draft);
+      assert.equal(await modal.locator('#solicita-cabana').isDisabled(), true, 'un fallo no libera la cabaña fijada por la ficha');
       await page.evaluate(() => window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada));
       assert.equal(await page.locator('#solicita-texto').inputValue(), draft);
       const overflow = await modal.locator('.cb-request-drawer-panel').evaluate(node => node.scrollWidth - node.clientWidth);
@@ -140,6 +145,29 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.locator('#guardar-solicita').click();
       await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
       assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.categoria === 'reposicion_lena').descripcion), draft);
+      assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.every(row => row.cabana_id === 'cab-1')), true);
+      await page.evaluate(() => { window.HAIKU_CABANAS_SITES_V1.cerrar(); window.HAIKU_CABANAS_SITES_V1.abrir(7); });
+      await page.locator('#cabinsDetailAddRequest').click();
+      assert.equal(await modal.locator('#solicita-cabana-fija').textContent(), 'Cabaña 7');
+      assert.equal(await modal.locator('#solicita-cabana').isVisible(), false);
+      await modal.locator('[value="recambio_toallas"]').check();
+      await page.locator('#solicita-texto').fill('Toallas para Cabaña 7');
+      // Incluso si otro productor toca el select oculto, se guarda la ficha original.
+      await page.evaluate(() => { document.querySelector('#solicita-cabana').value = '2'; });
+      await page.locator('#guardar-solicita').click();
+      await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
+      assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.descripcion === 'Toallas para Cabaña 7').cabana_id), 'cab-7');
+      await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.cerrar());
+      await page.locator('#agregar-solicita').click();
+      assert.equal(await modal.locator('#solicita-cabana').isVisible(), true, 'el listado general conserva la elección de cabaña');
+      assert.equal(await modal.locator('#solicita-cabana').isDisabled(), false);
+      assert.equal(await modal.locator('#solicita-cabana-fija').isVisible(), false);
+      await modal.locator('#solicita-cabana').selectOption('3');
+      await modal.locator('[value="reposicion_carbon"]').check();
+      await page.locator('#solicita-texto').fill('Carbón para Cabaña 3');
+      await page.locator('#guardar-solicita').click();
+      await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
+      assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.descripcion === 'Carbón para Cabaña 3').cabana_id), 'cab-3');
       assert.equal(await page.evaluate(() => window.__requestWrites.every(write => write.table === 'solicitudes')), true, 'no modifica aseos, revisiones ni insumos');
       assert.deepEqual(errors, []);
       await page.close();
