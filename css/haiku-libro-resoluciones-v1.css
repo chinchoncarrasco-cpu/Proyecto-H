@@ -65,7 +65,7 @@
 .haiku-ocupacion-card .haiku-ocupacion-error:empty { display: none; }
 
 /* Una resolución guardada ocupa una fila de cantidades, sin cajas individuales. */
-.haiku-libro-resolucion.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; padding: 10px; }
+.haiku-libro-resolucion.haiku-ocupacion-card[data-ocupacion-estado="confirmada"]:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; padding: 10px; }
 .haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-cabecera { grid-column: 1 / -1; }
 .haiku-ocupacion-card[data-ocupacion-estado="confirmada"] .haiku-ocupacion-titular { font-size: 14px; line-height: 20px; }
 .haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-resumen { grid-column: 1; grid-row: 2; align-self: center; }
