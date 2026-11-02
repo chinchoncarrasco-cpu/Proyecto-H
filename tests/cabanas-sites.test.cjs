@@ -770,7 +770,7 @@ test("un ciclo con horas no ofrece No requiere ni permite aplicarlo desde un bot
     assert.deepEqual(escrituras, []);
 });
 
-test("Estado final deriva seis estados sin tomar solicitudes operativas como autoridad", () => {
+test("Estado final deriva seis estados sin tomar textos de solicitudes como autoridad", () => {
     const h = arnes();
     const casos = [
         [{}, "pendiente"],
@@ -787,6 +787,64 @@ test("Estado final deriva seis estados sin tomar solicitudes operativas como aut
     assert.equal(h.api.revision({ estadoRevision: "en_revision" }, FECHA), "en_revision");
     assert.equal(h.api.estadoFinal({ aseoEstado: "cancelado" }, FECHA), "pendiente",
         "un cancelado histórico no se presenta como No requiere");
+});
+
+test("Express verificado controla revisión, estado final y contadores sin sobrescribir la revisión completa", () => {
+    for (const [estadoRevision, resultadoRevision, esperado] of [
+        ["completada", "lista", "lista"], ["completada", "con_detalles", "con-detalles"],
+        ["en_proceso", null, "en_revision"], ["pendiente", null, "pendiente"]
+    ]) {
+        const dato = { estadoRevision: "lista", aseoExpressCiclo: { fecha: FECHA, verificado: true, existe: true,
+            estadoRevision, resultadoRevision } };
+        const h = arnes({ 1: dato });
+        assert.equal(h.api.revision(dato, FECHA, 1), esperado);
+        assert.equal(h.api.estadoFinal(dato, FECHA, 1), ["lista", "con-detalles"].includes(esperado) ? esperado : "pendiente");
+        const contenido = fila(h.nodos.get("#aseo-resumen").innerHTML, 1);
+        assert.match(contenido, new RegExp(`data-cb-final-state>${esperado === "lista" ? "Lista" : esperado === "con-detalles" ? "Con detalles" : "Pendiente"}`));
+        assert.match(h.nodos.get("#cabinsFilters").innerHTML, new RegExp(`Listas · ${esperado === "lista" ? 1 : 0}`));
+        assert.equal(dato.estadoRevision, "lista");
+    }
+});
+
+test("Express requiere ciclo vigente verificado y No requiere no esconde una solicitud activa", () => {
+    const h = arnes();
+    const ciclo = { fecha: FECHA, verificado: true, existe: true, estadoRevision: "pendiente", resultadoRevision: null };
+    const dato = { aseoEstado: "no_requiere", aseoExpressCiclo: ciclo };
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "pendiente");
+    ciclo.estadoRevision = "completada"; ciclo.resultadoRevision = "lista";
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "lista");
+    for (const invalido of [{ existe: false }, { verificado: false }, { fecha: "2026-09-22" }]) {
+        assert.equal(h.api.estadoFinal({ ...dato, aseoExpressCiclo: { ...ciclo, ...invalido } }, FECHA, 1), "no_requiere");
+    }
+    h.window.haikuSesion = { auth: { id: "u1" } };
+    h.window.HAIKU_ASEO_OPERACION_V1 = { obtenerCicloExpress: (fecha, numero) =>
+        fecha === FECHA && String(numero) === "1" ? ciclo : null };
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "lista");
+    assert.equal(h.api.estadoFinal(dato, FECHA, 2), "no_requiere", "no toma Express de otra cabaña");
+});
+
+test("el selector del listado guarda el estado Express activo y conserva la revisión completa", async () => {
+    const ciclo = { fecha: FECHA, verificado: true, existe: true, estadoRevision: "pendiente", resultadoRevision: null };
+    const dato = { estadoRevision: "con-detalles", aseoExpressCiclo: ciclo };
+    const h = arnes({ 1: dato });
+    const escrituras = [];
+    h.window.HAIKU_ASEO_OPERACION_V1 = {
+        obtenerCicloExpress: (fecha, numero) => fecha === FECHA && String(numero) === "1" ? ciclo : null,
+        async guardarEstadoRevisionExpress(numero, valor) {
+            escrituras.push(["express", numero, valor]);
+            ciclo.estadoRevision = "completada"; ciclo.resultadoRevision = "lista";
+        }
+    };
+    h.window.HAIKU_REVISION_SUPABASE_V1 = { guardarEstadoRevision: (...args) => escrituras.push(["completa", ...args]) };
+    const control = nodo(); control.dataset = { cbRevisionSelect: "1", cbRevisionFecha: FECHA }; control.value = "lista";
+    h.escuchas.get("change")({ target: control });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(escrituras, [["express", "1", "lista"]]);
+    assert.equal(dato.estadoRevision, "con-detalles");
+    assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 1), /data-cb-final-state>Lista/);
+    ciclo.existe = false;
+    h.api.pintar();
+    assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 1), /data-cb-final-state>Con detalles/);
 });
 
 test("la revisión autenticada pertenece al ciclo completo de la fecha y no hereda un resultado antiguo", () => {

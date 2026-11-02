@@ -615,7 +615,8 @@
             const revision = await asegurarRevisionExpress(fecha, numeroCabana);
             const ahora = new Date().toISOString();
             const completada = valor === "con-detalles" || valor === "lista";
-            const detalles = document.getElementById("aseo-express-detalles");
+            const detalles = localStorage.getItem("haikuAseoExpressCabana") === numeroCabana
+                ? document.getElementById("aseo-express-detalles") : null;
             const payload = {
                 estado: completada ? "completada" : valor === "en_revision" ? "en_proceso" : "pendiente",
                 resultado: valor === "con-detalles" ? "con_detalles" : valor === "lista" ? "lista" : null,

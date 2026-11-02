@@ -74,7 +74,14 @@
     function mostrarContexto() {
         document.documentElement.classList.remove("haiku-cabanas-pendiente");
     }
-    const revision = (dato, fecha = fechaActual()) => {
+    const revision = (dato, fecha = fechaActual(), numero = "") => {
+        if (expressReal(dato, fecha, numero)) {
+            const ciclo = cicloExpress(dato, fecha, numero);
+            if (ciclo.estadoRevision === "en_proceso") return "en_revision";
+            if (ciclo.estadoRevision === "completada" && ciclo.resultadoRevision === "lista") return "lista";
+            if (ciclo.estadoRevision === "completada" && ["con_detalles", "no_lista"].includes(ciclo.resultadoRevision)) return "con-detalles";
+            return "pendiente";
+        }
         const ciclo = dato?.revisionCompletaCiclo;
         if (ciclo?.fecha === fecha && ciclo.verificado === false) return "pendiente";
         if (window.haikuSesion && ciclo?.fecha === fecha) {
@@ -91,10 +98,10 @@
         if (!dato?.aseoOut && dato?.aseoEstado === "no_requiere") return "no_requiere";
         return "pendiente";
     };
-    const estadoFinal = (dato, fecha = fechaActual()) => {
+    const estadoFinal = (dato, fecha = fechaActual(), numero = "") => {
         const aseo = estadoAseo(dato);
-        if (aseo === "no_requiere") return "no_requiere";
-        const rev = revision(dato, fecha);
+        if (aseo === "no_requiere" && !expressReal(dato, fecha, numero)) return "no_requiere";
+        const rev = revision(dato, fecha, numero);
         if (rev === "lista" || rev === "con-detalles") return rev;
         if (aseo === "lista_para_revisar" || aseo === "en_curso") return aseo;
         return "pendiente";
@@ -264,16 +271,16 @@
             }).catch(() => expressAutomaticos.delete(clave));
         }, 0);
     }
-    function grupoCabana(dato, fecha) {
+    function grupoCabana(dato, fecha, numero) {
         if (dato?.aseoIn && !dato.aseoOut) return "en_curso";
-        const final = estadoFinal(dato, fecha);
+        const final = estadoFinal(dato, fecha, numero);
         if (["lista", "no_requiere"].includes(final)) return "listas";
         return final === "lista_para_revisar" ? "por_revisar" : "pendientes";
     }
     function gruposCabanas(fecha) {
         const grupos = { todas: [], pendientes: [], en_curso: [], por_revisar: [], listas: [], trabajo: [] };
         for (let numero = 1; numero <= 11; numero++) {
-            const grupo = grupoCabana(cabana(fecha, numero), fecha);
+            const grupo = grupoCabana(cabana(fecha, numero), fecha, numero);
             grupos.todas.push(numero); grupos[grupo].push(numero);
             if (grupo === "pendientes" || grupo === "en_curso") grupos.trabajo.push(numero);
         }
@@ -462,7 +469,7 @@
             .map(([clave, texto, cantidad]) => `<button type="button" data-cb-filter="${clave}" aria-pressed="${estado.filtro === clave}">${texto} · ${cantidad}</button>`).join("");
     }
     function selectorRevisionHTML(fecha, numero, dato) {
-        const actual = revision(dato, fecha);
+        const actual = revision(dato, fecha, numero);
         const guardando = revisionesGuardando.has(`${fecha}:${numero}`);
         return `<label class="cb-badge cb-revision-picker ${tono(actual)}" title="${guardando ? "Guardando revisión…" : "Cambiar estado de revisión"}">
           <span data-cb-revision-state>${REVISIONES[actual]}</span><span class="cb-revision-chevron cb-chevron" aria-hidden="true"></span>
@@ -472,7 +479,7 @@
     }
     function filaOperacion(fecha, numero) {
         const dato = cabana(fecha, numero);
-        const final = estadoFinal(dato, fecha);
+        const final = estadoFinal(dato, fecha, numero);
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
@@ -564,7 +571,7 @@
         const numero = estado.numero;
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
-        const final = estadoFinal(dato, fecha);
+        const final = estadoFinal(dato, fecha, numero);
         const hayExpress = expressReal(dato, fecha, numero);
         const ciclo = cicloExpress(dato, fecha, numero);
         $("#revision-titulo").textContent = `Cabaña ${numero}`;
@@ -586,10 +593,10 @@
         $("#cabinsDetailOut").disabled = !dato.aseoIn && !dato.aseoOut;
         $("#cabinsDetailRequests").innerHTML = solicitudesHTML(fecha, numero, dato, true, true) || "<p>Sin solicitudes registradas.</p>";
         $("#cabinsAseoProgress").textContent = etiqueta(aseo);
-        $("#cabinsRevisionProgress").textContent = REVISIONES[revision(dato, fecha)];
+        $("#cabinsRevisionProgress").textContent = REVISIONES[revision(dato, fecha, numero)];
         $("#cabinsFinalProgress").textContent = FINALES[final];
         $("#cabinsFinalBadge").textContent = $("#cabinsFinalProgress").textContent;
-        for (const [id, valor] of [["#cabinsAseoDot", aseo], ["#cabinsRevisionDot", revision(dato, fecha)], ["#cabinsFinalDot", final]]) {
+        for (const [id, valor] of [["#cabinsAseoDot", aseo], ["#cabinsRevisionDot", revision(dato, fecha, numero)], ["#cabinsFinalDot", final]]) {
             const punto = $(id); punto.className = `cb-stage-dot ${tono(valor)}`;
         }
         $("#cabinsFinalBadge").className = `cb-badge ${tono(final)}`;
@@ -749,7 +756,8 @@
     async function cambiarEstadoRevision(control) {
         const numero = String(control.dataset.cbRevisionSelect || "");
         const fecha = String(control.dataset.cbRevisionFecha || "");
-        const previo = revision(cabana(fecha, numero), fecha);
+        const dato = cabana(fecha, numero);
+        const previo = revision(dato, fecha, numero);
         const nuevo = control.value;
         const clave = `${fecha}:${numero}`;
         if (!numeroValido(numero) || fecha !== fechaActual() ||
@@ -758,8 +766,10 @@
             return;
         }
         if (nuevo === previo) return;
-        const api = window.HAIKU_REVISION_SUPABASE_V1;
-        if (!api?.guardarEstadoRevision) {
+        const guardar = expressReal(dato, fecha, numero)
+            ? window.HAIKU_ASEO_OPERACION_V1?.guardarEstadoRevisionExpress
+            : window.HAIKU_REVISION_SUPABASE_V1?.guardarEstadoRevision;
+        if (!guardar) {
             control.value = previo;
             alert("No fue posible guardar la revisión. Vuelve a intentarlo.");
             return;
@@ -767,7 +777,7 @@
         revisionesGuardando.add(clave);
         control.disabled = true;
         try {
-            await api.guardarEstadoRevision(numero, nuevo, fecha);
+            await guardar(numero, nuevo, fecha);
         } catch (error) {
             control.value = previo;
             console.error("HAKU · No fue posible cambiar la revisión:", error);
