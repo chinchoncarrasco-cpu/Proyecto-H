@@ -177,12 +177,17 @@
     }
     function abrirSolicitud(numero = "", solicitud = null) {
         solicitudEditada = solicitud;
-        contextoSolicitud = { fecha: fechaActual(), usuario: usuarioActual() };
+        const numeroFijo = numeroValido(numero) ? String(numero) : numeroValido(estado.numero) ? estado.numero : "";
+        contextoSolicitud = { fecha: fechaActual(), usuario: usuarioActual(), numero: numeroFijo };
         const panel = $("#panel-agregar-solicita");
         const select = $("#solicita-cabana");
         if (!panel || !select) return;
-        select.value = numeroValido(numero) ? String(numero) : "1";
-        select.disabled = Boolean(solicitud);
+        select.value = numeroFijo || "1";
+        select.disabled = Boolean(numeroFijo || solicitud);
+        $("#solicita-cabana-campo").hidden = Boolean(numeroFijo);
+        const cabanaFija = $("#solicita-cabana-fija");
+        cabanaFija.hidden = !numeroFijo;
+        cabanaFija.textContent = numeroFijo ? `Cabaña ${numeroFijo}` : "";
         $("#cabinsRequestTitle").textContent = solicitud ? "Editar solicitud" : "Agregar solicitud";
         const tipos = tiposSolicitud();
         $("#solicita-texto").value = solicitud && solicitud.descripcion !== tipos[solicitud.categoria] ? solicitud.descripcion : "";
@@ -196,7 +201,7 @@
     async function guardarSolicitudDesdeFormulario() {
         if (solicitudGuardando) return;
         const api = window.HAIKU_ASEO_OPERACION_V1;
-        const numero = $("#solicita-cabana").value;
+        const numero = contextoSolicitud?.numero || $("#solicita-cabana").value;
         const categoria = $("#solicita-tipos").querySelector('input:checked')?.value;
         const descripcion = $("#solicita-texto").value.trim();
         const error = $("#solicita-error");
@@ -223,7 +228,9 @@
             solicitudGuardando = false;
             panel.setAttribute("aria-busy", "false");
             for (const boton of panel.querySelectorAll("button")) boton.disabled = false;
-            for (const control of panel.querySelectorAll('input, select')) control.disabled = Boolean(solicitudEditada);
+            for (const control of panel.querySelectorAll('input, select')) {
+                control.disabled = Boolean(solicitudEditada) || (control.id === "solicita-cabana" && Boolean(contextoSolicitud?.numero));
+            }
             $("#solicita-texto").readOnly = false;
         }
     }
