@@ -26,7 +26,10 @@
                 s.usuario.activo === true && PERMISOS.every(p => s.permisos?.includes(p));
         };
         function estado(state, mensaje = textos[state]) {
-            if (state !== 'ready') verificado = false;
+            // Closing only hides this document. Its live authorization remains
+            // valid until Auth or the current profile invalidates it; cerrado
+            // still prevents every action while the panel is closed.
+            if (state !== 'ready' && state !== 'closed') verificado = false;
             vista(state, mensaje || '');
             if (!binding) return;
             const payload = { type: 'haku-assistant-session', nonce: binding.nonce, userId: identidad(), state };
@@ -77,9 +80,19 @@
         }
         function bind(value) {
             if (!UUID.test(value?.owner || '') || !UUID.test(value?.nonce || '')) return false;
-            invalidar(); cerrado = false; ultimaPublicacion = '';
+            const reanudar = binding?.owner === value.owner && verificado && !validar && !pendiente && candidatoValido();
+            // Rotate the nonce without reconnecting a verified, still-live
+            // conversation. A new document/account or any Auth change takes
+            // the normal validation path instead.
+            if (reanudar) revision++;
+            else invalidar();
+            cerrado = false; ultimaPublicacion = '';
             binding = { owner: value.owner, nonce: value.nonce };
-            if (prepararHistorial(binding.owner)) return true;
+            if (prepararHistorial(binding.owner)) {
+                if (reanudar) invalidar();
+                return true;
+            }
+            if (reanudar) { estado('ready'); chat().abrir(); return true; }
             void revisar(); return true;
         }
         function permitido() { return verificado && !cerrado && candidatoValido(); }

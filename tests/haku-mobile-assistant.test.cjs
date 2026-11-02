@@ -90,11 +90,67 @@ test('renovar token del mismo usuario revalida sin cambiar documento ni historia
     assert.equal(f.audit.reload, 0); assert.equal(f.controller.permitido(), true);
     assert.deepEqual(f.audit.history, [OWNER]); assert.equal(f.audit.rpc.length, 2);
 });
-test('cerrar y volver a bind con el mismo nonce conserva conversación y no compara', async () => {
+test('cerrar y reabrir la misma conversación rota el nonce sin otra validación ni espera', async () => {
     const f = fixture(); f.bind(); await flush(); f.controller.cerrar();
     assert.equal(f.controller.permitido(), false); assert.equal(f.audit.posts.at(-1).state, 'closed');
-    f.bind(); await flush(); assert.equal(f.controller.permitido(), true); assert.equal(f.audit.open, 2);
+    const vistasAntes = f.audit.views.length;
+    f.bind({ owner: OWNER, nonce: OTHER });
+    assert.equal(f.controller.permitido(), true); assert.equal(f.audit.open, 2);
+    assert.deepEqual(f.audit.views.slice(vistasAntes).map(v => v.state), ['ready']);
+    assert.deepEqual(f.audit.posts.at(-1), { type: 'haku-assistant-session', nonce: OTHER, userId: OWNER, state: 'ready' });
+    assert.equal(f.controller.coincide({ owner: OWNER, nonce: NONCE }), false);
+    assert.equal(f.audit.user, 1); assert.equal(f.audit.session, 2);
+    assert.deepEqual(f.audit.rpc, ['haiku_sesion_actual']); assert.equal(f.audit.reload, 0);
     assert.deepEqual(Object.keys(f.chat).sort(), ['abrir', 'cerrar']);
+});
+for (const event of ['TOKEN_REFRESHED', 'SIGNED_IN']) test(event + ' mientras está cerrado exige validar antes de reabrir', async () => {
+    const f = fixture(); f.bind(); await flush(); f.controller.cerrar();
+    f.controller.cambioSesion(event, { user: { id: OWNER } });
+    await f.controller.revisar();
+    assert.equal(f.controller.permitido(), false); assert.equal(f.audit.user, 1);
+    f.bind({ owner: OWNER, nonce: OTHER });
+    assert.equal(f.controller.permitido(), false);
+    await flush();
+    assert.equal(f.controller.permitido(), true); assert.equal(f.audit.user, 2);
+    assert.equal(f.audit.session, 4); assert.equal(f.audit.rpc.length, 2); assert.equal(f.audit.reload, 0);
+});
+test('cerrar sesión mientras el panel está cerrado descarta su autorización anterior', async () => {
+    const f = fixture(); f.bind(); await flush(); f.controller.cerrar();
+    f.setContext(null); f.controller.cambioSesion('SIGNED_OUT', null);
+    f.bind({ owner: OWNER, nonce: OTHER }); await flush();
+    assert.equal(f.controller.permitido(), false); assert.equal(f.audit.posts.at(-1).state, 'login');
+    assert.equal(f.audit.open, 1); assert.equal(f.audit.reload, 1); assert.equal(f.audit.rpc.length, 1);
+});
+for (const [name, change] of [
+    ['otra cuenta Auth', c => { c.auth.id = OTHER; }],
+    ['perfil ajeno', c => { c.usuario.id = OTHER; }],
+    ['usuario inactivo', c => { c.usuario.activo = false; }],
+    ['permiso retirado', c => { c.permisos = ['reservas.ver']; }]
+]) test('reabrir con ' + name + ' bloquea la confianza anterior', async () => {
+    const f = fixture(); f.bind(); await flush(); f.controller.cerrar(); change(f.context());
+    f.bind({ owner: OWNER, nonce: OTHER }); await flush();
+    assert.equal(f.controller.permitido(), false); assert.equal(f.audit.posts.at(-1).state, 'mismatch');
+    assert.equal(f.audit.open, 1); assert.equal(f.audit.rpc.length, 1);
+});
+test('cerrar y reabrir después de un error no reutiliza una validación anterior', async () => {
+    const options = { authUser: OWNER }, f = fixture(options);
+    f.bind(); await flush(); options.authUser = OTHER;
+    f.controller.revalidar(); await flush(); assert.equal(f.audit.posts.at(-1).state, 'error');
+    f.controller.cerrar(); f.bind({ owner: OWNER, nonce: OTHER }); await flush();
+    assert.equal(f.controller.permitido(), false); assert.equal(f.audit.posts.at(-1).state, 'error');
+    assert.equal(f.audit.open, 1); assert.equal(f.audit.user, 3);
+});
+test('cerrar durante la validación descarta la respuesta anterior y no acredita el nonce nuevo', async () => {
+    let resume; const wait = new Promise(resolve => { resume = resolve; });
+    const f = fixture({ rpcWait: () => wait }); f.bind(); await flush();
+    f.controller.cerrar(); f.bind({ owner: OWNER, nonce: OTHER });
+    assert.equal(f.controller.permitido(), false);
+    resume(); await flush();
+    assert.equal(f.audit.open, 0); assert.equal(f.controller.permitido(), false);
+    assert.equal(f.audit.posts.some(p => p.state === 'ready'), false);
+    await f.controller.revisar(); await flush();
+    assert.equal(f.audit.open, 1); assert.equal(f.audit.rpc.length, 2);
+    assert.equal(f.audit.posts.at(-1).nonce, OTHER); assert.equal(f.audit.posts.at(-1).state, 'ready');
 });
 test('cambiar nonce invalida respuestas del documento o binding anterior', async () => {
     const f = fixture(); f.bind(); await flush();
@@ -215,6 +271,22 @@ test('focusMonth real: rechaza acción/nonce/owner ajenos y dispara cada botón 
         assert.equal(f.actions.at(-1), `[data-haiku-accion-rapida="${button}"]`);
     }
     assert.equal(f.actions.length, 4);
+});
+test('reabrir conserva los mismos mensajes, borrador y lector sin volver a conectar el Libro', async () => {
+    const f = installedFixture(), context = { owner: OWNER, nonce: NONCE };
+    f.api.bind(context); await flush();
+    const card = { textContent: 'Resultado visible de una consulta', handlers: { click: () => 'vigente' } };
+    f.messages.children.push(card); f.field.value = 'Mi próxima consulta';
+    const reader = f.root.HAIKU_LIBRO_RESERVA_V1;
+    const close = { closest: selector => selector === '#haiku-asistente-cerrar' ? close : null };
+    for (const { cb, capture } of f.events.get('click')) if (capture === true)
+        cb({ type: 'click', target: close, preventDefault() {}, stopImmediatePropagation() {} });
+    assert.equal(f.api.focusMonth('book-current', context), false);
+    f.api.bind({ owner: OWNER, nonce: OTHER }); await flush();
+    assert.equal(f.messages.children[0], card); assert.equal(card.handlers.click(), 'vigente');
+    assert.equal(f.field.value, 'Mi próxima consulta'); assert.equal(f.root.HAIKU_LIBRO_RESERVA_V1, reader);
+    assert.equal(f.root.reloads, 0); assert.equal(f.audit.user, 1); assert.equal(f.audit.rpc.length, 1);
+    assert.deepEqual(f.actions, []); assert.deepEqual(f.submissions, []);
 });
 test('focusMonth espera PIN y módulos reales; no puede saltar bloqueo mediante click programático', async () => {
     const f = installedFixture(), context = { owner: OWNER, nonce: NONCE };
