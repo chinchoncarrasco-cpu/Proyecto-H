@@ -27,7 +27,8 @@
         destruido: "Consulta cerrada; no se conserva el informe."
     });
     const fallo = code => Object.assign(new Error(mensajes[code] || mensajes.error_comparacion), { code });
-    function crearControlador({ cliente, google, lector, nucleo, emitir = () => {}, ahora = () => new Date().toISOString() }) {
+    function crearControlador({ cliente, google, lector, nucleo, emitir = () => {}, ahora = () => new Date().toISOString(),
+        sesionVerificada = () => {}, limpiarSesionVerificada = () => {} }) {
         let revision = 0, propietario = null, acceso = false, ocupado = false, destruido = false;
         let handle = null, resultado = null, fase = "sin_sesion", limpiando = false, inicioFuente = false;
         const pintar = () => emitir({ fase, mensaje: mensajes[fase], acceso, ocupado, resultado });
@@ -38,7 +39,7 @@
         function invalidar(code = "obsoleta", cerrarGoogle = false) {
             if (limpiando) return;
             revision++; ocupado = false; handle = null; resultado = null; fase = code;
-            if (cerrarGoogle) { acceso = false; propietario = null; }
+            if (cerrarGoogle) { acceso = false; propietario = null; limpiarSesionVerificada(); }
             // Limpiar antes de publicar cualquier nuevo estado; callbacks recursivos no reentran.
             limpiando = true;
             try {
@@ -53,6 +54,7 @@
             try {
                 const s = await cliente.auth.getSession(); comprobar(id, owner);
                 const user = s?.data?.session?.user?.id;
+                const token = s?.data?.session?.access_token;
                 if (s?.error) throw fallo("error_sesion");
                 if (!user) throw fallo("sin_sesion");
                 if (owner && user !== owner) throw fallo("obsoleta");
@@ -60,9 +62,15 @@
                 if (u?.error || u?.data?.user?.id !== user) throw fallo("error_sesion");
                 const r = await cliente.rpc("haiku_sesion_actual"); comprobar(id, owner);
                 if (r?.error) throw fallo("error_sesion");
-                if (r?.data?.usuario?.activo !== true || !Array.isArray(r.data.permisos) || !permisos.every(p => r.data.permisos.includes(p))) throw fallo("permisos");
+                if (r?.data?.usuario?.id !== user || r.data.usuario.activo !== true || !Array.isArray(r.data.permisos) || !permisos.every(p => r.data.permisos.includes(p))) throw fallo("permisos");
                 const final = await cliente.auth.getSession(); comprobar(id, owner);
-                if (final?.error || final?.data?.session?.user?.id !== user) throw fallo("obsoleta");
+                if (final?.error || final?.data?.session?.user?.id !== user || final.data.session.access_token !== token) throw fallo("obsoleta");
+                // El informe no carga el login del panel. Publica el mismo contexto
+                // canónico sólo después de validar Auth, permisos y la sesión final.
+                // Nunca entrega el token a observadores ni lo incorpora al contexto.
+                sesionVerificada({ auth: { id: user }, usuario: { ...r.data.usuario },
+                    roles: Array.isArray(r.data.roles) ? [...r.data.roles] : [], permisos: [...r.data.permisos] });
+                comprobar(id, owner);
                 return user;
             } catch (e) { throw fallo(Object.hasOwn(mensajes, e?.code) ? e.code : "error_sesion"); }
         }
@@ -250,9 +258,21 @@
         const boton = d.getElementById("informe-comparar"), aviso = d.getElementById("informe-estado");
         const periodo = d.getElementById("informe-periodo"), ahora = () => new Date().toISOString();
         periodo.textContent = new Intl.DateTimeFormat("es-CL", { timeZone: "America/Santiago", month: "long", year: "numeric" }).format(new Date());
-        let control;
+        let control, sesionDelInforme = null;
+        const limpiarSesionVerificada = () => {
+            // No borrar una sesión que otro consumidor haya publicado después.
+            if (sesionDelInforme && root.haikuSesion === sesionDelInforme) root.haikuSesion = null;
+            sesionDelInforme = null;
+        };
+        const sesionVerificada = sesion => {
+            if (root.haikuSesion && root.haikuSesion !== sesionDelInforme) throw fallo("obsoleta");
+            sesionDelInforme = sesion;
+            root.haikuSesion = sesion;
+            root.dispatchEvent(new root.CustomEvent("haiku:auth-ready", { detail: sesion }));
+        };
         try {
             control = crearControlador({ cliente: root.haikuSupabase, google, lector, nucleo: root.HAIKU_LIBRO_COMPARACION_READONLY_V1.crearNucleo(), ahora,
+                sesionVerificada, limpiarSesionVerificada,
                 emitir: s => {
                     aviso.textContent = s.mensaje; aviso.dataset.estado = s.fase;
                     boton.disabled = !s.acceso || s.ocupado || !google?.estado().conectado || google.estado().sincronizando;
