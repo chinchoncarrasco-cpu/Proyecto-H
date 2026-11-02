@@ -216,12 +216,13 @@ const modulos = new Set([
             await window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada);
             window.HAIKU_CABANAS_SITES_V1.cerrar();
         });
-        await fila(9).locator('[data-cb-open]').click();
-        assert.equal(await page.locator('#cabinsExpressAvailability').textContent(), 'Solicitado');
         await page.evaluate(() => {
             window.__demoraSolicitudes = new Promise(resolve => { window.__liberarSolicitudes = resolve; });
         });
-        await page.locator('#cabinsReviewMode').selectOption('aseo_express');
+        await fila(9).locator('[data-cb-open]').click();
+        assert.equal(await page.locator('#cabinsExpressAvailability').textContent(), 'Verificando…');
+        // Una solicitud vigente ahora abre Express automáticamente; mantiene
+        // la pantalla completa mientras el mismo puente verifica la lectura.
         await page.waitForFunction(() => window.__lecturaExpressPendiente);
         assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'completa');
         assert.equal(await page.locator('#cabinsReviewMode').isDisabled(), true);

@@ -9,6 +9,14 @@
 
     const ZONA_HORARIA = "America/Santiago";
     const CATEGORIA_SOLICITUD = "aseo_express";
+    const TIPOS_SOLICITUD = Object.freeze({
+        aseo_express: "Solicita Express",
+        reposicion_carbon: "Reposición de Carbón",
+        reposicion_lena: "Reposición de Leña",
+        recambio_toallas: "Recambio de Toallas",
+        recambio_sabanas: "Recambio de Sábanas",
+        recambio_ropa_cama: "Recambio de Ropa Completa de Cama"
+    });
     const CATEGORIA_CHECKLIST = "🧹 ASEO EXPRESS";
     const TIPO_REVISION_EXPRESS = "aseo_express";
 
@@ -392,7 +400,9 @@
             });
     }
 
-    async function guardarSolicitud(fecha, numero, descripcion) {
+    async function guardarSolicitud(fecha, numero, descripcion, categoria = CATEGORIA_SOLICITUD) {
+        if (!Object.hasOwn(TIPOS_SOLICITUD, categoria)) throw new Error("Tipo de solicitud inválido.");
+        descripcion = String(descripcion || "").trim() || TIPOS_SOLICITUD[categoria];
         await cargarReferencias();
         const ref = cabanasPorNumero.get(String(numero));
         const cabana = cabanaCache(fecha, String(numero));
@@ -406,7 +416,7 @@
             fecha_operativa: fecha,
             cabana_id: ref.id,
             reserva_id: reservaId,
-            categoria: CATEGORIA_SOLICITUD,
+            categoria,
             descripcion: descripcion.trim(),
             prioridad: "normal",
             estado: "pendiente",
@@ -419,13 +429,14 @@
         const { data, error } = await cliente()
             .from("solicitudes")
             .upsert(payload, { onConflict: "fecha_operativa,cabana_id,categoria" })
-            .select("id,fecha_operativa,cabana_id,descripcion,estado")
+            .select("id,fecha_operativa,cabana_id,categoria,descripcion,estado")
             .single();
         errorSiExiste(error);
         return data;
     }
 
-    async function cancelarSolicitud(fecha, numero) {
+    async function cancelarSolicitud(fecha, numero, categoria = CATEGORIA_SOLICITUD) {
+        if (!Object.hasOwn(TIPOS_SOLICITUD, categoria)) throw new Error("Tipo de solicitud inválido.");
         await cargarReferencias();
         const ref = cabanasPorNumero.get(String(numero));
         if (!ref) return;
@@ -435,8 +446,23 @@
             .update({ estado: "cancelada" })
             .eq("fecha_operativa", fecha)
             .eq("cabana_id", ref.id)
-            .eq("categoria", CATEGORIA_SOLICITUD);
+            .eq("categoria", categoria);
         errorSiExiste(error);
+    }
+
+    async function guardarSolicitudTipo(fecha, numero, categoria, descripcion = "", cancelar = false) {
+        const usuario = usuarioId();
+        if (!usuario || fecha !== fechaOperativa() || !/^(?:[1-9]|10|11)$/.test(String(numero))) {
+            throw new Error("La fecha o la sesión cambió. Abre nuevamente la solicitud.");
+        }
+        if (!Object.hasOwn(TIPOS_SOLICITUD, categoria)) throw new Error("Tipo de solicitud inválido.");
+        const resultado = await encolar(`solicitud:${fecha}:${numero}:${categoria}`, async () => {
+            if (usuario !== usuarioId() || fecha !== fechaOperativa()) throw new Error("La fecha o la sesión cambió.");
+            return cancelar ? cancelarSolicitud(fecha, numero, categoria) : guardarSolicitud(fecha, numero, descripcion, categoria);
+        });
+        // La relectura queda fuera de la cola: hidratar espera las escrituras.
+        if (usuario === usuarioId() && fecha === fechaOperativa()) await hidratar(fecha);
+        return resultado;
     }
 
     function claveRevision(fecha, numero) {
@@ -657,9 +683,9 @@
                 .eq("fecha", fecha),
             supabase
                 .from("solicitudes")
-                .select("id,fecha_operativa,cabana_id,descripcion,estado")
+                .select("id,fecha_operativa,cabana_id,categoria,descripcion,estado")
                 .eq("fecha_operativa", fecha)
-                .eq("categoria", CATEGORIA_SOLICITUD),
+                .in("categoria", Object.keys(TIPOS_SOLICITUD)),
             supabase
                 .from("revisiones_cabana")
                 .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
@@ -686,9 +712,9 @@
                 .eq("fecha", fecha),
             supabase
                 .from("solicitudes")
-                .select("id,fecha_operativa,cabana_id,descripcion,estado")
+                .select("id,fecha_operativa,cabana_id,categoria,descripcion,estado")
                 .eq("fecha_operativa", fecha)
-                .eq("categoria", CATEGORIA_SOLICITUD),
+                .in("categoria", Object.keys(TIPOS_SOLICITUD)),
             supabase
                 .from("revisiones_cabana")
                 .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
@@ -738,7 +764,8 @@
         const aseos = new Map(remoto.aseos.map(fila => [String(fila.cabana_id), fila]));
         const solicitudes = new Map();
         remoto.solicitudes.forEach(fila => {
-            if (fila.estado !== "cancelada" && !solicitudes.has(String(fila.cabana_id))) {
+            if ((fila.categoria || CATEGORIA_SOLICITUD) === CATEGORIA_SOLICITUD &&
+                fila.estado !== "cancelada" && !solicitudes.has(String(fila.cabana_id))) {
                 solicitudes.set(String(fila.cabana_id), fila);
             }
         });
@@ -755,6 +782,8 @@
         for (const [cabanaId, numero] of cabanaIdANumero) {
             const local = cabanaCache(fecha, numero);
             if (!local) continue;
+            local.solicitudesTipos = remoto.solicitudes.filter(fila => String(fila.cabana_id) === cabanaId && fila.estado !== "cancelada")
+                .map(fila => ({ ...fila, categoria: fila.categoria || CATEGORIA_SOLICITUD }));
 
             const aseo = aseos.get(cabanaId);
             if (aseo || !remoto.aseosLegacyIncompatibles?.includes(numero)) {
@@ -1065,6 +1094,8 @@
         document.addEventListener("click", evento => {
             const guardar = evento.target?.closest?.("#guardar-solicita");
             if (guardar) {
+                // El formulario por tipo espera la respuesta y conserva su borrador.
+                if (document.getElementById("solicita-tipos")) return;
                 const fecha = fechaOperativa();
                 const numero = document.getElementById("solicita-cabana")?.value || "";
                 const descripcion = document.getElementById("solicita-texto")?.value.trim() || "";
@@ -1189,6 +1220,8 @@
         instalarRefrescos();
 
         window.HAIKU_ASEO_OPERACION_V1 = Object.freeze({
+            tiposSolicitud: TIPOS_SOLICITUD,
+            guardarSolicitudTipo,
             hidratar,
             obtenerCicloExpress,
             guardarCampoAseo,
