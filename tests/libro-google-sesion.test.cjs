@@ -286,15 +286,28 @@ test('servidor: logout durante descarga descarta bytes tardíos', async () => {
     } }); await b.idle(); b.root.haikuSesion = null; b.auth('SIGNED_OUT'); wait.resolve(); await b.idle();
     assert.equal(b.loads.length, 0); assert.equal(b.api.estado().conectado, false); assert.equal(b.intervals.size, 0);
 });
-test('servidor: 401 cierra acceso; 503 de red permite reintentar sin OAuth', async () => {
+test('servidor: un fallo deja de anunciar conexión lista y permite reintentar sin OAuth', async () => {
     for (const status of [401, 503]) {
         let failing = false;
         const b = browser({ server: true, serverFetcher: async (init, meta, bytes) => failing
             ? serverError(status, 'GOOGLE_TEMPORARY_ERROR') : { data: init.body.accion === 'metadata' ? meta : new Blob([bytes]), error: null } });
         await b.idle(); failing = true; await b.api.sincronizar();
-        assert.equal(b.api.estado().conectado, status !== 401); assert.equal(b.oauth(), 0);
+        assert.equal(b.api.estado().conectado, false); assert.equal(b.oauth(), 0);
         failing = false; await b.api.conectar(); assert.equal(b.api.estado().conectado, true);
     }
+});
+test('servidor: metadata correcta y descarga 502 no confirman conexión ni cargan el lector', async () => {
+    let failing = true;
+    const b = browser({ server: true, embed: true, serverFetcher: async (init, meta, bytes) =>
+        init.body.accion === 'metadata' ? { data: meta, error: null } : failing
+            ? serverError(502, 'GOOGLE_ACCESS_DENIED') : { data: new Blob([bytes]), error: null } });
+    await b.idle();
+    assert.equal(await b.api.conectar(), false);
+    assert.equal(b.api.estado().conectado, false); assert.equal(b.loads.length, 0); assert.equal(b.oauth(), 0);
+    assert.equal(b.api.estado().error.code, 'LIBRO_ENLACE_NO_DISPONIBLE');
+    failing = false;
+    assert.equal(await b.api.conectar(), true); assert.equal(b.loads.length, 1);
+    assert.equal(b.api.estado().conectado, true); assert.equal(b.api.estado().error, null);
 });
 test('servidor sin configurar conserva conexión Google previa como transición', async () => {
     const first = browser(); await first.api.conectar();

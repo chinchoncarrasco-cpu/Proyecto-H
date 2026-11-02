@@ -33,6 +33,21 @@ function setup(options = {}) {
             return json(options.session ?? { usuario: { activo: true }, permisos: ['reservas.ver', 'pagos.ver', 'servicios.ver'] });
         }
         const u = new URL(url);
+        if (u.origin === 'https://drive.google.com' || u.origin === 'https://drive.usercontent.google.com') {
+            assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'manual');
+            assert.deepEqual(init.headers, {}); assert.equal(init.credentials, 'omit'); assert.equal(init.referrerPolicy, 'no-referrer');
+            assert.equal(u.searchParams.get('id'), id); assert.equal(u.searchParams.get('export'), 'download');
+            assert.equal(u.searchParams.size, 2);
+            if (u.origin === 'https://drive.google.com') {
+                assert.equal(u.pathname, '/uc');
+                return new Response(null, { status: 303, headers: { Location: options.publicRedirect ??
+                    'https://drive.usercontent.google.com/download?id=' + id + '&export=download' } });
+            }
+            assert.equal(u.pathname, '/download');
+            if (options.publicNextRedirect) return new Response(null, { status: 303, headers: { Location: options.publicNextRedirect } });
+            if (options.publicStatus) return json({ error: { message: 'CUERPO_SENSIBLE' } }, options.publicStatus);
+            return new Response(options.bytes ?? fixture, { headers: options.mediaHeaders });
+        }
         assert.equal(u.origin, 'https://www.googleapis.com'); assert.equal(u.pathname, '/drive/v3/files/' + id);
         assert.equal(init.method, 'GET'); assert.equal(init.redirect, 'manual');
         assert.equal(init.headers.Authorization, undefined); assert.equal(init.headers['X-Goog-Api-Key'], apiKey);
@@ -65,7 +80,8 @@ test('descarga bytes XLSX idénticos sólo tras comprobar M0, checksums y M1', a
     const s = setup(); const response = await s.request({ accion: 'descargar', version: '25' });
     assert.equal(response.status, 200); assert.equal(response.headers.get('Content-Type'), 'application/octet-stream');
     assert.deepEqual(Buffer.from(await response.arrayBuffer()), fixture);
-    assert.equal(s.calls.length, 5); assert.equal(s.calls.filter(c => c.url.includes('alt=media')).length, 1);
+    assert.equal(s.calls.length, 6); assert.equal(s.calls.filter(c => c.url.includes('alt=media')).length, 0);
+    assert.equal(s.calls.filter(c => new URL(c.url).origin === 'https://drive.usercontent.google.com').length, 1);
 });
 for (const [name, patch] of [
     ['usuario inactivo', { session: { usuario: { activo: false }, permisos: ['reservas.ver', 'pagos.ver', 'servicios.ver'] } }],
@@ -134,3 +150,80 @@ test('credenciales ambiguas o inyectadas se rechazan antes de red', () => {
         { tokenProvider: { getAccessToken() {}, invalidate() {} } }, { resourceKey: 'a,b/c' }])
         assert.throws(() => sourceModule.createLibroDriveSource({ ...base, ...patch }), { code: 'CONFIG_INVALIDA' });
 });
+
+for (const target of [
+    'https://otro.invalid/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+    'https://drive.usercontent.google.com.evil.invalid/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+    'http://drive.usercontent.google.com/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+    'https://usuario:secreto@drive.usercontent.google.com/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+    'https://drive.usercontent.google.com/download?id=otro&export=download',
+    'https://drive.usercontent.google.com/otro?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+    'https://drive.usercontent.google.com/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&id=otro&export=download',
+    'https://drive.usercontent.google.com/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download&key=secret',
+    'https://drive.usercontent.google.com/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download#fragmento',
+    '/download?id=1ZX4KqcdY6LORafrI6NkqwT3hGxrdK2rk&export=download',
+]) test('redirección pública rechazada antes de enviar segunda solicitud: ' + target, async () => {
+    const s = setup({ publicRedirect: target }); const r = await s.request({ accion: 'descargar', version: '25' });
+    assert.equal(r.status, 502); assert.equal((await r.json()).code, 'FUENTE_INVALIDA');
+    assert.equal(s.calls.length, 4); assert.equal(s.calls.some(c => new URL(c.url).origin === 'https://drive.usercontent.google.com'), false);
+});
+test('una segunda redirección no se sigue y no se pide OAuth', async () => {
+    const s = setup({ publicNextRedirect: 'https://accounts.google.com/login' });
+    const r = await s.request({ accion: 'descargar', version: '25' });
+    assert.equal(r.status, 502); assert.equal((await r.json()).code, 'FUENTE_INVALIDA'); assert.equal(s.calls.length, 5);
+});
+for (const publicStatus of [401, 403, 404, 429, 503]) test('error de descarga pública ' + publicStatus + ' queda sanitizado y sin fallback', async () => {
+    const s = setup({ publicStatus }); const r = await s.request({ accion: 'descargar', version: '25' }); const text = await r.text();
+    assert.equal(r.status, publicStatus === 429 ? 429 : 502); assert.doesNotMatch(text, /CUERPO_SENSIBLE|FICTICIA|recurso-ficticio/);
+    assert.equal(s.calls.length, 5); assert.equal(s.calls.some(c => c.url.includes('alt=media')), false);
+});
+for (const mediaHeaders of [{ 'Content-Length': '-1' }, { 'Content-Length': String(9 * 1024 * 1024) }, { 'Content-Length': String(fixture.length - 1) }])
+    test('longitud pública inválida o excesiva se rechaza sin entregar bytes: ' + JSON.stringify(mediaHeaders), async () => {
+        const s = setup({ mediaHeaders }); const r = await s.request({ accion: 'descargar', version: '25' });
+        assert.equal(r.status, 502); assert.match((await r.json()).code, /^FUENTE_/); assert.equal(s.calls.length, 5);
+    });
+test('revocación de descarga en M1 impide entregar bytes', async () => {
+    const s = setup({ nextMetadata: { capabilities: { canDownload: false } } });
+    const r = await s.request({ accion: 'descargar', version: '25' });
+    assert.equal(r.status, 409); assert.equal((await r.json()).code, 'FUENTE_CAMBIADA');
+});
+test('modo público no se puede activar con credencial OAuth', () => {
+    assert.throws(() => sourceModule.createLibroDriveSource({ fileId: handlerModule.LIBRO_FILE_ID,
+        tokenProvider: { getAccessToken() {}, invalidate() {} }, publicLinkDownload: true }), { code: 'CONFIG_INVALIDA' });
+});
+test('modo fuente predeterminado conserva alt=media para OAuth y API key internos', async () => {
+    const tokenProvider = { getAccessToken: async () => 'token-ficticio', invalidate: () => assert.fail('OAuth inesperado') };
+    for (const credential of [{ apiKey }, { tokenProvider }]) {
+        const id = handlerModule.LIBRO_FILE_ID, calls = [];
+        const m = setup().metadata;
+        const source = sourceModule.createLibroDriveSource({ fileId: id, ...credential, fetch: async (url, init) => {
+            calls.push(url); assert.equal(new URL(url).origin, 'https://www.googleapis.com');
+            assert.equal(init.headers.Authorization, credential.tokenProvider ? 'Bearer token-ficticio' : undefined);
+            return new URL(url).searchParams.has('alt') ? new Response(fixture) : json(m);
+        } });
+        assert.equal((await source.obtain()).bytes.length, fixture.length);
+        assert.equal(calls.length, 3); assert.equal(calls.filter(url => url.includes('alt=media')).length, 1);
+    }
+});
+test('stream público mayor al máximo se cancela, aunque el encabezado omita tamaño', async () => {
+    const common = await import('../supabase/functions/_shared/googleDriveReadonlyCommon.ts');
+    let cancelled = false;
+    const t = common.createGoogleTransport({ fetch: async (_url, init) => {
+        assert.equal(init.credentials, 'omit');
+        return new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array(100)); }, cancel() { cancelled = true; } }));
+    } });
+    await assert.rejects(() => t.downloadPublicDriveFile(handlerModule.LIBRO_FILE_ID, 1000, t.operation(),
+        (response, signal) => common.readBounded(response, 32, signal, 'FUENTE_DEMASIADO_GRANDE')), { code: 'FUENTE_DEMASIADO_GRANDE' });
+    assert.equal(cancelled, true);
+});
+test('timeout público aborta fetch y no espera a un cuerpo bloqueado', async () => {
+    const common = await import('../supabase/functions/_shared/googleDriveReadonlyCommon.ts');
+    let aborted = false;
+    const t = common.createGoogleTransport({ fetch: async (_url, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => { aborted = true; reject(Error('SENSIBLE')); });
+    }) });
+    await assert.rejects(() => t.downloadPublicDriveFile(handlerModule.LIBRO_FILE_ID, 15, t.operation(), () => assert.fail('consumo inesperado')),
+        { code: 'GOOGLE_TIMEOUT' });
+    assert.equal(aborted, true);
+});
+

@@ -29,6 +29,7 @@ export type LibroDriveSourceOptions = NetworkOptions & {
   tokenProvider?: GoogleTokenProvider;
   apiKey?: string;
   resourceKey?: string;
+  publicLinkDownload?: boolean;
   crypto?: Crypto;
   maxBytes?: number;
   metadataTimeoutMs?: number;
@@ -48,6 +49,9 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
       typeof tokenProvider?.getAccessToken !== "function" || typeof tokenProvider?.invalidate !== "function")
     throw new LibroDriveError("CONFIG_INVALIDA");
   if (resourceKey !== undefined && (typeof resourceKey !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(resourceKey))) throw new LibroDriveError("CONFIG_INVALIDA");
+  if (options.publicLinkDownload !== undefined && (typeof options.publicLinkDownload !== "boolean" || options.publicLinkDownload && !apiKey))
+    throw new LibroDriveError("CONFIG_INVALIDA");
+  const publicLinkDownload = options.publicLinkDownload === true;
   const crypto = options.crypto ?? globalThis.crypto;
   if (!crypto?.subtle?.digest) throw new LibroDriveError("CONFIG_INVALIDA");
   const transport = createGoogleTransport(options);
@@ -143,7 +147,7 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
     const op = transport.operation();
     const initial = await metadata(op);
     validateInitial(initial.stamp);
-    const bytes = await drive(mediaUrl, downloadTimeout, op, async (response, signal) => {
+    const consume = async (response: Response, signal: AbortSignal) => {
       const length = response.headers.get("Content-Length");
       const encoding = response.headers.get("Content-Encoding");
       // Fetch may decompress transport encoding; Content-Length then measures another representation.
@@ -156,7 +160,10 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
       const data = await readBounded(response, maxBytes, signal, "FUENTE_DEMASIADO_GRANDE");
       if (!data.byteLength || data.byteLength !== initial.stamp.size) throw new LibroDriveError("FUENTE_INVALIDA");
       return data;
-    });
+    };
+    // Anonymous link mode uses the original public binary; OAuth callers retain Drive media.
+    const bytes = publicLinkDownload ? await transport.downloadPublicDriveFile(fileId, downloadTimeout, op, consume) :
+      await drive(mediaUrl, downloadTimeout, op, consume);
     let sha256: string;
     try {
       const hash = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
