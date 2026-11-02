@@ -71,6 +71,7 @@ export function createHandler(config: Config) {
       if (!driveApiKey) return json(503, { code: "CONFIGURACION_PENDIENTE" });
 
       const source = createLibroDriveSource({ fileId: LIBRO_FILE_ID, apiKey: driveApiKey, resourceKey,
+        publicLinkDownload: true,
         budgetMs: 35_000, fetch: (url, init) => fetcher(url, {
           ...init, signal: AbortSignal.any([abort.signal, init.signal!]),
         }) });

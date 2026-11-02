@@ -131,7 +131,38 @@ export function createGoogleTransport(options: NetworkOptions = {}) {
     return true;
   }
   const wait = <T>(op: Operation, promise: Promise<T>) => timed(op, remaining(op), () => promise);
-  return Object.freeze({ time, operation, remaining, request, retry, wait });
+  async function downloadPublicDriveFile<T>(fileId: string, timeoutMs: number, op: Operation,
+      consume: (response: Response, signal: AbortSignal) => Promise<T>): Promise<T> {
+    if (typeof fileId !== "string" || !/^[A-Za-z0-9_-]{1,200}$/.test(fileId)) throw new LibroDriveError("CONFIG_INVALIDA");
+    // This is the original binary download, not a Docs export or an OAuth fallback.
+    // No caller URL, headers, API key, resource key, cookies or token enters this path.
+    const initial = `https://drive.google.com/uc?${new URLSearchParams({ export: "download", id: fileId })}`;
+    return timed(op, timeoutMs, async signal => {
+      const get = (url: string) => fetcher(url, { method: "GET", headers: {}, redirect: "manual",
+        cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", signal });
+      let response = await get(initial);
+      if (response.status === 303) {
+        const location = response.headers.get("Location");
+        await discard(response);
+        let target: URL;
+        try { target = new URL(location || ""); } catch { throw new LibroDriveError("FUENTE_INVALIDA"); }
+        const params = target.searchParams;
+        if (target.origin !== "https://drive.usercontent.google.com" || target.pathname !== "/download" ||
+            target.username || target.password || target.hash || params.size !== 2 ||
+            params.getAll("id").length !== 1 || params.get("id") !== fileId ||
+            params.getAll("export").length !== 1 || params.get("export") !== "download")
+          throw new LibroDriveError("FUENTE_INVALIDA");
+        response = await get(target.href);
+      }
+      // Only one observed Google redirect is permitted. No redirect can forward credentials.
+      if (response.status >= 300 && response.status < 400) {
+        await discard(response); throw new LibroDriveError("FUENTE_INVALIDA");
+      }
+      if (response.status !== 200) throw await httpError(response, false, time(), signal);
+      return consume(response, signal);
+    });
+  }
+  return Object.freeze({ time, operation, remaining, request, retry, wait, downloadPublicDriveFile });
 }
 
 export async function discard(response: Response): Promise<void> {

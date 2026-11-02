@@ -97,7 +97,7 @@
         const d = root.document, html = d.documentElement;
         html.dataset.hakuMobileAssistant = '1';
         let gate, status, logout, retry, bookStatus, nativeAuth = null, reloadPendiente = false;
-        let mesPendiente = null, peticionMes = 0;
+        let mesPendiente = null, peticionMes = 0, contextoActual = null, despachandoMes = false;
         function limpiarHistorial() {
             try { root.sessionStorage.removeItem(`haiku_asistente_historial_v1::${root.location.pathname}`); } catch (_) {}
         }
@@ -142,7 +142,7 @@
             if (panel) panel.inert = state !== 'ready';
             if (gate) { gate.hidden = state === 'ready'; status.textContent = mensaje;
                 logout.hidden = state !== 'mismatch'; retry.hidden = state !== 'error'; }
-            if (state !== 'ready') mesPendiente = null;
+            if (state !== 'ready') { mesPendiente = null; informarLibro(''); }
             // El gate y el login ya ocultan el panel; no esperar al PIN del panel
             // para poder cambiar una sesión equivocada. El bloqueo canónico sigue vivo.
             if (gate && state !== 'ready') html.classList.remove('haiku-privacidad-arranque');
@@ -163,23 +163,61 @@
             }, publicar: payload => {
                 try { root.ReactNativeWebView?.postMessage(JSON.stringify(payload)); } catch (_) {}
             } });
-        function informarLibro(texto) {
+        function informarLibro(texto, reintentar) {
             const conversacion = d.querySelector('.haiku-asistente-conversacion');
             if (!conversacion) return;
             if (!bookStatus) { bookStatus = d.createElement('p'); bookStatus.id = 'haku-mobile-assistant-book-status';
                 bookStatus.setAttribute('role', 'status'); conversacion.prepend(bookStatus); }
             bookStatus.textContent = texto; bookStatus.hidden = !texto;
+            if (reintentar) {
+                const boton = d.createElement('button'); boton.type = 'button'; boton.textContent = 'Reintentar';
+                boton.addEventListener('click', reintentar);
+                bookStatus.append(' ', boton);
+            }
+        }
+        function falloLibro(peticion) {
+            if (mesPendiente !== peticion) return;
+            mesPendiente = null;
+            // La descarga fallida no es una comparación vacía ni una orden de subir otro archivo.
+            // No mostrar errores brutos del servidor ni información de la cuenta de Google.
+            const code = root.HAIKU_LIBRO_GOOGLE_V1?.estado?.().error?.code;
+            const motivo = code === 'HAKU_NO_AUTORIZADO' ? 'Comprueba tu sesión de Haku.'
+                : code === 'LIBRO_ENLACE_NO_DISPONIBLE' ? 'El Libro compartido no está disponible.'
+                : 'Comprueba tu conexión.';
+            informarLibro(`No pudimos preparar el Libro para compararlo. ${motivo}`, () => {
+                if (peticion.texto !== undefined) encolarTexto(peticion.texto, peticion.contexto);
+                else focusMonth(peticion.action, peticion.contexto);
+            });
         }
         function focusMonth(action, context) {
             if (!Object.hasOwn(ACCIONES, action) || !control.coincide(context) || !control.permitido() || reloadPendiente) return false;
-            mesPendiente = { id: ++peticionMes, inicio: Date.now(), conectando: false, accion: ACCIONES[action] };
-            informarLibro('Preparando la comparación del Libro con Proyecto H…'); revisarMes(); return true;
+            mesPendiente = { id: ++peticionMes, inicio: Date.now(), conectando: false,
+                action, accion: ACCIONES[action], contexto: { ...context } };
+            informarLibro('Preparando la comparación del Libro con Proyecto H…'); revisarLuego(mesPendiente); return true;
+        }
+        function encolarTexto(texto, context) {
+            const campo = d.getElementById('haiku-asistente-texto');
+            if (!control.coincide(context) || !control.permitido() || reloadPendiente || campo?.value !== texto) return false;
+            if (mesPendiente?.texto === texto && control.coincide(mesPendiente.contexto)) return true;
+            // El texto permanece en el compositor. Editarlo cancela el envío
+            // pendiente; nunca sustituir una consulta nueva por otra anterior.
+            mesPendiente = { id: ++peticionMes, inicio: Date.now(), conectando: false,
+                texto, contexto: { ...context } };
+            informarLibro('Preparando el Libro para tu consulta…'); revisarLuego(mesPendiente); return true;
+        }
+        function revisarLuego(peticion) {
+            // HTML ignora click() sobre un botón cuyo click aún está en curso.
+            // Salir de ese evento antes de volver a usar el envío canónico.
+            root.setTimeout(() => { if (mesPendiente === peticion) revisarMes(); }, 0);
         }
         function revisarMes() {
             const peticion = mesPendiente;
             if (!peticion || !control.permitido()) return;
-            if (Date.now() - peticion.inicio > 90_000) { mesPendiente = null;
-                informarLibro('No pudimos preparar el Libro. Comprueba tu conexión y vuelve a pulsar Comparar Libro.'); return; }
+            if (!control.coincide(peticion.contexto) || peticion.texto !== undefined &&
+                d.getElementById('haiku-asistente-texto')?.value !== peticion.texto) {
+                mesPendiente = null; informarLibro(''); return;
+            }
+            if (Date.now() - peticion.inicio > 90_000) { falloLibro(peticion); return; }
             const google = root.HAIKU_LIBRO_GOOGLE_V1, libro = root.HAIKU_LIBRO_RESERVA_V1;
             if (!google?.estado || !libro?.estado) return;
             if (!google.estado().conectado) {
@@ -187,21 +225,22 @@
                     peticion.conectando = true;
                     Promise.resolve(google.conectar()).then(() => {
                         if (mesPendiente !== peticion) return;
-                        if (!google.estado().conectado) { mesPendiente = null;
-                            informarLibro('No pudimos conectar con el Libro compartido. Comprueba tu conexión e inténtalo nuevamente.'); }
+                        if (!google.estado().conectado || !libro.estado().cargado) falloLibro(peticion);
                         else revisarMes();
-                    }, () => { if (mesPendiente === peticion) { mesPendiente = null;
-                        informarLibro('No pudimos conectar con el Libro compartido. Vuelve a intentarlo.'); } });
+                    }, () => falloLibro(peticion));
                 }
                 return;
             }
             if (google.estado().sincronizando || !libro.estado().cargado || root.HAIKU_ASISTENTE.procesando?.()) return;
             const privacidad = root.HAIKU_PRIVACIDAD?.estado?.();
             if (!privacidad || !privacidad.armado || privacidad.modo !== 'oculto') return;
-            if (!root.HAIKU_LIBRO_CONSULTAS || peticion.accion.startsWith('servicios') && !root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2) return;
-            const boton = d.querySelector(`[data-haiku-accion-rapida="${peticion.accion}"]`);
-            if (!boton) return;
-            mesPendiente = null; informarLibro(''); boton.click();
+            if (!root.HAIKU_LIBRO_CONSULTAS || (peticion.texto !== undefined || peticion.accion.startsWith('servicios')) &&
+                !root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2) return;
+            const boton = peticion.texto !== undefined ? d.getElementById('haiku-asistente-enviar')
+                : d.querySelector(`[data-haiku-accion-rapida="${peticion.accion}"]`);
+            if (!boton || boton.disabled) return;
+            mesPendiente = null; informarLibro(''); despachandoMes = true;
+            try { boton.click(); } finally { despachandoMes = false; }
         }
         function registrarSesion() {
             const auth = root.haikuSupabase?.auth;
@@ -217,6 +256,26 @@
         function proteger(event) {
             if (control.permitido()) {
                 if (event.type === 'click' && event.target?.closest?.('#haiku-asistente-cerrar')) control.cerrar();
+                const boton = event.type === 'click' && event.target?.closest?.('[data-haiku-accion-rapida]');
+                const accion = boton?.getAttribute?.('data-haiku-accion-rapida');
+                const mensual = Object.keys(ACCIONES).find(key => ACCIONES[key] === accion);
+                if (mensual && !despachandoMes) {
+                    event.preventDefault(); event.stopImmediatePropagation();
+                    focusMonth(mensual, contextoActual);
+                    return;
+                }
+                const campo = d.getElementById('haiku-asistente-texto');
+                const texto = campo?.value || '';
+                // Mismo reconocimiento amplio que el lector canónico. El
+                // intérprete real conserva fechas, titulares y texto original.
+                const servicios = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.esConsultaServicios?.(texto);
+                const enviando = event.type === 'click' ? event.target?.closest?.('#haiku-asistente-enviar')
+                    : event.target === campo && event.key === 'Enter' && ((event.ctrlKey || event.metaKey) || servicios && !event.shiftKey);
+                if (enviando && !despachandoMes && /\blibro\b/i.test(texto) &&
+                    !d.querySelector('#haiku-asistente-adjuntos .haiku-asistente-adjunto')) {
+                    event.preventDefault(); event.stopImmediatePropagation();
+                    encolarTexto(texto, contextoActual);
+                }
                 return;
             }
             if (event.target?.closest?.('.haiku-auth-overlay, .haiku-privacidad-overlay, #haku-mobile-assistant-gate')) return;
@@ -231,7 +290,11 @@
             construirGate(); registrarSesion(); void control.revisar(); revisarMes();
         }, 250);
         root.addEventListener('pagehide', () => { root.clearInterval(timer); mesPendiente = null; }, { once: true });
-        const api = Object.freeze({ version: 1, serverOnly: true, bind: control.bind, focusMonth });
+        const api = Object.freeze({ version: 1, serverOnly: true, bind: value => {
+            const aceptado = control.bind(value);
+            if (aceptado) contextoActual = { owner: value.owner, nonce: value.nonce };
+            return aceptado;
+        }, focusMonth });
         root.HAKU_MOBILE_ASSISTANT_V1 = api;
         return api;
     }
