@@ -5,6 +5,7 @@ on:
     paths:
       - "js/sites-cabanas-v1.js"
       - "js/supabase-aseo-revision-v1.js"
+      - "js/supabase-aseo-operacion-v1.js"
       - "js/supabase-insumos-aseo-v1.js"
       - "css/sites-cabanas-v1.css"
       - "index.html"
@@ -13,6 +14,7 @@ on:
       - "tests/revision-completa-estados.test.cjs"
       - "tests/aseo-derivado-panel-browser-check.cjs"
       - "tests/cabanas-seguimiento-browser-check.cjs"
+      - "tests/solicitudes-tipos-browser-check.cjs"
       - ".github/workflows/cabanas-revision.yml"
 
 permissions:
@@ -43,3 +45,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/cabanas-seguimiento-browser-check.cjs
+      - name: Solicitudes por tipo y revisión Express automática
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/solicitudes-tipos-browser-check.cjs

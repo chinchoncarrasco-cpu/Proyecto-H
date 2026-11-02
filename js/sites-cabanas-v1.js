@@ -24,6 +24,10 @@
     let revisionPendiente = null;
     let aperturaExpress = null;
     let restaurando = false;
+    let solicitudEditada = null;
+    let contextoSolicitud = null;
+    let solicitudGuardando = false;
+    const expressAutomaticos = new Set();
     const $ = selector => raiz.querySelector(selector);
     const escapar = valor => String(valor ?? "").replace(/[&<>"']/g, caracter => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -153,12 +157,105 @@
         const expresa = String(dato?.solicitudAseoExpress || "").trim();
         return { expresas: expresa ? [expresa] : [], operativas };
     }
-    function solicitudesHTML(fecha, numero, dato, eliminar = true) {
+    function solicitudesHTML(fecha, numero, dato, eliminar = true, detalle = false) {
+        if (Array.isArray(dato?.solicitudesTipos)) return solicitudesTiposHTML(numero, dato.solicitudesTipos, eliminar, detalle);
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const etiquetas = solicitudes.expresas.map(texto => `<span>${escapar(texto)}${eliminar
             ? ` <button type="button" data-eliminar-solicita="${numero}" aria-label="Eliminar solicitud de cabaña ${numero}">×</button>` : ""}</span>`);
         etiquetas.push(...solicitudes.operativas.map(texto => `<span>${escapar(texto)}</span>`));
         return etiquetas.length ? `<div class="cb-requests">${etiquetas.join("")}</div>` : "";
+    }
+    function tiposSolicitud() { return window.HAIKU_ASEO_OPERACION_V1?.tiposSolicitud || {}; }
+    function solicitudesTiposHTML(numero, solicitudes, eliminar, enFicha) {
+        const tipos = tiposSolicitud();
+        return solicitudes.filter(solicitud => solicitud.estado !== "cancelada" && tipos[solicitud.categoria]).map(solicitud => {
+            const titulo = tipos[solicitud.categoria], detalle = solicitud.descripcion === titulo ? "" : solicitud.descripcion;
+            const atributos = `data-cb-request-category="${escapar(solicitud.categoria)}"`;
+            if (!enFicha) return `<span class="cb-typed-request-chip" title="${escapar(detalle || titulo)}">${escapar(titulo)}</span>`;
+            return `<div class="cb-typed-request"><div><strong>${escapar(titulo)}</strong>${detalle ? `<small>${escapar(detalle)}</small>` : ""}</div><span class="cb-badge pending">${solicitud.estado === "completada" ? "Completada" : solicitud.estado === "en_proceso" ? "En curso" : "Pendiente"}</span>${eliminar ? `<button type="button" data-cb-request-edit="${numero}" ${atributos} aria-label="Editar ${escapar(titulo)}">Editar</button><button type="button" data-cb-request-cancel="${numero}" ${atributos} aria-label="Cancelar ${escapar(titulo)}">×</button>` : ""}</div>`;
+        }).join("");
+    }
+    function abrirSolicitud(numero = "", solicitud = null) {
+        solicitudEditada = solicitud;
+        contextoSolicitud = { fecha: fechaActual(), usuario: usuarioActual() };
+        const panel = $("#panel-agregar-solicita");
+        const select = $("#solicita-cabana");
+        if (!panel || !select) return;
+        select.value = numeroValido(numero) ? String(numero) : "1";
+        select.disabled = Boolean(solicitud);
+        $("#cabinsRequestTitle").textContent = solicitud ? "Editar solicitud" : "Agregar solicitud";
+        const tipos = tiposSolicitud();
+        $("#solicita-texto").value = solicitud && solicitud.descripcion !== tipos[solicitud.categoria] ? solicitud.descripcion : "";
+        for (const radio of panel.querySelectorAll('[name="solicita-tipo"]')) {
+            radio.checked = radio.value === (solicitud?.categoria || "aseo_express");
+            radio.disabled = Boolean(solicitud);
+        }
+        $("#solicita-error").textContent = "";
+        panel.classList.add("activo");
+    }
+    async function guardarSolicitudDesdeFormulario() {
+        if (solicitudGuardando) return;
+        const api = window.HAIKU_ASEO_OPERACION_V1;
+        const numero = $("#solicita-cabana").value;
+        const categoria = $("#solicita-tipos").querySelector('input:checked')?.value;
+        const descripcion = $("#solicita-texto").value.trim();
+        const error = $("#solicita-error");
+        if (!contextoSolicitud || contextoSolicitud.fecha !== fechaActual() || contextoSolicitud.usuario !== usuarioActual()) {
+            error.textContent = "La fecha o la sesión cambió. Abre nuevamente la solicitud."; return;
+        }
+        if (!api?.guardarSolicitudTipo || !tiposSolicitud()[categoria]) {
+            error.textContent = "Espera a que termine de cargar la operación e intenta nuevamente."; return;
+        }
+        solicitudGuardando = true; error.textContent = "";
+        const panel = $("#panel-agregar-solicita");
+        panel.setAttribute("aria-busy", "true");
+        for (const boton of panel.querySelectorAll("button")) boton.disabled = true;
+        for (const control of panel.querySelectorAll('input, select')) control.disabled = true;
+        $("#solicita-texto").readOnly = true;
+        try {
+            await api.guardarSolicitudTipo(contextoSolicitud.fecha, numero, categoria, descripcion);
+            panel.classList.remove("activo");
+            pintar();
+            if (categoria === "aseo_express" && estado.numero === String(numero)) await cambiarModo("aseo_express");
+        } catch (causa) {
+            error.textContent = causa.message || "No fue posible guardar. El detalle se conserva para reintentar.";
+        } finally {
+            solicitudGuardando = false;
+            panel.setAttribute("aria-busy", "false");
+            for (const boton of panel.querySelectorAll("button")) boton.disabled = false;
+            for (const control of panel.querySelectorAll('input, select')) control.disabled = Boolean(solicitudEditada);
+            $("#solicita-texto").readOnly = false;
+        }
+    }
+    async function cancelarSolicitudTipo(numero, categoria) {
+        if (!tiposSolicitud()[categoria] || !window.confirm(`¿Cancelar ${tiposSolicitud()[categoria]} de Cabaña ${numero}?`)) return;
+        try {
+            await window.HAIKU_ASEO_OPERACION_V1.guardarSolicitudTipo(fechaActual(), numero, categoria, "", true);
+            pintar();
+        } catch (error) { window.alert(error.message || "No fue posible cancelar la solicitud."); }
+    }
+    function seleccionarExpressAutomatico() {
+        if (!estado.numero || aperturaExpress || revisionPendiente || restaurando) return;
+        const ciclo = cicloExpress(cabana(fechaActual(), estado.numero), fechaActual(), estado.numero);
+        if (!ciclo?.verificado || ciclo.fecha !== fechaActual()) return;
+        const prefijo = `${usuarioActual()}:${ciclo.fecha}:${estado.numero}:`;
+        if (!ciclo.existe) {
+            for (const clave of expressAutomaticos) if (clave.startsWith(prefijo)) expressAutomaticos.delete(clave);
+            return;
+        }
+        const clave = `${usuarioActual()}:${ciclo.fecha}:${estado.numero}:${ciclo.solicitudId}`;
+        if (expressAutomaticos.has(clave)) return;
+        expressAutomaticos.add(clave);
+        const numero = estado.numero, fecha = fechaActual(), usuario = usuarioActual();
+        // El evento se emite dentro de hidratar. Esperar su cierre permite que
+        // el puente haga una lectura nueva, sin reutilizar la misma verificación.
+        setTimeout(() => {
+            if (estado.numero !== numero || fechaActual() !== fecha || usuarioActual() !== usuario) return;
+            if (estado.modo === "aseo_express" || aperturaExpress) return;
+            Promise.resolve(cambiarModo("aseo_express")).then(abierto => {
+                if (abierto === false) expressAutomaticos.delete(clave);
+            }).catch(() => expressAutomaticos.delete(clave));
+        }, 0);
     }
     function grupoCabana(dato, fecha) {
         if (dato?.aseoIn && !dato.aseoOut) return "en_curso";
@@ -480,7 +577,7 @@
         }
         $("#cabinsDetailAseo").innerHTML = aseoHTML(dato, numero);
         $("#cabinsDetailOut").disabled = !dato.aseoIn && !dato.aseoOut;
-        $("#cabinsDetailRequests").innerHTML = solicitudesHTML(fecha, numero, dato) || "<p>Sin solicitudes registradas.</p>";
+        $("#cabinsDetailRequests").innerHTML = solicitudesHTML(fecha, numero, dato, true, true) || "<p>Sin solicitudes registradas.</p>";
         $("#cabinsAseoProgress").textContent = etiqueta(aseo);
         $("#cabinsRevisionProgress").textContent = REVISIONES[revision(dato, fecha)];
         $("#cabinsFinalProgress").textContent = FINALES[final];
@@ -601,6 +698,10 @@
     }
     function abrir(numero, origen = estado.tab, modo = "completa", opciones = {}) {
         if (!numeroValido(numero)) return;
+        if (!opciones.restaurando) {
+            const prefijo = `${usuarioActual()}:${fechaActual()}:${numero}:`;
+            for (const clave of expressAutomaticos) if (clave.startsWith(prefijo)) expressAutomaticos.delete(clave);
+        }
         aperturaExpress = null;
         if (modo === "aseo_express" && !expressReal(cabana(fechaActual(), numero), fechaActual(), numero)) modo = "completa";
         estado.numero = String(numero);
@@ -620,6 +721,7 @@
         decorarChecklist();
         pintarDetalle(); aplicarVista();
         guardarContexto();
+        seleccionarExpressAutomatico();
         if (!opciones.restaurando) raiz.scrollIntoView({ block: "start" });
     }
     function cerrar() {
@@ -704,7 +806,7 @@
             decorarChecklist(); pintarDetalle(); aplicarVista(); guardarContexto();
             return;
         }
-        if (aperturaExpress) return aperturaExpress.promesa;
+        if (aperturaExpress) { aplicarVista(); return aperturaExpress.promesa; }
         const fecha = fechaActual();
         if (!expressReal(cabana(fecha, numero), fecha, numero) ||
             typeof window.abrirRevisionAseoExpress !== "function") {
@@ -863,7 +965,15 @@
             }
             return;
         }
-        if (boton.id === "cabinsDetailAddRequest") { $("#agregar-solicita").click(); $("#solicita-cabana").value = estado.numero; return; }
+        if (boton.id === "cabinsDetailAddRequest") { abrirSolicitud(estado.numero); return; }
+        if (boton.id === "agregar-solicita") { abrirSolicitud(); return; }
+        if (boton.dataset.cbRequestEdit) {
+            const numero = boton.dataset.cbRequestEdit;
+            const solicitud = cabana(fechaActual(), numero).solicitudesTipos?.find(item => item.categoria === boton.dataset.cbRequestCategory);
+            if (solicitud) abrirSolicitud(numero, solicitud);
+            return;
+        }
+        if (boton.dataset.cbRequestCancel) { cancelarSolicitudTipo(boton.dataset.cbRequestCancel, boton.dataset.cbRequestCategory); return; }
         if (boton.dataset.eliminarSolicita) {
             const dato = cabana(fechaActual(), boton.dataset.eliminarSolicita);
             dato.solicitudAseoExpress = "";
@@ -878,6 +988,11 @@
             boton.lastElementChild.textContent = cuerpo.hidden ? "+" : "−";
         }
     });
+    $("#panel-agregar-solicita")?.addEventListener("click", evento => {
+        if (!evento.target.closest?.("#guardar-solicita")) return;
+        evento.preventDefault(); evento.stopImmediatePropagation();
+        void guardarSolicitudDesdeFormulario();
+    }, true);
     raiz.addEventListener("input", evento => {
         if (evento.target.matches("[data-saco-editar-peso]") && edicionSaco) edicionSaco.peso = evento.target.value;
         if (evento.target.matches("[data-saco-editar-peso], [data-saco-peso]")) evento.target.setCustomValidity("");
@@ -920,6 +1035,7 @@
         if (evento.detail?.fecha !== fechaActual()) return;
         if (revisionPendiente && confirmarRevisionRestaurada()) return;
         pintar(evento.detail.fecha);
+        seleccionarExpressAutomatico();
         if (estado.numero) guardarContexto();
     });
     document.addEventListener("haiku:insumos-actualizados", evento => {
