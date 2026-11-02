@@ -171,7 +171,8 @@ test('permisos rechazados en informe no publican identidad ni llaman al servidor
 test('renovar Auth del mismo usuario conserva el enlace servidor y revalida el contexto', async t => {
     const x = page(); t.after(() => x.destroy()); await x.idle();
     const previous = x.root.haikuSesion;
-    x.auth('TOKEN_REFRESHED', 'usuario-ficticio-a'); await x.idle();
+    x.auth('TOKEN_REFRESHED', 'usuario-ficticio-a');
+    await new Promise(resolve => setTimeout(resolve, 0)); await x.idle();
     assert.equal(x.root.haikuSesion.auth.id, 'usuario-ficticio-a');
     assert.notEqual(x.root.haikuSesion, previous);
     assert.equal(x.root.HAIKU_LIBRO_GOOGLE_V1.estado().conexion, 'servidor-enlace');
