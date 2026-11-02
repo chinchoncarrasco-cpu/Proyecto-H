@@ -78,7 +78,7 @@ test('generación nueva descarta B silenciosamente y procesa C sin paralelo',asy
     resolveB(res());await Promise.all([b,siguiente]);assert.equal(calls,2);assert.equal(mensajes.filter(x=>!x.pendiente).length,1);assert.match(mensajes.at(-1).texto,/Persona Prueba/);
 });
 test('sin cambios, nuevas, modificadas y contadores son resúmenes seguros',()=>{
-    assert.match(A.resumir(res({estado:'sin_cambios'})).texto,/No encontré cambios en las reservas/);
+    assert.match(A.resumir(res({estado:'sin_cambios'})).texto,/no cambiaron respecto de la copia anterior/);
     assert.match(A.resumir(res({nuevas:[{actual:row}]})).texto,/Persona Prueba · CAB 8 · Entrada: 11-09-2026 · Salida: 13-09-2026/);
     assert.match(A.resumir(res({modificadas:[{actual:row,cambios:[{campo:'fecha_checkout',antes:'2026-09-12',ahora:'2026-09-13'}]}]})).texto,/Salida: antes 12-09-2026, ahora 13-09-2026/);
     assert.match(A.resumir(res({nuevas:[{},{}],modificadas:[{},{}],ya_no_aparecen:[{}]})).texto,/5 cambios.*2 reservas agregadas · 2 con cambios · 1 ya no aparece/);
@@ -137,13 +137,13 @@ test('auto y consulta manual comparten la instancia real de caché; Ver informe 
 });
 test('aviso queda en Haku y sus acciones antiguas se desactivan al cambiar Libro',async()=>{
     const h=interfaz(async()=>res());h.emitir('haiku:libro-version-cargada',evento(2));await tick();
-    const mensaje=h.ids['haiku-asistente-mensajes'].children[0];assert.match(mensaje.textContent,/Libro actualizado/);
+    const mensaje=h.ids['haiku-asistente-mensajes'].children[0];assert.match(mensaje.textContent,/Las reservas no cambiaron respecto de la copia anterior del Libro/);
     const boton=mensaje.children[0];h.cambiar();assert.equal(boton.disabled,true);assert.equal(h.document.body.children.length,0);
 });
 test('error obsoleto no se notifica; error vigente es breve y permite una carga posterior',async()=>{
     let rechazar,calls=0;const h=interfaz(()=>{calls++;return calls===1?new Promise((_,r)=>rechazar=r):Promise.resolve(res());});
     h.emitir('haiku:libro-version-cargada',evento(2));await tick();h.cambiar();rechazar(Error('cancelado antiguo'));await tick();assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
-    h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/No encontré cambios/);
+    h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
     const fallo=interfaz(async()=>{throw Error('detalle técnico secreto');});fallo.emitir('haiku:libro-version-cargada',evento(2));await tick();
     assert.match(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/No pude completar/);assert.doesNotMatch(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/secreto/);
 });

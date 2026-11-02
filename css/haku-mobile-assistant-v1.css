@@ -1,0 +1,50 @@
+/* Opt-in únicamente; el panel web normal conserva su presentación. */
+html[data-haku-mobile-assistant="1"], html[data-haku-mobile-assistant="1"] body {
+    margin: 0; width: 100%; height: 100%; overflow: hidden;
+}
+html[data-haku-mobile-assistant="1"] body > .sites-shell-topbar,
+html[data-haku-mobile-assistant="1"] body > .sites-shell-sidebar,
+html[data-haku-mobile-assistant="1"] #sites-notificaciones-overlay,
+html[data-haku-mobile-assistant="1"] #sites-notificaciones-drawer,
+html[data-haku-mobile-assistant="1"] .haiku-usuario-chip { display: none !important; }
+html[data-haku-mobile-assistant="1"] body > .sites-shell-main { visibility: hidden; pointer-events: none; }
+/* Las fichas y confirmaciones existentes pueden estar dentro de main. Su
+   ancestro conserva layout, para que estos diálogos sigan funcionando. */
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready .sites-shell-main [role="dialog"],
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready .sites-shell-main [aria-modal="true"],
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #sites-resumen-reserva-drawer,
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #ficha-reserva-modal,
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #panel-agregar-nota,
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #resumen-servicio-modal,
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #modal-bloqueo-calendario,
+html[data-haku-mobile-assistant="1"].haku-mobile-assistant-ready #panel-agregar-solicita {
+    visibility: visible; pointer-events: auto;
+}
+html[data-haku-mobile-assistant="1"]:not(.haku-mobile-assistant-ready) body > :not(.haiku-auth-overlay):not(.haiku-privacidad-overlay):not(#haku-mobile-assistant-gate):not(script):not(style):not(link) {
+    display: none !important;
+}
+html[data-haku-mobile-assistant="1"] .haiku-asistente-root {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+}
+html[data-haku-mobile-assistant="1"] .haiku-asistente-boton { display: none !important; }
+html[data-haku-mobile-assistant="1"] .haiku-asistente-panel {
+    position: fixed !important; inset: 0 !important; width: 100% !important; max-width: none !important;
+    height: 100% !important; max-height: none !important; margin: 0; border: 0; border-radius: 0;
+}
+html[data-haku-mobile-assistant="1"] .haiku-asistente-cabecera { padding-top: 10px; }
+html[data-haku-mobile-assistant="1"] .haiku-asistente-pie {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+}
+#haku-mobile-assistant-gate {
+    position: fixed; inset: 0; z-index: 999998; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; padding: 24px;
+    background: #132019; color: #f2f5f3; text-align: center; font-family: system-ui, sans-serif;
+}
+#haku-mobile-assistant-gate[hidden] { display: none; }
+#haku-mobile-assistant-gate p { max-width: 360px; line-height: 1.5; }
+#haku-mobile-assistant-gate button {
+    min-height: 44px; padding: 10px 18px; border: 1px solid #90af9c; border-radius: 8px;
+    background: #285d48; color: white; font: inherit;
+}
+#haku-mobile-assistant-gate button[hidden] { display: none; }
+#haku-mobile-assistant-book-status { margin: 8px 12px; padding: 10px; font-size: 13px; line-height: 1.4; }
