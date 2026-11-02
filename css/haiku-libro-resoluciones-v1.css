@@ -14,44 +14,46 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     width: 100%;
     max-width: 560px;
     min-width: 0;
-    margin: 12px 0;
-    padding: 16px;
+    margin: 8px 0;
+    padding: 12px;
     border: 1px solid var(--ocupacion-borde);
     border-radius: 12px;
     background: var(--ocupacion-superficie);
     color: var(--ocupacion-texto);
     font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
-    font-size: 14px;
-    line-height: 20px;
+    font-size: 13px;
+    line-height: 18px;
     text-align: left;
     overflow-wrap: anywhere;
 }
 .haiku-ocupacion-card .haiku-ocupacion-cabecera { display: flex; align-items: center; gap: 8px; }
 .haiku-ocupacion-card .haiku-ocupacion-identidad { flex: 1; min-width: 0; }
-.haiku-ocupacion-card .haiku-ocupacion-titular { display: block; margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; }
-.haiku-ocupacion-card .haiku-ocupacion-meta { margin: 4px 0 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
-.haiku-ocupacion-card .haiku-ocupacion-badge { box-sizing: border-box; flex: none; width: 101px; padding: 4px 8px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font-size: 11px; line-height: 16px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-titular { display: block; margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-meta { margin: 2px 0 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 14px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-badge { box-sizing: border-box; flex: none; max-width: 120px; padding: 2px 8px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font-size: 11px; line-height: 16px; font-weight: 500; }
 .haiku-ocupacion-card[data-ocupacion-estado="confirmada"] .haiku-ocupacion-badge { background: var(--ocupacion-lista); color: var(--ocupacion-lista-texto); }
-.haiku-ocupacion-card .haiku-ocupacion-aviso { margin: 0; padding: 12px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font: inherit; }
-.haiku-ocupacion-card .haiku-ocupacion-editor { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.haiku-ocupacion-card .haiku-ocupacion-aviso { margin: 0; padding: 8px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font: inherit; }
+.haiku-ocupacion-card .haiku-ocupacion-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .haiku-ocupacion-card .haiku-ocupacion-campos,
 .haiku-ocupacion-card .haiku-ocupacion-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; margin: 0; }
-.haiku-ocupacion-card .haiku-ocupacion-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; color: var(--ocupacion-texto); font-size: 12px; line-height: 16px; font-weight: 600; }
-.haiku-ocupacion-card .haiku-ocupacion-campo input { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; margin: 0; padding: 10px 12px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 14px; line-height: 20px; font-weight: 400; }
+.haiku-ocupacion-card .haiku-ocupacion-campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; color: var(--ocupacion-texto); font-size: 12px; line-height: 16px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-campo input { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; margin: 0; padding: 7px 10px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 14px; line-height: 20px; font-weight: 400; }
 .haiku-ocupacion-card .haiku-ocupacion-estado,
-.haiku-ocupacion-card .haiku-ocupacion-ayuda { margin: 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
-.haiku-ocupacion-card .haiku-ocupacion-resumen-item { min-width: 0; padding: 12px; border-radius: 8px; background: var(--ocupacion-suave); }
+.haiku-ocupacion-card .haiku-ocupacion-ayuda { margin: 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 14px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen:not([hidden]) { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .haiku-ocupacion-card .haiku-ocupacion-resumen-item dt { color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
-.haiku-ocupacion-card .haiku-ocupacion-resumen-item dd { margin: 4px 0 0; color: var(--ocupacion-texto); font-size: 14px; line-height: 20px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item dt { text-transform: lowercase; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item dd { order: -1; margin: 0; color: var(--ocupacion-texto); font-size: 12px; line-height: 16px; font-weight: 600; }
 .haiku-ocupacion-card .haiku-ocupacion-acciones { display: flex; justify-content: flex-end; gap: 8px; min-width: 0; }
-.haiku-ocupacion-card .haiku-ocupacion-boton { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 0; min-height: 36px; max-width: 100%; margin: 0; padding: 7px 14px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 14px; line-height: 20px; font-weight: 600; white-space: normal; text-align: center; cursor: pointer; }
+.haiku-ocupacion-card .haiku-ocupacion-boton { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 0; min-height: 32px; max-width: 100%; margin: 0; padding: 7px 14px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 12px; line-height: 16px; font-weight: 600; white-space: normal; text-align: center; cursor: pointer; }
 .haiku-ocupacion-card .haiku-ocupacion-boton--principal { border-color: var(--ocupacion-accion); background: var(--ocupacion-accion); color: var(--ocupacion-sobre-accion); }
-.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton { width: 100px; }
-.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton--principal { width: 180px; }
+.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton { width: 92px; }
+.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton--principal { width: 164px; }
 .haiku-ocupacion-card .haiku-ocupacion-boton:hover:not(:disabled) { filter: brightness(.97); }
 .haiku-ocupacion-card .haiku-ocupacion-boton:disabled { opacity: .55; cursor: default; }
 .haiku-ocupacion-card .haiku-ocupacion-boton:focus-visible,
@@ -61,6 +63,16 @@
 .haiku-ocupacion-card [hidden],
 .haiku-ocupacion-card .haiku-ocupacion-estado:empty,
 .haiku-ocupacion-card .haiku-ocupacion-error:empty { display: none; }
+
+/* Una resolución guardada ocupa una fila de cantidades, sin cajas individuales. */
+.haiku-libro-resolucion.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; padding: 10px; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-cabecera { grid-column: 1 / -1; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] .haiku-ocupacion-titular { font-size: 14px; line-height: 20px; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-resumen { grid-column: 1; grid-row: 2; align-self: center; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-acciones { grid-column: 2; grid-row: 2; align-self: center; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-estado { grid-column: 1 / -1; grid-row: 3; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-editor { grid-column: 1 / -1; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] > .haiku-ocupacion-acciones .haiku-ocupacion-boton { min-height: 28px; padding: 4px 8px; white-space: nowrap; }
 
 html[data-haiku-tema="oscuro"] .haiku-libro-resolucion.haiku-ocupacion-card {
     --ocupacion-superficie: #1b2621;
@@ -83,6 +95,5 @@ html[data-haiku-tema="oscuro"] .haiku-ocupacion-card .haiku-ocupacion-error { co
     .haiku-libro-resolucion.haiku-ocupacion-card { padding: 12px; }
     .haiku-ocupacion-card .haiku-ocupacion-cabecera { align-items: flex-start; }
     .haiku-ocupacion-card .haiku-ocupacion-titular { font-size: 16px; line-height: 22px; }
-    .haiku-ocupacion-card .haiku-ocupacion-resumen-item { padding: 8px; }
     .haiku-ocupacion-card .haiku-ocupacion-boton { padding-right: 10px; padding-left: 10px; }
 }
