@@ -14,7 +14,7 @@
         } else if (!['ok','sin_cambios'].includes(r.estado)) {
             return {texto:'No pude completar el informe de esta actualización. Puedes solicitarlo en Haku.',revision:true};
         } else if (!total && a) texto=`La actualización contiene ${a} ${a===1?'caso que requiere':'casos que requieren'} revisión.`;
-        else if (!total) texto='Libro actualizado. No encontré cambios en las reservas.';
+        else if (!total) texto='Las reservas no cambiaron respecto de la copia anterior del Libro. Esto no comprueba si quedan diferencias con Proyecto H; usa Comparar Libro para revisarlas.';
         else if (total===1 && c===1) texto=`${r.cancelaciones_confirmadas[0].anterior?.titular || 'Una reserva'} aparece en CANCELACIONES del Libro.`;
         else if (total===1 && n===1) {
             const x=r.nuevas[0].actual || {};
@@ -108,3 +108,4 @@
     if (typeof module!=='undefined') module.exports=root.HAIKU_ASISTENTE_LIBRO_AUTO_V1;
     if (root.document) instalar();
 })(typeof window!=='undefined'?window:globalThis);
+

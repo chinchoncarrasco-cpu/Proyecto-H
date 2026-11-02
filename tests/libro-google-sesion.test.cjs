@@ -35,6 +35,7 @@ function browser(options = {}) {
     reader.cargarDesdeGoogleParaVerificacion = reader.cargarDesdeGoogle;
     const root = { Date: class extends Date { static now() { return now; } }, File, Blob, Event, CustomEvent, AbortController,
         crypto: webcrypto, HAIKU_LIBRO_FUENTE_OFICIAL_V1: F, HAIKU_LIBRO_RESERVA_V1: reader,
+        HAKU_MOBILE_ASSISTANT_V1: options.embed ? { serverOnly: true } : undefined,
         haikuSesion: options.user === null ? null : { auth: { id: options.user || 'usuario-a' }, usuario: { activo: true } },
         haikuSupabase: { auth: { onAuthStateChange(cb) { callback = cb; } } },
         sessionStorage: storage(session, options.failStorage), localStorage: storage(local, options.failStorage),
@@ -225,6 +226,17 @@ test('servidor: conexión automática y F5 descargan sin permiso personal ni alm
     assert.equal(b.loads.length, 1); assert.equal(b.oauth(), 0); assert.equal(b.requests.length, 0); assert.equal(b.session.size, 0);
     const reload = browser({ server: true, session: b.session, local: b.local }); await reload.idle();
     assert.equal(reload.api.estado().conectado, true); assert.equal(reload.loads.length, 1); assert.equal(reload.oauth(), 0);
+});
+test('chat integrado: servidor sin configurar no abre GIS ni solicita permiso personal', async () => {
+    const b = browser({ embed: true, server: true,
+        serverFetcher: async () => serverError(503, 'CONFIGURACION_PENDIENTE') });
+    await b.idle(); await b.api.conectar();
+    assert.equal(b.oauth(), 0); assert.equal(b.requests.length, 0); assert.equal(b.loads.length, 0);
+    assert.equal(b.api.estado().conectado, false);
+});
+test('chat integrado: configuración servidor ausente permanece cerrado sin GIS', async () => {
+    const b = browser({ embed: true }); await b.api.conectar();
+    assert.equal(b.oauth(), 0); assert.equal(b.requests.length, 0); assert.equal(b.api.estado().conectado, false);
 });
 test('servidor: sigue conectado tras una jornada y comprueba cambios por versión', async () => {
     const b = browser({ server: true }); await b.idle(); b.advance(12 * 3600000);

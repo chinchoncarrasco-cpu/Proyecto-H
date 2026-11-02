@@ -17,6 +17,7 @@
     <script>
         (async () => {
             "use strict";
+            const asistenteMovil = new URLSearchParams(location.search).get('haku-mobile-assistant') === '1';
             function cargarScript(src) {
                 return new Promise((resolve, reject) => {
                     const script = document.createElement("script"); script.src = src; script.async = true; script.onload = resolve; script.onerror = () => reject(new Error(`No fue posible cargar ${src}`)); document.head.appendChild(script);
@@ -104,6 +105,12 @@
                     '/script>' + `\n<script src="js/sites-notificaciones-v1.js?v=${version}"><` +
                     '/script>' + `\n<script src="js/haiku-panel-coordinacion-v1.js?v=${version}"><` +
                     '/script>\n</body>');
+                if (asistenteMovil) {
+                    // Gate desde el primer frame del documento final; el panel
+                    // normal no carga este modo ni recibe el contexto nativo.
+                    html = html.replace('<html ', '<html data-haku-mobile-assistant="1" ');
+                    html = html.replace('</head>', `<style>html[data-haku-mobile-assistant="1"] body>.sites-shell-topbar,html[data-haku-mobile-assistant="1"] body>.sites-shell-sidebar{display:none!important}html[data-haku-mobile-assistant="1"] body>.sites-shell-main{visibility:hidden;pointer-events:none}html[data-haku-mobile-assistant="1"]:not(.haku-mobile-assistant-ready) .haiku-asistente-root{visibility:hidden!important;pointer-events:none!important}</style>\n<link rel="stylesheet" href="css/haku-mobile-assistant-v1.css?v=${version}">\n<script src="js/haku-mobile-assistant-v1.js?v=${version}"><` + '/script>\n</head>');
+                }
                 document.open(); document.write(html); document.close();
             } catch (error) {
                 console.error("PANEL · No fue posible iniciar versión Supabase:", error);
@@ -113,4 +120,6 @@
     </script>
 </body>
 </html>
+
+
 

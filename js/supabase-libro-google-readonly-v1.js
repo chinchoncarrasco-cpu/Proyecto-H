@@ -536,7 +536,7 @@
                 "Libro online conectado",
                 descargarCopia
                     ? `Copia local actualizada desde Google · ${horaChile(metadata.modifiedTime)}${metadata.name ? ` · ${metadata.name}` : ""}`
-                    : `Google sin cambios · ${horaChile(metadata.modifiedTime)} · copia local no comparada`
+                    : `El archivo de Google sigue igual · ${horaChile(metadata.modifiedTime)} · aún debes compararlo con Proyecto H`
             );
         } catch (error) {
             if (autorizacionInforme !== revisionAutorizacion) return;
@@ -573,6 +573,10 @@
         try { if (await conectarServidor()) return; }
         catch (error) { pintar("error", "Libro online", error.message); return; }
         if (revision !== revisionAutorizacion || usuario !== usuarioActual()) return;
+        if (root.HAKU_MOBILE_ASSISTANT_V1?.serverOnly === true) {
+            pintar("error", "Libro online", "No pudimos conectar con el Libro compartido. Comprueba tu conexión y vuelve a intentarlo.");
+            return;
+        }
         if (!CLIENT_ID) {
             pintar("error", "Libro online", "Falta configurar una vez el acceso Google de solo lectura.");
             return;
@@ -663,3 +667,4 @@
         instalar();
     }
 })(window);
+
