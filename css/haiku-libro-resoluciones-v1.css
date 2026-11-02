@@ -1,7 +1,88 @@
-.haiku-libro-resolucion { margin: 12px 0; padding: 14px; border: 1px solid #d5b274; border-radius: 10px; background: #fffaf0; color: #302e28; }
-.haiku-libro-resolucion > strong { display: block; overflow-wrap: anywhere; }
-.haiku-libro-resolucion label { display: inline-flex; flex-direction: column; gap: 5px; margin: 10px 16px 10px 0; }
-.haiku-libro-resolucion input { width: 100px; padding: 8px; font: inherit; border: 1px solid #9a968d; border-radius: 6px; }
-.haiku-libro-resolucion button { margin: 6px 10px 6px 0; min-height: 36px; cursor: pointer; }
-.haiku-libro-resolucion [role="alert"] { color: #8a2222; }
-.haiku-libro-resolucion [hidden] { display: none; }
+/* Revisión de ocupación del Libro: estilos acotados a esta tarjeta. */
+.haiku-libro-resolucion.haiku-ocupacion-card {
+    --ocupacion-superficie: var(--sites-shell-surface, #fff);
+    --ocupacion-borde: var(--sites-shell-line, #d9e3de);
+    --ocupacion-texto: var(--sites-shell-ink, #17362d);
+    --ocupacion-secundario: var(--sites-shell-muted, #728079);
+    --ocupacion-accion: var(--sites-shell-green, #173d33);
+    --ocupacion-sobre-accion: #fff;
+    --ocupacion-aviso: var(--sites-shell-amber-soft, #fff0dd);
+    --ocupacion-aviso-texto: var(--sites-shell-amber, #8e561a);
+    --ocupacion-lista: var(--sites-shell-green-soft, #e6f3ea);
+    --ocupacion-lista-texto: var(--sites-shell-green, #3a6c4a);
+    --ocupacion-suave: #f0f6f2;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 560px;
+    min-width: 0;
+    margin: 12px 0;
+    padding: 16px;
+    border: 1px solid var(--ocupacion-borde);
+    border-radius: 12px;
+    background: var(--ocupacion-superficie);
+    color: var(--ocupacion-texto);
+    font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+    font-size: 14px;
+    line-height: 20px;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+.haiku-ocupacion-card .haiku-ocupacion-cabecera { display: flex; align-items: center; gap: 8px; }
+.haiku-ocupacion-card .haiku-ocupacion-identidad { flex: 1; min-width: 0; }
+.haiku-ocupacion-card .haiku-ocupacion-titular { display: block; margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-meta { margin: 4px 0 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-badge { box-sizing: border-box; flex: none; width: 101px; padding: 4px 8px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font-size: 11px; line-height: 16px; font-weight: 500; }
+.haiku-ocupacion-card[data-ocupacion-estado="confirmada"] .haiku-ocupacion-badge { background: var(--ocupacion-lista); color: var(--ocupacion-lista-texto); }
+.haiku-ocupacion-card .haiku-ocupacion-aviso { margin: 0; padding: 12px; border-radius: 8px; background: var(--ocupacion-aviso); color: var(--ocupacion-aviso-texto); font: inherit; }
+.haiku-ocupacion-card .haiku-ocupacion-editor { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.haiku-ocupacion-card .haiku-ocupacion-campos,
+.haiku-ocupacion-card .haiku-ocupacion-resumen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-width: 0; margin: 0; }
+.haiku-ocupacion-card .haiku-ocupacion-campo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; color: var(--ocupacion-texto); font-size: 12px; line-height: 16px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-campo input { box-sizing: border-box; width: 100%; min-width: 0; height: 44px; margin: 0; padding: 10px 12px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 14px; line-height: 20px; font-weight: 400; }
+.haiku-ocupacion-card .haiku-ocupacion-estado,
+.haiku-ocupacion-card .haiku-ocupacion-ayuda { margin: 0; color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item { min-width: 0; padding: 12px; border-radius: 8px; background: var(--ocupacion-suave); }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item dt { color: var(--ocupacion-secundario); font-size: 11px; line-height: 16px; font-weight: 500; }
+.haiku-ocupacion-card .haiku-ocupacion-resumen-item dd { margin: 4px 0 0; color: var(--ocupacion-texto); font-size: 14px; line-height: 20px; font-weight: 600; }
+.haiku-ocupacion-card .haiku-ocupacion-acciones { display: flex; justify-content: flex-end; gap: 8px; min-width: 0; }
+.haiku-ocupacion-card .haiku-ocupacion-boton { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; min-width: 0; min-height: 36px; max-width: 100%; margin: 0; padding: 7px 14px; border: 1px solid var(--ocupacion-borde); border-radius: 8px; background: var(--ocupacion-superficie); color: var(--ocupacion-texto); font: inherit; font-size: 14px; line-height: 20px; font-weight: 600; white-space: normal; text-align: center; cursor: pointer; }
+.haiku-ocupacion-card .haiku-ocupacion-boton--principal { border-color: var(--ocupacion-accion); background: var(--ocupacion-accion); color: var(--ocupacion-sobre-accion); }
+.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton { width: 100px; }
+.haiku-ocupacion-card .haiku-ocupacion-editor-acciones .haiku-ocupacion-boton--principal { width: 180px; }
+.haiku-ocupacion-card .haiku-ocupacion-boton:hover:not(:disabled) { filter: brightness(.97); }
+.haiku-ocupacion-card .haiku-ocupacion-boton:disabled { opacity: .55; cursor: default; }
+.haiku-ocupacion-card .haiku-ocupacion-boton:focus-visible,
+.haiku-ocupacion-card .haiku-ocupacion-campo input:focus-visible { outline: 2px solid var(--ocupacion-accion); outline-offset: 2px; }
+.haiku-ocupacion-card .haiku-ocupacion-error { margin: 0; color: var(--sites-shell-red, #aa4e44); font-size: 12px; line-height: 18px; }
+.haiku-libro-resolucion.haiku-ocupacion-card[hidden],
+.haiku-ocupacion-card [hidden],
+.haiku-ocupacion-card .haiku-ocupacion-estado:empty,
+.haiku-ocupacion-card .haiku-ocupacion-error:empty { display: none; }
+
+html[data-haiku-tema="oscuro"] .haiku-libro-resolucion.haiku-ocupacion-card {
+    --ocupacion-superficie: #1b2621;
+    --ocupacion-borde: #3e5145;
+    --ocupacion-texto: #e8efea;
+    --ocupacion-secundario: #b1c2b7;
+    --ocupacion-accion: #254736;
+    --ocupacion-sobre-accion: #9fd2b3;
+    --ocupacion-aviso: #34271b;
+    --ocupacion-aviso-texto: #f2c58d;
+    --ocupacion-lista: #1d3b2c;
+    --ocupacion-lista-texto: #9fd2b3;
+    --ocupacion-suave: #212e25;
+    background: var(--ocupacion-superficie);
+    border-color: var(--ocupacion-borde);
+    color: var(--ocupacion-texto);
+}
+html[data-haiku-tema="oscuro"] .haiku-ocupacion-card .haiku-ocupacion-error { color: #f3b2a8; }
+@media (max-width: 380px) {
+    .haiku-libro-resolucion.haiku-ocupacion-card { padding: 12px; }
+    .haiku-ocupacion-card .haiku-ocupacion-cabecera { align-items: flex-start; }
+    .haiku-ocupacion-card .haiku-ocupacion-titular { font-size: 16px; line-height: 22px; }
+    .haiku-ocupacion-card .haiku-ocupacion-resumen-item { padding: 8px; }
+    .haiku-ocupacion-card .haiku-ocupacion-boton { padding-right: 10px; padding-left: 10px; }
+}

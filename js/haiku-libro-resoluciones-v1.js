@@ -104,7 +104,12 @@
     function adjuntar(contenedor, reservas, generacion, alConfirmar = async () => {}, comparacion = null) {
         const doc = root.document;
         if (!doc) return;
-        const el = (tag,texto) => {const e=doc.createElement(tag);e.textContent=texto;e.className='haiku-versiones-meta';return e;};
+        const el = (tag,texto,clase='') => {const e=doc.createElement(tag);e.textContent=texto;e.className=clase;return e;};
+        const fechaCorta = valor => {
+            const partes=/^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(valor || '');
+            const meses=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+            return partes ? `${Number(partes[3])} ${meses[Number(partes[2])-1]} ${partes[1]}` : valor || 'Sin fecha';
+        };
         const vistos = new Set();
         const pendientes = reservas.filter(r =>
             resolvers.ocupacion.necesita(r) && !ocupacionYaRegistrada(r,comparacion));
@@ -114,36 +119,62 @@
             : root.HAIKU_LIBRO_CONSULTAS?.compararSistema(reservas,root.haikuSupabase);
         for (const r of pendientes) {
             const key=firma(r);if(vistos.has(key))continue;vistos.add(key);
-            const card=el('article','');card.className='haiku-libro-resolucion';
+            const card=el('article','','haiku-libro-resolucion haiku-ocupacion-card');
+            card.dataset.ocupacionEstado='pendiente';
             // Si la comparación llega después, no mostrar un falso aviso fugaz.
             card.hidden=!comparacion;
-            card.append(el('strong',`${r.titular || 'Sin titular'} · CAB ${r.cabana ?? '—'} · ${r.fecha_checkin || 'Sin fecha'} · ${r.id || 'Sin origen'}`));
-            const descripcion=el('p','Revisión manual · Acción necesaria: no se pudo identificar una ocupación válida de esta reserva.');
-            card.append(descripcion);
-            const estado=el('p','No incorporable hasta completar la ocupación.');estado.setAttribute('role','status');
-            const accion=el('button','Completar ocupación');accion.type='button';accion.className='libro-reserva-boton secundario';
-            const editor=el('div','');editor.hidden=true;
+            const cabecera=el('header','','haiku-ocupacion-cabecera');
+            const identidadVisual=el('div','','haiku-ocupacion-identidad');
+            identidadVisual.append(el('strong',r.titular || 'Sin titular','haiku-ocupacion-titular'),
+                el('p',`Cabaña ${r.cabana ?? '—'} · ${fechaCorta(r.fecha_checkin)} · ${r.id || 'Sin origen'}`,'haiku-ocupacion-meta'));
+            const badge=el('span','Por completar','haiku-ocupacion-badge');
+            cabecera.append(identidadVisual,badge);
+            const descripcion=el('p','No pudimos identificar cuántas personas se hospedan. Completa los datos para continuar.','haiku-ocupacion-aviso');
+            const resumen=el('dl','','haiku-ocupacion-resumen');resumen.hidden=true;
+            resumen.setAttribute('aria-label','Ocupación confirmada');
+            const estado=el('p','','haiku-ocupacion-estado');estado.setAttribute('role','status');
+            const acciones=el('div','','haiku-ocupacion-acciones');
+            const accion=el('button','Completar ocupación','libro-reserva-boton haiku-ocupacion-boton haiku-ocupacion-boton--principal');accion.type='button';
+            acciones.append(accion);
+            const editor=el('div','','haiku-ocupacion-editor');editor.hidden=true;
             let decision=null, anteriorPersistido=null, obsoleto=false, ocupado=false, habilitada=false;
             const mostrar = d => {
                 decision=d;
                 anteriorPersistido=d?.id || anteriorPersistido;
-                estado.textContent=d ? `✓ Resuelto manualmente · ${d.valor_confirmado.adultos} adultos · ${d.valor_confirmado.ninos} niños · ${d.valor_confirmado.mascotas} mascotas. Se volverán a validar los demás conflictos.` : 'No incorporable hasta completar la ocupación.';
-                accion.textContent=d?'Editar resolución':'Completar ocupación';
+                card.dataset.ocupacionEstado=d?'confirmada':'pendiente';
+                badge.textContent=d?'Confirmado':'Por completar';
+                descripcion.hidden=Boolean(d);
+                resumen.replaceChildren();resumen.hidden=!d;
+                if(d) campos.forEach(k=>{
+                    const dato=el('div','','haiku-ocupacion-resumen-item');
+                    dato.append(el('dt',k==='adultos'?'Adultos':k==='ninos'?'Niños':'Mascotas'),el('dd',String(d.valor_confirmado[k])));
+                    resumen.append(dato);
+                });
+                estado.hidden=false;
+                estado.textContent=d ? 'Ocupación guardada. Se revisarán los demás datos.' : '';
+                accion.textContent=d?'Editar ocupación':'Completar ocupación';
+                accion.className=`libro-reserva-boton haiku-ocupacion-boton${d?' secundario':' haiku-ocupacion-boton--principal'}`;
             };
             accion.addEventListener('click',()=>{
                 if(obsoleto||ocupado||!habilitada)return;
-                editor.replaceChildren(el('strong','Ocupación de la reserva'));editor.hidden=false;accion.hidden=true;
+                editor.replaceChildren();editor.hidden=false;accion.hidden=true;acciones.hidden=true;
+                resumen.hidden=true;estado.hidden=true;
+                const camposEditor=el('div','','haiku-ocupacion-campos');
+                camposEditor.setAttribute('role','group');camposEditor.setAttribute('aria-label','Ocupación de la reserva');
                 const inputs={};
                 campos.forEach(k=>{
-                    const label=el('label',k==='adultos'?'Adultos':k==='ninos'?'Niños':'Mascotas');
+                    const label=el('label',k==='adultos'?'Adultos':k==='ninos'?'Niños':'Mascotas','haiku-ocupacion-campo');
                     const input=doc.createElement('input');input.type='number';input.min=k==='adultos'?'1':'0';input.max='32767';input.step='1';
                     input.value=String(decision?.valor_confirmado[k] ?? r[k] ?? (k==='adultos'?'':0));
-                    input.setAttribute('aria-label',label.textContent);label.append(input);editor.append(label);inputs[k]=input;
+                    input.setAttribute('aria-label',label.textContent);input.setAttribute('inputmode','numeric');
+                    label.append(input);camposEditor.append(label);inputs[k]=input;
                 });
-                const error=el('p','');error.setAttribute('role','alert');
-                const cancelar=el('button','Cancelar');cancelar.type='button';
-                cancelar.addEventListener('click',()=>{if(ocupado)return;editor.hidden=true;accion.hidden=false;});
-                const guardar=el('button','Confirmar datos');guardar.type='button';
+                const ayuda=el('p','Al confirmar se revisarán los demás datos de la reserva.','haiku-ocupacion-ayuda');
+                const error=el('p','','haiku-ocupacion-error');error.setAttribute('role','alert');
+                const botones=el('div','','haiku-ocupacion-acciones haiku-ocupacion-editor-acciones');
+                const cancelar=el('button','Cancelar','libro-reserva-boton secundario haiku-ocupacion-boton');cancelar.type='button';
+                cancelar.addEventListener('click',()=>{if(ocupado)return;editor.hidden=true;accion.hidden=false;acciones.hidden=false;resumen.hidden=!decision;estado.hidden=false;});
+                const guardar=el('button','Confirmar ocupación','libro-reserva-boton haiku-ocupacion-boton haiku-ocupacion-boton--principal');guardar.type='button';
                 let operacion=null, ultimoValor=null;
                 guardar.addEventListener('click',async()=>{
                     if(obsoleto||ocupado||!habilitada)return;
@@ -153,16 +184,18 @@
                         ocupado=true;guardar.disabled=true;cancelar.disabled=true;accion.disabled=true;error.textContent='Confirmando…';
                         if(ultimoValor!==firma(valor)) {operacion=root.crypto.randomUUID();ultimoValor=firma(valor);}
                         const d=await confirmar(r,valor,generacion,anteriorPersistido,root.haikuSupabase,operacion);
-                        mostrar(d);editor.hidden=true;accion.hidden=false;
+                        mostrar(d);editor.hidden=true;accion.hidden=false;acciones.hidden=false;
                         await alConfirmar();
                     } catch(e) {error.textContent=e.message;}
                     finally {ocupado=false;guardar.disabled=obsoleto;cancelar.disabled=obsoleto;accion.disabled=obsoleto;}
                 });
-                editor.append(error,cancelar,guardar);
+                botones.append(cancelar,guardar);editor.append(camposEditor,ayuda,error,botones);
             });
-            card.append(estado,accion,editor);contenedor.append(card);
+            card.append(cabecera,descripcion,resumen,estado,acciones,editor);contenedor.append(card);
             root.addEventListener?.('haiku:libro-cambio',()=>{
                 obsoleto=true;accion.disabled=true;editor.hidden=true;
+                card.dataset.ocupacionEstado='obsoleta';badge.textContent='Actualizar informe';
+                descripcion.hidden=true;resumen.hidden=true;estado.hidden=false;accion.hidden=false;acciones.hidden=false;
                 estado.textContent='El Libro cambió. Genera el informe nuevamente antes de continuar.';
             },{once:true});
             accion.disabled=true;
@@ -182,7 +215,7 @@
                     (comp.snapshot?.estadias || []).some(s=>Number(s.cabana)===Number(r.cabana) &&
                         s.fecha_checkin===r.fecha_checkin && s.fecha_checkout===r.fecha_checkout);
                 if(existente) {
-                    accion.hidden=true;
+                    accion.hidden=true;acciones.hidden=true;
                     descripcion.textContent='Revisión de coincidencia con Proyecto H.';
                     const candidatos = Array.from(comp).filter(i=>i.libro?.id===r.id);
                     const asociado = candidatos.length===1 && candidatos[0].estado==='asociada';
