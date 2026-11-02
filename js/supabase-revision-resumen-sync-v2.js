@@ -32,7 +32,7 @@
             : {};
         const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
         return typeof derivar === "function"
-            ? derivar({ ...dato, estadoRevision: valorRevision })
+            ? derivar({ ...dato, estadoRevision: valorRevision }, fecha, numero)
             : "pendiente";
     }
 
@@ -268,7 +268,7 @@
                     resultado
                 };
                 const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
-                if (typeof derivar === "function") cabana.estadoFinal = derivar(cabana);
+                if (typeof derivar === "function") cabana.estadoFinal = derivar(cabana, fecha, numero);
                 if (typeof guardarDatos === "function") guardarDatos();
             }
         }

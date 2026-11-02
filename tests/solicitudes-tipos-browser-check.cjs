@@ -116,6 +116,32 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       assert.equal(await page.locator('#aseo-express-individual').isVisible(), true);
       assert.equal(await page.locator('#aseo-express-checklist input[type="checkbox"]').count(), 16);
       assert.equal(await page.locator('#cabinsDetailRequests .cb-typed-request').count(), 6);
+      const expressText = 'Conservar observación de Express · Cabaña 1';
+      await page.locator('#aseo-express-detalles').fill(expressText);
+      await page.locator('#aseo-express-detalles').blur();
+      await page.waitForFunction(text => window.__requestRows.revisiones_cabana.some(row =>
+        row.tipo_revision === 'aseo_express' && row.observaciones === text), expressText);
+      await page.evaluate(() => window.HAIKU_ASEO_OPERACION_V1.esperarEscrituras());
+      await page.locator('#aseo-express-estado').selectOption('lista');
+      await page.waitForFunction(() => document.querySelector('#cabinsExpressFinalStateDisplay').textContent === 'Lista');
+      assert.equal(await page.locator('#cabinsFinalBadge').textContent(), 'Lista');
+      if (process.env.HAKU_UI_SHOTS) {
+        fs.mkdirSync(process.env.HAKU_UI_SHOTS, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.HAKU_UI_SHOTS, `express-status-${width}-${theme}.png`) });
+      }
+      await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.cerrar());
+      assert.equal(await page.locator('[data-cb-cabin="1"] [data-cb-revision-state]').textContent(), 'Lista');
+      assert.equal(await page.locator('[data-cb-cabin="1"] [data-cb-final-state]').textContent(), 'Lista');
+      assert.match(await page.locator('#cabinsFilters [data-cb-filter="listas"]').textContent(), /Listas · 1/);
+      // Un textarea oculto de otra ficha no debe sustituir la observación de esta cabaña.
+      await page.evaluate(() => { document.querySelector('#aseo-express-detalles').value = 'Texto oculto de otra cabaña'; });
+      await page.locator('[data-cb-cabin="1"] [data-cb-revision-select="1"]').selectOption('con-detalles');
+      await page.waitForFunction(() => document.querySelector('[data-cb-cabin="1"] [data-cb-final-state]').textContent === 'Con detalles');
+      assert.equal(await page.evaluate(() => window.__requestRows.revisiones_cabana.find(row => row.tipo_revision === 'aseo_express').observaciones), expressText);
+      await page.evaluate(() => window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada));
+      assert.equal(await page.locator('[data-cb-cabin="1"] [data-cb-final-state]').textContent(), 'Con detalles');
+      await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.abrir(1));
+      await page.waitForFunction(() => document.querySelector('#cabinsReviewMode').value === 'aseo_express');
       await page.locator('[data-cb-request-cancel="1"][data-cb-request-category="reposicion_lena"]').click();
       await page.waitForFunction(() => document.querySelectorAll('#cabinsDetailRequests .cb-typed-request').length === 5);
       assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'aseo_express');
@@ -168,7 +194,8 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.locator('#guardar-solicita').click();
       await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
       assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.descripcion === 'Carbón para Cabaña 3').cabana_id), 'cab-3');
-      assert.equal(await page.evaluate(() => window.__requestWrites.every(write => write.table === 'solicitudes')), true, 'no modifica aseos, revisiones ni insumos');
+      assert.equal(await page.evaluate(() => window.__requestWrites.every(write => ['solicitudes', 'revisiones_cabana'].includes(write.table))), true, 'no modifica aseos ni insumos');
+      assert.equal(await page.evaluate(() => window.__requestRows.revisiones_cabana.every(row => row.tipo_revision === 'aseo_express')), true, 'conserva la revisión completa');
       assert.deepEqual(errors, []);
       await page.close();
       console.log(`Solicitudes ${width}px ${theme}: seis tipos, detalle opcional, edición, cancelación, Express automático y revisión completa conservada OK.`);
