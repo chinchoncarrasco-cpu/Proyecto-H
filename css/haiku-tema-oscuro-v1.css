@@ -2519,18 +2519,18 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-i
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:is(:hover, :has(input:checked)), html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area label:is(:hover, :has(input:checked)){background-color:transparent;background-image:initial;border-color:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item input[type="checkbox"], html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .revision-area input[type="checkbox"]{accent-color:#9fd2b3}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-item:has(input:checked) span{color:#b1c2b7}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail{border-top-color:#3e5145}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-label{color:#e8efea}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-input{color:#e8efea;background-color:#1b2420;background-image:initial;outline-color:initial;border-color:#3e5145}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-input:focus{box-shadow:rgba(45, 115, 80, 0.1) 0px 0px 0px 3px;border-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy{color:#b1c2b7;background-color:rgba(27, 36, 32, 0.94);background-image:initial;box-shadow:rgba(31, 60, 44, 0.06) 0px 1px 2px;border-color:transparent}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy:hover{color:#9fd2b3;background-color:#1f2b24;background-image:initial;border-color:#3e5145}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy:focus-visible{outline-color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy .copy-icon{fill:none;stroke:currentcolor}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="copiado"]{color:#9fd2b3}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="vacio"], html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="error"]{color:#f2c58d}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-feedback]::after{color:rgb(255, 255, 255);background-color:rgb(49, 76, 61);background-image:initial}
-html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .checklist-section-detail-copy-status{border-color:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail{border-top-color:#3e5145}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-label{color:#e8efea}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input{color:#e8efea;background-color:#1b2420;background-image:initial;outline-color:initial;border-color:#3e5145}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input:focus{box-shadow:rgba(45, 115, 80, 0.1) 0px 0px 0px 3px;border-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy{color:#b1c2b7;background-color:rgba(27, 36, 32, 0.94);background-image:initial;box-shadow:rgba(31, 60, 44, 0.06) 0px 1px 2px;border-color:transparent}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:hover{color:#9fd2b3;background-color:#1f2b24;background-image:initial;border-color:#3e5145}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:focus-visible{outline-color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy .copy-icon{fill:none;stroke:currentcolor}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"]{color:#9fd2b3}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="vacio"], html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="error"]{color:#f2c58d}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-feedback]::after{color:rgb(255, 255, 255);background-color:rgb(49, 76, 61);background-image:initial}
+html[data-haiku-tema="oscuro"] #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy-status{border-color:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #revision-checklist .cb-sector-head .cb-sector-count, html[data-haiku-tema="oscuro"] #seccion-cabanas #aseo-express-checklist .cb-sector-head .cb-sector-count{color:#b1c2b7}
 html[data-haiku-tema="oscuro"] #seccion-cabanas #panel-agregar-solicita.cb-request-drawer{background-color:rgba(24, 45, 37, 0.66);background-image:initial}
 html[data-haiku-tema="oscuro"] #seccion-cabanas .cb-request-drawer-panel{background-color:#1b2420;background-image:initial;box-shadow:rgba(24, 51, 39, 0.125) -12px 0px 36px}

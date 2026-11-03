@@ -1639,7 +1639,7 @@ function crearDetalleRevisionSector(
         }
 
         try {
-            await copiarTextoDetalleRevision(texto);
+            await copiarTextoDetalleRevision(`${nombreArea}\n${texto}`);
             mostrarFeedbackCopiaDetalle(
                 botonCopiar,
                 "copiado",

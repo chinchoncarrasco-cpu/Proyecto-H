@@ -1094,21 +1094,21 @@ test("cada checklist agrega cuatro detalles con copia aislada fuera del conteo",
             };
 
             await botonesCopiar[0].listener("click")(evento);
-            assert.deepEqual(copiados, ["Cocina guardada"]);
+            assert.deepEqual(copiados, ["🍳 COCINA\nCocina guardada"]);
             assert.equal(botonesCopiar[0].dataset.estadoCopia, "copiado");
             assert.equal(botonesCopiar[0].dataset.feedback, "Copiado");
 
             detalles[1].value = "";
             await botonesCopiar[1].listener("click")(evento);
-            assert.deepEqual(copiados, ["Cocina guardada"]);
+            assert.deepEqual(copiados, ["🍳 COCINA\nCocina guardada"]);
             assert.equal(botonesCopiar[1].dataset.estadoCopia, "vacio");
             assert.equal(botonesCopiar[1].dataset.feedback, "Sin texto");
 
             detalles[1].value = "  Revisar ducha  ";
             await botonesCopiar[1].listener("click")(evento);
             assert.deepEqual(copiados, [
-                "Cocina guardada",
-                "  Revisar ducha  "
+                "🍳 COCINA\nCocina guardada",
+                "🚿 BAÑO\n  Revisar ducha  "
             ]);
             assert.equal(botonesCopiar[1].dataset.estadoCopia, "copiado");
         }

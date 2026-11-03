@@ -1006,7 +1006,7 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   color: #71887a;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail {
   position: relative;
   display: grid;
   grid-column: 1 / -1;
@@ -1017,14 +1017,14 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   border-top: 1px solid #edf2ee;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-label {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-label {
   color: #496151;
   font-size: 10px;
   font-weight: 720;
   letter-spacing: .02em;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-input {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input {
   box-sizing: border-box;
   display: block;
   width: 100%;
@@ -1043,12 +1043,12 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   transition: border-color .15s ease, box-shadow .15s ease;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-input:focus {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input:focus {
   border-color: #76a98c;
   box-shadow: 0 0 0 3px rgba(45, 115, 80, .1);
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy {
   position: absolute;
   z-index: 1;
   top: 34px;
@@ -1068,18 +1068,18 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   transition: color .15s ease, background .15s ease, border-color .15s ease;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy:hover {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:hover {
   border-color: #dce7df;
   background: #f0f6f2;
   color: #315c45;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy:focus-visible {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy:focus-visible {
   outline: 2px solid #76a98c;
   outline-offset: 2px;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy .copy-icon {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy .copy-icon {
   width: 14px;
   height: 14px;
   fill: none;
@@ -1089,29 +1089,29 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   stroke-width: 1.55;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy .copy-icon-success {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy .copy-icon-success {
   display: none;
   stroke-width: 2;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="copiado"] {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"] {
   color: #2d7350;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="copiado"] .copy-icon-default {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"] .copy-icon-default {
   display: none;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="copiado"] .copy-icon-success {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="copiado"] .copy-icon-success {
   display: block;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="vacio"],
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-estado-copia="error"] {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="vacio"],
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-estado-copia="error"] {
   color: #8a6541;
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy[data-feedback]::after {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy[data-feedback]::after {
   position: absolute;
   top: 50%;
   right: calc(100% + 6px);
@@ -1128,7 +1128,7 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   transform: translateY(-50%);
 }
 
-#seccion-cabanas #revision-checklist .checklist-section-detail-copy-status {
+#seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy-status {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1204,12 +1204,12 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
     grid-template-columns: 1fr;
   }
 
-  #seccion-cabanas #revision-checklist .checklist-section-detail-input {
+  #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-input {
     min-height: 88px;
     font-size: 16px;
   }
 
-  #seccion-cabanas #revision-checklist .checklist-section-detail-copy {
+  #seccion-cabanas :is(#revision-checklist, #repaso-checklist) .checklist-section-detail-copy {
     width: 30px;
     height: 30px;
   }
@@ -1252,7 +1252,8 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas .cb-status .cb-badge { max-width:100%; font-size:11px; }
 #seccion-cabanas .cb-revision-status > small { color:#243e30; font-weight:750; }
 #seccion-cabanas .cb-revision-status .cb-badge { font-size:12px; font-weight:750; padding:4px 7px; border:1px solid currentColor; }
-#seccion-cabanas .cb-no-requiere { padding:0; font-size:10px; line-height:12px; text-decoration:underline; }
+#seccion-cabanas .cb-no-requiere { padding:0; font-size:10px; line-height:12px; text-decoration:none; }
+#seccion-cabanas [data-cb-no-requiere][aria-pressed="true"] { text-decoration:underline; text-underline-offset:3px; }
 #seccion-cabanas .cb-revision-indicator { display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; max-width:100%; position:relative; }
 #seccion-cabanas .cb-repaso:disabled { opacity:.5; cursor:default; }
 #seccion-cabanas .cb-aseo-indicator { display:contents; }
