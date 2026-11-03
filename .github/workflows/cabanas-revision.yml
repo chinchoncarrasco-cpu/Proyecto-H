@@ -14,6 +14,7 @@ on:
       - "index.html"
       - "assets/icons/cabanas-chevron.svg"
       - "tests/cabanas-sites.test.cjs"
+      - "tests/cabanas-filters-browser-check.cjs"
       - "tests/revision-completa-estados.test.cjs"
       - "tests/aseo-derivado-panel-browser-check.cjs"
       - "tests/cabanas-seguimiento-browser-check.cjs"
@@ -56,3 +57,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/cabanas-repaso-browser-check.cjs
+      - name: Filtros por columna con tipo de revisión activo y conteos
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/cabanas-filters-browser-check.cjs

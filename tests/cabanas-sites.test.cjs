@@ -568,7 +568,7 @@ test("proyecta once cabañas reales y el trabajo operativo de cada estado", () =
         assert.match(actual, new RegExp(titular));
         assert.match(actual, new RegExp(trabajo));
     }
-    assert.match(h.nodos.get("#cabinsOperationDescription").textContent, /11 cabañas visibles/);
+    assert.match(h.nodos.get("#cabinsFilterCount").textContent, /11 cabañas visibles/);
 });
 
 test("la identidad de la fila pertenece a su reserva exacta y no reutiliza un titular anterior", () => {
@@ -1519,4 +1519,44 @@ test('Repaso usa su propio resultado y No requiere prevalece sin borrar ninguna 
         assert.equal(h.api.estadoFinal({...dato,aseoEstado:'no_requiere'},FECHA,1),'no_requiere');
         assert.equal(JSON.stringify(dato),before);
     }
+});
+
+test('filtros por Aseo, Revisión y Final son independientes y usan Express o Repaso activos', () => {
+    const cabanas = {
+        1: { estadoRevision: 'lista', aseoExpressCiclo: { fecha: FECHA, verificado: true, existe: true, solicitudId: 's1', estadoSolicitud: 'pendiente', estadoRevision: 'pendiente' } },
+        2: { estadoRevision: 'lista', revisionCompletaCiclo: { fecha: FECHA, esRepaso: true }, repasoRevision: { fecha: FECHA, estado: 'completada', resultado: 'lista' } },
+        3: { aseoEstado: 'no_requiere', estadoRevision: 'pendiente' },
+        4: { aseoIn: '10:00', estadoRevision: 'pendiente' },
+        5: { aseoIn: '10:00', aseoOut: '10:30', estadoRevision: 'en_revision' },
+        6: { estadoRevision: 'con-detalles' },
+    };
+    const h = arnes(cabanas);
+    const ids = (category, value) => Array.from({length:11},(_,i)=>i+1).filter(n=>h.api.coincideFiltro(FECHA,n,category,value)).join(',');
+    assert.equal(ids('revision','lista'),'2');
+    assert.equal(ids('revision','pendiente'),'1,4,7,8,9,10,11','Express pendiente no hereda Lista completa');
+    assert.equal(ids('revision','no_requiere'),'3');
+    assert.equal(ids('revision','en_revision'),'5');
+    assert.equal(ids('revision','con-detalles'),'6');
+    assert.equal(ids('aseo','pendiente'),'1,2,6,7,8,9,10,11');
+    assert.equal(ids('aseo','en_curso'),'4');
+    assert.equal(ids('aseo','lista_para_revisar'),'5');
+    assert.equal(ids('final','lista'),'2');
+    assert.equal(ids('final','no_requiere'),'3');
+    assert.equal(ids('final','con-detalles'),'6');
+    for(const category of ['general','aseo','revision','final']) {
+        const options=h.api.opcionesFiltro(FECHA,category);
+        assert.equal(options[0][2],11);
+        assert.equal(options.slice(1).reduce((sum,o)=>sum+o[2],0),11);
+    }
+    const click = dataset => h.escuchas.get('click')({target:{closest:()=>({dataset})}});
+    click({cbFilterCategory:'revision'});click({cbFilter:'lista'});
+    assert.match(h.nodos.get('#aseo-resumen').innerHTML,/data-cb-cabin="2"/);
+    assert.doesNotMatch(h.nodos.get('#aseo-resumen').innerHTML,/data-cb-cabin="1"/);
+    click({cbFilterCategory:'aseo'});
+    assert.match(h.nodos.get('#cabinsFilters').innerHTML,/data-cb-filter="todas" aria-pressed="true"/);
+    click({cbFilter:'en_curso'});
+    assert.doesNotMatch(h.nodos.get('#aseo-resumen').innerHTML,/cb-tracking-row/);
+    click({cbFilter:'en_curso',cbSummary:'true'});
+    assert.match(h.nodos.get('#cabinsFilterLabel').textContent,/General/);
+    assert.match(h.nodos.get('#aseo-resumen').innerHTML,/cb-tracking-row/);
 });

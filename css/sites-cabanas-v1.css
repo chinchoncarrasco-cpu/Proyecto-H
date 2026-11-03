@@ -1486,3 +1486,31 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas #repaso-individual [data-repaso-error]:empty { display:none; }
 
 #seccion-cabanas .cb-operation-row[hidden], #seccion-cabanas .cb-review-row[hidden] { display:none!important; }
+
+/* Figma aprobado: una categoría y una fila de estados, sin cambiar las tarjetas. */
+#seccion-cabanas .cb-filter-bar { display:flex; align-items:center; gap:12px; margin-bottom:12px; min-width:0; }
+#seccion-cabanas .cb-filter-category { position:relative; flex:0 0 auto; margin:0; border:0; padding:0; overflow:visible; }
+#seccion-cabanas .cb-filter-category > summary { display:flex; align-items:center; gap:8px; min-height:30px; box-sizing:border-box; padding:7px; border:1px solid var(--cb-border); border-radius:7px; background:var(--cb-surface); color:var(--cb-muted); font:600 12px/16px var(--sites-shell-font,Inter,sans-serif); white-space:nowrap; cursor:pointer; list-style:none; }
+#seccion-cabanas .cb-filter-category > summary::-webkit-details-marker { display:none; }
+#seccion-cabanas .cb-filter-category .cb-chevron { width:10px; height:10px; }
+#seccion-cabanas .cb-filter-category[open] > summary .cb-chevron { transform:rotate(180deg); }
+#seccion-cabanas .cb-filter-menu { position:absolute; top:calc(100% + 6px); left:0; z-index:30; width:220px; box-sizing:border-box; display:grid; gap:3px; padding:10px; border:1px solid var(--cb-border); border-radius:10px; background:var(--cb-surface); box-shadow:0 8px 24px #0002; }
+#seccion-cabanas .cb-filter-category:not([open]) > .cb-filter-menu { display:none; }
+#seccion-cabanas .cb-filter-menu > small { padding:3px 6px 5px; color:var(--cb-muted); font-size:10px; line-height:14px; letter-spacing:.6px; }
+#seccion-cabanas .cb-filter-menu > button { display:flex; align-items:center; gap:9px; min-height:36px; margin:0; padding:8px 6px; border:0; border-radius:6px; background:transparent; color:var(--cb-text); text-align:left; font:500 12px/16px var(--sites-shell-font,Inter,sans-serif); cursor:pointer; }
+#seccion-cabanas .cb-filter-menu > button::before { content:""; width:12px; height:12px; flex-shrink:0; box-sizing:border-box; border:1px solid var(--cb-border); border-radius:50%; }
+#seccion-cabanas .cb-filter-menu > button[aria-pressed="true"] { background:var(--cb-selected); color:var(--cb-accent); }
+#seccion-cabanas .cb-filter-menu > button[aria-pressed="true"]::before { border-color:var(--cb-accent); background:var(--cb-accent); box-shadow:inset 0 0 0 2px var(--cb-surface); }
+#seccion-cabanas .cb-filter-category summary:focus-visible, #seccion-cabanas .cb-filter-menu button:focus-visible { outline:2px solid var(--cb-accent); outline-offset:2px; }
+#seccion-cabanas .cb-filter-bar .cb-filters { flex:1; min-width:0; flex-wrap:nowrap; gap:2px; margin:0; overflow-x:auto; scrollbar-width:none; }
+#seccion-cabanas .cb-filter-bar .cb-filters::-webkit-scrollbar { display:none; }
+#seccion-cabanas .cb-filter-bar .cb-filters button { flex:0 0 auto; min-height:30px; padding:6px; border-radius:6px; white-space:nowrap; color:var(--cb-muted); font-size:12px; line-height:16px; }
+#seccion-cabanas .cb-filter-bar .cb-filters button[aria-pressed="true"] { background:var(--cb-selected); color:var(--cb-accent); }
+#seccion-cabanas .cb-filter-count { flex:0 0 auto; color:var(--cb-muted); font-size:11px; line-height:16px; white-space:nowrap; }
+@media(max-width:700px) {
+  #seccion-cabanas .cb-filter-bar { flex-wrap:wrap; gap:4px 8px; }
+  #seccion-cabanas .cb-filter-category { order:1; margin-left:auto; }
+  #seccion-cabanas .cb-filter-count { order:0; }
+  #seccion-cabanas .cb-filter-bar .cb-filters { order:2; flex-basis:100%; }
+  #seccion-cabanas .cb-filter-menu { left:auto; right:0; }
+}
