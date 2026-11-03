@@ -806,20 +806,23 @@ test("Express verificado controla revisión, estado final y contadores sin sobre
     }
 });
 
-test("Express requiere ciclo vigente verificado y No requiere no esconde una solicitud activa", () => {
+test("No requiere se refleja en los tres estados sin borrar el ciclo Express", () => {
     const h = arnes();
     const ciclo = { fecha: FECHA, verificado: true, existe: true, estadoRevision: "pendiente", resultadoRevision: null };
     const dato = { aseoEstado: "no_requiere", aseoExpressCiclo: ciclo };
-    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "pendiente");
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "no_requiere");
     ciclo.estadoRevision = "completada"; ciclo.resultadoRevision = "lista";
-    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "lista");
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "no_requiere");
+    assert.equal(h.api.revision(dato, FECHA, 1), "no_requiere");
+    assert.equal(ciclo.resultadoRevision, "lista");
+    assert.equal(h.api.estadoFinal({ ...dato, aseoEstado: "pendiente" }, FECHA, 1), "lista");
     for (const invalido of [{ existe: false }, { verificado: false }, { fecha: "2026-09-22" }]) {
         assert.equal(h.api.estadoFinal({ ...dato, aseoExpressCiclo: { ...ciclo, ...invalido } }, FECHA, 1), "no_requiere");
     }
     h.window.haikuSesion = { auth: { id: "u1" } };
     h.window.HAIKU_ASEO_OPERACION_V1 = { obtenerCicloExpress: (fecha, numero) =>
         fecha === FECHA && String(numero) === "1" ? ciclo : null };
-    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "lista");
+    assert.equal(h.api.estadoFinal(dato, FECHA, 1), "no_requiere");
     assert.equal(h.api.estadoFinal(dato, FECHA, 2), "no_requiere", "no toma Express de otra cabaña");
 });
 
@@ -1501,4 +1504,19 @@ test("destinos separa cabaña y tipo, mantiene el peso y no suma carbón pendien
     assert.equal(lena[0].peso, 8); assert.equal(lena[0].destino, "aseo_full");
     const carbon = h.api.destinosPorCabana(FECHA, "carbon");
     assert.equal(carbon.length, 1); assert.equal(carbon[0].numero, 7); assert.equal(carbon[0].cantidad, 1);
+});
+
+
+test('Repaso usa su propio resultado y No requiere prevalece sin borrar ninguna revisión', () => {
+    const h = arnes(); h.window.haikuSesion = { auth: { id: 'u1' } };
+    for (const tipo of [true, false]) for (const full of ['pendiente', 'completada']) for (const repaso of ['pendiente', 'completada']) {
+        const dato = { revisionCompletaCiclo:{fecha:FECHA,verificado:true,esRepaso:tipo,estado:full,resultado:full==='completada'?'lista':null},
+            repasoRevision:{fecha:FECHA,verificado:true,estado:repaso,resultado:repaso==='completada'?'lista':null} };
+        const before = JSON.stringify(dato), expected = (tipo ? repaso : full) === 'completada' ? 'lista' : 'pendiente';
+        assert.equal(h.api.revision(dato,FECHA,1),expected);
+        assert.equal(h.api.estadoFinal(dato,FECHA,1),expected);
+        assert.equal(h.api.revision({...dato,aseoEstado:'no_requiere'},FECHA,1),'no_requiere');
+        assert.equal(h.api.estadoFinal({...dato,aseoEstado:'no_requiere'},FECHA,1),'no_requiere');
+        assert.equal(JSON.stringify(dato),before);
+    }
 });

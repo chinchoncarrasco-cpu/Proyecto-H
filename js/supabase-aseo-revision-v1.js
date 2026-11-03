@@ -750,13 +750,12 @@
         }
     }
 
-    async function guardarTipoRevision(numeroCabana, tipo, fecha = fechaOperativa()) {
+    async function guardarTipoRevision(numeroCabana, tipo, fecha = fechaOperativa(), opciones = {}) {
         if (!["completa", "repaso"].includes(tipo) || !/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) {
             throw new Error("El tipo o la fecha de revisión no son válidos.");
         }
         const supabase = cliente();
         if (!supabase) throw new Error("No fue posible conectar para guardar el tipo de revisión.");
-        cacheRevisiones.delete(claveRevision(fecha, numeroCabana));
         const revision = await asegurarRevision(numeroCabana, fecha, { pendiente: true });
         const { data, error } = await supabase.from("revisiones_cabana")
             .update({ es_repaso: tipo === "repaso", revisado_por: await obtenerUsuarioId() })
@@ -774,7 +773,7 @@
             cabana.estadoRevision = estadoLegacyDesdeRevision(data);
             actualizarEstadoFinalDerivado(cabana);
             if (typeof guardarDatos === "function") guardarDatos();
-            refrescarVistasLegacy();
+            if (!opciones.sinRefrescar) refrescarVistasLegacy();
         }
         document.dispatchEvent(new CustomEvent("haiku:revision-tipo-guardado", {
             detail: { fecha, numeroCabana: String(numeroCabana), tipo }

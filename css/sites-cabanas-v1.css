@@ -39,8 +39,10 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas #cabinsDetail[hidden],
 #seccion-cabanas #cabinsOperation[hidden],
 #seccion-cabanas #cabinsReview[hidden],
+#seccion-cabanas #repaso-individual:not(.activa),
 #seccion-cabanas #revision-individual:not(.activa),
 #seccion-cabanas #aseo-express-individual:not(.activa) { display:none; }
+#seccion-cabanas #repaso-individual.activa,
 #seccion-cabanas #revision-individual.activa,
 #seccion-cabanas #aseo-express-individual.activa { display:block; position:static; width:auto; min-height:0; margin:0; padding:0; background:transparent; box-shadow:none; border:0; }
 #seccion-cabanas #cabinsList.aseo-panel { margin:0; padding:0; border:0; background:transparent; box-shadow:none; }
@@ -1471,3 +1473,15 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas #solicita-cabana-campo[hidden],
 #seccion-cabanas #solicita-cabana-fija[hidden] { display:none; }
 #seccion-cabanas #solicita-cabana-fija { margin:4px 0 0; color:var(--cb-muted); font-size:13px; line-height:18px; font-weight:500; }
+
+/* Repaso conserva los controles actuales y centra la acción bajo el texto del estado. */
+#seccion-cabanas .cb-revision-indicator .cb-repaso { width:100%; text-align:center; padding-right:14px; box-sizing:border-box; text-decoration:none; }
+#seccion-cabanas .cb-revision-indicator .cb-repaso[aria-pressed="true"] { text-decoration:underline; text-underline-offset:3px; }
+#seccion-cabanas #repaso-checklist { display:block; border-top:0; }
+#seccion-cabanas #repaso-checklist .cb-sector-body[hidden] { display:none; }
+#seccion-cabanas #repaso-checklist .cb-sector-head { color:inherit; }
+#seccion-cabanas #repaso-checklist .cb-check { color:inherit; }
+#seccion-cabanas #repaso-individual [data-repaso-error] { font-size:11px; color:var(--texto-secundario, #7b8b7e); }
+#seccion-cabanas #repaso-individual [data-repaso-error]:empty { display:none; }
+
+#seccion-cabanas .cb-operation-row[hidden], #seccion-cabanas .cb-review-row[hidden] { display:none!important; }
