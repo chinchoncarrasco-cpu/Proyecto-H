@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "js/sites-cabanas-v1.js"
+      - "js/supabase-repaso-v2.js"
+      - "js/haiku-repaso-checklist-v1.js"
+      - "tests/cabanas-repaso-browser-check.cjs"
       - "js/supabase-aseo-revision-v1.js"
       - "js/supabase-aseo-operacion-v1.js"
       - "js/supabase-insumos-aseo-v1.js"
@@ -49,3 +52,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/solicitudes-tipos-browser-check.cjs
+      - name: Repaso independiente, optimismo y No requiere en ambos temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/cabanas-repaso-browser-check.cjs

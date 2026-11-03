@@ -430,6 +430,11 @@
                 if (!valorRevision) {
                     return Promise.reject(new Error("Estado de revisión no reconocido."));
                 }
+                const fecha = fechaActual();
+                const dato = typeof obtenerDatosDia === 'function' ? obtenerDatosDia(fecha)?.cabanas?.[numero] : null;
+                if (window.HAIKU_CABANAS_SITES_V1?.estadoAseo(dato) === 'no_requiere') return Promise.resolve();
+                if (window.HAIKU_CABANAS_SITES_V1?.expressReal(dato, fecha, numero)) return window.HAIKU_ASEO_OPERACION_V1.guardarEstadoRevisionExpress(numero, valorRevision, fecha);
+                if (dato?.revisionCompletaCiclo?.fecha === fecha && dato.revisionCompletaCiclo.esRepaso) return window.HAIKU_REPASO_V2.guardarEstadoRevision(numero, valorRevision, fecha);
                 aplicarLocal(String(numero), valorRevision);
                 refrescarVistasLocales();
                 return encolarEscritura(String(numero), valorRevision);
