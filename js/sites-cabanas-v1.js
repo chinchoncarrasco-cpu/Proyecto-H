@@ -14,6 +14,7 @@
     const REVISIONES = Object.freeze({ pendiente: "Pendiente", en_revision: "En revisión",
         "con-detalles": "Con detalles", lista: "Lista" });
     const revisionesGuardando = new Set();
+    const tiposRevisionGuardando = new Set();
     const FINALES = Object.freeze({ pendiente: "Pendiente", en_curso: "En curso",
         lista_para_revisar: "Lista para revisar", "con-detalles": "Con detalles",
         lista: "Lista", no_requiere: "No requiere" });
@@ -41,6 +42,7 @@
         catch (_) { return null; }
     };
     const cabana = (fecha, numero) => dia(fecha)?.cabanas?.[String(numero)] || {};
+    const esRepaso = (dato, fecha = fechaActual()) => dato?.revisionCompletaCiclo?.fecha === fecha && dato.revisionCompletaCiclo.esRepaso === true;
     const numeroValido = numero => /^(?:[1-9]|10|11)$/.test(String(numero));
     const usuarioActual = () => String(window.haikuSesion?.auth?.id || "");
     function guardarContexto() {
@@ -66,7 +68,7 @@
                 ["operation", "review"].includes(contexto.tab) &&
                 (!contexto.numero || numeroValido(contexto.numero)) &&
                 ["operation", "review"].includes(contexto.origen) &&
-                ["completa", "aseo_express"].includes(contexto.modo)) return contexto;
+                ["completa", "repaso", "aseo_express"].includes(contexto.modo)) return contexto;
         } catch (_) {}
         try { sessionStorage.removeItem(CLAVE_CONTEXTO); } catch (_) {}
         return null;
@@ -100,7 +102,7 @@
     };
     const estadoFinal = (dato, fecha = fechaActual(), numero = "") => {
         const aseo = estadoAseo(dato);
-        if (aseo === "no_requiere" && !expressReal(dato, fecha, numero)) return "no_requiere";
+        if (aseo === "no_requiere" && !expressReal(dato, fecha, numero) && !esRepaso(dato, fecha)) return "no_requiere";
         const rev = revision(dato, fecha, numero);
         if (rev === "lista" || rev === "con-detalles") return rev;
         if (aseo === "lista_para_revisar" || aseo === "en_curso") return aseo;
@@ -470,12 +472,14 @@
     }
     function selectorRevisionHTML(fecha, numero, dato) {
         const actual = revision(dato, fecha, numero);
-        const guardando = revisionesGuardando.has(`${fecha}:${numero}`);
-        return `<label class="cb-badge cb-revision-picker ${tono(actual)}" title="${guardando ? "Guardando revisión…" : "Cambiar estado de revisión"}">
+        const guardando = revisionesGuardando.has(`${fecha}:${numero}`) || tiposRevisionGuardando.has(`${fecha}:${numero}`);
+        const repaso = esRepaso(dato, fecha);
+        const bloqueado = guardando || expressReal(dato, fecha, numero);
+        return `<span class="cb-revision-indicator"><label class="cb-badge cb-revision-picker ${tono(actual)}" title="${guardando ? "Guardando revisión…" : "Cambiar estado de revisión"}">
           <span data-cb-revision-state>${REVISIONES[actual]}</span><span class="cb-revision-chevron cb-chevron" aria-hidden="true"></span>
           <select data-cb-revision-select="${numero}" data-cb-revision-fecha="${escapar(fecha)}" aria-label="Estado de revisión de cabaña ${numero}"${guardando ? ' disabled aria-busy="true"' : ""}>
             ${Object.entries(REVISIONES).map(([valor, texto]) => `<option value="${valor}"${valor === actual ? " selected" : ""}>${texto}</option>`).join("")}
-          </select></label>`;
+          </select></label><button type="button" class="cb-text-action cb-no-requiere cb-repaso" data-cb-repaso="${numero}" aria-pressed="${repaso}" aria-label="${repaso ? 'Desactivar Repaso' : 'Activar Repaso'} · Cabaña ${numero}" title="${bloqueado && !guardando ? 'Completa o cancela Solicita Express antes de activar Repaso' : 'Cambiar el tipo de revisión'}"${bloqueado ? ' disabled' : ''}>Repaso${repaso ? ' ✓' : ''}</button></span>`;
     }
     function filaOperacion(fecha, numero) {
         const dato = cabana(fecha, numero);
@@ -549,7 +553,7 @@
     function filaRevision(fecha, numero) {
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
-        const tipo = expressReal(dato, fecha, numero) ? "Revisión completa / Aseo Express" : "Revisión completa";
+        const tipo = expressReal(dato, fecha, numero) ? "Revisión completa / Aseo Express" : esRepaso(dato, fecha) ? "Repaso" : "Revisión completa";
         return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${revisadosChecklist(dato)}/${totalChecklist(numero)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
     }
     function pintarRevision(fecha) {
@@ -574,6 +578,14 @@
         const final = estadoFinal(dato, fecha, numero);
         const hayExpress = expressReal(dato, fecha, numero);
         const ciclo = cicloExpress(dato, fecha, numero);
+        if (estado.modo !== "aseo_express" && !tiposRevisionGuardando.has(`${fecha}:${numero}`)) {
+            estado.modo = esRepaso(dato, fecha) ? "repaso" : "completa";
+        }
+        const etiquetaRevision = esRepaso(dato, fecha) ? "Repaso" : "Revisión completa";
+        $("#cabinsStandardReviewLabel").textContent = etiquetaRevision;
+        $("#revision-individual").setAttribute("aria-label", etiquetaRevision);
+        const opcionRepaso = $("#cabinsReviewMode").querySelector('option[value="repaso"]');
+        if (opcionRepaso) opcionRepaso.disabled = hayExpress;
         $("#revision-titulo").textContent = `Cabaña ${numero}`;
         $("#cabinsDetailSubtitle").textContent = `${titular(dato, fecha, numero)} · ${trabajo(dato)}`;
         $("#cabinsDetailDate").textContent = `Operación · ${fecha}`;
@@ -669,14 +681,14 @@
             boton.classList.toggle("active", activo);
             boton.setAttribute("aria-current", activo ? "page" : "false");
         });
-        $("#revision-individual").classList.toggle("activa", detalle && estado.modo === "completa");
+        $("#revision-individual").classList.toggle("activa", detalle && estado.modo !== "aseo_express");
         const expressAbierto = detalle && hayExpress && estado.modo === "aseo_express";
         $("#aseo-express-individual").classList.toggle("activa", expressAbierto);
         $("#cabinsExpressToggle").setAttribute("aria-expanded", String(expressAbierto));
         $("#cabinsExpressToggle").setAttribute("aria-disabled", String(!hayExpress || Boolean(aperturaExpress)));
         $("#cabinsExpressToggleIcon").textContent = expressAbierto ? "−" : "+";
         $("#cabinsReviewMode").value = estado.modo;
-        $("#cabinsReviewMode").disabled = Boolean(aperturaExpress);
+        $("#cabinsReviewMode").disabled = Boolean(aperturaExpress) || tiposRevisionGuardando.has(`${fechaActual()}:${estado.numero}`);
         $("#cabinsReviewMode").setAttribute("aria-busy", String(Boolean(aperturaExpress)));
     }
     function pintar(fecha = fechaActual()) {
@@ -720,7 +732,7 @@
         if (modo === "aseo_express" && !expressReal(cabana(fechaActual(), numero), fechaActual(), numero)) modo = "completa";
         estado.numero = String(numero);
         estado.origen = origen;
-        estado.modo = "completa";
+        estado.modo = esRepaso(cabana(fechaActual(), numero)) ? "repaso" : "completa";
         estado.fecha = fechaActual();
         localStorage.removeItem(modo === "aseo_express" ? "haikuRevisionCabana" : "haikuAseoExpressCabana");
         if (modo === "aseo_express") {
@@ -810,10 +822,36 @@
             alert("No fue posible guardar el estado de aseo. Se releyeron los datos.");
         } finally { control.disabled = false; }
     }
-    function cambiarModo(modo) {
-        if (!estado.numero || !["completa", "aseo_express"].includes(modo)) return;
+    async function cambiarTipoRevision(numero, tipo) {
+        const fecha = fechaActual(), usuarioId = usuarioActual(), clave = `${fecha}:${numero}`;
+        if (!numeroValido(numero) || tiposRevisionGuardando.has(clave) || revisionesGuardando.has(clave)) return false;
+        if (expressReal(cabana(fecha, numero), fecha, numero)) return false;
+        tiposRevisionGuardando.add(clave);
+        pintar();
+        try {
+            const guardar = window.HAIKU_REVISION_SUPABASE_V1?.guardarTipoRevision;
+            if (!guardar) throw new Error("La revisión aún no está conectada. Intenta nuevamente.");
+            await guardar(numero, tipo, fecha);
+            if (fecha !== fechaActual() || usuarioActual() !== usuarioId) return false;
+            if (estado.numero === String(numero) && estado.modo !== "aseo_express") estado.modo = tipo;
+            guardarContexto();
+            return true;
+        } catch (error) {
+            alert(error?.message || "No fue posible guardar el tipo de revisión.");
+            return false;
+        } finally {
+            tiposRevisionGuardando.delete(clave);
+            pintar();
+        }
+    }
+    async function cambiarModo(modo) {
+        if (!estado.numero || !["completa", "repaso", "aseo_express"].includes(modo)) return;
         const numero = estado.numero;
-        if (modo === "completa") {
+        const fechaModo = fechaActual();
+        if (modo !== "aseo_express") {
+            const actual = esRepaso(cabana(fechaModo, numero), fechaModo) ? "repaso" : "completa";
+            if (actual !== modo && !await cambiarTipoRevision(numero, modo)) { aplicarVista(); return false; }
+            if (estado.numero !== numero || fechaActual() !== fechaModo) return false;
             aperturaExpress = null;
             localStorage.removeItem("haikuAseoExpressCabana");
             $("#volver-aseo")?.click();
@@ -944,7 +982,7 @@
                 fecha: contexto.fecha, numero: String(contexto.numero),
                 revisionId: String(contexto.revisionId || ""), modo: contexto.modo
             };
-            if (contexto.modo === "completa" && window.HAIKU_REVISION_SUPABASE_V1) {
+            if (contexto.modo !== "aseo_express" && window.HAIKU_REVISION_SUPABASE_V1) {
                 abrir(contexto.numero, contexto.origen, "completa", { restaurando: true });
             }
         }
@@ -972,6 +1010,11 @@
         if (boton.dataset.insumoDelta) { cambiarInsumo(boton); return; }
         if (boton.dataset.insumosReintentar !== undefined) { window.HAIKU_INSUMOS_ASEO_V1?.hidratar(fechaActual()); return; }
         if (boton.dataset.cbNoRequiere !== undefined) { cambiarEstadoAseo(boton); return; }
+        if (boton.dataset.cbRepaso) {
+            const numero = boton.dataset.cbRepaso;
+            void cambiarTipoRevision(numero, esRepaso(cabana(fechaActual(), numero)) ? "completa" : "repaso");
+            return;
+        }
         if (boton.dataset.cabTab) { estado.tab = boton.dataset.cabTab; estado.filtro = "todas"; pintar(); guardarContexto(); return; }
         if (boton.dataset.cbFilter) { estado.filtro = boton.dataset.cbFilter; pintar(); return; }
         if (boton.dataset.cbOpen) { abrir(boton.dataset.cbOpen, boton.dataset.cbOrigin || estado.tab); return; }

@@ -159,7 +159,7 @@
 
         const { data, error } = await supabase
             .from("revisiones_cabana")
-            .select("id, estado, resultado, observaciones, creado_en")
+            .select("id, estado, resultado, es_repaso, observaciones, creado_en")
             .eq("fecha", fecha)
             .eq("cabana_id", cabanaId)
             .eq("tipo_revision", "completa")
@@ -193,7 +193,7 @@
                 finalizado_en: null,
                 observaciones: null
             })
-            .select("id, estado, resultado, observaciones, creado_en")
+            .select("id, estado, resultado, es_repaso, observaciones, creado_en")
             .single();
 
         if (!error) {
@@ -265,7 +265,8 @@
                     verificado: true,
                     id: revision.id,
                     estado,
-                    resultado
+                    resultado,
+                    esRepaso: revision.es_repaso === true
                 };
                 const derivar = window.HAIKU_CABANAS_SITES_V1?.estadoFinal;
                 if (typeof derivar === "function") cabana.estadoFinal = derivar(cabana, fecha, numero);

@@ -1251,6 +1251,8 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas .cb-revision-status > small { color:#243e30; font-weight:750; }
 #seccion-cabanas .cb-revision-status .cb-badge { font-size:12px; font-weight:750; padding:4px 7px; border:1px solid currentColor; }
 #seccion-cabanas .cb-no-requiere { padding:0; font-size:10px; line-height:12px; text-decoration:underline; }
+#seccion-cabanas .cb-revision-indicator { display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; max-width:100%; position:relative; }
+#seccion-cabanas .cb-repaso:disabled { opacity:.5; cursor:default; }
 #seccion-cabanas .cb-aseo-indicator { display:contents; }
 #seccion-cabanas .cb-operation-row .cb-aseo-indicator { display:flex; flex-direction:column; align-items:center; gap:3px; width:max-content; max-width:100%; }
 #seccion-cabanas .cb-status > .cb-aseo-conflict { color:#9b452d; }
@@ -1270,6 +1272,7 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
   #seccion-cabanas .cb-operation-row .cb-aseo-conflict { position:absolute; top:28px; left:0; }
   #seccion-cabanas .cb-operation-row .cb-aseo-indicator { position:relative; }
   #seccion-cabanas .cb-operation-row .cb-aseo-indicator .cb-no-requiere { top:calc(100% + 4px); left:50%; transform:translateX(-50%); white-space:nowrap; }
+  #seccion-cabanas .cb-operation-row .cb-revision-indicator .cb-repaso { top:calc(100% + 4px); left:50%; transform:translateX(-50%); white-space:nowrap; }
   #seccion-cabanas .cb-operation-row > .cb-open { justify-self:end; padding:6px 0; }
   #seccion-cabanas .cb-operation-head { font-size:9px; letter-spacing:.02em; }
 }

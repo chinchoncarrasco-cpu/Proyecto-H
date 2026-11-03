@@ -19,6 +19,7 @@
         "fecha",
         "cabana_id",
         "tipo_revision",
+        "es_repaso",
         "estado",
         "resultado",
         "observaciones",
@@ -229,7 +230,7 @@
         return data || null;
     }
 
-    async function asegurarRevision(numeroCabana, fecha = fechaOperativa()) {
+    async function asegurarRevision(numeroCabana, fecha = fechaOperativa(), opciones = {}) {
         if (!fecha) {
             throw new Error("No hay fecha operativa seleccionada.");
         }
@@ -259,10 +260,10 @@
                 fecha,
                 cabana_id: cabana.id,
                 tipo_revision: TIPO_REVISION,
-                estado: "en_proceso",
+                estado: opciones.pendiente ? "pendiente" : "en_proceso",
                 resultado: null,
                 revisado_por: usuarioId,
-                iniciado_en: ahora,
+                iniciado_en: opciones.pendiente ? null : ahora,
                 observaciones: null
             })
             .select(COLUMNAS_REVISION)
@@ -359,7 +360,8 @@
             verificado,
             id: revision?.id || null,
             estado: revision?.estado || null,
-            resultado: revision?.resultado || null
+            resultado: revision?.resultado || null,
+            esRepaso: revision?.es_repaso === true
         };
     }
 
@@ -372,7 +374,8 @@
         lista.forEach(numero => {
             const cabana = cabanas[numero];
             if (!cabana) return;
-            cabana.revisionCompletaCiclo = cicloRevision(fecha, null, false);
+            const esRepaso = cabana.revisionCompletaCiclo?.fecha === fecha && cabana.revisionCompletaCiclo.esRepaso === true;
+            cabana.revisionCompletaCiclo = { ...cicloRevision(fecha, null, false), esRepaso };
             cambio = true;
         });
         if (cambio && typeof guardarDatos === "function") guardarDatos();
@@ -745,6 +748,38 @@
             parcial.cause = errorPosterior;
             throw parcial;
         }
+    }
+
+    async function guardarTipoRevision(numeroCabana, tipo, fecha = fechaOperativa()) {
+        if (!["completa", "repaso"].includes(tipo) || !/^\d{4}-\d{2}-\d{2}$/.test(String(fecha))) {
+            throw new Error("El tipo o la fecha de revisión no son válidos.");
+        }
+        const supabase = cliente();
+        if (!supabase) throw new Error("No fue posible conectar para guardar el tipo de revisión.");
+        cacheRevisiones.delete(claveRevision(fecha, numeroCabana));
+        const revision = await asegurarRevision(numeroCabana, fecha, { pendiente: true });
+        const { data, error } = await supabase.from("revisiones_cabana")
+            .update({ es_repaso: tipo === "repaso", revisado_por: await obtenerUsuarioId() })
+            .eq("id", revision.id).eq("fecha", fecha).eq("tipo_revision", TIPO_REVISION)
+            .select(COLUMNAS_REVISION).single();
+        if (error) throw error;
+        if (data?.id !== revision.id || data.es_repaso !== (tipo === "repaso")) {
+            throw new Error("No fue posible confirmar el tipo de revisión.");
+        }
+        cacheRevisiones.set(claveRevision(fecha, numeroCabana), data);
+        if (fecha === fechaOperativa() && typeof obtenerDatosDia === "function") {
+            const datos = obtenerDatosDia(fecha);
+            const cabana = datos.cabanas[numeroCabana] ||= {};
+            cabana.revisionCompletaCiclo = cicloRevision(fecha, data);
+            cabana.estadoRevision = estadoLegacyDesdeRevision(data);
+            actualizarEstadoFinalDerivado(cabana);
+            if (typeof guardarDatos === "function") guardarDatos();
+            refrescarVistasLegacy();
+        }
+        document.dispatchEvent(new CustomEvent("haiku:revision-tipo-guardado", {
+            detail: { fecha, numeroCabana: String(numeroCabana), tipo }
+        }));
+        return data;
     }
 
     async function guardarEstadoRevision(numeroCabana, valorSolicitado, fechaSolicitada = fechaOperativa()) {
@@ -1430,6 +1465,7 @@
 
         window.HAIKU_REVISION_SUPABASE_V1 = Object.freeze({
             guardarEstadoRevision,
+            guardarTipoRevision,
             prepararRevision,
             refrescarChecklistAbierto,
             sincronizarResumenFecha,
