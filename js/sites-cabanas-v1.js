@@ -19,7 +19,9 @@
     const FINALES = Object.freeze({ pendiente: "Pendiente", en_curso: "En curso",
         lista_para_revisar: "Lista para revisar", "con-detalles": "Con detalles",
         lista: "Lista", no_requiere: "No requiere" });
-    const estado = { tab: "operation", filtro: "todas", numero: "", origen: "operation", modo: "completa", fecha: "" };
+    const CATEGORIAS_FILTRO = Object.freeze({ general: "General", aseo: "Aseo", revision: "Revisión", final: "Final" });
+    const FILTROS_GENERAL = [["todas", "Todas"], ["pendientes", "Pendientes"], ["en_curso", "En curso"], ["por_revisar", "Por revisar"], ["listas", "Listas"]];
+    const estado = { tab: "operation", categoriaFiltro: "general", filtro: "todas", numero: "", origen: "operation", modo: "completa", fecha: "" };
     const CLAVE_CONTEXTO = "haikuCabanasContextoPestanaV1";
     const panelAutenticado = document.documentElement.classList.contains("haiku-cabanas-pendiente");
     let usuarioRestaurado = "";
@@ -300,8 +302,8 @@
         $("#cabinsSummary").innerHTML = [["trabajo", "En trabajo o pendientes"], ["por_revisar", "Por revisar"], ["listas", "Listas para operar"]]
             .map(([clave, texto]) => {
                 const numeros = grupos[clave];
-                const activo = estado.filtro === clave || (clave === "trabajo" && ["pendientes", "en_curso"].includes(estado.filtro));
-                return `<button type="button" class="cb-summary-group" data-cb-filter="${clave}" aria-pressed="${activo}" aria-label="${texto}: ${numeros.length}. Cabañas: ${numeros.join(", ") || "ninguna"}"><strong class="cb-summary-count">${numeros.length}</strong><span class="cb-summary-label">${texto}</span><span class="cb-summary-numbers">${numeros.map(n => `<span class="cb-cabin-number">${n}</span>`).join("") || '<span class="cb-summary-none">—</span>'}</span></button>`;
+                const activo = estado.categoriaFiltro === "general" && (estado.filtro === clave || (clave === "trabajo" && ["pendientes", "en_curso"].includes(estado.filtro)));
+                return `<button type="button" class="cb-summary-group" data-cb-filter="${clave}" data-cb-summary="true" aria-pressed="${activo}" aria-label="${texto}: ${numeros.length}. Cabañas: ${numeros.join(", ") || "ninguna"}"><strong class="cb-summary-count">${numeros.length}</strong><span class="cb-summary-label">${texto}</span><span class="cb-summary-numbers">${numeros.map(n => `<span class="cb-cabin-number">${n}</span>`).join("") || '<span class="cb-summary-none">—</span>'}</span></button>`;
             }).join("");
     }
     const pesoTexto = valor => String(Number(Number(valor || 0).toPrecision(12)));
@@ -469,12 +471,29 @@
         }
         return filas;
     }
-    function filtro(fech, numero) {
-        return gruposCabanas(fech)[estado.filtro]?.includes(numero) || false;
+    function coincideFiltro(fecha, numero, categoria, valor) {
+        if (valor === "todas") return true;
+        const dato = cabana(fecha, numero);
+        if (categoria === "general") {
+            const grupo = grupoCabana(dato, fecha, numero);
+            return valor === grupo || (valor === "trabajo" && ["pendientes", "en_curso"].includes(grupo));
+        }
+        const actual = categoria === "aseo" ? estadoAseo(dato) : categoria === "revision" ? revision(dato, fecha, numero) : estadoFinal(dato, fecha, numero);
+        return actual === valor;
+    }
+    function filtro(fecha, numero) {
+        return coincideFiltro(fecha, numero, estado.categoriaFiltro, estado.filtro);
+    }
+    function opcionesFiltro(fecha, categoria = estado.categoriaFiltro) {
+        const opciones = categoria === "general" ? FILTROS_GENERAL : [["todas", "Todas"], ...
+            (categoria === "aseo" ? ESTADOS : Object.entries(categoria === "revision" ? { ...REVISIONES, no_requiere: "No requiere" } : FINALES))];
+        return opciones.map(([valor, texto]) => [valor, texto, Array.from({ length: 11 }, (_, i) => i + 1).filter(n => coincideFiltro(fecha, n, categoria, valor)).length]);
     }
     function pintarFiltros(fecha) {
-        const grupos = gruposCabanas(fecha);
-        $("#cabinsFilters").innerHTML = [["todas", "Todas", grupos.todas.length], ["pendientes", "Pendientes", grupos.pendientes.length], ["en_curso", "En curso", grupos.en_curso.length], ["por_revisar", "Por revisar", grupos.por_revisar.length], ["listas", "Listas", grupos.listas.length]]
+        $("#cabinsFilterLabel").textContent = `Filtrar: ${CATEGORIAS_FILTRO[estado.categoriaFiltro]}`;
+        raiz.querySelectorAll("[data-cb-filter-category]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.cbFilterCategory === estado.categoriaFiltro)));
+        $("#cabinsFilters").setAttribute("aria-label", `Filtrar cabañas · ${CATEGORIAS_FILTRO[estado.categoriaFiltro]}`);
+        $("#cabinsFilters").innerHTML = opcionesFiltro(fecha)
             .map(([clave, texto, cantidad]) => `<button type="button" data-cb-filter="${clave}" aria-pressed="${estado.filtro === clave}">${texto} · ${cantidad}</button>`).join("");
     }
     function selectorRevisionHTML(fecha, numero, dato) {
@@ -537,12 +556,13 @@
         const enfocado = document.activeElement;
         if (enfocado && $("#aseo-resumen")?.contains(enfocado) && enfocado.matches?.("input, select, textarea")) return;
         const numeros = Array.from({ length: 11 }, (_, i) => i + 1).filter(numero => filtro(fecha, numero));
-        const seguimiento = estado.filtro === "en_curso";
+        const seguimiento = estado.categoriaFiltro === "general" && estado.filtro === "en_curso";
+        $("#cabinsFilterCount").textContent = `${numeros.length} cabañas visibles`;
         const titulo = $("#cabinsOperation h2");
         if (titulo) titulo.textContent = seguimiento ? "Seguimiento de camareros" : "Operación de hoy";
         $("#cabinsOperationDescription").textContent = seguimiento
             ? `${numeros.length} cabañas en curso · ${new Set(numeros.map(n => String(cabana(fecha, n).aseo || "").trim().toLocaleLowerCase("es-CL")).filter(Boolean)).size} camareros trabajando`
-            : `Asignación, horarios y coordinación del turno · ${numeros.length} cabañas visibles`;
+            : "Asignación, horarios y coordinación del turno";
         if (seguimiento) {
             $("#aseo-resumen").innerHTML = `<div class="cb-tracking-head" aria-hidden="true"><span>Cabaña</span><span>Camarero</span><span>Tipo de aseo</span><span>IN</span><span>OUT</span><span>Tiempo</span><span>Estado</span><span></span></div>${numeros.map(n => filaSeguimiento(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas en curso.</p>'}`;
             return;
@@ -859,6 +879,7 @@
             if (progress && esRepaso(dato, fecha)) progress.textContent = `${dato.repasoRevision?.checked?.length || 0}/26`;
         }
         resumen(fecha); pintarFiltros(fecha);
+        if (estado.categoriaFiltro !== "general" && estado.filtro !== "todas") pintarOperacion(fecha);
         if (estado.numero === String(numero)) { pintarDetalle(fecha); aplicarVista(); }
     }
     function proyectarTipo(numero, tipo, fecha) {
@@ -1080,8 +1101,18 @@
             void cambiarTipoRevision(numero, esRepaso(cabana(fechaActual(), numero)) ? "completa" : "repaso");
             return;
         }
-        if (boton.dataset.cabTab) { estado.tab = boton.dataset.cabTab; estado.filtro = "todas"; pintar(); guardarContexto(); return; }
-        if (boton.dataset.cbFilter) { estado.filtro = boton.dataset.cbFilter; pintar(); return; }
+        if (boton.dataset.cabTab) { estado.tab = boton.dataset.cabTab; estado.categoriaFiltro = "general"; estado.filtro = "todas"; cerrarFiltro(); pintar(); $("#cabinsFilters").scrollLeft = 0; guardarContexto(); return; }
+        if (Object.hasOwn(CATEGORIAS_FILTRO, boton.dataset.cbFilterCategory)) {
+            estado.categoriaFiltro = boton.dataset.cbFilterCategory; estado.filtro = "todas";
+            cerrarFiltro(); pintar(); $("#cabinsFilters").scrollLeft = 0; $("#cabinsFilterCategory summary")?.focus?.(); return;
+        }
+        if (boton.dataset.cbFilter) {
+            if (boton.dataset.cbSummary) { estado.categoriaFiltro = "general"; estado.tab = "operation"; }
+            estado.filtro = boton.dataset.cbFilter; pintar();
+            if (boton.dataset.cbSummary) $("#cabinsFilters").scrollLeft = 0;
+            else $(`#cabinsFilters [data-cb-filter="${estado.filtro}"]`)?.focus?.({ preventScroll: true });
+            return;
+        }
         if (boton.dataset.cbOpen) { abrir(boton.dataset.cbOpen, boton.dataset.cbOrigin || estado.tab); return; }
         if (boton.id === "volver-cabanas") { cerrar(); return; }
         if (boton.id === "cabinsExpressToggle") {
@@ -1171,9 +1202,18 @@
     });
     observador.observe($("#revision-checklist"), { childList: true });
     observador.observe($("#aseo-express-checklist"), { childList: true });
+    function cerrarFiltro() { const selector = $("#cabinsFilterCategory"); if (selector) selector.open = false; }
+    document.addEventListener("click", evento => {
+        if (!$("#cabinsFilterCategory")?.contains(evento.target)) cerrarFiltro();
+    });
+    document.addEventListener("keydown", evento => {
+        if (evento.key === "Escape" && $("#cabinsFilterCategory")?.open) {
+            cerrarFiltro(); $("#cabinsFilterCategory summary")?.focus?.();
+        }
+    });
     window.HAIKU_CABANAS_SITES_V1 = Object.freeze({ pintar, pintarOperacion, pintarRevision, pintarDetalle, abrir, cerrar,
         actualizarEstadoCabana, actualizarConteos, estadoAseo, estadoFinal, revision, trabajo, titular, expressReal,
-        grupoCabana, gruposCabanas, destinosPorCabana, tiempoTranscurrido });
+        grupoCabana, gruposCabanas, coincideFiltro, opcionesFiltro, destinosPorCabana, tiempoTranscurrido });
     if (panelAutenticado) {
         window.addEventListener("haiku:auth-ready", restaurarContexto, true);
         if (window.haikuSesion) restaurarContexto();
