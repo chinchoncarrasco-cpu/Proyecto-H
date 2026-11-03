@@ -123,7 +123,7 @@
     function aseoHTML(dato, numero) {
         const aseo = estadoAseo(dato);
         const accion = !dato.aseoIn && !dato.aseoOut
-            ? `<button type="button" class="cb-text-action cb-no-requiere" data-cb-no-requiere data-cabana="${numero}" aria-label="${aseo === "no_requiere" ? "Restablecer a Pendiente" : "Marcar No requiere"} · Cabaña ${numero}">${aseo === "no_requiere" ? "Restablecer" : "No requiere"}</button>` : "";
+            ? `<button type="button" class="cb-text-action cb-no-requiere" data-cb-no-requiere data-cabana="${numero}" aria-pressed="${aseo === "no_requiere"}" aria-label="${aseo === "no_requiere" ? "Restablecer a Pendiente" : "Marcar No requiere"} · Cabaña ${numero}">${aseo === "no_requiere" ? "Restablecer" : "No requiere"}</button>` : "";
         const conflicto = dato.aseoOut && !dato.aseoIn ? "Revisar: OUT sin IN"
             : dato.aseoEstado === "no_requiere" && (dato.aseoIn || dato.aseoOut) ? "Revisar: No requiere con horas" : "";
         return `<span class="cb-aseo-indicator"><span class="cb-badge ${tono(aseo)}" data-cb-aseo-state>${etiqueta(aseo)}</span>${accion}</span>${conflicto ? `<small class="cb-aseo-conflict">${conflicto}</small>` : ""}`;

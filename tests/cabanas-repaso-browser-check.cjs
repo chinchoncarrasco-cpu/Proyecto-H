@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
-const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/haiku-repaso-checklist-v1.js', 'js/supabase-repaso-v2.js']);
+const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/haiku-repaso-checklist-v1.js', 'js/supabase-repaso-v2.js', 'js/supabase-revision-ui-v1.js']);
 (async () => {
  const browser = await chromium.launch({ headless: true });
  try {
@@ -69,6 +69,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.locator('.menu-item[data-seccion="cabanas"]').click();
    const row = page.locator('#cabinsOperation [data-cb-cabin="1"]');
    const repaso = row.locator('[data-cb-repaso="1"]');
+   const noNeed = row.locator('[data-cb-no-requiere]');
+   assert.equal(await noNeed.getAttribute('aria-pressed'),'false');
+   assert.equal(await noNeed.evaluate(n=>getComputedStyle(n).textDecorationLine),'none','No requiere inactivo no se subraya');
    await page.evaluate(()=>{window.__timeNode=document.querySelector('#cabinsOperation [data-cb-cabin="1"] input[type="time"]');window.__modeDelay=800;});
    await repaso.click();
    assert.equal(await repaso.getAttribute('aria-pressed'),'true','selección optimista antes de confirmar');
@@ -92,8 +95,14 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await detail.fill('Limpiar lámparas y cajones sin perder lo escrito');
    await page.evaluate(()=>window.HAIKU_REPASO_V2.hidratar());
    assert.equal(await detail.inputValue(),'Limpiar lámparas y cajones sin perder lo escrito');
-   await page.locator('[data-repaso-copy="living"]').click();
+   const copy = page.locator('[data-repaso-copy="living"]');
+   const copyBox = await copy.boundingBox(), detailBox = await detail.boundingBox();
+   assert.ok(copyBox.x>=detailBox.x && copyBox.x+copyBox.width<=detailBox.x+detailBox.width && copyBox.y>=detailBox.y && copyBox.y+copyBox.height<=detailBox.y+detailBox.height,'copia visible dentro del detalle como Mobile');
+   assert.equal(await copy.locator('svg.copy-icon-default').isVisible(),true);
+   await copy.click();
    assert.equal(await page.evaluate(()=>window.__clipboard),'🛏️ LIVING / CAMA\nLimpiar lámparas y cajones sin perder lo escrito');
+   await page.locator('[data-repaso-paste]').click();
+   assert.equal(await page.locator('#repaso-observations').inputValue(),'🛏️ LIVING / CAMA\nLimpiar lámparas y cajones sin perder lo escrito');
    await page.locator('[data-repaso-item="repaso-living-cama"]').check();
    await page.locator('#repaso-status').selectOption('lista');
    assert.equal(await page.locator('#repaso-final').textContent(),'Lista','Lista de Repaso manda inmediatamente');
@@ -103,6 +112,13 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.waitForFunction(()=>document.querySelector('#revision-individual')?.classList.contains('activa'));
    assert.equal(await page.locator('#revision-detalles').inputValue(),'Observación existente');
    assert.ok(await page.locator('#revision-checklist [data-checklist-id]').count()>26,'completa conserva su checklist');
+   const fullDetail=page.locator('[data-revision-detalle-seccion="detalle_cocina"]');
+   await fullDetail.fill('Limpiar tetera por fuera\nLimpiar copa flauta');
+   await page.locator('[data-copiar-detalle-seccion="detalle_cocina"]').click();
+   assert.equal(await page.evaluate(()=>window.__clipboard),'🍳 COCINA\nLimpiar tetera por fuera\nLimpiar copa flauta');
+   await page.locator('#revision-detalles').fill('');
+   await page.locator('#pegar-detalles').click();
+   assert.equal(await page.locator('#revision-detalles').inputValue(),'🍳 COCINA\nLimpiar tetera por fuera\nLimpiar copa flauta');
    await page.locator('#cabinsReviewMode').selectOption('repaso');
    await page.waitForFunction(()=>document.querySelector('#repaso-individual')?.classList.contains('activa'));
    await page.locator('#repaso-checklist .cb-sector-head').first().click();
@@ -111,6 +127,8 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.evaluate(()=>{
      const data=obtenerDatosDia(fechaSeleccionada).cabanas['1'];data.aseoEstado='no_requiere';window.HAIKU_CABANAS_SITES_V1.pintar();
    });
+   assert.equal(await noNeed.getAttribute('aria-pressed'),'true');
+   assert.equal(await noNeed.evaluate(n=>getComputedStyle(n).textDecorationLine),'underline','No requiere seleccionado queda subrayado');
    for(const selector of ['[data-cb-aseo-state]','[data-cb-revision-state]','[data-cb-final-state]'])assert.equal(await row.locator(selector).textContent(),'No requiere');
    await page.evaluate(()=>{obtenerDatosDia(fechaSeleccionada).cabanas['1'].aseoEstado='pendiente';window.HAIKU_CABANAS_SITES_V1.pintar();});
    assert.equal(await row.locator('[data-cb-final-state]').textContent(),'Lista');

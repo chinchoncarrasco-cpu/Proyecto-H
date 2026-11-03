@@ -167,7 +167,7 @@
         const list = host.querySelector('#repaso-checklist');
         if (list.dataset.owner !== ctx.key) {
             list.dataset.owner = ctx.key;
-            list.innerHTML = profile.sections.map(s => `<section class="checklist-area cb-sector"><button type="button" class="cb-sector-head" aria-expanded="false"><span><strong>${esc(s.title)}</strong><small data-repaso-count="${s.id}"></small></span><span aria-hidden="true">+</span></button><div class="cb-sector-body" hidden><div class="checklist-items cb-group">${s.items.map(i=>`<label class="checklist-item cb-check"><input type="checkbox" data-repaso-item="${i.id}"><span>${esc(i.label)}</span></label>`).join('')}</div><div class="cb-observations"><label for="repaso-detail-${s.id}">DETALLE:</label><textarea id="repaso-detail-${s.id}" data-repaso-text="${s.id}" rows="3"></textarea><div><button type="button" class="cb-quiet" data-repaso-copy="${s.id}">Copiar</button></div></div></div></section>`).join('');
+            list.innerHTML = profile.sections.map(s => `<section class="checklist-area cb-sector"><button type="button" class="cb-sector-head" aria-expanded="false"><span><strong>${esc(s.title)}</strong><small data-repaso-count="${s.id}"></small></span><span aria-hidden="true">+</span></button><div class="cb-sector-body" hidden><div class="checklist-items cb-group">${s.items.map(i=>`<label class="checklist-item cb-check"><input type="checkbox" data-repaso-item="${i.id}"><span>${esc(i.label)}</span></label>`).join('')}</div><div class="checklist-section-detail"><label class="checklist-section-detail-label" for="repaso-detail-${s.id}">DETALLE:</label><button type="button" class="checklist-section-detail-copy" data-repaso-copy="${s.id}" aria-label="Copiar detalle de ${esc(s.title)}" title="Copiar detalle de ${esc(s.title)}"><svg class="copy-icon copy-icon-default" viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="9" height="10" rx="1.5"></rect><path d="M4.5 13.5h-1a1.5 1.5 0 0 1-1.5-1.5V3.5A1.5 1.5 0 0 1 3.5 2h8A1.5 1.5 0 0 1 13 3.5v1"></path></svg><svg class="copy-icon copy-icon-success" viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 3.5 3.5L16 5.5"></path></svg></button><span class="checklist-section-detail-copy-status" aria-live="polite" aria-atomic="true"></span><textarea class="checklist-section-detail-input" id="repaso-detail-${s.id}" data-repaso-text="${s.id}" rows="3"></textarea></div></div></section>`).join('');
         }
         host.querySelector('#repaso-count').textContent = `${data.checked.length}/26`;
         for(const input of list.querySelectorAll('[data-repaso-item]')) input.checked = data.checked.includes(input.dataset.repasoItem);
@@ -232,7 +232,12 @@
                     const target = {...opened}; const text=await navigator.clipboard.readText(); if (opened?.key !== target.key) return; const input=host.querySelector('[data-repaso-text="observations"]'); input.value=text; edit(target,'observations',text); return;
                 }
                 const field=button.dataset.repasoCopy, input=host.querySelector(`[data-repaso-text="${field}"]`), heading=profile.sections.find(s=>s.id===field)?.title;
-                await copy(`${heading?`${heading}\n`:''}${input?.value || ''}`); button.textContent='Copiado'; setTimeout(()=>{button.textContent='Copiar';},1300);
+                const text = input?.value || '';
+                if (!text.trim()) return;
+                await copy(`${heading?`${heading}\n`:''}${text}`);
+                if (button.classList.contains('checklist-section-detail-copy')) {
+                    mostrarFeedbackCopiaDetalle(button, 'copiado', 'Copiado', `Copiar detalle de ${heading}`, `Detalle de ${heading} copiado`);
+                } else { button.textContent='Copiado'; setTimeout(()=>{button.textContent='Copiar';},1300); }
             } catch(error) { showError(error); }
         });
         host.addEventListener('input',event=>{if(opened && event.target.dataset.repasoText) edit({...opened},event.target.dataset.repasoText,event.target.value);});
