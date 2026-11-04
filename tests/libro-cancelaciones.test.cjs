@@ -45,7 +45,7 @@ test('review uses real reservation data and only a saved cancellation opens the 
  const x=visualEnvironment(),detected=await x.api.detectarActual(sheet([],[e()]),x.cliente);
  x.api.adjuntar(x.out,detected,1);
  assert.equal(x.nodes().filter(n=>n.className?.includes('haiku-cancelacion-card')).length,1);
- for(const text of ['Carol Vega Ruiz','CAB 1','CANCELACIONES · Sep26 · D16','Proyecto H: Activa','2 noches'])assert.ok(x.text().includes(text),text);
+ for(const text of ['Carol Vega Ruiz','CAB 1','CANCELACIONES · Sep26 · D16','Confirmada en el Libro','Haku · por verificar','2 noches'])assert.ok(x.text().includes(text),text);
  const button=x.nodes().find(n=>n.tag==='button');assert.equal(button.textContent,'Preparar cancelación');assert.equal(typeof button.events.click,'function');
  await button.events.click();assert.equal(x.calls(),0);
  for(const text of ['Haku','Asistente operativo','REVISIÓN DEL LIBRO · SEPTIEMBRE 2026','Revisar cancelación','1 sep → 3 sep 2026 · 2 noches','EN EL LIBRO','Cancelación confirmada','CAMBIO EN HAKU','Actual','Activa','Después de confirmar','Cancelada','Pendiente de confirmar','La cancelación se aplicará al confirmar'])assert.ok(x.text().includes(text),text);
@@ -62,6 +62,20 @@ test('back and close preserve the original review nodes without applying a cance
   const original=x.out.children[1].children[0],button=x.nodes().find(n=>n.tag==='button');
   await button.events.click();await x.nodes().find(n=>n.tag==='button'&&n.textContent===accion).events.click();
   assert.equal(x.out.children[1].children[0],original);assert.equal(x.calls(),0);assert.doesNotMatch(x.text(),/Revisar cancelación/);
+ }
+});
+
+test('compact initial cards keep the stay dates, including month and year boundaries',()=>{
+ for(const [entrada,salida,noches,esperado] of [
+  ['2026-12-11','2026-12-12',1,'11 → 12 dic 2026 · 1 noche'],
+  ['2026-11-30','2026-12-02',2,'30 nov → 2 dic 2026 · 2 noches'],
+  ['2026-12-31','2027-01-02',2,'31 dic 2026 → 2 ene 2027 · 2 noches']
+ ]){
+  const x=visualEnvironment();x.api.adjuntar(x.out,{cancelaciones_confirmadas:[{anterior:{...r(),fecha_checkin:entrada,fecha_checkout:salida,noches},evidencia:e()}]},1);
+  assert.ok(x.text().includes(esperado),esperado);
+  assert.ok(x.text().includes('CANCELACIONES · Sep26 · D16'));
+  assert.ok(x.text().includes('Haku · por verificar'));
+  assert.equal(x.calls(),0);
  }
 });
 

@@ -131,10 +131,23 @@
   const m=String(fecha||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return fecha||'Sin fecha';
   return completa?`${m[3]}/${m[2]}/${m[1]}`:`${Number(m[3])} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m[2])-1]}`;
  }
- function cabecera(out,texto,n){const h=elemento('h3','haiku-cancelacion-titulo',texto);h.append(elemento('span','haiku-cancelacion-cantidad',`(${n})`));out.append(h);}
+ function cabecera(out,texto,n){const h=elemento('h3','haiku-cancelacion-titulo haiku-cancelacion-titulo--detectadas',texto);h.append(elemento('span','haiku-cancelacion-cantidad',String(n)));out.append(h);}
  function tarjeta(caso,resuelta=false){
   const r=caso.actual||caso.anterior,origen=caso.evidencia?.origen;
   const box=elemento('section',`haku-libro-item haiku-cancelacion-card${resuelta?' haiku-cancelacion-card--resuelta':''}`);
+  if(!resuelta){
+   box.className+=' haiku-cancelacion-card--detectada';
+   const top=elemento('div','haiku-cancelacion-top'),identidad=elemento('div','haiku-cancelacion-identidad');
+   top.append(elemento('span','haiku-cancelacion-badge','Confirmada en el Libro'),elemento('span','haiku-cancelacion-cab',`CAB ${r.cabana??'—'}`));
+   const entrada=String(r.fecha_checkin||''),salida=String(r.fecha_checkout||''),mismoMes=entrada.slice(0,7)===salida.slice(0,7)&&/^\d{4}-\d{2}-\d{2}$/.test(entrada)&&/^\d{4}-\d{2}-\d{2}$/.test(salida);
+   const anioEntrada=entrada.slice(0,4),anioSalida=salida.slice(0,4);
+   let periodo=`${mismoMes?Number(entrada.slice(8,10)):fechaVisual(entrada)}${anioEntrada!==anioSalida&&/^\d{4}$/.test(anioEntrada)?' '+anioEntrada:''} → ${fechaVisual(salida)}${/^\d{4}$/.test(anioSalida)?' '+anioSalida:''}`;
+   if(r.noches!=null)periodo+=` · ${r.noches} ${Number(r.noches)===1?'noche':'noches'}`;
+   const fechas=elemento('p','haiku-cancelacion-periodo',periodo);fechas.title=`${r.fecha_checkin} → ${r.fecha_checkout}`;
+   identidad.append(elemento('h4','haiku-cancelacion-nombre',r.titular),fechas);box.append(top,identidad);
+   if(origen&&(origen.hoja||origen.celda))box.append(elemento('p','haiku-cancelacion-origen',['Origen','CANCELACIONES',origen.hoja,origen.celda].filter(Boolean).join(' · ')));
+   return box;
+  }
   const top=elemento('div','haiku-cancelacion-top');top.append(elemento('span','haiku-cancelacion-badge',resuelta?'✓ Ya coincide':'Cancelación confirmada'),elemento('span','haiku-cancelacion-cab',`CAB ${r.cabana??'—'}`));
   const chips=elemento('div','haiku-cancelacion-chips');
   const fechas=elemento('span','haiku-cancelacion-chip',`${fechaVisual(r.fecha_checkin)} → ${fechaVisual(r.fecha_checkout)}`);fechas.title=`${r.fecha_checkin} → ${r.fecha_checkout}`;chips.append(fechas);
@@ -307,7 +320,10 @@
     }catch(e){
      vista=null;mostrarEstado(status,e.message||'No se pudo preparar la cancelación.');mostrar({...r,estado_actual:caso.estado_proyecto,reserva_id:caso.reserva_id},{error:e.message||'No se pudo preparar la cancelación.'});
     }finally{ocupado=false;button.disabled=obsoleto||terminada;}
-   });box.append(status,button);contenedor.append(box);out.appendChild(contenedor);
+   });
+   const pie=elemento('div','haiku-cancelacion-pie'),verificacion=elemento('div','haiku-cancelacion-verificacion');
+   verificacion.append(elemento('span','haiku-cancelacion-estado-haku','Haku · por verificar'),elemento('span','haiku-cancelacion-ayuda','Se revisará antes de confirmar.'));
+   pie.append(verificacion,button);box.append(status,pie);contenedor.append(box);out.appendChild(contenedor);
   }
  }
  const api=Object.freeze({preparar,confirmar,adjuntar,detectarActual,detectarActualConSnapshot,adjuntarResueltas,adjuntarRevision});root.HAIKU_LIBRO_CANCELACIONES_V1=api;if(typeof module!=='undefined')module.exports=api;
