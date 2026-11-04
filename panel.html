@@ -57,7 +57,7 @@
                 html = html.replace("<body>", `<body>\n${scriptArranquePrivado}`);
                 html = html.replace('src="js/cabanas.js"', `src="js/cabanas.js?v=${version}"`);
                 // La prueba visual del Resumen debe cargar siempre los drawers y sus puentes vigentes.
-                for (const modulo of ["haiku-horas-edicion-v1", "app", "calendario", "haiku-buscador-reservas-v1", "sites-resumen-drawer-v1", "sites-resumen-reserva-v1",
+                for (const modulo of ["haiku-horas-edicion-v1", "app", "calendario", "haiku-redes-core-v1", "haiku-redes-api-v1", "haiku-redes-ui-v1", "haiku-buscador-reservas-v1", "sites-resumen-drawer-v1", "sites-resumen-reserva-v1",
                     "haiku-reserva-estado-manual-v1", "sites-resumen-nota-v1", "sites-resumen-servicio-v1", "sites-resumen-pago-v1",
                     "supabase-resumen-tablero-v1", "checklist-optimista-v1", "haiku-repaso-checklist-v1", "sites-cabanas-v1", "sites-cierre-v1", "sites-servicios-v1"]) {
                     html = html.replace(`src="js/${modulo}.js"`, `src="js/${modulo}.js?v=${version}"`);
@@ -85,6 +85,8 @@
                 html = html.replace(/<link rel="stylesheet" href="css\/haiku-tema(?:-oscuro)?-v1\.css">\s*/g, "");
                 html = html.replace('src="js/haiku-tema-v1.js"', `src="js/haiku-tema-v1.js?v=${version}"`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-tema-oscuro-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-v1.css?v=${version}">\n</head>`);
+                html = html.replace('<link rel="stylesheet" href="css/haiku-redes-v1.css">', "");
+                html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-redes-v1.css?v=${version}">\n</head>`);
                 const marca = "<!-- JAVASCRIPT -->";
                 if (!html.includes(marca)) throw new Error("No se encontró el punto de inserción JAVASCRIPT en index.html");
                 const scriptsSupabaseBase = [
