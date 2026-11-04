@@ -225,6 +225,9 @@
 
     function inertizarFondo() {
         document.documentElement.classList.add("haiku-privacidad-bloqueada");
+        // Native modal dialogs live above ordinary overlays. Their owners must
+        // suspend them before the background becomes inert so the PIN stays usable.
+        window.dispatchEvent(new CustomEvent("haiku:privacidad-cambio", {detail: {bloqueada: true}}));
 
         [...document.body.children].forEach(elemento => {
             if (elemento === overlay) return;
@@ -246,6 +249,7 @@
             }
         });
         elementosInertizados.clear();
+        window.dispatchEvent(new CustomEvent("haiku:privacidad-cambio", {detail: {bloqueada: false}}));
     }
 
     function limpiarMensajes() {

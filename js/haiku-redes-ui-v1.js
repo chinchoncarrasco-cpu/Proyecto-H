@@ -9,6 +9,32 @@
     const day=C.today(); let cursor=day.slice(0,7), view='mes', plan=null, rows=[], assets=[], api=null, selected=null, dirty=false, busy=false, generation=0, opening=0, lastFocus=null, signedTimer=null;
     let filters=defaults(), loaded=false;
     let shareState=null;
+    let privacySuspended=false,privacyFocus=null;
+    const privacyBlocked=()=>!readOnly&&document.documentElement.classList.contains('haiku-privacidad-bloqueada');
+    function showDialog(){
+        if(privacyBlocked()){privacySuspended=true;return;}
+        privacySuspended=false;dialog.showModal();
+    }
+    function syncPrivacy(){
+        if(readOnly)return;
+        if(privacyBlocked()){
+            if(dialog.open){privacySuspended=true;privacyFocus=document.activeElement;dialog.close();clearTimeout(signedTimer);}
+            return;
+        }
+        if(privacySuspended){
+            privacySuspended=false;
+            if(!window.haikuSesion)return;
+            dialog.showModal();
+            if(privacyFocus?.isConnected&&dialog.contains(privacyFocus))privacyFocus.focus({preventScroll:true});
+            privacyFocus=null;
+            if(selected)renderGallery();
+        }
+    }
+    if(!readOnly){
+        window.addEventListener('haiku:privacidad-cambio',syncPrivacy);
+        // Also supports a privacy script from the previous cached panel version.
+        new MutationObserver(syncPrivacy).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+    }
     if(readOnly&&window.matchMedia('(max-width:600px)').matches)view='agenda';
     function defaults(){return {categories:['redes'],search:'',type:'',format:'',material:'',state:'',channel:'',campaign:'',execution:''};}
     const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -137,24 +163,24 @@
         const event=allEvents().find(p=>p.id===id);if(!event)return;
         lastFocus=document.activeElement; const o=++opening,g=generation;
         if(!event.content_type){
-            selected=null;dirty=false;dialog.innerHTML=`<div class="hr-drawer-head"><div><p class="hr-eyebrow">PLANIFICACIÓN</p><h3>${E(event.title)}</h3></div><button data-close aria-label="Cerrar">×</button></div><div class="hr-drawer-body"><p>${E(C.dateLabel(event.date))}${event.end_date?' – '+E(C.dateLabel(event.end_date)):''}</p><p>${E(event.detail)}</p><p>${E(event.status)}</p>${event.asset?`<p>Material sugerido: ${E(event.asset)}</p>`:''}${event.campaign_id?`<button data-campaign="${E(event.campaign_id)}">Ver contenidos de esta campaña</button>`:''}<p class="hr-muted">${(event.source_ids||[]).map(id=>{const s=plan.sources.find(s=>s.id===id);return s&&/^https:\/\//.test(s.url)?`<a href="${E(s.url)}" target="_blank" rel="noopener">${E(s.title)}</a>`:'';}).join(' · ')}</p></div>`;dialog.showModal();return;
+            selected=null;dirty=false;dialog.innerHTML=`<div class="hr-drawer-head"><div><p class="hr-eyebrow">PLANIFICACIÓN</p><h3>${E(event.title)}</h3></div><button data-close aria-label="Cerrar">×</button></div><div class="hr-drawer-body"><p>${E(C.dateLabel(event.date))}${event.end_date?' – '+E(C.dateLabel(event.end_date)):''}</p><p>${E(event.detail)}</p><p>${E(event.status)}</p>${event.asset?`<p>Material sugerido: ${E(event.asset)}</p>`:''}${event.campaign_id?`<button data-campaign="${E(event.campaign_id)}">Ver contenidos de esta campaña</button>`:''}<p class="hr-muted">${(event.source_ids||[]).map(id=>{const s=plan.sources.find(s=>s.id===id);return s&&/^https:\/\//.test(s.url)?`<a href="${E(s.url)}" target="_blank" rel="noopener">${E(s.title)}</a>`:'';}).join(' · ')}</p></div>`;showDialog();return;
         }
         if(!loaded){note('Espera a que termine de cargar el contenido compartido.',true);return;}
-        if(readOnly){selected={...event};dirty=false;drawReadOnly();dialog.showModal();return;}
-        try{const d=await api.get(id);if(o!==opening||g!==generation)return;updateData(id,d);selected={...getPost(id)};dirty=false;drawPost();dialog.showModal();}
+        if(readOnly){selected={...event};dirty=false;drawReadOnly();showDialog();return;}
+        try{const d=await api.get(id);if(o!==opening||g!==generation)return;updateData(id,d);selected={...getPost(id)};dirty=false;drawPost();showDialog();}
         catch(e){note(e.message,true);}
     }
     function newPost(date){
         if(readOnly)return;
         if(!loaded){note('Espera a que termine la conexión con Haku y pulsa «Actualizar» si hubo un error.',true);return;}
-        lastFocus=document.activeElement;selected={id:'manual-'+C.uuid(),date,title:'',content_type:'publicacion',format:'Foto',story_kind:null,channels:['facebook','instagram'],workflow_status:'material_pendiente',categories:['redes']};dirty=false;++opening;drawPost();dialog.showModal();
+        lastFocus=document.activeElement;selected={id:'manual-'+C.uuid(),date,title:'',content_type:'publicacion',format:'Foto',story_kind:null,channels:['facebook','instagram'],workflow_status:'material_pendiente',categories:['redes']};dirty=false;++opening;drawPost();showDialog();
     }
     function fieldOptions(items,value){return Object.entries(items).map(([v,t])=>`<option value="${E(v)}" ${v===value?'selected':''}>${E(t)}</option>`).join('');}
     function shareURL(){const url=new URL('calendario-redes.html',location.href);url.search='';url.hash=new URLSearchParams({enlace:shareState.token,mes:cursor}).toString();return url.href;}
     async function openShare(){
         if(!loaded||!api){note('Espera a que termine de cargar el calendario.',true);return;}
         lastFocus=document.activeElement;selected=null;dirty=false;const o=++opening,g=generation;
-        try{const state=await api.getShare();if(o!==opening||g!==generation)return;shareState=state;drawShare();dialog.showModal();}catch(e){note(e.message,true);}
+        try{const state=await api.getShare();if(o!==opening||g!==generation)return;shareState=state;drawShare();showDialog();}catch(e){note(e.message,true);}
     }
     function drawShare(){
         const enabled=!!shareState?.enabled,url=enabled?shareURL():'';
@@ -261,7 +287,7 @@
             if(g===generation&&o===opening&&await reloadSelected())drawerNote('Archivos guardados. Ya están disponibles para el equipo.');
         });input.value='';
     }
-    function close(){if(busy)return;if(dirty&&!window.confirm('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?'))return;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);lastFocus?.focus();}
+    function close(){if(busy)return;if(dirty&&!window.confirm('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?'))return;privacySuspended=false;privacyFocus=null;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);lastFocus?.focus();}
     dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
     dialog.addEventListener('submit',e=>{e.preventDefault();if(!readOnly)run(async()=>{await persist();drawPost();drawerNote('Contenido guardado.');});});
     dialog.addEventListener('input',e=>{if(!readOnly&&e.target.name)dirty=true;});
@@ -290,7 +316,7 @@
         else if(b.dataset.remove){if(!window.confirm(`¿Retirar «${a.filename}» de este contenido?`))return;run(async()=>{if(dirty)await persist();await api.remove(a);if(await reloadSelected())drawerNote('Archivo retirado. El contenido vuelve a material pendiente.');});}
         else{run(async()=>{if(dirty)await persist();const list=assetList(a.post_id).filter(a=>a.state==='ready'),n=list.findIndex(x=>x.id===a.id),to=n+(b.dataset.up?-1:1);if(to<0||to>=list.length)return;[list[n],list[to]]=[list[to],list[n]];await api.reorder(a.post_id,list.map(a=>a.id));if(await reloadSelected())drawerNote('Orden guardado.');});}
     });
-    function reset(){generation++;opening++;rows=[];assets=[];api=null;loaded=false;selected=null;shareState=null;dirty=false;busy=false;clearTimeout(signedTimer);dialog.close();dialog.innerHTML='';dialog.classList.remove('hr-busy');dialog.removeAttribute('aria-busy');shell();note('Inicia sesión para acceder al contenido compartido.');}
+    function reset(){generation++;opening++;rows=[];assets=[];api=null;loaded=false;selected=null;shareState=null;privacySuspended=false;privacyFocus=null;dirty=false;busy=false;clearTimeout(signedTimer);dialog.close();dialog.innerHTML='';dialog.classList.remove('hr-busy');dialog.removeAttribute('aria-busy');shell();note('Inicia sesión para acceder al contenido compartido.');}
     window.addEventListener('haiku:auth-ready',()=>{if(!readOnly&&section.classList.contains('hr-social-active'))init();});
     let subscribed=false;
     function subscribe(){if(subscribed||!window.haikuSupabase)return;subscribed=true;let user=window.haikuSesion?.auth?.id||null;window.haikuSupabase.auth.onAuthStateChange((event,session)=>{if(event==='SIGNED_OUT'||(user&&session?.user?.id!==user))reset();user=session?.user?.id||null;});}
