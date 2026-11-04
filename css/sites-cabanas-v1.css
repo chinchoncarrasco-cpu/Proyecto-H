@@ -1570,8 +1570,6 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas { --cb-request-text:#f2c58d; --c
 #seccion-cabanas .cabins-tabs::-webkit-scrollbar { display:none; }
 #seccion-cabanas .cabins-tabs button { flex:none; }
 #seccion-cabanas #cabinsSupplies[hidden], #seccion-cabanas #cabinsCheckout[hidden], #seccion-cabanas #cabinsCheckoutList[hidden], #seccion-cabanas #cabinsCheckoutDetail[hidden] { display:none; }
-#seccion-cabanas .cb-open-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
-#seccion-cabanas .cb-open-actions button { border:0; padding:2px 0; background:none; color:var(--cb-accent); font:600 10px/14px var(--sites-shell-font,Inter,sans-serif); cursor:pointer; white-space:nowrap; }
 #seccion-cabanas .cb-supply-cabins { display:grid; gap:8px; margin-top:12px; }
 #seccion-cabanas .cb-supply-cabin { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--cb-border); border-radius:10px; background:var(--cb-surface); padding:12px; color:var(--cb-text); }
 #seccion-cabanas .cb-supply-cabin strong { color:var(--cb-text); font-size:12px; }
@@ -1617,9 +1615,3 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas { --cb-request-text:#f2c58d; --c
 #seccion-cabanas .cb-checkout-card .cb-cabin-guest { display:flex; align-items:center; gap:6px; }
 #seccion-cabanas .cb-checkout-card .cb-cabin-holder { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--cb-text); font-size:11px; }
 #seccion-cabanas .cb-checkout-card .cb-cabin-movement { flex:none; color:var(--cb-progress-text); font-size:9px; }
-
-#seccion-cabanas .cb-tracking-actions { display:flex; flex-direction:column; gap:4px; }
-@media(max-width:780px) {
-  #seccion-cabanas .cb-tracking-actions { grid-column:1/4; flex-direction:row; gap:8px; }
-  #seccion-cabanas #aseo-resumen .cb-tracking-actions>.cb-open, #seccion-cabanas .cb-tracking-actions>.cb-outline { flex:1; width:auto; }
-}
