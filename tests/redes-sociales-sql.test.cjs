@@ -9,7 +9,7 @@ const migration=fs.existsSync(candidate)?candidate:path.join(ROOT,'supabase/migr
 test('Postgres: permisos, archivos privados, captura diaria, formato, concurrencia y orden',async()=>{
  const db=new PGlite();
  try{
- await db.exec(`create role anon;create role authenticated;create schema auth;create schema private;create schema storage;
+ await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create schema private;create schema storage;
  create table auth.users(id uuid primary key);
  create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
  create table public.permisos(id uuid primary key default gen_random_uuid(),codigo text unique,nombre text,descripcion text,categoria text);
@@ -29,8 +29,13 @@ test('Postgres: permisos, archivos privados, captura diaria, formato, concurrenc
  insert into public.usuario_roles select '00000000-0000-0000-0000-000000000002',id from public.roles where codigo='manager';
  insert into public.usuario_roles select '00000000-0000-0000-0000-000000000003',id from public.roles where codigo='aseo';`);
  await db.exec(fs.readFileSync(migration,'utf8'));
+ const shareMigration=fs.readdirSync(path.join(ROOT,'supabase/migrations')).find(f=>f.endsWith('_calendario_redes_compartir.sql'));
+ await db.exec(fs.readFileSync(path.join(ROOT,'supabase/migrations',shareMigration),'utf8'));
  async function asUser(n){await db.exec(`reset role;set request.jwt.claim.sub='00000000-0000-0000-0000-${String(n).padStart(12,'0')}';set role authenticated;`);}
  await asUser(1);
+ await db.exec(`insert into public.haiku_redes_share(id,token,enabled) values ('redes',repeat('a',64),true)`);
+ await assert.rejects(db.exec(`update public.haiku_redes_share set created_by='00000000-0000-0000-0000-000000000002'`),/permission denied/);
+ await db.exec(`update public.haiku_redes_share set enabled=false`);
  await db.exec(`insert into public.haiku_redes_posts(id,title,publish_date,content_type,format) values ('test','Terraza',current_date,'publicacion','Foto');`);
  const a=(await db.query(`insert into public.haiku_redes_assets(post_id,filename,mime,bytes) values ('test','foto.jpg','image/jpeg',100) returning *`)).rows[0];
  assert.ok(a.storage_path.startsWith('test/'));
@@ -57,11 +62,17 @@ test('Postgres: permisos, archivos privados, captura diaria, formato, concurrenc
  await db.exec(`insert into public.haiku_redes_assets(post_id,filename,mime,bytes,captured_on) values ('story','foto.jpg','image/jpeg',100,(now() at time zone 'America/Santiago')::date)`);
  await assert.rejects(db.exec(`insert into public.haiku_redes_assets(post_id,filename,mime,bytes) values ('test','video.mp4','video/mp4',100)`),/no corresponde/);
  await asUser(3);
+ assert.equal((await db.query('select * from public.haiku_redes_share')).rows.length,0);
+ assert.equal((await db.query('update public.haiku_redes_share set enabled=true returning id')).rows.length,0);
  assert.equal((await db.query('select * from public.haiku_redes_posts')).rows.length,0);
  assert.equal((await db.query('select * from public.haiku_redes_assets')).rows.length,0);
  assert.equal((await db.query('select * from storage.objects')).rows.length,0);
  await assert.rejects(db.exec(`insert into public.haiku_redes_posts(id,title,publish_date,content_type,format) values ('unauthorized','No',current_date,'publicacion','Foto')`),/row-level security/);
  await db.exec('reset role;set role anon');await assert.rejects(db.exec('select * from public.haiku_redes_posts'),/permission denied/);
+ await assert.rejects(db.exec('select * from public.haiku_redes_share'),/permission denied/);
+ await db.exec('reset role;set role service_role');
+ assert.equal((await db.query('select id,title,copy from public.haiku_redes_posts')).rows.length,2);
+ await assert.rejects(db.exec('select owner,created_by from public.haiku_redes_posts'),/permission denied/);
  await asUser(2);
  await db.exec(`delete from storage.objects where name='${a.storage_path}';delete from public.haiku_redes_assets where id='${a.id}';`);
  assert.equal((await db.query(`select workflow_status from public.haiku_redes_posts where id='test'`)).rows[0].workflow_status,'material_pendiente');

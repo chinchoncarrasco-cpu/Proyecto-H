@@ -51,7 +51,19 @@
             return check(await bucket.createSignedUrl(asset.storage_path,900,download?{download:asset.filename}:undefined)).signedUrl;
         }
         async function reorder(postId, ids) {check(await client.rpc('haiku_redes_ordenar',{p_post:postId,p_ids:ids}));}
-        return {load,get,ensure,save,upload,remove,signed,reorder};
+        async function getShare(){return check(await client.from('haiku_redes_share').select('id,token,enabled').eq('id','redes').maybeSingle());}
+        async function changeShare(previous,enabled){
+            const token=enabled?Array.from(crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join(''):previous?.token;
+            if(!previous){
+                const result=await client.from('haiku_redes_share').insert({id:'redes',token,enabled}).select('id,token,enabled').single();
+                if(result.error?.code==='23505')throw new Error('Otra persona cambió el enlace. Cierra y vuelve a abrir Compartir.');
+                return check(result);
+            }
+            const data=check(await client.from('haiku_redes_share').update({token,enabled}).eq('id','redes').eq('token',previous.token).eq('enabled',previous.enabled).select('id,token,enabled'));
+            if(!data.length)throw new Error('El enlace cambió en otro equipo. Cierra y vuelve a abrir Compartir.');
+            return data[0];
+        }
+        return {load,get,ensure,save,upload,remove,signed,reorder,getShare,changeShare};
     }
     if(typeof module==='object'&&module.exports) module.exports={create}; else root.HaikuRedesApi=Object.freeze({create});
 })(typeof window==='object'?window:globalThis);

@@ -1,0 +1,9 @@
+.hr-public-page{margin:0;background:#0e1915;color:#e8efea;font-family:Inter,"Segoe UI",Arial,sans-serif;min-height:100dvh}
+.hr-public-brand{max-width:1600px;margin:auto;padding:28px 32px;display:flex;align-items:center;gap:12px;font-size:14px;letter-spacing:2px}
+.hr-public-mark{display:grid;place-items:center;background:#213d30;border:1px solid #365043;border-radius:50%;width:40px;height:40px;font-size:20px}
+.hr-public-brand small{display:block;font-size:10px;color:#a4b6aa;letter-spacing:1px;margin-top:4px}
+.hr-readonly{margin-left:auto;font-size:11px;letter-spacing:0;border:1px solid #365043;border-radius:20px;padding:6px 12px;color:#b7cbbf}
+.hr-public-page main{max-width:1600px;margin:auto;padding:12px 32px 40px}.hr-public-footer{padding:20px;text-align:center;color:#a4b6aa;font-size:11px}
+.hr-public-page .hr-read-copy{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:var(--hr-panel);border:1px solid var(--hr-border);border-radius:8px}
+.hr-public-page .hr-preview{height:280px}.hr-public-page .hr-dialog{max-width:100vw}
+@media(max-width:600px){.hr-public-brand{padding:20px 16px}.hr-public-page main{padding:8px 16px 24px}.hr-public-page .hr-filter-grid{grid-template-columns:1fr}.hr-public-page .hr-segment{width:100%;justify-content:space-between}.hr-public-page .hr-controls{gap:12px}.hr-public-page .hr-preview{height:240px}}

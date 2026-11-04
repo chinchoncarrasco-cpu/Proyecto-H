@@ -1,4 +1,5 @@
 /* Scoped calendar layer; existing reservation selectors and geometry are preserved. */
+.hr-top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.hr-share-link{display:inline-flex;align-items:center;min-height:36px;padding:8px 11px;border:1px solid var(--hr-border);border-radius:7px}
 #haiku-redes,.hr-dialog,#haiku-calendario-modo{--hr-bg:#fff;--hr-panel:#f5f7f5;--hr-ink:#172522;--hr-muted:#687873;--hr-border:#dce5e0;--hr-green:#22735c;--hr-tint:#e6f2eb;--hr-blue:#e8f2f7;--hr-purple:#f0eafa;--hr-warn:#fff2df;--hr-error:#a83330;font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--hr-ink);font-size:13px;line-height:1.5;color-scheme:light}
 html[data-haiku-tema="oscuro"] :is(#haiku-redes,.hr-dialog,#haiku-calendario-modo){--hr-bg:#17241e;--hr-panel:#101916;--hr-ink:#e8efea;--hr-muted:#a4b6aa;--hr-border:#365043;--hr-green:#2b7b60;--hr-tint:#213d30;--hr-blue:#203c41;--hr-purple:#373047;--hr-warn:#433823;--hr-error:#ffb2a9;color-scheme:dark}
 #haiku-redes[hidden]{display:none!important}
