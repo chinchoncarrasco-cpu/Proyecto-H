@@ -184,6 +184,17 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
       assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.descripcion === 'Toallas para Cabaña 7').cabana_id), 'cab-7');
       await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.cerrar());
+      const summary=page.locator('[data-cb-cabin="1"] .cb-request-summary');
+      assert.equal(await summary.locator('.cb-request-summary-item').count(),5,'el listado muestra los tipos guardados aunque no haya texto Express legacy');
+      assert.doesNotMatch(await summary.textContent(),/Solicita Express/,'las canceladas desaparecen del listado');
+      assert.match(await summary.textContent(),/Reposición de Leña/,'una solicitud restaurada reaparece sin tocar el checklist');
+      assert.equal(await summary.locator('.cb-request-summary-item').first().evaluate(n=>getComputedStyle(n).backgroundColor),'rgba(0, 0, 0, 0)','texto sin recuadros');
+      assert.equal(await summary.locator('.cb-request-summary-item').first().evaluate(n=>getComputedStyle(n).color),theme==='oscuro'?'rgb(242, 197, 141)':'rgb(142, 86, 26)','color de solicitudes en ambos temas');
+      const heading=await page.locator('[data-cb-cabin="1"] .cb-cabin-heading').boundingBox();
+      assert.ok(Math.abs((await summary.boundingBox()).x-heading.x)<1,'solicitudes alineadas al título de cabaña');
+      assert.equal(await page.locator('[data-cb-cabin="2"] .cb-request-summary').count(),0,'sin solicitudes no agrega una fila vacía');
+      assert.equal(await page.locator('[data-cb-cabin="1"] .cb-cabin-holder').textContent(),'Sin reserva');
+      assert.equal(await page.locator('[data-cb-cabin="1"] .cb-cabin-movement').count(),0,'Sin reserva se muestra una sola vez');
       await page.locator('#agregar-solicita').click();
       assert.equal(await modal.locator('#solicita-cabana').isVisible(), true, 'el listado general conserva la elección de cabaña');
       assert.equal(await modal.locator('#solicita-cabana').isDisabled(), false);

@@ -599,7 +599,7 @@ test("la proyección autoritativa muestra al saliente exacto y no mezcla otro ID
     h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha: FECHA });
     const correcta = fila(h.nodos.get("#aseo-resumen").innerHTML, 9);
     assert.match(correcta, /Yann O&#39;Connell/);
-    assert.doesNotMatch(correcta, /<span title="H-9">H-9<\/span>/);
+    assert.doesNotMatch(correcta, /<span class="cb-cabin-holder" title="H-9">H-9<\/span>/);
     assert.equal(h.api.titular(datos[9], FECHA, "9"), "Yann O'Connell",
         "En sale-libre debe prevalecer salidaReservaId frente al reservaId local obsoleto");
     assert.match(fila(h.nodos.get("#aseo-resumen").innerHTML, 10), /Sin reserva/);
@@ -608,7 +608,7 @@ test("la proyección autoritativa muestra al saliente exacto y no mezcla otro ID
     datos[9].salidaReservaId = "r-otra";
     h.emitirDocumento("haiku:resumen-datos-actualizados", { fecha: FECHA });
     const otra = fila(h.nodos.get("#aseo-resumen").innerHTML, 9);
-    assert.match(otra, /<span title="Sin titular">Sin titular<\/span>/);
+    assert.match(otra, /<span class="cb-cabin-holder" title="Sin titular">Sin titular<\/span>/);
     assert.doesNotMatch(otra, /Yann O&#39;Connell/);
 });
 

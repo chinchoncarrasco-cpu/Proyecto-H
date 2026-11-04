@@ -175,6 +175,21 @@
         const expresa = String(dato?.solicitudAseoExpress || "").trim();
         return { expresas: expresa ? [expresa] : [], operativas };
     }
+    function solicitudesResumenHTML(fecha, numero, dato) {
+        const { expresas, operativas } = listaSolicitudes(fecha, numero, dato);
+        const tipos = tiposSolicitud();
+        const entradas = Array.isArray(dato?.solicitudesTipos)
+            ? dato.solicitudesTipos.filter(s => s.estado !== "cancelada" && tipos[s.categoria])
+                .map(s => ({ texto: tipos[s.categoria], detalle: s.descripcion || tipos[s.categoria] }))
+            : expresas.map(texto => ({ texto, detalle: texto }));
+        entradas.push(...operativas.map(texto => ({ texto, detalle: texto })));
+        return entradas.length ? `<div class="cb-request-summary" aria-label="Solicitudes de cabaña ${numero}">${entradas.map((s, i) =>
+            `<span class="cb-request-summary-item" title="${escapar(s.detalle)}">${i ? '· ' : ''}${escapar(s.texto)}</span>`).join("")}</div>` : "";
+    }
+    function movimientoCabecera(dato) {
+        return ({ "libre-ingresa": "Ingresa", "sale-ingresa": "Sale / Ingresa", "sale-libre": "Sale",
+            continua: "Continúa", fullday: "Full Day", bloqueada: "Bloqueada" })[dato?.estado] || "";
+    }
     function solicitudesHTML(fecha, numero, dato, eliminar = true, detalle = false) {
         if (Array.isArray(dato?.solicitudesTipos)) return solicitudesTiposHTML(numero, dato.solicitudesTipos, eliminar, detalle);
         const solicitudes = listaSolicitudes(fecha, numero, dato);
@@ -343,7 +358,9 @@
         }
         raiz.querySelectorAll("[data-cb-insumos]").forEach(nodo => {
             const texto = textoInsumos(fecha, nodo.dataset.cbInsumos);
-            nodo.textContent = texto ? ` · ${texto}` : "";
+            const soloInsumos = nodo.hasAttribute("data-cb-insumos-only");
+            nodo.textContent = texto ? `${soloInsumos ? "" : " · "}${texto}` : "";
+            if (soloInsumos) nodo.parentElement.hidden = !texto;
             nodo.parentElement.title = nodo.parentElement.textContent;
         });
         const bloque = $("#cabinsReplenishment");
@@ -510,10 +527,9 @@
     function filaOperacion(fecha, numero) {
         const dato = cabana(fecha, numero);
         const final = estadoFinal(dato, fecha, numero);
-        const solicitudes = listaSolicitudes(fecha, numero, dato);
-        const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
+        const nombre = titular(dato, fecha, numero), movimiento = movimientoCabecera(dato);
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
+          <div class="cb-cabin"><div class="cb-cabin-heading"><strong>Cabaña ${numero}</strong><div class="cb-cabin-guest"><span class="cb-cabin-holder" title="${escapar(nombre)}">${escapar(nombre)}</span>${movimiento && movimiento !== nombre ? `<span class="cb-cabin-movement">${escapar(movimiento)}</span>` : ""}</div></div>${solicitudesResumenHTML(fecha, numero, dato)}<small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}"${textoInsumos(fecha, numero) ? "" : " hidden"}><span data-cb-insumos="${numero}" data-cb-insumos-only>${escapar(textoInsumos(fecha, numero))}</span></small></div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
           <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
