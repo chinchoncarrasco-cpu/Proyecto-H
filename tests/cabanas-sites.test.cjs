@@ -162,6 +162,37 @@ function fila(contenido, numero, tipo) {
     return contenido.match(new RegExp(`<article[^>]*${atributo}="${numero}"[\\s\\S]*?<\\/article>`))?.[0] || "";
 }
 
+test("solicitudes y notas se separan en listado y cabecera sin reservar espacio vacío", () => {
+    const h = arnes({ 10: { solicitudAseoExpress: "Solicita Express" } });
+    const dia = h.datosPorFecha[FECHA];
+    dia.notasOperativas = [{ cabana: 10, texto: "Prueba Nota <texto>\nSegunda línea" },
+        { cabana: 9, texto: "Nota de otra cabaña" }];
+    h.api.pintar();
+    const markup = fila(h.nodos.get("#aseo-resumen").innerHTML, 10);
+    const requests = markup.match(/<div class="cb-request-summary"[\s\S]*?<\/div>/)[0];
+    assert.match(requests, /Solicita Express/);
+    assert.doesNotMatch(requests, /Prueba Nota/);
+    assert.ok(markup.indexOf('class="cb-note-summary"') > markup.indexOf('class="cb-request-summary"'));
+    assert.match(markup, /Prueba Nota &lt;texto&gt;\nSegunda línea/);
+    assert.doesNotMatch(markup, /Nota de otra cabaña/);
+    h.api.abrir(10);
+    const context = h.nodos.get("#cabinsDetailContext");
+    assert.equal(context.hidden, false);
+    assert.match(context.innerHTML, /Solicita Express[\s\S]*cb-note-summary[\s\S]*Prueba Nota/);
+    dia.cabanas[10].solicitudAseoExpress = "";
+    h.api.pintar();
+    assert.match(context.innerHTML, /cb-note-summary/);
+    assert.doesNotMatch(context.innerHTML, /cb-request-summary/);
+    dia.notasOperativas = [];
+    h.api.pintar();
+    assert.equal(context.innerHTML, "");
+    assert.equal(context.hidden, true);
+    dia.cabanas[10].solicitudAseoExpress = "Solicita Express";
+    h.api.pintar();
+    assert.match(context.innerHTML, /cb-request-summary/);
+    assert.doesNotMatch(context.innerHTML, /cb-note-summary/);
+});
+
 test("la etiqueta de revisión ofrece cuatro estados y guarda la cabaña sin abrir la ficha", async () => {
     const h = arnes({ 5: { aseoIn: "14:27", aseoOut: "14:28", estadoRevision: "pendiente" } });
     const markup = fila(h.nodos.get("#aseo-resumen").innerHTML, 5);
