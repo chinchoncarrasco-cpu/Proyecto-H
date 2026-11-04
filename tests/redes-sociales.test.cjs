@@ -24,11 +24,11 @@ test('plan 2027 mantiene 105 publicaciones permanentes y 470 historias, con prep
  assert.equal(ps.filter(p=>p.content_type!=='historia').length,105);
  assert.equal(ps.filter(p=>p.content_type==='historia').length,470);
  assert.equal(new Set(plan.posts.map(p=>p.id)).size,plan.posts.length);
- assert.equal(plan.preparation_tasks.length,18);
+ assert.equal(plan.preparation_tasks.filter(t=>t.extension!=='inicio-2026').length,18);
 });
 test('filtros combinan capas, diferencian material y no duplican feriados',()=>{
  const f={categories:Object.keys(C.CATEGORIES)};
- assert.equal(plan.events.filter(e=>C.matches(e,f)).length,26);
+ assert.equal(plan.events.filter(e=>e.date.startsWith('2027')&&C.matches(e,f)).length,26);
  const daily={...post,story_kind:'diaria',date:'2027-01-05'};
  assert.equal(C.material(daily,[],'2027-01-04'),'capturar');
  assert.equal(C.material(post,[{state:'ready',kind:'cover'}]),'sin');
