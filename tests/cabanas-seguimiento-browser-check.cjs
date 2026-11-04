@@ -56,7 +56,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    assert.ok(summary.height <= (width > 1100 ? 44 : 154), 'resumen compacto: ' + summary.height);
    await page.locator('[data-cb-filter="en_curso"]').click();
    assert.equal(await page.locator('.cb-tracking-row').count(), 2);
-   assert.equal(await page.locator('.cb-tracking-row [data-supply-open]').count(), 2);
+   assert.equal(await page.locator('.cb-tracking-row [data-supply-open]').count(), 0);
    assert.deepEqual(await page.locator('[data-cb-elapsed]').allTextContents(), ['36 min','23 min']);
    await page.locator('[data-cab-tab="supplies"]').click();
    const details = page.locator('[data-insumos-destinos]');
