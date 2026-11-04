@@ -67,6 +67,31 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
     fs.mkdirSync(process.env.HAKU_UI_SHOTS, { recursive: true });
     await page.locator('#seccion-cabanas').screenshot({ path: path.join(process.env.HAKU_UI_SHOTS, 'web-' + width + '-' + theme + '.png') });
    }
+   await page.locator('#cabinsFilters [data-cb-filter="todas"]').click();
+   const duration=page.locator('[data-cb-duration="3"]');
+   assert.equal(await duration.textContent(),'En curso: 36 min');
+   assert.equal(await page.locator('[data-cb-duration="1"]').textContent(),'Tiempo total: 11 min');
+   const out=page.locator('[data-cb-cabin="3"] [data-aseo-hora="aseoOut"]');
+   await out.focus();
+   await page.evaluate(()=>{
+    window.__outNode=document.querySelector('[data-cb-cabin="3"] [data-aseo-hora="aseoOut"]');
+    const c=obtenerDatosDia(fechaSeleccionada).cabanas[3];c.aseoOut='15:00';c.estadoRevision='lista';c.revisionCompletaCiclo.estado='completada';c.revisionCompletaCiclo.resultado='lista';
+    window.HAIKU_CABANAS_SITES_V1.pintar();
+   });
+   assert.equal(await page.evaluate(()=>window.__outNode===document.querySelector('[data-cb-cabin="3"] [data-aseo-hora="aseoOut"]')),true,'mostrar el total no reconstruye el input enfocado');
+   assert.equal(await duration.textContent(),'Tiempo total: 33 min','OUT congela el tiempo inmediatamente');
+   await page.locator('#cabinsFilters [data-cb-filter="listas"]').click();
+   assert.equal(await duration.textContent(),'Tiempo total: 33 min');
+   await page.evaluate(()=>{Date.now=()=>Date.parse('2026-10-31T21:03:00Z');document.dispatchEvent(new Event('visibilitychange'));});
+   assert.equal(await duration.textContent(),'Tiempo total: 33 min','el reloj no sigue sumando después de OUT');
+   await page.evaluate(()=>{obtenerDatosDia(fechaSeleccionada).cabanas[3].aseoOut='15:12';window.HAIKU_CABANAS_SITES_V1.pintar();});
+   assert.equal(await duration.textContent(),'Tiempo total: 45 min','corregir OUT recalcula');
+   await page.locator('#cabinsFilters [data-cb-filter="todas"]').click();
+   assert.equal(await duration.textContent(),'Tiempo total: 45 min');
+   assert.equal(await page.locator('[data-cb-duration="7"]').textContent(),'En curso: 3 h 23 min');
+   await page.evaluate(()=>{const c=obtenerDatosDia(fechaSeleccionada).cabanas[11];c.aseoIn='';c.aseoOut='';c.aseoEstado='no_requiere';window.HAIKU_CABANAS_SITES_V1.pintar();});
+   assert.equal(await page.locator('[data-cb-duration="11"]').isVisible(),false,'No requiere sin horas no inventa duración');
+   if(process.env.HAKU_UI_SHOTS) await page.locator('[data-cb-cabin="3"]').screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`total-${width}-${theme}.png`)});
    await page.locator('[data-cab-tab="review"]').click();
    const layout = await page.locator('.lista-revision-cabanas').evaluate(n => getComputedStyle(n).display);
    assert.equal(layout, 'block', 'la cuadrícula antigua no divide el listado');

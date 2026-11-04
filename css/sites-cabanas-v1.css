@@ -1486,6 +1486,9 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas #repaso-individual [data-repaso-error]:empty { display:none; }
 
 #seccion-cabanas .cb-operation-row[hidden], #seccion-cabanas .cb-review-row[hidden] { display:none!important; }
+#seccion-cabanas .cb-operation-row .cb-cabin .cb-cleaning-duration { display:block; margin-top:2px; color:var(--cb-muted); font-size:11px; line-height:15px; white-space:normal; }
+#seccion-cabanas .cb-cleaning-duration b { color:var(--cb-accent); font-weight:600; }
+#seccion-cabanas .cb-cleaning-duration[hidden] { display:none!important; }
 
 /* Figma aprobado: una categoría y una fila de estados, sin cambiar las tarjetas. */
 #seccion-cabanas .cb-filter-bar { display:flex; align-items:center; gap:12px; margin-bottom:12px; min-width:0; }

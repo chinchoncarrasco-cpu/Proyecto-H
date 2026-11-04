@@ -513,7 +513,7 @@
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
+          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${duracionAseoHTML(fecha, numero, dato)}${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
           <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
@@ -524,27 +524,47 @@
           <button type="button" class="cb-open" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button>
         </article>`;
     }
-    function tiempoTranscurrido(fecha, hora, ahora = Date.now()) {
+    function tiempoTranscurrido(fecha, hora, ahora = Date.now(), horaFin = "") {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return "—";
-        const [ano, mes, dia] = fecha.split("-").map(Number), [h, m] = hora.split(":").map(Number);
-        if (h > 23 || m > 59) return "—";
-        const deseado = Date.UTC(ano, mes - 1, dia, h, m);
-        let inicio = deseado;
+        const [ano, mes, dia] = fecha.split("-").map(Number);
         const formateador = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
         const pared = instante => {
             const p = Object.fromEntries(formateador.formatToParts(new Date(instante)).map(x => [x.type, x.value]));
             return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
         };
-        for (let i = 0; i < 3; i++) inicio += deseado - pared(inicio);
-        if (pared(inicio) !== deseado) return "—";
-        const minutos = Math.max(0, Math.floor((ahora - inicio) / 60000));
+        const instante = horaLocal => {
+            if (!/^\d{2}:\d{2}$/.test(horaLocal)) return NaN;
+            const [h, m] = horaLocal.split(":").map(Number);
+            if (h > 23 || m > 59) return NaN;
+            const deseado = Date.UTC(ano, mes - 1, dia, h, m);
+            let valor = deseado;
+            for (let i = 0; i < 3; i++) valor += deseado - pared(valor);
+            return pared(valor) === deseado ? valor : NaN;
+        };
+        const inicio = instante(hora), fin = horaFin ? instante(horaFin) : ahora;
+        if (!Number.isFinite(inicio) || !Number.isFinite(fin) || (horaFin && fin < inicio)) return "—";
+        const minutos = Math.max(0, Math.floor((fin - inicio) / 60000));
         return minutos < 60 ? `${minutos} min` : `${Math.floor(minutos / 60)} h ${minutos % 60} min`;
+    }
+    function duracionAseoHTML(fecha, numero, dato) {
+        const tiempo = tiempoTranscurrido(fecha, dato.aseoIn, Date.now(), dato.aseoOut || "");
+        return `<small class="cb-cleaning-duration" data-cb-duration="${numero}"${tiempo === "—" ? " hidden" : ""}><span data-cb-duration-label>${dato.aseoOut ? "Tiempo total" : "En curso"}</span>: <b data-cb-duration-value>${tiempo}</b></small>`;
+    }
+    function actualizarDuracionesAseo(fecha) {
+        raiz.querySelectorAll("[data-cb-duration]").forEach(nodo => {
+            const dato = cabana(fecha, nodo.dataset.cbDuration);
+            const tiempo = tiempoTranscurrido(fecha, dato.aseoIn, Date.now(), dato.aseoOut || "");
+            nodo.hidden = tiempo === "—";
+            nodo.querySelector("[data-cb-duration-label]").textContent = dato.aseoOut ? "Tiempo total" : "En curso";
+            nodo.querySelector("[data-cb-duration-value]").textContent = tiempo;
+        });
     }
     function filaSeguimiento(fecha, numero) {
         const dato = cabana(fecha, numero), nombre = String(dato.aseo || "").trim() || "Sin asignar";
         return `<article class="cb-tracking-row" data-cb-cabin="${numero}" role="listitem"><strong>Cabaña ${numero}</strong><span class="cb-tracking-person"><span class="cb-tracking-avatar" aria-hidden="true">${escapar(Array.from(nombre)[0])}</span>${escapar(nombre)}</span><span class="cb-tracking-type">${expressReal(dato, fecha, numero) ? "Aseo Exprés" : "Aseo Full"}</span><span class="cb-tracking-in" data-label="IN">${escapar(dato.aseoIn)}</span><span class="cb-tracking-out" data-label="OUT">—</span><strong class="cb-tracking-time" data-label="Tiempo" data-cb-elapsed data-cb-day="${escapar(fecha)}" data-cb-in="${escapar(dato.aseoIn)}">${tiempoTranscurrido(fecha, dato.aseoIn)}</strong><span class="cb-badge progress">En curso</span><button type="button" class="cb-open" data-cb-open="${numero}">Abrir cabaña</button></article>`;
     }
     function actualizarTiempos() {
+        actualizarDuracionesAseo(fechaActual());
         raiz.querySelectorAll("[data-cb-elapsed]").forEach(n => {
             n.textContent = tiempoTranscurrido(n.dataset.cbDay, n.dataset.cbIn);
         });
@@ -553,6 +573,7 @@
     document.addEventListener("visibilitychange", actualizarTiempos);
     function pintarOperacion(fecha) {
         if (!fecha) return;
+        actualizarDuracionesAseo(fecha);
         const enfocado = document.activeElement;
         if (enfocado && $("#aseo-resumen")?.contains(enfocado) && enfocado.matches?.("input, select, textarea")) return;
         const numeros = Array.from({ length: 11 }, (_, i) => i + 1).filter(numero => filtro(fecha, numero));
