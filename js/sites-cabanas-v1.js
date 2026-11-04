@@ -71,7 +71,7 @@
             if (!guardado) return null;
             const contexto = JSON.parse(guardado);
             if (contexto?.usuarioId === usuarioActual() && contexto.fecha === fechaActual() &&
-                ["operation", "review"].includes(contexto.tab) &&
+                ["operation", "review", "supplies", "checkout"].includes(contexto.tab) &&
                 (!contexto.numero || numeroValido(contexto.numero)) &&
                 ["operation", "review"].includes(contexto.origen) &&
                 ["completa", "repaso", "aseo_express"].includes(contexto.modo)) return contexto;
@@ -572,7 +572,7 @@
           <div class="cb-state cb-status cb-aseo-status" aria-live="polite"><small>Estado aseo</small>${aseoHTML(dato, numero)}</div>
           <div class="cb-state cb-status cb-revision-status" aria-live="polite"><small>Estado revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div>
           <div class="cb-state cb-status cb-final-status" aria-live="polite"><small>Estado final</small><span class="cb-badge ${tono(final)}" data-cb-final-state>${FINALES[final]}</span></div>
-          <button type="button" class="cb-open" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button>
+          <div class="cb-open cb-open-actions"><button type="button" class="cb-open-link" data-cb-open="${numero}" aria-label="Abrir ficha de cabaña ${numero}">Abrir <span aria-hidden="true">›</span></button><button type="button" class="cb-supply-link" data-supply-open="${numero}" aria-label="Agregar insumo a cabaña ${numero}">+ Insumo</button></div>
         </article>`;
     }
     function tiempoTranscurrido(fecha, hora, ahora = Date.now(), horaFin = "") {
@@ -613,7 +613,7 @@
     }
     function filaSeguimiento(fecha, numero) {
         const dato = cabana(fecha, numero), nombre = String(dato.aseo || "").trim() || "Sin asignar";
-        return `<article class="cb-tracking-row" data-cb-cabin="${numero}" role="listitem"><strong>Cabaña ${numero}</strong><span class="cb-tracking-person"><span class="cb-tracking-avatar" aria-hidden="true">${escapar(Array.from(nombre)[0])}</span>${escapar(nombre)}</span><span class="cb-tracking-type">${expressReal(dato, fecha, numero) ? "Aseo Exprés" : "Aseo Full"}</span><span class="cb-tracking-in" data-label="IN">${escapar(dato.aseoIn)}</span><span class="cb-tracking-out" data-label="OUT">—</span><strong class="cb-tracking-time" data-label="Tiempo" data-cb-elapsed data-cb-day="${escapar(fecha)}" data-cb-in="${escapar(dato.aseoIn)}">${tiempoTranscurrido(fecha, dato.aseoIn)}</strong><span class="cb-badge progress">En curso</span><button type="button" class="cb-open" data-cb-open="${numero}">Abrir cabaña</button></article>`;
+        return `<article class="cb-tracking-row" data-cb-cabin="${numero}" role="listitem"><strong>Cabaña ${numero}</strong><span class="cb-tracking-person"><span class="cb-tracking-avatar" aria-hidden="true">${escapar(Array.from(nombre)[0])}</span>${escapar(nombre)}</span><span class="cb-tracking-type">${expressReal(dato, fecha, numero) ? "Aseo Exprés" : "Aseo Full"}</span><span class="cb-tracking-in" data-label="IN">${escapar(dato.aseoIn)}</span><span class="cb-tracking-out" data-label="OUT">—</span><strong class="cb-tracking-time" data-label="Tiempo" data-cb-elapsed data-cb-day="${escapar(fecha)}" data-cb-in="${escapar(dato.aseoIn)}">${tiempoTranscurrido(fecha, dato.aseoIn)}</strong><span class="cb-badge progress">En curso</span><div class="cb-tracking-actions"><button type="button" class="cb-open" data-cb-open="${numero}">Abrir cabaña</button><button type="button" class="cb-outline" data-supply-open="${numero}">+ Insumo</button></div></article>`;
     }
     function actualizarTiempos() {
         actualizarDuracionesAseo(fechaActual());
@@ -829,6 +829,8 @@
         estado.fecha = fecha;
         $("#cabinsDate").textContent = fechaLarga(fecha);
         pintarPersonal(fecha); resumen(fecha); pintarFiltros(fecha);
+        $("#cabinsSummary").hidden = estado.tab === "supplies" || estado.tab === "checkout";
+        espacios?.render(estado.tab, fecha);
         pintarSolicitudes(fecha);
         pintarOperacion(fecha); pintarRevision(fecha);
         pintarInsumos(fecha);
@@ -1165,6 +1167,8 @@
             if (revisionPendiente === pendiente) volverOperacionRestaurada();
         }, 15000);
     }
+    const espacios = window.HAIKU_CABANAS_ESPACIOS_V1?.create({ root: raiz, date: fechaActual, user: usuarioActual,
+        dayData: dia, afterSupply: () => pintar(fechaActual()) });
     raiz.addEventListener("click", evento => {
         if (evento.target === $("#cabinsRequestsPanel")) { cerrarSolicitudes(); return; }
         const boton = evento.target.closest("button");

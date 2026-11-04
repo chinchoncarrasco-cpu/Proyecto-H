@@ -1564,3 +1564,62 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas { --cb-request-text:#f2c58d; --c
   #seccion-cabanas .cb-filter-bar .cb-filters { order:2; flex-basis:100%; }
   #seccion-cabanas .cb-filter-menu { left:auto; right:0; }
 }
+
+/* Espacios de Cabañas: mismo formato y colores, navegación horizontal ampliable. */
+#seccion-cabanas .cabins-tabs { overflow-x:auto; flex-wrap:nowrap; white-space:nowrap; scrollbar-width:none; }
+#seccion-cabanas .cabins-tabs::-webkit-scrollbar { display:none; }
+#seccion-cabanas .cabins-tabs button { flex:none; }
+#seccion-cabanas #cabinsSupplies[hidden], #seccion-cabanas #cabinsCheckout[hidden], #seccion-cabanas #cabinsCheckoutList[hidden], #seccion-cabanas #cabinsCheckoutDetail[hidden] { display:none; }
+#seccion-cabanas .cb-open-actions { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+#seccion-cabanas .cb-open-actions button { border:0; padding:2px 0; background:none; color:var(--cb-accent); font:600 10px/14px var(--sites-shell-font,Inter,sans-serif); cursor:pointer; white-space:nowrap; }
+#seccion-cabanas .cb-supply-cabins { display:grid; gap:8px; margin-top:12px; }
+#seccion-cabanas .cb-supply-cabin { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--cb-border); border-radius:10px; background:var(--cb-surface); padding:12px; color:var(--cb-text); }
+#seccion-cabanas .cb-supply-cabin strong { color:var(--cb-text); font-size:12px; }
+#seccion-cabanas .cb-supply-cabin p { margin:3px 0 0; color:var(--cb-muted); font-size:10px; line-height:14px; }
+#seccion-cabanas .cb-supply-form { display:grid; gap:12px; padding:16px; overflow:auto; }
+#seccion-cabanas .cb-supply-form label { display:grid; gap:5px; font-size:11px; color:var(--cb-muted); }
+#seccion-cabanas .cb-supply-form :is(input,select) { min-height:36px; padding:7px 9px; border:1px solid var(--cb-border); border-radius:7px; background:var(--cb-surface); color:var(--cb-text); font-size:12px; }
+#seccion-cabanas .cb-supply-form p { margin:0; font-size:11px; line-height:16px; }
+#seccion-cabanas .cb-supply-form label[hidden] { display:none; }
+#seccion-cabanas #cabinsCheckoutError:empty { display:none; }
+#seccion-cabanas #cabinsCheckoutError { color:var(--cb-request-text); font-size:11px; line-height:16px; }
+#seccion-cabanas #cabinsCheckoutList { border:1px solid var(--cb-border); border-radius:12px; overflow:hidden; }
+#seccion-cabanas .cb-checkout-card { display:grid; gap:10px; padding:12px; border:1px solid var(--cb-border); border-radius:12px; background:var(--cb-surface); color:var(--cb-text); }
+#seccion-cabanas #cabinsCheckoutList>.cb-checkout-card { border:0; border-bottom:1px solid var(--cb-border); border-radius:0; }
+#seccion-cabanas #cabinsCheckoutList>.cb-checkout-card:last-child { border-bottom:0; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-heading { display:flex; align-items:center; gap:6px; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-heading>strong { flex:none; font-size:12px; line-height:16px; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-guest { flex:1; min-width:0; }
+#seccion-cabanas .cb-checkout-fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+#seccion-cabanas .cb-checkout-fields label { display:grid; min-width:0; gap:4px; font-size:9px; color:var(--cb-muted); }
+#seccion-cabanas .cb-checkout-fields input { min-width:0; width:100%; box-sizing:border-box; min-height:32px; padding:6px 8px; border:1px solid var(--cb-border); border-radius:7px; background:var(--cb-surface); color:var(--cb-text); font-size:11px; }
+#seccion-cabanas #cabinsCheckout .cb-cabin-context { margin-top:0; }
+#seccion-cabanas .cb-checkout-card [data-checkout-context]:empty, #seccion-cabanas .cb-checkout-card [data-checkout-saving]:empty { display:none; }
+#seccion-cabanas .cb-checkout-recover summary { display:flex; justify-content:space-between; gap:12px; min-height:26px; align-items:center; font-size:11px; font-weight:600; cursor:pointer; }
+#seccion-cabanas .cb-checkout-recover>small { display:block; margin:6px 0; color:var(--cb-muted); font-size:9px; }
+#seccion-cabanas .cb-checkout-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 12px; }
+#seccion-cabanas .cb-checkout-grid button { display:flex; align-items:center; gap:8px; min-height:32px; padding:0; border:0; background:none; color:var(--cb-text); text-align:left; font-size:11px; cursor:pointer; }
+#seccion-cabanas .cb-checkout-grid button>.cb-check-square { flex:none; display:flex; align-items:center; justify-content:center; width:14px; height:14px; border:1px solid var(--cb-border); border-radius:2px; background:transparent; font-size:11px; line-height:14px; }
+#seccion-cabanas .cb-checkout-grid button[aria-checked="true"]>.cb-check-square { background:var(--cb-accent); border-color:var(--cb-accent); color:var(--cb-surface); }
+#seccion-cabanas .cb-checkout-review { display:grid; gap:8px; }
+#seccion-cabanas .cb-checkout-review>strong { color:var(--cb-text); font-size:12px; }
+#seccion-cabanas #cabinsCheckoutDetail { display:grid; gap:16px; }
+#seccion-cabanas #cabinsCheckoutDetail>.cb-cabin h2 { margin:4px 0; }
+#seccion-cabanas #cabinsCheckoutDetail>.cb-cabin p { margin:4px 0; color:var(--cb-muted); }
+#seccion-cabanas .cb-checkout-card>h3 { margin:0; font-size:16px; color:var(--cb-text); }
+#seccion-cabanas .cb-checkout-card>.cb-text-action { justify-self:start; }
+@media(min-width:781px) {
+  #seccion-cabanas #cabinsCheckoutList>.cb-checkout-card { grid-template-columns:minmax(260px,1.3fr) minmax(240px,1fr); }
+  #seccion-cabanas #cabinsCheckoutList>.cb-checkout-card>.cb-checkout-recover { grid-column:1; }
+  #seccion-cabanas #cabinsCheckoutList>.cb-checkout-card>.cb-text-action { grid-column:2; justify-self:end; }
+}
+#seccion-cabanas #cabinsSummary[hidden] { display:none; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-guest { display:flex; align-items:center; gap:6px; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-holder { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--cb-text); font-size:11px; }
+#seccion-cabanas .cb-checkout-card .cb-cabin-movement { flex:none; color:var(--cb-progress-text); font-size:9px; }
+
+#seccion-cabanas .cb-tracking-actions { display:flex; flex-direction:column; gap:4px; }
+@media(max-width:780px) {
+  #seccion-cabanas .cb-tracking-actions { grid-column:1/4; flex-direction:row; gap:8px; }
+  #seccion-cabanas #aseo-resumen .cb-tracking-actions>.cb-open, #seccion-cabanas .cb-tracking-actions>.cb-outline { flex:1; width:auto; }
+}

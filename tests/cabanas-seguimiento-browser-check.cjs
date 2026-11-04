@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
-const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js']);
+const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/checkout-core-v1.js', 'js/checkout-profile-v1.js', 'js/cabanas-espacios-v1.js']);
 (async () => {
  const browser = await chromium.launch({ headless: true, executablePath: process.env.HAIKU_BROWSER_PATH || undefined });
  try {
@@ -44,8 +44,8 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
      hidratar: () => Promise.resolve(),
      total: () => ({ listo: true, lena: 1, lenaKg: 8, carbon: 1, destinos: { lena: { ...counts, aseo_full: 1 }, carbon: { ...counts, aseo_full: 1 } } }),
      obtener: (_, n) => ({ listo: true,
-      lena: { confirmada: n === 3 ? 1 : 0, destinos: { ...counts, aseo_full: n === 3 ? 1 : 0 }, sacos: n === 3 ? [{ destino: 'aseo_full', peso_kg: 8 }] : [] },
-      carbon: { confirmada: n === 7 ? 1 : 0, destinos: { ...counts, aseo_full: n === 7 ? 1 : 0 } } })
+      lena: { cantidad: n === 3 ? 1 : 0, pesoKg: n === 3 ? 8 : 0, confirmada: n === 3 ? 1 : 0, destinos: { ...counts, aseo_full: n === 3 ? 1 : 0 }, sacos: n === 3 ? [{ destino: 'aseo_full', peso_kg: 8 }] : [] },
+      carbon: { cantidad: n === 7 ? 1 : 0, confirmada: n === 7 ? 1 : 0, destinos: { ...counts, aseo_full: n === 7 ? 1 : 0 } } })
     };
     window.HAIKU_CABANAS_SITES_V1.pintar();
    }, theme);
@@ -56,7 +56,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    assert.ok(summary.height <= (width > 1100 ? 44 : 154), 'resumen compacto: ' + summary.height);
    await page.locator('[data-cb-filter="en_curso"]').click();
    assert.equal(await page.locator('.cb-tracking-row').count(), 2);
+   assert.equal(await page.locator('.cb-tracking-row [data-supply-open]').count(), 2);
    assert.deepEqual(await page.locator('[data-cb-elapsed]').allTextContents(), ['36 min','23 min']);
+   await page.locator('[data-cab-tab="supplies"]').click();
    const details = page.locator('[data-insumos-destinos]');
    await details.locator('summary').click();
    assert.equal(await details.getAttribute('open'), '');
@@ -67,6 +69,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
     fs.mkdirSync(process.env.HAKU_UI_SHOTS, { recursive: true });
     await page.locator('#seccion-cabanas').screenshot({ path: path.join(process.env.HAKU_UI_SHOTS, 'web-' + width + '-' + theme + '.png') });
    }
+   await page.locator('[data-cab-tab="operation"]').click();
    await page.locator('#cabinsFilters [data-cb-filter="todas"]').click();
    const duration=page.locator('[data-cb-duration="3"]');
    assert.equal(await duration.textContent(),'En curso: 36 min');
@@ -94,13 +97,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.evaluate(()=>{const c=obtenerDatosDia(fechaSeleccionada).cabanas[11];c.aseoIn='';c.aseoOut='';c.aseoEstado='no_requiere';window.HAIKU_CABANAS_SITES_V1.pintar();});
    assert.equal(await page.locator('[data-cb-duration="11"]').isVisible(),false,'No requiere sin horas no inventa duración');
    if(process.env.HAKU_UI_SHOTS) await page.locator('[data-cb-cabin="3"]').screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`total-${width}-${theme}.png`)});
-   await page.locator('[data-cab-tab="review"]').click();
-   const layout = await page.locator('.lista-revision-cabanas').evaluate(n => getComputedStyle(n).display);
-   assert.equal(layout, 'block', 'la cuadrícula antigua no divide el listado');
-   const heads = await page.locator('.cb-review-head').boundingBox();
-   const first = await page.locator('.cb-review-row').first().boundingBox();
-   if (width > 1100) assert.ok(Math.abs(heads.x - first.x) < 1 && Math.abs(heads.width - first.width) < 1);
-   assert.equal(await page.locator('.cb-review-row').count(), 11); // la pestaña abre el listado completo
+   assert.equal(await page.locator('[data-cab-tab="review"]').count(), 0);
+   await page.locator('[data-cab-tab="supplies"]').click();
+   assert.equal(await page.locator('#cabinsSuppliesCabins article').count(), 11);
    const overflow = await page.locator('#seccion-cabanas').evaluate(n => n.scrollWidth - n.clientWidth);
    assert.ok(overflow <= 1, 'sin desborde horizontal: ' + overflow);
    assert.deepEqual(errors, []);
