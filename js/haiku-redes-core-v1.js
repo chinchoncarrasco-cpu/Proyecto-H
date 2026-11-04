@@ -42,6 +42,13 @@
         rows.forEach(r=>map.set(r.id,{...(map.get(r.id)||{categories:['redes'],detail:'Contenido creado por el equipo'}),...r,date:r.publish_date,time:r.publish_time}));
         return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
     }
+    function monthContext(plan, month) {
+        return plan?.month_overrides?.[month] || plan?.months?.find(m=>m.month===Number(month.slice(5)));
+    }
+    function campaignInYear(campaign, year) {
+        const dates=[campaign.prepare_by,campaign.target_start,campaign.target_end,...(campaign.stage_dates||[]).map(s=>s.date)].filter(Boolean);
+        return !dates.length || dates.some(d=>d.slice(0,4)===String(year));
+    }
     function matches(event, filters, assets=[], day=today()) {
         if (!(event.categories||['redes']).some(c=>filters.categories.includes(c))) return false;
         if (filters.search && !`${event.title} ${event.detail||''}`.toLocaleLowerCase('es').includes(filters.search.toLocaleLowerCase('es'))) return false;
@@ -51,7 +58,7 @@
             (!filters.material || material(event,assets,day)===filters.material) && (!filters.state || event.workflow_status===filters.state) &&
             (!filters.channel || event.channels?.includes(filters.channel)) && (!filters.execution || (event.conditional?'conditional':'fixed')===filters.execution);
     }
-    const api={TYPES,STATES,CATEGORIES,uuid,today,dateLabel,escape,material,validateFile,row,merge,matches};
+    const api={TYPES,STATES,CATEGORIES,uuid,today,dateLabel,escape,material,validateFile,row,merge,monthContext,campaignInYear,matches};
     if (typeof module==='object' && module.exports) module.exports=api;
     else root.HaikuRedesCore=Object.freeze(api);
 })(typeof window==='object'?window:globalThis);

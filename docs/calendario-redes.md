@@ -4,7 +4,11 @@ En `panel.html`: **Calendario → Redes sociales**. Reservas sigue siendo la vis
 
 Para probar una foto inmediatamente: **Nuevo contenido**, escribir un título, dejar Publicación / Foto y elegir un JPG, PNG o WebP. La carga guarda también los campos de la ficha. Cerrar y volver a abrir muestra el archivo compartido. Las publicaciones previstas se abren directamente desde el mes, la agenda o la campaña.
 
-El plan aprobado de 2027 vive en `data/haiku-redes-2027.json`. Incluye preparativos de noviembre y diciembre de 2026. Al editar una tarea se guarda una sobrescritura por ID; se conservan los contextos de campaña, estación y fecha objetivo. Los cambios del equipo prevalecen sobre el plan. El botón Actualizar recupera cambios de otros equipos; esta primera integración no usa Realtime ni publica en Meta.
+El plan aprobado vive en `data/haiku-redes-2027.json`: rutina completa desde el 4 de noviembre de 2026 hasta diciembre de 2027. Noviembre incluye 27 historias diarias, 7 contenidos permanentes y 8 apoyos comerciales; diciembre, 31, 9 y 9 respectivamente. Los apoyos comerciales dependen de cupos verificados y el sábado es opcional. Los días previos al inicio no generan tareas retroactivas.
+
+La extensión conserva los ocho contenidos previos de las campañas de Año Nuevo y verano y todo el plan 2027. Añade Navidad, una escapada alrededor del 8 de diciembre y nueve tareas de preparación semanal. El lunes 7 de diciembre no se considera feriado. `scripts/extend-redes-2026.cjs` reconstruye esta extensión de forma idempotente; los textos nuevos son propuestas para revisar antes de publicar.
+
+Al editar una tarea se guarda una sobrescritura por ID; se conservan los contextos de campaña, estación y fecha objetivo. Los cambios del equipo prevalecen sobre el plan. El botón Actualizar recupera cambios de otros equipos; esta primera integración no usa Realtime ni publica en Meta.
 
 ## Material y estados
 

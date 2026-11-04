@@ -45,9 +45,9 @@
         const events=filtered(), current=events.filter(e=>inMonth(e)), year=cursor.slice(0,4);
         const content=current.filter(p=>p.content_type);
         host.querySelector('[data-summary]').textContent=`${months[Number(cursor.slice(5))-1]} ${year} · ${content.length} contenidos · ${content.filter(p=>assetList(p.id).some(a=>a.state==='ready')).length} con material adjunto`;
-        const m=plan?.months.find(m=>m.month===Number(cursor.slice(5)));
+        const m=C.monthContext(plan,cursor);
         let html=m?`<div class="hr-season"><strong>${E(m.season)} · ${E(m.content)}</strong><span>${E(m.weather_rule)}</span></div>`:'';
-        if(year!=='2027')html+=`<p class="hr-muted">El plan anual corresponde a 2027; también incluye preparativos de 2026 y estadías de comienzos de 2028. Puedes crear contenido en cualquier fecha.</p>`;
+        if(year!=='2027')html+=`<p class="hr-muted">${year==='2026'?'La rutina comienza el 4 de noviembre de 2026: historia diaria, publicaciones de martes y viernes y refuerzos comerciales. Los días anteriores quedan sin tareas retroactivas.':'La rutina está programada desde el 4 de noviembre de 2026 hasta diciembre de 2027. También se muestran las estadías objetivo de comienzos de 2028; puedes crear contenido en cualquier fecha.'}</p>`;
         if(view==='mes'){
             const first=new Date(cursor+'-01T12:00:00Z'),offset=(first.getUTCDay()+6)%7, days=new Date(Number(year),Number(cursor.slice(5)),0).getDate();
             html+=`<div class="hr-month-scroll"><div class="hr-month"><div class="hr-weekdays">${['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d=>`<span>${d}</span>`).join('')}</div><div class="hr-grid">`;
@@ -67,7 +67,7 @@
         }else if(view==='agenda'){
             html+=current.length?`<div class="hr-agenda">${current.sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`<div><time>${E(C.dateLabel(e.date,{day:'numeric',month:'short',weekday:'short'}))}</time>${eventButton(e)}</div>`).join('')}</div>`:'<div class="hr-empty">No hay contenido con estos filtros. Prueba «Todos» o crea una tarea.</div>';
         }else{
-            const campaigns=(plan?.campaigns||[]).filter(c=>(!filters.campaign||c.id===filters.campaign)&&(!filters.search||c.title.toLowerCase().includes(filters.search.toLowerCase()))&&(!c.target_start||c.target_start.slice(0,4)===year));
+            const campaigns=(plan?.campaigns||[]).filter(c=>(!filters.campaign||c.id===filters.campaign)&&(!filters.search||c.title.toLowerCase().includes(filters.search.toLowerCase()))&&C.campaignInYear(c,year));
             html+=`<p class="hr-muted">Campañas del año ${year}. Las etapas respetan los filtros de contenido seleccionados.</p><div class="hr-campaigns">${campaigns.map(c=>`<article><p class="hr-eyebrow">${E(c.priority||'Planificación')} · ${c.planned_lead_days||c.lead_days||'—'} días de anticipación</p><h4>${E(c.title)}</h4><p>${c.target_start?E(C.dateLabel(c.target_start))+' – '+E(C.dateLabel(c.target_end)):'Fechas por confirmar'}</p><p>${E(c.detail||'')}</p><p class="hr-muted">Material: ${E(c.assets||'Por definir')}</p>${events.filter(e=>e.campaign_id===c.id&&e.content_type).map(e=>`<div class="hr-campaign-stage"><time>${E(C.dateLabel(e.date,{day:'numeric',month:'short'}))}</time>${eventButton(e)}</div>`).join('')}</article>`).join('')}</div>`;
         }
         area.innerHTML=html;

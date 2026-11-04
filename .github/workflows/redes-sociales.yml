@@ -7,6 +7,7 @@ on:
       - 'data/haiku-redes-2027.json'
       - 'supabase/migrations/*_calendario_redes_adjuntos.sql'
       - 'tests/redes-sociales*.cjs'
+      - 'scripts/extend-redes-2026.cjs'
       - '.github/workflows/redes-sociales.yml'
       - 'index.html'
       - 'panel.html'
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'js/haiku-redes-*.js'
+      - 'data/haiku-redes-2027.json'
       - 'tests/redes-sociales*.cjs'
       - 'supabase/migrations/*_calendario_redes_adjuntos.sql'
 permissions:
@@ -31,4 +33,4 @@ jobs:
       - name: Calendario, adjuntos y permisos
         env:
           NODE_PATH: ${{ runner.temp }}/haku-redes-test/node_modules
-        run: node --test tests/redes-sociales.test.cjs tests/redes-sociales-sql.test.cjs tests/calendario-sites.test.cjs tests/calendario-estadias.test.cjs tests/calendario-checkout-colores.test.cjs tests/calendario-realtime-publicacion.test.cjs
+        run: node --test tests/redes-sociales.test.cjs tests/redes-sociales-2026.test.cjs tests/redes-sociales-sql.test.cjs tests/calendario-sites.test.cjs tests/calendario-estadias.test.cjs tests/calendario-checkout-colores.test.cjs tests/calendario-realtime-publicacion.test.cjs
