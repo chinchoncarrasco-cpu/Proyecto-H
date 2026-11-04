@@ -513,11 +513,11 @@
         const solicitudes = listaSolicitudes(fecha, numero, dato);
         const pendiente = [...solicitudes.expresas, ...solicitudes.operativas].join(" · ");
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${duracionAseoHTML(fecha, numero, dato)}${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
+          <div class="cb-cabin"><strong>Cabaña ${numero}</strong><span title="${escapar(titular(dato, fecha, numero))}">${escapar(titular(dato, fecha, numero))}</span><small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}">${escapar(trabajo(dato))}<span data-cb-insumos="${numero}">${textoInsumos(fecha, numero) ? ` · ${textoInsumos(fecha, numero)}` : ""}</span></small>${pendiente ? `<div class="cb-pending" title="${escapar(pendiente)}">${solicitudesHTML(fecha, numero, dato)}</div>` : ""}</div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
           <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
-          <label class="cb-cell"><span>OUT</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="${numero}" value="${escapar(dato.aseoOut || "")}"${!dato.aseoIn && !dato.aseoOut ? " disabled" : ""} aria-label="Hora OUT de cabaña ${numero}"></label>
+          <label class="cb-cell"><span>OUT</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoOut" data-cabana="${numero}" value="${escapar(dato.aseoOut || "")}"${!dato.aseoIn && !dato.aseoOut ? " disabled" : ""} aria-label="Hora OUT de cabaña ${numero}">${duracionAseoHTML(fecha, numero, dato)}</label>
           <div class="cb-state cb-status cb-aseo-status" aria-live="polite"><small>Estado aseo</small>${aseoHTML(dato, numero)}</div>
           <div class="cb-state cb-status cb-revision-status" aria-live="polite"><small>Estado revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div>
           <div class="cb-state cb-status cb-final-status" aria-live="polite"><small>Estado final</small><span class="cb-badge ${tono(final)}" data-cb-final-state>${FINALES[final]}</span></div>
@@ -548,13 +548,14 @@
     }
     function duracionAseoHTML(fecha, numero, dato) {
         const tiempo = tiempoTranscurrido(fecha, dato.aseoIn, Date.now(), dato.aseoOut || "");
-        return `<small class="cb-cleaning-duration" data-cb-duration="${numero}"${tiempo === "—" ? " hidden" : ""}><span data-cb-duration-label>${dato.aseoOut ? "Tiempo total" : "En curso"}</span>: <b data-cb-duration-value>${tiempo}</b></small>`;
+        return `<small class="cb-cleaning-duration${dato.aseoOut ? " is-complete" : ""}" data-cb-duration="${numero}"${tiempo === "—" ? " hidden" : ""}><span data-cb-duration-label>${dato.aseoOut ? "Tiempo total" : "En curso"}</span>: <b data-cb-duration-value>${tiempo}</b></small>`;
     }
     function actualizarDuracionesAseo(fecha) {
         raiz.querySelectorAll("[data-cb-duration]").forEach(nodo => {
             const dato = cabana(fecha, nodo.dataset.cbDuration);
             const tiempo = tiempoTranscurrido(fecha, dato.aseoIn, Date.now(), dato.aseoOut || "");
             nodo.hidden = tiempo === "—";
+            nodo.classList.toggle("is-complete", Boolean(dato.aseoOut));
             nodo.querySelector("[data-cb-duration-label]").textContent = dato.aseoOut ? "Tiempo total" : "En curso";
             nodo.querySelector("[data-cb-duration-value]").textContent = tiempo;
         });

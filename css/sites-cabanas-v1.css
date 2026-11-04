@@ -1343,12 +1343,12 @@ body:has(> .sites-shell-topbar):has(#seccion-cabanas.activa #cabinsDetail:not([h
 #seccion-cabanas {
   --cb-surface:#fff; --cb-canvas:#f4f7f5; --cb-text:#17362d; --cb-muted:#728079;
   --cb-border:#d9e3de; --cb-accent:#173d33; --cb-selected:#dceee4;
-  --cb-progress-bg:#e8f1fa; --cb-progress-text:#356a86;
+  --cb-progress-bg:#e8f1fa; --cb-progress-text:#356a86; --cb-ready-text:#246247;
 }
 html[data-haiku-tema="oscuro"] #seccion-cabanas {
   --cb-surface:#1b2621; --cb-canvas:#0f1915; --cb-text:#e8efea; --cb-muted:#b1c2b7;
   --cb-border:#3e5145; --cb-accent:#9fd2b3; --cb-selected:#254736;
-  --cb-progress-bg:#203a41; --cb-progress-text:#a6ccee;
+  --cb-progress-bg:#203a41; --cb-progress-text:#a6ccee; --cb-ready-text:#9fd2b3;
 }
 #seccion-cabanas #cabinsSummary.cb-summary {
   display:grid; grid-template-columns:minmax(0,31fr) minmax(0,19fr) minmax(0,50fr);
@@ -1486,9 +1486,14 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas #repaso-individual [data-repaso-error]:empty { display:none; }
 
 #seccion-cabanas .cb-operation-row[hidden], #seccion-cabanas .cb-review-row[hidden] { display:none!important; }
-#seccion-cabanas .cb-operation-row .cb-cabin .cb-cleaning-duration { display:block; margin-top:2px; color:var(--cb-muted); font-size:11px; line-height:15px; white-space:normal; }
-#seccion-cabanas .cb-cleaning-duration b { color:var(--cb-accent); font-weight:600; }
+#seccion-cabanas .cb-operation-row .cb-cleaning-duration { display:block; margin:0; color:var(--cb-progress-text); font-size:10px; line-height:14px; white-space:nowrap; text-align:right; }
+#seccion-cabanas .cb-operation-row .cb-cleaning-duration.is-complete { color:var(--cb-ready-text); }
+#seccion-cabanas .cb-cleaning-duration b { color:inherit; font-weight:600; }
 #seccion-cabanas .cb-cleaning-duration[hidden] { display:none!important; }
+@media(min-width:781px) {
+  #seccion-cabanas .cb-operation-row .cb-cell:has([data-cb-duration]) { position:relative; }
+  #seccion-cabanas .cb-operation-row .cb-cleaning-duration { position:absolute; top:calc(100% + 2px); right:0; width:calc(200% + 6px); text-align:center; pointer-events:none; }
+}
 
 /* Figma aprobado: una categoría y una fila de estados, sin cambiar las tarjetas. */
 #seccion-cabanas .cb-filter-bar { display:flex; align-items:center; gap:12px; margin-bottom:12px; min-width:0; }

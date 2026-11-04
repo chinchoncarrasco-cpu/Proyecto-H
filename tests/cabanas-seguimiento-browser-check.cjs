@@ -70,6 +70,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.locator('#cabinsFilters [data-cb-filter="todas"]').click();
    const duration=page.locator('[data-cb-duration="3"]');
    assert.equal(await duration.textContent(),'En curso: 36 min');
+   assert.equal(await duration.evaluate(n=>getComputedStyle(n).color),theme==='oscuro'?'rgb(166, 204, 238)':'rgb(53, 106, 134)','contador activo azul');
    assert.equal(await page.locator('[data-cb-duration="1"]').textContent(),'Tiempo total: 11 min');
    const out=page.locator('[data-cb-cabin="3"] [data-aseo-hora="aseoOut"]');
    await out.focus();
@@ -80,6 +81,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    });
    assert.equal(await page.evaluate(()=>window.__outNode===document.querySelector('[data-cb-cabin="3"] [data-aseo-hora="aseoOut"]')),true,'mostrar el total no reconstruye el input enfocado');
    assert.equal(await duration.textContent(),'Tiempo total: 33 min','OUT congela el tiempo inmediatamente');
+   assert.equal(await duration.evaluate(n=>getComputedStyle(n).color),theme==='oscuro'?'rgb(159, 210, 179)':'rgb(36, 98, 71)','total terminado verde');
    await page.locator('#cabinsFilters [data-cb-filter="listas"]').click();
    assert.equal(await duration.textContent(),'Tiempo total: 33 min');
    await page.evaluate(()=>{Date.now=()=>Date.parse('2026-10-31T21:03:00Z');document.dispatchEvent(new Event('visibilitychange'));});
