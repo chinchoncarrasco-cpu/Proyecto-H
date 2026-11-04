@@ -175,16 +175,21 @@
         const expresa = String(dato?.solicitudAseoExpress || "").trim();
         return { expresas: expresa ? [expresa] : [], operativas };
     }
-    function solicitudesResumenHTML(fecha, numero, dato) {
-        const { expresas, operativas } = listaSolicitudes(fecha, numero, dato);
+    function solicitudesResumenHTML(fecha, numero, dato, detalle = false) {
+        const { expresas } = listaSolicitudes(fecha, numero, dato);
         const tipos = tiposSolicitud();
         const entradas = Array.isArray(dato?.solicitudesTipos)
             ? dato.solicitudesTipos.filter(s => s.estado !== "cancelada" && tipos[s.categoria])
                 .map(s => ({ texto: tipos[s.categoria], detalle: s.descripcion || tipos[s.categoria] }))
             : expresas.map(texto => ({ texto, detalle: texto }));
-        entradas.push(...operativas.map(texto => ({ texto, detalle: texto })));
         return entradas.length ? `<div class="cb-request-summary" aria-label="Solicitudes de cabaña ${numero}">${entradas.map((s, i) =>
-            `<span class="cb-request-summary-item" title="${escapar(s.detalle)}">${i ? '· ' : ''}${escapar(s.texto)}</span>`).join("")}</div>` : "";
+            `<span class="cb-request-summary-item" title="${escapar(s.detalle)}">${i ? '· ' : ''}${escapar(s.texto)}${detalle && s.detalle !== s.texto ? `: ${escapar(s.detalle)}` : ""}</span>`).join("")}</div>` : "";
+    }
+    function contextoCabanaHTML(fecha, numero, dato, detalle = false) {
+        const notas = listaSolicitudes(fecha, numero, dato).operativas;
+        const notasHTML = notas.length ? `<div class="cb-note-summary" aria-label="Notas de cabaña ${numero}">${notas.map(texto =>
+            `<span class="cb-note-summary-item">${escapar(texto)}</span>`).join("")}</div>` : "";
+        return solicitudesResumenHTML(fecha, numero, dato, detalle) + notasHTML;
     }
     function movimientoCabecera(dato) {
         return ({ "libre-ingresa": "Ingresa", "sale-ingresa": "Sale / Ingresa", "sale-libre": "Sale",
@@ -559,7 +564,7 @@
         const final = estadoFinal(dato, fecha, numero);
         const nombre = titular(dato, fecha, numero), movimiento = movimientoCabecera(dato);
         return `<article class="cb-operation-row aseo-resumen-cabana" data-cb-cabin="${numero}" data-aseo-express-cabana="${numero}" role="listitem">
-          <div class="cb-cabin"><div class="cb-cabin-heading"><strong>Cabaña ${numero}</strong><div class="cb-cabin-guest"><span class="cb-cabin-holder" title="${escapar(nombre)}">${escapar(nombre)}</span>${movimiento && movimiento !== nombre ? `<span class="cb-cabin-movement">${escapar(movimiento)}</span>` : ""}</div></div>${solicitudesResumenHTML(fecha, numero, dato)}<small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}"${textoInsumos(fecha, numero) ? "" : " hidden"}><span data-cb-insumos="${numero}" data-cb-insumos-only>${escapar(textoInsumos(fecha, numero))}</span></small></div>
+          <div class="cb-cabin"><div class="cb-cabin-heading"><strong>Cabaña ${numero}</strong><div class="cb-cabin-guest"><span class="cb-cabin-holder" title="${escapar(nombre)}">${escapar(nombre)}</span>${movimiento && movimiento !== nombre ? `<span class="cb-cabin-movement">${escapar(movimiento)}</span>` : ""}</div></div>${contextoCabanaHTML(fecha, numero, dato)}<small class="cb-work-supplies" title="${escapar([trabajo(dato), textoInsumos(fecha, numero)].filter(Boolean).join(" · "))}"${textoInsumos(fecha, numero) ? "" : " hidden"}><span data-cb-insumos="${numero}" data-cb-insumos-only>${escapar(textoInsumos(fecha, numero))}</span></small></div>
           <label class="cb-cell"><span>Encargado</span><input type="text" class="aseo-encargado-input" data-aseo-encargado="${numero}" value="${escapar(dato.aseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Encargado de cabaña ${numero}"></label>
           <label class="cb-cell"><span>Revisor</span><input type="text" class="aseo-revision-input" data-revision-cabana="${numero}" value="${escapar(dato.revisionAseo || "")}" placeholder="Sin asignar" list="cabinsStaff" aria-label="Revisor de cabaña ${numero}"></label>
           <label class="cb-cell"><span>IN</span><input type="time" class="aseo-hora-input" data-aseo-hora="aseoIn" data-cabana="${numero}" value="${escapar(dato.aseoIn || "")}" aria-label="Hora IN de cabaña ${numero}"></label>
@@ -683,6 +688,9 @@
         if (opcionRepaso) opcionRepaso.disabled = hayExpress;
         $("#revision-titulo").textContent = `Cabaña ${numero}`;
         $("#cabinsDetailSubtitle").textContent = `${titular(dato, fecha, numero)} · ${trabajo(dato)}`;
+        const contexto = $("#cabinsDetailContext");
+        contexto.innerHTML = contextoCabanaHTML(fecha, numero, dato, true);
+        contexto.hidden = !contexto.innerHTML;
         $("#cabinsDetailDate").textContent = `Operación · ${fecha}`;
         for (const [selector, valor] of [["#cabinsDetailCleaner", dato.aseo],
             ["#cabinsDetailReviewer", dato.revisionAseo], ["#cabinsDetailIn", dato.aseoIn],
