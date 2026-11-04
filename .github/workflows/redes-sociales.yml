@@ -1,0 +1,34 @@
+name: Calendario de redes sociales
+on:
+  pull_request:
+    paths:
+      - 'js/haiku-redes-*.js'
+      - 'css/haiku-redes-v1.css'
+      - 'data/haiku-redes-2027.json'
+      - 'supabase/migrations/*_calendario_redes_adjuntos.sql'
+      - 'tests/redes-sociales*.cjs'
+      - '.github/workflows/redes-sociales.yml'
+      - 'index.html'
+      - 'panel.html'
+  push:
+    branches: [main]
+    paths:
+      - 'js/haiku-redes-*.js'
+      - 'tests/redes-sociales*.cjs'
+      - 'supabase/migrations/*_calendario_redes_adjuntos.sql'
+permissions:
+  contents: read
+jobs:
+  calendario:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Postgres de prueba
+        run: npm install --prefix "$RUNNER_TEMP/haku-redes-test" --no-audit --no-fund @electric-sql/pglite@0.5.15
+      - name: Calendario, adjuntos y permisos
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-redes-test/node_modules
+        run: node --test tests/redes-sociales.test.cjs tests/redes-sociales-sql.test.cjs tests/calendario-sites.test.cjs tests/calendario-estadias.test.cjs tests/calendario-checkout-colores.test.cjs tests/calendario-realtime-publicacion.test.cjs
