@@ -1488,6 +1488,19 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas {
 #seccion-cabanas .cb-operation-row[hidden], #seccion-cabanas .cb-review-row[hidden] { display:none!important; }
 #seccion-cabanas .cb-operation-row .cb-cleaning-duration { display:block; margin:0; color:var(--cb-progress-text); font-size:10px; line-height:14px; white-space:nowrap; text-align:right; }
 #seccion-cabanas .cb-operation-row .cb-cleaning-duration.is-complete { color:var(--cb-ready-text); }
+
+/* Cabecera aprobada: cabaña, titular y movimiento; solicitudes como texto. */
+#seccion-cabanas { --cb-request-text:#8e561a; }
+html[data-haiku-tema="oscuro"] #seccion-cabanas { --cb-request-text:#f2c58d; }
+#seccion-cabanas .cb-operation-row .cb-cabin { gap:4px; }
+#seccion-cabanas .cb-operation-row .cb-cabin-heading { display:flex; align-items:center; gap:6px; min-width:0; }
+#seccion-cabanas .cb-operation-row .cb-cabin-heading > strong { flex:none; font-size:12px; line-height:16px; }
+#seccion-cabanas .cb-operation-row .cb-cabin-guest { display:flex; align-items:center; gap:6px; min-width:0; }
+#seccion-cabanas .cb-operation-row .cb-cabin-holder { min-width:0; font-size:10px; line-height:14px; color:var(--cb-text); }
+#seccion-cabanas .cb-operation-row .cb-cabin-guest .cb-cabin-movement { flex:none; font-size:9px; line-height:13px; font-weight:500; color:var(--cb-progress-text); }
+#seccion-cabanas .cb-operation-row .cb-request-summary { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 4px; min-width:0; }
+#seccion-cabanas .cb-operation-row .cb-request-summary .cb-request-summary-item { display:inline; max-width:100%; padding:0; border:0; border-radius:0; background:none; color:var(--cb-request-text); font-size:10px; line-height:14px; font-weight:500; white-space:normal; overflow-wrap:anywhere; }
+#seccion-cabanas .cb-operation-row .cb-work-supplies[hidden] { display:none; }
 #seccion-cabanas .cb-cleaning-duration b { color:inherit; font-weight:600; }
 #seccion-cabanas .cb-cleaning-duration[hidden] { display:none!important; }
 @media(min-width:781px) {
