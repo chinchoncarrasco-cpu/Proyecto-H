@@ -222,6 +222,39 @@ test("un selector de otra fecha o el mismo estado no crea una revisión", () => 
 });
 
 // Ejecuta los puentes reales con lecturas controlables, sin red ni otro writer.
+test("Solicitudes cuenta todos los tipos vigentes, conserva detalle y abre la cabaña correcta sin escribir", () => {
+    const h = arnes({
+        1: { solicitudesTipos: [{ categoria: "reposicion_lena", descripcion: "1 saco <extra>", estado: "pendiente" },
+            { categoria: "recambio_toallas", descripcion: "2 grandes", estado: "completada" }] },
+        2: { solicitudAseoExpress: "Limpiar cocina" },
+        3: { solicitudesTipos: [{ categoria: "aseo_express", descripcion: "Cancelada", estado: "cancelada" }] }
+    });
+    h.window.HAIKU_ASEO_OPERACION_V1 = { tiposSolicitud: { aseo_express: "Solicita Express", reposicion_lena: "Reposición de Leña", recambio_toallas: "Recambio de Toallas" } };
+    h.api.pintar();
+    assert.equal(h.nodos.get("#cabinsRequestsButton").textContent, "Solicitudes · 3");
+    const click = boton => h.escuchas.get("click")({ target: { closest: () => boton } });
+    click({ id: "cabinsRequestsButton", dataset: {} });
+    assert.ok(h.nodos.get("#cabinsRequestsPanel").classList.contains("activo"));
+    const listado = h.nodos.get("#cabinsRequestsList").innerHTML;
+    for (const texto of ["Reposición de Leña", "Recambio de Toallas", "Solicita Express", "Completada", "1 saco &lt;extra&gt;"]) assert.ok(listado.includes(texto), texto);
+    assert.doesNotMatch(listado, /Cancelada|<extra>/);
+    assert.equal(h.aperturas.length, 0);
+    click({ dataset: { cbRequestOpen: "2" } });
+    assert.equal(h.nodos.get("#cabinsRequestsPanel").classList.contains("activo"), false);
+    assert.equal(h.aperturas.at(-1)[1], "2");
+});
+
+test("Solicitudes se actualiza al cancelar y no recupera el texto Express obsoleto", () => {
+    const dato = { solicitudAseoExpress: "Texto anterior", solicitudesTipos: [{ categoria: "reposicion_lena", descripcion: "1 saco", estado: "pendiente" }] };
+    const h = arnes({ 1: dato });
+    h.window.HAIKU_ASEO_OPERACION_V1 = { tiposSolicitud: { reposicion_lena: "Reposición de Leña" } };
+    h.api.pintar(); assert.equal(h.nodos.get("#cabinsRequestsButton").textContent, "Solicitudes · 1");
+    dato.solicitudesTipos[0].estado = "cancelada";
+    h.api.pintar(); assert.equal(h.nodos.get("#cabinsRequestsButton").textContent, "Solicitudes · 0");
+    h.escuchas.get("click")({ target: { closest: () => ({ id: "cabinsRequestsButton", dataset: {} }) } });
+    assert.match(h.nodos.get("#cabinsRequestsList").innerHTML, /Sin solicitudes vigentes/);
+});
+
 function instalarOperacionExpress(h, solicitudes = [{ id: "sol-9", cabana_id: "cab-9",
     fecha_operativa: FECHA, categoria: "aseo_express", estado: "pendiente", descripcion: "Reponer toallas" }]) {
     const fuentes = new Map(), escrituras = [], escuchas = new Map();

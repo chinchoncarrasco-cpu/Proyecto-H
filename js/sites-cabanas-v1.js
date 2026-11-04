@@ -199,6 +199,36 @@
         return etiquetas.length ? `<div class="cb-requests">${etiquetas.join("")}</div>` : "";
     }
     function tiposSolicitud() { return window.HAIKU_ASEO_OPERACION_V1?.tiposSolicitud || {}; }
+    function solicitudesDelDia(fecha) {
+        const tipos = tiposSolicitud(), solicitudes = [];
+        for (let numero = 1; numero <= 11; numero++) {
+            const dato = cabana(fecha, numero);
+            const entradas = Array.isArray(dato.solicitudesTipos)
+                ? dato.solicitudesTipos.filter(item => item.estado !== "cancelada" && tipos[item.categoria])
+                    .map(item => ({ titulo: tipos[item.categoria], detalle: item.descripcion, estado: item.estado }))
+                : listaSolicitudes(fecha, numero, dato).expresas.map(detalle => ({ titulo: "Solicita Express", detalle, estado: "pendiente" }));
+            solicitudes.push(...entradas.map(item => ({ ...item, numero })));
+        }
+        return solicitudes;
+    }
+    function pintarSolicitudes(fecha) {
+        const solicitudes = solicitudesDelDia(fecha), boton = $("#cabinsRequestsButton"), panel = $("#cabinsRequestsPanel");
+        if (boton) boton.textContent = `Solicitudes · ${solicitudes.length}`;
+        if (!panel?.classList.contains("activo")) return;
+        $("#cabinsRequestsDate").textContent = `${fechaLarga(fecha)} · ${solicitudes.length} ${solicitudes.length === 1 ? "solicitud" : "solicitudes"}`;
+        $("#cabinsRequestsList").innerHTML = solicitudes.map(item => `<button type="button" class="cb-request-list-item" data-cb-request-open="${item.numero}"><span class="cb-request-list-head"><strong>Cabaña ${item.numero}</strong><small>${item.estado === "completada" ? "Completada" : item.estado === "en_proceso" ? "En curso" : "Pendiente"}</small></span><span class="cb-request-list-title">${escapar(item.titulo)}</span>${item.detalle && item.detalle !== item.titulo ? `<span class="cb-request-list-description">${escapar(item.detalle)}</span>` : ""}</button>`).join("") || '<p class="cb-empty">Sin solicitudes vigentes.</p>';
+    }
+    function abrirSolicitudes() {
+        const panel = $("#cabinsRequestsPanel");
+        if (!panel) return;
+        panel.classList.add("activo");
+        pintarSolicitudes(fechaActual());
+        $("#cabinsRequestsClose")?.focus?.();
+    }
+    function cerrarSolicitudes(restaurarFoco = true) {
+        $("#cabinsRequestsPanel")?.classList.remove("activo");
+        if (restaurarFoco) $("#cabinsRequestsButton")?.focus?.();
+    }
     function solicitudesTiposHTML(numero, solicitudes, eliminar, enFicha) {
         const tipos = tiposSolicitud();
         return solicitudes.filter(solicitud => solicitud.estado !== "cancelada" && tipos[solicitud.categoria]).map(solicitud => {
@@ -791,6 +821,7 @@
         estado.fecha = fecha;
         $("#cabinsDate").textContent = fechaLarga(fecha);
         pintarPersonal(fecha); resumen(fecha); pintarFiltros(fecha);
+        pintarSolicitudes(fecha);
         pintarOperacion(fecha); pintarRevision(fecha);
         pintarInsumos(fecha);
         window.HAIKU_INSUMOS_ASEO_V1?.hidratar(fecha, { forzar: false });
@@ -1127,8 +1158,12 @@
         }, 15000);
     }
     raiz.addEventListener("click", evento => {
+        if (evento.target === $("#cabinsRequestsPanel")) { cerrarSolicitudes(); return; }
         const boton = evento.target.closest("button");
         if (!boton) return;
+        if (boton.id === "cabinsRequestsButton") { abrirSolicitudes(); return; }
+        if (boton.id === "cabinsRequestsClose") { cerrarSolicitudes(); return; }
+        if (boton.dataset.cbRequestOpen) { cerrarSolicitudes(false); abrir(boton.dataset.cbRequestOpen, estado.tab); return; }
         if (boton.dataset.sacoEditar || boton.dataset.sacoGuardar || boton.dataset.sacoCancelar !== undefined) { corregirSaco(boton); return; }
         if (boton.dataset.sacoAgregar !== undefined || boton.dataset.sacoAnular) { cambiarSaco(boton); return; }
         if (boton.dataset.insumoDelta) { cambiarInsumo(boton); return; }
@@ -1245,6 +1280,15 @@
         if (!$("#cabinsFilterCategory")?.contains(evento.target)) cerrarFiltro();
     });
     document.addEventListener("keydown", evento => {
+        const panel = $("#cabinsRequestsPanel");
+        if (panel?.classList.contains("activo")) {
+            if (evento.key === "Escape") { evento.preventDefault(); cerrarSolicitudes(); return; }
+            if (evento.key === "Tab") {
+                const controles = panel.querySelectorAll("button:not(:disabled)"), primero = controles[0], ultimo = controles[controles.length - 1];
+                if (evento.shiftKey && document.activeElement === primero) { evento.preventDefault(); ultimo?.focus(); }
+                else if (!evento.shiftKey && document.activeElement === ultimo) { evento.preventDefault(); primero?.focus(); }
+            }
+        }
         if (evento.key === "Escape" && $("#cabinsFilterCategory")?.open) {
             cerrarFiltro(); $("#cabinsFilterCategory summary")?.focus?.();
         }
