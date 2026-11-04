@@ -53,8 +53,7 @@ const modulos = new Set([
             window.HAIKU_CABANAS_SITES_V1.pintar(fechaSeleccionada);
         });
         await page.locator('.menu-item[data-seccion="cabanas"]').click();
-        await page.locator('#seccion-cabanas [data-cab-tab="review"]').click();
-        await page.locator('#cabinsReview [data-cb-open="1"]').click();
+        await page.locator('#cabinsOperation [data-cb-open="1"]').click();
         assert.equal(await page.locator('#cabinsDetail').isVisible(), true);
         await page.reload();
         await page.waitForFunction(() => Boolean(window.HAIKU_CABANAS_SITES_V1) &&
