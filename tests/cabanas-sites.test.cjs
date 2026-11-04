@@ -1560,3 +1560,18 @@ test('filtros por Aseo, Revisión y Final son independientes y usan Express o Re
     assert.match(h.nodos.get('#cabinsFilterLabel').textContent,/General/);
     assert.match(h.nodos.get('#aseo-resumen').innerHTML,/cb-tracking-row/);
 });
+
+test('OUT detiene el contador; el total sale de IN/OUT y permanece al consultar otro día', () => {
+    const { tiempoTranscurrido: tiempo } = arnes().api;
+    for (const now of ['2026-11-03T21:02:00-03:00','2026-11-04T10:00:00-03:00']) {
+        assert.equal(tiempo('2026-11-03','20:00',Date.parse(now),'21:02'),'1 h 2 min');
+    }
+    assert.equal(tiempo('2026-11-03','20:00',Date.now(),'21:15'),'1 h 15 min');
+    assert.equal(tiempo('2026-11-03','20:15',Date.now(),'21:02'),'47 min');
+    assert.equal(tiempo('2026-07-03','20:00',Date.now(),'21:02'),'1 h 2 min','también usa la zona de Chile en invierno');
+    assert.equal(tiempo('2026-11-03','20:00',Date.now(),'20:00'),'0 min');
+    assert.equal(tiempo('2026-11-03','',Date.now(),'21:02'),'—');
+    assert.equal(tiempo('2026-11-03','20:00',Date.now(),'25:00'),'—');
+    assert.equal(tiempo('2026-11-03','21:02',Date.now(),'20:00'),'—');
+    assert.equal(tiempo('2026-11-03','20:00',Date.parse('2026-11-03T21:02:00-03:00')),'1 h 2 min','sin OUT sigue en curso');
+});
