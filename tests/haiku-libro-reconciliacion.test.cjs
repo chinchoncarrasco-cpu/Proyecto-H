@@ -2564,13 +2564,13 @@ test('confirmed cancellations travel from monthly query to preparation and their
  assert.equal(result.comparacion.grupos.filter(g=>g.estado==='ambigua'&&g.principal.titular===kutotu.titular).length,1);
  const baseline=await h.Q.compararSistema([kutotu],db,result.q);
  assert.deepEqual(result.comparacion.pagosDetalle,baseline.pagosDetalle);
- h.render(result);assert.match(h.texts(),/Cancelaciones confirmadas \(1\)/);assert.match(h.texts(),/Xomep Zomi Voyu/);assert.match(h.texts(),/CANCELACIONES · Sep26/);assert.match(h.texts(),/Proyecto H: Activa/);
+ h.render(result);assert.match(h.texts(),/Cancelaciones confirmadas 1/);assert.match(h.texts(),/Xomep Zomi Voyu/);assert.match(h.texts(),/CANCELACIONES · Sep26/);assert.match(h.texts(),/Haku · por verificar/);
  const plan=await h.Q.prepararIncorporacion(result,new Map(),new Set(),db);
  assert.equal(plan.cancelaciones_confirmadas,result.cancelaciones_confirmadas);
  assert.ok(!plan.items.some(i=>i.reserva?.titular===xomep.titular));
  assert.ok(!h.Q.serializarIncorporacion(plan).some(i=>i.tipo==='cancelacion'));
  h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},()=>{});
- assert.match(h.texts(),/Cancelaciones confirmadas \(1\)/);assert.ok(h.button('Preparar cancelación'));
+ assert.match(h.texts(),/Cancelaciones confirmadas 1/);assert.ok(h.button('Preparar cancelación'));
  assert.equal(JSON.stringify(actual),before);assert.ok(!db.calls.some(c=>c.startsWith('haiku_')));
  assert.equal(reads.filter(x=>x[1]==='anterior').length,0);
  generation++;await assert.rejects(h.Q.prepararIncorporacion(result,new Map(),new Set(),db),/Libro cambió/);

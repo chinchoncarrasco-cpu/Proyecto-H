@@ -47,6 +47,100 @@
     .haiku-cancelacion-card .haiku-cancelacion-boton { width:100%; }
 }
 
+/* Tarjeta inicial aprobada en Figma. El modificador evita alterar la revisión,
+   el resultado guardado y las cancelaciones que requieren revisión manual. */
+.haiku-cancelacion-titulo--detectadas,
+.haiku-cancelacion-card--detectada {
+    --haku-cancelacion-ink: #17362d;
+    --haku-cancelacion-muted: #728079;
+    --haku-cancelacion-surface: #fff;
+    --haku-cancelacion-soft: #f0f6f2;
+    --haku-cancelacion-line: #d9e3de;
+    --haku-cancelacion-libro: #a34b38;
+    --haku-cancelacion-libro-soft: #fbe9e3;
+    --haku-cancelacion-pendiente: #8e561a;
+    --haku-cancelacion-action: #173d33;
+    --haku-cancelacion-action-ink: #fff;
+    --haku-cancelacion-focus: #22735c;
+}
+html[data-haiku-tema="oscuro"] .haiku-cancelacion-titulo--detectadas,
+html[data-haiku-tema="oscuro"] .haiku-cancelacion-card--detectada {
+    --haku-cancelacion-ink: #e8efea;
+    --haku-cancelacion-muted: #b1c2b7;
+    --haku-cancelacion-surface: #1b2621;
+    --haku-cancelacion-soft: #202d26;
+    --haku-cancelacion-line: #3e5145;
+    --haku-cancelacion-libro: #edb5a6;
+    --haku-cancelacion-libro-soft: #442c27;
+    --haku-cancelacion-pendiente: #f2c58d;
+    --haku-cancelacion-action: #254736;
+    --haku-cancelacion-action-ink: #e8efea;
+    --haku-cancelacion-focus: #9fd2b3;
+}
+:root .haiku-cancelacion-titulo.haiku-cancelacion-titulo--detectadas {
+    gap: 8px; margin: 12px 0; color: var(--haku-cancelacion-ink);
+    font: 600 16px/1.4 var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
+:root .haiku-cancelacion-titulo--detectadas .haiku-cancelacion-cantidad {
+    padding: 2px 6px; border-radius: 8px; background: var(--haku-cancelacion-soft);
+    color: var(--haku-cancelacion-muted); font-size: 11px; line-height: 16px;
+}
+/* La especificidad mantiene esta tarjeta frente a las bandas heredadas del
+   asistente, sin cambiar los estilos de sus otras tarjetas. */
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card.haiku-cancelacion-card--detectada {
+    display: flex; flex-direction: column; align-items: stretch; gap: 12px;
+    position: relative; width: 100%; max-width: 528px; min-width: 0;
+    margin: 0 0 12px; padding: 16px; border: 1px solid var(--haku-cancelacion-line);
+    border-radius: 8px; background: var(--haku-cancelacion-surface);
+    color: var(--haku-cancelacion-ink); box-shadow: none;
+    font: 400 13px/18px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+    container: haku-cancelacion-detectada / inline-size;
+}
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card.haiku-cancelacion-card--detectada::before { content: none; }
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0;
+}
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-badge {
+    margin: 0; padding: 4px 8px; border-radius: 8px;
+    background: var(--haku-cancelacion-libro-soft); color: var(--haku-cancelacion-libro);
+    font-size: 11px; font-weight: 600; line-height: 16px;
+}
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-cab {
+    flex: 0 0 auto; color: var(--haku-cancelacion-ink); font-size: 12px; font-weight: 600; line-height: 18px;
+}
+.haiku-cancelacion-card--detectada .haiku-cancelacion-identidad { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-nombre {
+    margin: 0; color: var(--haku-cancelacion-ink); font-size: 16px; font-weight: 600; line-height: 1.4;
+}
+.haiku-cancelacion-card--detectada .haiku-cancelacion-periodo { margin: 0; color: var(--haku-cancelacion-muted); font-size: 13px; line-height: 18px; }
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-origen {
+    margin: 0; color: var(--haku-cancelacion-muted); font-size: 12px; line-height: 18px;
+}
+.haiku-cancelacion-card--detectada .haiku-cancelacion-pie {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    border-top: 1px solid var(--haku-cancelacion-line); padding-top: 12px;
+}
+.haiku-cancelacion-card--detectada .haiku-cancelacion-verificacion { display: flex; flex: 1 1 200px; flex-direction: column; gap: 4px; min-width: 0; }
+.haiku-cancelacion-card--detectada .haiku-cancelacion-estado-haku { color: var(--haku-cancelacion-pendiente); font-size: 12px; font-weight: 600; line-height: 16px; }
+.haiku-cancelacion-card--detectada .haiku-cancelacion-ayuda { color: var(--haku-cancelacion-muted); font-size: 11px; line-height: 16px; }
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-boton {
+    display: inline-flex; flex: 0 1 200px; align-items: center; justify-content: center;
+    width: 200px; min-height: 36px; max-width: 100%; margin: 0 0 0 auto; padding: 7px 12px;
+    border: 1px solid transparent; border-radius: 8px; box-shadow: none;
+    background: var(--haku-cancelacion-action); color: var(--haku-cancelacion-action-ink);
+    font: 600 14px/20px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-boton:hover:not(:disabled) { background: var(--haku-cancelacion-action); filter: brightness(.94); }
+:is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-boton:focus-visible { outline: 2px solid var(--haku-cancelacion-focus); outline-offset: 3px; }
+@container haku-cancelacion-detectada (max-width: 430px) {
+    .haiku-cancelacion-card--detectada .haiku-cancelacion-pie { flex-direction: column; align-items: stretch; }
+    .haiku-cancelacion-card--detectada .haiku-cancelacion-verificacion { flex-basis: auto; }
+    :is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-boton { flex-basis: auto; width: 100%; }
+}
+@media (pointer: coarse) {
+    :is(.haiku-asistente-root .haiku-asistente-panel, :root) .haiku-cancelacion-flujo .haiku-cancelacion-card--detectada .haiku-cancelacion-boton { min-height: 40px; }
+}
+
 /* Revisión y resultado de una cancelación: sólo afectan esta vista del Libro. */
 .haiku-cancelacion-flujo { min-width:0; max-width:100%; }
 .haiku-cancelacion-pantalla {
