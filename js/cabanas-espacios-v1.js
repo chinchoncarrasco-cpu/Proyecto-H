@@ -44,7 +44,7 @@
       const ownScope=scope, day=config.date();
       core=window.HAIKU_CHECKOUT_CORE_V1.createCheckoutStore({day,isCurrent:()=>scope===ownScope&&scopeKey()===ownScope,
         async read(date){const {data,error}=await window.haikuSupabase.rpc('haiku_revisiones_checkout_dia_v2',{p_fecha:date});if(error)throw error;return data;},
-        async write(t,field,value){const loan=field==='prestamo'||field==='devolucion';const {data,error}=await window.haikuSupabase.rpc(loan?'haiku_guardar_prestamo_estadia_v1':'haiku_guardar_revision_checkout_v2',loan?{p_estadia_id:t.stayId,p_campo:field,p_valor:value}:{p_fecha:t.day,p_cabana_id:t.cabinId,p_estadia_id:t.stayId,p_campo:field,p_valor:value});if(error)throw error;return data;},
+        async write(t,field,value){const loan=field==='prestamo'||field==='devolucion';const {data,error}=await window.haikuSupabase.rpc(loan?'haiku_guardar_prestamo_estadia_v1':field==='detalle'||field==='detalle_foto'?'haiku_guardar_detalle_checkout_v1':'haiku_guardar_revision_checkout_v2',loan?{p_estadia_id:t.stayId,p_campo:field,p_valor:value}:{p_fecha:t.day,p_cabana_id:t.cabinId,p_estadia_id:t.stayId,p_campo:field,p_valor:value});if(error)throw error;return data;},
       });
       core.subscribe(renderCheckout); void core.ensure(); void loadDepartures();
       const refresh=(reviews,source)=>{
@@ -122,7 +122,7 @@
       if(b.dataset.supplyOpen){void openSupply(b.dataset.supplyOpen);return;}
       if(b.id==='cabinsSupplyClose'){closeSupply();return;}
       if(b.id==='cabinsSupplySave'){void saveSupply();return;}
-      if(b.hasAttribute('data-checkout-back')){selected='';renderCheckout();return;}
+      if(b.hasAttribute('data-checkout-back')){const d=find(selected);if(d)void core.flushDetails(target(d)).catch(error=>{$('#cabinsCheckoutError').textContent=error.message;});selected='';renderCheckout();return;}
       if(b.hasAttribute('data-checkout-retry')){void core?.refresh();void loadDepartures();return;}
       if(b.dataset.checkoutOpen){const d=find(b.dataset.checkoutOpen);if(!d)return;const open=()=>{selected=b.dataset.checkoutOpen;renderCheckout();$('#cabinsCheckoutDetail').scrollIntoView?.({block:'start'});};if(core.state.canEdit&&core.view(target(d)).revision_estado==='pendiente')void core.set(target(d),'revision_estado','en_revision').then(open).catch(()=>undefined);else open();return;}
       if(b.dataset.checkoutCheck){const d=find(b.dataset.checkoutTarget);if(d)void core.set(target(d),b.dataset.checkoutCheck,{id:b.dataset.checkoutItem,checked:b.getAttribute('aria-checked')!=='true'}).catch(()=>undefined);}

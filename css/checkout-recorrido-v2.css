@@ -130,3 +130,18 @@ html[data-haiku-tema="oscuro"] :is(.co-dialog,.co-stay-widget) { --cb-surface:#1
   #cabinsCheckout .co-reponer { display:none; }
   .co-dialog { width:100%;max-width:480px;max-height:92dvh;inset:auto 0 0;margin:0 auto;border-bottom:0;border-radius:12px 12px 0 0;padding-bottom:max(14px,env(safe-area-inset-bottom)); }
 }
+/* Optional area notes stay folded and keep their disclosure at the bottom right. */
+#cabinsCheckout .co-area-detail { min-width:0;margin-top:-5px; }
+#cabinsCheckout .co-area-detail[open] { display:flex;flex-direction:column;gap:5px; }
+#cabinsCheckout .co-area-detail>summary { display:flex;align-items:center;justify-content:flex-end;gap:7px;list-style:none;margin-left:auto;width:30px;min-height:24px;cursor:pointer;color:var(--cb-accent);order:2; }
+#cabinsCheckout .co-area-detail>summary::-webkit-details-marker { display:none; }
+#cabinsCheckout .co-area-detail[open]>summary>svg { transform:rotate(180deg); }
+#cabinsCheckout .co-detail-body { order:1;display:grid;gap:7px; }
+:is(#cabinsCheckout,.co-dialog) .co-evidence-input { position:relative;min-width:0; }
+:is(#cabinsCheckout,.co-dialog) .co-evidence-input>textarea { display:block;box-sizing:border-box;width:100%;min-height:76px;resize:vertical;padding:8px 10px 34px;border:1px solid var(--cb-border);border-radius:7px;background:var(--cb-canvas);color:var(--cb-text);font:400 12px/18px var(--sites-shell-font,Inter,sans-serif); }
+:is(#cabinsCheckout,.co-dialog) .co-camera { position:absolute;right:4px;bottom:4px;display:grid;place-items:center;width:30px;height:30px;min-height:0;margin:0;padding:0;border:0;border-radius:5px;background:transparent;color:var(--cb-accent);cursor:pointer;box-shadow:none; }
+:is(#cabinsCheckout,.co-dialog) .co-photo-picker { min-height:34px;display:flex;align-items:center; }
+.co-dialog .co-photo-sources { display:flex;gap:6px;flex-wrap:wrap; }
+#cabinsCheckout .co-usage.is-selected { color:var(--cb-accent);border-color:var(--cb-accent);background:var(--co-success-bg); }
+#cabinsCheckout [data-co-message]>strong { font-weight:600; }
+#cabinsCheckout [data-co-area-photo] { gap:12px; }
