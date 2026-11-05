@@ -90,7 +90,8 @@
       const usage = usageItems.find(item => item.area === sector.id);
       if (usage) items.push(((row.chequeados || []).includes(usage.checkId) ? 'Usaron ' : 'No usaron ') + usage.label);
       for (const supply of supplies.filter(item => item.area === sector.id && row.reposiciones?.[item.id] > 0)) {
-        items.push(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : ''));
+        const label = supply.id === 'lena' || supply.id === 'diario' ? 'Reponer ' + supply.label.toLowerCase() : supply.label;
+        items.push(label + (supply.countable ? ' x' + row.reposiciones[supply.id] : ''));
       }
       if (items.length) sections.push('*' + headings[sector.id] + '*\n' + items.join(' · '));
       const note = row.detalles?.[sector.id], noteLines = [];
@@ -99,7 +100,7 @@
       if (noteLines.length) notes.push(sector.title + ': ' + noteLines.join('\n').replace(/\n/g, '\n  '));
     }
     const activeLoans = borrowed.filter(item => !item.descartado);
-    if (activeLoans.length) sections.push('*🤝 Prestados:*\n' + activeLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : ''))).join('\n'));
+    if (activeLoans.length) sections.push('*🤝 Prestados:*\n' + activeLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' x' + item.cantidad : ''))).join('\n'));
     if (notes.length) sections.push('*📝 Nota:*\n' + notes.join('\n'));
     return sections.join('\n\n');
   }
