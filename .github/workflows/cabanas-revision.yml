@@ -40,6 +40,8 @@ jobs:
           node-version: 24
       - name: Revisión, Aseo, Realtime y edición de horas
         run: node --test tests/cabanas-sites.test.cjs tests/revision-completa-estados.test.cjs tests/revision-checklist-realtime.test.cjs tests/aseo-operacion-autoridad.test.cjs tests/horas-edicion.test.cjs tests/insumos-aseo.test.cjs tests/insumos-realtime-ready.test.cjs
+      - name: Resumen atómico, navegación y solicitudes derivadas
+        run: node --test tests/resumen-refresh-atomico.test.cjs tests/resumen-generaciones-origen.test.cjs tests/resumen-productores-derivados.test.cjs tests/resumen-refresh-navegacion.test.cjs
       - name: Navegador aislado de prueba
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12
@@ -68,3 +70,8 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/cabanas-filters-browser-check.cjs
+
+      - name: Resumen con cambios de día y pagos publicados
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/resumen-nav-panel-browser-check.cjs

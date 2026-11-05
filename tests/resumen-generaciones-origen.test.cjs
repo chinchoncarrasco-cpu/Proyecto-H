@@ -15,7 +15,7 @@ function instalarCargaRealDeCabanas(contexto) {
         contexto);
 }
 
-test('checkout DOM y click diferido se clasifican como internos; realtime como externo', async () => {
+test('checkout DOM no relee con coordinador; click diferido es interno y realtime es externo', async () => {
     const solicitudes = [];
     const escuchas = new Map();
     const escuchasWindow = new Map();
@@ -80,14 +80,10 @@ test('checkout DOM y click diferido se clasifican como internos; realtime como e
     } }));
     await new Promise(resolve => setTimeout(resolve, 10));
 
-    assert.equal(solicitudes.length, 2);
-    assert.deepEqual(solicitudes.map(item => item.fecha),
-        ['2026-09-24', '2026-09-24']);
-    assert.equal(solicitudes[0].origen.evento,
-        'MutationObserver pagos-lista-checkout');
-    assert.equal(solicitudes[1].origen.evento, 'click document delayed');
+    assert.equal(solicitudes.length, 1);
+    assert.equal(solicitudes[0].fecha, '2026-09-24');
+    assert.equal(solicitudes[0].origen.evento, 'click document delayed');
     assert.equal(solicitudes[0].origen.tipo, 'interno_derivado');
-    assert.equal(solicitudes[1].origen.tipo, 'interno_derivado');
 
     // El detector genérico de clicks sólo sincroniza la fecha; la escritura
     // real pide refresh mediante su API explícita o Realtime.
@@ -95,38 +91,38 @@ test('checkout DOM y click diferido se clasifican como internos; realtime como e
         closest: () => null
     } }));
     await new Promise(resolve => setTimeout(resolve, 10));
-    assert.equal(solicitudes.length, 3);
-    assert.equal(solicitudes[2].origen.evento, 'click document delayed');
-    assert.equal(solicitudes[2].origen.tipo, 'interno_derivado');
+    assert.equal(solicitudes.length, 2);
+    assert.equal(solicitudes[1].origen.evento, 'click document delayed');
+    assert.equal(solicitudes[1].origen.tipo, 'interno_derivado');
 
     await window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1.refrescar('2026-09-24', {
         evento: 'acción de pago confirmada', tipo: 'externo'
     });
-    assert.equal(solicitudes.length, 4);
-    assert.equal(solicitudes[3].origen.tipo, 'externo');
+    assert.equal(solicitudes.length, 3);
+    assert.equal(solicitudes[2].origen.tipo, 'externo');
 
     realtime.get('pagos')();
     await new Promise(resolve => setTimeout(resolve, 140));
-    assert.equal(solicitudes.length, 5);
-    assert.equal(solicitudes[4].fecha, '2026-09-24');
-    assert.equal(solicitudes[4].origen.evento, 'realtime pagos');
-    assert.equal(solicitudes[4].origen.tipo, 'externo');
+    assert.equal(solicitudes.length, 4);
+    assert.equal(solicitudes[3].fecha, '2026-09-24');
+    assert.equal(solicitudes[3].origen.evento, 'realtime pagos');
+    assert.equal(solicitudes[3].origen.tipo, 'externo');
 
     // Un focus posterior no puede cancelar el refresh externo pendiente.
     realtime.get('pagos')();
     escuchasWindow.get('focus')();
     await new Promise(resolve => setTimeout(resolve, 140));
-    assert.equal(solicitudes.length, 6);
-    assert.equal(solicitudes[5].origen.evento, 'realtime pagos');
-    assert.equal(solicitudes[5].origen.tipo, 'externo');
+    assert.equal(solicitudes.length, 5);
+    assert.equal(solicitudes[4].origen.evento, 'realtime pagos');
+    assert.equal(solicitudes[4].origen.tipo, 'externo');
 
     // Una nueva fecha solicitada explícitamente sigue entrando al coordinador.
     contexto.fechaSeleccionada = '2026-09-25';
     await coordinador.solicitar('2026-09-25', {
         categoria: 'navegación usuario', evento: 'Día siguiente'
     });
-    assert.equal(solicitudes.length, 7);
-    assert.equal(solicitudes[6].origen.categoria, 'navegación usuario');
+    assert.equal(solicitudes.length, 6);
+    assert.equal(solicitudes[5].origen.categoria, 'navegación usuario');
 });
 
 test('cargarCabanasDia real y su envoltorio son derivados; escritura y refresh explícito siguen externos', async () => {
@@ -277,7 +273,6 @@ test('navegación absorbe todos los productores derivados y publica T3/T4/T5', a
         [item.categoria, item.evento]), [
         ['cabañas', 'cargarCabanasDia'],
         ['tablero', 'cargarCabanasDia envuelto'],
-        ['tablero', 'MutationObserver pagos-lista-checkout'],
         ['pagos', 'click document delayed'],
         ['notas', 'click document delayed'],
         ['notas', 'focus'],
@@ -297,6 +292,15 @@ test('navegación absorbe todos los productores derivados y publica T3/T4/T5', a
     assert.ok(publicada.t3 && publicada.t4 && publicada.t5);
     assert.ok(Date.parse(publicada.t3) <= Date.parse(publicada.t4));
     assert.ok(Date.parse(publicada.t4) <= Date.parse(publicada.t5));
+
+    // La notificación de un MutationObserver por el DOM de Pagos se entrega
+    // en una microtarea posterior a la publicación, con ambos flags ya libres.
+    assert.equal(api.publicando(), false);
+    assert.equal(api.enCurso(), false);
+    queueMicrotask(() => observadores.find(item => item.nodo === checkout).callback());
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(api.historialGeneraciones().filter(item => item.generacion).length, 2);
+    assert.equal(api.publicaciones(), 2);
 });
 
 test('primera carga absorbe cabañas y tablero sin reiniciar generación ni loading', async () => {

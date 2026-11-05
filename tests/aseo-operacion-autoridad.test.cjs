@@ -12,6 +12,7 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
     optimista = false, demorarItems = false, clienteInicial = true, readyState = "complete",
     sesionInicial = false, autenticarDespues = true, fallarEscritura = false, antesDeActualizarAseo } = {}) {
     const escrituras = [];
+    const lecturas = [];
     const listeners = new Map();
     const listenersDocumento = new Map();
     const listenersWindow = new Map();
@@ -111,6 +112,7 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
                     return Promise.resolve({ data, error: null });
                 },
                 then(resolver, rechazar) {
+                    if (!mutacion) lecturas.push(tabla);
                     if (demorarItems && tabla === "revision_items" && mutacion === "upsert") {
                         return new Promise(resolve => resolucionesItems.push(resolve)).then(resolver, rechazar);
                     }
@@ -151,7 +153,7 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
     if (optimista) vm.runInContext(fuenteOptimista, contexto, { filename: "checklist-optimista-v1.js" });
     vm.runInContext(fuente, contexto, { filename: "supabase-aseo-operacion-v1.js" });
     if (autenticarDespues) window.haikuSesion = sesion;
-    return { get api() { return window.HAIKU_ASEO_OPERACION_V1; }, local, escrituras, listeners, eventos,
+    return { get api() { return window.HAIKU_ASEO_OPERACION_V1; }, local, escrituras, lecturas, listeners, eventos,
         window, document, listenersDocumento, listenersWindow,
         get intervalos() { return intervalos; }, get registros() { return registros; },
         conectarCliente() { window.haikuSupabase = supabase; },
@@ -538,4 +540,23 @@ test("eventos de reinicialización no duplican autoridad, listeners, intervalos 
     await api.esperarEscrituras();
     assert.equal(h.escrituras.length, 1);
     assert.equal(h.escrituras[0].payload.estado, "pendiente");
+});
+
+test("hidratar aseo consulta una sola vez cada fuente cuando no crea filas legacy", async () => {
+    const h = arnes();
+    await h.api.hidratar(FECHA, { pintar: false });
+    for (const tabla of ["aseos", "solicitudes", "revisiones_cabana"]) {
+        assert.equal(h.lecturas.filter(actual => actual === tabla).length, 1, tabla);
+    }
+    assert.equal(h.escrituras.length, 0);
+});
+
+test("crear un aseo legacy relee las fuentes y publica el registro confirmado", async () => {
+    const h = arnes({ local: { aseo: "Scarla", aseoIn: "10:00", aseoOut: "11:00" } });
+    await h.api.hidratar(FECHA, { pintar: false });
+    assert.ok(h.escrituras.some(actual => actual.tabla === "aseos"));
+    for (const tabla of ["aseos", "solicitudes", "revisiones_cabana"]) {
+        assert.equal(h.lecturas.filter(actual => actual === tabla).length, 2, tabla);
+    }
+    assert.equal(h.local.aseoIn, "10:00");
 });

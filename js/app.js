@@ -401,13 +401,11 @@ function cargarDatosDia(fecha) {
 
     mostrarNotasOperativas(fecha);
 
-    // Actualizar pagos para la fecha seleccionada
-    if (typeof cargarAbonosPagos === "function") {
-        cargarAbonosPagos();
-    }
-
-    if (typeof cargarSaldosCheckin === "function") {
-        cargarSaldosCheckin();
+    // La fuente de pagos del Resumen ya pertenece a su publicación atómica.
+    // La vista Pagos consulta sus detalles al abrirse.
+    if (!window.HAIKU_RESUMEN_REFRESH_V1?.activo()) {
+        if (typeof cargarAbonosPagos === "function") cargarAbonosPagos();
+        if (typeof cargarSaldosCheckin === "function") cargarSaldosCheckin();
     }
 }
 

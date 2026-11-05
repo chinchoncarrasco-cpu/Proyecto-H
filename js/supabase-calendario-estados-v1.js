@@ -31,8 +31,9 @@
     let estados = new Map();
     let estadosPorReserva = new Map();
     let refrescando = false;
-    let refrescoPendiente = false;
+    let refrescoPendiente = null;
     let refrescoProgramado = false;
+    let origenProgramado = null;
     let wrapperInstalado = false;
     let canalRealtime = null;
 
@@ -215,8 +216,13 @@
         aplicarEstadosDOM();
     }
 
-    async function refrescar({ sincronizarCache = true, redibujar = true } = {}) {
-        if (refrescando) { refrescoPendiente = true; return; }
+    async function refrescar({ sincronizarCache = true, redibujar = true,
+        origen = { evento: "refresh explícito calendario estados", tipo: "externo" }
+    } = {}) {
+        if (refrescando) {
+            if (!refrescoPendiente || origen.tipo === "externo") refrescoPendiente = origen;
+            return;
+        }
         refrescando = true;
 
         try {
@@ -224,7 +230,7 @@
                 sincronizarCache &&
                 typeof window.haikuSincronizarReservasSupabase === "function"
             ) {
-                await window.haikuSincronizarReservasSupabase();
+                await window.haikuSincronizarReservasSupabase(origen);
             }
 
             await cargarEstadosSupabase();
@@ -234,7 +240,7 @@
             // la autoridad existente y NO abre un segundo canal Realtime.
             try {
                 await window.HAIKU_CHECKOUT_AUTORIDAD_V1?.sincronizar?.({
-                    regenerarCalendario: false
+                    regenerarCalendario: false, origen
                 });
             } catch (errorCheckout) {
                 console.warn(
@@ -254,13 +260,16 @@
         } finally {
             refrescando = false;
             if (refrescoPendiente) {
-                refrescoPendiente = false;
-                programarRefresco();
+                const pendiente = refrescoPendiente;
+                refrescoPendiente = null;
+                programarRefresco(pendiente);
             }
         }
     }
 
-    function programarRefresco() {
+    function programarRefresco(evento) {
+        const origen = evento?.tipo ? evento : { evento: "realtime calendario estados", tipo: "externo" };
+        if (!origenProgramado || origen.tipo === "externo") origenProgramado = origen;
         if (refrescoProgramado) return;
         refrescoProgramado = true;
 
@@ -268,7 +277,9 @@
         // en una sola lectura. Es un disparo único, no polling.
         setTimeout(async () => {
             refrescoProgramado = false;
-            await refrescar({ sincronizarCache: true, redibujar: true });
+            const origen = origenProgramado;
+            origenProgramado = null;
+            await refrescar({ sincronizarCache: true, redibujar: true, origen });
         }, 80);
     }
 
@@ -320,7 +331,9 @@
     iniciarRealtime();
 
     window.addEventListener("haiku:auth-ready", () => {
-        refrescar({ sincronizarCache: true, redibujar: true });
+        refrescar({ sincronizarCache: true, redibujar: true, origen: {
+            evento: "auth calendario estados", tipo: "interno_derivado"
+        } });
     }, { once: true });
 
     document.addEventListener("click", evento => {
@@ -340,7 +353,9 @@
 
     // El loader puede ejecutar este módulo después de que la sesión ya esté lista.
     if (window.haikuSesion) {
-        refrescar({ sincronizarCache: false, redibujar: true });
+        refrescar({ sincronizarCache: false, redibujar: true, origen: {
+            evento: "inicio calendario estados", tipo: "interno_derivado"
+        } });
     }
 
     window.HAIKU_CALENDARIO_ESTADOS_V1 = Object.freeze({
