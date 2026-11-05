@@ -82,6 +82,7 @@ const server = http.createServer((request, response) => {
         });
         for (const file of [
             'js/supabase-asistente-libro-prioridad-v1.js',
+            'js/supabase-asistente-libro-incorporacion-v1.js',
             'js/supabase-asistente-libro-actualizacion-v1.js',
             'js/supabase-asistente-libro-auto-v1.js'
         ]) await page.addScriptTag({ content: read(file) });
@@ -94,7 +95,7 @@ const server = http.createServer((request, response) => {
         const first = page.locator('.haku-actualizacion-sites').last();
         assert.equal(await first.count(), 1);
         assert.equal(await page.evaluate(() => window.__opened), 1);
-        assert.match(await first.locator('.haku-actualizacion-sites__mensaje').innerText(), /Libro actualizado.*No encontré cambios en las reservas/);
+        assert.match(await first.locator('.haku-actualizacion-sites__mensaje').innerText(), /Las reservas no cambiaron respecto de la copia anterior del Libro/);
         assert.deepEqual(await first.locator('.haku-actualizacion-sites__metricas strong').allInnerTexts(), ['0', '0', '0', '0']);
         assert.deepEqual(await first.locator('.haku-prioridad-fila > .haku-actualizacion-sites__fila-vacia strong').allInnerTexts(), ['0', '0', '0', '0']);
         assert.equal(await first.locator('.haku-actualizacion-sites__sin-cambios').count(), 1);
@@ -163,6 +164,7 @@ const server = http.createServer((request, response) => {
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
         await history.locator('[data-haku-preparar-pendientes]').click();
         await page.waitForFunction(() => window.__preparations === 1);
+        assert.equal(await page.getByRole('button',{name:'Preparar cambios en Proyecto H',exact:true}).count(),0);
         const manual=history.getByRole('button',{name:'Aprobación manual',exact:true});
         for(const width of [1100,390,320]){
             await page.setViewportSize({width,height:900});await manual.click();

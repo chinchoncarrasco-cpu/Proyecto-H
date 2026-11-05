@@ -37,56 +37,13 @@
         return {entrada,result};
     }
     function adjuntar(contenedor,resultado,generacion) {
+        // Los cambios que se pueden incorporar se revisan en la zona de pendientes del informe.
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntar(contenedor,resultado,generacion);
         const entrada=adaptar(resultado,generacion);
         // Revisiones de campo junto al informe, incluso en elementos que siguen
         // fuera del lote por identidad/fechas ambiguas. Resolver no los promueve.
         root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(contenedor,
             [...entrada.reservas,...lista(resultado.ambiguas).flatMap(x=>lista(x.actuales))],generacion);
-        if(!entrada.reservas.length)return;
-        const doc=root.document;
-        const elemento=(tag,texto)=>{const el=doc.createElement(tag);el.textContent=texto;return el;};
-        const boton=elemento('button','Preparar cambios en Proyecto H');boton.type='button';boton.className='libro-reserva-boton secundario haku-4b-preparar';
-        const zona=elemento('section','');zona.className='haku-4b-zona';zona.hidden=true;
-        let ocupado=false,obsoleto=false;
-        root.addEventListener('haiku:libro-cambio',()=>{
-            obsoleto=true;boton.disabled=true;
-            zona.replaceChildren(elemento('p',OBSOLETO));
-        },{once:true});
-        boton.addEventListener('click',async()=>{
-            if(ocupado)return;
-            ocupado=true;boton.disabled=true;zona.hidden=false;zona.replaceChildren(elemento('p','Revalidando los cambios contra Proyecto H…'));
-            try {
-                if(obsoleto)throw Error(OBSOLETO);
-                vigente(generacion);
-                const vista=elemento('div','');
-                const preparacion=await preparar(resultado,generacion,vista);
-                if(obsoleto)throw Error(OBSOLETO);
-                if(!preparacion.result)throw Error('No hay cambios accionables para preparar.');
-                zona.replaceChildren(elemento('h4','Preparación para Proyecto H'));
-                // Contexto de diferencias sólo visual; no alimenta patches ni acciones.
-                const contexto=elemento('details','');contexto.className='haku-4b-contexto';contexto.appendChild(elemento('summary','Cambios detectados que originaron esta preparación'));
-                for(const x of preparacion.entrada.contexto){
-                    const fechas=r=>`${r?.fecha_checkin || 'Sin fecha'} → ${r?.fecha_checkout || 'Sin fecha'}`;
-                    contexto.appendChild(elemento('p',`${x.actual.titular || 'Titular no disponible'} · CAB ${x.actual.cabana ?? '—'} · ${fechas(x.actual)} · ${x.tipo==='nuevas'?'Nueva en el Libro':'Modificada en el Libro'}`));
-                    if(x.tipo==='modificadas')contexto.appendChild(elemento('p',`Anterior: CAB ${x.anterior?.cabana ?? '—'} · ${fechas(x.anterior)}. Campos detectados: ${lista(x.cambios).map(c=>String(c.campo || 'Campo sin identificar').replace(/_/g,' ')).join(', ')}. La propuesta se determina al comparar el registro actual con Proyecto H.`));
-                }
-                zona.appendChild(contexto);
-                if(preparacion.entrada.noTransferibles.length){
-                    const detalles=elemento('details','');detalles.className='haku-4b-avisos';detalles.appendChild(elemento('summary',`No transferibles automáticamente / avisos · ${preparacion.entrada.noTransferibles.length}`));
-                    for(const x of preparacion.entrada.noTransferibles){
-                        const r=x.dato?.anterior || x.dato;
-                        const ref=typeof r?.titular==='string'?r.titular:[x.dato?.hoja,x.dato?.segmento,x.dato?.actual,x.dato?.anterior].find(v=>typeof v==='string') || '';
-                        detalles.appendChild(elemento('p',`${x.tipo}${ref?' · '+ref:''}: ${x.motivo}`));
-                    }
-                    zona.appendChild(detalles);
-                }
-                zona.appendChild(vista);
-                const volver=elemento('button','Volver al informe');volver.type='button';volver.className='libro-reserva-boton secundario haku-4b-volver';volver.addEventListener('click',()=>{zona.hidden=true;});zona.appendChild(volver);
-            }catch(e){zona.replaceChildren(elemento('p',e?.message || 'No se pudo preparar. No hay una propuesta actualizada.'));}
-            finally{ocupado=false;boton.disabled=obsoleto;}
-        });
-        contenedor.appendChild(boton);contenedor.appendChild(zona);
     }
     const api=Object.freeze({adaptar,preparar,adjuntar});root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1=api;
     if(typeof module!=='undefined')module.exports=api;

@@ -62,10 +62,14 @@ test('sin cambios no prepara ni muestra botón',async()=>{
  const h=entorno(),b=puente(h);b.adjuntar(h.out,cambio({estado:'sin_cambios'}),1);
  assert.equal(h.out.children.length,0);const r=await b.preparar(cambio({estado:'sin_cambios'}),1,h.out);assert.equal(r.result,null);assert.equal(h.lecturas(),0);
 });
-test('botón recibe el objeto visible y no llama al comparador XLSX',async()=>{
- const h=entorno(),b=puente(h);h.context.HAIKU_LIBRO_DIFERENCIAS_V1={compararUltimasVersiones(){throw Error('No recalcular XLSX');}};
- b.adjuntar(h.out,cambio({nuevas:[{actual:reserva()}]}),1);assert.ok(h.boton('Preparar cambios en Proyecto H'));
- await h.boton('Preparar cambios en Proyecto H').events.click();assert.match(h.texto(),/Preparación para Proyecto H/);assert.ok(h.lecturas()>0);assert.equal(h.writes(),0);
+test('adjuntar conserva cancelaciones y ocupación sin abrir otra comparación',()=>{
+ const h=entorno(),b=puente(h),informe=cambio({nuevas:[{actual:reserva()}]});
+ const llamadas=[];
+ h.context.HAIKU_LIBRO_CANCELACIONES_V1={adjuntar:(out,r,g)=>llamadas.push([out===h.out,r===informe,g])};
+ h.context.HAIKU_LIBRO_RESOLUCIONES_V1={adjuntar:(out,rs,g)=>llamadas.push([out===h.out,rs[0].id===informe.nuevas[0].actual.id,g])};
+ b.adjuntar(h.out,informe,1);
+ assert.deepEqual(llamadas,[[true,true,1],[true,true,1]]);
+ assert.equal(h.boton('Preparar cambios en Proyecto H'),undefined);assert.equal(h.lecturas(),0);assert.equal(h.writes(),0);
 });
 test('Mauricio conserva CAB 8 y 11→13 al reconciliar; Proyecto H puede decir que ya existe',async()=>{
  const h=entorno(),b=puente(h),r=reserva();h.rows.push({id:'estadia',reserva_id:'reserva',cabanas:{numero:8},fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'confirmada',tipo_estadia:'alojamiento',adultos:2,reservas:{titular_nombre:r.titular,titular_numero_documento:r.rut_documento,correo_contacto:r.correo,telefono_contacto:r.telefono,estado_reserva:'confirmada'}});
@@ -81,8 +85,8 @@ test('puente rechaza generación antigua antes de red',async()=>{
 });
 test('error de red no crea vista previa accionable ni estado incorporado',async()=>{
  const h=entorno(),b=puente(h);h.context.haikuSupabase.auth.getSession=async()=>{throw Error('Red no disponible');};
- b.adjuntar(h.out,cambio({nuevas:[{actual:reserva()}]}),1);await h.boton('Preparar cambios en Proyecto H').events.click();
- assert.match(h.texto(),/Red no disponible/);assert.equal(h.boton('Preparar incorporación'),undefined);assert.equal(h.writes(),0);
+ await assert.rejects(b.preparar(cambio({nuevas:[{actual:reserva()}]}),1,h.out),/Red no disponible/);
+assert.equal(h.boton('Preparar incorporación'),undefined);assert.equal(h.writes(),0);
 });
 test('confirmación del núcleo mantiene segunda lectura y RPC existente, sólo mock',async()=>{
  const h=entorno(),b=puente(h);const {result}=await b.preparar(cambio({nuevas:[{actual:reserva()}]}),1,h.out);
@@ -102,16 +106,21 @@ test('informe manual y Ver informe adjuntan el puente con la generación origina
  const campo={value:'',dispatchEvent(){}},enviar={},mensajes=h.out;
  h.context.document.getElementById=id=>({'haiku-asistente-texto':campo,'haiku-asistente-enviar':enviar,'haiku-asistente-mensajes':mensajes}[id]);
  h.context.document.head=new h.El('head');
- let llamadas=0;const datos=cambio({nuevas:[{actual:reserva()}]});
+ let llamadas=0,revisiones=0;
+ h.context.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados:async()=>{revisiones++;return {items:[],resueltos:[],reservas:[]};}};
+ const datos=cambio({nuevas:[{actual:reserva()}]});
  h.context.HAIKU_LIBRO_DIFERENCIAS_V1={compararUltimasVersiones:async()=>{llamadas++;return datos;}};
  vm.runInNewContext(fs.readFileSync(require.resolve('../js/supabase-asistente-libro-actualizacion-v1.js'),'utf8'),h.context);
  const E=h.context.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
  const obtenido=await E.obtenerResultado();assert.equal(obtenido,datos);E.mostrarResultado(obtenido);
- assert.ok(h.boton('Preparar cambios en Proyecto H'));await h.boton('Preparar cambios en Proyecto H').events.click();assert.match(h.texto(),/Preparación para Proyecto H/);assert.equal(llamadas,1);
+ await new Promise(r=>setImmediate(r));assert.equal(revisiones,1);
+ assert.equal(h.boton('Preparar cambios en Proyecto H'),undefined);
  campo.value='Haku, informe de actualización';for(const f of listeners.click)f({type:'click',target:{closest:()=>enviar},preventDefault(){},stopImmediatePropagation(){}});
- await new Promise(r=>setImmediate(r));assert.equal(llamadas,1);assert.equal(h.out.querySelectorAll('button').filter(x=>x.textContent==='Preparar cambios en Proyecto H').length,2);
+ await new Promise(r=>setImmediate(r));assert.equal(llamadas,1);assert.equal(revisiones,1);
+ assert.equal(h.out.querySelectorAll('.haku-libro-pendientes-zona').length,2);
+ assert.equal(h.boton('Preparar cambios en Proyecto H'),undefined);
  h.cambiar();for(const f of listeners['haiku:libro-cambio'])f();
- assert.ok(h.out.querySelectorAll('button').filter(x=>x.textContent==='Preparar cambios en Proyecto H').every(x=>x.disabled));
- E.mostrarResultado(obtenido);const ultimo=h.out.children.at(-1);const boton=ultimo.querySelectorAll('button')[0];await boton.events.click();
- assert.match(ultimo.querySelectorAll('*').map(x=>x.textContent).join(' '),/El Libro cambió desde este informe/);assert.equal(llamadas,1);
+ const ultimo=E.mostrarResultado(obtenido);await new Promise(r=>setImmediate(r));
+ assert.match(ultimo.querySelector('.haku-libro-pendientes-zona').innerHTML,/El Libro cambió desde este informe/);
+ assert.equal(revisiones,1);assert.equal(llamadas,1);
 });

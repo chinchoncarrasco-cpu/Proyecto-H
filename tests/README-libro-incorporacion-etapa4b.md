@@ -1,6 +1,8 @@
 # ETAPA 4B: puente del informe a Proyecto H
 
-## Contrato y flujo
+El informe actual comprueba los pendientes al abrirse. Las acciones son «Revisar cambios» y la aprobación de cada caso. El botón «Preparar cambios en Proyecto H» descrito a continuación pertenece a la interfaz anterior.
+
+## Contrato y flujo original
 
 El informe de ETAPA 2 adjunta `Preparar cambios en Proyecto H` al resultado ya mostrado. La generación se recuerda en un WeakMap al completar la comparación validada; no se modifica el resultado ni se toma la generación actual como sustituto de una desconocida. Tanto el informe manual como Ver informe usan el mismo mecanismo.
 
