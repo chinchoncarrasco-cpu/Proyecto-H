@@ -106,13 +106,13 @@ test('el arranque con sesión activa programa una sola generación inicial', asy
 test('primera carga fallida conserva el shell y muestra un error controlado', async () => {
     const h = entorno();
     const carga = h.api.solicitar();
-    h.lecturasDe('operacion', 1).rechazar(new Error('Operación no disponible'));
+    h.lecturasDe('operacion', 1).rechazar(Object.assign(new Error('Operación no disponible'), { code: 'PGRST201' }));
     await resolverTodas(h, 1, 'B', ['operacion']);
     assert.equal(await carga, false);
     assert.equal(h.api.publicaciones(), 0);
     assert.equal(h.clases.has('haiku-resumen-pendiente'), true);
     assert.match(h.nodos.get('resumen-refresh-estado').textContent,
-        /No fue posible cargar el Resumen/);
+        /No fue posible cargar el Resumen.*operación \(PGRST201\)/);
 });
 
 test('A permanece visible hasta B; un fallo obligatorio conserva A', async () => {

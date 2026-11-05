@@ -98,7 +98,7 @@
     }
 
     async function estadiasQueSalen(fecha) {
-        const campos = "id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,checkin_realizado_en,checkout_realizado_en,cabanas(numero)";
+        const campos = "id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,checkin_realizado_en,checkout_realizado_en,cabanas!reserva_estadias_cabana_id_fkey(numero)";
 
         const { data: alojamientos, error: errorAlojamientos } = await cliente
             .from("reserva_estadias")

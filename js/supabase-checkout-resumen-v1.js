@@ -170,7 +170,7 @@
     async function obtenerCheckouts(fecha) {
         const { data, error } = await cliente
             .from("reserva_estadias")
-            .select("id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,checkout_realizado_en,cabanas(numero)")
+            .select("id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,checkout_realizado_en,cabanas!reserva_estadias_cabana_id_fkey(numero)")
             .eq("fecha_salida", fecha)
             .not("checkout_realizado_en", "is", null);
 

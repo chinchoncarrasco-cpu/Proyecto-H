@@ -233,7 +233,7 @@
                 ),
                 reserva_estadias (
                     cabana_id,
-                    cabanas ( numero )
+                    cabanas!reserva_estadias_cabana_id_fkey( numero )
                 )
             `)
             .order("fecha_servicio", { ascending: true })
