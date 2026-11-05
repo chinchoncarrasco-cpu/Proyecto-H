@@ -1,0 +1,64 @@
+// Disposable PostgreSQL. All identities and reservations in this file are invented.
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {PGlite}=require('@electric-sql/pglite');
+const root=path.resolve(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const user='10000000-0000-4000-8000-000000000001',cabin='20000000-0000-4000-8000-000000000001',stay='30000000-0000-4000-8000-000000000001',otherStay='30000000-0000-4000-8000-000000000002',reservation='40000000-0000-4000-8000-000000000001';
+test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento comercial',async()=>{
+ const db=new PGlite();
+ try{
+ await db.exec(`create role authenticated;create role anon;create schema auth;create schema private;create schema storage;
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create function private.haiku_usuario_activo() returns boolean language sql stable as $$select auth.uid() is not null$$;
+ create function private.haiku_tiene_permiso(p text) returns boolean language sql stable as $$select auth.uid() is not null and (p='revisiones.ver' or coalesce(current_setting('qa.manage',true),'true')='true')$$;
+ create table public.usuarios(id uuid primary key,nombre text,apellido text,activo boolean default true);
+ create table public.cabanas(id uuid primary key,numero integer);
+ create table public.reserva_estadias(id uuid primary key,reserva_id uuid,cabana_id uuid references cabanas(id),fecha_ingreso date,fecha_salida date,tipo_estadia text default 'alojamiento',estado_estadia text default 'hospedada',checkout_realizado_en timestamptz);
+ create table public.notas(id uuid primary key default gen_random_uuid(),reserva_id uuid,estadia_id uuid,cabana_id uuid,texto text,creado_en timestamptz default now(),vigente_hasta timestamptz);
+ create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+ create table storage.objects(id uuid default gen_random_uuid(),bucket_id text,name text);alter table storage.objects enable row level security;
+ create function storage.foldername(p text) returns text[] language sql immutable as $$select string_to_array(p,'/')$$;
+ grant usage on schema public,auth,private,storage to authenticated;grant select on public.usuarios,public.cabanas,public.reserva_estadias,public.notas to authenticated;
+ create function public.haiku_operacion_dia(p_fecha date) returns table(cabana_id uuid,salida_estadia_id uuid) language sql stable security invoker as $$select e.cabana_id,e.id from public.reserva_estadias e where e.fecha_salida=p_fecha and e.estado_estadia not in ('cancelada','no_show')$$;
+ insert into usuarios(id,nombre,apellido) values('${user}','Operador','QA');insert into cabanas values('${cabin}',3);
+ insert into reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida) values('${stay}','${reservation}','${cabin}','2026-11-01','2026-11-05');
+ insert into notas(reserva_id,estadia_id,texto) values('${reservation}','${stay}','Se prestaron 2 batas y un sacacorcho');
+ `);
+ await db.exec(read('supabase/migrations/20261104173051_checkout_operativo.sql'));
+ // Match the production correction that prevents PostgREST relation ambiguity.
+ await db.exec(`alter table revisiones_checkout drop constraint revisiones_checkout_pkey;alter table revisiones_checkout add column revision_id uuid default gen_random_uuid() primary key;alter table revisiones_checkout add unique(fecha_operativa,cabana_id,estadia_id);`);
+ await db.exec(read('supabase/migrations/20261105045159_checkout_recorrido_prestamos.sql'));
+ await db.exec(`select set_config('request.jwt.claim.sub','${user}',false);set role authenticated;`);
+ const write=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_revision_checkout_v2($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
+ const loan=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_prestamo_estadia_v1($1::uuid,$2,$3::jsonb)) row',[stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
+ await write('hora_out','12:34');await write('encargado','Operador QA');
+ await write('reposicion',{items:{cafe:2}});await write('reposicion',{items:{te:3}});
+ const row=await write('reposicion',{items:{champu:2,jabon:1,balsamo:2}});
+ assert.deepEqual(row.reposiciones,{cafe:2,te:3,champu:2,jabon:1,balsamo:2});assert.equal(row.hora_out,'12:34:00');assert.equal(row.encargado,'Operador QA');
+ await assert.rejects(write('reposicion',{items:{cafe:-1}}),/Cantidad/);await assert.rejects(write('reposicion',{items:{sal:2}}),/Cantidad/);await assert.rejects(write('reposicion',{items:{cafe:1.5}}),/Cantidad/);
+ await assert.rejects(write('revision_estado','revisada'),/cuatro sectores/);
+ await write('revision_estado','en_revision');for(const id of ['cocina','bano','living','terraza'])await write('chequeado',{id,checked:true});
+ assert.equal((await write('revision_estado','revisada')).revision_estado,'revisada');
+ await assert.rejects(write('chequeado',{id:'bano',checked:false}),/Reabre/);
+ await loan('prestamo',{id:'cenicero',label:'Cenicero',area:'cocina',cantidad:2,origen:'manual'});
+ await loan('devolucion',{id:'cenicero',label:'Cenicero',area:'cocina',total:2,cantidad:1,origen:'manual'});
+ let lr=await loan('prestamo',{id:'sacacorchos',label:'Sacacorcho',area:'cocina',cantidad:1,origen:'notas'});
+ assert.equal(lr.items.cenicero.devueltos,1);assert.equal(lr.items.cenicero.cantidad,2);
+ await assert.rejects(loan('devolucion',{id:'cenicero',label:'Cenicero',area:'cocina',total:99,cantidad:3,origen:'manual'}),/supera/);
+ await loan('prestamo',{id:'sacacorchos',descartado:true});
+ lr=await loan('prestamo',{id:'batas',label:'Batas',area:'bano',cantidad:2,origen:'notas'});assert.equal(lr.items.sacacorchos.descartado,true);
+ await db.exec('reset role');await db.query('update reserva_estadias set fecha_salida=$1 where id=$2',['2026-11-06',stay]);await db.exec('set role authenticated');
+ const after=(await db.query("select public.haiku_revisiones_checkout_dia_v2('2026-11-06') result")).rows[0].result;
+ assert.equal(after.prestamos[0].estadia_id,stay);assert.equal(after.prestamos[0].items.cenicero.devueltos,1);assert.equal(after.notas_prestamos[0].textos[0],'Se prestaron 2 batas y un sacacorcho');
+ const byStay=(await db.query('select public.haiku_prestamos_estadia_v1($1) result',[stay])).rows[0].result;assert.equal(byStay.notas.length,1);
+ await db.exec(`reset role;insert into reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida) values('${otherStay}','${reservation}','${cabin}','2026-11-01','2026-11-06');insert into notas(reserva_id,texto) values('${reservation}','Se prestó un paraguas sin cabaña');set role authenticated;`);
+ const scoped=(await db.query('select public.haiku_prestamos_estadia_v1($1) result',[stay])).rows[0].result;assert.equal(scoped.notas.length,1,'Una nota ambigua de varias estadías no se asigna a todas');
+ await db.exec("select set_config('qa.manage','false',false)");await assert.rejects(loan('prestamo',{id:'batas',descartado:true}),/no puede/);
+ await db.exec("select set_config('qa.manage','true',false)");
+ await assert.rejects(db.query("update prestamos_estadia set items='{\"batas\":{\"label\":\"Batas\",\"cantidad\":-2}}' where estadia_id=$1",[stay]),/Cantidad/);
+ await db.exec("select set_config('request.jwt.claim.sub','',false)");await assert.rejects(db.query('select public.haiku_prestamos_estadia_v1($1)',[stay]),/no puede/);
+ await db.exec('reset role');
+ assert.equal((await db.query('select checkout_realizado_en from reserva_estadias where id=$1',[stay])).rows[0].checkout_realizado_en,null,'Ningún control operativo realiza el checkout comercial');
+ const bridges=(await db.query("select count(*)::integer n from pg_constraint where conrelid='public.revisiones_checkout'::regclass and contype='p' and cardinality(conkey)>1")).rows[0].n;
+ assert.equal(bridges,0,'Se conserva la corrección de relaciones del Resumen');
+ }finally{await db.close();}
+});

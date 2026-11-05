@@ -484,6 +484,8 @@
         pintarPagos(ficha);
         pintarSolicitudes(ficha);
         pintarNotas(ficha);
+        window.HAIKU_CHECKOUT_UI_V2?.mountStayLoans(document.getElementById("ficha-reserva-notas")?.closest(".ficha-bloque"),
+            (ficha.estadias || []).map(item => ({ id: item.id, number: item.cabana_numero })));
 
         if (modal) modal.hidden = false;
 

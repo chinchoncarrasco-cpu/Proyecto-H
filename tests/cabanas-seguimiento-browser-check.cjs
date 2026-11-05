@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
-const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/checkout-core-v1.js', 'js/checkout-profile-v1.js', 'js/cabanas-espacios-v1.js']);
+const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/checkout-core-v1.js', 'js/checkout-workflow-v2.js', 'js/checkout-ui-v2.js', 'js/cabanas-espacios-v1.js']);
 (async () => {
  const browser = await chromium.launch({ headless: true, executablePath: process.env.HAIKU_BROWSER_PATH || undefined });
  try {

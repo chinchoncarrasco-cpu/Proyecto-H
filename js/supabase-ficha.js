@@ -553,6 +553,8 @@
         pintarPagos(ficha);
         pintarNotas(ficha);
         pintarSolicitudes(ficha);
+        window.HAIKU_CHECKOUT_UI_V2?.mountStayLoans(document.getElementById("ficha-reserva-notas")?.closest(".ficha-bloque"),
+            (ficha.estadias || []).map(item => ({ id: item.id, number: item.cabana_numero })));
 
         // Hasta conectar la edición real, evitamos guardar sólo en localStorage.
         const editar = document.getElementById("ficha-reserva-editar");

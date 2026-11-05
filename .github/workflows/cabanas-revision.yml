@@ -5,6 +5,9 @@ on:
     paths:
       - "js/sites-cabanas-v1.js"
       - "js/checkout-*.js"
+      - "css/checkout-recorrido-v2.css"
+      - "tests/checkout-*.cjs"
+      - "supabase/migrations/*_checkout_recorrido_prestamos.sql"
       - "js/cabanas-espacios-v1.js"
       - "tests/cabanas-espacios.test.cjs"
       - "js/supabase-repaso-v2.js"
@@ -44,7 +47,7 @@ jobs:
         run: node --test tests/resumen-refresh-atomico.test.cjs tests/resumen-generaciones-origen.test.cjs tests/resumen-productores-derivados.test.cjs tests/resumen-refresh-navegacion.test.cjs
       - name: Navegador aislado de prueba
         run: |
-          npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12
+          npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12 @electric-sql/pglite@0.5.14
           node "$RUNNER_TEMP/haku-ui/node_modules/playwright/cli.js" install chromium --with-deps
       - name: Insumos y salidas con contexto de estadía
         env:
@@ -75,3 +78,11 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/resumen-nav-panel-browser-check.cjs
+      - name: Checkout, préstamos por estadía y permisos PostgreSQL
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node --test tests/checkout-workflow.test.cjs tests/checkout-recorrido-postgres.test.cjs
+      - name: Checkout real en ambos temas y tamaños
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: node tests/checkout-recorrido-browser-check.cjs

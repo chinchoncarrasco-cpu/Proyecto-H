@@ -1,8 +1,8 @@
 /* Shared operational checkout state. No booking, payment or housekeeping writes. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.HAIKU_CHECKOUT_CORE_V1 = factory();
-})(typeof globalThis === 'object' ? globalThis : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./checkout-workflow-v2.js'));
+  else root.HAIKU_CHECKOUT_CORE_V1 = factory(root.HAIKU_CHECKOUT_WORKFLOW_V2);
+})(typeof globalThis === 'object' ? globalThis : this, function (workflow) {
   const key = t => [t.day, t.cabinId, t.stayId].join(':');
   function normalizeTime(value) {
     const text = String(value || '').trim();
@@ -12,7 +12,8 @@
     return normalized;
   }
   function empty(t) { return { fecha_operativa: t.day, cabana_id: t.cabinId, estadia_id: t.stayId, hora_out: null,
-    hora_out_definida: false, encargado: '', recuperados: [], chequeados: [], revision: 0 }; }
+    hora_out_definida: false, encargado: '', recuperados: [], chequeados: [], revision: 0,
+    reposiciones: {}, observaciones: {}, prestamos: {}, revision_estado: 'pendiente' }; }
   function validate(row, t) {
     if (!row || typeof row.cabana_id !== 'string' || !row.cabana_id || typeof row.estadia_id !== 'string' || !row.estadia_id || row.fecha_operativa !== t.day || row.cabana_id !== t.cabinId || row.estadia_id !== t.stayId
       || typeof row.encargado !== 'string' || typeof row.hora_out_definida !== 'boolean'
@@ -20,18 +21,20 @@
       || Number(row.revision) < 1 || (row.hora_out !== null && !/^([01]\d|2[0-3]):[0-5]\d(:00)?$/.test(row.hora_out))) {
       throw new Error('La revisión recibida no corresponde a esta cabaña, estadía y fecha.');
     }
-    return { ...row, revision: Number(row.revision) };
+    for (const field of ['reposiciones', 'observaciones']) if (row[field] !== undefined && (!row[field] || typeof row[field] !== 'object' || Array.isArray(row[field]))) throw new Error('El detalle de la revisión no es válido.');
+    return { ...row, revision: Number(row.revision), reposiciones: row.reposiciones || {}, observaciones: row.observaciones || {}, revision_estado: row.revision_estado || 'pendiente' };
   }
   function patch(row, field, value) {
     if (field === 'hora_out') return { ...row, hora_out: value || null, hora_out_definida: true };
     if (field === 'encargado') return { ...row, encargado: value };
+    if (['reposicion', 'observacion', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return workflow.patchWorkflow(row, field, value);
     const column = field === 'recuperado' ? 'recuperados' : 'chequeados';
     const selected = new Set(row[column]);
     if (value.checked) selected.add(value.id); else selected.delete(value.id);
     return { ...row, [column]: [...selected] };
   }
   function createCheckoutStore(options) {
-    const records = new Map(), pending = new Map(), tails = new Map(), listeners = new Set(), errors = new Map();
+    const records = new Map(), loanRecords = new Map(), notes = new Map(), pending = new Map(), tails = new Map(), listeners = new Set(), errors = new Map();
     let disposed = false, loading = null, readId = 0, readError = null;
     const state = { ready: false, loading: false, error: null, canEdit: false };
     const updateError = () => { state.error = readError || [...errors.values()].pop() || null; };
@@ -39,9 +42,14 @@
     const emit = () => { if (alive()) for (const fn of listeners) fn(); };
     function accept(row) {
       const t = { day: row.fecha_operativa, cabinId: row.cabana_id, stayId: row.estadia_id };
-      validate(row, t);
+      const normalized = validate(row, t);
       const current = records.get(key(t));
-      if (!current || Number(row.revision) >= current.revision) records.set(key(t), { ...row, revision: Number(row.revision) });
+      if (!current || Number(row.revision) >= current.revision) records.set(key(t), normalized);
+    }
+    function acceptLoans(row, expectedStay) {
+      if (!row || typeof row.estadia_id !== 'string' || (expectedStay && row.estadia_id !== expectedStay) || !row.items || typeof row.items !== 'object' || Array.isArray(row.items) || !Number.isSafeInteger(Number(row.revision)) || Number(row.revision) < 0) throw new Error('Los préstamos no corresponden a esta estadía.');
+      const current = loanRecords.get(row.estadia_id);
+      if (!current || Number(row.revision) >= Number(current.revision)) loanRecords.set(row.estadia_id, { ...row, revision: Number(row.revision) });
     }
     async function refresh() {
       if (!alive()) return;
@@ -55,6 +63,12 @@
           if (row.fecha_operativa !== options.day) throw new Error('La revisión pertenece a otra fecha.');
           accept(row);
         }
+        if (result.prestamos !== undefined && !Array.isArray(result.prestamos)) throw new Error('La lectura de préstamos no es válida.');
+        for (const row of result.prestamos || []) acceptLoans(row);
+        for (const row of result.notas_prestamos || []) {
+          if (typeof row.estadia_id !== 'string' || !Array.isArray(row.textos) || row.textos.some(t => typeof t !== 'string')) throw new Error('Las notas de préstamos no son válidas.');
+          notes.set(row.estadia_id, row.textos);
+        }
         state.ready = true; state.canEdit = result.puede_editar; readError = null; updateError();
       } catch (e) { if (alive() && request === readId) { readError = e.message || String(e); updateError(); } }
       finally { if (alive() && request === readId) { state.loading = false; emit(); } }
@@ -63,9 +77,11 @@
       state,
       subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
       ensure() { if (!state.ready && !loading) loading = refresh().finally(() => { loading = null; }); return loading || Promise.resolve(); },
-      refresh,
+      refresh() { if (!loading) loading = refresh().finally(() => { loading = null; }); return loading; },
+      receive(row) { if (!alive() || row?.fecha_operativa !== options.day) return false; try { accept(row); emit(); return true; } catch (_) { return false; } },
+      receiveLoans(row) { if (!alive()) return false; try { acceptLoans(row); emit(); return true; } catch (_) { return false; } },
       view(t) {
-        let row = records.get(key(t)) || empty(t);
+        let row = { ...(records.get(key(t)) || empty(t)), prestamos: loanRecords.get(t.stayId)?.items || {}, notas_prestamos: notes.get(t.stayId) || [] };
         for (const p of pending.values()) if (key(p.target) === key(t)) row = patch(row, p.field, p.value);
         return row;
       },
@@ -73,20 +89,24 @@
       set(t, field, value) {
         if (!alive() || t.day !== options.day) return Promise.reject(new Error('La fecha o la sesión cambió. Abre nuevamente la revisión.'));
         if (!state.ready || !state.canEdit) return Promise.reject(new Error('Tu usuario no puede editar la revisión de salida.'));
-        if (!['hora_out', 'encargado', 'recuperado', 'chequeado'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
+        if (!['hora_out', 'encargado', 'recuperado', 'chequeado', 'reposicion', 'observacion', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
         if (field === 'hora_out') { try { value = normalizeTime(value); } catch (e) { return Promise.reject(e); } }
         else if (field === 'encargado') { value = String(value || '').trim(); if (value.length > 120) return Promise.reject(new Error('El nombre es demasiado largo.')); }
-        else if (!value || !/^[a-z][a-z0-9_]{0,63}$/.test(value.id) || typeof value.checked !== 'boolean') return Promise.reject(new Error('Ítem no válido.'));
-        const targetKey = key(t), fieldKey = targetKey + ':' + field + (typeof value === 'object' ? ':' + value.id : ''), token = {};
+        else if (field === 'recuperado' || field === 'chequeado') { if (!value || !/^[a-z][a-z0-9_]{0,63}$/.test(value.id) || typeof value.checked !== 'boolean') return Promise.reject(new Error('Ítem no válido.')); }
+        else { try { workflow.validateMutation(field, value); } catch (e) { return Promise.reject(e); } }
+        if (field === 'revision_estado' && value === 'revisada' && !workflow.sectors.every(s => store.view(t).chequeados.includes(s.id))) return Promise.reject(new Error('Marca los cuatro sectores como revisados.'));
+        if (typeof value === 'object') value = JSON.parse(JSON.stringify(value));
+        const itemKey = field === 'reposicion' ? Object.keys(value.items).sort().join('_') : typeof value === 'object' ? value.id : '';
+        const targetKey = key(t), fieldKey = targetKey + ':' + field + ':' + itemKey, token = {};
         pending.set(fieldKey, { target: t, field, value, token }); errors.delete(fieldKey); updateError(); emit();
         const task = (tails.get(targetKey) || Promise.resolve()).catch(() => undefined).then(async () => {
           if (!alive()) throw new Error('La fecha o la sesión cambió.');
           if (pending.get(fieldKey)?.token !== token) return;
           const response = await options.write(t, field, value);
           const row = Array.isArray(response) ? response.length === 1 ? response[0] : null : response;
-          validate(row, t);
+          if (field === 'prestamo' || field === 'devolucion') acceptLoans(row, t.stayId); else validate(row, t);
           if (!alive()) return;
-          accept(row);
+          if (field !== 'prestamo' && field !== 'devolucion') accept(row);
           if (pending.get(fieldKey)?.token === token) { pending.delete(fieldKey); errors.delete(fieldKey); }
           updateError(); emit();
           return row;
