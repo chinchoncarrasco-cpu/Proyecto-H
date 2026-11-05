@@ -56,7 +56,8 @@ const server=http.createServer((req,res)=>res.writeHead(200,{'Content-Type':'tex
   assert.equal(await card.locator('.haiku-ocupacion-aviso').isVisible(),false);
   await card.getByRole('button',{name:'Editar ocupación'}).click();await card.getByRole('spinbutton',{name:'Adultos',exact:true}).fill('3');
   await card.getByRole('button',{name:'Cancelar',exact:true}).click();assert.equal(await page.evaluate(()=>window.__writes),1);
-  await page.getByRole('button',{name:'Preparar cambios en Proyecto H',exact:true}).click();
+  assert.equal(await page.getByRole('button',{name:'Preparar cambios en Proyecto H',exact:true}).count(),0);
+  await page.evaluate(()=>HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(document.getElementById('out'),{reservas:[window.__original],generacion:1}));
   await page.getByRole('button',{name:'Preparar incorporación',exact:true}).waitFor();
   const stats=await page.evaluate(async()=>{
    const p=await HAIKU_LIBRO_CONSULTAS.prepararIncorporacion({reservas:[window.__original],generacion:1,q:{desde:'2026-10-02',hasta:'2026-10-03'}});
