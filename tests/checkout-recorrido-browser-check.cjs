@@ -1,15 +1,17 @@
 // Actual checkout modules and markup. All reservations, users, RPCs and photos are local fixtures.
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {parseHTML}=require('linkedom'),{chromium}=require('playwright');
+const {createFixtureClient,contextFixtureData}=require('./fixtures/cabin-context/client.cjs');
 const root=path.resolve(__dirname,'..'),source=p=>fs.readFileSync(path.join(root,p),'utf8');
 const section=parseHTML(source('index.html')).document.querySelector('#seccion-cabanas').outerHTML;
-const modules=['checkout-workflow-v2.js','checkout-core-v1.js','checkout-ui-v2.js','cabanas-espacios-v1.js'];
+const modules=['cabin-context-v1.js','cabin-context-ui-v1.js','checkout-workflow-v2.js','checkout-core-v1.js','checkout-ui-v2.js','cabanas-espacios-v1.js'];
 const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/sites-cabanas-v1.css"><link rel="stylesheet" href="/css/checkout-recorrido-v2.css"><style>body{margin:0;background:#f4f7f5}html[data-haiku-tema=oscuro] body{background:#0f1915}.co-dialog{font-family:Inter,Arial,sans-serif}#seccion-cabanas{box-sizing:border-box}#cabinsOperation,#cabinsSummary,#cabinsFilters,#cabinsDetail{display:none!important}</style></head><body>${section}${modules.map(name=>`<script src="/js/${name}"></script>`).join('')}</body></html>`;
 (async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.HAIKU_BROWSER_PATH||undefined});
  try{for(const width of [1440,390])for(const theme of ['claro','oscuro']){
   const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.hostname!=='haku-checkout.test')return route.abort();if(u.pathname==='/')return route.fulfill({contentType:'text/html',body:html});
    const file=path.join(root,decodeURIComponent(u.pathname));if(u.pathname.includes('..')||!fs.existsSync(file))return route.abort();return route.fulfill({contentType:file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'image/svg+xml',body:fs.readFileSync(file)});});
+  await page.addInitScript({content:'window.__makeContextClient='+createFixtureClient.toString()+';window.__contextData='+contextFixtureData.toString()+';'});
   await page.goto('https://haku-checkout.test/');
   await page.evaluate(theme=>{
    document.documentElement.dataset.haikuTema=theme;const root=document.querySelector('#seccion-cabanas');root.classList.add('activa');
@@ -28,12 +30,17 @@ const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta nam
     else if(p.p_campo==='chequeado'){r.chequeados=p.p_valor.checked?[...new Set([...r.chequeados,p.p_valor.id])]:r.chequeados.filter(id=>id!==p.p_valor.id);}else r=V.patchWorkflow(r,p.p_campo,p.p_valor);
     if(p.p_campo==='revision_estado'&&p.p_valor==='en_revision'&&!r.encargado)r.encargado='Felipe';r.revision++;rows[k]=r;queueMicrotask(()=>callbacks.filter(c=>c.table==='revisiones_checkout').forEach(c=>c.fn({new:r})));return{data:r};
    },channel(){return{on(_,filter,fn){callbacks.push({...filter,fn});return this;},subscribe(){return this;}};},removeChannel(){},storage:{from(){return{async upload(path,blob){window.__uploaded={path,blob};return{data:{path}};},async createSignedUrl(){return{data:{signedUrl:URL.createObjectURL(window.__uploaded.blob)}};},async remove(){return{data:[]};}}}}};
+   window.__contextClient=window.__makeContextClient(window.__contextData());window.haikuSupabase.from=window.__contextClient.from;
    const app=window.HAIKU_CABANAS_ESPACIOS_V1.create({root,date:()=>day,user:()=>window.haikuSesion?.user?.id,dayData:()=>({cabanas:{},notasOperativas:[]}),afterSupply:()=>{}});window.__app=app;app.render('checkout',day);
   },theme);
   const card=page.locator('[data-checkout-card="2026-11-05:cab-3:stay-3"]');await card.getByRole('button',{name:'Revisar',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Copiar para aseo',exact:true}).count(),0,'No se copia desde el listado inicial');
   await card.locator('[data-checkout-open]').click();const detail=page.locator('#cabinsCheckoutDetail');await detail.locator('[data-co-sector="cocina"]').waitFor();
   assert.deepEqual(await detail.locator('[data-co-sector]').evaluateAll(nodes=>nodes.map(n=>n.dataset.coSector)),['cocina','bano','living','terraza']);
+  await detail.locator('[data-checkout-party]').filter({hasText:'3 personas · 2 adultos · 1 niño · 1 mascota'}).waitFor();
+  const sourceContext=detail.locator('[data-checkout-context]');assert.match(await sourceContext.textContent(),/Tinaja · 03\/11 · 18:00 · Realizado/);assert.match(await sourceContext.textContent(),/03\/11 · Nota del ingreso/);assert.match(await sourceContext.textContent(),/03\/11 · Completada/);assert.doesNotMatch(await sourceContext.textContent(),/entrante|Otra cabaña/);
+  assert.equal(await sourceContext.locator('.cb-service-summary-item').first().evaluate(el=>getComputedStyle(el).color),theme==='oscuro'?'rgb(212, 180, 242)':'rgb(113, 52, 163)');
+  const contextReads=await page.evaluate(()=>window.__contextClient.reads.length);
   const reads=await page.evaluate(()=>window.__calls.filter(c=>['haiku_operacion_dia','haiku_revisiones_checkout_dia_v2'].includes(c.name)).length);
   await detail.locator('[data-co-supply="cafe"]').click();let modal=page.locator('dialog.co-dialog');await modal.locator('[data-qty="2"]').click();
   assert.ok(await modal.locator('input[type=number]').evaluate(n=>parseFloat(getComputedStyle(n).fontSize))<=16);
@@ -62,6 +69,7 @@ const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta nam
   await detail.locator('[data-co-supply=te]').click();modal=page.locator('dialog.co-dialog');await modal.locator('input[type=number]').fill('100');await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.locator('[data-dialog-error]').filter({hasText:'99'}).waitFor();await modal.locator('[data-dialog-close]').click();
   for(const id of ['cocina','bano','living','terraza'])await detail.locator(`[data-checkout-item=${id}]`).click();
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>['haiku_operacion_dia','haiku_revisiones_checkout_dia_v2'].includes(c.name)).length),reads,'Las marcas, reposiciones y préstamos no recargan operación ni Resumen');
+  assert.equal(await page.evaluate(()=>window.__contextClient.reads.length),contextReads,'Editar la revisión no vuelve a leer su contexto');
   if(process.env.HAKU_UI_SHOTS){fs.mkdirSync(process.env.HAKU_UI_SHOTS,{recursive:true});await detail.screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`checkout-web-${width}-${theme}.png`)});}
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Sin desborde horizontal');
   await detail.locator('[data-co-finish]').click();await card.waitFor();assert.equal(await card.locator('[data-co-status]').textContent(),'Revisada');assert.match(await card.locator('[data-co-loans]').textContent(),/por recuperar/);

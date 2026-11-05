@@ -691,6 +691,12 @@
         const contexto = $("#cabinsDetailContext");
         contexto.innerHTML = contextoCabanaHTML(fecha, numero, dato, true);
         contexto.hidden = !contexto.innerHTML;
+        const idContexto = reservaId(dato);
+        window.HAIKU_CABIN_CONTEXT_UI_V1?.render(contexto, {
+            client: window.haikuSupabase, user: usuarioActual, date: fechaActual,
+            occupancy: $("#cabinsDetailOccupancy"), fallbackHTML: contexto.innerHTML,
+            target: idContexto ? { scope: 'day', day: fecha, cabinNumber: Number(numero), reservationId: idContexto } : null
+        });
         $("#cabinsDetailDate").textContent = `Operación · ${fecha}`;
         for (const [selector, valor] of [["#cabinsDetailCleaner", dato.aseo],
             ["#cabinsDetailReviewer", dato.revisionAseo], ["#cabinsDetailIn", dato.aseoIn],

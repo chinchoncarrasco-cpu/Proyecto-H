@@ -71,7 +71,19 @@
     function renderCheckout() {
       if(currentTab!=='checkout'||!core)return;
       if(!checkoutUI)checkoutUI=window.HAIKU_CHECKOUT_UI_V2.create({root,date:config.date,user:config.user,notes:checkoutNotes,
-        context:contextHTML,time:timeChile,back(){selected='';renderCheckout();}});
+        context:contextHTML,time:timeChile,
+        renderContext(d, detail) {
+          const host=detail.querySelector('[data-checkout-context]');
+          if(!window.HAIKU_CABIN_CONTEXT_UI_V1){host.innerHTML=contextHTML(d,true);return;}
+          const cabin=config.dayData(config.date())?.cabanas?.[String(d.numero)]||{};
+          const requests=(cabin.solicitudesTipos||[]).filter(row=>row.estado!=='cancelada'&&(!(row.reserva_id||row.reservaId)||(row.reserva_id||row.reservaId)===d.salida_reserva_id));
+          window.HAIKU_CABIN_CONTEXT_UI_V1.render(host, {
+            client:window.haikuSupabase,user:config.user,date:config.date,
+            occupancy:detail.querySelector('[data-checkout-party]'), fallbackHTML:contextHTML(d,true),
+            fallback:{notes:checkoutNotes(d),requests},
+            target:{scope:'stay',day:config.date(),cabinNumber:d.numero,cabinId:d.cabana_id,stayId:d.salida_estadia_id,reservationId:d.salida_reserva_id}
+          });
+        },back(){selected='';renderCheckout();}});
       checkoutUI.render({core,departures,selected});
     }
     function renderSupplies() {
