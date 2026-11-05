@@ -84,6 +84,7 @@
   function housekeepingMessage(cabin, row, loans) {
     const sections = ['CAB ' + cabin + ' · Checked Out · Reponer'];
     const borrowed = loans || loansFor(row.notas_prestamos || [], row.prestamos || {}, row.recuperados || []);
+    const notes = [];
     for (const sector of sectors) {
       const lines = [];
       const usage = usageItems.find(item => item.area === sector.id);
@@ -91,17 +92,15 @@
       for (const supply of supplies.filter(item => item.area === sector.id && row.reposiciones?.[item.id] > 0)) {
         lines.push(bullet(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : '')));
       }
-      const blocks = lines.length ? [lines.join('\n')] : [];
-      const areaLoans = borrowed.filter(item => item.area === sector.id && !item.descartado);
-      if (areaLoans.length) {
-        blocks.push('*🤝 Prestados:*\n' + areaLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : ''))).join('\n'));
-      }
+      if (lines.length) sections.push('*' + headings[sector.id] + '*\n' + lines.join('\n'));
       const note = row.detalles?.[sector.id], noteLines = [];
       if (note?.texto?.trim()) noteLines.push(note.texto.trim().replace(/\r\n?/g, '\n'));
       if (note?.foto_path) noteLines.push('📷 Foto en Haku.');
-      if (noteLines.length) blocks.push('*📝 Nota:*\n' + noteLines.join('\n'));
-      if (blocks.length) sections.push('*' + headings[sector.id] + '*\n' + blocks.join('\n\n'));
+      if (noteLines.length) notes.push(sector.title + ': ' + noteLines.join('\n').replace(/\n/g, '\n  '));
     }
+    const activeLoans = borrowed.filter(item => !item.descartado);
+    if (activeLoans.length) sections.push('*🤝 Prestados:*\n' + activeLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : ''))).join('\n'));
+    if (notes.length) sections.push('*📝 Nota:*\n' + notes.join('\n'));
     return sections.join('\n\n');
   }
   function maintenanceMessage(cabin, row) {
