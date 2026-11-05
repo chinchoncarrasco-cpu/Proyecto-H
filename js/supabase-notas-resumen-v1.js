@@ -495,7 +495,7 @@
 
         instalarRealtime();
         cargarFecha(fechaActual(), true, {
-            evento: "inicio/auth", tipo: "externo"
+            evento: "inicio/auth", tipo: "interno_derivado"
         }).catch(() => {});
     }
 

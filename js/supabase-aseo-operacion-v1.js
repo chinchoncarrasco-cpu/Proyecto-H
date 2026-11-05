@@ -649,6 +649,7 @@
     async function migrarLegacySiCorresponde(fecha, filasAseo) {
         const aseosPorCabana = new Map((filasAseo || []).map(fila => [String(fila.cabana_id), fila]));
         const incompatibles = [];
+        let creadas = false;
 
         for (const [numero, ref] of cabanasPorNumero) {
             const local = cabanaCache(fecha, numero, false);
@@ -665,11 +666,14 @@
                     continue;
                 }
                 const creada = await guardarAseoCompleto(fecha, numero);
-                if (creada) aseosPorCabana.set(String(ref.id), creada);
+                if (creada) {
+                    aseosPorCabana.set(String(ref.id), creada);
+                    creadas = true;
+                }
             }
 
         }
-        return incompatibles;
+        return { incompatibles, creadas };
     }
 
     async function leerFecha(fecha) {
@@ -700,31 +704,33 @@
         errorSiExiste(solicitudesResp.error);
         errorSiExiste(revisionesResp.error);
 
-        const aseosLegacyIncompatibles = await migrarLegacySiCorresponde(
+        const migracionLegacy = await migrarLegacySiCorresponde(
             fecha,
             aseosResp.data || []
         );
 
         // Releer sólo cuando la protección legacy creó filas nuevas.
-        const [aseosFinal, solicitudesFinal, revisionesFinal] = await Promise.all([
-            supabase
-                .from("aseos")
-                .select("id,fecha,cabana_id,estado,encargado_nombre,revisor_nombre,iniciado_en,completado_en")
-                .eq("fecha", fecha),
-            supabase
-                .from("solicitudes")
-                .select("id,fecha_operativa,cabana_id,categoria,descripcion,estado")
-                .eq("fecha_operativa", fecha)
-                .in("categoria", Object.keys(TIPOS_SOLICITUD)),
-            supabase
-                .from("revisiones_cabana")
-                .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
-                .eq("fecha", fecha)
-                .eq("tipo_revision", TIPO_REVISION_EXPRESS)
-                .neq("estado", "cancelada")
-                .order("creado_en", { ascending: false })
-        ]);
-
+        let [aseosFinal, solicitudesFinal, revisionesFinal] = [aseosResp, solicitudesResp, revisionesResp];
+        if (migracionLegacy.creadas) {
+            [aseosFinal, solicitudesFinal, revisionesFinal] = await Promise.all([
+                supabase
+                    .from("aseos")
+                    .select("id,fecha,cabana_id,estado,encargado_nombre,revisor_nombre,iniciado_en,completado_en")
+                    .eq("fecha", fecha),
+                supabase
+                    .from("solicitudes")
+                    .select("id,fecha_operativa,cabana_id,categoria,descripcion,estado")
+                    .eq("fecha_operativa", fecha)
+                    .in("categoria", Object.keys(TIPOS_SOLICITUD)),
+                supabase
+                    .from("revisiones_cabana")
+                    .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
+                    .eq("fecha", fecha)
+                    .eq("tipo_revision", TIPO_REVISION_EXPRESS)
+                    .neq("estado", "cancelada")
+                    .order("creado_en", { ascending: false })
+            ]);
+        }
         errorSiExiste(aseosFinal.error);
         errorSiExiste(solicitudesFinal.error);
         errorSiExiste(revisionesFinal.error);
@@ -751,7 +757,7 @@
         return {
             usuarioVerificado,
             aseos: aseosFinal.data || [],
-            aseosLegacyIncompatibles,
+            aseosLegacyIncompatibles: migracionLegacy.incompatibles,
             solicitudes: solicitudesFinal.data || [],
             revisiones,
             items

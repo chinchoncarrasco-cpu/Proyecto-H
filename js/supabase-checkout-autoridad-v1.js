@@ -100,21 +100,22 @@
     async function estadiasQueSalen(fecha) {
         const campos = "id,reserva_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,checkin_realizado_en,checkout_realizado_en,cabanas!reserva_estadias_cabana_id_fkey(numero)";
 
-        const { data: alojamientos, error: errorAlojamientos } = await cliente
-            .from("reserva_estadias")
-            .select(campos)
-            .eq("tipo_estadia", "alojamiento")
-            .eq("fecha_salida", fecha)
-            .not("estado_estadia", "in", "(cancelada,no_show)");
-        if (errorAlojamientos) throw errorAlojamientos;
-
-        const { data: fullDays, error: errorFullDays } = await cliente
-            .from("reserva_estadias")
-            .select(campos)
-            .eq("tipo_estadia", "fullday")
-            .eq("fecha_ingreso", fecha)
-            .not("estado_estadia", "in", "(cancelada,no_show)");
-        if (errorFullDays) throw errorFullDays;
+        const [alojamientosR, fullDaysR] = await Promise.all([
+            cliente.from("reserva_estadias")
+                .select(campos)
+                .eq("tipo_estadia", "alojamiento")
+                .eq("fecha_salida", fecha)
+                .not("estado_estadia", "in", "(cancelada,no_show)"),
+            cliente.from("reserva_estadias")
+                .select(campos)
+                .eq("tipo_estadia", "fullday")
+                .eq("fecha_ingreso", fecha)
+                .not("estado_estadia", "in", "(cancelada,no_show)")
+        ]);
+        if (alojamientosR.error) throw alojamientosR.error;
+        if (fullDaysR.error) throw fullDaysR.error;
+        const alojamientos = alojamientosR.data;
+        const fullDays = fullDaysR.data;
 
         return [...new Map(
             [...(alojamientos || []), ...(fullDays || [])]

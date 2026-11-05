@@ -544,7 +544,8 @@
         if (!window.haikuSesion) return;
         instalarIntegracionNotificaciones();
         instalarRealtime();
-        cargar(fechaActual()).catch(() => {});
+        cargar(fechaActual(), { evento: "inicio/auth pagos", tipo: "interno_derivado" })
+            .catch(() => {});
     }
 
     window.HAIKU_PAGOS_PENDIENTES_SUPABASE_V1 = Object.freeze({

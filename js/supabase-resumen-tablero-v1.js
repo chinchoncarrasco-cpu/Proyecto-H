@@ -974,6 +974,10 @@
         const listaCheckout = document.getElementById("pagos-lista-checkout");
         if (listaCheckout) {
             const observadorCheckout = new MutationObserver(() => {
+                // El coordinador ya publica Pagos y el tablero juntos. El DOM
+                // se observa después de esa publicación, cuando publicando()
+                // vuelve a false, y no debe iniciar otra lectura completa.
+                if (window.HAIKU_RESUMEN_REFRESH_V1?.activo()) return;
                 programarActualizacion("MutationObserver pagos-lista-checkout");
             });
             observadorCheckout.observe(listaCheckout, { childList: true, subtree: true });

@@ -5,7 +5,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const raiz = path.resolve(__dirname, '..');
-const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const edge = process.platform === 'win32' ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe' : undefined;
 const modulos = new Set([
     'js/supabase-resumen-refresh-v1.js',
     'js/calendario.js',
@@ -59,12 +59,22 @@ const modulos = new Set([
                         }
                         return dato;
                     },
-                    publicar: () => {}
+                    publicar: snapshot => {
+                        if (nombre !== 'pagos') return;
+                        const lista = document.getElementById('pagos-lista-checkout');
+                        lista.replaceChildren(document.createTextNode(snapshot.fecha));
+                    }
                 });
             }
         });
         await registrarFuentes();
         await page.waitForFunction(() => window.HAIKU_RESUMEN_REFRESH_V1.publicaciones() >= 1);
+        // El MutationObserver nativo ya recibió el cambio de la lista de Pagos.
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 30)));
+        assert.equal(await page.evaluate(() =>
+            window.HAIKU_RESUMEN_REFRESH_V1.historialGeneraciones()
+                .filter(item => item.generacion !== null).length), 1,
+        'publicar el DOM de Pagos no dispara otra generación del Resumen');
         const fechaInicial = await page.evaluate(() => String(fechaSeleccionada));
         const anterior = await page.evaluate(fecha => {
             const [anio, mes, dia] = fecha.split('-').map(Number);

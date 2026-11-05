@@ -2318,10 +2318,8 @@ function seleccionarDia(año, mes, dia, fechaISO, origenResumen) {
     if (refrescoResumen?.activo() && !refrescoResumen.publicando()) {
         fechaSeleccionada = fechaISO;
         guardarContextoFechas();
-        if (typeof renderizarAgendaServicios === "function") renderizarAgendaServicios();
-        if (typeof cargarAbonosPagos === "function") cargarAbonosPagos();
-        if (typeof cargarCierreDia === "function") cargarCierreDia(fechaSeleccionada);
-        if (typeof actualizarCierreTurno === "function") actualizarCierreTurno();
+        // Pagos, Servicios y Cierre cargan la fecha al abrir sus secciones.
+        // Esta navegación prepara únicamente el Resumen visible.
         document.querySelectorAll(".seccion-app").forEach(seccion =>
             seccion.classList.remove("activa"));
         document.getElementById("seccion-resumen")?.classList.add("activa");
