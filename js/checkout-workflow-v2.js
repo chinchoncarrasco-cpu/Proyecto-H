@@ -91,15 +91,16 @@
       for (const supply of supplies.filter(item => item.area === sector.id && row.reposiciones?.[item.id] > 0)) {
         lines.push(bullet(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : '')));
       }
-      const detail = row.detalles?.[sector.id];
-      if (detail?.texto?.trim()) lines.push(bullet('Detalle: ' + detail.texto));
-      if (detail?.foto_path) lines.push(bullet('Evidencia fotográfica registrada en Haku.'));
+      const blocks = lines.length ? [lines.join('\n')] : [];
       const areaLoans = borrowed.filter(item => item.area === sector.id && !item.descartado);
       if (areaLoans.length) {
-        lines.push('Artículos prestados:');
-        for (const item of areaLoans) lines.push(bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : '')));
+        blocks.push('*🤝 Prestados:*\n' + areaLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : ''))).join('\n'));
       }
-      if (lines.length) sections.push('*' + headings[sector.id] + '*\n' + lines.join('\n'));
+      const note = row.detalles?.[sector.id], noteLines = [];
+      if (note?.texto?.trim()) noteLines.push(note.texto.trim().replace(/\r\n?/g, '\n'));
+      if (note?.foto_path) noteLines.push('📷 Foto en Haku.');
+      if (noteLines.length) blocks.push('*📝 Nota:*\n' + noteLines.join('\n'));
+      if (blocks.length) sections.push('*' + headings[sector.id] + '*\n' + blocks.join('\n\n'));
     }
     return sections.join('\n\n');
   }
@@ -120,7 +121,7 @@
   function reviewStatus(row) { return row.revision_estado || 'pendiente'; }
   function validateMutation(field, value) {
     if (field === 'detalle' || field === 'detalle_foto') {
-      if (!value || !sectors.some(s => s.id === value.id) || (field === 'detalle' ? typeof value.texto !== 'string' || value.texto.length > 1000 : value.foto_path !== null && typeof value.foto_path !== 'string')) throw new Error('Detalle de área no válido.');
+      if (!value || !sectors.some(s => s.id === value.id) || (field === 'detalle' ? typeof value.texto !== 'string' || value.texto.length > 1000 : value.foto_path !== null && typeof value.foto_path !== 'string')) throw new Error('Nota de área no válida.');
     } else if (field === 'reposicion') {
       const values = value?.items;
       if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length || Object.keys(values).length > 3
@@ -130,7 +131,7 @@
     } else if (field === 'devolucion') {
       if (!value || !safeId(value.id) || !units(value.cantidad) || !units(value.total, 1) || value.cantidad > value.total || typeof value.label !== 'string' || !value.label.trim() || value.label.length > 80 || !sectors.some(s => s.id === value.area) || !['manual', 'notas'].includes(value.origen)) throw new Error('Cantidad devuelta no válida.');
     } else if (field === 'observacion') {
-      if (!value || !safeId(value.id) || (value.borrar !== true && (!observationTypes.some(t => t.id === value.tipo) || (value.area !== null && !sectors.some(s => s.id === value.area)) || typeof value.texto !== 'string' || value.texto.length > 1000 || (!value.texto.trim() && !value.foto_path) || (value.foto_path !== null && typeof value.foto_path !== 'string')))) throw new Error('Completa el detalle o adjunta una foto.');
+      if (!value || !safeId(value.id) || (value.borrar !== true && (!observationTypes.some(t => t.id === value.tipo) || (value.area !== null && !sectors.some(s => s.id === value.area)) || typeof value.texto !== 'string' || value.texto.length > 1000 || (!value.texto.trim() && !value.foto_path) || (value.foto_path !== null && typeof value.foto_path !== 'string')))) throw new Error('Escribe una nota o adjunta una foto.');
     } else if (field === 'revision_estado' && !['en_revision', 'revisada', 'pendiente'].includes(value)) throw new Error('Estado de revisión no válido.');
   }
   function patchWorkflow(row, field, value) {
