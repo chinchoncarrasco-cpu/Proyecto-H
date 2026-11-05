@@ -46,13 +46,13 @@ test('coalesce las lecturas simultáneas y conserva los cambios por insumo',asyn
  await store.set(t,'reposicion',{items:{cafe:0}});assert.equal(V.selectedSupply('cafe',store.view(t).reposiciones),false);assert.equal(store.view(t).reposiciones.te,3);
 });
 
-test('un área separa préstamos, nota y uso; ignora suministros retirados y detecciones descartadas',()=>{
+test('reúne préstamos y notas al final, sin suministros retirados ni descartes',()=>{
  const row={chequeados:['uso_salamandra','uso_fogon'],reposiciones:{jabon_liquido:1,papel_higienico:1},detalles:{cocina:{texto:'Falta una copa',foto_path:null},living:{texto:'Sábana manchada',foto_path:'evidencia'}},notas_prestamos:['Un sacacorcho'],prestamos:{batas:{id:'batas',label:'Batas',area:'bano',cantidad:2,devueltos:2},cenicero:{descartado:true}}};
  const text=V.housekeepingMessage(10,row);
- assert.equal(text.split('*🍳 COCINA*').length,2);assert.match(text,/\*🍳 COCINA\*\n\*🤝 Prestados:\*\n- Sacacorcho\n\n\*📝 Nota:\*\nFalta una copa/);
- assert.match(text,/\*🚿 BAÑO\*\n\*🤝 Prestados:\*\n- Batas × 2/);assert.match(text,/- Usaron Salamandra/);assert.match(text,/- Usaron Fogón/);
- assert.match(text,/\*📝 Nota:\*\nSábana manchada/);assert.doesNotMatch(text,/Jabón liq|P.H.|Cenicero/);
- const noteOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'Revisar toallas',foto_path:null}}});assert.match(noteOnly,/\*🚿 BAÑO\*\n\*📝 Nota:\*\nRevisar toallas/);
+ assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🛏️ LIVING/CAMA*\n- Usaron Salamandra\n\n*🌄 TERRAZA*\n- Usaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas × 2\n\n*📝 Nota:*\nCocina: Falta una copa\nLiving: Sábana manchada\n  📷 Foto en Haku.');
+ assert.doesNotMatch(text,/Jabón liq|P.H.|Cenicero|evidencia/);
+ const noteOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'Revisar toallas',foto_path:null}}});
+ assert.match(noteOnly,/\*📝 Nota:\*\nBaño: Revisar toallas$/);assert.doesNotMatch(noteOnly,/\*🚿 BAÑO\*|Prestados/);
 });
 test('mantención agrupa exclusivamente sus observaciones y señala evidencia sin exponer URLs',()=>{
  const text=V.maintenanceMessage(10,{observaciones:{a:{tipo:'dano',area:'terraza',texto:'Daño excluido'},b:{tipo:'mantencion',area:'bano',texto:'Llave de ducha suelta',foto_path:'privada'},c:{tipo:'mantencion',area:null,texto:'Revisar acceso'}}});
@@ -65,16 +65,16 @@ test('detalles conservan la última palabra ante ACK atrasado, fallo y reintento
  await store.ensure();store.editDetail(t,'living','Sábana');const first=store.flushDetails(t);await new Promise(r=>setImmediate(r));store.editDetail(t,'living','Sábana manchada');release();await first;
  assert.equal(store.view(t).detalles.living.texto,'Sábana manchada');assert.deepEqual(writes,['Sábana','Sábana manchada']);
  fail=true;store.editDetail(t,'bano','Última palabra');await assert.rejects(store.flushDetails(t),/Sin conexión/);assert.equal(store.view(t).detalles.bano.texto,'Última palabra');
- fail=false;await store.flushDetails(t);assert.match(V.housekeepingMessage(3,store.view(t)),/\*📝 Nota:\*\nÚltima palabra/);assert.equal(reads,1);assert.equal(store.saving(t),false);
+ fail=false;await store.flushDetails(t);assert.match(V.housekeepingMessage(3,store.view(t)),/Baño: Última palabra/);assert.equal(reads,1);assert.equal(store.saving(t),false);
  store.receive({...row,revision:row.revision+1,detalles:{...row.detalles,cocina:{texto:'Foto ajena preservada',foto_path:null}}});assert.equal(store.view(t).detalles.cocina.texto,'Foto ajena preservada');store.dispose();
 });
 
-test('el mensaje distingue reposición, prestados y nota sin duplicar el área',()=>{
- const row={reposiciones:{sal:1,te:4},detalles:{cocina:{texto:'Falta 1 copa flauta.\nRevisar antes del ingreso.',foto_path:null}}};
- const loans=[{id:'sacacorchos',label:'Sacacorcho',area:'cocina',cantidad:1,devueltos:1}];
+test('el mensaje presenta las áreas primero y un único bloque final de prestados y nota',()=>{
+ const row={reposiciones:{sal:1,te:4,champu:1},detalles:{cocina:{texto:'Falta 1 copa flauta.\r\nRevisar antes del ingreso.',foto_path:null},bano:{texto:'Secador no funciona',foto_path:null},terraza:{texto:'Ordenar canasta',foto_path:null}}};
+ const loans=[{id:'sacacorchos',label:'Sacacorcho',area:'cocina',cantidad:1,devueltos:1},{id:'batas',label:'Batas',area:'bano',cantidad:2,devueltos:2},{id:'asado',label:'Asado',area:'terraza',cantidad:null,devueltos:0},{id:'cenicero',label:'Cenicero',area:'cocina',cantidad:1,descartado:true}];
  const text=V.housekeepingMessage(10,row,loans);
- assert.equal(text.split('\n\n*🛏️')[0],'CAB 10 · Checked Out · Reponer\n\n*🍳 COCINA*\n- Sal\n- Té × 4\n\n*🤝 Prestados:*\n- Sacacorcho\n\n*📝 Nota:*\nFalta 1 copa flauta.\nRevisar antes del ingreso.');
- assert.equal(text.split('*🍳 COCINA*').length,2);assert.doesNotMatch(text,/Detalle:|Artículos prestados:/);
+ assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🍳 COCINA*\n- Sal\n- Té × 4\n\n*🚿 BAÑO*\n- Champú × 1\n\n*🛏️ LIVING/CAMA*\n- No usaron Salamandra\n\n*🌄 TERRAZA*\n- No usaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas × 2\n- Asado (cantidad por confirmar)\n\n*📝 Nota:*\nCocina: Falta 1 copa flauta.\n  Revisar antes del ingreso.\nBaño: Secador no funciona\nTerraza: Ordenar canasta');
+ assert.equal(text.split('*🤝 Prestados:*').length,2);assert.equal(text.split('*📝 Nota:*').length,2);assert.doesNotMatch(text,/Detalle:|Artículos prestados:|Cenicero/);
  const photoOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'',foto_path:'privada'}}});
- assert.match(photoOnly,/\*🚿 BAÑO\*\n\*📝 Nota:\*\n📷 Foto en Haku[.]/);assert.doesNotMatch(photoOnly,/privada/);
+ assert.match(photoOnly,/\*📝 Nota:\*\nBaño: 📷 Foto en Haku[.]$/);assert.doesNotMatch(photoOnly,/privada|\*🚿 BAÑO\*/);
 });
