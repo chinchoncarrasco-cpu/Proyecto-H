@@ -86,13 +86,13 @@
     const borrowed = loans || loansFor(row.notas_prestamos || [], row.prestamos || {}, row.recuperados || []);
     const notes = [];
     for (const sector of sectors) {
-      const lines = [];
+      const items = [];
       const usage = usageItems.find(item => item.area === sector.id);
-      if (usage) lines.push(bullet(((row.chequeados || []).includes(usage.checkId) ? 'Usaron ' : 'No usaron ') + usage.label));
+      if (usage) items.push(((row.chequeados || []).includes(usage.checkId) ? 'Usaron ' : 'No usaron ') + usage.label);
       for (const supply of supplies.filter(item => item.area === sector.id && row.reposiciones?.[item.id] > 0)) {
-        lines.push(bullet(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : '')));
+        items.push(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : ''));
       }
-      if (lines.length) sections.push('*' + headings[sector.id] + '*\n' + lines.join('\n'));
+      if (items.length) sections.push('*' + headings[sector.id] + '*\n' + items.join(' · '));
       const note = row.detalles?.[sector.id], noteLines = [];
       if (note?.texto?.trim()) noteLines.push(note.texto.trim().replace(/\r\n?/g, '\n'));
       if (note?.foto_path) noteLines.push('📷 Foto en Haku.');
