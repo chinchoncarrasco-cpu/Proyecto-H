@@ -5,6 +5,9 @@ on:
     paths:
       - "js/sites-cabanas-v1.js"
       - "js/checkout-*.js"
+      - "js/cabin-context*.js"
+      - "tests/cabin-*.cjs"
+      - "tests/fixtures/cabin-context/**"
       - "css/checkout-recorrido-v2.css"
       - "tests/checkout-*.cjs"
       - "supabase/migrations/*_checkout_recorrido_prestamos.sql"
@@ -46,6 +49,8 @@ jobs:
         run: node --test tests/cabanas-sites.test.cjs tests/revision-completa-estados.test.cjs tests/revision-checklist-realtime.test.cjs tests/aseo-operacion-autoridad.test.cjs tests/horas-edicion.test.cjs tests/insumos-aseo.test.cjs tests/insumos-realtime-ready.test.cjs
       - name: Resumen atómico, navegación y solicitudes derivadas
         run: node --test tests/resumen-refresh-atomico.test.cjs tests/resumen-generaciones-origen.test.cjs tests/resumen-productores-derivados.test.cjs tests/resumen-refresh-navegacion.test.cjs
+      - name: Contexto histórico de la estadía y personas
+        run: node --test tests/cabin-stay-context.test.cjs
       - name: Navegador aislado de prueba
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12 @electric-sql/pglite@0.5.14
@@ -86,4 +91,6 @@ jobs:
       - name: Checkout real en ambos temas y tamaños
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
-        run: node tests/checkout-recorrido-browser-check.cjs
+        run: |
+          node tests/checkout-recorrido-browser-check.cjs
+          node tests/cabin-context-browser-check.cjs
