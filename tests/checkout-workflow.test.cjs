@@ -16,7 +16,7 @@ test('los ajustes manuales y descartes prevalecen aunque se relean las notas',()
 });
 test('el mensaje de WhatsApp presenta ítems con punto medio, cantidades y uso por área',()=>{
  const text=V.housekeepingMessage(3,{reposiciones:{te:3,cafe:2,champu:2,jabon:1,balsamo:2,lena:1,diario:1,carbon:1},observaciones:{a:{texto:'Mantención privada'}}});
- assert.equal(text,'CAB 3 · Checked Out · Reponer\n\n*🍳 COCINA*\nTé × 3 · Café × 2\n\n*🚿 BAÑO*\nChampú × 2 · Jabón × 1 · Bálsamo × 2\n\n*🛏️ LIVING/CAMA*\nNo usaron Salamandra · Leña · Diario\n\n*🌄 TERRAZA*\nNo usaron Fogón · Carbón');
+ assert.equal(text,'CAB 3 · Checked Out · Reponer\n\n*🍳 COCINA*\nTé x3 · Café x2\n\n*🚿 BAÑO*\nChampú x2 · Jabón x1 · Bálsamo x2\n\n*🛏️ LIVING/CAMA*\nNo usaron Salamandra · Reponer leña · Reponer diario\n\n*🌄 TERRAZA*\nNo usaron Fogón · Carbón');
  assert.equal(V.replenishmentLabel('amenities',{champu:2,jabon:1,balsamo:2}),'Amenities · 5 un.');
  assert.equal(V.selectedSupply('amenities',{}),false);
 });
@@ -49,7 +49,7 @@ test('coalesce las lecturas simultáneas y conserva los cambios por insumo',asyn
 test('reúne préstamos y notas al final, sin suministros retirados ni descartes',()=>{
  const row={chequeados:['uso_salamandra','uso_fogon'],reposiciones:{jabon_liquido:1,papel_higienico:1},detalles:{cocina:{texto:'Falta una copa',foto_path:null},living:{texto:'Sábana manchada',foto_path:'evidencia'}},notas_prestamos:['Un sacacorcho'],prestamos:{batas:{id:'batas',label:'Batas',area:'bano',cantidad:2,devueltos:2},cenicero:{descartado:true}}};
  const text=V.housekeepingMessage(10,row);
- assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🛏️ LIVING/CAMA*\nUsaron Salamandra\n\n*🌄 TERRAZA*\nUsaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas × 2\n\n*📝 Nota:*\nCocina: Falta una copa\nLiving: Sábana manchada\n  📷 Foto en Haku.');
+ assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🛏️ LIVING/CAMA*\nUsaron Salamandra\n\n*🌄 TERRAZA*\nUsaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas x2\n\n*📝 Nota:*\nCocina: Falta una copa\nLiving: Sábana manchada\n  📷 Foto en Haku.');
  assert.doesNotMatch(text,/Jabón liq|P.H.|Cenicero|evidencia/);
  const noteOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'Revisar toallas',foto_path:null}}});
  assert.match(noteOnly,/\*📝 Nota:\*\nBaño: Revisar toallas$/);assert.doesNotMatch(noteOnly,/\*🚿 BAÑO\*|Prestados/);
@@ -73,7 +73,7 @@ test('el mensaje presenta las áreas primero y un único bloque final de prestad
  const row={reposiciones:{sal:1,te:4,champu:1},detalles:{cocina:{texto:'Falta 1 copa flauta.\r\nRevisar antes del ingreso.',foto_path:null},bano:{texto:'Secador no funciona',foto_path:null},terraza:{texto:'Ordenar canasta',foto_path:null}}};
  const loans=[{id:'sacacorchos',label:'Sacacorcho',area:'cocina',cantidad:1,devueltos:1},{id:'batas',label:'Batas',area:'bano',cantidad:2,devueltos:2},{id:'asado',label:'Asado',area:'terraza',cantidad:null,devueltos:0},{id:'cenicero',label:'Cenicero',area:'cocina',cantidad:1,descartado:true}];
  const text=V.housekeepingMessage(10,row,loans);
- assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🍳 COCINA*\nSal · Té × 4\n\n*🚿 BAÑO*\nChampú × 1\n\n*🛏️ LIVING/CAMA*\nNo usaron Salamandra\n\n*🌄 TERRAZA*\nNo usaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas × 2\n- Asado (cantidad por confirmar)\n\n*📝 Nota:*\nCocina: Falta 1 copa flauta.\n  Revisar antes del ingreso.\nBaño: Secador no funciona\nTerraza: Ordenar canasta');
+ assert.equal(text,'CAB 10 · Checked Out · Reponer\n\n*🍳 COCINA*\nSal · Té x4\n\n*🚿 BAÑO*\nChampú x1\n\n*🛏️ LIVING/CAMA*\nNo usaron Salamandra\n\n*🌄 TERRAZA*\nNo usaron Fogón\n\n*🤝 Prestados:*\n- Sacacorcho\n- Batas x2\n- Asado (cantidad por confirmar)\n\n*📝 Nota:*\nCocina: Falta 1 copa flauta.\n  Revisar antes del ingreso.\nBaño: Secador no funciona\nTerraza: Ordenar canasta');
  assert.equal(text.split('*🤝 Prestados:*').length,2);assert.equal(text.split('*📝 Nota:*').length,2);assert.doesNotMatch(text,/Detalle:|Artículos prestados:|Cenicero/);
  const photoOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'',foto_path:'privada'}}});
  assert.match(photoOnly,/\*📝 Nota:\*\nBaño: 📷 Foto en Haku[.]$/);assert.doesNotMatch(photoOnly,/privada|\*🚿 BAÑO\*/);
