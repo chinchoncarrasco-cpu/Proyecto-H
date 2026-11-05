@@ -2,6 +2,15 @@ begin;
 do $$
 declare u record; d record; chosen_day date; operator_id uuid; target record; r public.revisiones_checkout; denied boolean;
 begin
+  -- PostgREST considera una tabla puente si ambas FK pertenecen a su PK.
+  -- En ese caso incluso la lectura de una estadía sin revisiones falla (PGRST201).
+  assert not exists (
+    select 1 from pg_constraint pk
+    where pk.conrelid = 'public.revisiones_checkout'::regclass and pk.contype = 'p'
+      and (select count(*) from pg_attribute a
+           where a.attrelid = pk.conrelid and a.attnum = any(pk.conkey)
+             and a.attname in ('cabana_id','estadia_id')) = 2
+  ), 'Una estadía debe devolver su cabaña sin ambigüedad en el Resumen';
   perform set_config('request.jwt.claim.sub','',true);
   denied:=false;
   begin perform public.haiku_revisiones_checkout_dia_v1(current_date); exception when insufficient_privilege then denied:=true; end;
