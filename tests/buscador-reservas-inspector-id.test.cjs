@@ -163,7 +163,7 @@ const plano = valor => JSON.parse(JSON.stringify(valor));
         "la consulta de estadías ya trae reserva_estadias.id y reserva_id");
     assert.match(sync, /reservas\([\s\S]*?id,codigo_haiku,cloudbeds_id/,
         "la consulta ya trae reservas.id, código Haiku y Cloudbeds ID");
-    assert.match(sync, /cabanas\(numero,nombre\)/,
+    assert.match(sync, /cabanas!reserva_estadias_cabana_id_fkey\(numero,nombre\)/,
         "el número de cabaña verificable llega en la misma lectura");
     assert.match(cabanas, /String\(cabana\.estadiaId \|\| ""\)/,
         "cada resultado conserva el UUID de estadía leído");

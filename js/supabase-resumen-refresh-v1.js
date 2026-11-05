@@ -89,10 +89,11 @@
         if (estado) estado.textContent = mensaje;
     }
 
-    function estadoError() {
-        estadoCarga(ultimo
+    function estadoError(detalles = []) {
+        const mensaje = ultimo
             ? "No fue posible actualizar el Resumen. Se conserva la vista anterior."
-            : "No fue posible cargar el Resumen. Reintenta la actualización.");
+            : "No fue posible cargar el Resumen. Reintenta la actualización.";
+        estadoCarga([mensaje, ...detalles].join(" "));
     }
 
     function programarInicio() {
@@ -292,6 +293,7 @@
             notas: null, aseo: null, revision: null
         });
         const faltantes = [];
+        const detallesError = [];
         lecturas.forEach((lectura, indice) => {
             const [nombre, fuente] = entradas[indice];
             perfil.fuentes[nombre] ||= {};
@@ -301,6 +303,12 @@
                 datos[nombre] = lectura.value;
             } else if (fuente.obligatoria !== false) {
                 faltantes.push(nombre);
+                const secciones = { checkout: "salidas", checkoutAutoridad: "estado de salidas",
+                    operacion: "operación", operacionVisual: "filas de cabañas", autoridadVisual: "estado de cabañas" };
+                const codigo = lectura.reason?.code;
+                const referencia = typeof codigo === "string" && /^[A-Z0-9_]{3,24}$/.test(codigo)
+                    ? ` (${codigo})` : "";
+                detallesError.push(`${secciones[nombre] || nombre}${referencia}`);
             } else if (ultimo?.fecha === fecha && ultimo.usuario === usuario &&
                 Object.hasOwn(ultimo.datos, nombre)) {
                 datos[nombre] = ultimo.datos[nombre];
@@ -314,7 +322,7 @@
             perfil.resultado = `faltan: ${faltantes.join(", ")}`;
             ultimoPerfil = perfil;
             console.error("HAIKU · Resumen incompleto; se conserva la última vista válida:", faltantes);
-            estadoError();
+            estadoError([`Pendiente: ${detallesError.join(", ")}.`]);
             return false;
         }
         perfil.tSnapshot = new Date().toISOString();

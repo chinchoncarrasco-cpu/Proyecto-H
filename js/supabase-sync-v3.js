@@ -157,7 +157,7 @@
                     titular_numero_documento,correo_contacto,telefono_contacto,
                     observaciones,estado_reserva
                 ),
-                cabanas(numero,nombre),
+                cabanas!reserva_estadias_cabana_id_fkey(numero,nombre),
                 estadia_noches(fecha,tarifa)
             `)
             .order("fecha_ingreso", { ascending: true });
