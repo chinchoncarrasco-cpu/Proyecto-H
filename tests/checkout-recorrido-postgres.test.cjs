@@ -27,9 +27,23 @@ test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento com
  // Match the production correction that prevents PostgREST relation ambiguity.
  await db.exec(`alter table revisiones_checkout drop constraint revisiones_checkout_pkey;alter table revisiones_checkout add column revision_id uuid default gen_random_uuid() primary key;alter table revisiones_checkout add unique(fecha_operativa,cabana_id,estadia_id);`);
  await db.exec(read('supabase/migrations/20261105054558_checkout_recorrido_prestamos.sql'));
+ await db.exec(read('supabase/migrations/'+fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.endsWith('_checkout_detalles_area.sql'))));
  await db.exec(`select set_config('request.jwt.claim.sub','${user}',false);set role authenticated;`);
  const write=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_revision_checkout_v2($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
  const loan=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_prestamo_estadia_v1($1::uuid,$2,$3::jsonb)) row',[stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
+ const detail=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_detalle_checkout_v1($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
+ const photo=`${user}/${stay}/detalle_living_${'a'.repeat(32)}.jpg`;
+ await detail('detalle',{id:'living',texto:'Sábana manchada'});await detail('detalle_foto',{id:'living',foto_path:photo});
+ let areaRow=await detail('detalle',{id:'living',texto:'Sábana manchada con sangre'});assert.equal(areaRow.detalles.living.foto_path,photo);
+ areaRow=await detail('detalle',{id:'cocina',texto:'Falta copa'});assert.equal(areaRow.detalles.living.texto,'Sábana manchada con sangre');
+ await assert.rejects(detail('detalle',{id:'constructor',texto:'x'}),/Área/);await assert.rejects(detail('detalle',{id:'bano',texto:'x'.repeat(1001)}),/1000/);
+ await assert.rejects(detail('detalle_foto',{id:'living',foto_path:photo.replace(stay,otherStay)}),/estadía/);
+ await assert.rejects(detail('detalle_foto',{id:'living',foto_path:photo.replace(user,'10000000-0000-4000-8000-000000000002')}),/usuario actual/);
+ await assert.rejects(db.query("update revisiones_checkout set detalles='{\"x\":{\"texto\":\"x\",\"foto_path\":null}}'"),/Detalle/);
+ await db.exec("select set_config('qa.manage','false',false)");await assert.rejects(detail('detalle',{id:'bano',texto:'Sin permiso'}),/no puede/);await db.exec("select set_config('qa.manage','true',false)");
+ areaRow=await detail('detalle_foto',{id:'living',foto_path:null});assert.equal(areaRow.detalles.living.texto,'Sábana manchada con sangre');
+ areaRow=await detail('detalle',{id:'living',texto:''});assert.equal(areaRow.detalles.living,undefined);
+ await write('chequeado',{id:'uso_salamandra',checked:true});await write('chequeado',{id:'uso_fogon',checked:true});
  await write('hora_out','12:34');await write('encargado','Operador QA');
  await write('reposicion',{items:{cafe:2}});await write('reposicion',{items:{te:3}});
  const row=await write('reposicion',{items:{champu:2,jabon:1,balsamo:2}});

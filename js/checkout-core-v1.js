@@ -13,7 +13,7 @@
   }
   function empty(t) { return { fecha_operativa: t.day, cabana_id: t.cabinId, estadia_id: t.stayId, hora_out: null,
     hora_out_definida: false, encargado: '', recuperados: [], chequeados: [], revision: 0,
-    reposiciones: {}, observaciones: {}, prestamos: {}, revision_estado: 'pendiente' }; }
+    reposiciones: {}, observaciones: {}, detalles: {}, prestamos: {}, revision_estado: 'pendiente' }; }
   function validate(row, t) {
     if (!row || typeof row.cabana_id !== 'string' || !row.cabana_id || typeof row.estadia_id !== 'string' || !row.estadia_id || row.fecha_operativa !== t.day || row.cabana_id !== t.cabinId || row.estadia_id !== t.stayId
       || typeof row.encargado !== 'string' || typeof row.hora_out_definida !== 'boolean'
@@ -21,19 +21,20 @@
       || Number(row.revision) < 1 || (row.hora_out !== null && !/^([01]\d|2[0-3]):[0-5]\d(:00)?$/.test(row.hora_out))) {
       throw new Error('La revisión recibida no corresponde a esta cabaña, estadía y fecha.');
     }
-    for (const field of ['reposiciones', 'observaciones']) if (row[field] !== undefined && (!row[field] || typeof row[field] !== 'object' || Array.isArray(row[field]))) throw new Error('El detalle de la revisión no es válido.');
-    return { ...row, revision: Number(row.revision), reposiciones: row.reposiciones || {}, observaciones: row.observaciones || {}, revision_estado: row.revision_estado || 'pendiente' };
+    for (const field of ['reposiciones', 'observaciones', 'detalles']) if (row[field] !== undefined && (!row[field] || typeof row[field] !== 'object' || Array.isArray(row[field]))) throw new Error('El detalle de la revisión no es válido.');
+    return { ...row, revision: Number(row.revision), reposiciones: row.reposiciones || {}, observaciones: row.observaciones || {}, detalles: row.detalles || {}, revision_estado: row.revision_estado || 'pendiente' };
   }
   function patch(row, field, value) {
     if (field === 'hora_out') return { ...row, hora_out: value || null, hora_out_definida: true };
     if (field === 'encargado') return { ...row, encargado: value };
-    if (['reposicion', 'observacion', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return workflow.patchWorkflow(row, field, value);
+    if (['reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return workflow.patchWorkflow(row, field, value);
     const column = field === 'recuperado' ? 'recuperados' : 'chequeados';
     const selected = new Set(row[column]);
     if (value.checked) selected.add(value.id); else selected.delete(value.id);
     return { ...row, [column]: [...selected] };
   }
   function createCheckoutStore(options) {
+    const drafts = new Map();
     const records = new Map(), loanRecords = new Map(), notes = new Map(), pending = new Map(), tails = new Map(), listeners = new Set(), errors = new Map();
     let disposed = false, loading = null, readId = 0, readError = null;
     const state = { ready: false, loading: false, error: null, canEdit: false };
@@ -83,13 +84,54 @@
       view(t) {
         let row = { ...(records.get(key(t)) || empty(t)), prestamos: loanRecords.get(t.stayId)?.items || {}, notas_prestamos: notes.get(t.stayId) || [] };
         for (const p of pending.values()) if (key(p.target) === key(t)) row = patch(row, p.field, p.value);
+        for (const draft of drafts.values()) if (key(draft.target) === key(t)) row = workflow.patchWorkflow(row, 'detalle', { id: draft.id, texto: draft.text });
         return row;
       },
-      saving(t) { return [...pending.values()].some(p => key(p.target) === key(t)); },
+      focusDetail(t, id) {
+        const draft = drafts.get(key(t) + ':' + id);
+        if (draft) draft.focused = true;
+      },
+      editDetail(t, id, text) {
+        if (!alive() || t.day !== options.day || !state.ready || !state.canEdit) return;
+        workflow.validateMutation('detalle', { id, texto: text });
+        const draftKey = key(t) + ':' + id;
+        let draft = drafts.get(draftKey);
+        if (!draft) { draft = { target: { ...t }, id, text, version: 0, dirty: false, focused: true, timer: null, inflight: null }; drafts.set(draftKey, draft); }
+        clearTimeout(draft.timer); draft.text = text; draft.version++; draft.dirty = true;
+        draft.timer = setTimeout(() => { draft.timer = null; void store.flushDetail(t, id).catch(() => undefined); }, 600);
+        emit();
+      },
+      blurDetail(t, id) {
+        const draft = drafts.get(key(t) + ':' + id); if (draft) draft.focused = false;
+        return store.flushDetail(t, id);
+      },
+      async flushDetail(t, id) {
+        const draftKey = key(t) + ':' + id, draft = drafts.get(draftKey);
+        if (!draft) return;
+        clearTimeout(draft.timer); draft.timer = null;
+        if (draft.inflight) { await draft.inflight; if (draft.dirty) return store.flushDetail(t, id); return; }
+        if (!draft.dirty) { if (!draft.focused) drafts.delete(draftKey); return; }
+        const version = draft.version, text = draft.text;
+        const task = store.set(t, 'detalle', { id, texto: text }).then(() => {
+          if (draft.version === version) draft.dirty = false;
+        }).finally(() => {
+          if (draft.inflight === task) draft.inflight = null;
+          if (!draft.dirty && !draft.focused && drafts.get(draftKey) === draft) drafts.delete(draftKey);
+          emit();
+        });
+        draft.inflight = task;
+        await task;
+        if (draft.dirty) return store.flushDetail(t, id);
+      },
+      async flushDetails(t) {
+        do { for (const sector of workflow.sectors) await store.flushDetail(t, sector.id); }
+        while ([...drafts.values()].some(d => key(d.target) === key(t) && (d.dirty || d.inflight)));
+      },
+      saving(t) { return [...pending.values()].some(p => key(p.target) === key(t)) || [...drafts.values()].some(d => key(d.target) === key(t) && (d.dirty || d.inflight)); },
       set(t, field, value) {
         if (!alive() || t.day !== options.day) return Promise.reject(new Error('La fecha o la sesión cambió. Abre nuevamente la revisión.'));
         if (!state.ready || !state.canEdit) return Promise.reject(new Error('Tu usuario no puede editar la revisión de salida.'));
-        if (!['hora_out', 'encargado', 'recuperado', 'chequeado', 'reposicion', 'observacion', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
+        if (!['hora_out', 'encargado', 'recuperado', 'chequeado', 'reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
         if (field === 'hora_out') { try { value = normalizeTime(value); } catch (e) { return Promise.reject(e); } }
         else if (field === 'encargado') { value = String(value || '').trim(); if (value.length > 120) return Promise.reject(new Error('El nombre es demasiado largo.')); }
         else if (field === 'recuperado' || field === 'chequeado') { if (!value || !/^[a-z][a-z0-9_]{0,63}$/.test(value.id) || typeof value.checked !== 'boolean') return Promise.reject(new Error('Ítem no válido.')); }
@@ -117,7 +159,7 @@
         tails.set(targetKey, task);
         return task;
       },
-      dispose() { disposed = true; listeners.clear(); readId++; },
+      dispose() { disposed = true; for (const draft of drafts.values()) clearTimeout(draft.timer); drafts.clear(); listeners.clear(); readId++; },
     };
     return store;
   }

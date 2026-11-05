@@ -6,18 +6,21 @@
   'use strict';
   const sectors = [
     { id: 'cocina', label: 'COCINA', title: 'Cocina', points: 'Loza · Refri · Perillas · Llave de gas · Piso', supplies: ['sal', 'aceite', 'te', 'cafe', 'te_hierbas', 'azucar', 'servilletas'] },
-    { id: 'bano', label: 'BAÑO', title: 'Baño', points: 'Secador · Toallas · Ducha · WC · Cortina / Alfombra · Piso', supplies: ['amenities', 'jabon_liquido', 'papel_higienico'] },
-    { id: 'living', label: 'LIVING / CAMA', title: 'Living', points: 'Cama / Debajo · Cajones / Clóset · Controles · TV · AC · Salamandra · Manilla · Ventanales / Cortinas · Piso', supplies: ['lena', 'diario'] },
-    { id: 'terraza', label: 'TERRAZA', title: 'Terraza', points: 'Fogón · Atizador / Pala · Escobillón · Mesa / Sillas · Cojines · Jardineras · Piso', supplies: ['carbon'] },
+    { id: 'bano', label: 'BAÑO', title: 'Baño', points: 'Secador · Toallas · Ducha · WC · Cortina / Alfombra · Piso', supplies: ['amenities'] },
+    { id: 'living', label: 'LIVING / CAMA', title: 'Living', points: 'Cama / Debajo · Cajones / Clóset · Controles · TV · AC · Manilla · Ventanales / Cortinas · Piso', supplies: ['lena', 'diario'] },
+    { id: 'terraza', label: 'TERRAZA', title: 'Terraza', points: 'Atizador / Pala · Escobillón · Mesa / Sillas · Cojines · Jardineras · Piso', supplies: ['carbon'] },
   ];
   const supplies = [
     ['sal', 'Sal', 'cocina'], ['aceite', 'Aceite', 'cocina'], ['te', 'Té', 'cocina', true],
     ['cafe', 'Café', 'cocina', true], ['te_hierbas', 'Té hierbas', 'cocina', true],
     ['azucar', 'Azúcar', 'cocina'], ['servilletas', 'Servilletas', 'cocina'],
     ['champu', 'Champú', 'bano', true], ['jabon', 'Jabón', 'bano', true], ['balsamo', 'Bálsamo', 'bano', true],
-    ['jabon_liquido', 'Jabón liq.', 'bano'], ['papel_higienico', 'P.H.', 'bano'],
     ['lena', 'Leña', 'living'], ['diario', 'Diario', 'living'], ['carbon', 'Carbón', 'terraza'],
   ].map(([id, label, area, countable]) => ({ id, label, area, countable: Boolean(countable) }));
+  const usageItems = [
+    { id: 'salamandra', checkId: 'uso_salamandra', label: 'Salamandra', area: 'living' },
+    { id: 'fogon', checkId: 'uso_fogon', label: 'Fogón', area: 'terraza' },
+  ];
   const amenities = ['champu', 'jabon', 'balsamo'];
   const catalog = [
     ['sacacorchos', 'Sacacorcho', 'cocina', 'sacacorchos?'],
@@ -76,19 +79,49 @@
     const item = supplies.find(s => s.id === id); return item ? item.label + (item.countable && quantities[id] ? ' · ' + quantities[id] : '') : '';
   }
   function selectedSupply(id, quantities) { return id === 'amenities' ? amenities.some(k => quantities[k] > 0) : quantities[id] > 0; }
-  function housekeepingMessage(cabin, row) {
-    const lines = ['CAB ' + cabin + ' · Reponer'];
+  const headings = { cocina: '🍳 COCINA', bano: '🚿 BAÑO', living: '🛏️ LIVING/CAMA', terraza: '🌄 TERRAZA', general: 'OBSERVACIONES' };
+  const bullet = text => '- ' + String(text).trim().replace(/\r\n?/g, '\n').replace(/\n/g, '\n  ');
+  function housekeepingMessage(cabin, row, loans) {
+    const sections = ['CAB ' + cabin + ' · Checked Out · Reponer'];
+    const borrowed = loans || loansFor(row.notas_prestamos || [], row.prestamos || {}, row.recuperados || []);
     for (const sector of sectors) {
-      const list = supplies.filter(s => s.area === sector.id && row.reposiciones?.[s.id] > 0).map(s => s.label + (s.countable ? ' × ' + row.reposiciones[s.id] : ''));
-      if (list.length) lines.push(sector.title + ': ' + list.join(' · '));
+      const lines = [];
+      const usage = usageItems.find(item => item.area === sector.id);
+      if (usage) lines.push(bullet(((row.chequeados || []).includes(usage.checkId) ? 'Usaron ' : 'No usaron ') + usage.label));
+      for (const supply of supplies.filter(item => item.area === sector.id && row.reposiciones?.[item.id] > 0)) {
+        lines.push(bullet(supply.label + (supply.countable ? ' × ' + row.reposiciones[supply.id] : '')));
+      }
+      const detail = row.detalles?.[sector.id];
+      if (detail?.texto?.trim()) lines.push(bullet('Detalle: ' + detail.texto));
+      if (detail?.foto_path) lines.push(bullet('Evidencia fotográfica registrada en Haku.'));
+      const areaLoans = borrowed.filter(item => item.area === sector.id && !item.descartado);
+      if (areaLoans.length) {
+        lines.push('Artículos prestados:');
+        for (const item of areaLoans) lines.push(bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' × ' + item.cantidad : '')));
+      }
+      if (lines.length) sections.push('*' + headings[sector.id] + '*\n' + lines.join('\n'));
     }
-    // Damage/maintenance/lost property belong in Observaciones, not in the cleaning supply message.
-    if (lines.length === 1) lines.push('Sin reposiciones.');
-    return lines.join('\n');
+    return sections.join('\n\n');
+  }
+  function maintenanceMessage(cabin, row) {
+    const sections = ['@Mantención', 'CAB ' + cabin + ' · Mantención'];
+    for (const area of [...sectors.map(item => item.id), null]) {
+      const observations = Object.values(row.observaciones || {}).filter(item => item.tipo === 'mantencion' && (item.area || null) === area);
+      if (!observations.length) continue;
+      const lines = [];
+      for (const item of observations) {
+        if (item.texto?.trim()) lines.push(bullet(item.texto));
+        if (item.foto_path) lines.push(bullet('Evidencia fotográfica registrada en Haku.'));
+      }
+      sections.push('*' + headings[area || 'general'] + '*\n' + lines.join('\n'));
+    }
+    return sections.join('\n\n');
   }
   function reviewStatus(row) { return row.revision_estado || 'pendiente'; }
   function validateMutation(field, value) {
-    if (field === 'reposicion') {
+    if (field === 'detalle' || field === 'detalle_foto') {
+      if (!value || !sectors.some(s => s.id === value.id) || (field === 'detalle' ? typeof value.texto !== 'string' || value.texto.length > 1000 : value.foto_path !== null && typeof value.foto_path !== 'string')) throw new Error('Detalle de área no válido.');
+    } else if (field === 'reposicion') {
       const values = value?.items;
       if (!values || typeof values !== 'object' || Array.isArray(values) || !Object.keys(values).length || Object.keys(values).length > 3
         || Object.entries(values).some(([id, q]) => !supplies.some(s => s.id === id) || !units(q) || (!supplies.find(s => s.id === id).countable && q > 1))) throw new Error('Cantidad de reposición no válida.');
@@ -101,6 +134,11 @@
     } else if (field === 'revision_estado' && !['en_revision', 'revisada', 'pendiente'].includes(value)) throw new Error('Estado de revisión no válido.');
   }
   function patchWorkflow(row, field, value) {
+    if (field === 'detalle' || field === 'detalle_foto') {
+      const next = { ...row.detalles }, entry = { texto: '', foto_path: null, ...next[value.id], ...(field === 'detalle' ? { texto: value.texto } : { foto_path: value.foto_path }) };
+      if (entry.texto.trim() || entry.foto_path) next[value.id] = entry; else delete next[value.id];
+      return { ...row, detalles: next };
+    }
     if (field === 'reposicion') { const next = { ...row.reposiciones }; for (const [id, q] of Object.entries(value.items)) { if (q) next[id] = q; else delete next[id]; } return { ...row, reposiciones: next }; }
     if (field === 'revision_estado') return { ...row, revision_estado: value };
     if (field === 'observacion') { const next = { ...row.observaciones }; if (value.borrar) delete next[value.id]; else next[value.id] = { ...value }; return { ...row, observaciones: next }; }
@@ -109,5 +147,5 @@
     if (field === 'devolucion') next[value.id] = { label: value.label, area: value.area, cantidad: existing?.cantidad || value.total, origen: existing?.origen || value.origen, ...existing, devueltos: value.cantidad };
     return { ...row, prestamos: next };
   }
-  return { sectors, supplies, amenities, catalog, observationTypes, normalize, safeId, units, detectLoans, loansFor, loanSummary, replenishmentLabel, selectedSupply, housekeepingMessage, reviewStatus, validateMutation, patchWorkflow };
+  return { sectors, usageItems, supplies, amenities, catalog, observationTypes, normalize, safeId, units, detectLoans, loansFor, loanSummary, replenishmentLabel, selectedSupply, housekeepingMessage, maintenanceMessage, reviewStatus, validateMutation, patchWorkflow };
 });

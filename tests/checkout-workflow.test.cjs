@@ -14,9 +14,9 @@ test('los ajustes manuales y descartes prevalecen aunque se relean las notas',()
  assert.equal(loans.length,2);assert.equal(loans.find(l=>l.id==='batas').cantidad,3);assert.equal(loans.find(l=>l.id==='batas').devueltos,2);assert.equal(loans.find(l=>l.id==='cenicero').origen,'manual');
  assert.equal(V.loansFor([],manual).find(l=>l.id==='batas').cantidad,3,'Un préstamo ajustado se conserva si se retira la nota');
 });
-test('el mensaje incluye cantidades de amenities y excluye observaciones y préstamos',()=>{
+test('el mensaje de WhatsApp separa áreas, cantidades y uso sin mezclar mantención',()=>{
  const text=V.housekeepingMessage(3,{reposiciones:{te:3,cafe:2,champu:2,jabon:1,balsamo:2,lena:1},observaciones:{a:{texto:'Mantención privada'}}});
- assert.equal(text,'CAB 3 · Reponer\nCocina: Té × 3 · Café × 2\nBaño: Champú × 2 · Jabón × 1 · Bálsamo × 2\nLiving: Leña');
+ assert.equal(text,'CAB 3 · Checked Out · Reponer\n\n*🍳 COCINA*\n- Té × 3\n- Café × 2\n\n*🚿 BAÑO*\n- Champú × 2\n- Jabón × 1\n- Bálsamo × 2\n\n*🛏️ LIVING/CAMA*\n- No usaron Salamandra\n- Leña\n\n*🌄 TERRAZA*\n- No usaron Fogón');
  assert.equal(V.replenishmentLabel('amenities',{champu:2,jabon:1,balsamo:2}),'Amenities · 5 un.');
  assert.equal(V.selectedSupply('amenities',{}),false);
 });
@@ -44,4 +44,27 @@ test('coalesce las lecturas simultáneas y conserva los cambios por insumo',asyn
  await Promise.all([store.set(t,'reposicion',{items:{cafe:2}}),store.set(t,'reposicion',{items:{te:3}})]);
  assert.deepEqual(store.view(t).reposiciones,{cafe:2,te:3});assert.equal(store.view(t).hora_out,'12:35');assert.equal(store.view(t).encargado,'Felipe');
  await store.set(t,'reposicion',{items:{cafe:0}});assert.equal(V.selectedSupply('cafe',store.view(t).reposiciones),false);assert.equal(store.view(t).reposiciones.te,3);
+});
+
+test('un área reúne préstamos, detalle y uso; ignora suministros retirados y detecciones descartadas',()=>{
+ const row={chequeados:['uso_salamandra','uso_fogon'],reposiciones:{jabon_liquido:1,papel_higienico:1},detalles:{cocina:{texto:'Falta una copa',foto_path:null},living:{texto:'Sábana manchada',foto_path:'evidencia'}},notas_prestamos:['Un sacacorcho'],prestamos:{batas:{id:'batas',label:'Batas',area:'bano',cantidad:2,devueltos:2},cenicero:{descartado:true}}};
+ const text=V.housekeepingMessage(10,row);
+ assert.equal(text.split('*🍳 COCINA*').length,2);assert.match(text,/\*🍳 COCINA\*\n- Detalle: Falta una copa\nArtículos prestados:\n- Sacacorcho/);
+ assert.match(text,/\*🚿 BAÑO\*\nArtículos prestados:\n- Batas × 2/);assert.match(text,/- Usaron Salamandra/);assert.match(text,/- Usaron Fogón/);
+ assert.match(text,/- Detalle: Sábana manchada/);assert.doesNotMatch(text,/Jabón liq|P.H.|Cenicero/);
+ const noteOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'Revisar toallas',foto_path:null}}});assert.match(noteOnly,/\*🚿 BAÑO\*\n- Detalle: Revisar toallas/);
+});
+test('mantención agrupa exclusivamente sus observaciones y señala evidencia sin exponer URLs',()=>{
+ const text=V.maintenanceMessage(10,{observaciones:{a:{tipo:'dano',area:'terraza',texto:'Daño excluido'},b:{tipo:'mantencion',area:'bano',texto:'Llave de ducha suelta',foto_path:'privada'},c:{tipo:'mantencion',area:null,texto:'Revisar acceso'}}});
+ assert.equal(text,'@Mantención\n\nCAB 10 · Mantención\n\n*🚿 BAÑO*\n- Llave de ducha suelta\n- Evidencia fotográfica registrada en Haku.\n\n*OBSERVACIONES*\n- Revisar acceso');assert.doesNotMatch(text,/Daño excluido|privada/);
+});
+test('detalles conservan la última palabra ante ACK atrasado, fallo y reintento sin releer',async()=>{
+ const t={day:'2026-11-05',cabinId:'cab3',stayId:'stay3'};let release,fail=false,reads=0;
+ let row={fecha_operativa:t.day,cabana_id:t.cabinId,estadia_id:t.stayId,hora_out:null,hora_out_definida:false,encargado:'',chequeados:[],recuperados:[],revision:1,detalles:{}};
+ const writes=[];const store=createCheckoutStore({day:t.day,isCurrent:()=>true,read:async()=>{reads++;return{fecha:t.day,puede_editar:true,revisiones:[row]};},write:async(_,field,value)=>{writes.push(value.texto);if(writes.length===1)await new Promise(r=>{release=r;});if(fail)throw Error('Sin conexión');row={...V.patchWorkflow(row,field,value),revision:row.revision+1};return row;}});
+ await store.ensure();store.editDetail(t,'living','Sábana');const first=store.flushDetails(t);await new Promise(r=>setImmediate(r));store.editDetail(t,'living','Sábana manchada');release();await first;
+ assert.equal(store.view(t).detalles.living.texto,'Sábana manchada');assert.deepEqual(writes,['Sábana','Sábana manchada']);
+ fail=true;store.editDetail(t,'bano','Última palabra');await assert.rejects(store.flushDetails(t),/Sin conexión/);assert.equal(store.view(t).detalles.bano.texto,'Última palabra');
+ fail=false;await store.flushDetails(t);assert.match(V.housekeepingMessage(3,store.view(t)),/- Detalle: Última palabra/);assert.equal(reads,1);assert.equal(store.saving(t),false);
+ store.receive({...row,revision:row.revision+1,detalles:{...row.detalles,cocina:{texto:'Foto ajena preservada',foto_path:null}}});assert.equal(store.view(t).detalles.cocina.texto,'Foto ajena preservada');store.dispose();
 });
