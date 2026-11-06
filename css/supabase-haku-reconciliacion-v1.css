@@ -1721,7 +1721,50 @@
 .haku-actualizacion-compacta .haku-prioridad--manana > summary::before { background: #bd8730; }
 .haku-actualizacion-compacta .haku-prioridad--proximos > summary::before { background: #a39535; }
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) > .haku-4b-preparar { margin: 9px 10px; width: calc(100% - 20px); }
-.haku-libro-auto.haku-libro-auto { border-radius: 5px; padding: 10px 12px; }
+/* Burbuja aprobada en Figma: el cambio ocupa el foco; los contadores una franja. */
+.haku-libro-auto.haku-libro-auto {
+    --aviso-fondo: #f0f6f2;
+    --aviso-superficie: var(--sites-shell-surface, #fff);
+    --aviso-borde: var(--sites-shell-line, #d9e3de);
+    --aviso-texto: var(--sites-shell-ink, #17362d);
+    --aviso-secundario: var(--sites-shell-muted, #687873);
+    --aviso-acento: var(--sites-shell-green, #22735c);
+    display: flex; flex-direction: column; gap: 6px;
+    border-radius: 4px; padding: 12px;
+    background: var(--aviso-fondo); color: var(--aviso-texto); border-color: var(--aviso-borde);
+    font: 400 12px/18px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
+}
+.haku-libro-auto.haku-libro-auto p { margin: 0; }
+.haku-libro-auto__marca { display: block; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 600; }
+.haku-libro-auto__titulo { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
+.haku-libro-auto__caso { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); }
+.haku-libro-auto__reserva { color: var(--aviso-secundario); font-size: 12px; line-height: 16px; }
+.haku-libro-auto__detalles { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 4px 8px; margin: 2px 0 0; }
+.haku-libro-auto__detalles dt { color: var(--aviso-secundario); font-size: 11px; font-weight: 500; }
+.haku-libro-auto__detalles dd { margin: 0; font-size: 12px; font-weight: 500; }
+.haku-libro-auto__prioridades {
+    display: flex; align-items: center; justify-content: space-between; gap: 0;
+    padding: 4px 8px; border: 1px solid var(--aviso-borde); border-radius: 4px;
+    background: var(--aviso-superficie); font-size: 11px; line-height: 14px;
+}
+.haku-libro-auto__prioridad { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--aviso-secundario); }
+.haku-libro-auto__prioridad + .haku-libro-auto__prioridad { border-left: 1px solid var(--aviso-borde); padding-left: 12px; }
+.haku-libro-auto__prioridad strong { color: var(--aviso-texto); font-size: inherit; font-weight: 600; }
+.haku-libro-auto__aviso { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; }
+.haku-libro-auto__acciones { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px solid var(--aviso-borde); }
+.haku-libro-auto.haku-libro-auto button { margin: 0; min-height: 28px; padding: 4px 8px; border-radius: 4px; border-color: var(--aviso-borde); background: var(--aviso-superficie); color: var(--aviso-acento); font-family: inherit; font-size: 12px; line-height: 18px; font-weight: 400; }
+.haku-libro-auto.haku-libro-auto button:focus-visible { outline: 2px solid var(--aviso-acento); outline-offset: 2px; }
+html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto {
+    --aviso-fondo: #202d26; --aviso-superficie: #1b2621; --aviso-borde: #3e5145;
+    --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7; --aviso-acento: #9fd2b3;
+    background: var(--aviso-fondo); color: var(--aviso-texto); border-color: var(--aviso-borde);
+}
+html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { background: var(--aviso-superficie); color: var(--aviso-acento); border-color: var(--aviso-borde); }
+@media (max-width: 370px) {
+    .haku-libro-auto.haku-libro-auto { right: 10px; width: calc(100vw - 20px); }
+    .haku-libro-auto__prioridades { padding-inline: 5px; }
+    .haku-libro-auto__prioridad + .haku-libro-auto__prioridad { padding-left: 6px; }
+}
 
 /* Comparar pagos: misma geometría compacta, acotada a esta vista. */
 .haiku-asistente-panel .haku-pagos-compactos {
