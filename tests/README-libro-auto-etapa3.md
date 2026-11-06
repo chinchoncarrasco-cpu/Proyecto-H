@@ -12,7 +12,15 @@ Google entrega el archivo mediante `cargarDesdeGoogle()` para conservar el orige
 
 ETAPA 2 expone `obtenerResultado()` y `mostrarResultado(resultado)`. Manual y automático usan la misma instancia de caché. Si hay una comparación antigua en vuelo, la nueva espera su finalización y después obtiene la generación vigente; no hay paralelismo de comparaciones. El controlador descarta resultados y errores obsoletos y acepta una sola notificación por generación.
 
-La burbuja contiene un resumen seguro, botón Cerrar y Ver informe. El mensaje final permanece en Haku. Ver informe usa el resultado retenido, renderiza la tarjeta de ETAPA 2 sin recalcular y abre el panel mediante `HAIKU_ASISTENTE.abrir()`. No abre Haku espontáneamente. Las acciones de versiones anteriores quedan desactivadas al cambiar el Libro.
+La burbuja contiene un resumen seguro y permite desplegar hasta tres cambios, identificando la reserva y los campos modificados. Cuando hay una consulta o revisión abierta, el aviso no inserta mensajes ni desplaza la conversación; «Seguir con mi consulta» sólo cierra la burbuja. «Ver informe» se habilita al finalizar la consulta, usa el resultado retenido y abre Haku sólo por acción del usuario. Sin consulta abierta, el mensaje final permanece en el chat. Las acciones de informes anteriores quedan desactivadas al cambiar el Libro.
+
+## Consultas conservadas
+
+`crearLectura()` mantiene una referencia a los bytes actuales, metadatos y copia anterior de esa consulta. Sus workers y cola no se cancelan por una actualización; todas las hojas corresponden a la misma versión. El visor y las consultas siguientes reciben la versión nueva. No añade almacenamiento persistente.
+
+Las consultas del Libro, comparación de versiones, comparación mensual de sólo lectura, servicios y búsqueda BOVE usan esa lectura estable. En servicios sólo se utiliza para consultar; las preparaciones y confirmaciones siguen releyendo la fuente viva. La caché devuelve el informe anterior a quien lo solicitó, pero no lo conserva como vigente ni lo incorpora al historial nuevo.
+
+Actualizar el Libro ya no reemplaza las respuestas por «consulta invalidada». Conserva desplegables, selecciones y datos escritos; añade una nota si la consulta usa una versión anterior. Los controles de generación, permisos y confirmación de reservas/pagos siguen activos: conservar una respuesta no permite guardar desde una comparación antigua. Una recarga de página, cierre de sesión o error real de lectura no quedan cubiertos por esta conservación en memoria.
 
 No se muestran contactos, documentos ni valores financieros en la burbuja. Sólo se resumen hasta dos cambios de campos operacionales numéricos o de fechas; los otros remiten al informe. Advertencias y ambigüedades se mantienen separadas. Ausencia no se interpreta como cancelación.
 

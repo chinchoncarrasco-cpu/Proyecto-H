@@ -5,6 +5,14 @@ const pro=()=>B.desdeProyecto([reserva()])[0];
 const lib=(extra={})=>({...pro(),fuente:'libro',origen:{hoja:'Sep26',celda:'L27'},...extra});
 function cliente(rows,cargos=[],servicios=[]){const calls=[];return {calls,from(tabla){calls.push(tabla);let data=tabla==='reservas'?rows:tabla==='servicios'?servicios:cargos;const q={select(s){calls.push(s);return q;},order(){return q;},eq(){return q;},gte(){return q;},lte(){return q;},or(){return q;},async range(a,b){return {data:data.slice(a,b+1)};}};return q;}};}
 const libro=items=>({listo:async()=>{},estado:()=>({generacion:1,cargado:true}),listarHojas:()=>['Sep26'],buscarHojasBove:async()=>({hojas:['Sep26']}),buscarHojas:async()=>({hojas:['Sep26']}),consultarHoja:async()=>({evidencias_bove:items,reservas:[]})});
+test('BOVE mantiene la lectura de su versión cuando llega una actualización del Libro',async()=>{
+ let g=1,terminar;const estable=libro([]),vivo={...estable,estado:()=>({generacion:g,cargado:true})};
+ vivo.crearLectura=async()=>({...estable,consultarHoja:()=>new Promise(r=>{terminar=r;})});
+ const consulta=B.consultar('busca el BOVE 19888 en el Libro',{cliente:cliente([]),libro:vivo});
+ await new Promise(r=>setImmediate(r));g=2;
+ terminar({evidencias_bove:[{numero:'19888',estado:'registrado',origen:{hoja:'Sep26',celda:'L27'},texto_original:'BOVE:19888'}],reservas:[]});
+ const r=await consulta;assert.notEqual(r.incompleto,true);assert.equal(r.libro[0].numero,'19888');
+});
 for(const [texto,fuente] of [['Haku, busca el BOVE 19888','ambas'],['busca el BOVE 19888 en el Libro','libro'],['busca en Proyecto H el BOVE 19888','proyecto_h']])test(texto,async()=>{
  const c=cliente([reserva()]);const r=await B.consultar(texto,{cliente:c,libro:libro([{numero:'19888',estado:'registrado',origen:{hoja:'Sep26',celda:'L27'},texto_original:'BOVE:19888'}])});
  assert.equal(r.q.fuente,fuente);assert.equal(r.proyecto.length,fuente==='libro'?0:1);assert.equal(r.libro.length,fuente==='proyecto_h'?0:1);if(fuente==='libro')assert.equal(c.calls.length,0);

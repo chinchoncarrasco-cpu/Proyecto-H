@@ -115,9 +115,12 @@
  }
  const cache=new WeakMap();
  async function leerLibro(libro,q,dia,control){
-  if(!libro)throw Error('Carga un XLSX para consultar el Libro.');await libro.listo();control.comprobar();const estado=libro.estado();
+  if(!libro)throw Error('Carga un XLSX para consultar el Libro.');
+  const origen=libro;
+  if(libro.crearLectura)libro=await libro.crearLectura();
+  await libro.listo();control.comprobar();const estado=libro.estado();
   if(!estado.cargado)throw Error('Carga un XLSX para consultar el Libro.');
-  let c=cache.get(libro);if(!c||c.g!==estado.generacion){c={g:estado.generacion,hojas:new Map(),numeros:new Map()};cache.set(libro,c);}
+  let c=cache.get(origen);if(!c||c.g!==estado.generacion){c={g:estado.generacion,hojas:new Map(),numeros:new Map()};cache.set(origen,c);}
   let nombres=libro.listarHojas();
   // Búsqueda textual por concepto: conserva 16.968 y 16,968, sin reconciliar.
   if(q.accion==='pendientes'){

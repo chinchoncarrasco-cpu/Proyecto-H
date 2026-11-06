@@ -55,10 +55,11 @@ test('cache reutiliza generación y vuelve a comparar al cambiarla',async()=>{
     let llamadas=0,g=1;const c=A.crearCache(async()=>{llamadas++;return resultado();},()=>g);
     await c.obtener();await c.obtener();assert.equal(llamadas,1);g++;await c.obtener();assert.equal(llamadas,2);
 });
-test('cache comparte una comparación en vuelo y descarta generación invalidada',async()=>{
+test('cache termina la consulta en vuelo, conserva su resultado y no lo reutiliza tras invalidar',async()=>{
     let llamadas=0,resolver;const c=A.crearCache(()=>{llamadas++;return new Promise(r=>resolver=r);},()=>1);
     const a=c.obtener(),b=c.obtener();await Promise.resolve();assert.equal(llamadas,1);c.invalidar();resolver(resultado());
-    const fin=await Promise.allSettled([a,b]);assert.ok(fin.every(x=>x.status==='rejected'));
+    const fin=await Promise.allSettled([a,b]);assert.ok(fin.every(x=>x.status==='fulfilled'));
+    const nueva=c.obtener();await Promise.resolve();assert.equal(llamadas,2);resolver(resultado());await nueva;
 });
 function montar(comparar) {
     class Elemento {

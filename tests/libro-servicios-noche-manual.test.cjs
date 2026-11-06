@@ -68,10 +68,20 @@ function entorno() {
         if (!event.stopped) await target.listeners.click?.(event);
         await new Promise(resolve => setImmediate(resolve));
     };
-    return { ...state, state, api: c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2, document, Element, cargarGuard, click };
+    return { ...state, state, context:c, api: c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2, document, Element, cargarGuard, click };
 }
 const consulta = 'incorpora servicios del Libro septiembre 2026';
 const consultaComparacion = 'Libro: compara servicios de septiembre 2026 con Proyecto H';
+test('consulta de servicios conserva su copia; preparar escrituras vuelve a leer el Libro vivo',async()=>{
+    const e=entorno(),vivo=e.context.HAIKU_LIBRO_RESERVA_V1;let terminar,capturas=0;
+    vivo.crearLectura=async()=>{capturas++;const estado=vivo.estado();return {...vivo,crearLectura:undefined,estado:()=>estado,consultarHoja:()=>new Promise(r=>terminar=r)};};
+    const pendiente=e.api.construir(consultaComparacion,new Map(),new Map(),true);
+    await new Promise(r=>setImmediate(r));e.state.generacion=2;
+    terminar({reservas:[copy(e.r)]});await pendiente;
+    assert.equal(capturas,1);assert.equal(e.state.lecturas,0);
+    await e.api.construir(consultaComparacion);assert.equal(e.state.lecturas,1);assert.equal(capturas,1);
+    assert.ok(!e.state.calls.includes('rpc'));
+});
 const asociacion = { estado: 'asociada', sistema: { reserva_id: 'r1', id: 'e1' } };
 function preparar(e, texto, extra = {}) { return e.api.prepararServicio(e.r, { concepto: 'jacuzzi', texto_original: texto, hora: '19:15', semantica: 'SERVICIO_REAL', ...extra }, asociacion); }
 async function elegir(e) {

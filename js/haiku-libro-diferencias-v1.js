@@ -261,6 +261,7 @@
         const error = motivo => ({...salida('no_comparable'), generado_en, advertencias: [{motivo}]});
         if (!libro?.consultarHuellas || !libro?.consultarIndice) return error('El lector no expone índices y huellas de ambas versiones.');
         try {
+            if (libro.crearLectura) libro = await libro.crearLectura();
             await libro.listo();
             const generacion = libro.estado().generacion;
             const comprobar = () => { if (libro.estado().generacion !== generacion) throw new Error('El Libro cambió durante la comparación. Repite la consulta.'); };

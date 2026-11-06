@@ -227,6 +227,7 @@
 
     function estaOcupado() {
         return procesando || guardandoReserva || window.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true ||
+            window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true ||
             window.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.procesando?.() === true;
     }
 
