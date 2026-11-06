@@ -100,7 +100,7 @@
       if (noteLines.length) notes.push(sector.title + ': ' + noteLines.join('\n').replace(/\n/g, '\n  '));
     }
     const activeLoans = borrowed.filter(item => !item.descartado);
-    if (activeLoans.length) sections.push('*🤝 Prestados:*\n' + activeLoans.map(item => bullet(item.label + (item.cantidad === null ? ' (cantidad por confirmar)' : item.cantidad > 1 ? ' x' + item.cantidad : ''))).join('\n'));
+    if (activeLoans.length) sections.push('*🤝 Prestados:*\n' + activeLoans.map(item => bullet(item.label + (item.cantidad > 1 ? ' x' + item.cantidad : ''))).join('\n'));
     if (notes.length) sections.push('*📝 Nota:*\n' + notes.join('\n'));
     return sections.join('\n\n');
   }
