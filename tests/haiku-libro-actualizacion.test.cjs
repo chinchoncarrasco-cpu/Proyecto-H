@@ -26,7 +26,7 @@ test('modificaciones exclusivamente desde cambios; arrays, servicios y privacida
         {campo:'adultos',antes:2,ahora:3},{campo:'notas_importantes',antes:['Aniversario'],ahora:['Aniversario','Tinaja']},
         {campo:'servicios',antes:[],ahora:[{concepto:'Tinaja',hora:'20:00',pendiente:true}]},
         {campo:'correo',antes:'old@example.test',ahora:'new@example.test'}]}]}));
-    for(const text of ['Adultos','Antes: 2<br>Ahora: 3','Aniversario · Tinaja','Tinaja · 20:00 · Pendiente','No se muestra aquí por privacidad']) assert.ok(html.includes(text));
+    for(const text of ['Adultos','Antes: 2<br>Ahora: 3','Aniversario · Tinaja','Tinaja · 20:00 · Pago pendiente','No se muestra aquí por privacidad']) assert.ok(html.includes(text));
     assert.doesNotMatch(html,/NO MOSTRAR|example.test|\[object Object\]/);
 });
 test('ya no aparece nunca equivale a cancelada',()=>{
@@ -184,11 +184,66 @@ test('el texto distingue una reserva faltante de una posible coincidencia sin ca
             assert.match(html,/Falta incorporar esta reserva en Proyecto H/);
             assert.match(html,/data-haku-preparar-pendientes/);
         }else{
-            assert.match(html,/Hay que revisar si esta reserva ya está registrada en Proyecto H/);
+            assert.match(html,proyecto==='ambigua'?/No pude identificar con certeza esta reserva en Proyecto H/:/No encontré esta reserva en Proyecto H, pero faltan datos válidos/);
+            assert.match(html,/Volver a revisar/);
             assert.doesNotMatch(html,/Falta incorporar|data-haku-preparar-pendientes/);
         }
         assert.doesNotMatch(html,/coincidencia segura|sin_coincidencia|Revalidación focalizada/);
     }
+});
+
+test('la salida pendiente explica el cambio y la confirmación; conserva la comparación cerrada',()=>{
+    const anterior=global.haikuSesion;
+    try{
+        global.haikuSesion={usuario:{activo:true},roles:['administrador']};
+        const item={tipo:'modificacion',actual:reserva,estado:'pendiente',accionable:true,sistema:{reserva_id:'r1'},
+            preparacion:{reservas:[reserva]},cambios:[
+                {campo:'fecha_checkout',antes:'2026-09-14',ahora:'2026-09-13',proyecto:'2026-09-14'},
+                {campo:'noches',antes:2,ahora:1,proyecto:2}]};
+        const original=JSON.stringify(item),html=A.renderizarPendientes({items:[item]});
+        assert.match(html,/La salida cambió del 14-09-2026 al 13-09-2026\. Pasa de 2 noches a 1\./);
+        assert.match(html,/Este cambio todavía no está guardado en Proyecto H/);
+        assert.match(html,/Falta tu confirmación\. Abre «Aprobación manual»/);
+        assert.match(html,/<details class="haku-pendiente-comparacion"><summary>Ver comparación de datos \(2\)/);
+        assert.match(html,/En Proyecto H: 14-09-2026/);
+        assert.equal(JSON.stringify(item),original);
+        global.haikuSesion.roles=['recepcion'];
+        const recepcion=A.renderizarPendientes({items:[item]});
+        assert.doesNotMatch(recepcion,/Abre «Aprobación manual»|data-haku-aprobar-pendiente/);
+    }finally{global.haikuSesion=anterior;}
+});
+
+test('una cancelada comprobada explica por qué no se incorpora y sólo permite ver su reserva',()=>{
+    const pendientes={items:[],resueltosDetalle:[{actual:reserva,sistema:{reserva_id:'reserva-cancelada',estado_reserva:'cancelada'}}]};
+    const html=A.renderizarPendientes(pendientes);
+    assert.match(html,/Ya registrada y cancelada/);
+    assert.match(html,/No hace falta incorporarla otra vez/);
+    assert.match(html,/No necesitas aprobar nada/);
+    assert.match(html,/data-haku-ver-resuelta="0"/);
+    assert.doesNotMatch(html,/data-haku-aprobar-pendiente|data-haku-preparar-pendientes|Necesita revisión|reserva-cancelada/);
+    pendientes.resueltosDetalle[0].sistema.estado_reserva='no_show';
+    assert.match(A.renderizarPendientes(pendientes),/Ya registrada como «No se presentó»/);
+});
+
+test('la revisión explica candidatos distintos y datos faltantes sin exponer contactos ni ejecutar HTML',()=>{
+    const pendientes={items:[{tipo:'nueva',actual:reserva,estado:'revision',accionable:false,proyecto:'ambigua',
+        revision:{categoria:'modificacion_titular',motivos:[],candidatos:[{titular:'<img src=x>Otra Persona',cabana:reserva.cabana,
+            fecha_checkin:reserva.fecha_checkin,fecha_checkout:reserva.fecha_checkout,correo:'privado@example.test'}]}}]};
+    const html=A.renderizarPendientes(pendientes);
+    assert.match(html,/misma cabaña y fechas, pero los datos del huésped no coinciden/);
+    assert.match(html,/Busca esta reserva en «Reservas»/);
+    assert.match(html,/&lt;img src=x&gt;/);assert.doesNotMatch(html,/<img|privado@example/);
+    pendientes.items[0].revision.categoria='ambiguo';
+    pendientes.items[0].revision.motivos=['Falta confirmar la cantidad de adultos.'];
+    const advertencia=A.renderizarPendientes(pendientes);
+    assert.match(advertencia,/misma cabaña y fechas, pero hay datos del Libro por aclarar/);
+    assert.doesNotMatch(advertencia,/datos del huésped no coinciden|otra cabaña o fechas/);
+    pendientes.items[0].proyecto='sin_coincidencia';
+    pendientes.items[0].revision={motivos:['Falta una cantidad válida de adultos.'],candidatos:[]};
+    const falta=A.renderizarPendientes(pendientes);
+    assert.match(falta,/Falta una cantidad válida de adultos/);
+    assert.match(falta,/Revisa los datos indicados en el Libro/);
+    assert.doesNotMatch(falta,/Falta incorporar esta reserva|data-haku-preparar-pendientes/);
 });
 
 test('un cambio histórico accionable muestra valores y habilita preparar sin exponer contacto',()=>{
@@ -255,6 +310,18 @@ test('un fallo focal conserva el historial y permite reintentar',async()=>{
     const informe={libro_actual:{generacion:3},modificadas:[]};
     await assert.rejects(cache.obtener(informe),/Supabase no disponible/);
     await cache.obtener(informe,{revalidar:true});assert.equal(intentos,2);
+});
+test('la cache retira el pendiente cancelado pero conserva la explicación y el enlace en el informe',async()=>{
+    let registro={version:1,cambios:[{id:'cancelada',tipo:'nueva',actual:reserva}]},consultas=0;
+    const detalle={id:'cancelada',actual:reserva,motivo:'ya_cancelada',sistema:{reserva_id:'r-cancelada',estado_reserva:'cancelada'}};
+    const cache=A.crearCachePendientes({generacion:()=>3,leer:async()=>registro,guardar:async x=>{registro=x;},
+        revalidarCambios:async()=>{consultas++;return {items:[],resueltos:['cancelada'],resueltosDetalle:[detalle],reservas:[],comparacion:[]};}});
+    const informe={libro_actual:{generacion:3},modificadas:[]};
+    const out=await cache.obtener(informe);
+    assert.equal(registro.cambios.length,0);
+    assert.equal(out.items.length,0);assert.equal(out.resueltosDetalle[0].sistema.reserva_id,'r-cancelada');
+    assert.match(A.renderizarPendientes(out),/Ya registrada y cancelada/);
+    assert.equal((await cache.obtener(informe)).resueltosDetalle[0],detalle);assert.equal(consultas,1);
 });
 test('una revisión de servicios mantiene Ver reserva, cuenta cero preparables y no expone identificadores persistentes',()=>{
     const html=A.renderizarPendientes({items:[{tipo:'modificacion',actual:reserva,estado:'revision',accionable:false,
