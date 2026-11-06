@@ -157,8 +157,9 @@ function interfaz(comparar) {
         const e={type:'click',target:{closest:()=>ids['haiku-asistente-enviar']},preventDefault(){},stopImmediatePropagation(){this.stop=true;}};
         for(const f of listeners.click || []){f(e);if(e.stop)break;}
     };
-    return {window,document,ids,emitir,manual,calls:()=>calls,abierto:()=>abierto,cambiar:()=>{g++;emitir('haiku:libro-cambio');},
-        botones:()=>document.body.children.flatMap(x=>x.children).filter(x=>x.textContent==='Ver informe')};
+    const nodos=el=>[el,...el.children.flatMap(nodos)];
+    return {window,document,ids,emitir,manual,nodos:()=>nodos(document.body),calls:()=>calls,abierto:()=>abierto,cambiar:()=>{g++;emitir('haiku:libro-cambio');},
+        botones:()=>nodos(document.body).filter(x=>x.textContent==='Ver informe')};
 }
 test('módulo al cargar y evento genérico no comparan ni notifican; primera carga no inicia',async()=>{
     const h=interfaz(async()=>res());h.emitir('haiku:libro-cambio');h.emitir('haiku:libro-version-cargada',{...evento(2),tenia_anterior:false});
@@ -196,7 +197,62 @@ test('aviso en segundo plano conserva conversación, borrador y posición y espe
     abrir.dispatchEvent({type:'click'});assert.equal(h.abierto(),0);
     ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
     assert.equal(abrir.disabled,false);
-    const seguir=h.document.body.children[0].children.find(x=>x.textContent==='Seguir con mi consulta');
+    const seguir=h.nodos().find(x=>x.textContent==='Seguir con mi consulta');
     seguir.dispatchEvent({type:'click'});assert.equal(h.document.body.children.length,0);
     assert.equal(h.abierto(),0);assert.equal(mensajes.scrollTop,37);
+});
+
+const burbuja=r=>A.resumir(res(r)).burbuja;
+const cambio=(campo,antes,ahora)=>burbuja({modificadas:[{actual:row,cambios:[{campo,antes,ahora}]}]}).casos[0].detalles[0];
+test('burbuja: fecha breve precisa, incluso al cambiar de mes o año',()=>{
+    assert.deepEqual(cambio('fecha_checkout','2026-11-14','2026-11-15'),{etiqueta:'Fecha',texto:'Salida: 14 → 15 nov.'});
+    assert.equal(cambio('fecha_checkin','2026-11-30','2026-12-01').texto,'Entrada: 30 nov. → 1 dic.');
+    assert.equal(cambio('fecha_checkin','2026-12-31','2027-01-01').texto,'Entrada: 31 dic. 2026 → 1 ene. 2027');
+});
+test('burbuja: identifica la nota agregada, retirada o sustituida sin repetir las conservadas',()=>{
+    const a=['Sin azúcar','Llegada a las 19:00'],b=[' sin azúcar ','Llegada a las 20:00'];
+    assert.equal(cambio('notas_importantes',[],['Llegada a las 20:00']).texto,'Se agregó «Llegada a las 20:00»');
+    assert.equal(cambio('notas_importantes',['Llegada a las 20:00'],[]).texto,'Se retiró «Llegada a las 20:00»');
+    const detalle=cambio('notas_importantes',a,b).texto;
+    assert.match(detalle,/Se retiró «Llegada a las 19:00».*Se agregó «Llegada a las 20:00»/);assert.doesNotMatch(detalle,/azúcar/);
+});
+test('burbuja: nota acotada y sin contactos, documentos o montos',()=>{
+    const texto=cambio('notas_importantes',[],['Llamar a test@example.test +56 9 1234 5678 RUT 12.345.678-9, abono $120.000. '+ 'a'.repeat(300)]).texto;
+    assert.doesNotMatch(texto,/example\.test|1234 5678|12\.345\.678|120\.000/);assert.ok(texto.length<105);assert.match(texto,/…/);
+});
+test('burbuja: traslado de tinaja y cambio de horario describen el antes y después',()=>{
+    const a={concepto:'tonel',hora:'19:15',cortesia:true,pendiente:false,monto:null};
+    assert.deepEqual(cambio('servicios',[a],[{...a,concepto:'jacuzzi'}]),{etiqueta:'Tinaja',texto:'Tonel → Jacuzzi · 19:15'});
+    assert.equal(cambio('servicios',[a],[{...a,hora:'20:15'}]).texto,'Tonel · 19:15 → 20:15');
+    assert.equal(cambio('servicios',[a],[{...a,pendiente:true,cortesia:false,monto:30000}]).texto,'Tonel: cambió la condición de cobro.');
+});
+test('burbuja: servicios agregados o retirados no se presentan como un traslado inventado',()=>{
+    const a={concepto:'tonel',hora:'19:15'},b={concepto:'masaje',hora:'20:00'};
+    assert.equal(cambio('servicios',[a],[a,b]).texto,'Agregado: Masaje · 20:00');
+    assert.equal(cambio('servicios',[a,b],[b]).texto,'Retirado: Tonel · 19:15');
+    assert.equal(cambio('servicios',[a],[a,a]).texto,'Agregado: Tonel · 19:15');
+    assert.equal(cambio('servicios',[{concepto:'otro_a'}],[{concepto:'otro_b'}]).texto,'Cambió el tipo de servicio.');
+    assert.match(cambio('servicios',[a,b],[{concepto:'jacuzzi',hora:'19:15'}]).texto,/Agregado: Jacuzzi.*Retirado: Tonel.*Masaje/);
+});
+test('burbuja: cancelación en el Libro no afirma que esté guardada en Proyecto H',()=>{
+    const cancelada=burbuja({cancelaciones_confirmadas:[{anterior:row}]}).casos[0];
+    assert.equal(cancelada.titulo,'Cancelada en el Libro');assert.match(cancelada.detalles[0].texto,/Falta confirmarla en Proyecto H/);
+    assert.doesNotMatch(JSON.stringify(burbuja({ya_no_aparecen:[{anterior:row}]})),/cancelad/i);
+});
+test('burbuja: varios cambios y avisos conservan límites, diferencias y estado parcial',()=>{
+    const r=burbuja({estado:'parcial',nuevas:[{actual:row},{actual:row},{actual:row}],ya_no_aparecen:[{anterior:row}],ambiguas:[{}],advertencias:[{}]});
+    assert.equal(r.casos.length,3);assert.equal(r.restantes,1);assert.match(r.titulo,/4 cambios/);
+    assert.deepEqual(r.avisos,['No pude revisar todo el Libro.','1 caso por aclarar.','1 dato por revisar.']);
+    assert.equal(burbuja({estado:'sin_cambios'}).detalle,'Esto no compara con Proyecto H.');
+});
+test('burbuja: usa la clasificación real en una sola franja y texto seguro en el DOM',async()=>{
+    const payload='<img src=x onerror=alert(1)>',r=res({modificadas:[{actual:row,cambios:[{campo:'notas_importantes',antes:[],ahora:[payload]}]}]});
+    const h=interfaz(async()=>r),P=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=P;h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const franja=h.nodos().find(n=>n.className==='haku-libro-auto__prioridades');assert.equal(franja.children.length,4);
+    const grupos=P.clasificar(r).grupos;
+    assert.deepEqual(franja.children.map(n=>n.children[1].textContent),Object.values(grupos).map(g=>String(g.length)));
+    assert.deepEqual(franja.children.map(n=>n.children[0].textContent),['Hoy','Mañana','Próximos','Info']);
+    const nota=h.nodos().find(n=>n.textContent.includes(payload));assert.ok(nota);assert.equal(nota.innerHTML,undefined);
+    assert.doesNotMatch(h.nodos().map(n=>n.textContent).join(' '),/🔴|🟠|🟡|🟢|Abre el informe para ver qué datos/);
 });

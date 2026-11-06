@@ -12,7 +12,9 @@ Google entrega el archivo mediante `cargarDesdeGoogle()` para conservar el orige
 
 ETAPA 2 expone `obtenerResultado()` y `mostrarResultado(resultado)`. Manual y automático usan la misma instancia de caché. Si hay una comparación antigua en vuelo, la nueva espera su finalización y después obtiene la generación vigente; no hay paralelismo de comparaciones. El controlador descarta resultados y errores obsoletos y acepta una sola notificación por generación.
 
-La burbuja contiene un resumen seguro y permite desplegar hasta tres cambios, identificando la reserva y los campos modificados. Cuando hay una consulta o revisión abierta, el aviso no inserta mensajes ni desplaza la conversación; «Seguir con mi consulta» sólo cierra la burbuja. «Ver informe» se habilita al finalizar la consulta, usa el resultado retenido y abre Haku sólo por acción del usuario. Sin consulta abierta, el mensaje final permanece en el chat. Las acciones de informes anteriores quedan desactivadas al cambiar el Libro.
+La burbuja muestra hasta tres reservas, con nombre/cabaña y hasta tres detalles concretos por reserva; indica cuántos quedan en el informe. El diseño aprobado conserva el ancho de 340 px, separadores y botones, con «Hoy / Mañana / Próximos / Info» en una franja de 24 px, sin círculos ni cifras grandes. Los contadores provienen de `clasificar()`; no alteran la clasificación del informe. Claro y oscuro usan la misma estructura.
+
+Cuando hay una consulta o revisión abierta, el aviso no inserta mensajes ni desplaza la conversación; «Seguir con mi consulta» sólo cierra la burbuja. «Ver informe» se habilita al finalizar la consulta, usa el resultado retenido y abre Haku sólo por acción del usuario. Sin consulta abierta, el mensaje final permanece en el chat. Las acciones de informes anteriores quedan desactivadas al cambiar el Libro.
 
 ## Consultas conservadas
 
@@ -22,7 +24,7 @@ Las consultas del Libro, comparación de versiones, comparación mensual de sól
 
 Actualizar el Libro ya no reemplaza las respuestas por «consulta invalidada». Conserva desplegables, selecciones y datos escritos; añade una nota si la consulta usa una versión anterior. Los controles de generación, permisos y confirmación de reservas/pagos siguen activos: conservar una respuesta no permite guardar desde una comparación antigua. Una recarga de página, cierre de sesión o error real de lectura no quedan cubiertos por esta conservación en memoria.
 
-No se muestran contactos, documentos ni valores financieros en la burbuja. Sólo se resumen hasta dos cambios de campos operacionales numéricos o de fechas; los otros remiten al informe. Advertencias y ambigüedades se mantienen separadas. Ausencia no se interpreta como cancelación.
+El detalle distingue fechas (antes → después), notas agregadas/retiradas, cambios de tinaja/horario, servicios agregados/retirados, ocupantes y estados. Los extractos de notas son acotados y ocultan patrones de contacto, documento o monto; los campos de contacto/cobro se describen sin sus valores. El texto del Libro se inserta mediante `textContent`, nunca HTML. Advertencias y ambigüedades se mantienen separadas. Ausencia no se interpreta como cancelación, y una cancelación detectada en el Libro sigue pendiente de confirmación en Proyecto H.
 
 ## Verificación
 
