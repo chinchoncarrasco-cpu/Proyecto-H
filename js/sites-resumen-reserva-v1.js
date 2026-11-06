@@ -493,6 +493,8 @@
 
         colocar("#sites-resumen-reserva-titulo", nombre);
         colocar("[data-reserva-kicker]", `CABAÑA ${identidad.numeroCabana} · ${codigo}`);
+        estado.drawer.querySelector("#sites-resumen-reserva-titulo").title = nombre;
+        estado.drawer.querySelector("[data-reserva-kicker]").title = `CABAÑA ${identidad.numeroCabana} · ${codigo}`;
         colocar("[data-reserva-codigo]", codigo);
         colocar("[data-reserva-estado-operativo]", estadoActual);
         const botonEstado = estado.drawer.querySelector("[data-reserva-estado-operativo]");
