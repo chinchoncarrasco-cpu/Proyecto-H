@@ -4529,6 +4529,7 @@
 
     async function consultar(texto, libro = root.HAIKU_LIBRO_RESERVA_V1, cliente = root.haikuSupabase) {
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
+        if (libro.crearLectura) libro = await libro.crearLectura();
         await libro.listo();
         const estado = libro.estado(), hojas = libro.listarHojas();
         if (!estado.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
@@ -7215,6 +7216,15 @@
         out.append(acciones);
     }
 
+    function avisarVersionAnterior(out) {
+        if (!out || out.querySelector?.('[data-haiku-libro-aviso-version]')) return;
+        const aviso = document.createElement('p');
+        aviso.className = 'haiku-libro-nota';
+        aviso.dataset.haikuLibroAvisoVersion = '1';
+        aviso.textContent = 'Conservé esta consulta. El Libro cambió; antes de guardar, vuelve a comparar con la versión actual.';
+        out.appendChild(aviso);
+    }
+
     async function enviar(texto) {
         ocupado = true;
         const campo = document.getElementById("haiku-asistente-texto"), boton = document.getElementById("haiku-asistente-enviar");
@@ -7229,6 +7239,7 @@
             if (result.q.versiones) renderizarVersiones(out, result);
             else if (result.q.comparar) renderizarComparacion(out, result);
             else renderizarConsultaLibro(out, result);
+            if (result.generacion !== undefined && result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) avisarVersionAnterior(out);
         } catch (error) {
             out.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente";
             out.textContent = error.message || "No pude completar la lectura del Libro.";
@@ -7260,10 +7271,7 @@
     root.addEventListener("click", interceptar, true);
     root.addEventListener("keydown", interceptar, true);
     root.addEventListener("haiku:libro-cambio", () => {
-        document.querySelectorAll('[data-haiku-libro-respuesta="1"]').forEach(el => {
-            el.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente";
-            el.textContent = "Consulta del Libro anterior invalidada: el archivo cambió o se quitó. Vuelve a preguntar.";
-        });
+        document.querySelectorAll('[data-haiku-libro-respuesta="1"]:not(.haiku-asistente-mensaje--usuario)').forEach(avisarVersionAnterior);
     });
 
     const acciones = document.querySelector("#seccion-libro-reserva .libro-reserva-acciones");

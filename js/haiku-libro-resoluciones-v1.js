@@ -193,10 +193,12 @@
             });
             card.append(cabecera,descripcion,resumen,estado,acciones,editor);contenedor.append(card);
             root.addEventListener?.('haiku:libro-cambio',()=>{
-                obsoleto=true;accion.disabled=true;editor.hidden=true;
+                obsoleto=true;accion.disabled=true;
+                const confirmar=editor.querySelector?.('.haiku-ocupacion-boton--principal');
+                if(confirmar)confirmar.disabled=true;
                 card.dataset.ocupacionEstado='obsoleta';badge.textContent='Actualizar informe';
-                descripcion.hidden=true;resumen.hidden=true;estado.hidden=false;accion.hidden=false;acciones.hidden=false;
-                estado.textContent='El Libro cambió. Genera el informe nuevamente antes de continuar.';
+                estado.hidden=false;
+                estado.textContent='Conservé los datos que estabas revisando. El Libro cambió; vuelve a comparar antes de confirmar.';
             },{once:true});
             accion.disabled=true;
             Promise.all([decisiones([r],generacion),alcance]).then(([data,comp])=>{

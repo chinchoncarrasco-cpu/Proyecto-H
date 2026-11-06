@@ -121,6 +121,6 @@ test('informe manual y Ver informe adjuntan el puente con la generación origina
  assert.equal(h.boton('Preparar cambios en Proyecto H'),undefined);
  h.cambiar();for(const f of listeners['haiku:libro-cambio'])f();
  const ultimo=E.mostrarResultado(obtenido);await new Promise(r=>setImmediate(r));
- assert.match(ultimo.querySelector('.haku-libro-pendientes-zona').innerHTML,/El Libro cambió desde este informe/);
+ assert.match(ultimo.querySelector('.haku-libro-pendientes-zona').textContent,/Conservé este informe.*versión nueva/);
  assert.equal(revisiones,1);assert.equal(llamadas,1);
 });

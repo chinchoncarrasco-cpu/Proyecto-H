@@ -915,6 +915,76 @@
         document.head.appendChild(link);
     }
 
+    function leerConsulta(buffer, nombre, tipo, conservar = false) {
+        const copia = buffer.slice(0);
+        const worker = new Worker(`js/supabase-libro-reserva-worker-v1.js${VERSION_QUERY}`);
+        return new Promise((resolve, reject) => {
+            const cancelar = () => terminar(new Error("El Libro cambió durante la consulta. Vuelve a preguntar."));
+            const timer = setTimeout(() => terminar(new Error("La lectura tardó demasiado. Intenta una hoja más pequeña.")), 90000);
+            function terminar(error, value) {
+                clearTimeout(timer);
+                if (!conservar) window.removeEventListener("haiku:libro-cambio", cancelar);
+                worker.terminate();
+                if (error) reject(error); else resolve(value);
+            }
+            if (!conservar) window.addEventListener("haiku:libro-cambio", cancelar, { once: true });
+            worker.onmessage = event => event.data?.ok ? terminar(null, event.data.resultado) : terminar(new Error(event.data?.error || "No se pudo interpretar la hoja."));
+            worker.onerror = () => terminar(new Error("No se pudo iniciar el lector del Libro."));
+            worker.postMessage({ id: 1, tipo, nombreHoja: nombre, nombresHojas: tipo === "huellas" ? nombre : undefined, buffer: copia }, [copia]);
+        });
+    }
+
+    // Una consulta conserva sus bytes y metadatos hasta terminar. No congela el
+    // visor ni la fuente oficial: las escrituras siguen validando la generación viva.
+    async function crearLectura() {
+        let carga;
+        do { carga = cargaLista; await carga; } while (carga !== cargaLista);
+        if (!archivoBuffer || !libroIndice) throw new Error("Carga primero un XLSX en Libro de Reserva.");
+        const actual = archivoBuffer, hojas = [...libroIndice.SheetNames];
+        const estado = {nombre:archivoNombre,generacion:operacionLibro,version:archivoVersion,cargado:true};
+        const persistido = persistenciaConfirmada;
+        // Se encola antes de que una nueva carga pueda reemplazar el par persistido.
+        const anterior = persistenciaPC && persistido ? copiaLocal("leer_anterior") : Promise.resolve(null);
+        // Una consulta sólo del Libro actual no depende del almacenamiento anterior.
+        const anteriorSeguro = anterior.then(registro => ({registro}), error => ({error}));
+        let cola = Promise.resolve();
+        const cache = new Map();
+        const consultar = (nombre, version = "actual", tipo = "semantica") => {
+            const tarea = cola.then(async () => {
+                if (!["semantica", "buscar", "buscar_bove", "indice", "indice_nombres", "huellas"].includes(tipo)) throw new Error("Consulta no válida");
+                if (!["actual", "anterior"].includes(version)) throw new Error("Versión no válida");
+                const key = `${version}:${tipo}:${JSON.stringify(nombre)}`;
+                if (cache.has(key)) return structuredClone(cache.get(key));
+                let buffer = actual;
+                if (version === "anterior") {
+                    if (!persistenciaPC && ["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
+                    if (!persistido) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
+                    const previo = await anteriorSeguro;
+                    if (previo.error) throw previo.error;
+                    buffer = previo.registro?.buffer;
+                    if (!buffer) {
+                        if (["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
+                        throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
+                    }
+                }
+                const resultado = await leerConsulta(buffer, nombre, tipo, true);
+                if (cache.size >= 3) cache.delete(cache.keys().next().value);
+                cache.set(key, resultado);
+                return structuredClone(resultado);
+            });
+            cola = tarea.catch(() => {});
+            return tarea;
+        };
+        return Object.freeze({
+            listo: () => Promise.resolve(), estado: () => ({...estado}), listarHojas: () => [...hojas],
+            consultarHoja: consultar,
+            consultarIndice: (version = "actual") => consultar("", version, "indice_nombres"),
+            consultarHuellas: (version = "actual", nombres = []) => consultar([...nombres], version, "huellas"),
+            buscarHojas: nombre => consultar(nombre, "actual", "buscar"),
+            buscarHojasBove: numero => consultar(numero, "actual", "buscar_bove")
+        });
+    }
+
     function consultarHoja(nombre, version = "actual", tipo = "semantica") {
         if (!["semantica", "buscar", "buscar_bove", "indice", "indice_nombres", "huellas"].includes(tipo)) return Promise.reject(new Error("Consulta no válida"));
         if (!["actual", "anterior"].includes(version)) return Promise.reject(new Error("Versión no válida"));
@@ -932,20 +1002,7 @@
                 if (["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
                 throw new Error("Todavía no hay un Libro anterior. Carga una versión diferente para compararlas.");
             }
-            const copia = (version === "anterior" ? registro.buffer : archivoBuffer).slice(0);
-            const worker = new Worker(`js/supabase-libro-reserva-worker-v1.js${VERSION_QUERY}`);
-            const resultado = await new Promise((resolve, reject) => {
-                const cancelar = () => terminar(new Error("El Libro cambió durante la consulta. Vuelve a preguntar."));
-                const timer = setTimeout(() => terminar(new Error("La lectura tardó demasiado. Intenta una hoja más pequeña.")), 90000);
-                function terminar(error, value) {
-                    clearTimeout(timer); window.removeEventListener("haiku:libro-cambio", cancelar); worker.terminate();
-                    if (error) reject(error); else resolve(value);
-                }
-                window.addEventListener("haiku:libro-cambio", cancelar, { once: true });
-                worker.onmessage = event => event.data?.ok ? terminar(null, event.data.resultado) : terminar(new Error(event.data?.error || "No se pudo interpretar la hoja."));
-                worker.onerror = () => terminar(new Error("No se pudo iniciar el lector del Libro."));
-                worker.postMessage({ id: 1, tipo, nombreHoja: nombre, nombresHojas: tipo === "huellas" ? nombre : undefined, buffer: copia }, [copia]);
-            });
+            const resultado = await leerConsulta(version === "anterior" ? registro.buffer : archivoBuffer, nombre, tipo);
             if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta.");
             if (cacheConsultas.size >= 3) cacheConsultas.delete(cacheConsultas.keys().next().value);
             cacheConsultas.set(key, resultado);
@@ -978,6 +1035,7 @@
             leerCambiosDetectados: async () => persistenciaPC ? await copiaLocal("leer_cambios") : null,
             guardarCambiosDetectados: async registro => persistenciaPC ? await copiaLocal("guardar_cambios", structuredClone(registro)) : registro,
             consultarHoja,
+            crearLectura,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
             buscarHojasBove: numero => consultarHoja(numero, "actual", "buscar_bove"),
             estado: () => ({ nombre: archivoNombre, generacion: operacionLibro, version: archivoVersion, cargado: !!libroIndice })

@@ -7,7 +7,7 @@ const tick=()=>new Promise(r=>setImmediate(r));
 function cargador({pc=true}={}) {
     const store=new Map(),eventos=[],timers=[];let fail=false,invalid=false;
     const el={replaceChildren(){},style:{}};
-    const ctx=vm.createContext({ArrayBuffer,Uint8Array,URL,console:{error(){}},
+    const ctx=vm.createContext({ArrayBuffer,Uint8Array,URL,structuredClone,console:{error(){}},
         document:{readyState:'loading',addEventListener(){},getElementById:()=>el,currentScript:{src:'https://test.invalid/libro.js'}},
         matchMedia:()=>({matches:pc}),dispatchEvent:e=>eventos.push(e),CustomEvent:class {constructor(type,opt){this.type=type;this.detail=opt?.detail;}},
         setTimeout:f=>{timers.push(f);},clearTimeout(){},
@@ -22,6 +22,7 @@ function cargador({pc=true}={}) {
         window.cargarTest=(archivo,restaurado=false,origen='manual')=>(cargaLista=cargarArchivo(archivo,restaurado,origen));
         window.restaurarTest=()=>cargaLista=restaurarLibro();
         window.quitarTest=quitarLibro;
+        window.lecturaTest=crearLectura;
     `;
     const source=fs.readFileSync(require.resolve('../js/supabase-libro-reserva-v1.js'),'utf8');
     vm.runInContext(source.replace(/\}\)\(\);\s*$/,hook+'})();'),ctx);
@@ -59,6 +60,42 @@ test('fallo de persistencia no emite ni reemplaza las copias',async()=>{
 test('quitar invalida el evento diferido; móvil sin anterior no emite',async()=>{
     const h=cargador();await h.cargar([1]);await h.cargar([2]);await h.ctx.quitarTest();h.flush();assert.equal(h.avisos().length,0);
     const m=cargador({pc:false});await m.cargar([1]);await m.cargar([2]);m.flush();assert.equal(m.avisos().length,0);
+});
+test('lectura aislada mantiene actual/anterior y hojas en cola durante dos actualizaciones',async()=>{
+    const h=cargador();await h.cargar([1]);await h.cargar([2]);
+    const workers=[];
+    h.ctx.Worker=class {constructor(){workers.push(this);}postMessage(data){this.data=data;}terminate(){this.terminado=true;}};
+    const lectura=await h.ctx.lecturaTest(),g=lectura.estado().generacion;
+    const primera=lectura.consultarHoja('Sep26'),segunda=lectura.consultarHoja('Oct26');await tick();
+    assert.equal(new Uint8Array(workers[0].data.buffer)[0],2);
+    await h.cargarGoogle([3]);await h.cargarGoogle([4]);
+    assert.equal(workers[0].terminado,undefined);
+    workers[0].onmessage({data:{ok:true,resultado:{hoja:'Sep26',valor:2}}});
+    assert.equal((await primera).valor,2);await tick();
+    assert.equal(new Uint8Array(workers[1].data.buffer)[0],2);
+    workers[1].onmessage({data:{ok:true,resultado:{hoja:'Oct26',valor:2}}});await segunda;
+    const anterior=lectura.consultarIndice('anterior');await tick();
+    assert.equal(new Uint8Array(workers[2].data.buffer)[0],1);
+    workers[2].onmessage({data:{ok:true,resultado:{nombres:['Sep26']}}});await anterior;
+    assert.equal(lectura.estado().generacion,g);
+    const actual=await h.ctx.lecturaTest();assert.notEqual(actual.estado().generacion,g);
+    const fresca=actual.consultarHoja('Sep26');await tick();
+    assert.equal(new Uint8Array(workers[3].data.buffer)[0],4);
+    workers[3].onmessage({data:{ok:true,resultado:{valor:4}}});assert.equal((await fresca).valor,4);
+});
+test('consulta del lector Haku finaliza con su copia y escrituras antiguas siguen bloqueadas',async()=>{
+    const ctx={HAIKU_LIBRO_SEMANTICA:require('../js/haiku-libro-semantica-v1.js')};
+    vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),ctx);
+    const C=ctx.HAIKU_LIBRO_CONSULTAS;
+    const h=cargador();await h.cargar([1]);
+    let worker;h.ctx.Worker=class {constructor(){worker=this;}postMessage(data){this.data=data;}terminate(){}};
+    const vivo={crearLectura:()=>h.ctx.lecturaTest()};
+    const consulta=C.consultar('Libro Sep26',vivo);
+    await tick();await h.cargarGoogle([2]);
+    worker.onmessage({data:{ok:true,resultado:{reservas:[],aseos:[],espacios:[],anotaciones:[],cobertura:{geometria:true}}}});
+    const resultado=await consulta;assert.equal(resultado.generacion,1);
+    ctx.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:2})};
+    await assert.rejects(C.prepararIncorporacion(resultado),/Libro cambió/);
 });
 const evento=g=>({generacion:g,carga_manual:true,tenia_anterior:true});
 const eventoGoogle=g=>({generacion:g,carga_manual:false,carga_automatica:true,origen:'google',tenia_anterior:true});
@@ -146,4 +183,20 @@ test('error obsoleto no se notifica; error vigente es breve y permite una carga 
     h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
     const fallo=interfaz(async()=>{throw Error('detalle técnico secreto');});fallo.emitir('haiku:libro-version-cargada',evento(2));await tick();
     assert.match(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/No pude completar/);assert.doesNotMatch(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/secreto/);
+});
+test('aviso en segundo plano conserva conversación, borrador y posición y espera al terminar para abrir',async()=>{
+    const h=interfaz(async()=>res({nuevas:[{actual:row}]}));let ocupado=true;
+    h.window.HAIKU_ASISTENTE.procesando=()=>ocupado;
+    const mensajes=h.ids['haiku-asistente-mensajes'];mensajes.scrollTop=37;
+    h.ids['haiku-asistente-texto'].value='Mi consulta pendiente';
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    assert.equal(mensajes.children.length,0);assert.equal(mensajes.scrollTop,37);
+    assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
+    const abrir=h.botones()[0];assert.equal(abrir.disabled,true);
+    abrir.dispatchEvent({type:'click'});assert.equal(h.abierto(),0);
+    ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
+    assert.equal(abrir.disabled,false);
+    const seguir=h.document.body.children[0].children.find(x=>x.textContent==='Seguir con mi consulta');
+    seguir.dispatchEvent({type:'click'});assert.equal(h.document.body.children.length,0);
+    assert.equal(h.abierto(),0);assert.equal(mensajes.scrollTop,37);
 });

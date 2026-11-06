@@ -291,9 +291,10 @@
 
     const entradasHistorial=new WeakMap(),fuentesPorVista=new WeakMap();
     const claveFicha=r=>[normalizar(r?.titular),Number(r?.cabana),r?.fecha_checkin,r?.fecha_checkout].join('|');
-    async function leerLibro(texto) {
-        const libro = root.HAIKU_LIBRO_RESERVA_V1;
+    async function leerLibro(texto, conservarConsulta = false) {
+        let libro = root.HAIKU_LIBRO_RESERVA_V1;
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
+        if (conservarConsulta && libro.crearLectura) libro = await libro.crearLectura();
         await libro.listo();
         const estado = libro.estado();
         if (!estado?.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
@@ -1573,10 +1574,10 @@
         catch (e) { anterior ? manuales.set(itemId, anterior) : manuales.delete(itemId); throw e; }
     }
 
-    async function construir(texto, overrides = new Map(), manuales = new Map()) {
+    async function construir(texto, overrides = new Map(), manuales = new Map(), conservarConsulta = false) {
         const cliente = root.haikuSupabase;
         if (!cliente) throw new Error("No está disponible la conexión con Proyecto H.");
-        return construirPlan(await leerLibro(texto), cliente, texto, overrides, manuales);
+        return construirPlan(await leerLibro(texto, conservarConsulta), cliente, texto, overrides, manuales);
     }
 
     // La comparación mensual consume el mismo plan, con las filas ya leídas
@@ -2729,7 +2730,7 @@
         const campo = document.getElementById("haiku-asistente-texto"), boton = document.getElementById("haiku-asistente-enviar");
         if (campo) { campo.value = ""; campo.disabled = true; campo.dispatchEvent(new Event("input", { bubbles: true })); } if (boton) boton.disabled = true;
         mensaje("usuario", entradasHistorial.get(texto)?.descripcion||texto); const out = mensaje("asistente", "Revisando servicios y separando notas operativas…");
-        try { const resultado = await construir(texto); if (out) renderizar(resultado, out, texto); }
+        try { const resultado = await construir(texto, new Map(), new Map(), true); if (out) renderizar(resultado, out, texto); }
         catch (error) { if (out) out.textContent = error?.message || "No pude revisar los servicios del Libro."; }
         finally { ocupado = false; if (campo) { campo.disabled = false; campo.dispatchEvent(new Event("input", { bubbles: true })); } out?.scrollIntoView?.({ block: "nearest" }); }
     }

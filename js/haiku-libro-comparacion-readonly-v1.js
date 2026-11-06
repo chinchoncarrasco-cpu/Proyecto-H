@@ -215,11 +215,13 @@
             try {
                 periodo = periodoMes(ahora, solicitado);
                 if (!fuente) throw fallo("LIBRO_AUSENTE", "Se requiere un Libro suministrado para comparar.");
-                const consultasHojas = [], wrapped = fuente.libro;
+                const consultasHojas = [];
+                let wrapped = fuente.libro;
                 let hojas, leer;
                 if (wrapped) {
                     if (!["listo", "estado", "listarHojas", "consultarHoja"].every(k => typeof wrapped[k] === "function"))
                         throw fallo("LIBRO_INVALIDO", "La entrada canónica del Libro está incompleta.");
+                    if (wrapped.crearLectura) wrapped = await wrapped.crearLectura();
                     await wrapped.listo();
                     if (!wrapped.estado()?.cargado) throw fallo("LIBRO_AUSENTE", "El Libro no está cargado.");
                     hojas = wrapped.listarHojas();

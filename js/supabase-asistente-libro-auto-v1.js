@@ -56,10 +56,16 @@
         };
     }
     function instalar() {
-        let toast, acciones=[];
+        let toast, estadoConsulta, acciones=[];
+        const consultando = () => root.HAIKU_ASISTENTE?.procesando?.() === true || root.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true || root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true;
+        const consultaVisible = () => consultando() || Boolean(root.document.querySelector?.('#haiku-asistente-mensajes [data-haiku-libro-respuesta="1"], #haiku-asistente-mensajes .haiku-asistente-preview')) || Boolean(root.document.getElementById('haiku-asistente-texto')?.value?.trim());
+        root.document.getElementById('haiku-asistente-texto')?.addEventListener('input',()=>{
+            for (const boton of acciones) if (!boton.informeAnterior) boton.disabled=consultando();
+            if (estadoConsulta && !consultando()) estadoConsulta.textContent='Tu consulta y lo que estabas revisando siguen en Haku.';
+        });
         function limpiar() {
-            toast?.remove();toast=null;
-            for (const boton of acciones) {boton.disabled=true;boton.textContent='Informe de una versión anterior';}
+            toast?.remove();toast=null;estadoConsulta=null;
+            for (const boton of acciones) {boton.informeAnterior=true;boton.disabled=true;boton.textContent='Informe de una versión anterior';}
             acciones=[];
         }
         function mostrar({texto,revision=false,pendiente=false,resultado}) {
@@ -72,12 +78,28 @@
             toast?.remove();toast=doc.createElement('aside');toast.className='haku-libro-auto'+(revision?' haku-libro-auto--revision':'');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');
             const titulo=doc.createElement('strong');titulo.textContent='Haku';toast.appendChild(titulo);
             const contenido=doc.createElement('p');contenido.textContent=texto;toast.appendChild(contenido);
+            const conservarConsulta=consultaVisible();
+            if (conservarConsulta) {
+                const aviso=doc.createElement('p');estadoConsulta=aviso;
+                aviso.textContent=consultando()?'Tu consulta sigue en proceso. Puedes abrir este informe cuando termine.':'Tu consulta y lo que estabas revisando siguen en Haku.';
+                toast.appendChild(aviso);
+            }
+            if (resultado && lista(resultado.nuevas).length+lista(resultado.modificadas).length+lista(resultado.ya_no_aparecen).length>1) {
+                const detalle=doc.createElement('details'), tituloDetalle=doc.createElement('summary');
+                tituloDetalle.textContent='Ver qué cambió';detalle.appendChild(tituloDetalle);
+                const campos={cabana:'cabaña',fecha_checkin:'entrada',fecha_checkout:'salida',noches:'noches',adultos:'adultos',ninos:'niños',mascotas:'mascotas',servicios:'servicios',notas_importantes:'notas',pagos:'pagos'};
+                const cambios=[...lista(resultado.nuevas).map(x=>({tipo:'Agregada',r:x.actual})),...lista(resultado.modificadas).map(x=>({tipo:'Modificada',r:x.actual,campos:lista(x.cambios).map(c=>campos[c.campo]).filter(Boolean)})),...lista(resultado.ya_no_aparecen).map(x=>({tipo:'Ya no aparece',r:x.anterior}))];
+                for (const x of cambios.slice(0,3)) {const p=doc.createElement('p');p.textContent=`${x.tipo}: ${x.r?.titular||'Nombre no indicado'} · CAB ${x.r?.cabana??'—'}${x.campos?.length?' · Cambió: '+[...new Set(x.campos)].join(', '):''}`;detalle.appendChild(p);}
+                if (cambios.length>3) {const p=doc.createElement('p');p.textContent=`Hay ${cambios.length-3} cambios más en el informe.`;detalle.appendChild(p);}
+                toast.appendChild(detalle);
+            }
             let insertado=false,mensajeInforme=null;
             function botonInforme(contenedor) {
                 const boton=doc.createElement('button');boton.type='button';
                 boton.textContent=typeof root.HAIKU_ASISTENTE?.abrir==='function'?'Ver informe':'Abre Haku para ver el informe';
+                boton.disabled=consultando();
                 boton.addEventListener('click',()=>{
-                    if (boton.disabled) return;
+                    if (boton.disabled || consultando()) return;
                     if (!insertado) {root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado(resultado);insertado=true;}
                     root.HAIKU_ASISTENTE?.abrir?.();
                     mensajeInforme?.remove();mensajeInforme=null;
@@ -86,9 +108,10 @@
                 contenedor.appendChild(boton);acciones.push(boton);
             }
             if (resultado) botonInforme(toast);
-            const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent='Cerrar';cerrar.addEventListener('click',()=>{toast?.remove();toast=null;});toast.appendChild(cerrar);
+            const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent=conservarConsulta?'Seguir con mi consulta':'Cerrar';cerrar.addEventListener('click',()=>{toast?.remove();toast=null;});toast.appendChild(cerrar);
             doc.body.appendChild(toast);
-            if (!pendiente) {
+            // Un aviso de fondo no inserta respuestas ni desplaza una consulta abierta.
+            if (!pendiente && !conservarConsulta) {
                 const mensajes=doc.getElementById('haiku-asistente-mensajes');
                 if (mensajes) {
                     const mensaje=doc.createElement('div');mensaje.className='haiku-asistente-mensaje haiku-asistente-mensaje--asistente';mensaje.textContent=texto;

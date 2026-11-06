@@ -3,6 +3,7 @@
     'use strict';
     if (root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1) return;
     const generacionesResultado = new WeakMap();
+    let ocupado = false;
     const normalizar = v => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
         .replace(/^\s*haku\b[\s,;:!¡¿?—-]*/,'').replace(/[¿?¡!.,;:]/g,'').replace(/\s+/g,' ').trim();
     function esConsulta(texto) {
@@ -214,9 +215,11 @@
                 if (g != null && cache?.generacion === g) return cache.resultado;
                 pendienteGeneracion = g; pendienteRevision = rev;
                 pendiente = Promise.resolve().then(comparar).then(resultado => {
-                    if (rev !== revision || g !== generacion()) throw new Error('El Libro cambió durante la comparación. Solicita nuevamente el informe.');
-                    generacionesResultado.set(resultado, g);
-                    if (g != null && ['ok','sin_cambios','sin_linea_base','parcial'].includes(resultado.estado)) cache = {generacion:g,resultado};
+                    const origen = resultado.libro_actual?.generacion ?? g;
+                    generacionesResultado.set(resultado, origen);
+                    // El solicitante termina su lectura; una versión antigua nunca
+                    // se reutiliza como vigente ni habilita las acciones de escritura.
+                    if (rev === revision && origen === generacion() && origen != null && ['ok','sin_cambios','sin_linea_base','parcial'].includes(resultado.estado)) cache = {generacion:origen,resultado};
                     return resultado;
                 });
                 try { return await pendiente; } finally { pendiente = undefined; }
@@ -284,10 +287,10 @@
             const resultado=await root.HAIKU_LIBRO_DIFERENCIAS_V1.compararUltimasVersiones();
             try{
                 const libro=root.HAIKU_LIBRO_RESERVA_V1,g=libro?.estado?.().generacion;
-                if(libro?.leerCambiosDetectados&&libro?.guardarCambiosDetectados){
+                if(libro?.leerCambiosDetectados&&libro?.guardarCambiosDetectados&&resultado.libro_actual?.generacion===g){
                     const previo=await libro.leerCambiosDetectados()||{version:1,cambios:[]};
                     const fusion=fusionarHistorialCambios(previo,resultado,g);
-                    if(JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
+                    if(libro.estado().generacion===g&&JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
                 }
             }catch(error){console.warn('HAIKU · No se pudo conservar el historial local de cambios:',error);}
             return resultado;
@@ -305,6 +308,10 @@
         function adjuntarPendientes(contenedor,resultado) {
             const zona=doc.createElement('div');zona.className='haku-libro-pendientes-zona';
             (contenedor.querySelector?.('.haku-actualizacion-sites__tarjeta')||contenedor).appendChild(zona);
+            if (generacionesResultado.get(resultado) !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) {
+                zona.textContent='Conservé este informe. Llegó una versión nueva del Libro; abre su aviso para revisar los cambios antes de guardarlos.';
+                return zona;
+            }
             const cargar=async revalidar=>{
                 zona.innerHTML='<section class="haku-libro-pendientes"><p>Revisando qué falta guardar en Proyecto H…</p></section>';
                 try{
@@ -399,9 +406,8 @@
             mensajes.scrollTop = mensajes.scrollHeight;
             return el;
         };
-        let ocupado = false;
         async function procesar(texto) {
-            if (ocupado) return;
+            if (ocupado || root.HAIKU_ASISTENTE?.procesando?.()) return;
             ocupado = true;
             let espera;
             try {
@@ -432,7 +438,7 @@
         return true;
     }
     const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado});
+        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
     if (root.document && !instalar()) {
