@@ -16,6 +16,8 @@
     --sites-shell-blue-soft: #e8f2f7;
     --sites-shell-font: Inter, "Segoe UI", Arial, sans-serif;
     --sites-shell-sidebar-width: var(--haiku-sidebar-ancho, 240px);
+    /* Una misma línea bajo el logo, la barra superior y Haku en escritorio. */
+    --sites-shell-header-height: 72px;
 }
 
 body:has(> .sites-shell-topbar) {
@@ -45,7 +47,8 @@ body:has(> .sites-shell-topbar) {
     display: flex;
     align-items: center;
     gap: 11px;
-    height: 91px;
+    width: 100%;
+    height: var(--sites-shell-header-height);
     padding: 0 23px;
     border-bottom: 1px solid #34433e;
 }
@@ -148,7 +151,7 @@ body:has(> .sites-shell-topbar) {
     justify-content: space-between;
     gap: 18px;
     width: calc(100% - var(--sites-shell-sidebar-width));
-    height: 72px;
+    height: var(--sites-shell-header-height);
     margin-left: var(--sites-shell-sidebar-width);
     padding: 0 32px;
     border-bottom: 1px solid var(--sites-shell-line);
