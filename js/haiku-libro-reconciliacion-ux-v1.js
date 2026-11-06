@@ -11,7 +11,7 @@
         const link = document.createElement("link");
         link.id = "haiku-libro-decision-cards-v1";
         link.rel = "stylesheet";
-        link.href = "css/haiku-libro-decision-cards-v1.css?v=3";
+        link.href = "css/haiku-libro-decision-cards-v1.css?v=4";
         document.head.appendChild(link);
     }
 
