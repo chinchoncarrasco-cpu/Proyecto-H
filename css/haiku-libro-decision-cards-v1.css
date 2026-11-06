@@ -420,6 +420,66 @@ html[data-haiku-tema="oscuro"] .haiku-cancelacion-card--detectada {
     display: none !important;
 }
 
+/* Preguntas de comparación: la hoja se carga al abrirlas, después del tema.
+   Cada opción conserva su tono y todos sus textos tienen contraste en oscuro. */
+@media screen {
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-explicacion {
+        background: #1f2b24;
+        border-color: #3e5145;
+        color: #b1c2b7 !important;
+    }
+
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision {
+        background: #1f2b24;
+        border-color: #3e5145;
+        color: #e8efea;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision[data-tipo="misma"] {
+        background: #20392c;
+        border-color: #496b56;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision[data-tipo="estadia"] {
+        background: #1c303e;
+        border-color: #416078;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-decision[data-tipo="independiente"] {
+        background: #34271b;
+        border-color: #745633;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-titulo {
+        color: #e8efea;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista :is(.haiku-reconciliacion-ayuda-efecto, .haiku-reconciliacion-ayuda-lista, .haiku-reconciliacion-ayuda-lista li) {
+        color: #b1c2b7;
+        border-color: #3e5145;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-ayuda-chip {
+        background: #1f2b24;
+        border-color: #496b56;
+        color: #b9e6c9;
+    }
+
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-alerta {
+        background: #34271b;
+        border-color: #745633;
+        color: #f2c58d;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista :is(.haiku-reconciliacion-alerta-icono, .haiku-reconciliacion-alerta-chip) {
+        background: #49351e;
+        border-color: #8e6b3b;
+        color: #f2c58d;
+    }
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista :is(.haiku-reconciliacion-alerta-titulo, .haiku-reconciliacion-alerta-texto, .haiku-reconciliacion-alerta-nota) {
+        color: #f2c58d;
+    }
+
+    /* Este aviso recibe los colores claros mediante estilos en línea. */
+    html[data-haiku-tema="oscuro"] .haiku-asistente-preview-lista .haiku-reconciliacion-recordada {
+        background: #20392c !important;
+        color: #b9e6c9 !important;
+    }
+}
+
 @media (max-width: 700px) {
     .haiku-reconciliacion-alerta {
         grid-template-columns: 24px minmax(0, 1fr);
