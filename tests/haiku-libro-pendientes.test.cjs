@@ -280,8 +280,47 @@ test('un alta histórica que ya existe cancelada se resuelve sin recrearla ni re
     const db=clienteFocal({reserva_estadias:[s]},[]),antes=JSON.stringify(s);
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],db,{generacion:3});
     assert.equal(out.items.length,0);assert.deepEqual(Array.from(out.resueltos),[registro.id]);assert.equal(out.reservas.length,0);
+    assert.equal(out.resueltosDetalle[0].sistema.reserva_id,s.reserva_id);
+    assert.equal(out.resueltosDetalle[0].motivo,'ya_cancelada');
     assert.equal(JSON.stringify(s),antes);
     const duplicada={...s,id:'otra-estadia',reserva_id:'otra-reserva',reservas:{...s.reservas,id:'otra-reserva'}};
     const ambigua=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s,duplicada]},[]),{generacion:3});
     assert.equal(ambigua.items.length,1);assert.equal(ambigua.items[0].accionable,false);
+});
+
+test('una cancelada se reconoce aunque otra persona haya ocupado la misma CAB y fechas',async()=>{
+    const r=libro(),registro={id:'alta-cancelada',tipo:'nueva',actual:r,cambios:[]};
+    const cancelada=filaSistema('cancelada');cancelada.reservas.estado_reserva='cancelada';
+    const ocupante=filaSistema('checked_out',{id:'e2',reserva_id:'r2',reservas:{id:'r2',titular_nombre:'Otra Persona',estado_reserva:'checked_out'}});
+    const rows=[cancelada,ocupante],antes=JSON.stringify(rows),llamadas=[];
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:rows},llamadas),{generacion:3});
+    assert.equal(out.items.length,0);assert.deepEqual(Array.from(out.resueltos),[registro.id]);
+    assert.equal(out.resueltosDetalle[0].sistema.reserva_id,'r1');
+    assert.equal(out.reservas.length,0);
+    assert.equal(context.HAIKU_LIBRO_CONSULTAS.serializarIncorporacion(context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(out.reservas,out.comparacion)).length,0);
+    assert.equal(JSON.stringify(rows),antes);assert.deepEqual(llamadas,['reserva_estadias']);
+});
+
+test('una cancelada no oculta otras estadías de identidad compatible ni conflictos de documento',async()=>{
+    const r=libro(),registro={id:'alta-cancelada',tipo:'nueva',actual:r,cambios:[]};
+    const cancelada=filaSistema('cancelada');cancelada.reservas.estado_reserva='cancelada';
+    const otra=filaSistema('confirmada',{id:'e2',reserva_id:'r2',fecha_salida:'2026-09-21',reservas:{id:'r2',titular_nombre:r.titular,estado_reserva:'confirmada'}});
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[cancelada,otra]},[]),{generacion:3});
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.resueltos.length,0);
+    assert.match(out.items[0].proyecto,/cancelada y otras estadías/);
+    r.rut_documento='12345678-5';cancelada.reservas.titular_numero_documento='11111111-1';
+    const conflicto=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[cancelada,otra]},[]),{generacion:3});
+    assert.equal(conflicto.resueltos.length,0);assert.equal(conflicto.resueltosDetalle.length,0);
+});
+
+test('los pendientes conservan los motivos concretos del plan y las posibles reservas para explicarlos',async()=>{
+    const r=libro({adultos:null}),registro={id:'incompleta',tipo:'nueva',actual:r,cambios:[]};
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[]},[]),{generacion:3});
+    assert.equal(out.items[0].accionable,false);
+    assert.ok(out.items[0].revision.motivos.includes('Falta una cantidad válida de adultos.'));
+    const otra=filaSistema('confirmada');otra.reservas.titular_nombre='Otra Persona';otra.reservas.correo_contacto='privado@example.test';
+    const conflicto=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[otra]},[]),{generacion:3});
+    assert.equal(conflicto.items[0].revision.categoria,'modificacion_titular');
+    assert.equal(conflicto.items[0].revision.candidatos[0].titular,'Otra Persona');
+    assert.equal(conflicto.items[0].revision.candidatos[0].correo,undefined);
 });

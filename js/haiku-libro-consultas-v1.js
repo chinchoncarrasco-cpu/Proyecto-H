@@ -2196,9 +2196,16 @@
         prep.snapshot=comparacion.snapshot;prep.meta={...(comparacion.meta||{}),libro:prep.grupos.length,estadias_libro:filas.length};
         return prep;
     }
-    function filaHistoricaPreparable(fila,comparacion){
+    function evaluarFilaHistorial(fila,comparacion){
+        if(!fila)return {accionable:false,revision:{motivos:['No pude leer todos los datos de esta reserva. Revisa su entrada, salida y cabaña en el Libro.'],candidatos:[]}};
         const plan=crearPlanIncorporacion([fila.libro],comparacionPreparacionHistorial([fila],comparacion));
-        return plan.items.some(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria));
+        return {
+            accionable:plan.items.some(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria)),
+            revision:{categoria:fila.categoria,motivos:[...new Set([
+                ...(fila.libro.advertencias||[]),...plan.items.flatMap(x=>x.motivos||[])
+            ])],candidatos:(fila.candidatosDetalle||[]).map(s=>({titular:s.titular,cabana:s.cabana,
+                fecha_checkin:s.fecha_checkin,fecha_checkout:s.fecha_checkout}))}
+        };
     }
     async function revalidarCambiosDetectados(registros,cliente,{generacion}={}){
         const lista=Array.isArray(registros)?registros:[];
@@ -2229,7 +2236,7 @@
         const q={desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,
             incluirServicios:incluyeServicios,serviciosOperativos:incluyeServicios};
         const comparacion=await compararSistema(reservas,cliente,q);
-        const items=[],resueltos=[],filasPreparacion=[],reservasPreparacion=[];
+        const items=[],resueltos=[],resueltosDetalle=[],filasPreparacion=[],reservasPreparacion=[];
         for(let indice=0;indice<entradas.length;indice++){
             const grupo=entradas[indice],resultado=Array.from(comparacion).find(x=>x.libro?._historial_indice===indice)||Array.from(comparacion)[indice];
             for(const registro of grupo.registros){
@@ -2240,14 +2247,24 @@
                         /cancelad|no.?show/.test(S.normalizar(`${s.estado_reserva} ${s.estado_operativo}`)));
                     // "Nueva" es un alta detectada anteriormente en el Libro,
                     // no una orden de recrear una reserva que ya fue cancelada.
-                    if(resultado?.estado==='sin_coincidencia'&&canceladas.length){
-                        if(canceladas.length===1)resueltos.push(registro.id);
+                    // Otra persona puede ocupar la misma CAB y fechas después
+                    // de una cancelación. Eso no vuelve desconocida esta reserva.
+                    // Conservar revisión si también hay una estadía vigente de
+                    // identidad compatible: podría ser una reactivación o duplicado.
+                    const vigentesCompatibles=(comparacion.snapshot?.estadias||[]).filter(s=>identidad(grupo.reserva,s).compatible);
+                    if(canceladas.length&&!vigentesCompatibles.length){
+                        if(canceladas.length===1){
+                            resueltos.push(registro.id);
+                            resueltosDetalle.push({...registro,sistema:canceladas[0],motivo:'ya_cancelada'});
+                        }
                         else items.push({...registro,estado:'revision',accionable:false,
                             proyecto:'Existen varias reservas canceladas con esa identidad y estadía. Revisa cuál corresponde; no se creará otra reserva.'});
                         continue;
                     }
-                    const accionable=resultado?.estado==='sin_coincidencia'&&filaHistoricaPreparable(resultado,comparacion);
-                    items.push({...registro,estado:accionable?'pendiente':'revision',accionable,proyecto:resultado?.estado||'sin coincidencia'});
+                    const evaluacion=evaluarFilaHistorial(resultado,comparacion);
+                    const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable;
+                    items.push({...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
+                        proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'});
                     if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
                     continue;
                 }
@@ -2265,7 +2282,7 @@
                     const canceladas=(comparacion.snapshot?.estadias_todas||[]).filter(s=>
                         mismasFechas(grupo.reserva,s)&&Number(grupo.reserva.cabana)===Number(s.cabana)&&identidad(grupo.reserva,s).compatible&&
                         /cancelad|no.?show/.test(S.normalizar(`${s.estado_reserva} ${s.estado_operativo}`)));
-                    items.push({...registro,estado:'revision',accionable:false,proyecto:canceladas.length===1?
+                    items.push({...registro,estado:'revision',accionable:false,revision:evaluarFilaHistorial(resultado,comparacion).revision,proyecto:canceladas.length===1?
                         'Esta estadía figura cancelada o No Show en Proyecto H. Requiere revisar su estado; no se reactivará ni recibirá servicios automáticamente.':
                         'No se pudo asociar de forma segura'});continue;
                 }
@@ -2277,8 +2294,9 @@
                 if(!pendientes.length){resueltos.push(registro.id);continue;}
                 const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)),pendientes);
                 const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
-                const accionable=pendientes.every(x=>x.accionable)&&filaHistoricaPreparable(fila,comparacion);
-                const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico};
+                const evaluacion=evaluarFilaHistorial(fila,comparacion);
+                const accionable=pendientes.every(x=>x.accionable)&&evaluacion.accionable;
+                const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico,revision:evaluacion.revision};
                 if(accionable)item.preparacion={reservas:[libro],comparacion:comparacionPreparacionHistorial([fila],comparacion),generacion,
                     q:{...q,incluirServicios:false,serviciosOperativos:false}};
                 items.push(item);
@@ -2292,7 +2310,7 @@
         const reservasPrep=[...new Map(reservasPreparacion.map(x=>[firmaReservaHistorial(x),x])).values()];
         const fichasOperativas=new Map(items.filter(x=>x.sistema&&(x.cambios||[]).some(c=>c.campo==='servicios'))
             .map(x=>[firmaReservaHistorial(x.actual),x.actual]));
-        return {items,resueltos,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
+        return {items,resueltos,resueltosDetalle,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
             revisionServicios:{reservas:[...fichasOperativas.values()],generacion},
             q:{...q,incluirServicios:false,serviciosOperativos:false}};
     }
