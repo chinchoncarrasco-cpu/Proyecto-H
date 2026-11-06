@@ -1817,7 +1817,7 @@ test("Bofore multicabin decision maps CAB 2 and CAB 7 to their exact sibling sta
  assert.equal(pagosPlan.length,4);assert.ok(pagosPlan.every(item=>item.categoria==='omitidos'&&item.aprobable!==true));
 });
 
-test('a remembered holder decision is hydrated before preparation and missing decisions cannot open a misleading payment plan',async()=>{
+test('Dejar pendiente permite preparar sin aprobar pagos; una decisión recordada conserva el paso de identidad',async()=>{
  const movimiento=readyPay({codigo_autorizacion:"BOFORE-NUEVO",folio:null,bovtar:null,medio_pago:'credito',monto:210000,
   titular:"Bofore Kebi",cabana:2,fecha_comprobante:'2026-09-17',origen:{hoja:'Sep26',celda:'A3'}});
  const libro=readyBook({titular:"Bofore Kebi",rut_documento:"85660448-9",cabana:2,pagos:[movimiento]});
@@ -1827,8 +1827,11 @@ test('a remembered holder decision is hydrated before preparation and missing de
 
  const sinDecision=renderHarness(null,db);sinDecision.render(resultado);
  await sinDecision.button('Preparar incorporación').events.click();
- assert.match(sinDecision.texts(),/Paso 1: elige la reserva existente/);
- assert.doesNotMatch(sinDecision.texts(),/Confirmar incorporación|Revisar pago/);
+ assert.match(sinDecision.texts(),/Confirmar incorporación/);
+ assert.match(sinDecision.texts(),/La reserva quedó pendiente: este pago no se incorporará/);
+ assert.doesNotMatch(sinDecision.texts(),/Paso 1: elige la reserva existente/);
+ assert.equal(sinDecision.button('Selecciona al menos un elemento listo').disabled,true);
+ assert.equal(sinDecision.out.querySelectorAll('button').filter(b=>/Aprobar este pago|Revisar pago/.test(b.textContent)).length,0);
 
  let aplicaciones=0;
  const ux={aplicar(contenedor){
@@ -1843,6 +1846,78 @@ test('a remembered holder decision is hydrated before preparation and missing de
  assert.match(restaurada.texts(),/Paso 1 de 2 · Actualizar titular y RUT/);
  assert.match(restaurada.texts(),/Bofore Kebi/);
  assert.equal(restaurada.out.querySelectorAll('button').filter(b=>b.textContent==='Aprobar este pago').length,0);
+});
+
+function escenarioDejarPendiente() {
+ const pendiente=readyBook({fecha_checkout:'2026-09-19',pagos:[readyPay()]});
+ const independiente=readyBook({id:'independiente',titular:'Persona Independiente',rut_documento:'12345678-5',cabana:6,
+  pagos:[readyPay({codigo_autorizacion:'INDEPENDIENTE-1',origen:{hoja:'Sep26',celda:'F30'}})]});
+ return {pendiente,independiente,reservas:[pendiente,independiente],rows:[stay(readyBook())]};
+}
+
+for(const cambiar of [false,true]) test(`Dejar pendiente ${cambiar?'tras elegir otra opción':'sin tocar el selector'} permite continuar con otro caso`,async()=>{
+ const f=escenarioDejarPendiente(),db=client(f.rows),comparacion=await Q.compararSistema(f.reservas,db,q);
+ assert.equal(comparacion.grupos.find(g=>g.principal.id===f.pendiente.id).estado,'ambigua');
+ const h=renderHarness(null,db);h.render({reservas:f.reservas,q,comparacion});
+ const select=h.out.querySelector('select');assert.equal(select.options[select.selectedIndex].value,'');
+ if(cambiar) {
+  select.selectedIndex=select.options.findIndex(o=>o.value==='actualizar:e1');assert.ok(select.selectedIndex>0);
+  select.events.change();select.selectedIndex=0;select.events.change();
+ }
+ const escrituras=[];db.rpc=async(name,args)=>{escrituras.push({name,args});return {data:{ok:true}}};
+ await h.button('Preparar incorporación').events.click();
+ assert.match(h.texts(),/Confirmar incorporación/);
+ assert.match(h.texts(),/La reserva quedó pendiente: este pago no se incorporará/);
+ assert.ok(h.button('Continuar con 2 elementos listos'));
+ assert.equal(h.button('Continuar con 2 elementos listos').disabled,false);
+ assert.deepEqual(escrituras,[],'preparar no registra nada');
+ assert.doesNotMatch(h.texts(),/Paso 1: elige la reserva existente/);
+});
+
+test('Dejar pendiente se conserva si Proyecto H coincide al revalidar y sólo el caso independiente llega al writer',async()=>{
+ const f=escenarioDejarPendiente(),db=client(f.rows),comparacion=await Q.compararSistema(f.reservas,db,q);
+ const clave=comparacion.grupos.find(g=>g.principal.id===f.pendiente.id).clave;
+ const decisiones=new Map([[clave,{valor:''}]]),result={reservas:f.reservas,q,comparacion};
+ f.rows[0]=stay(f.pendiente);
+ const plan=await Q.prepararIncorporacion(result,decisiones,new Set(),db);
+ const diferido=plan.items.find(i=>i.pagoLibro===f.pendiente.pagos[0]);
+ assert.equal(diferido.categoria,'pendientes');assert.equal(diferido.payload,null);
+ assert.equal(diferido.aprobable,false);assert.equal(diferido.manualPago,undefined);
+ assert.equal(diferido.seleccionado,false);
+ const operaciones=Q.serializarIncorporacion(plan);
+ assert.equal(operaciones.length,2);
+ assert.deepEqual(operaciones.map(i=>i.tipo),['reserva_nueva','pago']);
+ assert.equal(operaciones[0].reserva.titular_nombre,'Persona Independiente');
+ assert.equal(operaciones[1].argumentos.p_codigo_autorizacion,'INDEPENDIENTE-1');
+ const escrituras=[];db.rpc=async(name,args)=>{escrituras.push({name,args});return {data:{ok:true}}};
+ await Q.confirmarIncorporacion(result,decisiones,new Set(),plan,db);
+ assert.equal(escrituras.length,1);assert.equal(escrituras[0].name,'haiku_incorporar_libro_v1');
+ assert.deepEqual(escrituras[0].args.p_items,operaciones);
+});
+
+test('Dejar pendiente cubre todas las cabañas del grupo y prevalece sobre aprobaciones previas del pago',async()=>{
+ const a=readyBook({pagos:[readyPay({cabana:1})]}),b=readyBook({id:'b2',cabana:2,
+  pagos:[readyPay({cabana:2,origen:{hoja:'Sep26',celda:'F30'}})]});
+ const comp=await compare([a,b],[stay(a),stay(b)]);
+ assert.equal(comp.grupos.length,1);
+ const antes=Q.crearPlanIncorporacion([a,b],comp),aprobados=new Set(antes.items.filter(i=>i.pagoLibro).map(i=>i.id));
+ const plan=Q.crearPlanIncorporacion([a,b],comp,new Map([[comp.grupos[0].clave,{valor:''}]]),aprobados);
+ assert.equal(plan.items.length,3);
+ assert.ok(plan.items.every(i=>i.categoria==='pendientes'&&!i.seleccionado&&i.payload===null));
+ assert.ok(plan.items.filter(i=>i.pagoLibro).every(i=>i.aprobable===false&&!i.manualPago));
+ assert.deepEqual(Q.serializarIncorporacion(plan),[]);
+});
+
+test('un comprobante compartido con una reserva pendiente no se incorpora por partes aunque tuviera aprobación previa',async()=>{
+ const f=escenarioDejarPendiente();
+ f.independiente.pagos[0].codigo_autorizacion=f.pendiente.pagos[0].codigo_autorizacion;
+ const comp=await compare(f.reservas,f.rows),antes=Q.crearPlanIncorporacion(f.reservas,comp);
+ const aprobados=new Set(antes.items.filter(i=>i.pagoLibro).map(i=>i.id));
+ const clave=comp.grupos.find(g=>g.principal.id===f.pendiente.id).clave;
+ const plan=Q.crearPlanIncorporacion(f.reservas,comp,new Map([[clave,{valor:''}]]),aprobados);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'||i.tipo==='pago_actualizar'));
+ assert.ok(plan.items.filter(i=>i.pagoLibro).every(i=>!i.seleccionado&&!i.manualPago&&!i.aprobable));
+ assert.equal(Q.serializarIncorporacion(plan)[0].tipo,'reserva_nueva');
 });
 
 test("Bofore shared card receipt includes the existing 10% penalty and serializes one grouped payment",async()=>{

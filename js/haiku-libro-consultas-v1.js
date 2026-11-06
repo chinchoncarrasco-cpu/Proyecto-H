@@ -3331,10 +3331,16 @@
         // Se conserva aparte para no convertir un cambio de titular/RUT en un
         // falso bloqueo de pagos existentes o de un comprobante conjunto.
         const destinosFinancierosSeguros = new Map();
+        const reservasDejadasPendientes = new Set();
         const usados = new Set();
         for (const g of comp.grupos || []) {
             const d = decisiones.get(g.clave);
-            if (d && !d.valor) { add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null, ['Dejar pendiente: no se incorpora.']); continue; }
+            if (d && !d.valor) {
+                g.items.forEach(x => reservasDejadasPendientes.add(claveReserva(x.libro)));
+                add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null,
+                    ['Dejar pendiente: esta reserva y sus pagos no se incorporarán. Puedes continuar con los demás casos.']);
+                continue;
+            }
             const previa = anterior?.grupos?.find(x => x.clave === g.clave);
             let categoria = g.estado === 'asociada' ? 'asociadas' : g.estado === 'sin_coincidencia' ? 'nuevas' : 'pendientes';
             let destino = null;
@@ -3501,11 +3507,20 @@
             huellaFuentePago(movimiento?.pago, {cabana:movimiento?.reserva?.cabana})].join('|');
         const movimientosAnteriores = new Map((anterior?.pagosDetalle || [])
             .map(movimiento => [claveMovimientoRevalidado(movimiento), movimiento]));
+        const pagosDejadosPendientes = (comp.pagosDetalle || [])
+            .filter(x => reservasDejadasPendientes.has(claveReserva(x.reserva))).map(x => x.pago);
         for (const x of comp.pagosDetalle || []) {
             const p = x.pago, r = x.reserva, destino = destinosFinancieros.get(claveReserva(r));
             const id = idMovimientoIncorporacion(x);
             if (plan.items.some(i => i.id === id)) continue;
             const texto = r.titular + ' · CAB ' + r.cabana + ' · ' + money(p.monto) + ' · ' + (p.concepto || p.tipo_movimiento) + ' · Check-In ' + r.fecha_checkin;
+            if (reservasDejadasPendientes.has(claveReserva(r))) {
+                const item = add('pendientes', id, texto, null,
+                    ['La reserva quedó pendiente: este pago no se incorporará.']);
+                item.reservaPendiente = true;
+                item.aprobable = false;
+                continue;
+            }
             const fuerte = pagoTieneIdentificadorFuerte(p);
             const recalculada = resolucionesPreparacion.get(p);
             const resolucionPago = x.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO ?
@@ -3516,6 +3531,14 @@
                     resolucionPago.evidencia === 'distribucion_persistida' ?
                         ' · El componente ya está representado por un comprobante distribuido confirmado de Proyecto H.' :
                         ' · El pago ya existe en Proyecto H para la reserva elegida y no se incorporará nuevamente.'));
+                continue;
+            }
+            if (fuerte && pagosDejadosPendientes.some(pendiente =>
+                pagoCoincide(p, { ...pendiente, datos_origen: { bovtar: pendiente.bovtar } }))) {
+                const item = add('pendientes', id, texto, null,
+                    ['Este comprobante también aparece en una reserva que dejaste pendiente. Revísalo completo antes de incorporarlo.']);
+                item.reservaPendiente = true;
+                item.aprobable = false;
                 continue;
             }
             const coincidencias = fuerte ? snapshot.pagos.filter(v => pagoCoincide(p,v)) : [];
@@ -3761,6 +3784,8 @@
             if (!item) continue;
             item.pagoLibro = x.pago;
             item.pagoSistema = x.sistema || null;
+            // Una aprobación previa del pago no puede deshacer «Dejar pendiente».
+            if (item.reservaPendiente) continue;
             item.decisionPagoManual = x.decisionPagoManual || null;
             item.resolucionMedio = propuestaMedioPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
@@ -5590,6 +5615,9 @@
                     label.append(elemento("p", "", texto));
                 });
                 select.selectedIndex = Math.max(0, modelo.opciones.findIndex(o => o.valor === decisiones.get(g.clave)?.valor));
+                // La opción visible es una decisión válida incluso sin cambiar el
+                // selector. Se conserva también durante la revalidación del plan.
+                decisiones.set(g.clave, modelo.opciones[select.selectedIndex]);
                 select.addEventListener("change", () => {
                     decisiones.set(g.clave, modelo.opciones[select.selectedIndex]);
                     vista.replaceChildren(avisoDecisionActualizada());
@@ -5608,16 +5636,6 @@
         preparar.type = "button";
         preparar.addEventListener("click", async () => {
             if (preparar.disabled) return;
-            const sinDecision = ambiguas.filter(g => (g.pagos || []).length && !decisiones.get(g.clave)?.valor);
-            if (sinDecision.length) {
-                root.HAIKU_LIBRO_RECONCILIACION_UX_V1?.aplicar?.(preguntas);
-                preguntas?.classList?.add?.("haiku-reconciliacion-abierto");
-                const primera = preguntas?.querySelector?.("select");
-                primera?.focus?.();
-                primera?.scrollIntoView?.({ block:"nearest" });
-                vista.replaceChildren(elemento("p", "", `Paso 1: elige la reserva existente para ${sinDecision.length === 1 ? "este caso" : "estos casos"}. Haku actualizará primero el titular y RUT; recién después habilitará sus pagos.`));
-                return;
-            }
             preparar.disabled = true; preparar.textContent = "Preparando…";
             preparar.setAttribute("aria-busy", "true");
             refrescar.disabled = true;
