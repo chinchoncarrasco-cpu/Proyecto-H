@@ -67,6 +67,8 @@
 
     /* CALENDARIO */
     #seccion-calendario #activar-bloqueo-calendario {
+        /* Centrado como Nueva reserva, descontando el borde inferior de la barra. */
+        top: calc((var(--sites-shell-header-height, 72px) - 1px - 38px) / 2) !important;
         right: 210px !important;
         width: 132px !important;
         min-width: 132px !important;
