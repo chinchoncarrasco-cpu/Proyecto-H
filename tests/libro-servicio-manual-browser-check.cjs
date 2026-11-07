@@ -35,7 +35,7 @@ const server = http.createServer((req, res) => {
                 await page.locator('.haku-libro-servicio-manual').waitFor();
             };
             const hora = async valor => { const el = page.locator('[data-campo-manual="hora"]'); await el.fill(valor); await el.dispatchEvent('change'); };
-            const confirmar = async () => { await page.getByRole('button', { name: 'Confirmar datos y revalidar' }).click(); await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' }); };
+            const confirmar = async () => { await page.getByRole('button', { name: 'Revisar datos' }).click(); await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' }); };
             await abrir('1 HORA DE CORTESIA TINAJA');
             assert.equal(await page.locator('[data-campo-manual="tipo_cobro"]').count(), 0);
             await page.locator('[data-campo-manual="codigo_servicio"]').selectOption('tinajaTonel'); await hora('18:00');

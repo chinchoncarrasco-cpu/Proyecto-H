@@ -349,3 +349,81 @@
         filter: brightness(1.65);
     }
 }
+
+/* Ficha de servicios compartida: Figma uj4bWbbpOC14p4Bm4rjTdF / 5:214.
+   Acotada a servicios; no altera las fichas de aprobación de pagos. */
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel {
+    --servicio-campo: #f3f8f5;
+    --servicio-inactivo: #dcebe4;
+    box-sizing: border-box;
+    width: 100%; margin: 8px 0 0; min-width: 0;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel [hidden] { display: none !important; }
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-contenido {
+    gap: 8px; padding: 12px 12px 8px;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera { gap: 3px; }
+.haku-servicio-compacto .haku-servicio-compacto__titulo {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera h3 {
+    font-size: 15px; line-height: 20px; font-weight: 600; min-width: 0;
+}
+.haku-servicio-compacto .haku-servicio-compacto__cabana {
+    flex: 0 0 auto; color: var(--manual-verde); font-size: 10px; line-height: 15px; font-weight: 500;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera .haku-servicio-compacto__titular {
+    font-size: 12px; line-height: 17px; color: var(--manual-texto);
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-caption {
+    font-size: 10px; line-height: 15px;
+}
+.haku-servicio-compacto .haku-servicio-compacto__resumen {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px;
+    padding: 8px 0; border-block: 1px solid var(--manual-borde);
+}
+.haku-servicio-compacto .haku-servicio-compacto__resumen strong {
+    font-size: 12px; line-height: 17px; font-weight: 500; color: var(--manual-texto);
+}
+.haku-servicio-compacto :is(.haku-servicio-compacto__importe, .haku-servicio-compacto__cobro) { text-align: right; }
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas {
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+}
+.haku-servicio-compacto .haiku-manual-dos-columnas > :is(:only-child, :has(select)) { grid-column: 1 / -1; }
+.haku-servicio-compacto .haiku-manual-dos-columnas:empty { display: none; }
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo {
+    gap: 6px; font-size: 12px; line-height: 17px; font-weight: 500;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input,select),
+.haku-servicio-compacto .haku-servicio-compacto__valor-fecha {
+    height: 36px; box-sizing: border-box; padding: 8px 10px; background-color: var(--servicio-campo);
+    border: 1px solid var(--manual-borde); border-radius: 6px; color: var(--manual-texto);
+    font-size: 11px; line-height: 18px; font-weight: 400; margin: 0;
+}
+.haku-servicio-compacto .haku-servicio-compacto__fecha-confirmada { display: grid; gap: 6px; }
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel :is(input[type="date"], .haku-servicio-compacto__valor-fecha) {
+    background-image: url('../assets/icons/haku-pagos-manual/servicio-fecha.svg');
+    background-position: right 10px center; background-size: 16px 16px; background-repeat: no-repeat;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel input[type="date"]::-webkit-calendar-picker-indicator {
+    width: 16px; height: 16px; opacity: 0;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie {
+    grid-template-columns: minmax(64px, .8fr) minmax(0, 2.2fr); gap: 8px;
+    margin: 0 12px; padding: 8px 0 0;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-incorporacion-manual-accion {
+    min-height: 34px; padding: 8px 10px; font-weight: 500; line-height: 16px; white-space: nowrap;
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-secundario { background: transparent; }
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-primario:disabled {
+    opacity: 1; background: var(--servicio-inactivo); border-color: var(--servicio-inactivo); color: var(--manual-muted);
+}
+.haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haku-servicio-compacto__ayuda { margin: 8px 12px 12px; }
+html[data-haiku-tema="oscuro"] .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel {
+    --servicio-campo: #1f2b24;
+    --servicio-inactivo: #234a3d;
+}
+@container (max-width: 260px) {
+    .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas { grid-template-columns: minmax(0, 1fr); }
+}

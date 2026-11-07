@@ -57,8 +57,8 @@ const server=http.createServer((req,res)=>{
             await panel.getByRole('button',{name:'Cancelar',exact:true}).click();
             assert.equal(await panel.count(),0);assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
             await page.evaluate(()=>abrirManualHistorial());
-            await panel.getByRole('button',{name:'Confirmar datos y revalidar',exact:true}).click();
-            const incorporar=out.getByRole('button',{name:'Incorporar este servicio',exact:true});await incorporar.waitFor();
+            await panel.getByRole('button',{name:'Revisar datos',exact:true}).click();
+            const incorporar=out.getByRole('button',{name:'Agregar servicio',exact:true});await incorporar.waitFor();
             assert.doesNotMatch(await out.innerText(),/Interpretación operativa|DEJAR BATAS/);
             assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
             assert.equal(await page.locator('details.haku-actualizacion-sites__pendiente').evaluate(el=>el.open),true);

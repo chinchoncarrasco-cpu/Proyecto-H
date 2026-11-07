@@ -18,7 +18,7 @@ test('aprobación directa abre sólo el formulario del servicio sin comparación
     const e=casoManual();await e.abrir();
     assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,1);
     assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Reglas de lectura|DEJAR BATAS|Seleccionados:/);
-    assert.match(e.out.textContent,/Aprobación manual · Jacuzzi|Inicio 18:00/);
+    assert.match(e.out.textContent,/Jacuzzi.*18:00–19:00/);
     assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length,0);
     assert.equal(e.state.escrituras.length,0);
     await e.out.querySelectorAll('button').find(b=>b.textContent==='Cancelar').listeners.click();
@@ -27,8 +27,8 @@ test('aprobación directa abre sólo el formulario del servicio sin comparación
 });
 test('revalidar la tarjeta directa selecciona sólo ese servicio y conserva la confirmación final',async()=>{
     const e=casoManual();await e.abrir();
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
-    assert.match(e.out.textContent,/Incorporar este servicio/);assert.doesNotMatch(e.out.textContent,/Interpretación operativa|DEJAR BATAS/);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
+    assert.match(e.out.textContent,/Agregar servicio/);assert.doesNotMatch(e.out.textContent,/Interpretación operativa|DEJAR BATAS/);
     assert.equal(e.state.escrituras.length,0);assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length,1);
     e.guard();let confirma=false;e.c.confirm=()=>confirma;
     const click=async()=>{
@@ -49,13 +49,13 @@ test('varios servicios pendientes ofrecen elección breve y sólo abren el elegi
     const elegir=e.out.querySelectorAll('button').find(b=>b.textContent.includes('Jacuzzi'));
     await elegir.listeners.click();await new Promise(r=>setTimeout(r,10));
     assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,1);
-    assert.match(e.out.textContent,/Aprobación manual · (Tinaja )?Jacuzzi/);assert.equal(e.state.escrituras.length,0);
+    assert.match(e.out.textContent,/Jacuzzi.*18:00–19:00/);assert.equal(e.state.escrituras.length,0);
 });
 test('aprobación directa conserva permisos y duplicados; otra generación no invalida datos vigentes',async()=>{
     const sinRol=casoManual();sinRol.c.haikuSesion.roles=[];await assert.rejects(sinRol.abrir(),/administrador/);
     const cambiado=casoManual();await cambiado.abrir();cambiado.state.generacion++;
-    await cambiado.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
-    assert.match(cambiado.out.textContent,/Incorporar este servicio/);assert.equal(cambiado.state.escrituras.length,0);
+    await cambiado.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
+    assert.match(cambiado.out.textContent,/Agregar servicio/);assert.equal(cambiado.state.escrituras.length,0);
     const e=casoManual(),est=e.state.db.reserva_estadias[0];
     e.state.db.servicios.push({id:'ya-creado',reserva_id:est.reserva_id,estadia_id:est.id,
         fecha_servicio:e.r.fecha_checkin,hora_inicio:'18:00',hora_fin:'19:00',personas:2,cantidad:1,
@@ -107,8 +107,8 @@ test('confirmación del flujo focal funciona sin una consulta de servicios anter
 test('actualizaciones ajenas antes de abrir, confirmar y guardar conservan la aprobación y auditan la versión vigente',async()=>{
     const e=casoManual();e.state.generacion=2;await e.abrir();
     e.state.generacion=3;e.state.reservas[1].texto_original+=' nueva nota';
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
-    assert.match(e.out.textContent,/Incorporar este servicio/);assert.equal(e.state.escrituras.length,0);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
+    assert.match(e.out.textContent,/Agregar servicio/);assert.equal(e.state.escrituras.length,0);
     e.state.generacion=4;e.guard();
     const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
     e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
@@ -126,9 +126,9 @@ test('una actualización durante la lectura usa su copia coherente y relee al co
             return {reservas};
         }};
     };
-    await e.abrir();assert.match(e.out.textContent,/Aprobación manual · (Tinaja )?Jacuzzi/);
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
-    assert.match(e.out.textContent,/Incorporar este servicio/);assert.equal(lecturas,3);assert.equal(e.state.escrituras.length,0);
+    await e.abrir();assert.match(e.out.textContent,/Jacuzzi.*18:00–19:00/);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
+    assert.match(e.out.textContent,/Agregar servicio/);assert.equal(lecturas,3);assert.equal(e.state.escrituras.length,0);
 });
 test('si cambió esa prestación conserva formulario y fecha escrita, pero no guarda la evidencia antigua',async()=>{
     const e=casoManual();e.r.noches=2;e.r.fecha_checkout='2026-10-12';e.state.db.reserva_estadias[0].fecha_salida='2026-10-12';
@@ -138,7 +138,7 @@ test('si cambió esa prestación conserva formulario y fecha escrita, pero no gu
     if(cobro){cobro.value='normal';cobro.listeners.change();}
     const panel=e.out.querySelector('.haku-libro-servicio-manual');
     e.r.servicios[0].hora='19:00';e.r.servicios[0].texto_original='19hrs jacuzzi';e.state.generacion++;
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
     assert.equal(e.out.querySelector('.haku-libro-servicio-manual'),panel);
     assert.equal(e.out.querySelectorAll('input').find(x=>x.dataset.campoManual==='fecha').value,'2026-10-11');
     assert.match(e.out.textContent,/evidencia o el destino cambiaron/);assert.equal(e.state.escrituras.length,0);
@@ -147,12 +147,12 @@ test('después de resolver, cambio de fecha, cancelación o catálogo impiden gu
     for(const mutar of [e=>e.r.fecha_checkout='2026-10-12',e=>e.state.db.reserva_estadias[0].estado_estadia='cancelada',
         e=>e.state.db.catalogo_servicios.find(x=>x.codigo==='tinajaJacuzzi').activo=false]){
         const e=casoManual();await e.abrir();
-        await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar datos y revalidar').listeners.click();
+        await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
         e.state.generacion++;mutar(e);e.guard();
         const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
         e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
         await new Promise(r=>setTimeout(r,30));assert.equal(e.state.escrituras.length,0);
-        assert.match(e.out.textContent,/Servicio revisado/);
+        assert.match(e.out.textContent,/Agregar servicio/);
     }
 });
 test('Tinaja CORTESIA sin agenda desde Notas es una nota preparable, sin crear prestación ni cargo',async()=>{
