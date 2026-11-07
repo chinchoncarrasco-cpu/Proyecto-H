@@ -57,6 +57,27 @@ test('structured fragments, labels, services and operator codes cannot compete w
   assert.equal(normalizar(`${dato} // David Sanchez`).reservas[0]?.titular,'David Sanchez',dato);
  }
 });
+test('WALK IN es un canal, con espacios o guion, antes o después del titular',()=>{
+ for(const canal of ['WALK IN','walk in','Walk-In','WALKIN','WALK   IN']){
+  for(const separador of [' // ',' / ','\n']) for(const partes of [[canal,'Ana Pérez','2 ADL'],['Ana Pérez','2 ADL',canal]]){
+   const texto=partes.join(separador),h=normalizar(texto);
+   assert.equal(h.reservas.length,1,texto);assert.equal(h.reservas[0].titular,'Ana Pérez');
+   assert.equal(h.reservas[0].texto_original,texto);
+  }
+  assert.equal(normalizar(canal).reservas.length,0);
+  const dudosa=normalizar(`Ana Pérez // ${canal} // Juan Soto`);
+  assert.equal(dudosa.reservas.length,0);assert.deepEqual(dudosa.anotaciones[0].titulares_posibles,['Ana Pérez','Juan Soto']);
+ }
+ assert.equal(normalizar('Walk Inés // 2 ADL').reservas[0]?.titular,'Walk Inés');
+});
+test('entregado más un insumo sigue siendo una nota, sin perder al huésped',()=>{
+ for(const nota of ['Entregado Sacacorcho','entregado SACACORCHO','ENTREGADAS BATAS','ENTREGADO CARBON','ENTREGADAS TENAZAS','entregada llave','se le entrega de leña']){
+  for(const texto of [`Ana Pérez // 2 ADL // ${nota}`,`${nota}\nAna Pérez\n1 noche`]){
+   const h=normalizar(texto);assert.equal(h.reservas[0]?.titular,'Ana Pérez',texto);assert.equal(h.reservas[0].texto_original,texto);
+  }
+  assert.equal(normalizar(nota).reservas.length,0,nota);
+ }
+});
 test('two plausible humans are ambiguous regardless of order or contact position; displaced anchor retains warning',()=>{
  for(const texto of ['Ana Pérez // Juan Soto','Juan Soto // Ana Pérez','Ana Pérez // +56 9 1234 5678 // Juan Soto','SOLICITA FACTURA // Ana Pérez // Juan Soto // 1 noche']){
   for(const desplazada of [false,true]){const h=S.normalizarHoja(hoja(texto,desplazada),'Sep26');assert.equal(h.reservas.length,0);assert.match(h.advertencias.join(' '),/varios posibles titulares/);assert.ok(h.anotaciones.some(a=>a.texto_original===texto));}
