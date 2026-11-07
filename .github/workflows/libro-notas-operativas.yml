@@ -12,6 +12,8 @@ on:
       - "tests/libro-cortesia-confirmacion-directa.test.cjs"
       - "js/haiku-libro-confirm-cancel-fix-v1.js"
       - "tests/libro-servicio-confirmacion-unica.test.cjs"
+      - "tests/libro-personas-adultos.test.cjs"
+      - "tests/libro-resoluciones-ocupacion.test.cjs"
       - ".github/workflows/libro-notas-operativas.yml"
 
 permissions:
@@ -30,6 +32,8 @@ jobs:
           node-version: 24
       - name: Notas, identidad, horarios, cobro y reservas del Libro
         run: node --test tests/libro-notas-insumos-tinaja.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-servicios-clasificador-canonico.test.cjs tests/libro-servicios-letra-amarilla.test.cjs tests/libro-servicios-fechas.test.cjs tests/libro-fullday-titular-mismo-fragmento.test.cjs tests/libro-semantica.test.cjs tests/libro-aprobacion-admin.test.cjs tests/libro-tinaja-reemplazo.test.cjs tests/libro-tinaja-cambio-color.test.cjs tests/haiku-servicios-idempotencia.test.cjs
+      - name: Ocupación del Libro, huéspedes y adultos
+        run: node --test tests/libro-personas-adultos.test.cjs tests/libro-resoluciones-ocupacion.test.cjs tests/libro-fullday-tarifa-adl.test.cjs
       - name: Confirmación de cortesía sin altas duplicadas ni revisión repetida
         run: node --test tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-cortesia-confirmacion-directa.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicio-manual-compacto.test.cjs tests/haku-asistente-servicios-cortesia.test.cjs tests/haku-asistente-servicios-cortesia-rpc.test.cjs
       - name: Dependencias aisladas de prueba

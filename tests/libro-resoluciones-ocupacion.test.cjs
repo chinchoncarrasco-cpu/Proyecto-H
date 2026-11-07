@@ -42,6 +42,24 @@ test('sin ocupación: revisión inline visible y no incorporable',async()=>{
  assert.ok(h.boton('Completar ocupación'));assert.match(h.texto(),/Por completar/);
  assert.equal(h.Q.serializarIncorporacion(await preparar(h,[r()])).length,0);
 });
+test('huéspedes en el Libro evitan completar ocupación; sin cantidad conserva el formulario',async()=>{
+ for(const [texto,necesita] of [['2 huéspedes + 1 mascota',false],['ocupación por confirmar',true]]){
+  const h=entorno(),hoja={celdas:[{r:1,c:2,valor:'2 oct',fechaISO:'2026-10-02'},
+   {r:1,c:6,valor:'3 oct',fechaISO:'2026-10-03'},{r:1,c:10,valor:'4 oct',fechaISO:'2026-10-04'},
+   {r:2,c:0,valor:'cabaña 1'},{r:2,c:2,valor:`Persona Ejemplo // ${texto} // 1 noche`,estiloId:0},
+   {r:24,c:2,valor:'Pagos de arriendos de hoy'}],
+   combinaciones:[{s:{r:2,c:2},e:{r:2,c:4}}],estilos:[{fill:{fgColor:{rgb:'FFB4A7D6'}}}]};
+  const [reserva]=S.normalizarHoja(hoja,'Oct26').reservas;
+  h.R.adjuntar(h.out,[reserva],1);await tick();
+  assert.equal(Boolean(h.boton('Completar ocupación')),necesita,texto);
+  if(!necesita){
+   const items=h.Q.serializarIncorporacion(await preparar(h,[reserva]));
+   assert.equal(items.length,1);assert.equal(items[0].estadias[0].datos.adultos,2);
+   assert.equal(items[0].estadias[0].datos.mascotas,1);assert.equal(h.reads(),0);
+  }
+  assert.equal(h.writes(),0);
+ }
+});
 test('confirmar 2/0/0 habilita preparación efectiva sin mutar origen',async()=>{
  const h=entorno(),a=r(),before=JSON.stringify(a);await h.R.confirmar(a,{adultos:2,ninos:0,mascotas:0},1);
  const p=await preparar(h,[a]),items=h.Q.serializarIncorporacion(p);

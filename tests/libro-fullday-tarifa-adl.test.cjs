@@ -52,8 +52,8 @@ for (const [adl,ninos,total] of [[2,0,120000],[3,0,180000],[4,0,240000],[2,1,120
     }
   });
 }
-test('ADL ambiguos, decimales, negativos y solo total de huéspedes no generan tarifa', async () => {
-  for(const texto of ['2 ADL + 3 ADL','2.5 ADL','-2 ADL','3 huéspedes','2 PAX']) {
+test('ADL ambiguos, decimales, negativos y totales con niños sin desglose no generan tarifa', async () => {
+  for(const texto of ['2 ADL + 3 ADL','2.5 ADL','-2 ADL','3 huéspedes incluidos 1 niño','2 PAX']) {
     const r=leer(texto), p=await plan(r), item=p.items.find(x=>x.categoria==='nuevas' || x.categoria==='pendientes');
     assert.equal(item.seleccionado,false,texto);
     assert.deepEqual(Q.serializarIncorporacion(p),[],texto);

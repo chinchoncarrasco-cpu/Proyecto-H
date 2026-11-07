@@ -24,7 +24,10 @@ for(const [texto,adultos,ninos] of [
  ['3 personas',3,null],['2 personas',2,null],['1 persona',1,null],[' 3 PERSONAS ',3,null],['3personas',3,null],
  ['3 personas // 3 PERSONAS',3,null],['2 personas + 1 niño',2,1],['2 personas // 1 niño',2,1],
  ['3 personas // 2 ADL + 1 niño',2,1],['2 adultos // 3 personas',2,null],
- ['2 personas + 1 mascota',2,null]
+ ['2 personas + 1 mascota',2,null],
+ ['2 huéspedes',2,null],['1 huésped',1,null],['2 HUESPEDES',2,null],['2huéspedes + 1 mascota',2,null],
+ ['2 huéspedes + 1 niño',2,1],['2 huéspedes // 2 personas',2,null],
+ ['3 huéspedes // 2 ADL + 1 niño',2,1],['2 adultos // 3 huéspedes',2,null]
 ])test(`ocupación del Libro: ${texto}`,()=>{
  const r=leer(texto);assert.equal(r.adultos,adultos);assert.equal(r.ninos,ninos);
  assert.ok(r.texto_original.includes(texto));
@@ -34,7 +37,9 @@ for(const texto of [
  '2 o 3 personas','3 personas por confirmar','máximo 3 personas','capacidad 3 personas',
  '3 personas adicionales','tinaja para 3 personas','masaje para 2 personas',
  'JACUZZI // 3 personas','TINAJA TONEL // 1 hora // 3 personas','3 personas incluidos 1 niño',
- '3 personas // incluye 1 niño','3 personas // adultos por confirmar','2 PAX','3 huéspedes',
+ '3 personas // incluye 1 niño','3 personas // adultos por confirmar','2 PAX',
+ '0 huéspedes','2.5 huéspedes','2 huéspedes // 3 personas','2 o 3 huéspedes',
+ '3 huéspedes por confirmar','3 huéspedes incluidos 1 niño','tinaja para 2 huéspedes','JACUZZI // 2 huéspedes',
  'tel: +56 9 1234 5678 // 2 noches'
 ])test(`no convierte una cantidad ambigua o de servicio en adultos: ${texto}`,async()=>{
  const r=leer(texto);assert.equal(r.adultos,null);
@@ -60,7 +65,20 @@ test('las dos reservas de una y dos noches llegan incorporables desde el lector 
   [7,3,'2026-10-24','2026-10-25','confirmada'],[10,2,'2026-10-24','2026-10-26','pendiente']]);
  assert.equal(llamadas.length,0);
 });
-for(const [texto,tarifa] of [['2 personas',120000],['3 personas',180000],['2 personas + 1 niño',120000],['1 persona',null]])
+test('huéspedes y mascota llegan a incorporación desde el lector completo sin resolución manual',async()=>{
+ const h=hoja('Pedir rut // 2 huéspedes + 1 mascota // 3 noches // AP // 24-10-2026 // Booking');
+ h.combinaciones=[{s:{r:2,c:2},e:{r:2,c:12}}];
+ const [r]=L.corregirResultado(C.corregirResultado(S.normalizarHoja(h,'Oct26'))).reservas;
+ assert.equal(r.adultos,2);assert.equal(r.mascotas,1);assert.equal(r.noches,3);
+ assert.equal(r.fecha_checkin,'2026-10-24');assert.equal(r.fecha_checkout,'2026-10-27');
+ const db=cliente();db.rpc=async()=>{throw Error('No corresponde escribir ni completar ocupación');};
+ const items=Q.serializarIncorporacion(await Q.prepararIncorporacion({reservas:[r],q:{desde:'2026-10-24',hasta:'2026-10-27'}},new Map(),new Set(),db));
+ assert.equal(items.length,1);assert.equal(items[0].tipo,'reserva_nueva');
+ const estadia=items[0].estadias[0];assert.equal(estadia.datos.adultos,2);assert.equal(estadia.datos.mascotas,1);
+ assert.equal(estadia.resolucion_manual,undefined);
+});
+for(const [texto,tarifa] of [['2 personas',120000],['3 personas',180000],['2 personas + 1 niño',120000],['1 persona',null],
+ ['2 huéspedes + 1 mascota',120000],['3 huéspedes // 2 ADL + 1 niño',120000],['1 huésped',null]])
 test(`Full Day aplica la misma lectura sin cambiar mínimo ni tarifa: ${texto}`,async()=>{
  const r=leer(`FULLDAY // ${texto}`),resultado=T.resolverLibro(r);
  assert.equal(resultado.tarifa,tarifa);assert.equal(resultado.bloqueada,tarifa===null);
