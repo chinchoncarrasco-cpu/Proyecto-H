@@ -10,6 +10,24 @@
     const dinero=x=>x!==null&&x!==undefined&&x!==''&&Number.isSafeInteger(Number(x))&&Number(x)>=0;
     const keys=x=>new Set(lista(x.cambios).map(c=>c.campo));
     const hoja=r=>r?.hoja||r?.coordenadas_origen?.hoja||String(r?.id||'').split('!').slice(0,-1).join('!');
+    function evidenciaCalendario(reserva,data){
+        // Las fechas resueltas desde el texto no acreditan celdas ocupadas.
+        if(reserva.geometria_inequivoca!==true||reserva.geometria_resuelta_texto||reserva.tipo_estadia==='full_day')return null;
+        const dias=lista(reserva.fechas_ocupadas),src=reserva.coordenadas_origen;
+        if(!dias.length||!src?.celda||dias.length!==Number(reserva.noches))return null;
+        const direccion=(r,c)=>{let col='';for(let n=c+1;n>0;n=Math.floor((n-1)/26))col=String.fromCharCode(65+(n-1)%26)+col;return col+(r+1);};
+        const fin=src.merge?.e,libres=lista(data?.espacios).filter(x=>Number(x.cabana)===Number(reserva.cabana)&&
+            x.fecha===reserva.fecha_checkout&&x.estado==='libre_explicito');
+        return {hoja:hoja(reserva),rango:fin?`${src.celda}:${direccion(fin.r,fin.c)}`:src.celda,
+            noches:[...dias],salida:reserva.fecha_checkout,
+            siguiente_libre:libres.length===1?{fecha:libres[0].fecha,celda:libres[0].origen?.celda}:null};
+    }
+    function fraseCalendario(e){
+        if(!e)return '';
+        const dias=e.noches;
+        return `Las celdas cubren ${dias.length===1?`la noche del ${fecha(dias[0])}`:`${dias.length} noches: del ${fecha(dias[0])} al ${fecha(dias.at(-1))}`}`+
+            (e.siguiente_libre?`; el ${fecha(e.siguiente_libre.fecha)} figura «LIBRE».`:'.');
+    }
     function mismaPersona(a,b){
         const S=root.HAIKU_LIBRO_SEMANTICA;
         const doc=x=>S?.documentoCanon?S.documentoCanon(x.rut_documento,x.tipo_documento):texto(x.rut_documento).replace(/[.\s-]/g,'');
@@ -24,7 +42,7 @@
         let lectura;
         try{lectura=await libro.crearLectura();}catch(_){return registros.map(sinFuente);}
         const hojas=[...new Set(registros.filter(x=>x.tipo!=='cancelacion').map(x=>hoja(x.actual||x.anterior)).filter(Boolean))];
-        const disponibles=new Set(lectura.listarHojas()),resultados=new Map(),cancelaciones=new Map();
+        const disponibles=new Set(lectura.listarHojas()),resultados=new Map(),cancelaciones=new Map(),datosHojas=new Map();
         let lote;
         if(typeof lectura.consultarHojas==='function'){
             try{lote=new Map((await lectura.consultarHojas(hojas.filter(h=>disponibles.has(h)))).map(x=>[x.hoja,x]));}
@@ -37,6 +55,7 @@
             try{const data=lote?lote.get(h):await lectura.consultarHoja(h,'actual','semantica');
                 resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
                 cancelaciones.set(h,lista(data?.cancelaciones));
+                datosHojas.set(h,data);
             }catch(_){resultados.set(h,null);}
         }
         const actualizados=registros.map(registro=>{
@@ -52,7 +71,8 @@
             if(candidatos.length!==1)return {...registro,fuente_vigente:{estado:candidatos.length?'ambigua':'no_encontrada'}};
             const actual=structuredClone(candidatos[0]);
             return {...registro,actual,fuente_vigente:{estado:'verificada',generacion:lectura.estado().generacion,
-                actualizada:JSON.stringify(actual)!==JSON.stringify(registro.actual)},
+                actualizada:JSON.stringify(actual)!==JSON.stringify(registro.actual),
+                calendario:evidenciaCalendario(actual,datosHojas.get(hoja(r)))},
                 cambios:lista(registro.cambios).map(c=>({...c,ahora:structuredClone(actual[c.campo])}))};
         });
         // Dos avisos de la misma ficha y la misma versión son un caso. Se
@@ -123,8 +143,12 @@
         if(relevantes.length)contexto.historial=relevantes[0];
         if(s.estado_operativo==='checked_out')contexto.hechos.push('Esta estadía ya terminó.');
         if([...campos].some(k=>fechas.has(k))){
-            if(r.noches_texto!=null&&Number(r.noches_texto)!==Number(r.noches))contexto.avisos.push({codigo:'noches_contradictorias',texto:
-                `El texto dice ${r.noches_texto} noche${Number(r.noches_texto)===1?'':'s'}, pero las fechas del Libro ocupan ${r.noches}. Falta aclarar la salida correcta.`});
+            const calendario=item.fuente_vigente?.estado==='verificada'?item.fuente_vigente.calendario:null;
+            const nochesTexto=r.noches_texto_efectivas??r.noches_texto,frase=fraseCalendario(calendario);
+            if(calendario)contexto.calendario=calendario;
+            if(nochesTexto!=null&&Number(nochesTexto)!==Number(r.noches))contexto.avisos.push({codigo:'noches_contradictorias',texto:
+                `El texto dice ${nochesTexto} noche${Number(nochesTexto)===1?'':'s'}. ${frase||`Las fechas del Libro abarcan ${r.noches} noche${Number(r.noches)===1?'':'s'}.`} Falta aclarar la salida correcta.`});
+            else if(frase)contexto.hechos.push(frase);
             const fin=datos.finanzas;
             const cargos=lista(fin?.cargos).filter(c=>c.estadia_id===s.id&&c.tipo_cargo==='alojamiento'&&c.estado==='activo');
             const noches=new Map(lista(fin?.noches).filter(n=>n.estadia_id===s.id).map(n=>[n.id,n.fecha]));
