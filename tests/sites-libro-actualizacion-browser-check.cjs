@@ -323,9 +323,10 @@ const server = http.createServer((request, response) => {
             window.haikuSesion={usuario:{activo:true},roles:['administrador']};
             const actual={id:'Nov26!X7',titular:'Reserva de continuidad',cabana:5,fecha_checkin:'2026-11-06',fecha_checkout:'2026-11-08',adultos:3};
             window.__pendientesActual={items:[{id:'caso-continuidad',tipo:'modificacion',actual,accionable:true,
+                sistema:{reserva_id:'reserva-continuidad'},
                 cambios:[{campo:'adultos',antes:2,ahora:3,proyecto:2}],preparacion:{reservas:[actual],comparacion:[],generacion:4,q:{}}}],
                 resueltos:[],reservas:[actual],comparacion:[],q:{}};
-            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async x=>x,enriquecer:async x=>x};
+            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async x=>x,enriquecer:async x=>x,fraseHistorial:()=>''};
             window.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion=async(el,scope)=>{
                 window.__preparationScopes.push(structuredClone(scope));el.textContent='Continuidad comprobada';
             };
