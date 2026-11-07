@@ -300,12 +300,49 @@ const server = http.createServer((request, response) => {
         assert.match(textoAvisos,/Versión anterior · Oct26/);assert.match(textoAvisos,/Versión actual · Oct26/);
         assert.equal((textoAvisos.match(/La cantidad de noches escrita no coincide/g)||[]).length,2);
         assert.doesNotMatch(textoAvisos,/Titular no disponible|CAB —|Fechas no determinadas/);
+        await page.waitForFunction(()=>document.querySelectorAll('.haku-libro-pendientes-zona')[
+            document.querySelectorAll('.haku-libro-pendientes-zona').length-1]?.textContent.includes('No quedan cambios pendientes'));
+        assert.doesNotMatch(await page.locator('.haku-actualizacion-sites').last().innerText(),/Llegó una versión nueva del Libro/,
+            'un resultado directo con generación explícita no depende de un WeakMap privado');
         for(const width of [1100,390,320]){
             await page.setViewportSize({width,height:900});
             assert.equal(await avisos.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${width}: avisos sin desbordes`);
             if(process.env.HAKU_AVISOS_SCREENSHOT_DIR){fs.mkdirSync(process.env.HAKU_AVISOS_SCREENSHOT_DIR,{recursive:true});
                 await avisos.screenshot({path:path.join(process.env.HAKU_AVISOS_SCREENSHOT_DIR,`avisos-${width}.png`)});}
         }
+        // Conservar el informe, incluso si el Libro avanzó antes de abrirlo y
+        // otra vez antes de pulsar su acción. La preparación recibe lo vigente.
+        await page.evaluate(()=>{
+            window.__generation=4;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+            const actual={id:'Nov26!X7',titular:'Reserva de continuidad',cabana:5,fecha_checkin:'2026-11-06',fecha_checkout:'2026-11-08',adultos:3};
+            window.__pendientesActual={items:[{id:'caso-continuidad',tipo:'modificacion',actual,accionable:true,
+                cambios:[{campo:'adultos',antes:2,ahora:3,proyecto:2}],preparacion:{reservas:[actual],comparacion:[],generacion:4,q:{}}}],
+                resueltos:[],reservas:[actual],comparacion:[],q:{}};
+            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async x=>x,enriquecer:async x=>x};
+            window.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion=async(el,scope)=>{
+                window.__preparationScopes.push(structuredClone(scope));el.textContent='Continuidad comprobada';
+            };
+            window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'ok',libro_actual:{generacion:3},
+                modificadas:[{actual:{...actual,adultos:2},cambios:[{campo:'adultos',antes:1,ahora:2}]}]});
+            document.getElementById('haiku-asistente-texto').value='Mi consulta sigue aquí';
+        });
+        const conservado=page.locator('.haku-actualizacion-sites').last();
+        await conservado.getByRole('button',{name:'Revisar cambios',exact:true}).click();
+        assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).generacion),4);
+        await conservado.locator('.haku-actualizacion-sites__pendiente > summary').click();
+        await page.evaluate(()=>{
+            __generation=5;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __pendientesActual.items[0].actual.adultos=4;
+            __pendientesActual.items[0].preparacion.generacion=5;
+        });
+        await conservado.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        await page.waitForFunction(()=>__preparationScopes.at(-1).generacion===5);
+        assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).reservas[0].adultos),4);
+        assert.equal(await conservado.locator('.haku-actualizacion-sites__pendiente').getAttribute('open'),'');
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        assert.match(await conservado.innerText(),/Continuidad comprobada/);
+        assert.doesNotMatch(await conservado.innerText(),/Llegó una versión nueva|Genera el informe nuevamente/);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

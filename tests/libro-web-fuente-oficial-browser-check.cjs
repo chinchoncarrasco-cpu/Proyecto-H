@@ -107,6 +107,18 @@ const server = http.createServer((req, res) => {
             assert.equal(await page.evaluate(async () => { __drive.metadata.version = '78';
                 try { await HAIKU_LIBRO_GOOGLE_V1.verificarVigencia(__handle); return 'success'; } catch (e) { return e.code; } }), 'FUENTE_CAMBIADA');
             await page.evaluate(async () => { window.__handle = await HAIKU_LIBRO_GOOGLE_V1.obtenerFuenteVerificada(); });
+            // Verificar o sincronizar los mismos bytes mantiene generación y
+            // consultas: no es una edición de recepción ni otro informe.
+            const estable=await page.evaluate(async()=>{
+                const anterior=HAIKU_LIBRO_RESERVA_V1.estado().generacion;
+                let cambios=0;const contar=()=>cambios++;
+                window.addEventListener('haiku:libro-cambio',contar);
+                window.__handle=await HAIKU_LIBRO_GOOGLE_V1.obtenerFuenteVerificada();
+                await HAIKU_LIBRO_GOOGLE_V1.sincronizar();
+                window.removeEventListener('haiku:libro-cambio',contar);
+                return {anterior,actual:HAIKU_LIBRO_RESERVA_V1.estado().generacion,cambios};
+            });
+            assert.equal(estable.actual,estable.anterior);assert.equal(estable.cambios,0);
             // Solicitud antigua en M0: se cancela; su respuesta tardía no certifica el estado nuevo.
             await page.evaluate(() => { __drive.pauseNext = true; window.__old = HAIKU_LIBRO_GOOGLE_V1.obtenerFuenteVerificada().catch(e => e.code); });
             await page.waitForFunction(() => typeof __drive.release === 'function');
