@@ -97,6 +97,31 @@ test('consulta del lector Haku finaliza con su copia y escrituras antiguas sigue
     ctx.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:2})};
     await assert.rejects(C.prepararIncorporacion(resultado),/Libro cambió/);
 });
+test('lectura agrupada reutiliza hojas entre consultas y una nueva versión invalida ese contexto',async()=>{
+    const h=cargador();await h.cargar([1]);const workers=[];
+    h.ctx.Worker=class {constructor(){workers.push(this);}postMessage(data){this.data=data;}terminate(){}};
+    const lectura=await h.ctx.lecturaTest(),p=lectura.consultarHojas(['Sep26','Oct26','Sep26']);await tick();
+    assert.equal(workers.length,1);assert.equal(workers[0].data.tipo,'semantica_lote');
+    assert.deepEqual(Array.from(workers[0].data.nombresHojas),['Sep26','Oct26']);
+    workers[0].onmessage({data:{ok:true,resultado:[{hoja:'Sep26',valor:1},{hoja:'Oct26',valor:1}]}});
+    const salida=await p;salida[0].valor=99;
+    assert.equal((await lectura.consultarHoja('Sep26')).valor,1);
+    assert.equal((await (await h.ctx.lecturaTest()).consultarHojas(['Oct26','Sep26']))[0].valor,1);
+    assert.equal(workers.length,1,'no repite lectura ni recibe cambios externos sobre su caché');
+    await h.cargarGoogle([2]);const nueva=await h.ctx.lecturaTest();
+    const q=nueva.consultarHojas(['Sep26']);await tick();assert.equal(workers.length,2);
+    assert.equal(new Uint8Array(workers[1].data.buffer)[0],2);
+    workers[1].onmessage({data:{ok:true,resultado:[{hoja:'Sep26',valor:2}]}});assert.equal((await q)[0].valor,2);
+});
+test('un lote en curso conserva su versión y no contamina la caché del Libro recién cargado',async()=>{
+    const h=cargador();await h.cargar([1]);const workers=[];
+    h.ctx.Worker=class {constructor(){workers.push(this);}postMessage(data){this.data=data;}terminate(){}};
+    const lectura=await h.ctx.lecturaTest(),p=lectura.consultarHojas(['Sep26']);await tick();
+    await h.cargarGoogle([2]);workers[0].onmessage({data:{ok:true,resultado:[{hoja:'Sep26',valor:1}]}});
+    assert.equal((await p)[0].valor,1);
+    const q=(await h.ctx.lecturaTest()).consultarHojas(['Sep26']);await tick();assert.equal(workers.length,2);
+    workers[1].onmessage({data:{ok:true,resultado:[{hoja:'Sep26',valor:2}]}});assert.equal((await q)[0].valor,2);
+});
 const evento=g=>({generacion:g,carga_manual:true,tenia_anterior:true});
 const eventoGoogle=g=>({generacion:g,carga_manual:false,carga_automatica:true,origen:'google',tenia_anterior:true});
 test('evento duplicado: una comparación y un aviso final',async()=>{

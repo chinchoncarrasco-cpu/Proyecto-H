@@ -1920,6 +1920,9 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { backgro
     padding: 6px 0; min-height: 0; color: inherit; font-size: .69rem; cursor: pointer;
 }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-explicacion p { margin: 6px 0; }
+.haiku-asistente-panel .haku-pendiente-contexto { border-block: 1px solid var(--haku-border, #3b5145); margin: 7px 0; padding: 3px 0; }
+.haiku-asistente-panel .haku-pendientes-resueltos { border-top: 1px solid var(--haku-border, #3b5145); margin-top: 6px; }
+.haiku-asistente-panel .haku-pendientes-resueltos > summary { cursor: pointer; padding: 9px 10px; font-size: .7rem; }
 .haiku-asistente-panel .haku-pendientes-compactos .haku-pendiente-detalle > small {
     display: block; margin-bottom: 4px; color: #1f7650; font-size: .61rem; font-weight: 700;
 }

@@ -1800,7 +1800,11 @@
         const operativa = q.incluirServicios !== false &&
             (q.serviciosOperativos === true || q.incluirFinanzas !== false && q.focal !== true) &&
             typeof motorServicios?.compararReservas === 'function'
-            ? await motorServicios.compararReservas(validas, {desde, hasta}, cliente) : null;
+            ? await motorServicios.compararReservas(validas, {desde, hasta}, cliente, system.map(s=>({
+                id:s.id,reserva_id:s.reserva_id,cabana_numero:s.cabana,titular_nombre:s.titular,
+                titular_numero_documento:s.rut_documento,correo_contacto:s.correo,telefono_contacto:s.telefono,
+                fecha_ingreso:s.fecha_checkin,fecha_salida:s.fecha_checkout,tipo_estadia:s.tipo_estadia,
+                estado_estadia:s.estado_operativo,estado_reserva:s.estado_reserva}))) : null;
         if (operativa && !Array.isArray(operativa.items))
             throw new Error('La revisión de servicios y notas está incompleta. No se concluye que esté conciliada.');
         const porReservaOperativa = new Map(validas.map(r => [r, []]));
@@ -2240,7 +2244,20 @@
         for(let indice=0;indice<entradas.length;indice++){
             const grupo=entradas[indice],resultado=Array.from(comparacion).find(x=>x.libro?._historial_indice===indice)||Array.from(comparacion)[indice];
             for(const registro of grupo.registros){
+                if(registro.fuente_vigente?.estado==='cancelada'){
+                    const compatibles=(comparacion.snapshot?.estadias||[]).filter(s=>identidad(grupo.reserva,s).compatible&&
+                        (s.fecha_checkin===grupo.reserva.fecha_checkin||s.fecha_checkout===grupo.reserva.fecha_checkout));
+                    if(!compatibles.length){
+                        resueltos.push(registro.id);resueltosDetalle.push({...registro,motivo:'cancelada_en_libro'});
+                    }else items.push({...registro,accionable:false,estado:'revision',sistema:compatibles.length===1?compatibles[0]:null});
+                    continue;
+                }
                 if(registro.tipo==='nueva'){
+                    if(registro.fuente_vigente&&registro.fuente_vigente.estado!=='verificada'){
+                        items.push({...registro,estado:'revision',accionable:false,sistema:resultado?.sistema||null,
+                            revision:{motivos:['Falta comprobar esta reserva en el Libro vigente.'],candidatos:[]}});
+                        continue;
+                    }
                     if(resultado?.estado==='asociada'){resueltos.push(registro.id);continue;}
                     const canceladas=(comparacion.snapshot?.estadias_todas||[]).filter(s=>
                         mismasFechas(grupo.reserva,s)&&Number(grupo.reserva.cabana)===Number(s.cabana)&&identidad(grupo.reserva,s).compatible&&
@@ -2262,7 +2279,8 @@
                         continue;
                     }
                     const evaluacion=evaluarFilaHistorial(resultado,comparacion);
-                    const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable;
+                    const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable&&
+                        (!registro.fuente_vigente||registro.fuente_vigente.estado==='verificada');
                     items.push({...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
                         proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'});
                     if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
@@ -2278,6 +2296,11 @@
                 }
                 const sistemaHistorico=resultado?.estado==='asociada'&&resultado.sistema
                     ?resultado.sistema:asociacionHistoricaSegura(registro,comparacion);
+                if(registro.fuente_vigente&&registro.fuente_vigente.estado!=='verificada'){
+                    items.push({...registro,estado:'revision',accionable:false,sistema:sistemaHistorico||null,
+                        revision:{motivos:['Falta comprobar esta reserva en el Libro vigente.'],candidatos:[]}});
+                    continue;
+                }
                 if(!sistemaHistorico){
                     const canceladas=(comparacion.snapshot?.estadias_todas||[]).filter(s=>
                         mismasFechas(grupo.reserva,s)&&Number(grupo.reserva.cabana)===Number(s.cabana)&&identidad(grupo.reserva,s).compatible&&
@@ -2291,7 +2314,11 @@
                     const detalle=detalleCambioHistorico(cambio,grupo.reserva,sistemaHistorico,comparacion,registro.cambios||[]);
                     if(detalle.pendiente)pendientes.push({...cambio,proyecto:detalle.proyecto,accionable:detalle.accionable});
                 }
-                if(!pendientes.length){resueltos.push(registro.id);continue;}
+                if(!pendientes.length){
+                    resueltos.push(registro.id);
+                    if(registro.fuente_vigente?.estado==='verificada')resueltosDetalle.push({...registro,sistema:sistemaHistorico,motivo:'ya_coincide'});
+                    continue;
+                }
                 const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)),pendientes);
                 const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
                 const evaluacion=evaluarFilaHistorial(fila,comparacion);
@@ -2311,6 +2338,7 @@
         const fichasOperativas=new Map(items.filter(x=>x.sistema&&(x.cambios||[]).some(c=>c.campo==='servicios'))
             .map(x=>[firmaReservaHistorial(x.actual),x.actual]));
         return {items,resueltos,resueltosDetalle,total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
+            serviciosContexto:comparacion.serviciosDetalle||[],notasContexto:comparacion.notasDetalle||[],
             revisionServicios:{reservas:[...fichasOperativas.values()],generacion},
             q:{...q,incluirServicios:false,serviciosOperativos:false}};
     }

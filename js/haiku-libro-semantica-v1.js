@@ -265,6 +265,11 @@
         for (const m of sinFechas.matchAll(/\b(\d{1,2})(?:\s*[:.,]\s*(\d{2}))?(?:\s*(am|pm|hra?s?|hs|h))?\b/g)) {
             if (m[2] == null && !m[3]) continue; // Un número suelto no es un horario.
             if (/\d\s*[:.,]\s*$/.test(sinFechas.slice(0, m.index))) continue;
+            // «1HRA TINAJA ... 22:15» declara duración, no inicio a la 01:00.
+            // Se conservan las horas explícitas: «a la 1 HR» y «1:00».
+            if (m[1] === '1' && m[2] == null && /^(?:hra?s?|hs|h)$/.test(m[3] || '') &&
+                !esHoraProgramada(sinFechas,m.index) &&
+                /^\s*(?:de\s+)?(?:tinaja|tonel|jacuzzi|masaje)\b/.test(sinFechas.slice(m.index+m[0].length))) continue;
             let hora = Number(m[1]);
             const minuto = Number(m[2] || 0), meridiano = m[3] === 'am' || m[3] === 'pm';
             if (minuto > 59 || (meridiano ? hora < 1 || hora > 12 : hora > 23)) continue;

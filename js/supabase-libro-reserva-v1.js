@@ -62,6 +62,7 @@
     let persistenciaConfirmada = false;
     let colaConsulta = Promise.resolve();
     const cacheConsultas = new Map();
+    const MAX_CACHE_CONSULTAS = 8;
     let revisionMemoriaVisual = 0;
 
     function copiaLocal(accion, registro) {
@@ -930,7 +931,7 @@
             if (!conservar) window.addEventListener("haiku:libro-cambio", cancelar, { once: true });
             worker.onmessage = event => event.data?.ok ? terminar(null, event.data.resultado) : terminar(new Error(event.data?.error || "No se pudo interpretar la hoja."));
             worker.onerror = () => terminar(new Error("No se pudo iniciar el lector del Libro."));
-            worker.postMessage({ id: 1, tipo, nombreHoja: nombre, nombresHojas: tipo === "huellas" ? nombre : undefined, buffer: copia }, [copia]);
+            worker.postMessage({ id: 1, tipo, nombreHoja: nombre, nombresHojas: ["huellas","semantica_lote"].includes(tipo) ? nombre : undefined, buffer: copia }, [copia]);
         });
     }
 
@@ -949,9 +950,11 @@
         const anteriorSeguro = anterior.then(registro => ({registro}), error => ({error}));
         let cola = Promise.resolve();
         const cache = new Map();
+        const prefijo=`${estado.generacion}:`;
+        for(const [key,value] of cacheConsultas)if(key.startsWith(prefijo+'actual:semantica:'))cache.set(key.slice(prefijo.length),value);
         const consultar = (nombre, version = "actual", tipo = "semantica") => {
             const tarea = cola.then(async () => {
-                if (!["semantica", "buscar", "buscar_bove", "indice", "indice_nombres", "huellas"].includes(tipo)) throw new Error("Consulta no válida");
+                if (!["semantica", "semantica_lote", "buscar", "buscar_bove", "indice", "indice_nombres", "huellas"].includes(tipo)) throw new Error("Consulta no válida");
                 if (!["actual", "anterior"].includes(version)) throw new Error("Versión no válida");
                 const key = `${version}:${tipo}:${JSON.stringify(nombre)}`;
                 if (cache.has(key)) return structuredClone(cache.get(key));
@@ -968,8 +971,16 @@
                     }
                 }
                 const resultado = await leerConsulta(buffer, nombre, tipo, true);
-                if (cache.size >= 3) cache.delete(cache.keys().next().value);
-                cache.set(key, resultado);
+                const guardarCache=(clave,valor,semantica)=>{
+                    if(cache.size>=MAX_CACHE_CONSULTAS&&!cache.has(clave))cache.delete(cache.keys().next().value);
+                    cache.set(clave,valor);
+                    if(version==='actual'&&semantica&&actual===archivoBuffer&&estado.generacion===operacionLibro){
+                        if(cacheConsultas.size>=MAX_CACHE_CONSULTAS&&!cacheConsultas.has(prefijo+clave))cacheConsultas.delete(cacheConsultas.keys().next().value);
+                        cacheConsultas.set(prefijo+clave,valor);
+                    }
+                };
+                if(tipo==='semantica_lote')for(const data of resultado)guardarCache(`${version}:semantica:${JSON.stringify(data.hoja)}`,data,true);
+                else guardarCache(key,resultado,tipo==='semantica');
                 return structuredClone(resultado);
             });
             cola = tarea.catch(() => {});
@@ -978,6 +989,18 @@
         return Object.freeze({
             listo: () => Promise.resolve(), estado: () => ({...estado}), listarHojas: () => [...hojas],
             consultarHoja: consultar,
+            consultarHojas: async nombres => {
+                const seleccion=[...new Set(nombres)],salida=new Map();
+                const faltantes=seleccion.filter(h=>{
+                    const key=`actual:semantica:${JSON.stringify(h)}`;
+                    if(cache.has(key)){salida.set(h,structuredClone(cache.get(key)));return false;}
+                    return true;
+                });
+                for(let i=0;i<faltantes.length;i+=8){
+                    for(const data of await consultar(faltantes.slice(i,i+8),'actual','semantica_lote'))salida.set(data.hoja,data);
+                }
+                return seleccion.map(h=>salida.get(h));
+            },
             consultarIndice: (version = "actual") => consultar("", version, "indice_nombres"),
             consultarHuellas: (version = "actual", nombres = []) => consultar([...nombres], version, "huellas"),
             buscarHojas: nombre => consultar(nombre, "actual", "buscar"),
@@ -1004,7 +1027,7 @@
             }
             const resultado = await leerConsulta(version === "anterior" ? registro.buffer : archivoBuffer, nombre, tipo);
             if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta.");
-            if (cacheConsultas.size >= 3) cacheConsultas.delete(cacheConsultas.keys().next().value);
+            if (cacheConsultas.size >= MAX_CACHE_CONSULTAS) cacheConsultas.delete(cacheConsultas.keys().next().value);
             cacheConsultas.set(key, resultado);
             return structuredClone(resultado);
         });
