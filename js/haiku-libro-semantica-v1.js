@@ -30,9 +30,9 @@
         return protegido.split(/\s*(?:\/+\*\/+|\/+)\s*|\r?\n/).map(x => x.trim())
             .filter(Boolean).map(x => x.replace(/\uE000(\d+)\uE001/g, (_, indice) => tokens[Number(indice)]));
     }
-    // Convención del Libro: un campo de ocupación «N personas» equivale a N
-    // adultos. Un desglose ADL explícito tiene prioridad; nunca sumar el total
-    // otra vez ni tomar capacidades/cantidades de servicios como huéspedes.
+    // Convención del Libro: «N personas» o «N huéspedes» en el campo de
+    // ocupación equivale a N adultos. Un desglose ADL explícito tiene prioridad;
+    // nunca sumar el total otra vez ni tomar capacidades de servicios como huéspedes.
     function adultosPorPersonas(texto) {
         const normal = normalizar(texto);
         if (/\b(?:adl|adlt|adult|adult[oa]s?|aldt)\b/.test(normal) ||
@@ -42,8 +42,8 @@
         for (const campo of separarCampos(texto).map(normalizar)) {
             if (/\b(?:tinajas?|jacuzzi|tonel|masajes?|desayunos?|cenas?)\b/.test(campo)) contextoServicio = true;
             else if (/^(?:\d+\s*noches?\b|full\s*day\b|rut\b|tel(?:efono)?\s*:|correo\s*:)/.test(campo) || /@/.test(campo)) contextoServicio = false;
-            if (contextoServicio || !/\d\s*personas?\b/.test(campo)) continue;
-            const declaracion = campo.match(/^(\d+)\s*personas?(?:\s*(?:\+|y)\s*\d+\s*(?:nin[oa]s?|chld|mascotas?))*\.?$/);
+            if (contextoServicio || !/\d\s*(?:personas?|huesped(?:es)?)\b/.test(campo)) continue;
+            const declaracion = campo.match(/^(\d+)\s*(?:personas?|huesped(?:es)?)(?:\s*(?:\+|y)\s*\d+\s*(?:nin[oa]s?|chld|mascotas?))*\.?$/);
             if (!declaracion) return null;
             const cantidad = Number(declaracion[1]);
             if (!Number.isSafeInteger(cantidad) || cantidad < 1 || cantidad > 32767) return null;
