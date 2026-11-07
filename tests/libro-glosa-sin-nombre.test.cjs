@@ -45,8 +45,14 @@ test('un nombre bancario explícito de un tercero se conserva separado del titul
  assert.equal(h.p.pagador.nombre,'Pagador Distinto');assert.equal(h.libro.reservas[0].titular,'Titular Sintetico');
  assert.equal(h.item.seleccionado,true);sinEscrituras(h);
 });
-test('dos glosas, un nombre parcial y mezcla de medios conservan revisión',async()=>{
- for(const glosa of [numero+' Transf. // 0765432109 Transf.',numero+' Transf. Parcial',numero+' Transf. // Webpay crédito']){
+test('un nombre bancario truncado se conserva literal sin inventar operación ni titular',async()=>{
+ const h=await caso([{glosa:numero+' Transf. Parcial'}]);
+ assert.equal(h.item.seleccionado,true);assert.equal(h.p.pagador.nombre,'Parcial');
+ assert.equal(h.p.evidencia_transferencia.operacion_bancaria,null);
+ assert.equal(h.libro.reservas[0].titular,'Titular Sintetico');sinEscrituras(h);
+});
+test('dos glosas y mezcla de medios conservan revisión',async()=>{
+ for(const glosa of [numero+' Transf. // 0765432109 Transf.',numero+' Transf. // Webpay crédito']){
   const h=await caso([{glosa}]);assert.equal(h.item.seleccionado,false);sinEscrituras(h);
  }
 });

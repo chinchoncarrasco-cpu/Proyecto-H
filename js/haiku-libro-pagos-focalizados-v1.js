@@ -209,21 +209,24 @@
         };
     }
 
-    function instalarProxyLibro() {
-        const original = window.HAIKU_LIBRO_RESERVA_V1;
-        if (!original || original.__pagosFocalizadosProxy) return Boolean(original);
+    function envolverLectura(original, obtenerScope = () => estado.scope) {
+        if (!original || original.__pagosFocalizadosProxy) return original;
 
         const consultarOriginal = original.consultarHoja;
-        if (typeof consultarOriginal !== "function") return false;
+        if (typeof consultarOriginal !== "function") return original;
 
         const proxy = {
             ...original,
             __pagosFocalizadosProxy: true,
             // La comparación mensual programática no hereda la selección transitoria de la UI.
             consultarHojaMensual: (...args) => consultarOriginal(...args),
+            ...(original.crearLectura ? {crearLectura: async (...args) => {
+                const scope = obtenerScope();
+                return envolverLectura(await original.crearLectura(...args), () => scope);
+            }} : {}),
             consultarHoja: async (...args) => {
                 const data = await consultarOriginal(...args);
-                const scope = estado.scope;
+                const scope = obtenerScope();
                 if (!scope || args[1] === "anterior" || !Array.isArray(data?.reservas)) return data;
 
                 return {
@@ -235,7 +238,13 @@
             }
         };
 
-        window.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(proxy);
+        return Object.freeze(proxy);
+    }
+
+    function instalarProxyLibro() {
+        const original = window.HAIKU_LIBRO_RESERVA_V1;
+        if (!original) return false;
+        window.HAIKU_LIBRO_RESERVA_V1 = envolverLectura(original);
         return true;
     }
 

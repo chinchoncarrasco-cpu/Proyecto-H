@@ -1438,9 +1438,13 @@
             return anterior.pago_recibido === true && anterior.estado_pago === 'registrado_en_libro' &&
                 anterior.tipo_movimiento === p.tipo_movimiento && medioLibro(anterior) === medioLibro(p) &&
                 Number(anterior.monto) === Number(p.monto) && anterior.moneda === p.moneda &&
-                anterior.fecha_comprobante === p.fecha_comprobante && anterior.fecha_bloque === p.fecha_bloque &&
-                datos.fecha_bloque === p.fecha_bloque && Number(anterior.cabana) === Number(p.cabana) &&
-                anterior.origen?.hoja === p.origen?.hoja && glosaReciboCanon(anterior.texto_original) === glosa;
+                anterior.fecha_comprobante === p.fecha_comprobante &&
+                // Reagendar la misma reserva mueve el bloque/hoja del Libro,
+                // pero no cambia la recepción del dinero ni el recibo guardado.
+                // Su bloque original debe seguir siendo internamente consistente.
+                !!anterior.fecha_bloque && datos.fecha_bloque === anterior.fecha_bloque &&
+                Number(anterior.cabana) === Number(p.cabana) &&
+                !!anterior.origen?.hoja && glosaReciboCanon(anterior.texto_original) === glosa;
         };
         const reciboDeOtraCabana = (guardado, cabana) => {
             const datos = guardado.datos_origen || {}, id = datos.item_id;

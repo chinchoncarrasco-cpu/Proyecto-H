@@ -1,0 +1,45 @@
+name: Haku lectura y conciliación de pagos
+
+on:
+  pull_request:
+    paths:
+      - "js/haiku-libro-pagos-canon-v1.js"
+      - "js/haiku-libro-lenguaje-natural-v1.js"
+      - "js/haiku-libro-pagos-focalizados-v1.js"
+      - "js/haiku-libro-consultas-v1.js"
+      - "js/haiku-libro-semantica-v1.js"
+      - "tests/libro-pagos-lectura-estable.test.cjs"
+      - "tests/libro-transferencias-bancarias.test.cjs"
+      - "tests/libro-glosa-sin-nombre.test.cjs"
+      - ".github/workflows/libro-pagos-lectura.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pagos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dependencias del lector XLSX con versiones y huellas verificadas
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir -p haku-libro-worker
+          curl --fail --silent --show-error --location --retry 2 https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js -o haku-libro-worker/xlsx.full.min.js
+          curl --fail --silent --show-error --location --retry 2 https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js -o haku-libro-worker/jszip.min.js
+          sha256sum --check <<'SUMS'
+          cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  haku-libro-worker/xlsx.full.min.js
+          acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e  haku-libro-worker/jszip.min.js
+          SUMS
+      - name: Lectura estable, pagos existentes, medios y confirmaciones
+        env:
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: node --test tests/libro-pagos-lectura-estable.test.cjs tests/libro-transferencias-bancarias.test.cjs tests/haiku-libro-pagos-canon.test.cjs tests/haiku-libro-pagos-clasificacion.test.cjs tests/haiku-libro-pagos-focalizados.test.cjs tests/haiku-libro-auto.test.cjs tests/libro-comparacion-readonly.test.cjs tests/libro-pagos-existentes-visibles.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/haiku-libro-pago-snapshot-manual.test.cjs tests/haiku-libro-medio-pago-manual.test.cjs tests/libro-actualizaciones-pagos-flujo.test.cjs tests/libro-semantica.test.cjs tests/libro-penalidad-pago-manual.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-historial-revision-operativa.test.cjs
+      - name: Glosas bancarias e índices de lectura
+        run: node --test tests/libro-glosa-sin-nombre.test.cjs tests/libro-indice-lectura.test.cjs

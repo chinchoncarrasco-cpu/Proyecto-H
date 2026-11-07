@@ -233,6 +233,35 @@ function reciboHistorico(libro, cambios={}) {
    operacion_id:'operacion-historica-sintetica',fecha_bloque:p.fecha_bloque,
    origen_libro:p.origen,item_id:'pago:reserva-historica:'+p.origen.hoja+'!'+p.origen.celda+':'+JSON.stringify(p)},...cambios});
 }
+
+for(const mes of ['Oct26','Sep26']) test('reagendar la misma reserva conserva su transferencia aunque cambie el bloque y la hoja '+mes,async()=>{
+ const anterior=F.leer();anterior.pagos[0].fecha_bloque='2026-09-10';anterior.pagos[0].origen.hoja=mes;
+ const g=reciboHistorico(anterior),h=await comparar([{}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');assert.equal(movimiento(h).sistema.id,g.id);
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));sinEscrituras(h);
+});
+test('recibo reagendado incoherente no oculta un pago ni se cuenta como seguro',async()=>{
+ const g=reciboHistorico(F.leer());g.datos_origen.fecha_bloque='2026-09-10';
+ const h=await comparar([{}],[g]);assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+test('dos filas iguales tras reagendar conservan revisión: el recibo no acredita dos transferencias',async()=>{
+ const anterior=F.leer();anterior.pagos[0].fecha_bloque='2026-09-10';anterior.pagos[0].origen.hoja='Sep26';
+ const h=await comparar([{pagos:[{},{}]}],[reciboHistorico(anterior)]);
+ assert.ok(h.c.pagosDetalle.every(x=>x.estado==='revisar'));sinEscrituras(h);
+});
+for(const glosa of ['0762844834 Transf. COMER','Transf. 0762844834 COMER'])
+ test('glosa bancaria con nombre truncado conserva su evidencia literal '+glosa,async()=>{
+  const h=await comparar([{pagos:[{glosa}]}]);
+  assert.equal(movimiento(h).estado,'nuevo_seguro');
+  assert.equal(h.libro.pagos[0].pagador.nombre,'COMER');
+  assert.equal(h.libro.pagos[0].evidencia_transferencia.glosa_original,glosa);
+  const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+  assert.equal(plan.items.find(i=>i.pagoLibro).categoria,'pagos');sinEscrituras(h);
+ });
+for(const palabra of ['pendiente','BOVE','manager','confirmar']) test('una nota administrativa no es nombre bancario '+palabra,()=>{
+ assert.equal(F.S.evidenciaTransferencia({...F.leer().pagos[0],detalle_bancario:null,texto_original:'0762844834 Transf. '+palabra}).valida,false);
+});
 test('recibo histórico aprobado se reconoce sin operación bancaria y sin preparar otra inserción',async()=>{
  const libro=F.leer(),g=reciboHistorico(libro);
  const h=await comparar([{}],[g]);
