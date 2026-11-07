@@ -176,7 +176,7 @@
         lastFocus=document.activeElement;selected={id:'manual-'+C.uuid(),date,title:'',content_type:'publicacion',format:'Foto',story_kind:null,channels:['facebook','instagram'],workflow_status:'material_pendiente',categories:['redes']};dirty=false;++opening;drawPost();showDialog();
     }
     function fieldOptions(items,value){return Object.entries(items).map(([v,t])=>`<option value="${E(v)}" ${v===value?'selected':''}>${E(t)}</option>`).join('');}
-    function shareURL(){const url=new URL('calendario-redes.html',location.href);url.search='';url.hash=new URLSearchParams({enlace:shareState.token,mes:cursor}).toString();return url.href;}
+    function shareURL(){const url=new URL('https://calendario-editorial-haiku.fulgor.chatgpt.site/');url.search='';url.hash=new URLSearchParams({enlace:shareState.token,mes:cursor}).toString();return url.href;}
     async function openShare(){
         if(!loaded||!api){note('Espera a que termine de cargar el calendario.',true);return;}
         lastFocus=document.activeElement;selected=null;dirty=false;const o=++opening,g=generation;
