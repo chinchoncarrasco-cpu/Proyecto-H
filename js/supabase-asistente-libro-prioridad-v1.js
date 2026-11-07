@@ -16,7 +16,7 @@
         const codigo=typeof aviso.tipo==='string'?aviso.tipo:typeof aviso.codigo==='string'?aviso.codigo:'';
         return detalle||codigo.replace(/_/g,' ')||'Aviso de interpretación sin detalle adicional.';
     }
-    function clasificar(resultado,{fechaActual=hoy(),formatearAviso=detalleAvisoBasico}={}) {
+    function clasificar(resultado,{fechaActual=hoy(),formatearAviso=detalleAvisoBasico,incluirOrigen=false}={}) {
         const base=dia(fechaActual);if(base===null)throw Error('Fecha de referencia no válida.');
         const salida={fechaActual,horizonte:'2–7 días',grupos:Object.fromEntries(grupos.map(k=>[k,[]]))};
         // Sólo referencias explícitas; no vincular por nombre, celda próxima ni continuidad supuesta.
@@ -39,21 +39,22 @@
             return {nivel,razon:`${accion} ${cuando}${nivel===3?' · faltan más de 7 días':''}.`};
         }
         const segmento=(s,version)=>({version,titular:s?.titular||null,cabana:s?.cabana??null,fecha_checkin:s?.fecha_checkin??null,fecha_checkout:s?.fecha_checkout??null,tipo_estadia:s?.tipo_estadia??null});
-        function agregar(tipo,partes,referencia,cambios=[],aviso=null) {
+        function agregar(tipo,partes,referencia,cambios=[],aviso=null,origen=aviso) {
             const segmentos=partes.filter(x=>x[0] && typeof x[0]==='object').map(([s,v])=>({...segmento(s,v),...evaluar(s)}));
             const nivel=segmentos.length?Math.min(...segmentos.map(s=>s.nivel)):3;
             salida.grupos[grupos[nivel]].push({tipo,referencia:typeof referencia==='string'?referencia:null,segmentos,
+                ...(incluirOrigen?{origen}:{}),
                 ...(aviso!=null?{detalleAviso:formatearAviso(aviso),
                     versionAviso:aviso?.version==='anterior'?'Versión anterior':aviso?.version==='actual'?'Versión actual':null}:{}),
                 cambios:[...new Set(lista(cambios).map(c=>etiquetasCambios[c?.campo] || (typeof c?.campo==='string'?c.campo.replace(/_/g,' '):'Otro campo')))],
                 explicacion:segmentos.length?segmentos.filter(s=>s.nivel===nivel).map(s=>`${s.version}: ${s.razon}`).join(' '):
                     aviso!=null?'Este aviso no indica una fecha; aparece en Informativos.':'No hay fechas suficientes para saber cuándo atender este caso.'});
         }
-        for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']]);
-        for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']],null,x.cambios);
-        for(const x of lista(resultado.ya_no_aparecen))agregar('ausencia',[[x.anterior,'Anterior']]);
-        for(const x of lista(resultado.cancelaciones_confirmadas))agregar('cancelacion',[[x.anterior,'Anterior']]);
-        for(const x of lista(resultado.ambiguas))agregar('ambigua',[...lista(x.anteriores).map(s=>[s,'Candidato anterior']),...lista(x.actuales).map(s=>[s,'Candidato actual'])]);
+        for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']],null,[],null,x);
+        for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']],null,x.cambios,null,x);
+        for(const x of lista(resultado.ya_no_aparecen))agregar('ausencia',[[x.anterior,'Anterior']],null,[],null,x);
+        for(const x of lista(resultado.cancelaciones_confirmadas))agregar('cancelacion',[[x.anterior,'Anterior']],null,[],null,x);
+        for(const x of lista(resultado.ambiguas))agregar('ambigua',[...lista(x.anteriores).map(s=>[s,'Candidato anterior']),...lista(x.actuales).map(s=>[s,'Candidato actual'])],null,[],null,x);
         for(const [campo,tipo] of [['advertencias','advertencia'],['no_comparables','cobertura']])for(const x of lista(resultado[campo])) {
             const partes=[];
             for(const v of ['anterior','actual']) {

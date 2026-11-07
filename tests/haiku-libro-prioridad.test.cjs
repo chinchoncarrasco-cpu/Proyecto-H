@@ -89,3 +89,12 @@ test('el informe reutiliza el detalle completo de validación también dentro de
     assert.doesNotMatch(prioridad,/Titular no disponible|CAB —/);
     assert.match(html,/Sin cambios nuevos/);
 });
+test('el origen optativo conserva la identidad exacta del caso sin alterar la clasificación habitual',()=>{
+    const r=result({nuevas:[{actual:row()}],modificadas:[{anterior:row(),actual:row()}],
+        ya_no_aparecen:[{anterior:row()}],cancelaciones_confirmadas:[{anterior:row()}],
+        ambiguas:[{actuales:[row()]}],advertencias:[{hoja:'Oct26'}],no_comparables:[{hoja:'Sep26'}]});
+    const originales=[r.nuevas[0],r.modificadas[0],r.ya_no_aparecen[0],r.cancelaciones_confirmadas[0],r.ambiguas[0],r.advertencias[0],r.no_comparables[0]];
+    const sin=Object.values(P.clasificar(r,opciones).grupos).flat();
+    const con=Object.values(P.clasificar(r,{...opciones,incluirOrigen:true}).grupos).flat();
+    con.forEach((c,i)=>{assert.equal(c.origen,originales[i]);const {origen,...resto}=c;assert.deepEqual(resto,sin[i]);});
+});

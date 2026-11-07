@@ -159,6 +159,7 @@ function interfaz(comparar) {
     class El {
         constructor(){this.children=[];this.listeners={};this.value='';this.textContent='';}
         appendChild(x){x.parent=this;this.children.push(x);return x;}
+        replaceChildren(...xs){for(const x of this.children)x.parent=null;this.children=[];for(const x of xs)this.appendChild(x);}
         remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);}
         setAttribute(k,v){this[k]=v;}
         removeAttribute(k){delete this[k];}
@@ -317,4 +318,60 @@ test('burbuja: usa la clasificación real en una sola franja y texto seguro en e
     assert.deepEqual(franja.children.map(n=>n.children[0].textContent),['Hoy','Mañana','Próximos','Info']);
     const nota=h.nodos().find(n=>n.textContent.includes(payload));assert.ok(nota);assert.equal(nota.innerHTML,undefined);
     assert.doesNotMatch(h.nodos().map(n=>n.textContent).join(' '),/🔴|🟠|🟡|🟢|Abre el informe para ver qué datos/);
+});
+const textoNodo=n=>[n.textContent,...n.children.map(textoNodo)].join(' ');
+const filtroUI=h=>({
+    botones:h.nodos().find(n=>n.className==='haku-libro-auto__prioridades').children,
+    contenido:h.nodos().find(n=>n.className==='haku-libro-auto__filtrado'),
+    resumen:h.nodos().find(n=>n.className==='haku-libro-auto__resumen')
+});
+test('Info explica ambos avisos, distingue versiones y permite cambiar o cerrar sin releer ni interrumpir',async()=>{
+    const r=res({advertencias:['anterior','actual'].map(version=>({version,hoja:'Oct26',
+        detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))});
+    const h=interfaz(async()=>r);h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    h.ids['haiku-asistente-texto'].value='Mi consulta pendiente';h.window.HAIKU_ASISTENTE.procesando=()=>true;
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const {botones,contenido,resumen}=filtroUI(h);assert.equal(contenido.hidden,true);
+    botones[3].dispatchEvent({type:'click'});
+    assert.equal(contenido.hidden,false);assert.equal(resumen.hidden,true);assert.equal(contenido.children.length,2);
+    assert.match(textoNodo(contenido.children[0]),/Versión anterior.*Oct26.*La cantidad de noches escrita no coincide/);
+    assert.match(textoNodo(contenido.children[1]),/Versión actual.*Oct26.*La cantidad de noches escrita no coincide/);
+    assert.doesNotMatch(textoNodo(contenido),/Nombre no indicado|CAB —|\[object Object\]/);
+    for(let i=0;i<3;i++){
+        botones[i].dispatchEvent({type:'click'});
+        assert.match(textoNodo(contenido),/No hay cambios ni avisos en esta categoría/);
+        assert.deepEqual(botones.map(b=>b['aria-expanded']),botones.map((_,j)=>String(j===i)));
+    }
+    botones[2].dispatchEvent({type:'click'});assert.equal(contenido.hidden,true);assert.equal(resumen.hidden,false);
+    assert.equal(contenido.children.length,0);assert.equal(h.calls(),1);assert.equal(h.abierto(),0);
+    assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
+    assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
+});
+test('cada categoría muestra todas sus reservas y diferencias exactas, incluso con el mismo titular',async()=>{
+    const P=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    const r=res({modificadas:['2026-11-07','2026-11-08','2026-11-10',...Array(5).fill('2026-10-01')].map((dia,i)=>({
+        anterior:{...row,fecha_checkin:dia,fecha_checkout:dia},actual:{...row,fecha_checkin:dia,fecha_checkout:dia},
+        cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'masaje',hora:`${10+i}:00`}]}]
+    }))});
+    const original=JSON.stringify(r),h=interfaz(async()=>r);
+    h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1={...P,clasificar:(r,opciones)=>P.clasificar(r,{...opciones,fechaActual:'2026-11-07'})};
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const {botones,contenido}=filtroUI(h);
+    for(let i=0;i<4;i++){
+        botones[i].dispatchEvent({type:'click'});
+        assert.equal(contenido.children.length,i===3?5:1);
+        assert.match(textoNodo(contenido),new RegExp(`Agregado: Masaje · ${10+i}:00`));
+        assert.doesNotMatch(textoNodo(contenido),/más en el informe/);
+    }
+    assert.match(textoNodo(contenido),/17:00/);assert.equal(h.calls(),1);assert.equal(JSON.stringify(r),original);
+});
+test('los detalles filtrados conservan texto seguro y ocultan contactos y montos dentro del motivo',async()=>{
+    const payload='<img src=x onerror=alert(1)>',h=interfaz(async()=>res({advertencias:[{hoja:'Oct26',
+        validacion:[{codigo:'checkout_anterior_al_checkin',motivo:`${payload} privado@example.test $50000 12.345.678-9 +56912345678`}]}]}));
+    h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const {botones,contenido}=filtroUI(h);botones[3].dispatchEvent({type:'click'});
+    assert.match(textoNodo(contenido),/La salida figura antes de la entrada/);assert.ok(textoNodo(contenido).includes(payload));
+    assert.doesNotMatch(textoNodo(contenido),/privado@example|50000|12\.345\.678-9|56912345678/);
+    const detalle=contenido.children[0].children.at(-1).children.at(-1);assert.equal(detalle.innerHTML,undefined);
 });
