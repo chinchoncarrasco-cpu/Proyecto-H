@@ -322,8 +322,8 @@
         return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null, revision_focal:Boolean(focal) };
     }
 
-    async function abrirRevisionHistorial(out,{reservas,generacion,aprobacionManual=false}={}){
-        if(!out||!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
+    function fuenteHistorial({reservas,generacion,aprobacionManual=false}={}){
+        if(!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
         if(aprobacionManual && (!esAdministrador() || reservas.length!==1))throw Error('La aprobación manual requiere un administrador y una sola reserva.');
         const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
         if(!fechas.length)throw Error('No hay fechas verificables para revisar servicios.');
@@ -331,6 +331,14 @@
         const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
         const fuente=Object.freeze({descripcion});
         entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,claves:[...new Set(reservas.map(claveFicha))]});
+        return fuente;
+    }
+    async function prepararHistorial(scope){
+        return construir(fuenteHistorial(scope));
+    }
+    async function abrirRevisionHistorial(out,scope={}){
+        if(!out)throw Error('No hay una vista para revisar servicios.');
+        const fuente=fuenteHistorial(scope);
         const plan=await construir(fuente);await renderizar(plan,out,fuente);return plan;
     }
 
@@ -2847,7 +2855,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial,
+    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;

@@ -430,10 +430,101 @@
         return esAdministrador()&&['ok','sin_cambios','parcial'].includes(resultado?.estado)&&
             Boolean(lista(resultado?.nuevas).length||lista(resultado?.modificadas).length);
     }
-    function incorporarDesdeAviso(resultado){
+    function revisarDesdeAviso(resultado){
         if(!puedeIncorporar(resultado))throw new Error('La incorporación de cambios requiere una sesión de administrador.');
         if(!instalar())throw new Error('Haku todavía no está disponible.');
         return insertarIncorporacion(resultado);
+    }
+    const operacionesAviso=new WeakMap();
+    function incorporarDesdeAviso(resultado){
+        if(!puedeIncorporar(resultado))return Promise.reject(new Error('Necesitas una sesión de administrador para incorporar estos cambios.'));
+        let estado=operacionesAviso.get(resultado);
+        if(!estado){estado={cache:crearCachePendientes({soloAviso:true}),decisiones:new Map(),aprobados:new Set(),recibos:[]};operacionesAviso.set(resultado,estado);}
+        if(estado.terminado)return Promise.resolve(estado.terminado);
+        if(estado.promesa)return estado.promesa;
+        const validarSesion=async()=>{
+            if(!puedeIncorporar(resultado))throw Error('Necesitas una sesión de administrador para incorporar estos cambios.');
+            const auth=await root.haikuSupabase?.auth?.getUser?.(),id=auth?.data?.user?.id;
+            if(auth?.error||!id||estado.usuario&&estado.usuario!==id)throw Error('La sesión cambió. Revisa el aviso con tu sesión actual.');
+            estado.usuario=id;
+        };
+        const totales=()=>estado.recibos.reduce((s,r)=>{
+            for(const k of ['reservas_creadas','estadias_agregadas','actualizaciones','servicios_creados','notas_creadas'])s[k]=(s[k]||0)+(r[k]||0);
+            return s;
+        },{});
+        const ejecutar=async()=>{
+            try{
+                await validarSesion();
+                const api=root.HAIKU_LIBRO_CONSULTAS;
+                if(!estado.inicial)estado.inicial=await estado.cache.obtener(resultado,{revalidar:true});
+                if(!estado.reservasTerminadas){
+                    if(!estado.plan&&estado.inicial.preparacion?.reservas?.length){
+                        estado.entrada=estado.inicial.preparacion;
+                        estado.plan=await api.prepararIncorporacion(estado.entrada,estado.decisiones,estado.aprobados);
+                        // Los avisos de «pagos pendientes» son notas. Este acceso
+                        // no confirma cobros ni decisiones manuales de pagos.
+                        for(const item of estado.plan.items)item.seleccionado=Boolean(item.seleccionado&&
+                            (['nuevas','estadias'].includes(item.categoria)||item.payload?.tipo==='reserva_actualizar'));
+                    }
+                    if(estado.plan?.items.some(x=>x.seleccionado)){
+                        await validarSesion();
+                        const fin=await api.confirmarIncorporacion(estado.entrada,estado.decisiones,estado.aprobados,estado.plan);
+                        if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
+                        estado.recibos.push(fin.resultado);
+                    }
+                    estado.reservasTerminadas=true;
+                }
+                if(!estado.serviciosTerminados){
+                    const anteriores=lista(estado.inicial.revisionServicios?.reservas);
+                    const nuevas=lista(estado.inicial.items).filter(x=>x.tipo==='nueva'&&x.accionable&&
+                        (lista(x.actual?.servicios).length||lista(x.actual?.menciones_servicio).length)).map(x=>x.actual);
+                    const scope={generacion:estado.inicial.generacion,reservas:[...new Map([...anteriores,...nuevas]
+                        .map(r=>[JSON.stringify([r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]),r])).values()]};
+                    if(scope?.reservas?.length){
+                        if(!estado.guardarServicios){
+                            const guard=root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
+                            if(!guard?.crearIncorporacionAviso)throw Error('La incorporación de servicios todavía no está disponible.');
+                            estado.guardarServicios=guard.crearIncorporacionAviso(scope);
+                        }
+                        await validarSesion();
+                        estado.recibos.push(await estado.guardarServicios());
+                    }
+                    estado.serviciosTerminados=true;
+                }
+                let pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                // Al guardar un servicio pueden quedar sus notas listas para el
+                // writer de la reserva. Completar esa etapa en el mismo clic.
+                if(!estado.cierreTerminado&&(estado.planFinal?.solicitudPendiente||pendientes.preparacion?.reservas?.length)){
+                    if(!estado.planFinal){
+                        estado.entradaFinal=pendientes.preparacion;
+                        estado.planFinal=await api.prepararIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados);
+                        for(const item of estado.planFinal.items)item.seleccionado=Boolean(item.seleccionado&&
+                            (['nuevas','estadias'].includes(item.categoria)||item.payload?.tipo==='reserva_actualizar'));
+                    }
+                    if(estado.planFinal.items.some(x=>x.seleccionado)){
+                        await validarSesion();
+                        const fin=await api.confirmarIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados,estado.planFinal);
+                        if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
+                        estado.recibos.push(fin.resultado);
+                    }
+                    estado.cierreTerminado=true;
+                    pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                }
+                estado.terminado={...totales(),pendientes:lista(pendientes.items).map(item=>({
+                    reserva:`${item.actual?.titular||item.anterior?.titular||'Reserva'} · CAB ${item.actual?.cabana||item.anterior?.cabana||'—'}`,
+                    motivos:[...new Set([...lista(item.revision?.motivos),...lista(item.cambios).map(c=>c.proyecto).filter(v=>typeof v==='string'),
+                        typeof item.proyecto==='string'?item.proyecto:null].filter(Boolean))]
+                }))};
+                return estado.terminado;
+            }catch(error){
+                // Un rechazo anterior al envío permite preparar datos vigentes.
+                // Una solicitud enviada conserva su identidad para el reintento.
+                if(!estado.reservasTerminadas&&!estado.plan?.solicitudPendiente){estado.plan=null;estado.inicial=null;}
+                if(!estado.cierreTerminado&&!estado.planFinal?.solicitudPendiente)estado.planFinal=null;
+                throw Object.assign(error instanceof Error?error:new Error(error?.message||'No pude confirmar la incorporación.'),{incorporado:totales()});
+            }
+        };
+        estado.promesa=ejecutar().finally(()=>{estado.promesa=null;});return estado.promesa;
     }
     function obtenerResultado() {
         if (!instalar()) return Promise.reject(new Error('Haku todavía no está disponible.'));
@@ -672,7 +763,7 @@
         return true;
     }
     const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,procesando:()=>ocupado});
+        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
     if (root.document && !instalar()) {

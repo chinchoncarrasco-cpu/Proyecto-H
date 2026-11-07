@@ -371,11 +371,57 @@
     // interacción y recuperación de errores.
     bloquearRevision(document);
 
+    // El clic en Incorporar del aviso es la confirmación. El lote usa las mismas
+    // comprobaciones y writer; no crea una tarjeta ni pide otro diálogo.
+    function crearIncorporacionAviso(scope){
+        let solicitud,usuario,resultado,pendiente;
+        const permiso=()=>{
+            const s=root.haikuSesion;
+            if(s?.usuario?.activo!==true||!s.roles?.some(r=>/^(admin|administrador)$/i.test(typeof r==='string'?r:r?.codigo||r?.nombre||'')))
+                throw Error('Necesitas una sesión de administrador para incorporar estos cambios.');
+            if(solicitud?.p_servicios.length&&root.haikuTienePermiso?.('servicios.crear')!==true)throw Error('Falta permiso para agregar servicios.');
+            if(solicitud?.p_notas.length&&root.haikuTienePermiso?.('notas.gestionar')!==true)throw Error('Falta permiso para guardar notas.');
+        };
+        const ejecutar=async()=>{
+            permiso();
+            const auth=await root.haikuSupabase.auth.getUser();
+            const id=auth.data?.user?.id;
+            if(auth.error||!id||usuario&&usuario!==id)throw Error('La sesión cambió. Revisa el aviso con tu sesión actual.');
+            usuario=id;
+            if(resultado)return resultado;
+            if(!solicitud){
+                const actual=await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial(scope);
+                const elegidos=actual.items.filter(x=>x.estado==='listo'&&x.payload&&!x.resolucionManual&&
+                    (x.kind==='nota'||x.kind==='servicio'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'));
+                if(!elegidos.length)return {ok:true,servicios_creados:0,notas_creadas:0,servicios_omitidos:0,notas_omitidas:0};
+                const cache=new Map(),corregidos=await Promise.all(elegidos.map(x=>resolverEstadia(x,cache)));
+                if(actual.generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
+                    throw Error('El Libro cambió durante la comprobación. Pulsa Reintentar para usar sus datos actuales.');
+                solicitud={p_operacion_id:uuid(),p_servicios:[],p_notas:[]};
+                elegidos.forEach((x,i)=>solicitud[x.kind==='nota'?'p_notas':'p_servicios'].push(corregidos[i]));
+            }
+            permiso();
+            const sesion=await root.haikuSupabase.auth.getUser();
+            if(sesion.error||sesion.data?.user?.id!==usuario)throw Error('La sesión cambió antes de guardar.');
+            // Conservar ID y payload si se pierde la respuesta. Nunca reconstruir
+            // otra operación para un lote cuyo resultado aún no conocemos.
+            const {data,error}=await root.haikuSupabase.rpc('haiku_importar_libro_operaciones_v2',solicitud);
+            if(error)throw error;
+            if(data?.ok!==true||!['servicios_creados','notas_creadas','servicios_omitidos','notas_omitidas']
+                .every(k=>Number.isSafeInteger(data[k])&&data[k]>=0))throw Error('Proyecto H no confirmó el resultado. Reintenta para comprobarlo sin duplicar.');
+            resultado=data;return resultado;
+        };
+        return ()=>{
+            if(!pendiente)pendiente=ejecutar().finally(()=>{pendiente=null;});
+            return pendiente;
+        };
+    }
     const api = Object.freeze({
         version: "4.0.0",
         reactivar: reactivarBotonLibro,
         bloquearRevision,
         completarRecibo,
+        crearIncorporacionAviso,
         confirmarServicioManual: (card, texto, item) => {
             if (!item?.resolucionManual || !item.payload?.servicio_manual_v1)
                 return Promise.reject(new Error('Falta completar los datos de este servicio.'));
