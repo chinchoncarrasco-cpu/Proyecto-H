@@ -1582,16 +1582,18 @@
 
     // La comparación mensual consume el mismo plan, con las filas ya leídas
     // de SU consulta. No vuelve a abrir otro XLSX ni usa resultados anteriores.
-    async function compararReservas(reservas, rango, cliente = root.haikuSupabase) {
+    async function compararReservas(reservas, rango, cliente = root.haikuSupabase, sistemaLectura = null) {
         if (!cliente || !Array.isArray(reservas) || !rango?.desde || !rango?.hasta)
             throw new Error('No hay una lectura completa para comparar servicios y notas.');
         return construirPlan({ reservas, desde:rango.desde, hasta:rango.hasta,
             archivo:rango.archivo || null, generacion:rango.generacion,
-            version_libro:rango.version_libro || null }, cliente, '', new Map(), new Map());
+            version_libro:rango.version_libro || null }, cliente, '', new Map(), new Map(), sistemaLectura);
     }
 
-    async function construirPlan(libro, cliente, texto, overrides, manuales) {
-        const sistema = await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
+    async function construirPlan(libro, cliente, texto, overrides, manuales, sistemaLectura = null) {
+        // Sólo compararReservas recibe la lectura que acaba de hacer el informe.
+        // Preparar/confirmar escrituras siguen consultando nuevamente Proyecto H.
+        const sistema = Array.isArray(sistemaLectura) ? sistemaLectura : await cargarSistema(libro.desde, libro.hasta, cliente), items = [];
         const contrato = manuales.size ? await cargarContratoManual() : null;
         for (const reserva of libro.reservas) {
             const asociacion = asociarReserva(reserva, sistema), candidatos = agruparCortesiaConHorario(agruparTinajaPromoMixta(reserva, depurarServicios(reserva))), notasCanonicas = new Map();

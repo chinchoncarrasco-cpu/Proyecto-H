@@ -156,11 +156,12 @@
         }
         return {version:1,actualizado_en:new Date().toISOString(),cambios};
     }
-    function cambioPendiente(cambio={}){
+    function cambioPendiente(cambio={},vigente=true){
         const campo=cambio.campo||'Dato',antes=cambio.antes,ahora=cambio.ahora;
         const etiqueta=etiquetas[campo]||campo.replace(/_/g,' ');
-        if(/notas|pagos_pendientes|servicios/i.test(campo))return `<dt>${escapar(etiqueta)}</dt><dd>Antes en el Libro: ${escapar(resumenNota(valor(antes)))}<br>Ahora en el Libro: ${escapar(resumenNota(valor(ahora)))}<br>En Proyecto H: ${escapar(resumenNota(explicar(cambio.proyecto)))}</dd>`;
-        return `<dt>${escapar(etiqueta)}</dt><dd>${sensible(campo)?'Este dato cambió en el Libro. No se muestra aquí por privacidad.':`Antes en el Libro: ${escapar(valor(antes,campo))}<br>Ahora en el Libro: ${escapar(valor(ahora,campo))}<br>En Proyecto H: ${escapar(valor(cambio.proyecto,campo))}`}</dd>`;
+        const actual=vigente?'Ahora en el Libro':'Última lectura guardada';
+        if(/notas|pagos_pendientes|servicios/i.test(campo))return `<dt>${escapar(etiqueta)}</dt><dd>Antes en el Libro: ${escapar(resumenNota(valor(antes)))}<br>${actual}: ${escapar(resumenNota(valor(ahora)))}<br>En Proyecto H: ${escapar(resumenNota(explicar(cambio.proyecto)))}</dd>`;
+        return `<dt>${escapar(etiqueta)}</dt><dd>${sensible(campo)?'Este dato cambió en el Libro. No se muestra aquí por privacidad.':`Antes en el Libro: ${escapar(valor(antes,campo))}<br>${actual}: ${escapar(valor(ahora,campo))}<br>En Proyecto H: ${escapar(valor(cambio.proyecto,campo))}`}</dd>`;
     }
     function explicarPendiente(item,generacion){
         const cambios=lista(item.cambios),r=item.actual||item.anterior||{};
@@ -218,8 +219,25 @@
     }
     function detallePendiente(item,generacion){
         const e=explicarPendiente(item,generacion);
-        return `<div class="haku-pendiente-explicacion"><p><strong>${escapar(e.encontro)}</strong></p><p>${escapar(e.motivo)}</p><p class="haku-pendiente-estado">${escapar(e.paso)}</p></div>`+
-            (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>Ver comparación de datos (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambioPendiente).join('')}</dl></details>`:'');
+        const c=item.contexto,avisos=lista(c?.avisos),hechos=lista(c?.hechos);
+        const pendienteFuente=avisos.find(x=>['libro_no_verificado','cancelada_en_libro'].includes(x.codigo));
+        const contradiccion=avisos.find(x=>['noches_contradictorias','cambio_en_ambas_fuentes','promocion_segunda_noche'].includes(x.codigo));
+        const financiero=avisos.find(x=>['noche_con_cobro','cobros_no_comprobados'].includes(x.codigo));
+        const historia=root.HAIKU_LIBRO_CONTEXTO_V1?.fraseHistorial(c?.historial);
+        if(pendienteFuente){e.encontro=pendienteFuente.codigo==='cancelada_en_libro'?'El Libro actual la muestra cancelada.':'Hay un aviso anterior de esta reserva.';e.motivo=pendienteFuente.texto;e.paso='Comprueba dónde está esta reserva en el Libro actual y pulsa «Volver a revisar».';}
+        else if(contradiccion){e.motivo=contradiccion.texto;e.paso='Aclara ese dato en el Libro antes de incorporar el cambio.';}
+        else if(financiero){e.motivo=financiero.texto;e.paso='El cambio de fechas debe conservar el precio acordado. Revisa su efecto en los cobros antes de confirmarlo.';}
+        const servicios=lista(c?.servicios).filter(x=>x.estado!=='en_sistema');
+        const detallesServicios=servicios.slice(0,2).map(x=>`${x.concepto}${x.hora?' · '+x.hora:''}: ${x.estado==='faltante'?'falta registrar.':resumenNota(explicar(x.razon))||'falta aclarar sus datos.'}`);
+        if(servicios.length>2)detallesServicios.push(`${servicios.length-2} servicio${servicios.length===3?'':'s'} más en la comparación.`);
+        const principal=pendienteFuente||contradiccion||financiero;
+        if(!principal&&detallesServicios.length&&lista(item.cambios).every(x=>x.campo==='servicios'))e.motivo='';
+        const contexto=[...hechos.filter(x=>!x.startsWith('Corregir las fechas')),...detallesServicios,historia,
+            ...avisos.filter(x=>x!==principal).map(x=>x.texto)].filter(Boolean);
+        return `<div class="haku-pendiente-explicacion"><p><strong>${escapar(e.encontro)}</strong></p>`+
+            (contexto.length?`<div class="haku-pendiente-contexto">${contexto.map(x=>`<p>${escapar(x)}</p>`).join('')}</div>`:'')+
+            (e.motivo?`<p>${escapar(e.motivo)}</p>`:'')+`<p class="haku-pendiente-estado">${escapar(e.paso)}</p></div>`+
+            (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>${pendienteFuente?'Ver última comparación guardada':'Ver comparación de datos'} (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambio=>cambioPendiente(cambio,!pendienteFuente)).join('')}</dl></details>`:'');
     }
     function revisionServiciosPendiente(item,generacion){
         if(generacion==null||item?.tipo!=='modificacion'||!item.actual||!item.sistema?.reserva_id||
@@ -243,10 +261,14 @@
                 html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${detallePendiente(item,pendientes.generacion)}<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&(item.preparacion||revisionServicios)?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
             }
         }
-        for(const [indice,item] of lista(pendientes.resueltosDetalle).entries()){
+        const resueltos=lista(pendientes.resueltosDetalle);
+        if(resueltos.length)html+=`<details class="haku-pendientes-resueltos"><summary>Ya resueltos (${resueltos.length})</summary>`;
+        for(const [indice,item] of resueltos.entries()){
             const r=item.actual||item.anterior||{},noShow=/no[\s_-]*show/i.test(`${item.sistema?.estado_reserva} ${item.sistema?.estado_operativo}`);
-            html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>YA COMPROBADA EN PROYECTO H</small><p><strong>${noShow?'Ya registrada como «No se presentó».':'Ya registrada y cancelada.'}</strong></p><p>Coinciden el huésped, la cabaña y las fechas. No hace falta incorporarla otra vez.</p><p class="haku-pendiente-estado">Se conserva su estado. No necesitas aprobar nada para este aviso.</p>${item.sistema?.reserva_id?`<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0"><button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-resuelta="${indice}">Ver reserva</button></div>`:''}</div></details>`;
+            const coincide=item.motivo==='ya_coincide',canceladaLibro=item.motivo==='cancelada_en_libro';
+            html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>YA COMPROBADA EN PROYECTO H</small><p><strong>${canceladaLibro?'Cancelada en el Libro. No corresponde incorporarla.':coincide?'El Libro actual y Proyecto H ya coinciden.':noShow?'Ya registrada como «No se presentó».':'Ya registrada y cancelada.'}</strong></p><p>${canceladaLibro?'La encontré en Cancelaciones y no hay una estadía vigente compatible en Proyecto H.':coincide?`Entrada ${escapar(fecha(r.fecha_checkin))} · Salida ${escapar(fecha(r.fecha_checkout))}. El aviso anterior ya no requiere cambios.`:'Coinciden el huésped, la cabaña y las fechas. No hace falta incorporarla otra vez.'}</p><p class="haku-pendiente-estado">${coincide||canceladaLibro?'Pendiente cerrado sin modificar la reserva ni sus cobros.':'Se conserva su estado. No necesitas aprobar nada para este aviso.'}</p>${item.sistema?.reserva_id?`<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0"><button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-resuelta="${indice}">Ver reserva</button></div>`:''}</div></details>`;
         }
+        if(resueltos.length)html+='</details>';
         html+='<div class="haku-libro-pendientes-acciones haku-actualizacion-sites__historial-acciones"><button type="button" class="haku-libro-revalidar haku-actualizacion-sites__boton" data-haku-revalidar-proyecto>Volver a revisar</button>';
         if(items.some(x=>x.accionable)&&pendientes.preparacion?.reservas?.length)html+='<button type="button" class="haku-libro-preparar haku-actualizacion-sites__boton haku-actualizacion-sites__boton--primario" data-haku-preparar-pendientes>Revisar cambios</button>';
         if(pendientes.revisionServicios?.reservas?.length)html+='<button type="button" class="haku-actualizacion-sites__boton" data-haku-revisar-servicios>Revisar servicios y notas</button>';
@@ -300,8 +322,18 @@
                     let registro=fusionarHistorialCambios(previo,resultado,g);
                     if(JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
                     validar(g);
-                    const resultadoPendientes=await revalidarCambios(registro.cambios,{generacion:g});
+                    const contexto=root.HAIKU_LIBRO_CONTEXTO_V1;
+                    const vigentes=contexto?await contexto.actualizarDesdeLibro(registro.cambios):registro.cambios;
+                    validar(g);
+                    const resultadoPendientes=await revalidarCambios(vigentes,{generacion:g});
                     if(!resultadoPendientes)throw new Error('No pude revalidar los cambios detectados contra Proyecto H.');
+                    if(contexto){
+                        resultadoPendientes.items=await contexto.enriquecer(resultadoPendientes.items||[],root.haikuSupabase,{comparacion:{
+                            serviciosDetalle:resultadoPendientes.serviciosContexto,notasDetalle:resultadoPendientes.notasContexto}});
+                        const porId=new Map(vigentes.map(x=>[x.id,x]));
+                        resultadoPendientes.resueltos=[...new Set((resultadoPendientes.resueltos||[]).flatMap(id=>porId.get(id)?.ids_origen||[id]))];
+                    }
+                    validar(g);
                     if(resultadoPendientes.resueltos?.length){
                         const resueltos=new Set(resultadoPendientes.resueltos);
                         registro={...registro,actualizado_en:new Date().toISOString(),cambios:registro.cambios.filter(x=>!resueltos.has(x.id))};

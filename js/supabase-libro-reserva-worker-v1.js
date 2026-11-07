@@ -325,13 +325,13 @@ function indiceLibro(buffer) {
     };
 }
 
-async function leerHoja(buffer, nombreHoja) {
+async function leerHoja(buffer, nombreHoja, compartido = null) {
     asegurarLector();
     asegurarZip();
 
     // SheetJS resuelve valores, fórmulas, formato visible, merges y rango.
     // OOXML se usa como fuente de verdad para estilos, dimensiones y texto enriquecido.
-    const libro = self.XLSX.read(buffer, {
+    const libro = compartido?.libro || self.XLSX.read(buffer, {
         type: "array",
         sheets: [nombreHoja],
         cellDates: true,
@@ -351,12 +351,10 @@ async function leerHoja(buffer, nombreHoja) {
     let celdasXml = new Map();
 
     try {
-        const zip = await self.JSZip.loadAsync(buffer);
-        const estilosXml = await zip.file("xl/styles.xml")?.async("text");
-        const temaXml = await zip.file("xl/theme/theme1.xml")?.async("text");
-        const temas = coloresTemaXml(temaXml || "");
-        estilos = parsearEstilosXml(estilosXml || "", temas);
-        const textosCompartidos = await leerTextosCompartidos(zip, temas);
+        const zip = compartido?.zip || await self.JSZip.loadAsync(buffer);
+        const temas = compartido?.temas || coloresTemaXml(await zip.file("xl/theme/theme1.xml")?.async("text") || "");
+        estilos = compartido?.estilos || parsearEstilosXml(await zip.file("xl/styles.xml")?.async("text") || "", temas);
+        const textosCompartidos = compartido?.textos || await leerTextosCompartidos(zip, temas);
         const rutaHoja = await rutaHojaDesdeNombre(zip, nombreHoja);
         const hojaXml = rutaHoja ? await zip.file(rutaHoja)?.async("text") : null;
         if (hojaXml) {
@@ -416,6 +414,19 @@ async function leerHoja(buffer, nombreHoja) {
         columnas,
         filas
     };
+}
+
+async function leerHojas(buffer, nombres) {
+    if (!Array.isArray(nombres) || !nombres.length || nombres.length > 8 || nombres.some(n=>typeof n!=='string') || new Set(nombres).size!==nombres.length)
+        throw new Error('Selecciona entre 1 y 8 hojas distintas.');
+    asegurarLector(); asegurarZip();
+    const libro=self.XLSX.read(buffer,{type:'array',sheets:nombres,cellDates:true,cellStyles:true,cellNF:true,cellFormula:true,sheetStubs:true});
+    const zip=await self.JSZip.loadAsync(buffer);
+    const temas=coloresTemaXml(await zip.file('xl/theme/theme1.xml')?.async('text')||'');
+    const estilos=parsearEstilosXml(await zip.file('xl/styles.xml')?.async('text')||'',temas);
+    const textos=await leerTextosCompartidos(zip,temas),compartido={libro,zip,temas,estilos,textos},salida=[];
+    for(const hoja of nombres)salida.push({hoja,datos:await leerHoja(buffer,hoja,compartido)});
+    return salida;
 }
 
 // Búsqueda exacta de candidatos OOXML, sin SheetJS ni semántica global.
@@ -598,7 +609,7 @@ async function indiceNombres(buffer) {
     if (!nombres.length) throw new Error('Índice de nombres no disponible.');
     return { nombres };
 }
-const lector = Object.freeze({ leerHoja, indiceNombres });
+const lector = Object.freeze({ leerHoja, leerHojas, indiceNombres });
 // Conserva las utilidades globales del worker usadas por sus contratos Web.
 if (typeof self.addEventListener === "function") Object.assign(self, {
     coloresTemaXml, parsearEstilosXml, parsearTextoEnriquecido, parsearCeldasXml, huellasLibro
@@ -609,6 +620,12 @@ if (typeof module !== "undefined" && module.exports) module.exports = Object.fre
 if (typeof self.addEventListener === "function") self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, nombresHojas, buffer } = evento.data || {};
     try {
+        if(tipo==='semantica_lote'){
+            const hojas=await leerHojas(buffer,nombresHojas);
+            if(!self.HAIKU_LIBRO_SEMANTICA)importScripts(`haiku-libro-semantica-v1.js${self.location.search}`);
+            self.postMessage({id,ok:true,resultado:hojas.map(x=>self.HAIKU_LIBRO_SEMANTICA.normalizarHoja(x.datos,x.hoja))});
+            return;
+        }
         if(tipo==='buscar_bove') {
             self.postMessage({id,ok:true,resultado:await buscarHojasBove(buffer,nombreHoja)});
             return;
