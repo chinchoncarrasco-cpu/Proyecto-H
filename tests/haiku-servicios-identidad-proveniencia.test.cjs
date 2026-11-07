@@ -86,7 +86,7 @@ test('cortesía equivalente es existente y cobro explícito contra cortesía req
   const decision = P.decisionServicioExistente(cobrable, [existente({ total: 0, tipo_cobro: 'cortesia' })]);
   assert.equal(decision.estado, 'revisar');
   assert.deepEqual(Array.from(decision.contradicciones), ['tipo_cobro']);
-  assert.match(decision.motivo, /datos explícitos.*tipo_cobro/i);
+  assert.equal(decision.motivo, 'Libro: con cobro. Proyecto H: cortesía. Falta actualizar el cobro.');
 });
 
 test('Carlos: candidato único por reserva, hora y cortesía se omite sin inventar fecha ni subtipo', () => {
@@ -122,4 +122,29 @@ test('dos candidatos compatibles conservan identidad ambigua', () => {
   assert.equal(decision.estado, 'revisar');
   assert.equal(decision.candidatos.length, 2);
   assert.match(decision.motivo, /más de un servicio existente compatible/i);
+});
+
+test('explica cortesía frente al importe real registrado y conserva las demás diferencias', () => {
+  const item = preparar('TINAJA TONEL DE 19:15 A 20:15 CORTESIA PARA 3 PERSONAS');
+  const actual = existente({tipo_cobro:'normal',total:45000,hora_fin:'21:15:00',personas:2});
+  const copia = JSON.stringify(actual), decision = P.decisionServicioExistente(item,[actual]);
+  assert.equal(decision.estado,'revisar');
+  assert.equal(decision.motivo,'Libro: cortesía. Proyecto H: cobro de $45.000. También difieren: hora de término, personas. Revisa estos cambios.');
+  assert.deepEqual(Array.from(decision.contradicciones),['hora_fin','personas','tipo_cobro']);
+  assert.equal(JSON.stringify(actual),copia);
+});
+
+test('no inventa un importe cuando falta ni elige entre varios servicios', () => {
+  const item = preparar('TINAJA TONEL 19.15 HRS CORTESIA');
+  for(const total of [null,undefined,'',NaN,-1]){
+    const decision = P.decisionServicioExistente(item,[existente({tipo_cobro:'normal',total})]);
+    assert.equal(decision.estado,'revisar');
+    assert.equal(decision.motivo,'Libro: cortesía. Proyecto H: con cobro, importe por verificar. Falta actualizar el cobro.');
+    assert.doesNotMatch(decision.motivo,/\$0|NaN|undefined/);
+  }
+  const decision = P.decisionServicioExistente(item,[existente({tipo_cobro:'normal',total:30000}),
+    existente({id:'otro-servicio',tipo_cobro:'normal',total:45000})]);
+  assert.equal(decision.estado,'revisar');assert.equal(decision.candidatos.length,2);
+  assert.equal(decision.motivo,'Hay varios servicios posibles en Proyecto H. Entre las diferencias está el cobro. Revisa cuál corresponde.');
+  assert.doesNotMatch(decision.motivo,/\$|Falta actualizar/);
 });

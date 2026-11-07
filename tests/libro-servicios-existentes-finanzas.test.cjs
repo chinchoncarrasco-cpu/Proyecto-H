@@ -64,7 +64,8 @@ for (const [campo, valor] of [['total',20000], ['cantidad',2], ['tipo_cobro','co
     test('La coincidencia sin hora no oculta contradicción explícita: ' + campo, async () => {
         const { servicio, leer } = caso(); servicio[campo] = valor;
         const i = await leer(); assert.equal(i.estado, 'revisar'); assert.equal(i.payload, null);
-        assert.match(i.razones.join(' '), /contradice/);
+        if (campo === 'tipo_cobro') assert.ok(i.razones.includes('Libro: con cobro. Proyecto H: cortesía. Falta actualizar el cobro.'));
+        else assert.match(i.razones.join(' '), /contradice/);
     });
 
 for (const [campo, valor] of [['estadia_id','otra-estadia'], ['reserva_id','otra-reserva'],

@@ -283,7 +283,7 @@
         const extra=[...lista(c.hechos),historia,...lista(c.avisos).map(x=>x.texto)].filter(Boolean);
         const explicacion=otros.length?explicarPendiente({...item,cambios:otros},generacion).encontro:'';
         const accion=esAdministrador()&&revisionServiciosPendiente(item,generacion)
-            ?'Completa lo que falta en «Aprobación manual».' : 'Revisa estos datos en «Ver reserva».';
+            ?'Revisa estos datos en «Aprobación manual».' : 'Revisa estos datos en «Ver reserva».';
         // El detalle conserva la evidencia original una sola vez, sin repetir
         // diagnósticos, columnas vacías ni llamar pagos a las notas de cobro.
         const fuentes=[...new Set([...servicios.map(s=>s.texto),...notas.map(n=>n.texto),

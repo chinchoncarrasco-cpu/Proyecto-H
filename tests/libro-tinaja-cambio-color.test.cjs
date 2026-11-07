@@ -82,7 +82,7 @@ test('cambiar sólo amarillo a rojo no queda oculto por el marcador del mismo or
     const original=await e.leer();s.observaciones=`[HAKU-LIBRO-SERVICIO:${original.item_id}]`;
     e.state.leerColor('FFFF0000');const i=await e.leer();
     assert.equal(i.item_id,original.item_id);assert.equal(i.estado,'revisar');assert.equal(i.payload,null);
-    assert.match(i.razones.join(' '),/color.*cobro/);assert.equal(s.total,30000);
+    assert.equal(i.razones.join(' '),'Libro: cortesía. Proyecto H: cobro de $30.000. Falta actualizar el cobro.');assert.equal(s.total,30000);
 });
 test('nunca prepara un alta manual cuando corresponde revisar el traslado',async()=>{
     const e=caso();await assert.rejects(()=>e.resolver(0,{codigo_servicio:'tinajaJacuzzi',tipo_cobro:'cortesia'}),/tinaja existente/);

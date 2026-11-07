@@ -227,7 +227,8 @@ test('Sara generic tinaja resolves one existing courtesy only after inferring it
     cobroContradictorio.db.servicios.push(existente);
     const conflicto = (await cobroContradictorio.api.construir(consulta)).items.find(x => x.kind === 'servicio');
     assert.equal(conflicto.estado, 'revisar');assert.equal(conflicto.payload, null);
-    assert.ok(conflicto.razones.some(x => /contradice datos explícitos.*tipo_cobro/i.test(x)));
+    assert.equal(conflicto.intencion_cobro,'no_determinada');
+    assert.ok(conflicto.razones.includes('El cobro del Libro no está claro y no coincide con Proyecto H. Revisa si corresponde cobrar o dar cortesía.'));
 
     const especifico = configurar();especifico.r.servicios[0] = { ...especifico.r.servicios[0], concepto: 'jacuzzi', clasificacion: 'servicio_confirmado', intencion_cobro: 'cobrable' };
     especifico.db.servicios.push(existente);
