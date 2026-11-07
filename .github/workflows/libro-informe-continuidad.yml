@@ -6,6 +6,7 @@ on:
       - "js/supabase-asistente-libro-actualizacion-v1.js"
       - "js/haiku-libro-fuente-oficial-v1.js"
       - "js/supabase-libro-google-readonly-v1.js"
+      - "css/supabase-haku-reconciliacion-v1.css"
       - "tests/haiku-libro-actualizacion.test.cjs"
       - "tests/libro-web-fuente-oficial.test.cjs"
       - "tests/libro-google-sesion.test.cjs"

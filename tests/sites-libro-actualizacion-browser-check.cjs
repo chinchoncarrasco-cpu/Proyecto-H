@@ -135,7 +135,7 @@ const server = http.createServer((request, response) => {
         });
         const secondAnnouncement = page.locator('.haku-libro-auto').filter({hasText:'Ver informe'});
         await secondAnnouncement.getByRole('button',{name:'Ver informe',exact:true}).click();
-        assert.equal(await first.count(),1,'el aviso de fondo conserva el informe abierto');
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),2,'el aviso de fondo conserva el informe abierto');
         assert.equal(await page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje').filter({hasText:'Ver informe'}).count(),0,
             'una consulta abierta recibe la burbuja sin insertar otro mensaje');
         const report = page.locator('.haku-actualizacion-sites').last();

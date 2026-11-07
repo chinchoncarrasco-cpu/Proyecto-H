@@ -1723,6 +1723,7 @@
 .haiku-asistente-panel .haiku-asistente-mensaje:has(> .haku-actualizacion-compacta) > .haku-4b-preparar { margin: 9px 10px; width: calc(100% - 20px); }
 /* Burbuja aprobada en Figma: el cambio ocupa el foco; los contadores una franja. */
 .haku-libro-auto.haku-libro-auto {
+    z-index: 90020; /* Visible y accionable sobre Haku y su inspector (90000/90010). */
     --aviso-fondo: #f0f6f2;
     --aviso-superficie: var(--sites-shell-surface, #fff);
     --aviso-borde: var(--sites-shell-line, #d9e3de);
