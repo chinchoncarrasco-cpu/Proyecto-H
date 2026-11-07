@@ -1075,6 +1075,29 @@
         return new Set();
     }
 
+    // Explicar la diferencia entre fuentes sin exponer nombres de columnas.
+    // Esta descripción no decide identidades ni autoriza cambios de cobro.
+    function explicarDiferenciaCobro(item, candidatos, campos) {
+        if (!campos.includes('tipo_cobro')) return null;
+        const nombres = {hora_fin:'hora de término',personas:'personas',monto:'importe',total:'total',
+            precio:'precio',cantidad:'cantidad',catalogo:'tipo de servicio',fecha:'fecha',horario:'horario'};
+        const otros = [...new Set(campos.filter(x => x !== 'tipo_cobro').map(x => nombres[x] || 'otros datos'))];
+        if (candidatos.length !== 1)
+            return 'Hay varios servicios posibles en Proyecto H. Entre las diferencias está el cobro. Revisa cuál corresponde.' +
+                (otros.length ? ` También difieren: ${otros.join(', ')}.` : '');
+        const actual = candidatos[0], intencion = ['cortesia', 'cobrable'].includes(item.intencion_cobro)
+            ? item.intencion_cobro : intencionCobroServicio(item.servicio);
+        if (!['cortesia', 'cobrable'].includes(intencion))
+            return 'El cobro del Libro no está claro y no coincide con Proyecto H. Revisa si corresponde cobrar o dar cortesía.' +
+                (otros.length ? ` También difieren: ${otros.join(', ')}.` : '');
+        const total = actual.total, importe = total != null && total !== '' && Number.isFinite(Number(total)) && Number(total) >= 0
+            ? '$' + Number(total).toLocaleString('es-CL') : null;
+        const registrado = actual.tipo_cobro === 'cortesia' ? 'cortesía' : actual.tipo_cobro === 'normal'
+            ? importe ? `cobro de ${importe}` : 'con cobro, importe por verificar' : 'cobro por verificar';
+        return `Libro: ${intencion === 'cortesia' ? 'cortesía' : 'con cobro'}. Proyecto H: ${registrado}. ` +
+            (otros.length ? `También difieren: ${otros.join(', ')}. Revisa estos cambios.` : 'Falta actualizar el cobro.');
+    }
+
     function decisionServicioExistente(item, existentes) {
         if (item?.semantica !== "SERVICIO_REAL") return { estado: "no_aplica", motivo: "La identidad sólo se resuelve para SERVICIO_REAL." };
         const reservaId = item.payload?.reserva_id || (item.asociacion?.estado === 'asociada' ? item.asociacion.sistema.reserva_id : null);
@@ -1130,7 +1153,7 @@
                 ['cortesia','cobrable'].includes(item.intencion_cobro) &&
                 (item.intencion_cobro === 'cortesia') !== (x.tipo_cobro === 'cortesia'))
                 return { estado:'revisar', candidatos:porOrigen, contradicciones:['tipo_cobro'],
-                    motivo:'El color de la tinaja en el Libro no coincide con su cobro registrado. Revisa el servicio existente; no se creará otro ni se cambiará su importe automáticamente.' };
+                    motivo:explicarDiferenciaCobro(item,porOrigen,['tipo_cobro']) };
             if (item.reglaFullDay && x.tipo_cobro !== 'cortesia')
                 return { estado:'revisar', candidatos:porOrigen, contradicciones:['tipo_cobro'],
                     motivo:'La tinaja del mismo origen aún figura cobrable; Full Day incluye una hora de cortesía.' };
@@ -1215,6 +1238,7 @@
                 const contradicciones = [...new Set(evaluados.flatMap(x => x.contradicciones))];
                 return { estado: "revisar", candidato: null, candidatos: mismoHechoBase, contradicciones,
                     motivo: item.reglaFullDay ? "Full Day incluye una hora de cortesía; el servicio existente figura como cobrable." :
+                        explicarDiferenciaCobro(item,mismoHechoBase,contradicciones) ||
                         `El servicio existente contradice datos explícitos del Libro: ${contradicciones.join(", ")}.` };
             }
         }

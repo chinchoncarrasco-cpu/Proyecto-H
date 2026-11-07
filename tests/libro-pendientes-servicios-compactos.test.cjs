@@ -58,3 +58,23 @@ test('el motivo principal de identidad no se pierde al resumir los datos que fal
     assert.match(html,/La asociación de la reserva requiere revisión antes de incorporar/);
     assert.equal((html.match(/Falta indicar el día\./g)||[]).length,1);
 });
+
+test('el informe explica una vez cortesía en Libro frente al cobro de Proyecto H, sin modificar el servicio',async()=>{
+    const {e}=await crearCaso(),r=e.state.reservas[0],estadia=e.state.db.reserva_estadias[0];
+    r.texto_original='TÓNEL EL 13/11 A LAS 22.15 CORTESIA';r.pagos_pendientes=[];
+    r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+    e.state.db.servicios=[{id:'tonel-registrado',reserva_id:estadia.reserva_id,estadia_id:estadia.id,
+        fecha_servicio:'2026-11-13',hora_inicio:'22:15:00',hora_fin:'23:15:00',personas:2,cantidad:1,
+        tipo_cobro:'normal',total:30000,estado_servicio:'programado',
+        observaciones:'Importado desde Libro: TÓNEL EL 13/11 A LAS 22.15 X PAGAR',
+        catalogo_servicios:{codigo:'tinajaTonel',nombre:'Tinaja Tonel de Madera'}}];
+    const antes=JSON.stringify(e.state.db),registro={id:'cambio-cobro',tipo:'modificacion',actual:r,
+        anterior:{...r,servicios:[]},cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]};
+    const comp=await e.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],e.c.haikuSupabase,{generacion:1});
+    const item=comp.items[0];item.contexto=C.construir(item,{servicios:comp.serviciosContexto,notas:comp.notasContexto});
+    const html=A.renderizarPendientes({generacion:1,items:[item]});
+    assert.equal((html.match(/Libro: cortesía\. Proyecto H: cobro de \$30\.000\. Falta actualizar el cobro\./g)||[]).length,1);
+    assert.doesNotMatch(html,/tipo_cobro|contradice datos|Completa lo que falta/);
+    assert.match(html,/Ver detalle del Libro/);
+    assert.equal(JSON.stringify(e.state.db),antes);assert.equal(e.state.escrituras.length,0);
+});
