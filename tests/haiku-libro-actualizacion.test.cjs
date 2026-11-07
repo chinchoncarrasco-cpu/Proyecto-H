@@ -311,6 +311,31 @@ test('un fallo focal conserva el historial y permite reintentar',async()=>{
     await assert.rejects(cache.obtener(informe),/Supabase no disponible/);
     await cache.obtener(informe,{revalidar:true});assert.equal(intentos,2);
 });
+test('informe anterior revalida sus pendientes con el Libro actual y conserva el origen',async()=>{
+    let registro={version:1,cambios:[]},leidas=0;
+    const informe={libro_actual:{generacion:3},nuevas:[{actual:{...reserva,adultos:2}}]};
+    const original=JSON.stringify(informe);
+    const cache=A.crearCachePendientes({generacion:()=>4,leer:async()=>registro,guardar:async x=>{registro=x;},
+        contexto:{actualizarDesdeLibro:async rows=>{leidas++;return rows.map(r=>({...r,actual:{...r.actual,adultos:3},
+            fuente_vigente:{estado:'verificada',generacion:4}}));},enriquecer:async rows=>rows},
+        revalidarCambios:async(rows,{generacion})=>{
+            assert.equal(generacion,4);assert.equal(rows[0].actual.adultos,3);assert.equal(rows[0].detectado_generacion,3);
+            return {items:rows,resueltos:[],reservas:rows.map(r=>r.actual),comparacion:[],q:{}};
+        }});
+    const fin=await cache.obtener(informe);assert.equal(fin.preparacion.generacion,4);
+    assert.equal(fin.preparacion.reservas[0].adultos,3);assert.equal(JSON.stringify(informe),original);
+    await cache.obtener(informe);assert.equal(leidas,1);
+});
+test('un cambio durante la lectura termina en la generación vigente sin cancelar el informe',async()=>{
+    let g=3,intentos=0,registro={version:1,cambios:[]};
+    const informe={libro_actual:{generacion:3},nuevas:[{actual:reserva}]};
+    const cache=A.crearCachePendientes({generacion:()=>g,leer:async()=>registro,guardar:async x=>{registro=x;},
+        contexto:{actualizarDesdeLibro:async rows=>{if(++intentos===1){g=4;cache.invalidar();}return rows;},enriquecer:async rows=>rows},
+        revalidarCambios:async(rows,{generacion})=>{assert.equal(generacion,4);return {items:rows,resueltos:[],reservas:rows.map(x=>x.actual),comparacion:[]};}});
+    const [a,b]=await Promise.all([cache.obtener(informe),cache.obtener(informe)]);
+    assert.equal(a.generacion,4);assert.equal(b.generacion,4);assert.equal(a.preparacion.generacion,4);
+    assert.equal(registro.cambios.length,1);assert.equal(registro.cambios[0].detectado_generacion,3);
+});
 test('la cache retira el pendiente cancelado pero conserva la explicación y el enlace en el informe',async()=>{
     let registro={version:1,cambios:[{id:'cancelada',tipo:'nueva',actual:reserva}]},consultas=0;
     const detalle={id:'cancelada',actual:reserva,motivo:'ya_cancelada',sistema:{reserva_id:'r-cancelada',estado_reserva:'cancelada'}};

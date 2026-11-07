@@ -181,18 +181,24 @@
                     if (m0.sha256Checksum && m0.sha256Checksum !== hash || m0.md5Checksum && m0.md5Checksum !== md5Hex(bytes)) throw error("CHECKSUM_INVALIDO");
                     const m1 = metadata(await obtenerMetadata(signal)); comprobarSolicitud(id, libro);
                     if (!iguales(m0, m1)) throw error("FUENTE_CAMBIADA");
-                    const anterior = libro.estado().generacion;
+                    const previo = libro.estado(), anterior = previo.generacion;
                     if (!Number.isSafeInteger(anterior) || anterior < 0) throw error("LECTOR_NO_CONFIRMADO");
-                    let carga;
-                    inicioEntrega = { id, cambios: 0 };
-                    try { carga = entregar(archivo, libro); }
-                    finally { inicioEntrega = null; }
-                    Promise.resolve(carga).catch(() => {});
-                    const generacion = libro.estado().generacion;
-                    if (generacion !== anterior + 1) throw error("LECTOR_NO_CONFIRMADO");
-                    entregaEnCurso = { id, libro, generacion };
-                    try { await esperar(carga, signal); await esperar(libro.listo(), signal); }
-                    finally { if (entregaEnCurso?.id === id) entregaEnCurso = null; }
+                    // M0, descarga, checksums y M1 ya acreditaron estos bytes.
+                    // Certificar la misma copia no es un cambio del Libro ni debe
+                    // invalidar las consultas que están trabajando con ella.
+                    let generacion = anterior;
+                    if (previo.cargado !== true || previo.version !== hash) {
+                        let carga;
+                        inicioEntrega = { id, cambios: 0 };
+                        try { carga = entregar(archivo, libro); }
+                        finally { inicioEntrega = null; }
+                        Promise.resolve(carga).catch(() => {});
+                        generacion = libro.estado().generacion;
+                        if (generacion !== anterior + 1) throw error("LECTOR_NO_CONFIRMADO");
+                        entregaEnCurso = { id, libro, generacion };
+                        try { await esperar(carga, signal); await esperar(libro.listo(), signal); }
+                        finally { if (entregaEnCurso?.id === id) entregaEnCurso = null; }
+                    }
                     comprobarSolicitud(id, libro);
                     const estado = libro.estado();
                     if (estado.cargado !== true || estado.version !== hash || estado.generacion !== generacion) throw error("LECTOR_NO_CONFIRMADO");

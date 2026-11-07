@@ -457,6 +457,18 @@
             return;
         }
         if (typeof lector?.cargarDesdeGoogle === "function") {
+            const antes = lector.estado?.();
+            if (antes?.cargado && /^[a-f0-9]{64}$/i.test(antes.version || '') && root.crypto?.subtle) {
+                const bytes = await archivo.arrayBuffer();
+                const digest = await root.crypto.subtle.digest('SHA-256', bytes);
+                const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+                const ahora = lector.estado?.();
+                if (lector !== root.HAIKU_LIBRO_RESERVA_V1 || ahora?.generacion !== antes.generacion)
+                    throw fallo('FUENTE_CAMBIADA');
+                // Una descarga de los mismos bytes conserva informe, consulta,
+                // cachés y generación; no simula una edición de recepción.
+                if (ahora.cargado && ahora.version === hash) return false;
+            }
             await lector.cargarDesdeGoogle(archivo);
             if (!lector.estado?.().cargado) throw fallo("LECTOR_NO_CONFIRMADO");
             return;
@@ -537,14 +549,15 @@
             // Si Drive no ofrece SHA-256, descargar: el lector evita avisos por bytes idénticos.
             const comprobarCopiaRestaurada = !previa && !mismaHuella;
             const descargarCopia = forzar || (!verificadaVigente && (cambio || comprobarCopiaRestaurada)) || necesitaArchivo;
+            let copiaActualizada = false;
 
             if (descargarCopia) {
                 fuenteControl?.invalidar();
-                pintar("trabajando", "Libro online", cambio && anterior ? "Nueva versión detectada. Actualizando…" : "Descargando versión oficial…");
+                pintar("trabajando", "Libro online", "Comprobando la copia de Google…");
                 const archivo = await descargar(metadata, { signal: abort?.signal });
                 comprobarInforme(); // El body puede terminar después del logout, aunque los headers fueran válidos.
                 if (abort?.signal.aborted) throw fallo("GOOGLE_ERROR");
-                await entregarAlLibro(archivo);
+                copiaActualizada = await entregarAlLibro(archivo) !== false;
                 comprobarInforme();
                 if (metadata.modifiedTime) {
                     modifiedMemoria = metadata.modifiedTime;
@@ -559,7 +572,7 @@
             pintar(
                 "ok",
                 "Libro online conectado",
-                descargarCopia
+                copiaActualizada
                     ? `Copia local actualizada desde Google · ${horaChile(metadata.modifiedTime)}${metadata.name ? ` · ${metadata.name}` : ""}`
                     : `El archivo de Google sigue igual · ${horaChile(metadata.modifiedTime)} · aún debes compararlo con Proyecto H`
             );

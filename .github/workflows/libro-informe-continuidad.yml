@@ -1,0 +1,59 @@
+name: Haku continuidad del informe
+
+on:
+  pull_request:
+    paths:
+      - "js/supabase-asistente-libro-actualizacion-v1.js"
+      - "js/haiku-libro-fuente-oficial-v1.js"
+      - "js/supabase-libro-google-readonly-v1.js"
+      - "css/supabase-haku-reconciliacion-v1.css"
+      - "tests/haiku-libro-actualizacion.test.cjs"
+      - "tests/libro-web-fuente-oficial.test.cjs"
+      - "tests/libro-google-sesion.test.cjs"
+      - "tests/sites-libro-actualizacion-browser-check.cjs"
+      - "tests/libro-web-fuente-oficial-browser-check.cjs"
+      - ".github/workflows/libro-informe-continuidad.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  continuidad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Navegador aislado
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-informe" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          node "$RUNNER_TEMP/haku-informe/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Lector XLSX verificado
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir -p haku-libro-worker
+          curl --fail --silent --show-error --location --retry 2 https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js -o haku-libro-worker/xlsx.full.min.js
+          curl --fail --silent --show-error --location --retry 2 https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js -o haku-libro-worker/jszip.min.js
+          sha256sum --check <<'SUMS'
+          cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  haku-libro-worker/xlsx.full.min.js
+          acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e  haku-libro-worker/jszip.min.js
+          SUMS
+      - name: Fuente, sesión, informe conservado y contexto vigente
+        env:
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: node --test tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-pagos-lectura-estable.test.cjs
+      - name: Informe operativo y lector real en escritorio y móvil
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-informe/node_modules
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: |
+          export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          export HAIKU_BROWSER_EXECUTABLE="$HAKU_CHROMIUM_PATH"
+          resultado=0
+          node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
+          node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
+          exit "$resultado"

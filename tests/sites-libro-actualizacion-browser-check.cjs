@@ -133,8 +133,11 @@ const server = http.createServer((request, response) => {
                 detail: { carga_manual: true, tenia_anterior: true, generacion: 2 }
             }));
         });
-        const secondAnnouncement = page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje').filter({ hasText: 'Ver informe' }).last();
-        await secondAnnouncement.locator('button').click();
+        const secondAnnouncement = page.locator('.haku-libro-auto').filter({hasText:'Ver informe'});
+        await secondAnnouncement.getByRole('button',{name:'Ver informe',exact:true}).click();
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),2,'el aviso de fondo conserva el informe abierto');
+        assert.equal(await page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje').filter({hasText:'Ver informe'}).count(),0,
+            'una consulta abierta recibe la burbuja sin insertar otro mensaje');
         const report = page.locator('.haku-actualizacion-sites').last();
         assert.deepEqual(await report.locator('.haku-actualizacion-sites__metricas strong').allInnerTexts(), ['1', '1', '1', '1']);
         assert.deepEqual(await report.locator('.haku-prioridad-fila > summary strong').allInnerTexts(), ['1', '1', '1', '1']);
@@ -158,7 +161,10 @@ const server = http.createServer((request, response) => {
         const history = report.locator('.haku-actualizacion-sites__historial');
         assert.match(await history.innerText(), /Qué falta resolver en Proyecto H/);
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
+        const comparacion = history.getByText('Ver comparación de datos (1)', { exact: true });
+        await comparacion.click();
         assert.match(await history.innerText(), /En Proyecto H: 2/);
+        await comparacion.click();
         await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica']);
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
@@ -300,12 +306,56 @@ const server = http.createServer((request, response) => {
         assert.match(textoAvisos,/Versión anterior · Oct26/);assert.match(textoAvisos,/Versión actual · Oct26/);
         assert.equal((textoAvisos.match(/La cantidad de noches escrita no coincide/g)||[]).length,2);
         assert.doesNotMatch(textoAvisos,/Titular no disponible|CAB —|Fechas no determinadas/);
+        await page.waitForFunction(()=>document.querySelectorAll('.haku-libro-pendientes-zona')[
+            document.querySelectorAll('.haku-libro-pendientes-zona').length-1]?.textContent.includes('No quedan cambios pendientes'));
+        assert.doesNotMatch(await page.locator('.haku-actualizacion-sites').last().innerText(),/Llegó una versión nueva del Libro/,
+            'un resultado directo con generación explícita no depende de un WeakMap privado');
         for(const width of [1100,390,320]){
             await page.setViewportSize({width,height:900});
             assert.equal(await avisos.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${width}: avisos sin desbordes`);
             if(process.env.HAKU_AVISOS_SCREENSHOT_DIR){fs.mkdirSync(process.env.HAKU_AVISOS_SCREENSHOT_DIR,{recursive:true});
                 await avisos.screenshot({path:path.join(process.env.HAKU_AVISOS_SCREENSHOT_DIR,`avisos-${width}.png`)});}
         }
+        // Conservar el informe, incluso si el Libro avanzó antes de abrirlo y
+        // otra vez antes de pulsar su acción. La preparación recibe lo vigente.
+        await page.evaluate(()=>{
+            window.__generation=4;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+            const actual={id:'Nov26!X7',titular:'Reserva de continuidad',cabana:5,fecha_checkin:'2026-11-06',fecha_checkout:'2026-11-08',adultos:3};
+            window.__pendientesActual={items:[{id:'caso-continuidad',tipo:'modificacion',actual,accionable:true,
+                sistema:{reserva_id:'reserva-continuidad'},
+                cambios:[{campo:'adultos',antes:2,ahora:3,proyecto:2}],preparacion:{reservas:[actual],comparacion:[],generacion:4,q:{}}}],
+                resueltos:[],reservas:[actual],comparacion:[],q:{}};
+            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async x=>x,enriquecer:async x=>x,fraseHistorial:()=>''};
+            window.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion=async(el,scope)=>{
+                window.__preparationScopes.push(structuredClone(scope));el.textContent='Continuidad comprobada';
+            };
+            window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'ok',libro_actual:{generacion:3},
+                modificadas:[{actual:{...actual,adultos:2},cambios:[{campo:'adultos',antes:1,ahora:2}]}]});
+            document.getElementById('haiku-asistente-texto').value='Mi consulta sigue aquí';
+        });
+        const conservado=page.locator('.haku-actualizacion-sites').last();
+        await page.waitForFunction(()=>{
+            const zonas=document.querySelectorAll('.haku-libro-pendientes-zona'),ultima=zonas[zonas.length-1];
+            return ultima?.querySelector('.haku-actualizacion-sites__historial,.haku-libro-pendientes-error');
+        });
+        const estadoConservado=await conservado.locator('.haku-libro-pendientes-zona').innerText();
+        assert.match(estadoConservado,/Revisar cambios/,'el informe conservado ofrece acciones: '+estadoConservado+'; errores: '+JSON.stringify(errors));
+        await conservado.getByRole('button',{name:'Revisar cambios',exact:true}).click();
+        assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).generacion),4);
+        await conservado.locator('.haku-actualizacion-sites__pendiente > summary').click();
+        await page.evaluate(()=>{
+            __generation=5;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __pendientesActual.items[0].actual.adultos=4;
+            __pendientesActual.items[0].preparacion.generacion=5;
+        });
+        await conservado.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        await page.waitForFunction(()=>__preparationScopes.at(-1).generacion===5);
+        assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).reservas[0].adultos),4);
+        assert.equal(await conservado.locator('.haku-actualizacion-sites__pendiente').getAttribute('open'),'');
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        assert.match(await conservado.innerText(),/Continuidad comprobada/);
+        assert.doesNotMatch(await conservado.innerText(),/Llegó una versión nueva|Genera el informe nuevamente/);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

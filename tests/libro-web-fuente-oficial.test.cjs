@@ -175,6 +175,20 @@ test('M2 verifica metadata/hash/generación sin otra descarga y sin comparar', a
     assert.equal(await x.control.verificarVigencia(h), x.control.fuente(h));
     assert.deepEqual(x.stats(), { lecturas: 3, descargas: 1, cargas: 1 });
 });
+test('volver a certificar bytes idénticos conserva generación y no dispara otra carga',async()=>{
+    const x=fixture(),anterior=await x.control.obtener(),g=x.estado().generacion;
+    const actual=await x.control.obtener();
+    assert.equal(x.estado().generacion,g);assert.equal(x.control.fuente(actual).generacion,g);
+    assert.deepEqual(x.stats(),{lecturas:4,descargas:2,cargas:1});
+    assert.throws(()=>x.control.fuente(anterior),{code:'FUENTE_CAMBIADA'});
+    await x.control.verificarVigencia(actual);
+});
+test('metadata nueva con los mismos bytes se verifica sin invalidar el lector',async()=>{
+    let version='77';const x=fixture({metadata:()=>({...original(),version})});
+    await x.control.obtener();version='78';const h=await x.control.obtener();
+    assert.equal(x.control.fuente(h).generacion,1);assert.equal(x.stats().cargas,1);
+    assert.equal(x.stats().descargas,2);
+});
 for (const key of ['version', 'generacion']) test('M2 comprueba ' + key + ' del lector antes de leer Drive', async () => {
     const x = fixture(), h = await x.control.obtener();
     x.estado()[key] = key === 'version' ? '0'.repeat(64) : 900;

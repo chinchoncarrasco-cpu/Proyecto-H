@@ -19,7 +19,8 @@ const storage = (map, fail = false) => ({
 function browser(options = {}) {
     const session = options.session || new Map(), local = options.local || new Map();
     const events = new EventTarget(), docEvents = new EventTarget(), timers = new Map(), intervals = new Map();
-    const requests = [], serverRequests = [], loads = [], bytes = fs.readFileSync(require.resolve('./fixtures/libro-reconciliacion-oct26-real.xlsx'));
+    const requests = [], serverRequests = [], loads = [];
+    let bytes = fs.readFileSync(require.resolve('./fixtures/libro-reconciliacion-oct26-real.xlsx'));
     let now = options.now ?? 1792886400000, seq = 0, oauth = 0, revokes = 0, callback, pendingOAuth;
     const meta = { id: fileId, name: 'Libro prueba.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         modifiedTime: '2026-10-25T00:00:00Z', version: '1', size: String(bytes.length),
@@ -67,11 +68,22 @@ function browser(options = {}) {
     }
     root.window = root; vm.runInNewContext(code, root);
     return { root, api: root.HAIKU_LIBRO_GOOGLE_V1, session, local, requests, serverRequests, loads, timers, intervals, meta,
+        cambiarContenido() {
+            bytes=Buffer.concat([bytes,Buffer.from('cambio ficticio')]);
+            Object.assign(meta,{size:String(bytes.length),sha256Checksum:createHash('sha256').update(bytes).digest('hex'),
+                md5Checksum:createHash('md5').update(bytes).digest('hex')});
+        },
         now: () => now, advance: ms => { now += ms; }, oauth: () => oauth, revokes: () => revokes, oauthReply: () => pendingOAuth(),
         event: name => events.dispatchEvent(new Event(name)),
         visibility(value) { root.document.visibilityState = value; docEvents.dispatchEvent(new Event('visibilitychange')); },
         auth(event, id) { callback(event, id ? { user: { id } } : null); },
-        async idle() { for (let i = 0; i < 12; i++) await tick(); }
+        async idle() {
+            for (let i = 0; i < 200; i++) {
+                await tick();
+                if(i>=12&&!root.HAIKU_LIBRO_GOOGLE_V1.estado().sincronizando)return;
+                await new Promise(resolve=>setTimeout(resolve,1));
+            }
+        }
     };
 }
 
@@ -149,7 +161,10 @@ test('vencimiento elimina la sesión; F5 no amplía el permiso ni solicita OAuth
 test('almacenamiento bloqueado no rompe conexión, lectura ni desconexión', async () => {
     const b = browser({ failStorage: true }); await b.api.conectar();
     assert.equal(b.api.estado().conectado, true); assert.equal(b.loads.length, 1);
-    await b.api.sincronizar(); assert.equal(b.loads.length, 2); b.api.desconectar();
+    const generacion=b.root.HAIKU_LIBRO_RESERVA_V1.estado().generacion;
+    await b.api.sincronizar(); assert.equal(b.loads.length, 1);
+    assert.equal(b.root.HAIKU_LIBRO_RESERVA_V1.estado().generacion,generacion);
+    assert.equal(b.requests.filter(x=>x.url.includes('alt=media')).length,2);b.api.desconectar();
 });
 
 test('informe readonly no restaura ni modifica la sesión guardada del panel', async () => {
@@ -171,7 +186,7 @@ test('401 al recuperar invalida el permiso; una caída de red lo conserva para r
 test('volver a la pestaña o recuperar internet comprueba cambios sin esperar al próximo intervalo', async () => {
     const b = browser(); await b.api.conectar(); const before = b.requests.length;
     b.advance(4000); b.visibility('hidden'); await b.idle(); assert.equal(b.requests.length, before);
-    b.meta.version = '2'; b.visibility('visible'); b.event('focus'); await b.idle();
+    b.meta.version = '2'; b.cambiarContenido(); b.visibility('visible'); b.event('focus'); await b.idle();
     assert.equal(b.requests.length, before + 2); assert.equal(b.loads.length, 2);
     b.advance(4000); b.event('online'); await b.idle(); assert.equal(b.requests.length, before + 3);
     assert.equal(b.loads.length, 2); // Mismo archivo: sólo metadata, sin aviso duplicado.
@@ -181,7 +196,7 @@ test('un cambio de versión con igual fecha se reintenta si falla la descarga', 
     let fail = false;
     const b = browser({ fetcher: async (url, _init, meta, bytes) => url.includes('alt=media')
         ? new Response(fail ? '' : bytes, { status: fail ? 503 : 200 }) : new Response(JSON.stringify(meta)) });
-    await b.api.conectar(); b.meta.version = '2'; fail = true;
+    await b.api.conectar(); b.meta.version = '2'; b.cambiarContenido(); fail = true;
     [...b.intervals.values()][0].f(); await b.idle(); assert.equal(b.loads.length, 1);
     fail = false; [...b.intervals.values()][0].f(); await b.idle(); assert.equal(b.loads.length, 2);
 });
@@ -240,7 +255,7 @@ test('chat integrado: configuración servidor ausente permanece cerrado sin GIS'
 });
 test('servidor: sigue conectado tras una jornada y comprueba cambios por versión', async () => {
     const b = browser({ server: true }); await b.idle(); b.advance(12 * 3600000);
-    b.meta.version = '2'; b.event('focus'); await b.idle();
+    b.meta.version = '2'; b.cambiarContenido(); b.event('focus'); await b.idle();
     assert.equal(b.api.estado().conectado, true); assert.equal(b.loads.length, 2); assert.equal(b.oauth(), 0);
     assert.equal([...b.timers.values()].some(t => t.ms > 30000), false);
 });
