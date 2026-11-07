@@ -53,5 +53,7 @@ jobs:
         run: |
           export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
           export HAIKU_BROWSER_EXECUTABLE="$HAKU_CHROMIUM_PATH"
-          node tests/sites-libro-actualizacion-browser-check.cjs
-          node tests/libro-web-fuente-oficial-browser-check.cjs
+          resultado=0
+          node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
+          node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
+          exit "$resultado"

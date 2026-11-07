@@ -161,7 +161,10 @@ const server = http.createServer((request, response) => {
         const history = report.locator('.haku-actualizacion-sites__historial');
         assert.match(await history.innerText(), /Qué falta resolver en Proyecto H/);
         await history.locator('.haku-actualizacion-sites__pendiente > summary').click();
+        const comparacion = history.getByText('Ver comparación de datos (1)', { exact: true });
+        await comparacion.click();
         assert.match(await history.innerText(), /En Proyecto H: 2/);
+        await comparacion.click();
         await history.getByRole('button',{name:'Ver reserva',exact:true}).click();
         assert.deepEqual(await page.evaluate(()=>window.__reservasAbiertas),['reserva-sintetica']);
         assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(), 1);
