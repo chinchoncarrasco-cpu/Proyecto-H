@@ -1736,6 +1736,9 @@
     font: 400 12px/18px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
 .haku-libro-auto.haku-libro-auto p { margin: 0; }
+.haku-libro-auto__resumen, .haku-libro-auto__filtrado { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.haku-libro-auto__resumen[hidden], .haku-libro-auto__filtrado[hidden] { display: none; }
+.haku-libro-auto__filtrado .haku-libro-auto__caso:last-child { padding-bottom: 0; border-bottom: 0; }
 .haku-libro-auto__marca { display: block; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 600; }
 .haku-libro-auto__titulo { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
 .haku-libro-auto__caso { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); }
@@ -1745,11 +1748,9 @@
 .haku-libro-auto__detalles dd { margin: 0; font-size: 12px; font-weight: 500; }
 .haku-libro-auto__prioridades {
     display: flex; align-items: center; justify-content: space-between; gap: 0;
-    padding: 4px 8px; border: 1px solid var(--aviso-borde); border-radius: 4px;
+    padding: 0; border: 1px solid var(--aviso-borde); border-radius: 4px;
     background: var(--aviso-superficie); font-size: 11px; line-height: 14px;
 }
-.haku-libro-auto__prioridad { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--aviso-secundario); }
-.haku-libro-auto__prioridad + .haku-libro-auto__prioridad { border-left: 1px solid var(--aviso-borde); padding-left: 12px; }
 .haku-libro-auto__prioridad strong { color: var(--aviso-texto); font-size: inherit; font-weight: 600; }
 .haku-libro-auto__aviso { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; }
 .haku-libro-auto__acciones { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px solid var(--aviso-borde); }
@@ -1772,10 +1773,18 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto {
 }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { background: var(--aviso-superficie); color: var(--aviso-acento); border-color: var(--aviso-borde); }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad {
+    display: inline-flex; flex: 1; align-items: center; justify-content: center; gap: 4px;
+    min-width: 0; min-height: 26px; padding: 3px 5px; border: 0; border-radius: 2px;
+    background: transparent; color: var(--aviso-secundario); white-space: nowrap; font-size: 11px; line-height: 16px;
+}
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad + .haku-libro-auto__prioridad { border-left: 1px solid var(--aviso-borde); }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad:hover,
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad[aria-expanded="true"] { background: var(--aviso-fondo); color: var(--aviso-acento); }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad[aria-expanded="true"] { box-shadow: inset 0 -2px var(--aviso-acento); }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad:focus-visible { outline-offset: -2px; }
 @media (max-width: 370px) {
     .haku-libro-auto.haku-libro-auto { right: 10px; width: calc(100vw - 20px); }
-    .haku-libro-auto__prioridades { padding-inline: 5px; }
-    .haku-libro-auto__prioridad + .haku-libro-auto__prioridad { padding-left: 6px; }
 }
 
 /* Comparar pagos: misma geometría compacta, acotada a esta vista. */

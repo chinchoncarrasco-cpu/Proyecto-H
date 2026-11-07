@@ -7,11 +7,11 @@
     const normalizar = x => String(x ?? '').normalize('NFC').trim().replace(/\s+/g,' ').toLowerCase();
     const breve = (x,max=100) => { const s=String(x??'').trim().replace(/\s+/g,' '); return s.length>max?s.slice(0,max-1)+'…':s; };
     // El aviso es visible fuera del chat: no copiar contactos, documentos ni montos.
-    function notaBreve(x) {
+    function notaBreve(x,max=84) {
         return breve(String(x??'').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[correo]')
             .replace(/(?:\$|\bCLP\s*|\bUSD\s*)\s*\d[\d.,]*/gi,'[monto]')
             .replace(/\b\d{1,2}\.\d{3}\.\d{3}-[\dk]\b|\b\d{7,8}-[\dk]\b/gi,'[documento]')
-            .replace(/\+?\d[\d ()-]{6,}\d/g,s=>/^\d{4}-\d{2}-\d{2}$/.test(s)||/^\d{2}-\d{2}-\d{4}$/.test(s)?s:s.replace(/\D/g,'').length>=8?'[dato]':s),84);
+            .replace(/\+?\d[\d ()-]{6,}\d/g,s=>/^\d{4}-\d{2}-\d{2}$/.test(s)||/^\d{2}-\d{2}-\d{4}$/.test(s)?s:s.replace(/\D/g,'').length>=8?'[dato]':s),max);
     }
     function fechaCorta(x,conAno=false) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(x||'')) return 'Sin fecha';
@@ -59,23 +59,39 @@
         const [etiqueta,texto]=otros[c.campo]||['Reserva','Cambió un dato de la reserva.'];return {etiqueta,texto};
     }
     function describirBurbuja(r) {
-        const casos=[];
-        const agregar=(titulo,reserva,detalles)=>casos.push({titulo,reserva:`${breve(reserva?.titular||'Nombre no indicado',60)} · CAB ${reserva?.cabana??'—'}`,detalles});
-        for(const x of lista(r.nuevas)) agregar('Se agregó una reserva',x.actual,[{etiqueta:'Estadía',texto:`${fechaCorta(x.actual?.fecha_checkin,true)} → ${fechaCorta(x.actual?.fecha_checkout,true)}`}]);
+        const casos=[],porOrigen=new Map();
+        const agregar=(origen,titulo,reserva,detalles)=>{
+            const caso={titulo,reserva:`${breve(reserva?.titular||'Nombre no indicado',60)} · CAB ${reserva?.cabana??'—'}`,detalles};
+            casos.push(caso);porOrigen.set(origen,caso);
+        };
+        for(const x of lista(r.nuevas)) agregar(x,'Se agregó una reserva',x.actual,[{etiqueta:'Estadía',texto:`${fechaCorta(x.actual?.fecha_checkin,true)} → ${fechaCorta(x.actual?.fecha_checkout,true)}`}]);
         for(const x of lista(r.modificadas)) {
             const cambios=lista(x.cambios),detalles=cambios.slice(0,3).map(detalleCambio);
             if(cambios.length>3)detalles.push({etiqueta:'Además',texto:`${cambios.length-3} ${cambios.length===4?'cambio':'cambios'} más en el informe.`});
-            agregar('Cambió una reserva',x.actual,detalles.length?detalles:[{etiqueta:'Reserva',texto:'Cambió la información de la reserva.'}]);
+            agregar(x,'Cambió una reserva',x.actual,detalles.length?detalles:[{etiqueta:'Reserva',texto:'Cambió la información de la reserva.'}]);
         }
-        for(const x of lista(r.cancelaciones_confirmadas)) agregar('Cancelada en el Libro',x.anterior,[{etiqueta:'Estado',texto:'Figura en CANCELACIONES. Falta confirmarla en Proyecto H.'}]);
-        for(const x of lista(r.ya_no_aparecen)) agregar('Una reserva ya no aparece',x.anterior,[{etiqueta:'Libro',texto:'No aparece en la versión actual.'}]);
+        for(const x of lista(r.cancelaciones_confirmadas)) agregar(x,'Cancelada en el Libro',x.anterior,[{etiqueta:'Estado',texto:'Figura en CANCELACIONES. Falta confirmarla en Proyecto H.'}]);
+        for(const x of lista(r.ya_no_aparecen)) agregar(x,'Una reserva ya no aparece',x.anterior,[{etiqueta:'Libro',texto:'No aparece en la versión actual.'}]);
         const avisos=[];
         if(['parcial','no_comparable'].includes(r.estado))avisos.push('No pude revisar todo el Libro.');
         const ambiguas=lista(r.ambiguas).length,advertencias=lista(r.advertencias).length;
         if(ambiguas)avisos.push(`${ambiguas} ${ambiguas===1?'caso por':'casos por'} aclarar.`);
         if(advertencias)avisos.push(`${advertencias} ${advertencias===1?'dato por':'datos por'} revisar.`);
-        const grupos=root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1?.clasificar?.(r)?.grupos;
-        const prioridades=grupos?[['hoy','Hoy'],['manana','Mañana'],['proximos','Próximos'],['informativos','Info']].map(([clave,nombre])=>({clave,nombre,total:lista(grupos[clave]).length})):[];
+        const formatearAviso=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.detalleAviso;
+        const grupos=root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1?.clasificar?.(r,{incluirOrigen:true,formatearAviso})?.grupos;
+        const describirCaso=x=>{
+            const conocido=porOrigen.get(x.origen);
+            if(conocido)return x.tipo==='modificada'&&lista(x.origen.cambios).length
+                ? {...conocido,detalles:x.origen.cambios.map(detalleCambio)}:conocido;
+            const reservas=[...new Set(lista(x.segmentos).filter(s=>s.titular||s.cabana!=null)
+                .map(s=>`${breve(s.titular||'Nombre no indicado',60)} · CAB ${s.cabana??'—'}`))];
+            const motivo=x.detalleAviso||(formatearAviso&&x.origen?.motivo?formatearAviso(x.origen.motivo):'No pude identificar con certeza a qué reserva corresponde.');
+            return {titulo:x.tipo==='ambigua'?'Reserva por aclarar':x.tipo==='cobertura'?'Lectura incompleta':'Dato por revisar',
+                reserva:[x.versionAviso,...reservas].filter(Boolean).join(' · '),
+                detalles:[{etiqueta:'Motivo',texto:notaBreve(motivo,600)}]};
+        };
+        const prioridades=grupos?[['hoy','Hoy'],['manana','Mañana'],['proximos','Próximos'],['informativos','Info']]
+            .map(([clave,nombre])=>({clave,nombre,total:lista(grupos[clave]).length,casos:lista(grupos[clave]).map(describirCaso)})):[];
         return {titulo:casos.length>1?`${casos.length} cambios en el Libro`:casos.length?'':avisos.length?'Actualización por revisar':'Sin cambios entre copias',casos:casos.slice(0,3),restantes:Math.max(0,casos.length-3),avisos,prioridades,
             detalle:!casos.length&&!avisos.length?'Esto no compara con Proyecto H.':''};
     }
@@ -131,7 +147,7 @@
         };
     }
     function instalar() {
-        let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido;
+        let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0;
         const consultando = () => root.HAIKU_ASISTENTE?.procesando?.() === true || root.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true || root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true;
         const consultaVisible = () => consultando() || Boolean(root.document.querySelector?.('#haiku-asistente-mensajes [data-haiku-libro-respuesta="1"], #haiku-asistente-mensajes .haiku-asistente-preview')) || Boolean(root.document.getElementById('haiku-asistente-texto')?.value?.trim());
         root.document.getElementById('haiku-asistente-texto')?.addEventListener('input',()=>{
@@ -161,20 +177,42 @@
             const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre.appendChild(el);return el;};
             nodo(toast,'strong','haku-libro-auto__marca','Haku');
             if (burbuja) {
-                if(burbuja.titulo)nodo(toast,'strong','haku-libro-auto__titulo',burbuja.titulo);
-                for(const caso of burbuja.casos){
-                    const bloque=nodo(toast,'section','haku-libro-auto__caso');
+                const resumen=nodo(toast,'div','haku-libro-auto__resumen');
+                const mostrarCaso=(padre,caso)=>{
+                    const bloque=nodo(padre,'section','haku-libro-auto__caso');
                     nodo(bloque,'strong','haku-libro-auto__titulo',caso.titulo);
-                    nodo(bloque,'p','haku-libro-auto__reserva',caso.reserva);
+                    if(caso.reserva)nodo(bloque,'p','haku-libro-auto__reserva',caso.reserva);
                     const detalles=nodo(bloque,'dl','haku-libro-auto__detalles');
                     for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}
-                }
-                if(burbuja.restantes)nodo(toast,'p','haku-libro-auto__aviso',`${burbuja.restantes} ${burbuja.restantes===1?'cambio':'cambios'} más en el informe.`);
-                if(burbuja.detalle)nodo(toast,'p','haku-libro-auto__aviso',burbuja.detalle);
-                if(burbuja.avisos.length)nodo(toast,'p','haku-libro-auto__aviso',burbuja.avisos.join(' '));
+                };
+                if(burbuja.titulo)nodo(resumen,'strong','haku-libro-auto__titulo',burbuja.titulo);
+                for(const caso of burbuja.casos)mostrarCaso(resumen,caso);
+                if(burbuja.restantes)nodo(resumen,'p','haku-libro-auto__aviso',`${burbuja.restantes} ${burbuja.restantes===1?'cambio':'cambios'} más en el informe.`);
+                if(burbuja.detalle)nodo(resumen,'p','haku-libro-auto__aviso',burbuja.detalle);
+                if(burbuja.avisos.length)nodo(resumen,'p','haku-libro-auto__aviso',burbuja.avisos.join(' '));
                 if(burbuja.prioridades.length){
-                    const franja=nodo(toast,'div','haku-libro-auto__prioridades');franja.setAttribute('aria-label','Cambios y avisos por fecha');
-                    for(const p of burbuja.prioridades){const item=nodo(franja,'span','haku-libro-auto__prioridad');item.setAttribute('title',p.clave==='proximos'?'Próximos 2 a 7 días':p.clave==='informativos'?'Informativos, incluidos casos sin fecha':p.nombre);nodo(item,'span','',p.nombre);nodo(item,'strong','',String(p.total));}
+                    const franja=nodo(toast,'div','haku-libro-auto__prioridades');franja.setAttribute('role','group');franja.setAttribute('aria-label','Cambios y avisos por fecha');
+                    const contenido=nodo(toast,'div','haku-libro-auto__filtrado');
+                    contenido.id='haku-aviso-categoria-'+(++numeroAviso);contenido.hidden=true;contenido.setAttribute('role','region');
+                    let seleccion=null;
+                    for(const p of burbuja.prioridades){
+                        const item=nodo(franja,'button','haku-libro-auto__prioridad');item.type='button';
+                        item.setAttribute('title',p.clave==='proximos'?'Próximos 2 a 7 días':p.clave==='informativos'?'Informativos, incluidos casos sin fecha':p.nombre);
+                        item.setAttribute('aria-controls',contenido.id);item.setAttribute('aria-expanded','false');
+                        nodo(item,'span','',p.nombre);nodo(item,'strong','',String(p.total));
+                        item.addEventListener('click',()=>{
+                            seleccion=seleccion===p.clave?null:p.clave;
+                            for(const boton of franja.children)boton.setAttribute('aria-expanded',String(seleccion!==null&&boton===item));
+                            contenido.replaceChildren();contenido.hidden=seleccion===null;resumen.hidden=seleccion!==null;
+                            if(seleccion!==null){
+                                contenido.setAttribute('aria-label',p.nombre+' · '+p.total);
+                                for(const caso of p.casos)mostrarCaso(contenido,caso);
+                                if(!p.total)nodo(contenido,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
+                            }
+                            // Sólo cambia la vista de este aviso; no relee el Libro ni toca la consulta.
+                            toast.scrollTop=0;
+                        });
+                    }
                 }
             } else nodo(toast,'p','haku-libro-auto__aviso',texto);
             const conservarConsulta=consultaVisible();

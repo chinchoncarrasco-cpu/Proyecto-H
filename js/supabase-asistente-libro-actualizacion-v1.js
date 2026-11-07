@@ -762,7 +762,7 @@
         root.addEventListener('keydown',interceptar,true);
         return true;
     }
-    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,extraerCambiosDetectados,fusionarHistorialCambios,
+    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,extraerCambiosDetectados,fusionarHistorialCambios,
         crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;

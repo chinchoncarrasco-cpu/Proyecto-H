@@ -390,6 +390,10 @@ const server = http.createServer((request, response) => {
         const incorporando=burbuja.getByRole('button',{name:'Incorporando…',exact:true});
         assert.equal(await incorporando.isDisabled(),true);
         await incorporando.dispatchEvent('click');
+        const categoriasGuardando=burbuja.locator('.haku-libro-auto__prioridad');
+        await categoriasGuardando.last().click();
+        assert.equal(await incorporando.getAttribute('aria-busy'),'true','filtrar no interrumpe la incorporación');
+        await categoriasGuardando.last().click();
         for(const tema of ['claro','oscuro']){
             await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
             for(const width of [1100,390,320]){
@@ -441,6 +445,45 @@ const server = http.createServer((request, response) => {
         await burbuja.getByText('Incorporado: 1 reserva.',{exact:true}).waitFor();
         assert.equal(await page.evaluate(()=>__intentosAviso),2);
         assert.equal(await page.evaluate(()=>__opened),abiertosAntes);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
+        // Los dos informativos se pueden leer en el aviso, sin entrar al informe.
+        await page.evaluate(()=>{
+            __generation=9;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __resultadoActual={estado:'sin_cambios',libro_actual:{generacion:9},
+                advertencias:['anterior','actual'].map(version=>({version,hoja:'Oct26',
+                    detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))};
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_automatica:true,tenia_anterior:true,generacion:9}}));
+        });
+        const categorias=burbuja.locator('.haku-libro-auto__prioridad'),filtrado=burbuja.locator('.haku-libro-auto__filtrado');
+        await categorias.last().waitFor();
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                await categorias.last().click();
+                assert.equal(await filtrado.locator('.haku-libro-auto__caso').count(),2);
+                assert.match(await filtrado.innerText(),/Versión anterior.*Oct26/s);
+                assert.match(await filtrado.innerText(),/Versión actual.*Oct26/s);
+                assert.match(await filtrado.innerText(),/La cantidad de noches escrita no coincide/);
+                assert.equal(await burbuja.locator('.haku-libro-auto__resumen').isVisible(),false,'sin duplicar el resumen');
+                assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: filtro sin desbordes`);
+                assert.ok((await burbuja.locator('.haku-libro-auto__prioridades').boundingBox()).height<=30,'contadores compactos');
+                assert.notEqual(await categorias.last().evaluate(el=>getComputedStyle(el).boxShadow),'none','categoría seleccionada visible');
+                await categorias.first().click();
+                assert.match(await filtrado.innerText(),/No hay cambios ni avisos/);
+                assert.equal(await categorias.last().getAttribute('aria-expanded'),'false');
+                await categorias.first().press('Enter');
+                assert.equal(await filtrado.isVisible(),false);
+                assert.equal(await burbuja.locator('.haku-libro-auto__resumen').isVisible(),true);
+                await categorias.last().focus();await categorias.last().press('Space');
+                assert.equal(await filtrado.isVisible(),true,'acceso con teclado');
+                await categorias.last().press('Space');
+                assert.equal(await filtrado.isVisible(),false);
+            }
+        }
+        assert.equal(await page.evaluate(()=>__opened),abiertosAntes);
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntes);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
