@@ -177,6 +177,7 @@
         const completa = cobertura.hojas.length > 0 && cobertura.hojas.every(c => c.geometria === true && c.pagos === true) &&
             cobertura.bloqueosLecturaSegura === true && !cobertura.cabanasRevision.length &&
             cobertura.pagosPorCaso.every(c => c.cobertura === true) &&
+            !modelo.reservasPorIdentificar.length &&
             !(comp.meta.libro_detectadas > 0 && !comp.meta.estadias_libro);
         return { schemaVersion, intent: "comparar_libro_mes_actual", mode: "read-only", canonicalRevision, generatedAt,
             status: completa ? "ok" : "incompleto", error: completa ? null : { code: "COBERTURA_INSUFICIENTE", message: "La lectura no permite afirmar cobertura completa." },
@@ -185,12 +186,14 @@
             comparacion: { items, grupos, meta: campos(comp.meta, metaKeys) }, pagosDetalle, serviciosDetalle,
             advertencias: textos(result.advertencias), cobertura,
             contexto: { cadenaCanonica: [...cadenaCanonica], advertenciasInformativas: textos(modelo.advertenciasInformativas),
+                reservasPorIdentificar: modelo.reservasPorIdentificar.map(a => ({...campos(a, ['cabana','fecha']),
+                    titularesPosibles: textos(a.titulares_posibles), fechasOcupadas: textos(a.fechas_ocupadas), origen: origen(a.origen)})),
                 bloqueos: { items: lista(b).map(x => ({ ...bloqueo(x.bloqueo), ...campos(x, ["estado", "mensaje"]) })),
                     soloProyectoH: lista(b?.solo_proyecto_h).map(bloqueo), revisionInversa: lista(b?.revision_inversa).map(bloqueo), errorInversa: escalar(b?.error_inversa) },
                 cancelaciones: { confirmadas: lista(result.cancelaciones_confirmadas).map(cancelacion),
                     yaCoinciden: lista(result.cancelaciones_ya_coinciden).map(cancelacion), revision: lista(result.cancelaciones_revision).map(cancelacion) } },
             presentacion: campos(modelo.contadores, ["gruposLibro", "registrosDetectados", "reservasProyecto", "estadiasAsociadas",
-                "estadiasValidas", "gruposAsociados", "faltantes", "ambiguas", "casosConDiferencias", "gruposConDiferencias",
+                "estadiasValidas", "gruposAsociados", "faltantes", "ambiguas", "reservasPorIdentificar", "casosConDiferencias", "gruposConDiferencias",
                 "pagosFaltantes", "pagosRevisar", "serviciosRevisar", "advertencias", "advertenciasInformativas"]) };
     }
 

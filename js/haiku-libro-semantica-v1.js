@@ -158,7 +158,7 @@
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
         const objetos = /^(?:cortesia|articulos?|art\.?|utensilios?\s+(?:de|para)\s+asado|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
         // Reconocer entregas de insumos sin descartar nombres por un apellido aislado.
-        const entregaInsumos = /^(?:se(?:\s+les?)?\s+)?(?:hace\s+)?entr{1,2}ega\s+(?:de\s+)?(?:carbon|lena|utensilios?\s+(?:de|para)\s+asado)\b/;
+        const entregaInsumos = /^(?:se(?:\s+les?)?\s+)?(?:hace\s+)?entr{1,2}eg(?:a|ad[oa]s?)\s+(?:de\s+)?(?:carbon|lena|utensilios?\s+(?:de|para)\s+asado|sacacorchos?|tenazas?|batas?|llaves?|ceniceros?)\b/;
         const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
@@ -169,6 +169,9 @@
         let humanoPrevio=false, datosPosteriores=false;
         const clasificar = texto => {
             const t=normalizar(texto);
+            // Canal de llegada, no un segundo huésped. Sólo el campo completo:
+            // un nombre que contenga «Walk» sigue siendo candidato a titular.
+            if (/^walk[\s-]*in$/.test(t)) return 'etiqueta';
             if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) return 'etiqueta';
             if (notaDeTitular(texto, datosPosteriores)) return 'nota_operativa';
             if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
@@ -910,7 +913,10 @@
                     const ambigua=candidatosTitular(cell.valor).length>1;
                     if(ambigua)res.advertencias.push(`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`);
                     res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
-                        ...(ambigua?{advertencias:['Varios posibles titulares; no se eligió uno arbitrariamente.']}: {}) }); continue;
+                        ...(ambigua?{tipo:'reserva_por_identificar',
+                            titulares_posibles:candidatosTitular(cell.valor).map(x=>x.texto),
+                            fechas_ocupadas:headers.filter(d=>d.c>=h.c&&d.c<=(origen(cell).merge?.e.c??h.c)).map(d=>d.fechaISO),
+                            advertencias:['Varios posibles titulares; no se eligió uno arbitrariamente.']}: {}) }); continue;
                 }
                 const src = origen(cell), merge = src.merge;
                 const diasHoja = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));

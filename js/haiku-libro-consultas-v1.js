@@ -4601,6 +4601,7 @@
             aseos: [],
             espacios: [],
             anotaciones: [],
+            reservas_por_identificar: [],
             cambios: [],
             comparacion: [],
             advertencias: [...q.warnings]
@@ -4624,6 +4625,14 @@
                 else for (const a of contextos) if (!resultado.bloqueos_cabanas_revision.includes(a.cabana)) resultado.bloqueos_cabanas_revision.push(a.cabana);
             }
             resultado.advertencias.push(...(data.advertencias || []));
+            // Una fila con identidad dudosa también forma parte de la lectura.
+            // Mantenerla visible sin inventar un titular ni declararla faltante.
+            resultado.reservas_por_identificar.push(...(data.anotaciones || []).filter(a =>
+                a.tipo === 'reserva_por_identificar' &&
+                (!q.cabana || Number(a.cabana) === Number(q.cabana)) &&
+                (!q.nombre || S.normalizar(a.texto_original).includes(q.nombre)) &&
+                (!q.desde || (a.fechas_ocupadas?.length ? a.fechas_ocupadas : [a.fecha])
+                    .some(fecha => fecha >= q.desde && fecha <= q.hasta))));
             const reservasHoja = Array.isArray(data.reservas) ? data.reservas : [];
             resultado.bloqueos.push(...(data.bloqueos || []).filter(b =>
                 (!q.cabana || b.cabana === Number(q.cabana)) &&
@@ -4746,6 +4755,7 @@
             const pagos = gruposVistaPagos(result.comparacion);
             return ['LIBRO · PAGOS', 'Pagos del Libro ↔ Proyecto H', `${result.q.desde} al ${result.q.hasta}`,
                 ...pagos.contadores.map(([nombre, n]) => `${nombre}: ${n}`),
+                ...(result.reservas_por_identificar || []).map(descripcionReservaPorIdentificar),
                 ...pagos.secciones.flatMap(([titulo, items]) => items.length ? [titulo, ...items.map(x =>
                     `${x.reserva?.titular || 'Titular no determinado'} · ${money(x.pago?.monto)} · ${x.estado}${x.diferencias?.length ? ' · ' + x.diferencias.join('; ') : ''}`)] : []),
                 'Sólo lectura. Los pagos ya existentes no se volverán a incorporar.'].join('\n');
@@ -4764,11 +4774,15 @@
             `Faltan claramente: ${meta.faltantes ?? 0} · Coinciden: ${meta.asociadas ?? 0} · Requieren asociación manual: ${meta.ambiguas ?? 0}.`,
             `Pagos a incorporar/revisar: ${meta.pagos_faltantes ?? 0} probables faltantes · ${meta.pagos_revisar ?? 0} requieren revisión.`
         ];
+        if (result.reservas_por_identificar?.length) {
+            lines.push(`\nRESERVAS POR IDENTIFICAR (${result.reservas_por_identificar.length})`,
+                ...result.reservas_por_identificar.map(descripcionReservaPorIdentificar));
+        }
         if (!meta.libro && meta.libro_detectadas) lines.push(`El lector detectó ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural; revisar formato antes de concluir que el Libro está vacío.`);
         if (faltantes.length) {
             lines.push("\nRESERVAS QUE FALTAN");
             faltantes.forEach(g => lines.push(`• ${descripcionGrupo(g)} · confianza ${g.confianza}`));
-        } else lines.push("\nNo encontré reservas claramente faltantes con el matching actual.");
+        } else if (!result.reservas_por_identificar?.length) lines.push("\nNo encontré reservas claramente faltantes con el matching actual.");
         if (pagosFaltan.length) {
             lines.push("\nPAGOS NUEVOS SEGUROS EN ESTA CONSULTA");
             pagosFaltan.forEach(x => lines.push(`• ${descripcionPagoNuevoSeguro(x)}`));
@@ -4849,7 +4863,8 @@
             }
         }
 
-        for (const a of result.anotaciones) lines.push(`Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
+        for (const a of result.reservas_por_identificar || []) lines.push(descripcionReservaPorIdentificar(a));
+        for (const a of result.anotaciones.filter(a=>a.tipo!=='reserva_por_identificar')) lines.push(`Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
         lines.push(...[...new Set(result.advertencias || [])]);
         return lines.join("\n");
     }
@@ -5088,12 +5103,13 @@
         const notasRevisar = (comp.notasDetalle || []).filter(x => x.estado === 'revisar');
         const advertenciasInformativas = comp.flatMap(x => (x.libro.advertencias_informativas || [])
             .map(a => `${x.libro.titular} · CAB ${x.libro.cabana}: ${a}`));
-        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes,
+        const reservasPorIdentificar = result.reservas_por_identificar || [];
+        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes, reservasPorIdentificar,
             serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas,
             contadores: { gruposLibro: meta.libro ?? 0, registrosDetectados: meta.libro_detectadas ?? 0,
                 reservasProyecto: meta.proyecto ?? 0, estadiasAsociadas: comp.filter(x => x.estado === "asociada").length,
                 estadiasValidas: meta.estadias_libro ?? 0, gruposAsociados: meta.asociadas ?? 0,
-                faltantes: faltantes.length, ambiguas: ambiguas.length, casosConDiferencias: meta.con_diferencias ?? 0,
+                faltantes: faltantes.length, ambiguas: ambiguas.length, reservasPorIdentificar: reservasPorIdentificar.length, casosConDiferencias: meta.con_diferencias ?? 0,
                 gruposConDiferencias: diferencias.length, pagosFaltantes: pagosFaltan.length,
                 pagosRevisar: pagosRevisar.length,
                 ...(criterioOperativo ? {pagosActualizar:pagosActualizar.length} : {}),
@@ -5212,7 +5228,8 @@
             if (!result.aseos.length) linea(aseos, 'No encontré un registro de aseo para esas fechas; no inferí quién lo hizo.');
             out.append(aseos);
         }
-        for (const a of result.anotaciones) linea(out, `Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
+        mostrarReservasPorIdentificar(out, result.reservas_por_identificar || []);
+        for (const a of result.anotaciones.filter(a=>a.tipo!=='reserva_por_identificar')) linea(out, `Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
         [...new Set(result.advertencias || [])].forEach(w => linea(out, w));
     }
 
@@ -5274,6 +5291,15 @@
         details.append(ul);
         contenedor.append(details);
         return details;
+    }
+
+    function descripcionReservaPorIdentificar(a) {
+        return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — Aparecen varios nombres: ${(a.titulares_posibles || []).join(' / ')}. Falta aclarar quién es el titular.`;
+    }
+    function mostrarReservasPorIdentificar(out, items) {
+        if (!items.length) return;
+        agregarLista(out, `Reservas por identificar (${items.length})`, items.map(descripcionReservaPorIdentificar),
+            { tono: 'revision', formato: 'reserva' }).open = true;
     }
 
     // La decoración sólo cambia los encabezados; conserva cada <details>, su contenido y sus listeners.
@@ -5508,7 +5534,10 @@
         const { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes,
             serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas } = modelo;
 
-        if (result.q.solo_pagos) renderizarSoloPagos(out, result);
+        if (result.q.solo_pagos) {
+            renderizarSoloPagos(out, result);
+            mostrarReservasPorIdentificar(out, modelo.reservasPorIdentificar);
+        }
         else {
         out.className = "haiku-asistente-preview haku-comparacion-compacta haku-comparacion-sites";
         out.replaceChildren();
@@ -5539,6 +5568,7 @@
         agregarDato(grid, "Faltan", `${meta.faltantes ?? 0} reservas`);
         resumen.append(grid);
         out.append(resumen);
+        mostrarReservasPorIdentificar(out, modelo.reservasPorIdentificar);
         out.append(elemento("p", "haku-comparacion-sites-alcance", "La comparación considera los registros accesibles con tu sesión."));
         if (ui.revalidado) {
             const estado = elemento("p", "haku-comparacion-sites-estado", `Revalidación completada · ${ui.revalidado}. ${meta.asociadas ?? 0} reservas asociadas; ${meta.pagos_faltantes ?? 0} pagos nuevos seguros; ${meta.ambiguas ?? 0} por decidir. Las decisiones recordadas que sigan siendo compatibles se vuelven a validar. Sólo vista previa.`);
@@ -5621,7 +5651,7 @@
             fila.append(accionInspectorReserva(identidadInspectorMovimiento(pagosExistentes[i], comp))));
         agregarLista(contexto, `Reservas que faltan (${faltantes.length})`,
             faltantes.map(g => `${descripcionGrupo(g)} · confianza ${g.confianza}`),
-            { alerta: true, vacio: "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" });
+            { alerta: true, vacio: modelo.reservasPorIdentificar.length ? 'La comparación está incompleta: quedan reservas por identificar.' : "No encontré reservas claramente faltantes.", tono: "faltante", formato: "reserva" });
         agregarDetalles(contexto, "Detalles técnicos XLSX", grupos.flatMap(g => g.items.flatMap(x => [
             x.libro.titular + " · " + source(x.libro.coordenadas_origen),
             ...[...x.libro.pagos, ...x.libro.pagos_sin_asociacion].map(p => x.libro.titular + " · " + source(p.origen))
