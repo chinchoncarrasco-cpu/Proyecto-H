@@ -170,10 +170,14 @@
         if(campos.has('servicios')){
             const servicios=lista(datos.servicios).filter(x=>x.sistema?.reserva_id===s.reserva_id||x.reserva?.id===r.id);
             const notas=lista(datos.notas).filter(x=>x.reserva?.id===r.id);
-            contexto.servicios=servicios.map(x=>({estado:x.estado,razon:x.razon||'',concepto:x.servicio?.concepto||x.servicio?.nombre||x.concepto||'Servicio',hora:x.servicio?.hora_inicio||x.servicio?.hora||''}));
+            contexto.servicios=servicios.map(x=>({estado:x.estado,razon:x.razon||'',
+                concepto:x.lectura?.nombre||x.servicio?.nombre||x.servicio?.concepto||x.concepto||'Servicio',
+                tipo:x.servicio?.concepto, texto:x.servicio?.fragmento_original||x.servicio?.texto_original||'',
+                fecha:x.estado==='en_sistema'?x.sistema?.fecha_servicio||x.lectura?.fecha:x.lectura?.fecha,
+                hora:(x.estado==='en_sistema'?x.sistema?.hora_inicio:null)||x.lectura?.hora||x.servicio?.hora_inicio||x.servicio?.hora||'',
+                cantidad:(x.estado==='en_sistema'?x.sistema?.cantidad:null)||x.lectura?.cantidad||x.servicio?.cantidad,
+                razones:x.lectura?.razones||[]}));
             contexto.notas=notas.map(x=>({estado:x.estado,texto:x.texto||''}));
-            const existentes=servicios.filter(x=>x.estado==='en_sistema').length+notas.filter(x=>x.estado==='en_sistema').length;
-            if(existentes)contexto.hechos.push(`${existentes} servicio${existentes===1?' o nota ya está registrado':'s o notas ya están registrados'}. Solo falta resolver las diferencias.`);
         }
         return contexto;
     }

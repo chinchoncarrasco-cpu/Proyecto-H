@@ -231,6 +231,9 @@
         const detallesServicios=servicios.slice(0,2).map(x=>`${x.concepto}${x.hora?' · '+x.hora:''}: ${x.estado==='faltante'?'falta registrar.':resumenNota(explicar(x.razon))||'falta aclarar sus datos.'}`);
         if(servicios.length>2)detallesServicios.push(`${servicios.length-2} servicio${servicios.length===3?'':'s'} más en la comparación.`);
         const principal=pendienteFuente||contradiccion||financiero;
+        // Servicios, notas y la columna de cobros pueden describir la misma
+        // prestación. Mostrar una sola conclusión por elemento comprobado.
+        if(!principal&&lista(c?.servicios).length)return detalleOperativo(item,generacion,historia);
         if(!principal&&detallesServicios.length&&lista(item.cambios).every(x=>x.campo==='servicios'))e.motivo='';
         const contexto=[...hechos.filter(x=>!x.startsWith('Corregir las fechas')),...detallesServicios,historia,
             ...avisos.filter(x=>x!==principal).map(x=>x.texto)].filter(Boolean);
@@ -238,6 +241,60 @@
             (contexto.length?`<div class="haku-pendiente-contexto">${contexto.map(x=>`<p>${escapar(x)}</p>`).join('')}</div>`:'')+
             (e.motivo?`<p>${escapar(e.motivo)}</p>`:'')+`<p class="haku-pendiente-estado">${escapar(e.paso)}</p></div>`+
             (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>${pendienteFuente?'Ver última comparación guardada':'Ver comparación de datos'} (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambio=>cambioPendiente(cambio,!pendienteFuente)).join('')}</dl>${c?.calendario?`<p>Celdas revisadas: ${escapar(c.calendario.hoja)} · ${escapar(c.calendario.rango)}${c.calendario.siguiente_libre?.celda?`. LIBRE: ${escapar(c.calendario.siguiente_libre.celda)}`:''}.</p>`:''}</details>`:'');
+    }
+    function motivoServicio(s){
+        if(s.estado==='en_sistema')return 'Ya registrado.';
+        if(s.estado==='faltante')return 'Falta agregarlo a Proyecto H.';
+        const motivos=lista(s.razones).length?s.razones:String(s.razon||'').split(' · ');
+        const sinFecha=motivos.some(x=>/^Falta una fecha inequívoca del servicio/.test(x));
+        const breves=motivos.map(x=>{
+            if(/^Falta una fecha inequívoca del servicio/.test(x))return 'Falta indicar el día.';
+            if(x==='Falta fecha u hora para comprobar el servicio existente sin adivinar.')return sinFecha?'Falta indicar el día.':
+                s.hora?'Falta indicar el día.':s.fecha?'Falta indicar la hora.':'Faltan el día y la hora.';
+            return explicar(x);
+        }).filter(Boolean);
+        return [...new Set(breves)].join(' ')||'Falta aclarar sus datos.';
+    }
+    function detalleOperativo(item,generacion,historia){
+        const c=item.contexto,servicios=lista(c.servicios),notas=lista(c.notas);
+        const operativos=new Set(['servicios','notas_importantes','pagos_pendientes']);
+        const otros=lista(item.cambios).filter(x=>!operativos.has(x.campo));
+        const tituloServicio=s=>[String(s.concepto||'Servicio').replace(/^./,x=>x.toUpperCase())+
+            (/masaje/i.test(s.tipo||s.concepto)&&Number(s.cantidad)>1?` ×${s.cantidad}`:''),
+            s.fecha?fecha(s.fecha):'',s.hora?String(s.hora).slice(0,5):''].filter(Boolean).join(' · ');
+        const bloques=servicios.map(s=>`<p><strong>${escapar(tituloServicio(s))}</strong><br>${escapar(motivoServicio(s))}</p>`);
+        for(const n of notas)bloques.push(`<p><strong>Nota · ${n.estado==='en_sistema'?'ya guardada':n.estado==='faltante'?'falta guardar':'por revisar'}</strong><br>${escapar(resumenNota(n.texto))}</p>`);
+        // Conservar las notas independientes. La glosa de cobro no acredita un
+        // pago: si ya está desglosada como servicio, no es otro pendiente.
+        const canon=t=>normalizar(t).replace(/[^a-z0-9]/g,'');
+        const evidencias=[...servicios.map(s=>s.texto),...notas.map(n=>n.texto)].filter(Boolean).map(canon);
+        const textos=new Set();
+        for(const cambio of lista(item.cambios).filter(x=>operativos.has(x.campo)&&x.campo!=='servicios')){
+            for(const raw of lista(Array.isArray(cambio.ahora)?cambio.ahora:[cambio.ahora])){
+                if(typeof raw!=='string'||!raw.trim())continue;
+                for(const fragmento of raw.split(/\s*\/\/\s*/).filter(Boolean)){
+                    const key=canon(fragmento);
+                    if(!key||textos.has(key)||evidencias.some(x=>x.includes(key)||key===x))continue;
+                    textos.add(key);
+                    bloques.push(`<p><strong>${cambio.campo==='pagos_pendientes'?'Nota de cobro':'Nota'} · por revisar</strong><br>${escapar(resumenNota(fragmento))}</p>`);
+                }
+            }
+        }
+        const extra=[...lista(c.hechos),historia,...lista(c.avisos).map(x=>x.texto)].filter(Boolean);
+        const explicacion=otros.length?explicarPendiente({...item,cambios:otros},generacion).encontro:'';
+        const accion=esAdministrador()&&revisionServiciosPendiente(item,generacion)
+            ?'Completa lo que falta en «Aprobación manual».' : 'Revisa estos datos en «Ver reserva».';
+        // El detalle conserva la evidencia original una sola vez, sin repetir
+        // diagnósticos, columnas vacías ni llamar pagos a las notas de cobro.
+        const fuentes=[...new Set([...servicios.map(s=>s.texto),...notas.map(n=>n.texto),
+            ...lista(item.cambios).filter(x=>operativos.has(x.campo)&&x.campo!=='servicios')
+                .flatMap(x=>Array.isArray(x.ahora)?x.ahora:[x.ahora])]
+            .filter(x=>typeof x==='string'&&x.trim()).flatMap(x=>x.split(/\s*\/\/\s*/)).filter(Boolean))];
+        return '<div class="haku-pendiente-explicacion">'+
+            (explicacion?`<p><strong>${escapar(explicacion)}</strong></p>`:'')+
+            `<div class="haku-pendiente-contexto">${bloques.join('')}${extra.map(x=>`<p>${escapar(x)}</p>`).join('')}</div>`+
+            `<p class="haku-pendiente-estado">${escapar(accion)}</p></div>`+
+            (fuentes.length||otros.length?`<details class="haku-pendiente-comparacion"><summary>Ver detalle del Libro</summary>${fuentes.map(x=>`<p>${escapar(resumenNota(x))}</p>`).join('')}${otros.length?`<dl>${otros.map(x=>cambioPendiente(x)).join('')}</dl>`:''}</details>`:'');
     }
     function revisionServiciosPendiente(item,generacion){
         if(generacion==null||item?.tipo!=='modificacion'||!item.actual||!item.sistema?.reserva_id||

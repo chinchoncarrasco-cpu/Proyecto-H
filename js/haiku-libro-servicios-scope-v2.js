@@ -294,12 +294,13 @@
     async function leerLibro(texto, conservarConsulta = false) {
         let libro = root.HAIKU_LIBRO_RESERVA_V1;
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
-        if (conservarConsulta && libro.crearLectura) libro = await libro.crearLectura();
+        const focal=entradasHistorial.get(texto);
+        // Cada lectura focal usa una copia coherente. Una nueva versión del
+        // archivo no invalida el formulario: al confirmar se relee ESTA ficha.
+        if ((conservarConsulta || focal) && libro.crearLectura) libro = await libro.crearLectura();
         await libro.listo();
         const estado = libro.estado();
         if (!estado?.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
-        const focal=entradasHistorial.get(texto);
-        if(focal&&estado.generacion!==focal.generacion)throw Error('El Libro cambió; vuelve a revalidar el informe antes de revisar servicios.');
         const rango = rangoDesdeTexto(focal?.descripcion||texto);
         if (!rango) throw new Error("Indica un mes con año o una fecha para revisar los servicios del Libro.");
         const hojas = hojasDelRango(libro.listarHojas(), rango.desde, rango.hasta);
@@ -309,16 +310,16 @@
             for (const r of Array.isArray(data?.reservas) ? data.reservas : []) if (solapa(r, rango.desde, rango.hasta)) reservas.push(r);
         }
         if(focal){
-            if(libro.estado().generacion!==focal.generacion)throw Error('El Libro cambió durante la revisión. Revalida el informe.');
+            if(libro.estado().generacion!==estado.generacion)throw Error('Esta lectura del Libro cambió. Tus datos siguen aquí; vuelve a confirmar para comprobar esta reserva.');
             const seleccion=[];
             for(const clave of focal.claves){
                 const matches=reservas.filter(r=>claveFicha(r)===clave);
-                if(matches.length!==1)throw Error('Una ficha del historial cambió o no es única en el Libro actual. Revalida el informe.');
+                if(matches.length!==1)throw Error('Esta reserva cambió de fechas, ya no aparece o no es única en el Libro. Conservé tu revisión; comprueba esta reserva antes de guardar.');
                 seleccion.push(matches[0]);
             }
             reservas.splice(0,reservas.length,...seleccion);
         }
-        return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null };
+        return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null, revision_focal:Boolean(focal) };
     }
 
     async function abrirRevisionHistorial(out,{reservas,generacion,aprobacionManual=false}={}){
@@ -1457,7 +1458,8 @@
         // La unidad original y su destino, nunca otras glosas de la reserva ni otras reservas.
         return JSON.stringify([item.item_id, evidenciaManual(item), r.coordenadas_origen || null,
             r.adultos ?? null, r.noches, r.fecha_checkin, r.fecha_checkout, r.tipo_estadia,
-            item.asociacion.estado, destinoEsperado(item), libro.archivo, libro.generacion, libro.version_libro,
+            item.asociacion.estado, destinoEsperado(item), libro.archivo,
+            ...(libro.revision_focal ? [] : [libro.generacion, libro.version_libro]),
             item.reglaFullDay || item.reglaPromo || null]);
     }
 
@@ -1651,7 +1653,7 @@
         }
 
         // Firma exacta, sin persistencia: incluye todos los datos leídos del Libro y la asociación actual.
-        const firmaLibro = JSON.stringify([libro.archivo, libro.generacion, libro.reservas]);
+        const firmaLibro = JSON.stringify([libro.archivo, ...(libro.revision_focal ? [] : [libro.generacion]), libro.reservas]);
         for (let i = 0; i < items.length; i++) {
             const item = items[i];
             item.firmaNoche = JSON.stringify([firmaLibro, item.item_id, item.servicio, item.asociacion]);
