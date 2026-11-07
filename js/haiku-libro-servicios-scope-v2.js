@@ -1615,6 +1615,13 @@
         catch (e) { anterior ? manuales.set(itemId, anterior) : manuales.delete(itemId); throw e; }
     }
 
+    // Compara lo que el usuario vio y confirmó; la versión general del Libro
+    // puede avanzar por otra reserva sin cambiar estos datos de la prestación.
+    function firmaConfirmacionServicio(item) {
+        const { servicio_manual_v1, ...payload } = item.payload || {};
+        return JSON.stringify([payload, item.hora_fin, item.precio?.total]);
+    }
+
     async function construir(texto, overrides = new Map(), manuales = new Map(), conservarConsulta = false) {
         const cliente = root.haikuSupabase;
         if (!cliente) throw new Error("No está disponible la conexión con Proyecto H.");
@@ -2262,7 +2269,7 @@
         const fechaConocida = document.createElement('p'); fechaConocida.className = 'haku-servicio-compacto__fecha haiku-manual-caption';
         const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion'; aviso.setAttribute('role', 'alert');
         const revalidacion = document.createElement('p'); revalidacion.className = 'haiku-manual-caption haku-servicio-compacto__ayuda';
-        revalidacion.textContent = 'Después podrás confirmar el registro.';
+        revalidacion.textContent = 'Completa los datos para confirmar este servicio.';
         const conflicto = document.createElement('p'); conflicto.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
         // Las preguntas del formulario ya explican estos datos faltantes.
         // Los conflictos adicionales siguen visibles y la evidencia conserva todos los motivos.
@@ -2271,7 +2278,8 @@
             : base.asociacion.estado !== 'asociada' ? 'Primero hay que identificar la reserva de este servicio.' : motivoExtra || '';
         conflicto.hidden = !conflicto.textContent;
         const acciones = document.createElement('footer'); acciones.className = 'haku-libro-servicio-manual__acciones haiku-manual-pie';
-        const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario'; confirmar.textContent = 'Revisar datos';
+        const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario'; confirmar.textContent = 'Confirmar servicio';
+        confirmar.dataset.hakuAccion = 'confirmar-servicio-manual';
         const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario'; cancelar.textContent = 'Cancelar';
         cancelar.addEventListener('click', () => { estado.apertura++; panel.remove(); });
         const borrador = { ...(estado.manuales.get(base.item_id)?.campos || {}) }; // Nunca modifica una decisión confirmada.
@@ -2313,22 +2321,32 @@
             fechaConocida.textContent = actual.fecha && !tieneCampoFecha ? `Día del servicio · ${fechaManualBreve(actual.fecha)}` : '';
             fechaConocida.hidden = !fechaConocida.textContent;
             ficha.actualizar(actual, calculo.cantidad, calculo.catalogo, actual.precio.distinto && !borrador.precio_decision);
-            confirmar.disabled = !calculo.catalogo || base.asociacion.estado !== 'asociada' || [...campos.querySelectorAll('input,select')].some(x => !x.value);
+            const faltanCampos = [...campos.querySelectorAll('input,select')].some(x => !x.value);
+            confirmar.disabled = !calculo.catalogo || base.asociacion.estado !== 'asociada' || faltanCampos || !actual.payload;
+            revalidacion.textContent = !actual.payload ? 'Completa los datos para confirmar este servicio.' : actual.cortesia
+                ? 'Se agregará como cortesía, sin cobro.' : `Se agregará un cargo de $${actual.precio.total.toLocaleString('es-CL')}.`;
+            if (!faltanCampos && !actual.payload) aviso.textContent = actual.razones.join(' ');
         };
         confirmar.addEventListener('click', async () => {
             if (confirmar.disabled || estado.ocupado) return;
             estado.ocupado = true; confirmar.disabled = true; cancelar.disabled = true;
+            const camposConfirmados = { ...borrador }, controles = [...campos.querySelectorAll('input,select')];
+            controles.forEach(x => x.disabled = true);
             try {
-                const resultado = await confirmarServicioManual(texto, base.item_id, borrador, estado.manuales, base.firmaManual, overrides);
+                const guard = root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
+                if (!guard?.confirmarServicioManual) throw new Error('La confirmación de servicios no está disponible. Actualiza la página.');
+                const mostrado = calcularManual(base, camposConfirmados, contrato).item;
+                const resultado = await confirmarServicioManual(texto, base.item_id, camposConfirmados, estado.manuales, base.firmaManual, overrides);
                 const revisado = resultado.items.find(x => x.item_id === base.item_id);
-                if (revisado?.estado === 'revisar' && !revisado.cambioCortesiaExistente && !revisado.cambioHorarioExistente) {
-                    aviso.textContent = 'No se guardó el cambio. ' + revisado.razones.join(' ');
-                    cancelar.disabled = false;
-                    return;
-                }
-                await renderizar(resultado, out, texto, overrides);
-            } catch (e) { aviso.textContent = e.message; confirmar.disabled = false; cancelar.disabled = false; }
-            finally { estado.ocupado = false; }
+                if (revisado?.estado !== 'listo' || !revisado.payload)
+                    throw new Error(revisado?.estado === 'existente' ? 'Este servicio ya está registrado. No se agregó otro.'
+                        : 'No se guardó el servicio. ' + (revisado?.razones || []).join(' '));
+                if (firmaConfirmacionServicio(mostrado) !== firmaConfirmacionServicio(revisado))
+                    throw new Error('Los datos o el importe cambiaron. Abre nuevamente esta ficha antes de confirmar.');
+                aviso.textContent = 'Comprobando y guardando servicio…';
+                await guard.confirmarServicioManual(out, texto, revisado);
+            } catch (e) { aviso.textContent = e.message; confirmar.disabled = false; }
+            finally { estado.ocupado = false; cancelar.disabled = false; controles.forEach(x => x.disabled = false); }
         });
         const explicacionPromo = base.servicio.promoTinajaMixta?.version === 1
             ? (() => { const x=document.createElement('p');
@@ -2701,43 +2719,10 @@
             return;
         }
         estado.itemHistorial = item.item_id;
-        if (!item.resolucionManual || item.estado !== 'listo' || !item.payload) {
-            return Promise.resolve(abrirManual(item,out,texto,overrides,estado,out)).catch(error=>{
-                const aviso=crear('p','haiku-manual-validacion',error.message || 'No se pudo abrir la aprobación manual.');
-                aviso.setAttribute('role','alert');out.append(aviso);
-            });
-        }
-        // Tras revalidar, sólo este servicio queda seleccionado para la confirmación final.
-        const panel=crear('section','haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel haku-servicio-compacto');
-        panel.setAttribute('aria-label', `Confirmar servicio de ${item.reserva.titular}`);
-        const contenido=crear('div','haiku-manual-contenido');
-        const ficha=fichaServicioManual(item);
-        ficha.actualizar(item,item.payload.cantidad,item.resolucionManual.catalogo);
-        const fecha=crear('div','haku-servicio-compacto__fecha-confirmada');
-        fecha.append(crear('span','haiku-manual-caption','Día del servicio'),
-            crear('p','haku-servicio-compacto__valor-fecha',fechaManualBreve(item.fecha)));
-        contenido.append(ficha.cabecera,ficha.resumen,fecha,ficha.evidencia);
-        const check=crear('input','haku-libro-servicios__check');check.type='checkbox';check.checked=true;check.hidden=true;
-        check.dataset.hakuItemId=item.item_id;contenido.append(check);
-        const acciones=crear('footer','haku-libro-servicio-manual__acciones haiku-manual-pie');
-        const incorporar=crear('button','haku-libro-servicios__boton haiku-incorporacion-manual-accion haiku-manual-primario','Agregar servicio');
-        incorporar.type='button';incorporar.dataset.hakuAccion='incorporar';
-        incorporar.addEventListener('click',async()=>{
-            if(incorporar.disabled || estado.ocupado)return;
-            estado.ocupado=true;incorporar.disabled=true;
-            try{await importarSeleccionados(new Set([item.item_id]),out,texto,overrides);}
-            catch(error){const aviso=crear('p','haiku-manual-validacion',error.message);aviso.setAttribute('role','alert');contenido.append(aviso);}
-            finally{estado.ocupado=false;incorporar.disabled=false;}
+        return Promise.resolve(abrirManual(item,out,texto,overrides,estado,out)).catch(error=>{
+            const aviso=crear('p','haiku-manual-validacion',error.message || 'No se pudo abrir la ficha del servicio.');
+            aviso.setAttribute('role','alert');out.append(aviso);
         });
-        const volver=crear('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Volver');volver.type='button';
-        volver.addEventListener('click',async()=>{
-            if(estado.ocupado)return;
-            try{await abrirManual(item,out,texto,overrides,estado,out);}
-            catch(error){const aviso=crear('p','haiku-manual-validacion',error.message);aviso.setAttribute('role','alert');contenido.append(aviso);}
-        });
-        const ayuda=crear('p','haiku-manual-caption haku-servicio-compacto__ayuda',item.cortesia
-            ? 'Se registrará como cortesía, sin cargo.' : `Se registrará con un cargo de $${item.precio.total.toLocaleString('es-CL')}.`);
-        acciones.append(volver,incorporar);panel.append(contenido,acciones,ayuda);out.append(panel);
     }
 
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {
@@ -2863,7 +2848,7 @@
     }
 
     const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial,
-        consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, procesar, renderizarResultadoServicios });
+        consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;
     root.addEventListener("click", interceptar, true);

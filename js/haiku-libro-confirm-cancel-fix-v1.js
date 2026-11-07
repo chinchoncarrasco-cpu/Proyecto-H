@@ -280,14 +280,24 @@
         tarjeta.insertBefore(notasIncorporadas, detalle);
     }
 
-    async function importarSeguro(card, textoOriginal) {
+    async function importarSeguro(card, textoOriginal, servicioConfirmado = null) {
         const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
         if (!api?.construir) throw new Error("La comparación de servicios del Libro no está disponible.");
         if (!textoOriginal) throw new Error("No pude recuperar la consulta original. Vuelve a pedir la revisión del Libro.");
 
         bloquearRevision(card);
         const actual = await (api.revalidarVista ? api.revalidarVista(card, textoOriginal) : api.construir(textoOriginal));
-        const elegidos = itemsSeleccionados(card, actual);
+        let elegidos;
+        if (servicioConfirmado) {
+            const coincidencias = actual.items.filter(x => x.item_id === servicioConfirmado.item_id);
+            const vigente = coincidencias[0];
+            if (coincidencias.length !== 1 || vigente?.kind !== 'servicio' || vigente.estado !== 'listo' ||
+                !vigente.payload || !vigente.resolucionManual || vigente.completitud !== 'COMPLETO' ||
+                vigente.firmaManual !== servicioConfirmado.firmaManual ||
+                api.firmaConfirmacionServicio(vigente) !== api.firmaConfirmacionServicio(servicioConfirmado))
+                throw new Error('Este servicio cambió o ya está registrado. No se agregó otro servicio.');
+            elegidos = [vigente];
+        } else elegidos = itemsSeleccionados(card, actual);
         if (!elegidos.length) throw new Error("No hay servicios ni notas listos seleccionados para incorporar.");
 
         const cache = new Map();
@@ -299,7 +309,9 @@
             else if (item.kind === "nota") notas.push(corregidos[i]);
         });
 
-        const confirmar = root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
+        // La ficha manual ya muestra el servicio y el importe: su botón es la
+        // confirmación final. La incorporación por selección mantiene su diálogo.
+        const confirmar = servicioConfirmado || root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
         if (!confirmar) return;
 
         const estados = guardarEstadosControles(card);
@@ -363,7 +375,12 @@
         version: "4.0.0",
         reactivar: reactivarBotonLibro,
         bloquearRevision,
-        completarRecibo
+        completarRecibo,
+        confirmarServicioManual: (card, texto, item) => {
+            if (!item?.resolucionManual || !item.payload?.servicio_manual_v1)
+                return Promise.reject(new Error('Falta completar los datos de este servicio.'));
+            return importarSeguro(card, texto, item);
+        }
     });
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V1 = api;
     root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V2 = api;

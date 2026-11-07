@@ -2,7 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const { entorno, consulta } = require('./fixtures/libro-servicio-manual.cjs');
 
 async function fechaPendiente(directa = false) {
-    const e = entorno(), r = e.state.reservas[0];
+    const e = entorno(), r = e.state.reservas[0]; e.guard();
     r.fecha_checkout = '2026-10-12'; r.noches = 2;
     e.state.db.reserva_estadias[0].fecha_salida = r.fecha_checkout;
     r.texto_original = '1 HORA TINAJA TONEL A LAS 17:15 X PAGAR';
@@ -32,23 +32,22 @@ for (const directa of [false, true]) test(`misma ficha compacta desde ${directa 
     assert.match(panel.querySelector('details').textContent, /1 HORA TINAJA TONEL A LAS 17:15 X PAGAR/);
     assert.match(fecha(panel).parentElement.textContent, /¿Qué día será\?/);
     assert.equal(fecha(panel).min, '2026-10-10'); assert.equal(fecha(panel).max, '2026-10-12');
-    assert.equal(boton(panel, 'Revisar datos').disabled, true);
+    assert.equal(boton(panel, 'Confirmar servicio').disabled, true);
     await boton(panel, 'Cancelar').listeners.click();
     assert.equal(e.panel(), null); assert.equal(e.state.escrituras.length, 0);
 });
 
-test('revisar conserva la confirmación final y Volver recupera la fecha elegida', async () => {
+test('la fecha elegida se confirma en la misma ficha y muestra el recibo', async () => {
     const e = await fechaPendiente(true);
     const campo = fecha(e.panel()); campo.value = '2026-10-11'; campo.listeners.change();
-    await boton(e.panel(), 'Revisar datos').listeners.click();
-    assert.equal(e.panel().querySelector('.haku-servicio-compacto__valor-fecha').textContent, '11 oct. 2026');
-    assert.equal(boton(e.panel(), 'Agregar servicio').dataset.hakuAccion, 'incorporar');
-    assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length, 1);
+    e.c.confirm = () => { throw Error('No debe pedir otra confirmación'); };
     assert.equal(e.state.escrituras.length, 0);
-    await boton(e.panel(), 'Volver').listeners.click();
-    assert.equal(fecha(e.panel()).value, '2026-10-11');
-    assert.equal(boton(e.panel(), 'Revisar datos').disabled, false);
-    assert.equal(e.state.escrituras.length, 0);
+    await boton(e.panel(), 'Confirmar servicio').listeners.click();
+    assert.equal(e.state.escrituras.length, 1);
+    assert.equal(e.state.escrituras[0].p_servicios[0].fecha_servicio, '2026-10-11');
+    assert.equal(e.state.escrituras[0].p_notas.length, 0);
+    assert.match(e.out.textContent, /Incorporación completada/);
+    assert.equal(e.panel(), null);
 });
 
 test('un precio por elegir no se presenta como un cobro ya confirmado', async () => {
@@ -67,7 +66,7 @@ test('un precio por elegir no se presenta como un cobro ya confirmado', async ()
 test('una fecha fuera de la estadía nunca habilita la incorporación final', async () => {
     const e = await fechaPendiente(true);
     const campo = fecha(e.panel()); campo.value = '2026-10-15'; campo.listeners.change();
-    await boton(e.panel(), 'Revisar datos').listeners.click();
+    await boton(e.panel(), 'Confirmar servicio').listeners.click();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(boton(e.out, 'Agregar servicio'), undefined);
     assert.match(e.out.textContent, /fuera de la estadía/);

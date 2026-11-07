@@ -57,15 +57,8 @@ const server=http.createServer((req,res)=>{
             await panel.getByRole('button',{name:'Cancelar',exact:true}).click();
             assert.equal(await panel.count(),0);assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
             await page.evaluate(()=>abrirManualHistorial());
-            await panel.getByRole('button',{name:'Revisar datos',exact:true}).click();
-            const incorporar=out.getByRole('button',{name:'Agregar servicio',exact:true});await incorporar.waitFor();
-            assert.doesNotMatch(await out.innerText(),/Interpretación operativa|DEJAR BATAS/);
-            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
-            assert.equal(await page.locator('details.haku-actualizacion-sites__pendiente').evaluate(el=>el.open),true);
-            await page.evaluate(()=>window.confirm=()=>false);await incorporar.click();
-            await page.waitForFunction(()=>!document.querySelector('[data-haku-accion="incorporar"]')?.disabled);
-            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
-            await page.evaluate(()=>window.confirm=()=>true);await incorporar.click();
+            await page.evaluate(()=>window.confirm=()=>{throw Error('No corresponde otro diálogo');});
+            await panel.getByRole('button',{name:'Confirmar servicio',exact:true}).click();
             await page.waitForFunction(()=>fixtureServicios.escrituras.length===1);
             const payload=await page.evaluate(()=>fixtureServicios.escrituras[0]);
             assert.equal(payload.p_servicios.length,1);assert.equal(payload.p_notas.length,0);assert.equal(payload.p_servicios[0].tipo_cobro,'cortesia');

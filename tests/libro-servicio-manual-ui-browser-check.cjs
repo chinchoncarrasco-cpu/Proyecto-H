@@ -100,7 +100,7 @@ const foto = async (locator, nombre) => {
                     assert.equal(await panel.locator('.haiku-manual-aviso--revision:visible').count(), 0);
                     const evidencia = panel.locator('.haiku-manual-evidencia'); await evidencia.locator('summary').click();
                     assert.match(await evidencia.innerText(), new RegExp(texto));
-                    assert.equal(await panel.locator('.haiku-manual-pie .haiku-manual-primario').textContent(), 'Revisar datos');
+                    assert.equal(await panel.locator('.haiku-manual-pie .haiku-manual-primario').textContent(), 'Confirmar servicio');
                     await panel.locator('[data-campo-manual="hora"]').fill('17:00');
                     await panel.locator('[data-campo-manual="hora"]').dispatchEvent('change');
                     assert.match(await panel.innerText(), /17:00–/);

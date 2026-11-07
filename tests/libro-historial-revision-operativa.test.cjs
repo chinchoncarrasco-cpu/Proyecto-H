@@ -11,7 +11,7 @@ function caso(){
     return {...e,r,out,abrir};
 }
 function casoManual(){
-    const e=caso();e.c.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
+    const e=caso();e.guard();e.c.haikuSesion={usuario:{activo:true},roles:[{codigo:'administrador'}]};
     const abrir=e.abrir;e.abrir=(extra={})=>abrir({aprobacionManual:true,...extra});return e;
 }
 test('aprobación directa abre sólo el formulario del servicio sin comparación, notas ni escrituras',async()=>{
@@ -25,19 +25,12 @@ test('aprobación directa abre sólo el formulario del servicio sin comparación
     assert.equal(e.out.querySelectorAll('.haku-libro-servicio-manual').length,0);
     assert.equal(e.state.escrituras.length,0);
 });
-test('revalidar la tarjeta directa selecciona sólo ese servicio y conserva la confirmación final',async()=>{
-    const e=casoManual();await e.abrir();
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
-    assert.match(e.out.textContent,/Agregar servicio/);assert.doesNotMatch(e.out.textContent,/Interpretación operativa|DEJAR BATAS/);
-    assert.equal(e.state.escrituras.length,0);assert.equal(e.out.querySelectorAll('input[data-haku-item-id]').length,1);
-    e.guard();let confirma=false;e.c.confirm=()=>confirma;
-    const click=async()=>{
-        const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
-        e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
-        await new Promise(r=>setTimeout(r,30));
-    };
-    await click();assert.equal(e.state.escrituras.length,0);
-    confirma=true;await click();assert.equal(e.state.escrituras.length,1);
+test('confirmar en la ficha agrega sólo ese servicio y muestra el resultado sin segundo diálogo',async()=>{
+    const e=casoManual();await e.abrir();e.c.confirm=()=>{throw Error('No corresponde un segundo diálogo');};
+    assert.equal(e.state.escrituras.length,0);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
+    assert.match(e.out.textContent,/Incorporación completada/);assert.doesNotMatch(e.out.textContent,/Agregar servicio/);
+    assert.equal(e.state.escrituras.length,1);
     const p=e.state.escrituras[0];assert.equal(p.p_servicios.length,1);assert.equal(p.p_notas.length,0);
     assert.equal(p.p_servicios[0].tipo_cobro,'cortesia');
 });
@@ -54,8 +47,8 @@ test('varios servicios pendientes ofrecen elección breve y sólo abren el elegi
 test('aprobación directa conserva permisos y duplicados; otra generación no invalida datos vigentes',async()=>{
     const sinRol=casoManual();sinRol.c.haikuSesion.roles=[];await assert.rejects(sinRol.abrir(),/administrador/);
     const cambiado=casoManual();await cambiado.abrir();cambiado.state.generacion++;
-    await cambiado.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
-    assert.match(cambiado.out.textContent,/Agregar servicio/);assert.equal(cambiado.state.escrituras.length,0);
+    await cambiado.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
+    assert.match(cambiado.out.textContent,/Incorporación completada/);assert.equal(cambiado.state.escrituras.length,1);
     const e=casoManual(),est=e.state.db.reserva_estadias[0];
     e.state.db.servicios.push({id:'ya-creado',reserva_id:est.reserva_id,estadia_id:est.id,
         fecha_servicio:e.r.fecha_checkin,hora_inicio:'18:00',hora_fin:'19:00',personas:2,cantidad:1,
@@ -107,15 +100,10 @@ test('confirmación del flujo focal funciona sin una consulta de servicios anter
 test('actualizaciones ajenas antes de abrir, confirmar y guardar conservan la aprobación y auditan la versión vigente',async()=>{
     const e=casoManual();e.state.generacion=2;await e.abrir();
     e.state.generacion=3;e.state.reservas[1].texto_original+=' nueva nota';
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
-    assert.match(e.out.textContent,/Agregar servicio/);assert.equal(e.state.escrituras.length,0);
-    e.state.generacion=4;e.guard();
-    const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
-    e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
-    await new Promise(r=>setTimeout(r,30));
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
     assert.equal(e.state.escrituras.length,1);const p=e.state.escrituras[0];
     assert.equal(p.p_servicios.length,1);assert.equal(p.p_notas.length,0);
-    assert.equal(p.p_servicios[0].servicio_manual_v1.libro.generacion,4);
+    assert.equal(p.p_servicios[0].servicio_manual_v1.libro.generacion,3);
 });
 test('una actualización durante la lectura usa su copia coherente y relee al confirmar',async()=>{
     const e=casoManual(),api=e.c.HAIKU_LIBRO_RESERVA_V1;let lecturas=0;
@@ -127,8 +115,8 @@ test('una actualización durante la lectura usa su copia coherente y relee al co
         }};
     };
     await e.abrir();assert.match(e.out.textContent,/Jacuzzi.*18:00–19:00/);
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
-    assert.match(e.out.textContent,/Agregar servicio/);assert.equal(lecturas,3);assert.equal(e.state.escrituras.length,0);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
+    assert.match(e.out.textContent,/Incorporación completada/);assert.equal(lecturas,4);assert.equal(e.state.escrituras.length,1);
 });
 test('si cambió esa prestación conserva formulario y fecha escrita, pero no guarda la evidencia antigua',async()=>{
     const e=casoManual();e.r.noches=2;e.r.fecha_checkout='2026-10-12';e.state.db.reserva_estadias[0].fecha_salida='2026-10-12';
@@ -138,23 +126,21 @@ test('si cambió esa prestación conserva formulario y fecha escrita, pero no gu
     if(cobro){cobro.value='normal';cobro.listeners.change();}
     const panel=e.out.querySelector('.haku-libro-servicio-manual');
     e.r.servicios[0].hora='19:00';e.r.servicios[0].texto_original='19hrs jacuzzi';e.state.generacion++;
-    await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
     assert.equal(e.out.querySelector('.haku-libro-servicio-manual'),panel);
     assert.equal(e.out.querySelectorAll('input').find(x=>x.dataset.campoManual==='fecha').value,'2026-10-11');
     assert.match(e.out.textContent,/evidencia o el destino cambiaron/);assert.equal(e.state.escrituras.length,0);
 });
-test('después de resolver, cambio de fecha, cancelación o catálogo impiden guardar aunque haya otra generación',async()=>{
+test('cambio de fecha, cancelación o catálogo antes de confirmar impide guardar',async()=>{
     for(const mutar of [e=>e.r.fecha_checkout='2026-10-12',e=>e.state.db.reserva_estadias[0].estado_estadia='cancelada',
         e=>e.state.db.catalogo_servicios.find(x=>x.codigo==='tinajaJacuzzi').activo=false]){
-        const e=casoManual();await e.abrir();
-        await e.out.querySelectorAll('button').find(b=>b.textContent==='Revisar datos').listeners.click();
-        e.state.generacion++;mutar(e);e.guard();
-        const boton=e.out.querySelectorAll('button').find(b=>b.dataset.hakuAccion==='incorporar');
-        e.captures.filter(([t])=>t==='click').forEach(([,fn])=>fn({target:boton,preventDefault(){},stopImmediatePropagation(){}}));
-        await new Promise(r=>setTimeout(r,30));assert.equal(e.state.escrituras.length,0);
-        assert.match(e.out.textContent,/Agregar servicio/);
+        const e=casoManual();await e.abrir();e.state.generacion++;mutar(e);
+        await e.out.querySelectorAll('button').find(b=>b.textContent==='Confirmar servicio').listeners.click();
+        assert.equal(e.state.escrituras.length,0);
+        assert.match(e.out.textContent,/Confirmar servicio/);
     }
 });
+
 test('Tinaja CORTESIA sin agenda desde Notas es una nota preparable, sin crear prestación ni cargo',async()=>{
     const e=caso();e.r.texto_original='Tinaja CORTESIA';e.r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(e.r.texto_original,{origen_campo:'notas_reserva'});
     const plan=await e.abrir();assert.equal(plan.items.filter(x=>x.kind==='servicio').length,0);

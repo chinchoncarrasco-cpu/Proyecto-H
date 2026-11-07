@@ -27,42 +27,30 @@ const server = http.createServer((req, res) => {
             await page.addScriptTag({ content: source });
             await page.addScriptTag({ content: read('js/haiku-libro-confirm-cancel-fix-v1.js') });
             await page.evaluate(async q => { document.getElementById('prev').textContent = q; window.q = q; const api = HAIKU_LIBRO_SERVICIOS_SCOPE_V2; api.renderizar(await api.construir(q), document.getElementById('out'), q); }, consulta);
-            const ready = () => page.evaluate(async () => (await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.revalidarVista(document.getElementById('out'), q)).items.filter(x => x.kind === 'servicio' && x.estado === 'listo').length);
-            const abrir = async texto => {
-                const row = page.locator('.haku-libro-servicios__item').filter({ hasText: texto });
-                await row.locator('..').locator('..').evaluate(el => el.open = true);
-                await row.getByRole('button', { name: 'Aprobación manual', exact: true }).click();
-                await page.locator('.haku-libro-servicio-manual').waitFor();
-            };
-            const hora = async valor => { const el = page.locator('[data-campo-manual="hora"]'); await el.fill(valor); await el.dispatchEvent('change'); };
-            const confirmar = async () => { await page.getByRole('button', { name: 'Revisar datos' }).click(); await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' }); };
-            await abrir('1 HORA DE CORTESIA TINAJA');
-            assert.equal(await page.locator('[data-campo-manual="tipo_cobro"]').count(), 0);
-            await page.locator('[data-campo-manual="codigo_servicio"]').selectOption('tinajaTonel'); await hora('18:00');
-            assert.equal(await page.locator('[data-campo-manual="fecha"]').count(), 0);
-            assert.equal(await page.locator('[data-campo-manual="personas"]').count(), 0);
-            await confirmar(); assert.equal(await ready(), 1);
-            await page.getByText('Servicios preparables para incorporar', { exact: true }).click();
-            const checkA = page.locator('.haku-libro-servicios__item--listo input[type=checkbox]'); await checkA.uncheck();
-            await abrir('X PAGAR LATE OUT'); await hora('12:20');
-            assert.match(await page.locator('.haku-libro-servicio-manual').innerText(), /término 13:20/);
-            assert.equal(await page.locator('[data-campo-manual="precio_decision"]').count(), 0);
-            await confirmar(); assert.equal(await ready(), 2);
-            assert.equal(await page.locator('.haku-libro-servicios__item--listo').filter({ hasText: '1 HORA DE CORTESIA TINAJA' }).locator('input').isChecked(), false);
-            await abrir('1 MASAJE DE 1 HORA');
-            assert.equal(await page.locator('[data-campo-manual="duracion_minutos"]').count(), 0);
-            assert.equal(await page.locator('[data-campo-manual="cantidad"]').count(), 0);
-            await page.locator('[data-campo-manual="codigo_servicio"]').selectOption('masajeTerapeutico60'); await hora('17:00'); await confirmar(); assert.equal(await ready(), 3);
-            await abrir('X PAGAR LATE OUT'); await hora('12:45'); await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
-            assert.equal(await ready(), 3);
-            assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
-            await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
-            const cajas = await page.locator('.haku-libro-servicios__item--listo input').all(); for (const caja of cajas) await caja.check();
-            const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1); assert.equal(overflow, false);
-            await page.locator('[data-haku-accion="incorporar"]').click();
-            await page.waitForFunction(() => fixtureServicios.escrituras.length === 1);
-            assert.equal(await page.evaluate(() => new Set(fixtureServicios.escrituras[0].p_servicios.map(x => x.item_id)).size), 3);
-            await page.close(); console.log(`PASS servicios manual: ${viewport.width}px, A+B+C, cancelación, selección, payload único`);
+            for (const [texto,campos,codigo] of [
+                ['1 HORA DE CORTESIA TINAJA',{codigo_servicio:'tinajaTonel',hora:'18:00'},'tinajaTonel'],
+                ['X PAGAR LATE OUT',{hora:'12:20'},'lateCheckout'],
+                ['1 MASAJE DE 1 HORA',{codigo_servicio:'masajeTerapeutico60',hora:'17:00'},'masajeTerapeutico60']]) {
+                await page.evaluate(async q=>{const api=HAIKU_LIBRO_SERVICIOS_SCOPE_V2;await api.renderizar(await api.construir(q),document.getElementById('out'),q);},consulta);
+                const row=page.locator('.haku-libro-servicios__item').filter({hasText:texto});
+                await row.locator('..').locator('..').evaluate(el=>el.open=true);
+                await row.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+                const panel=page.locator('.haku-libro-servicio-manual');
+                for(const [clave,valor] of Object.entries(campos)){
+                    const input=panel.locator(`[data-campo-manual="${clave}"]`);
+                    if(clave==='codigo_servicio')await input.selectOption(valor);
+                    else {await input.fill(valor);await input.dispatchEvent('change');}
+                }
+                const antes=await page.evaluate(()=>fixtureServicios.escrituras.length);
+                await page.evaluate(()=>window.confirm=()=>{throw Error('No corresponde otro diálogo');});
+                await panel.getByRole('button',{name:'Confirmar servicio',exact:true}).click();
+                await page.waitForFunction(n=>fixtureServicios.escrituras.length===n+1,antes);
+                const payload=await page.evaluate(()=>fixtureServicios.escrituras.at(-1));
+                assert.equal(payload.p_servicios.length,1);assert.equal(payload.p_notas.length,0);
+                assert.equal(payload.p_servicios[0].codigo_servicio,codigo);
+                await page.getByText('Incorporación completada',{exact:true}).waitFor();
+            }
+            await page.close(); console.log(`PASS servicios manual: ${viewport.width}px, A+B+C, confirmación directa, sin segundo diálogo, payload único`);
         }
         assert.deepEqual(errors, []); assert.deepEqual(externos, []);
     } finally { if (browser) await browser.close(); await new Promise(r => server.close(r)); }
