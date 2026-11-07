@@ -245,7 +245,7 @@
     function motivoServicio(s){
         if(s.estado==='en_sistema')return 'Ya registrado.';
         if(s.estado==='faltante')return 'Falta agregarlo a Proyecto H.';
-        const motivos=lista(s.razones).length?s.razones:String(s.razon||'').split(' · ');
+        const motivos=[...new Set([...String(s.razon||'').split(' · '),...lista(s.razones)])].filter(Boolean);
         const sinFecha=motivos.some(x=>/^Falta una fecha inequívoca del servicio/.test(x));
         const breves=motivos.map(x=>{
             if(/^Falta una fecha inequívoca del servicio/.test(x))return 'Falta indicar el día.';
