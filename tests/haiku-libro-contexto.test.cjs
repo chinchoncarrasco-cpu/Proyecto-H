@@ -13,6 +13,48 @@ test('1HRA TINAJA indica duración y conserva el intervalo horario explícito',(
  assert.deepEqual(S.horasDeServicio('12hrs tonel'),['12:00']);
 });
 const caso=(extra={})=>({...registro(),sistema,...extra});
+function calendarioDias(noches,{libre=true,texto='2 noches'}={}){
+ const celdas=[{r:1,c:51,valor:'13 nov',fechaISO:'2026-11-13'},{r:1,c:55,valor:'14 nov',fechaISO:'2026-11-14'},
+  {r:1,c:59,valor:'15 nov',fechaISO:'2026-11-15'},{r:10,c:0,valor:'cabaña 9'},
+  {r:10,c:51,valor:`Persona Ejemplo // 2 ADL // ${texto}`},{r:24,c:51,valor:'Pagos de arriendos de hoy'}];
+ if(libre)celdas.push({r:10,c:51+4*noches,valor:'LIBRE'});
+ return S.normalizarHoja({celdas,combinaciones:[{s:{r:10,c:51},e:{r:10,c:53+4*(noches-1)}}]},'Nov26');
+}
+async function contextoCalendario(data){
+ const actual=data.reservas[0],l={crearLectura:async()=>({estado:()=>({generacion:1}),listarHojas:()=>['Nov26'],consultarHoja:async()=>data})};
+ const [item]=await C.actualizarDesdeLibro([registro({actual,anterior:actual})],l);
+ return {...item,sistema,contexto:C.construir({...item,sistema})};
+}
+test('contrasta texto con fechas de encabezados y muestra el día LIBRE de la misma cabaña',async()=>{
+ const item=await contextoCalendario(calendarioDias(1)),e=item.contexto.calendario;
+ assert.equal(e.rango,'AZ11:BB11');assert.deepEqual(e.noches,['2026-11-13']);assert.equal(e.siguiente_libre.celda,'BD11');
+ const aviso=item.contexto.avisos.find(x=>x.codigo==='noches_contradictorias').texto;
+ assert.match(aviso,/texto dice 2 noches.*noche del 13-11-2026.*14-11-2026.*LIBRE/);
+ const html=require('../js/supabase-asistente-libro-actualizacion-v1.js').renderizarPendientes({items:[item]});
+ assert.match(html,/Celdas revisadas: Nov26 · AZ11:BB11\. LIBRE: BD11/);
+});
+test('dos días ocupados y texto de dos noches se corroboran: no crea una contradicción',async()=>{
+ const item=await contextoCalendario(calendarioDias(2));
+ assert.equal(item.actual.fecha_checkout,'2026-11-15');assert.deepEqual(item.contexto.calendario.noches,['2026-11-13','2026-11-14']);
+ assert.ok(!item.contexto.avisos.some(x=>x.codigo==='noches_contradictorias'));
+ assert.match(item.contexto.hechos.join(' '),/2 noches: del 13-11-2026 al 14-11-2026/);
+});
+test('no inventa LIBRE por una celda vacía, ni usa el LIBRE de otra cabaña',async()=>{
+ const data=calendarioDias(1,{libre:false});data.espacios.push({fecha:'2026-11-14',cabana:8,estado:'libre_explicito',origen:{celda:'BD10'}});
+ const item=await contextoCalendario(data);assert.equal(item.contexto.calendario.siguiente_libre,null);
+ assert.doesNotMatch(item.contexto.avisos.find(x=>x.codigo==='noches_contradictorias').texto,/LIBRE/);
+});
+test('duración explícita con extensión se contrasta completa y no sólo con la primera noche',async()=>{
+ const item=await contextoCalendario(calendarioDias(2,{texto:'1 noche // pidió extender 1 noche'}));
+ assert.equal(item.actual.noches_texto,1);assert.equal(item.actual.noches_texto_efectivas,2);
+ assert.ok(!item.contexto.avisos.some(x=>x.codigo==='noches_contradictorias'));
+});
+test('geometría incierta o fechas deducidas del texto no se presentan como celdas comprobadas',async()=>{
+ for(const cambios of [{geometria_inequivoca:false},{geometria_resuelta_texto:true}]){
+  const data=calendarioDias(1);Object.assign(data.reservas[0],cambios);
+  const item=await contextoCalendario(data);assert.equal(item.fuente_vigente.calendario,null);assert.equal(item.contexto.calendario,undefined);
+ }
+});
 test('pendiente de una salida antigua vuelve al Libro vigente, conservando su ID y evidencia anterior',async()=>{
  const original=registro(),previo=structuredClone(original),out=await C.actualizarDesdeLibro([original],lector([r()]));
  assert.equal(out[0].id,'p1');assert.equal(out[0].actual.fecha_checkout,'2026-09-14');assert.equal(out[0].cambios[0].ahora,'2026-09-14');

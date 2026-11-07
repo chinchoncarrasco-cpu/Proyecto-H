@@ -237,7 +237,7 @@
         return `<div class="haku-pendiente-explicacion"><p><strong>${escapar(e.encontro)}</strong></p>`+
             (contexto.length?`<div class="haku-pendiente-contexto">${contexto.map(x=>`<p>${escapar(x)}</p>`).join('')}</div>`:'')+
             (e.motivo?`<p>${escapar(e.motivo)}</p>`:'')+`<p class="haku-pendiente-estado">${escapar(e.paso)}</p></div>`+
-            (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>${pendienteFuente?'Ver última comparación guardada':'Ver comparación de datos'} (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambio=>cambioPendiente(cambio,!pendienteFuente)).join('')}</dl></details>`:'');
+            (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>${pendienteFuente?'Ver última comparación guardada':'Ver comparación de datos'} (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambio=>cambioPendiente(cambio,!pendienteFuente)).join('')}</dl>${c?.calendario?`<p>Celdas revisadas: ${escapar(c.calendario.hoja)} · ${escapar(c.calendario.rango)}${c.calendario.siguiente_libre?.celda?`. LIBRE: ${escapar(c.calendario.siguiente_libre.celda)}`:''}.</p>`:''}</details>`:'');
     }
     function revisionServiciosPendiente(item,generacion){
         if(generacion==null||item?.tipo!=='modificacion'||!item.actual||!item.sistema?.reserva_id||
