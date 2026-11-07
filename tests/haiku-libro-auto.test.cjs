@@ -228,6 +228,34 @@ test('aviso en segundo plano conserva conversación, borrador y posición y espe
 });
 
 const burbuja=r=>A.resumir(res(r)).burbuja;
+test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el borrador',async()=>{
+    const resultado=res({nuevas:[{actual:row}]}),h=interfaz(async()=>resultado);
+    const entregados=[];let ocupado=true;
+    h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+    h.window.HAIKU_ASISTENTE.procesando=()=>ocupado;
+    h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={...h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1,
+        incorporarDesdeAviso:r=>entregados.push(r)};
+    h.ids['haiku-asistente-texto'].value='Mi consulta pendiente';
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const boton=h.nodos().find(x=>x.textContent==='Incorporar');assert.ok(boton);assert.equal(boton.disabled,true);
+    boton.dispatchEvent({type:'click'});assert.equal(entregados.length,0);
+    ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
+    assert.equal(boton.disabled,false);boton.dispatchEvent({type:'click'});
+    assert.deepEqual(entregados,[resultado]);assert.equal(h.abierto(),1);
+    assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
+    assert.equal(h.document.body.children.length,0);
+});
+test('Incorporar se desactiva al llegar otra generación y no aparece para avisos sin cambios',async()=>{
+    const h=interfaz(async()=>res({nuevas:[{actual:row}]}));
+    h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const boton=h.nodos().find(x=>x.textContent==='Incorporar');assert.ok(boton);
+    h.cambiar();assert.equal(boton.disabled,true);
+    const vacio=interfaz(async()=>res({advertencias:[{}]}));
+    vacio.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+    vacio.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    assert.equal(vacio.nodos().some(x=>x.textContent==='Incorporar'),false);
+});
 const cambio=(campo,antes,ahora)=>burbuja({modificadas:[{actual:row,cambios:[{campo,antes,ahora}]}]}).casos[0].detalles[0];
 test('burbuja: fecha breve precisa, incluso al cambiar de mes o año',()=>{
     assert.deepEqual(cambio('fecha_checkout','2026-11-14','2026-11-15'),{etiqueta:'Fecha',texto:'Salida: 14 → 15 nov.'});

@@ -311,6 +311,35 @@ test('un fallo focal conserva el historial y permite reintentar',async()=>{
     await assert.rejects(cache.obtener(informe),/Supabase no disponible/);
     await cache.obtener(informe,{revalidar:true});assert.equal(intentos,2);
 });
+test('incorporar desde aviso revalida sólo sus cambios sin leer ni alterar otros pendientes',async()=>{
+    const informe={estado:'ok',libro_actual:{generacion:3},nuevas:[{actual:reserva}]};
+    const original=JSON.stringify(informe);let consultas=0;
+    const cache=A.crearCachePendientes({soloAviso:true,generacion:()=>4,
+        leer:()=>assert.fail('no debe sumar el historial a este aviso'),
+        guardar:()=>assert.fail('la preparación no modifica el historial'),
+        contexto:{actualizarDesdeLibro:async rows=>rows.map(r=>({...r,actual:{...r.actual,adultos:3}})),enriquecer:async rows=>rows},
+        revalidarCambios:async(rows,{generacion})=>{
+            consultas++;assert.equal(rows.length,1);assert.equal(rows[0].actual.adultos,3);assert.equal(generacion,4);
+            return {items:consultas===1?rows:[],resueltos:consultas===1?[]:[rows[0].id],
+                reservas:consultas===1?rows.map(r=>r.actual):[],comparacion:[],q:{}};
+        }});
+    assert.equal((await cache.obtener(informe)).preparacion.generacion,4);
+    assert.equal((await cache.obtener(informe,{revalidar:true})).items.length,0);
+    assert.equal(consultas,2);assert.equal(JSON.stringify(informe),original);
+});
+test('incorporación directa requiere administrador y cambios concretos',()=>{
+    const sesion=global.haikuSesion;
+    try{
+        const informe={estado:'ok',nuevas:[{actual:reserva}]};
+        global.haikuSesion={usuario:{activo:true},roles:['recepcion']};
+        assert.equal(A.puedeIncorporar(informe),false);
+        assert.throws(()=>A.incorporarDesdeAviso(informe),/administrador/);
+        global.haikuSesion={usuario:{activo:true},roles:['administrador']};
+        assert.equal(A.puedeIncorporar(informe),true);
+        assert.equal(A.puedeIncorporar({estado:'ok',advertencias:[{}]}),false);
+        assert.equal(A.puedeIncorporar({estado:'sin_linea_base',nuevas:[{}]}),false);
+    }finally{global.haikuSesion=sesion;}
+});
 test('informe anterior revalida sus pendientes con el Libro actual y conserva el origen',async()=>{
     let registro={version:1,cambios:[]},leidas=0;
     const informe={libro_actual:{generacion:3},nuevas:[{actual:{...reserva,adultos:2}}]};

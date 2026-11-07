@@ -190,7 +190,25 @@
                 });
                 contenedor.appendChild(boton);acciones.push(boton);
             }
+            function botonIncorporar(contenedor){
+                const api=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
+                if(!api?.puedeIncorporar?.(resultado))return;
+                const boton=doc.createElement('button');boton.type='button';boton.textContent='Incorporar';
+                boton.className='haku-libro-auto__incorporar';boton.title='Preparar estos cambios y confirmar su incorporación';boton.disabled=consultando();
+                boton.addEventListener('click',()=>{
+                    if(boton.disabled||consultando())return;
+                    try{
+                        api.incorporarDesdeAviso(resultado);root.HAIKU_ASISTENTE?.abrir?.();
+                        mensajeInforme?.remove();mensajeInforme=null;toast?.remove();toast=null;
+                    }catch(error){
+                        const aviso=doc.createElement('p');aviso.setAttribute('role','alert');
+                        aviso.textContent=error?.message||'No pude abrir la incorporación.';contenedor.appendChild(aviso);
+                    }
+                });
+                contenedor.appendChild(boton);acciones.push(boton);
+            }
             const pie=nodo(toast,'div','haku-libro-auto__acciones');
+            if(resultado)botonIncorporar(pie);
             if (resultado) botonInforme(pie);
             const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent=conservarConsulta?'Seguir con mi consulta':'Cerrar';cerrar.addEventListener('click',()=>{toast?.remove();toast=null;});pie.appendChild(cerrar);
             doc.body.appendChild(toast);
@@ -199,7 +217,7 @@
                 const mensajes=doc.getElementById('haiku-asistente-mensajes');
                 if (mensajes) {
                     const mensaje=doc.createElement('div');mensaje.className='haiku-asistente-mensaje haiku-asistente-mensaje--asistente';mensaje.textContent=texto;
-                    if (resultado) botonInforme(mensaje);
+                    if (resultado) {botonIncorporar(mensaje);botonInforme(mensaje);}
                     mensajes.appendChild(mensaje);
                     if (resultado) mensajeInforme=mensaje;
                 }
