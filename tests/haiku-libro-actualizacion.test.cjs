@@ -327,13 +327,13 @@ test('incorporar desde aviso revalida sólo sus cambios sin leer ni alterar otro
     assert.equal((await cache.obtener(informe,{revalidar:true})).items.length,0);
     assert.equal(consultas,2);assert.equal(JSON.stringify(informe),original);
 });
-test('incorporación directa requiere administrador y cambios concretos',()=>{
+test('incorporación directa requiere administrador y cambios concretos',async()=>{
     const sesion=global.haikuSesion;
     try{
         const informe={estado:'ok',nuevas:[{actual:reserva}]};
         global.haikuSesion={usuario:{activo:true},roles:['recepcion']};
         assert.equal(A.puedeIncorporar(informe),false);
-        assert.throws(()=>A.incorporarDesdeAviso(informe),/administrador/);
+        await assert.rejects(A.incorporarDesdeAviso(informe),/administrador/);
         global.haikuSesion={usuario:{activo:true},roles:['administrador']};
         assert.equal(A.puedeIncorporar(informe),true);
         assert.equal(A.puedeIncorporar({estado:'ok',advertencias:[{}]}),false);
