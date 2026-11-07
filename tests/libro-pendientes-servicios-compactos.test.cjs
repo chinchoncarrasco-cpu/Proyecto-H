@@ -51,3 +51,10 @@ test('sin contexto operativo conserva la advertencia, y un conflicto de fechas m
     item.contexto={...c,avisos:[{codigo:'noches_contradictorias',texto:'El texto dice dos noches, pero las celdas cubren una.'}]};
     assert.match(A.renderizarPendientes({generacion:1,items:[item]}),/El texto dice dos noches, pero las celdas cubren una/);
 });
+test('el motivo principal de identidad no se pierde al resumir los datos que faltan',async()=>{
+    const {item}=await crearCaso(),s=item.contexto.servicios.find(x=>x.tipo==='tonel');
+    s.razon='La asociación de la reserva requiere revisión antes de incorporar.';
+    const html=A.renderizarPendientes({generacion:1,items:[item]});
+    assert.match(html,/La asociación de la reserva requiere revisión antes de incorporar/);
+    assert.equal((html.match(/Falta indicar el día\./g)||[]).length,1);
+});
