@@ -48,6 +48,7 @@ class Element {
     constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.value = ''; this.style = {}; this.dataset = {}; }
     append(...els) { this.children.push(...els); els.forEach(el => el.parentElement = this); }
     appendChild(el) { this.append(el); }
+    replaceChildren(...els) { this.text = ''; this.children = []; this.append(...els); }
     setAttribute(k, v) { this[k] = v; }
     addEventListener(k, fn) { this.listeners[k] = fn; }
     remove() { if (this.parentElement) this.parentElement.children = this.parentElement.children.filter(x => x !== this); }

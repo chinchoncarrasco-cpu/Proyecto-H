@@ -124,7 +124,8 @@ test('revisión que sigue incompleta explica por qué no avanza y conserva el fo
     await boton(out, 'Aprobación manual').listeners.click();
     const panel = out.querySelector('.haku-servicio-compacto');
     // Simula la pulsación obsoleta de una ficha cuyo dato sigue faltando.
-    const revisar = boton(panel, 'Revisar datos'); revisar.disabled = false;
+    e.guard();
+    const revisar = boton(panel, 'Confirmar servicio'); revisar.disabled = false;
     await revisar.listeners.click();
     assert.match(panel.textContent, /No se guardó el cambio\.|equivalencia activa compatible/);
     assert.equal(out.querySelector('.haku-servicio-compacto'), panel);

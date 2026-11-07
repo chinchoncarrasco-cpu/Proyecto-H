@@ -49,39 +49,28 @@ const server = http.createServer((req, res) => {
                 const hora = async valor => {
                     const el = page.locator('[data-campo-manual="hora"]'); await el.fill(valor); await el.dispatchEvent('change');
                 };
-                const confirmar = async () => {
-                    await page.getByRole('button', { name: 'Revisar datos' }).click();
-                    await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' });
-                };
-                const listos = () => page.evaluate(async () => (await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.revalidarVista(document.getElementById('out'), q)).items.filter(x => x.kind === 'servicio' && x.estado === 'listo').length);
+                const id = await filaRocio().locator('input').getAttribute('data-haku-item-id');
                 await abrir('Rocío Leal');
                 assert.equal(await page.locator('[data-campo-manual]').count(), 1);
                 assert.equal(await page.locator('[data-campo-manual="hora"]').count(), 1);
-                assert.match(await page.locator('.haku-libro-servicio-manual').innerText(), /2026-10-24/);
-                await hora('17:00'); await confirmar(); assert.equal(await listos(), 1);
-                assert.equal(await page.evaluate(() => HAIKU_LIBRO_SERVICIOS_SCOPE_V2.estadosPorVista.get(document.getElementById('out')).manuales.size), 1);
-                const id = await filaRocio().locator('input').getAttribute('data-haku-item-id');
-                await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
-                await filaRocio().locator('input[type=checkbox]').uncheck();
-                await abrir('1 HORA DE CORTESIA TINAJA');
-                await page.locator('[data-campo-manual="codigo_servicio"]').selectOption('tinajaTonel'); await hora('18:00'); await confirmar();
-                await abrir('X PAGAR LATE OUT'); await hora('12:20'); await confirmar(); assert.equal(await listos(), 3);
-                assert.equal(await filaRocio().locator('input[type=checkbox]').isChecked(), false);
-                await abrir('Rocío Leal'); await hora('18:00'); await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
-                assert.equal(await listos(), 3); assert.equal(await filaRocio().locator('input').getAttribute('data-haku-item-id'), id);
-                assert.equal(await filaRocio().locator('input[type=checkbox]').isChecked(), false);
-                await page.locator('.haku-libro-servicios__seccion--servicios').evaluate(el => el.open = true);
-                // Incorporar sólo Rocío demuestra un payload único desde la selección real.
-                const checks = await page.locator('.haku-libro-servicios__item--listo input[type=checkbox]').all();
-                for (const check of checks) await check.uncheck();
-                await filaRocio().locator('input[type=checkbox]').check();
-                await page.locator('[data-haku-accion="incorporar"]').click();
+                await hora('17:00');
+                await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+                assert.equal(await page.evaluate(() => fixtureServicios.escrituras.length), 0);
+                await abrir('Rocío Leal'); await hora('17:00');
+                await page.evaluate(() => window.confirm = () => { throw Error('No corresponde otro diálogo'); });
+                await page.getByRole('button', { name: 'Confirmar servicio', exact: true }).click();
                 await page.waitForFunction(() => fixtureServicios.escrituras.length === 1);
-                const payload = await page.evaluate(() => fixtureServicios.escrituras[0].p_servicios);
+                const solicitud = await page.evaluate(() => fixtureServicios.escrituras[0]);
+                assert.equal(solicitud.p_notas.length, 0);
+                const payload = solicitud.p_servicios;
                 assert.equal(payload.length, 1); assert.equal(payload[0].item_id, id);
+                assert.equal(payload[0].hora, '17:00');
+                assert.equal(payload[0].codigo_servicio, 'masajeDescontracturante60');
+                assert.equal(payload[0].fecha_servicio, '2026-10-24');
                 assert.equal(payload[0].servicio_manual_v1.evidencia_original.texto, fragmentos.join(separador));
+                await page.getByText('Incorporación completada', { exact: true }).waitFor();
                 await page.close();
-                console.log(`PASS masaje agrupado: ${viewport.width}px, separador ${JSON.stringify(separador)}, sólo hora, A+B+C, deselección, payload único`);
+                console.log(`PASS masaje agrupado: ${viewport.width}px, separador ${JSON.stringify(separador)}, sólo hora, cancelación, confirmación directa, payload único`);
             }
             const page = await browser.newPage({ viewport }); page.on('pageerror', e => errores.push(e.message));
             await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : (externos.push(r.request().url()), r.abort()));
