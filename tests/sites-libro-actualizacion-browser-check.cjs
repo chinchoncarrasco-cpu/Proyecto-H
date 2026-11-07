@@ -133,8 +133,11 @@ const server = http.createServer((request, response) => {
                 detail: { carga_manual: true, tenia_anterior: true, generacion: 2 }
             }));
         });
-        const secondAnnouncement = page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje').filter({ hasText: 'Ver informe' }).last();
-        await secondAnnouncement.locator('button').click();
+        const secondAnnouncement = page.locator('.haku-libro-auto').filter({hasText:'Ver informe'});
+        await secondAnnouncement.getByRole('button',{name:'Ver informe',exact:true}).click();
+        assert.equal(await first.count(),1,'el aviso de fondo conserva el informe abierto');
+        assert.equal(await page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje').filter({hasText:'Ver informe'}).count(),0,
+            'una consulta abierta recibe la burbuja sin insertar otro mensaje');
         const report = page.locator('.haku-actualizacion-sites').last();
         assert.deepEqual(await report.locator('.haku-actualizacion-sites__metricas strong').allInnerTexts(), ['1', '1', '1', '1']);
         assert.deepEqual(await report.locator('.haku-prioridad-fila > summary strong').allInnerTexts(), ['1', '1', '1', '1']);
