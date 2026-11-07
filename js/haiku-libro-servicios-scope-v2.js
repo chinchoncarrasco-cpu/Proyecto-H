@@ -1299,6 +1299,20 @@
         const candidatos = decision?.candidatos || [], actual = candidatos[0];
         const codigo = codigoExistente(actual), esperado = item?.payload;
         const destino = item?.asociacion?.sistema;
+        // El Libro puede indicar sólo el inicio. Cambiar el cobro conserva el
+        // término verificado del servicio; no calcula ni cambia su horario.
+        const fin = item?.hora_fin || horaCorta(actual?.hora_fin);
+        if (!item?.hora_fin) {
+            if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(fin || '')) return null;
+            const duracion = (minutosHora(fin) - minutosHora(item?.hora) + 1440) % 1440;
+            if (!duracion || duracion !== Number(actual?.cantidad) * 60) return null;
+            const texto = normalizar(item?.servicio?.texto_original).replace(
+                /\b([01]?\d|2[0-3])[:.,]([0-5]\d)\s*(?:horas?|hra?s?|hr|h)\b/g,
+                (valor, hh, mm) => Number(hh)*60+Number(mm) === minutosHora(item?.hora) ? ' ' : valor);
+            const duraciones = [...texto.matchAll(/\b(\d+(?:[.,]\d+)?)\s*(horas?|hra?s?|hr\b|h\b|minutos?|mins?|min\b)/g)];
+            if (/\b(?:media\s+hora|hora\s+y\s+media|adicional|extension)\b/.test(texto) ||
+                duraciones.some(m => Number(m[1].replace(',','.')) * (/^min/.test(m[2]) ? 1 : 60) !== duracion)) return null;
+        }
         if (decision?.estado !== 'revisar' || candidatos.length !== 1 ||
             decision.contradicciones?.length !== 1 || decision.contradicciones[0] !== 'tipo_cobro' ||
             item?.semantica !== 'SERVICIO_REAL' || item.completitud !== 'COMPLETO' ||
@@ -1311,13 +1325,13 @@
             actual.reserva_id !== destino.reserva_id || actual.estadia_id !== destino.id ||
             actual.tipo_cobro !== 'normal' || !Number.isSafeInteger(Number(actual.total)) ||
             Number(actual.total) <= 0 || actual.fecha_servicio !== esperado.fecha_servicio ||
-            !item.hora_fin || horaCorta(actual.hora_inicio) !== esperado.hora ||
-            horaCorta(actual.hora_fin) !== item.hora_fin ||
+            !fin || horaCorta(actual.hora_inicio) !== esperado.hora ||
+            horaCorta(actual.hora_fin) !== fin ||
             Number(actual.cantidad) !== Number(esperado.cantidad) ||
             Number(actual.personas) !== Number(esperado.personas)) return null;
         return Object.freeze({ servicioId:actual.id, reservaId:destino.reserva_id,
             estadiaId:destino.id, codigo, fecha:actual.fecha_servicio,
-            hora:esperado.hora, fin:item.hora_fin, personas:Number(actual.personas),
+            hora:esperado.hora, fin, personas:Number(actual.personas),
             cantidad:Number(actual.cantidad), total:Number(actual.total) });
     }
 
@@ -1589,6 +1603,7 @@
         if (!base || actual.items.filter(i => i.item_id === itemId).length !== 1 || base.semantica !== 'SERVICIO_REAL' || base.estado === 'existente' || base.firmaManual !== firma)
             throw new Error('La evidencia o el destino cambiaron; vuelve a abrir la revisión de este servicio.');
         if (base.cambioHorarioExistente) throw new Error('Confirma el cambio de horario de la tinaja existente desde Revisar horario.');
+        if (base.cambioCortesiaExistente) throw new Error('Esta tinaja ya existe. Abre Aprobación manual para confirmar el cambio a cortesía.');
         if (base.conflicto_tinaja_promo) throw new Error('Revisa el cambio de tipo u horario de la tinaja registrada desde Ver reserva.');
         if (base.conflicto_tinaja_existente) throw new Error('Revisa la modificación de la tinaja existente desde Aprobación manual; no corresponde preparar un servicio nuevo.');
         const contrato = await cargarContratoManual(), calculo = calcularManual(base, campos, contrato);
@@ -1996,22 +2011,25 @@
         const apertura = ++estado.apertura, vigente = () => estado.apertura === apertura && fila.isConnected !== false;
         out.querySelector('.haku-libro-servicio-manual')?.remove();
         const panel = document.createElement('section');
-        panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
-        const titulo = document.createElement('h3');
-        titulo.textContent = 'Aprobación manual · Tinaja existente';
+        panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel haku-servicio-compacto';
+        panel.setAttribute('aria-label', `Cambio a cortesía de ${item.reserva.titular}`);
+        const ficha = fichaServicioManual(item);
         const origen = document.createElement('p'); origen.className = 'haiku-manual-caption';
-        origen.textContent = item.reserva.titular + ' · CAB ' + item.reserva.cabana +
-            ' · ' + esperado.fecha + ' · ' + esperado.hora + '–' + esperado.fin;
+        origen.textContent = fechaManualBreve(esperado.fecha) + ' · ' + esperado.hora + '–' + esperado.fin;
         const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion';
         aviso.setAttribute('role','status'); aviso.textContent = 'Verificando servicio y saldo…';
         const contenido = document.createElement('div');
+        const cuerpo = document.createElement('div'); cuerpo.className = 'haiku-manual-contenido';
+        const acciones = document.createElement('footer'); acciones.className = 'haku-libro-servicio-manual__acciones haiku-manual-pie';
         const cancelar = document.createElement('button'); cancelar.type = 'button';
         cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario';
         cancelar.textContent = 'Cancelar';
         cancelar.addEventListener('click', () => { estado.apertura++; panel.remove(); });
         panel.style.gridColumn = '1 / -1';
         panel.style.minWidth = '0';
-        panel.append(titulo,origen,aviso,contenido,cancelar);fila.append(panel);
+        acciones.append(cancelar);
+        cuerpo.append(ficha.cabecera,origen,contenido,ficha.evidencia,aviso);
+        panel.append(cuerpo,acciones);fila.append(panel);
         panel.scrollIntoView?.({ block:'nearest' });
         const consulta = { intencion:'MODIFICAR_SERVICIO_EXISTENTE', accion:'NORMAL_A_CORTESIA',
             titular:item.reserva.titular, cabana:Number(item.reserva.cabana),
@@ -2028,23 +2046,35 @@
                 horaCorta(s.hora_inicio) !== esperado.hora || horaCorta(s.hora_fin) !== esperado.fin ||
                 Number(s.cantidad) !== esperado.cantidad || Number(s.personas) !== esperado.personas ||
                 Number(s.total) !== esperado.total) {
-                aviso.textContent = p?.mensaje || 'El servicio ya no coincide; vuelve a revisar.';
+                const razones = p?.elegibilidad?.razones || [];
+                aviso.textContent = razones.includes('Existen aplicaciones de pago históricas.')
+                    ? 'Esta tinaja tiene pagos aplicados. Revisa esos pagos antes de anular el cobro.'
+                    : razones.length ? razones.join(' ') : p?.mensaje || 'El servicio ya no coincide; vuelve a revisar.';
                 return;
             }
-            contenido.innerHTML = api.renderizar(p);
-            const motivo = contenido.querySelector('[data-servicio-cortesia-motivo]');
-            const confirmar = contenido.querySelector('[data-servicio-cortesia-confirmar]');
-            const cancelarInterno = contenido.querySelector('[data-servicio-cortesia-cancelar]');
-            if (!motivo || !confirmar) throw Error('Falta el formulario seguro de cortesía.');
-            if (cancelarInterno) cancelarInterno.hidden = true; // El panel ya tiene un único Cancelar.
-            motivo.addEventListener('input',()=>{confirmar.disabled = estado.ocupado || !motivo.value.trim();});
-            confirmar.disabled = true;
-            aviso.textContent = 'Tinaja y cargo comprobados. Indica el motivo y confirma.';
+            const comparacion = document.createElement('p'); comparacion.className = 'haku-servicio-compacto__resumen';
+            comparacion.textContent = `Cobro $${esperado.total.toLocaleString('es-CL')} → Cortesía $0`;
+            const efecto = document.createElement('p'); efecto.className = 'haiku-manual-caption';
+            efecto.textContent = 'El Libro indica cortesía. Al confirmar se anulará el cargo pendiente de esta tinaja.';
+            contenido.append(comparacion,efecto);
+            const motivo = 'El Libro indica cortesía para esta tinaja. Se conserva el servicio y su horario.';
+            const confirmar = document.createElement('button'); confirmar.type = 'button';
+            confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario';
+            confirmar.textContent = 'Confirmar cambio'; confirmar.disabled = false;
+            acciones.append(confirmar);
+            aviso.textContent = '';
             const resultado = async r => {
                 if (!vigente()) return;
                 if (r?.estado === 'realizado' || r?.estado === 'already_courtesy') {
                     const actualizado = await construir(texto,overrides,estado.manuales);
-                    if (vigente()) renderizar(actualizado,out,texto,overrides);
+                    if (vigente()) {
+                        await renderizar(actualizado,out,texto,overrides);
+                        if (entradasHistorial.get(texto)?.aprobacionManual &&
+                            !actualizado.items.some(x => x.kind === 'servicio' && x.estado !== 'existente')) out.textContent = '';
+                        const guardado = document.createElement('p'); guardado.className = 'haiku-manual-validacion';
+                        guardado.setAttribute('role','status'); guardado.textContent = 'Cambio a cortesía guardado. Se actualizó la tinaja existente.';
+                        out.append(guardado);
+                    }
                     return;
                 }
                 aviso.textContent = r?.mensaje || 'No se pudo verificar el cambio.';
@@ -2061,21 +2091,23 @@
             confirmar.addEventListener('click',async()=>{
                 if(confirmar.disabled || estado.ocupado || !vigente()) return;
                 estado.ocupado=true;confirmar.disabled=true;cancelar.disabled=true;
+                let confirmacionEnviada = false;
                 try {
                     const relectura=await construir(texto,overrides,estado.manuales);
                     if(!vigente())return;
                     const coincidencias=relectura.items.filter(x=>x.item_id===item.item_id);
                     if(coincidencias.length!==1 || coincidencias[0].firmaManual!==item.firmaManual ||
-                        coincidencias[0].cambioCortesiaExistente?.servicioId!==esperado.servicioId)
+                        JSON.stringify(coincidencias[0].cambioCortesiaExistente)!==JSON.stringify(esperado))
                         throw Error('La evidencia o el servicio cambió. Vuelve a abrir la revisión.');
-                    await resultado(await api.confirmar(p,motivo.value.trim(),{
+                    confirmacionEnviada = true;
+                    await resultado(await api.confirmar(p,motivo,{
                         onEstado:mensaje=>{if(vigente())aviso.textContent=mensaje;}
                     }));
                 }catch(e){
                     if(vigente()){
                         aviso.textContent=e.message||'No se pudo comprobar el resultado.';
                         // Una respuesta perdida nunca permite reintento automático.
-                        await resultado(await api.verificarEstado(p));
+                        if (confirmacionEnviada) await resultado(await api.verificarEstado(p));
                     }
                 }finally{estado.ocupado=false;if(vigente())cancelar.disabled=false;}
             });
@@ -2288,7 +2320,13 @@
             estado.ocupado = true; confirmar.disabled = true; cancelar.disabled = true;
             try {
                 const resultado = await confirmarServicioManual(texto, base.item_id, borrador, estado.manuales, base.firmaManual, overrides);
-                renderizar(resultado, out, texto, overrides);
+                const revisado = resultado.items.find(x => x.item_id === base.item_id);
+                if (revisado?.estado === 'revisar' && !revisado.cambioCortesiaExistente && !revisado.cambioHorarioExistente) {
+                    aviso.textContent = 'No se guardó el cambio. ' + revisado.razones.join(' ');
+                    cancelar.disabled = false;
+                    return;
+                }
+                await renderizar(resultado, out, texto, overrides);
             } catch (e) { aviso.textContent = e.message; confirmar.disabled = false; cancelar.disabled = false; }
             finally { estado.ocupado = false; }
         });
