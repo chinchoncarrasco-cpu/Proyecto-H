@@ -245,6 +245,19 @@
         return copia;
     }
 
+    function envolverLectura(api) {
+        if (!api || api.__haikuPagosCanonV1 || typeof api.consultarHoja !== 'function') return api;
+        const corregir = (data, tipo = 'semantica') => tipo === 'semantica' ? corregirResultado(data)
+            : tipo === 'semantica_lote' ? data.map(corregirResultado) : data;
+        return Object.freeze({ ...api, __haikuPagosCanonV1: true,
+            version: `${api.version || '1'}+pagos-canon-v1`,
+            consultarHoja: async (...args) => corregir(await api.consultarHoja(...args), args[2]),
+            ...(api.consultarHojas ? {consultarHojas: async (...args) => (await api.consultarHojas(...args)).map(corregirResultado)} : {}),
+            // La copia estable debe conservar las mismas reglas que la fuente viva.
+            ...(api.crearLectura ? {crearLectura: async (...args) => envolverLectura(await api.crearLectura(...args))} : {})
+        });
+    }
+
     function instalar() {
         if (instalado) return true;
         const api = root.HAIKU_LIBRO_RESERVA_V1;
@@ -258,14 +271,7 @@
         const consultarOriginal = api.consultarHoja?.bind(api);
         if (typeof consultarOriginal !== "function") return false;
 
-        const envuelto = {
-            ...api,
-            __haikuPagosCanonV1: true,
-            version: `${api.version || "1"}+pagos-canon-v1`,
-            consultarHoja: async (...args) => corregirResultado(await consultarOriginal(...args))
-        };
-
-        root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze(envuelto);
+        root.HAIKU_LIBRO_RESERVA_V1 = envolverLectura(api);
         instalado = true;
         asegurarUiPagos();
         console.info("HAKU · Canon de pagos del Libro V1 preparado.");

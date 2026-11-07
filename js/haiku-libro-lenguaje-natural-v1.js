@@ -359,18 +359,24 @@
         };
     }
 
-    function instalarCompatibilidadPagos() {
-        const libro = root.HAIKU_LIBRO_RESERVA_V1;
-        if (!libro || libro.__haikuPagosCompatV1 || typeof libro.consultarHoja !== "function") return;
-        const consultarHojaBase = libro.consultarHoja.bind(libro);
-        root.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
+    function envolverLectura(libro) {
+        if (!libro || libro.__haikuPagosCompatV1 || typeof libro.consultarHoja !== 'function') return libro;
+        return Object.freeze({
             ...libro,
             __haikuPagosCompatV1: true,
             consultarHoja: async (...args) => {
-                const resultado = await consultarHojaBase(...args);
-                return args[2] === "buscar" ? resultado : ajustarResultadoPagos(resultado);
-            }
+                const resultado = await libro.consultarHoja(...args), tipo = args[2] || 'semantica';
+                return tipo === 'semantica' ? ajustarResultadoPagos(resultado)
+                    : tipo === 'semantica_lote' ? resultado.map(ajustarResultadoPagos) : resultado;
+            },
+            ...(libro.consultarHojas ? {consultarHojas: async (...args) => (await libro.consultarHojas(...args)).map(ajustarResultadoPagos)} : {}),
+            ...(libro.crearLectura ? {crearLectura: async (...args) => envolverLectura(await libro.crearLectura(...args))} : {})
         });
+    }
+
+    function instalarCompatibilidadPagos() {
+        const libro = root.HAIKU_LIBRO_RESERVA_V1;
+        if (libro) root.HAIKU_LIBRO_RESERVA_V1 = envolverLectura(libro);
     }
 
     // Consulta anual por uno o varios titulares. Se maneja aquí antes del

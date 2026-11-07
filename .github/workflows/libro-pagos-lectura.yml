@@ -1,0 +1,33 @@
+name: Haku lectura y conciliación de pagos
+
+on:
+  pull_request:
+    paths:
+      - "js/haiku-libro-pagos-canon-v1.js"
+      - "js/haiku-libro-lenguaje-natural-v1.js"
+      - "js/haiku-libro-pagos-focalizados-v1.js"
+      - "js/haiku-libro-consultas-v1.js"
+      - "js/haiku-libro-semantica-v1.js"
+      - "tests/libro-pagos-lectura-estable.test.cjs"
+      - "tests/libro-transferencias-bancarias.test.cjs"
+      - "tests/libro-glosa-sin-nombre.test.cjs"
+      - ".github/workflows/libro-pagos-lectura.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pagos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Lectura estable, pagos existentes, medios y confirmaciones
+        run: node --test tests/libro-pagos-lectura-estable.test.cjs tests/libro-transferencias-bancarias.test.cjs tests/haiku-libro-pagos-canon.test.cjs tests/haiku-libro-pagos-clasificacion.test.cjs tests/haiku-libro-pagos-focalizados.test.cjs tests/haiku-libro-auto.test.cjs tests/libro-comparacion-readonly.test.cjs tests/libro-pagos-existentes-visibles.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/haiku-libro-pago-snapshot-manual.test.cjs tests/haiku-libro-medio-pago-manual.test.cjs tests/libro-actualizaciones-pagos-flujo.test.cjs tests/libro-semantica.test.cjs tests/libro-penalidad-pago-manual.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-historial-revision-operativa.test.cjs
+      - name: Glosas bancarias e índices de lectura
+        run: node --test tests/libro-glosa-sin-nombre.test.cjs tests/libro-indice-lectura.test.cjs

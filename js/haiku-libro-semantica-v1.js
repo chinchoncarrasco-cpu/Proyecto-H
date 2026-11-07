@@ -72,7 +72,9 @@
             // El banco puede mostrar sólo el número. No completar el nombre
             // con el titular: un tercero también puede realizar el abono.
             const nombre = m[4]?.trim() || null, palabras = nombre?.split(/\s+/) || [];
-            if (nombre && (palabras.length < 2 || palabras.length > 8 || /\b(?:cab|noches?|saldo|folio|codaut|telefono|factura|bove)\b/.test(normalizar(nombre)))) return [];
+            // El banco también entrega nombres truncados, por ejemplo COMER.
+            // Se conserva exactamente ese texto, sin inventar el nombre completo.
+            if (nombre && (palabras.length > 8 || /\b(?:cab|noches?|saldo|folio|codaut|telefono|factura|bove|manager|manageer|pendiente|pend|pendt|confirmar)\b/.test(normalizar(nombre)))) return [];
             return [{glosa_original:fragmento,numero_remitente:m[2],nombre_remitente:nombre}];
         });
         if (!glosas.length && pago.medio_pago !== 'transferencia') return null;
@@ -1015,7 +1017,7 @@
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
                     const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
-                        codigo_autorizacion: ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
+                        codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manager/.test(t),
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
