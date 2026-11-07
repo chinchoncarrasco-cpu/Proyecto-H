@@ -101,7 +101,8 @@ test('las lecturas se agrupan: 100 tarjetas no generan 100 consultas',async()=>{
 });
 test('notas y servicios reutilizan la comparación, sin lecturas financieras innecesarias',async()=>{
  const llamadas=[];const out=await C.enriquecer([caso({cambios:[{campo:'servicios'}]})],cliente(tablas,llamadas),{comparacion:{serviciosDetalle:[{estado:'en_sistema',reserva:r(),servicio:{concepto:'masaje',hora:'16:00'}},{estado:'faltante',reserva:r(),servicio:{concepto:'tonel',hora:'17:15'}}]}});
- assert.deepEqual(llamadas,['eventos_auditoria']);assert.equal(out[0].contexto.servicios.length,2);assert.match(out[0].contexto.hechos.join(' '),/ya está registrado/);
+ assert.deepEqual(llamadas,['eventos_auditoria']);assert.equal(out[0].contexto.servicios.length,2);assert.equal(out[0].contexto.servicios[0].estado,'en_sistema');
+ assert.doesNotMatch(out[0].contexto.hechos.join(' '),/servicio.*o nota/);
 });
 test('sin permiso de pagos o sin cargos visibles no informa cero ni permite concluir precio conservado',async()=>{
  const llamadas=[],out=await C.enriquecer([caso()],cliente(tablas,llamadas),{puedeVerPagos:false});

@@ -1826,6 +1826,8 @@
                         item.estado === 'listo' ? 'faltante' : item.servicio_existente ? 'diferente' : 'revisar';
                     const detalle = { estado, canonico:true, item_id:item.item_id, reserva:r,
                         servicio:item.servicio, texto:item.texto, sistema:item.servicio_existente,
+                        lectura:{nombre:item.mapa?.nombre,fecha:item.fecha,hora:item.hora,
+                            cantidad:item.payload?.cantidad,razones:item.razones || []},
                         finanzas:item.finanzas_existente,
                         razon: !identidadSegura ? 'La asociación de la reserva requiere revisión antes de incorporar.' :
                             item.razones?.join(' · ') || (estado === 'en_sistema' ? 'Ya existe en Proyecto H.' : 'Preparado para incorporar.'),
