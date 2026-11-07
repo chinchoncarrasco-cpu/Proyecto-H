@@ -407,7 +407,9 @@ const server = http.createServer((request, response) => {
         });
         assert.equal(await incorporando.count(),1,'otra versión no oculta el guardado');
         await page.evaluate(()=>__resolverGuardado());
-        await burbuja.getByText('Incorporado: 1 servicio · 1 nota.',{exact:true}).waitFor();
+        await incorporando.waitFor({state:'detached'});
+        assert.match(await burbuja.locator('.haku-libro-auto__resultado').innerText(),/Incorporado: 1 servicio · 1 nota\./,
+            'recibo conservado al llegar otro aviso; errores: '+JSON.stringify(errors));
         assert.equal(await page.evaluate(()=>__escriturasAviso),1);
         assert.equal(await page.evaluate(()=>__scopeServicio.reservas[0].id),'Nov26!AB10');
         assert.equal(await page.evaluate(()=>__scopesAviso.every(rows=>rows.length===1&&rows[0].actual.id==='Nov26!AB10')),true);
