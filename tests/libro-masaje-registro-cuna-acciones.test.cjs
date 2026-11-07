@@ -94,7 +94,7 @@ test('Dos masajes ya pagados de otro subtipo no autorizan recrearlos ni cobrar o
     assert.equal(JSON.stringify([s,c]),anterior);assert.equal(e.state.escrituras.length,0);
     const manual=out.querySelectorAll('button').find(b=>b.textContent==='Aprobación manual');assert.ok(manual);
     await manual.listeners.click();const panel=out.querySelector('.haku-libro-servicio-manual');assert.ok(panel);
-    assert.match(panel.textContent,/19:00/);assert.match(panel.textContent,/Confirmar aquí sólo revalida/);
+    assert.match(panel.textContent,/19:00/);assert.match(panel.textContent,/Revisar aquí no cambia el servicio existente/);
     assert.match(panel.textContent,/Pagado/);
 });
 test('Aprobación manual revalida el conflicto de tipo, pero no crea ningún servicio',async()=>{

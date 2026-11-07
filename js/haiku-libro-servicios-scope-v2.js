@@ -1726,7 +1726,7 @@
         // La misma base visual de aprobaciones de Pagos, sin duplicar su CSS.
         if (!document.getElementById('haiku-libro-pagos-ui-v1-css')) {
             const link = document.createElement('link'); link.id = 'haiku-libro-pagos-ui-v1-css';
-            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=4'; document.head.appendChild(link);
+            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=5'; document.head.appendChild(link);
         }
         if (document.getElementById("haku-libro-servicios-estilos-v2")) return;
         const style = document.createElement("style"); style.id = "haku-libro-servicios-estilos-v2";
@@ -2136,6 +2136,54 @@
         fila.append(panel);panel.scrollIntoView?.({block:'center'});
     }
 
+    function fechaManualBreve(fecha) {
+        const partes = String(fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return partes ? `${Number(partes[3])} ${PREFIJOS[Number(partes[2]) - 1]}. ${partes[1]}` : 'Por definir';
+    }
+
+    // Presentación compartida por la comparación, las consultas y el informe.
+    // Los valores siempre vienen del cálculo existente, nunca del diseño de ejemplo.
+    function fichaServicioManual(base) {
+        const crear = (tag, clase, texto) => {
+            const el = document.createElement(tag); el.className = clase;
+            if (texto != null) el.textContent = texto;
+            return el;
+        };
+        const cabecera = crear('header', 'haiku-manual-cabecera');
+        const linea = crear('div', 'haku-servicio-compacto__titulo');
+        const titulo = crear('h3', '', base.mapa.nombre || base.servicio.concepto);
+        linea.append(titulo, crear('span', 'haku-servicio-compacto__cabana', `CAB ${base.reserva.cabana}`));
+        const entrada = base.reserva.fecha_checkin, salida = base.reserva.fecha_checkout;
+        const rango = entrada && salida && entrada.slice(0, 7) === salida.slice(0, 7)
+            ? `${Number(entrada.slice(-2))}–${fechaManualBreve(salida)}`
+            : `${fechaManualBreve(entrada)} → ${fechaManualBreve(salida)}`;
+        cabecera.append(linea, crear('p', 'haku-servicio-compacto__titular', base.reserva.titular),
+            crear('p', 'haiku-manual-caption', `Estadía · ${rango}`));
+        const resumen = crear('div', 'haku-servicio-compacto__resumen');
+        const horario = crear('strong', 'haku-servicio-compacto__horario');
+        const total = crear('strong', 'haku-servicio-compacto__importe');
+        const detalle = crear('span', 'haiku-manual-caption');
+        const cobro = crear('span', 'haiku-manual-caption haku-servicio-compacto__cobro');
+        resumen.append(horario, total, detalle, cobro);
+        const evidencia = crear('details', 'haiku-manual-evidencia');
+        evidencia.append(crear('summary', '', 'Ver texto del Libro'), crear('pre', '', base.servicio.texto_original));
+        const actualizar = (actual, cantidad, catalogo, precioPendiente = false) => {
+            const nombre = catalogo?.nombre || actual.mapa.nombre || base.mapa.nombre || base.servicio.concepto;
+            titulo.textContent = ({ tinajaTonel: 'Tinaja Tonel', tinajaJacuzzi: 'Jacuzzi', lateCheckout: 'Late Out' })[catalogo?.codigo || actual.mapa.codigo] || nombre.charAt(0).toUpperCase() + nombre.slice(1);
+            horario.textContent = actual.hora ? `${actual.hora}${actual.hora_fin ? `–${actual.hora_fin}` : ''}` : 'Hora por definir';
+            total.textContent = precioPendiente || (!catalogo && !actual.cortesia)
+                ? 'Precio por definir' : `$${actual.precio.total.toLocaleString('es-CL')}`;
+            const minutos = catalogo?.duracion_minutos || base.servicio.duracion_minutos ||
+                (catalogo?.unidad === 'hora' || ['tinaja', 'tonel', 'jacuzzi', 'lateout'].includes(base.servicio.concepto) ? cantidad * 60 : null);
+            const duracion = minutos ? (minutos % 60 === 0 ? `${minutos / 60} ${minutos === 60 ? 'hora' : 'horas'}` : `${minutos} min`) : '';
+            detalle.textContent = [duracion, cantidad > 1 && catalogo?.unidad !== 'hora' ? `${cantidad} servicios` : '',
+                actual.personas > 0 ? `${actual.personas} ${actual.personas === 1 ? 'persona' : 'personas'}`
+                    : esTinajaServicio(base.servicio) ? 'Personas por definir' : ''].filter(Boolean).join(' · ');
+            cobro.textContent = actual.cortesia ? 'Cortesía' : actual.intencion_cobro === 'cobrable' ? 'Cobrable' : 'Cobro por definir';
+        };
+        return { cabecera, resumen, evidencia, actualizar };
+    }
+
     async function abrirManual(item, out, texto, overrides, estado, fila) {
         if (item.cambioHorarioExistente) return abrirCambioHorarioExistente(item, out, texto, overrides, estado, fila);
         if (item.cambioCortesiaExistente) return abrirManualCortesiaExistente(item, out, texto, overrides, estado, fila);
@@ -2148,36 +2196,26 @@
         const contrato = await cargarContratoManual();
         if (apertura !== estado.apertura || fila.isConnected === false) return;
         out.querySelector('.haku-libro-servicio-manual')?.remove();
-        const panel = document.createElement('section'); panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel';
+        const panel = document.createElement('section'); panel.className = 'haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel haku-servicio-compacto';
         panel.setAttribute('aria-label', `Aprobación manual de ${base.reserva.titular}`);
         const contenido = document.createElement('div'); contenido.className = 'haiku-manual-contenido';
-        const cabecera = document.createElement('header'); cabecera.className = 'haiku-manual-cabecera';
-        const badge = document.createElement('span'); badge.className = 'haiku-manual-badge haiku-manual-badge--revision'; badge.textContent = 'Revisión manual';
-        const titulo = document.createElement('h3'); titulo.textContent = `Aprobación manual · ${base.mapa.nombre || base.servicio.concepto}`;
-        const estadoVisual = document.createElement('div'); estadoVisual.className = 'haiku-manual-estado'; estadoVisual.append(badge);
-        cabecera.append(estadoVisual, titulo);
-        const identidad = document.createElement('section'); identidad.className = 'haiku-manual-resumen';
-        const huesped = document.createElement('div'); huesped.className = 'haiku-manual-fila';
-        const titular = document.createElement('strong'); titular.textContent = base.reserva.titular;
-        const cab = document.createElement('span'); cab.className = 'haiku-manual-badge'; cab.textContent = `CAB ${base.reserva.cabana}`;
-        huesped.append(titular, cab);
-        const evidencia = document.createElement('details'); evidencia.className = 'haiku-manual-evidencia';
-        const etiquetaOrigen = document.createElement('summary'); etiquetaOrigen.textContent = 'Evidencia original del Libro';
-        const origen = document.createElement('pre'); origen.textContent = base.servicio.texto_original;
-        evidencia.append(etiquetaOrigen, origen);
-        const contexto = document.createElement('p'); contexto.className = 'haiku-manual-caption'; contexto.textContent = `Estadía ${base.reserva.fecha_checkin} → ${base.reserva.fecha_checkout} · ${base.asociacion.estado === 'asociada' ? 'Reserva y estadía verificadas' : 'Destino pendiente'}`;
+        const ficha = fichaServicioManual(base);
         const motivos = document.createElement('p'); motivos.className = 'haiku-manual-caption haku-libro-servicio-manual__motivos'; motivos.textContent = item.razones.join(' ');
-        const conocidos = document.createElement('p'); conocidos.className = 'haiku-manual-caption'; conocidos.textContent = `Datos conocidos: ${base.intencion_cobro === 'cortesia' ? 'cortesía' : base.intencion_cobro === 'cobrable' ? 'cobrable' : 'cobro pendiente'}${base.servicio.duracion_minutos ? ` · ${base.servicio.duracion_minutos} minutos` : ''} · cantidad ${base.servicio.cantidad || 1}${base.fecha ? ` · fecha ${base.fecha}` : ''}${base.hora ? ` · horario original ${base.hora}` : ''}`;
-        identidad.append(huesped, contexto, conocidos);
+        ficha.evidencia.append(motivos);
         const campos = document.createElement('div'); campos.className = 'haku-libro-servicio-manual__campos haiku-manual-dos-columnas';
-        const resumen = document.createElement('p'); resumen.className = 'haiku-manual-total';
+        const fechaConocida = document.createElement('p'); fechaConocida.className = 'haku-servicio-compacto__fecha haiku-manual-caption';
         const aviso = document.createElement('p'); aviso.className = 'haiku-manual-validacion'; aviso.setAttribute('role', 'alert');
-        const revalidacion = document.createElement('p'); revalidacion.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
-        revalidacion.textContent = item.conflicto_tipo_masaje
-            ? detalleMasajeRegistrado(item) + ' Confirmar aquí sólo revalida; no cambia el tipo del servicio existente.'
-            : 'Al confirmar, Haku volverá a validar el servicio antes de dejarlo listo para incorporar.';
+        const revalidacion = document.createElement('p'); revalidacion.className = 'haiku-manual-caption haku-servicio-compacto__ayuda';
+        revalidacion.textContent = 'Después podrás confirmar el registro.';
+        const conflicto = document.createElement('p'); conflicto.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
+        // Las preguntas del formulario ya explican estos datos faltantes.
+        // Los conflictos adicionales siguen visibles y la evidencia conserva todos los motivos.
+        const motivoExtra = item.razones.find(r => !/^(?:Falta una fecha inequívoca del servicio;|Falta fecha u hora para comprobar el servicio existente|Falta un horario inequívoco del servicio\.|Falta horario del masaje\.|Falta tipo de masaje\.|No hay una equivalencia segura con el catálogo de servicios de Proyecto H\.)/.test(r));
+        conflicto.textContent = item.conflicto_tipo_masaje ? detalleMasajeRegistrado(item) + ' Revisar aquí no cambia el servicio existente.'
+            : base.asociacion.estado !== 'asociada' ? 'Primero hay que identificar la reserva de este servicio.' : motivoExtra || '';
+        conflicto.hidden = !conflicto.textContent;
         const acciones = document.createElement('footer'); acciones.className = 'haku-libro-servicio-manual__acciones haiku-manual-pie';
-        const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario'; confirmar.textContent = 'Confirmar datos y revalidar';
+        const confirmar = document.createElement('button'); confirmar.type = 'button'; confirmar.className = 'haiku-incorporacion-manual-accion haiku-manual-primario'; confirmar.textContent = 'Revisar datos';
         const cancelar = document.createElement('button'); cancelar.type = 'button'; cancelar.className = 'haiku-incorporacion-manual-accion haiku-manual-secundario'; cancelar.textContent = 'Cancelar';
         cancelar.addEventListener('click', () => { estado.apertura++; panel.remove(); });
         const borrador = { ...(estado.manuales.get(base.item_id)?.campos || {}) }; // Nunca modifica una decisión confirmada.
@@ -2203,7 +2241,7 @@
             if (codigosManual(base).length > 1 || !base.mapa.codigo) campo('codigo_servicio', base.servicio.concepto === 'masaje' ? (base.servicio.duracion_minutos ? 'Tipo de masaje' : 'Tipo y duración del masaje') : 'Tipo de tinaja', 'text', calculo.opciones.map(c => [c, contrato.catalogo.find(x => x.codigo === c).nombre]));
             if (!base.hora || (base.servicio.concepto === 'lateout' && /\bhasta\b/.test(normalizar(base.servicio.texto_original)))) campo('hora', 'Hora de inicio', 'time');
             const sinOpcionales = calcularManual(base, { ...borrador, fecha: null, personas: undefined }, contrato).item;
-            if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', 'Fecha del servicio', 'date');
+            if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', '¿Qué día será?', 'date');
             if (calculo.catalogo && /^tinaja/.test(calculo.catalogo.codigo) && (!Number.isInteger(sinOpcionales.personas) || sinOpcionales.personas < 1 || sinOpcionales.personas > Number(calculo.catalogo.capacidad_maxima || Infinity))) campo('personas', 'Personas', 'number');
             if (base.intencion_cobro === 'no_determinada') campo('tipo_cobro', 'Tipo de cobro', 'text', [['normal', 'Cobrable'], ...(calculo.catalogo?.permite_cortesia && /^tinaja/.test(calculo.catalogo.codigo) ? [['cortesia', 'Cortesía']] : [])]);
             if (actual.precio.distinto) {
@@ -2215,7 +2253,10 @@
                 ];
                 campo('precio_decision','Confirmar precio contractual','text',opcionesPrecio);
             }
-            resumen.textContent = `${actual.fecha ? `Fecha ${actual.fecha}` : 'Fecha pendiente'} · ${actual.hora ? `Inicio ${actual.hora}${actual.hora_fin ? ` · término ${actual.hora_fin}` : ''}` : 'Inicio pendiente'} · ${calculo.cantidad} unidad(es) · ${actual.personas || 0} persona(s) · ${actual.cortesia ? 'cortesía · total $0' : `total $${actual.precio.total.toLocaleString('es-CL')}`}`;
+            const tieneCampoFecha = [...campos.querySelectorAll('input')].some(x => x.dataset.campoManual === 'fecha');
+            fechaConocida.textContent = actual.fecha && !tieneCampoFecha ? `Día del servicio · ${fechaManualBreve(actual.fecha)}` : '';
+            fechaConocida.hidden = !fechaConocida.textContent;
+            ficha.actualizar(actual, calculo.cantidad, calculo.catalogo, actual.precio.distinto && !borrador.precio_decision);
             confirmar.disabled = !calculo.catalogo || base.asociacion.estado !== 'asociada' || [...campos.querySelectorAll('input,select')].some(x => !x.value);
         };
         confirmar.addEventListener('click', async () => {
@@ -2232,9 +2273,9 @@
                 x.className='haiku-manual-aviso haiku-manual-aviso--revision';
                 x.textContent='Una sola tinaja de 2 horas: primera hora de cortesía ($0), segunda hora por pagar ($30.000). Total $30.000. El unitario $15.000 es sólo un promedio técnico para registrar un único servicio. Confirma el importe del Libro.';
                 return [x]; })() : [];
-        acciones.append(confirmar, cancelar);
-        contenido.append(cabecera, identidad, evidencia, motivos, ...explicacionPromo, campos, resumen, revalidacion, aviso);
-        panel.append(contenido, acciones);
+        acciones.append(cancelar, confirmar);
+        contenido.append(ficha.cabecera, ficha.resumen, conflicto, ...explicacionPromo, fechaConocida, campos, ficha.evidencia, aviso);
+        panel.append(contenido, acciones, revalidacion);
         panel.style.gridColumn = '1 / -1';
         panel.style.minWidth = '0';
         fila.append(panel); actualizar(); panel.scrollIntoView?.({ block: 'nearest' });
@@ -2605,16 +2646,19 @@
             });
         }
         // Tras revalidar, sólo este servicio queda seleccionado para la confirmación final.
-        const panel=crear('section','haiku-incorporacion-manual-pago-panel');
+        const panel=crear('section','haku-libro-servicio-manual haiku-incorporacion-manual-pago-panel haku-servicio-compacto');
+        panel.setAttribute('aria-label', `Confirmar servicio de ${item.reserva.titular}`);
         const contenido=crear('div','haiku-manual-contenido');
-        contenido.append(crear('h3','','Servicio revisado'),
-            crear('p','haiku-manual-caption',`CAB ${item.reserva.cabana} · ${item.reserva.titular} · ${item.mapa.nombre}`),
-            crear('p','haiku-manual-total',`${item.fecha} · ${item.hora}–${item.hora_fin} · ${item.personas} personas · ${item.cortesia ? 'cortesía · total $0' : `total $${item.precio.total.toLocaleString('es-CL')}`}`),
-            crear('p','haiku-manual-caption','Los datos están revisados. Falta confirmar su incorporación en Proyecto H.'));
+        const ficha=fichaServicioManual(item);
+        ficha.actualizar(item,item.payload.cantidad,item.resolucionManual.catalogo);
+        const fecha=crear('div','haku-servicio-compacto__fecha-confirmada');
+        fecha.append(crear('span','haiku-manual-caption','Día del servicio'),
+            crear('p','haku-servicio-compacto__valor-fecha',fechaManualBreve(item.fecha)));
+        contenido.append(ficha.cabecera,ficha.resumen,fecha,ficha.evidencia);
         const check=crear('input','haku-libro-servicios__check');check.type='checkbox';check.checked=true;check.hidden=true;
         check.dataset.hakuItemId=item.item_id;contenido.append(check);
-        const acciones=crear('footer','haiku-manual-pie');
-        const incorporar=crear('button','haku-libro-servicios__boton haiku-incorporacion-manual-accion haiku-manual-primario','Incorporar este servicio');
+        const acciones=crear('footer','haku-libro-servicio-manual__acciones haiku-manual-pie');
+        const incorporar=crear('button','haku-libro-servicios__boton haiku-incorporacion-manual-accion haiku-manual-primario','Agregar servicio');
         incorporar.type='button';incorporar.dataset.hakuAccion='incorporar';
         incorporar.addEventListener('click',async()=>{
             if(incorporar.disabled || estado.ocupado)return;
@@ -2623,9 +2667,15 @@
             catch(error){const aviso=crear('p','haiku-manual-validacion',error.message);aviso.setAttribute('role','alert');contenido.append(aviso);}
             finally{estado.ocupado=false;incorporar.disabled=false;}
         });
-        const cancelar=crear('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Cancelar');cancelar.type='button';
-        cancelar.addEventListener('click',()=>{if(!estado.ocupado){estado.apertura++;panel.remove();}});
-        acciones.append(incorporar,cancelar);panel.append(contenido,acciones);out.append(panel);
+        const volver=crear('button','haiku-incorporacion-manual-accion haiku-manual-secundario','Volver');volver.type='button';
+        volver.addEventListener('click',async()=>{
+            if(estado.ocupado)return;
+            try{await abrirManual(item,out,texto,overrides,estado,out);}
+            catch(error){const aviso=crear('p','haiku-manual-validacion',error.message);aviso.setAttribute('role','alert');contenido.append(aviso);}
+        });
+        const ayuda=crear('p','haiku-manual-caption haku-servicio-compacto__ayuda',item.cortesia
+            ? 'Se registrará como cortesía, sin cargo.' : `Se registrará con un cargo de $${item.precio.total.toLocaleString('es-CL')}.`);
+        acciones.append(volver,incorporar);panel.append(contenido,acciones,ayuda);out.append(panel);
     }
 
     function renderizar(resultado, out, textoOriginal, overrides = new Map()) {

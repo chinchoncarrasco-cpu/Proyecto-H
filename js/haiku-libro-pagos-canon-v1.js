@@ -34,7 +34,7 @@
         if (!document.getElementById("haiku-libro-pagos-ui-v1-script")) {
             const script = document.createElement("script");
             script.id = "haiku-libro-pagos-ui-v1-script";
-            script.src = "js/haiku-libro-pagos-ui-v1.js?v=2";
+            script.src = "js/haiku-libro-pagos-ui-v1.js?v=3";
             script.defer = true;
             document.head.appendChild(script);
         }

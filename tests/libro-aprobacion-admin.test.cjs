@@ -60,7 +60,7 @@ test('el historial directo abre la decisión del servicio existente y conserva s
     completar(form);await form.confirmar.listeners.click();
     assert.equal(llamadas.length,1);assert.equal(llamadas[0].p_modo,'conservar');
     assert.match(e.out.textContent,/Aprobación guardada/);
-    assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Incorporar este servicio/);
+    assert.doesNotMatch(e.out.textContent,/Interpretación operativa|Agregar servicio/);
     assert.deepEqual(e.state.db.vista_estado_cargos,finanzas);assert.equal(e.state.escrituras.length,0);
 });
 test('administrador siempre ve aprobación y el conflicto pagado abre comparación, importe y decisión',async()=>{

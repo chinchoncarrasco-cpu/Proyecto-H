@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
                     const el = page.locator('[data-campo-manual="hora"]'); await el.fill(valor); await el.dispatchEvent('change');
                 };
                 const confirmar = async () => {
-                    await page.getByRole('button', { name: 'Confirmar datos y revalidar' }).click();
+                    await page.getByRole('button', { name: 'Revisar datos' }).click();
                     await page.locator('.haku-libro-servicio-manual').waitFor({ state: 'detached' });
                 };
                 const listos = () => page.evaluate(async () => (await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.revalidarVista(document.getElementById('out'), q)).items.filter(x => x.kind === 'servicio' && x.estado === 'listo').length);

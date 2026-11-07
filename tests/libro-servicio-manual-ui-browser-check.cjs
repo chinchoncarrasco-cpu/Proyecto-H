@@ -92,18 +92,18 @@ const foto = async (locator, nombre) => {
                     'la aprobación manual debe abrirse debajo de la misma ficha, no al final del resultado');
                 assert.equal(await page.locator('#out > .haku-libro-servicio-manual').count(),0);
                 assert.deepEqual(await panel.locator('[data-campo-manual]').evaluateAll(els => els.map(x => x.dataset.campoManual)), campos);
-                assert.match(await panel.innerText(), /Datos conocidos:.*60 minutos|Datos conocidos:.*cortesía|Datos conocidos:.*cobrable/);
+                assert.match(await panel.innerText(), /1 hora|Cortesía|Cobrable/);
                 if (!baseline) {
                     assert.equal(await panel.locator('.haiku-manual-cabecera h3').count(), 1);
-                    assert.equal(await panel.locator('.haiku-manual-resumen').count(), 1);
-                    assert.equal(await panel.locator('.haiku-manual-badge').filter({ hasText: 'CAB' }).count(), 1);
-                    assert.equal(await panel.locator('.haiku-manual-aviso--revision').count(), 1);
+                    assert.equal(await panel.locator('.haku-servicio-compacto__resumen').count(), 1);
+                    assert.equal(await panel.locator('.haku-servicio-compacto__cabana').count(), 1);
+                    assert.equal(await panel.locator('.haiku-manual-aviso--revision:visible').count(), 0);
                     const evidencia = panel.locator('.haiku-manual-evidencia'); await evidencia.locator('summary').click();
                     assert.match(await evidencia.innerText(), new RegExp(texto));
-                    assert.equal(await panel.locator('.haiku-manual-pie .haiku-manual-primario').textContent(), 'Confirmar datos y revalidar');
+                    assert.equal(await panel.locator('.haiku-manual-pie .haiku-manual-primario').textContent(), 'Revisar datos');
                     await panel.locator('[data-campo-manual="hora"]').fill('17:00');
                     await panel.locator('[data-campo-manual="hora"]').dispatchEvent('change');
-                    assert.match(await panel.innerText(), /Inicio 17:00/);
+                    assert.match(await panel.innerText(), /17:00–/);
                 }
                 await sinOverflow(page); await foto(panel, `${caso}-${width}`);
                 await panel.getByRole('button', { name: 'Cancelar', exact: true }).click();
