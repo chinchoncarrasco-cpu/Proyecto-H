@@ -334,6 +334,11 @@ const server = http.createServer((request, response) => {
             document.getElementById('haiku-asistente-texto').value='Mi consulta sigue aquí';
         });
         const conservado=page.locator('.haku-actualizacion-sites').last();
+        await page.waitForFunction(()=>{
+            const zonas=document.querySelectorAll('.haku-libro-pendientes-zona'),ultima=zonas[zonas.length-1];
+            return ultima?.querySelector('.haku-actualizacion-sites__historial,.haku-libro-pendientes-error');
+        });
+        assert.match(await conservado.innerText(),/Revisar cambios/,'el informe conservado ofrece acciones: '+JSON.stringify(errors));
         await conservado.getByRole('button',{name:'Revisar cambios',exact:true}).click();
         assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).generacion),4);
         await conservado.locator('.haku-actualizacion-sites__pendiente > summary').click();
