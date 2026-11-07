@@ -360,6 +360,7 @@
     }
     function crearCachePendientes(dependencias = {}) {
         let cache, pendiente, revision = 0;
+        const soloAviso=dependencias.soloAviso===true;
         const generacionActual = dependencias.generacion || (()=>root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
         const leer = dependencias.leer || (()=>root.HAIKU_LIBRO_RESERVA_V1?.leerCambiosDetectados?.());
         const guardar = dependencias.guardar || (registro=>root.HAIKU_LIBRO_RESERVA_V1?.guardarCambiosDetectados?.(registro));
@@ -384,9 +385,9 @@
                     return this.obtener(resultado,{revalidar,reintento});
                 }
                 const tarea=(async()=>{
-                    const previo=await leer()||{version:1,cambios:[]};
+                    const previo=soloAviso?{version:1,cambios:[]}:await leer()||{version:1,cambios:[]};
                     let registro=fusionarHistorialCambios(previo,resultado,origen);
-                    if(JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
+                    if(!soloAviso&&JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
                     validar(g);
                     const vigentes=contexto?await contexto.actualizarDesdeLibro(registro.cambios):registro.cambios;
                     validar(g);
@@ -402,7 +403,7 @@
                     if(resultadoPendientes.resueltos?.length){
                         const resueltos=new Set(resultadoPendientes.resueltos);
                         registro={...registro,actualizado_en:new Date().toISOString(),cambios:registro.cambios.filter(x=>!resueltos.has(x.id))};
-                        await guardar(registro);
+                        if(!soloAviso)await guardar(registro);
                     }
                     resultadoPendientes.generacion=g;
                     if(resultadoPendientes.reservas?.length)Object.defineProperty(resultadoPendientes,'preparacion',{value:{
@@ -424,7 +425,16 @@
             }
         };
     }
-    let instalado = false, cacheCompartida, insertarResultado;
+    let instalado = false, cacheCompartida, insertarResultado, insertarIncorporacion;
+    function puedeIncorporar(resultado){
+        return esAdministrador()&&['ok','sin_cambios','parcial'].includes(resultado?.estado)&&
+            Boolean(lista(resultado?.nuevas).length||lista(resultado?.modificadas).length);
+    }
+    function incorporarDesdeAviso(resultado){
+        if(!puedeIncorporar(resultado))throw new Error('La incorporación de cambios requiere una sesión de administrador.');
+        if(!instalar())throw new Error('Haku todavía no está disponible.');
+        return insertarIncorporacion(resultado);
+    }
     function obtenerResultado() {
         if (!instalar()) return Promise.reject(new Error('Haku todavía no está disponible.'));
         return cacheCompartida.obtener();
@@ -461,18 +471,18 @@
             const cerrar=contenedor.querySelector?.('[data-haku-cerrar-actualizacion]');
             cerrar?.addEventListener?.('click',()=>doc.getElementById('haiku-asistente-cerrar')?.click());
         }
-        function adjuntarPendientes(contenedor,resultado) {
+        function adjuntarPendientes(contenedor,resultado,cacheActual=cachePendientes) {
             const zona=doc.createElement('div');zona.className='haku-libro-pendientes-zona';
             (contenedor.querySelector?.('.haku-actualizacion-sites__tarjeta')||contenedor).appendChild(zona);
             const cargar=async revalidar=>{
                 zona.innerHTML='<section class="haku-libro-pendientes"><p>Revisando qué falta guardar en Proyecto H…</p></section>';
                 try{
-                    const pendientes=await cachePendientes.obtener(resultado,{revalidar});
+                    const pendientes=await cacheActual.obtener(resultado,{revalidar});
                     zona.innerHTML=renderizarPendientes(pendientes);
                     const pendientesVigentes=async()=>{
                         await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
                         return pendientes.generacion===root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion
-                            ? pendientes : cachePendientes.obtener(resultado,{revalidar:true});
+                            ? pendientes : cacheActual.obtener(resultado,{revalidar:true});
                     };
                     const claveCaso=item=>item?.id||JSON.stringify([item?.tipo,item?.actual?.id,item?.actual?.titular,
                         item?.actual?.cabana,item?.actual?.fecha_checkin,item?.anterior?.id]);
@@ -572,6 +582,55 @@
             void cargar(false);
             return zona;
         }
+        const incorporaciones=new WeakMap();
+        insertarIncorporacion=resultado=>{
+            const existente=incorporaciones.get(resultado);
+            if(existente&&existente.el.isConnected!==false){
+                existente.el.scrollIntoView?.({block:'nearest'});return existente.el;
+            }
+            const el=mensaje('asistente',''),estado={el};incorporaciones.set(resultado,estado);
+            el.classList.add('haku-incorporacion-aviso');
+            el.innerHTML='<strong>Incorporar cambios</strong><div class="haku-incorporacion-aviso__contenido"></div>';
+            const contenido=el.querySelector('.haku-incorporacion-aviso__contenido');
+            // Este acceso trabaja sólo con el aviso pulsado; el historial general
+            // conserva sus otros pendientes y sus resoluciones.
+            const cacheAviso=crearCachePendientes({soloAviso:true});
+            const ejecutar=async()=>{
+                if(estado.ocupado)return;estado.ocupado=true;
+                contenido.textContent='Comprobando estos cambios en Proyecto H…';
+                contenido.setAttribute('aria-busy','true');
+                try{
+                    if(!puedeIncorporar(resultado))throw new Error('Inicia sesión como administrador para incorporar estos cambios.');
+                    const pendientes=await cacheAviso.obtener(resultado,{revalidar:true});
+                    if(!puedeIncorporar(resultado))throw new Error('Inicia sesión como administrador para incorporar estos cambios.');
+                    contenido.textContent='';
+                    if(!pendientes.items?.length){contenido.textContent='Estos cambios ya están resueltos en Proyecto H.';return;}
+                    let preparadas=false,servicios=false;
+                    if(pendientes.preparacion?.reservas?.length){
+                        if(!root.HAIKU_LIBRO_CONSULTAS?.abrirPreparacionComparacion)throw new Error('La preparación de reservas todavía no está disponible.');
+                        const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';contenido.appendChild(vista);
+                        await root.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion(vista,pendientes.preparacion);preparadas=true;
+                    }
+                    if(pendientes.revisionServicios?.reservas?.length){
+                        if(!root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.abrirRevisionHistorial)throw new Error('La preparación de servicios y notas todavía no está disponible.');
+                        const vista=doc.createElement('div');vista.className='haku-libro-revision-servicios-zona';contenido.appendChild(vista);
+                        const card=doc.createElement('div');vista.appendChild(card);
+                        await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(card,pendientes.revisionServicios);servicios=true;
+                    }
+                    if(!preparadas&&!servicios)adjuntarPendientes(contenido,resultado,cacheAviso);
+                    else if(pendientes.items.some(x=>!x.preparacion&&!(servicios&&x.sistema?.reserva_id&&
+                        lista(x.cambios).length&&lista(x.cambios).every(c=>['notas_importantes','pagos_pendientes','servicios'].includes(c.campo))))){
+                        adjuntarPendientes(contenido,resultado,cacheAviso);
+                    }
+                }catch(error){
+                    if(error?.haikuSinCambiosPreparables){contenido.textContent='';adjuntarPendientes(contenido,resultado,cacheAviso);return;}
+                    const aviso=doc.createElement('p');aviso.setAttribute('role','alert');aviso.textContent=error?.message||'No pude preparar estos cambios.';contenido.appendChild(aviso);
+                    const reintentar=doc.createElement('button');reintentar.type='button';reintentar.textContent='Reintentar';
+                    reintentar.addEventListener('click',()=>{void ejecutar();});contenido.appendChild(reintentar);
+                }finally{estado.ocupado=false;contenido.removeAttribute('aria-busy');el.scrollIntoView?.({block:'nearest'});}
+            };
+            void ejecutar();return el;
+        };
         insertarResultado = resultado => {
             const el = mensaje('asistente','');
             el.innerHTML = renderizar(resultado);
@@ -613,7 +672,7 @@
         return true;
     }
     const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,procesando:()=>ocupado});
+        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
     if (root.document && !instalar()) {

@@ -1755,12 +1755,16 @@
 .haku-libro-auto__acciones { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px solid var(--aviso-borde); }
 .haku-libro-auto.haku-libro-auto button { margin: 0; min-height: 28px; padding: 4px 8px; border-radius: 4px; border-color: var(--aviso-borde); background: var(--aviso-superficie); color: var(--aviso-acento); font-family: inherit; font-size: 12px; line-height: 18px; font-weight: 400; }
 .haku-libro-auto.haku-libro-auto button:focus-visible { outline: 2px solid var(--aviso-acento); outline-offset: 2px; }
+.haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); font-weight: 600; }
+.haku-incorporacion-aviso { min-width: 0; }
+.haku-incorporacion-aviso__contenido { min-width: 0; overflow-wrap: anywhere; }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto {
     --aviso-fondo: #202d26; --aviso-superficie: #1b2621; --aviso-borde: #3e5145;
     --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7; --aviso-acento: #9fd2b3;
     background: var(--aviso-fondo); color: var(--aviso-texto); border-color: var(--aviso-borde);
 }
 html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto button { background: var(--aviso-superficie); color: var(--aviso-acento); border-color: var(--aviso-borde); }
+html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); }
 @media (max-width: 370px) {
     .haku-libro-auto.haku-libro-auto { right: 10px; width: calc(100vw - 20px); }
     .haku-libro-auto__prioridades { padding-inline: 5px; }

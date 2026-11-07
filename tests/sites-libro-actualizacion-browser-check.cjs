@@ -356,6 +356,79 @@ const server = http.createServer((request, response) => {
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         assert.match(await conservado.innerText(),/Continuidad comprobada/);
         assert.doesNotMatch(await conservado.innerText(),/Llegó una versión nueva|Genera el informe nuevamente/);
+        // El aviso prepara sólo su alcance, sin tocar el borrador ni guardar nada.
+        const informesAntes=await page.locator('.haku-actualizacion-sites').count();
+        await page.evaluate(()=>{
+            window.__generation=6;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            const actual={id:'Nov26!AB10',titular:'Cristian de prueba',cabana:8,
+                fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-09',adultos:2};
+            window.__resultadoActual={estado:'ok',libro_actual:{generacion:6},nuevas:[],modificadas:[{actual,
+                cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'19:15'}]}]}]};
+            window.__pendientesActual={items:[{id:'servicio-aviso',tipo:'modificacion',actual,
+                sistema:{reserva_id:'r-cristian'},cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]}],
+                resueltos:[],reservas:[],comparacion:[],revisionServicios:{reservas:[actual],generacion:6}};
+            window.__scopesAviso=[];
+            window.__historialAntes=JSON.stringify(window.__registration);
+            window.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async cambios=>{
+                __scopesAviso.push(structuredClone(cambios));
+                if(window.__errorAviso)throw Error('No se pudo comprobar la reserva.');
+                return structuredClone(window.__pendientesActual);
+            };
+            window.haikuSupabase=new Proxy({},{get(){throw Error('El acceso directo no guarda registros.');}});
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
+                detail:{carga_automatica:true,origen:'google',tenia_anterior:true,generacion:6}
+            }));
+        });
+        const burbuja=page.locator('.haku-libro-auto');
+        await burbuja.getByRole('button',{name:'Incorporar',exact:true}).waitFor();
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: aviso sin desbordes`);
+                assert.equal(await burbuja.getByRole('button',{name:'Incorporar',exact:true}).evaluate(el=>{
+                    const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+                    return r.left>=0&&r.right<=innerWidth&&s.backgroundColor!==s.color;
+                }),true,`${tema} ${width}: Incorporar visible`);
+            }
+        }
+        const serviciosAntes=await page.evaluate(()=>__revisionesServicios.length);
+        await burbuja.getByRole('button',{name:'Incorporar',exact:true}).click();
+        const directa=page.locator('.haku-incorporacion-aviso').last();
+        await directa.getByText('Servicios y notas auditados',{exact:true}).waitFor();
+        assert.equal(await burbuja.count(),0);
+        assert.equal(await page.evaluate(()=>__revisionesServicios.length),serviciosAntes+1);
+        assert.equal(await page.evaluate(()=>__revisionesServicios.at(-1).reservas[0].id),'Nov26!AB10');
+        assert.equal(await page.evaluate(()=>__scopesAviso.every(rows=>rows.length===1&&rows[0].actual.id==='Nov26!AB10')),true);
+        assert.equal(await page.evaluate(()=>JSON.stringify(__registration)===__historialAntes),true);
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntes);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        assert.equal(await directa.locator('.haku-libro-pendientes-zona').count(),0,'no repite el servicio en otro panel');
+        await page.evaluate(()=>HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.incorporarDesdeAviso(__resultadoActual));
+        assert.equal(await page.locator('.haku-incorporacion-aviso').count(),1,'un segundo clic reutiliza la preparación');
+        // Reservas nuevas: omitir las ya resueltas y reintentar fallos sin escrituras.
+        await page.evaluate(()=>{
+            __pendientesActual={items:[],resueltos:[],reservas:[],comparacion:[]};
+            HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.incorporarDesdeAviso(structuredClone(__resultadoActual));
+        });
+        await page.locator('.haku-incorporacion-aviso').last().getByText('Estos cambios ya están resueltos en Proyecto H.',{exact:true}).waitFor();
+        await page.evaluate(()=>{
+            const actual={...__resultadoActual.modificadas[0].actual,id:'reserva-nueva-prueba'};
+            __avisoNuevo={estado:'ok',libro_actual:{generacion:6},nuevas:[{actual}]};
+            __pendientesActual={items:[{id:'nueva',actual,preparacion:{reservas:[actual]}}],
+                resueltos:[],reservas:[actual],comparacion:[],q:{}};
+            __errorAviso=true;
+            HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.incorporarDesdeAviso(__avisoNuevo);
+        });
+        const reintento=page.locator('.haku-incorporacion-aviso').last();
+        await reintento.getByRole('button',{name:'Reintentar',exact:true}).waitFor();
+        assert.match(await reintento.getByRole('alert').innerText(),/No se pudo comprobar/);
+        await page.evaluate(()=>{__errorAviso=false;});
+        await reintento.getByRole('button',{name:'Reintentar',exact:true}).click();
+        await reintento.getByText('Continuidad comprobada',{exact:true}).waitFor();
+        assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).reservas[0].id),'reserva-nueva-prueba');
+        assert.equal(await page.evaluate(()=>JSON.stringify(__registration)===__historialAntes),true);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

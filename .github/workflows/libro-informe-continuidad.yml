@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "js/supabase-asistente-libro-actualizacion-v1.js"
+      - "js/supabase-asistente-libro-auto-v1.js"
+      - "tests/haiku-libro-auto.test.cjs"
       - "js/haiku-libro-fuente-oficial-v1.js"
       - "js/supabase-libro-google-readonly-v1.js"
       - "css/supabase-haku-reconciliacion-v1.css"
