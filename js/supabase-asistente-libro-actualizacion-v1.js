@@ -618,7 +618,7 @@
                         await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(card,pendientes.revisionServicios);servicios=true;
                     }
                     if(!preparadas&&!servicios)adjuntarPendientes(contenido,resultado,cacheAviso);
-                    else if(pendientes.items.some(x=>!x.preparacion&&!(servicios&&x.sistema?.reserva_id&&
+                    else if(pendientes.items.some(x=>!(preparadas&&x.accionable)&&!(servicios&&revisionServiciosPendiente(x,pendientes.generacion)&&
                         lista(x.cambios).length&&lista(x.cambios).every(c=>['notas_importantes','pagos_pendientes','servicios'].includes(c.campo))))){
                         adjuntarPendientes(contenido,resultado,cacheAviso);
                     }

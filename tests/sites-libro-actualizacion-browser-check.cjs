@@ -368,7 +368,6 @@ const server = http.createServer((request, response) => {
                 sistema:{reserva_id:'r-cristian'},cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]}],
                 resueltos:[],reservas:[],comparacion:[],revisionServicios:{reservas:[actual],generacion:6}};
             window.__scopesAviso=[];
-            window.__historialAntes=JSON.stringify(window.__registration);
             window.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async cambios=>{
                 __scopesAviso.push(structuredClone(cambios));
                 if(window.__errorAviso)throw Error('No se pudo comprobar la reserva.');
@@ -381,6 +380,8 @@ const server = http.createServer((request, response) => {
         });
         const burbuja=page.locator('.haku-libro-auto');
         await burbuja.getByRole('button',{name:'Incorporar',exact:true}).waitFor();
+        // La detección conserva el aviso; desde este punto el botón sólo prepara.
+        await page.evaluate(()=>{window.__historialAntes=JSON.stringify(window.__registration);});
         for(const tema of ['claro','oscuro']){
             await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
             for(const width of [1100,390,320]){
@@ -415,7 +416,7 @@ const server = http.createServer((request, response) => {
         await page.evaluate(()=>{
             const actual={...__resultadoActual.modificadas[0].actual,id:'reserva-nueva-prueba'};
             __avisoNuevo={estado:'ok',libro_actual:{generacion:6},nuevas:[{actual}]};
-            __pendientesActual={items:[{id:'nueva',actual,preparacion:{reservas:[actual]}}],
+            __pendientesActual={items:[{id:'nueva',tipo:'nueva',actual,accionable:true}],
                 resueltos:[],reservas:[actual],comparacion:[],q:{}};
             __errorAviso=true;
             HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.incorporarDesdeAviso(__avisoNuevo);
@@ -427,6 +428,7 @@ const server = http.createServer((request, response) => {
         await reintento.getByRole('button',{name:'Reintentar',exact:true}).click();
         await reintento.getByText('Continuidad comprobada',{exact:true}).waitFor();
         assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).reservas[0].id),'reserva-nueva-prueba');
+        assert.equal(await reintento.locator('.haku-libro-pendientes-zona').count(),0,'la reserva nueva no se repite como pendiente');
         assert.equal(await page.evaluate(()=>JSON.stringify(__registration)===__historialAntes),true);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         assert.deepEqual(errors, []);
