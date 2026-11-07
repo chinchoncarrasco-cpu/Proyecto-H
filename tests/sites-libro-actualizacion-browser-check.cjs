@@ -338,7 +338,8 @@ const server = http.createServer((request, response) => {
             const zonas=document.querySelectorAll('.haku-libro-pendientes-zona'),ultima=zonas[zonas.length-1];
             return ultima?.querySelector('.haku-actualizacion-sites__historial,.haku-libro-pendientes-error');
         });
-        assert.match(await conservado.innerText(),/Revisar cambios/,'el informe conservado ofrece acciones: '+JSON.stringify(errors));
+        const estadoConservado=await conservado.locator('.haku-libro-pendientes-zona').innerText();
+        assert.match(estadoConservado,/Revisar cambios/,'el informe conservado ofrece acciones: '+estadoConservado+'; errores: '+JSON.stringify(errors));
         await conservado.getByRole('button',{name:'Revisar cambios',exact:true}).click();
         assert.equal(await page.evaluate(()=>__preparationScopes.at(-1).generacion),4);
         await conservado.locator('.haku-actualizacion-sites__pendiente > summary').click();
