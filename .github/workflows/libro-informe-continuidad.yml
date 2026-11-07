@@ -27,8 +27,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Fuente, sesión, informe conservado y contexto vigente
-        run: node --test tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-pagos-lectura-estable.test.cjs
       - name: Navegador aislado
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-informe" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
@@ -43,6 +41,10 @@ jobs:
           cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  haku-libro-worker/xlsx.full.min.js
           acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e  haku-libro-worker/jszip.min.js
           SUMS
+      - name: Fuente, sesión, informe conservado y contexto vigente
+        env:
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: node --test tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-pagos-lectura-estable.test.cjs
       - name: Informe operativo y lector real en escritorio y móvil
         env:
           NODE_PATH: ${{ runner.temp }}/haku-informe/node_modules
