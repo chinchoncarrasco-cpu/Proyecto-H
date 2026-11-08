@@ -218,6 +218,9 @@
         const proxy = {
             ...original,
             __pagosFocalizadosProxy: true,
+            // La continuidad reutiliza el alcance de la consulta, aunque el usuario
+            // cambie después el filtro de pagos en otro panel.
+            proyectarReservaConsulta: reserva => { const scope=obtenerScope();return scope?sanitizarReserva(reserva,scope):reserva; },
             // La comparación mensual programática no hereda la selección transitoria de la UI.
             consultarHojaMensual: (...args) => consultarOriginal(...args),
             ...(original.crearLectura ? {crearLectura: async (...args) => {

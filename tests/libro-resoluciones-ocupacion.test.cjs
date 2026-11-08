@@ -284,3 +284,26 @@ test('cuando la comparación llega tarde, el aviso falso desaparece sin escritur
  assert.ok(!tarjeta || tarjeta.hidden === true);
  assert.equal(h.writes(),0);
 });
+
+test('consulta abierta conserva el editor de ocupación y confirma tras un cambio ajeno',async()=>{
+ const h=entorno(),a=r(),estadoInicial=h.estado();
+ h.c.HAIKU_LIBRO_RESERVA_V1.crearLectura=async()=>{const estado=h.estado();return {estado:()=>estado,listarHojas:()=>['Oct26'],
+  consultarHojas:async()=>[{hoja:'Oct26',reservas:[structuredClone(a)],cobertura:{geometria:true}}]};};
+ await h.Q.abrirComparacionEstructurada(h.out,{reservas:[a],generacion:1});await tick();
+ h.boton('Completar ocupación').events.click();h.out.querySelectorAll('input')[0].value='2';h.cambiar();
+ assert.equal(h.boton('Confirmar ocupación').disabled,undefined,'La descarga no deshabilita el formulario');
+ await h.boton('Confirmar ocupación').events.click();await tick();
+ assert.equal(h.writes(),1);assert.equal(h.data[0].valor_confirmado.adultos,2);
+ assert.equal(h.data[0].identidad.version,estadoInicial.version,'Conserva la evidencia y versión que se aclararon');
+ assert.doesNotMatch(h.texto(),/vuelve a comparar|El Libro cambió/);
+});
+
+test('ocupación: si cambió la misma reserva conserva los campos y explica el dato sin escribir',async()=>{
+ const h=entorno(),a=r(),actual=structuredClone(a);
+ h.c.HAIKU_LIBRO_RESERVA_V1.crearLectura=async()=>{const estado=h.estado();return {estado:()=>estado,listarHojas:()=>['Oct26'],
+  consultarHojas:async()=>[{hoja:'Oct26',reservas:[structuredClone(actual)],cobertura:{geometria:true}}]};};
+ await h.Q.abrirComparacionEstructurada(h.out,{reservas:[a],generacion:1});await tick();
+ h.boton('Completar ocupación').events.click();h.out.querySelectorAll('input')[0].value='2';actual.adultos=3;h.cambiar();
+ await h.boton('Confirmar ocupación').events.click();assert.equal(h.writes(),0);
+ assert.equal(h.out.querySelectorAll('input')[0].value,'2');assert.match(h.texto(),/Adultos: sin dato → 3/);
+});

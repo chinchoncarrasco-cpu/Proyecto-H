@@ -876,7 +876,9 @@
             void actualizarMemoriaVisual();
             notificarVistaLibro(origen, true);
             renderizarHoja(hojaActual);
-            if (avisarActualizacion && !restaurado && actualizacion && persistenciaConfirmada) {
+            const consultaAbierta = window.HAIKU_ASISTENTE?.abierta?.() === true ||
+                document.getElementById("haiku-asistente-panel")?.hidden === false;
+            if ((avisarActualizacion || consultaAbierta) && !restaurado && actualizacion && persistenciaConfirmada) {
                 const cargaGoogle = origen === "google";
                 const detalle = {
                     generacion:cargaId,

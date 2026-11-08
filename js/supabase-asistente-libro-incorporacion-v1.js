@@ -3,7 +3,6 @@
     'use strict';
     if(root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1)return;
     const lista=x=>Array.isArray(x)?x:[];
-    const OBSOLETO='El Libro cambió desde este informe. Genera el informe nuevamente antes de preparar cambios en Proyecto H.';
     const canon=x=>Array.isArray(x)?x.map(canon):x && typeof x==='object'?Object.fromEntries(Object.keys(x).sort().map(k=>[k,canon(x[k])])):x;
     function adaptar(resultado,generacion) {
         const reservas=[],contexto=[],noTransferibles=[],vistos=new Set();
@@ -24,16 +23,11 @@
         }
         return {reservas,contexto,noTransferibles,generacion,continuidades:structuredClone(resultado.continuidades || [])};
     }
-    function vigente(generacion){
-        if(generacion===undefined || generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)throw Error(OBSOLETO);
-    }
     async function preparar(resultado,generacion,out) {
-        vigente(generacion);
         const entrada=adaptar(resultado,generacion);
         if(!entrada.reservas.length)return {entrada,result:null};
         if(!root.HAIKU_LIBRO_CONSULTAS?.abrirComparacionEstructurada)throw Error('La reconciliación de Proyecto H todavía no está disponible.');
         const result=await root.HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(out,entrada);
-        vigente(generacion);
         return {entrada,result};
     }
     function adjuntar(contenedor,resultado,generacion) {
@@ -42,8 +36,9 @@
         const entrada=adaptar(resultado,generacion);
         // Revisiones de campo junto al informe, incluso en elementos que siguen
         // fuera del lote por identidad/fechas ambiguas. Resolver no los promueve.
-        root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(contenedor,
-            [...entrada.reservas,...lista(resultado.ambiguas).flatMap(x=>lista(x.actuales))],generacion);
+        const reservas=[...entrada.reservas,...lista(resultado.ambiguas).flatMap(x=>lista(x.actuales))];
+        const fuente=root.HAIKU_LIBRO_CONSULTAS?.verificadorFuenteConsulta?.({reservas,generacion});
+        root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(contenedor,reservas,generacion,undefined,null,fuente);
     }
     const api=Object.freeze({adaptar,preparar,adjuntar});root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1=api;
     if(typeof module!=='undefined')module.exports=api;

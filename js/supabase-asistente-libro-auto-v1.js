@@ -154,6 +154,31 @@
             for (const boton of acciones) if (!boton.informeAnterior&&!boton.incorporacionBloqueada) boton.disabled=consultando();
             if (estadoConsulta && !consultando()) estadoConsulta.textContent='Tu consulta y revisión se conservan.';
         });
+        function posicionarAviso() {
+            if(!toast?.style)return;
+            const panel=root.document.getElementById('haiku-asistente-panel') || root.document.querySelector?.('.haiku-asistente-panel');
+            const caja=panel?.hidden===false ? panel.getBoundingClientRect?.() : null;
+            const ancho=root.innerWidth || root.document.documentElement?.clientWidth || 0;
+            const alto=root.innerHeight || root.document.documentElement?.clientHeight || 0;
+            toast.style.removeProperty('right');toast.style.removeProperty('left');
+            toast.style.removeProperty('bottom');toast.style.removeProperty('max-height');
+            if(caja && caja.width>0 && ancho>0) {
+                const margen=12, anchoAviso=Math.min(340,ancho-2*margen);
+                if(caja.left>=anchoAviso+2*margen) {
+                    toast.style.right=`${ancho-caja.left+margen}px`;
+                    toast.style.bottom=`${Math.max(margen,alto-caja.bottom)}px`;
+                    toast.dataset.juntoHaku='1';
+                } else {
+                    // Pantallas estrechas: aviso compacto sobre el panel, siempre
+                    // cerrable y sin cambiar el tamaño ni el scroll de la consulta.
+                    toast.style.right=`${margen}px`;toast.style.bottom=`${Math.max(margen,alto-caja.bottom)}px`;
+                    toast.style.maxHeight=`${Math.max(120,Math.min(alto*.38,caja.height-24))}px`;
+                    toast.dataset.juntoHaku='compacto';
+                }
+            } else delete toast.dataset.juntoHaku;
+        }
+        root.addEventListener('haiku:panel-estado',posicionarAviso);
+        root.addEventListener('resize',posicionarAviso);
         function limpiar() {
             if(avisoProtegido)return;
             toast?.remove();toast=null;estadoConsulta=null;
@@ -286,6 +311,7 @@
             if (resultado) botonInforme(pie);
             const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent=conservarConsulta?'Seguir con mi consulta':'Cerrar';cerrar.addEventListener('click',()=>{if(!guardando)cerrarAviso();});pie.appendChild(cerrar);
             doc.body.appendChild(toast);
+            posicionarAviso();
             // Un aviso de fondo no inserta respuestas ni desplaza una consulta abierta.
             if (!pendiente && !conservarConsulta) {
                 const mensajes=doc.getElementById('haiku-asistente-mensajes');

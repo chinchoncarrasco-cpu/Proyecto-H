@@ -2746,7 +2746,7 @@
     }
     function propuestaMedioPago(item,comp,generacion) {
         const p = item?.pagoLibro, original = pagosEfectivosMedio.get(p)?.original || p;
-        const x = comp?.pagosDetalle?.find(x => x.pago === p), e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const x = comp?.pagosDetalle?.find(x => x.pago === p), e = estadoComparacion(comp);
         const destino = destinoConfirmacionAirbnb(comp,x);
         if (!original || medioLibro(original) || !destino || item.pagoSistema || item.payload?.tipo === 'pago_actualizar' ||
             !root.HAIKU_LIBRO_PAGOS_CANON_V1?.pagoConMedioManual ||
@@ -2767,7 +2767,7 @@
     async function compararConMediosManuales(reservas,result,decisiones,aprobados,cliente,generacion) {
         const raw = await compararSistema(reservas,cliente,result.q), registros = registroMedios(decisiones);
         if (!registros.size) return {reservas,comparacion:raw};
-        const {data,error} = await cliente.auth.getSession(), e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const {data,error} = await cliente.auth.getSession(), e = estadoFuente(result);
         const aplicar = new Map();
         for (const [id,d] of [...registros]) {
             const x = raw.pagosDetalle.find(x => idMovimientoIncorporacion(x) === id), destino = destinoConfirmacionAirbnb(raw,x);
@@ -2801,7 +2801,7 @@
         };
         const copias = reservas.map(r => ({...r,pagos:(r.pagos || []).map(efectivo),pagos_sin_asociacion:(r.pagos_sin_asociacion || []).map(efectivo)}));
         const comparacion = await compararSistema(copias,cliente,result.q);
-        const sesion = await cliente.auth.getSession(), estado = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const sesion = await cliente.auth.getSession(), estado = estadoFuente(result);
         const relectura = Object.assign([...raw],raw,{snapshot:comparacion.snapshot});
         let cambio = false;
         for (const [p,d] of aplicar) {
@@ -2818,24 +2818,25 @@
         const p = item.manualPago?.tipo === DEFINIR_MEDIO_PAGO ? item.manualPago : item.resolucionMedio;
         if (!p || accion.tipo !== DEFINIR_MEDIO_PAGO ||
             !Object.hasOwn(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos,accion.medio)) throw Error('Selecciona un medio de pago válido.');
-        const vigente = () => {
-            const e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const vigente = async () => {
+            await verificarFuenteManual(result,plan,item);
+            const e = estadoFuente(result);
             if (accion.vigente?.() === false) throw Error('Revisión cancelada; no se guardó el medio.');
             if (e?.generacion !== p.generacion || e?.version !== p.version || root.haikuTienePermiso?.('pagos.registrar') !== true)
                 throw Error('El Libro o el permiso cambió; vuelve a revisar.');
         };
-        vigente();
+        await vigente();
         const {data,error} = await cliente.auth.getSession(), usuario = data?.session?.user?.id;
         if (error || !usuario || usuario !== p.usuario) throw Error('La sesión cambió; vuelve a revisar.');
         const reservas = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
-            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas,result.generacion,cliente) : result.reservas;
-        const crudo = await compararSistema(reservas,cliente,result.q); vigente();
+            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(reservasVigentes(result,contextoFuente(result)),result.generacion,cliente,()=>estadoFuente(result)) : reservasVigentes(result,contextoFuente(result));
+        const crudo = await compararSistema(reservas,cliente,result.q); await vigente();
         const x = crudo.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id), destino = destinoConfirmacionAirbnb(crudo,x);
         if (!x || !destino || destino.reserva_id !== p.reservaId || destino.id !== p.estadiaId ||
             JSON.stringify(x.pago) !== JSON.stringify(p.original) ||
             firmaManualPago(crudo,x) !== p.firma)
             throw Error('La evidencia o Proyecto H cambió; vuelve a revisar el medio.');
-        const sesion = await cliente.auth.getSession(); vigente();
+        const sesion = await cliente.auth.getSession(); await vigente();
         if (sesion.error || sesion.data?.session?.user?.id !== usuario) throw Error('La sesión cambió; vuelve a revisar.');
         const d = {medio:accion.medio,generacion:p.generacion,version:p.version,usuario,reservaId:p.reservaId,estadiaId:p.estadiaId,
             evidencia:JSON.stringify(x.pago),firma:firmaManualPago(crudo,x),
@@ -2848,7 +2849,7 @@
         delete plan.solicitudPendiente;
         registroMedios(decisiones).set(item.id,d);
         try {
-            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); await vigente();
             if (registroMedios(decisiones).get(item.id) !== d) throw Error('Proyecto H cambió; vuelve a definir el medio.');
             return siguiente;
         } catch (e) {
@@ -2882,7 +2883,7 @@
     }
     function propuestaConfirmacionAirbnb(item,comp,generacion) {
         const p = item?.pagoLibro, x = comp?.pagosDetalle?.find(x => x.pago === p);
-        const estado = root.HAIKU_LIBRO_RESERVA_V1?.estado?.(), destino = destinoConfirmacionAirbnb(comp,x);
+        const estado = estadoComparacion(comp), destino = destinoConfirmacionAirbnb(comp,x);
         // El proxy de pagos focalizados omite el tipo del Libro para no proponer
         // cambios de estadía. En esa ruta, exigir alojamiento en el destino real
         // y una estancia nocturna; nunca convertir Full Day ni un tipo desconocido.
@@ -2925,17 +2926,18 @@
         if (accion.tipo !== CONFIRMACION_AIRBNB || !fechaConfirmacionAirbnbValida(accion.fecha))
             throw Error('Ingresa la fecha real válida del correo de confirmación de Airbnb.');
         if (accion.confirmacionRecibida !== true) throw Error('Confirma que has recibido la confirmación de pago de Airbnb.');
-        const vigente = () => {
-            const e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+        const vigente = async () => {
+            await verificarFuenteManual(result,plan,item);
+            const e = estadoFuente(result);
             if (typeof accion.vigente === 'function' && !accion.vigente()) throw Error('Revisión Airbnb cancelada; no se guardó la decisión.');
             if (e?.generacion !== propuesta.generacion || e?.version !== propuesta.version ||
                 root.haikuTienePermiso?.('pagos.registrar') !== true) throw Error('El Libro o el permiso cambió; vuelve a revisar.');
         };
-        vigente();
+        await vigente();
         const {data,error} = await cliente.auth.getSession();
         if (error || !data?.session?.user?.id || propuesta.usuario && propuesta.usuario !== data.session.user.id)
             throw Error('La sesión cambió; vuelve a revisar la confirmación de Airbnb.');
-        const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+        const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente); await vigente();
         const nuevo = actual.items.find(i => i.id === item.id), comp = contextoVisualPlanes.get(actual);
         const x = comp.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id);
         const referencia = String(accion.referencia || '').trim() || item.pagoLibro.referencia_externa || null;
@@ -2953,7 +2955,7 @@
         decisiones.set(claveDecisionPago(item.id),decision);
         aprobados.add(item.id); revisionesPagoManual.get(decisiones)?.delete(item.id);
         try {
-            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+            const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); await vigente();
             const preparado = siguiente.items.find(i => i.id === item.id);
             if (preparado?.decisionPagoManual !== decision || preparado.categoria !== 'pagos' || preparado.motivos.length)
                 throw Error('La reserva, el monto o los pagos de Proyecto H cambiaron; vuelve a revisar la confirmación Airbnb.');
@@ -3110,20 +3112,21 @@
     }
     async function resolverRevisionAdminPago(result,decisiones,aprobados,plan,item,accion,cliente) {
         const p = item.manualPago, motivo = String(accion.motivo || '').trim();
-        const vigente = () => {
+        const vigente = async () => {
+            await verificarFuenteManual(result,plan,item);
             if (accion.vigente?.() === false || !esAdminPagos() || root.haikuTienePermiso?.('pagos.registrar') !== true ||
-                p.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
+                p.generacion !== estadoFuente(result).generacion)
                 throw Error('La revisión, el Libro o los permisos cambiaron; vuelve a revisar.');
         };
-        vigente();
+        await vigente();
         if (accion.tipo !== REVISION_ADMIN_PAGO || accion.confirmado !== true || motivo.length < 8 || motivo.length > 500 ||
             Number(accion.cabana) !== p.cabana) throw Error('Confirma el destino y escribe el motivo de la revisión.');
-        const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente();
+        const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente); await vigente();
         const nuevo = actual.items.find(i => i.id === item.id), propuesta = nuevo?.manualPago;
         if (propuesta?.tipo !== REVISION_ADMIN_PAGO || propuesta.bloqueo || propuesta.firma !== p.firma ||
             propuesta.caso !== p.caso || propuesta.reservaId !== p.reservaId || propuesta.estadiaId !== p.estadiaId)
             throw Error(propuesta?.bloqueo || 'Proyecto H cambió; vuelve a revisar este pago.');
-        const {data,error} = await cliente.auth.getSession(); vigente();
+        const {data,error} = await cliente.auth.getSession(); await vigente();
         const usuario = data?.session?.user?.id;
         if (error || !usuario || usuario !== p.usuario) throw Error('La sesión cambió; vuelve a revisar.');
         const comp = contextoVisualPlanes.get(actual), x = comp.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id);
@@ -3135,7 +3138,7 @@
             firma:p.firma,firmaDestino:firmaDestinoRevalidado(x,comp),generacion:p.generacion,usuario,reservaId:p.reservaId,auditoria};
         decisiones.set(claveDecisionPago(item.id),decision); aprobados.add(item.id);
         revisionesPagoManual.get(decisiones)?.delete(item.id);
-        try { const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); vigente(); return siguiente; }
+        try { const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente); await vigente(); return siguiente; }
         catch(e) { invalidarPagoManual(decisiones,aprobados,item.id,p.generacion); throw e; }
     }
 
@@ -3210,19 +3213,20 @@
             return resolverRevisionAdminPago(result,decisiones,aprobados,plan,item,accion,cliente);
         if (propuesta.tipo === CONFIRMACION_AIRBNB)
             return completarConfirmacionAirbnb(result,decisiones,aprobados,plan,item,accion,cliente);
-        const vigente = () => {
+        const vigente = async () => {
+            await verificarFuenteManual(result,plan,item);
             if (accion.vigente?.() === false) throw Object.assign(
                 Error('Revisión cancelada; no se guardó la decisión manual.'),{haikuRevisionCancelada:true});
-            if (propuesta.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion ||
+            if (propuesta.generacion !== estadoFuente(result).generacion ||
                 root.haikuTienePermiso?.('pagos.registrar') !== true) throw Error('El Libro o el permiso cambió; vuelve a revisar.');
         };
-        vigente();
+        await vigente();
         const {data:sesion,error:sesionError} = await cliente.auth.getSession();
         if (sesionError || !sesion?.session?.user?.id) throw Error('Debe iniciar sesión.');
         if (propuesta.usuario && propuesta.usuario !== sesion.session.user.id) throw Error('La sesión cambió; vuelve a revisar la decisión manual.');
-        vigente();
+        await vigente();
         const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente);
-        vigente();
+        await vigente();
         const nuevo = actual.items.find(i => i.id === itemId), comp = contextoVisualPlanes.get(actual);
         const movimiento = comp.pagosDetalle.find(x => idMovimientoIncorporacion(x) === itemId);
         if (!movimiento || movimiento.reserva_sistema_id !== propuesta.reservaId) throw Error('La reserva destino cambió; vuelve a revisar.');
@@ -3240,7 +3244,7 @@
             return siguiente;
         };
         const guardarDecision = async (comparacion, x, datos, aprobar) => {
-            vigente();
+            await vigente();
             const clave = claveDecisionPago(itemId), previa = decisiones.get(clave), aprobadoAntes = aprobados.has(itemId);
             const decision = { ...datos, itemId, fuente:source(x.pago.origen), reservaLibroId:x.reserva.id,
                 firma:firmaManualPago(comparacion,x), firmaDestino:firmaDestinoRevalidado(x,comparacion),
@@ -3252,7 +3256,7 @@
                 // La siguiente lectura compara este item contra el snapshot
                 // posterior validado; las referencias de los demás no cambian.
                 const siguiente = await prepararIncorporacion(result,decisiones,aprobados,cliente);
-                vigente();
+                await vigente();
                 return siguiente;
             } catch (error) {
                 if (decisiones.get(clave) === decision) {
@@ -3268,7 +3272,7 @@
                 !actual.capacidadServicios?.servicio_faltante_manual_v1) throw Error('No está disponible la creación protegida del servicio faltante.');
             const app = accion.indice == null || accion.indice === '' ? null :
                 propuesta.aplicaciones.find(a => a.indice === Number(accion.indice) && a.estado === 'sin_destino');
-            const catalogo = await catalogoManualPago(cliente); vigente();
+            const catalogo = await catalogoManualPago(cliente); await vigente();
             const opciones = catalogo.filter(c => c.activo === true && c.codigo === accion.codigo);
             const c = opciones.length === 1 ? opciones[0] : null;
             const canon = c && D.conceptoCanon([c.codigo,c.nombre,c.categoria].join(' '));
@@ -3317,7 +3321,7 @@
                     'transferencia:'+source(item.pagoLibro.origen).replace(/[^a-z0-9]/gi,'_')+
                     ':'+item.pagoLibro.fecha_comprobante+':'+item.pagoLibro.monto : identificador;
                 const marca = `[HAKU-LIBRO-SERVICIO:pago_manual:${marcaOrigen}:${app.concepto_canon}:${app.indice}]`;
-                vigente();
+                await vigente();
                 const {data,error} = await cliente.rpc('haiku_registrar_servicio',{
                     p_reserva_id:propuesta.reservaId, p_estadia_id:propuesta.estadiaId,
                     p_codigo_servicio:c.codigo, p_fecha_servicio:fecha, p_hora:accion.hora || null,
@@ -3331,11 +3335,11 @@
                 const medio = registroMedios(decisiones).get(itemId);
                 if (medio) medio.servicioCreado = {id:servicioId,codigo:c.codigo,fecha,total:app.monto,
                     cantidad,personas,precio,hora:hora ? hora+':00' : ''};
-                vigente();
+                await vigente();
                 // Crear un servicio no aprueba ni registra un pago. El motor consulta
                 // de nuevo servicio, cargo activo y saldo, y reconstruye el plan.
                 const posterior = await prepararIncorporacion(result,decisiones,aprobados,cliente);
-                vigente();
+                await vigente();
                 const compPosterior = contextoVisualPlanes.get(posterior);
                 const movimientoPosterior = compPosterior.pagosDetalle.find(x => idMovimientoIncorporacion(x) === itemId);
                 const servicioPosterior = compPosterior.snapshot.finanzas?.servicios.find(s => s.id === servicioId);
@@ -3839,12 +3843,12 @@
             // Una aprobación previa del pago no puede deshacer «Dejar pendiente».
             if (item.reservaPendiente) continue;
             item.decisionPagoManual = x.decisionPagoManual || null;
-            item.resolucionMedio = propuestaMedioPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
+            item.resolucionMedio = propuestaMedioPago(item,comp,estadoComparacion(comp)?.generacion);
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
-            item.manualPago = propuestaRevisionAdminPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,capacidadServicios) ||
+            item.manualPago = propuestaRevisionAdminPago(item,comp,estadoComparacion(comp)?.generacion,capacidadServicios) ||
                 (!medioLibro(x.pago) ? item.resolucionMedio : null) ||
-                propuestaConfirmacionAirbnb(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) ||
-                propuestaManualPago(item,comp,root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,capacidadServicios);
+                propuestaConfirmacionAirbnb(item,comp,estadoComparacion(comp)?.generacion) ||
+                propuestaManualPago(item,comp,estadoComparacion(comp)?.generacion,capacidadServicios);
             if (![CONFIRMACION_AIRBNB,DEFINIR_MEDIO_PAGO,REVISION_ADMIN_PAGO].includes(item.manualPago?.tipo) && !capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones)) item.manualPago = null;
             item.decisionManualInvalidada = x.decisionManualInvalidada === true;
             if (item.decisionManualInvalidada) {
@@ -4065,13 +4069,124 @@
             });
         }
     }
-    async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase) {
-        const generacion = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
-        if (result.generacion !== undefined && result.generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+    // La generación identifica una descarga, no un conflicto. Cada consulta conserva
+    // su evidencia y sólo vuelve a leer las hojas de sus reservas antes de escribir.
+    const continuidadesConsulta = new WeakMap(), fuentesComparacion = new WeakMap();
+    const PROYECCION_FUENTE = Symbol('proyeccion-fuente-consulta');
+    const canonFuente = x => Array.isArray(x) ? x.map(canonFuente) : x && typeof x === 'object'
+        ? Object.fromEntries(Object.keys(x).sort().map(k => [k,canonFuente(x[k])])) : x;
+    const firmaFuente = x => JSON.stringify(canonFuente(x));
+    function contextoFuente(result) {
+        if (!continuidadesConsulta.has(result)) {
+            const actual = root.HAIKU_LIBRO_RESERVA_V1?.estado?.() || {};
+            result.version_libro ||= actual.generacion === result.generacion ? actual.version : undefined;
+            continuidadesConsulta.set(result,{origen:{...actual,generacion:result.generacion,
+                version:result.version_libro || (actual.generacion === result.generacion ? actual.version : undefined)},
+                verificada:result.generacion, versionVerificada:actual.generacion === result.generacion ? actual.version : undefined, conflictos:[], firma: firmaFuente(result.reservas)});
+        }
+        return continuidadesConsulta.get(result);
+    }
+    const estadoFuente = result => root.HAIKU_LIBRO_RESERVA_V1?.crearLectura ? contextoFuente(result).origen : root.HAIKU_LIBRO_RESERVA_V1?.estado?.() || contextoFuente(result).origen;
+    const estadoComparacion = comp => fuentesComparacion.get(comp) || root.HAIKU_LIBRO_RESERVA_V1?.estado?.();
+    function detalleCambioFuente(anterior,actual) {
+        if (!actual) return 'Esta reserva ya no aparece en la misma celda del Libro. Los demás casos pueden continuar.';
+        const campos = {titular:'Titular',cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',
+            adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',pagos:'Pagos',pagos_sin_asociacion:'Pagos',
+            servicios:'Servicios',notas_importantes:'Notas',pagos_pendientes:'Pagos pendientes'};
+        const cambios = Object.entries(campos).filter(([k])=>firmaFuente(anterior[k])!==firmaFuente(actual[k]))
+            .map(([k,nombre])=>Array.isArray(anterior[k])||Array.isArray(actual[k]) ? `${nombre}: cambió la información` :
+                `${nombre}: ${anterior[k] ?? 'sin dato'} → ${actual[k] ?? 'sin dato'}`);
+        return (cambios.length ? [...new Set(cambios)].slice(0,3).join(' · ') : 'Cambió la evidencia de esta reserva en el Libro') + '.';
+    }
+    async function verificarFuenteConsulta(result) {
+        const contexto = contextoFuente(result), libro = root.HAIKU_LIBRO_RESERVA_V1;
+        for (let intento=0;intento<3;intento++) {
+            const actual = libro?.estado?.() || {};
+            if (!libro?.crearLectura && result.generacion === actual.generacion) {
+                contexto.verificada=actual.generacion;contexto.firma=firmaFuente(result.reservas);return contexto;
+            }
+            if (contexto.verificada === actual.generacion && (!libro?.crearLectura || contexto.versionVerificada === actual.version) && contexto.firma === firmaFuente(result.reservas)) return contexto;
+            if (!libro?.crearLectura) throw Error('El Libro cambió desde este informe; vuelve a comparar. No se pudo comprobar la fuente de esta consulta.');
+            const lector = await libro.crearLectura(), estado = lector.estado();
+            const hojas = [...new Set(result.reservas.map(r=>r.coordenadas_origen?.hoja))];
+            if (hojas.some(h=>!h)) throw Error('No pude localizar las celdas de esta consulta. Tus decisiones se conservan.');
+            const disponibles = lector.listarHojas?.();
+            const presentes = hojas.filter(h=>!disponibles || disponibles.includes(h));
+            const datos = lector.consultarHojas ? await lector.consultarHojas(presentes) :
+                await Promise.all(presentes.map(h=>(lector.consultarHojaMensual || lector.consultarHoja)(h)));
+            if (libro.estado().generacion !== estado.generacion) continue;
+            if (datos.some(d=>!Array.isArray(d?.reservas) || d.cobertura?.geometria === false))
+                throw Error('No pude comprobar las celdas actuales. Tu consulta se conserva; reintenta cuando termine la lectura.');
+            const actuales = datos.flatMap(d=>d.reservas).map(r=>result[PROYECCION_FUENTE]?.(r) || r);
+            const clave=r=>JSON.stringify([r.id,r.coordenadas_origen?.hoja,r.coordenadas_origen?.celda]),indice=new Map();
+            for(const r of actuales){const k=clave(r);if(!indice.has(k))indice.set(k,[]);indice.get(k).push(r);}
+            contexto.conflictos = result.reservas.flatMap(r=>{
+                const candidatos=indice.get(clave(r)) || [];
+                const igual=candidatos.length===1 && firmaFuente(candidatos[0])===firmaFuente(r);
+                return igual ? [] : [{anterior:r,actual:candidatos.length===1?candidatos[0]:null,
+                    motivo:detalleCambioFuente(r,candidatos.length===1?candidatos[0]:null)}];
+            });
+            contexto.verificada=estado.generacion; contexto.versionVerificada=estado.version; contexto.firma=firmaFuente(result.reservas);
+            // Una entrada estructurada antigua puede carecer de hash. Sólo después
+            // de cotejar sus celdas se usa la versión de esa lectura comprobada.
+            contexto.origen.version ||= estado.version;
+            result.version_libro ||= contexto.origen.version;
+            return contexto;
+        }
+        throw Error('El Libro sigue actualizándose. Tu consulta y decisiones se conservan; reintenta la incorporación.');
+    }
+    async function verificarFuenteManual(result,plan,item) {
+        const contexto=await verificarFuenteConsulta(result);
+        const fuente=contextoVisualPlanes.get(plan)?.pagosDetalle?.find(x=>idMovimientoIncorporacion(x)===item.id)?.reserva;
+        const conflicto=contexto.conflictos.find(c=>c.anterior.id===fuente?.id);
+        if(conflicto)throw Error(conflicto.motivo+' Conservé tus datos; usa los valores actuales de esta reserva para continuar.');
+    }
+    function verificadorFuenteConsulta(result) {
+        contextoFuente(result);
+        return {estado:()=>estadoFuente(result),verificar:async reserva=>{
+            const contexto=await verificarFuenteConsulta(result);
+            const conflicto=contexto.conflictos.find(c=>c.anterior.id===reserva.id);
+            if(conflicto)throw Error(conflicto.motivo+' Conservé los datos que completaste.');
+            return estadoFuente(result);
+        }};
+    }
+    const reservasVigentes = (result,contexto) => result.reservas.filter(r=>!contexto.conflictos.some(c=>c.anterior===r));
+    function adjuntarConflictosFuente(plan,result,contexto,decisiones,aprobados,cliente) {
+        for (const c of contexto.conflictos) plan.items.push({id:'fuente:'+c.anterior.id,categoria:'pendientes',
+            texto:`CAB ${c.anterior.cabana} · ${c.anterior.titular}`,reservaLibro:c.anterior,
+            payload:null,seleccionado:false,dependeDe:[],permisos:[],motivos:[c.motivo],cambioFuente:c});
+        if(!contexto.conflictos.length)return;
+        plan.usarFuenteActual = async (conflicto,out) => {
+            if (!conflicto.actual) return;
+            // La reserva modificada tiene evidencia y aprobaciones propias. No
+            // trasladar una aprobación antigua ni atribuir datos nuevos al hash viejo.
+            const actual={reservas:[structuredClone(conflicto.actual)],generacion:contexto.verificada,
+                version_libro:contexto.versionVerificada,q:result.q};
+            const decisionesActuales=new Map(),aprobadosActuales=new Set();
+            const preparar=()=>prepararIncorporacion(actual,decisionesActuales,aprobadosActuales,cliente);
+            const nuevo=await preparar();
+            if(out) {
+                const volver=async()=>renderizarIncorporacion(out,await preparar(),volver,aprobar,incorporar);
+                const aprobar=async ids=>{(Array.isArray(ids)?ids:[ids]).forEach(id=>aprobadosActuales.add(id));await volver();};
+                const incorporar=p=>confirmarIncorporacion(actual,decisionesActuales,aprobadosActuales,p,cliente);
+                aprobar.manualPago=async (p,id,accion)=>{
+                    const siguiente=await resolverAprobacionManualPago(actual,decisionesActuales,aprobadosActuales,p,id,accion,cliente);
+                    renderizarIncorporacion(out,siguiente,volver,aprobar,incorporar);return siguiente;
+                };
+                renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
+            }
+            return nuevo;
+        };
+
+    }
+    async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase, intento = 0) {
+        const contexto = await verificarFuenteConsulta(result), generacion = result.generacion;
+        const seleccion = reservasVigentes(result,contexto);
+        const revision = contexto.verificada;
         const reservasOriginales = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
-            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion, cliente) : result.reservas;
+            ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(seleccion, result.generacion, cliente, () => estadoFuente(result)) : seleccion;
         const {reservas,comparacion} = await compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion);
-        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+
         for (const decision of [...decisiones.values()].filter(d => d?.itemId)) {
             const x = comparacion.pagosDetalle?.find(x => source(x.pago.origen) === decision.fuente && x.reserva.id === decision.reservaLibroId);
             if (!x || idMovimientoIncorporacion(x) !== decision.itemId) {
@@ -4094,7 +4209,7 @@
             if (!decision) continue;
             const {data,error} = await cliente.auth.getSession();
             if (decision.tipo === CONFIRMACION_AIRBNB) {
-                const e = root.HAIKU_LIBRO_RESERVA_V1?.estado?.(), destino = destinoConfirmacionAirbnb(comparacion,x);
+                const e = estadoFuente(result), destino = destinoConfirmacionAirbnb(comparacion,x);
                 if (error || decision.generacion !== generacion || decision.version !== e?.version ||
                     decision.usuario !== data?.session?.user?.id || root.haikuTienePermiso?.('pagos.registrar') !== true ||
                     decision.reservaId !== destino?.reserva_id || decision.estadiaId !== destino?.id ||
@@ -4124,7 +4239,8 @@
                 delete x.decisionPagoManual; x.decisionManualInvalidada = true;
             }
         }
-        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion) throw new Error('El Libro cambió; vuelve a comparar.');
+
+        fuentesComparacion.set(comparacion,estadoFuente(result));
         const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
         plan.contextoSeleccion = { generacion, usuario:usuariosComparacion.get(comparacion) };
         const conflictos = conflictosIdentidad.get(decisiones);
@@ -4140,8 +4256,11 @@
             item.conflictoIdentidad = true;
         }
         await conciliarPenalidadesEnPlan(plan,cliente,comparacion,aprobados);
-        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== generacion)
-            throw new Error('El Libro cambió mientras se comprobaba la penalidad; vuelve a comparar.');
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== revision) {
+            if (intento >= 2) throw Error('El Libro sigue actualizándose. Tu consulta se conserva; reintenta la incorporación.');
+            return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1);
+        }
+        adjuntarConflictosFuente(plan,result,contexto,decisiones,aprobados,cliente);
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
@@ -4363,11 +4482,13 @@
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
+        const generacionConsulta = result.generacion;
         const seleccionIds = () => plan.items.filter(i => i.seleccionado).map(i => i.id).sort();
         if (plan.solicitudPendiente?.seleccionIds &&
             JSON.stringify(plan.solicitudPendiente.seleccionIds) !== JSON.stringify(seleccionIds())) {
             throw new Error('La confirmación anterior tiene un resultado pendiente. Reintenta la misma operación antes de cambiar la selección.');
         }
+        if (!plan.solicitudPendiente) await verificarFuenteConsulta(result);
         const mediosElegidos = plan.items.filter(i => i.medioPagoManual && (i.seleccionado ||
             plan.solicitudPendiente?.items.some(x => x.item_id === i.id) ||
             plan.solicitudPendiente?.servicios.some(x => x.item.item_id === i.id)));
@@ -4386,16 +4507,15 @@
                 throw Error('Falta el soporte de auditoría del medio de pago manual en Proyecto H. No se incorporó el pago.');
         }
         const vigente = () => {
-            if(result.generacion !== undefined && result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
-                throw Error('El Libro cambió; vuelve a comparar antes de incorporar.');
-            if (mediosElegidos.some(i => i.medioPagoManual.version !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version ||
+            if(result.generacion !== generacionConsulta) throw Error('La consulta cambió durante la confirmación. Conservé los resultados recibidos.');
+            if (mediosElegidos.some(i => i.medioPagoManual.version !== estadoFuente(result).version ||
                 registroMedios(decisiones).get(i.id) !== i.medioPagoManual)) {
                 delete plan.solicitudPendiente;
                 throw Error('La decisión del medio o el Libro cambió; vuelve a revisar antes de incorporar.');
             }
             const versionesAirbnb = [...plan.items.filter(i => i.seleccionado).map(i => i.payload?.datos_origen?.confirmacion_airbnb?.version),
                 ...(plan.solicitudPendiente?.items || []).map(i => i.datos_origen?.confirmacion_airbnb?.version)].filter(Boolean);
-            if (versionesAirbnb.some(v => v !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version))
+            if (versionesAirbnb.some(v => v !== estadoFuente(result).version))
                 throw Error('El Libro cambió; vuelve a revisar la confirmación Airbnb antes de incorporar.');
         };
         vigente();
@@ -4459,6 +4579,9 @@
                 if (nuevo && refs(item) !== refs(nuevo)) throw Object.assign(
                     Error('La resolución manual cambió desde la preparación. Revisa y vuelve a preparar la incorporación.'),
                     {code:'HLC01',haikuConflictoDatos:true});
+                if (nuevo?.payload && item.categoria === 'nuevas' && JSON.stringify(item.payload) !== JSON.stringify(nuevo.payload))
+                    throw Object.assign(Error('Cambiaron los datos de esta reserva. Revisa los valores actuales antes de incorporarla.'),
+                        {code:'HLC01',haikuConflictoDatos:true,planActual:actualizado});
             }
             for (const item of actualizado.items) {
                 const previo = plan.items.find(i => i.id === item.id);
@@ -4472,7 +4595,7 @@
             omitidosAlRevalidar = [...seleccionados].filter(id => !vigentes.has(id)).length;
             const serializados = serializarIncorporacion(actualizado);
             if (!serializados.length) throw Object.assign(new Error('Los elementos seleccionados cambiaron o ya existen. Vuelve a preparar la incorporación.'),
-                {code:'HLC01',haikuConflictoDatos:true});
+                {code:'HLC01',haikuConflictoDatos:true,planActual:actualizado});
             const servicios = serializados.filter(item => item.tipo === 'pago_servicios_4c')
                 .map(item => ({ operacionId: crearIdOperacion(), item, resultado: null }));
             const items = serializados.filter(item => item.tipo !== 'pago_servicios_4c').map(item =>
@@ -4592,7 +4715,9 @@
 
         const resultado = {
             q,
+            [PROYECCION_FUENTE]:libro.proyectarReservaConsulta,
             generacion: estado.generacion,
+            version_libro: estado.version,
             archivo: estado.nombre,
             reservas: [],
             bloqueos: [],
@@ -4981,15 +5106,11 @@
 
     const ENTRADA_ESTRUCTURADA = Symbol('entrada-estructurada-libro');
     async function revalidarEntradaEstructurada(result) {
-        const vigente = () => {
-            if (result.generacion === undefined || result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) {
-                throw new Error('El Libro cambió desde este informe. Genera el informe nuevamente antes de preparar cambios en Proyecto H.');
-            }
-        };
-        vigente();
-        const comparacion = await compararSistema(result.reservas, root.haikuSupabase, result.q);
-        vigente();
-        return {...result, comparacion};
+        const contexto = await verificarFuenteConsulta(result);
+        const comparacion = await compararSistema(reservasVigentes(result,contexto), root.haikuSupabase, result.q);
+        await verificarFuenteConsulta(result);
+        result.comparacion = comparacion;
+        return result;
     }
     async function abrirComparacionEstructurada(out, {reservas, generacion}) {
         if (!Array.isArray(reservas) || !reservas.length) throw new Error('No hay registros actuales para preparar.');
@@ -5005,7 +5126,7 @@
     }
     async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){
         if(!root.document)throw new Error('La vista de preparación sólo está disponible en el panel.');
-        if(generacion===undefined||generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)throw new Error('El Libro cambió; vuelve a generar el informe.');
+
         if(!Array.isArray(reservas)||!reservas.length||!Array.isArray(comparacion))throw new Error('No hay diferencias accionables para preparar.');
         const result={ [ENTRADA_ESTRUCTURADA]:true,reservas:structuredClone(reservas),generacion,
             q:{desde:q?.desde,hasta:q?.hasta},comparacion };
@@ -5121,7 +5242,7 @@
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,procesando:()=>ocupado,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
         abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica,
-        resolverAprobacionManualPago, catalogoManualPago});
+        resolverAprobacionManualPago, catalogoManualPago, verificadorFuenteConsulta});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
@@ -5604,11 +5725,12 @@
         revisionTitulo.append(elemento("strong", "", "Requieren revisión"), elemento("small", "", "Abre una categoría para ver su detalle"));
         revision.append(revisionTitulo);
         root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(revision, result.reservas, result.generacion, async () => {
-            const reservas = await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(result.reservas, result.generacion);
+            const contexto=await verificarFuenteConsulta(result);
+            const reservas = await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(reservasVigentes(result,contexto), result.generacion,undefined,()=>estadoFuente(result));
             const comparacion = await compararSistema(reservas, root.haikuSupabase, result.q);
-            if (result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) throw Error('El Libro cambió; vuelve a comparar.');
+            await verificarFuenteConsulta(result);
             renderizarComparacion(out, {...result, comparacion}, ui);
-        },result.comparacion);
+        },result.comparacion,verificadorFuenteConsulta(result));
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(revision, result);
         agregarDetalles(revision, "Reservas con diferencias",
             diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
@@ -5711,7 +5833,7 @@
             out.append(preguntas);
             root.HAIKU_LIBRO_RECONCILIACION_UX_V1?.aplicar?.(preguntas);
         }
-        const contextoComprobante = {generacion:root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,usuario:usuariosComparacion.get(comp)};
+        const contextoComprobante = {generacion:result.generacion,usuario:usuariosComparacion.get(comp)};
         if (ui.planAnterior && JSON.stringify(ui.planAnterior.contextoSeleccion) === JSON.stringify(contextoComprobante)) {
             const comprobante = renderizarComprobanteActualizaciones(ui.planAnterior);
             if (comprobante) out.replaceChildren(comprobante,...Array.from(out.children));
@@ -7044,6 +7166,22 @@
             plan.focoPagos ? "El titular y RUT ya coinciden. Si Bofore continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
             "El Libro de Reservas tiene prioridad. Revisa qué datos de Proyecto H serán reemplazados. Al confirmar se guardará la selección completa en una sola operación segura; los datos ausentes en el Libro se conservarán.");
         preparacion.append(aviso);
+        for (const item of plan.items.filter(i=>i.cambioFuente)) {
+            const c=item.cambioFuente, card=elemento('section','haiku-incorporacion-item');
+            card.append(elemento('strong','',`CAB ${c.anterior.cabana} · ${c.anterior.titular}`),
+                elemento('p','haiku-incorporacion-aviso',c.motivo));
+            if(c.actual) {
+                const usar=elemento('button','libro-reserva-boton secundario','Usar datos actuales');usar.type='button';
+                usar.addEventListener('click',async()=>{
+                    if(usar.disabled)return;usar.disabled=true;usar.textContent='Actualizando…';
+                    try {
+                        await plan.usarFuenteActual(c,card);
+                    } catch(error) {usar.disabled=false;usar.textContent='Reintentar';card.append(elemento('p','',error.message));}
+                });
+                card.append(usar);
+            }
+            preparacion.append(card);
+        }
         if (plan.actualizacionesConfirmadas) preparacion.append(elemento('p','haiku-incorporacion-continuar',
             `${plan.actualizacionesConfirmadas} actualización(es) confirmada(s). Haku volvió a comprobar los pagos. Los conflictos restantes siguen pendientes; selecciona los pagos habilitados que quieras registrar.`));
         const cifras = elemento("div", "haku-incorporacion-sites-cifras");
@@ -7136,7 +7274,7 @@
             cabeceraGrupo.append(elemento("strong", "", tituloGrupo), subtitulo);
             grupo.append(cabeceraGrupo);
             for (const [categoria, tituloSeccion, icono] of categorias) {
-                const items = plan.items.filter(i => i.categoria === categoria);
+                const items = plan.items.filter(i => i.categoria === categoria && !i.cambioFuente);
                 const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria} haku-incorporacion-sites-fila`);
                 const revisionManual = revisionesVisualesManualPago.get(plan);
                 if (revisionManual?.activo && items.some(item => item.id === revisionManual.itemId)) seccion.open = true;
@@ -7277,6 +7415,13 @@
                 guardando = false; atras.disabled = confirmacionPendiente();
                 if (cerrarVista) cerrarVista.disabled = confirmacionPendiente();
                 confirmar.removeAttribute?.("aria-busy");
+                if (error.planActual?.items.some(i=>i.cambioFuente)) {
+                    const nuevo=restaurarSeleccionIncorporacion(error.planActual,plan);
+                    contextoVisualPlanes.set(plan,contextoVisualPlanes.get(nuevo));
+                    Object.assign(plan,nuevo);
+                    renderizarIncorporacion(out,plan,volver,aprobar,incorporar);
+                    return;
+                }
                 volverAComparar = error.haikuConflictoDatos === true;
                 seleccionAlConflicto = firmaSeleccionActual();
                 confirmar.textContent = volverAComparar ? "Volver a comparar con datos actuales" : "Reintentar confirmación";
@@ -7304,7 +7449,7 @@
         const aviso = document.createElement('p');
         aviso.className = 'haiku-libro-nota';
         aviso.dataset.haikuLibroAvisoVersion = '1';
-        aviso.textContent = 'Conservé esta consulta. El Libro cambió; antes de guardar, vuelve a comparar con la versión actual.';
+        aviso.textContent = 'Llegó una actualización del Libro. Puedes continuar: comprobaré los datos de esta consulta al incorporar.';
         out.appendChild(aviso);
     }
 
@@ -7353,7 +7498,7 @@
 
     root.addEventListener("click", interceptar, true);
     root.addEventListener("keydown", interceptar, true);
-    root.addEventListener("haiku:libro-cambio", () => {
+    root.addEventListener("haiku:libro-version-cargada", () => {
         document.querySelectorAll('[data-haiku-libro-respuesta="1"]:not(.haiku-asistente-mensaje--usuario)').forEach(avisarVersionAnterior);
     });
 
