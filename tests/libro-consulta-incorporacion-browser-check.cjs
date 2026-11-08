@@ -4,10 +4,10 @@ const {chromium}=require('playwright'),f=require('./fixtures/libro-comparacion-r
 const root=path.resolve(__dirname,'..');
 const server=http.createServer((req,res)=>{
     const ruta=new URL(req.url,'http://localhost').pathname;
-    if(ruta==='/'){res.writeHead(200,{'Content-Type':'text/html'}).end('<!doctype html><html></html>');return;}
+    if(ruta==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end('<!doctype html><html></html>');return;}
     const file=path.resolve(root,'.'+ruta);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
-    try{const data=fs.readFileSync(file);res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':'text/css'}).end(data);}
+    try{const data=fs.readFileSync(file);res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8'}).end(data);}
     catch{res.writeHead(404).end();}
 });
 (async()=>{
@@ -39,7 +39,8 @@ const server=http.createServer((req,res)=>{
     window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={obtenerResultado:()=>new Promise(resolve=>window.__resolverAviso=resolve)};
    },f.casos().find(c=>c.id==='reserva_faltante').data);
    for(const name of ['haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1','haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1','supabase-asistente-libro-auto-v1'])
-    await page.addScriptTag({url:`${base}/js/${name}.js`});
+    await page.addScriptTag({content:fs.readFileSync(path.join(root,'js',name+'.js'),'utf8')});
+   assert.deepEqual(errors,[],'Los módulos reales deben inicializarse antes de la consulta');
    await page.evaluate(async()=>{
     await HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(document.getElementById('respuesta'),{reservas:structuredClone(window.__data.reservas),generacion:1});
     document.getElementById('haiku-asistente-texto').focus();
