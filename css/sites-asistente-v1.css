@@ -36,6 +36,7 @@
 .haku-guia-operativa .haku-guia__medios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
 .haku-guia-operativa .haku-guia__navegacion { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0 0; border-top: 1px solid var(--guia-linea); }
 .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__principal { background: var(--guia-acento); border-color: var(--guia-acento); color: var(--guia-fondo); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__principal:hover { background: var(--guia-acento); filter: brightness(.94); }
 .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__completa { width: 100%; margin-top: 9px; text-align: center; }
 .haku-guia-operativa .haku-guia__fuente { display: block; padding: 9px 0 0; color: var(--guia-suave); font-size: 10px; line-height: 15px; }
 .haku-guia-operativa .haku-guia__fin { color: var(--guia-acento); }

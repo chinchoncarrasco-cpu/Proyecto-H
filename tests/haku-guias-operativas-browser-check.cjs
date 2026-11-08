@@ -79,6 +79,11 @@ const server=http.createServer((req,res)=>{
                 await page.setViewportSize({width,height:900});
                 assert.equal(await manager.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,`${tema} ${width}: guía sin desborde`);
                 assert.equal(await page.locator('#haiku-asistente-panel').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
+                const next=manager.getByRole('button',{name:'Siguiente',exact:true});
+                await page.mouse.move(0,0);
+                const fondo=await next.evaluate(e=>getComputedStyle(e).backgroundColor);
+                await next.hover();
+                assert.equal(await next.evaluate(e=>getComputedStyle(e).backgroundColor),fondo,'el hover conserva el fondo que contrasta con el texto');
                 await manager.getByRole('button',{name:'Siguiente',exact:true}).focus();
                 await page.keyboard.press('Enter');
                 assert.match(await manager.innerText(),/ABB\$/);
