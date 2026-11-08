@@ -1,39 +1,65 @@
 /* Haku Sites: una sola interfaz sobre los contratos reales del asistente. */
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa {
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa, .haku-guia-imagen {
     --guia-fondo: var(--sites-shell-surface, #fff); --guia-texto: var(--sites-shell-ink, #17362d);
     --guia-suave: var(--sites-shell-muted, #687873); --guia-linea: var(--sites-shell-line, #dce5e0);
     --guia-acento: var(--sites-shell-green, #22735c); --guia-seleccion: #eef5f1;
-    width: 100%; min-width: 0; margin: 0; border: 1px solid var(--guia-linea); border-radius: 5px;
-    background: var(--guia-fondo); color: var(--guia-texto); font-family: inherit; font-size: 12px; font-weight: 400; line-height: 1.5; overflow-wrap: anywhere;
+    min-width: 0; border: 1px solid var(--guia-linea); border-radius: 8px;
+    background: var(--guia-fondo); color: var(--guia-texto); font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); font-size: 12px; font-weight: 400; line-height: 1.45; overflow-wrap: anywhere;
 }
-.haku-guia-operativa .haku-guia__cabecera { display: flex; flex-direction: column; align-items: start; gap: 5px; padding: 12px; border-bottom: 1px solid var(--guia-linea); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa { width: 100%; margin: 0; padding: 12px; }
+.haku-guia-operativa .haku-guia__cabecera { display: flex; flex-direction: column; gap: 9px; padding: 0 0 9px; border-bottom: 1px solid var(--guia-linea); }
+.haku-guia-operativa .haku-guia__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.haku-guia-operativa .haku-guia__progreso { flex-shrink: 0; }
 .haku-guia-operativa .haku-guia__etiqueta, .haku-guia-operativa .haku-guia__progreso { color: var(--guia-suave); font-size: 10px; line-height: 15px; }
-.haku-guia-operativa .haku-guia__titulo { margin: 0; color: var(--guia-texto); font-size: 15px; line-height: 20px; }
-.haku-guia-operativa .haku-guia__intro { margin: 0; padding: 9px 12px; color: var(--guia-suave); font-size: 12px; }
-.haku-guia-operativa .haku-guia__opciones { display: flex; flex-direction: column; padding: 0 12px; }
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button { cursor: pointer; min-height: 32px; margin: 0; padding: 5px 10px; border: 1px solid var(--guia-linea); border-radius: 4px; background: var(--guia-fondo); color: var(--guia-acento); font: inherit; font-size: 12px; line-height: 18px; text-align: left; }
+.haku-guia-operativa .haku-guia__titulo { margin: 0; color: var(--guia-texto); font-size: 15px; font-weight: 600; line-height: 22px; }
+.haku-guia-operativa .haku-guia__intro { margin: 9px 0; color: var(--guia-suave); font-size: 12px; }
+.haku-guia-operativa .haku-guia__opciones { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button, .haku-guia-imagen button { cursor: pointer; min-width: 0; min-height: 34px; margin: 0; padding: 7px 10px; border: 1px solid var(--guia-linea); border-radius: 5px; background: var(--guia-fondo); color: var(--guia-acento); font: inherit; font-size: 12px; line-height: 18px; text-align: left; }
 .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button:hover { background: var(--guia-seleccion); }
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button:focus-visible { outline: 2px solid var(--guia-acento); outline-offset: 2px; }
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button:disabled { opacity: .45; cursor: default; }
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__opcion { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border: 0; border-bottom: 1px solid var(--guia-linea); border-radius: 0; color: var(--guia-texto); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button:focus-visible, .haku-guia-imagen button:focus-visible { outline: 2px solid var(--guia-acento); outline-offset: 2px; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa button:disabled, .haku-guia-imagen button:disabled { opacity: .45; cursor: default; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__opcion { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 9px; color: var(--guia-texto); background: var(--guia-seleccion); }
+.haku-guia-operativa .haku-guia__opcion > span { font-weight: 600; }
 .haku-guia-operativa .haku-guia__opcion > small { color: var(--guia-suave); font-size: 10px; line-height: 14px; }
-.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__volver { border: 0; padding: 0; min-height: 24px; font-size: 11px; }
-.haku-guia-operativa .haku-guia__cuerpo { padding: 12px; font-size: 12px; line-height: 18px; }
-.haku-guia-operativa .haku-guia__paso-titulo { margin: 4px 0 10px; color: var(--guia-texto); font-size: 14px; line-height: 19px; }
-.haku-guia-operativa .haku-guia__instrucciones { margin: 0; padding: 0 0 0 16px; list-style: disc; }
-.haku-guia-operativa .haku-guia__instrucciones > li { margin: 0 0 7px; }
-.haku-guia-operativa .haku-guia__datos { display: grid; grid-template-columns: minmax(75px, .7fr) minmax(0, 1.7fr); gap: 6px 10px; margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--guia-linea); }
-.haku-guia-operativa .haku-guia__datos dt { color: var(--guia-suave); font-size: 11px; }
-.haku-guia-operativa .haku-guia__datos dd { margin: 0; color: var(--guia-texto); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__opcion--cierre { grid-column: 1 / -1; padding: 0; background: none; border: 0; color: var(--guia-acento); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__opcion--cierre > span { font-weight: 400; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__volver { border: 0; padding: 0; min-height: 24px; font-size: 10px; color: var(--guia-suave); }
+.haku-guia-operativa .haku-guia__cuerpo { padding: 9px 0; font-size: 12px; line-height: 18px; }
+.haku-guia-operativa .haku-guia__paso-titulo { margin: 0 0 9px; color: var(--guia-texto); font-size: 14px; font-weight: 600; line-height: 20px; }
+.haku-guia-operativa .haku-guia__instrucciones { margin: 0; padding: 0; list-style-position: inside; }
+.haku-guia-operativa .haku-guia__instrucciones > li { margin: 0 0 5px; }
+.haku-guia-operativa .haku-guia__instrucciones > li:last-child { margin-bottom: 0; }
+.haku-guia-operativa .haku-guia__datos { display: grid; grid-template-columns: minmax(75px, .7fr) minmax(0, 1.7fr); margin: 9px 0 0; }
+.haku-guia-operativa .haku-guia__datos dt { color: var(--guia-suave); font-size: 11px; padding: 8px 8px 8px 0; border-top: 1px solid var(--guia-linea); }
+.haku-guia-operativa .haku-guia__datos dd { margin: 0; padding: 8px 0; color: var(--guia-texto); border-top: 1px solid var(--guia-linea); }
 .haku-guia-operativa .haku-guia__nota { margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--guia-linea); color: var(--guia-suave); font-size: 11px; line-height: 16px; }
 .haku-guia-operativa .haku-guia__medios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.haku-guia-operativa .haku-guia__navegacion { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--guia-linea); }
+.haku-guia-operativa .haku-guia__navegacion { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0 0; border-top: 1px solid var(--guia-linea); }
 .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__principal { background: var(--guia-acento); border-color: var(--guia-acento); color: var(--guia-fondo); }
-.haku-guia-operativa .haku-guia__fuente { display: block; padding: 8px 12px; color: var(--guia-suave); font-size: 9px; line-height: 14px; }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__completa { width: 100%; margin-top: 9px; text-align: center; }
+.haku-guia-operativa .haku-guia__fuente { display: block; padding: 9px 0 0; color: var(--guia-suave); font-size: 10px; line-height: 15px; }
 .haku-guia-operativa .haku-guia__fin { color: var(--guia-acento); }
-html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa {
+.haku-guia-operativa .haku-guia__capturas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 9px; }
+.haku-guia-operativa .haku-guia__capturas--varias { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa .haku-guia__captura { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 0; border: 0; background: none; }
+.haku-guia-operativa .haku-guia__captura img { display: block; width: 100%; height: 120px; object-fit: contain; border-radius: 5px; }
+.haku-guia-operativa .haku-guia__capturas--varias img { height: 82px; }
+.haku-guia-operativa .haku-guia__captura span, .haku-guia-operativa .haku-guia__capturas-ayuda { color: var(--guia-suave); font-size: 10px; line-height: 15px; }
+.haku-guia-operativa .haku-guia__capturas-ayuda { display: block; margin-top: 6px; }
+.haku-guia-imagen { box-sizing: border-box; width: min(760px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 12px; overflow: auto; }
+.haku-guia-imagen::backdrop { background: rgb(5 15 10 / 75%); }
+.haku-guia-imagen header, .haku-guia-imagen nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.haku-guia-imagen header { padding-bottom: 10px; border-bottom: 1px solid var(--guia-linea); }
+.haku-guia-imagen header strong { font-size: 14px; }
+.haku-guia-imagen nav { margin-top: 10px; }
+.haku-guia-imagen nav[hidden], .haku-guia-imagen img[hidden], .haku-guia-operativa .haku-guia__captura img[hidden] { display: none; }
+.haku-guia-imagen__vista { padding-top: 12px; min-width: 0; }
+.haku-guia-imagen__vista img { display: block; width: 100%; height: auto; max-height: calc(100dvh - 180px); object-fit: contain; }
+.haku-guia__imagen-error { display: block; padding: 10px; font-size: 11px; }
+html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haku-guia-operativa,
+html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     --guia-fondo: #1b2621; --guia-texto: #e8efea; --guia-suave: #b1c2b7; --guia-linea: #3e5145;
-    --guia-acento: #9fd2b3; --guia-seleccion: #26372e;
+    --guia-acento: #9fd2b3; --guia-seleccion: #24352c;
 }
 .haiku-asistente-root,
 .haiku-asistente-root * { box-sizing: border-box; }

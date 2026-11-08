@@ -70,3 +70,21 @@ test('el módulo es una guía local sin acceso a datos, cobros, correos ni model
     assert.doesNotMatch(source,/\.rpc\s*\(|\.invoke\s*\(|\bfetch\s*\(|\.insert\s*\(|\.update\s*\(|\.innerHTML\s*=|localStorage|indexedDB/);
     assert.match(source,/No confirman que el pago o la reserva hayan sido registrados/);
 });
+test('cada captura corresponde al paso y existe localmente, sin depender de URLs temporales',()=>{
+    const path=require('node:path'),archivos=new Set();
+    for(const g of Object.values(G.guias))for(const p of g.pasos)for(const ref of G.imagenesDe(p)){
+        assert.match(ref.archivo,/^[a-z-]+\.(png|jpg)$/);
+        assert.ok(ref.alt.length>20&&ref.ancho>0&&ref.alto>0);
+        assert.ok(fs.statSync(path.join(__dirname,'../assets/guias',ref.archivo)).size>1000);
+        archivos.add(ref.archivo);
+    }
+    assert.equal(archivos.size,8);
+    assert.equal(G.imagenesDe({titulo:'Realizar Check-in en el terminal'}).length,4);
+    assert.equal(G.imagenesDe({titulo:'Completar Check-out y recoger vouchers'})[0].titulo,'3 · Check-out');
+    assert.deepEqual(G.imagenesDe({titulo:'constructor'}),[]);
+    assert.deepEqual(G.imagenesDe({titulo:'Crear el comprobante'}),[],'el manual Manager no tiene capturas');
+    for(const medio of ['webpay','transferencia','booking','airbnb','pos','efectivo']){
+        const p=G.pasosDe('reserva-completa',medio).find(p=>p.titulo==='Abrir Añadir pago en Cloudbeds');
+        assert.equal(G.imagenesDe(p)[0].archivo,'cloudbeds-anadir-pago.png');
+    }
+});
