@@ -1,6 +1,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
-const root=path.resolve(__dirname,'..');let falloInicial=true,cargasGuia=0;
+const root=path.resolve(__dirname,'..'),capturasDir=path.join(process.env.RUNNER_TEMP||require('node:os').tmpdir(),'haku-guias-capturas');let falloInicial=true,cargasGuia=0;
+fs.mkdirSync(capturasDir,{recursive:true});
 const server=http.createServer((req,res)=>{
     const url=new URL(req.url,'http://localhost'),name=url.pathname;
     if(name==='/')return res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(`<!doctype html><html lang="es"><head>
@@ -17,7 +18,8 @@ const server=http.createServer((req,res)=>{
     if(/^\/js\/haiku-libro-(historial-ui-fix|confirm-cancel-fix)-v1\.js$/.test(name))return res.writeHead(200,{'Content-Type':'text/javascript'}).end('');
     const file=path.resolve(root,'.'+name);
     if(!file.startsWith(root+path.sep))return res.writeHead(403).end();
-    try{res.writeHead(200,{'Content-Type':name.endsWith('.css')?'text/css':'text/javascript'}).end(fs.readFileSync(file));}
+    const tipo={'.css':'text/css','.png':'image/png','.jpg':'image/jpeg','.js':'text/javascript'}[path.extname(name)]||'application/octet-stream';
+    try{res.writeHead(200,{'Content-Type':tipo}).end(fs.readFileSync(file));}
     catch{res.writeHead(404).end();}
 });
 (async()=>{
@@ -50,11 +52,12 @@ const server=http.createServer((req,res)=>{
         await accion('ingresos-manager');
         const manager=page.locator('.haku-guia-operativa[data-haku-guia-grupo="manager"]');
         await manager.waitFor();assert.equal(await manager.locator('.haku-guia__opcion').count(),10);
+        await manager.screenshot({path:path.join(capturasDir,'manager-menu.png')});
         assert.equal(cargasGuia,2,'reintento del módulo sin otra consulta');
         assert.equal(await page.evaluate(()=>HAIKU_ASISTENTE.adjuntos().length),1);
         assert.equal(await page.evaluate(()=>__calls.length),0);
         // Recorrer todas las variantes y verificar que el final nunca afirma un guardado.
-        const opciones=await manager.locator('.haku-guia__opcion > span').allTextContents();
+        const opciones=await manager.locator('.haku-guia__opcion').evaluateAll(items=>items.map(e=>e.getAttribute('aria-label')));
         for(const nombre of opciones){
             await manager.getByRole('button',{name:new RegExp('^'+nombre.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
             assert.ok(await manager.locator('.haku-guia__cuerpo').isVisible());
@@ -76,6 +79,11 @@ const server=http.createServer((req,res)=>{
                 await page.setViewportSize({width,height:900});
                 assert.equal(await manager.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,`${tema} ${width}: guía sin desborde`);
                 assert.equal(await page.locator('#haiku-asistente-panel').evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
+                const next=manager.getByRole('button',{name:'Siguiente',exact:true});
+                await page.mouse.move(0,0);
+                const fondo=await next.evaluate(e=>getComputedStyle(e).backgroundColor);
+                await next.hover();
+                assert.equal(await next.evaluate(e=>getComputedStyle(e).backgroundColor),fondo,'el hover conserva el fondo que contrasta con el texto');
                 await manager.getByRole('button',{name:'Siguiente',exact:true}).focus();
                 await page.keyboard.press('Enter');
                 assert.match(await manager.innerText(),/ABB\$/);
@@ -143,6 +151,52 @@ const server=http.createServer((req,res)=>{
         assert.match(await reservas.innerText(),/Fin de la guía/);
         await reservas.getByRole('button',{name:'Volver a los pasos',exact:true}).click();
         assert.match(await reservas.innerText(),/Verificar el correo/);
+        // Capturas reales: rutas locales, ampliación y teclado.
+        const capturas=await page.evaluate(()=>Object.values(HAIKU_GUIAS_OPERATIVAS_V1.guias).flatMap(g=>g.pasos.flatMap(p=>HAIKU_GUIAS_OPERATIVAS_V1.imagenesDe(p))).map(r=>r.archivo));
+        for(const archivo of new Set(capturas)){
+            const response=await page.request.get(new URL('/assets/guias/'+archivo,page.url()).href);
+            assert.equal(response.status(),200);assert.match(response.headers()['content-type'],/^image\//);
+        }
+        await reservas.getByRole('button',{name:'← Opciones',exact:true}).click();
+        await reservas.getByRole('button',{name:'Subir pago a Cloudbeds',exact:true}).click();
+        const mini=reservas.getByRole('button',{name:'Ampliar captura: Añadir pago',exact:true});
+        await mini.scrollIntoViewIfNeeded();
+        await mini.locator('img').evaluate(img=>img.decode());
+        const estado=await reservas.getAttribute('data-haku-guia-paso');
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                if(width===390)await reservas.screenshot({path:path.join(capturasDir,'cloudbeds-'+tema+'.png')});
+                await mini.click();
+                const modal=page.getByRole('dialog',{name:'Captura del manual'});
+                await modal.locator('img').evaluate(img=>img.decode());
+                assert.equal(await modal.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
+                assert.equal(await modal.locator('img').evaluate(img=>img.naturalWidth>0&&getComputedStyle(img).objectFit==='contain'),true);
+                await page.keyboard.press('Escape');await modal.waitFor({state:'detached'});
+                assert.equal(await page.locator('#haiku-asistente-panel').isVisible(),true,'Escape cierra sólo la captura');
+                assert.equal(await mini.evaluate(e=>e===document.activeElement),true);
+                assert.equal(await reservas.getAttribute('data-haku-guia-paso'),estado);
+            }
+        }
+        await reservas.getByRole('button',{name:'← Opciones',exact:true}).click();
+        await reservas.getByRole('button',{name:'Procesar pago Booking',exact:true}).click();
+        for(let i=0;i<2;i++)await reservas.getByRole('button',{name:'Siguiente',exact:true}).click();
+        assert.equal(await reservas.locator('.haku-guia__captura').count(),4);
+        await reservas.screenshot({path:path.join(capturasDir,'booking-galeria.png')});
+        await reservas.locator('.haku-guia__captura').first().click();
+        const galeria=page.getByRole('dialog',{name:'Captura del manual'});
+        await page.keyboard.press('ArrowRight');assert.match(await galeria.locator('strong').innerText(),/Hotel/);
+        await galeria.getByRole('button',{name:'Siguiente',exact:true}).click();assert.match(await galeria.locator('strong').innerText(),/Check-in/);
+        await galeria.getByRole('button',{name:'Cerrar',exact:true}).click();
+        assert.equal(await reservas.getAttribute('data-haku-guia-paso'),'2');
+        // Fallo de imagen no bloquea el paso ni inventa una captura.
+        await page.route('**/assets/guias/terminal-hotel.jpg',route=>route.abort());
+        await reservas.locator('.haku-guia__captura').nth(1).click();
+        await page.getByRole('dialog').getByText('No se pudo cargar la captura. Puedes continuar con los pasos.').waitFor();
+        await page.keyboard.press('Escape');
+        await reservas.getByRole('button',{name:'Siguiente',exact:true}).click();
+        assert.match(await reservas.innerText(),/Completar Check-out/);
         assert.equal(await page.evaluate(()=>__writes.length),0);assert.equal(await page.evaluate(()=>__calls.length),0);
         assert.deepEqual(externas,[]);assert.deepEqual(errors,[]);
         console.log('Guías Haku: menús, variantes, temas, móvil, teclado, reintento, consulta en curso e historial OK');

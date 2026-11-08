@@ -183,8 +183,86 @@
     };
     const grupos={manager:{nombre:'Ingresos Manager',descripcion:'Elige qué ingreso necesitas registrar.'},
         reservas:{nombre:'Proceso de reservas',descripcion:'Sigue el proceso completo o elige una etapa.'}};
+    // Capturas recortadas y aplanadas: sólo controles; nunca los originales con datos de huéspedes.
+    const raizImagenes=root.document?.currentScript?.src?new URL('../assets/guias/',root.document.currentScript.src).href:'assets/guias/';
+    const captura=(archivo,titulo,alt,ancho,alto)=>({archivo,titulo,alt,ancho,alto});
+    const fotosTerminal=[
+        captura('terminal-tarjetas.jpg','1 · Tarjetas','Terminal Transbank: opción VISA-MC-AMEX-DINERS.',480,540),
+        captura('terminal-hotel.jpg','2 · Hotel','Terminal Transbank: opción 2 Hotel.',480,550),
+        captura('terminal-checkin-checkout.jpg','3 · Check-in','Menú Hotel: opción 1 Check-in y opción 3 Check-out.',480,550),
+        captura('terminal-monto.jpg','4 · Monto','Terminal: pantalla Ingrese monto, antes de introducir el importe.',480,550)
+    ];
+    const apoyos={
+        'Verificar la transferencia en el banco':[captura('santander-movimientos.png','Saldos y movimientos','Santander: Cuentas corrientes → Saldos y movimientos.',662,309)],
+        'Abrir Añadir pago en Cloudbeds':[captura('cloudbeds-anadir-pago.png','Añadir pago','Cloudbeds: pestaña Folio y menú Añadir o reembolsar pago → Añadir pago.',630,315)],
+        'Completar y guardar el pago':[captura('cloudbeds-guardar-pago.png','Campos del pago','Cloudbeds: huésped, habitación, cantidad, método, fecha, notas y Guardar. Datos de ejemplo ocultos.',535,526)],
+        'Imprimir la tarjeta de registro':[captura('cloudbeds-tarjeta-registro.png','Tarjeta de registro','Cloudbeds: Acciones → Imprimir tarjetas de registro.',289,452)],
+        'Realizar Check-in en el terminal':fotosTerminal,
+        'Completar Check-out y recoger vouchers':[{...fotosTerminal[2],titulo:'3 · Check-out'}]
+    };
+    const etiquetas={
+        'manager-transferencia':['Transferencia','Comprobante nuevo'],
+        'manager-transferencia-existente':['Fecha ya creada','Continuar transferencia'],
+        'manager-webpay-credito':['WebPay crédito','TXC + AC+P'],
+        'manager-webpay-debito':['WebPay débito','TXC + AC+P'],
+        'manager-booking':['Pago Booking','TCR + AC+B'],
+        'manager-virtual':['Cargo virtual','TCR + AC+P'],
+        'manager-checkin-credito':['Check-in crédito','BOVE + TCR'],
+        'manager-checkin-debito':['Check-in débito','BOVE + RECO'],
+        'manager-futuro':['Reserva futura','Pago directo'],
+        'manager-efectivo':['Efectivo','Regla por aclarar'],
+        'reserva-libro':['Datos del Libro','Huésped y estadía'],
+        'reserva-correo':['Pre-reserva','Correo y adjuntos'],
+        'reserva-webpay':['WebPay','Comprobar y anotar'],
+        'reserva-transferencia':['Transferencia','Banco y Libro'],
+        'reserva-booking':['Booking','Cobro y vouchers'],
+        'reserva-airbnb':['Airbnb','Desglose y Libro'],
+        'reserva-pos':['Tarjeta recepción','Voucher y Libro'],
+        'reserva-efectivo':['Efectivo','Sobre y Libro'],
+        'reserva-cloudbeds':['Cloudbeds','Añadir pago'],
+        'reserva-tarjeta':['Tarjeta de registro','Imprimir'],
+        'reserva-confirmar':['Confirmación o acuse →','']
+    };
     const congelar=x=>{if(x&&typeof x==='object'&&!Object.isFrozen(x)){Object.values(x).forEach(congelar);Object.freeze(x);}return x;};
-    congelar(guias);congelar(medios);congelar(grupos);
+    congelar(guias);congelar(medios);congelar(grupos);congelar(apoyos);congelar(etiquetas);
+    const imagenesDe=p=>Object.hasOwn(apoyos,p?.titulo)?apoyos[p.titulo]:[];
+    function cargarImagen(img,ref){
+        img.alt=ref.alt;img.width=ref.ancho;img.height=ref.alto;img.decoding='async';
+        img.addEventListener('error',()=>{
+            img.hidden=true;
+            const aviso=root.document.createElement('span');aviso.className='haku-guia__imagen-error';
+            aviso.textContent='No se pudo cargar la captura. Puedes continuar con los pasos.';
+            img.after(aviso);
+        },{once:true});
+        img.src=raizImagenes+ref.archivo;
+    }
+    function ampliarImagen(imagenes,indice,origen){
+        const d=root.document,dialog=d.createElement('dialog');dialog.className='haku-guia-imagen';
+        dialog.setAttribute('aria-label','Captura del manual');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
+        const head=d.createElement('header'),titulo=d.createElement('strong'),cerrar=d.createElement('button');
+        cerrar.type='button';cerrar.textContent='Cerrar';cerrar.addEventListener('click',()=>dialog.close());
+        head.append(titulo,cerrar);const vista=d.createElement('div');vista.className='haku-guia-imagen__vista';
+        const nav=d.createElement('nav');nav.setAttribute('aria-label','Capturas del paso');
+        const anterior=d.createElement('button'),siguiente=d.createElement('button'),contador=d.createElement('span');
+        anterior.type=siguiente.type='button';anterior.textContent='Anterior';siguiente.textContent='Siguiente';
+        const mostrar=()=>{
+            const ref=imagenes[indice];titulo.textContent=ref.titulo;vista.replaceChildren();
+            const img=d.createElement('img');cargarImagen(img,ref);vista.append(img);
+            contador.textContent=`${indice+1} de ${imagenes.length}`;contador.setAttribute('aria-live','polite');
+            anterior.disabled=indice===0;siguiente.disabled=indice===imagenes.length-1;
+        };
+        anterior.addEventListener('click',()=>{indice--;mostrar();});siguiente.addEventListener('click',()=>{indice++;mostrar();});
+        dialog.addEventListener('keydown',e=>{
+            // Escape pertenece a la captura, no al panel Haku que está debajo.
+            if(e.key==='Escape'){e.preventDefault();e.stopPropagation();dialog.close();return;}
+            if(e.key==='ArrowLeft'&&indice>0){e.preventDefault();indice--;mostrar();}
+            if(e.key==='ArrowRight'&&indice<imagenes.length-1){e.preventDefault();indice++;mostrar();}
+        });
+        nav.append(anterior,contador,siguiente);nav.hidden=imagenes.length<2;
+        dialog.append(head,vista,nav);
+        dialog.addEventListener('close',()=>{dialog.remove();if(origen.isConnected)origen.focus({preventScroll:true});},{once:true});
+        d.body.append(dialog);mostrar();dialog.showModal();cerrar.focus({preventScroll:true});
+    }
     function pasosDe(id,medio){
         if(!Object.hasOwn(guias,id))return [];
         if(id!=='reserva-completa')return guias[id].pasos;
@@ -208,29 +286,53 @@
         const nodo=(padre,tag,clase,texto)=>{const el=d.createElement(tag);el.className=clase;if(texto)el.textContent=texto;padre.appendChild(el);return el;};
         const cambiar=parche=>{renderizar(card,{...s,...parche},true);root.HAIKU_ASISTENTE_HISTORIAL_V1?.guardar?.();};
         const boton=(padre,texto,accion,clase='')=>{const b=nodo(padre,'button',clase,texto);b.type='button';b.addEventListener('click',accion);return b;};
-        const head=nodo(card,'header','haku-guia__cabecera');nodo(head,'span','haku-guia__etiqueta','GUÍA · '+g.nombre);
+        const head=nodo(card,'header','haku-guia__cabecera'),meta=nodo(head,'div','haku-guia__meta');
+        if(guia){
+            const volver=boton(meta,'← '+g.nombre,()=>cambiar({id:'',indice:0,medio:''}),'haku-guia__volver');
+            volver.setAttribute('aria-label','← Opciones');
+        }else nodo(meta,'span','haku-guia__etiqueta','ACCIONES RÁPIDAS');
+        const progreso=guia?(s.indice>=pasos.length?'Completada':`${s.indice+1}${s.id==='reserva-completa'&&!s.medio?'':` de ${pasos.length}`}`):'GUÍA';
+        const progresoEl=nodo(meta,'span','haku-guia__progreso',progreso);
+        if(guia)progresoEl.setAttribute('aria-label','Paso '+progreso);
         const titulo=nodo(head,'h3','haku-guia__titulo',guia?.nombre||g.nombre);titulo.tabIndex=-1;
         if(!guia){
-            nodo(card,'p','haku-guia__intro',g.descripcion);
+            if(s.grupo==='reservas'){
+                const completa=boton(card,'Procesar reserva completa',()=>cambiar({id:'reserva-completa',indice:0,medio:''}),'haku-guia__principal haku-guia__completa');
+                completa.setAttribute('aria-label',guias['reserva-completa'].nombre);
+            }
+            nodo(card,'p','haku-guia__intro',s.grupo==='reservas'?'O elige una etapa':g.descripcion);
             const menu=nodo(card,'div','haku-guia__opciones');
-            for(const [id,x] of Object.entries(guias).filter(([,x])=>x.grupo===s.grupo)){
+            const ids=s.grupo==='manager'?['manager-transferencia','manager-transferencia-existente','manager-webpay-credito','manager-webpay-debito','manager-booking','manager-virtual','manager-checkin-credito','manager-checkin-debito','manager-futuro','manager-efectivo']:
+                Object.keys(guias).filter(id=>guias[id].grupo===s.grupo&&id!=='reserva-completa');
+            for(const id of ids){
+                const x=guias[id],[nombre,resumen]=etiquetas[id]||[x.nombre,x.resumen];
                 const b=boton(menu,'',()=>cambiar({id,indice:0,medio:''}),'haku-guia__opcion');
-                nodo(b,'span','',x.nombre);nodo(b,'small','',x.resumen);
+                b.setAttribute('aria-label',x.nombre);nodo(b,'span','',nombre);if(resumen)nodo(b,'small','',resumen);
+                if(id==='reserva-confirmar')b.classList.add('haku-guia__opcion--cierre');
             }
         }else{
-            boton(head,'← Opciones',()=>cambiar({id:'',indice:0,medio:''}),'haku-guia__volver');
             const cuerpo=nodo(card,'div','haku-guia__cuerpo');
             if(s.indice>=pasos.length){
                 nodo(cuerpo,'strong','haku-guia__fin','Fin de la guía');
                 nodo(cuerpo,'p','','Estos pasos son una guía. No confirman que el pago o la reserva hayan sido registrados.');
                 boton(cuerpo,'Volver a los pasos',()=>cambiar({indice:0}),'haku-guia__principal');
             }else{
-                const p=pasos[s.indice],total=s.id==='reserva-completa'&&!s.medio?'':` de ${pasos.length}`;
-                nodo(cuerpo,'span','haku-guia__progreso',`Paso ${s.indice+1}${total}`);
+                const p=pasos[s.indice];
                 nodo(cuerpo,'h4','haku-guia__paso-titulo',p.titulo);
-                if(p.items?.length){const ul=nodo(cuerpo,'ul','haku-guia__instrucciones');for(const text of p.items)nodo(ul,'li','',text);}
+                if(p.items?.length){const ul=nodo(cuerpo,'ol','haku-guia__instrucciones');for(const text of p.items)nodo(ul,'li','',text);}
                 if(p.datos?.length){const dl=nodo(cuerpo,'dl','haku-guia__datos');for(const [k,v] of p.datos){nodo(dl,'dt','',k);nodo(dl,'dd','',v);}}
                 if(p.nota)nodo(cuerpo,'p','haku-guia__nota',p.nota);
+                const imagenes=imagenesDe(p);
+                if(imagenes.length){
+                    const galeria=nodo(cuerpo,'div','haku-guia__capturas'+(imagenes.length>1?' haku-guia__capturas--varias':''));
+                    imagenes.forEach((ref,index)=>{
+                        const b=boton(galeria,'',()=>ampliarImagen(imagenes,index,b),'haku-guia__captura');
+                        b.setAttribute('aria-label','Ampliar captura: '+ref.titulo);b.setAttribute('aria-haspopup','dialog');
+                        const img=nodo(b,'img','');img.loading='lazy';cargarImagen(img,ref);
+                        if(imagenes.length>1)nodo(b,'span','',ref.titulo);
+                    });
+                    nodo(cuerpo,'small','haku-guia__capturas-ayuda','Capturas del manual · pulsa para ampliar');
+                }
                 if(p.opciones){
                     const opciones=nodo(cuerpo,'div','haku-guia__medios');
                     for(const o of p.opciones)boton(opciones,o.nombre,()=>cambiar({medio:o.id,indice:s.indice+1}));
@@ -240,7 +342,7 @@
                 if(!p.opciones)boton(nav,s.indice===pasos.length-1?'Terminar guía':'Siguiente',()=>cambiar({indice:s.indice+1}),'haku-guia__principal');
             }
         }
-        nodo(card,'small','haku-guia__fuente','Fuente: '+fuentes[s.grupo]);
+        nodo(card,'small','haku-guia__fuente','Manual · '+g.nombre).title=fuentes[s.grupo];
         if(enfocar){titulo.focus({preventScroll:true});card.scrollIntoView({block:'start',behavior:'auto'});}
         return card;
     }
@@ -259,6 +361,6 @@
             renderizar(card,{grupo:card.dataset.hakuGuiaGrupo,id:card.dataset.hakuGuiaId,indice:card.dataset.hakuGuiaPaso,medio:card.dataset.hakuGuiaMedio});
         }
     }
-    const api=Object.freeze({guias,grupos,pasosDe,estadoValido,mostrar,restaurar});
+    const api=Object.freeze({guias,grupos,pasosDe,imagenesDe,estadoValido,mostrar,restaurar});
     root.HAIKU_GUIAS_OPERATIVAS_V1=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);
