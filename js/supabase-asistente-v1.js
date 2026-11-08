@@ -20,6 +20,10 @@
     let procesando = false;
     let guardandoReserva = false;
     let ultimaPreview = null;
+    let cargaGuias = null, guiaSolicitada = null, estadoGuias = null;
+    const urlGuias = new URL('haiku-guias-operativas-v1.js', document.currentScript?.src || new URL('js/supabase-asistente-v1.js', location.href));
+    const versionGuias = new URL(document.currentScript?.src || location.href).searchParams.get('v');
+    if (versionGuias) urlGuias.searchParams.set('v', versionGuias);
 
     const root = document.createElement("div");
     root.className = "haiku-asistente-root";
@@ -58,6 +62,8 @@
                         <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
                         <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
                         <button type="button" data-haiku-accion-rapida="consultar-documento">Cloudbeds · Tarifas</button>
+                        <button type="button" data-haiku-accion-rapida="ingresos-manager">Ingresos Manager</button>
+                        <button type="button" data-haiku-accion-rapida="proceso-reservas">Proceso de reservas</button>
                         <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
                         <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
                         <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
@@ -238,7 +244,7 @@
         adjuntar.disabled = ocupado;
         campo.disabled = ocupado;
         botonesRapidos.forEach(botonRapido => {
-            botonRapido.disabled = ocupado;
+            botonRapido.disabled = ocupado && !['ingresos-manager','proceso-reservas'].includes(botonRapido.dataset.haikuAccionRapida);
         });
         enviar.textContent = procesando ? "Analizando…" : "Enviar";
     }
@@ -276,7 +282,50 @@
         return "";
     }
 
+    function cargarGuias() {
+        if (window.HAIKU_GUIAS_OPERATIVAS_V1) return Promise.resolve(window.HAIKU_GUIAS_OPERATIVAS_V1);
+        if (cargaGuias) return cargaGuias;
+        cargaGuias = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = urlGuias.href;
+            script.onload = () => window.HAIKU_GUIAS_OPERATIVAS_V1
+                ? resolve(window.HAIKU_GUIAS_OPERATIVAS_V1) : fallo();
+            const fallo = () => { script.remove(); cargaGuias = null; reject(new Error('No se cargaron las guías.')); };
+            script.onerror = fallo;
+            document.head.appendChild(script);
+        });
+        return cargaGuias;
+    }
+
+    function mostrarGuia(grupo) {
+        rapidas.open = false;
+        if (window.HAIKU_GUIAS_OPERATIVAS_V1) { window.HAIKU_GUIAS_OPERATIVAS_V1.mostrar(grupo); return; }
+        guiaSolicitada = grupo;
+        if (!estadoGuias) estadoGuias = agregarMensaje('asistente', 'Abriendo guía…');
+        cargarGuias().then(api => {
+            if (!guiaSolicitada) return;
+            const elegida = guiaSolicitada; guiaSolicitada = null;
+            estadoGuias?.remove(); estadoGuias = null;
+            api.mostrar(elegida);
+        }).catch(() => {
+            guiaSolicitada = null;
+            if (estadoGuias) estadoGuias.textContent = 'No pude abrir la guía. Pulsa la acción rápida para reintentar.';
+            estadoGuias = null;
+        });
+    }
+
+    function restaurarGuias(contenedor) {
+        if (!contenedor?.querySelector('.haku-guia-operativa')) return;
+        void cargarGuias().then(api => api.restaurar(contenedor)).catch(() => {
+            console.warn('Haku: abre la acción rápida para recuperar la guía.');
+        });
+    }
+
     function ejecutarAccionRapida(accion) {
+        if (accion === 'ingresos-manager' || accion === 'proceso-reservas') {
+            mostrarGuia(accion === 'ingresos-manager' ? 'manager' : 'reservas');
+            return;
+        }
         if (estaOcupado()) return;
         if (accion === "revisar-captura" || accion === "consultar-documento") {
             archivosInput.accept = accion === "consultar-documento"
@@ -1721,6 +1770,7 @@
         visible: () => !root.hidden,
         abierta: () => !panel.hidden,
         procesando: estaOcupado,
+        restaurarGuias,
         ultimaPreview: () => ultimaPreview,
         adjuntos: () => adjuntos.map(item => ({
             nombre: item.file.name,
