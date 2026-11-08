@@ -238,7 +238,7 @@
     }
     function ampliarImagen(imagenes,indice,origen){
         const d=root.document,dialog=d.createElement('dialog');dialog.className='haku-guia-imagen';
-        dialog.setAttribute('aria-label','Captura del manual');
+        dialog.setAttribute('aria-label','Captura del manual');dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
         const head=d.createElement('header'),titulo=d.createElement('strong'),cerrar=d.createElement('button');
         cerrar.type='button';cerrar.textContent='Cerrar';cerrar.addEventListener('click',()=>dialog.close());
         head.append(titulo,cerrar);const vista=d.createElement('div');vista.className='haku-guia-imagen__vista';
@@ -253,6 +253,8 @@
         };
         anterior.addEventListener('click',()=>{indice--;mostrar();});siguiente.addEventListener('click',()=>{indice++;mostrar();});
         dialog.addEventListener('keydown',e=>{
+            // Escape pertenece a la captura, no al panel Haku que está debajo.
+            if(e.key==='Escape'){e.preventDefault();e.stopPropagation();dialog.close();return;}
             if(e.key==='ArrowLeft'&&indice>0){e.preventDefault();indice--;mostrar();}
             if(e.key==='ArrowRight'&&indice<imagenes.length-1){e.preventDefault();indice++;mostrar();}
         });

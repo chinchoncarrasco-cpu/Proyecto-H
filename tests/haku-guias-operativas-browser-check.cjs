@@ -169,6 +169,7 @@ const server=http.createServer((req,res)=>{
                 assert.equal(await modal.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true);
                 assert.equal(await modal.locator('img').evaluate(img=>img.naturalWidth>0&&getComputedStyle(img).objectFit==='contain'),true);
                 await page.keyboard.press('Escape');await modal.waitFor({state:'detached'});
+                assert.equal(await page.locator('#haiku-asistente-panel').isVisible(),true,'Escape cierra sólo la captura');
                 assert.equal(await mini.evaluate(e=>e===document.activeElement),true);
                 assert.equal(await reservas.getAttribute('data-haku-guia-paso'),estado);
             }
