@@ -101,6 +101,8 @@ test('puente no contiene parser, RPC, SQL ni modificaciones operacionales',()=>{
 });
 test('informe manual y Ver informe adjuntan el puente con la generación original del resultado cacheado',async()=>{
  const h=entorno();puente(h);const listeners={};
+ const enlaces=[],puenteOriginal=h.context.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1;
+ h.context.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1={...puenteOriginal,adjuntar:(el,r,g)=>{enlaces.push({r,g});return puenteOriginal.adjuntar(el,r,g);}};
  h.context.addEventListener=(t,f)=>(listeners[t] ||= []).push(f);
  h.context.Event=class {constructor(type){this.type=type;}};
  const campo={value:'',dispatchEvent(){}},enviar={},mensajes=h.out;
@@ -121,6 +123,11 @@ test('informe manual y Ver informe adjuntan el puente con la generación origina
  assert.equal(h.boton('Preparar cambios en Proyecto H'),undefined);
  h.cambiar();for(const f of listeners['haiku:libro-cambio'])f();
  const ultimo=E.mostrarResultado(obtenido);await new Promise(r=>setImmediate(r));
- assert.match(ultimo.querySelector('.haku-libro-pendientes-zona').textContent,/Conservé este informe.*versión nueva/);
+ // La consulta se conserva; el mensaje de bloqueo fue retirado al permitir
+ // continuar con una lectura estable. Verificar contenido y generación reales.
+ assert.ok(ultimo.querySelector('.haku-libro-pendientes-zona'));
+ assert.match(ultimo.innerHTML,/Mauricio Cepeda/);
+ assert.ok(enlaces.length>=3);assert.ok(enlaces.every(x=>x.r===datos&&x.g===1));
+ assert.equal(h.writes(),0);
  assert.equal(revisiones,1);assert.equal(llamadas,1);
 });

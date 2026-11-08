@@ -146,7 +146,7 @@
     function titularContexto(texto) {
         const partes = separarCampos(texto);
         const etiqueta = /^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|late check out|x hacer|por hacer|pendiente|sin titular)\b/;
-        return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
+        return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
     }
     // Señales de lenguaje, sólo para titular: no altera bloqueos ni cancelaciones.
     function notaDeTitular(texto, posteriorADatos = false) {
@@ -178,6 +178,8 @@
             ['aseo', /^(?:camarer[oa]|(?:responsable|encargad[oa])\s+(?:de|del)\s+aseo)\b/],
             ['profesional_servicio', /^(?:masajista|terapeuta|(?:responsable|encargad[oa])\s+del\s+servicio)\b/],
             ['pagador', /^(?:pagador[ae]?|(?:pago|abono)\s+(?:realizado\s+)?por|(?:transferencia|transf)\s+de)\b/],
+            ['intermediario', /^(?:booker\b|agencia\s*:)/],
+            ['facturacion', /^(?:(?:razon\s+social|sociedad\s+comercial|datos\s+de\s+facturacion)\b|empresa\s*:)/],
             ['acompanante', /^acompanante\b/]
         ];
         for (const [rol, patron] of etiquetas) {
@@ -198,17 +200,26 @@
             if (/^walk[\s-]*in$/.test(t)) return 'etiqueta';
             if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) return 'etiqueta';
             if (notaDeTitular(texto, datosPosteriores)) return 'nota_operativa';
-            if (/^(?:telefono|celular|correo|email|rut|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
+            if (/^(?:telefono|celular|correo|email|rut|dni|id|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
                 /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) return 'dato_estructurado';
-            return /^[\p{L}][\p{L}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2 ? 'posible_titular' : 'otro';
+            return /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2 ? 'posible_titular' : 'otro';
         };
-        return separarCampos(texto).map(texto=>{
+        const campos=separarCampos(texto).flatMap(campo=>{
+            // Separar un nombre de su documento sólo ante una etiqueta explícita
+            // o un RUT completo. Nunca desarmar el nombre de un pagador/personal.
+            if (rolNoTitular(campo)) return [campo];
+            const limpio=campo.includes('@')?campo:campo.replace(/^[\s"“”«»•.\-–—]+/, '').replace(/[,"“”«»]+$/, '').trim();
+            const junto=limpio.match(/^([\p{L}][\p{L}\p{M}\s.'’()-]+?)\s+(rut\s*:?\s*\d.*)$/iu) ||
+                limpio.match(/^([\p{L}][\p{L}\p{M}\s.'’()-]+?)\s*:?\s*(\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK]))$/u);
+            return junto&&clasificar(junto[1].trim())==='posible_titular'?[junto[1].trim(),junto[2]]:[limpio];
+        });
+        return campos.map(texto=>{
             let tipo=clasificar(texto);
             const rolExplicito=rolNoTitular(texto);
             // «Camarero // Rosa Vega» y «Camarero: Rosa Vega» expresan el mismo rol.
             // Sólo consumir el campo inmediato; un dato intermedio rompe el vínculo.
             const nombreDelRol=rolPendiente && !rolExplicito &&
-                (tipo==='posible_titular' || (tipo==='otro' && /^[\p{L}]+$/u.test(texto)));
+                (tipo==='posible_titular' || (tipo==='otro' && /^[\p{L}\p{M}]+$/u.test(texto)));
             const rol=rolExplicito?.rol || (nombreDelRol ? rolPendiente : null);
             if (nombreDelRol) tipo='nota_operativa';
             rolPendiente=rolExplicito?.esperaNombre ? rolExplicito.rol : null;
@@ -216,7 +227,9 @@
             // explícito («BOOKING - Ana Pérez»), y validar el sufijo como nombre.
             // Mantener intacta la celda original para notas, servicios y pagos.
             const nombreConCanal=(texto.match(/^full\s*day\s+(.+)$/i) ||
-                texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i))?.[1].trim();
+                texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i) ||
+                texto.match(/^promo\s+h(?:aiku|aku)\s+(?:[:–—-]\s*)?(.+)$/i) ||
+                texto.match(/^(?:titular|hu[eéè]sped)\s*:\s*(.+)$/i))?.[1].trim();
             if (!rol && nombreConCanal && clasificar(nombreConCanal)==='posible_titular') {
                 texto=nombreConCanal;
                 tipo='posible_titular';
@@ -231,6 +244,21 @@
     function titular(texto) {
         const candidatos=candidatosTitular(texto);
         return candidatos.length===1?candidatos[0].texto:null;
+    }
+    function fechasRegistroReserva(texto) {
+        const partes=separarCampos(texto), fechas=[];
+        let servicioPrevio=false;
+        for(const parte of partes) {
+            const etiqueta=parte.match(/^(?:fecha\s+(?:de\s+)?(?:registro|reserva|ingreso\s+(?:al\s+)?libro))\s*:\s*(.+)$/i);
+            if (etiqueta) {const f=fechaTexto(etiqueta[1]);if(f)fechas.push(f);continue;}
+            if (conceptosDeServicio(parte).some(c=>!['cama_adicional','cuna'].includes(c))) servicioPrevio=true;
+            // Una fecha dentro de una nota o después de iniciar un servicio no
+            // es la fecha administrativa de la reserva ni resuelve su geometría.
+            if (!servicioPrevio && /^\d{1,2}[-/.]\d{1,2}[-/.](?:\d{2}|\d{4})(?:\s+[A-Z]{2,4})?$/i.test(parte)) {
+                const f=fechaTexto(parte);if(f)fechas.push(f);
+            }
+        }
+        return [...new Set(fechas)];
     }
     function declaracionesNochesReserva(texto) {
         // `cab6/1noche` es un concepto financiero histórico, no una declaración
@@ -261,7 +289,7 @@
     function titularPago(texto) {
         const partes = separarCampos(texto);
         const candidato = partes.find(x => !/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normalizar(x)));
-        return candidato && /^[\p{L}][\p{L}\s.'’()-]+$/u.test(candidato) && candidato.split(/\s+/).length >= 2 ? candidato : null;
+        return candidato && /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(candidato) && candidato.split(/\s+/).length >= 2 ? candidato : null;
     }
     function mismaPersona(a, b) {
         const na = normalizar(a).replace(/[^a-z0-9 ]/g, ""), nb = normalizar(b).replace(/[^a-z0-9 ]/g, "");
@@ -827,43 +855,100 @@
             return numeros.length ? [...new Set(numeros)].map(numero=>({...base,numero,estado:'registrado'})) : [{...base,numero:null,estado:'no_determinado'}];
         });
     }
-    function anclaReservaDia(at, merges, fila, header, siguiente) {
-        const directa = at(fila, header.c);
-        // La columna inmediatamente anterior al siguiente header es de checkout.
-        const fin = siguiente ? siguiente.c - 2 : header.c + 2;
-        const candidatas = merges.filter(m => m.s.r === fila && m.e.r === fila &&
-            m.s.c > header.c && m.s.c <= fin && m.e.c > m.s.c)
-            .map(m => at(fila, m.s.c)).filter(c => c && candidatosTitular(c.valor).length);
-        if (candidatosTitular(directa?.valor).length) candidatas.unshift(directa);
-        return candidatas.length === 1 ? candidatas[0] : directa;
+    function fechaDeEncabezado(texto) {
+        const t = normalizar(texto).replace(/^(?:lunes|martes|miercoles|mierccoles|jueves|viernes|sabado|domingo|monday|tuesday|wednesday|thursday|friday|saturday|sunday)[,.\s]+/, '').trim();
+        const numerica = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+        if (numerica) return {dia:Number(numerica[1]),mes:Number(numerica[2]),anio:Number(numerica[3]),fecha:iso(numerica[3],numerica[2],numerica[1])};
+        const mesesTexto = {enero:1,january:1,febrero:2,february:2,marzo:3,march:3,abril:4,april:4,mayo:5,may:5,junio:6,june:6,julio:7,july:7,agosto:8,august:8,septiembre:9,setiembre:9,september:9,octubre:10,october:10,noviembre:11,november:11,diciembre:12,december:12};
+        const a=t.match(/^(\d{1,2})\s+(?:de\s+)?([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?(?:\s*[,;].*)?$/),
+            b=t.match(/^([a-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})$/);
+        if (!a && !b) return null;
+        const dia=Number(a?a[1]:b[2]), mes=mesesTexto[a?a[2]:b[1]], anio=Number(a?a[3]:b[3])||null;
+        if (!mes || dia<1 || dia>31) return null;
+        return {dia,mes,anio,fecha:anio?iso(anio,mes,dia):null};
     }
+    // Reconstruir el calendario físico antes de leer huéspedes. Una fecha textual
+    // se acepta por su contenido; una referencia inferida sólo localiza una duda.
+    function leerEncabezados(cells, merges, firstCab) {
+        const candidatas=cells.filter(c=>c.r<firstCab && (c.fechaISO || fechaDeEncabezado(c.valor)?.fecha));
+        const filas=[...new Set(candidatas.map(c=>c.r))].sort((a,b)=>candidatas.filter(c=>c.r===b).length-candidatas.filter(c=>c.r===a).length||a-b);
+        if (!filas.length) return [];
+        const fila=filas[0], conocidas=candidatas.filter(c=>c.r===fila).sort((a,b)=>a.c-b.c), porColumna=new Map(cells.filter(c=>c.r===fila).map(c=>[c.c,c]));
+        const pasos=conocidas.slice(1).map((c,i)=>c.c-conocidas[i].c), frecuencias=new Map();
+        pasos.forEach(p=>frecuencias.set(p,(frecuencias.get(p)||0)+1));
+        // Los encabezados de tres columnas y su columna de aseo corroboran el paso
+        // de cuatro, incluso si falta una fecha completa entre las conocidas.
+        const bandas=conocidas.filter(c=>merges.some(m=>m.s.r===fila&&m.e.r===fila&&m.s.c===c.c&&m.e.c===c.c+2));
+        const paso=bandas.length>=2 && pasos.every(p=>p%4===0) ? 4 : [...frecuencias].sort((a,b)=>b[1]-a[1]||a[0]-b[0])[0]?.[0]||4;
+        const regular=[1,4].includes(paso)&&pasos.every(p=>p%paso===0), inicio=conocidas[0].c, fin=conocidas.at(-1).c;
+        const votos=new Map();
+        if (regular) for (const c of conocidas) {
+            const f=c.fechaISO||fechaDeEncabezado(c.valor).fecha, base=sumarDias(f,-(c.c-inicio)/paso);
+            votos.set(base,(votos.get(base)||0)+1);
+        }
+        const orden=[...votos].sort((a,b)=>b[1]-a[1]), base=orden[0]?.[1]>=2&&orden[0][1]>(orden[1]?.[1]||0)?orden[0][0]:null;
+        const columnas=regular?Array.from({length:(fin-inicio)/paso+1},(_,i)=>inicio+i*paso):conocidas.map(c=>c.c);
+        return columnas.map(c=>{
+            const celda=porColumna.get(c)||{r:fila,c,valor:''}, declarada=fechaDeEncabezado(celda.valor), original=celda.fechaISO||declarada?.fecha||null;
+            const referencia=base?sumarDias(base,(c-inicio)/paso):null;
+            const anterior=conocidas.some(x=>x.c<c),posterior=conocidas.some(x=>x.c>c);
+            const parcial=declarada&&!declarada.anio&&referencia&&anterior&&posterior&&
+                Number(referencia.slice(5,7))===declarada.mes&&Number(referencia.slice(8,10))===declarada.dia;
+            const fiable=!!(original&&(!referencia||original===referencia)||parcial);
+            const fechaISO=fiable?(original||referencia):(referencia||original);
+            const duda=!fiable?`La fecha de ${direccion(fila,c)} ${original?`dice ${original}`:'falta o no coincide con los días vecinos'}. Confirma ese encabezado del Libro.`:null;
+            return {...celda,fechaISO,fuente_fecha:celda.fechaISO?'fecha_xlsx':parcial?'texto_y_dias_vecinos':original?'fecha_textual':'referencia_calendario',
+                ...(duda?{duda_fecha:duda}:{}),paso};
+        }).filter(c=>c.fechaISO);
+    }
+    function celdasReservaDia(at, fila, header, siguiente) {
+        const fin=header.paso===1?header.c:siguiente?siguiente.c-2:header.c+2;
+        const salida=[];
+        for(let c=header.c;c<=fin;c++) {const cell=at(fila,c);if(cell?.valor?.trim())salida.push(cell);}
+        return salida;
+    }
+    const indiciosEstadia = texto => !notaOperativa(String(texto).replace(/^\s*[-•]\s*/,'')) && /\b\d+\s*(?:adl|adultos?|huespedes?|personas?|noches?)\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(normalizar(texto));
+    const marcaCabaña = texto => /^(?:libre|full\s*day|lista\s+para\s+la\s+venta|mantencion|mantenimiento|detalles?(?:\s+(?:de\s+)?mantencion)?|desmantelad[ao](?:\s+pero\s+pendiente\s+full)?)$/i.test(normalizar(texto));
     function normalizarHoja(data, hoja) {
         const cells = data.celdas || [], estilos = data.estilos || [], merges = data.combinaciones || [];
         const map = new Map(cells.map(c => [`${c.r}:${c.c}`, c]));
+        const porFila=new Map(),porAncla=new Map();
+        for(const c of cells){if(!porFila.has(c.r))porFila.set(c.r,[]);porFila.get(c.r).push(c);}
+        for(const m of merges){const clave=`${m.s.r}:${m.s.c}`;if(!porAncla.has(clave))porAncla.set(clave,m);}
+        const verticales=merges.filter(m=>m.e.r>m.s.r).map(m=>({merge:m,cell:map.get(`${m.s.r}:${m.s.c}`)})).filter(x=>x.cell);
         const at = (r, c) => map.get(`${r}:${c}`);
         const origen = c => ({ hoja, celda: direccion(c.r, c.c), fila: c.r + 1, columna: c.c + 1,
-            merge: merges.find(m => m.s.r === c.r && m.s.c === c.c) || null });
+            merge: porAncla.get(`${c.r}:${c.c}`) || null });
         const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], bloqueos: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
         const cabCells = cells.filter(c => /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(c.valor)));
         const marker = cells.filter(c => /pagos de arriendos de hoy/.test(normalizar(c.valor)));
-        const financialRow = marker.length ? Math.min(...marker.map(c => c.r)) : Infinity;
-        const cabRows = cabCells.filter(c => c.r < financialRow && c.c === Math.min(...cabCells.map(x => x.c)));
+        const columnaCab=Math.min(...cabCells.map(c=>c.c)),columnaCabs=cabCells.filter(c=>c.c===columnaCab).sort((a,b)=>a.r-b.r),primerGrupo=[];
+        for(const c of columnaCabs) {if(primerGrupo.length&&c.r!==primerGrupo.at(-1).r+1)break;primerGrupo.push(c);}
+        const financialRow = marker.length ? Math.min(...marker.map(c => c.r)) :
+            columnaCabs.find(c=>c.r>(primerGrupo.at(-1)?.r??Infinity))?.r-1 || cells.reduce((max,c)=>Math.max(max,c.r),0)+1;
+        const cabRows = (marker.length ? cabCells.filter(c => c.r < financialRow && c.c === columnaCab) : primerGrupo).sort((a,b)=>a.r-b.r);
         const firstCab = Math.min(...cabRows.map(c => c.r));
-        // Only typed date cells above the reservation grid are date headers.
-        const headerDates = cells.filter(c => c.fechaISO && c.r < firstCab);
-        const rows = [...new Set(headerDates.map(c => c.r))];
-        const bestRow = rows.sort((a, b) => headerDates.filter(c => c.r === b).length - headerDates.filter(c => c.r === a).length)[0];
-        const headers = headerDates.filter(c => c.r === bestRow).sort((a, b) => a.c - b.c);
-        if (!headers.length || !cabRows.length || !Number.isFinite(financialRow)) {
+        const headers = leerEncabezados(cells, merges, firstCab);
+        if (!headers.length || !cabRows.length || !Number.isFinite(financialRow) || !marker.length&&headers.length<2) {
             res.advertencias.push("Estructura mensual no reconocida: sólo se ofrecen coincidencias textuales con coordenadas, sin asignar reservas ni pagos.");
             res.anotaciones = cells.filter(c => c.valor?.trim()).map(c => ({ texto_original: c.valor, origen: origen(c) }));
             return res;
         }
         if (new Set(headers.map(c => c.fechaISO)).size !== headers.length || headers.some((h, i) => i && h.fechaISO <= headers[i - 1].fechaISO)) {
-            res.advertencias.push("Fechas duplicadas o desordenadas: no se interpreta automáticamente esta hoja."); return res;
+            res.advertencias.push("Fechas duplicadas o desordenadas: no se interpreta automáticamente esta hoja.");
+            res.anotaciones=cells.filter(c=>c.valor?.trim()).map(c=>({texto_original:c.valor,origen:origen(c)}));return res;
         }
         res.fechas = headers.map(c => c.fechaISO);
-        res.cobertura.geometria = true;
+        res.cobertura.geometria = headers.every(h=>!h.duda_fecha);
+        res.advertencias.push(...headers.filter(h=>h.duda_fecha).map(h=>`${hoja} · ${h.duda_fecha}`));
+        if (!marker.length) res.advertencias.push('Identifiqué las reservas, pero no el encabezado de pagos. No puedo afirmar que sus pagos estén completos.');
+        if (data.fidelidad?.formato===false) {
+            res.cobertura.geometria=false;
+            res.advertencias.push(...(data.fidelidad.advertencias||[]));
+        }
+        res.lectura = {version:2,encabezados:headers.map(h=>({celda:direccion(h.r,h.c),fecha:h.fechaISO,fuente:h.fuente_fecha,verificada:!h.duda_fecha})),
+            secciones:{reservas:{primera_fila:firstCab+1,ultima_fila:Math.max(...cabRows.map(c=>c.r))+1},pagos:{primera_fila:financialRow+1}},
+            fidelidad:data.fidelidad||null};
         // Evidencia administrativa independiente: sólo dentro del bloque rotulado.
         const columnaPrimaria = Math.min(...cabRows.map(c => c.c));
         for (const label of cells.filter(c => c.c === columnaPrimaria && normalizar(c.valor) === 'cancelaciones' && c.r > Math.max(...cabRows.map(c => c.r)) && c.r < financialRow)) {
@@ -874,6 +959,10 @@
                 const nombre = titularContexto(contenido);
                 const hs = headers.filter((h,i) => cell.c >= h.c && cell.c < (headers[i+1]?.c ?? h.c+4));
                 if (!nombre || hs.length !== 1) continue;
+                if (hs[0].duda_fecha) {
+                    res.anotaciones.push({tipo:'cancelacion_fecha_dudosa',texto_original:cell.valor,origen:origen(cell),motivo_identificacion:hs[0].duda_fecha});
+                    continue;
+                }
                 const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
                 res.cancelaciones.push({titular:nombre,fecha_checkin:hs[0].fechaISO,noches:noches?Number(noches[1]):null,
                     rut_documento:documentoDelLibro(contenido),
@@ -882,23 +971,37 @@
                     texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label)});
             }
         }
-        const paymentCabs = cabCells.filter(c => c.r > financialRow).sort((a, b) => a.r - b.r);
+        const paymentCabs = cabCells.filter(c => c.r > financialRow && c.c===columnaPrimaria).sort((a, b) => a.r - b.r);
         for (const e of res.evidencias_bove) {
             const fila=e.origen.fila-1,columna=e.origen.columna-1;
             const hs=headers.filter(h=>columna>=h.c&&columna<=h.c+3);
             const cs=paymentCabs.filter(c=>merges.some(m=>m.s.r===c.r&&m.s.c===c.c&&fila>=m.s.r&&fila<=m.e.r));
-            if(hs.length===1&&cs.length===1){e.fecha_bloque=hs[0].fechaISO;e.cabana_contexto=Number(cs[0].valor.match(/\d+/)[0]);}
+            if(hs.length===1&&!hs[0].duda_fecha&&cs.length===1){e.fecha_bloque=hs[0].fechaISO;e.cabana_contexto=Number(cs[0].valor.match(/\d+/)[0]);}
         }
-        res.cobertura.pagos = paymentCabs.length === cabRows.length;
+        const etiquetasPrimarias=cells.filter(c=>c.c===columnaPrimaria&&c.valor?.trim()).sort((a,b)=>a.r-b.r),finalesPago=new Map();
+        const finBloquePago = cab => {
+            if(finalesPago.has(cab))return finalesPago.get(cab);
+            const merge=porAncla.get(`${cab.r}:${cab.c}`);
+            const siguiente=etiquetasPrimarias.find(c=>c.r>cab.r);
+            if (merge && merge.e.c===cab.c && merge.e.r>=cab.r && (!siguiente||merge.e.r<siguiente.r)) return merge.e.r;
+            const fin=siguiente && /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(siguiente.valor)) ? siguiente.r-1 : null;
+            finalesPago.set(cab,fin);return fin;
+        };
+        const numerosCab=cabRows.map(c=>Number(c.valor.match(/\d+/)[0]));
+        const bloquesPagoValidos=paymentCabs.filter(c=>c.c===columnaPrimaria&&Number.isInteger(finBloquePago(c))&&
+            paymentCabs.filter(x=>Number(x.valor.match(/\d+/)[0])===Number(c.valor.match(/\d+/)[0])).length===1);
+        res.cobertura.pagos = marker.length>0&&numerosCab.every(n=>bloquesPagoValidos.some(c=>Number(c.valor.match(/\d+/)[0])===n))&&paymentCabs.length===cabRows.length;
         for (const cab of cabRows) {
             const cabana = Number(cab.valor.match(/\d+/)[0]);
+            const celdasFila=porFila.get(cab.r)||[];
             const celdasBloqueadas = new Set(), diasBloqueados = new Set();
             const rojo = c => {
                 const fill = estilos[c?.estiloId]?.fill;
                 return fill?.patternType === 'solid' && ['FF0000','C00000','CC0000','E60000'].includes(color(fill.fgColor));
             };
             const marcadorFullDay = c => /^full\s*day$/.test(normalizar(c?.valor));
-            for (const cell of cells.filter(c => (rojo(c) || marcadorFullDay(c)) && (c.r === cab.r || merges.some(m=>m.s.r===c.r && m.s.c===c.c && m.s.r<=cab.r && m.e.r>=cab.r)))) {
+            const celdasDisponibilidad=new Set([...celdasFila,...verticales.filter(x=>x.merge.s.r<=cab.r&&x.merge.e.r>=cab.r).map(x=>x.cell)]);
+            for (const cell of [...celdasDisponibilidad].filter(c=>rojo(c)||marcadorFullDay(c))) {
                 if (merges.some(m=>cell.r>=m.s.r && cell.r<=m.e.r && cell.c>=m.s.c && cell.c<=m.e.c && (cell.r!==m.s.r || cell.c!==m.s.c))) continue;
                 const src = origen(cell), merge = src.merge;
                 const fullDay = marcadorFullDay(cell);
@@ -914,6 +1017,7 @@
                 const h = headers.find((d,i) => cell.c >= d.c && cell.c <= d.c + 1 && cell.c < (headers[i+1]?.c ?? d.c+4));
                 if (!h || merge && (merge.e.r !== cab.r || merge.s.r !== cab.r)) { revision('con geometría parcial o entre filas'); continue; }
                 const dias = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));
+                if (dias.some(d=>d.duda_fecha)) { revision('con fecha de encabezado sin confirmar'); continue; }
                 const ultimo = headers.find(d => d.fechaISO === dias.at(-1)?.fechaISO);
                 const ancho = headers[1] ? headers[1].c - headers[0].c : 4;
                 if (![1,4].includes(ancho) || headers.some((d,i)=>i && d.c-headers[i-1].c!==ancho) || cabRows.filter(c=>c.r===cab.r).length!==1) { revision('con calendario o cabaña no inequívocos'); continue; }
@@ -921,7 +1025,7 @@
                     fullDay || cell.c === h.c && Array.from({length:Math.max(1,ancho-1)},(_,i)=>at(cab.r,h.c+i)).every(c=>rojo(c)&&(!c.valor?.trim()||c===cell));
                 const estructuraReserva = !fullDay && /\b(?:\d+\s*(?:noches?|adl|adlt|adultos?|pax|chld|ninos?)|full\s*day)\b|@|\+\d[\d ()-]{7,}\d|\b\d{9}\b|\b\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK])\b|\b[a-z]{2,3}\d{5,}\b/.test(String(cell.valor || '').toLowerCase());
                 if (!completo || fullDay && dias.length!==1 || estructuraReserva ||
-                    cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=ultimo.c+Math.max(0,ancho-2)&&c.valor?.trim()) ||
+                    celdasFila.some(c=>c!==cell&&c.c>=h.c&&c.c<=ultimo.c+Math.max(0,ancho-2)&&c.valor?.trim()) ||
                     dias.some((d,i)=>i && d.fechaISO !== sumarDias(dias[i-1].fechaISO,1))) { revision(estructuraReserva?'con datos contradictorios de reserva':'con cobertura incompleta, huecos o contenido adicional'); continue; }
                 // Fin exclusivo, igual que las estadías y el bloqueo de calendario existente.
                 const fechas = dias.map(d=>d.fechaISO);
@@ -931,12 +1035,43 @@
                 celdasBloqueadas.add(`${cell.r}:${cell.c}`);fechas.forEach(d=>diasBloqueados.add(d));
             }
             for (let i = 0; i < headers.length; i++) {
-                const h = headers[i], cell = anclaReservaDia(at, merges, cab.r, h, headers[i + 1]), cleaning = at(cab.r, h.c - 1);
-                if (cleaning?.valor && /check\s*out/i.test(cleaning.valor)) res.aseos.push(aseo(cleaning, h.fechaISO, cabana, origen(cleaning)));
+                const h = headers[i], entradas = celdasReservaDia(at, cab.r, h, headers[i + 1]), cleaning = at(cab.r, h.c - 1);
+                const bloqueHorizontal=c=>merges.some(m=>m.s.r===cab.r&&m.e.r===cab.r&&m.s.c===c.c&&m.e.c>c.c);
+                let candidatas=entradas.filter(c=>c.c===h.c||bloqueHorizontal(c)||indiciosEstadia(c.valor));
+                // Algunos bloques empiezan una columna después de LIBRE. El merge
+                // horizontal delimita esa estadía; una nota suelta no tiene ese rol.
+                if (candidatas.length===2&&candidatas[0].c===h.c&&marcaCabaña(candidatas[0].valor)&&bloqueHorizontal(candidatas[1])) candidatas=candidatas.slice(1);
+                const cell = candidatas[0] || at(cab.r,h.c);
+                if (!h.duda_fecha && cleaning?.valor && /check\s*out/i.test(cleaning.valor)) res.aseos.push(aseo(cleaning, h.fechaISO, cabana, origen(cleaning)));
                 if (diasBloqueados.has(h.fechaISO) || cell && celdasBloqueadas.has(`${cell.r}:${cell.c}`)) continue;
+                const auxiliares=entradas.filter(c=>!candidatas.includes(c)&&!marcaCabaña(c.valor));
+                res.anotaciones.push(...auxiliares.map(c=>({tipo:'nota_cabana',texto_original:c.valor,origen:origen(c),fecha:h.fechaISO,cabana})));
+                // «LIBRE | detalle de mantención» son dos celdas con roles distintos.
+                // Conservar las notas en su cabaña/día, sin convertirlas en huéspedes.
+                if (cell?.c===h.c && marcaCabaña(cell.valor) && !candidatas.slice(1).some(c=>indiciosEstadia(c.valor))) {
+                    const notas=candidatas.slice(1),contradiccion=[...notas,...auxiliares].some(c=>/\bbloquead[ao]\b|\bno\s+vender\b/.test(normalizar(c.valor)));
+                    res.espacios.push({fecha:h.fechaISO,cabana,estado:h.duda_fecha?'sin_dato':normalizar(cell.valor)==='libre'&&!contradiccion?'libre_explicito':'bloque_o_marca',
+                        texto_original:cell.valor,origen:origen(cell)});
+                    res.anotaciones.push(...notas.map(c=>({tipo:'nota_cabana',texto_original:c.valor,origen:origen(c),fecha:h.fechaISO,cabana})));
+                    continue;
+                }
+                if (candidatas.length>1) {
+                    for(const c of candidatas) res.anotaciones.push({tipo:'reserva_por_identificar',texto_original:c.valor,origen:origen(c),fecha:h.fechaISO,cabana,
+                        fechas_ocupadas:[h.fechaISO],titulares_posibles:candidatosTitular(c.valor).map(x=>x.texto),
+                        motivo_identificacion:'Hay más de un bloque con contenido en el mismo día y cabaña. Confirma cuál corresponde a la reserva.'});
+                    continue;
+                }
                 if (!cell?.valor.trim()) {
                     const ocupado = merges.some(m => m.s.r === cab.r && m.s.c < h.c && m.e.c >= h.c && at(m.s.r, m.s.c)?.valor.trim());
                     if (!ocupado) res.espacios.push({ fecha: h.fechaISO, cabana, estado: "sin_dato", origen: { hoja, celda: direccion(cab.r, h.c) } });
+                    continue;
+                }
+                const mergeCelda=merges.find(m=>m.s.r===cell.r&&m.s.c===cell.c);
+                const diasCelda=headers.filter(d=>d.c>=h.c&&d.c<=(mergeCelda?.e.c??h.c));
+                if (diasCelda.some(d=>d.duda_fecha)) {
+                    res.anotaciones.push({tipo:'reserva_por_identificar',texto_original:cell.valor,origen:origen(cell),fecha:h.fechaISO,cabana,
+                        fechas_ocupadas:diasCelda.map(d=>d.fechaISO),titulares_posibles:candidatosTitular(cell.valor).map(x=>x.texto),
+                        motivo_identificacion:diasCelda.find(d=>d.duda_fecha).duda_fecha});
                     continue;
                 }
                 const t = normalizar(cell.valor);
@@ -946,12 +1081,14 @@
                 }
                 if (!nombre) {
                     const ambigua=candidatosTitular(cell.valor).length>1;
+                    const sinTitular=indiciosEstadia(t);
                     if(ambigua)res.advertencias.push(`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`);
                     res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
-                        ...(ambigua?{tipo:'reserva_por_identificar',
+                        ...(ambigua||sinTitular?{tipo:'reserva_por_identificar',
                             titulares_posibles:candidatosTitular(cell.valor).map(x=>x.texto),
                             fechas_ocupadas:headers.filter(d=>d.c>=h.c&&d.c<=(origen(cell).merge?.e.c??h.c)).map(d=>d.fechaISO),
-                            advertencias:['Varios posibles titulares; no se eligió uno arbitrariamente.']}: {}) }); continue;
+                            ...(sinTitular&&!ambigua?{motivo_identificacion:'El bloque tiene datos de estadía, pero no un titular identificable. Completa el nombre en esa celda del Libro.'}:{}),
+                            advertencias:[ambigua?'Varios posibles titulares; no se eligió uno arbitrariamente.':'Titular no identificado en el bloque de reserva.']}: {}) }); continue;
                 }
                 const src = origen(cell), merge = src.merge;
                 const diasHoja = headers.filter(d => d.c >= h.c && d.c <= (merge?.e.c ?? h.c));
@@ -966,16 +1103,17 @@
                 const nochesTextoEfectivas = nochesTexto === null ? null : nochesTexto + (nochesExtensionTexto ?? 0);
                 const nochesGeometria = fd ? 0 : dias.length;
                 const dudas = [];
+                if (data.fidelidad?.formato===false) dudas.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
                 const notasInterpretacion = [];
                 const advertenciasInformativas = [];
                 const partes = separarCampos(cell.valor);
-                const fechasTexto = [...new Set(partes.map(fechaTexto).filter(Boolean))];
-                const fechaRegistro = fechasTexto.at(-1) || null;
+                const fechasTexto = fechasRegistroReserva(cell.valor);
+                const fechaRegistro = fechasTexto.length===1 ? fechasTexto[0] : null;
                 const paso = headers[1] ? headers[1].c - headers[0].c : null;
                 const calendarioRegular = Number.isInteger(paso) && paso > 0 && headers.every((d,i)=>!i||d.c-headers[i-1].c===paso);
                 const diasConsecutivos = dias.every((d,i)=>!i||d===sumarDias(dias[i-1],1));
                 const ultimoDia = diasHoja.at(-1);
-                const contenidoContradictorio = !!merge && cells.some(c=>c!==cell&&c.r===cab.r&&c.c>=h.c&&c.c<=merge.e.c&&c.valor?.trim());
+                const contenidoContradictorio = !!merge && celdasFila.some(c=>c!==cell&&c.c>=h.c&&c.c<=merge.e.c&&c.valor?.trim());
                 const mergeSeguro = !merge ? cell.r===cab.r && cell.c===h.c : calendarioRegular && merge.s.r===cab.r && merge.e.r===cab.r &&
                     merge.s.c===cell.c && cell.c>=h.c && cell.c<=h.c+Math.max(0,paso-2) &&
                     merge.e.c>=ultimoDia.c+Math.max(0,paso-2) && merge.e.c<=ultimoDia.c+paso-1 && !contenidoContradictorio;
@@ -995,9 +1133,11 @@
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
                 const colors = fuente(cell, estilos);
                 const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src, formato:colors });
-                const correo = cell.valor.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
-                const telefono = cell.valor.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
-                const documento = documentoDelLibro(cell.valor);
+                const camposIdentidad=clasificarFragmentos(cell.valor).filter(f=>!f.rol&&(['posible_titular','dato_estructurado'].includes(f.tipo)||
+                    /^(?:pedir|solicitar)\s+(?:(?:rut|dni|documento|pasaporte|telefono|correo|email)\b\s*:?\s*\S|[\d+])/.test(normalizar(f.texto)))).map(f=>f.texto).join(' // ');
+                const correo = camposIdentidad.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
+                const telefono = camposIdentidad.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
+                const documento = documentoDelLibro(camposIdentidad);
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
                 res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: fechaCheckin,
@@ -1019,17 +1159,17 @@
         }
         for (let k = 0; k < paymentCabs.length; k++) {
             const cab = paymentCabs[k], cabana = Number(cab.valor.match(/\d+/)[0]);
-            const mergeCab = merges.find(m => m.s.r === cab.r && m.s.c === cab.c);
-            const end = mergeCab?.e.r ?? (paymentCabs[k + 1]?.r - 1);
-            if (!Number.isInteger(end)) continue;
+            const end = finBloquePago(cab);
+            if (!marker.length || !bloquesPagoValidos.includes(cab)) continue;
             for (let i = 0; i < headers.length; i++) {
                 const h = headers[i];
+                if (h.duda_fecha) continue;
                 // Financial blocks are explicitly labelled and consist of date, detail, concept, amount.
                 const mark = marker.find(m => m.c === h.c);
                 // Algunos días conservan la banda combinada, pero borraron su título.
                 // Recuperar sólo dentro de la geometría financiera conocida; nunca
                 // tratar una región cualquiera o un título distinto como pagos.
-                const bandaSinTitulo = res.cobertura.pagos && !at(financialRow, h.c)?.valor?.trim() &&
+                const bandaSinTitulo = !at(financialRow, h.c)?.valor?.trim() &&
                     merges.some(m => m.s.r === financialRow && m.e.r === financialRow && m.s.c === h.c && m.e.c === h.c + 3);
                 if ((!mark && !bandaSinTitulo) || (headers[i + 1] && headers[i + 1].c - h.c !== 4)) continue;
                 for (let r = cab.r; r <= end; r++) {
@@ -1037,6 +1177,10 @@
                     if (!detail?.valor.trim() && !concept?.valor.trim() && !amount?.valor.trim()) continue;
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
+                    if (/^caba(?:n|ñ)a\s*\d+$/.test(t) && !at(r,h.c)?.valor?.trim() && !amount?.valor?.trim() && amount?.valorNumero==null) {
+                        res.anotaciones.push({tipo:'etiqueta_cabana',texto_original:text,origen:origen(detail?.valor?.trim()?detail:concept)});
+                        continue;
+                    }
                     // Una nota de reserva reagendada sin importe no es un pago.
                     // Conservar el texto y la celda para consulta sin crear un movimiento financiero.
                     if (!amount?.valor?.trim() && amount?.valorNumero == null &&
@@ -1054,6 +1198,9 @@
                     if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
                     const cabanaConcepto = Number(c.match(/^cab\s*(\d+)\b/)?.[1]) || null;
                     const advertencias = [];
+                    if (data.fidelidad?.formato===false) advertencias.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
+                    for(const dato of [at(r,h.c),detail,concept,amount])if(dato?.errorExcel)
+                        advertencias.push(`La celda ${direccion(dato.r,dato.c)} del Libro contiene ${dato.errorExcel}. Corrige ese dato antes de incorporar el pago.`);
                     if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
                     const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
@@ -1089,7 +1236,8 @@
         for (const r of res.reservas) {
             const candidates = res.pagos.filter(p => p.fecha_bloque === r.fecha_checkin && p.cabana === r.cabana);
             const others = res.reservas.filter(x => x.cabana === r.cabana && x.fecha_checkin === r.fecha_checkin);
-            r.cobertura_pagos = res.cobertura.pagos && marker.some(m => headers.find(h => h.fechaISO === r.fecha_checkin)?.c === m.c);
+            r.cobertura_pagos = bloquesPagoValidos.some(c=>Number(c.valor.match(/\d+/)[0])===r.cabana) &&
+                marker.some(m => headers.find(h => h.fechaISO === r.fecha_checkin&&!h.duda_fecha)?.c === m.c);
             for (const p of candidates) {
                 const transferencia = evidenciaTransferencia(p);
                 const destinoBancario = transferencia?.valida && p.tipo_movimiento === 'alojamiento';
