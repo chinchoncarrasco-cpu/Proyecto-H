@@ -102,6 +102,20 @@ const server=http.createServer((req,res)=>{
         await page.evaluate(()=>__pending.shift()({data:null,error:{message:'Consulta de prueba completada'}}));
         await page.waitForFunction(()=>!HAIKU_ASISTENTE.procesando());
         assert.match(await reservas.innerText(),/Comprobar el aviso WebPay/);
+        // Una actualización del Libro no inserta respuestas ni desplaza la guía abierta.
+        const mensajesAntes=await page.locator('#haiku-asistente-mensajes > *').count();
+        await page.evaluate(()=>{
+            window.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:2})};
+            window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={procesando:()=>false,obtenerResultado:async()=>({estado:'sin_cambios'})};
+        });
+        await page.addScriptTag({url:'/js/supabase-asistente-libro-auto-v1.js'});
+        await page.evaluate(()=>window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
+            detail:{carga_automatica:true,tenia_anterior:true,generacion:2}
+        })));
+        await page.locator('.haku-libro-auto').getByRole('button',{name:'Seguir con mi consulta',exact:true}).waitFor();
+        assert.equal(await page.locator('#haiku-asistente-mensajes > *').count(),mensajesAntes);
+        assert.match(await reservas.innerText(),/Comprobar el aviso WebPay/);
+        await page.locator('.haku-libro-auto').getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
         // Cambiar el medio dentro del recorrido sustituye sólo sus pasos.
         await reservas.getByRole('button',{name:'Anterior',exact:true}).click();
         await reservas.getByRole('button',{name:'Transferencia',exact:true}).click();

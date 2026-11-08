@@ -5,6 +5,7 @@ on:
       - "js/haiku-guias-operativas-v1.js"
       - "js/supabase-asistente-v1.js"
       - "js/supabase-asistente-historial-v1.js"
+      - "js/supabase-asistente-libro-auto-v1.js"
       - "css/sites-asistente-v1.css"
       - "tests/haku-guias-operativas*.cjs"
       - ".github/workflows/haku-guias-operativas.yml"
