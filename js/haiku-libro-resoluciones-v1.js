@@ -49,8 +49,8 @@
         if (error) throw Object.assign(Error('No se pudo confirmar la resolución persistente: ' + error.message), {code:error.code});
         return data;
     }
-    async function decisiones(reservas, generacion, cliente = root.haikuSupabase) {
-        const estado = vigente(generacion);
+    async function decisiones(reservas, generacion, cliente = root.haikuSupabase, fuente) {
+        const estado = (fuente ? fuente() : vigente(generacion));
         const revisiones = reservas.filter(resolvers.ocupacion.necesita);
         if (!revisiones.length) return [];
         const ids = revisiones.map(r => identidad(r,estado));
@@ -58,27 +58,27 @@
         for(let i=0;i<ids.length;i+=50) {
             const lote=await rpc(cliente,'haiku_libro_leer_resoluciones_v1',{p_identidades:ids.slice(i,i+50)});
             if(!Array.isArray(lote))throw Error('Respuesta de resoluciones inválida.');
-            data.push(...lote);vigente(generacion);
+            data.push(...lote);(fuente ? fuente() : vigente(generacion));
         }
-        vigente(generacion);
+        (fuente ? fuente() : vigente(generacion));
         if (!Array.isArray(data)) throw Error('Respuesta de resoluciones inválida.');
         return data;
     }
-    async function efectivos(reservas, generacion, cliente) {
-        const data = await decisiones(reservas,generacion,cliente);
-        const estado = vigente(generacion);
+    async function efectivos(reservas, generacion, cliente, fuente) {
+        const data = await decisiones(reservas,generacion,cliente,fuente);
+        const estado = (fuente ? fuente() : vigente(generacion));
         return reservas.map(r => {
             if (!resolvers.ocupacion.necesita(r)) return structuredClone(r);
             const id = identidad(r,estado);
             return aplicar(r,data.find(d => firma(d.identidad) === firma(id)),estado);
         });
     }
-    async function confirmar(r, valor, generacion, anterior = null, cliente = root.haikuSupabase, operacion = root.crypto.randomUUID()) {
-        const estado = vigente(generacion), confirmado = validarOcupacion(valor,r), id = identidad(r,estado);
+    async function confirmar(r, valor, generacion, anterior = null, cliente = root.haikuSupabase, operacion = root.crypto.randomUUID(), fuente) {
+        const estado = fuente ? await fuente() : vigente(generacion), confirmado = validarOcupacion(valor,r), id = identidad(r,estado);
         const data = await rpc(cliente,'haiku_libro_confirmar_resolucion_v1',{
             p_operacion_id:operacion,p_identidad:id,p_campo:'ocupacion',p_valor:confirmado,p_anterior:anterior
         });
-        vigente(generacion);
+        if(!fuente)vigente(generacion);
         aplicar(r,data,estado); // No mostrar resuelto ante una respuesta ajena/incompleta.
         return data;
     }
@@ -101,7 +101,7 @@
             return true;
         } catch (_) { return false; }
     }
-    function adjuntar(contenedor, reservas, generacion, alConfirmar = async () => {}, comparacion = null) {
+    function adjuntar(contenedor, reservas, generacion, alConfirmar = async () => {}, comparacion = null, fuente = null) {
         const doc = root.document;
         if (!doc) return;
         const el = (tag,texto,clase='') => {const e=doc.createElement(tag);e.textContent=texto;e.className=clase;return e;};
@@ -180,10 +180,11 @@
                     if(obsoleto||ocupado||!habilitada)return;
                     try {
                         const valor=Object.fromEntries(campos.map(k=>[k,inputs[k].value.trim()===''?null:Number(inputs[k].value)]));
-                        validarOcupacion(valor,r);vigente(generacion);
+                        validarOcupacion(valor,r);
                         ocupado=true;guardar.disabled=true;cancelar.disabled=true;accion.disabled=true;error.textContent='Confirmando…';
+                        if(fuente)await fuente.verificar(r);else vigente(generacion);
                         if(ultimoValor!==firma(valor)) {operacion=root.crypto.randomUUID();ultimoValor=firma(valor);}
-                        const d=await confirmar(r,valor,generacion,anteriorPersistido,root.haikuSupabase,operacion);
+                        const d=await confirmar(r,valor,generacion,anteriorPersistido,root.haikuSupabase,operacion,fuente?()=>fuente.verificar(r):undefined);
                         mostrar(d);editor.hidden=true;accion.hidden=false;acciones.hidden=false;
                         await alConfirmar();
                     } catch(e) {error.textContent=e.message;}
@@ -193,6 +194,7 @@
             });
             card.append(cabecera,descripcion,resumen,estado,acciones,editor);contenedor.append(card);
             root.addEventListener?.('haiku:libro-cambio',()=>{
+                if(fuente){estado.hidden=false;estado.textContent='Llegó una actualización. Tus datos se conservan.';return;}
                 obsoleto=true;accion.disabled=true;
                 const confirmar=editor.querySelector?.('.haiku-ocupacion-boton--principal');
                 if(confirmar)confirmar.disabled=true;
@@ -201,9 +203,9 @@
                 estado.textContent='Conservé los datos que estabas revisando. El Libro cambió; vuelve a comparar antes de confirmar.';
             },{once:true});
             accion.disabled=true;
-            Promise.all([decisiones([r],generacion),alcance]).then(([data,comp])=>{
+            Promise.all([decisiones([r],generacion,undefined,fuente?.estado),alcance]).then(([data,comp])=>{
                 if(obsoleto||ocupado||!editor.hidden)return;
-                vigente(generacion);
+                if(!fuente)vigente(generacion);
                 if(!comp)throw Error('Compara con Proyecto H antes de completar la ocupación.');
                 if (ocupacionYaRegistrada(r,comp)) {
                     card.hidden=true;
@@ -230,10 +232,10 @@
                     return;
                 }
                 habilitada=true;
-                const d=data.find(x=>firma(x.identidad)===firma(identidad(r,vigente(generacion))));
+                const d=data.find(x=>firma(x.identidad)===firma(identidad(r,fuente?fuente.estado():vigente(generacion))));
                 if(d) {
                     anteriorPersistido=d.id;
-                    aplicar(r,d,vigente(generacion));mostrar(d);
+                    aplicar(r,d,fuente?fuente.estado():vigente(generacion));mostrar(d);
                 }
             }).catch(e=>{if(!obsoleto){card.hidden=false;estado.textContent=e.message+' La ocupación sigue pendiente.';}})
                 .finally(()=>{if(!obsoleto&&!ocupado)accion.disabled=!habilitada;});

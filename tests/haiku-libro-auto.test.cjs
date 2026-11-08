@@ -19,7 +19,7 @@ function cargador({pc=true}={}) {
     const hook=`
         mostrarVacio=mostrarCargando=actualizarEstado=actualizarPaginacion=poblarSelector=renderizarHoja=()=>{};
         leerEnSegundoPlano=async()=>({nombres:window.invalido?[]:['Sep26'],hojas:[]});
-        window.cargarTest=(archivo,restaurado=false,origen='manual')=>(cargaLista=cargarArchivo(archivo,restaurado,origen));
+        window.cargarTest=(archivo,restaurado=false,origen='manual',avisar=true)=>(cargaLista=cargarArchivo(archivo,restaurado,origen,avisar));
         window.restaurarTest=()=>cargaLista=restaurarLibro();
         window.quitarTest=quitarLibro;
         window.lecturaTest=crearLectura;
@@ -374,4 +374,15 @@ test('los detalles filtrados conservan texto seguro y ocultan contactos y montos
     assert.match(textoNodo(contenido),/La salida figura antes de la entrada/);assert.ok(textoNodo(contenido).includes(payload));
     assert.doesNotMatch(textoNodo(contenido),/privado@example|50000|12\.345\.678-9|56912345678/);
     const detalle=contenido.children[0].children.at(-1).children.at(-1);assert.equal(detalle.innerHTML,undefined);
+});
+
+test('verificación automática avisa con Haku abierto; cerrado, restaurado o mismos bytes siguen en silencio',async()=>{
+    const h=cargador();await h.cargar([1]);h.flush();
+    const cargar=bytes=>h.ctx.cargarTest({name:'Libro.xlsx',size:bytes.length,arrayBuffer:async()=>new Uint8Array(bytes).buffer},false,'google',false);
+    await cargar([2]);h.flush();assert.equal(h.avisos().length,0);
+    h.ctx.HAIKU_ASISTENTE={abierta:()=>true};
+    await cargar([3]);h.flush();assert.equal(h.avisos().length,1);
+    assert.equal(h.avisos()[0].detail.carga_automatica,true);
+    await cargar([3]);h.flush();assert.equal(h.avisos().length,1);
+    await h.ctx.restaurarTest();h.flush();assert.equal(h.avisos().length,1);
 });
