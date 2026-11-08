@@ -4169,6 +4169,10 @@
                 const volver=async()=>renderizarIncorporacion(out,await preparar(),volver,aprobar,incorporar);
                 const aprobar=async ids=>{(Array.isArray(ids)?ids:[ids]).forEach(id=>aprobadosActuales.add(id));await volver();};
                 const incorporar=p=>confirmarIncorporacion(actual,decisionesActuales,aprobadosActuales,p,cliente);
+                aprobar.manualPago=async (p,id,accion)=>{
+                    const siguiente=await resolverAprobacionManualPago(actual,decisionesActuales,aprobadosActuales,p,id,accion,cliente);
+                    renderizarIncorporacion(out,siguiente,volver,aprobar,incorporar);return siguiente;
+                };
                 renderizarIncorporacion(out,nuevo,volver,aprobar,incorporar);
             }
             return nuevo;

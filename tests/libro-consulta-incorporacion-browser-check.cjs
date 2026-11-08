@@ -3,9 +3,11 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {chromium}=require('playwright'),f=require('./fixtures/libro-comparacion-readonly.cjs');
 const root=path.resolve(__dirname,'..');
 const server=http.createServer((req,res)=>{
-    const file=path.resolve(root,'.'+new URL(req.url,'http://localhost').pathname);
+    const ruta=new URL(req.url,'http://localhost').pathname;
+    if(ruta==='/'){res.writeHead(200,{'Content-Type':'text/html'}).end('<!doctype html><html></html>');return;}
+    const file=path.resolve(root,'.'+ruta);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return;}
-    try{res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':'text/css'}).end(fs.readFileSync(file));}
+    try{const data=fs.readFileSync(file);res.writeHead(200,{'Content-Type':file.endsWith('.js')?'text/javascript':'text/css'}).end(data);}
     catch{res.writeHead(404).end();}
 });
 (async()=>{
@@ -15,7 +17,7 @@ const server=http.createServer((req,res)=>{
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   const base=`http://127.0.0.1:${server.address().port}`;
   for(const theme of ['claro','oscuro']){
-   await page.goto(base+'/tests/fixtures/consulta-continuidad.html');
+   await page.goto(base+'/');
    await page.setContent(`<!doctype html><html lang="es" data-haiku-tema="${theme}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
    ${['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1','haiku-tema-oscuro-v1'].map(s=>`<link rel="stylesheet" href="${base}/css/${s}.css">`).join('')}
    </head><body><div class="haiku-asistente-root"><div class="haiku-asistente-panel" id="haiku-asistente-panel">
@@ -64,6 +66,7 @@ const server=http.createServer((req,res)=>{
    assert.equal(await page.evaluate(()=>window.__rpc[0].args.p_items.length),1);
    assert.doesNotMatch(await page.locator('#respuesta').innerText(),/El Libro cambió; vuelve a comparar|No se pudo confirmar/);
    await page.setViewportSize({width:390,height:844});
+   await page.waitForFunction(()=>{const r=document.querySelector('.haku-libro-auto').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;});
    const movil=await page.locator('.haku-libro-auto').boundingBox();assert.ok(movil.x>=0 && movil.x+movil.width<=391);
    await page.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();assert.equal(await page.locator('.haku-libro-auto').count(),0);
    await page.setViewportSize({width:1440,height:1000});
