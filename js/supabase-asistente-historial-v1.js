@@ -254,6 +254,8 @@
             mensajes.replaceChildren(fragmento);
             mensajes.dataset.haikuHistorialRestaurado = "1";
             reactivarPreparacionActual();
+            // Sólo guías locales: reconstruye su contenido validado, sin reactivar operaciones guardadas.
+            window.HAIKU_ASISTENTE?.restaurarGuias?.(mensajes);
             requestAnimationFrame(() => {
                 mensajes.scrollTop = mensajes.scrollHeight;
             });

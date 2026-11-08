@@ -1,0 +1,34 @@
+name: Haku guías operativas
+on:
+  pull_request:
+    paths:
+      - "js/haiku-guias-operativas-v1.js"
+      - "js/supabase-asistente-v1.js"
+      - "js/supabase-asistente-historial-v1.js"
+      - "js/supabase-asistente-libro-auto-v1.js"
+      - "css/sites-asistente-v1.css"
+      - "tests/haku-guias-operativas*.cjs"
+      - ".github/workflows/haku-guias-operativas.yml"
+permissions:
+  contents: read
+jobs:
+  guias:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Reglas de los manuales y contratos del asistente
+        run: node --test tests/haku-guias-operativas.test.cjs tests/haku-panel-scroll.test.cjs tests/haku-reserva-convivencia-v1.test.cjs tests/airbnb-prepaid-card.test.cjs tests/haiku-libro-auto.test.cjs
+      - name: Navegador aislado
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-guias" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          node "$RUNNER_TEMP/haku-guias/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Guías reales en escritorio y móvil, historial y consulta en curso
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
+        run: node tests/haku-guias-operativas-browser-check.cjs
