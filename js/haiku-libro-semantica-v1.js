@@ -159,16 +159,40 @@
         const objetos = /^(?:cortesia|articulos?|art\.?|utensilios?\s+(?:de|para)\s+asado|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
         // Reconocer entregas de insumos sin descartar nombres por un apellido aislado.
         const entregaInsumos = /^(?:se(?:\s+les?)?\s+)?(?:hace\s+)?entr{1,2}eg(?:a|ad[oa]s?)\s+(?:de\s+)?(?:carbon|lena|utensilios?\s+(?:de|para)\s+asado|sacacorchos?|tenazas?|batas?|llaves?|ceniceros?)\b/;
+        const tareaRecepcion = /^(?:se(?:\s+les?)?\s+)?(?:presto|entrego|colocar|afilar)\s+/.test(t) ||
+            /^no\s+hacerles?\s+firmar\b/.test(t) || /\b(?:pedir|solicitar)\s+(?:rut|documento|telefono|correo)\b/.test(t);
+        const insumosAdicionales = /^(?:implementos\s+(?:de\s+|para\s+)?asado|minipimer\b|mortero\b|tabla\s+de\s+picar\b)/.test(t);
+        const noShow = /^(?:reserva\s+)?no\s*show$/.test(t);
         const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
         const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
-        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || entregaInsumos.test(t) || acompanamientoMascota.test(t) || contextoPosterior;
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || entregaInsumos.test(t) || tareaRecepcion || insumosAdicionales || noShow || acompanamientoMascota.test(t) || contextoPosterior;
+    }
+    // El papel explícito de una persona prevalece sobre su apariencia de nombre.
+    // Estas señales sólo clasifican texto del bloque de reserva: no crean servicios,
+    // pagos ni bloqueos, ni toman datos prestados de una celda vecina.
+    function rolNoTitular(texto) {
+        const t = normalizar(texto).replace(/[.:\s]+$/, '');
+        const etiquetas = [
+            ['aseo', /^(?:camarer[oa]|(?:responsable|encargad[oa])\s+(?:de|del)\s+aseo)\b/],
+            ['profesional_servicio', /^(?:masajista|terapeuta|(?:responsable|encargad[oa])\s+del\s+servicio)\b/],
+            ['pagador', /^(?:pagador[ae]?|(?:pago|abono)\s+(?:realizado\s+)?por|(?:transferencia|transf)\s+de)\b/],
+            ['acompanante', /^acompanante\b/]
+        ];
+        for (const [rol, patron] of etiquetas) {
+            const etiqueta = t.match(patron);
+            if (etiqueta) return { rol, esperaNombre: etiqueta[0] === t };
+        }
+        const aseo = /^(?:(?:nota|aviso)\s*[:.-]\s*)?(?:(?:se\s+)?(?:realizo|realiza|realizar|hizo|hace|hacer|completo|completar)\s+(?:el\s+)?){0,1}(?:aseo|limpieza)\b/.test(t) ||
+            /^[\p{L}][\p{L}\s.'’()-]+\s+(?:realizo|hizo|completo)\s+(?:el\s+)?(?:aseo|limpieza)\b/u.test(t);
+        return aseo ? { rol: 'aseo', esperaNombre: /\bpor$/.test(t) } : null;
     }
     function clasificarFragmentos(texto) {
-        let humanoPrevio=false, datosPosteriores=false;
+        let humanoPrevio=false, datosPosteriores=false, rolPendiente=null;
         const clasificar = texto => {
             const t=normalizar(texto);
+            if (rolNoTitular(texto)) return 'nota_operativa';
             // Canal de llegada, no un segundo huésped. Sólo el campo completo:
             // un nombre que contenga «Walk» sigue siendo candidato a titular.
             if (/^walk[\s-]*in$/.test(t)) return 'etiqueta';
@@ -180,18 +204,27 @@
         };
         return separarCampos(texto).map(texto=>{
             let tipo=clasificar(texto);
-            // Sólo FULLDAY/FULL DAY puede compartir fragmento con un nombre.
-            // El sufijo pasa el mismo clasificador, sin retirar otras etiquetas
-            // ni alterar el texto original usado por pagos, servicios y notas.
-            const nombreFullDay=texto.match(/^full\s*day\s+(.+)$/i)?.[1].trim();
-            if (nombreFullDay && clasificar(nombreFullDay)==='posible_titular') {
-                texto=nombreFullDay;
+            const rolExplicito=rolNoTitular(texto);
+            // «Camarero // Rosa Vega» y «Camarero: Rosa Vega» expresan el mismo rol.
+            // Sólo consumir el campo inmediato; un dato intermedio rompe el vínculo.
+            const nombreDelRol=rolPendiente && !rolExplicito &&
+                (tipo==='posible_titular' || (tipo==='otro' && /^[\p{L}]+$/u.test(texto)));
+            const rol=rolExplicito?.rol || (nombreDelRol ? rolPendiente : null);
+            if (nombreDelRol) tipo='nota_operativa';
+            rolPendiente=rolExplicito?.esperaNombre ? rolExplicito.rol : null;
+            // FULL DAY admite nombre contiguo. Para un canal exigir separador
+            // explícito («BOOKING - Ana Pérez»), y validar el sufijo como nombre.
+            // Mantener intacta la celda original para notas, servicios y pagos.
+            const nombreConCanal=(texto.match(/^full\s*day\s+(.+)$/i) ||
+                texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i))?.[1].trim();
+            if (!rol && nombreConCanal && clasificar(nombreConCanal)==='posible_titular') {
+                texto=nombreConCanal;
                 tipo='posible_titular';
             }
             const t=normalizar(texto);
             if (tipo==='posible_titular') humanoPrevio=true;
             if (humanoPrevio && (tipo==='dato_estructurado' || /^(?:confirmad[oa]|pagad[oa]|reservad[oa])\b/.test(t))) datosPosteriores=true;
-            return {texto,tipo};
+            return {texto,tipo,...(rol ? {rol} : {})};
         });
     }
     function candidatosTitular(texto) { return clasificarFragmentos(texto).filter(x=>x.tipo==='posible_titular'); }
@@ -257,7 +290,9 @@
         if (/\blate[\s-]*(?:check[\s-]*)?out\b/.test(t)) hallados.push("lateout");
         if (/\bcama\s*adicional\b|\bcamaadicional\b/.test(t)) hallados.push("cama_adicional");
         if (/\bcuna\b/.test(t)) hallados.push("cuna");
-        if (/\bmasaj\w*\b|\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/.test(t)) hallados.push("masaje");
+        // La profesión no declara una prestación: masajista/terapeuta por sí
+        // solos no crean un masaje, aunque incluyan un nombre o un horario.
+        if (/\bmasaj(?!istas?\b)\w*\b|\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut(?!as?\b)\w*)\b/.test(t)) hallados.push("masaje");
         return [...new Set(hallados)];
     }
 
@@ -309,7 +344,7 @@
         if (/\b(?:descontractur\w*|descontratur\w*)\b/.test(t)) return "descontracturante";
         // Equivalencia explícita de negocio: en el Libro, Relajante y
         // Holístico son nombres operacionales del masaje Terapéutico.
-        if (/\b(?:relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/.test(t)) return "terapeutico";
+        if (/\b(?:relajant\w*|reljant\w*|holistic\w*|terapeut(?!as?\b)\w*)\b/.test(t)) return "terapeutico";
         return null;
     }
 
@@ -587,7 +622,7 @@
         for (const [concepto, re] of [["lateout", /\blate[\s-]*(?:check[\s-]*)?out\b/g], ["cama_adicional", /\bcama\s*adicional\b|\bcamaadicional\b/g], ["cuna", /\bcuna\b/g]]) {
             for (const m of t.matchAll(re)) agregar(concepto, m.index);
         }
-        const mencionesMasaje = [...t.matchAll(/\bmasaj\w*\b/g)];
+        const mencionesMasaje = [...t.matchAll(/\bmasaj(?!istas?\b)\w*\b/g)];
         const masajes = mencionesMasaje.filter((m, i) => !(i > 0 && /^masaj\w*\s+(?:por|x)\s+(?:pagar|cobrar)\b/.test(t.slice(m.index))))
             .map(m => ({ concepto: "masaje", indice: m.index }));
         const descontracturantes = [...t.matchAll(/\bdescontractur\w*\b/g)].filter(m => !masajes.some(x => x.indice < m.index && m.index - x.indice < 24));
