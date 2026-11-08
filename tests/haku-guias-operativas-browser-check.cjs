@@ -6,6 +6,7 @@ const server=http.createServer((req,res)=>{
     if(name==='/')return res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(`<!doctype html><html lang="es"><head>
         <meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8">
         <link rel="stylesheet" href="/css/styles.css"><link rel="stylesheet" href="/css/supabase-asistente-v1.css">
+        <link rel="stylesheet" href="/css/supabase-haku-reconciliacion-v1.css">
         <link rel="stylesheet" href="/css/sites-asistente-v1.css"><link rel="stylesheet" href="/css/haiku-tema-oscuro-v1.css">
         <link rel="stylesheet" href="/css/haiku-tema-v1.css"></head><body><main>Panel de prueba</main>
         <script src="/js/supabase-asistente-v1.js?v=guias-test"></script><script src="/js/supabase-asistente-historial-v1.js"></script></body></html>`);
