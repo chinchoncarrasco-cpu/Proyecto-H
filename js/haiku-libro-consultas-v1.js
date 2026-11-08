@@ -5294,6 +5294,7 @@
     }
 
     function descripcionReservaPorIdentificar(a) {
+        if (a.motivo_identificacion) return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — ${a.motivo_identificacion}`;
         return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — Aparecen varios nombres: ${(a.titulares_posibles || []).join(' / ')}. Falta aclarar quién es el titular.`;
     }
     function mostrarReservasPorIdentificar(out, items) {

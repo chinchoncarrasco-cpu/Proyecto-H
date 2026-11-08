@@ -349,11 +349,14 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
     let columnas = [];
     let filas = [];
     let celdasXml = new Map();
+    const fidelidad={version:1,formato:true,texto_enriquecido:true,advertencias:[]};
 
     try {
         const zip = compartido?.zip || await self.JSZip.loadAsync(buffer);
         const temas = compartido?.temas || coloresTemaXml(await zip.file("xl/theme/theme1.xml")?.async("text") || "");
-        estilos = compartido?.estilos || parsearEstilosXml(await zip.file("xl/styles.xml")?.async("text") || "", temas);
+        const xmlEstilos=compartido?.estilos ? null : await zip.file("xl/styles.xml")?.async("text");
+        estilos = compartido?.estilos || parsearEstilosXml(xmlEstilos || "", temas);
+        if (!estilos.length) throw new Error('No se pudieron leer los estilos del archivo.');
         const textosCompartidos = compartido?.textos || await leerTextosCompartidos(zip, temas);
         const rutaHoja = await rutaHojaDesdeNombre(zip, nombreHoja);
         const hojaXml = rutaHoja ? await zip.file(rutaHoja)?.async("text") : null;
@@ -362,11 +365,13 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
             columnas = dimensiones.columnas;
             filas = dimensiones.filas;
             celdasXml = parsearCeldasXml(hojaXml, textosCompartidos, temas);
-        }
+        } else throw new Error('No se encontró la estructura de celdas de la hoja.');
     } catch (error) {
         // Si el complemento OOXML no estuviera disponible, mantenemos la lectura
         // funcional de valores. La vista simplemente cae al estilo básico.
         console.warn("LIBRO RESERVA · Fidelidad OOXML parcial:", error?.message || error);
+        fidelidad.formato=false;fidelidad.texto_enriquecido=false;
+        fidelidad.advertencias.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
     }
 
     const porDireccion = new Map();
@@ -383,6 +388,10 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
             r: posicion.r,
             c: posicion.c,
             valor,
+            tipo:celda.t || null,
+            valorCrudo:celda.v instanceof Date ? (Number.isFinite(celda.v.getTime()) ? celda.v.toISOString() : null) : celda.v ?? null,
+            formula:celda.f || null,
+            errorExcel:celda.t === 'e' ? valor : null,
             valorNumero: celda.t === "n" && Number.isFinite(celda.v) ? celda.v : null,
             fechaISO: celda.t === "d" && celda.v instanceof Date && Number.isFinite(celda.v.getTime()) ? celda.v.toISOString().slice(0, 10) : null,
             estiloId: Number.isInteger(estiloId) ? estiloId : -1,
@@ -412,7 +421,8 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
             e: { r: rango.e.r, c: rango.e.c }
         })),
         columnas,
-        filas
+        filas,
+        fidelidad
     };
 }
 

@@ -9,6 +9,11 @@ on:
       - "js/haiku-libro-consultas-v1.js"
       - "js/haiku-libro-semantica-v1.js"
       - "js/haiku-libro-comparacion-readonly-v1.js"
+      - "js/supabase-libro-reserva-worker-v1.js"
+      - "tests/libro-estructura-celdas.test.cjs"
+      - "tests/libro-celdas-xlsx.test.cjs"
+      - "tests/libro-lector-suite.cjs"
+      - "tests/haiku-libro-incorporacion-estructurada.test.cjs"
       - "tests/libro-reservas-identificacion.test.cjs"
       - "tests/libro-pagos-lectura-estable.test.cjs"
       - "tests/libro-transferencias-bancarias.test.cjs"
@@ -39,6 +44,13 @@ jobs:
           cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  haku-libro-worker/xlsx.full.min.js
           acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e  haku-libro-worker/jszip.min.js
           SUMS
+      - name: PostgreSQL aislado para las pruebas del lector
+        run: npm install --prefix "$RUNNER_TEMP/haku-libro-test" --no-save --ignore-scripts --package-lock=false @electric-sql/pglite@0.5.14
+      - name: Celdas XLSX, estructura, reservas, notas, servicios, pagos y continuidad
+        env:
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+        run: node tests/libro-lector-suite.cjs
       - name: Lectura estable, pagos existentes, medios y confirmaciones
         env:
           HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker

@@ -141,8 +141,12 @@ test('incomplete merge and nonconsecutive calendar remain blocking geometry warn
  assert.equal(S.asociar(a,[{...a,id:'proyecto-h',advertencias:[]}]).estado,'ambigua');
 
  const hueco=hojaDosNoches('Persona Prueba // 2 noches');hueco.celdas.find(c=>c.c===6).fechaISO='2026-09-23';hueco.celdas.find(c=>c.c===6).valor='23 sep';hueco.celdas.find(c=>c.c===10).fechaISO='2026-09-24';hueco.celdas.find(c=>c.c===10).valor='24 sep';
- const b=S.normalizarHoja(hueco,'Sep26').reservas[0];
- assert.equal(b.geometria_inequivoca,false);assert.match(b.advertencias.join(' '),/geometría.*incompleta o ambigua/i);
+ const b=S.normalizarHoja(hueco,'Sep26');
+ // La fecha incompatible ahora queda visible como bloque por identificar,
+ // sin construir una estadía con noches dudosas ni ocultar los otros días.
+ assert.equal(b.reservas.length,0);assert.equal(b.cobertura.geometria,false);
+ const duda=b.anotaciones.find(a=>a.tipo==='reserva_por_identificar');
+ assert.equal(duda.texto_original,'Persona Prueba // 2 noches');assert.match(duda.motivo_identificacion,/fecha/i);
 });
 test('informational or unconfirmed service questions do not become services',()=>{
  for(const nota of [
