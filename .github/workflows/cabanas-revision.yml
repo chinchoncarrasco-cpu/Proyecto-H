@@ -12,6 +12,7 @@ on:
       - "tests/checkout-*.cjs"
       - "supabase/migrations/*_checkout_recorrido_prestamos.sql"
       - "supabase/migrations/*_checkout_detalles_area.sql"
+      - "supabase/migrations/*_checkout_conteo_compacto.sql"
       - "js/cabanas-espacios-v1.js"
       - "tests/cabanas-espacios.test.cjs"
       - "js/supabase-repaso-v2.js"

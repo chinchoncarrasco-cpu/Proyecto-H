@@ -28,6 +28,7 @@ test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento com
  await db.exec(`alter table revisiones_checkout drop constraint revisiones_checkout_pkey;alter table revisiones_checkout add column revision_id uuid default gen_random_uuid() primary key;alter table revisiones_checkout add unique(fecha_operativa,cabana_id,estadia_id);`);
  await db.exec(read('supabase/migrations/20261105054558_checkout_recorrido_prestamos.sql'));
  await db.exec(read('supabase/migrations/'+fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.endsWith('_checkout_detalles_area.sql'))));
+ await db.exec(read('supabase/migrations/20261109152440_checkout_conteo_compacto.sql'));
  await db.exec(`select set_config('request.jwt.claim.sub','${user}',false);set role authenticated;`);
  const write=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_revision_checkout_v2($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
  const loan=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_prestamo_estadia_v1($1::uuid,$2,$3::jsonb)) row',[stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
@@ -53,6 +54,37 @@ test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento com
  await write('revision_estado','en_revision');for(const id of ['cocina','bano','living','terraza'])await write('chequeado',{id,checked:true});
  assert.equal((await write('revision_estado','revisada')).revision_estado,'revisada');
  await assert.rejects(write('chequeado',{id:'bano',checked:false}),/Reabre/);
+ const V=require('../js/checkout-workflow-v2.js');
+ const count=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_recorrido_checkout_v3($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
+ await assert.rejects(count('punto',{id:'bano_secador',checked:true}),/Reabre/);
+ await write('revision_estado','en_revision');
+ let counted=await count('conteo',{id:'copas_vino',encontrados:2,esperados:3});
+ assert.equal(counted.recorrido_version,3);assert.deepEqual(counted.conteos.copas_vino,{encontrados:2,esperados:3});
+ assert.equal(counted.detalles.cocina.texto,'Falta copa','La nota humana permanece intacta');
+ assert.deepEqual(counted.reposiciones,row.reposiciones);assert.equal(counted.hora_out,'12:34:00');
+ assert.match(V.housekeepingMessage(3,counted),/Cocina: Falta 1 copa de vino/);
+ await assert.rejects(count('conteo',{id:'copas_vino',encontrados:2,esperados:5}),/dotación/);
+ for(const q of [-1,100,1.5,'2'])await assert.rejects(count('conteo',{id:'vasos',encontrados:q,esperados:3}),/Cantidad/);
+ await assert.rejects(count('punto',{id:'cocina',checked:true}),/Punto/);
+ await db.exec("select set_config('qa.manage','false',false)");await assert.rejects(count('conteo',{id:'vasos',encontrados:2,esperados:3}),/no puede/);await db.exec("select set_config('qa.manage','true',false)");
+ await assert.rejects(db.query("update revisiones_checkout set conteos='{\"vasos\":{\"encontrados\":-1,\"esperados\":3}}'"),/Cantidad/);
+ for(const point of V.points)await count('punto',{id:point.id,checked:true});
+ await assert.rejects(write('revision_estado','revisada'),/cuatro sectores/);
+ for(const item of V.inventory)counted=await count('conteo',{id:item.id,encontrados:item.id==='copas_vino'?2:3,esperados:3});
+ assert.ok(counted.chequeados.includes('cocina'),'Revisado con faltante también cuenta como completado');
+ assert.equal((await write('revision_estado','revisada')).revision_estado,'revisada');
+ await assert.rejects(count('conteo',{id:'copas_vino',encontrados:3,esperados:3}),/Reabre/);
+ await write('revision_estado','en_revision');counted=await count('conteo',{id:'copas_vino',encontrados:3,esperados:3});
+ assert.equal(V.inventoryNote(counted),'');assert.equal(counted.detalles.cocina.texto,'Falta copa');
+ counted=await count('conteo',{id:'vasos',encontrados:null});assert.equal(counted.conteos.vasos,undefined);assert.ok(!counted.chequeados.includes('cocina'));
+ // Invented cabins exercise every expected-count group, including Deluxe and Maxi Loft.
+ for(const [n,expected] of [[5,3],[7,5],[9,5],[10,2],[11,4]]){
+   const c='20000000-0000-4000-8000-'+String(n).padStart(12,'0'),st='30000000-0000-4000-8000-'+String(n+10).padStart(12,'0');
+   await db.exec('reset role');await db.query('insert into cabanas values($1,$2)',[c,n]);
+   await db.query('insert into reserva_estadias(id,reserva_id,cabana_id,fecha_ingreso,fecha_salida) values($1,$2,$3,$4,$5)',[st,reservation,c,'2026-11-01','2026-11-05']);await db.exec('set role authenticated');
+   const result=(await db.query('select to_jsonb(public.haiku_guardar_recorrido_checkout_v3($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',c,st,'conteo',JSON.stringify({id:'vasos',encontrados:expected-1,esperados:expected})])).rows[0].row;
+   assert.equal(result.conteos.vasos.esperados,expected);assert.equal(V.inventoryNote(result),'Falta 1 vaso.');
+ }
  await loan('prestamo',{id:'cenicero',label:'Cenicero',area:'cocina',cantidad:2,origen:'manual'});
  await loan('devolucion',{id:'cenicero',label:'Cenicero',area:'cocina',total:2,cantidad:1,origen:'manual'});
  let lr=await loan('prestamo',{id:'sacacorchos',label:'Sacacorcho',area:'cocina',cantidad:1,origen:'notas'});
