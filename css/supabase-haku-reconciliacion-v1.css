@@ -1977,3 +1977,90 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
         align-items: stretch;
     }
 }
+
+/* Bloqueos de Haku: datos esenciales a la vista, evidencia completa plegada.
+   Colores propios de ambos temas; no heredar las tarjetas de cancelación. */
+.haiku-bloqueos-grupo {
+    --bloqueo-fondo: #fff;
+    --bloqueo-texto: #203b30;
+    --bloqueo-secundario: #596b61;
+    --bloqueo-linea: #d8e3dc;
+    --bloqueo-suave: #eef4f0;
+    --bloqueo-acento: #22735c;
+    --bloqueo-alerta-fondo: #fff5e5;
+    --bloqueo-alerta-texto: #78501d;
+}
+@media screen {
+    html[data-haiku-tema="oscuro"] .haiku-bloqueos-grupo {
+        --bloqueo-fondo: #1b2420;
+        --bloqueo-texto: #e8efea;
+        --bloqueo-secundario: #b1c2b7;
+        --bloqueo-linea: #3e5145;
+        --bloqueo-suave: #24392e;
+        --bloqueo-acento: #a7d8ba;
+        --bloqueo-alerta-fondo: #332719;
+        --bloqueo-alerta-texto: #eed3aa;
+    }
+}
+.haiku-bloqueos-grupo .haku-bloqueo-card {
+    box-sizing: border-box; min-width: 0; width: 100%; margin: 0; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 6px;
+    border: 0; border-top: 1px solid var(--bloqueo-linea); border-radius: 0;
+    background: var(--bloqueo-fondo); color: var(--bloqueo-texto);
+    font: 400 12px/1.45 var(--sites-shell-font, Inter, "Segoe UI", sans-serif);
+    overflow-wrap: anywhere; box-shadow: none;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-cabecera {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
+    margin: 0; padding: 0; border: 0; background: transparent;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-identidad {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-cabana { color: var(--bloqueo-texto); font-size: 12px; font-weight: 650; }
+.haiku-bloqueos-grupo .haku-bloqueo-fechas { color: var(--bloqueo-secundario); font-size: 11px; }
+.haiku-bloqueos-grupo .haku-bloqueo-estado {
+    flex: none; padding: 2px 6px; border-radius: 4px;
+    background: var(--bloqueo-suave); color: var(--bloqueo-acento); font-size: 10px; line-height: 16px; font-weight: 600;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-card[data-estado="revision"] .haku-bloqueo-estado,
+.haiku-bloqueos-grupo .haku-bloqueo-card[data-estado="solo_h"] .haku-bloqueo-estado {
+    background: var(--bloqueo-alerta-fondo); color: var(--bloqueo-alerta-texto);
+}
+.haiku-bloqueos-grupo .haku-bloqueo-motivo { margin: 0; padding: 0; color: var(--bloqueo-texto); font-size: 12px; line-height: 1.45; }
+.haiku-bloqueos-grupo .haku-bloqueo-acciones { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; }
+.haiku-bloqueos-grupo .haku-bloqueo-detalle { min-width: 0; margin: 0; padding: 0; border: 0; background: transparent; border-radius: 0; box-shadow: none; }
+.haiku-bloqueos-grupo .haku-bloqueo-detalle > summary {
+    margin: 0; padding: 6px 0; min-height: 30px; box-sizing: border-box; cursor: pointer;
+    background: transparent; color: var(--bloqueo-secundario); font-size: 11px; font-weight: 400; line-height: 18px;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-detalle[open] { flex-basis: 100%; }
+.haiku-bloqueos-grupo .haku-bloqueo-original {
+    margin: 4px 0; padding: 8px; border-left: 2px solid var(--bloqueo-linea);
+    background: var(--bloqueo-suave); color: var(--bloqueo-texto); font-size: 11px; line-height: 1.45;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-origen { margin: 3px 0; padding: 0; color: var(--bloqueo-secundario); font-size: 11px; }
+.haiku-bloqueos-grupo .haku-bloqueo-boton {
+    box-sizing: border-box; min-height: 32px; max-width: 100%; margin: 0 0 0 auto; padding: 6px 10px;
+    border: 1px solid #22735c; border-radius: 5px; background: #22735c; color: #fff;
+    font: 500 11px/18px var(--sites-shell-font, Inter, "Segoe UI", sans-serif); text-align: center;
+    white-space: normal; cursor: pointer; box-shadow: none;
+}
+.haiku-bloqueos-grupo .haku-bloqueo-boton:hover:not(:disabled) { background: #195e4a; border-color: #195e4a; }
+.haiku-bloqueos-grupo .haku-bloqueo-boton:disabled { background: var(--bloqueo-suave); border-color: var(--bloqueo-linea); color: var(--bloqueo-secundario); opacity: 1; cursor: default; }
+.haiku-bloqueos-grupo .haku-bloqueo-boton[aria-busy="true"]::before {
+    content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 6px;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px;
+    animation: haku-aviso-incorporando .7s linear infinite;
+}
+.haiku-bloqueos-grupo :is(.haku-bloqueo-boton,.haku-bloqueo-detalle > summary):focus-visible { outline: 2px solid var(--bloqueo-acento); outline-offset: 2px; }
+.haiku-bloqueos-grupo .haku-bloqueos-barra { display: flex; align-items: center; padding: 8px 12px; }
+.haiku-bloqueos-grupo .haku-bloqueo-status { margin: 0; padding: 0; color: var(--bloqueo-secundario); background: transparent; border: 0; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.haiku-bloqueos-grupo .haku-bloqueo-status p { margin: 4px 0; color: inherit; font-size: inherit; }
+.haiku-bloqueos-grupo .haku-bloqueos-resultado:not(:empty) { padding: 6px 12px; }
+.haiku-bloqueos-grupo .haku-bloqueo-status:empty,
+.haiku-bloqueos-grupo [hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+    .haiku-bloqueos-grupo .haku-bloqueo-boton[aria-busy="true"]::before { animation: none; }
+}

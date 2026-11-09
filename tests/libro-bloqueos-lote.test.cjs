@@ -24,17 +24,17 @@ function env(n=3){
 test('8 Libro blocks count 7 new dynamically; existing, review and inverse-only cannot enter preparation',async()=>{
  const x=env(8);x.casos[0].estado='ya_coincide';x.existing(x.casos[0].bloqueo);
  x.casos.solo_proyecto_h=[{cabana:2,fecha_inicio:'2026-09-01',fecha_fin:'2026-09-02',nota:'Inverse only'}];
- const out=x.render();assert.match(text(out),/Preparar todos los bloqueos nuevos \(7\)/);
+ const out=x.render();assert.match(text(out),/Preparar 7 nuevos/);
  x.casos[1].estado='revision';const p=await x.api.prepararTodos(x.casos,1);
  assert.equal(p.cantidad,6);assert.equal(p.items.length,6);assert.ok(p.items.every(x=>x.bloqueo.cabana===10));assert.equal(x.writes().length,0);
 });
 test('UI prepare lists compact candidates without RPC; global cancellation leaves 0 writes',async()=>{
- const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent.startsWith('Preparar todos'));
+ const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent==='Preparar 3 nuevos');
  const accordion=nodes(out).find(n=>n.tag==='details');assert.equal(accordion.open,false);assert.equal(accordion.children[0].tag,'summary');assert.equal(accordion.children[0].textContent,'Bloqueos del Libro (3)');
  assert.ok(!accordion.children[0].children.some(n=>n.tag==='button'),'actions stay outside native toggle header');
  await button.events.click();assert.equal(x.writes().length,0);assert.equal(x.confirmations.length,0);
  assert.equal(accordion.open,true);accordion.open=false;
- assert.match(text(out),/Se prepararon 3 bloqueos nuevos/);assert.match(text(out),/2026-09-14 → 2026-09-15/);assert.match(text(out),/FULL DAY/);
+ assert.match(text(out),/3 listos para confirmar/);assert.match(text(out),/14 → 15 sep 2026/);assert.match(text(out),/FULL DAY/);
  x.decline();await button.events.click();assert.equal(x.writes().length,0);assert.equal(x.confirmations.length,1);
  assert.equal(accordion.open,true,'confirmation feedback reopens the section');
  assert.match(x.confirmations[0],/secuencial y no atómica/);assert.match(text(out),/Confirmación cancelada/);
@@ -56,18 +56,18 @@ test('RPC failure stops sequence and reports created, omitted, failed and untouc
  assert.ok(!x.writes().some(c=>c[2].p_desde==='2026-09-17'));await assert.rejects(x.api.confirmarTodos(p),/consumido/);
 });
 test('successful UI run creates red and FULL DAY blocks sequentially, once confirmed, then refreshes to Ya coincide',async()=>{
- const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent.startsWith('Preparar todos')),original=x.db.rpc;
+ const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent==='Preparar 3 nuevos'),original=x.db.rpc;
  let active=0,max=0;x.db.rpc=async(...args)=>{active++;max=Math.max(max,active);await Promise.resolve();const r=await original(...args);active--;return r;};
  await button.events.click();await button.events.click();
  assert.equal(x.confirmations.length,1);assert.equal(max,1);assert.equal(x.writes().length,3);assert.equal(x.blocks.length,3);
  assert.match(text(out),/Proceso completado/);assert.match(text(out),/Creados: 3/);assert.match(text(out),/Fallos: 0/);
  const accordion=nodes(out).find(n=>n.tag==='details');assert.equal(accordion.open,true);assert.match(text(accordion),/Proceso completado/);
- assert.equal(nodes(out).filter(n=>n.textContent==='✓ Ya coincide').length,3);
+ assert.equal(nodes(out).filter(n=>n.textContent==='Ya existe').length,3);
  assert.ok(!nodes(out).some(n=>n.tag==='button'&&n.textContent==='Preparar bloqueo'));
  assert.ok(x.writes().every(c=>c[1]==='haiku_registrar_bloqueo_calendario'));
 });
 test('partial failure UI preserves exact result and never offers an automatic retry',async()=>{
- const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent.startsWith('Preparar todos')),original=x.db.rpc;
+ const x=env(),out=x.render(),button=nodes(out).find(n=>n.textContent==='Preparar 3 nuevos'),original=x.db.rpc;
  x.db.rpc=async(name,args)=>{if(args.p_desde==='2026-09-15'){x.calls.push(['rpc',name,args]);return {error:Error('fallo de prueba')};}return original(name,args);};
  await button.events.click();await button.events.click();assert.equal(x.writes().length,2);assert.equal(button.disabled,true);
  assert.match(text(out),/Creados: 1/);assert.match(text(out),/Pendientes por procesar: 1/);assert.match(text(out),/Falló: CAB 10 · 2026-09-15/);assert.match(text(out),/resultado incierto/);
@@ -82,4 +82,29 @@ test('tampering with public batch preview cannot change stored targets or cause 
  const x=env(),p=await x.api.prepararTodos(x.casos,1);p.items[0].bloqueo.nota='Tampered';p.cantidad=99;
  const running=x.api.confirmarTodos(p);await assert.rejects(x.api.confirmarTodos(p),/curso|consumido/);await running;
  assert.equal(x.writes().length,3);assert.equal(x.writes()[0][2].p_motivo,'BLOQUEO ROJO 0');assert.match(x.confirmations[0],/crear 3 bloqueos/);
+});
+
+function lecturaEstable(x){
+ x.libro.crearLectura=async()=>{const estado=x.libro.estado(),h=structuredClone(x.h);return {estado:()=>estado,consultarHoja:async()=>h};};
+}
+test('una descarga ajena no cancela la preparación ni la confirmación de los bloqueos',async()=>{
+ const x=env();lecturaEstable(x);const p=await x.api.prepararTodos(x.casos,1);x.change();
+ const r=await x.api.confirmarTodos(p);assert.equal(r.creados.length,3);assert.equal(x.writes().length,3);
+});
+test('un bloque cambiado se omite; los otros conservan confirmación y nota exacta',async()=>{
+ const x=env();lecturaEstable(x);const p=await x.api.prepararTodos(x.casos,1);
+ x.h.bloqueos[1].nota='Motivo actualizado';x.change();
+ const r=await x.api.confirmarTodos(p);assert.equal(r.creados.length,2);assert.equal(r.omitidos.length,1);
+ assert.match(r.omitidos[0].mensaje,/CAB 10/);assert.equal(x.writes().length,2);
+ assert.ok(!x.writes().some(c=>c[2].p_desde==='2026-09-15'));
+});
+test('el lote continúa tras una nueva versión durante un RPC y no repite los confirmados',async()=>{
+ const x=env();lecturaEstable(x);const p=await x.api.prepararTodos(x.casos,1),rpc=x.db.rpc;
+ x.db.rpc=async(...a)=>{const r=await rpc(...a);x.change();return r;};
+ const r=await x.api.confirmarTodos(p);assert.equal(r.creados.length,3);assert.equal(x.writes().length,3);
+});
+test('una nueva reserva que cruza el bloque lo detiene aunque su nota siga idéntica',async()=>{
+ const x=env(1);lecturaEstable(x);const p=await x.api.prepararTodos(x.casos,1);
+ x.h.reservas.push({cabana:10,fecha_checkin:'2026-09-14',fecha_checkout:'2026-09-15'});x.change();
+ const r=await x.api.confirmarTodos(p);assert.equal(r.creados.length,0);assert.equal(r.omitidos.length,1);assert.equal(x.writes().length,0);
 });
