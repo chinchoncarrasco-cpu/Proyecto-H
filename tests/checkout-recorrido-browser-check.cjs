@@ -67,17 +67,22 @@ const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta nam
   const maintenanceDownload=page.waitForEvent('download');await detail.locator('[data-co-download-photo]').click();assert.match((await maintenanceDownload).suggestedFilename(),/^Haku-obs_/);
   await detail.locator('[data-co-copy-maintenance]').click();assert.match(await page.evaluate(()=>window.__clipboard),/^@Mantención/);assert.match(await page.evaluate(()=>window.__clipboard),/Revisar la llave/);assert.doesNotMatch(await page.evaluate(()=>window.__clipboard),/Café|Sacacorcho/);
   await detail.locator('[data-co-supply=te]').click();modal=page.locator('dialog.co-dialog');await modal.locator('input[type=number]').fill('100');await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.locator('[data-dialog-error]').filter({hasText:'99'}).waitFor();await modal.locator('[data-dialog-close]').click();
-  // Compact checks are natural-width, and inventory and notes fold independently.
+  // Desktop uses the available width; mobile keeps the compact single column.
+  const layout=await detail.evaluate(el=>{const style=getComputedStyle(el.parentElement),route=el.querySelector('.co-route').getBoundingClientRect(),sidebar=el.querySelector('.co-sidebar').getBoundingClientRect();return{width:el.getBoundingClientRect().width,available:el.parentElement.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),route:{x:route.x,right:route.right,bottom:route.bottom,width:route.width},sidebar:{x:sidebar.x,y:sidebar.y,right:sidebar.right}};});
+  assert.ok(Math.abs(layout.width-layout.available)<2,'La ficha ocupa todo el ancho disponible');
+  if(width>1100){assert.ok(layout.width>1000);assert.ok(layout.sidebar.x>=layout.route.right+19,'Panel lateral a la derecha del recorrido');assert.ok(layout.sidebar.right-layout.route.x>layout.width-2,'Las dos columnas aprovechan el ancho');}
+  else{assert.ok(layout.sidebar.y>=layout.route.bottom,'Paneles debajo en móvil');assert.ok(Math.abs(layout.route.width-layout.width)<2);}
+  // Natural-width checks; inventory and notes fold independently.
   const checkBox=await detail.locator('[data-co-point=bano_secador]').evaluate(n=>({w:n.getBoundingClientRect().width,h:n.closest('label').getBoundingClientRect().height,label:n.closest('label').getBoundingClientRect().width}));
-  assert.equal(checkBox.w,16);assert.equal(checkBox.h,26);assert.ok(checkBox.label<100);
+  assert.equal(checkBox.w,16);assert.equal(checkBox.h,width>1100?30:26);assert.ok(checkBox.label<100);
   assert.equal(await detail.locator('.co-inventory[open]').count(),0);
   await detail.locator('.co-inventory>summary').click();
   const wineCheck=detail.locator('[data-co-inventory-check=copas_vino]'),countWrites=()=>page.evaluate(()=>window.__calls.filter(c=>c.p?.p_campo==='conteo').length),writesBeforeCount=await countWrites();
   await wineCheck.click();modal=page.locator('dialog.co-dialog');await modal.waitFor();
   assert.equal(await wineCheck.isChecked(),false,'Abrir el conteo no marca el artículo como revisado');
-  assert.equal(await modal.locator('[name=encontrados]').inputValue(),'','No se presume la dotación completa');
-  assert.equal(await modal.locator('[data-found][aria-pressed=true]').count(),0,'Ninguna cantidad se preselecciona');
-  assert.equal(await modal.getByRole('button',{name:'Listo',exact:true}).isEnabled(),false);
+  assert.equal(await modal.locator('[name=encontrados]').inputValue(),'3','Se propone la dotación esperada sin guardarla');
+  assert.equal(await modal.locator('[data-found="3"][aria-pressed=true]').count(),1);
+  assert.equal(await modal.getByRole('button',{name:'Listo',exact:true}).isEnabled(),true);
   await modal.locator('[data-dialog-close]').click();assert.equal(await countWrites(),writesBeforeCount,'Cancelar no guarda un conteo');assert.equal(await wineCheck.isChecked(),false);
   await wineCheck.focus();await wineCheck.press('Space');modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="2"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});
   assert.equal(await wineCheck.isChecked(),true);assert.equal(await detail.locator('[data-co-count=copas_vino]').textContent(),'2/3');
