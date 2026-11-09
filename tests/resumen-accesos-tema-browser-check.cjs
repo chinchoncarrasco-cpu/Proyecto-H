@@ -6,7 +6,7 @@ const auditor=read('tests/haiku-tema-browser-check.cjs');
 const contraste=vm.runInNewContext('('+auditor.slice(auditor.indexOf('function auditarContraste()'),auditor.indexOf('main().catch'))+')');
 async function htmlPanel(){
  let html;const document={createElement:()=>({}),head:{appendChild:s=>s.onload()},open(){},write:s=>html=s,close(){}};
- await vm.runInNewContext(read('panel.html').match(/<script>([\s\S]*)<\/script>/)[1],{document,window:{supabase:{createClient(){}}},fetch:async()=>({ok:true,text:async()=>read('index.html')}),Date,console});
+ await vm.runInNewContext(read('panel.html').match(/<script>([\s\S]*)<\/script>/)[1],{document,window:{supabase:{createClient(){}}},fetch:async()=>({ok:true,text:async()=>read('index.html')}),Date,console,URLSearchParams,location:{search:""}});
  return html.replace(/<script\b[\s\S]*?<\/script>/g,'').replace(/class="haiku-privacidad-arranque[^"]*"/,'');
 }
 (async()=>{

@@ -33,6 +33,8 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/haku-resumen/node_modules
         run: |
           export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
-          node tests/resumen-accesos-tema-browser-check.cjs
-          node tests/reserva-estado-manual-browser-check.cjs
-          node tests/resumen-nav-panel-browser-check.cjs
+          resultado=0
+          node tests/resumen-accesos-tema-browser-check.cjs || resultado=$?
+          node tests/reserva-estado-manual-browser-check.cjs || resultado=$?
+          node tests/resumen-nav-panel-browser-check.cjs || resultado=$?
+          exit "$resultado"
