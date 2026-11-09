@@ -146,7 +146,7 @@ html[data-haiku-tema="oscuro"] :is(.co-dialog,.co-stay-widget) { --cb-surface:#1
 #cabinsCheckout [data-co-message]>strong { font-weight:600; }
 #cabinsCheckout [data-co-area-photo] { gap:12px; }
 /* Compact recorrido: natural-width checks, independent folded inventory and notes. */
-#cabinsCheckoutDetail { max-width:760px; }
+#cabinsCheckoutDetail { width:100%;max-width:none;min-width:0;container:checkout-review / inline-size; }
 #cabinsCheckout .co-review-head { display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 0 6px; }
 #cabinsCheckout .co-review-head>div { min-width:0; }
 #cabinsCheckout .co-review-head h2 { font-size:18px;line-height:24px; }
@@ -202,4 +202,19 @@ html[data-haiku-tema="oscuro"] :is(.co-dialog,.co-stay-widget) { --cb-surface:#1
   #cabinsCheckout .co-sector-body { padding:0 7px 7px; }
   #cabinsCheckout .co-route-heading [data-co-loan-count] { flex:1; }
   #cabinsCheckout .co-route-heading .co-actions-inline { margin:0; }
+}
+/* Use available desktop space; keep the compact single column on small surfaces. */
+@container checkout-review (min-width:1000px){
+  #cabinsCheckout .co-layout { grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:20px; }
+  #cabinsCheckout .co-route,#cabinsCheckout .co-sidebar { gap:10px; }
+  #cabinsCheckout .co-review-head h2 { font-size:20px;line-height:28px; }
+  #cabinsCheckoutDetail .co-button { min-height:34px;padding:6px 12px; }
+  #cabinsCheckout .co-sector>summary,#cabinsCheckout .co-panel>summary { min-height:34px;padding:6px 10px;font-size:14px;line-height:20px; }
+  #cabinsCheckout .co-sector>summary h3 { font-size:14px;line-height:20px; }
+  #cabinsCheckout .co-sector-body { gap:6px;padding:0 12px 12px; }
+  #cabinsCheckout .co-panel-body { gap:8px;padding:4px 12px 12px; }
+  #cabinsCheckout .co-sector .co-chip { min-height:28px;padding:4px 8px;font-size:12px; }
+  #cabinsCheckout .co-checks { column-gap:16px;row-gap:2px; }
+  #cabinsCheckout .co-check { min-height:30px;font-size:14px;line-height:20px; }
+  #cabinsCheckout .co-review-footer { grid-column:1 / -1; }
 }

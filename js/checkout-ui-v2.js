@@ -31,7 +31,7 @@
           :`<p class="co-small">Unidades a reponer</p><div class="co-form-row"><div class="co-chips">${[1,2,3,4].map(q=>chip(q,`data-qty="${q}"`,(row.reposiciones[initial.id]||1)===q)).join('')}</div>${counter(initial.id,row.reposiciones[initial.id]||1)}</div>`;
         html+='<div class="co-actions"><button type="button" class="co-button" data-remove-quantity>Quitar</button><button class="co-button co-primary" type="submit">Listo</button></div>';
       }else if(next==='inventory'){
-        const item=V.inventory.find(i=>i.id===initial.id),expected=V.inventoryExpected(ctx.cabin),found=row.conteos?.[item.id]?.encontrados??'';
+        const item=V.inventory.find(i=>i.id===initial.id),expected=V.inventoryExpected(ctx.cabin),found=row.conteos?.[item.id]?.encontrados??expected;
         title=item.label;
         html=`<p class="co-small">CAB ${esc(ctx.cabin)} · Debe haber ${expected}</p><label class="co-form-label" for="co-found">¿Cuántos encontraste?</label><div class="co-form-row"><div class="co-chips">${Array.from({length:expected+1},(_,q)=>chip(q,`data-found="${q}"`,q===found)).join('')}</div>${counter('encontrados',found)}</div><p class="co-small" data-count-result role="status"></p><div class="co-actions"><button type="button" class="co-button" data-clear-count>Sin revisar</button><button class="co-button co-primary" type="submit">Listo</button></div>`;
       }else if(next==='loans'){
