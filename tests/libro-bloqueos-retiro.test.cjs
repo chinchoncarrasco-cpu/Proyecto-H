@@ -25,7 +25,7 @@ function env(){
 test('inverse-only item has preparation; preview and cancelled native confirmation never write',async()=>{
  const x=env(),r=await x.compare(),out=new El('div');x.blocks.renderizar(out,r,1);
  const button=nodes(out).find(n=>n.textContent==='Preparar eliminación');assert.ok(button);await button.events.click();
- assert.equal(x.writes().length,0);assert.match(text(out),/PREVISUALIZACIÓN · Sin escritura/);assert.match(text(out),/Este bloqueo existe en Proyecto H/);assert.equal(button.textContent,'Confirmar eliminación');
+ assert.equal(x.writes().length,0);assert.match(text(out),/Ausencia comprobada/);assert.match(text(out),/Listo para confirmar la eliminación/);assert.equal(button.textContent,'Confirmar eliminación');
  x.decline();await button.events.click();assert.equal(x.writes().length,0);assert.equal(x.confirms.length,1);assert.match(text(out),/Confirmación cancelada/);
 });
 test('reappearing Libro block or generation change after preview prevents RPC',async()=>{
@@ -64,4 +64,15 @@ test('SQL checks expected version and identity after locking, without replacing 
  assert.ok(sql.indexOf('for update of b, c')<sql.indexOf('v_bloqueo.actualizado_en is distinct from p_actualizado_en'));
  assert.ok(sql.indexOf('v_bloqueo.actualizado_en is distinct from p_actualizado_en')<sql.indexOf('update public.bloqueos_cabana'));
  assert.doesNotMatch(sql,/create(?: or replace)? function public.haiku_liberar_bloqueo_calendario/i);assert.doesNotMatch(sql,/delete from/i);
+});
+
+test('retiro conserva su propuesta tras cambios ajenos y revalida ausencia e identidad antes de liberar',async()=>{
+ const x=env();x.libro.crearLectura=async()=>{const estado=x.libro.estado(),h=structuredClone(x.h);return {estado:()=>estado,consultarHoja:async()=>h};};
+ const p=await x.api.preparar(await x.item(),1);x.change();
+ const r=await x.api.confirmar(p);assert.equal(r.estado,'liberado');assert.equal(x.writes().length,1);
+});
+test('la continuidad nunca permite liberar un bloqueo que reapareció en el Libro',async()=>{
+ const x=env();x.libro.crearLectura=async()=>{const estado=x.libro.estado(),h=structuredClone(x.h);return {estado:()=>estado,consultarHoja:async()=>h};};
+ const p=await x.api.preparar(await x.item(),1);x.h.bloqueos.push(x.book());x.change();
+ await assert.rejects(x.api.confirmar(p),/reapareció/);assert.equal(x.writes().length,0);
 });

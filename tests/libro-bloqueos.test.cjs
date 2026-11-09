@@ -146,7 +146,7 @@ test('8 blocks with 3 existing including DST CAB 2 leave exactly 5 new in batch 
  const r=await x.api.comparar(x.h.bloqueos,x.db,septiembre);assert.equal(r.filter(c=>c.estado==='ya_coincide').length,3);assert.equal(r.revision_inversa.length,0);
  class El{constructor(tag){this.tag=tag;this.children=[];}append(...xs){this.children.push(...xs)}setAttribute(){}addEventListener(){}}
  x.context.document={createElement:t=>new El(t)};x.context.addEventListener=()=>{};const out=new El('div');x.api.renderizar(out,r,1);
- const texts=n=>[n.textContent,...n.children.flatMap(texts)];assert.ok(texts(out).includes('Preparar todos los bloqueos nuevos (5)'));
+ const texts=n=>[n.textContent,...n.children.flatMap(texts)];assert.ok(texts(out).includes('Preparar 5 nuevos'));
  assert.equal((await x.api.prepararTodos(r,1)).cantidad,5);assert.equal(x.writes().length,0);
 });
 test('inverse comparison shares exact matching, never double counts, and keeps Libro-only preparable',async()=>{
@@ -277,17 +277,19 @@ test('monthly comparison exposes blocks separately and does not create a new gue
  assert.equal(result.comparacion.length,0);assert.equal(x.writes().length,0);
  const plan=q.crearPlanIncorporacion(result.reservas,result.comparacion);assert.equal(plan.items.length,0);
 });
-test('block card retains source and exact note, previews without writes, and Libro event disables confirmation',async()=>{
+test('compact block card retains full evidence and a confirmed update does not disable the query',async()=>{
  const x=env();class Element{
   constructor(tag){this.tag=tag;this.children=[];this.textContent='';this.events={};}
   append(...xs){this.children.push(...xs)}setAttribute(k,v){this[k]=v}addEventListener(k,f){this.events[k]=f}
  }
- let onChange;x.context.document={createElement:t=>new Element(t)};x.context.addEventListener=(event,fn)=>{assert.equal(event,'haiku:libro-cambio');onChange=fn;};
+ let onChange;x.context.document={createElement:t=>new Element(t)};x.context.addEventListener=(event,fn)=>{assert.equal(event,'haiku:libro-version-cargada');onChange=fn;};
  const out=new Element('div'),nodes=(n=out)=>[n,...n.children.flatMap(c=>nodes(c))],text=()=>nodes().map(n=>n.textContent).join(' ');
  const cases=await x.api.comparar([x.b],x.db);x.api.renderizar(out,cases,1);
  assert.equal(nodes().filter(n=>n.tag==='section').length,1);assert.match(text(),/Bloqueos del Libro \(1\)/);assert.ok(text().includes(nota));assert.match(text(),/Sep26 · C12:E12/);
- const button=nodes().find(n=>n.tag==='button'&&n.textContent==='Preparar bloqueo');await button.events.click();assert.equal(x.writes().length,0);assert.equal(button.textContent,'Confirmar bloqueo');assert.match(text(),/PREVISUALIZACIÓN · Sin escritura/);
- x.change();onChange();assert.equal(button.disabled,true);await button.events.click();assert.equal(x.writes().length,0);assert.match(text(),/Propuesta invalidada/);
+ const button=nodes().find(n=>n.tag==='button'&&n.textContent==='Preparar bloqueo');await button.events.click();assert.equal(x.writes().length,0);assert.equal(button.textContent,'Confirmar bloqueo');assert.match(text(),/Listo para confirmar/);
+ x.libro.crearLectura=async()=>{const estado=x.libro.estado(),h=structuredClone(x.h);return {estado:()=>estado,consultarHoja:async()=>h};};
+ x.change();onChange?.();assert.equal(button.disabled,false);assert.doesNotMatch(text(),/Propuesta invalidada/);
+ await button.events.click();assert.equal(x.writes().length,1);assert.match(text(),/Bloqueo creado/);
  const readonly=new Element('div');x.api.renderizar(readonly,[{...cases[0],estado:'revision',mensaje:'Reserva real en el intervalo'},{...cases[0],estado:'ya_coincide',mensaje:'Ya coincide'}],2);
  assert.equal(nodes(readonly).filter(n=>n.tag==='button').length,0);
 });

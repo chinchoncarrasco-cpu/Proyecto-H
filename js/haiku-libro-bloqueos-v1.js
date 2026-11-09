@@ -23,11 +23,22 @@
   if(!Number.isInteger(b.cabana)||b.cabana<=0||!fecha(b.fecha_inicio)||!fecha(b.fecha_fin)||b.fecha_fin<=b.fecha_inicio||!b.nota?.trim()||!b.origen?.hoja||!b.origen?.rango||b.evidencia?.geometria!=='disponibilidad_completa')throw Error('Evidencia incompleta; requiere revisión manual.');
  }
  async function comprobar(b,g,libro){
-  vigente(g,libro);validar(b);const h=await libro.consultarHoja(b.origen.hoja,'actual','semantica');vigente(g,libro);
-  const iguales=(h.bloqueos||[]).filter(x=>x.id===b.id);
-  if(!h.cobertura?.geometria||iguales.length!==1||JSON.stringify(iguales[0])!==JSON.stringify(b)||
-   (h.bloqueos||[]).some(x=>x.id!==b.id&&x.cabana===b.cabana&&cruza(x.fecha_inicio,x.fecha_fin,b.fecha_inicio,b.fecha_fin))||
-   (h.reservas||[]).some(x=>x.cabana===b.cabana&&(x.fecha_checkin===x.fecha_checkout?x.fecha_checkin>=b.fecha_inicio&&x.fecha_checkin<b.fecha_fin:cruza(x.fecha_checkin,x.fecha_checkout,b.fecha_inicio,b.fecha_fin))))throw Error('La evidencia del Libro cambió o contiene cruces. Requiere revisión manual.');
+  validar(b);
+  for(let intento=0;intento<3;intento++){
+   if(!libro.crearLectura)vigente(g,libro);
+   const lectura=libro.crearLectura?await libro.crearLectura():libro,version=lectura.estado().generacion;
+   const consultar=lectura.consultarHojaMensual||lectura.consultarHoja;
+   const h=await consultar(b.origen.hoja,'actual','semantica');
+   if(libro.estado().generacion!==version){if(!libro.crearLectura)vigente(g,libro);continue;}
+   const iguales=(h.bloqueos||[]).filter(x=>x.id===b.id);
+   if(!h.cobertura?.geometria||iguales.length!==1||JSON.stringify(iguales[0])!==JSON.stringify(b))
+    throw Error(`CAB ${b.cabana}: cambió el bloqueo o su lectura no es inequívoca. Revisa sus fechas y motivo en el Libro.`);
+   if((h.bloqueos||[]).some(x=>x.id!==b.id&&x.cabana===b.cabana&&cruza(x.fecha_inicio,x.fecha_fin,b.fecha_inicio,b.fecha_fin))||
+    (h.reservas||[]).some(x=>x.cabana===b.cabana&&(x.fecha_checkin===x.fecha_checkout?x.fecha_checkin>=b.fecha_inicio&&x.fecha_checkin<b.fecha_fin:cruza(x.fecha_checkin,x.fecha_checkout,b.fecha_inicio,b.fecha_fin))))
+    throw Error(`CAB ${b.cabana}: coincide con otra reserva o bloqueo del Libro. Requiere revisión.`);
+   return version;
+  }
+  throw Error('El Libro sigue actualizándose. Conservé la propuesta; vuelve a intentar la comprobación.');
  }
  async function revisar(b,cliente=root.haikuSupabase,cache){
   validar(b);await sesion(cliente);
@@ -89,7 +100,8 @@
   return out;
  }
  async function preparar(b,g,{libro=root.HAIKU_LIBRO_RESERVA_V1,cliente=root.haikuSupabase}={}){
-  permiso();await comprobar(b,g,libro);const resultado=await revisar(b,cliente);vigente(g,libro);
+  permiso();const version=await comprobar(b,g,libro),resultado=await revisar(b,cliente);
+  if(libro.estado().generacion!==version)await comprobar(b,g,libro);
   if(resultado.estado==='revision')throw Error(resultado.mensaje);
   const vista={bloqueo:structuredClone(b),...resultado};previews.set(vista,{b:structuredClone(b),g,libro,cliente,cabana_id:resultado.cabana_id});return vista;
  }
@@ -98,7 +110,7 @@
   if(p.confirmando)throw Error('La confirmación de este bloqueo ya está en curso.');
   p.confirmando=true;
   try{
-  permiso();await sesion(p.cliente);vigente(p.g,p.libro);
+  permiso();await sesion(p.cliente);if(!p.libro.crearLectura)vigente(p.g,p.libro);
   if(vista.estado==='ya_coincide')return {estado:'ya_coincide'};
   if(root.confirm?.(`¿Crear bloqueo en CAB ${p.b.cabana}, del ${p.b.fecha_inicio} al ${p.b.fecha_fin}?\n${p.b.nota}`)!==true)return {estado:'sin_confirmar'};
   return await ejecutarRevalidado(p,()=>previews.delete(vista));
@@ -106,7 +118,8 @@
  }
  // Núcleo compartido: la confirmación individual o global ocurre antes de entrar aquí.
  async function ejecutarRevalidado(p,consumir,antesDeRpc=()=>{}){
-  await comprobar(p.b,p.g,p.libro);const actual=await revisar(p.b,p.cliente);vigente(p.g,p.libro);permiso();
+  const version=await comprobar(p.b,p.g,p.libro),actual=await revisar(p.b,p.cliente);
+  if(p.libro.estado().generacion!==version)await comprobar(p.b,p.g,p.libro);permiso();
   if(actual.cabana_id!==p.cabana_id||actual.estado==='revision')throw Error(actual.mensaje||'Proyecto H cambió. Vuelve a preparar.');
   if(actual.estado==='ya_coincide'){consumir();return {estado:'ya_coincide'};}
   // Consumir la propuesta antes de enviar: un error de red requiere releer, no repetir ciegamente.
@@ -122,20 +135,20 @@
   return resultado.filter(c=>{try{validar(c.bloqueo);return c.estado==='no_existe';}catch(_){return false;}});
  }
  async function prepararTodos(resultado,g,{libro=root.HAIKU_LIBRO_RESERVA_V1,cliente=root.haikuSupabase}={}){
-  permiso();vigente(g,libro);const items=[],privados=[];
+  permiso();if(!libro.crearLectura)vigente(g,libro);const items=[],privados=[];
   for(const {bloqueo} of candidatosNuevos(resultado)){
    const b=structuredClone(bloqueo);
    try{const v=await preparar(b,g,{libro,cliente});items.push(v);privados.push({...previews.get(v),estado:v.estado});}
    catch(error){items.push({bloqueo:b,estado:'revision',mensaje:error.message});privados.push({b,estado:'revision',mensaje:error.message});}
   }
-  vigente(g,libro);const vista={items,cantidad:items.filter(c=>c.estado==='no_existe').length};
+  if(!libro.crearLectura)vigente(g,libro);const vista={items,cantidad:items.filter(c=>c.estado==='no_existe').length};
   lotes.set(vista,{items:privados,g,libro,cliente});return vista;
  }
  async function confirmarTodos(vista){
   const p=lotes.get(vista);if(!p)throw Error('Lote no válido o ya consumido. Vuelve a comparar.');
   if(p.confirmando)throw Error('El lote ya está en curso.');p.confirmando=true;
   try{
-   permiso();await sesion(p.cliente);vigente(p.g,p.libro);
+   permiso();await sesion(p.cliente);if(!p.libro.crearLectura)vigente(p.g,p.libro);
    const cantidad=p.items.filter(c=>c.estado==='no_existe').length;
    if(!cantidad||root.confirm?.(`Se intentarán crear ${cantidad} bloqueos en Proyecto H.\nCada bloqueo será revalidado individualmente antes de escribirse.\nLa operación es secuencial y no atómica.\n¿Confirmas?`)!==true)return {estado:'sin_confirmar'};
    lotes.delete(vista); // Nunca reutilizar una confirmación aceptada, incluso ante respuesta incierta.
@@ -164,73 +177,111 @@
    ...r.creados.map(b=>'Creado · '+detalle(b)),...r.omitidos.map(x=>'Omitido · '+detalle(x.bloqueo)+' · '+x.mensaje),...r.pendientes.map(b=>'Pendiente · '+detalle(b)),
    ...(r.fallo?[`Falló: ${detalle(r.fallo.bloqueo)} · ${r.fallo.mensaje}`, 'La escritura fallida puede tener resultado incierto. Reconsulta antes de intentar otra operación; no se reintentó.']:[])].join('\n');
  }
+ const fechaCorta=valor=>{
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(valor||'');
+  return m?`${Number(m[3])} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(m[2])-1]} ${m[1]}`:'Sin fecha';
+ };
+ const rangoCorto=(desde,hasta)=>{
+  const a=fechaCorta(desde).split(' '),b=fechaCorta(hasta).split(' ');
+  return a.length===3&&b.length===3&&a[2]===b[2]?`${a[0]}${a[1]===b[1]?'':' '+a[1]} → ${b.join(' ')}`:`${fechaCorta(desde)} → ${fechaCorta(hasta)}`;
+ };
  function renderizar(out,resultado,g,interno=false){
   if(!resultado)return;const doc=root.document,el=(tag,clase,texto)=>{const n=doc.createElement(tag);n.className=clase;if(texto!=null)n.textContent=texto;return n;};
   if(!resultado.length&&!resultado.solo_proyecto_h?.length&&!resultado.revision_inversa?.length&&!resultado.error_inversa)return;
   if(!interno){const grupo=el('div','haiku-bloqueos-grupo');out.append(grupo);out=grupo;}
-  let loteEnCurso=false,obsoletoGrupo=false,individualesEnCurso=0;const botones=[];
+  let loteEnCurso=false,finalizadoGrupo=false,individualesEnCurso=0;const botones=[];
   const seccion=el('details','haiku-comparacion-acordeon');seccion.open=false;
   seccion.append(el('summary','',`Bloqueos del Libro (${resultado.length})`));out.append(seccion);
+  function ficha(b,estado,mensaje){
+   const card=el('section','haku-bloqueo-card');card.setAttribute('data-estado',estado);
+   const cabecera=el('header','haku-bloqueo-cabecera'),identidad=el('div','haku-bloqueo-identidad');
+   const rango=rangoCorto(b.fecha_inicio,b.fecha_fin);
+   identidad.append(el('strong','haku-bloqueo-cabana',`CAB ${b.cabana}`),el('span','haku-bloqueo-fechas',rango));
+   const badge=el('span','haku-bloqueo-estado',estado==='ya_coincide'?'Ya existe':estado==='revision'?'Revisar':estado==='solo_h'?'Sólo Proyecto H':'Nuevo');
+   cabecera.append(identidad,badge);
+   const original=b.nota||'Sin motivo registrado',breve=original.replace(/\s+/g,' ').trim();
+   const nota=el('p','haku-bloqueo-motivo',breve.length>150?breve.slice(0,147)+'…':breve);
+   const status=el('div','haku-bloqueo-status',mensaje);status.setAttribute('role','status');
+   const acciones=el('div','haku-bloqueo-acciones'),detalle=el('details','haku-bloqueo-detalle');detalle.open=false;
+   detalle.append(el('summary','',b.origen?'Detalle del Libro':'Detalle del bloqueo'));
+   detalle.append(el('p','haku-bloqueo-original',original));
+   if(b.origen)detalle.append(el('p','haku-bloqueo-origen',`${b.origen.hoja} · ${b.origen.rango}`));
+   detalle.append(el('p','haku-bloqueo-origen',`Desde ${b.fecha_inicio||'sin fecha'} hasta ${b.fecha_fin||'sin fecha'} (fin no incluido).`));
+   acciones.append(detalle);card.append(cabecera,nota,status,acciones);
+   return {card,status,acciones,badge};
+  }
   const cantidad=candidatosNuevos(resultado).length;
   if(cantidad){
-   const button=el('button','haiku-cancelacion-boton',`Preparar todos los bloqueos nuevos (${cantidad})`),status=el('div','haiku-cancelacion-status haiku-bloqueo-nota');
-   button.type='button';status.setAttribute('role','status');botones.push(button);seccion.append(button,status);let vista=null;
-   root.addEventListener('haiku:libro-cambio',()=>{obsoletoGrupo=true;button.disabled=true;status.textContent+='\nEl Libro cambió. Vuelve a comparar.';seccion.open=true;},{once:true});
+   const barra=el('div','haku-bloqueos-barra'),button=el('button','haku-bloqueo-boton',`Preparar ${cantidad} nuevos`),status=el('div','haku-bloqueo-status haku-bloqueos-resultado');
+   button.type='button';status.setAttribute('role','status');botones.push(button);barra.append(button);seccion.append(barra,status);let vista=null;
    button.addEventListener('click',async()=>{
-    if(loteEnCurso||obsoletoGrupo||individualesEnCurso)return;loteEnCurso=true;seccion.open=true;
-    const estados=botones.map(b=>b.disabled);botones.forEach(b=>b.disabled=true);
+    if(loteEnCurso||finalizadoGrupo||individualesEnCurso)return;loteEnCurso=true;seccion.open=true;
+    const estados=botones.map(b=>b.disabled);botones.forEach(b=>b.disabled=true);button.setAttribute('aria-busy','true');
     try{
      if(!vista){
-      status.textContent='Preparando bloqueos… Sin escritura.';vista=await prepararTodos(resultado,g);if(obsoletoGrupo)return;
-      status.textContent=[`Se prepararon ${vista.cantidad} bloqueos nuevos. Sin escritura.`,...vista.items.map(x=>`${detalle(x.bloqueo)}${x.estado==='no_existe'?'':' · Omitido: '+(x.mensaje||'Ya existe')}`),'Se revalidarán individualmente. Operación secuencial, no atómica.'].join('\n');
-      button.textContent=`Confirmar bloqueos nuevos (${vista.cantidad})`;if(!vista.cantidad)obsoletoGrupo=true;
+      status.textContent='Comprobando bloqueos…';vista=await prepararTodos(resultado,g);
+      status.textContent= vista.cantidad?`${vista.cantidad} listos para confirmar.`:'No quedan bloqueos nuevos para incorporar.';
+      const omitidos=vista.items.filter(x=>x.estado==='revision');
+      for(const x of omitidos)status.append(el('p','',`CAB ${x.bloqueo.cabana} · ${x.mensaje}`));
+      button.textContent=`Confirmar ${vista.cantidad} bloqueos`;if(!vista.cantidad)finalizadoGrupo=true;
      }else{
       const r=await confirmarTodos(vista);
-      if(r.estado==='sin_confirmar'){status.textContent+='\nConfirmación cancelada. No se realizó ninguna escritura.';return;}
-      status.textContent=textoReporte(r);obsoletoGrupo=true;
+      if(r.estado==='sin_confirmar'){status.textContent='Confirmación cancelada. No se guardaron cambios.';return;}
+      status.textContent=r.estado==='completado'?`Creados: ${r.creados.length} · Omitidos: ${r.omitidos.length}`:`Creados: ${r.creados.length} · Pendientes: ${r.pendientes.length}`;
+      if(r.fallo)status.append(el('p','',`CAB ${r.fallo.bloqueo.cabana}: ${r.fallo.mensaje}. Comprueba el resultado antes de reintentar.`));
+      const detalle=el('details','haku-bloqueo-detalle');detalle.append(el('summary','','Ver resultado'),el('p','haku-bloqueo-original',textoReporte(r)));status.append(detalle);finalizadoGrupo=true;
       if(r.estado==='completado'){
        try{
-        const libro=root.HAIKU_LIBRO_RESERVA_V1;vigente(g,libro);
-        const actualizado=await comparar(resultado.map(c=>c.bloqueo),root.haikuSupabase);vigente(g,libro);
+        const actualizado=await comparar(resultado.map(c=>c.bloqueo),root.haikuSupabase);
+        for(const c of actualizado){const omitido=r.omitidos.find(x=>x.estado==='revision'&&x.bloqueo.id===c.bloqueo.id);if(omitido)Object.assign(c,{estado:'revision',mensaje:omitido.mensaje});}
         for(const k of ['solo_proyecto_h','revision_inversa','error_inversa'])actualizado[k]=resultado[k];
         out.replaceChildren();const actual=renderizar(out,actualizado,g,true);actual.append(status);actual.open=true;
-       }catch(error){status.textContent+='\nNo se pudo refrescar la comparación: '+error.message;}
+       }catch(error){status.append(el('p','','No se pudo refrescar la comparación: '+error.message));}
       }
      }
-    }catch(error){status.textContent+='\n'+error.message;vista=null;button.textContent='Volver a preparar todos los bloqueos nuevos';}
-    finally{seccion.open=true;loteEnCurso=false;botones.forEach((b,i)=>b.disabled=obsoletoGrupo||estados[i]);}
+    }catch(error){status.textContent=error.message;vista=null;button.textContent='Reintentar preparación';}
+    finally{seccion.open=true;loteEnCurso=false;button.setAttribute('aria-busy','false');botones.forEach((b,i)=>b.disabled=finalizadoGrupo||estados[i]);}
    });
   }
-  for(const caso of resultado){const b=caso.bloqueo,card=el('section','haiku-cancelacion-card'),status=el('div','haiku-cancelacion-status');status.setAttribute('role','status');
-   card.append(el('span','haiku-cancelacion-badge',caso.estado==='ya_coincide'?'✓ Ya coincide':caso.estado==='revision'?'Revisión necesaria':'Bloqueo'),
-    el('h4','haiku-cancelacion-nombre',`CAB ${b.cabana}`),el('p','haiku-cancelacion-origen',`${b.fecha_inicio} → ${b.fecha_fin}`),
-    el('p','haiku-cancelacion-nota haiku-bloqueo-nota',b.nota),el('p','haiku-cancelacion-secundario',`Origen: ${b.origen.hoja} · ${b.origen.rango}`),el('p','haiku-cancelacion-nota',`Proyecto H: ${caso.mensaje}`));
+  for(const caso of resultado){
+   const b=caso.bloqueo,{card,status,acciones,badge}=ficha(b,caso.estado,caso.estado==='revision'?caso.mensaje:'');
    if(caso.estado==='no_existe'){
-    card.append(el('p','haiku-cancelacion-accion','Acción propuesta: Crear bloqueo'));const button=el('button','haiku-cancelacion-boton','Preparar bloqueo');button.type='button';
-    botones.push(button);let vista=null,busy=false,obsoleto=false;
-    root.addEventListener('haiku:libro-cambio',()=>{obsoleto=true;button.disabled=true;status.textContent='El Libro cambió. Propuesta invalidada.';seccion.open=true;},{once:true});
-    button.addEventListener('click',async()=>{if(busy||obsoleto||loteEnCurso||obsoletoGrupo)return;busy=true;individualesEnCurso++;button.disabled=true;seccion.open=true;
-     try{if(!vista){vista=await preparar(b,g);if(obsoleto)return;status.textContent=vista.estado==='ya_coincide'?'Ya coincide. Sin escritura.':`PREVISUALIZACIÓN · Sin escritura\nCAB ${b.cabana} · ${b.fecha_inicio} → ${b.fecha_fin}\n${b.nota}\nSe revalidará después de confirmar.`;button.textContent=vista.estado==='ya_coincide'?'Ya coincide':'Confirmar bloqueo';}
-      else{const r=await confirmar(vista);if(obsoleto)return;status.textContent=r.estado==='creado'?'✓ Bloqueo creado.':r.estado==='ya_coincide'?'✓ Ya coincide. Sin escritura.':r.mensaje||'Bloqueo no confirmado.';if(r.estado!=='sin_confirmar'){button.disabled=true;obsoleto=true;}}
-     }catch(e){if(!obsoleto){status.textContent=e.message;vista=null;button.textContent='Volver a preparar bloqueo';}}
-     finally{seccion.open=true;busy=false;individualesEnCurso--;button.disabled=obsoleto||vista?.estado==='ya_coincide';}
-    });status.className+=' haiku-bloqueo-nota';card.append(status,button);
-   }else card.append(el('p','haiku-cancelacion-secundario',caso.estado==='ya_coincide'?'No se requiere ninguna escritura.':'Sin acción automática.'));
+    const button=el('button','haku-bloqueo-boton','Preparar bloqueo');button.type='button';
+    botones.push(button);let vista=null,busy=false,finalizado=false;
+    button.addEventListener('click',async()=>{
+     if(busy||finalizado||loteEnCurso||finalizadoGrupo)return;busy=true;individualesEnCurso++;button.disabled=true;button.setAttribute('aria-busy','true');seccion.open=true;
+     try{
+      if(!vista){
+       status.textContent='Comprobando…';vista=await preparar(b,g);
+       status.textContent=vista.estado==='ya_coincide'?'Ya está registrado.':'Listo para confirmar.';
+       button.textContent='Confirmar bloqueo';
+       if(vista.estado==='ya_coincide'){badge.textContent='Ya existe';button.hidden=true;finalizado=true;card.setAttribute('data-estado','ya_coincide');}
+      }else{
+       const r=await confirmar(vista);
+       status.textContent=r.estado==='creado'?'Bloqueo creado.':r.estado==='ya_coincide'?'Ya está registrado.':r.mensaje||'Confirmación cancelada.';
+       if(['creado','ya_coincide'].includes(r.estado)){badge.textContent='Ya existe';button.hidden=true;finalizado=true;card.setAttribute('data-estado','ya_coincide');}
+       else if(r.estado!=='sin_confirmar'){vista=null;button.textContent='Reintentar comprobación';}
+      }
+     }catch(e){status.textContent=e.message;vista=null;button.textContent='Reintentar comprobación';}
+     finally{busy=false;individualesEnCurso--;button.disabled=finalizado;button.setAttribute('aria-busy','false');}
+    });acciones.append(button);
+   }
    seccion.append(card);
   }
   for(const [titulo,items,revision] of [['Bloqueos sólo en Proyecto H',resultado.solo_proyecto_h,false],['Bloqueos de Proyecto H por revisar',resultado.revision_inversa,true]]){
-   if(!items?.length)continue;let destino=out;
-   if(revision)out.append(el('h3','haiku-cancelacion-titulo',`${titulo} (${items.length})`));
-   else{destino=el('details','haiku-comparacion-acordeon haiku-comparacion-acordeon--revision');destino.open=false;destino.append(el('summary','',`${titulo} (${items.length})`));out.append(destino);}
-   for(const b of items){const card=el('section','haiku-cancelacion-card');
+   if(!items?.length)continue;
+   const destino=el('details','haiku-comparacion-acordeon haiku-comparacion-acordeon--revision');destino.open=false;
+   destino.append(el('summary','',`${titulo} (${items.length})`));out.append(destino);
+   for(const b of items){
     const retiro=!revision&&root.HAIKU_LIBRO_BLOQUEOS_RETIRO_V1?.puedePreparar(b);
-    card.append(el('h4','haiku-cancelacion-nombre',`CAB ${b.cabana}`),el('p','haiku-cancelacion-origen',`${b.fecha_inicio||'Fecha no determinada'} → ${b.fecha_fin||'Fin no determinado'}`),el('p','haiku-cancelacion-nota haiku-bloqueo-nota',b.nota||'Sin motivo registrado'),el('p','haiku-cancelacion-secundario',revision?b.mensaje:'No aparece en el Libro actual.'),el('p','haiku-cancelacion-secundario',revision?'Sólo lectura. Sin acción automática.':retiro?'Revisar antes de eliminar.':'Revisar antes de eliminar. Sólo lectura.'));
+    const mensaje=revision?b.mensaje:retiro?'No aparece en el Libro actual.':'No aparece en el Libro actual. Revisar antes de eliminar · Sólo lectura.';
+    const {card}=ficha(b,revision?'revision':'solo_h',mensaje);
     if(retiro)root.HAIKU_LIBRO_BLOQUEOS_RETIRO_V1.adjuntar(card,b,g,destino,(nuevo,status)=>{
      out.replaceChildren();renderizar(out,nuevo.bloqueos_comparacion,nuevo.generacion,true);out.append(status);
     });destino.append(card);
    }
   }
-  if(resultado.error_inversa)out.append(el('p','haiku-cancelacion-secundario',resultado.error_inversa));
+  if(resultado.error_inversa)out.append(el('p','haku-bloqueo-status',resultado.error_inversa));
   return seccion;
  }
  const api=Object.freeze({comparar,revisar,preparar,confirmar,prepararTodos,confirmarTodos,renderizar});root.HAIKU_LIBRO_BLOQUEOS_V1=api;if(typeof module!=='undefined')module.exports=api;

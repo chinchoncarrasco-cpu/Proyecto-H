@@ -6,6 +6,12 @@ on:
       - "js/supabase-asistente-libro-actualizacion-v1.js"
       - "js/supabase-asistente-libro-auto-v1.js"
       - "js/haiku-libro-consultas-v1.js"
+      - "js/haiku-libro-bloqueos-v1.js"
+      - "js/haiku-libro-bloqueos-retiro-v1.js"
+      - "tests/libro-bloqueos.test.cjs"
+      - "tests/libro-bloqueos-lote.test.cjs"
+      - "tests/libro-bloqueos-retiro.test.cjs"
+      - "tests/libro-bloqueos-tema-browser-check.cjs"
       - "js/haiku-libro-resoluciones-v1.js"
       - "js/supabase-libro-reserva-v1.js"
       - "tests/libro-consulta-incorporacion-continua.test.cjs"
@@ -57,7 +63,7 @@ jobs:
       - name: Fuente, sesión, informe conservado y contexto vigente
         env:
           HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
-        run: node --test tests/libro-consulta-incorporacion-continua.test.cjs tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-prioridad.test.cjs tests/haiku-libro-incorporar-aviso.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-servicios-resultados-parciales.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-pagos-lectura-estable.test.cjs
+        run: node --test tests/libro-bloqueos.test.cjs tests/libro-bloqueos-lote.test.cjs tests/libro-bloqueos-retiro.test.cjs tests/libro-consulta-incorporacion-continua.test.cjs tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-prioridad.test.cjs tests/haiku-libro-incorporar-aviso.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-servicios-resultados-parciales.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-pagos-lectura-estable.test.cjs
       - name: Informe operativo y lector real en escritorio y móvil
         env:
           NODE_PATH: ${{ runner.temp }}/haku-informe/node_modules
@@ -66,6 +72,7 @@ jobs:
           export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
           export HAIKU_BROWSER_EXECUTABLE="$HAKU_CHROMIUM_PATH"
           resultado=0
+          node tests/libro-bloqueos-tema-browser-check.cjs || resultado=$?
           node tests/libro-consulta-incorporacion-browser-check.cjs || resultado=$?
           node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
           node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
