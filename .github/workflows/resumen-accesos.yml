@@ -1,0 +1,40 @@
+name: Haku accesos y estados del Resumen
+on:
+  pull_request:
+    paths:
+      - "js/supabase-resumen-tablero-v1.js"
+      - "js/sites-resumen-reserva-v1.js"
+      - "css/sites-resumen-v1.css"
+      - "css/haiku-tema-v1.css"
+      - "tests/resumen-accesos*.cjs"
+      - "tests/reserva-estado-manual-browser-check.cjs"
+      - ".github/workflows/resumen-accesos.yml"
+permissions:
+  contents: read
+jobs:
+  resumen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Identidades, navegación, estados y fuentes del Resumen
+        run: node --test tests/resumen-*.test.cjs tests/reserva-estado-manual.test.cjs tests/reserva-estados-colores-visuales.test.cjs tests/ficha-estado-estadia.test.cjs tests/haiku-tema*.test.cjs
+      - name: Navegador aislado
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-resumen" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          node "$RUNNER_TEMP/haku-resumen/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Accesos, contraste y cambio de estado sin esperar otras vistas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-resumen/node_modules
+        run: |
+          export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          resultado=0
+          node tests/resumen-accesos-tema-browser-check.cjs || resultado=$?
+          node tests/reserva-estado-manual-browser-check.cjs || resultado=$?
+          node tests/resumen-nav-panel-browser-check.cjs || resultado=$?
+          exit "$resultado"

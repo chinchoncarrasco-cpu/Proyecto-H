@@ -16,6 +16,7 @@
     });
     const selectorFila = "#seccion-resumen .sites-resumen-cabana[data-cabana]";
     const filtros = new Set(["continuan", "ingresan", "salen", "servicios", "pagos"]);
+    const accesosDia = new WeakMap();
     const historial = new Map();
     const operacionFiltrada = new Map();
     const historialPendiente = new Map();
@@ -422,6 +423,48 @@
         return descripcionDia(String(datos.estado || ""), String(datos.titular || "").trim());
     }
 
+    function identidadAccesoDia(operacion) {
+        return identidadDelDia(operacion) ||
+            (["sale-libre", "sale-bloqueada"].includes(operacion?.estado_operativo)
+                ? identidadEstado(operacion, "salida") : null);
+    }
+
+    function configurarAccesoDia(elemento, operacion, dia, fecha, numero) {
+        if (!elemento) return;
+        const identidad = identidadAccesoDia(operacion);
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        accesosDia.delete(elemento);
+        elemento.removeAttribute?.("role");
+        elemento.removeAttribute?.("tabindex");
+        elemento.removeAttribute?.("aria-label");
+        elemento.removeAttribute?.("title");
+        delete elemento.dataset.resumenDiaAcceso;
+        if (!window.haikuSesion || window.haikuTienePermiso?.("reservas.ver") !== true ||
+            !uuid.test(identidad?.reservaId || "") || !uuid.test(identidad?.estadiaId || "")) return;
+        accesosDia.set(elemento, { ...identidad, dia, fecha, numero,
+            sesion: window.haikuSesion });
+        elemento.dataset.resumenDiaAcceso = "true";
+        elemento.setAttribute?.("role", "button");
+        elemento.setAttribute?.("tabindex", "0");
+        const etiqueta = `${dia} · Cabaña ${numero} · Ver reserva de ${titularOperacion(operacion) || "este día"}`;
+        elemento.setAttribute?.("aria-label", etiqueta);
+        elemento.setAttribute?.("title", etiqueta);
+    }
+
+    function abrirDia(elemento) {
+        const acceso = accesosDia.get(elemento);
+        if (!acceso || acceso.fecha !== fechaActiva() || !window.haikuSesion ||
+            acceso.sesion !== window.haikuSesion ||
+            window.haikuTienePermiso?.("reservas.ver") !== true) return false;
+        const actual = identidadAccesoDia(historial.get(acceso.dia)?.get(acceso.numero));
+        if (!actual || actual.reservaId !== acceso.reservaId || actual.estadiaId !== acceso.estadiaId)
+            return false;
+        return window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(acceso.reservaId, elemento, {
+            estadiaId: acceso.estadiaId, numeroCabana: acceso.numero,
+            fecha: acceso.dia, fechaResumen: acceso.fecha
+        });
+    }
+
     function pintarFlujo(fila, fecha, indice = indiceEstadosReserva()) {
         const numero = String(fila.dataset.cabana || "");
         const anterior = sumarDias(fecha, -1);
@@ -433,10 +476,9 @@
                 ? descripcionDia(String(filaRemota.estado_operativo || ""), titularOperacion(filaRemota))
                 : (datos ? resumenDiaLocal(dia, numero) : "Sin datos");
             texto(fila.querySelector(`.sites-resumen-dia--${tipo} .sites-resumen-dia-valor`), valor);
-            aplicarEstadoReservaDia(
-                fila.querySelector(`.sites-resumen-dia--${tipo}`),
-                estadoReservaDelDia(filaRemota || operacionLocal(datos), indice)
-            );
+            const elemento = fila.querySelector(`.sites-resumen-dia--${tipo}`);
+            aplicarEstadoReservaDia(elemento, estadoReservaDelDia(filaRemota || operacionLocal(datos), indice));
+            configurarAccesoDia(elemento, filaRemota, dia, fecha, numero);
         }
         const estado = String(campo(fila, "estado")?.value || "");
         const datosActuales = datosLocales(fecha, numero);
@@ -444,11 +486,19 @@
             !window.haikuSesion ? datosActuales : null);
         texto(fila.querySelector(".sites-resumen-dia--actual .sites-resumen-dia-valor"),
             descripcionDia(estado, titular === "Sin titular" ? "" : titular));
-        aplicarEstadoReservaDia(
-            fila.querySelector(".sites-resumen-dia--actual"),
-            estadoReservaDelDia(historial.get(fecha)?.get(numero) ||
-                operacionLocal(datosActuales), indice)
-        );
+        const operacion = historial.get(fecha)?.get(numero);
+        const elemento = fila.querySelector(".sites-resumen-dia--actual");
+        aplicarEstadoReservaDia(elemento, estadoReservaDelDia(operacion || operacionLocal(datosActuales), indice));
+        configurarAccesoDia(elemento, operacion, fecha, fecha, numero);
+        // El plan del día no cambia. Sólo señalamos la salida ya confirmada por su estadía exacta.
+        if (["sale-libre", "sale-bloqueada", "sale-ingresa"].includes(estado)) {
+            const salida = identidadEstado(operacion, "salida");
+            if (salida?.estadiaId && indice.estadias.get(salida.estadiaId) === "checked_out") {
+                const badge = fila.querySelector(".sites-resumen-estado-badge");
+                texto(badge, estado === "sale-ingresa" ? "Salió · ingresa" : "Ya salió");
+                if (badge) badge.dataset.estadoVisual = "salio";
+            }
+        }
     }
 
     function operacionParaFiltro(fila, fecha) {
@@ -901,7 +951,16 @@
         botonAnterior?.addEventListener("click", () => navegar(-1));
         botonHoy?.addEventListener("click", navegarHoy);
         botonSiguiente?.addEventListener("click", () => navegar(1));
+        lista.addEventListener("keydown", evento => {
+            if (!["Enter", " "].includes(evento.key) || evento.repeat) return;
+            const dia = evento.target.closest?.("[data-resumen-dia-acceso]");
+            if (!dia) return;
+            evento.preventDefault();
+            abrirDia(dia);
+        });
         lista.addEventListener("click", evento => {
+            const dia = evento.target.closest?.("[data-resumen-dia-acceso]");
+            if (dia) { abrirDia(dia); return; }
             const boton = evento.target.closest?.("[data-resumen-expandir]");
             if (boton) {
                 alternarDetalle(boton);

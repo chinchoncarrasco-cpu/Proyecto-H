@@ -282,3 +282,16 @@ test("La ficha legacy sigue disponible y su lectura Sites exige datos completos"
     assert.match(historialFuente, /abrirHistorialReserva\(reservaIdSolicitado = "", metaSolicitud = null\)/);
     assert.match(historialFuente, /abrirReserva: abrirHistorialReserva/);
 });
+
+test("la franja abre la estadía de su fecha y rechaza fechas movidas o navegación durante la apertura", async () => {
+    const caso=montar();
+    assert.equal(await caso.api.abrirPorId(RESERVA,caso.boton,{estadiaId:ESTADIA,numeroCabana:9,
+        fecha:'2026-09-22',fechaResumen:FECHA}),true);
+    caso.api.cerrar();
+    assert.equal(await caso.api.abrirPorId(RESERVA,caso.boton,{estadiaId:ESTADIA,numeroCabana:9,
+        fecha:'2026-09-25',fechaResumen:FECHA}),false);
+    assert.match(caso.drawer.get('[data-reserva-estado]').textContent,/estadía o el día/);
+    caso.api.cerrar();caso.cambiarFecha('2026-09-24');
+    assert.equal(await caso.api.abrirPorId(RESERVA,caso.boton,{estadiaId:ESTADIA,numeroCabana:9,
+        fecha:'2026-09-22',fechaResumen:FECHA}),false);
+});

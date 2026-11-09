@@ -90,7 +90,7 @@ async function continuarLectura(page){
  await page.evaluate(()=>{window.__readGate=null;window.__releaseRead();});
 }
 (async()=>{
- const browser=await chromium.launch({executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
+ const browser=await chromium.launch({executablePath:process.env.HAKU_CHROMIUM_PATH || (process.platform==='win32'?'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe':undefined),headless:true});
  let checks=0;
  try{
   for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
@@ -132,18 +132,18 @@ async function continuarLectura(page){
    await page.evaluate(()=>{__fail=true;__delay=0;});await badge.click();
    await menu.locator('[data-reserva-nuevo-estado="hospedada"]').click();
    assert.equal(await confirm.isVisible(),false);checks++;
-   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('Fallo simulado'));
+   await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('Fallo simulado'));
    assert.equal(await badge.innerText(),'Confirmada');checks++;
-   assert.match(await page.locator('[data-reserva-estado]').innerText(),/No se pudo confirmar/);checks++;
+   assert.match(await page.locator('p[data-reserva-estado]').innerText(),/No se pudo confirmar/);checks++;
    // Cambio concurrente o pérdida de permiso detienen la operación antes de escribir.
    await page.evaluate(()=>{__fail=false;});await badge.click();await menu.locator('[data-reserva-nuevo-estado="pendiente"]').click();
    await page.evaluate(()=>{__ficha.estadias[0].fecha_salida='2026-09-29';});
    await page.locator('[data-reserva-estado-confirmar]').click();
-   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('cambi'));
+   await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('cambi'));
    assert.equal(await page.evaluate(()=>__writes.length),2);checks++;
    await montar(page,'confirmada');await badge.click();await menu.locator('[data-reserva-nuevo-estado="pendiente"]').click();
    await page.evaluate(()=>{__permission=false;});await page.locator('[data-reserva-estado-confirmar]').click();
-   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('permiso'));
+   await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('permiso'));
    assert.equal(await page.evaluate(()=>__writes.length),0);assert.equal(await badge.innerText(),'Confirmada');checks++;
    // SQLSTATE manda: 40001 reconcilia incluso con HTTP 200; P0001 no lo hace
    // incluso con HTTP 409. El destino rechazado nunca aparece como guardado.
@@ -151,23 +151,23 @@ async function continuarLectura(page){
     await montar(page);await badge.click();await menu.locator('[data-reserva-nuevo-estado="cancelada"]').click();
     await page.evaluate(status=>{__rpcError={code:'40001',message:'Snapshot obsoleto'};__httpStatus=status;__serverCambio='confirmada';},status);
     await page.locator('[data-reserva-estado-confirmar]').click();
-    await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('Se releyó'));
+    await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('Se releyó'));
     assert.equal(await badge.innerText(),'Confirmada');assert.equal(await page.evaluate(()=>__writes.length),1);checks++;
     assert.ok(await page.evaluate(()=>__reads>__readsAtRpc));
-    assert.equal(await page.locator('[data-reserva-estado]').getAttribute('data-error'),'true');checks++;
+    assert.equal(await page.locator('p[data-reserva-estado]').getAttribute('data-error'),'true');checks++;
     assert.deepEqual((await page.evaluate(()=>__refresh)).sort(),['calendario','historial','listado','pagos','reservas','resumen']);checks++;
     assert.deepEqual(await page.evaluate(()=>__resumenEventos),['conflicto concurrente de estado de reserva']);checks++;
    }
    await montar(page);await badge.click();await menu.locator('[data-reserva-nuevo-estado="cancelada"]').click();
    await page.evaluate(()=>{__rpcError={code:'P0001',message:'Regla de negocio'};__httpStatus=409;__serverCambio='confirmada';});
    await page.locator('[data-reserva-estado-confirmar]').click();
-   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('Regla de negocio'));
+   await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('Regla de negocio'));
    assert.equal(await badge.innerText(),'Hospedado');assert.ok(await page.evaluate(()=>__reads===__readsAtRpc));
    assert.deepEqual(await page.evaluate(()=>__refresh),[]);checks++;
    await montar(page);await badge.click();await menu.locator('[data-reserva-nuevo-estado="cancelada"]').click();
    await page.evaluate(()=>{__rpcError={code:'40001',message:'Snapshot obsoleto'};__failReadAfterConflict=true;});
    await page.locator('[data-reserva-estado-confirmar]').click();
-   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('No se pudo releer'));
+   await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('No se pudo releer'));
    assert.equal(await badge.innerText(),'Hospedado');assert.equal(await page.evaluate(()=>__writes.length),1);checks++;
    // La opción queda habilitada en el mismo ingreso a las 00:00 de Chile.
    await montar(page,'confirmada');await page.evaluate(()=>{__ficha.estadias[0].fecha_ingreso='2026-09-27';__now='2026-09-27T03:00:00Z';});
@@ -199,7 +199,7 @@ async function continuarLectura(page){
     await montar(page,'confirmada');await directoPausado(page,destino);
     assert.equal(await confirm.isVisible(),false);assert.equal(await menu.isVisible(),false);checks++;
     assert.equal(await badge.innerText(),'Confirmada');assert.equal(await page.evaluate(()=>__writes.length),0);checks++;
-    assert.match(await page.locator('[data-reserva-estado]').innerText(),/Actualizando estado/);checks++;
+    assert.match(await page.locator('p[data-reserva-estado]').innerText(),/Actualizando estado/);checks++;
     await continuarLectura(page);
     const nuevo=destino==='hospedada'?'Hospedado':'Check-out';
     await page.waitForFunction(nuevo=>document.querySelector('[data-reserva-estado-operativo]').textContent===nuevo,nuevo);
@@ -215,11 +215,11 @@ async function continuarLectura(page){
     await page.evaluate(destino=>{__rpcError={code:'P0001',message:destino==='checked_out'?
      'Check-out bloqueado por fecha/hora':'Check-in bloqueado por regla operativa'};},destino);
     await badge.click();await menu.locator(`[data-reserva-nuevo-estado="${destino}"]`).click();
-    await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('bloqueado'));
+    await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('bloqueado'));
     assert.equal(await badge.innerText(),'Confirmada');assert.equal(await confirm.isVisible(),false);checks++;
     assert.equal(await page.evaluate(()=>__writes.length),1);
     assert.deepEqual(await page.evaluate(()=>__refresh),[]);
-    assert.equal(await page.locator('[data-reserva-estado]').getAttribute('data-error'),'true');checks++;
+    assert.equal(await page.locator('p[data-reserva-estado]').getAttribute('data-error'),'true');checks++;
     // Permiso perdido o identidad obsoleta durante revalidación: cero RPC.
     for(const fallo of ['permiso','identidad']){
      await montar(page,'confirmada');await directoPausado(page,destino);
@@ -228,7 +228,7 @@ async function continuarLectura(page){
       else __ficha.estadias[0].fecha_salida='2026-09-29';
      },fallo);
      await continuarLectura(page);
-     await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').dataset.error==='true');
+     await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').dataset.error==='true');
      assert.equal(await page.evaluate(()=>__writes.length),0);assert.equal(await badge.innerText(),'Confirmada');checks++;
      assert.equal(await confirm.isVisible(),false);assert.equal(await page.evaluate(()=>__avisosDirectos),0);checks++;
     }
@@ -236,12 +236,31 @@ async function continuarLectura(page){
     await montar(page,'confirmada');
     await page.evaluate(()=>{__rpcError={code:'40001',message:'Snapshot obsoleto'};__httpStatus=200;__serverCambio='pendiente';});
     await badge.click();await menu.locator(`[data-reserva-nuevo-estado="${destino}"]`).click();
-    await page.waitForFunction(()=>document.querySelector('[data-reserva-estado]').textContent.includes('Se releyó'));
+    await page.waitForFunction(()=>document.querySelector('p[data-reserva-estado]').textContent.includes('Se releyó'));
     assert.equal(await badge.innerText(),'Confirmación Pendiente');assert.equal(await confirm.isVisible(),false);checks++;
     assert.equal(await page.evaluate(()=>__writes.length),1);assert.ok(await page.evaluate(()=>__reads>__readsAtRpc));checks++;
-    assert.equal(await page.locator('[data-reserva-estado]').getAttribute('data-error'),'true');
+    assert.equal(await page.locator('p[data-reserva-estado]').getAttribute('data-error'),'true');
     assert.deepEqual(await page.evaluate(()=>__resumenEventos),['conflicto concurrente de estado de reserva']);checks++;
    }
+   // La relectura verificada de la ficha no espera a las otras vistas (5–7 s en recepción).
+   await montar(page,'hospedada');
+   await page.evaluate(()=>{
+    window.__background=new Promise(resolve=>window.__releaseBackground=resolve);
+    window.haikuSincronizarReservasSupabase=async()=>{__refresh.push('reservas');await __background;throw Error('Lista lenta');};
+   });
+   await badge.click();await menu.locator('[data-reserva-nuevo-estado="checked_out"]').click();
+   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado-operativo]').textContent==='Check-out',null,{timeout:1500});
+   assert.equal(await page.locator('[data-reserva-contenido]').isVisible(),true);
+   assert.equal(await page.evaluate(()=>__reads),3,'Una apertura, una revalidación, una relectura: sin duplicar la ficha');checks++;
+   assert.equal(await badge.getAttribute('aria-busy'),null);
+   assert.equal(await page.evaluate(()=>__writes.length),1);
+   assert.match(await page.locator('p[data-reserva-estado]').innerText(),/Check-out guardado/);checks++;
+   // Cerrar/reabrir otra ficha mientras se refresca es posible; la respuesta vieja no la pisa.
+   await page.locator('[data-reserva-cerrar]').click();
+   await page.evaluate(({R,E})=>HAIKU_RESUMEN_RESERVA_SITES_V1.abrirPorId(R,null,{estadiaId:E,numeroCabana:2}),{R,E});
+   await page.evaluate(async()=>{__releaseBackground();await __background;});
+   await page.waitForFunction(()=>__refresh.includes('calendario'));
+   assert.equal(await page.locator('p[data-reserva-estado]').textContent(),'');checks++;
    assert.deepEqual(errors,[]);await page.close();
   }
   console.log(`PASS: ${checks} comprobaciones browser Edge desktop/móvil, sin red. Capturas: ${os.tmpdir()}\\haiku-reserva-estado-*.png`);

@@ -371,6 +371,19 @@
         return resultados.every(r => r.status === "fulfilled");
     }
 
+    // La ficha confirmada queda disponible sin esperar a Pagos, Historial y Calendario.
+    // Cada tarea conserva su autoridad de lectura; un resultado viejo no toca otra ficha.
+    function refrescarVistasEnSegundoPlano(version, seguimiento, evento) {
+        void refrescarTrasEstado(evento).then(ok => {
+            if (ok || version !== estado.version || seguimiento !== estado.seguimientoEstado ||
+                estado.drawer.hidden || !window.haikuSesion ||
+                window.haikuTienePermiso?.("reservas.ver") !== true) return;
+            const mensaje = estado.drawer.querySelector("[data-reserva-estado]");
+            estadoVisible(mensaje.textContent + " Alguna vista no pudo actualizarse; recárgala.",
+                mensaje.dataset.error === "true");
+        }).catch(error => console.warn("HAIKU · No se pudieron refrescar las vistas:", error));
+    }
+
     async function confirmarEstado() {
         const cambio = estado.cambio;
         if (estado.ocupado || !cambio || cambio.version !== estado.version) return false;
@@ -378,14 +391,18 @@
         const version = estado.version;
         estado.ocupado = true;
         estado.guardandoEstado = true;
+        estado.drawer.querySelector("[data-reserva-estado-operativo]").setAttribute?.("aria-busy", "true");
         const confirmar = estado.drawer.querySelector("[data-reserva-estado-confirmar]");
         const cancelar = estado.drawer.querySelector("[data-reserva-estado-cancelar]");
         confirmar.disabled = cancelar.disabled = true;
         confirmar.textContent = "Guardando…";
         let guardado = false;
+        const seguimiento = {};
+        estado.seguimientoEstado = seguimiento;
         try {
-            await revalidar(identidad);
-            const ficha = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
+            const validada = await revalidar(identidad);
+            const ficha = identidad.origen === "reservas"
+                ? validada : await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
             const estadia = elegirEstadia(ficha, identidad);
             if (version !== estado.version || !estadia ||
                 JSON.stringify(manual.esperado(ficha)) !== JSON.stringify(cambio.esperado))
@@ -404,21 +421,23 @@
             estado.cambio = null;
             estado.drawer.querySelector("[data-reserva-estado-confirmacion]").hidden = true;
             estadoVisible("Cambio guardado. Actualizando la ficha…");
-            const refrescado = await refrescarTrasEstado();
             const actualizada = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
             const seleccionada = elegirEstadia(actualizada, identidad);
-            if (!seleccionada || manual.actual(actualizada, seleccionada) !== cambio.destino)
+            if (version !== estado.version || !window.haikuSesion ||
+                window.haikuTienePermiso?.("reservas.ver") !== true ||
+                String(actualizada?.reserva?.id || "") !== identidad.reservaId ||
+                !seleccionada || manual.actual(actualizada, seleccionada) !== cambio.destino)
                 throw new Error("No se pudo verificar el estado guardado. Actualiza la ficha.");
             estado.ficha = actualizada;
             estado.estadia = seleccionada;
             estado.identidad = identidadEstadia(identidad.reservaId, actualizada, seleccionada);
             pintar(actualizada, seleccionada, estado.identidad);
-            estadoVisible(refrescado ? "Estado actualizado." : "Estado guardado. Alguna vista no pudo actualizarse; recárgala.");
+            estadoVisible(`${manual.etiqueta(cambio.destino)} guardado.`);
+            refrescarVistasEnSegundoPlano(version, seguimiento);
             return true;
         } catch (error) {
             if (!guardado && error?.code === "40001") {
                 try {
-                    const refrescado = await refrescarTrasEstado("conflicto concurrente de estado de reserva");
                     const reconciliada = await window.haikuLeerFichaSupabaseV2(identidad.reservaId);
                     const seleccionada = elegirEstadia(reconciliada, identidad);
                     if (version !== estado.version || !seleccionada ||
@@ -430,21 +449,24 @@
                     estado.identidad = identidadEstadia(identidad.reservaId, reconciliada, seleccionada);
                     pintar(reconciliada, seleccionada, estado.identidad);
                     estadoVisible("El cambio fue rechazado porque la reserva cambió en otro proceso. " +
-                        "Se releyó su estado actual; revísalo antes de volver a confirmar." +
-                        (refrescado ? "" : " Alguna vista no pudo actualizarse; recárgala."), true);
+                        "Se releyó su estado actual; revísalo antes de volver a confirmar.", true);
+                    refrescarVistasEnSegundoPlano(version, seguimiento, "conflicto concurrente de estado de reserva");
                 } catch (_) {
                     estadoVisible("El cambio fue rechazado porque la reserva cambió en otro proceso. " +
                         "No se pudo releer su estado actual; vuelve a abrir la ficha.", true);
+                    refrescarVistasEnSegundoPlano(version, seguimiento, "conflicto concurrente de estado de reserva");
                 }
                 return false;
             }
             estadoVisible((guardado ? "El servidor recibió el cambio. " : "No se pudo confirmar el cambio. ") +
                 (error?.message || "Inténtalo nuevamente."), true);
+            if (guardado) refrescarVistasEnSegundoPlano(version, seguimiento);
             // No hay pintura optimista: ante un fallo conserva el badge previo.
             return false;
         } finally {
             estado.ocupado = false;
             estado.guardandoEstado = false;
+            estado.drawer.querySelector("[data-reserva-estado-operativo]").removeAttribute?.("aria-busy");
             confirmar.disabled = cancelar.disabled = false;
             confirmar.textContent = "Confirmar cambio";
             cerrarCambioEstado(true);
@@ -731,6 +753,12 @@
                 if (!UUID.test(estadiaId) || !/^\d{1,2}$/.test(numeroCabana) ||
                     !estadia || Number(estadia.cabana_numero) !== Number(numeroCabana)) {
                     throw new Error("La estadía y cabaña seleccionadas no corresponden a la reserva. Actualiza el Calendario.");
+                }
+                if (seleccion.fecha && (!FECHA.test(seleccion.fecha) ||
+                    seleccion.fecha < String(estadia.fecha_ingreso || "").slice(0, 10) ||
+                    seleccion.fecha > String(estadia.fecha_salida || "").slice(0, 10) ||
+                    (seleccion.fechaResumen && seleccion.fechaResumen !== fechaActiva()))) {
+                    throw new Error("La estadía o el día del Resumen cambiaron. Vuelve a abrirla desde la franja.");
                 }
                 return seleccionarEstadia(estadiaId);
             }
