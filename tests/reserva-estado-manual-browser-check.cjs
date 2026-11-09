@@ -90,7 +90,7 @@ async function continuarLectura(page){
  await page.evaluate(()=>{window.__readGate=null;window.__releaseRead();});
 }
 (async()=>{
- const browser=await chromium.launch({executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
+ const browser=await chromium.launch({executablePath:process.env.HAKU_CHROMIUM_PATH || (process.platform==='win32'?'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe':undefined),headless:true});
  let checks=0;
  try{
   for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
@@ -242,6 +242,25 @@ async function continuarLectura(page){
     assert.equal(await page.locator('[data-reserva-estado]').getAttribute('data-error'),'true');
     assert.deepEqual(await page.evaluate(()=>__resumenEventos),['conflicto concurrente de estado de reserva']);checks++;
    }
+   // La relectura verificada de la ficha no espera a las otras vistas (5–7 s en recepción).
+   await montar(page,'hospedada');
+   await page.evaluate(()=>{
+    window.__background=new Promise(resolve=>window.__releaseBackground=resolve);
+    window.haikuSincronizarReservasSupabase=async()=>{__refresh.push('reservas');await __background;throw Error('Lista lenta');};
+   });
+   await badge.click();await menu.locator('[data-reserva-nuevo-estado="checked_out"]').click();
+   await page.waitForFunction(()=>document.querySelector('[data-reserva-estado-operativo]').textContent==='Check-out',null,{timeout:1500});
+   assert.equal(await page.locator('[data-reserva-contenido]').isVisible(),true);
+   assert.equal(await page.evaluate(()=>__reads),3,'Una apertura, una revalidación, una relectura: sin duplicar la ficha');checks++;
+   assert.equal(await badge.getAttribute('aria-busy'),null);
+   assert.equal(await page.evaluate(()=>__writes.length),1);
+   assert.match(await page.locator('[data-reserva-estado]').innerText(),/Check-out guardado/);checks++;
+   // Cerrar/reabrir otra ficha mientras se refresca es posible; la respuesta vieja no la pisa.
+   await page.locator('[data-reserva-cerrar]').click();
+   await page.evaluate(({R,E})=>HAIKU_RESUMEN_RESERVA_SITES_V1.abrirPorId(R,null,{estadiaId:E,numeroCabana:2}),{R,E});
+   await page.evaluate(async()=>{__releaseBackground();await __background;});
+   await page.waitForFunction(()=>__refresh.includes('calendario'));
+   assert.equal(await page.locator('[data-reserva-estado]').textContent(),'');checks++;
    assert.deepEqual(errors,[]);await page.close();
   }
   console.log(`PASS: ${checks} comprobaciones browser Edge desktop/móvil, sin red. Capturas: ${os.tmpdir()}\\haiku-reserva-estado-*.png`);

@@ -53,12 +53,12 @@
         --haiku-reserva-confirmada-fondo: #223557;
         --haiku-reserva-confirmada-texto: #d8e5ff;
         --haiku-reserva-confirmada-acento: #81a8ff;
-        --haiku-reserva-hospedada-fondo: #20392c;
-        --haiku-reserva-hospedada-texto: #b9e6c9;
+        --haiku-reserva-hospedada-fondo: #16482f;
+        --haiku-reserva-hospedada-texto: #b9f1cc;
         --haiku-reserva-hospedada-acento: #75ce96;
-        --haiku-reserva-checkout-fondo: #323c37;
-        --haiku-reserva-checkout-texto: #d6dfd9;
-        --haiku-reserva-checkout-acento: #afc0b6;
+        --haiku-reserva-checkout-fondo: #383b42;
+        --haiku-reserva-checkout-texto: #e2e4e9;
+        --haiku-reserva-checkout-acento: #b9bec8;
         --haiku-reserva-cancelada-fondo: #3c2928;
         --haiku-reserva-cancelada-texto: #f3b2a8;
         --haiku-reserva-cancelada-acento: #e59c91;
@@ -69,8 +69,18 @@
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado] {
         --franja-estado-bg: color-mix(in srgb, var(--franja-estado-acento) 18%, #101916);
     }
-    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="hospedada"] { --franja-estado-bg: #20392c; }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="hospedada"] { --franja-estado-bg: var(--haiku-reserva-hospedada-fondo); }
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="confirmada"] { --franja-estado-bg: #223557; }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-dia[data-reserva-estado="checked_out"] {
+        --franja-estado-bg: var(--haiku-reserva-checkout-fondo);
+    }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-estado-badge[data-estado-visual="salio"] {
+        background: var(--haiku-reserva-checkout-fondo);
+        color: var(--haiku-reserva-checkout-texto) !important;
+    }
+    html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-estado-badge[data-estado-visual="salio"]::before {
+        background: transparent;
+    }
     /* El documento importado conserva los colores y el texto originales de sus celdas. */
     html[data-haiku-tema="oscuro"] #libro-reserva-visor table { color-scheme: light; }
 }

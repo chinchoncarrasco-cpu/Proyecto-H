@@ -1569,3 +1569,26 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
   .sites-resumen-pago-drawer .sites-resumen-pago-resumen { gap: 5px; padding: 10px 8px; }
   .sites-resumen-pago-drawer .sites-resumen-pago-resumen strong { font-size: 11px; }
 }
+
+/* La franja abre la estadía visible sin navegar fuera del día del Resumen. */
+#seccion-resumen .sites-resumen-dia[data-resumen-dia-acceso] { cursor: pointer; }
+#seccion-resumen .sites-resumen-dia[data-resumen-dia-acceso]:hover .sites-resumen-dia-valor { text-decoration: underline; }
+#seccion-resumen .sites-resumen-dia[data-resumen-dia-acceso]:focus-visible {
+    outline: 2px solid currentColor; outline-offset: -3px;
+}
+#seccion-resumen .sites-resumen-dia[data-reserva-estado="checked_out"]::after {
+    content: "✓ Salió"; flex: none; font-size: 10px; font-weight: 600; margin-left: auto;
+}
+#seccion-resumen .sites-resumen-estado-badge[data-estado-visual="salio"] {
+    background: #e8e9ed; color: #444953;
+}
+#seccion-resumen .sites-resumen-estado-badge[data-estado-visual="salio"]::before { content: "✓"; width: auto; height: auto; border-radius: 0; background: transparent; }
+#sites-resumen-reserva-drawer .rd-status[aria-busy="true"] { cursor: progress; }
+#sites-resumen-reserva-drawer .rd-status[aria-busy="true"]::after {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 6px;
+    border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+    animation: sites-resumen-dia-cargando .7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    #sites-resumen-reserva-drawer .rd-status[aria-busy="true"]::after { animation: none; }
+}
