@@ -28,7 +28,8 @@ test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento com
  await db.exec(`alter table revisiones_checkout drop constraint revisiones_checkout_pkey;alter table revisiones_checkout add column revision_id uuid default gen_random_uuid() primary key;alter table revisiones_checkout add unique(fecha_operativa,cabana_id,estadia_id);`);
  await db.exec(read('supabase/migrations/20261105054558_checkout_recorrido_prestamos.sql'));
  await db.exec(read('supabase/migrations/'+fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.endsWith('_checkout_detalles_area.sql'))));
- await db.exec(read('supabase/migrations/20261109152440_checkout_conteo_compacto.sql'));
+ await db.exec(read('supabase/migrations/20261109153550_checkout_conteo_compacto.sql'));
+ await db.exec(read('supabase/migrations/'+fs.readdirSync(path.join(root,'supabase/migrations')).find(name=>name.endsWith('_checkout_uso_tras_revision.sql'))));
  await db.exec(`select set_config('request.jwt.claim.sub','${user}',false);set role authenticated;`);
  const write=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_revision_checkout_v2($1::date,$2::uuid,$3::uuid,$4,$5::jsonb)) row',['2026-11-05',cabin,stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
  const loan=(field,value)=>db.query('select to_jsonb(public.haiku_guardar_prestamo_estadia_v1($1::uuid,$2,$3::jsonb)) row',[stay,field,JSON.stringify(value)]).then(r=>r.rows[0].row);
@@ -74,6 +75,9 @@ test('recorrido, cantidades, préstamos por estadía, permisos y aislamiento com
  assert.ok(counted.chequeados.includes('cocina'),'Revisado con faltante también cuenta como completado');
  assert.equal((await write('revision_estado','revisada')).revision_estado,'revisada');
  await assert.rejects(count('conteo',{id:'copas_vino',encontrados:3,esperados:3}),/Reabre/);
+ assert.equal((await write('chequeado',{id:'llaves',checked:true})).revision_estado,'revisada');
+ assert.equal((await write('chequeado',{id:'uso_salamandra',checked:false})).revision_estado,'revisada');
+ await assert.rejects(db.query("update revisiones_checkout set chequeados=array_remove(chequeados,'bano_secador') where estadia_id=$1",[stay]),/Reabre/);
  await write('revision_estado','en_revision');counted=await count('conteo',{id:'copas_vino',encontrados:3,esperados:3});
  assert.equal(V.inventoryNote(counted),'');assert.equal(counted.detalles.cocina.texto,'Falta copa');
  counted=await count('conteo',{id:'vasos',encontrados:null});assert.equal(counted.conteos.vasos,undefined);assert.ok(!counted.chequeados.includes('cocina'));
