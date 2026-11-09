@@ -72,13 +72,23 @@ const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta nam
   assert.equal(checkBox.w,16);assert.equal(checkBox.h,26);assert.ok(checkBox.label<100);
   assert.equal(await detail.locator('.co-inventory[open]').count(),0);
   await detail.locator('.co-inventory>summary').click();
-  await detail.locator('[data-co-count=copas_vino]').click();modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="2"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});
+  const wineCheck=detail.locator('[data-co-inventory-check=copas_vino]'),countWrites=()=>page.evaluate(()=>window.__calls.filter(c=>c.p?.p_campo==='conteo').length),writesBeforeCount=await countWrites();
+  await wineCheck.click();modal=page.locator('dialog.co-dialog');await modal.waitFor();
+  assert.equal(await wineCheck.isChecked(),false,'Abrir el conteo no marca el artículo como revisado');
+  assert.equal(await modal.locator('[name=encontrados]').inputValue(),'','No se presume la dotación completa');
+  assert.equal(await modal.locator('[data-found][aria-pressed=true]').count(),0,'Ninguna cantidad se preselecciona');
+  assert.equal(await modal.getByRole('button',{name:'Listo',exact:true}).isEnabled(),false);
+  await modal.locator('[data-dialog-close]').click();assert.equal(await countWrites(),writesBeforeCount,'Cancelar no guarda un conteo');assert.equal(await wineCheck.isChecked(),false);
+  await wineCheck.focus();await wineCheck.press('Space');modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="2"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});
+  assert.equal(await wineCheck.isChecked(),true);assert.equal(await detail.locator('[data-co-count=copas_vino]').textContent(),'2/3');
+  await wineCheck.click();modal=page.locator('dialog.co-dialog');assert.equal(await modal.locator('[name=encontrados]').inputValue(),'2');await modal.locator('[data-dialog-close]').click();assert.equal(await wineCheck.isChecked(),true,'Editar y cancelar conserva el conteo confirmado');
   assert.match(await detail.locator('[data-co-short-note]').textContent(),/Falta 1 copa de vino/);
   await detail.locator('[data-co-area-detail=cocina]>summary').click();await detail.locator('[data-co-detail=cocina]').fill('Nota manual conservada.');
   await detail.locator('[data-co-count=copas_vino]').click();modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="3"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});
   assert.doesNotMatch(await detail.locator('[data-co-short-note]').textContent(),/Falta/);assert.equal(await detail.locator('[data-co-detail=cocina]').inputValue(),'Nota manual conservada.');
   await detail.locator('[data-co-count=copas_flauta]').click();modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="2"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});
-  for(const input of await detail.locator('[data-co-point],[data-co-inventory-check]').all())await input.check();
+  for(const input of await detail.locator('[data-co-point]').all())await input.check();
+  for(const input of await detail.locator('[data-co-inventory-check]').all()){if(await input.isChecked())continue;await input.click();modal=page.locator('dialog.co-dialog');await modal.locator('[data-found="3"]').click();await modal.getByRole('button',{name:'Listo',exact:true}).click();await modal.waitFor({state:'detached'});}
   await detail.locator('[data-co-progress]').filter({hasText:'4/4 sectores revisados'}).waitFor();
   assert.equal(await detail.locator('[data-co-count=copas_flauta]').textContent(),'2/3','Marcar revisado no borra una diferencia registrada');
   await detail.locator('[data-co-copy]').click();assert.match(await page.evaluate(()=>window.__clipboard),/Cocina: Falta 1 copa flauta[.]\n  Nota manual conservada[.]/);
