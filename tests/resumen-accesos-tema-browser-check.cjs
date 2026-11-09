@@ -38,7 +38,7 @@ async function htmlPanel(){
     for(const row of document.querySelectorAll('.sites-resumen-cabana')){
      const cab=Number(row.dataset.cabana),o=__ops['2026-11-08'].find(x=>x.numero===cab),n=cab===1?2:cab===2?4:5;
      row.dataset.resumenFecha='2026-11-08';row.querySelector('[data-campo="estado"]').value=o?.estado_operativo||'libre-libre';
-     if(o){Object.assign(row.dataset,{resumenReservaId:id(n),resumenEstadiaId:id(n+10),resumenTitularReservaId:id(n),resumenTitular:name(n),resumenSalidaTitular:o.salida_titular});}
+     if(o){Object.assign(row.dataset,{resumenReservaId:id(n),resumenEstadiaId:id(n+10),resumenTitularReservaId:id(n),resumenTitular:name(n),resumenSalidaTitular:o.salida_titular,ingresoReservaId:o.ingreso_reserva_id,salidaReservaId:o.salida_reserva_id});}
      if(cab>3)row.remove();
     }
     window.haikuSupabase={rpc:async(nombre,p)=>{if(nombre!=='haiku_operacion_dia')throw Error('RPC inesperada '+nombre);return {data:structuredClone(__ops[p.p_fecha]||[])};}};
@@ -54,6 +54,8 @@ async function htmlPanel(){
    for(const p of ['js/haiku-reserva-estado-manual-v1.js','js/supabase-finanzas-resumen-v1.js','js/sites-resumen-drawer-v1.js','js/sites-resumen-reserva-v1.js','js/supabase-resumen-tablero-v1.js'])await page.addScriptTag({content:read(p)});
    const row=page.locator('.sites-resumen-cabana[data-cabana="1"]');
    await page.waitForFunction(()=>document.querySelector('.sites-resumen-dia--anterior')?.dataset.resumenDiaAcceso==='true');
+   assert.match(await row.locator('.sites-resumen-dia--actual .sites-resumen-dia-valor').innerText(),/Bruno Díaz/);
+   assert.equal(await row.locator('.sites-resumen-celda--huesped .sites-resumen-valor').innerText(),'Bruno Díaz');
    for(const tema of ['claro','oscuro']){
     await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
     const hospedado=page.locator('.sites-resumen-cabana[data-cabana="2"] .sites-resumen-dia--actual');
