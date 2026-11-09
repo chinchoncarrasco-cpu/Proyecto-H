@@ -1592,3 +1592,5 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
 @media (prefers-reduced-motion: reduce) {
     #sites-resumen-reserva-drawer .rd-status[aria-busy="true"]::after { animation: none; }
 }
+
+#seccion-resumen .sites-resumen-dia .sites-resumen-dia-etiqueta { color: #435b4b; }
