@@ -78,3 +78,38 @@ test('el mensaje presenta las áreas primero y un único bloque final de prestad
  const photoOnly=V.housekeepingMessage(10,{detalles:{bano:{texto:'',foto_path:'privada'}}});
  assert.match(photoOnly,/\*📝 Nota:\*\nBaño: 📷 Foto en Haku[.]$/);assert.doesNotMatch(photoOnly,/privada|\*🚿 BAÑO\*/);
 });
+
+test('dotación por cabaña y nota automática reversible sin modificar notas humanas',()=>{
+ assert.deepEqual(Array.from({length:11},(_,i)=>V.inventoryExpected(i+1)),[3,3,3,3,3,3,5,5,5,2,4]);
+ assert.equal(V.inventoryExpected(12),null);assert.equal(V.inventoryExpected(7.5),null);
+ let row={chequeados:[],detalles:{cocina:{texto:'Revisar el refri.',foto_path:'foto'}},conteos:{}};
+ const human=row.detalles;
+ for(const id of ['copas_flauta','copas_vino','cucharas_chicas'])row=V.patchWorkflow(row,'conteo',{id,encontrados:2,esperados:3});
+ assert.equal(V.inventoryNote(row),'Faltan 1 copa flauta, 1 copa de vino y 1 cuchara chica.');
+ assert.strictEqual(row.detalles,human);assert.match(V.housekeepingMessage(1,row),/Cocina: Faltan.*\n  Revisar el refri[.]\n  📷 Foto en Haku[.]/);
+ row=V.patchWorkflow(row,'conteo',{id:'copas_vino',encontrados:0,esperados:3});assert.match(V.inventoryNote(row),/3 copas de vino/);
+ row=V.patchWorkflow(row,'conteo',{id:'copas_vino',encontrados:3,esperados:3});assert.doesNotMatch(V.inventoryNote(row),/vino/);
+ row=V.patchWorkflow(row,'conteo',{id:'copas_flauta',encontrados:null});
+ row=V.patchWorkflow(row,'conteo',{id:'cucharas_chicas',encontrados:4,esperados:3});assert.equal(V.inventoryNote(row),'');assert.strictEqual(row.detalles,human);
+});
+test('una diferencia registrada cuenta como revisada; no convierte checks antiguos en comprobaciones',()=>{
+ let row={chequeados:['cocina','bano','living','terraza'],conteos:{}};
+ assert.equal(V.sectorProgress(row,'bano').legacy,true);
+ row=V.patchWorkflow(row,'punto',{id:'bano_secador',checked:true});assert.equal(V.sectorProgress(row,'bano').checked,1);assert.equal(V.sectorProgress(row,'bano').complete,false);
+ for(const point of V.points)row=V.patchWorkflow(row,'punto',{id:point.id,checked:true});
+ assert.equal(V.sectorProgress(row,'cocina').complete,false);
+ for(const item of V.inventory)row=V.patchWorkflow(row,'conteo',{id:item.id,encontrados:2,esperados:3});
+ assert.equal(V.sectorProgress(row,'cocina').complete,true);assert.equal(V.sectorProgress(row,'cocina').missing,9);
+ row=V.patchWorkflow(row,'punto',{id:'bano_secador',checked:false});assert.equal(V.sectorProgress(row,'bano').complete,false);assert.ok(!row.chequeados.includes('bano'));
+ for(const value of [{id:'x',encontrados:1,esperados:3},{id:'vasos',encontrados:-1,esperados:3},{id:'vasos',encontrados:'2',esperados:3},{id:'vasos',encontrados:0}])assert.throws(()=>V.validateMutation('conteo',value));
+});
+test('conteos optimistas conservan notas, aíslan estadías y vuelven al valor guardado si falla',async()=>{
+ const t={day:'2026-11-09',cabinId:'cab1',stayId:'stay1'};let reads=0,release,fail=false;
+ let row={fecha_operativa:t.day,cabana_id:t.cabinId,estadia_id:t.stayId,hora_out:null,hora_out_definida:false,encargado:'',chequeados:[],recuperados:[],revision:1,detalles:{cocina:{texto:'Nota humana',foto_path:null}}};
+ const store=createCheckoutStore({day:t.day,isCurrent:()=>true,read:async()=>{reads++;return{fecha:t.day,puede_editar:true,revisiones:[row]};},write:async(_,field,value)=>{if(release===undefined)await new Promise(r=>{release=r;});if(fail)throw Error('Sin conexión');row={...V.patchWorkflow(row,field,value),revision:row.revision+1};return row;}});
+ await store.ensure();const first=store.set(t,'conteo',{id:'copas_vino',encontrados:2,esperados:3});assert.equal(V.inventoryNote(store.view(t)),'Falta 1 copa de vino.');
+ assert.equal(V.inventoryNote(store.view({...t,stayId:'stay2'})),'');await new Promise(r=>setImmediate(r));
+ const second=store.set(t,'conteo',{id:'copas_vino',encontrados:3,esperados:3});release();await Promise.all([first,second]);await store.flush(t);assert.equal(V.inventoryNote(store.view(t)),'');
+ fail=true;await assert.rejects(store.set(t,'conteo',{id:'copas_vino',encontrados:0,esperados:3}),/Sin conexión/);assert.equal(store.view(t).conteos.copas_vino.encontrados,3);await assert.rejects(store.flush(t),/Sin conexión/);
+ fail=false;await store.set(t,'conteo',{id:'copas_vino',encontrados:2,esperados:3});await store.flush(t);assert.equal(store.view(t).detalles.cocina.texto,'Nota humana');assert.equal(reads,1);store.dispose();
+});

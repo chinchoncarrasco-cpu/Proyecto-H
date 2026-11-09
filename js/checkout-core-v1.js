@@ -13,7 +13,7 @@
   }
   function empty(t) { return { fecha_operativa: t.day, cabana_id: t.cabinId, estadia_id: t.stayId, hora_out: null,
     hora_out_definida: false, encargado: '', recuperados: [], chequeados: [], revision: 0,
-    reposiciones: {}, observaciones: {}, detalles: {}, prestamos: {}, revision_estado: 'pendiente' }; }
+    reposiciones: {}, observaciones: {}, detalles: {}, conteos: {}, prestamos: {}, revision_estado: 'pendiente' }; }
   function validate(row, t) {
     if (!row || typeof row.cabana_id !== 'string' || !row.cabana_id || typeof row.estadia_id !== 'string' || !row.estadia_id || row.fecha_operativa !== t.day || row.cabana_id !== t.cabinId || row.estadia_id !== t.stayId
       || typeof row.encargado !== 'string' || typeof row.hora_out_definida !== 'boolean'
@@ -21,13 +21,13 @@
       || Number(row.revision) < 1 || (row.hora_out !== null && !/^([01]\d|2[0-3]):[0-5]\d(:00)?$/.test(row.hora_out))) {
       throw new Error('La revisión recibida no corresponde a esta cabaña, estadía y fecha.');
     }
-    for (const field of ['reposiciones', 'observaciones', 'detalles']) if (row[field] !== undefined && (!row[field] || typeof row[field] !== 'object' || Array.isArray(row[field]))) throw new Error('El detalle de la revisión no es válido.');
+    for (const field of ['reposiciones', 'observaciones', 'detalles', 'conteos']) if (row[field] !== undefined && (!row[field] || typeof row[field] !== 'object' || Array.isArray(row[field]))) throw new Error('El detalle de la revisión no es válido.');
     return { ...row, revision: Number(row.revision), reposiciones: row.reposiciones || {}, observaciones: row.observaciones || {}, detalles: row.detalles || {}, revision_estado: row.revision_estado || 'pendiente' };
   }
   function patch(row, field, value) {
     if (field === 'hora_out') return { ...row, hora_out: value || null, hora_out_definida: true };
     if (field === 'encargado') return { ...row, encargado: value };
-    if (['reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return workflow.patchWorkflow(row, field, value);
+    if (['punto', 'conteo', 'reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return workflow.patchWorkflow(row, field, value);
     const column = field === 'recuperado' ? 'recuperados' : 'chequeados';
     const selected = new Set(row[column]);
     if (value.checked) selected.add(value.id); else selected.delete(value.id);
@@ -127,16 +127,23 @@
         do { for (const sector of workflow.sectors) await store.flushDetail(t, sector.id); }
         while ([...drafts.values()].some(d => key(d.target) === key(t) && (d.dirty || d.inflight)));
       },
+      async flush(t) {
+        await store.flushDetails(t);
+        while (tails.has(key(t))) await tails.get(key(t));
+        const error = [...errors].find(([id]) => id.startsWith(key(t) + ':'));
+        if (error) throw new Error(error[1]);
+      },
       saving(t) { return [...pending.values()].some(p => key(p.target) === key(t)) || [...drafts.values()].some(d => key(d.target) === key(t) && (d.dirty || d.inflight)); },
       set(t, field, value) {
         if (!alive() || t.day !== options.day) return Promise.reject(new Error('La fecha o la sesión cambió. Abre nuevamente la revisión.'));
         if (!state.ready || !state.canEdit) return Promise.reject(new Error('Tu usuario no puede editar la revisión de salida.'));
-        if (!['hora_out', 'encargado', 'recuperado', 'chequeado', 'reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
+        if (!['punto', 'conteo', 'hora_out', 'encargado', 'recuperado', 'chequeado', 'reposicion', 'observacion', 'detalle', 'detalle_foto', 'revision_estado', 'prestamo', 'devolucion'].includes(field)) return Promise.reject(new Error('Campo de salida no válido.'));
         if (field === 'hora_out') { try { value = normalizeTime(value); } catch (e) { return Promise.reject(e); } }
         else if (field === 'encargado') { value = String(value || '').trim(); if (value.length > 120) return Promise.reject(new Error('El nombre es demasiado largo.')); }
         else if (field === 'recuperado' || field === 'chequeado') { if (!value || !/^[a-z][a-z0-9_]{0,63}$/.test(value.id) || typeof value.checked !== 'boolean') return Promise.reject(new Error('Ítem no válido.')); }
         else { try { workflow.validateMutation(field, value); } catch (e) { return Promise.reject(e); } }
-        if (field === 'revision_estado' && value === 'revisada' && !workflow.sectors.every(s => store.view(t).chequeados.includes(s.id))) return Promise.reject(new Error('Marca los cuatro sectores como revisados.'));
+        if (['punto', 'conteo'].includes(field) && store.view(t).revision_estado === 'revisada') return Promise.reject(new Error('Reabre la revisión para cambiar los checks.'));
+        if (field === 'revision_estado' && value === 'revisada' && !workflow.sectors.every(s => workflow.sectorProgress(store.view(t), s.id).complete)) return Promise.reject(new Error('Completa los checks de los cuatro sectores.'));
         if (typeof value === 'object') value = JSON.parse(JSON.stringify(value));
         const itemKey = field === 'reposicion' ? Object.keys(value.items).sort().join('_') : typeof value === 'object' ? value.id : '';
         const targetKey = key(t), fieldKey = targetKey + ':' + field + ':' + itemKey, token = {};

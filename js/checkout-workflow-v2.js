@@ -22,6 +22,51 @@
     { id: 'fogon', checkId: 'uso_fogon', label: 'Fogón', area: 'terraza' },
   ];
   const amenities = ['champu', 'jabon', 'balsamo'];
+  const reviewPoints = {
+    cocina: [['refri', 'Refri'], ['perillas', 'Perillas'], ['gas', 'Llave de gas'], ['piso', 'Piso']],
+    bano: [['secador', 'Secador'], ['toallas', 'Toallas'], ['ducha', 'Ducha'], ['wc', 'WC'], ['cortina', 'Cortina / Alfombra'], ['piso', 'Piso']],
+    living: [['cama', 'Cama / Debajo'], ['cajones', 'Cajones / Clóset'], ['controles', 'Controles'], ['tv', 'TV'], ['ac', 'AC'], ['manilla', 'Manilla'], ['ventanales', 'Ventanales / Cortinas'], ['piso', 'Piso']],
+    terraza: [['atizador', 'Atizador / Pala'], ['escobillon', 'Escobillón'], ['mesa', 'Mesa / Sillas'], ['cojines', 'Cojines'], ['jardineras', 'Jardineras'], ['piso', 'Piso']],
+  };
+  const points = Object.entries(reviewPoints).flatMap(([area, items]) => items.map(([id, label]) => ({ id: area + '_' + id, area, label })));
+  const inventory = [
+    ['platos', 'Platos', 'plato', 'platos'], ['tazas', 'Tazas', 'taza', 'tazas'], ['vasos', 'Vasos', 'vaso', 'vasos'],
+    ['copas_flauta', 'Copas flauta', 'copa flauta', 'copas flauta'], ['copas_vino', 'Copas de vino', 'copa de vino', 'copas de vino'],
+    ['tenedores', 'Tenedores', 'tenedor', 'tenedores'], ['cuchillos', 'Cuchillos', 'cuchillo', 'cuchillos'],
+    ['cucharas_grandes', 'Cucharas grandes', 'cuchara grande', 'cucharas grandes'], ['cucharas_chicas', 'Cucharas chicas', 'cuchara chica', 'cucharas chicas'],
+  ].map(([id, label, singular, plural]) => ({ id, label, singular, plural, area: 'cocina' }));
+  // CAB 10 is Mini Loft (2 places); CAB 11 is Maxi Loft (4).
+  function inventoryExpected(cabin) {
+    const n = Number(cabin);
+    if (!Number.isInteger(n)) return null;
+    return n >= 1 && n <= 6 ? 3 : n >= 7 && n <= 9 ? 5 : n === 10 ? 2 : n === 11 ? 4 : null;
+  }
+  function inventoryMissing(row) {
+    return inventory.flatMap(item => {
+      const count = row.conteos?.[item.id];
+      if (!count || !units(count.encontrados) || !units(count.esperados, 1)) return [];
+      const missing = Math.max(0, count.esperados - count.encontrados);
+      return missing ? [{ ...item, missing }] : [];
+    });
+  }
+  function inventoryNote(row) {
+    const missing = inventoryMissing(row), labels = missing.map(i => i.missing + ' ' + (i.missing === 1 ? i.singular : i.plural));
+    if (!labels.length) return '';
+    const total = missing.reduce((sum, item) => sum + item.missing, 0);
+    return (total === 1 ? 'Falta ' : 'Faltan ') + (labels.length === 1 ? labels[0] : labels.slice(0, -1).join(', ') + ' y ' + labels.at(-1)) + '.';
+  }
+  function sectorProgress(row, area) {
+    const items = points.filter(p => p.area === area), counted = area === 'cocina' ? inventory.filter(i => row.conteos?.[i.id] !== undefined).length : 0;
+    const checked = items.filter(p => row.chequeados?.includes(p.id)).length + counted;
+    const total = items.length + (area === 'cocina' ? inventory.length : 0);
+    const legacy = row.recorrido_version !== 3 && Boolean(row.chequeados?.includes(area));
+    return { checked, total, complete: checked === total || legacy, legacy, missing: area === 'cocina' ? inventoryMissing(row).reduce((sum, item) => sum + item.missing, 0) : 0 };
+  }
+  function syncSectors(row) {
+    const checked = new Set(row.chequeados || []);
+    for (const sector of sectors) { if (sectorProgress(row, sector.id).complete) checked.add(sector.id); else checked.delete(sector.id); }
+    return { ...row, chequeados: [...checked] };
+  }
   const catalog = [
     ['sacacorchos', 'Sacacorcho', 'cocina', 'sacacorchos?'],
     ['cenicero', 'Cenicero', 'cocina', 'ceniceros?'],
@@ -95,6 +140,7 @@
       }
       if (items.length) sections.push('*' + headings[sector.id] + '*\n' + items.join(' · '));
       const note = row.detalles?.[sector.id], noteLines = [];
+      if (sector.id === 'cocina' && inventoryNote(row)) noteLines.push(inventoryNote(row));
       if (note?.texto?.trim()) noteLines.push(note.texto.trim().replace(/\r\n?/g, '\n'));
       if (note?.foto_path) noteLines.push('📷 Foto en Haku.');
       if (noteLines.length) notes.push(sector.title + ': ' + noteLines.join('\n').replace(/\n/g, '\n  '));
@@ -120,7 +166,11 @@
   }
   function reviewStatus(row) { return row.revision_estado || 'pendiente'; }
   function validateMutation(field, value) {
-    if (field === 'detalle' || field === 'detalle_foto') {
+    if (field === 'punto') {
+      if (!value || !points.some(p => p.id === value.id) || typeof value.checked !== 'boolean') throw new Error('Punto de revisión no válido.');
+    } else if (field === 'conteo') {
+      if (!value || !inventory.some(i => i.id === value.id) || (value.encontrados !== null && (!units(value.encontrados) || !units(value.esperados, 1)))) throw new Error('Cantidad encontrada no válida.');
+    } else if (field === 'detalle' || field === 'detalle_foto') {
       if (!value || !sectors.some(s => s.id === value.id) || (field === 'detalle' ? typeof value.texto !== 'string' || value.texto.length > 1000 : value.foto_path !== null && typeof value.foto_path !== 'string')) throw new Error('Nota de área no válida.');
     } else if (field === 'reposicion') {
       const values = value?.items;
@@ -135,6 +185,17 @@
     } else if (field === 'revision_estado' && !['en_revision', 'revisada', 'pendiente'].includes(value)) throw new Error('Estado de revisión no válido.');
   }
   function patchWorkflow(row, field, value) {
+    if (field === 'punto') {
+      const checked = new Set(row.chequeados || []);
+      if (value.checked) checked.add(value.id); else checked.delete(value.id);
+      return syncSectors({ ...row, recorrido_version: 3, chequeados: [...checked] });
+    }
+    if (field === 'conteo') {
+      const conteos = { ...row.conteos };
+      if (value.encontrados === null) delete conteos[value.id];
+      else conteos[value.id] = { encontrados: value.encontrados, esperados: value.esperados };
+      return syncSectors({ ...row, recorrido_version: 3, conteos });
+    }
     if (field === 'detalle' || field === 'detalle_foto') {
       const next = { ...row.detalles }, entry = { texto: '', foto_path: null, ...next[value.id], ...(field === 'detalle' ? { texto: value.texto } : { foto_path: value.foto_path }) };
       if (entry.texto.trim() || entry.foto_path) next[value.id] = entry; else delete next[value.id];
@@ -148,5 +209,5 @@
     if (field === 'devolucion') next[value.id] = { label: value.label, area: value.area, cantidad: existing?.cantidad || value.total, origen: existing?.origen || value.origen, ...existing, devueltos: value.cantidad };
     return { ...row, prestamos: next };
   }
-  return { sectors, usageItems, supplies, amenities, catalog, observationTypes, normalize, safeId, units, detectLoans, loansFor, loanSummary, replenishmentLabel, selectedSupply, housekeepingMessage, maintenanceMessage, reviewStatus, validateMutation, patchWorkflow };
+  return { sectors, points, inventory, inventoryExpected, inventoryMissing, inventoryNote, sectorProgress, usageItems, supplies, amenities, catalog, observationTypes, normalize, safeId, units, detectLoans, loansFor, loanSummary, replenishmentLabel, selectedSupply, housekeepingMessage, maintenanceMessage, reviewStatus, validateMutation, patchWorkflow };
 });

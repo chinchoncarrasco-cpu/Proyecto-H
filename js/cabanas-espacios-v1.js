@@ -44,7 +44,7 @@
       const ownScope=scope, day=config.date();
       core=window.HAIKU_CHECKOUT_CORE_V1.createCheckoutStore({day,isCurrent:()=>scope===ownScope&&scopeKey()===ownScope,
         async read(date){const {data,error}=await window.haikuSupabase.rpc('haiku_revisiones_checkout_dia_v2',{p_fecha:date});if(error)throw error;return data;},
-        async write(t,field,value){const loan=field==='prestamo'||field==='devolucion';const {data,error}=await window.haikuSupabase.rpc(loan?'haiku_guardar_prestamo_estadia_v1':field==='detalle'||field==='detalle_foto'?'haiku_guardar_detalle_checkout_v1':'haiku_guardar_revision_checkout_v2',loan?{p_estadia_id:t.stayId,p_campo:field,p_valor:value}:{p_fecha:t.day,p_cabana_id:t.cabinId,p_estadia_id:t.stayId,p_campo:field,p_valor:value});if(error)throw error;return data;},
+        async write(t,field,value){const loan=field==='prestamo'||field==='devolucion';const {data,error}=await window.haikuSupabase.rpc(loan?'haiku_guardar_prestamo_estadia_v1':field==='detalle'||field==='detalle_foto'?'haiku_guardar_detalle_checkout_v1':field==='punto'||field==='conteo'?'haiku_guardar_recorrido_checkout_v3':'haiku_guardar_revision_checkout_v2',loan?{p_estadia_id:t.stayId,p_campo:field,p_valor:value}:{p_fecha:t.day,p_cabana_id:t.cabinId,p_estadia_id:t.stayId,p_campo:field,p_valor:value});if(error)throw error;return data;},
       });
       core.subscribe(renderCheckout); void core.ensure(); void loadDepartures();
       const refresh=(reviews,source)=>{
