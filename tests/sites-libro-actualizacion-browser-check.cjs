@@ -26,7 +26,7 @@ const server = http.createServer((request, response) => {
     }
     const file = path.resolve(root, '.' + pathname);
     if (!file.startsWith(root + path.sep)) { response.writeHead(403).end(); return; }
-    try { const content = fs.readFileSync(file); response.writeHead(200, { 'Content-Type': 'text/css' }).end(content); }
+    try { const content = fs.readFileSync(file); response.writeHead(200, { 'Content-Type': file.endsWith('.svg')?'image/svg+xml':'text/css' }).end(content); }
     catch { response.writeHead(404).end(); }
 });
 
@@ -485,6 +485,87 @@ const server = http.createServer((request, response) => {
         assert.equal(await page.evaluate(()=>__opened),abiertosAntes);
         assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntes);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        // El mensaje de actualización usa el diseño aprobado, con categorías locales.
+        await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
+        await page.evaluate(()=>{
+            document.getElementById('haiku-asistente-texto').value='';
+            document.getElementById('haiku-asistente-mensajes').replaceChildren();
+            __generation=10;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            const actual={titular:'Huésped Sintético',cabana:3,fecha_checkin:'2030-11-20',fecha_checkout:'2030-11-22'};
+            __resultadoActual={estado:'ok',libro_actual:{generacion:10},
+                nuevas:Array.from({length:5},(_,i)=>({actual:{...actual,id:'alta-'+i}})),
+                modificadas:Array.from({length:2},(_,i)=>({actual:{...actual,id:'cambio-'+i},cambios:[{campo:'adultos',antes:2,ahora:3}]})),
+                advertencias:Array.from({length:3},()=>({version:'actual',hoja:'Nov30',motivo:'Aviso sintético de lectura'}))};
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_automatica:true,tenia_anterior:true,generacion:10}}));
+        });
+        const resumen=page.locator('#haiku-asistente-mensajes > .haku-libro-resumen');
+        await resumen.waitFor();
+        await burbuja.getByRole('button',{name:'Cerrar',exact:true}).click();
+        assert.equal(await resumen.locator('.haku-libro-resumen__titulo').innerText(),'7 cambios en el Libro');
+        assert.deepEqual(await resumen.locator('.haku-libro-resumen__cifras > span').allInnerTexts(),['5 agregadas','2 modificadas','0 no aparecen']);
+        assert.match(await resumen.locator('.haku-libro-resumen__aviso').innerText(),/3 datos por revisar/);
+        assert.doesNotMatch(await resumen.innerText(),/Encontré|Para organizar la revisión/);
+        const prioridades=resumen.locator('.haku-libro-resumen__prioridad'),region=resumen.locator('.haku-libro-auto__filtrado');
+        const informesAntesResumen=await page.locator('.haku-actualizacion-sites').count();
+        const lecturasAntes=await page.evaluate(()=>__revalidations);
+        const capturas=process.env.HAKU_RESUMEN_CAPTURES;
+        if(capturas)fs.mkdirSync(capturas,{recursive:true});
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,360,320]){
+                await page.setViewportSize({width,height:900});
+                const medidas=await resumen.evaluate(el=>{
+                    const s=getComputedStyle(el),box=el.getBoundingClientRect(),parent=el.parentElement;
+                    return {width:box.width,height:box.height,scroll:el.scrollWidth,client:el.clientWidth,
+                        text:s.color,accent:s.borderLeftColor,available:parent.clientWidth-parseFloat(getComputedStyle(parent).paddingLeft)-parseFloat(getComputedStyle(parent).paddingRight),
+                        button:el.querySelector('.haku-libro-resumen__informe').getBoundingClientRect().height};
+                });
+                assert.ok(medidas.scroll<=medidas.client+1,`${tema} ${width}: sin desborde`);
+                assert.ok(Math.abs(medidas.width-medidas.available)<=2,`${tema} ${width}: ancho completo del panel`);
+                assert.ok(medidas.height<=150,`${tema} ${width}: resumen compacto (${medidas.height})`);
+                assert.ok(medidas.button>=32,'Ver informe conserva un objetivo de toque cómodo');
+                assert.equal(medidas.text,tema==='oscuro'?'rgb(232, 239, 234)':'rgb(23, 32, 25)');
+                assert.equal(medidas.accent,tema==='oscuro'?'rgb(159, 210, 179)':'rgb(40, 108, 78)');
+                await page.waitForFunction(()=>[...document.querySelectorAll('.haku-libro-resumen img')].every(img=>img.complete&&img.naturalWidth===6));
+                const puntos=await resumen.locator('img:visible').evaluateAll(xs=>xs.map(x=>({w:x.getBoundingClientRect().width,h:x.getBoundingClientRect().height,src:x.getAttribute('src')})));
+                assert.equal(puntos.length,4);
+                assert.ok(puntos.every(x=>x.w===6&&x.h===6&&x.src.endsWith('-'+tema+'.svg')),'activos Figma locales en sus cuatro lugares');
+                if(capturas)await resumen.screenshot({path:path.join(capturas,`resumen-${tema}-${width}.png`)});
+                await prioridades.last().press('Enter');
+                assert.equal(await region.isVisible(),true);
+                assert.equal(await region.locator('.haku-libro-auto__caso').count(),10);
+                assert.equal(await prioridades.last().getAttribute('aria-expanded'),'true');
+                await prioridades.last().press('Space');
+                assert.equal(await region.isVisible(),false);
+                await prioridades.first().click();
+                assert.match(await region.innerText(),/No hay cambios ni avisos/);
+                await prioridades.first().click();
+            }
+        }
+        assert.equal(await page.evaluate(()=>__revalidations),lecturasAntes,'filtrar no consulta ni prepara otra vez');
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntesResumen);
+        await page.locator('#haiku-asistente-texto').fill('Conservar mi borrador');
+        await prioridades.last().click();
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Conservar mi borrador');
+        await prioridades.last().click();
+        await resumen.getByRole('button',{name:'Ver informe',exact:true}).click();
+        assert.equal(await resumen.count(),0,'el resumen se integra en el informe al abrirlo');
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntesResumen+1);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Conservar mi borrador');
+        // Un mensaje antiguo conserva sus cifras y deja de ofrecer acciones vigentes.
+        await page.evaluate(()=>{
+            document.getElementById('haiku-asistente-texto').value='';
+            document.getElementById('haiku-asistente-mensajes').replaceChildren();
+            __generation=11;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __resultadoActual.libro_actual.generacion=11;
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_manual:true,tenia_anterior:true,generacion:11}}));
+        });
+        await resumen.waitFor();
+        await page.evaluate(()=>{__generation=12;window.dispatchEvent(new Event('haiku:libro-cambio'));});
+        assert.equal(await resumen.getByRole('button',{name:'Informe anterior',exact:true}).isDisabled(),true);
+        assert.equal(await prioridades.count(),4);
+        for(const b of await prioridades.all())assert.equal(await b.isDisabled(),true);
+        assert.deepEqual(await prioridades.locator('span').allInnerTexts(),['Hoy','Mañana','Próximos','Info']);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

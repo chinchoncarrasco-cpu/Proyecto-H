@@ -25,6 +25,7 @@ on:
       - "js/haiku-libro-fuente-oficial-v1.js"
       - "js/supabase-libro-google-readonly-v1.js"
       - "css/supabase-haku-reconciliacion-v1.css"
+      - "assets/icons/haku-libro-resumen/**"
       - "tests/haiku-libro-actualizacion.test.cjs"
       - "tests/libro-web-fuente-oficial.test.cjs"
       - "tests/libro-google-sesion.test.cjs"
@@ -68,6 +69,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-informe/node_modules
           HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+          HAKU_RESUMEN_CAPTURES: ${{ runner.temp }}/haku-resumen-capturas
         run: |
           export HAKU_CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
           export HAIKU_BROWSER_EXECUTABLE="$HAKU_CHROMIUM_PATH"
@@ -77,3 +79,11 @@ jobs:
           node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
           node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
           exit "$resultado"
+      - name: Capturas del resumen compacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: haku-resumen-capturas
+          path: ${{ runner.temp }}/haku-resumen-capturas
+          if-no-files-found: ignore
+          retention-days: 3

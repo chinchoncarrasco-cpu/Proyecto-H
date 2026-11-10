@@ -386,3 +386,32 @@ test('verificación automática avisa con Haku abierto; cerrado, restaurado o mi
     await cargar([3]);h.flush();assert.equal(h.avisos().length,1);
     await h.ctx.restaurarTest();h.flush();assert.equal(h.avisos().length,1);
 });
+
+test('resumen compacto diferencia ausencias, cancelaciones por confirmar y lectura parcial',async()=>{
+    const h=interfaz(async()=>res({estado:'parcial',nuevas:[{actual:row}],ya_no_aparecen:[{anterior:row}],
+        cancelaciones_confirmadas:[{anterior:row}],ambiguas:[{}],advertencias:[{}]}));
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const mensaje=h.ids['haiku-asistente-mensajes'].children[0],texto=textoNodo(mensaje);
+    assert.match(mensaje.className,/haku-libro-resumen/);
+    assert.match(texto,/Lectura parcial del Libro/);
+    assert.match(texto,/1 agregada.*0 modificadas.*1 no aparece.*1 cancelada en el Libro/);
+    assert.match(texto,/No pude revisar todo el Libro/);
+    assert.match(texto,/1 caso por aclarar.*1 dato por revisar/);
+    assert.match(texto,/Cancelación en el Libro pendiente de confirmar en Proyecto H/);
+});
+test('el resumen de un cambio conserva reserva y detalle; una versión nueva desactiva sólo sus acciones',async()=>{
+    const h=interfaz(async()=>res({modificadas:[{actual:row,cambios:[{campo:'fecha_checkout',antes:'2026-09-12',ahora:'2026-09-13'}]}]}));
+    h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const mensaje=h.ids['haiku-asistente-mensajes'].children[0],texto=textoNodo(mensaje);
+    assert.match(texto,/1 cambio en el Libro/);assert.match(texto,/Persona Prueba · CAB 8/);
+    assert.match(texto,/Salida: 12 → 13 sep\./);
+    const franja=mensaje.children.find(n=>n.className==='haku-libro-resumen__prioridades');
+    const contenido=mensaje.children.find(n=>n.className==='haku-libro-auto__filtrado');
+    franja.children[3].dispatchEvent({type:'click'});assert.equal(contenido.hidden,false);
+    assert.equal(h.calls(),1);h.cambiar();
+    assert.equal(mensaje.children[0].children[1].textContent,'Informe anterior');
+    for(const b of franja.children)assert.equal(b.disabled,true);
+    assert.match(textoNodo(mensaje),/Persona Prueba · CAB 8/);
+    const previo=textoNodo(contenido);franja.children[0].dispatchEvent({type:'click'});assert.equal(textoNodo(contenido),previo);
+});

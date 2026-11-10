@@ -182,7 +182,11 @@
         function limpiar() {
             if(avisoProtegido)return;
             toast?.remove();toast=null;estadoConsulta=null;
-            for (const boton of acciones) {boton.informeAnterior=true;boton.disabled=true;boton.textContent='Informe de una versión anterior';}
+            for (const boton of acciones) {
+                boton.informeAnterior=true;boton.disabled=true;
+                if (!boton.prioridadLocal) boton.textContent=boton.avisoCompacto?'Informe anterior':'Informe de una versión anterior';
+                boton.title='Informe de una versión anterior';
+            }
             acciones=[];
         }
         function cerrarAviso(){
@@ -200,16 +204,16 @@
             }
             toast?.remove();toast=doc.createElement('aside');toast.className='haku-libro-auto'+(revision?' haku-libro-auto--revision':'');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');
             const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre.appendChild(el);return el;};
+            const mostrarCaso=(padre,caso)=>{
+                const bloque=nodo(padre,'section','haku-libro-auto__caso');
+                nodo(bloque,'strong','haku-libro-auto__titulo',caso.titulo);
+                if(caso.reserva)nodo(bloque,'p','haku-libro-auto__reserva',caso.reserva);
+                const detalles=nodo(bloque,'dl','haku-libro-auto__detalles');
+                for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}
+            };
             nodo(toast,'strong','haku-libro-auto__marca','Haku');
             if (burbuja) {
                 const resumen=nodo(toast,'div','haku-libro-auto__resumen');
-                const mostrarCaso=(padre,caso)=>{
-                    const bloque=nodo(padre,'section','haku-libro-auto__caso');
-                    nodo(bloque,'strong','haku-libro-auto__titulo',caso.titulo);
-                    if(caso.reserva)nodo(bloque,'p','haku-libro-auto__reserva',caso.reserva);
-                    const detalles=nodo(bloque,'dl','haku-libro-auto__detalles');
-                    for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}
-                };
                 if(burbuja.titulo)nodo(resumen,'strong','haku-libro-auto__titulo',burbuja.titulo);
                 for(const caso of burbuja.casos)mostrarCaso(resumen,caso);
                 if(burbuja.restantes)nodo(resumen,'p','haku-libro-auto__aviso',`${burbuja.restantes} ${burbuja.restantes===1?'cambio':'cambios'} más en el informe.`);
@@ -259,6 +263,60 @@
                     cerrarAviso();
                 });
                 contenedor.appendChild(boton);acciones.push(boton);
+                return boton;
+            }
+            function mensajeCompacto(mensaje) {
+                const nuevas=lista(resultado.nuevas).length,modificadas=lista(resultado.modificadas).length;
+                const ausentes=lista(resultado.ya_no_aparecen).length,canceladas=lista(resultado.cancelaciones_confirmadas).length;
+                const total=nuevas+modificadas+ausentes+canceladas;
+                if(!total && !burbuja.avisos.length)return false;
+                mensaje.className+=' haku-libro-resumen';
+                const cabecera=nodo(mensaje,'div','haku-libro-resumen__cabecera');
+                const parcial=['parcial','no_comparable'].includes(resultado.estado);
+                nodo(cabecera,'strong','haku-libro-resumen__titulo',parcial?'Lectura parcial del Libro':total?`${total} ${total===1?'cambio':'cambios'} en el Libro`:'Actualización por revisar');
+                const informe=botonInforme(cabecera);informe.className='haku-libro-resumen__informe';informe.avisoCompacto=true;
+                const cifras=nodo(mensaje,'div','haku-libro-resumen__cifras');
+                for(const [cantidad,uno,varios] of [[nuevas,'agregada','agregadas'],[modificadas,'modificada','modificadas'],[ausentes,'no aparece','no aparecen'],...(canceladas?[[canceladas,'cancelada en el Libro','canceladas en el Libro']]:[])]) {
+                    nodo(cifras,'span',cantidad?'':'haku-libro-resumen__cero',`${cantidad} ${cantidad===1?uno:varios}`);
+                }
+                if(total===1 && burbuja.casos[0])mostrarCaso(nodo(mensaje,'div','haku-libro-resumen__caso'),burbuja.casos[0]);
+                if(burbuja.avisos.length || canceladas){
+                    const avisos=[...burbuja.avisos];
+                    if(canceladas)avisos.push('Cancelación en el Libro pendiente de confirmar en Proyecto H.');
+                    const aviso=nodo(mensaje,'div','haku-libro-resumen__aviso');
+                    nodo(aviso,'span','','!').setAttribute('aria-hidden','true');
+                    nodo(aviso,'span','',avisos.join(' ').replace(/\.$/,''));
+                }
+                if(burbuja.prioridades.length){
+                    const franja=nodo(mensaje,'div','haku-libro-resumen__prioridades');
+                    franja.setAttribute('role','group');franja.setAttribute('aria-label','Cambios y avisos por fecha');
+                    const contenido=nodo(mensaje,'div','haku-libro-auto__filtrado');
+                    contenido.id='haku-resumen-categoria-'+(++numeroAviso);contenido.hidden=true;contenido.setAttribute('role','region');
+                    let seleccion=null;
+                    for(const p of burbuja.prioridades){
+                        const item=nodo(franja,'button','haku-libro-resumen__prioridad');item.type='button';item.prioridadLocal=true;
+                        item.setAttribute('title',p.clave==='proximos'?'Próximos 2 a 7 días':p.clave==='informativos'?'Informativos, incluidos casos sin fecha':p.nombre);
+                        item.setAttribute('aria-controls',contenido.id);item.setAttribute('aria-expanded','false');
+                        for(const tema of ['claro','oscuro']){
+                            const icono=nodo(item,'img','haku-libro-resumen__punto haku-libro-resumen__punto--'+tema);
+                            icono.src=`assets/icons/haku-libro-resumen/${p.clave}-${tema}.svg`;icono.alt='';icono.width=6;icono.height=6;
+                        }
+                        nodo(item,'span','',p.nombre);nodo(item,'strong','',String(p.total));
+                        item.addEventListener('click',()=>{
+                            if(item.disabled || consultando())return;
+                            seleccion=seleccion===p.clave?null:p.clave;
+                            for(const boton of franja.children)boton.setAttribute('aria-expanded',String(seleccion!==null&&boton===item));
+                            contenido.replaceChildren();contenido.hidden=seleccion===null;
+                            if(seleccion!==null){
+                                contenido.setAttribute('aria-label',p.nombre+' · '+p.total);
+                                for(const caso of p.casos)mostrarCaso(contenido,caso);
+                                if(!p.total)nodo(contenido,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
+                            }
+                        });
+                        acciones.push(item);
+                    }
+                }
+                return true;
             }
             let guardando=false,finalizado=false,estadoGuardado;
             const botonesIncorporar=[];
@@ -316,8 +374,11 @@
             if (!pendiente && !conservarConsulta) {
                 const mensajes=doc.getElementById('haiku-asistente-mensajes');
                 if (mensajes) {
-                    const mensaje=doc.createElement('div');mensaje.className='haiku-asistente-mensaje haiku-asistente-mensaje--asistente';mensaje.textContent=texto;
-                    if (resultado) botonInforme(mensaje);
+                    const mensaje=doc.createElement('div');mensaje.className='haiku-asistente-mensaje haiku-asistente-mensaje--asistente';
+                    if(!resultado || !burbuja || !mensajeCompacto(mensaje)){
+                        mensaje.textContent=texto;
+                        if (resultado) botonInforme(mensaje);
+                    }
                     mensajes.appendChild(mensaje);
                     if (resultado) mensajeInforme=mensaje;
                 }
