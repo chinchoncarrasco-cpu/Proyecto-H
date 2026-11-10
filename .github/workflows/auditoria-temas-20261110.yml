@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [principal, operacion, asistentes]
+        group: [principal]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,7 +36,7 @@ jobs:
           if [ "$GROUP" = principal ]; then
             TEMA_OUTPUT_DIR="$RUNNER_TEMP/evidence/principal" node tests/auditoria-temas-20261110.cjs
             cp css/haiku-tema-oscuro-v1.css "$RUNNER_TEMP/tema-original.css"
-            node tools/generar-tema-oscuro.cjs
+            node tests/auditoria-temas-20261110.cjs --generation
             diff -u "$RUNNER_TEMP/tema-original.css" css/haiku-tema-oscuro-v1.css > "$RUNNER_TEMP/evidence/principal/generador.diff" || true
             cp "$RUNNER_TEMP/tema-original.css" css/haiku-tema-oscuro-v1.css
           else

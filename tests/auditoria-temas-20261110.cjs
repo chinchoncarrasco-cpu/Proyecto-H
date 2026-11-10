@@ -5,7 +5,7 @@ const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),output=process.env.TEMA_OUTPUT_DIR||'/tmp/haiku-auditoria-temas';
 const original=path.join(__dirname,'haiku-tema-browser-check.cjs');
 const helper=new Module(original,module);helper.filename=original;helper.paths=module.paths;
-helper._compile(fs.readFileSync(original,'utf8').replace(/main\(\)\.catch\([\s\S]*$/,'module.exports={panelSinDatos,estadoVisual};'),original);
+helper._compile(fs.readFileSync(original,'utf8').replace('Date, console', 'Date, console, URLSearchParams, location: {search: ""}').replace(/main\(\)\.catch\([\s\S]*$/,'module.exports={panelSinDatos,estadoVisual};'),original);
 const {panelSinDatos,estadoVisual}=helper.exports;
 const fixtures=require('./fixtures/haiku-tema-v1.cjs');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
@@ -42,13 +42,22 @@ for(const [key,id,section]of [['nueva-reserva','modal-nueva-reserva','resumen'],
 for(const [key,id]of [['reservas-filtros','reservas-panel-filtros'],['reservas-columnas','reservas-panel-columnas']])scenes.push({key,section:'reservas',setup:async p=>{await fixtures.reservas(p);await openStatic(p,id)}});
 scenes.push({key:'calendario-redes-publico',file:'calendario-redes.html',setup:async()=>{},scope:'página pública, sin token ni datos externos'});
 scenes.push({key:'libro-comparacion-externo',file:'libro-comparacion.html',setup:async()=>{},scope:'página independiente, acceso y estructura; sin sesión de producción'});
+for(const step of ['cabana','detalles','confirmacion'])scenes.push({key:'nueva-reserva-'+step,section:'resumen',scope:'markup de etapa real; datos sintéticos',setup:async p=>{await openStatic(p,'modal-nueva-reserva');await p.evaluate(step=>document.querySelectorAll('.nueva-reserva-seccion').forEach(e=>{e.hidden=e.id!=='reserva-paso-'+step;e.classList.toggle('activa',!e.hidden)}),step)}});
+scenes.push({key:'saldo-a-favor',section:'pagos',setup:async p=>{
+ await p.evaluate(()=>{window.haikuSupabase={rpc:async name=>({data:name==='haiku_saldo_favor_unidad'?{saldo_a_favor:40000,fuentes:[{disponible:40000,medio_pago:'transferencia',fecha_pago:'2026-10-22',glosa:'Pago de prueba'}],cargos_servicio:[{cargo_id:'demo-cargo',cabana:1,hora:'20:45',concepto:'Tinaja',saldo:30000}]}:[]})};window.haikuTienePermiso=()=>true;});
+ await p.addScriptTag({content:read('js/supabase-saldo-favor-v2.js')});await p.evaluate(()=>HAIKU_SALDO_FAVOR_V2.abrir('demo-reserva'));
+}});
+scenes.push({key:'ficha-detalle-financiero',section:'resumen',setup:async p=>{
+ await openStatic(p,'ficha-reserva-modal');await p.evaluate(()=>{const m=document.getElementById('ficha-reserva-modal');m.dataset.reservaId='demo-reserva';m.dataset.numeroCabana='1';window.haikuSupabase={rpc:async()=>({data:{es_grupo:false}}),from:table=>{const rows=table==='vista_estado_cargos'?[{cargo_id:'demo-cargo',reserva_id:'demo-reserva',tipo_cargo:'alojamiento',concepto:'Alojamiento',estado:'activo',monto_ajustado:320000,aplicado_neto:160000,saldo_cargo:160000}]:[];const q={select(){return q},in(){return q},eq(){return q},order(){return q},then(resolve){resolve({data:rows})}};return q}};});
+ await p.addScriptTag({content:read('js/supabase-finanzas-resumen-v1.js')});await p.addScriptTag({content:read('js/supabase-ficha-atajos.js')});await p.locator('#ficha-pago-total').scrollIntoViewIfNeeded();await p.evaluate(()=>HAIKU_FICHA_ATAJOS_V2.abrirDetalle('ficha-pago-total'));
+}});
 async function run(){
  fs.mkdirSync(output,{recursive:true});const html=await panelSinDatos();
  const strip=s=>s.replace(/<script\b[\s\S]*?<\/script>/g,'');
  const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://localhost').pathname;const f=path.resolve(root,'.'+decodeURIComponent(u));if(u==='/'){res.setHeader('Content-Type','text/html');return res.end(html)}if(!f.startsWith(root+path.sep)){res.writeHead(403).end();return}try{res.setHeader('Content-Type',f.endsWith('.css')?'text/css':f.endsWith('.js')?'application/javascript':f.endsWith('.html')?'text/html':'application/octet-stream');const body=fs.readFileSync(f);res.end(f.endsWith('.html')?strip(String(body)):body)}catch{res.writeHead(404).end()}});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const url='http://127.0.0.1:'+server.address().port+'/';const browser=await chromium.launch({headless:true});const results=[];
  try{for(const width of[1600,390])for(const scene of scenes){const context=await browser.newContext({viewport:{width,height:width===390?844:1000},timezoneId:'America/Santiago'});await context.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort());const p=await context.newPage();p.setDefaultTimeout(7000);const row={scene:scene.key,width,scope:scene.scope||'renderizador real con fixture sintético',errors:[],themes:{}};p.on('pageerror',e=>row.errors.push(e.message));
- try{await p.goto(url+(scene.file||''));await p.addStyleTag({content:'*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'});if(!scene.file)await p.evaluate(section=>{document.querySelectorAll('.seccion-app').forEach(e=>{e.classList.toggle('activa',e.id==='seccion-'+section);e.classList.remove('oculto')});document.querySelectorAll('.menu-item[data-seccion]').forEach(e=>e.classList.toggle('activo',e.dataset.seccion===section));window.fechaSeleccionada='2026-10-22';},scene.section);await scene.setup(p);await p.waitForTimeout(500);row.initialTheme=await p.locator('html').getAttribute('data-haiku-tema');let geometry;
+ try{await p.goto(url+(scene.file||''));if(!scene.file)await p.addStyleTag({content:'*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'});if(!scene.file)await p.evaluate(section=>{document.querySelectorAll('.seccion-app').forEach(e=>{e.classList.toggle('activa',e.id==='seccion-'+section);e.classList.remove('oculto')});document.querySelectorAll('.menu-item[data-seccion]').forEach(e=>e.classList.toggle('activo',e.dataset.seccion===section));window.fechaSeleccionada='2026-10-22';},scene.section);await scene.setup(p);await p.waitForTimeout(500);row.initialTheme=await p.locator('html').getAttribute('data-haiku-tema');let geometry;
  for(const theme of['claro','oscuro']){await p.evaluate(t=>document.documentElement.dataset.haikuTema=t,theme);await p.waitForTimeout(50);const state=await p.evaluate(estadoVisual);if(geometry)row.geometryUnchanged=JSON.stringify(state)===JSON.stringify(geometry);else geometry=state;row.themes[theme]=await p.evaluate(metrics);await p.screenshot({path:path.join(output,`${width}-${scene.key}-${theme}.png`)});}
  // An additional lower viewport catches forms and sections below the fold.
  const scrolled=await p.evaluate(()=>{const candidates=[document.scrollingElement,...document.querySelectorAll('body *')].filter(e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return r.width>150&&r.height>150&&e.scrollHeight>e.clientHeight+100&&(e===document.scrollingElement||/auto|scroll/.test(s.overflowY))});for(const e of candidates)e.scrollTop=e.scrollHeight;return candidates.length});
@@ -57,5 +66,5 @@ async function run(){
  }catch(e){row.error=e.message;console.log('AUDIT INCOMPLETE',width,scene.key,e.message)}finally{results.push(row);fs.writeFileSync(path.join(output,'resultados.json'),JSON.stringify(results,null,2));await context.close()}}
  }finally{await browser.close();await new Promise(r=>server.close(r))}
 }
-if(require.main===module)run().catch(e=>{console.error(e);process.exitCode=1});
+if(require.main===module){if(process.argv.includes('--generation')){const f=path.join(root,'tools/generar-tema-oscuro.cjs');const m=new Module(f,module);m.filename=f;m.paths=module.paths;m._compile(read('tools/generar-tema-oscuro.cjs').replace('Date, console','Date, console, URLSearchParams, location: {search: \"\"}'),f)}else run().catch(e=>{console.error(e);process.exitCode=1})}
 module.exports={metrics};
