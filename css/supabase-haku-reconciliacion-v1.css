@@ -1787,6 +1787,62 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
     .haku-libro-auto.haku-libro-auto { right: 10px; width: calc(100vw - 20px); }
 }
 
+/* Resumen de actualización aprobado en Figma (32:181). Ocupa el ancho real
+   de Haku; la densidad responde al panel, también cuando está acoplado. */
+.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
+    --aviso-borde: var(--sites-shell-line, #dbe3de);
+    --aviso-texto: var(--sites-shell-ink, #172019);
+    --aviso-secundario: #586c60; --aviso-acento: #286c4e;
+    --resumen-suave: #eef4ef; --resumen-aviso: #825016;
+    container-type: inline-size; display: flex; flex-direction: column; gap: 4px;
+    box-sizing: border-box; flex: 0 0 auto; align-self: stretch; width: 100%; max-width: none; min-width: 0;
+    margin: 0; padding: 0 2px 0 10px; border: 0; border-left: 2px solid var(--aviso-acento);
+    border-radius: 0; background: transparent; box-shadow: none; color: var(--aviso-texto);
+    font: 400 13px/19px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); white-space: normal;
+}
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__cabecera { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__titulo { flex: 1; min-width: 0; margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; color: var(--aviso-texto); }
+.haiku-asistente-panel .haku-libro-resumen button { font-family: inherit; cursor: pointer; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__informe {
+    flex: 0 0 auto; max-width: 52%; min-height: 32px; margin: 0; padding: 6px 10px;
+    border: 1px solid var(--aviso-borde); border-radius: 5px; background: var(--resumen-suave); color: var(--aviso-acento);
+    font-size: 13px; font-weight: 500; line-height: 18px;
+}
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__cifras { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.haku-libro-resumen__cifras > span { white-space: nowrap; }
+.haku-libro-resumen__cifras > span + span::before { content: '·'; margin-right: 6px; color: var(--aviso-secundario); }
+.haku-libro-resumen__cero { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__aviso { display: flex; align-items: baseline; gap: 6px; color: var(--resumen-aviso); font-size: 13px; line-height: 18px; font-weight: 500; }
+.haku-libro-resumen__aviso > span:first-child { flex: none; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridades { display: flex; align-items: center; min-width: 0; padding-top: 2px; border-top: 1px solid var(--aviso-borde); }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad {
+    position: relative; display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: 4px;
+    min-width: 0; min-height: 32px; margin: 0; padding: 6px; border: 0; border-radius: 0;
+    background: transparent; color: var(--aviso-texto); font-size: 11px; line-height: 16px; white-space: nowrap;
+}
+.haku-libro-resumen__prioridad + .haku-libro-resumen__prioridad::before { content: ''; position: absolute; left: 0; height: 14px; border-left: 1px solid var(--aviso-borde); }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad strong { color: inherit; font-size: 13px; line-height: 18px; font-weight: 500; }
+.haiku-asistente-panel .haku-libro-resumen button:hover:not(:disabled),
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad[aria-expanded="true"] { background: var(--resumen-suave); }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad[aria-expanded="true"] { box-shadow: inset 0 -2px var(--aviso-acento); }
+.haiku-asistente-panel .haku-libro-resumen button:focus-visible { outline: 2px solid var(--aviso-acento); outline-offset: -2px; }
+.haiku-asistente-panel .haku-libro-resumen button:disabled { cursor: default; opacity: .6; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto { flex: none; margin: 0; max-width: none; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--oscuro { display: none; }
+.haku-libro-resumen .haku-libro-auto__caso { padding-bottom: 4px; }
+.haku-libro-resumen .haku-libro-auto__caso p { margin: 0; }
+.haku-libro-resumen__caso .haku-libro-auto__titulo { display: none; } /* El título general ya identifica el cambio. */
+html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
+    --aviso-borde: #3e5145; --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7;
+    --aviso-acento: #9fd2b3; --resumen-suave: #28382f; --resumen-aviso: #f0c584;
+}
+html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--claro { display: none; }
+html[data-haiku-tema="oscuro"] .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--oscuro { display: inline-block; }
+@container (max-width: 400px) {
+    .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__titulo { font-size: 14px; line-height: 20px; }
+    .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad { padding-inline: 4px; }
+}
+
 /* Comparar pagos: misma geometría compacta, acotada a esta vista. */
 .haiku-asistente-panel .haku-pagos-compactos {
     min-width: 0; max-width: 100%; overflow-x: hidden;
