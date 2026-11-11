@@ -360,8 +360,9 @@
 
     // El clic en Incorporar del aviso es la confirmación. El lote usa las mismas
     // comprobaciones y writer; no crea una tarjeta ni pide otro diálogo.
-    function crearIncorporacionAviso(scope){
+    function crearIncorporacionAviso(scope,notaConfirmada){
         let solicitud,usuario,resultado,pendiente;
+        const firmaNota=notaConfirmada&&JSON.stringify(notaConfirmada);
         const permiso=()=>{
             const s=root.haikuSesion;
             if(s?.usuario?.activo!==true||!s.roles?.some(r=>/^(admin|administrador)$/i.test(typeof r==='string'?r:r?.codigo||r?.nombre||'')))
@@ -379,7 +380,9 @@
             if(!solicitud){
                 const actual=await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial(scope);
                 const elegidos=actual.items.filter(x=>x.estado==='listo'&&x.payload&&!x.resolucionManual&&
-                    (x.kind==='nota'||x.kind==='servicio'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'));
+                    (firmaNota ? x.kind==='nota'&&JSON.stringify(x.payload)===firmaNota :
+                        x.kind==='nota'||x.kind==='servicio'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'));
+                if(firmaNota&&elegidos.length!==1)throw Error('La nota cambió o ya está guardada. Vuelve a revisar el informe.');
                 if(!elegidos.length)return {ok:true,servicios_creados:0,notas_creadas:0,servicios_omitidos:0,notas_omitidas:0};
                 const cache=new Map(),corregidos=await Promise.all(elegidos.map(x=>resolverEstadia(x,cache)));
                 if(actual.generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
@@ -396,6 +399,8 @@
             if(error)throw error;
             if(data?.ok!==true||!['servicios_creados','notas_creadas','servicios_omitidos','notas_omitidas']
                 .every(k=>Number.isSafeInteger(data[k])&&data[k]>=0))throw Error('Proyecto H no confirmó el resultado. Reintenta para comprobarlo sin duplicar.');
+            if(firmaNota&&(data.notas_creadas+data.notas_omitidas!==1||data.servicios_creados||data.servicios_omitidos))
+                throw Error('Proyecto H no confirmó el resultado de esta nota. Reintenta para comprobarlo.');
             resultado=data;return resultado;
         };
         return ()=>{
