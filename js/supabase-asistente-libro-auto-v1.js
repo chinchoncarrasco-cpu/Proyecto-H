@@ -61,7 +61,7 @@
     function describirBurbuja(r) {
         const casos=[],porOrigen=new Map();
         const agregar=(origen,titulo,reserva,detalles)=>{
-            const caso={titulo,reserva:`${breve(reserva?.titular||'Nombre no indicado',60)} · CAB ${reserva?.cabana??'—'}`,detalles};
+            const caso={titulo,reserva:`${breve(reserva?.titular||'Nombre no indicado',60)} · CAB ${reserva?.cabana??'—'}`,detalles,detectadoEn:r.generado_en};
             casos.push(caso);porOrigen.set(origen,caso);
         };
         for(const x of lista(r.nuevas)) agregar(x,'Se agregó una reserva',x.actual,[{etiqueta:'Estadía',texto:`${fechaCorta(x.actual?.fecha_checkin,true)} → ${fechaCorta(x.actual?.fecha_checkout,true)}`}]);
@@ -146,6 +146,18 @@
             }
         };
     }
+    function horaDeteccion(valor) {
+        // La comparación aporta el instante de detección; no usar la hora de renderizado ni la del archivo.
+        if(typeof valor!=='string' || !Number.isFinite(Date.parse(valor)))return null;
+        const instante=new Date(valor),ahora=new Date(),timeZone='America/Santiago';
+        const partes=fecha=>Object.fromEntries(new Intl.DateTimeFormat('es-CL',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
+            .formatToParts(fecha).map(p=>[p.type,p.value]));
+        const d=partes(instante),hoy=partes(ahora),hora=`${d.hour}:${d.minute}`;
+        const mismoDia=['year','month','day'].every(k=>d[k]===hoy[k]);
+        const fecha=`${d.day}/${d.month}${d.year===hoy.year?'':'/'+d.year}`;
+        return {iso:instante.toISOString(),texto:mismoDia?hora:`${fecha} · ${hora}`,
+            descripcion:`Detectado por Haku el ${d.day}/${d.month}/${d.year} a las ${hora} (hora de Chile)`};
+    }
     function instalar() {
         let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0;
         const consultando = () => root.HAIKU_ASISTENTE?.procesando?.() === true || root.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true || root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true;
@@ -206,7 +218,15 @@
             const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre.appendChild(el);return el;};
             const mostrarCaso=(padre,caso)=>{
                 const bloque=nodo(padre,'section','haku-libro-auto__caso');
-                nodo(bloque,'strong','haku-libro-auto__titulo',caso.titulo);
+                const cabecera=nodo(bloque,'div','haku-libro-auto__cabecera');
+                nodo(cabecera,'strong','haku-libro-auto__titulo',caso.titulo);
+                const deteccion=horaDeteccion(caso.detectadoEn);
+                if(deteccion){
+                    const hora=nodo(cabecera,'time','haku-libro-auto__hora',deteccion.texto);
+                    hora.setAttribute('datetime',deteccion.iso);
+                    hora.setAttribute('title',deteccion.descripcion);
+                    hora.setAttribute('aria-label',deteccion.descripcion);
+                }
                 if(caso.reserva)nodo(bloque,'p','haku-libro-auto__reserva',caso.reserva);
                 const detalles=nodo(bloque,'dl','haku-libro-auto__detalles');
                 for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}

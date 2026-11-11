@@ -56,8 +56,16 @@ const server=http.createServer((req,res)=>{
    });
    assert.ok(posicion.right<=posicion.panelLeft-10,JSON.stringify(posicion));assert.ok(posicion.left>=0);
    assert.equal(posicion.scroll,posicion.antes);assert.equal(posicion.activo,'haiku-asistente-texto');
-   await page.evaluate(()=>window.__resolverAviso({estado:'ok',nuevas:[],modificadas:[{actual:{titular:'Otra Persona',cabana:2},cambios:[{campo:'notas_importantes',antes:[],ahora:['Entrega de carbón']}]}],ya_no_aparecen:[],ambiguas:[],advertencias:[]}));
+   await page.evaluate(()=>window.__resolverAviso({estado:'ok',generado_en:new Date().toISOString(),nuevas:[],modificadas:[{actual:{titular:'Otra Persona',cabana:2},cambios:[{campo:'notas_importantes',antes:[],ahora:['Entrega de carbón']}]}],ya_no_aparecen:[],ambiguas:[],advertencias:[]}));
    await page.getByText('Otra Persona · CAB 2',{exact:true}).waitFor();
+   if(process.env.HAKU_RESUMEN_CAPTURES){
+    fs.mkdirSync(process.env.HAKU_RESUMEN_CAPTURES,{recursive:true});
+    for(const width of [1440,390,320]){
+     await page.setViewportSize({width,height:1000});
+     await page.locator('.haku-libro-auto').screenshot({path:path.join(process.env.HAKU_RESUMEN_CAPTURES,`hora-deteccion-${theme}-${width}.png`)});
+    }
+    await page.setViewportSize({width:1440,height:1000});
+   }
    await page.getByRole('button',{name:'Preparar incorporación',exact:true}).click();
    await page.getByRole('button',{name:'Continuar con 1 elemento listo',exact:true}).waitFor();
    assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Consulta en curso');

@@ -1741,6 +1741,8 @@
 .haku-libro-auto__filtrado .haku-libro-auto__caso:last-child { padding-bottom: 0; border-bottom: 0; }
 .haku-libro-auto__marca { display: block; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 600; }
 .haku-libro-auto__titulo { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
+.haku-libro-auto__cabecera { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
+.haku-libro-auto__hora { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .haku-libro-auto__caso { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); }
 .haku-libro-auto__reserva { color: var(--aviso-secundario); font-size: 12px; line-height: 16px; }
 .haku-libro-auto__detalles { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 4px 8px; margin: 2px 0 0; }
@@ -1831,7 +1833,7 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__punto--oscuro { display: none; }
 .haku-libro-resumen .haku-libro-auto__caso { padding-bottom: 4px; }
 .haku-libro-resumen .haku-libro-auto__caso p { margin: 0; }
-.haku-libro-resumen__caso .haku-libro-auto__titulo { display: none; } /* El título general ya identifica el cambio. */
+.haku-libro-resumen__caso .haku-libro-auto__cabecera { display: none; } /* El título general ya identifica el cambio. */
 html[data-haiku-tema="oscuro"] .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haiku-asistente-mensaje.haku-libro-resumen {
     --aviso-borde: #3e5145; --aviso-texto: #e8efea; --aviso-secundario: #b1c2b7;
     --aviso-acento: #9fd2b3; --resumen-suave: #28382f; --resumen-aviso: #f0c584;
