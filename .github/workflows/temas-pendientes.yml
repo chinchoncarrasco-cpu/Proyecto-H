@@ -8,11 +8,13 @@ on:
       - 'css/haiku-redes-public-v1.css'
       - 'js/sites-libro-comparacion-readonly-v1.js'
       - 'js/haiku-redes-ui-v1.js'
+      - 'js/supabase-reserva-estados-v1.js'
       - 'libro-comparacion.html'
       - 'calendario-redes.html'
       - 'index.html'
       - 'panel.html'
       - 'tests/temas-pendientes-browser-check.cjs'
+      - 'tests/calendario-mobile-browser-check.cjs'
       - 'tests/libro-informe-readonly-web-browser-check.cjs'
       - '.github/workflows/temas-pendientes.yml'
 permissions:

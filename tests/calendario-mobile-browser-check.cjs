@@ -17,8 +17,8 @@ const sectionEnd = end >= 0 ? end : endCrLf;
 assert.ok(start >= 0 && sectionEnd > start);
 const section = html.slice(start, sectionEnd).replace('class="seccion-app sites-calendario"',
     'class="seccion-app sites-calendario activa"');
-const css = ['css/styles.css', 'css/sites-shell-v1.css', 'css/sites-calendario-v1.css', 'css/haiku-tema-oscuro-v1.css',
-    'css/haiku-tema-v1.css', 'css/haiku-tema-legibilidad-v1.css'].map(read).join('\n');
+const css = ['css/styles.css', 'css/sites-shell-v1.css', 'css/sites-calendario-v1.css', 'css/sites-resumen-v1.css',
+    'css/haiku-tema-oscuro-v1.css', 'css/haiku-tema-v1.css', 'css/haiku-tema-legibilidad-v1.css'].map(read).join('\n');
 const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const documentHTML = `<!doctype html><html lang="es" data-haiku-tema="claro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body><span id="fecha-actual"></span><main style="min-width:0">${section}</main></body></html>`;
 
@@ -26,6 +26,95 @@ const coloresBarras = page => page.locator('.calendario-reserva-barra').evaluate
     const estilo = getComputedStyle(barra);
     return [barra.dataset.reservaId, { fondo: estilo.backgroundColor, acento: estilo.boxShadow.match(/rgba?\([^)]+\)/)?.[0] }];
 })));
+
+async function comprobarFichaFullDay(page) {
+    const reservaId = '00000000-0000-4000-8000-000000000001';
+    const estadiaId = '00000000-0000-4000-8000-000000000002';
+    const otraEstadiaId = '00000000-0000-4000-8000-000000000003';
+    const fecha = '2026-09-25';
+    await page.evaluate(({ reservaId, estadiaId, otraEstadiaId, fecha }) => {
+        const datos = JSON.parse(localStorage.getItem('haikuDatos'));
+        const cabanas = datos[fecha].cabanas;
+        Object.assign(cabanas[5], { reservaId, estadiaId, estado: 'fullday' });
+        cabanas[8] = { reservaId, estadiaId: otraEstadiaId, titular: 'Visita Full Day', noches: 1 };
+        for (const cabana of [9, 10]) {
+            cabanas[cabana] = { reservaId: `R-adicional-${cabana}`, titular: 'Otra reserva', noches: 1 };
+        }
+        localStorage.setItem('haikuDatos', JSON.stringify(datos));
+        fechaSeleccionada = '2026-09-23';
+        document.body.insertAdjacentHTML('beforeend', `<section id="seccion-resumen" hidden>
+            <div class="sites-resumen-cabana" data-cabana="5" data-resumen-fecha="2026-09-23">
+                <button data-ficha-cabana="5">Ver reserva del Resumen</button>
+            </div></section>`);
+        document.querySelector('[data-ficha-cabana="5"]').onclick = evento =>
+            window.HAIKU_RESUMEN_RESERVA_SITES_V1.abrirDesdeBoton(evento.currentTarget);
+        delete window.HAIKU_RESUMEN_RESERVA_SITES_V1;
+        window.haikuSesion = {};
+        window.haikuTienePermiso = permiso => permiso === 'reservas.ver';
+        window.__rpcFichaFullDay = [];
+        window.haikuSupabase.rpc = nombre => {
+            window.__rpcFichaFullDay.push(nombre);
+            throw new Error(`RPC inesperada: ${nombre}`);
+        };
+        window.haikuLeerFichaSupabaseV2 = async id => {
+            if (id !== reservaId) throw new Error(`Reserva inesperada: ${id}`);
+            return {
+                reserva: { id, titular_nombre: 'Visita Full Day', estado_reserva: 'confirmada', observaciones: '' },
+                estadias: [
+                    { id: otraEstadiaId, cabana_numero: 8, tipo_estadia: 'alojamiento',
+                        fecha_ingreso: fecha, fecha_salida: '2026-09-26', estado_estadia: 'confirmada' },
+                    { id: estadiaId, cabana_numero: 5, tipo_estadia: 'fullday',
+                        fecha_ingreso: fecha, fecha_salida: fecha, estado_estadia: 'confirmada' }
+                ],
+                pagos: [], cargos: []
+            };
+        };
+    }, { reservaId, estadiaId, otraEstadiaId, fecha });
+    for (const script of ['supabase-finanzas-resumen-v1', 'sites-resumen-drawer-v1',
+        'sites-resumen-reserva-v1', 'supabase-reserva-estados-v1']) {
+        await page.addScriptTag({ content: read(`js/${script}.js`) });
+    }
+    await page.evaluate(() => generarCalendario());
+
+    const modal = page.locator('#haiku-fullday-acciones-fondo');
+    const ficha = page.locator('#sites-resumen-reserva-drawer');
+    const panel = page.locator('.sites-calendario-popover');
+    for (const tema of ['claro', 'oscuro']) {
+        await page.evaluate(tema => { document.documentElement.dataset.haikuTema = tema; }, tema);
+        await page.setViewportSize({ width: 1100, height: 844 });
+        await page.locator(`.calendario-reserva-barra[data-estadia-id="${estadiaId}"]`).click();
+        assert.equal(await modal.locator('[data-fd-fecha]').innerText(), '25-09-2026');
+        assert.ok(await modal.getByRole('button', { name: 'Liberar cabaña' }).isVisible());
+        await modal.getByRole('button', { name: 'Ver reserva' }).click();
+        await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+        assert.match(await ficha.locator('[data-reserva-kicker]').innerText(), /CABAÑA 5/);
+        assert.equal(await ficha.locator('[data-reserva-duracion]').innerText(), 'Full Day');
+        assert.equal(await ficha.locator('[data-reserva-ingreso]').innerText(),
+            await ficha.locator('[data-reserva-salida]').innerText());
+        await ficha.locator('[data-reserva-cerrar]').click();
+
+        await page.locator(`.calendario-mas-reservas[data-fecha="${fecha}"]`).click();
+        await panel.locator(`[data-estadia-id="${estadiaId}"]`).click();
+        await modal.getByRole('button', { name: 'Ver reserva' }).click();
+        await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+        assert.equal(await ficha.locator('[data-reserva-duracion]').innerText(), 'Full Day');
+        await ficha.locator('[data-reserva-cerrar]').click();
+        await panel.locator(`[data-estadia-id="${otraEstadiaId}"]`).click();
+        await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+        assert.match(await ficha.locator('[data-reserva-kicker]').innerText(), /CABAÑA 8/);
+        await ficha.locator('[data-reserva-cerrar]').click();
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator(`.dia-calendario[data-fecha="${fecha}"]`).click();
+        await page.locator(`.sites-calendario-agenda-item[data-estadia-id="${estadiaId}"]`).click();
+        await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+        assert.equal(await ficha.locator('[data-reserva-duracion]').innerText(), 'Full Day');
+        await ficha.locator('[data-reserva-cerrar]').click();
+    }
+    assert.equal(await page.evaluate(() => fechaSeleccionada), '2026-09-23');
+    assert.deepEqual(await page.evaluate(() => window.__rpcFichaFullDay), []);
+    console.log('Ficha Full Day: barra, +N y agenda móvil abren la estadía exacta en ambos temas.');
+}
 
 async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS_CAPTURAS) {
     const server = http.createServer((_request, response) => {
@@ -168,6 +257,7 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
         assert.match(await page.locator('.sites-calendario-agenda-vacia').innerText(), /Sin reservas/);
         assert.equal(await page.locator('#calendario-grid .dia-calendario.seleccionado').getAttribute('data-fecha'), '2026-09-29');
         console.log('Calendario Sites: colores por estado, contraste, leyenda, agenda y navegación correctos.');
+        await comprobarFichaFullDay(page);
     } finally {
         await page?.close();
         await new Promise(resolve => server.close(resolve));
