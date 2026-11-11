@@ -426,7 +426,7 @@
                 console.warn("HAIKU · Refresco posterior a liberar Full Day:", errorRefresco);
             });
 
-            window.HAIKU_DIALOGOS.aviso("Cabaña liberada. El Full Day permanece guardado en el historial, pero ya no bloquea una nueva venta.");
+            window.HAIKU_DIALOGOS.aviso("Cabaña liberada. El Full Day permanece guardado en el historial, pero ya no bloquea una nueva venta.", { tipo: 'exito' });
         } catch (error) {
             console.error("HAIKU · No fue posible liberar Full Day:", error);
             window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible liberar la cabaña.");

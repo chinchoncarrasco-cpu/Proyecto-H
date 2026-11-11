@@ -18,7 +18,7 @@
     }
     function contenido(mensaje, opciones) {
         const partes = String(mensaje || '').trim().split(/\n\s*\n/);
-        let titulo = opciones.titulo || 'Confirmar operación', cuerpo = String(mensaje || '');
+        let titulo = opciones.titulo || opciones.accion || 'Confirmar operación', cuerpo = String(mensaje || '');
         if (partes.length > 1 && /^¿/.test(partes[0]) && partes[0].length < 120) {
             titulo = opciones.titulo || partes[0];
             partes.shift();
@@ -179,11 +179,11 @@
         const exito = opciones.tipo === 'exito' || (!/\bno\b|fall|error/i.test(texto) && /correctamente|actualizada|reactivada|creado|liberada|turno cerrado|bloqueo.*registrad/i.test(texto));
         const permiso = /permiso|iniciar sesión/i.test(texto);
         const origen = doc.activeElement;
-        const contexto = exito ? null : origen?.closest?.('dialog[open],form,[role="dialog"],.ficha-reserva,.ficha-reserva-modal,.haiku-asistente-panel');
-        const campoBuscado = texto.match(/glosa|correo|titular|bovtar|bove|codaut|folio|monto|medio|noches/i)?.[0];
-        const candidatos = contexto ? [...contexto.querySelectorAll('input:not([type="hidden"]),select,textarea')].filter(visible) : [];
+        const contexto = exito ? null : origen?.closest?.('dialog[open],form,[role="dialog"],.ficha-reserva,.ficha-reserva-modal,.haiku-asistente-panel,.haiku-saldo-formulario,.haiku-pago-editor,.haiku-bove-cierre,.haiku-abono-verificacion-v2,.haiku-webpay-pendiente,.haiku-saldo-v5,.haiku-checkout-v1');
+        const campoBuscado = texto.match(/glosa|correo|titular|bovtar|bove|codaut|folio|monto|medio|noches|manager/i)?.[0];
+        const candidatos = contexto ? [...contexto.querySelectorAll('input:not([type="hidden"]):not(:disabled),select:not(:disabled),textarea:not(:disabled)')].filter(visible) : [];
         const campo = opciones.campo ? doc.querySelector(opciones.campo) : campoBuscado && candidatos.find(n =>
-            (n.id + ' ' + n.name + ' ' + (n.getAttribute('aria-label') || '')).toLowerCase().includes(campoBuscado.toLowerCase()));
+            [...n.attributes].map(a => a.name + ' ' + a.value).join(' ').toLowerCase().includes(campoBuscado.toLowerCase()));
         if (campo && visible(campo) && !exito && !permiso) {
             validaciones.get(campo)?.();
             const n = el('p', 'hk-validacion', texto); n.id = 'hk-aviso-' + (++secuencia); n.setAttribute('role', 'alert');

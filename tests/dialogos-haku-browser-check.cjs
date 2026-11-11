@@ -114,6 +114,16 @@ const server = http.createServer((req, res) => {
         assert.equal(await page.evaluate(() => resultado), false); assert.equal(await page.locator('.hk-dialogo').count(), 0);
         assert.equal(await page.evaluate(() => HAIKU_DIALOGOS.confirmar('Bloqueada')), false);
         await page.evaluate(() => document.documentElement.classList.remove('haiku-privacidad-bloqueada'));
+        await page.evaluate(() => {
+            const card = document.createElement('div'); card.className = 'haiku-bove-cierre';
+            card.innerHTML = '<label>BOVE<input data-haiku-bove-total></label><button id="bove-real">Registrar BOVE</button>';
+            document.body.append(card); card.querySelector('button').focus();
+            HAIKU_DIALOGOS.aviso('Ingresa el BOVE del alojamiento.');
+        });
+        assert.equal(await page.locator('[data-haiku-bove-total]').getAttribute('aria-invalid'), 'true');
+        await page.locator('[data-haiku-bove-total]').fill('202');
+        await page.evaluate(() => HAIKU_DIALOGOS.aviso('Cabaña liberada. Ya no bloquea una nueva venta.', { tipo: 'exito' }));
+        assert.equal(await page.locator('#hk-avisos .hk-aviso.exito[role=status]').count(), 1);
         await open('confirmar', ['Otra sesión']);
         await page.evaluate(() => { window.haikuSesion.auth.id = 'otro-usuario'; dispatchEvent(new Event('haiku:auth-ready')); });
         assert.equal(await page.evaluate(() => resultado), false);
