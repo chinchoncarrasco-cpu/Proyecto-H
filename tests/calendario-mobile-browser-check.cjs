@@ -163,10 +163,10 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
         await page.locator('.sites-calendario-agenda-item[data-reserva-id="R-sale"]').click();
         assert.deepEqual(await page.evaluate(() => window.__opened),
             [['R-ingresa', 'E-ingresa', '3'], ['R-sale', 'E-sale', '2']]);
-        await page.locator('#calendario-grid .dia-calendario[data-fecha="2026-09-28"]').click();
+        await page.locator('#calendario-grid .dia-calendario[data-fecha="2026-09-29"]').click();
         assert.equal(await page.locator('#calendario-grid .dia-calendario').first().getAttribute('data-browser-identity'), 'stable');
         assert.match(await page.locator('.sites-calendario-agenda-vacia').innerText(), /Sin reservas/);
-        assert.equal(await page.locator('#calendario-grid .dia-calendario.seleccionado').getAttribute('data-fecha'), '2026-09-28');
+        assert.equal(await page.locator('#calendario-grid .dia-calendario.seleccionado').getAttribute('data-fecha'), '2026-09-29');
         console.log('Calendario Sites: colores por estado, contraste, leyenda, agenda y navegación correctos.');
     } finally {
         await page?.close();
