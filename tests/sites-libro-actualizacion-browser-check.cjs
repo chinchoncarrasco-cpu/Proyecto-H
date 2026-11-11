@@ -937,6 +937,87 @@ async function comprobarCasosDelAviso(browser, url) {
         await informeTitular.getByText('Datos del Libro por revisar (1)',{exact:true}).click();
         assert.match(await informeTitular.innerText(),/Sep26 · C3 · CAB 2 · Ambas versiones/);
         assert.match(await informeTitular.innerText(),/«Lidia Salas» · «Marta López»/);
+
+        await page.addStyleTag({url:`http://127.0.0.1:${server.address().port}/css/haiku-libro-decision-cards-v1.css`});
+        await page.addScriptTag({content:read('js/haiku-libro-cancelaciones-v1.js')});
+        await page.evaluate(()=>{
+            const reserva={id:'Dic26!C3',hoja:'Dic26',titular:'Persona cancelación de prueba',cabana:1,
+                fecha_checkin:'2026-12-11',fecha_checkout:'2026-12-12',noches:1,tipo_estadia:'alojamiento'};
+            const evidencia={bloque:'CANCELACIONES',titular:reserva.titular,fecha_checkin:reserva.fecha_checkin,
+                noches:1,origen:{hoja:'Dic26',celda:'C20'}};
+            const anterior={tipo:'cancelacion_confirmada',anterior:reserva,evidencia};
+            const api=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
+            const caso=api.extraerCambiosDetectados({cancelaciones_confirmadas:[anterior]},19)[0];
+            const proyecto={id:'reserva-cancelacion-prueba',titular_nombre:reserva.titular,estado_reserva:'confirmada',
+                estadias:[{id:'estadia-cancelacion-prueba',fecha_ingreso:reserva.fecha_checkin,
+                    fecha_salida:reserva.fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};
+            __generation=21;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __registration={version:1,cambios:[caso]};
+            window.__cancelacionAviso={candidatas:0,escrituras:[],lecturas:[]};
+            HAIKU_LIBRO_RESERVA_V1.consultarHoja=async(hoja,version)=>{
+                __cancelacionAviso.lecturas.push([hoja,version]);
+                return {hoja:'Dic26',cobertura:{geometria:true},reservas:[],cancelaciones:[{...evidencia,origen:{hoja:'Dic26',celda:'C22'}}]};
+            };
+            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async xs=>xs,enriquecer:async xs=>xs,fraseHistorial:()=>''};
+            HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async registros=>({
+                items:proyecto.estado_reserva==='cancelada'?[]:registros.map(x=>({...x,estado:'revision',accionable:false,proyecto:'No se pudo asociar de forma única'})),
+                resueltos:proyecto.estado_reserva==='cancelada'?registros.map(x=>x.id):[],reservas:[],comparacion:[]
+            });
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+            window.haikuTienePermiso=permiso=>permiso==='reservas.cancelar';
+            window.haikuSupabase={
+                auth:{getSession:async()=>({data:{session:{user:{id:'admin-prueba'}}}})},
+                from(tabla){
+                    const copia={...proyecto,id:'otra-reserva-prueba'};
+                    const q={select:()=>q,eq:()=>q,in:()=>q,order:()=>q,range:async()=>({data:tabla==='reservas'
+                        ?[proyecto,copia].slice(0,__cancelacionAviso.candidatas)
+                        :[{id:proyecto.estadias[0].id,reserva_id:proyecto.id}]})};
+                    return q;
+                }
+            };
+            window.HAIKU_RESERVA_ESTADOS_SUPABASE_V2={cancelar:async(id,{antesDeCancelar})=>{
+                if(await antesDeCancelar()===false)return {estado:'sin_cambios'};
+                __cancelacionAviso.escrituras.push(id);proyecto.estado_reserva='cancelada';return {estado:'cancelada'};
+            }};
+            api.mostrarResultado({estado:'sin_cambios',libro_actual:{generacion:21}}).id='aviso-cancelacion-prueba';
+        });
+        const historialCancelacion=page.locator('#aviso-cancelacion-prueba .haku-libro-pendientes-zona');
+        const casoCancelacion=historialCancelacion.locator('.haku-pendiente-item').filter({hasText:'Persona cancelación de prueba'});
+        await casoCancelacion.locator('summary').click();
+        assert.match(await casoCancelacion.innerText(),/PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR/);
+        const aprobarCancelacion=casoCancelacion.getByRole('button',{name:'Aprobación manual',exact:true});
+        const revisionCancelacion=casoCancelacion.locator('.haiku-cancelacion-pantalla');
+        const confirmarCancelacion=revisionCancelacion.getByRole('button',{name:'Confirmar cancelación',exact:true});
+        await aprobarCancelacion.click();
+        await revisionCancelacion.getByText('No encontré una reserva compatible con este aviso en Proyecto H.',{exact:true}).waitFor();
+        assert.equal(await confirmarCancelacion.isDisabled(),true);
+        await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
+        assert.equal(await aprobarCancelacion.evaluate(el=>document.activeElement===el),true);
+        assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),[]);
+        await page.evaluate(()=>{__cancelacionAviso.candidatas=2;});
+        await aprobarCancelacion.click();
+        await revisionCancelacion.getByText('La reserva no se identifica de forma única; requiere revisión.',{exact:true}).waitFor();
+        assert.equal(await confirmarCancelacion.isDisabled(),true);
+        await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
+        await page.evaluate(()=>{__cancelacionAviso.candidatas=1;});
+        await aprobarCancelacion.click();
+        await revisionCancelacion.getByRole('heading',{name:'Revisar cancelación'}).waitFor();
+        assert.equal(await confirmarCancelacion.isEnabled(),true);
+        assert.match(await revisionCancelacion.innerText(),/Dic26 · C22/);
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await revisionCancelacion.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,tema+' '+width);
+            }
+        }
+        assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),[]);
+        await confirmarCancelacion.click();
+        await revisionCancelacion.getByRole('heading',{name:'Cancelación completada'}).waitFor();
+        assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),['reserva-cancelacion-prueba']);
+        assert.ok(await page.evaluate(()=>__cancelacionAviso.lecturas.every(([hoja,version])=>hoja==='Dic26'&&version==='actual')));
+        await revisionCancelacion.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
+        await historialCancelacion.getByText('No quedan cambios pendientes en este informe.',{exact:true}).waitFor();
         assert.deepEqual(errors, []);
         await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');

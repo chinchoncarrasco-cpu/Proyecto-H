@@ -24,7 +24,7 @@ function environment(){
  const row={id:'r1',titular_nombre:r().titular,correo_contacto:r().correo,estado_reserva:'confirmada',estadias:[{id:'s1',fecha_ingreso:r().fecha_checkin,fecha_salida:r().fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};
  const libro={estado:()=>({generacion:g}),consultarHoja:async(h,v)=>v==='anterior'?sheet([r()]):sheet([],[e()])};
  const cliente={auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from(t){const q={select(){return q},eq(){return q},in(){return q},order(){return q},range:async()=>({data:t==='reservas'?[row]:[{id:'s1',reserva_id:'r1'}]})};return q;}};
- const context={structuredClone,HAIKU_LIBRO_DIFERENCIAS_V1:D,HAIKU_LIBRO_RESERVA_V1:libro,haikuSupabase:cliente,haikuTienePermiso:()=>allow,
+ const context={structuredClone,HAIKU_LIBRO_SEMANTICA:S,HAIKU_LIBRO_DIFERENCIAS_V1:D,HAIKU_LIBRO_RESERVA_V1:libro,haikuSupabase:cliente,haikuTienePermiso:()=>allow,
  HAIKU_RESERVA_ESTADOS_SUPABASE_V2:{cancelar:async(id,options)=>{if(!confirmAccepted)return;if(await options.antesDeCancelar()===false)return {estado:'sin_cambios'};writerCalls++;return {estado:'cancelada'};}}};
  vm.runInNewContext(fs.readFileSync('js/haiku-libro-cancelaciones-v1.js','utf8'),context);
  return {api:context.HAIKU_LIBRO_CANCELACIONES_V1,context,caso,row,libro,cliente,calls:()=>writerCalls,change:()=>g++,deny:()=>allow=false,rejectConfirm:()=>confirmAccepted=false};
@@ -219,6 +219,30 @@ test('Libro vs Proyecto H consultation reads current CANCELACIONES without reque
 });
 test('preview is read-only and cancellation uses existing confirmation with second reading',async()=>{const x=environment(),p=await x.api.preparar(x.caso,1);assert.equal(p.estado,'propuesta');assert.equal(x.calls(),0);assert.equal((await x.api.confirmar(p)).estado,'cancelada');assert.equal(x.calls(),1);await assert.rejects(x.api.confirmar(p),/no válida/)});
 test('already cancelled is no-op; confirmation refusal never writes',async()=>{const x=environment();x.row.estado_reserva='cancelada';const p=await x.api.preparar(x.caso,1);assert.equal(p.estado,'ya_coincide');await x.api.confirmar(p);assert.equal(x.calls(),0);const y=environment(),q=await y.api.preparar(y.caso,1);y.rejectConfirm();await y.api.confirmar(q);assert.equal(y.calls(),0)});
+test('una cancelación del historial se prepara con la evidencia vigente, aunque haya cambiado de celda',async()=>{
+ const x=environment(),historial={...x.caso,fuente:'historial'};
+ x.change();
+ const vigente={...e(),origen:{hoja:'Sep26',celda:'D19'}},lecturas=[];
+ x.libro.consultarHoja=async(_h,version)=>{lecturas.push(version);return sheet([],[vigente]);};
+ const vista=await x.api.preparar(historial,2);
+ assert.equal(vista.reserva_id,'r1');
+ assert.equal(vista.origen_libro.celda,'D19');
+ assert.equal(x.calls(),0);
+ await x.api.confirmar(vista);
+ assert.equal(x.calls(),1);
+ assert.deepEqual(lecturas,['actual','actual']);
+});
+test('el historial protege la cancelación frente a evidencia retirada, duplicada o cambiada',async()=>{
+ for(const actual of [sheet([]),sheet([],[e(),e()]),sheet([{...r(),titular:'Vega Ruiz Carol'}],[e()])]){
+  const x=environment(),historial={...x.caso,fuente:'historial'};
+  x.libro.consultarHoja=async()=>actual;
+  await assert.rejects(x.api.preparar(historial,1));assert.equal(x.calls(),0);
+ }
+ const x=environment(),vista=await x.api.preparar({...x.caso,fuente:'historial'},1);
+ x.libro.consultarHoja=async()=>sheet([],[{...e(),origen:{hoja:'Sep26',celda:'D19'}}]);
+ await assert.rejects(x.api.confirmar(vista),/evidencia del Libro cambió/);
+ assert.equal(x.calls(),0);
+});
 test('changed generation, target, permissions and evidence block before writing',async()=>{
  for(const mutate of [x=>x.change(),x=>x.row.titular_nombre='Otra Persona',x=>x.deny(),x=>x.libro.consultarHoja=async(h,v)=>v==='anterior'?sheet([r()]):sheet([])]){
  const x=environment(),p=await x.api.preparar(x.caso,1);mutate(x);await assert.rejects(x.api.confirmar(p));assert.equal(x.calls(),0);

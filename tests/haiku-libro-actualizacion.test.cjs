@@ -388,6 +388,21 @@ test('una revisión de servicios mantiene Ver reserva, cuenta cero preparables y
     assert.match(html,/confirma el cambio de horario/);
     assert.doesNotMatch(html,/Revisar cambios|00000000-0000/);
 });
+test('la cancelación anterior muestra Aprobación manual al administrador aunque falte asociarla',()=>{
+    const antes=global.haikuSesion;
+    const item={tipo:'cancelacion',anterior:reserva,detectado_generacion:2,accionable:false,estado:'revision',
+        proyecto:'No se pudo asociar de forma única'};
+    const pendientes={generacion:3,items:[item]};
+    try{
+        global.haikuSesion={usuario:{activo:true},roles:['administrador']};
+        const html=A.renderizarPendientes(pendientes);
+        assert.match(html,/PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR/);
+        assert.match(html,/data-haku-aprobar-pendiente="0">Aprobación manual/);
+        assert.doesNotMatch(html,/data-haku-preparar-pendientes|data-haku-ver-reserva/);
+        global.haikuSesion.roles=['recepcion'];
+        assert.doesNotMatch(A.renderizarPendientes(pendientes),/data-haku-aprobar-pendiente/);
+    }finally{global.haikuSesion=antes;}
+});
 test('el administrador puede abrir la aprobación de servicios pendientes sin convertirlos en cambios de reserva',()=>{
     const anterior=global.haikuSesion;
     const item={tipo:'modificacion',actual:reserva,estado:'revision',accionable:false,

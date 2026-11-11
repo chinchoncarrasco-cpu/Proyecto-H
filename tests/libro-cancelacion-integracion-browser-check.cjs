@@ -3,7 +3,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),solicitudes=[];
-const modulos=new Set(['supabase-client','supabase-auth-menu-v1','supabase-asistente-v1','supabase-reserva-estados-v1',
+const modulos=new Set(['supabase-client','supabase-auth-menu-v1','supabase-asistente-v1','supabase-reserva-estados-v1','haiku-dialogos-v1',
     'haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1',
     'haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1','haiku-libro-cancelaciones-v1','haiku-libro-reconciliacion-ux-v1',
     'haiku-panel-coordinacion-v1','sites-resumen-drawer-v1','sites-resumen-reserva-v1','supabase-ficha-v2']);
@@ -69,7 +69,7 @@ const server=http.createServer((req,res)=>{
             await page.locator('#haiku-asistente-boton').click();
             await page.locator('#haiku-asistente-texto').fill('Libro: compara octubre 2026 con Proyecto H');await page.locator('#haiku-asistente-enviar').click();
             const preparar=page.getByRole('button',{name:/^Preparar cancelación/});await preparar.waitFor();
-            assert.ok(solicitudes.some(s=>s==='/css/haiku-libro-decision-cards-v1.css?v=2'));
+            assert.ok(solicitudes.some(s=>new URL(s,origin).pathname==='/css/haiku-libro-decision-cards-v1.css'));
             const comparacion=page.locator('.haku-comparacion-sites'),texto=await comparacion.innerText();assert.match(texto,/Huésped integración local/);
             await preparar.click();const panel=page.locator('.haiku-cancelacion-pantalla');
             await page.getByRole('heading',{name:'Revisar cancelación',exact:true}).waitFor();assert.match(await panel.innerText(),/1 oct → 3 oct 2026 · 2 noches/);
@@ -79,7 +79,8 @@ const server=http.createServer((req,res)=>{
             await panel.getByRole('button',{name:'Ver reserva',exact:true}).click();
             await page.waitForFunction(()=>window.HAIKU_INSPECTOR_V1.estado().reservaAbierta);
             await page.evaluate(()=>window.HAIKU_INSPECTOR_V1.cerrarReserva());
-            page.once('dialog',dialog=>dialog.accept());await panel.getByRole('button',{name:'Confirmar cancelación',exact:true}).click();
+            await panel.getByRole('button',{name:'Confirmar cancelación',exact:true}).click();
+            await page.locator('.hk-dialogo[open]').getByRole('button',{name:'Cancelar reserva',exact:true}).click();
             await page.getByRole('heading',{name:'Cancelación completada',exact:true}).waitFor();
             await panel.getByRole('button',{name:'Volver a la revisión',exact:true}).click();assert.match(await comparacion.innerText(),/Proyecto H: Cancelada/);
             assert.equal(await page.evaluate(()=>__cancelacionIntegracion.rpc.filter(x=>x.nombre==='haiku_cancelar_reserva').length),1);
