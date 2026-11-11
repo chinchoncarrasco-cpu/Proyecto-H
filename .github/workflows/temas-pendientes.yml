@@ -1,0 +1,70 @@
+name: Temas de comparación, calendario y etiquetas
+on:
+  pull_request:
+    paths:
+      - 'css/haiku-paleta-v1.css'
+      - 'css/haiku-tema-legibilidad-v1.css'
+      - 'css/sites-libro-comparacion-readonly-v1.css'
+      - 'css/haiku-redes-public-v1.css'
+      - 'js/sites-libro-comparacion-readonly-v1.js'
+      - 'js/haiku-redes-ui-v1.js'
+      - 'libro-comparacion.html'
+      - 'calendario-redes.html'
+      - 'index.html'
+      - 'panel.html'
+      - 'tests/temas-pendientes-browser-check.cjs'
+      - 'tests/libro-informe-readonly-web-browser-check.cjs'
+      - '.github/workflows/temas-pendientes.yml'
+permissions:
+  contents: read
+jobs:
+  temas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Navegador aislado
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-temas" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.15
+          node "$RUNNER_TEMP/haku-temas/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Lector XLSX verificado
+        working-directory: ${{ runner.temp }}
+        run: |
+          mkdir -p haku-libro-worker
+          curl --fail --silent --show-error --location --retry 2 https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js -o haku-libro-worker/xlsx.full.min.js
+          curl --fail --silent --show-error --location --retry 2 https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js -o haku-libro-worker/jszip.min.js
+          sha256sum --check <<'SUMS'
+          cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41  haku-libro-worker/xlsx.full.min.js
+          acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e  haku-libro-worker/jszip.min.js
+          SUMS
+      - name: Consulta y temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-temas/node_modules
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: node --test tests/libro-informe-readonly-web.test.cjs tests/libro-comparacion-readonly.test.cjs tests/redes-sociales-share.test.cjs tests/haiku-tema-v1.test.cjs
+      - name: Escritorio y móvil, claro y oscuro
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-temas/node_modules
+          HAIKU_TEMAS_OUTPUT: ${{ runner.temp }}/haku-temas-capturas
+        run: node tests/temas-pendientes-browser-check.cjs
+      - name: Informe con sesión, XLSX real y cambios de fuente
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-temas/node_modules
+          HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
+        run: |
+          export HAIKU_BROWSER_EXECUTABLE="$(node -p 'require("playwright").chromium.executablePath()')"
+          node tests/libro-informe-readonly-web-browser-check.cjs
+      - name: Capturas y resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: temas-pendientes
+          path: |
+            ${{ runner.temp }}/haku-temas-capturas
+            /tmp/haiku-libro-informe-readonly
+          retention-days: 7

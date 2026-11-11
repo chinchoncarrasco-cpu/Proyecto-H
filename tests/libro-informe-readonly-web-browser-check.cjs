@@ -178,7 +178,7 @@ async function validarLoginCanonico(browser, origin, width) {
             await page.waitForFunction(() => ['completo','incompleto'].includes(document.getElementById('informe-estado').dataset.estado), null, { timeout: 20000 });
             const check = await page.evaluate(() => ({ dto: __audit.dto, compares: __audit.compares, mutations: __audit.base.mutaciones,
                 rpc: __audit.rpc, storage: __audit.storage, idb: __audit.idb, logs: __audit.logs,
-                hero: document.querySelector('.informe-fraccion strong').textContent, metrics: [...document.querySelectorAll('.informe-metrica strong')].map(e => e.textContent),
+                hero: document.querySelector('.informe-metrica strong').textContent, metrics: [...document.querySelectorAll('.informe-metrica strong')].map(e => e.textContent),
                 counts: [...document.querySelectorAll('.informe-categoria > summary > span:nth-child(2)')].map(e => e.textContent),
                 heights: [...document.querySelectorAll('.informe-categoria > summary')].map(e => e.getBoundingClientRect().height),
                 overflow: document.documentElement.scrollWidth > innerWidth, open: document.querySelectorAll('details[open]').length,
@@ -186,32 +186,35 @@ async function validarLoginCanonico(browser, origin, width) {
             assert.ok(['ok','incompleto'].includes(check.dto.status)); assert.equal(check.compares, 1); assert.deepEqual(check.mutations, []);
             const p = check.dto.presentacion;
             assert.equal(check.hero, p.estadiasAsociadas + ' / ' + p.estadiasValidas);
-            assert.deepEqual(check.metrics, [p.estadiasAsociadas,p.faltantes,p.ambiguas].map(String));
+            assert.deepEqual(check.metrics, [p.estadiasAsociadas+' / '+p.estadiasValidas,String(p.faltantes),String(p.ambiguas)]);
             assert.deepEqual(check.counts, [p.gruposAsociados,p.gruposConDiferencias,p.faltantes,p.ambiguas,p.pagosRevisar,p.serviciosRevisar,p.advertencias].map(String));
-            assert.equal(check.open, 0); assert.equal(check.overflow, false); assert.ok(check.heights.every(h => h >= 34 && h <= 38));
+            assert.ok(check.open >= 1); assert.equal(check.overflow, false); assert.ok(check.heights.every(h => width > 700 ? h === 0 : h >= 40));
             assert.equal(check.idb, 0); assert.deepEqual(check.storage, []); assert.ok(check.rpc.every(n => n === 'haiku_sesion_actual'));
             assert.equal(check.globalsManual, false); assert.ok(check.logs.every(s => !/Ficticio|Apellid|TOKEN_|CONTENIDO_PRIVADO/.test(s)));
             await page.screenshot({ path: path.join(screenshots,'informe-' + width + '.png'), fullPage: true });
             // Este XLSX anonimizado contiene faltantes y servicios; abrir categorías con evidencia real.
-            await page.locator('.informe-categoria > summary').nth(2).click(); await page.locator('.informe-categoria > summary').nth(5).click();
-            await page.waitForTimeout(1100); assert.equal(await page.locator('.informe-categoria[open]').count(), 2);
-            const tecnico = page.locator('.informe-categoria[open] .informe-tecnico').first(); await tecnico.locator('summary').click(); assert.equal(await tecnico.getAttribute('open'), '');
+            const categoryControl=width>700?'.informe-nav button':'.informe-categoria > summary';
+            if(await page.locator('.informe-categoria').nth(2).getAttribute('open')===null)await page.locator(categoryControl).nth(2).click();
+            await page.waitForTimeout(1100); assert.equal(await page.locator('.informe-categoria[open]').count(), 1);
+            const tecnico = page.locator('.informe-categoria[open] .informe-item:not([hidden]) .informe-tecnico').first(); await tecnico.locator('summary').click(); assert.equal(await tecnico.getAttribute('open'), '');
             assert.ok((await tecnico.innerText()).includes('Oct26'));
+            await page.locator(categoryControl).nth(5).click();
+            assert.equal(await page.locator('.informe-categoria[open]').count(), 1);
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
             // Además del XLSX real, todos los estados canónicos se presentan sin reinterpretación ni HTML ejecutable.
             for (const { id, dto } of dtos) {
                 const rendered = await page.evaluate(dto => {
                     const target = document.createElement('section'); document.querySelector('main').append(target);
                     HAIKU_LIBRO_INFORME_READONLY_V1.renderizar(document, target, dto);
-                    const closed = !target.querySelector('details[open]');
+                    const selected = target.querySelectorAll('.informe-categoria[open]').length;
                     const technicalClosed = [...target.querySelectorAll('.informe-tecnico')].every(d => !d.open);
-                    const hero = target.querySelector('.informe-fraccion strong').textContent;
-                    target.querySelectorAll('.informe-categoria > summary').forEach(s => s.click());
-                    const categories = [...target.querySelectorAll('.informe-categoria')].map(d => d.innerText);
+                    const hero = target.querySelector('.informe-metrica strong').textContent;
+
+                    const categories = [...target.querySelectorAll('.informe-categoria')].map(d => d.textContent);
                     const overflow = document.documentElement.scrollWidth > innerWidth;
-                    target.remove(); return { closed, technicalClosed, hero, categories, overflow };
+                    target.remove(); return { selected, technicalClosed, hero, categories, overflow };
                 }, dto);
-                assert.equal(rendered.closed, true, id); assert.equal(rendered.technicalClosed, true, id);
+                assert.equal(rendered.selected, 1, id); assert.equal(rendered.technicalClosed, true, id);
                 assert.equal(rendered.hero, dto.presentacion.estadiasAsociadas + ' / ' + dto.presentacion.estadiasValidas, id);
                 for (const p of dto.pagosDetalle) { assert.ok(rendered.categories[4].includes(p.estado), id); for (const m of p.motivos) assert.ok(rendered.categories[4].includes(m), id); }
                 for (const s of dto.serviciosDetalle) { assert.ok(rendered.categories[5].includes(s.estado), id); if (s.motivo) assert.ok(rendered.categories[5].includes(s.motivo), id); }
@@ -223,11 +226,11 @@ async function validarLoginCanonico(browser, origin, width) {
             const safe = await page.evaluate(dto => {
                 const target = document.createElement('section'); document.querySelector('main').append(target);
                 HAIKU_LIBRO_INFORME_READONLY_V1.renderizar(document, target, dto);
-                const result = { hero: target.querySelector('.informe-fraccion strong').textContent, metrics: [...target.querySelectorAll('.informe-metrica strong')].map(e => e.textContent),
-                    tags: target.querySelectorAll('img,script,a,button').length, executed: !!window.__htmlEjecutado, literal: target.textContent.includes('<img src=x') };
+                const result = { hero: target.querySelector('.informe-metrica strong').textContent, metrics: [...target.querySelectorAll('.informe-metrica strong')].map(e => e.textContent),
+                    tags: target.querySelectorAll('img,script,a').length, executed: !!window.__htmlEjecutado, literal: target.textContent.includes('<img src=x') };
                 target.remove(); return result;
             }, unknown);
-            assert.equal(safe.hero, '— / —'); assert.deepEqual(safe.metrics, ['—','—','—']);
+            assert.equal(safe.hero, '— / —'); assert.deepEqual(safe.metrics, ['— / —','—','—']);
             assert.equal(safe.tags, 0); assert.equal(safe.executed, false); assert.equal(safe.literal, true);
             // M2 fallida elimina resultado anterior, sin contadores de éxito.
             await page.evaluate(() => __audit.failM2 = true); await page.locator('#informe-comparar').click();

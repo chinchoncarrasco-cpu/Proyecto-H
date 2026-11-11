@@ -13,7 +13,9 @@
     const privacyBlocked=()=>!readOnly&&document.documentElement.classList.contains('haiku-privacidad-bloqueada');
     function showDialog(){
         if(privacyBlocked()){privacySuspended=true;return;}
-        privacySuspended=false;dialog.showModal();
+        privacySuspended=false;
+        if(readOnly && window.matchMedia('(min-width:1000px)').matches) dialog.show();
+        else dialog.showModal();
     }
     function syncPrivacy(){
         if(readOnly)return;
@@ -47,18 +49,22 @@
     function drawerNote(message,error=false){const n=dialog.querySelector('[data-drawer-notice]');if(n){n.textContent=message;n.classList.toggle('hr-error',error);}}
     function select(name,label,items,value){return `<label>${E(label)}<select data-filter="${name}"><option value="">Todos</option>${Object.entries(items).map(([v,t])=>`<option value="${E(v)}" ${value===v?'selected':''}>${E(t)}</option>`).join('')}</select></label>`;}
     function shell(){
+        const reopen=readOnly&&dialog.open, layersOpen=!!host.querySelector('.hr-layer-options')?.open;
+        if(readOnly){if(reopen)dialog.close();document.body.append(dialog);}
         host.innerHTML=`<div class="hr-top"><div><p class="hr-eyebrow">PLAN EDITORIAL · ${readOnly?'HAIKU':'EQUIPO HAKU'}</p><h3>Redes sociales</h3><p>${readOnly?'Calendario compartido · Consulta las fechas, indicaciones y material adjunto.':'Prepara el contenido; las historias del día se capturan en su fecha.'}</p></div>${readOnly?'':'<div class="hr-top-actions"><button data-action="share">Compartir</button><button class="hr-primary" data-action="new">+ Nuevo contenido</button></div>'}</div>
         <p data-notice role="status" aria-live="polite"></p>
         <div class="hr-controls"><div class="hr-segment" aria-label="Vista del calendario">${['mes','ano','agenda','campanas'].map(v=>`<button data-view="${v}" aria-pressed="${view===v}">${{mes:'Mes',ano:'Año',agenda:'Agenda',campanas:'Campañas'}[v]}</button>`).join('')}</div>
         <div class="hr-period"><button data-action="previous" aria-label="Período anterior">‹</button><label><span class="hr-sr">Mes y año</span><input type="month" data-cursor value="${cursor}" min="2020-01" max="2100-12"></label><button data-action="next" aria-label="Período siguiente">›</button><button data-action="today">Hoy</button></div><button data-action="refresh">Actualizar</button></div>
-        <div class="hr-layers" aria-label="Capas del calendario"><button data-action="all" aria-pressed="${filters.categories.length===Object.keys(C.CATEGORIES).length}">Todos</button>${Object.entries(C.CATEGORIES).map(([v,t])=>`<button data-category="${v}" aria-pressed="${filters.categories.includes(v)}">${t}</button>`).join('')}</div>
+        ${readOnly?`<details class="hr-layer-options" ${layersOpen?'open':''}><summary>Capas · ${filters.categories.length===Object.keys(C.CATEGORIES).length?'Todas':filters.categories.length===1?E(C.CATEGORIES[filters.categories[0]]):filters.categories.length+' seleccionadas'}</summary>`:''}<div class="hr-layers" aria-label="Capas del calendario"><button data-action="all" aria-pressed="${filters.categories.length===Object.keys(C.CATEGORIES).length}">Todos</button>${Object.entries(C.CATEGORIES).map(([v,t])=>`<button data-category="${v}" aria-pressed="${filters.categories.includes(v)}">${t}</button>`).join('')}</div>${readOnly?'</details>':''}
         <details class="hr-filters" ${Object.entries(filters).some(([k,v])=>k!=='categories'&&v)?'open':''}><summary>Filtrar contenido <span>Tipo, material, estado y más</span></summary><div class="hr-filter-grid">
         ${select('type','Tipo',C.TYPES,filters.type)}${select('format','Formato',{Foto:'Foto',Carrusel:'Carrusel',Video:'Video'},filters.format)}
         ${select('material','Material',{sin:'Sin material',con:'Con material',listo:'Material listo',capturar:'Por capturar'},filters.material)}${select('state','Estado',C.STATES,filters.state)}
         ${select('channel','Red',{facebook:'Facebook',instagram:'Instagram'},filters.channel)}${select('campaign','Campaña',Object.fromEntries((plan?.campaigns||[]).map(c=>[c.id,c.title])),filters.campaign)}
         ${select('execution','Ejecución',{fixed:'Planificada',conditional:'Sujeta a disponibilidad'},filters.execution)}<label>Buscar<input data-filter="search" type="search" value="${E(filters.search)}" placeholder="Título o tema"></label></div><p>Las capas se combinan. Los filtros de contenido muestran solo tareas de redes sociales.</p></details>
-        <div data-summary class="hr-summary"></div><div data-calendar></div><div data-pending class="hr-pending"></div>`;
+        <div data-summary class="hr-summary"></div><div class="hr-workspace"><div data-calendar></div></div><div data-pending class="hr-pending"></div>`;
+        if(readOnly)host.querySelector('.hr-workspace').append(dialog);
         renderCalendar();
+        if(reopen&&loaded)showDialog();
     }
     function filtered(){return allEvents().filter(matches);}
     function inMonth(e,month=cursor){return e.date && e.date<=month+'-31' && (e.end_date||e.date)>=month+'-01';}
@@ -67,7 +73,7 @@
         const label=e.content_type?`${e.content_type==='historia'?({diaria:'Historia del día',comercial:'Historia comercial',refuerzo:'Historia de refuerzo'}[e.story_kind]||'Historia'):C.TYPES[e.content_type]}${e.content_type==='publicacion'?' · '+e.format:''}`:e.categories?.includes('preparacion')?'Preparar material':e.categories?.includes('campanias')?'Estadía':e.categories?.includes('feriados')?'Feriado':'Fecha importante';
         const mat=e.content_type?C.material(e,list):null;
         const status=mat==='capturar'?(e.date===C.today()?'Por capturar hoy':e.date<C.today()?'Sin captura registrada':'Capturar en la fecha'):count?`${count} adjunto${count===1?'':'s'}`:'Sin material';
-        return `<button class="hr-event hr-event--${E(e.content_type||'context')}" data-event="${E(e.id)}"><span class="hr-event-type">${E(label)}${e.conditional?' · Condicional':''}</span><strong>${E(e.title)}</strong>${e.content_type?`<span class="hr-event-meta">${E(status)}${compact?'':' · '+E(C.STATES[e.workflow_status]||'Material pendiente')}</span>`:''}</button>`;
+        return `<button class="hr-event hr-event--${E(e.content_type||'context')}" data-event="${E(e.id)}"${readOnly?` aria-pressed="${selected?.id===e.id}"`:""}><span class="hr-event-type">${E(label)}${e.conditional?' · Condicional':''}</span><strong>${E(e.title)}</strong>${e.content_type?`<span class="hr-event-meta">${E(status)}${compact?'':' · '+E(C.STATES[e.workflow_status]||'Material pendiente')}</span>`:''}</button>`;
     }
     function renderCalendar(){
         const area=host.querySelector('[data-calendar]');if(!area)return;
@@ -95,7 +101,7 @@
                 html+=`<button class="hr-year-month" data-month="${month}"><strong>${months[n-1]}</strong><span>${social.length} contenidos · ${es.length-social.length} fechas de contexto</span><span class="hr-year-types">${Object.entries(C.TYPES).map(([t,l])=>`${social.filter(p=>p.content_type===t).length} ${l}`).join(' · ')}</span><small>${social.filter(p=>assetList(p.id).some(a=>a.state==='ready')).length} con material</small></button>`;
             }html+='</div>';
         }else if(view==='agenda'){
-            html+=current.length?`<div class="hr-agenda">${current.sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`<div><time>${E(C.dateLabel(e.date,{day:'numeric',month:'short',weekday:'short'}))}</time>${eventButton(e)}</div>`).join('')}</div>`:'<div class="hr-empty">No hay contenido con estos filtros. Prueba «Todos» o crea una tarea.</div>';
+            html+=current.length?`<div class="hr-agenda">${current.sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`<div><time>${E(C.dateLabel(e.date,{day:'numeric',month:'short',weekday:'short'}))}</time>${eventButton(e)}</div>`).join('')}</div>`:`<div class="hr-empty">No hay contenido con estos filtros. ${readOnly?'Prueba «Todos» o cambia los filtros.':'Prueba «Todos» o crea una tarea.'}</div>`;
         }else{
             const campaigns=(plan?.campaigns||[]).filter(c=>(!filters.campaign||c.id===filters.campaign)&&(!filters.search||c.title.toLowerCase().includes(filters.search.toLowerCase()))&&C.campaignInYear(c,year));
             html+=`<p class="hr-muted">Campañas del año ${year}. Las etapas respetan los filtros de contenido seleccionados.</p><div class="hr-campaigns">${campaigns.map(c=>`<article><p class="hr-eyebrow">${E(c.priority||'Planificación')} · ${c.planned_lead_days||c.lead_days||'—'} días de anticipación</p><h4>${E(c.title)}</h4><p>${c.target_start?E(C.dateLabel(c.target_start))+' – '+E(C.dateLabel(c.target_end)):'Fechas por confirmar'}</p><p>${E(c.detail||'')}</p><p class="hr-muted">Material: ${E(c.assets||'Por definir')}</p>${events.filter(e=>e.campaign_id===c.id&&e.content_type).map(e=>`<div class="hr-campaign-stage"><time>${E(C.dateLabel(e.date,{day:'numeric',month:'short'}))}</time>${eventButton(e)}</div>`).join('')}</article>`).join('')}</div>`;
@@ -106,7 +112,7 @@
     }
     async function refresh(quiet=false){
         if(!api)return;const g=generation; if(!quiet)note('Actualizando contenido compartido…');
-        try{const data=await api.load();if(g!==generation)return;rows=data.posts;assets=data.assets;loaded=true;shell();if(!quiet)note(readOnly?'Solo lectura · Los cambios guardados por el equipo se actualizan aquí.':'Contenido compartido actualizado. La publicación en Meta se realiza por separado.');}
+        try{const data=await api.load();if(g!==generation)return;rows=data.posts;assets=data.assets;loaded=true;if(readOnly&&selected){const current=getPost(selected.id);++opening;if(current){selected={...current};drawReadOnly();}else{selected=null;dialog.close();clearTimeout(signedTimer);}}shell();if(!quiet)note(readOnly?'Solo lectura · Los cambios guardados por el equipo se actualizan aquí.':'Contenido compartido actualizado. La publicación en Meta se realiza por separado.');}
         catch(e){if(g===generation){if(readOnly){loaded=false;rows=[];assets=[];dialog.close();selected=null;++opening;clearTimeout(signedTimer);host.querySelector('[data-calendar]').innerHTML='';host.querySelector('[data-summary]').textContent='';host.querySelector('[data-pending]').innerHTML='';}note(e.message,true);}}
     }
     async function init(){
@@ -166,7 +172,7 @@
             selected=null;dirty=false;dialog.innerHTML=`<div class="hr-drawer-head"><div><p class="hr-eyebrow">PLANIFICACIÓN</p><h3>${E(event.title)}</h3></div><button data-close aria-label="Cerrar">×</button></div><div class="hr-drawer-body"><p>${E(C.dateLabel(event.date))}${event.end_date?' – '+E(C.dateLabel(event.end_date)):''}</p><p>${E(event.detail)}</p><p>${E(event.status)}</p>${event.asset?`<p>Material sugerido: ${E(event.asset)}</p>`:''}${event.campaign_id?`<button data-campaign="${E(event.campaign_id)}">Ver contenidos de esta campaña</button>`:''}<p class="hr-muted">${(event.source_ids||[]).map(id=>{const s=plan.sources.find(s=>s.id===id);return s&&/^https:\/\//.test(s.url)?`<a href="${E(s.url)}" target="_blank" rel="noopener">${E(s.title)}</a>`:'';}).join(' · ')}</p></div>`;showDialog();return;
         }
         if(!loaded){note('Espera a que termine de cargar el contenido compartido.',true);return;}
-        if(readOnly){selected={...event};dirty=false;drawReadOnly();showDialog();return;}
+        if(readOnly){selected={...event};dirty=false;drawReadOnly();renderCalendar();if(!dialog.open)showDialog();return;}
         try{const d=await api.get(id);if(o!==opening||g!==generation)return;updateData(id,d);selected={...getPost(id)};dirty=false;drawPost();showDialog();}
         catch(e){note(e.message,true);}
     }
@@ -188,7 +194,11 @@
     }
     function drawReadOnly(){
         const p=selected;
-        dialog.innerHTML=`<div class="hr-drawer-head"><div><p class="hr-eyebrow">${E(C.TYPES[p.content_type])} · SOLO LECTURA</p><h3>${E(p.title)}</h3><p>${E(C.dateLabel(p.date))}${p.time?' · '+E(p.time.slice(0,5)):''}</p></div><button data-close aria-label="Cerrar">×</button></div><div class="hr-drawer-body"><p>${E(p.format)} · ${E((p.channels||[]).map(c=>c==='facebook'?'Facebook':'Instagram').join(' / '))} · ${E(C.STATES[p.workflow_status]||'Material pendiente')}</p>${p.detail?`<p>${E(p.detail)}</p>`:''}${p.time_window?`<p>Momento sugerido: ${E(p.time_window)}</p>`:''}${p.conditional?`<p class="hr-warning">${E(p.condition||'Confirmar disponibilidad antes de publicar.')}</p>`:''}${p.story_kind==='diaria'?'<p class="hr-capture">Historia del día: la foto se toma durante el turno de esa fecha.</p>':''}${p.asset_brief||p.asset?`<p>Material: ${E(p.asset_brief||p.asset)}</p>`:''}<h4>Texto de la publicación</h4><div class="hr-read-copy">${E(p.copy||'Texto por preparar.')}</div><h4>Fotos y videos</h4><div class="hr-gallery" data-read-gallery></div></div>`;
+        dialog.innerHTML=`<div class="hr-drawer-head"><div><p class="hr-eyebrow">Contenido · Solo lectura</p><h3>${E(p.title)}</h3><p>${E(C.dateLabel(p.date))}${p.time?' · '+E(p.time.slice(0,5)):''}</p></div><button data-close aria-label="Cerrar">×</button></div><div class="hr-drawer-body">
+        <div class="hr-read-tags"><span>${E(C.TYPES[p.content_type])}</span>${(p.channels||[]).map(c=>`<span>${E(c==='facebook'?'Facebook':'Instagram')}</span>`).join('')}</div>
+        <dl class="hr-read-meta"><div><dt>Formato</dt><dd>${E(p.format)}</dd></div><div><dt>Estado</dt><dd>${E(C.STATES[p.workflow_status]||'Material pendiente')}</dd></div>${p.campaign_id?`<div class="hr-full"><dt>Campaña</dt><dd>${E(plan?.campaigns?.find(c=>c.id===p.campaign_id)?.title||'Sin campaña disponible')}</dd></div>`:''}</dl>
+        ${p.detail?`<p>${E(p.detail)}</p>`:''}${p.time_window?`<p>Momento sugerido: ${E(p.time_window)}</p>`:''}${p.conditional?`<p class="hr-warning">${E(p.condition||'Confirmar disponibilidad antes de publicar.')}</p>`:''}${p.story_kind==='diaria'?'<p class="hr-capture">Historia del día: la foto se toma durante el turno de esa fecha.</p>':''}
+        <h4>Texto de la publicación</h4><div class="hr-read-copy">${E(p.copy||'Texto por preparar.')}</div><h4>Fotos y videos</h4><div class="hr-gallery" data-read-gallery></div>${p.asset_brief||p.asset?`<p class="hr-read-brief">Preparación · ${E(p.asset_brief||p.asset)}</p>`:''}</div>`;
         readGallery();
     }
     async function readGallery(){
@@ -287,7 +297,13 @@
             if(g===generation&&o===opening&&await reloadSelected())drawerNote('Archivos guardados. Ya están disponibles para el equipo.');
         });input.value='';
     }
-    function close(){if(busy)return;if(dirty&&!window.confirm('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?'))return;privacySuspended=false;privacyFocus=null;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);lastFocus?.focus();}
+    function close(){if(busy)return;if(dirty&&!window.confirm('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?'))return;privacySuspended=false;privacyFocus=null;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);if(readOnly){const id=lastFocus?.dataset?.event;renderCalendar();(id?host.querySelector(`[data-event="${CSS.escape(id)}"]`):lastFocus)?.focus();}else lastFocus?.focus();}
+    if(readOnly)window.matchMedia('(min-width:1000px)').addEventListener('change',()=>{
+        if(!dialog.open)return;
+        const focus=document.activeElement;dialog.close();showDialog();
+        if(focus?.isConnected&&dialog.contains(focus))focus.focus({preventScroll:true});
+    });
+    if(readOnly)document.addEventListener('keydown',e=>{if(e.key==='Escape'&&dialog.open&&!dialog.matches(':modal')){e.preventDefault();close();}});
     dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
     dialog.addEventListener('submit',e=>{e.preventDefault();if(!readOnly)run(async()=>{await persist();drawPost();drawerNote('Contenido guardado.');});});
     dialog.addEventListener('input',e=>{if(!readOnly&&e.target.name)dirty=true;});

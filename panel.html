@@ -82,9 +82,9 @@
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-panel-coordinacion-v1.css?v=${version}">\n</head>`);
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-cuenta-redesign-v1.css?v=${version}">\n</head>`);
                 // El tema conserva la última posición de la cascada también en el panel.
-                html = html.replace(/<link rel="stylesheet" href="css\/haiku-tema(?:-oscuro|-finanzas-compactas)?-v1\.css">\s*/g, "");
+                html = html.replace(/<link rel="stylesheet" href="css\/haiku-tema(?:-oscuro|-finanzas-compactas|-legibilidad)?-v1\.css">\s*/g, "");
                 html = html.replace('src="js/haiku-tema-v1.js"', `src="js/haiku-tema-v1.js?v=${version}"`);
-                html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-tema-oscuro-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-finanzas-compactas-v1.css?v=${version}">\n</head>`);
+                html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-tema-oscuro-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-finanzas-compactas-v1.css?v=${version}">\n<link rel="stylesheet" href="css/haiku-tema-legibilidad-v1.css?v=${version}">\n</head>`);
                 html = html.replace('<link rel="stylesheet" href="css/haiku-redes-v1.css">', "");
                 html = html.replace("</head>", `<link rel="stylesheet" href="css/haiku-redes-v1.css?v=${version}">\n</head>`);
                 const marca = "<!-- JAVASCRIPT -->";

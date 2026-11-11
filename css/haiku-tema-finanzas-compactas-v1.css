@@ -1,28 +1,6 @@
+@import url("haiku-paleta-v1.css");
 /* Diseños aprobados de Figma: saldo a favor, detalle financiero y recibo Haku.
    Tokens propios: ambos temas se mantienen juntos, fuera del remapeo automático. */
-:root {
-  --haku-compacto-superficie: #fbfcfb;
-  --haku-compacto-control: #f1f5f2;
-  --haku-compacto-borde: #dbe3de;
-  --haku-compacto-texto: #172019;
-  --haku-compacto-secundario: #586c60;
-  --haku-compacto-acento: #286c4e;
-  --haku-compacto-seleccion: #e6f2eb;
-  --haku-compacto-suave: #eef4ef;
-  --haku-compacto-aviso: #825016;
-  --haku-compacto-primario: #22735c;
-}
-html[data-haiku-tema="oscuro"] {
-  --haku-compacto-superficie: #1b2621;
-  --haku-compacto-control: #0f1915;
-  --haku-compacto-borde: #3e5145;
-  --haku-compacto-texto: #e8efea;
-  --haku-compacto-secundario: #b1c2b7;
-  --haku-compacto-acento: #9fd2b3;
-  --haku-compacto-seleccion: #254736;
-  --haku-compacto-suave: #28382f;
-  --haku-compacto-aviso: #f0c585;
-}
 /* Archivos originales del diseño. La máscara adapta únicamente el color al tema. */
 .haiku-compacto-cerrar-icono, .haiku-compacto-seleccionar-icono {
   display: inline-block; width: 16px; height: 16px; flex: 0 0 16px;
