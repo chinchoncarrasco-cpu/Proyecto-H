@@ -1222,6 +1222,9 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
 .haiku-cancelacion-informe__acciones > .haiku-cancelacion-pantalla__boton--confirmar {
     margin-inline-start: auto; background: var(--cancelacion-confirmar); border-color: var(--cancelacion-confirmar-borde); color: #fff;
 }
+.haiku-cancelacion-informe__acciones > .haiku-cancelacion-pantalla__boton--cerrar-aviso {
+    margin-inline-start: auto; background: var(--cancelacion-suave);
+}
 .haiku-cancelacion-informe__acciones > button:focus-visible { outline: 2px solid var(--cancelacion-acento); outline-offset: 2px; }
 .haiku-cancelacion-informe__acciones > button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px currentColor; }
 .haiku-cancelacion-informe__acciones > button:disabled { opacity: .7; cursor: default; }

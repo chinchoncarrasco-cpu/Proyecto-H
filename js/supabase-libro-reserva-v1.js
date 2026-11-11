@@ -56,6 +56,8 @@
     // La página de informe usa el mismo lector, exclusivamente en memoria, a cualquier ancho.
     const informeReadonly = document.getElementById?.("seccion-libro-reserva")?.dataset?.libroModo === "informe-readonly";
     const persistenciaPC = !informeReadonly && window.matchMedia("(min-width: 901px)").matches;
+    const cierresCancelacionSesion = new Set();
+    const CLAVE_CIERRES_CANCELACION = "avisos_cancelacion_cerrados";
     let operacionLibro = 0;
     let colaLocal = Promise.resolve();
     let cargaLista = Promise.resolve();
@@ -85,7 +87,9 @@
                 try {
                     const tx = db.transaction("libro", accion.startsWith("leer") ? "readonly" : "readwrite");
                     const almacen = tx.objectStore("libro");
-                    const solicitud = accion === "leer_cambios" ? almacen.get("cambios_detectados")
+                    const operacionCierre = accion === "leer_cierres_cancelacion" || accion === "cerrar_aviso_cancelacion";
+                    const solicitud = operacionCierre ? almacen.get(CLAVE_CIERRES_CANCELACION)
+                        : accion === "leer_cambios" ? almacen.get("cambios_detectados")
                         : accion.startsWith("leer") ? almacen.get(accion === "leer_anterior" ? "anterior" : "actual")
                         : accion === "guardar_cambios" ? almacen.put(registro, "cambios_detectados")
                         : accion === "borrar" ? almacen.clear() : almacen.get("actual");
@@ -99,6 +103,10 @@
                         actualizacion = Boolean(anterior?.buffer);
                         if (anterior) almacen.put(anterior, "anterior");
                         almacen.put(registro, "actual");
+                    };
+                    if (accion === "cerrar_aviso_cancelacion") solicitud.onsuccess = () => {
+                        const firmas = Array.isArray(solicitud.result) ? solicitud.result : [];
+                        if (!firmas.includes(registro)) almacen.put([...firmas, registro], CLAVE_CIERRES_CANCELACION);
                     };
                     // A request's success alone does not guarantee that the write committed.
                     tx.oncomplete = () => { db.close(); resolve(accion === "guardar" ? {actualizacion} :
@@ -115,6 +123,7 @@
     async function quitarLibro() {
         const id = ++operacionLibro;
         limpiarMemoria();
+        cierresCancelacionSesion.clear();
         if (!persistenciaPC) {
             notificarVistaLibro("eliminado", false);
             return;
@@ -1059,6 +1068,11 @@
             consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),
             leerCambiosDetectados: async () => persistenciaPC ? await copiaLocal("leer_cambios") : null,
             guardarCambiosDetectados: async registro => persistenciaPC ? await copiaLocal("guardar_cambios", structuredClone(registro)) : registro,
+            leerAvisosCancelacionCerrados: async () => persistenciaPC ? await copiaLocal("leer_cierres_cancelacion") : [...cierresCancelacionSesion],
+            cerrarAvisoCancelacion: informeReadonly ? undefined : async firma => {
+                if (persistenciaPC) await copiaLocal("cerrar_aviso_cancelacion", firma);
+                else cierresCancelacionSesion.add(firma);
+            },
             consultarHoja,
             crearLectura,
             buscarHojas: nombre => consultarHoja(nombre, "actual", "buscar"),
