@@ -205,8 +205,10 @@
         const manual=esAdministrador()&&(item.preparacion||revisionServiciosPendiente(item,generacion));
         if(item.tipo==='cancelacion')return {
             encontro:'La reserva figura cancelada en el Libro.',
-            motivo:`En Proyecto H: ${valor(item.proyecto,'estado_operativo')}. La cancelación aún necesita confirmación.`,
-            paso:'Revisa la reserva en Proyecto H antes de confirmar su cancelación.'
+            motivo:`En Proyecto H: ${valor(item.proyecto,'estado_operativo').replace(/\.+$/,'')}. La cancelación aún necesita confirmación.`,
+            paso:esAdministrador()&&revisionCancelacionPendiente(item,generacion)
+                ?'Abre «Aprobación manual» para revisar la reserva y confirmar la cancelación.'
+                :'Revisa la reserva en Proyecto H antes de confirmar su cancelación.'
         };
         if(item.tipo==='nueva'&&item.accionable)return {
             encontro:'Falta incorporar esta reserva en Proyecto H.',motivo:'Los datos permiten preparar su registro.',
@@ -337,6 +339,9 @@
         // Abrir sólo esta ficha con el lector y la confirmación de servicios existentes.
         return {reservas:[item.actual],generacion};
     }
+    function revisionCancelacionPendiente(item,generacion){
+        return item?.tipo==='cancelacion'&&Boolean(item.anterior)&&generacion!=null&&item.fuente_vigente?.estado!=='no_disponible';
+    }
     function renderizarPendientes(pendientes={}){
         const items=lista(pendientes.items),accionables=items.filter(x=>x.accionable).length;
         let html='<section class="haku-libro-pendientes haku-pendientes-compactos haku-actualizacion-sites__historial" aria-label="Qué falta resolver en Proyecto H"><header class="haku-actualizacion-sites__historial-head"><div><span>DEL LIBRO A PROYECTO H</span><strong>Qué falta resolver en Proyecto H</strong></div><span class="haku-actualizacion-sites__chip">'+(pendientes.sinVerificar?'Por comprobar':'Revisado en Proyecto H')+'</span></header>';
@@ -349,9 +354,10 @@
                 const item=registro.tipo==='modificacion'&&registro.proyecto&&!registro.sistema?
                     {...registro,cambios:lista(registro.cambios).map(c=>({...c,proyecto:registro.proyecto}))}:registro;
                 const r=item.actual||item.anterior||{};
-                const revisionServicios=revisionServiciosPendiente(item,pendientes.generacion);
+                const revisionManual=item.preparacion||revisionServiciosPendiente(item,pendientes.generacion)||
+                    revisionCancelacionPendiente(item,pendientes.generacion);
                 const etiqueta=item.detectado_generacion===pendientes.generacion?'DE ESTA ACTUALIZACIÓN':'PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR';
-                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${detallePendiente(item,pendientes.generacion)}<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&(item.preparacion||revisionServicios)?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
+                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${detallePendiente(item,pendientes.generacion)}<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&revisionManual?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
             }
         }
         const resueltos=lista(pendientes.resueltosDetalle);
@@ -699,20 +705,33 @@
                             if(manual.disabled)return;
                             let item=pendientes.items[Number(manual.dataset.hakuAprobarPendiente)];
                             let revisionServicios=revisionServiciosPendiente(item,pendientes.generacion);
-                            if(!esAdministrador()||(!item?.preparacion&&!revisionServicios))return;
+                            let revisionCancelacion=revisionCancelacionPendiente(item,pendientes.generacion);
+                            if(!esAdministrador()||(!item?.preparacion&&!revisionServicios&&!revisionCancelacion))return;
                             manual.disabled=true;manual.setAttribute?.('aria-busy','true');
                             const destino=manual.closest('.haku-pendiente-detalle');
                             destino.querySelector?.('.haku-libro-preparacion-zona')?.remove?.();
                             const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';
                             vista.textContent='Comprobando este cambio antes de pedir tu confirmación…';destino.appendChild(vista);
+                            let cancelacionAbierta=false;
                             try{
                                 const actuales=await pendientesVigentes();
                                 if(actuales!==pendientes){
                                     item=actuales.items.find(x=>claveCaso(x)===claveCaso(item));
                                     revisionServicios=revisionServiciosPendiente(item,actuales.generacion);
-                                    if(!item?.preparacion&&!revisionServicios){await cargar(true);return;}
+                                    revisionCancelacion=revisionCancelacionPendiente(item,actuales.generacion);
+                                    if(!item?.preparacion&&!revisionServicios&&!revisionCancelacion){await cargar(true);return;}
                                 }
-                                if(item.preparacion){
+                                if(revisionCancelacion){
+                                    const api=root.HAIKU_LIBRO_CANCELACIONES_V1;
+                                    if(!api?.abrirRevisionHistorial)throw Error('No está disponible la revisión de cancelaciones. Recarga Proyecto H.');
+                                    vista.textContent='';
+                                    await api.abrirRevisionHistorial(vista,item,actuales.generacion,resuelta=>{
+                                        vista.remove();
+                                        if(resuelta)return cargar(true);
+                                        manual.disabled=false;manual.focus?.({preventScroll:true});
+                                    });
+                                    cancelacionAbierta=true;
+                                }else if(item.preparacion){
                                     if(!root.HAIKU_LIBRO_CONSULTAS?.abrirPreparacionComparacion)throw Error('Recarga Proyecto H para abrir la revisión.');
                                     await root.HAIKU_LIBRO_CONSULTAS.abrirPreparacionComparacion(vista,item.preparacion);
                                 }else{
@@ -725,7 +744,7 @@
                             }catch(error){
                                 if(error?.haikuSinCambiosPreparables){await cargar(true);return;}
                                 vista.textContent=error?.message||'No se pudo abrir la revisión.';vista.setAttribute?.('role','alert');
-                            }finally{manual.disabled=false;manual.removeAttribute?.('aria-busy');}
+                            }finally{if(!cancelacionAbierta)manual.disabled=false;manual.removeAttribute?.('aria-busy');}
                         });
                     }
                     const boton=zona.querySelector?.('[data-haku-revalidar-proyecto]');
