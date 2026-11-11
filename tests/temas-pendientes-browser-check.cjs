@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
 const {panelSinDatos,auditarContraste}=require('./haiku-tema-browser-check.cjs');
+const {comprobarCalendario}=require('./calendario-mobile-browser-check.cjs');
 const fixtures=require('./fixtures/haiku-tema-v1.cjs');
 const Redes=require('../js/haiku-redes-core-v1.js');
 const F=require('./fixtures/libro-comparacion-readonly.cjs'),Core=require('../js/haiku-libro-comparacion-readonly-v1.js');
@@ -133,6 +134,8 @@ async function secondary(p,url,width,theme,key){
     try{if(name==='comparacion')await comparacion(p,url,width,theme);else if(name==='calendario')await calendario(p,url,width,theme);else await secondary(p,url,width,theme,name);assert.deepEqual(errors,[]);results.push({name,width,theme,ok:true});console.log('OK',name,width,theme);}
     catch(e){results.push({name,width,theme,error:e.message});console.error(name,width,theme,e);await p.screenshot({path:path.join(out,`error-${name}-${width}-${theme}.png`),fullPage:true});}
     finally{fs.writeFileSync(path.join(out,'resultados.json'),JSON.stringify(results,null,2));await ctx.close();}
-  }}finally{await browser.close();await new Promise(r=>server.close(r));}
+  }
+    await comprobarCalendario(browser,path.join(out,'calendario-reservas'));
+  }finally{await browser.close();await new Promise(r=>server.close(r));}
   assert.equal(results.filter(r=>!r.ok).length,0,'36 combinaciones y sus estados');
 })().catch(e=>{console.error(e);process.exitCode=1;});

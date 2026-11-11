@@ -81,6 +81,57 @@
     html[data-haiku-tema="oscuro"] #seccion-resumen .sites-resumen-estado-badge[data-estado-visual="salio"]::before {
         background: transparent;
     }
+
+    /* La capa generada usa un color fijo para las barras y sus indicadores. */
+    html[data-haiku-tema="oscuro"] :is(#seccion-calendario, .sites-calendario-popover) {
+        --calendario-estado-fondo: var(--haiku-reserva-confirmada-fondo);
+        --calendario-estado-texto: var(--haiku-reserva-confirmada-texto);
+        --calendario-estado-acento: var(--haiku-reserva-confirmada-acento);
+    }
+    html[data-haiku-tema="oscuro"] :is(#seccion-calendario, .sites-calendario-popover)
+    :is(.cal-reserva-checkin, .cal-reserva-continua, .sites-calendario-leyenda-marca--hospedado) {
+        --calendario-estado-fondo: var(--haiku-reserva-hospedada-fondo);
+        --calendario-estado-texto: var(--haiku-reserva-hospedada-texto);
+        --calendario-estado-acento: var(--haiku-reserva-hospedada-acento);
+    }
+    html[data-haiku-tema="oscuro"] :is(#seccion-calendario, .sites-calendario-popover)
+    :is(.cal-reserva-fullday, .cal-reserva-ingresa, .cal-reserva-sale, .sites-calendario-leyenda-marca--fullday) {
+        --calendario-estado-fondo: #4d3822;
+        --calendario-estado-texto: #f5d8a9;
+        --calendario-estado-acento: #dfb575;
+    }
+    html[data-haiku-tema="oscuro"] :is(#seccion-calendario, .sites-calendario-popover) .cal-reserva-checkout {
+        --calendario-estado-fondo: var(--haiku-reserva-checkout-fondo);
+        --calendario-estado-texto: var(--haiku-reserva-checkout-texto);
+        --calendario-estado-acento: var(--haiku-reserva-checkout-acento);
+    }
+    html[data-haiku-tema="oscuro"] :is(#seccion-calendario, .sites-calendario-popover)
+    :is(.cal-reserva-bloqueada, .sites-calendario-leyenda-marca--bloqueo) {
+        --calendario-estado-fondo: #442b2a;
+        --calendario-estado-texto: #f6c3bb;
+        --calendario-estado-acento: #e59c91;
+    }
+    html[data-haiku-tema="oscuro"] #seccion-calendario .calendario-reserva-barra {
+        background-color: var(--calendario-estado-fondo);
+        color: var(--calendario-estado-texto);
+        box-shadow: inset 2px 0 var(--calendario-estado-acento);
+    }
+    html[data-haiku-tema="oscuro"] #seccion-calendario .calendario-reserva-barra.cal-reserva-bloqueada {
+        --cal-sites-bar-bg: var(--calendario-estado-fondo);
+        color: var(--calendario-estado-texto) !important;
+        background-image: repeating-linear-gradient(115deg, transparent 0 8px, #f3b2a81a 8px 10px) !important;
+    }
+    html[data-haiku-tema="oscuro"] #seccion-calendario .sites-calendario-leyenda-marca {
+        background-color: var(--calendario-estado-fondo);
+        border-left-color: var(--calendario-estado-acento);
+    }
+    html[data-haiku-tema="oscuro"] #seccion-calendario .sites-calendario-agenda-riel {
+        background-color: var(--calendario-estado-acento);
+    }
+    html[data-haiku-tema="oscuro"] .calendario-panel-dia.sites-calendario-popover .calendario-panel-reserva {
+        border-left-color: var(--calendario-estado-acento);
+    }
+
     /* El documento importado conserva los colores y el texto originales de sus celdas. */
     html[data-haiku-tema="oscuro"] #libro-reserva-visor table { color-scheme: light; }
 }
