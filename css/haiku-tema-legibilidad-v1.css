@@ -1,0 +1,29 @@
+/* Figma 06: sólo etiquetas y ayudas de las cuatro superficies auditadas. */
+html .ficha-reserva :is(.ficha-huesped-fila > strong, .ficha-contacto strong,
+  .ficha-reserva-subtitulo, .ficha-estancia-id > span, .ficha-servicios-encabezado),
+html .haiku-cuenta-menu-panel :is(.haiku-cuenta-titulos small, .haiku-cuenta-perfil > p,
+  .haiku-cuenta-tarjeta dt, .haiku-cuenta-rol small, .haiku-cuenta-permisos > small,
+  .haiku-cuenta-salida p),
+html .haiku-asistente-root .haiku-asistente-pista,
+html #seccion-servicios :is(.sites-servicios-heading p, .sv-metrics small, .sv-section-top p,
+  .sv-date-control, .sv-slot-head small, .sv-agenda-hint, .sv-service-main small, .sv-empty) {
+  color: var(--haku-compacto-secundario);
+  opacity: 1;
+}
+html .ficha-reserva .ficha-servicios-encabezado strong {
+  color: var(--haku-compacto-acento); background: var(--haku-compacto-seleccion);
+}
+html .ficha-reserva .ficha-dato-editable::placeholder {
+  color: var(--haku-compacto-secundario); opacity: 1;
+}
+/* La ayuda también se puede leer en móvil sin imponer ancho al compositor. */
+@media (max-width: 600px) {
+  html .haiku-asistente-root .haiku-asistente-pista {
+    display: block; flex: 1 1 100%; white-space: normal; overflow: visible;
+    font-size: 11px; line-height: 16px;
+  }
+}
+html #sites-resumen-reserva-drawer :is(.rd-label,.rd-muted,.rd-sub,.rd-section-head small) {
+  color: var(--haku-compacto-secundario); opacity: 1;
+}
+html .ficha-reserva .ficha-contacto > div > span { color: var(--haku-compacto-secundario); }

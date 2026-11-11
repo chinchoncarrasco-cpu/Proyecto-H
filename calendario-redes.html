@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-haiku-tema="oscuro">
+<html lang="es">
 <head>
  <meta charset="utf-8">
  <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -7,14 +7,16 @@
  <meta name="referrer" content="no-referrer">
  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://zqfegylkylxsuoejomow.supabase.co; img-src 'self' https://zqfegylkylxsuoejomow.supabase.co; media-src https://zqfegylkylxsuoejomow.supabase.co; object-src 'none'; base-uri 'none'; form-action 'none'">
  <title>Haiku · Calendario de redes sociales</title>
+ <script src="js/haiku-tema-v1.js"></script>
+ <link rel="stylesheet" href="css/haiku-paleta-v1.css">
  <link rel="stylesheet" href="css/haiku-redes-v1.css">
- <link rel="stylesheet" href="css/haiku-redes-public-v1.css">
+ <link rel="stylesheet" href="css/haiku-redes-public-v1.css?v=20261111">
  <script defer src="js/haiku-redes-core-v1.js"></script>
  <script defer src="js/haiku-redes-public-v1.js"></script>
- <script defer src="js/haiku-redes-ui-v1.js"></script>
+ <script defer src="js/haiku-redes-ui-v1.js?v=20261111"></script>
 </head>
 <body class="hr-public-page">
- <header class="hr-public-brand"><span class="hr-public-mark" aria-hidden="true">H</span><span>HAIKU <small>Cabañas Panorámicas</small></span><span class="hr-readonly">Solo lectura</span></header>
+ <header class="hr-public-brand"><span class="hr-public-mark" aria-hidden="true">H</span><div class="hr-public-title"><h1>Calendario de contenidos</h1><p>HAIKU · Cabañas Panorámicas</p></div><span class="hr-readonly">Solo lectura</span><button id="haiku-tema-boton" type="button" hidden><span data-tema-icono aria-hidden="true">☾</span><span data-tema-texto>Tema oscuro</span></button></header>
  <main id="seccion-calendario" data-redes-public="true"><div id="haiku-redes"><p>Cargando calendario compartido…</p></div></main>
  <noscript>Activa JavaScript para consultar este calendario.</noscript>
  <footer class="hr-public-footer">Calendario editorial de Haiku · Consulta de contenido para redes sociales</footer>

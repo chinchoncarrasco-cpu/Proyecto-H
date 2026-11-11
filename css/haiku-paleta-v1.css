@@ -1,0 +1,26 @@
+/* Paleta compartida HAIKU · Figma, claro y oscuro. */
+:root {
+  --haku-compacto-superficie: #fbfcfb;
+  --haku-compacto-control: #f1f5f2;
+  --haku-compacto-borde: #dbe3de;
+  --haku-compacto-texto: #172019;
+  --haku-compacto-secundario: #586c60;
+  --haku-compacto-acento: #286c4e;
+  --haku-compacto-seleccion: #e6f2eb;
+  --haku-compacto-suave: #eef4ef;
+  --haku-compacto-aviso: #825016;
+  --haku-compacto-primario: #22735c;
+}
+html[data-haiku-tema="oscuro"] {
+  --haku-compacto-superficie: #1b2621;
+  --haku-compacto-control: #0f1915;
+  --haku-compacto-borde: #3e5145;
+  --haku-compacto-texto: #e8efea;
+  --haku-compacto-secundario: #b1c2b7;
+  --haku-compacto-acento: #9fd2b3;
+  --haku-compacto-seleccion: #254736;
+  --haku-compacto-suave: #28382f;
+  --haku-compacto-aviso: #f0c585;
+}
+:root { --haku-compacto-aviso-fondo: #fff5e5; }
+html[data-haiku-tema="oscuro"] { --haku-compacto-aviso-fondo: #392b1c; }

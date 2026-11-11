@@ -6,7 +6,9 @@
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="noindex, nofollow">
   <title>Comparación del Libro · Proyecto H</title>
-  <link rel="stylesheet" href="css/sites-libro-comparacion-readonly-v1.css">
+  <script src="js/haiku-tema-v1.js"></script>
+  <link rel="stylesheet" href="css/haiku-paleta-v1.css">
+  <link rel="stylesheet" href="css/sites-libro-comparacion-readonly-v1.css?v=20261111">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="js/supabase-client.js"></script>
   <script defer src="js/supabase-libro-reserva-v1.js"></script>
@@ -21,12 +23,12 @@
   <script defer src="js/haiku-libro-comparacion-readonly-v1.js"></script>
   <script defer src="js/haiku-libro-fuente-oficial-v1.js"></script>
   <script defer src="js/supabase-libro-google-readonly-v1.js"></script>
-  <script defer src="js/sites-libro-comparacion-readonly-v1.js?v=20261102-sesion-servidor"></script>
+  <script defer src="js/sites-libro-comparacion-readonly-v1.js?v=20261111-temas"></script>
 </head>
 <body>
   <main class="informe-pagina">
-    <header class="informe-encabezado"><h1>COMPARACIÓN DEL LIBRO</h1><span>Sólo lectura</span></header>
-    <p id="informe-periodo" class="informe-periodo"></p>
+    <header class="informe-encabezado"><span class="informe-marca" aria-hidden="true">H</span><div><h1>Comparación del Libro</h1><p id="informe-periodo" class="informe-periodo"></p></div><span class="informe-lectura">Solo lectura</span></header>
+    <div class="informe-trabajo">
     <section class="informe-acceso" aria-label="Acceso al informe">
       <p id="informe-estado" role="status" aria-live="polite">Comprobando sesión…</p>
       <a id="informe-login" href="panel.html">Iniciar sesión en Proyecto H</a>
@@ -36,9 +38,10 @@
     <section id="seccion-libro-reserva" data-libro-modo="informe-readonly" hidden aria-label="Google autorizado">
       <div class="libro-reserva-acciones" hidden></div>
     </section>
-    <button id="informe-comparar" type="button" disabled>Comparar mes actual</button>
+    <div class="informe-acciones"><button id="informe-comparar" type="button" disabled>Comparar mes actual</button><button id="haiku-tema-boton" type="button" hidden><span data-tema-icono aria-hidden="true">☾</span><span data-tema-texto>Tema oscuro</span></button></div>
     <section id="informe-resultado" aria-label="Resultado de la comparación" hidden></section>
-    <p class="informe-pie">Consulta de solo lectura.</p>
+    </div>
+    <p class="informe-pie">Consulta de solo lectura. La comparación no modifica reservas, pagos ni servicios.</p>
   </main>
 </body>
 </html>

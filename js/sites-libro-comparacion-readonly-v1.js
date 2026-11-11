@@ -155,12 +155,11 @@
         const el = (tag, clase, texto) => { const x = document.createElement(tag); if (clase) x.className = clase; if (texto !== undefined) x.textContent = String(texto); return x; };
         const p = dto.presentacion || {}, items = lista(dto.comparacion?.items), grupos = lista(dto.comparacion?.grupos);
         const resumen = el("div", "informe-resumen");
-        const hero = el("div", "informe-fraccion"); hero.append(el("strong", "", `${conocido(p.estadiasAsociadas)} / ${conocido(p.estadiasValidas)}`), el("span", "", "estadías asociadas / válidas del Libro"));
         const metricas = el("div", "informe-metricas");
-        for (const [label, value] of [["Asociadas", p.estadiasAsociadas], ["Faltantes", p.faltantes], ["Ambiguas", p.ambiguas]]) {
-            const x = el("div", "informe-metrica"); x.append(el("strong", "", conocido(value)), el("span", "", label)); metricas.append(x);
+        for (const [label, value] of [["Asociadas", `${conocido(p.estadiasAsociadas)} / ${conocido(p.estadiasValidas)}`], ["Faltantes", conocido(p.faltantes)], ["Ambiguas", conocido(p.ambiguas)]]) {
+            const x = el("div", "informe-metrica"); x.append(el("strong", "", value), el("span", "", label)); metricas.append(x);
         }
-        resumen.append(hero, metricas, el("p", "informe-contexto", `${conocido(p.gruposAsociados)} grupos asociados · ${conocido(p.gruposLibro)} grupos Libro · ${conocido(p.gruposConDiferencias)} grupos con diferencias. Registros accesibles con tu sesión.`));
+        resumen.append(metricas, el("p", "informe-contexto", `${conocido(p.gruposAsociados)} grupos asociados · ${conocido(p.gruposLibro)} grupos Libro · ${conocido(p.gruposConDiferencias)} grupos con diferencias. Registros accesibles con tu sesión.`));
         if (dto.status === "incompleto") resumen.append(el("p", "informe-aviso", "Cobertura incompleta. Los resultados no demuestran ausencia en todo el Libro o Proyecto H."));
         if (p.pagosRevisar !== 0) resumen.append(el("p", "informe-aviso", `⚠ ${conocido(p.pagosRevisar)} pagos requieren revisión`));
         contenedor.append(resumen);
@@ -180,11 +179,17 @@
             texto(parent, i.libro?.notasImportantes); texto(parent, i.libro?.notasInterpretacion);
             texto(parent, i.libro?.pagosPendientes); texto(parent, i.libro?.advertencias);
             for (const d of lista(i.diferencias)) {
-                const row = el("div", ""); row.append(el("p", "", d));
+                const row = el("div", "informe-diferencia"); row.append(el("p", "informe-diferencia-titulo", d));
                 // Presentación de valores disponibles; la diferencia la determina exclusivamente el motor.
                 const key = String(d).split(":")[0], labels = { telefono: "telefono", correo: "correo", "RUT/documento": "rut_documento", "estado de estadía": "estado_operativo" };
                 const field = labels[key] || key;
-                if (Object.hasOwn(i.libro || {}, field) || Object.hasOwn(i.proyecto || {}, field)) valores(row, [["Campo", key], ["Libro", i.libro?.[field]], ["Proyecto H", i.proyecto?.[field]]]);
+                if (Object.hasOwn(i.libro || {}, field) || Object.hasOwn(i.proyecto || {}, field)) {
+                    const comparados = el("div", "informe-valores-comparados");
+                    for (const [label, value] of [["Libro", i.libro?.[field]], ["Proyecto H", i.proyecto?.[field]]]) {
+                        const columna = el("div", ""); columna.append(el("span", "", label), el("strong", "", visible(value))); comparados.append(columna);
+                    }
+                    row.append(comparados);
+                }
                 parent.append(row);
             }
             lista(i.candidatos).forEach(c => parent.append(el("p", "", `Candidato: ${titulo(c)} · ${visible(c.fecha_checkin)} – ${visible(c.fecha_checkout)} · ${visible(c.estado_reserva)}`)));
@@ -194,8 +199,26 @@
         const seccion = (nombre, count, rows, dibujar) => {
             const d = el("details", "informe-categoria"), s = el("summary", ""); s.append(el("span", "", nombre), el("span", "", conocido(count))); d.append(s);
             const body = el("div", "informe-detalles");
-            if (!rows.length) body.append(el("p", "", "Sin elementos en esta categoría del resultado."));
-            rows.forEach(row => { const card = el("article", "informe-item"); dibujar(card, row); body.append(card); });
+            if (!rows.length) body.append(el("p", "informe-vacio", "Sin elementos en esta categoría del resultado."));
+            const selector = el("details", "informe-selector-casos"); selector.open = true;
+            selector.append(el("summary", "", `${nombre} · ${rows.length}`));
+            const botones = el("div", "informe-lista-casos"), panel = el("div", "informe-panel-casos");
+            selector.append(botones);
+            rows.forEach((row, index) => {
+                const card = el("article", "informe-item"); dibujar(card, row); card.hidden = index !== 0;
+                card.tabIndex = -1;
+                const button = el("button", "informe-caso-boton"); button.type = "button";
+                button.setAttribute("aria-pressed", String(index === 0));
+                button.append(el("strong", "", card.querySelector("h3")?.textContent || `${nombre} · ${index + 1}`));
+                const contexto = card.querySelector("p")?.textContent;
+                if (contexto) button.append(el("span", "", contexto));
+                button.addEventListener("click", () => {
+                    for (const sibling of panel.children) sibling.hidden = sibling !== card;
+                    for (const sibling of botones.children) sibling.setAttribute("aria-pressed", String(sibling === button));
+                });
+                botones.append(button); panel.append(card);
+            });
+            if (rows.length) { body.classList.add("informe-detalles--casos"); body.append(selector, panel); }
             d.append(body); categorias.append(d);
         };
         seccion("Coincidencias", p.gruposAsociados, grupos.filter(g => g.estado === "asociada"), (parent, g) => {
@@ -249,7 +272,29 @@
             valores(cuerpo, [["Cancelación", key], ["Reserva", c.actual ? titulo(c.actual) : c.motivo], ["Estado Proyecto H", c.estado_proyecto], ["Motivo", c.tipo]]); tecnicos(cuerpo, [c.evidencia?.origen, c.actual?.origen]);
             if (c.evidencia) valores(cuerpo, [["Evidencia Libro", titulo(c.evidencia)], ["Entrada", c.evidencia.fecha_checkin], ["Salida", c.evidencia.fecha_checkout]]);
         });
-        contexto.append(cuerpo); categorias.append(contexto); contenedor.append(categorias); contenedor.hidden = false;
+        contexto.append(cuerpo); categorias.append(contexto);
+        const explorador = el("div", "informe-explorador"), nav = el("nav", "informe-nav");
+        nav.setAttribute("aria-label", "Categorías de comparación");
+        const secciones = Array.from(categorias.children);
+        secciones.forEach((d, index) => {
+            const button = el("button", ""); button.type = "button";
+            const summary = d.querySelector("summary");
+            for (const child of summary.children) button.append(el("span", "", child.textContent));
+            if (!summary.children.length) button.append(el("span", "", "Cobertura"));
+            button.setAttribute("aria-expanded", "false"); nav.append(button);
+            const abrir = () => {
+                secciones.forEach((other, i) => { other.open = i === index; nav.children[i].setAttribute("aria-expanded", String(i === index)); });
+            };
+            button.addEventListener("click", abrir);
+            summary.addEventListener("click", event => {
+                if (!d.open) { event.preventDefault(); abrir(); }
+                else button.setAttribute("aria-expanded", "false");
+            });
+        });
+        // Destacar diferencias si las hay; los contadores y el detalle siguen siendo los del DTO.
+        const initial = grupos.some(g => g.estado === "asociada" && lista(g.diferencias).length) ? 1 : 0;
+        secciones[initial].open = true; nav.children[initial].setAttribute("aria-expanded", "true");
+        explorador.append(nav, categorias); contenedor.append(explorador); contenedor.hidden = false;
     }
 
     function instalar(root) {
