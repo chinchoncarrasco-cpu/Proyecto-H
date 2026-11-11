@@ -47,7 +47,9 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
                     3: { reservaId: 'R-ingresa', estadiaId: 'E-ingresa', titular: 'Camila Ortega', fechaOrigenReserva: '2026-09-23', noches: 2 }
                 } },
                 '2026-09-24': { cabanas: {
-                    4: { reservaId: 'R-out', estadiaId: 'E-out', titular: 'Estadía finalizada', noches: 1 }
+                    4: { reservaId: 'R-out', estadiaId: 'E-out', titular: 'Estadía finalizada', noches: 1 },
+                    8: { reservaId: 'R-extra1', estadiaId: 'E-extra1', titular: 'Reserva adicional 1', noches: 1 },
+                    9: { reservaId: 'R-extra2', estadiaId: 'E-extra2', titular: 'Reserva adicional 2', noches: 1 }
                 } },
                 '2026-09-25': { cabanas: {
                     5: { reservaId: 'R-full', estadiaId: 'E-full', titular: 'Visita Full Day', tipoEstadia: 'fullday' }
@@ -66,6 +68,8 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
                 'E-sale': { reservaId: 'R-sale', estado: 'hospedada' },
                 'E-ingresa': { reservaId: 'R-ingresa', estado: 'confirmada' },
                 'E-out': { reservaId: 'R-out', estado: 'checked_out' },
+                'E-extra1': { reservaId: 'R-extra1', estado: 'confirmada' },
+                'E-extra2': { reservaId: 'R-extra2', estado: 'confirmada' },
                 'E-full': { reservaId: 'R-full', estado: 'confirmada' },
                 'E-pendiente': { reservaId: 'R-pendiente', estado: 'pendiente' }
             } }));
@@ -126,6 +130,13 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
         if (temas) await page.locator('#seccion-calendario').screenshot({ path: path.join(temas, 'calendario-oscuro.png') });
         await page.setViewportSize({ width: 1100, height: 844 });
         assert.deepEqual(await coloresBarras(page), oscuro);
+        await page.locator('.calendario-mas-reservas[data-fecha="2026-09-24"]').click();
+        const panel = page.locator('.sites-calendario-popover');
+        for (const id of ['R-ingresa', 'R-out']) {
+            const fila = panel.locator(`[data-reserva-id="${id}"]`);
+            assert.equal(await fila.evaluate(el => getComputedStyle(el).borderLeftColor), oscuro[id].acento);
+        }
+        await panel.locator('.calendario-panel-cerrar').click();
         await page.evaluate(() => { document.documentElement.dataset.haikuTema = 'claro'; });
         assert.deepEqual(await coloresBarras(page), claro);
         await page.locator('.calendario-reserva-barra[data-reserva-id="R-ingresa"]').click();
@@ -142,15 +153,6 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
         }
         await page.locator('.dia-calendario[data-fecha="2026-09-23"]').click();
         if (temas) await page.locator('#seccion-calendario').screenshot({ path: path.join(temas, 'calendario-oscuro-movil.png') });
-        await page.locator('.dia-calendario[data-fecha="2026-09-24"]').click();
-        await page.getByRole('button', { name: 'Ver resumen del día' }).click();
-        const panel = page.locator('.sites-calendario-popover');
-        for (const id of ['R-ingresa', 'R-out']) {
-            const fila = panel.locator(`[data-reserva-id="${id}"]`);
-            assert.equal(await fila.evaluate(el => getComputedStyle(el).borderLeftColor), oscuro[id].acento);
-        }
-        await panel.locator('.calendario-panel-cerrar').click();
-        await page.locator('.dia-calendario[data-fecha="2026-09-23"]').click();
         await page.evaluate(() => { document.documentElement.dataset.haikuTema = 'claro'; });
         if (process.env.CALENDARIO_SCREENSHOT) {
             await page.screenshot({ path: process.env.CALENDARIO_SCREENSHOT, fullPage: true });
