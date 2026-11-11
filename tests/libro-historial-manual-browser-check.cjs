@@ -7,7 +7,7 @@ const server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,'http://localhost').pathname;
     if(pathname==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(
         '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
-        ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1']
+        ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-tema-finanzas-compactas-v1']
             .map(s=>`<link rel="stylesheet" href="/css/${s}.css">`).join('')+
         '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel">'+
         '<header class="haiku-asistente-cabecera">Haku</header><div class="haiku-asistente-mensajes">'+

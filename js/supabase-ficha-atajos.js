@@ -47,6 +47,7 @@
     let turnoDetalle = 0;
     let popup = null;
     let cuadroPopup = null;
+    let contextoPopup = null;
 
     function dinero(valor) {
         return `$${Math.round(Number(valor || 0)).toLocaleString("es-CL")}`;
@@ -227,7 +228,7 @@
 
     function agregarSeccion(contenido, titulo, filas, vacio) {
         const seccion = crear("section", "haiku-ficha-detalle-seccion");
-        seccion.append(crear("h4", "", titulo));
+        if (titulo) seccion.append(crear("h4", "", titulo));
         if (filas.length) filas.forEach(fila => seccion.append(fila));
         else seccion.append(crear("p", "haiku-ficha-detalle-vacio", vacio));
         contenido.append(seccion);
@@ -253,12 +254,15 @@
         const valor = datos.resumen[tipo];
         const cabecera = crear("div", "haiku-ficha-detalle-importe");
         cabecera.append(crear("span", "", etiquetas[tipo]), crear("strong", "", dinero(valor)));
-        contenido.append(cabecera);
+        // Total, pagado y saldo ya se muestran juntos. Sólo los servicios
+        // pendientes necesitan una cifra adicional distinta de ese resumen.
+        if (tipo === "servicios") contenido.append(cabecera);
 
         const ecuacion = crear("div", "haiku-ficha-detalle-ecuacion");
         [["Total",datos.resumen.total],["Pagado",datos.resumen.abono],["Saldo",datos.resumen.saldo]]
             .forEach(([label,monto]) => {
                 const celda = crear("div");
+                celda.dataset.importe = label.toLowerCase();
                 celda.append(crear("span", "", label), crear("strong", "", dinero(monto)));
                 ecuacion.append(celda);
             });
@@ -268,13 +272,13 @@
             const filas = datos.porCabana
                 .filter(item => tipo === "total" || item.saldo > 0)
                 .map(item => filaDetalle(
-                    item.cabana ? `CAB ${item.cabana}` : "Alojamiento",
+                    item.cabana ? `Cargos · CAB ${item.cabana}` : "Cargos de la reserva",
                     dinero(tipo === "total" ? item.total : item.saldo),
                     tipo === "total"
                         ? `Aplicado ${dinero(item.abono)} · Saldo ${dinero(item.saldo)}`
                         : `de ${dinero(item.total)} · aplicado ${dinero(item.abono)}`
                 ));
-            agregarSeccion(contenido, tipo === "total" ? "Desglose de cargos" : "Saldo por cabaña", filas,
+            agregarSeccion(contenido, tipo === "total" ? "" : "Saldo por cabaña", filas,
                 tipo === "saldo" ? "La reserva está completamente pagada." : "No hay cargos activos.");
         }
 
@@ -298,7 +302,7 @@
             agregarSeccion(contenido, "Detalle pendiente", filas, "No hay servicios pendientes de pago.");
         }
 
-        contenido.append(crear("small", "haiku-ficha-detalle-lectura", "Información actual de Proyecto H · Sólo lectura"));
+        contenido.append(crear("small", "haiku-ficha-detalle-lectura", "Sólo lectura · Proyecto H"));
     }
 
     function obtenerPopup() {
@@ -312,8 +316,12 @@
 
         const cabecera = crear("header", "haiku-ficha-detalle-cabecera");
         const titulo = crear("div");
-        titulo.append(crear("span", "", "DETALLE FINANCIERO"), crear("strong", "", "Proyecto H"));
-        const cerrar = crear("button", "haiku-ficha-detalle-cerrar", "×");
+        contextoPopup = crear("span");
+        titulo.append(crear("strong", "", "Detalle financiero"), contextoPopup);
+        const cerrar = crear("button", "haiku-ficha-detalle-cerrar");
+        const iconoCerrar = crear("span", "haiku-compacto-cerrar-icono");
+        iconoCerrar.setAttribute("aria-hidden", "true");
+        cerrar.append(iconoCerrar);
         cerrar.type = "button";
         cerrar.setAttribute("aria-label", "Cerrar detalle financiero");
         cerrar.addEventListener("click", cerrarDetalle);
@@ -329,7 +337,7 @@
     function posicionarPopup(cuadro) {
         const panel = obtenerPopup();
         const rect = cuadro.getBoundingClientRect();
-        const ancho = Math.min(390, Math.max(280, window.innerWidth - 24));
+        const ancho = Math.min(704, Math.max(280, window.innerWidth - 24));
         panel.style.width = `${ancho}px`;
         panel.style.right = "auto";
         panel.style.bottom = "auto";
@@ -375,6 +383,8 @@
         cuadroPopup = cuadro;
         cuadro.classList.add("haiku-ficha-atajo-detalle-activo");
         const panel = obtenerPopup();
+        const titular = document.getElementById("ficha-reserva-titular")?.textContent?.trim();
+        contextoPopup.textContent = [numeroCabana ? `CAB ${numeroCabana}` : "", titular || "Reserva"].filter(Boolean).join(" · ");
         const contenido = panel.querySelector("[data-haiku-ficha-detalle-contenido]");
         contenido.replaceChildren(crear("p", "haiku-ficha-detalle-cargando", "Consultando información actual…"));
         panel.hidden = false;
@@ -387,6 +397,7 @@
             if (turno !== turnoDetalle || cuadroPopup !== cuadro || modal.hidden ||
                 String(modal.dataset.reservaId || "") !== reservaId) return;
             pintarDetalle(contenido, config.detalle, datos);
+            if (datos.esGrupo) contextoPopup.textContent = `Grupo · ${datos.miembros.map(item => `CAB ${item.cabana}`).join(" + ")}`;
             panel.removeAttribute("aria-busy");
             posicionarPopup(cuadro);
         } catch (error) {

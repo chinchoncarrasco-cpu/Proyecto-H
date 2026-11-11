@@ -185,7 +185,7 @@ test('mouse and touch holds open the read-only popup and consume only their gene
         await new Promise(resolve=>setTimeout(resolve,20));
         const popup=h.body.children.find(x=>x.id==='haiku-ficha-detalle-popup');
         assert.ok(popup&&!popup.hidden,pointerType);
-        assert.match(popup.textContent,/Total del grupo/);
+        assert.match(popup.textContent,/Grupo · CAB 2 \+ CAB 7/);
         assert.match(popup.textContent,/\$650\.000/);
         assert.match(popup.textContent,/CAB 2/);
         assert.match(popup.textContent,/CAB 7/);

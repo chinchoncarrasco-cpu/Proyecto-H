@@ -1,0 +1,47 @@
+name: Finanzas y Haku compactos
+on:
+  pull_request:
+    paths:
+      - 'css/haiku-tema-finanzas-compactas-v1.css'
+      - 'assets/icons/finanzas-compactas/**'
+      - 'js/supabase-saldo-favor-v2.js'
+      - 'js/supabase-ficha-atajos.js'
+      - 'js/haiku-libro-servicios-scope-v2.js'
+      - 'js/haiku-libro-confirm-cancel-fix-v1.js'
+      - 'tests/finanzas-compactas-browser-check.cjs'
+      - 'tests/libro-resultado-incorporados.test.cjs'
+      - 'tests/haiku-tema-browser-check.cjs'
+      - 'index.html'
+      - 'panel.html'
+      - '.github/workflows/finanzas-compactas.yml'
+permissions:
+  contents: read
+jobs:
+  interfaz-y-funciones:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Cálculos, gestos, identidad y confirmaciones
+        run: node --test tests/libro-resultado-incorporados.test.cjs tests/supabase-ficha-atajos-longpress.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-servicios-resultados-parciales.test.cjs
+      - name: Navegador aislado
+        run: npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+      - name: Chromium
+        run: node "$RUNNER_TEMP/haku-ui/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Ambos temas en escritorio y móviles de 390 y 320 px
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+          HAKU_COMPACTO_OUTPUT: ${{ runner.temp }}/haku-capturas
+        run: node tests/finanzas-compactas-browser-check.cjs
+      - name: Capturas y resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finanzas-haku-compacto
+          path: ${{ runner.temp }}/haku-capturas
+          retention-days: 7

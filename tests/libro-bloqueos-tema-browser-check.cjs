@@ -2,8 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http'),vm=require('node:vm');
 const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const auditor=read('tests/haiku-tema-browser-check.cjs');
-const contraste=vm.runInNewContext('('+auditor.slice(auditor.indexOf('function auditarContraste()'),auditor.indexOf('main().catch'))+')');
+const {auditarContraste:contraste}=require('./haiku-tema-browser-check.cjs');
 const server=http.createServer((req,res)=>{
  const ruta=new URL(req.url,'http://localhost').pathname;
  if(ruta==='/'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end('<!doctype html><html></html>');return;}

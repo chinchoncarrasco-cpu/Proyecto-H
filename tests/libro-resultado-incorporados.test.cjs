@@ -48,9 +48,9 @@ test('Servicios y notas nuevos se muestran en apartados separados, abiertos y an
     assert.equal(h.grupo('servicio').querySelector('h3').textContent,'Servicios incorporados');
     assert.equal(h.grupo('nota').querySelector('h3').textContent,'Notas incorporadas');
     assert.equal(h.filas('servicio').length,1);assert.equal(h.filas('nota').length,1);
-    assert.match(h.grupo('servicio').textContent,/CAB 2 · Huésped Servicio · Tinaja Tonel de Madera/);
-    assert.match(h.grupo('servicio').textContent,/2026-10-17.*19:15–20:15.*Cantidad: 1.*Cortesía/);
-    assert.match(h.grupo('nota').textContent,/CAB 8 · Huésped Nota · Nota de la reserva/);
+    assert.match(h.grupo('servicio').textContent,/CAB 2 · Huésped Servicio.*Tinaja Tonel de Madera/);
+    assert.match(h.grupo('servicio').textContent,/17\/10\/2026.*19:15–20:15.*Cortesía/);
+    assert.match(h.grupo('nota').textContent,/CAB 8 · Huésped Nota/);
     assert.match(h.grupo('nota').textContent,/Agregar cuna en el alojamiento\.\nBebé de 1 año\./);
     assert.doesNotMatch(h.grupo('nota').textContent,/Texto anterior/);
     assert.doesNotMatch(h.grupo('servicio').textContent,/Huésped Nota|Huésped Anterior|Huésped Omitido/);
@@ -68,6 +68,7 @@ test('Caso de captura: cero servicios y una nota muestra inmediatamente la nota 
     const h=caso();h.data.servicios=[];h.data.servicios_creados=0;h.data.notas_omitidas=0;
     h.data.notas=h.data.notas.slice(0,1);h.elegidos.splice(0,2);h.render();
     assert.equal(h.filas('servicio').length,0);assert.equal(h.filas('nota').length,1);
+    assert.equal(h.grupo('servicio').hidden,true);
     assert.match(h.grupo('servicio').textContent,/No se incorporaron servicios en esta operación/);
     assert.match(h.grupo('nota').textContent,/Agregar cuna/);
 });
@@ -75,6 +76,7 @@ test('Caso de captura: cero servicios y una nota muestra inmediatamente la nota 
 test('Sólo servicios no agrega las notas antiguas a Notas incorporadas',()=>{
     const h=caso();h.data.notas=[];h.data.notas_creadas=0;h.data.notas_omitidas=0;h.render();
     assert.equal(h.filas('servicio').length,1);assert.equal(h.filas('nota').length,0);
+    assert.equal(h.grupo('nota').hidden,true);
     assert.match(h.grupo('nota').textContent,/No se incorporaron notas en esta operación/);
 });
 
@@ -83,7 +85,7 @@ test('Una omisión por concurrencia no se presenta como recién incorporada',()=
     h.data.notas[0].estado='ya_importada';h.data.notas_creadas=0;h.data.notas_omitidas=2;h.render();
     assert.equal(h.filas('servicio').length,0);assert.equal(h.filas('nota').length,0);
     assert.match(h.card.querySelector('.haku-libro-resultado-sites__detalle').textContent,/Ya incorporado · omitido/);
-    assert.deepEqual(h.card.querySelector('.haku-libro-resultado-sites__metricas').children.map(x=>x.children[1].textContent),['0','0','3']);
+    assert.deepEqual(h.card.querySelector('.haku-libro-resultado-sites__metricas').children.map(x=>x.children[0].textContent),['0','0','3']);
 });
 
 for(const casoDe of ['sin-detalle','id-ajeno','tipo-equivocado','duplicado','omitida-y-creada','total-incoherente','sin-id','reserva-distinta','estadia-distinta','sin-seleccion','no-listo'])
