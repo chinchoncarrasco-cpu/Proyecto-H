@@ -527,6 +527,58 @@ body:has(> .sites-shell-topbar):has(#seccion-calendario.activa) {
     #seccion-calendario .calendario-reserva-barra { font-size: 9px; }
 }
 
+@media (min-width: 901px) {
+    /* El shell ya reserva el espacio de la barra lateral, Haku y la ficha. */
+    main.contenido.sites-shell-main:has(> #seccion-calendario.activa),
+    #seccion-calendario {
+        max-width: none;
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) > main.contenido.sites-shell-main:has(> #seccion-calendario.activa) {
+        padding-inline: 0;
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) #seccion-calendario {
+        padding-inline: min(32px, 3%);
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) #seccion-calendario .sites-calendario-encabezado {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    body:is(.haiku-panel-abierto, .haiku-inspector-abierto) #seccion-calendario .sites-calendario-accion-bloqueo {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    #seccion-calendario .sites-calendario-panel {
+        container-type: inline-size;
+    }
+
+    @container (max-width: 560px) {
+        #seccion-calendario .sites-calendario-barra-mes {
+            grid-template-columns: min(32px, 18%) minmax(0, 1fr) min(32px, 18%);
+            gap: 4px;
+            padding-inline: min(8px, 3%);
+        }
+        #seccion-calendario .sites-calendario-navegar { width: 100%; }
+        #seccion-calendario #titulo-mes { overflow-wrap: anywhere; }
+        #seccion-calendario .sites-calendario-dias-semana span {
+            padding: 9px 0;
+            font-size: 0;
+            text-align: center;
+        }
+        #seccion-calendario .sites-calendario-dias-semana span::before {
+            content: attr(data-corto);
+            font-size: 10px;
+        }
+        #seccion-calendario .dia-calendario { padding-inline: 3px; }
+        #seccion-calendario .numero-dia { min-width: 0; max-width: 100%; }
+        #seccion-calendario .calendario-reserva-barra { gap: 3px; padding-inline: 3px; }
+    }
+}
+
 @media (max-width: 780px) {
     #seccion-calendario {
         width: 100%;

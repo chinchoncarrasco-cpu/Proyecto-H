@@ -21,6 +21,8 @@ const css = ['css/styles.css', 'css/sites-shell-v1.css', 'css/sites-calendario-v
     'css/haiku-tema-oscuro-v1.css', 'css/haiku-tema-v1.css', 'css/haiku-tema-legibilidad-v1.css'].map(read).join('\n');
 const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const documentHTML = `<!doctype html><html lang="es" data-haiku-tema="claro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body><span id="fecha-actual"></span><main style="min-width:0">${section}</main></body></html>`;
+const estadiaFullDayId = '00000000-0000-4000-8000-000000000002';
+const estadiaAlojamientoId = '00000000-0000-4000-8000-000000000003';
 
 const coloresBarras = page => page.locator('.calendario-reserva-barra').evaluateAll(barras => Object.fromEntries(barras.map(barra => {
     const estilo = getComputedStyle(barra);
@@ -29,8 +31,8 @@ const coloresBarras = page => page.locator('.calendario-reserva-barra').evaluate
 
 async function comprobarFichaFullDay(page) {
     const reservaId = '00000000-0000-4000-8000-000000000001';
-    const estadiaId = '00000000-0000-4000-8000-000000000002';
-    const otraEstadiaId = '00000000-0000-4000-8000-000000000003';
+    const estadiaId = estadiaFullDayId;
+    const otraEstadiaId = estadiaAlojamientoId;
     const fecha = '2026-09-25';
     await page.evaluate(({ reservaId, estadiaId, otraEstadiaId, fecha }) => {
         const datos = JSON.parse(localStorage.getItem('haikuDatos'));
@@ -114,6 +116,99 @@ async function comprobarFichaFullDay(page) {
     assert.equal(await page.evaluate(() => fechaSeleccionada), '2026-09-23');
     assert.deepEqual(await page.evaluate(() => window.__rpcFichaFullDay), []);
     console.log('Ficha Full Day: barra, +N y agenda móvil abren la estadía exacta en ambos temas.');
+}
+
+async function comprobarAnchoConPaneles(page, temas) {
+    const shell = html.slice(html.indexOf('<header class="sites-shell-topbar"'), html.indexOf('<main class="contenido sites-shell-main">'));
+    await page.evaluate(shell => {
+        document.body.insertAdjacentHTML('afterbegin', shell);
+        document.querySelector('main').className = 'contenido sites-shell-main';
+        document.querySelectorAll('.menu-item[data-seccion]').forEach(item =>
+            item.classList.toggle('activo', item.dataset.seccion === 'calendario'));
+        window.haikuSesion.usuario = { id: 'prueba' };
+        localStorage.setItem('haikuSidebarAnchoV1', '180');
+    }, shell);
+    for (const hoja of ['supabase-asistente-v1', 'sites-asistente-v1', 'supabase-pagos-acciones-desktop-v1',
+        'haiku-panel-coordinacion-v1', 'haiku-redes-v1']) {
+        await page.addStyleTag({ content: read(`css/${hoja}.css`) });
+    }
+    for (const script of ['supabase-sidebar-resize-v1', 'supabase-asistente-v1', 'haiku-panel-coordinacion-v1']) {
+        await page.addScriptTag({ content: read(`js/${script}.js`) });
+    }
+
+    const haku = page.locator('#haiku-asistente-panel');
+    const ficha = page.locator('#sites-resumen-reserva-drawer');
+    const mes = page.locator('.sites-calendario-panel');
+    const reserva = page.locator(`.calendario-reserva-barra[data-estadia-id="${estadiaAlojamientoId}"]`);
+    const medidas = () => mes.evaluate(panel => {
+        const caja = elemento => elemento.getBoundingClientRect();
+        const dias = panel.querySelectorAll('.dia-calendario');
+        const paneles = [...document.querySelectorAll('#haiku-asistente-panel:not([hidden]), #sites-resumen-reserva-drawer:not([hidden])')];
+        return {
+            ancho: caja(panel).width,
+            derecha: caja(panel).right,
+            domingo: caja(dias[6]).right,
+            siguiente: caja(panel.querySelector('#mes-siguiente')).right,
+            bloqueo: caja(document.getElementById('activar-bloqueo-calendario')).right,
+            limite: Math.min(document.documentElement.clientWidth, ...paneles.map(caja).map(c => c.left)),
+            desborde: document.documentElement.scrollWidth > document.documentElement.clientWidth
+        };
+    });
+    async function comprobarAjuste(anchoCompleto, caso) {
+        const m = await medidas();
+        assert.ok(m.ancho < anchoCompleto, `${caso}: el mes se reduce al abrir el panel`);
+        assert.ok(m.derecha <= m.limite && Math.abs(m.derecha - m.domingo) <= 2,
+            `${caso}: las siete columnas caben antes del panel ${JSON.stringify(m)}`);
+        assert.ok(m.siguiente < m.limite && m.bloqueo < m.limite, `${caso}: controles dentro del espacio disponible`);
+        assert.equal(m.desborde, false, `${caso}: sin desplazamiento horizontal`);
+        await mes.locator('#mes-siguiente').click({ trial: true });
+        await page.locator('#activar-bloqueo-calendario').click({ trial: true });
+    }
+
+    for (const tema of ['claro', 'oscuro']) {
+        await page.evaluate(tema => { document.documentElement.dataset.haikuTema = tema; }, tema);
+        for (const width of [1920, 1280, 1024]) {
+            await page.setViewportSize({ width, height: 960 });
+            await reserva.waitFor({ state: 'visible' });
+            const antes = await medidas();
+            const titulo = await mes.locator('#titulo-mes').innerText();
+
+            await page.locator('#haiku-asistente-boton').click();
+            await haku.waitFor({ state: 'visible' });
+            await comprobarAjuste(antes.ancho, `${width} ${tema} Haku`);
+
+            await reserva.click();
+            await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+            await comprobarAjuste(antes.ancho, `${width} ${tema} ambos`);
+            if (width === 1280) {
+                const separador = page.locator('#haiku-sidebar-resize-v1-handle');
+                const ancho = (await medidas()).ancho;
+                await separador.press('ArrowRight');
+                assert.ok((await medidas()).ancho < ancho, 'El mes se adapta al ancho del menú');
+                await separador.press('ArrowLeft');
+                assert.equal((await medidas()).ancho, ancho);
+            }
+            if (temas && width === 1920) await page.screenshot({ path: path.join(temas, `calendario-paneles-${tema}.png`) });
+
+            await haku.locator('#haiku-asistente-cerrar').click();
+            await comprobarAjuste(antes.ancho, `${width} ${tema} ficha`);
+            await ficha.locator('[data-reserva-cerrar]').click();
+            assert.deepEqual(await medidas(), antes, `${width} ${tema}: se recupera el ancho completo`);
+            assert.equal(await mes.locator('#titulo-mes').innerText(), titulo);
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        const anchoMovil = (await medidas()).ancho;
+        await page.locator('#haiku-asistente-boton').click();
+        assert.equal((await medidas()).ancho, anchoMovil, 'Haku se superpone a la agenda móvil');
+        await haku.locator('#haiku-asistente-cerrar').click();
+        await page.locator('.dia-calendario[data-fecha="2026-09-25"]').click();
+        await page.locator(`.sites-calendario-agenda-item[data-estadia-id="${estadiaFullDayId}"]`).click();
+        await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
+        assert.equal((await medidas()).ancho, anchoMovil, 'La ficha se superpone a la agenda móvil');
+        await ficha.locator('[data-reserva-cerrar]').click();
+    }
+    console.log('Calendario: mes, controles y reservas se ajustan junto a Haku y la ficha en ambos temas.');
 }
 
 async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS_CAPTURAS) {
@@ -258,6 +353,7 @@ async function comprobarCalendario(browser, temas = process.env.CALENDARIO_TEMAS
         assert.equal(await page.locator('#calendario-grid .dia-calendario.seleccionado').getAttribute('data-fecha'), '2026-09-29');
         console.log('Calendario Sites: colores por estado, contraste, leyenda, agenda y navegación correctos.');
         await comprobarFichaFullDay(page);
+        await comprobarAnchoConPaneles(page, temas);
     } finally {
         await page?.close();
         await new Promise(resolve => server.close(resolve));
