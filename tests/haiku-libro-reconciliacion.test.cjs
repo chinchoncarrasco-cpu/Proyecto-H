@@ -13,7 +13,7 @@ function client(rows=[], payments=[], extras={}) {
  const calls=[];
  return {calls,auth:{getSession:async()=>({data:{session:{user:{id:'test'}}}})},from(table){
   calls.push(table);let data={reserva_estadias:rows,pagos:payments,servicios:[],...extras}[table] || [];
-  const b={select(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};
+  const b={select(){return b},eq(){return b},lte(){return b},gte(){return b},in(){return b},order(){return b},range(a,z){return Promise.resolve({data:data.slice(a,z+1)})}};
   return b;
  },rpc(name,args){calls.push(name);return Promise.resolve({data:{ok:true,operacion_id:args.p_operacion_id,reservas_creadas:0,estadias_agregadas:0,pagos_creados:0,omitidos:0},error:null})}};
 }
@@ -2464,6 +2464,99 @@ test('la aprobación mensual explica la asociación pendiente y muestra el año 
  const operacion=Q.serializarIncorporacion(aprobado).find(x=>x.tipo==='pago');
  assert.equal(operacion.argumentos.p_fecha_pago,'2024-09-17');
  assert.equal(operacion.reserva_id,'r1');
+});
+
+function escenarioPagoDeBloque({monto=72000, fecha='2026-10-30', otraLinea='', saldo=72000, extras=[], pagos=[]}={}) {
+ const F=require('./fixtures/libro-transferencias-bancarias.cjs');
+ const {reservas:[r]}=F.leer([{titular:'Marina Ejemplo',rut:'11111111-1',pagos:[{
+  glosa:`Débito // Folio: 001211 // BOVTAR: 003222${otraLinea}`,concepto:'CAB 10/1 noche',monto,fecha
+ }]}]);
+ const s=stay(r);
+ const cargos=[{cargo_id:'cargo-ficticio',reserva_id:s.reserva_id,estadia_id:s.id,tipo_cargo:'alojamiento',
+  estado:'activo',monto:160000,monto_ajustado:144000,saldo_cargo:saldo},...extras];
+ const db=client([s],pagos,{vista_estado_cargos:cargos});
+ const q={desde:'2026-10-01',hasta:'2026-10-31'};
+ const comparar=()=>Q.compararSistema([r],db,q);
+ return {r,s,cargos,db,q,comparar};
+}
+
+for (const monto of [72000,36000]) test(`un débito sin titular se prepara por CAB/fecha con saldo ajustado, importe ${monto}`,async()=>{
+ const h=escenarioPagoDeBloque({monto}),comparacion=await h.comparar();
+ assert.equal(h.r.pagos.length,0);
+ assert.equal(h.r.pagos_sin_asociacion.length,1);
+ assert.equal(h.r.pagos_sin_asociacion[0].titular,null);
+ assert.equal(comparacion.pagosDetalle[0].estado,'nuevo_seguro');
+ assert.equal(comparacion.pagosDetalle[0].resolucionPago.evidencia,'bloque_alojamiento_verificado');
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+ const pago=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pago.seleccionado,true);
+ assert.equal(pago.aprobable,false);
+ assert.match(pago.aviso,/CAB 10 y fecha de ingreso.*144\.000.*72\.000/);
+ const [operacion]=Q.serializarIncorporacion(plan).filter(i=>i.tipo==='pago');
+ assert.equal(operacion.reserva_id,h.s.reserva_id);
+ assert.equal(operacion.argumentos.p_monto,monto);
+ assert.equal(operacion.aprobado_manualmente,false);
+ assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
+});
+
+test('un anticipo WebPay sin titular puede preceder al ingreso de una reserva con fecha de registro',async()=>{
+ const h=escenarioPagoDeBloque({fecha:'2026-10-23',monto:36000});
+ h.r.fecha_ingreso_libro='2026-10-20';
+ Object.assign(h.r.pagos_sin_asociacion[0],{medio_pago:'webpay_credito',folio:null,bovtar:null,
+  codigo_autorizacion:'COD-FICTICIO',texto_original:'23-10 // WebPay Crédito // CodAut: COD-FICTICIO // CAB 10/1 noche // 36000'});
+ const comp=await h.comparar();
+ assert.equal(comp.pagosDetalle[0].estado,'nuevo_seguro');
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion:comp},new Map(),new Set(),h.db);
+ assert.equal(Q.serializarIncorporacion(plan).find(x=>x.tipo==='pago').argumentos.p_fecha_pago,'2026-10-23');
+});
+
+test('un comprobante ya registrado se omite antes de comprobar el saldo del bloque',async()=>{
+ const h=escenarioPagoDeBloque({saldo:0,pagos:[{id:'previo',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',
+  medio_pago:'tarjeta_debito',monto:72000,moneda:'CLP',fecha_pago:'2026-10-30',folio:'1211',datos_origen:{bovtar:'3222'}}]});
+ const comp=await h.comparar();
+ assert.equal(comp.pagosDetalle[0].estado,'en_sistema');
+ assert.ok(!h.db.calls.includes('vista_estado_cargos'));
+ assert.ok(!Q.serializarIncorporacion(Q.crearPlanIncorporacion([h.r],comp)).some(i=>i.tipo==='pago'));
+});
+
+for (const caso of [
+ {nombre:'el importe excede el saldo con descuento',opciones:{monto:73000},motivo:/superan el saldo/},
+ {nombre:'el año del comprobante difiere',opciones:{fecha:'2023-10-30'},motivo:/fecha del comprobante/},
+ {nombre:'el detalle indica otro titular',opciones:{otraLinea:' // Beatriz Ejemplo'},motivo:/titular o una cabaña diferente/},
+ {nombre:'el escritor podría aplicar el pago a otra estadía',opciones:{extras:[{cargo_id:'otro',reserva_id:'r1',estadia_id:'e99',
+  tipo_cargo:'alojamiento',estado:'activo',monto:20000,monto_ajustado:20000,saldo_cargo:20000}]},motivo:/qué cargos de alojamiento/},
+ {nombre:'existe un débito similar sin el comprobante identificable',opciones:{pagos:[{id:'previo',reserva_id:'r1',
+  tipo_movimiento:'pago',estado:'confirmado',medio_pago:'tarjeta_debito',monto:72000,moneda:'CLP',fecha_pago:'2026-10-30'}]},motivo:/pago compatible/}
+]) test(`el pago por bloque requiere revisión cuando ${caso.nombre}`,async()=>{
+ const h=escenarioPagoDeBloque(caso.opciones),comparacion=await h.comparar();
+ assert.equal(comparacion.pagosDetalle[0].estado,'revisar');
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+ const pago=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pago.seleccionado,false);
+ assert.match(pago.motivosRevisionPago.join(' '),caso.motivo);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
+});
+
+test('el bloque requiere una reserva única y comprueba juntos los pagos recibidos',async()=>{
+ const h=escenarioPagoDeBloque({monto:40000});
+ const otra={...h.r,id:'segunda',titular:'Alba Ejemplo',rut_documento:'22222222-2',pagos_sin_asociacion:[]};
+ const ambiguo=await Q.compararSistema([h.r,otra],h.db,h.q);
+ assert.equal(ambiguo.pagosDetalle[0].estado,'revisar');
+ const anterior=h.r.pagos_sin_asociacion[0];
+ h.r.pagos_sin_asociacion.push({...anterior,folio:'001212',bovtar:'003223',origen:{...anterior.origen,celda:'C28:F28'}});
+ const juntos=await h.comparar();
+ assert.ok(juntos.pagosDetalle.every(x=>x.estado==='revisar' && x.resolucionPago.motivos.some(m=>m.includes('superan el saldo'))));
+});
+
+test('la confirmación revalida los cargos y el saldo que sustentan la asociación por bloque',async()=>{
+ const h=escenarioPagoDeBloque({monto:36000}), comparacion=await h.comparar();
+ const result={reservas:[h.r],q:h.q,comparacion}, decisiones=new Map(), aprobados=new Set();
+ const plan=await Q.prepararIncorporacion(result,decisiones,aprobados,h.db);
+ assert.ok(plan.items.some(i=>i.categoria==='pagos'&&i.seleccionado));
+ plan.items.forEach(i=>{if(i.categoria!=='pagos') i.seleccionado=false;});
+ h.cargos[0].saldo_cargo=50000;
+ await assert.rejects(Q.confirmarIncorporacion(result,decisiones,aprobados,plan,h.db),e=>e.code==='HLC01');
+ assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
 });
 
 test('associated reservation cards show their related Libro movements with the existing classification and no payment controls',async()=>{
