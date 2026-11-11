@@ -24,6 +24,7 @@ const server=http.createServer((req,res)=>{
     try{
         for(const width of [1100,390,320])for(const tema of ['claro','oscuro']){
             const page=await browser.newPage({viewport:{width,height:950}});
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
             page.on('pageerror',e=>errors.push(e.message));
             await page.route('**/*',r=>new URL(r.request().url()).hostname==='127.0.0.1'?r.continue():(externos.push(r.request().url()),r.abort()));
             await page.goto(`http://127.0.0.1:${server.address().port}/`);

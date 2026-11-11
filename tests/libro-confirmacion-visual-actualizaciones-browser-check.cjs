@@ -26,7 +26,8 @@ const server = http.createServer((req, res) => {
         for (const width of [390, 1100]) for (const caso of ['confirmado', 'parcial', 'manual', 'relectura-fallida', 'aprobacion-fallida']) {
             const context = await browser.newContext({ viewport: { width, height: 900 } }), externos = [], errores = [];
             await context.route('**/*', route => { if (new URL(route.request().url()).origin === origin) return route.continue(); externos.push(route.request().url()); return route.abort(); });
-            const page = await context.newPage(); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin);
+            const page = await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin);
             await page.evaluate(async ({ f, caso }) => {
                 window.confirm = () => true;
                 if (['manual','aprobacion-fallida'].includes(caso)) for (const r of f.reservas.slice(0, 2)) { r.pagos[0].codigo_autorizacion = null; r.pagos[0].medio_pago = 'efectivo'; }

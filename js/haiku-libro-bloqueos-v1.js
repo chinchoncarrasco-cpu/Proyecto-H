@@ -112,7 +112,7 @@
   try{
   permiso();await sesion(p.cliente);if(!p.libro.crearLectura)vigente(p.g,p.libro);
   if(vista.estado==='ya_coincide')return {estado:'ya_coincide'};
-  if(root.confirm?.(`¿Crear bloqueo en CAB ${p.b.cabana}, del ${p.b.fecha_inicio} al ${p.b.fecha_fin}?\n${p.b.nota}`)!==true)return {estado:'sin_confirmar'};
+  if((await root.HAIKU_DIALOGOS.confirmar(`¿Crear bloqueo en CAB ${p.b.cabana}, del ${p.b.fecha_inicio} al ${p.b.fecha_fin}?\n${p.b.nota}`, {"accion":"Crear bloqueo","contexto":"Libro · Calendario","peligro":false}))!==true)return {estado:'sin_confirmar'};
   return await ejecutarRevalidado(p,()=>previews.delete(vista));
   }finally{p.confirmando=false;}
  }
@@ -150,7 +150,11 @@
   try{
    permiso();await sesion(p.cliente);if(!p.libro.crearLectura)vigente(p.g,p.libro);
    const cantidad=p.items.filter(c=>c.estado==='no_existe').length;
-   if(!cantidad||root.confirm?.(`Se intentarán crear ${cantidad} bloqueos en Proyecto H.\nCada bloqueo será revalidado individualmente antes de escribirse.\nLa operación es secuencial y no atómica.\n¿Confirmas?`)!==true)return {estado:'sin_confirmar'};
+   if(!cantidad||(await root.HAIKU_DIALOGOS.confirmar(`Se intentarán crear ${cantidad} bloqueos en Proyecto H.\nCada bloqueo será revalidado individualmente antes de escribirse.\nLa operación es secuencial y no atómica.\n¿Confirmas?`, {
+    titulo: 'Crear bloqueos', accion: 'Crear bloqueos', contexto: 'Libro · Calendario',
+    cuerpo: 'Se comprobará cada bloqueo antes de crearlo en Proyecto H.', resumen: [['Bloqueos', cantidad]],
+    aviso: 'Se guardan uno a uno. Si alguno falla, los anteriores pueden quedar creados.', advertencia: true
+   }))!==true)return {estado:'sin_confirmar'};
    lotes.delete(vista); // Nunca reutilizar una confirmación aceptada, incluso ante respuesta incierta.
    const reporte={estado:'completado',creados:[],omitidos:[],pendientes:[],fallo:null};
    for(let i=0;i<p.items.length;i++){

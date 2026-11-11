@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
+const vm = require('./fixtures/dialogos.cjs').vm;
 
 const fuente = fs.readFileSync(path.join(__dirname, "../js/supabase-aseo-operacion-v1.js"), "utf8");
 const fuenteOptimista = fs.readFileSync(path.join(__dirname, "../js/checklist-optimista-v1.js"), "utf8");
@@ -124,7 +124,7 @@ function arnes({ aseos = [], solicitudes = [], revisiones = [], local = {}, fall
         }
     };
     const sesion = { usuario: { id: "usuario-1" } };
-    const window = { haikuSupabase: clienteInicial ? supabase : null, haikuSesion: sesionInicial ? sesion : null,
+    const window = { alert() {}, haikuSupabase: clienteInicial ? supabase : null, haikuSesion: sesionInicial ? sesion : null,
         addEventListener(tipo, fn, opciones) { escuchar(listenersWindow, tipo, fn, opciones); },
         HAIKU_RESUMEN_REFRESH_V1: { registrar() { registros++; }, activo: () => false, enCurso: () => false },
         HAIKU_CABANAS_SITES_V1: {

@@ -332,9 +332,7 @@
                         if (typeof renderizarAgendaServicios === "function") renderizarAgendaServicios();
                     } catch {}
 
-                    alert(
-                        "El servicio no pudo guardarse en Supabase y fue retirado para evitar inconsistencias."
-                    );
+                    window.HAIKU_DIALOGOS.aviso("El servicio no pudo guardarse en Supabase y fue retirado para evitar inconsistencias.");
                 });
             }
 
@@ -348,7 +346,7 @@
             const resultado = originalMarcarRealizado.apply(this, arguments);
             sincronizarEstado(id, "realizado", servicio).catch(error => {
                 console.error("HAIKU · No se sincronizó estado realizado:", error);
-                alert("No fue posible guardar el estado Realizado en Supabase.");
+                window.HAIKU_DIALOGOS.aviso("No fue posible guardar el estado Realizado en Supabase.");
             });
             return resultado;
         };
@@ -360,19 +358,19 @@
             const resultado = originalDeshacerRealizado.apply(this, arguments);
             sincronizarEstado(id, "programado", servicio).catch(error => {
                 console.error("HAIKU · No se sincronizó estado programado:", error);
-                alert("No fue posible guardar el cambio de estado en Supabase.");
+                window.HAIKU_DIALOGOS.aviso("No fue posible guardar el cambio de estado en Supabase.");
             });
             return resultado;
         };
     }
 
     if (typeof originalEliminarServicio === "function") {
-        window.eliminarServicio = function eliminarServicioSupabase(id) {
+        window.eliminarServicio = async function eliminarServicioSupabase(id) {
             const servicioAntes = listaLegacy().find(
                 item => String(item?.id || "") === String(id || "")
             );
 
-            const resultado = originalEliminarServicio.apply(this, arguments);
+            const resultado = await originalEliminarServicio.apply(this, arguments);
 
             setTimeout(() => {
                 const sigueExistiendo = listaLegacy().some(
@@ -382,7 +380,7 @@
                 if (!sigueExistiendo && servicioAntes) {
                     sincronizarEstado(id, "cancelado", servicioAntes).catch(error => {
                         console.error("HAIKU · No se canceló servicio en Supabase:", error);
-                        alert("El servicio se quitó de la pantalla, pero no pudo cancelarse en Supabase.");
+                        window.HAIKU_DIALOGOS.aviso("El servicio se quitó de la pantalla, pero no pudo cancelarse en Supabase.");
                     });
                 }
             }, 0);
@@ -394,11 +392,11 @@
     // El antiguo cambio manual de estado de pago deja de ser válido.
     // Un servicio se paga mediante un movimiento financiero real en Pagos.
     window.marcarServicioPagado = function () {
-        alert("Registra este cobro desde Pagos → Cobros Check-out.");
+        window.HAIKU_DIALOGOS.aviso("Registra este cobro desde Pagos → Cobros Check-out.");
     };
 
     window.deshacerServicioPagado = function () {
-        alert("Los pagos reales se corrigen desde el módulo Pagos; ya no se modifica el estado manualmente.");
+        window.HAIKU_DIALOGOS.aviso("Los pagos reales se corrigen desde el módulo Pagos; ya no se modifica el estado manualmente.");
     };
 
     window.haikuMigrarServiciosLegacySupabase = migrarServiciosLegacy;

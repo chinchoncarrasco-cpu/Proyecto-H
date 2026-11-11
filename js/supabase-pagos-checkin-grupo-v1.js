@@ -193,13 +193,13 @@
         const folio=card.querySelector("[data-grupo-saldo-folio]")?.value?.trim()||"";
         const codaut=card.querySelector("[data-grupo-saldo-codaut]")?.value?.trim()||"";
         const manager=card.querySelector("[data-grupo-saldo-manager]")?.checked===true;
-        if(!reservaId||monto<=0||!medio){alert("Completa monto y medio de pago.");return;}
-        if(!manager){alert("El pago debe ser revisado por Manager.");return;}
+        if(!reservaId||monto<=0||!medio){window.HAIKU_DIALOGOS.aviso("Completa monto y medio de pago.");return;}
+        if(!manager){window.HAIKU_DIALOGOS.aviso("El pago debe ser revisado por Manager.");return;}
         const req=requisitos(medio);
-        if(req.glosa&&!glosa){alert("Transferencia requiere Glosa.");return;}
-        if(req.folio&&!folio){alert("Completa el Folio.");return;}
-        if(req.codaut&&!codaut){alert("Completa el CodAut.");return;}
-        if(!window.haikuTienePermiso?.("pagos.registrar")||!window.haikuTienePermiso?.("pagos.verificar")){alert("Tu usuario no tiene permiso para registrar/verificar este pago.");return;}
+        if(req.glosa&&!glosa){window.HAIKU_DIALOGOS.aviso("Transferencia requiere Glosa.");return;}
+        if(req.folio&&!folio){window.HAIKU_DIALOGOS.aviso("Completa el Folio.");return;}
+        if(req.codaut&&!codaut){window.HAIKU_DIALOGOS.aviso("Completa el CodAut.");return;}
+        if(!window.haikuTienePermiso?.("pagos.registrar")||!window.haikuTienePermiso?.("pagos.verificar")){window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar/verificar este pago.");return;}
 
         guardarBorrador(card); guardando=true;
         const btn=card.querySelector("[data-grupo-saldo-registrar]"); if(btn){btn.disabled=true;btn.textContent="Registrando...";}
@@ -215,22 +215,22 @@
                 Promise.resolve().then(()=>window.haikuSincronizarReservasSupabase?.())
             ]);
             luego(140);
-        }catch(e){console.error("HAIKU · pago check-in conjunto:",e);alert(e?.message||"No fue posible registrar el pago conjunto.");}
+        }catch(e){console.error("HAIKU · pago check-in conjunto:",e);window.HAIKU_DIALOGOS.aviso(e?.message||"No fue posible registrar el pago conjunto.");}
         finally{guardando=false;if(btn?.isConnected){btn.disabled=false;btn.textContent="Registrar pago conjunto";}}
     }
 
     async function registrarBove(card){
         const reservaId=card.dataset.reservaId||"";
         const valor=card.querySelector("[data-grupo-bove]")?.value?.trim()||"";
-        if(!reservaId||!valor){alert("Ingresa el BOVE del alojamiento.");return;}
-        if(!window.haikuTienePermiso?.("pagos.verificar")){alert("Tu usuario no tiene permiso para registrar BOVE.");return;}
+        if(!reservaId||!valor){window.HAIKU_DIALOGOS.aviso("Ingresa el BOVE del alojamiento.");return;}
+        if(!window.haikuTienePermiso?.("pagos.verificar")){window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar BOVE.");return;}
         const btn=card.querySelector("[data-grupo-bove-registrar]"); if(btn){btn.disabled=true;btn.textContent="Registrando...";}
         try{
             const {error}=await sb.rpc("haiku_registrar_bove_reserva_grupo",{p_reserva_id:reservaId,p_bove:valor});
             if(error) throw error;
             await window.haikuCargarSaldosCheckinSupabase?.();
             luego(140);
-        }catch(e){console.error("HAIKU · BOVE grupo:",e);alert(e?.message||"No fue posible registrar el BOVE conjunto.");}
+        }catch(e){console.error("HAIKU · BOVE grupo:",e);window.HAIKU_DIALOGOS.aviso(e?.message||"No fue posible registrar el BOVE conjunto.");}
         finally{if(btn?.isConnected){btn.disabled=false;btn.textContent="Registrar BOVE";}}
     }
 

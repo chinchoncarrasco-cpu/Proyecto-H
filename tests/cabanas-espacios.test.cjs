@@ -1,5 +1,5 @@
 // DOM aislado: nunca usa la base ni una reserva real.
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('./fixtures/dialogos.cjs').vm;
 const {parseHTML}=require('linkedom');
 const source=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
 const tick=async()=>{for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));};

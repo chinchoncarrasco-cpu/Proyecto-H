@@ -825,7 +825,7 @@ inputsEvidencia.forEach(input => {
 
         // Solo aceptar imágenes
         if (!archivo.type.startsWith("image/")) {
-            alert("Selecciona un archivo de imagen.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona un archivo de imagen.");
             input.value = "";
             return;
         }

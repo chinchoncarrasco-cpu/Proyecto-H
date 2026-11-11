@@ -5,19 +5,12 @@
     "use strict";
     if (!root.document || root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4) return;
 
-    const confirmarNativo = root.confirm.bind(root);
     let ultimoTextoServicios = "";
     // Sólo la selección directa de la tarjeta está bloqueada. Las casillas
     // dentro del formulario manual confirman la decisión del administrador.
     const selectorRevision = ".haku-libro-servicios__item--revisar > input[type='checkbox']," +
         ".haku-libro-servicios__item--existente > input[type='checkbox']";
     const selectorSeleccionados = "input.haku-libro-servicios__check[type='checkbox']:checked:not(:disabled)";
-
-    function esConfirmacionLibro(texto) {
-        const t = String(texto || "");
-        return /^Se incorporarán\s+\d+\s+servicio(?:s)?\s+y\s+\d+\s+nota(?:s)?\s+desde el Libro\./i.test(t)
-            && /operación será atómica/i.test(t);
-    }
 
     function bloquearRevision(scope = document) {
         scope.querySelectorAll?.(selectorRevision).forEach(check => {
@@ -40,12 +33,6 @@
             });
         });
     }
-
-    root.confirm = function (mensaje) {
-        const resultado = confirmarNativo(mensaje);
-        if (!resultado && esConfirmacionLibro(mensaje)) reactivarBotonLibro();
-        return resultado;
-    };
 
     function esConsultaServiciosTexto(texto) {
         const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
@@ -311,8 +298,8 @@
 
         // La ficha manual ya muestra el servicio y el importe: su botón es la
         // confirmación final. La incorporación por selección mantiene su diálogo.
-        const confirmar = servicioConfirmado || root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
-        if (!confirmar) return;
+        const confirmar = servicioConfirmado || (await root.HAIKU_DIALOGOS.confirmar(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`, {"accion":"Incorporar selección","contexto":"Haku · Libro","peligro":false}));
+        if (!confirmar) { reactivarBotonLibro(); return; }
 
         const estados = guardarEstadosControles(card);
         deshabilitarControles(estados);

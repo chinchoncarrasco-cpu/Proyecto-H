@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm');
+const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm;
 const F = require('./fixtures/libro-actualizaciones-pagos-flujo.cjs');
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
 const Q = require('../js/haiku-libro-consultas-v1.js');

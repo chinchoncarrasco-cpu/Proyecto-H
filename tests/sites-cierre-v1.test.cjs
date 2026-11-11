@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
+const vm = require('./fixtures/dialogos.cjs').vm;
 
 const root = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -45,7 +45,7 @@ test('Cierre conserva los 4 controles de etapa y las 11 cabañas reales', () => 
 test('La autoridad final sigue siendo el RPC seguro, con confirmación y cancelación', () => {
     assert.match(final, /"haiku_estado_cierre_dia"/);
     assert.match(final, /"haiku_cerrar_turno_dia"/);
-    assert.match(final, /if \(!confirm\(pregunta\)\) return/);
+    assert.match(final, /if \(!\(await window\.HAIKU_DIALOGOS\.confirmar\(pregunta,[\s\S]+?\}\)\)\) return/);
     assert.match(final, /if \(pendientes > 0 && !resumen\)/);
     assert.match(final, /"haiku_reabrir_cierre_dia"/);
     assert.match(final, /#sites-cierre-final-slot/);

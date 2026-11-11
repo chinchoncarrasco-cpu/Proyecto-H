@@ -162,7 +162,7 @@
             const datos = leerDatosFormularioReserva();
 
             if (!reservaId || !datos.titular || !datos.cabana || !datos.llegada || !datos.salida) {
-                alert("Faltan datos obligatorios para guardar la edición.");
+                window.HAIKU_DIALOGOS.aviso("Faltan datos obligatorios para guardar la edición.");
                 return;
             }
 
@@ -187,14 +187,12 @@
                 if (typeof guardarCambiosReservaEditada === "function") {
                     guardarCambiosReservaEditada();
                 } else {
-                    alert("Reserva actualizada correctamente.");
+                    window.HAIKU_DIALOGOS.aviso("Reserva actualizada correctamente.");
                 }
             } catch (error) {
                 console.error("HAIKU · No fue posible editar reserva:", error);
-                alert(
-                    error?.message ||
-                    "No fue posible guardar los cambios de la reserva."
-                );
+                window.HAIKU_DIALOGOS.aviso(error?.message ||
+                    "No fue posible guardar los cambios de la reserva.");
             } finally {
                 guardandoEdicion = false;
                 boton.disabled = false;
@@ -426,7 +424,7 @@
             // Un pago real no se "desmarca". Su anulación tendrá flujo propio.
             if (!check.checked) {
                 check.checked = true;
-                alert("Un abono confirmado no se elimina desmarcando el check. Usa la anulación de pago cuando esté habilitada.");
+                window.HAIKU_DIALOGOS.aviso("Un abono confirmado no se elimina desmarcando el check. Usa la anulación de pago cuando esté habilitada.");
                 return;
             }
 
@@ -441,13 +439,13 @@
 
             if (monto <= 0 || !medioDB) {
                 check.checked = false;
-                alert("Ingresa el monto del abono y selecciona el medio de pago.");
+                window.HAIKU_DIALOGOS.aviso("Ingresa el monto del abono y selecciona el medio de pago.");
                 return;
             }
 
             if (!window.haikuTienePermiso?.("pagos.registrar")) {
                 check.checked = false;
-                alert("Tu usuario no tiene permiso para registrar pagos.");
+                window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
                 return;
             }
 
@@ -487,7 +485,7 @@
             } catch (error) {
                 console.error("HAIKU · No fue posible registrar abono:", error);
                 check.checked = false;
-                alert(error?.message || "No fue posible registrar el abono.");
+                window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el abono.");
             } finally {
                 guardandoAbono = false;
                 check.disabled = false;

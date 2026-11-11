@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
 function ficha() {
  const ids={},events={},reads=[];let data={},core={reserva:{id:'r1'},estadias:[]},error=null;
  class El {

@@ -1755,7 +1755,7 @@ function generarIdBloqueoCalendario() {
 }
 
 
-function guardarBloqueoSeleccionadoCalendario() {
+async function guardarBloqueoSeleccionadoCalendario() {
     const seleccionadas =
         obtenerCheckboxesBloqueo()
             .filter(checkbox => checkbox.checked)
@@ -1782,10 +1782,8 @@ function guardarBloqueoSeleccionadoCalendario() {
         );
 
     if (dejaronDeEstarDisponibles.length > 0) {
-        alert(
-            "La disponibilidad cambió antes de guardar. " +
-            "Revisaremos nuevamente las cabañas libres."
-        );
+        window.HAIKU_DIALOGOS.aviso("La disponibilidad cambió antes de guardar. " +
+            "Revisaremos nuevamente las cabañas libres.");
 
         renderizarCabanasDisponiblesBloqueo();
         return;
@@ -1797,8 +1795,8 @@ function guardarBloqueoSeleccionadoCalendario() {
             fechaFinBloqueoCalendario
         );
 
-    const confirmado = confirm(
-        `Se bloquearán ${seleccionadas.length} ${
+    const fechasConfirmadas = [fechaInicioBloqueoCalendario, fechaFinBloqueoCalendario];
+    const confirmado = (await window.HAIKU_DIALOGOS.confirmar(`Se bloquearán ${seleccionadas.length} ${
             seleccionadas.length === 1
                 ? "cabaña"
                 : "cabañas"
@@ -1808,10 +1806,15 @@ function guardarBloqueoSeleccionadoCalendario() {
             fechaFinBloqueoCalendario
         )} (${noches} ${
             noches === 1 ? "noche" : "noches"
-        }). ¿Confirmar?`
-    );
+        }). ¿Confirmar?`, {"accion":"Crear bloqueos","contexto":"Calendario","peligro":false}));
 
     if (!confirmado) return;
+    if (fechasConfirmadas[0] !== fechaInicioBloqueoCalendario || fechasConfirmadas[1] !== fechaFinBloqueoCalendario ||
+        seleccionadas.some(numero => !cabanaDisponibleParaBloqueo(numero, fechasConfirmadas[0], fechasConfirmadas[1]))) {
+        window.HAIKU_DIALOGOS.aviso('La disponibilidad cambió. Revisa nuevamente las cabañas y fechas antes de confirmar.');
+        renderizarCabanasDisponiblesBloqueo();
+        return;
+    }
 
     const datosCalendario =
         JSON.parse(
@@ -1935,15 +1938,13 @@ function guardarBloqueoSeleccionadoCalendario() {
         actualizarResumenAseo(fechaSeleccionada);
     }
 
-    alert(
-        `Bloqueo guardado correctamente para ${
+    window.HAIKU_DIALOGOS.aviso(`Bloqueo guardado correctamente para ${
             seleccionadas.length
         } ${
             seleccionadas.length === 1
                 ? "cabaña"
                 : "cabañas"
-        }.`
-    );
+        }.`);
 }
 
 

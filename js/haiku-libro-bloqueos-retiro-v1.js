@@ -40,7 +40,7 @@
   p.ocupado=true;
   try{
    permiso();if(!p.libro.crearLectura)vigente(p);
-   if(root.confirm?.(`CAB ${p.b.cabana} · ${p.b.fecha_inicio} → ${p.b.fecha_fin}\n${p.b.nota}\nHaku volverá a comprobar el Libro y Proyecto H antes de quitar este bloqueo. ¿Confirmas?`)!==true)return {estado:'sin_confirmar'};
+   if((await root.HAIKU_DIALOGOS.confirmar(`CAB ${p.b.cabana} · ${p.b.fecha_inicio} → ${p.b.fecha_fin}\n${p.b.nota}\nHaku volverá a comprobar el Libro y Proyecto H antes de quitar este bloqueo. ¿Confirmas?`, {"accion":"Quitar bloqueo","contexto":"Libro · Calendario","peligro":true}))!==true)return {estado:'sin_confirmar'};
    const r=await revalidar(p);
    propuestas.delete(vista);
    if(r.estado!=='propuesta')return r;

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const vm = require("node:vm");
+const vm = require('./fixtures/dialogos.cjs').vm;
 
 const app = fs.readFileSync(require.resolve("../js/app.js"), "utf8");
 const inicio = app.indexOf("async function abrirReservaCreadaPorId()");

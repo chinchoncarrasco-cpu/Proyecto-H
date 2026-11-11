@@ -308,7 +308,7 @@
             await refrescar({ sincronizar: true });
         } catch (error) {
             console.error("HAIKU · No fue posible registrar checkout desde la hora:", error);
-            alert(error?.message || "No fue posible registrar el Check-out.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el Check-out.");
 
             // Si Supabase rechazó el checkout (por ejemplo por ser demasiado
             // temprano), no dejamos un azul que sugiera un estado que no existe.

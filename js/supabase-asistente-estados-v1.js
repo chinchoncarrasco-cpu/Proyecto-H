@@ -306,9 +306,7 @@
             if (ocupado || boton.disabled || !aptas.length) return;
 
             const detalle = aptas.map(f => `CAB ${f.cabana_numero} · ${f.titular_nombre}`).join("\n");
-            if (!window.confirm(
-                `¿Confirmas cambiar ${aptas.length} reserva${aptas.length === 1 ? "" : "s"} a HOSPEDADO?\n\n${detalle}`
-            )) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(`¿Confirmas cambiar ${aptas.length} reserva${aptas.length === 1 ? "" : "s"} a HOSPEDADO?\n\n${detalle}`, {"accion":"Cambiar a Hospedado","contexto":"Haku · Reservas","peligro":false}))) return;
 
             ocupado = true;
             const textoOriginal = boton.textContent;

@@ -981,7 +981,7 @@
                 input.disabled = true;
                 guardarCampoAseo(numero, campo, valor).catch(error => {
                     input.value = cabanaCache(fecha, numero, false)?.[campo] || "";
-                    window.alert?.(error.message || "No fue posible guardar el cambio de Aseo.");
+                    window.HAIKU_DIALOGOS.aviso(error.message || "No fue posible guardar el cambio de Aseo.");
                 }).finally(() => {
                     input.disabled = false;
                     if (fecha === fechaOperativa()) pintarAseo();
@@ -1002,7 +1002,7 @@
                 guardarEstadoRevisionExpress(numero, objetivo.value).catch(error => {
                     console.error("HAIKU · No fue posible guardar el estado de revisión Express:", error);
                     objetivo.value = previo;
-                    window.alert?.("No fue posible verificar o guardar la revisión de Aseo Express.");
+                    window.HAIKU_DIALOGOS.aviso("No fue posible verificar o guardar la revisión de Aseo Express.");
                 }).finally(() => {
                     objetivo.disabled = false;
                 });
@@ -1048,7 +1048,7 @@
                 }).catch(error => {
                     optimista?.terminar(pendiente, false);
                     if (!optimista) check.checked = !marcado;
-                    window.alert?.("No fue posible guardar este check de Aseo Express. Intenta nuevamente.");
+                    window.HAIKU_DIALOGOS.aviso("No fue posible guardar este check de Aseo Express. Intenta nuevamente.");
                 });
             }
         }, true);
@@ -1065,7 +1065,7 @@
                     encolar(`aseo:${fecha}:${numero}`, () =>
                         guardarAseoCompleto(fecha, numero)
                     ).catch(error => {
-                        window.alert?.(error.message || "No fue posible guardar el revisor de Aseo.");
+                        window.HAIKU_DIALOGOS.aviso(error.message || "No fue posible guardar el revisor de Aseo.");
                     });
                 }, 350);
                 return;

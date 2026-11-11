@@ -400,7 +400,7 @@
             if (guardando || boton.disabled) return;
             const ocupacion = filas.map(f => `${f.titular_nombre}: ${f.adultos ?? 1} ADL · ${f.ninos ?? 0} NIÑ${f.tipo_estadia === "fullday" ? " · FULL DAY" : ""}`).join("\n");
             const notaTipo = tiposAsumidos.length ? `\n\n⚠️ ${tiposAsumidos.length} reserva(s) quedaron como Alojamiento porque la categoría no está visible.` : "";
-            if (!window.confirm(`¿Confirmas importar ${filas.length} reserva${filas.length === 1 ? "" : "s"} con 0 pagos?\n\n${ocupacion}${notaTipo}`)) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(`¿Confirmas importar ${filas.length} reserva${filas.length === 1 ? "" : "s"} con 0 pagos?\n\n${ocupacion}${notaTipo}`, {"accion":"Importar reservas","contexto":"Haku · Cloudbeds","peligro":false}))) return;
             guardando = true; boton.disabled = true; boton.textContent = "Creando reservas…"; estado.textContent = "Validando disponibilidad y guardando el lote…";
             try {
                 const resultado = await crearListado(filas);

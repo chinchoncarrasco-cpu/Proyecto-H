@@ -159,7 +159,7 @@ test('el historial antiguo de cuna se reconoce como la nota ya incorporada y dej
     e.c.haikuSupabase.auth.getSession=async()=>({data:{session:{user:{id:e.state.usuario}}}});
     e.document.querySelector=()=>null;
     e.c.structuredClone=structuredClone;
-    require('node:vm').runInContext(read('js/haiku-libro-consultas-v1.js'),e.c);
+    require('./fixtures/dialogos.cjs').vm.runInContext(read('js/haiku-libro-consultas-v1.js'),e.c);
     const registro={id:'cuna-historica',tipo:'modificacion',actual:r,anterior:{...r,servicios:[]},cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]};
     const resultado=await e.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],e.c.haikuSupabase,{generacion:1});
     assert.equal(resultado.items.length,0);assert.equal(resultado.resueltos[0],registro.id);assert.equal(e.state.escrituras.length,0);

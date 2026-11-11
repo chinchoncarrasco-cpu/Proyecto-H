@@ -784,7 +784,7 @@ function deshacerServicioPagado(idServicio) {
 // ELIMINAR SERVICIO
 // =====================================
 
-function eliminarServicio(idServicio) {
+async function eliminarServicio(idServicio) {
 
     const servicio = serviciosRegistrados.find(
         servicio => servicio.id === idServicio
@@ -795,9 +795,7 @@ function eliminarServicio(idServicio) {
         return;
     }
 
-    const confirmar = confirm(
-        `¿Eliminar ${servicio.nombre} de la cabaña ${servicio.numeroCabana}?`
-    );
+    const confirmar = (await window.HAIKU_DIALOGOS.confirmar(`¿Eliminar ${servicio.nombre} de la cabaña ${servicio.numeroCabana}?`, {"accion":"Eliminar servicio","contexto":"Servicios","peligro":true}));
 
     if (!confirmar) return;
 
@@ -1111,7 +1109,7 @@ console.log("DEBUG PRECIO JACUZZI", {
 
     // Validar que exista cabaña y servicio
     if (!cabana || !idServicio) {
-        alert("Selecciona una cabaña y un servicio.");
+        window.HAIKU_DIALOGOS.aviso("Selecciona una cabaña y un servicio.");
         return;
     }
 

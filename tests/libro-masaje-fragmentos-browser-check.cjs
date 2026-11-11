@@ -21,7 +21,8 @@ const server = http.createServer((req, res) => {
         browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true });
         for (const viewport of [{ width: 1100, height: 950 }, { width: 390, height: 844 }]) {
             for (const separador of delimitadores) {
-                const page = await browser.newPage({ viewport }); page.on('pageerror', e => errores.push(e.message));
+                const page = await browser.newPage({ viewport });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message));
                 await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : (externos.push(r.request().url()), r.abort()));
                 await page.goto(`http://127.0.0.1:${server.address().port}`);
                 for (const file of ['haiku-libro-semantica-v1', 'haiku-servicios-identidad-v1']) await page.addScriptTag({ content: read(`js/${file}.js`) });
@@ -72,7 +73,8 @@ const server = http.createServer((req, res) => {
                 await page.close();
                 console.log(`PASS masaje agrupado: ${viewport.width}px, separador ${JSON.stringify(separador)}, sólo hora, cancelación, confirmación directa, payload único`);
             }
-            const page = await browser.newPage({ viewport }); page.on('pageerror', e => errores.push(e.message));
+            const page = await browser.newPage({ viewport });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message));
             await page.route('**/*', r => new URL(r.request().url()).hostname === '127.0.0.1' ? r.continue() : (externos.push(r.request().url()), r.abort()));
             await page.goto(`http://127.0.0.1:${server.address().port}`);
             for (const file of ['haiku-libro-semantica-v1', 'haiku-servicios-identidad-v1']) await page.addScriptTag({ content: read(`js/${file}.js`) });

@@ -14,7 +14,8 @@ const server=http.createServer((req,res)=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({executablePath:process.env.HAKU_CHROMIUM_PATH,headless:true,args:['--no-sandbox']});
  try {
-  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   const base=`http://127.0.0.1:${server.address().port}`;
   for(const theme of ['claro','oscuro']){
    await page.goto(base+'/');

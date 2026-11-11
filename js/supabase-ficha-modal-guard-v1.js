@@ -86,7 +86,7 @@
                 setTimeout(abrir, 25);
             } else {
                 console.error("HAIKU · El módulo de reactivación no quedó disponible.");
-                alert("No fue posible preparar la ficha de la reserva. Recarga la página e intenta nuevamente.");
+                window.HAIKU_DIALOGOS.aviso("No fue posible preparar la ficha de la reserva. Recarga la página e intenta nuevamente.");
             }
         };
 

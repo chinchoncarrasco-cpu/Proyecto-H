@@ -372,7 +372,7 @@
             console.info("HAIKU · Ficha cancelada cargada desde Supabase:", reserva.codigo_haiku || reserva.id);
         } catch (error) {
             console.error("HAIKU · No fue posible abrir reserva cancelada:", error);
-            alert(error?.message || "No fue posible abrir la reserva cancelada.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible abrir la reserva cancelada.");
         } finally {
             cargandoFicha = false;
         }
@@ -432,10 +432,8 @@
             ? "Confirmada"
             : "Confirmación pendiente";
 
-        if (!window.confirm(
-            `¿Reactivar esta reserva como ${etiqueta}?\n\n` +
-            "HAIKU comprobará que la misma cabaña y fechas sigan disponibles antes de reactivarla."
-        )) return;
+        if (!(await window.HAIKU_DIALOGOS.confirmar(`¿Reactivar esta reserva como ${etiqueta}?\n\n` +
+            "HAIKU comprobará que la misma cabaña y fechas sigan disponibles antes de reactivarla.", {"accion":"Reactivar reserva","contexto":"Reservas","peligro":false}))) return;
 
         reactivando = true;
         cerrarMenuEstado();
@@ -467,10 +465,10 @@
             const estadoFinal = data?.estado === "confirmada"
                 ? "Confirmada"
                 : "Confirmación pendiente";
-            alert(`Reserva reactivada como ${estadoFinal}. Ya volvió al Resumen y al Calendario.`);
+            window.HAIKU_DIALOGOS.aviso(`Reserva reactivada como ${estadoFinal}. Ya volvió al Resumen y al Calendario.`);
         } catch (error) {
             console.error("HAIKU · No fue posible reactivar reserva:", error);
-            alert(error?.message || "No fue posible reactivar la reserva.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible reactivar la reserva.");
         } finally {
             reactivando = false;
         }

@@ -1100,7 +1100,7 @@
                 console.error("HAIKU · No fue posible guardar ítem de revisión en Supabase:", error);
                 if (optimista) optimista.terminar(pendiente, error.itemPersistido === true);
                 else if (!error.itemPersistido) checkbox.checked = !valorEsperado;
-                alert(error.itemPersistido
+                window.HAIKU_DIALOGOS.aviso(error.itemPersistido
                     ? "El check se guardó, pero no fue posible actualizar el estado de revisión. Recarga para verificar."
                     : "No fue posible guardar este check en Supabase. Intenta nuevamente.");
             }
@@ -1131,9 +1131,7 @@
                         "HAIKU · No fue posible guardar estado de revisión en Supabase:",
                         error
                     );
-                    alert(
-                        "No fue posible guardar el estado de la revisión en Supabase."
-                    );
+                    window.HAIKU_DIALOGOS.aviso("No fue posible guardar el estado de la revisión en Supabase.");
                 }
             });
         }

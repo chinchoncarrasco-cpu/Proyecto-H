@@ -390,9 +390,7 @@ if (botonAgregarWebpay) {
             !cabana.value ||
             !monto.value
         ) {
-            alert(
-                "Completa al menos Nombre, Cabaña y Monto."
-            );
+            window.HAIKU_DIALOGOS.aviso("Completa al menos Nombre, Cabaña y Monto.");
             return;
         }
 

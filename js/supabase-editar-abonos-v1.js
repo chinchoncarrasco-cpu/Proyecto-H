@@ -380,7 +380,7 @@
     async function guardarCorreccion() {
         if (!edicionActual || guardando) return;
         if (!puedeEditar()) {
-            alert("Tu usuario no tiene permiso para corregir pagos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para corregir pagos.");
             return;
         }
 

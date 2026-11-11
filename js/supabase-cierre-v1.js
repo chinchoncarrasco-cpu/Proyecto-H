@@ -98,7 +98,7 @@
 
         if (error) {
             console.error("HAIKU · No se guardó respuesta de cierre:", codigo, error);
-            alert(`No fue posible guardar “${codigo}” en Supabase.`);
+            window.HAIKU_DIALOGOS.aviso(`No fue posible guardar “${codigo}” en Supabase.`);
             await cargarCierreSupabase(fecha, { forzarRender: true });
             throw error;
         }
@@ -352,7 +352,7 @@
 
             if (error) {
                 console.error("HAIKU · No se guardaron novedades de cierre:", error);
-                alert("No fue posible guardar las novedades del cierre en Supabase.");
+                window.HAIKU_DIALOGOS.aviso("No fue posible guardar las novedades del cierre en Supabase.");
             }
         }, 450);
     }, true);

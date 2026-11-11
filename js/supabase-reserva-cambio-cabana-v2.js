@@ -132,7 +132,7 @@
             console.error("HAIKU · No fue posible verificar disponibilidad del selector:", error);
             tarjetas.forEach(t => { t.disabled = true; });
             if (estado) estado.textContent = "No fue posible verificar disponibilidad. No selecciones una cabaña hasta recargar o volver a intentar.";
-            alert("No fue posible verificar la disponibilidad real en Supabase. No se habilitaron cabañas para evitar una sobreventa.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible verificar la disponibilidad real en Supabase. No se habilitaron cabañas para evitar una sobreventa.");
         } finally {
             verificandoPaso = false;
         }
@@ -175,7 +175,7 @@
             console.warn("HAIKU · Cambio de cabaña no pasó prevalidación:", error);
             boton.disabled = true;
             boton.textContent = "Revisar disponibilidad";
-            alert(error?.message || "Alguno de los alojamientos ya no está disponible.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "Alguno de los alojamientos ya no está disponible.");
         }
     }
 
@@ -197,26 +197,26 @@
         const estado = estadoV1();
         const tramos = estado.tramosConfirmacion || [];
         if (tramos.length < 2) {
-            alert("La reserva necesita al menos dos alojamientos consecutivos.");
+            window.HAIKU_DIALOGOS.aviso("La reserva necesita al menos dos alojamientos consecutivos.");
             return;
         }
 
         const datos = datosFormulario();
         if (!datos.titular) {
-            alert("Ingresa el nombre del titular de la reserva.");
+            window.HAIKU_DIALOGOS.aviso("Ingresa el nombre del titular de la reserva.");
             $("#reserva-nuevo-titular")?.focus();
             return;
         }
 
         const correo = $("#reserva-nuevo-correo");
         if (correo?.value.trim() && !correo.checkValidity()) {
-            alert("Revisa que el correo esté escrito correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Revisa que el correo esté escrito correctamente.");
             correo.focus();
             return;
         }
 
         if (!window.haikuTienePermiso?.("reservas.crear")) {
-            alert("Tu usuario no tiene permiso para crear reservas.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para crear reservas.");
             return;
         }
 
@@ -297,7 +297,7 @@
             console.info("HAIKU · Cambio de cabaña V2 creado atómicamente:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible crear cambio de cabaña V2:", error);
-            alert(error?.message || "No fue posible crear la reserva. No se guardó ningún tramo.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible crear la reserva. No se guardó ningún tramo.");
             boton.disabled = false;
             boton.textContent = texto;
         } finally {

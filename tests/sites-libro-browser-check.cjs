@@ -170,6 +170,7 @@ async function upload(page, name, bytes) {
         const context = await browser.newContext({ viewport: { width: 1600, height: 900 }, acceptDownloads: true });
         await mockExternalSources(context);
         const page = await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         page.on('dialog', dialog => dialog.accept());
@@ -329,6 +330,7 @@ async function upload(page, name, bytes) {
         // The Haku action must also be installed by a fresh mobile load, not
         // merely carried over from an earlier desktop DOM.
         const mobileFresh = await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(mobileFresh);
         await mobileFresh.setViewportSize({ width: 390, height: 800 });
         await mobileFresh.goto(`${base}/app`);
         await mobileFresh.waitForFunction(() => !!window.HAIKU_LIBRO_RESERVA_V1);

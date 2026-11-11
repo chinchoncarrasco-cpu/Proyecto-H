@@ -120,7 +120,7 @@
     async function editarOcupacion() {
         if (guardando) return;
         if (!puedeEditar()) {
-            alert("Tu usuario no tiene permiso para editar reservas.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para editar reservas.");
             return;
         }
 
@@ -131,14 +131,11 @@
 
         const actual = ocupacionVisible();
 
-        const respuestaAdultos = prompt("Cantidad de adultos:", actual.adultos);
-        if (respuestaAdultos === null) return;
-
-        const respuestaNinos = prompt("Cantidad de niños:", actual.ninos);
-        if (respuestaNinos === null) return;
-
-        const respuestaMascotas = prompt("Cantidad de mascotas:", actual.mascotas);
-        if (respuestaMascotas === null) return;
+        const ocupacion = await window.HAIKU_DIALOGOS.ocupacion(actual, capacidadLocal(numeroCabana), `Reserva · CAB ${numeroCabana}`);
+        if (ocupacion === null) return;
+        const respuestaAdultos = ocupacion.adultos;
+        const respuestaNinos = ocupacion.ninos;
+        const respuestaMascotas = ocupacion.mascotas;
 
         const valores = {
             adultos: Number(respuestaAdultos),
@@ -155,13 +152,13 @@
             valores.mascotas >= 0;
 
         if (!validos) {
-            alert("Ingresa cantidades válidas. Debe existir al menos un adulto.");
+            window.HAIKU_DIALOGOS.aviso("Ingresa cantidades válidas. Debe existir al menos un adulto.");
             return;
         }
 
         const capacidad = capacidadLocal(numeroCabana);
         if (capacidad > 0 && valores.adultos + valores.ninos > capacidad) {
-            alert(`La cabaña admite un máximo de ${capacidad} personas entre adultos y niños.`);
+            window.HAIKU_DIALOGOS.aviso(`La cabaña admite un máximo de ${capacidad} personas entre adultos y niños.`);
             return;
         }
 
@@ -197,7 +194,7 @@
             console.info("HAIKU · Ocupación rápida actualizada:", reservaId, valores);
         } catch (error) {
             console.error("HAIKU · No fue posible actualizar ocupación rápida:", error);
-            alert(error?.message || "No fue posible guardar la ocupación.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible guardar la ocupación.");
         } finally {
             guardando = false;
             actualizarDisponibilidad();

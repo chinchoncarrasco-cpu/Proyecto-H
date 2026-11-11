@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
 const S=require('../js/haiku-libro-semantica-v1.js');
 const reserva=(extra={})=>({id:'Sep26!AQ10',titular:'Mauricio Cepeda',cabana:8,fecha_checkin:'2026-09-11',fecha_checkout:'2026-09-13',tipo_estadia:'alojamiento',noches:2,adultos:2,rut_documento:'12345678-9',correo:'prueba@example.test',telefono:'+56912345678',pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],notas_importantes:[],coordenadas_origen:{hoja:'Sep26',celda:'AQ10'},...extra});
 function entorno() {

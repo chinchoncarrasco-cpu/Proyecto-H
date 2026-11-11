@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const vm = require('node:vm');
+const vm = require('./fixtures/dialogos.cjs').vm;
 const S = require('../js/haiku-libro-semantica-v1.js');
 const tarifaFullDay = require('../js/haiku-fullday-tarifa-v1.js');
 

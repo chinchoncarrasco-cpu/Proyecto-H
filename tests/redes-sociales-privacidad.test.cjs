@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('./fixtures/dialogos.cjs').vm;
 const {parseHTML}=require('linkedom');
 const C=require('../js/haiku-redes-core-v1');
 const source=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');

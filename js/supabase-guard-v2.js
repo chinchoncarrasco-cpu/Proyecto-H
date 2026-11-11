@@ -44,7 +44,7 @@
 
     async function cambiarNochesRapido(numeroCabana, reservaId) {
         if (!window.haikuTienePermiso?.("reservas.editar")) {
-            alert("Tu usuario no tiene permiso para editar reservas.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para editar reservas.");
             return;
         }
 
@@ -65,16 +65,13 @@
             }
 
             const actuales = diferenciaDias(estadia.fecha_ingreso, estadia.fecha_salida);
-            const respuesta = prompt(
-                `Noches CAB ${numeroCabana}:`,
-                String(actuales)
-            );
+            const respuesta = (await window.HAIKU_DIALOGOS.solicitar(`Noches CAB ${numeroCabana}:`, String(actuales)));
 
             if (respuesta === null) return;
 
             const nuevas = Number(String(respuesta).trim());
             if (!Number.isInteger(nuevas) || nuevas < 1 || nuevas > 365) {
-                alert("Ingresa una cantidad de noches válida entre 1 y 365.");
+                window.HAIKU_DIALOGOS.aviso("Ingresa una cantidad de noches válida entre 1 y 365.");
                 return;
             }
 
@@ -108,7 +105,7 @@
             }, 30);
         } catch (error) {
             console.error("HAIKU · No fue posible cambiar noches:", error);
-            alert(error?.message || "No fue posible cambiar la cantidad de noches.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible cambiar la cantidad de noches.");
         }
     }
 

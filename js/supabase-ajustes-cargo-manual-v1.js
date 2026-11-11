@@ -184,7 +184,11 @@
         const vinculo = document.getElementById("haiku-ajuste-vinculo")?.textContent?.replace(/^↳\s*/, "") || "";
         const destino = vinculo ? `\n${vinculo}` : "";
 
-        if (!window.confirm(`¿Aplicar ${titulo}?${destino}\n\nSe añadirán ${dinero(monto)} y el nuevo total será ${dinero(nuevo)}.`)) return;
+        if (!(await window.HAIKU_DIALOGOS.confirmar(`¿Aplicar ${titulo}?${destino}\n\nSe añadirán ${dinero(monto)} y el nuevo total será ${dinero(nuevo)}.`, {
+            titulo: 'Aplicar cargo', accion: 'Aplicar cargo', contexto: 'Pagos · Ajuste', cuerpo: titulo,
+            ...(vinculo ? { detalles: [['Reserva', vinculo]] } : {}),
+            resumen: [['Cargo', dinero(monto)], ['Nuevo total', dinero(nuevo)]]
+        }))) return;
 
         guardando = true;
         overlay.dataset.haikuAjusteManualGuardando = "1";

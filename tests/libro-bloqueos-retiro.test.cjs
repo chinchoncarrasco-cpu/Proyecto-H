@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
 class El{
  constructor(tag){this.tag=tag;this.children=[];this.textContent='';this.events={};this.disabled=false;}
  append(...xs){this.children.push(...xs)}replaceChildren(...xs){this.children=xs}setAttribute(){}addEventListener(k,f){this.events[k]=f}

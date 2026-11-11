@@ -728,7 +728,7 @@
             await registrarPagoControlado(reservaId, datos, fechaActual());
         } catch (error) {
             console.error("HAIKU · No fue posible registrar pago Check-out:", error);
-            alert(error?.message || "No fue posible registrar el pago de Check-out.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el pago de Check-out.");
         } finally {
             boton.disabled = false;
             boton.textContent = texto;
@@ -745,9 +745,9 @@
         const bove = campo?.value.trim() || "";
 
         if (!reservaId) return;
-        if (!bove) return alert("Ingresa el BOVE final de servicios.");
+        if (!bove) return window.HAIKU_DIALOGOS.aviso("Ingresa el BOVE final de servicios.");
         if (!window.haikuTienePermiso?.("pagos.verificar")) {
-            return alert("Tu usuario no tiene permiso para registrar el BOVE.");
+            return window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar el BOVE.");
         }
 
         guardandoBove = true;
@@ -770,7 +770,7 @@
             await cargarCheckoutSupabase();
         } catch (error) {
             console.error("HAIKU · No fue posible registrar BOVE Check-out:", error);
-            alert(error?.message || "No fue posible registrar el BOVE de Check-out.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el BOVE de Check-out.");
         } finally {
             guardandoBove = false;
             boton.disabled = false;

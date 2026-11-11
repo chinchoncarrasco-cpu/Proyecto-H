@@ -240,7 +240,7 @@
                         : precioManualActual();
 
             if (precioManual <= 0) {
-                alert("Ingresa el precio por hora del Early Check-In.");
+                window.HAIKU_DIALOGOS.aviso("Ingresa el precio por hora del Early Check-In.");
                 return null;
             }
 
@@ -257,7 +257,7 @@
             ).slice(0, 5);
 
             if (!fechaServicio || !horaServicio) {
-                alert("El Early Check-In requiere fecha y hora.");
+                window.HAIKU_DIALOGOS.aviso("El Early Check-In requiere fecha y hora.");
                 return null;
             }
 

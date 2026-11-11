@@ -344,10 +344,10 @@
             try { if (typeof generarCalendario === "function") generarCalendario(); } catch {}
 
             document.getElementById("cerrar-nueva-reserva")?.click();
-            alert("Full Day creado correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Full Day creado correctamente.");
         } catch (error) {
             console.error("HAIKU · No fue posible crear Full Day:", error);
-            alert(error?.message || "No fue posible crear el Full Day.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible crear el Full Day.");
         } finally {
             guardando = false;
             boton.disabled = false;

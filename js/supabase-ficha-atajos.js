@@ -631,7 +631,7 @@
             );
         } catch (error) {
             console.error("HAIKU · No fue posible abrir atajo desde ficha:", error);
-            alert(error?.message || "No fue posible abrir el apartado correspondiente.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible abrir el apartado correspondiente.");
         } finally {
             navegando = false;
         }

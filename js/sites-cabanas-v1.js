@@ -303,11 +303,11 @@
         }
     }
     async function cancelarSolicitudTipo(numero, categoria) {
-        if (!tiposSolicitud()[categoria] || !window.confirm(`¿Cancelar ${tiposSolicitud()[categoria]} de Cabaña ${numero}?`)) return;
+        if (!tiposSolicitud()[categoria] || !(await window.HAIKU_DIALOGOS.confirmar(`¿Cancelar ${tiposSolicitud()[categoria]} de Cabaña ${numero}?`, {"accion":"Cancelar solicitud","contexto":"Cabañas","peligro":true}))) return;
         try {
             await window.HAIKU_ASEO_OPERACION_V1.guardarSolicitudTipo(fechaActual(), numero, categoria, "", true);
             pintar();
-        } catch (error) { window.alert(error.message || "No fue posible cancelar la solicitud."); }
+        } catch (error) { window.HAIKU_DIALOGOS.aviso(error.message || "No fue posible cancelar la solicitud."); }
     }
     function seleccionarExpressAutomatico() {
         if (!estado.numero || aperturaExpress || revisionPendiente || restaurando) return;
@@ -907,7 +907,7 @@
             : window.HAIKU_REVISION_SUPABASE_V1?.guardarEstadoRevision;
         if (!guardar) {
             control.value = previo;
-            alert("No fue posible guardar la revisión. Vuelve a intentarlo.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar la revisión. Vuelve a intentarlo.");
             return;
         }
         revisionesGuardando.add(clave);
@@ -917,7 +917,7 @@
         } catch (error) {
             control.value = previo;
             console.error("HAKU · No fue posible cambiar la revisión:", error);
-            alert("No fue posible guardar el estado de revisión. Se conservó el estado anterior.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar el estado de revisión. Se conservó el estado anterior.");
         } finally {
             revisionesGuardando.delete(clave);
             control.disabled = false;
@@ -932,9 +932,9 @@
         if (control.disabled) return;
         const nuevo = previo === "no_requiere" ? "pendiente" : "no_requiere";
         const api = window.HAIKU_ASEO_OPERACION_V1;
-        if (!api?.guardarEstadoAseo) { alert("No fue posible verificar la autoridad de Aseo. Intenta nuevamente."); return; }
+        if (!api?.guardarEstadoAseo) { window.HAIKU_DIALOGOS.aviso("No fue posible verificar la autoridad de Aseo. Intenta nuevamente."); return; }
         if (dato.aseoIn || dato.aseoOut) {
-            alert("La cabaña ya tiene horas de aseo registradas. Revisa IN/OUT antes de cambiar No requiere."); return;
+            window.HAIKU_DIALOGOS.aviso("La cabaña ya tiene horas de aseo registradas. Revisa IN/OUT antes de cambiar No requiere."); return;
         }
         control.disabled = true;
         try {
@@ -943,7 +943,7 @@
         } catch (error) {
             console.error("HAIKU · No fue posible cambiar el estado de aseo:", error);
             await api.hidratar?.(fecha, { pintar: true });
-            alert("No fue posible guardar el estado de aseo. Se releyeron los datos.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar el estado de aseo. Se releyeron los datos.");
         } finally { control.disabled = false; }
     }
     function actualizarEstadoCabana(numero) {
@@ -999,7 +999,7 @@
                 } while (entry.tipo !== entry.confirmado);
                 return true;
             } catch (error) {
-                if (fecha === fechaActual() && usuarioActual() === usuarioId) { entry.tipo = entry.confirmado; proyectarTipo(numero, entry.confirmado, fecha); alert(error?.message || 'No fue posible guardar el tipo de revisión.'); }
+                if (fecha === fechaActual() && usuarioActual() === usuarioId) { entry.tipo = entry.confirmado; proyectarTipo(numero, entry.confirmado, fecha); window.HAIKU_DIALOGOS.aviso(error?.message || 'No fue posible guardar el tipo de revisión.'); }
                 return false;
             } finally { tiposPendientes.delete(clave); tiposRevisionGuardando.delete(`${fecha}:${numero}`); }
         })();
@@ -1052,7 +1052,7 @@
         const fallar = error => {
             if (vigente()) {
                 console.error("HAIKU · No fue posible abrir Aseo Express:", error);
-                alert("No fue posible verificar Aseo Express. Intenta nuevamente.");
+                window.HAIKU_DIALOGOS.aviso("No fue posible verificar Aseo Express. Intenta nuevamente.");
             }
             liberar();
             return false;

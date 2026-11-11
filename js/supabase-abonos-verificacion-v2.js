@@ -334,7 +334,7 @@
 
         if (typeof window.haikuTienePermiso === "function" && !window.haikuTienePermiso("pagos.verificar")) {
             check.checked = false;
-            alert("Tu usuario no tiene permiso para verificar abonos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para verificar abonos.");
             return;
         }
 
@@ -349,7 +349,7 @@
             console.error("HAIKU · No fue posible verificar el abono:", error);
             check.checked = false;
             check.disabled = false;
-            alert(error?.message || "No fue posible verificar el abono.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible verificar el abono.");
         } finally {
             verificando = false;
         }

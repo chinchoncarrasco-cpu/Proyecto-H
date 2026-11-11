@@ -10,6 +10,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
  try {
   for (const width of [1440, 390, 320]) for (const theme of ['claro', 'oscuro']) {
    const page = await browser.newPage({ viewport: { width, height: 1000 }, timezoneId: 'America/Santiago' });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
    const errors = [];
    page.on('pageerror', error => errors.push(error.message));
    page.on('dialog', dialog => dialog.dismiss());

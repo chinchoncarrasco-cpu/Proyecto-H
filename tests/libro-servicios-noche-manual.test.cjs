@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
+const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm, path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../js/haiku-libro-servicios-scope-v2.js'), 'utf8');
 const copy = x => JSON.parse(JSON.stringify(x));
 const textoYenny = 'TÓNEL A LAS 19:15 X PAGAR / CAB 6 YA ENTREGO SUS BATAS A RECEPCION';

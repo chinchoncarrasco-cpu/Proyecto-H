@@ -2652,7 +2652,7 @@
         if (elegidos.length !== ids.length) throw new Error("Uno o más elementos cambiaron desde la vista previa. Vuelve a revisar antes de guardar.");
         const servicios = elegidos.filter(x => x.kind === "servicio"), notas = elegidos.filter(x => x.kind === "nota");
         if (servicios.some(x => x.semantica !== "SERVICIO_REAL" || x.completitud !== "COMPLETO" || !x.payload)) throw new Error("Un servicio incompleto o ambiguo no puede incorporarse ni generar cargo.");
-        const confirmar = root.confirm(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`);
+        const confirmar = (await root.HAIKU_DIALOGOS.confirmar(`Se incorporarán ${servicios.length} servicio${servicios.length === 1 ? "" : "s"} y ${notas.length} nota${notas.length === 1 ? "" : "s"} desde el Libro. Haku revalidó la información y la operación será atómica. ¿Confirmas?`, {"accion":"Incorporar selección","contexto":"Haku · Libro","peligro":false}));
         if (!confirmar) return;
         const botones = card.querySelectorAll("button,input[type=checkbox]"); botones.forEach(x => x.disabled = true);
         try {

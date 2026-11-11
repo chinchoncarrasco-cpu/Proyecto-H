@@ -148,10 +148,8 @@
                 } catch {}
             }
 
-            alert(
-                "La evidencia no pudo subir a Supabase. " +
-                "Se intentó conservar temporalmente en este dispositivo."
-            );
+            window.HAIKU_DIALOGOS.aviso("La evidencia no pudo subir a Supabase. " +
+                "Se intentó conservar temporalmente en este dispositivo.");
 
             throw error;
         }

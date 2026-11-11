@@ -1323,7 +1323,7 @@
             if (guardandoReserva || botonCrear.disabled) return;
 
             const confirmacion = `¿Confirmas crear ${reservas.length} reservas${totalPagos ? ` y registrar ${totalPagos} ${totalPagos === 1 ? "abono" : "abonos"}` : ""}?`;
-            if (!window.confirm(confirmacion)) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(confirmacion, {"accion":"Crear reservas","contexto":"Haku · Reservas","peligro":false}))) return;
 
             const textoOriginal = botonCrear.textContent;
             guardandoReserva = true;
@@ -1511,7 +1511,7 @@
                 ? `¿Confirmas crear 1 reserva y registrar ${cantidadPagos} ${cantidadPagos === 1 ? "abono" : "abonos"}?`
                 : "¿Confirmas crear 1 reserva?";
 
-            if (!window.confirm(confirmacion)) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(confirmacion, {"accion":"Crear reserva","contexto":"Haku · Reservas","peligro":false}))) return;
 
             const textoOriginal = botonCrear.textContent;
             guardandoReserva = true;

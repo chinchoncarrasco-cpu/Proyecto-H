@@ -344,14 +344,14 @@
         const d = leerFormulario(tarjeta);
         const medioDB = codigoMedio(d.medio);
         const req = requisitosMedio(medioDB);
-        if (d.monto <= 0) return alert("Ingresa el monto de este pago.");
-        if (!medioDB) return alert("Selecciona el medio de pago.");
-        if (req.glosa && !d.glosa) return alert("Transferencia requiere Glosa.");
-        if (req.folio && !d.folio) return alert("Este medio requiere Folio.");
-        if (req.codAut && !d.codAut) return alert("Este medio requiere CodAut.");
-        if (!d.manager) return alert("Manager debe revisar el pago antes de registrarlo.");
-        if (!window.haikuTienePermiso?.("pagos.registrar")) return alert("Tu usuario no tiene permiso para registrar pagos.");
-        if (!window.haikuTienePermiso?.("pagos.verificar")) return alert("Tu usuario no tiene permiso para validar pagos como Manager.");
+        if (d.monto <= 0) return window.HAIKU_DIALOGOS.aviso("Ingresa el monto de este pago.");
+        if (!medioDB) return window.HAIKU_DIALOGOS.aviso("Selecciona el medio de pago.");
+        if (req.glosa && !d.glosa) return window.HAIKU_DIALOGOS.aviso("Transferencia requiere Glosa.");
+        if (req.folio && !d.folio) return window.HAIKU_DIALOGOS.aviso("Este medio requiere Folio.");
+        if (req.codAut && !d.codAut) return window.HAIKU_DIALOGOS.aviso("Este medio requiere CodAut.");
+        if (!d.manager) return window.HAIKU_DIALOGOS.aviso("Manager debe revisar el pago antes de registrarlo.");
+        if (!window.haikuTienePermiso?.("pagos.registrar")) return window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
+        if (!window.haikuTienePermiso?.("pagos.verificar")) return window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para validar pagos como Manager.");
 
         guardandoPago = true;
         const textoAnterior = boton.textContent;
@@ -374,7 +374,7 @@
             await window.haikuSincronizarReservasSupabase?.();
         } catch (error) {
             console.error("HAIKU · No fue posible registrar pago parcial Check-in:", error);
-            alert(error?.message || "No fue posible registrar el pago.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el pago.");
         } finally {
             guardandoPago = false;
             boton.disabled = false;
@@ -392,7 +392,7 @@
         evento.preventDefault();
         evento.stopPropagation();
         evento.stopImmediatePropagation();
-        if (!bove) return alert("Ingresa el BOVE total de la reserva.");
+        if (!bove) return window.HAIKU_DIALOGOS.aviso("Ingresa el BOVE total de la reserva.");
 
         guardandoBove = true;
         boton.disabled = true;
@@ -405,7 +405,7 @@
             await cargarSaldosCheckinMixto();
         } catch (error) {
             console.error("HAIKU · No fue posible registrar BOVE:", error);
-            alert(error?.message || "No fue posible registrar el BOVE.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el BOVE.");
         } finally {
             guardandoBove = false;
             boton.disabled = false;

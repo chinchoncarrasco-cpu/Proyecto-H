@@ -341,7 +341,7 @@
         const reservaId = reservaIdActual();
         const datos = datosFormulario();
         if (!reservaId) {
-            alert("No se encontró la reserva que estás editando.");
+            window.HAIKU_DIALOGOS.aviso("No se encontró la reserva que estás editando.");
             return;
         }
 
@@ -360,10 +360,10 @@
             try { await window.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.(); } catch {}
 
             document.getElementById("cerrar-nueva-reserva")?.click();
-            alert("Reserva actualizada correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Reserva actualizada correctamente.");
         } catch (error) {
             console.error("HAIKU · No fue posible guardar edición completa:", error);
-            alert(error?.message || "No fue posible guardar los cambios.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible guardar los cambios.");
         } finally {
             guardando = false;
             boton.disabled = false;

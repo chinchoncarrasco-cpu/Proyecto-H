@@ -1,4 +1,4 @@
-const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+const fs = require('node:fs'), path = require('node:path'), vm = require('./dialogos.cjs').vm;
 const read = f => fs.readFileSync(path.join(__dirname, '../..', f), 'utf8');
 const consulta = 'Libro: compara servicios de octubre 2026 con Proyecto H';
 const source = read('js/haiku-libro-servicios-scope-v2.js').replace('const api = Object.freeze({',
@@ -43,6 +43,7 @@ function setup() {
             servicios: args.p_servicios.map(x => ({ item_id: x.item_id, estado: 'creado' })), notas: [] } };
     } };
     w.confirm = () => true;
+    w.HAIKU_DIALOGOS ||= { confirmar: async (...args) => w.confirm(...args) };
 }
 class Element {
     constructor(tag) { this.tag = tag; this.children = []; this.listeners = {}; this.value = ''; this.style = {}; this.dataset = {}; }

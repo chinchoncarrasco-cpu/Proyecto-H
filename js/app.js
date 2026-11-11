@@ -496,7 +496,7 @@ document.addEventListener(
                     throw new Error("No está disponible la identidad segura de la nota.");
                 }
             } catch (error) {
-                alert(error.message || "No se pudo identificar la cabaña de esta nota.");
+                window.HAIKU_DIALOGOS.aviso(error.message || "No se pudo identificar la cabaña de esta nota.");
                 return;
             }
         }
@@ -682,7 +682,7 @@ document.addEventListener("click", async (evento) => {
                 "HAIKU · No fue posible eliminar la nota en Supabase:",
                 error
             );
-            alert("No fue posible eliminar la nota. Intenta nuevamente.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible eliminar la nota. Intenta nuevamente.");
             return;
         }
     }
@@ -768,7 +768,7 @@ botonGuardarNota.addEventListener("click", async () => {
             identidadNota = await window.HAIKU_SITES_RESUMEN_NOTA_V1.validar(
                 fechaNota, numeroCabana);
         } catch (error) {
-            alert(error.message || "La reserva cambió. La nota no se guardó.");
+            window.HAIKU_DIALOGOS.aviso(error.message || "La reserva cambió. La nota no se guardó.");
             return;
         }
     }
@@ -795,11 +795,11 @@ botonGuardarNota.addEventListener("click", async () => {
                 "HAIKU · No fue posible guardar la nota en Supabase:",
                 error
             );
-            alert("No fue posible guardar la nota. Intenta nuevamente.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar la nota. Intenta nuevamente.");
             return;
         }
     } else if (window.haikuSesion) {
-        alert("No está disponible el guardado real de notas. La nota no se guardó.");
+        window.HAIKU_DIALOGOS.aviso("No está disponible el guardado real de notas. La nota no se guardó.");
         return;
     }
 
@@ -3023,9 +3023,7 @@ function abrirModalEditarReserva(
 
     if (!registro?.cabana) {
 
-        alert(
-            "No se encontraron los datos de esta reserva."
-        );
+        window.HAIKU_DIALOGOS.aviso("No se encontraron los datos de esta reserva.");
 
         return false;
     }
@@ -3961,9 +3959,7 @@ puntoInsercion.insertAdjacentElement(
 
                 if (tarifasInvalidas) {
 
-                    alert(
-                        "Cada noche debe tener una tarifa válida."
-                    );
+                    window.HAIKU_DIALOGOS.aviso("Cada noche debe tener una tarifa válida.");
 
                     return;
                 }
@@ -4276,9 +4272,7 @@ function seleccionarFechaNuevaReserva(fecha) {
             // El rango completo no sirve
             if (cabanasDisponibles.length === 0) {
 
-                alert(
-                    "No hay una misma cabaña disponible durante todo ese rango."
-                );
+                window.HAIKU_DIALOGOS.aviso("No hay una misma cabaña disponible durante todo ese rango.");
 
                 fechaSalidaReserva = "";
 
@@ -4917,7 +4911,7 @@ function guardarCambiosReservaEditada() {
     const titular = campoNuevoTitular.value.trim();
 
     if (!titular) {
-        alert("Ingresa el nombre del titular de la reserva.");
+        window.HAIKU_DIALOGOS.aviso("Ingresa el nombre del titular de la reserva.");
         campoNuevoTitular.focus();
         return;
     }
@@ -4926,7 +4920,7 @@ function guardarCambiosReservaEditada() {
         campoNuevoCorreo.value.trim() &&
         !campoNuevoCorreo.checkValidity()
     ) {
-        alert("Revisa que el correo esté escrito correctamente.");
+        window.HAIKU_DIALOGOS.aviso("Revisa que el correo esté escrito correctamente.");
         campoNuevoCorreo.focus();
         return;
     }
@@ -4940,7 +4934,7 @@ function guardarCambiosReservaEditada() {
     );
 
     if (!cabana || noches < 1) {
-        alert("Selecciona una cabaña y fechas válidas.");
+        window.HAIKU_DIALOGOS.aviso("Selecciona una cabaña y fechas válidas.");
         return;
     }
 
@@ -4950,9 +4944,7 @@ function guardarCambiosReservaEditada() {
     );
 
     if (!disponibles.includes(numeroCabana)) {
-        alert(
-            "La cabaña seleccionada ya no está disponible durante todo ese rango."
-        );
+        window.HAIKU_DIALOGOS.aviso("La cabaña seleccionada ya no está disponible durante todo ese rango.");
         return;
     }
 
@@ -5102,9 +5094,7 @@ function guardarCambiosReservaEditada() {
         }
 
         console.error("NO SE PUDO EDITAR LA RESERVA:", error);
-        alert(
-            "No se pudieron guardar los cambios. La reserva original fue restaurada."
-        );
+        window.HAIKU_DIALOGOS.aviso("No se pudieron guardar los cambios. La reserva original fue restaurada.");
         return;
     }
 
@@ -5230,9 +5220,7 @@ function crearReservaDesdeFormulario() {
 
     if (!titular) {
 
-        alert(
-            "Ingresa el nombre del titular de la reserva."
-        );
+        window.HAIKU_DIALOGOS.aviso("Ingresa el nombre del titular de la reserva.");
 
         campoNuevoTitular.focus();
         return;
@@ -5244,9 +5232,7 @@ function crearReservaDesdeFormulario() {
         !campoNuevoCorreo.checkValidity()
     ) {
 
-        alert(
-            "Revisa que el correo esté escrito correctamente."
-        );
+        window.HAIKU_DIALOGOS.aviso("Revisa que el correo esté escrito correctamente.");
 
         campoNuevoCorreo.focus();
         return;
@@ -5726,9 +5712,7 @@ async function abrirReservaCreadaPorId() {
     const reservaId = String(reservaCreadaId || "").trim();
 
     if (!reservaId) {
-        alert(
-            "No se pudo identificar la reserva creada. Recarga la página e inténtalo nuevamente."
-        );
+        window.HAIKU_DIALOGOS.aviso("No se pudo identificar la reserva creada. Recarga la página e inténtalo nuevamente.");
         return false;
     }
 
@@ -5736,9 +5720,7 @@ async function abrirReservaCreadaPorId() {
         window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId;
 
     if (typeof abrirPorId !== "function") {
-        alert(
-            "La ficha de reserva no está disponible. Recarga la página e inténtalo nuevamente."
-        );
+        window.HAIKU_DIALOGOS.aviso("La ficha de reserva no está disponible. Recarga la página e inténtalo nuevamente.");
         return false;
     }
 
@@ -5748,17 +5730,13 @@ async function abrirReservaCreadaPorId() {
         const abierta = await abrirPorId(reservaId);
 
         if (!abierta) {
-            alert(
-                "No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente."
-            );
+            window.HAIKU_DIALOGOS.aviso("No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente.");
         }
 
         return Boolean(abierta);
     } catch (error) {
         console.error("NO SE PUDO ABRIR LA RESERVA CREADA:", error);
-        alert(
-            "No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente."
-        );
+        window.HAIKU_DIALOGOS.aviso("No se pudo abrir la ficha de la reserva creada. Recarga la página e inténtalo nuevamente.");
         return false;
     }
 }

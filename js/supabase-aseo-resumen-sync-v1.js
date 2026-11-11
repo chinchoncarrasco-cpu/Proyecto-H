@@ -147,7 +147,7 @@
             });
         } catch (error) {
             console.error("HAIKU · No fue posible guardar Aseo desde Resumen:", error);
-            alert("No fue posible guardar el cambio de Aseo. Revisa la conexión e inténtalo nuevamente.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar el cambio de Aseo. Revisa la conexión e inténtalo nuevamente.");
             programarRefresco(0);
         }
     }

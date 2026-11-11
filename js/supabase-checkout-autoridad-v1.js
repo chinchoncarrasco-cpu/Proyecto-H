@@ -264,7 +264,7 @@
             console.info("HAIKU · Checkout revertido al borrar hora:", numero, fecha, estadia.id);
         } catch (error) {
             console.error("HAIKU · No fue posible revertir checkout al borrar hora:", error);
-            alert(error?.message || "No fue posible revertir el Check-out.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible revertir el Check-out.");
             // Recuperamos inmediatamente el valor real de Supabase.
             await sincronizarDesdeSupabase({ regenerarCalendario: true });
         } finally {
