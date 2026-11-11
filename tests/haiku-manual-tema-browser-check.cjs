@@ -57,8 +57,7 @@ function state() {
         details:[...p.querySelectorAll('details')].map(e=>e.open)
     };
 }
-const contrastSource = read('tests/haiku-tema-browser-check.cjs');
-const contrast = vm.runInNewContext('(' + contrastSource.slice(contrastSource.indexOf('function auditarContraste()'), contrastSource.indexOf('main().catch')) + ')');
+const {auditarContraste:contrast}=require('./haiku-tema-browser-check.cjs');
 async function main() {
     fs.mkdirSync(output,{recursive:true});
     const cases = await panels();

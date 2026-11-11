@@ -244,7 +244,8 @@
                 fila.append(crear("strong", "", `${cabana}${item.reserva?.titular || 'Reserva'}`));
                 const p = item.payload || {};
                 if (kind === 'servicio') {
-                    const datos = [nombre, p.fecha_servicio,
+                    const fecha = String(p.fecha_servicio || '').replace(/^(\d{4})-(\d{2})-(\d{2})$/, '$3/$2/$1');
+                    const datos = [nombre, fecha,
                         p.hora ? `${p.hora}${item.hora_fin ? '–' + item.hora_fin : ''}` : null].filter(Boolean);
                     fila.append(crear("p", "haku-libro-resultado-sites__servicio", datos.join(' · ')));
                     const condiciones = [p.cantidad != null && Number(p.cantidad) !== 1 ? `Cantidad: ${p.cantidad}` : null,

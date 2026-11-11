@@ -49,7 +49,7 @@ test('Servicios y notas nuevos se muestran en apartados separados, abiertos y an
     assert.equal(h.grupo('nota').querySelector('h3').textContent,'Notas incorporadas');
     assert.equal(h.filas('servicio').length,1);assert.equal(h.filas('nota').length,1);
     assert.match(h.grupo('servicio').textContent,/CAB 2 · Huésped Servicio.*Tinaja Tonel de Madera/);
-    assert.match(h.grupo('servicio').textContent,/2026-10-17.*19:15–20:15.*Cortesía/);
+    assert.match(h.grupo('servicio').textContent,/17\/10\/2026.*19:15–20:15.*Cortesía/);
     assert.match(h.grupo('nota').textContent,/CAB 8 · Huésped Nota/);
     assert.match(h.grupo('nota').textContent,/Agregar cuna en el alojamiento\.\nBebé de 1 año\./);
     assert.doesNotMatch(h.grupo('nota').textContent,/Texto anterior/);
