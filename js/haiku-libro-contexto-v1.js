@@ -33,7 +33,8 @@
         const doc=x=>S?.documentoCanon?S.documentoCanon(x.rut_documento,x.tipo_documento):texto(x.rut_documento).replace(/[.\s-]/g,'');
         const da=doc(a),db=doc(b);
         if(da&&db&&da!==db)return false;
-        return Boolean(da&&da===db||texto(a.titular)&&texto(a.titular)===texto(b.titular));
+        const nombre=S?.mismaPersona?.(a.titular,b.titular) ?? Boolean(texto(a.titular)&&texto(a.titular)===texto(b.titular));
+        return Boolean(da&&da===db||nombre);
     }
     async function actualizarDesdeLibro(registros,libro=root.HAIKU_LIBRO_RESERVA_V1){
         if(!registros.length)return [];

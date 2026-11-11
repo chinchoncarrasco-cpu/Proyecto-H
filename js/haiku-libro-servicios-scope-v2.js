@@ -346,7 +346,8 @@
     function canonTelefono(v) { return String(v || "").replace(/\D/g, "").slice(-8); }
 
     function mismaPersona(libro, sistema) {
-        const nombre = normalizar(libro?.titular) === normalizar(sistema?.titular_nombre);
+        const nombre = root.HAIKU_LIBRO_SEMANTICA?.mismaPersona?.(libro?.titular,sistema?.titular_nombre) ??
+            normalizar(libro?.titular) === normalizar(sistema?.titular_nombre);
         const docA = canonDocumento(libro?.rut_documento), docB = canonDocumento(sistema?.titular_numero_documento);
         const mailA = normalizar(libro?.correo), mailB = normalizar(sistema?.correo_contacto);
         const telA = canonTelefono(libro?.telefono), telB = canonTelefono(sistema?.telefono_contacto);

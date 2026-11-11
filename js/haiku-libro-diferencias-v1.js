@@ -36,7 +36,7 @@
         return r;
     }
     function evidenciaCancelacion(reserva, evidencia) {
-        if (evidencia?.bloque !== 'CANCELACIONES' || !nombre(reserva.titular) || nombre(reserva.titular) !== nombre(evidencia.titular) ||
+        if (evidencia?.bloque !== 'CANCELACIONES' || !semantica.mismaPersona(reserva.titular,evidencia.titular) ||
             !reserva.fecha_checkin || reserva.fecha_checkin !== evidencia.fecha_checkin) return false;
         let respaldo = false;
         for (const campo of ['noches','rut_documento','correo','telefono']) {
@@ -50,8 +50,9 @@
         return {nombre: nombre(r.titular), documento: documento(r.rut_documento, r.tipo_documento), correo: texto(r.correo), telefono: telefono(r.telefono)};
     }
     function claves(r) {
-        const keys = Object.entries(senales(r)).filter(([k,v]) => v && (k !== 'telefono' || v.length >= 9))
+        const keys = Object.entries(senales(r)).filter(([k,v]) => k!=='nombre' && v && (k !== 'telefono' || v.length >= 9))
             .map(([k,v]) => `${k}:${v}`);
+        keys.push(...semantica.clavesTitular(r.titular).map(k=>`nombre:${k}`));
         // Sólo candidato para revisión: compartir ubicación nunca confirma identidad.
         if (conocido(r.cabana) && conocido(r.fecha_checkin)) keys.push(`contexto:${Number(r.cabana)}:${r.fecha_checkin}`);
         return keys;
@@ -85,7 +86,7 @@
         if (a.advertencias_validacion?.length || b.advertencias_validacion?.length) return null;
         if ((a.advertencias?.length || b.advertencias?.length) && !(exacta && contextoExacto(a,b) && advertenciaNochesIdentica(a,b))) return null;
         const x = senales(a), y = senales(b);
-        const iguales = k => !!x[k] && x[k] === y[k];
+        const iguales = k => k==='nombre' ? semantica.mismaPersona(a.titular,b.titular) : !!x[k] && x[k] === y[k];
         const fuertes = ['documento', 'correo', 'telefono'].filter(k => iguales(k) && (k !== 'telefono' || x[k].length >= 9));
         const conflicto = ['documento', 'correo', 'telefono'].some(k => x[k] && y[k] && x[k] !== y[k]);
         const fecha = k => conocido(a[k]) && a[k] === b[k];
@@ -106,7 +107,7 @@
         rows.forEach((a,i) => {
             if (a.tipo_estadia !== 'alojamiento' || !nombre(a.titular) || a.advertencias?.length || a.advertencias_validacion?.length) return;
             rows.forEach((b,j) => {
-                if (b.tipo_estadia !== 'full_day' || b.advertencias?.length || b.advertencias_validacion?.length || a.fecha_checkout !== b.fecha_checkin || nombre(a.titular) !== nombre(b.titular)) return;
+                if (b.tipo_estadia !== 'full_day' || b.advertencias?.length || b.advertencias_validacion?.length || a.fecha_checkout !== b.fecha_checkin || !semantica.mismaPersona(a.titular,b.titular)) return;
                 const x=senales(a),y=senales(b), keys=['documento','correo','telefono'];
                 if (keys.some(k=>x[k] && y[k] && x[k]!==y[k])) return;
                 const iguales=keys.filter(k=>x[k] && x[k]===y[k] && (k!=='telefono'||x[k].length>=9));
@@ -129,6 +130,7 @@
                 if (conocido(av) || conocido(bv)) advertencias.push({campo, motivo: 'Campo no determinado en ambas versiones.', anterior: a.id, actual: b.id});
                 continue;
             }
+            if (campo==='titular' && semantica.mismaPersona(av,bv)) continue;
             if (JSON.stringify(canon(campo, av, a.tipo_documento)) !== JSON.stringify(canon(campo, bv, b.tipo_documento))) cambios.push({campo, antes: copia(av), ahora: copia(bv)});
         }
         return cambios;
@@ -295,7 +297,7 @@
         out.ya_no_aparecen = out.ya_no_aparecen.filter(x => {
             const candidatos = evidencias.filter(e=>evidenciaCancelacion(x.anterior,e));
             if (candidatos.length !== 1 || prev.filter(r=>evidenciaCancelacion(r,candidatos[0])).length !== 1 ||
-                next.some(r=>nombre(r.titular)===nombre(x.anterior.titular)&&r.fecha_checkin===x.anterior.fecha_checkin)) return true;
+                next.some(r=>semantica.mismaPersona(r.titular,x.anterior.titular)&&r.fecha_checkin===x.anterior.fecha_checkin)) return true;
             confirmadas.push({tipo:'cancelacion_confirmada',anterior:x.anterior,evidencia:copia(candidatos[0])}); return false;
         });
         if (confirmadas.length) { out.cancelaciones_confirmadas=confirmadas; out.resumen.cancelaciones_confirmadas=confirmadas.length; }
