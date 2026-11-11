@@ -176,7 +176,8 @@ async function comprobarCasosDelAviso(browser, url) {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const browser = await chromium.launch({ executablePath: process.env.HAKU_CHROMIUM_PATH || edge, headless: true, args:['--no-sandbox'] });
     try {
-        const page = await browser.newPage({ viewport: { width: 600, height: 900 } });
+        const contexto = await browser.newContext({ viewport: { width: 600, height: 900 } });
+        const page = await contexto.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -940,13 +941,38 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.match(await informeTitular.innerText(),/«Lidia Salas» · «Marta López»/);
 
         await page.addStyleTag({url:`http://127.0.0.1:${server.address().port}/css/haiku-libro-decision-cards-v1.css`});
+        await page.addStyleTag({url:`http://127.0.0.1:${server.address().port}/css/haiku-dialogos-v1.css`});
         await page.addScriptTag({content:read('js/haiku-libro-cancelaciones-v1.js')});
+        await page.addScriptTag({content:read('js/haiku-dialogos-v1.js')});
+        const cargarLectorCierres=async target=>{
+            await target.setViewportSize({width:1100,height:900});
+            await target.evaluate(()=>{
+                const seccion=document.createElement('section');seccion.id='seccion-libro-reserva';seccion.hidden=true;
+                document.body.append(seccion);
+            });
+            await target.addScriptTag({content:read('js/supabase-libro-reserva-v1.js')});
+            await target.evaluate(()=>HAIKU_LIBRO_RESERVA_V1.listo());
+        };
+        await page.evaluate(()=>{window.__lectorAviso=window.HAIKU_LIBRO_RESERVA_V1;delete window.HAIKU_LIBRO_RESERVA_V1;});
+        await cargarLectorCierres(page);
         await page.evaluate(()=>{
+            const lectorReal=HAIKU_LIBRO_RESERVA_V1;
+            window.HAIKU_LIBRO_RESERVA_V1=Object.assign(__lectorAviso,{
+                leerAvisosCancelacionCerrados:lectorReal.leerAvisosCancelacionCerrados,
+                cerrarAvisoCancelacion:async firma=>{
+                    if(__cancelacionAviso.fallarCierre)throw Error('No pude guardar el cierre en este navegador.');
+                    await lectorReal.cerrarAvisoCancelacion(firma);
+                }
+            });
             const reserva={id:'Dic26!C3',hoja:'Dic26',titular:'Persona cancelación de prueba',cabana:1,
                 fecha_checkin:'2026-12-11',fecha_checkout:'2026-12-12',noches:1,tipo_estadia:'alojamiento'};
             const evidencia={bloque:'CANCELACIONES',titular:reserva.titular,fecha_checkin:reserva.fecha_checkin,
                 noches:1,origen:{hoja:'Dic26',celda:'C20'}};
             const anterior={tipo:'cancelacion_confirmada',anterior:reserva,evidencia};
+            const sinIngreso={...reserva,id:'Dic26!F3',titular:'Persona sin ingreso de prueba',
+                fecha_checkin:'2026-12-13',fecha_checkout:'2026-12-14'};
+            const evidenciaSinIngreso={...evidencia,titular:sinIngreso.titular,fecha_checkin:sinIngreso.fecha_checkin,
+                origen:{hoja:'Dic26',celda:'C32'}};
             const api=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
             const caso=api.extraerCambiosDetectados({cancelaciones_confirmadas:[anterior]},19)[0];
             const proyecto={id:'reserva-cancelacion-prueba',titular_nombre:reserva.titular,estado_reserva:'confirmada',
@@ -954,17 +980,19 @@ async function comprobarCasosDelAviso(browser, url) {
                     fecha_salida:reserva.fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};
             __generation=21;window.dispatchEvent(new Event('haiku:libro-cambio'));
             __registration={version:1,cambios:[caso]};
-            window.__cancelacionAviso={candidatas:0,escrituras:[],lecturas:[],inspecciones:[],pausar:true};
+            window.__cancelacionAviso={candidatas:0,escrituras:[],lecturas:[],inspecciones:[],pausar:true,
+                sinIngreso:{tipo:'cancelacion_confirmada',anterior:sinIngreso,evidencia:evidenciaSinIngreso}};
             HAIKU_LIBRO_RESERVA_V1.consultarHoja=async(hoja,version)=>{
                 __cancelacionAviso.lecturas.push([hoja,version]);
                 if(__cancelacionAviso.pausar)await new Promise(resolve=>{__cancelacionAviso.continuar=resolve;});
-                return {hoja:'Dic26',cobertura:{geometria:true},reservas:[],cancelaciones:[{...evidencia,origen:{hoja:'Dic26',celda:'C22'}}]};
+                return {hoja:'Dic26',cobertura:{geometria:true},reservas:[],cancelaciones:[{...evidencia,origen:{hoja:'Dic26',celda:'C22'}},evidenciaSinIngreso]};
             };
             window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async xs=>xs,enriquecer:async xs=>xs,fraseHistorial:()=>''};
-            HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async registros=>({
-                items:proyecto.estado_reserva==='cancelada'?[]:registros.map(x=>({...x,estado:'revision',accionable:false,proyecto:'No se pudo asociar de forma única'})),
-                resueltos:proyecto.estado_reserva==='cancelada'?registros.map(x=>x.id):[],reservas:[],comparacion:[]
-            });
+            HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async registros=>{
+                const resueltos=proyecto.estado_reserva==='cancelada'?registros.filter(x=>x.anterior?.fecha_checkin===reserva.fecha_checkin).map(x=>x.id):[];
+                return {items:registros.filter(x=>!resueltos.includes(x.id)).map(x=>({...x,estado:'revision',accionable:false,
+                    proyecto:'No se pudo asociar de forma única'})),resueltos,reservas:[],comparacion:[]};
+            };
             window.haikuSesion={usuario:{activo:true},roles:['administrador']};
             window.haikuTienePermiso=permiso=>permiso==='reservas.cancelar';
             window.haikuSupabase={
@@ -973,7 +1001,7 @@ async function comprobarCasosDelAviso(browser, url) {
                     const copia={...proyecto,id:'otra-reserva-prueba'};
                     const q={select:()=>q,eq:()=>q,in:()=>q,order:()=>q,range:async()=>({data:tabla==='reservas'
                         ?[proyecto,copia].slice(0,__cancelacionAviso.candidatas)
-                        :[{id:proyecto.estadias[0].id,reserva_id:proyecto.id}]})};
+                        :__cancelacionAviso.sinEstadias?[]:[{id:proyecto.estadias[0].id,reserva_id:proyecto.id}]})};
                     return q;
                 }
             };
@@ -993,7 +1021,9 @@ async function comprobarCasosDelAviso(browser, url) {
         const revisionCancelacion=casoCancelacion.locator('.haiku-cancelacion-informe');
         const confirmarCancelacion=revisionCancelacion.getByRole('button',{name:'Confirmar cancelación',exact:true});
         const verCancelacion=revisionCancelacion.getByRole('button',{name:'Ver reserva',exact:true});
-        const medirCancelacion=async(vista,estado,alturaMaxima)=>{
+        const dialogoCierre=page.getByRole('dialog');
+        const aceptarCierre=dialogoCierre.getByRole('button',{name:'Cerrar aviso',exact:true});
+        const medirCancelacion=async(vista,estado,alturaMaxima,fila=casoCancelacion)=>{
             for(const tema of ['claro','oscuro']){
                 await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
                 for(const width of [1100,390,320]){
@@ -1003,7 +1033,7 @@ async function comprobarCasosDelAviso(browser, url) {
                     assert.ok((await vista.boundingBox()).height<=alturaMaxima,contexto+' · altura');
                     assert.equal(await vista.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,contexto+' · ancho');
                     assert.deepEqual(await page.evaluate(auditarContraste,'.haku-pendiente-detalle:has(> .haku-libro-preparacion-zona--cancelacion)'),[],contexto+' · contraste');
-                    if(capturas&&(width===390||width===1100))await casoCancelacion.screenshot({path:path.join(capturas,`cancelacion-${estado}-${tema}-${width}.png`)});
+                    if(capturas&&(width===390||width===1100))await fila.screenshot({path:path.join(capturas,`cancelacion-${estado}-${tema}-${width}.png`)});
                 }
             }
         };
@@ -1021,6 +1051,15 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.doesNotMatch(await revisionCancelacion.innerText(),/Sin verificar|Asistente operativo/);
         await medirCancelacion(revisionCancelacion,'por-revisar',180);
         assert.equal(await revisionCancelacion.getByRole('alert').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(53, 41, 30)');
+        const cerrarPendiente=revisionCancelacion.getByRole('button',{name:'Cerrar aviso',exact:true});
+        await cerrarPendiente.click();
+        await dialogoCierre.getByRole('button',{name:'Cancelar',exact:true}).click();
+        assert.equal(await cerrarPendiente.isEnabled(),true);
+        await cerrarPendiente.click();
+        await page.evaluate(()=>{__cancelacionAviso.candidatas=1;});
+        await aceptarCierre.click();
+        await confirmarCancelacion.waitFor();
+        assert.deepEqual(await page.evaluate(async()=>await HAIKU_LIBRO_RESERVA_V1.leerAvisosCancelacionCerrados()||[]),[]);
         await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
         assert.equal(await aprobarCancelacion.evaluate(el=>document.activeElement===el),true);
         assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),[]);
@@ -1028,6 +1067,7 @@ async function comprobarCasosDelAviso(browser, url) {
         await aprobarCancelacion.click();
         await revisionCancelacion.getByText('La reserva no se identifica de forma única; requiere revisión.',{exact:true}).waitFor();
         assert.equal(await confirmarCancelacion.count(),0);
+        assert.equal(await cerrarPendiente.count(),0);
         await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
         await page.evaluate(()=>{__cancelacionAviso.candidatas=1;});
         await aprobarCancelacion.click();
@@ -1051,6 +1091,52 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.ok(await page.evaluate(()=>__cancelacionAviso.lecturas.every(([hoja,version])=>hoja==='Dic26'&&version==='actual')));
         await revisionCancelacion.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
         await historialCancelacion.getByText('No quedan cambios pendientes en este informe.',{exact:true}).waitFor();
+
+        await page.evaluate(()=>{
+            __cancelacionAviso.sinEstadias=true;
+            const informe={estado:'ok',libro_actual:{generacion:21},cancelaciones_confirmadas:[__cancelacionAviso.sinIngreso]};
+            HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado(informe).id='aviso-nunca-ingresada';
+        });
+        const historialCierre=page.locator('#aviso-nunca-ingresada .haku-libro-pendientes-zona');
+        const casoCierre=historialCierre.locator('.haku-pendiente-item');
+        await casoCierre.locator('summary').click();
+        await casoCierre.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        const revisionCierre=casoCierre.locator('.haiku-cancelacion-informe');
+        const cerrarAviso=revisionCierre.getByRole('button',{name:'Cerrar aviso',exact:true});
+        await revisionCierre.getByText('No encontré la reserva exacta en Proyecto H.',{exact:true}).waitFor();
+        await page.evaluate(()=>{__cancelacionAviso.fallarCierre=true;});
+        await cerrarAviso.click();await aceptarCierre.click();
+        await revisionCierre.getByText('No pude guardar el cierre en este navegador.',{exact:true}).waitFor();
+        assert.equal(await cerrarAviso.isEnabled(),true);
+        await page.evaluate(()=>{__cancelacionAviso.fallarCierre=false;});
+        await cerrarAviso.click();await aceptarCierre.click();
+        await revisionCierre.getByRole('heading',{name:'Aviso cerrado',exact:true}).waitFor();
+        await medirCancelacion(revisionCierre,'aviso-cerrado',180,casoCierre);
+        assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),['reserva-cancelacion-prueba']);
+        await revisionCierre.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
+        await historialCierre.getByText('No quedan cambios pendientes en este informe.',{exact:true}).waitFor();
+        await historialCierre.getByText('Ya resueltos (1)',{exact:true}).click();
+        await casoCierre.locator('summary').click();
+        await casoCierre.getByText('Reserva nunca ingresada en Proyecto H.',{exact:true}).waitFor();
+
+        const cierres=await page.evaluate(()=>HAIKU_LIBRO_RESERVA_V1.leerAvisosCancelacionCerrados());
+        assert.equal(cierres.length,1);
+        const otraPestana=await page.context().newPage();
+        await otraPestana.goto(`http://127.0.0.1:${server.address().port}/`);
+        await cargarLectorCierres(otraPestana);
+        assert.deepEqual(await otraPestana.evaluate(()=>HAIKU_LIBRO_RESERVA_V1.leerAvisosCancelacionCerrados()),cierres);
+        await otraPestana.close();
+        const pendientesTrasActualizar=await page.evaluate(async()=>{
+            const caso=__cancelacionAviso.sinIngreso;
+            const movido={...caso,evidencia:{...caso.evidencia,origen:{hoja:'Dic26',celda:'C36'}}};
+            const otro={...caso,anterior:{...caso.anterior,fecha_checkin:'2026-12-18',fecha_checkout:'2026-12-19'},
+                evidencia:{...caso.evidencia,fecha_checkin:'2026-12-18',origen:{hoja:'Dic26',celda:'C38'}}};
+            __generation++;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __resultadoActual={estado:'ok',libro_actual:{generacion:__generation},cancelaciones_confirmadas:[movido,otro]};
+            const aviso=await HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.obtenerResultadoAviso();
+            return aviso.cancelaciones_confirmadas.map(x=>x.anterior.fecha_checkin);
+        });
+        assert.deepEqual(pendientesTrasActualizar,['2026-12-18']);
         assert.deepEqual(errors, []);
         await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');

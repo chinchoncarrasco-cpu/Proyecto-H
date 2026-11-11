@@ -134,7 +134,7 @@
         if (puedeRevisarAbonos(r)) html += '<div class="haku-actualizacion-sites__historial-acciones"><button type="button" class="haku-actualizacion-sites__boton haku-actualizacion-sites__boton--primario" data-haku-revisar-abonos>Revisar abonos</button></div>';
         seccion('Reservas con cambios',lista(r.modificadas).map(x=>`<details class="haku-libro-item haku-pregunta-caso"><summary><small>CON CAMBIOS · CAB ${escapar(x.actual?.cabana ?? '—')}</small><strong>${escapar(x.actual?.titular || 'Nombre no indicado')}</strong></summary><dl>${lista(x.cambios).map(c=>`<dt>${escapar(etiquetas[c.campo] || 'Otro dato')}</dt><dd>${['rut_documento','telefono','correo'].includes(c.campo) ? 'Este dato cambió en el Libro. No se muestra aquí por privacidad.' : `Antes: ${escapar(valor(c.antes,c.campo))}<br>Ahora: ${escapar(valor(c.ahora,c.campo))}`}</dd>`).join('')}</dl></details>`));
         seccion('Ya no aparecen',lista(r.ya_no_aparecen).map(x=>`<div class="haku-libro-item"><small>YA NO APARECE</small>${reserva(x.anterior)}<p>Esta reserva estaba en la versión anterior y no aparece en la actual.</p></div>`));
-        seccion('Canceladas en el Libro',lista(r.cancelaciones_confirmadas).map(x=>`<div class="haku-libro-item"><small>CANCELADA EN EL LIBRO</small>${reserva(x.anterior)}<p>${escapar(x.anterior?.titular)} aparece en CANCELACIONES de ${escapar(x.evidencia?.origen?.hoja)} · ${escapar(x.evidencia?.origen?.celda)}. Revisa la reserva y confirma la cancelación antes de guardarla en Proyecto H.</p></div>`));
+        seccion('Canceladas en el Libro',lista(r.cancelaciones_confirmadas).map(x=>`<div class="haku-libro-item"><small>CANCELADA EN EL LIBRO</small>${reserva(x.anterior)}<p>Cancelaciones · ${escapar(x.evidencia?.origen?.hoja)} · ${escapar(x.evidencia?.origen?.celda)}</p></div>`));
         seccion('Necesitan revisión',lista(r.ambiguas).map(x=>`<div class="haku-libro-item"><strong>Necesita revisión</strong><p>${escapar(explicar(x.motivo) || 'No puedo confirmar cuáles reservas corresponden al mismo caso. Revisa los datos de ambas versiones.')}</p>${[['anteriores','Versión anterior'],['actuales','Versión actual']].map(([k,t])=>`<details><summary>${t} · ${lista(x[k]).length} reservas por revisar</summary>${lista(x[k]).map(reserva).join('')}</details>`).join('')}</div>`));
         const inicioAvisos = html.length;
         const especiales = new Set([...lista(r.diagnostico?.hojas_especiales_modificadas),...lista(r.advertencias).filter(a=>a.tipo === 'hoja_especial_modificada').map(a=>a.hoja)]);
@@ -157,6 +157,18 @@
     const hash=texto=>{let h=2166136261;for(const c of texto){h^=c.charCodeAt(0);h=Math.imul(h,16777619);}return (h>>>0).toString(36);};
     const firmaReservaCambio=r=>JSON.stringify(['titular','rut_documento','correo','telefono','cabana','fecha_checkin','fecha_checkout','tipo_estadia','adultos','ninos','mascotas','estado_operativo','notas_importantes','pagos_pendientes','servicios'].map(k=>r?.[k]??null));
     const idCambio=x=>'cambio:'+hash(JSON.stringify([x.tipo,firmaReservaCambio(x.anterior),firmaReservaCambio(x.actual),x.cambios||[],x.evidencia||null]));
+    function firmaAvisoCancelacion(item){
+        if(item?.tipo!=='cancelacion')return null;
+        const r=item.anterior;
+        const nombre=String(r?.titular||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+        const cabana=Number(r?.cabana);
+        if(!nombre||!Number.isInteger(cabana)||cabana<1||!r.fecha_checkin||!r.fecha_checkout)return item.id||null;
+        return JSON.stringify([nombre,cabana,r.fecha_checkin,r.fecha_checkout]);
+    }
+    async function leerCierresCancelacion(){
+        return new Set(lista(await root.HAIKU_LIBRO_RESERVA_V1?.leerAvisosCancelacionCerrados?.()));
+    }
+    const sinAvisosCerrados=(cambios,cierres)=>cambios.filter(x=>!cierres.has(firmaAvisoCancelacion(x)));
     function extraerCambiosDetectados(resultado={},generacion=null){
         const detectado=resultado.generado_en||new Date().toISOString();
         const meta=x=>({detectado_generacion:x.detectado_generacion??generacion,detectado_en:x.detectado_en||detectado});
@@ -363,9 +375,15 @@
         const resueltos=lista(pendientes.resueltosDetalle);
         if(resueltos.length)html+=`<details class="haku-pendientes-resueltos"><summary>Ya resueltos (${resueltos.length})</summary>`;
         for(const [indice,item] of resueltos.entries()){
-            const r=item.actual||item.anterior||{},noShow=/no[\s_-]*show/i.test(`${item.sistema?.estado_reserva} ${item.sistema?.estado_operativo}`);
+            const r=item.actual||item.anterior||{};
+            html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle">`;
+            if(item.motivo==='aviso_cancelacion_cerrado'){
+                html+=`<small>AVISO CERRADO</small><p>Reserva nunca ingresada en Proyecto H.</p><p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}</p></div></details>`;
+                continue;
+            }
+            const noShow=/no[\s_-]*show/i.test(`${item.sistema?.estado_reserva} ${item.sistema?.estado_operativo}`);
             const coincide=item.motivo==='ya_coincide',canceladaLibro=item.motivo==='cancelada_en_libro';
-            html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>YA COMPROBADA EN PROYECTO H</small><p><strong>${canceladaLibro?'Cancelada en el Libro. No corresponde incorporarla.':coincide?'El Libro actual y Proyecto H ya coinciden.':noShow?'Ya registrada como «No se presentó».':'Ya registrada y cancelada.'}</strong></p><p>${canceladaLibro?'La encontré en Cancelaciones y no hay una estadía vigente compatible en Proyecto H.':coincide?`Entrada ${escapar(fecha(r.fecha_checkin))} · Salida ${escapar(fecha(r.fecha_checkout))}. El aviso anterior ya no requiere cambios.`:'Coinciden el huésped, la cabaña y las fechas. No hace falta incorporarla otra vez.'}</p><p class="haku-pendiente-estado">${coincide||canceladaLibro?'Pendiente cerrado sin modificar la reserva ni sus cobros.':'Se conserva su estado. No necesitas aprobar nada para este aviso.'}</p>${item.sistema?.reserva_id?`<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0"><button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-resuelta="${indice}">Ver reserva</button></div>`:''}</div></details>`;
+            html+=`<small>YA COMPROBADA EN PROYECTO H</small><p><strong>${canceladaLibro?'Cancelada en el Libro. No corresponde incorporarla.':coincide?'El Libro actual y Proyecto H ya coinciden.':noShow?'Ya registrada como «No se presentó».':'Ya registrada y cancelada.'}</strong></p><p>${canceladaLibro?'La encontré en Cancelaciones y no hay una estadía vigente compatible en Proyecto H.':coincide?`Entrada ${escapar(fecha(r.fecha_checkin))} · Salida ${escapar(fecha(r.fecha_checkout))}. El aviso anterior ya no requiere cambios.`:'Coinciden el huésped, la cabaña y las fechas. No hace falta incorporarla otra vez.'}</p><p class="haku-pendiente-estado">${coincide||canceladaLibro?'Pendiente cerrado sin modificar la reserva ni sus cobros.':'Se conserva su estado. No necesitas aprobar nada para este aviso.'}</p>${item.sistema?.reserva_id?`<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0"><button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-resuelta="${indice}">Ver reserva</button></div>`:''}</div></details>`;
         }
         if(resueltos.length)html+='</details>';
         html+='<div class="haku-libro-pendientes-acciones haku-actualizacion-sites__historial-acciones"><button type="button" class="haku-libro-revalidar haku-actualizacion-sites__boton" data-haku-revalidar-proyecto>Volver a revisar</button>';
@@ -427,8 +445,11 @@
                 }
                 const tarea=(async()=>{
                     const previo=soloAviso?{version:1,cambios:[]}:await leer()||{version:1,cambios:[]};
+                    const cierres=await leerCierresCancelacion();
                     validar(g);
                     let registro=fusionarHistorialCambios(previo,resultado,origen);
+                    const cerrados=registro.cambios.filter(x=>cierres.has(firmaAvisoCancelacion(x)));
+                    registro.cambios=sinAvisosCerrados(registro.cambios,cierres);
                     if(!soloAviso&&JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
                     validar(g);
                     const vigentes=contexto?await contexto.actualizarDesdeLibro(registro.cambios):registro.cambios;
@@ -446,6 +467,11 @@
                     if(resueltos.size){
                         registro={...registro,actualizado_en:new Date().toISOString(),cambios:registro.cambios.filter(x=>!resueltos.has(x.id))};
                         if(!soloAviso)await guardar(registro);
+                    }
+                    if(cerrados.length){
+                        resultadoPendientes.resueltos=[...resueltos,...cerrados.map(x=>x.id)];
+                        resultadoPendientes.resueltosDetalle=[...lista(resultadoPendientes.resueltosDetalle),
+                            ...cerrados.map(x=>({...x,motivo:'aviso_cancelacion_cerrado'}))];
                     }
                     const porId=new Map(lista(resultadoPendientes.items).map(x=>[x.id,x]));
                     Object.defineProperty(resultadoPendientes,'registrosAviso',{configurable:true,value:vigentes
@@ -615,11 +641,12 @@
         return cacheCompartida.obtener();
     }
     async function conservarRegistros(resultado){
-        if(registroLeido.has(resultado))return registroLeido.get(resultado);
         const origen=generacionInforme(resultado);
         try{
+            const cierres=await leerCierresCancelacion();
+            if(registroLeido.has(resultado))return sinAvisosCerrados(registroLeido.get(resultado),cierres);
             const registro=await root.HAIKU_LIBRO_RESERVA_V1?.leerCambiosDetectados?.();
-            return fusionarHistorialCambios(registro,resultado,origen).cambios;
+            return sinAvisosCerrados(fusionarHistorialCambios(registro,resultado,origen).cambios,cierres);
         }catch(_){return extraerCambiosDetectados(resultado,origen);}
     }
     async function obtenerResultadoAviso() {
@@ -649,6 +676,7 @@
                 if(libro?.leerCambiosDetectados&&libro?.guardarCambiosDetectados&&resultado.libro_actual?.generacion===g){
                     const previo=await libro.leerCambiosDetectados()||{version:1,cambios:[]};
                     const fusion=fusionarHistorialCambios(previo,resultado,g);
+                    fusion.cambios=sinAvisosCerrados(fusion.cambios,await leerCierresCancelacion());
                     registroLeido.set(resultado,fusion.cambios);
                     if(libro.estado().generacion===g&&JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
                 }
@@ -728,12 +756,20 @@
                                 if(revisionCancelacion){
                                     const api=root.HAIKU_LIBRO_CANCELACIONES_V1;
                                     if(!api?.abrirRevisionHistorial)throw Error('No está disponible la revisión de cancelaciones. Recarga Proyecto H.');
+                                    const libro=root.HAIKU_LIBRO_RESERVA_V1,firma=firmaAvisoCancelacion(item);
+                                    const cerrarAviso=firma&&typeof libro?.cerrarAvisoCancelacion==='function'?async()=>{
+                                        if(!esAdministrador())throw Error('Inicia sesión como administrador para cerrar este aviso.');
+                                        if(libro.estado().generacion!==actuales.generacion)throw Error('El Libro cambió. Vuelve a revisar la cancelación.');
+                                        await libro.cerrarAvisoCancelacion(firma);
+                                        cacheActual.invalidar();
+                                        if(cacheActual!==cachePendientes)cachePendientes.invalidar();
+                                    }:undefined;
                                     vista.textContent='';vista.removeAttribute?.('role');
                                     await api.abrirRevisionHistorial(vista,item,actuales.generacion,resuelta=>{
                                         vista.remove();
                                         if(resuelta)return cargar(true);
                                         manual.disabled=false;manual.focus?.({preventScroll:true});
-                                    });
+                                    },cerrarAviso);
                                     cancelacionAbierta=true;
                                 }else if(item.preparacion){
                                     if(!root.HAIKU_LIBRO_CONSULTAS?.abrirPreparacionComparacion)throw Error('Recarga Proyecto H para abrir la revisión.');
