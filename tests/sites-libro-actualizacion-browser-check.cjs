@@ -759,6 +759,43 @@ const server = http.createServer((request, response) => {
         await burbuja.getByText('Sin cambios pendientes',{exact:true}).waitFor();
         assert.equal(await casosPendientes.count(),0);
         assert.equal(await page.evaluate(()=>__registration.cambios.length),0);
+
+        await page.evaluate(()=>{
+            const hoja=texto=>HAIKU_LIBRO_SEMANTICA.normalizarHoja({celdas:[
+                {r:1,c:2,valor:'12 sep',fechaISO:'2026-09-12'},{r:1,c:6,valor:'13 sep',fechaISO:'2026-09-13'},
+                {r:2,c:0,valor:'cabaña 2'},{r:2,c:2,valor:texto},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
+            ],combinaciones:[{s:{r:2,c:2},e:{r:2,c:4}}]},'Sep26');
+            const anterior=hoja('Lidia Salas // 1 NOCHE // contacto@example.test // Marta López');
+            const actual=hoja('Marta López // 1 NOCHE // Lidia Salas');
+            __generation=20;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __resultadoActual={...HAIKU_LIBRO_DIFERENCIAS_V1.comparar([anterior],[actual]),libro_actual:{generacion:20}};
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{
+                carga_automatica:true,tenia_anterior:true,generacion:20}}));
+        });
+        const infoTitular=burbuja.locator('.haku-libro-auto__prioridad').last();
+        await infoTitular.waitFor();
+        assert.equal(await infoTitular.locator('strong').innerText(),'1');
+        await infoTitular.click();
+        const dudaTitular=burbuja.locator('.haku-libro-auto__filtrado .haku-libro-auto__caso');
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1280,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await dudaTitular.count(),1);
+                const texto=await dudaTitular.innerText();
+                assert.match(texto,/Titular por confirmar/);
+                assert.match(texto,/Sep26 · C3 · CAB 2 · Ambas versiones/);
+                assert.match(texto,/IN: 12\/09\/2026/);
+                assert.match(texto,/«Lidia Salas» · «Marta López»/);
+                assert.doesNotMatch(texto,/contacto@example\.test|Sep26:\s*Sep26/);
+                assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+            }
+        }
+        await burbuja.getByRole('button',{name:'Ver informe',exact:true}).click();
+        const informeTitular=page.locator('.haku-actualizacion-sites').last();
+        await informeTitular.getByText('Datos del Libro por revisar (1)',{exact:true}).click();
+        assert.match(await informeTitular.innerText(),/Sep26 · C3 · CAB 2 · Ambas versiones/);
+        assert.match(await informeTitular.innerText(),/«Lidia Salas» · «Marta López»/);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

@@ -281,7 +281,20 @@
             return {texto,tipo,...(rol ? {rol} : {})};
         });
     }
-    function candidatosTitular(texto) { return clasificarFragmentos(texto).filter(x=>x.tipo==='posible_titular'); }
+    function candidatosTitular(texto) {
+        const porNombre=new Map();
+        for (const candidato of clasificarFragmentos(texto)) {
+            if (candidato.tipo!=='posible_titular') continue;
+            const nombre=normalizar(candidato.texto);
+            if (!porNombre.has(nombre)) porNombre.set(nombre,candidato);
+        }
+        // Excel puede unir el final de una nota en color al nombre repetido.
+        // Exigir que ese nombre completo aparezca por separado en la misma celda.
+        return [...porNombre].filter(([nombre])=>{
+            const repetido=nombre.match(/^no\s+mover(?=\p{L})(.+)$/u)?.[1];
+            return !repetido || !porNombre.has(repetido);
+        }).map(([,candidato])=>candidato);
+    }
     function titular(texto) {
         const candidatos=candidatosTitular(texto);
         return candidatos.length===1?candidatos[0].texto:null;
@@ -1116,18 +1129,21 @@
                     continue;
                 }
                 const t = normalizar(cell.valor);
-                const nombre = titular(cell.valor);
+                const candidatos = candidatosTitular(cell.valor);
+                const nombre = candidatos.length===1 ? candidatos[0].texto : null;
                 if (/^(libre|full\s*day)$/.test(t) || !nombre && /mantencion|mantenimiento|bloquead/.test(t)) {
                     res.espacios.push({ fecha: h.fechaISO, cabana, estado: t === "libre" ? "libre_explicito" : "bloque_o_marca", texto_original: cell.valor, origen: origen(cell) }); continue;
                 }
                 if (!nombre) {
-                    const ambigua=candidatosTitular(cell.valor).length>1;
+                    const ambigua=candidatos.length>1;
                     const sinTitular=indiciosEstadia(t);
-                    if(ambigua)res.advertencias.push(`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`);
+                    const avisoTitular=ambigua?`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`:null;
+                    if(avisoTitular)res.advertencias.push(avisoTitular);
                     res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
                         ...(ambigua||sinTitular?{tipo:'reserva_por_identificar',
-                            titulares_posibles:candidatosTitular(cell.valor).map(x=>x.texto),
+                            titulares_posibles:candidatos.map(x=>x.texto),
                             fechas_ocupadas:headers.filter(d=>d.c>=h.c&&d.c<=(origen(cell).merge?.e.c??h.c)).map(d=>d.fechaISO),
+                            ...(avisoTitular?{advertencia_hoja:avisoTitular}:{}),
                             ...(sinTitular&&!ambigua?{motivo_identificacion:'El bloque tiene datos de estadía, pero no un titular identificable. Completa el nombre en esa celda del Libro.'}:{}),
                             advertencias:[ambigua?'Varios posibles titulares; no se eligió uno arbitrariamente.':'Titular no identificado en el bloque de reserva.']}: {}) }); continue;
                 }
