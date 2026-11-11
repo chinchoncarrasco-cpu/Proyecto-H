@@ -105,7 +105,9 @@ test('compact date explanation is visual only and preserves the existing approva
  const plan=h.Q.crearPlanIncorporacion([r],comp);const before=JSON.stringify(plan);let clicks=0;
  h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>clicks++,()=>{});
  assert.match(h.texts(),/Fecha distinta · Libro 07\/09\/26 · Proyecto H 05\/09\/26/);
- assert.match(h.texts(),/Requiere aprobación manual de la asociación y el pago/);
+ assert.match(h.texts(),/Falta una referencia bancaria verificable/);
+ assert.doesNotMatch(h.texts(),/Requiere aprobación manual de la asociación y el pago/);
+ assert.ok(plan.items.find(i=>i.pagoLibro).motivos.includes('Requiere aprobación manual de la asociación y el pago.'));
  assert.doesNotMatch(h.texts(),/Hay otro pago con la misma reserva y monto/);
  assert.equal(h.out.querySelectorAll('.haiku-pago-diferencia-compacta').length,1);
  assert.equal(comp.pagosDetalle[0].estado,'revisar');assert.equal(JSON.stringify(plan),before);
@@ -2440,6 +2442,28 @@ test('payment update preview identifies the transaction before showing proposed 
  assert.match(text,/Fecha pago/);assert.match(text,/Cambios propuestos por el Libro/);
  assert.ok(text.indexOf('WebPay Crédito')<text.indexOf('Cambios propuestos por el Libro'));
  assert.doesNotMatch(text,/190000 → 160000/);
+});
+
+test('la aprobación mensual explica la asociación pendiente y muestra el año guardado en el Libro',async()=>{
+ const pago=readyPay({titular:null, medio_pago:'tarjeta_debito', codigo_autorizacion:null, folio:'000718', bovtar:'001918',
+  fecha_comprobante:'2024-09-17', clasificacion_financiera:'pago_real', origen:{hoja:'Sep26',celda:'M35:P35'}});
+ const reserva=readyBook({titular:'Marina Ejemplo', pagos_sin_asociacion:[pago]});
+ const plan=await prepare([reserva],[stay(reserva)]), pendiente=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pendiente.aprobable,true);
+ assert.equal(pendiente.seleccionado,false);
+ assert.equal(Q.serializarIncorporacion(plan).filter(x=>x.tipo==='pago').length,0);
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const tarjeta=h.out.querySelector('.haiku-incorporacion-item--dudosos');
+ const texto=tarjeta.querySelectorAll('*').map(e=>e.textContent).join(' ');
+ assert.match(texto,/Falta identificar al titular en el detalle del comprobante/);
+ assert.match(texto,/Libro · Sep26 M35:P35/);
+ assert.match(texto,/17\/09\/2024.*17\/09\/2026/);
+ assert.doesNotMatch(texto,/Requiere aprobación manual de la asociación y el pago/);
+ assert.ok(tarjeta.querySelectorAll('button').some(b=>b.textContent==='Aprobar este pago'));
+ const aprobado=await prepare([reserva],[stay(reserva)],[],new Map(),new Set([pendiente.id]));
+ const operacion=Q.serializarIncorporacion(aprobado).find(x=>x.tipo==='pago');
+ assert.equal(operacion.argumentos.p_fecha_pago,'2024-09-17');
+ assert.equal(operacion.reserva_id,'r1');
 });
 
 test('associated reservation cards show their related Libro movements with the existing classification and no payment controls',async()=>{
