@@ -75,8 +75,9 @@
         return 'Para organizar la revisión: '+grupos.map((k,i)=>`${nombres[i]} · ${p.grupos[k].length}`).join(' · ');
     }
     function renderizar(resultado,opciones) {
-        const p=clasificar(resultado,opciones);
+        const p=clasificar(resultado,{...opciones,incluirOrigen:true});
         const caso=x=>{
+            if(x.origen?.tipo==='titular_ambiguo')return `<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>Titular por confirmar</strong><p>${esc(x.detalleAviso)}</p></div>`;
             const aviso=['advertencia','cobertura'].includes(x.tipo),referencia=[x.versionAviso,x.referencia].filter(Boolean).join(' · ');
             return `<div class="haku-libro-item haku-actualizacion-sites__caso"><strong>${tipos[x.tipo]}</strong>${referencia?`<p>${esc(referencia)}</p>`:''}${x.segmentos.length?x.segmentos.map(s=>`<p>${esc(s.version.replace('Candidato','Posible reserva'))} · ${esc(s.titular||'Nombre no indicado')} · CAB ${esc(s.cabana??'—')} · Entrada: ${fecha(s.fecha_checkin)} · Salida: ${fecha(s.fecha_checkout)}</p>`).join(''):aviso?'<p>Este aviso no corresponde a una reserva identificada en el informe.</p>':'<p>Faltan el nombre, la cabaña o las fechas de la reserva.</p>'}${x.detalleAviso?`<p>${esc(x.detalleAviso)}</p>`:''}${x.cambios.length?`<p>Qué cambió: ${x.cambios.map(esc).join(' · ')}</p>`:''}<p>${esc(x.explicacion.replace(/Candidato/g,'Posible reserva'))}</p></div>`;
         };

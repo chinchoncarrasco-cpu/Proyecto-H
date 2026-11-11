@@ -207,11 +207,32 @@
         if (!Array.isArray(anterior) || !Array.isArray(actual)) {
             out.no_comparables.push({motivo: 'Se requieren arrays de hojas semánticas.'}); return finalizar(out);
         }
+        const avisosTitular=new Map();
         const extraer = (hojas, version) => hojas.flatMap(h => {
             if (!h?.cobertura?.geometria || !Array.isArray(h.reservas) || !Array.isArray(h.fechas) || !h.fechas.length) {
                 out.no_comparables.push({version, hoja: h?.hoja ?? null, motivo: 'Geometría no reconocida o lectura incompleta.'}); return [];
             }
-            if (h.advertencias?.length) out.advertencias.push({version, hoja: h.hoja, detalles: copia(h.advertencias)});
+            if (h.advertencias?.length) {
+                const porAviso=new Map((h.anotaciones||[]).filter(a=>a.tipo==='reserva_por_identificar'&&a.advertencia_hoja&&
+                    a.origen?.celda&&Array.isArray(a.titulares_posibles)&&a.titulares_posibles.length>1).map(a=>[a.advertencia_hoja,a]));
+                const detalles=[];
+                for (const textoAviso of h.advertencias) {
+                    const a=porAviso.get(textoAviso);
+                    if (!a) { detalles.push(textoAviso); continue; }
+                    const celda=a.origen.celda, titulares=a.titulares_posibles;
+                    const clave=JSON.stringify([h.hoja,celda,a.cabana,a.fecha,titulares.map(nombre).sort()]);
+                    const previo=avisosTitular.get(clave);
+                    if (previo) {
+                        if (previo.version!==version) previo.version='ambas';
+                    } else {
+                        const aviso={tipo:'titular_ambiguo',version,hoja:h.hoja,celda,cabana:a.cabana,
+                            fecha_ingreso:a.fecha,titulares_posibles:copia(titulares)};
+                        avisosTitular.set(clave,aviso);
+                        out.advertencias.push(aviso);
+                    }
+                }
+                if (detalles.length) out.advertencias.push({version,hoja:h.hoja,detalles:copia(detalles)});
+            }
             return h.reservas.map(r => {
                 const avisos = validarSegmento(r);
                 if (!avisos.length) return r;

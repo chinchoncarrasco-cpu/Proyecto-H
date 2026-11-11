@@ -100,12 +100,14 @@
         const ambiguas=lista(r.ambiguas).length,advertencias=lista(r.advertencias).length;
         if(ambiguas)avisos.push(`${ambiguas} ${ambiguas===1?'caso por':'casos por'} aclarar.`);
         if(advertencias)avisos.push(`${advertencias} ${advertencias===1?'dato por':'datos por'} revisar.`);
-        const formatearAviso=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.detalleAviso;
+        const {detalleAviso:formatearAviso,detalleTitularAmbiguo}=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1||{};
         const grupos=root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1?.clasificar?.(r,{incluirOrigen:true,formatearAviso})?.grupos;
         const describirCaso=x=>{
             const conocido=porOrigen.get(x.origen);
             if(conocido)return x.tipo==='modificada'&&lista(x.origen.cambios).length
                 ? {...conocido,detalles:x.origen.cambios.map(detalleCambio)}:conocido;
+            const titular=detalleTitularAmbiguo?.(x.origen);
+            if(titular)return titular;
             const reservas=[...new Set(lista(x.segmentos).filter(s=>s.titular||s.cabana!=null)
                 .map(s=>`${breve(s.titular||'Nombre no indicado',60)} · CAB ${s.cabana??'—'}`))];
             const motivo=x.detalleAviso||(formatearAviso&&x.origen?.motivo?formatearAviso(x.origen.motivo):'No pude identificar con certeza a qué reserva corresponde.');

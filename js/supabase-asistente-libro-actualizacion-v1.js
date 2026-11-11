@@ -58,9 +58,24 @@
     function reserva(r = {}) {
         return `<strong>${escapar(r.titular || 'Nombre no indicado')}</strong><p>CAB ${escapar(r.cabana ?? '—')} · Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.noches != null ? ` · ${escapar(r.noches)} ${Number(r.noches) === 1 ? 'noche' : 'noches'}` : ''}${r.tipo_estadia === 'full_day' ? ' · Full Day' : ''}</p>`;
     }
+    function detalleTitularAmbiguo(aviso) {
+        if (aviso?.tipo !== 'titular_ambiguo') return null;
+        const version={anterior:'Versión anterior',actual:'Versión actual',ambas:'Ambas versiones'}[aviso.version];
+        const reserva=[aviso.hoja,aviso.celda,aviso.cabana!=null?`CAB ${aviso.cabana}`:null,version].filter(Boolean).join(' · ');
+        const nombres=lista(aviso.titulares_posibles).map(nombre=>`«${nombre}»`).join(' · ');
+        return {titulo:'Titular por confirmar',reserva,fechaIngreso:aviso.fecha_ingreso,detalles:[
+            {etiqueta:'Posibles',texto:nombres},
+            {etiqueta:'Revisar',texto:'Haku leyó estos fragmentos como nombres en la misma celda. Confirma cuál es el titular.'}
+        ]};
+    }
     function detalleAviso(aviso) {
         if (typeof aviso === 'string') return explicar(aviso);
         if (!aviso || typeof aviso !== 'object') return 'Sin detalle disponible.';
+        const titular=detalleTitularAmbiguo(aviso);
+        if (titular) {
+            const ubicacion=[titular.reserva,titular.fechaIngreso?`IN ${fecha(titular.fechaIngreso).replaceAll('-','/')}`:null].filter(Boolean).join(' · ');
+            return [ubicacion,...titular.detalles.map(d=>d.texto)].filter(Boolean).join('. ');
+        }
         const nombres = {
             advertencia_de_origen_conservada:'Este dato sigue necesitando revisión',
             hoja_historica_modificada:'Cambió una hoja de fechas anteriores',
@@ -873,7 +888,7 @@
         root.addEventListener('keydown',interceptar,true);
         return true;
     }
-    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,detalleAbono,extraerCambiosDetectados,fusionarHistorialCambios,
+    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,detalleTitularAmbiguo,detalleAbono,extraerCambiosDetectados,fusionarHistorialCambios,
         crearCache,crearCachePendientes,instalar,obtenerResultado,obtenerResultadoAviso,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,
         puedeRevisarAbonos,revisarAbonosDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;

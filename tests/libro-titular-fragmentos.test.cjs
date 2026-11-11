@@ -25,6 +25,41 @@ test('post-data context excludes a trailing instruction without resolving two ac
   const r=normalizar(texto);assert.equal(r.reservas.length,0);assert.match(r.advertencias.join(' '),/varios posibles titulares/);
  }
 });
+test('un titular repetido junto a la nota NO MOVER identifica una sola reserva',()=>{
+ const textos=['Lidia Salas // 2 ADL // NO MOVERlidia salas','Lidia Salas // 2 ADL // LIDIA SALAS',
+  'NO MOVERlidia salas // 2 ADL // Lidia Salas'];
+ for(const texto of textos){
+  const r=normalizar(texto);
+  assert.equal(r.reservas.length,1,texto);
+  assert.equal(r.reservas[0].titular,'Lidia Salas');
+  assert.equal(r.reservas[0].texto_original,texto);
+  assert.doesNotMatch(r.advertencias.join(' '),/varios posibles titulares/);
+ }
+ const d=hoja(textos[0]);
+ d.celdas.find(c=>c.r===2&&c.c===2).runs=[
+  {texto:'Lidia Salas // 2 ADL // ',font:{color:{rgb:'FF000000'}}},
+  {texto:'NO MOVER',font:{color:{rgb:'FFFF0000'}}},
+  {texto:'lidia salas',font:{color:{rgb:'FF000000'}}}
+ ];
+ assert.deepEqual(S.normalizarHoja(d,'Sep26').reservas[0].notas_importantes,['NO MOVER']);
+ const duda=normalizar('Lidia Salas // 2 ADL // NO MOVERjuan soto');
+ assert.equal(duda.reservas.length,0);
+ assert.deepEqual(duda.anotaciones[0].titulares_posibles,['Lidia Salas','NO MOVERjuan soto']);
+});
+test('el informe identifica la celda y los candidatos, agrupando sólo la misma duda en ambas versiones',()=>{
+ const D=require('../js/haiku-libro-diferencias-v1.js');
+ const anterior=normalizar('Ana Pérez // 2 ADL // contacto@example.test // Juan Soto');
+ const misma=normalizar('Juan Soto // 2 ADL // Ana Pérez');
+ const aviso={tipo:'titular_ambiguo',version:'ambas',hoja:'Sep26',celda:'C3',cabana:2,
+  fecha_ingreso:'2026-09-12',titulares_posibles:['Ana Pérez','Juan Soto']};
+ assert.deepEqual(D.comparar([anterior],[misma]).advertencias,[aviso]);
+ const distinta=normalizar('Ana Pérez // 2 ADL // Marta López');
+ assert.deepEqual(D.comparar([anterior],[distinta]).advertencias,[
+  {...aviso,version:'anterior'},{...aviso,version:'actual',titulares_posibles:['Ana Pérez','Marta López']}
+ ]);
+ const separadas=D.comparar([anterior],[normalizar('Ana Pérez // 2 ADL')]).advertencias;
+ assert.deepEqual(separadas,[{...aviso,version:'anterior'}]);
+});
 test('operational language does not expel a guest or become a reservation on its own',()=>{
  for(const nota of ['Llegará tarde','Solicita leña','Manager pendiente','Llegada tarde','Sin azúcar','Cena por pagar','AGREGAR ESTACIONAMIENTO','Enviar instrucciones','Preparar bienvenida','Camas juntas','Confirmado por recepción','VIENE CON MASCOTA','VIENEN CON 2 MASCOTAS','TRAE MASCOTA']){
   for(const texto of [`Ana Pérez // ${nota} // 1 NOCHE`,`${nota}\nAna Pérez\n1 NOCHE`]){
