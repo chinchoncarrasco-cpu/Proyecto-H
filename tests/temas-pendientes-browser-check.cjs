@@ -10,7 +10,7 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const plan=JSON.parse(read('data/haiku-redes-2027.json'));
 const month=plan.posts.find(p=>p.content_type==='publicacion').date.slice(0,7);
 const sample=plan.posts.find(p=>p.date.startsWith(month)&&p.content_type==='publicacion');
-let dto, navegacion;
+let dto, navegacion, faltantes;
 async function capture(p,name,width,theme,scope='body'){
   await p.locator(scope).first().waitFor({state:'visible'});
   assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,name+' sin desborde del documento');
@@ -56,6 +56,8 @@ async function comparacion(p,url,width,theme){
     }
     assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
+  await p.evaluate(d=>HAIKU_LIBRO_INFORME_READONLY_V1.renderizar(document,document.getElementById('informe-resultado'),d),faltantes);
+  assert.match(await p.locator('.informe-categoria[open] > summary').textContent(),/Faltantes/);
   await p.evaluate(d=>HAIKU_LIBRO_INFORME_READONLY_V1.renderizar(document,document.getElementById('informe-resultado'),d),navegacion);
   assert.equal(await p.locator('.informe-categoria[open] .informe-caso-boton').count(),2);
   await p.locator('.informe-categoria[open] .informe-caso-boton').nth(1).click();
@@ -116,6 +118,7 @@ async function secondary(p,url,width,theme,key){
   fs.mkdirSync(out,{recursive:true});const html=await panelSinDatos();
   assert.equal((html.match(/href="css\/haiku-tema-legibilidad-v1.css/g)||[]).length,1);
   const scenarios=await Promise.all(F.casos().map(async f=>({f,dto:await Core.crearNucleo().compararMes({fuente:{hojas:{Oct26:f.data},nombre:'Fixture.xlsx'},cliente:F.cliente(f.db),ahora:F.ahora})})));
+  faltantes=scenarios.find(x=>x.f.id==='reserva_faltante').dto;
   dto=scenarios.find(x=>x.dto.presentacion.gruposConDiferencias>0)?.dto||scenarios[0].dto;
   const nf=F.caso('navegacion',(_,db,data)=>{const r=F.reserva({id:'libro-2',titular:'Sofía Prado',cabana:2});data.reservas.push(r);db.reserva_estadias.push(F.estadia(r,{id:'estadia-2',reserva_id:'reserva-2',reservas:{id:'reserva-2',titular_nombre:r.titular,estado_reserva:'confirmada'}}));});
   navegacion=await Core.crearNucleo().compararMes({fuente:{hojas:{Oct26:nf.data},nombre:'Fixture.xlsx'},cliente:F.cliente(nf.db),ahora:F.ahora});

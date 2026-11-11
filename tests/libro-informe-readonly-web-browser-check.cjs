@@ -194,7 +194,7 @@ async function validarLoginCanonico(browser, origin, width) {
             await page.screenshot({ path: path.join(screenshots,'informe-' + width + '.png'), fullPage: true });
             // Este XLSX anonimizado contiene faltantes y servicios; abrir categorías con evidencia real.
             const categoryControl=width>700?'.informe-nav button':'.informe-categoria > summary';
-            await page.locator(categoryControl).nth(2).click();
+            if(await page.locator('.informe-categoria').nth(2).getAttribute('open')===null)await page.locator(categoryControl).nth(2).click();
             await page.waitForTimeout(1100); assert.equal(await page.locator('.informe-categoria[open]').count(), 1);
             const tecnico = page.locator('.informe-categoria[open] .informe-item:not([hidden]) .informe-tecnico').first(); await tecnico.locator('summary').click(); assert.equal(await tecnico.getAttribute('open'), '');
             assert.ok((await tecnico.innerText()).includes('Oct26'));

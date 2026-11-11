@@ -296,7 +296,8 @@
             });
         });
         // Destacar diferencias si las hay; los contadores y el detalle siguen siendo los del DTO.
-        const initial = grupos.some(g => g.estado === "asociada" && lista(g.diferencias).length) ? 1 : 0;
+        const primeraConCasos = secciones.findIndex(d => d.querySelector(".informe-item"));
+        const initial = grupos.some(g => g.estado === "asociada" && lista(g.diferencias).length) ? 1 : Math.max(0, primeraConCasos);
         secciones[initial].open = true; nav.children[initial].setAttribute("aria-expanded", "true");
         explorador.append(nav, categorias); contenedor.append(explorador); contenedor.hidden = false;
     }
