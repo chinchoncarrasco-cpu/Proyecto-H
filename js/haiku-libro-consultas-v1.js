@@ -1030,13 +1030,8 @@
         };
         const identificadorFuerteSistema = p => Boolean(normalizarId(codAutSistema(p)) ||
             normalizarId(p?.folio) && normalizarId(bovtarSistema(p)));
-        const tokensTitular = valor => [...new Set(texto(valor).split(' ').filter(t=>/^\p{L}+$/u.test(t) && t.length>=2))];
-        const titularVarianteCompatible = (a,b) => {
-            const ta=tokensTitular(a),tb=tokensTitular(b);
-            if (ta.length<2 || tb.length<2) return false;
-            const [corto,largo]=ta.length<=tb.length?[ta,new Set(tb)]:[tb,new Set(ta)];
-            return corto.every(t=>largo.has(t));
-        };
+        const titularVarianteCompatible = (a,b) => [a,b].every(v=>new Set(texto(v).match(/\p{L}{2,}/gu)).size>=2) &&
+            Boolean(S.varianteTitular(a,b));
         const fuertesUsados = new Set(resultados.flatMap(r => (r.libro.pagos || []).filter(pagoTieneIdentificadorFuerte)
             .flatMap(p => pagos.filter(x=>pagoCoincide(p,x)).map(x=>x.id))));
         const items=[];
@@ -1684,7 +1679,7 @@
                 const reciboCompleto = medio?.startsWith('tarjeta_') ? normalizarId(p.folio) && normalizarId(p.bovtar) :
                     medio?.startsWith('webpay_') && normalizarId(p.codigo_autorizacion);
                 const fila = p.evidencia_financiera;
-                if (resolucion?.evidencia !== 'evidencia_insuficiente' || String(p.titular || '').trim() || !reciboCompleto ||
+                if (resolucion?.evidencia !== 'evidencia_insuficiente' || !reciboCompleto ||
                     p.tipo_movimiento !== 'alojamiento' || p.clasificacion_financiera !== 'pago_real' ||
                     p.estado_pago !== 'registrado_en_libro' || p.pago_recibido !== true || p.webpay_por_confirmar ||
                     p.conflicto_distribucion || p.transaccion_distribuida || p.advertencias?.length ||
@@ -1693,15 +1688,26 @@
                     !p.origen?.hoja || !p.origen.celda || p.origen.hoja !== r.coordenadas_origen?.hoja ||
                     fila?.sector !== 'pagos' || fila.estructura_fila !== 'fecha_detalle_concepto_monto' ||
                     !['fecha','detalle','concepto','monto'].every(k => fila.columnas_ocupadas?.[k] === true)) continue;
+                const variante=S.varianteTitular(r.titular,p.titular);
+                if (p.titular && (!variante || !S.varianteTitular(s.titular,p.titular))) continue;
+                const otroTitular = variante && variante!=='equivalente' && (
+                    reservas.some(x=>x!==r && x.fecha_checkin===r.fecha_checkin && S.mismaPersona(x.titular,p.titular)) ||
+                    estadias.some(x=>x.reserva_id!==s.reserva_id && x.fecha_checkin===r.fecha_checkin &&
+                        candidatoElegible(x) && S.mismaPersona(x.titular,p.titular)));
+                if (otroTitular) {
+                    revisar(p,'El nombre del comprobante coincide con otra reserva de esa fecha. Verifica el voucher y la cabaña.');
+                    continue;
+                }
                 const cabañas = [...S.normalizar(p.concepto).matchAll(/\bcab(?:ana)?[.\s]*(\d+)\b/g)];
                 const concepto = new Set(S.separarCampos(p.concepto).map(S.normalizar));
+                const nombreCompatible = nombre => S.mismaPersona(nombre,r.titular) || (variante && S.mismaPersona(nombre,p.titular));
                 const titularDistinto = S.separarCampos(p.texto_original).some(fragmento => {
                     const nombre = fragmento.match(/^(?:titular|hu[eé]sped|nombre del titular)\s*:\s*(.+)$/i)?.[1];
-                    if (nombre) return !S.mismaPersona(nombre,r.titular);
+                    if (nombre) return !nombreCompatible(nombre);
                     const texto = S.normalizar(fragmento);
                     return !concepto.has(texto) && /^[\p{L}\p{M}.'’-]+(?:\s+[\p{L}\p{M}.'’-]+)+$/u.test(fragmento) &&
                         !/\b(?:pago|pagado|abono|tarjeta|debito|credito|webpay|voucher|boleta|bove|bovtar|folio|manager|pend|pendiente|autorizacion|pos|transbank|alojamiento|arriendo|sin|comprobante)\b/.test(texto) &&
-                        !S.mismaPersona(fragmento,r.titular);
+                        !nombreCompatible(fragmento);
                 });
                 if (titularDistinto || cabañas.some(c => Number(c[1]) !== Number(r.cabana))) {
                     revisar(p,'El detalle del comprobante señala un titular o una cabaña diferente. Revisa el dato en el Libro.');
@@ -2174,6 +2180,7 @@
         const antes = {}, despues = {}, cambios = [];
         for (const [k,v] of Object.entries(propuesto)) {
             if (v === undefined || v === null || v === '' || v === 'no_determinado') continue;
+            if (k === 'titular_nombre' && S.mismaPersona(actual[k],v)) continue;
             if (k === 'titular_numero_documento' ? documentoCanon(actual[k], actual.titular_tipo_documento) === documentoCanon(v, propuesto.titular_tipo_documento || actual.titular_tipo_documento) : S.normalizar(actual[k]) === S.normalizar(v)) continue;
             antes[k] = actual[k] ?? null; despues[k] = v;
             cambios.push({ campo: etiquetasActualizacion[k] || k, anterior: actual[k] ?? null, libro: v });
@@ -2748,7 +2755,14 @@
             if (motivosCapacidad.length) return motivosCapacidad;
             return capacidad?.disponible ? [] : [capacidad?.motivo || 'El pago tiene un destino financiero seguro, pero la escritura protegida de servicios todavía no está disponible.'];
         }
-        const detalles = [...new Set((resolucion.aplicaciones || []).map(aplicacion => aplicacion.motivo).filter(Boolean))];
+        const aplicaciones=resolucion.aplicaciones || [];
+        const sinCargo=[...new Set(aplicaciones.filter(a=>a.estado==='sin_destino' && a.concepto).map(a=>a.concepto))];
+        const detalles = [...new Set(aplicaciones.filter(a=>!(a.estado==='sin_destino' && a.concepto))
+            .map(a=>a.motivo).filter(Boolean))];
+        if (sinCargo.length) {
+            const nombres=new Intl.ListFormat('es-CL').format(sinCargo.map(c=>`«${c}»`));
+            detalles.unshift(`${sinCargo.length===1?'Falta un cargo compatible':'Faltan cargos compatibles'} de ${nombres} en Proyecto H.`);
+        }
         return [...(detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.']),...motivosCapacidad];
     }
 
@@ -3488,7 +3502,9 @@
         const motivos = [];
         if (!r.pagos.includes(p) && resolucion?.evidencia !== PAGO_BLOQUE_REVISION) {
             if (!String(p.titular || '').trim()) motivos.push('Falta identificar al titular en el detalle del comprobante. Verifica a qué reserva corresponde.');
-            else if (!S.mismaPersona(r.titular,p.titular)) motivos.push('El titular del comprobante difiere del titular de la reserva. Comprueba si el pago corresponde a esta estadía.');
+            else if (!S.mismaPersona(r.titular,p.titular)) motivos.push(S.varianteTitular(r.titular,p.titular)
+                ? 'El nombre del comprobante parece abreviado o tiene una diferencia de escritura. Confirma su asociación con esta reserva.'
+                : 'El titular del comprobante difiere del titular de la reserva. Comprueba si el pago corresponde a esta estadía.');
             else if (r.advertencias?.length) motivos.push(...r.advertencias);
             else if (!p.advertencias?.length) motivos.push('El Libro dejó el comprobante sin una reserva única. Verifica su cabaña y fecha de ingreso.');
         }

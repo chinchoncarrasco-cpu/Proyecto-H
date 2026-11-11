@@ -46,6 +46,52 @@ test('un titular repetido junto a la nota NO MOVER identifica una sola reserva',
  assert.equal(duda.reservas.length,0);
  assert.deepEqual(duda.anotaciones[0].titulares_posibles,['Lidia Salas','NO MOVERjuan soto']);
 });
+test('el orden, la coma y los espacios de un nombre completo no crean un segundo titular',()=>{
+ for (const variante of ['Elena Salas','Salas, Elena','ElenaSalas','Éléna  Salas']){
+  assert.equal(S.mismaPersona('Salas Elena',variante),true,variante);
+  const texto=`Salas Elena // 2 ADL // Titular: ${variante}`;
+  const h=normalizar(texto);
+  assert.equal(h.reservas.length,1,texto);
+  assert.equal(h.reservas[0].titular,variante);
+  assert.equal(h.reservas[0].texto_original,texto);
+ }
+ assert.equal(S.mismaPersona('Salas Elena','Elena Lara'),false);
+ assert.equal(S.mismaPersona('Salas Elena','Elena'),false);
+ assert.equal(S.mismaPersona('Salas Elena','Elena Slaas'),false);
+ assert.equal(S.varianteTitular('Salas Elena','Elena'),'abreviado');
+ assert.equal(S.varianteTitular('Elena Marta Salas Fuentes','Salas Elena'),'abreviado');
+ for(const nombre of ['Elena Slaas','Elena Salaz','Elena Saalas','Elena Sals']){
+  assert.equal(S.varianteTitular('Salas Elena',nombre),'errata',nombre);
+ }
+ assert.equal(S.varianteTitular('Salas Elena','Elena Lara'),null);
+ assert.equal(S.varianteTitular('Salas Elena','Elena 2'),null);
+ assert.equal(normalizar('ElenaSalas // PedirRut // 2 ADL').reservas[0]?.titular,'ElenaSalas');
+ assert.equal(normalizar('Titular: LUIS // 2 ADL').reservas[0]?.titular,'LUIS');
+ assert.equal(normalizar('Elena Salas // CORTESIAS DE CUMPLEAÑOS , CARNET EN WHATSAPP NEGRO // 2 ADL').reservas[0]?.titular,'Elena Salas');
+});
+test('la etiqueta del titular separa el nombre de los roles, las notas y los servicios',()=>{
+ const texto='Pedir teléfono // Titular: Elena // Atendida por Irene Sol // Pago hecho por Clara Díaz // Persona de contacto: Alicia Prado // 2 ADL // 1 NOCHE // 1 MASAJE RELAJANTE DE HORA & 1 DESCONTRACTURANTE DE 1 HORA COMENZANDO A LAS 11.00 AM CON JOSEFINA X PAGAR // TINAJA TONEL A LAS 20,00 HRS X PAGAR';
+ const h=normalizar(texto);
+ assert.equal(h.reservas.length,1);
+ assert.equal(h.reservas[0].titular,'Elena');
+ assert.deepEqual(h.reservas[0].servicios.map(x=>[x.concepto,x.hora]),[['masaje',null],['masaje','11:00'],['tonel','20:00']]);
+ assert.equal(h.reservas[0].texto_original,texto);
+ assert.equal(normalizar('Titular: Elena Salas // Elena Slaas // 2 ADL').reservas[0]?.titular,'Elena Salas');
+ const dos=normalizar('Elena Salas // Elena Slaas // 2 ADL');
+ assert.equal(dos.reservas.length,0);
+ assert.deepEqual(dos.anotaciones[0].titulares_posibles,['Elena Salas','Elena Slaas']);
+});
+test('una variación de formato entre copias conserva la identidad y detecta las notas cambiadas',()=>{
+ const D=require('../js/haiku-libro-diferencias-v1.js');
+ const anterior=normalizar('Salas Elena // 2 ADL');
+ const actual=normalizar('ElenaSalas // 2 ADL // Titular: Elena Salas');
+ actual.reservas[0].notas_importantes=['Solicita confirmar el horario'];
+ const comparacion=D.comparar([anterior],[actual]);
+ assert.equal(comparacion.nuevas.length,0);
+ assert.equal(comparacion.ya_no_aparecen.length,0);
+ assert.equal(comparacion.ambiguas.length,0);
+ assert.deepEqual(comparacion.modificadas[0].cambios.map(c=>c.campo),['notas_importantes']);
+});
 test('el informe identifica la celda y los candidatos, agrupando sólo la misma duda en ambas versiones',()=>{
  const D=require('../js/haiku-libro-diferencias-v1.js');
  const anterior=normalizar('Ana Pérez // 2 ADL // contacto@example.test // Juan Soto');

@@ -154,7 +154,9 @@
             const recepcionCompatible = estados[0] === 'registrado_en_libro'
                 ? grupo.every(x => x.pago.pago_recibido === true)
                 : grupo.every(x => x.pago.pago_recibido !== true);
-            const compatibles = ['titular','cabana','fecha_bloque','fecha_comprobante','moneda','medio_pago'].every(mismos) &&
+            const titular=grupo[0].pago.titular, S=root.HAIKU_LIBRO_SEMANTICA;
+            const mismoTitular = S?.mismaPersona ? grupo.every(x=>S.mismaPersona(x.pago.titular,titular)) : mismos('titular');
+            const compatibles = mismoTitular && ['cabana','fecha_bloque','fecha_comprobante','moneda','medio_pago'].every(mismos) &&
                 grupo.every(x => Number.isSafeInteger(Number(x.pago.monto)) && Number(x.pago.monto) > 0 &&
                     x.pago.origen?.hoja && x.pago.origen?.celda && normalizarTexto(x.pago.concepto)) &&
                 estadoCompartido && recepcionCompatible &&

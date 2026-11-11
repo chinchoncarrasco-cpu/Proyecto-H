@@ -771,7 +771,7 @@ test('payment on a securely matched stay stays safe while another cabin awaits a
  assert.equal(c.pagosDetalle[0].estado,'nuevo_seguro');
 });
 
-function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
+function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null,pagosDestinos=null}={}) {
  const fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
@@ -791,6 +791,7 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
   querySelector(selector){return this.querySelectorAll(selector)[0]||null}
  }
  const context={confirm:()=>true,structuredClone,HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
+  HAIKU_LIBRO_PAGOS_DESTINOS_V1:pagosDestinos,
   document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
@@ -2518,6 +2519,78 @@ for (const monto of [72000,36000]) test(`un débito sin titular se prepara por C
  assert.equal(operacion.argumentos.p_monto,monto);
  assert.equal(operacion.aprobado_manualmente,false);
  assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
+});
+
+for (const titular of ['Marina','Ejemplo Marinaa','Marina Ejemlpo']) test(`el nombre «${titular}» se contrasta con el comprobante, la reserva y el saldo`,async()=>{
+ const h=escenarioPagoDeBloque({titularComprobante:titular+' // '});
+ const [p]=h.r.pagos_sin_asociacion;
+ assert.equal(p.titular,titular);
+ const comparacion=await h.comparar();
+ assert.equal(comparacion.pagosDetalle[0].resolucionPago.evidencia,'bloque_alojamiento_verificado');
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+ assert.equal(Q.serializarIncorporacion(plan).find(i=>i.tipo==='pago').reserva_id,h.s.reserva_id);
+ assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
+});
+
+test('un nombre parecido conserva la revisión si el voucher identifica otra reserva o excede el saldo',async()=>{
+ const h=escenarioPagoDeBloque({titularComprobante:'Marina Ejemlpo // '});
+ const otra={...h.r,id:'otra',cabana:11,titular:'Marina Ejemlpo',rut_documento:'22222222-2',pagos_sin_asociacion:[]};
+ const db=client([h.s,stay(otra,{reserva_id:'r-otra'})],[],{vista_estado_cargos:h.cargos});
+ const comparacion=await Q.compararSistema([h.r,otra],db,h.q);
+ assert.equal(comparacion.pagosDetalle[0].estado,'revisar');
+ assert.match(comparacion.pagosDetalle[0].resolucionPago.motivos.join(' '),/coincide con otra reserva/);
+ const excede=escenarioPagoDeBloque({titularComprobante:'Marina // ',monto:73000});
+ const sinSaldo=await excede.comparar();
+ assert.equal(sinSaldo.pagosDetalle[0].estado,'revisar');
+ assert.match(sinSaldo.pagosDetalle[0].resolucionPago.motivos.join(' '),/superan el saldo/);
+});
+
+test('el nombre invertido o junto conserva un solo comprobante de masajes y tinaja',async()=>{
+ const F=require('./fixtures/libro-transferencias-bancarias.cjs');
+ const D=require('../js/haiku-libro-pagos-destinos-v1.js');
+ const pagos=[['ElenaSalas','MASAJES',95000],['Elena Salas','TINAJA',30000]].map(([nombre,concepto,monto])=>({
+  fecha:'2026-10-30',glosa:`${nombre} // Débito // Folio: 000581 // BOVTAR: 005623 // TOTAL CLP$125.000`,concepto,monto
+ }));
+ const {reservas:[r]}=F.leer([{titular:'Salas Elena',pagos}]);
+ const [p]=r.pagos;
+ assert.equal(r.pagos.length,1);
+ assert.equal(r.pagos_sin_asociacion.length,0);
+ assert.equal(p.monto,125000);
+ assert.deepEqual(p.aplicaciones_libro.map(x=>[x.concepto,x.monto]),[['MASAJES',95000],['TINAJA',30000]]);
+ const db=client([stay(r)]),q={desde:'2026-10-30',hasta:'2026-10-31'};
+ const vista=renderHarness(null,db,{pagosDestinos:D}),motor=vista.Q;
+ const comparacion=await motor.compararSistema([r],db,q);
+ assert.ok(comparacion.pagosDetalle[0].destinoFinanciero.aplicaciones.every(a=>a.estado==='sin_destino'));
+ const plan=await motor.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+ const item=plan.items.find(x=>x.pagoLibro);
+ assert.equal(item.seleccionado,false);
+ assert.match(item.motivos.join(' '),/Faltan cargos compatibles de «MASAJES» y «TINAJA»/);
+ assert.doesNotMatch([...(item.motivosRevisionPago||[]),...item.motivos].join(' '),/titular del comprobante difiere/);
+ assert.equal(motor.serializarIncorporacion(plan).filter(i=>i.tipo==='pago').length,0);
+ motor.renderizarIncorporacion(vista.out,plan,()=>{},()=>{},async()=>{});
+ assert.match(vista.texts(),/Faltan cargos compatibles de «MASAJES» y «TINAJA»/);
+ assert.doesNotMatch(vista.texts(),/titular del comprobante difiere/);
+});
+
+test('una abreviatura en un pago de servicio necesita un voucher completo en el bloque de la estadía',()=>{
+ const F=require('./fixtures/libro-transferencias-bancarias.cjs');
+ const leer=comprobante=>F.leer([{titular:'Elena Salas Fuentes',pagos:[{
+  fecha:'2026-10-30',glosa:`Elena // Débito // Folio: 000581${comprobante}`,concepto:'TINAJA',monto:30000
+ }]}]).reservas[0];
+ const respaldada=leer(' // BOVTAR: 005623');
+ assert.equal(respaldada.pagos[0].titular,'Elena');
+ const incompleta=leer('');
+ assert.equal(incompleta.pagos.length,0);
+ assert.equal(incompleta.pagos_sin_asociacion.length,1);
+});
+
+test('una variación de formato asocia la estadía sin proponer cambiar el nombre guardado',async()=>{
+ const r=readyBook({titular:'Salas Elena',rut_documento:null,tipo_documento:null,correo:null,telefono:null});
+ const s=stay(r,{reservas:{titular_nombre:'ElenaSalas',estado_reserva:'confirmada'}});
+ const db=client([s]),comparacion=await Q.compararSistema([r],db,q);
+ assert.equal(comparacion[0].estado,'asociada');
+ const plan=await Q.prepararIncorporacion({reservas:[r],q,comparacion},new Map(),new Set(),db);
+ assert.ok(plan.items.every(i=>!Object.hasOwn(i.payload?.reserva?.despues||{},'titular_nombre')));
 });
 
 for (const caso of [

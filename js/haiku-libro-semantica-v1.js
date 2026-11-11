@@ -197,7 +197,7 @@
         const estado = /\b(?:pendientes?|por pagar|pagad[oa]s?|confirmar|confirmad[oa]s?)\b/;
         const contexto = /\b(?:facturas?|boletas?|lena|cenas?|desayunos?|batas?|manager|camas?|cunas?|tinajas?|jacuzzi|tonel|masajes?|estacionamiento)\b/;
         const condicion = /^(?:sin\s+\p{L}+|trato\s+especial)\b|\b(?:temprano|tarde|late\s*check\s*out)\b/u;
-        const objetos = /^(?:cortesia|articulos?|art\.?|utensilios?\s+(?:de|para)\s+asado|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
+        const objetos = /^(?:cortesias?|articulos?|art\.?|utensilios?\s+(?:de|para)\s+asado|ceniceros?|sacacorchos?|tenazas?|llaves?|chocolates?|espumantes?|batas?|lena|carbon)\b/;
         // Reconocer entregas de insumos sin descartar nombres por un apellido aislado.
         const entregaInsumos = /^(?:se(?:\s+les?)?\s+)?(?:hace\s+)?entr{1,2}eg(?:a|ad[oa]s?)\s+(?:de\s+)?(?:carbon|lena|utensilios?\s+(?:de|para)\s+asado|sacacorchos?|tenazas?|batas?|llaves?|ceniceros?)\b/;
         const tareaRecepcion = /^(?:se(?:\s+les?)?\s+)?(?:presto|entrego|colocar|afilar)\s+/.test(t) ||
@@ -217,11 +217,12 @@
         const t = normalizar(texto).replace(/[.:\s]+$/, '');
         const etiquetas = [
             ['aseo', /^(?:camarer[oa]|(?:responsable|encargad[oa])\s+(?:de|del)\s+aseo)\b/],
-            ['profesional_servicio', /^(?:masajista|terapeuta|(?:responsable|encargad[oa])\s+del\s+servicio)\b/],
-            ['pagador', /^(?:pagador[ae]?|(?:pago|abono)\s+(?:realizado\s+)?por|(?:transferencia|transf)\s+de)\b/],
+            ['profesional_servicio', /^(?:masajista|terapeuta|(?:responsable|encargad[oa])\s+del\s+servicio|atendid[oa]\s+por)\b/],
+            ['pagador', /^(?:pagador[ae]?|(?:pago|abono)\s+(?:(?:realizado|hecho|efectuado)\s+)?por|(?:transferencia|transf)\s+de)\b/],
             ['intermediario', /^(?:booker\b|agencia\s*:)/],
             ['facturacion', /^(?:(?:razon\s+social|sociedad\s+comercial|datos\s+de\s+facturacion)\b|empresa\s*:)/],
-            ['acompanante', /^acompanante\b/]
+            ['acompanante', /^acompanante\b/],
+            ['contacto', /^(?:persona\s+de\s+contacto|contacto\s+de\s+la\s+reserva)\b/]
         ];
         for (const [rol, patron] of etiquetas) {
             const etiqueta = t.match(patron);
@@ -241,9 +242,12 @@
             if (/^walk[\s-]*in$/.test(t)) return 'etiqueta';
             if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) return 'etiqueta';
             if (notaDeTitular(texto, datosPosteriores)) return 'nota_operativa';
-            if (/^(?:telefono|celular|correo|email|rut|dni|id|documento|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
+            if (/^(?:telefono|celular|correo|email|rut|dni|id|documento|carnet|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
                 /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) return 'dato_estructurado';
-            return /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2 ? 'posible_titular' : 'otro';
+            if (/^[\p{Lu}][\p{Ll}\p{M}]{2,}(?:[\p{Lu}][\p{Ll}\p{M}]{2,})+$/u.test(texto))
+                return clasificar(texto.replace(/([\p{Ll}\p{M}])(?=\p{Lu})/gu,'$1 '));
+            const conComa=/^[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}\s*,\s*[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}$/u.test(texto);
+            return conComa || (/^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2) ? 'posible_titular' : 'otro';
         };
         const campos=separarCampos(texto).flatMap(campo=>{
             // Separar un nombre de su documento sólo ante una etiqueta explícita
@@ -267,18 +271,21 @@
             // FULL DAY admite nombre contiguo. Para un canal exigir separador
             // explícito («BOOKING - Ana Pérez»), y validar el sufijo como nombre.
             // Mantener intacta la celda original para notas, servicios y pagos.
+            const nombreEtiquetado=texto.match(/^(?:titular|hu[eéè]sped|nombre del titular)\s*:\s*(.+)$/i)?.[1].trim();
             const nombreConCanal=(texto.match(/^full\s*day\s+(.+)$/i) ||
                 texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i) ||
-                texto.match(/^promo\s+h(?:aiku|aku)\s+(?:[:–—-]\s*)?(.+)$/i) ||
-                texto.match(/^(?:titular|hu[eéè]sped)\s*:\s*(.+)$/i))?.[1].trim();
-            if (!rol && nombreConCanal && clasificar(nombreConCanal)==='posible_titular') {
-                texto=nombreConCanal;
+                texto.match(/^promo\s+h(?:aiku|aku)\s+(?:[:–—-]\s*)?(.+)$/i))?.[1].trim();
+            const nombre=nombreEtiquetado || nombreConCanal;
+            const nombreSimple=nombreEtiquetado && /^[\p{L}\p{M}]{3,}$/u.test(nombreEtiquetado) &&
+                clasificar(nombreEtiquetado.toLowerCase())==='otro';
+            if (!rol && nombre && (nombreSimple || clasificar(nombre)==='posible_titular')) {
+                texto=nombre;
                 tipo='posible_titular';
             }
             const t=normalizar(texto);
             if (tipo==='posible_titular') humanoPrevio=true;
             if (humanoPrevio && (tipo==='dato_estructurado' || /^(?:confirmad[oa]|pagad[oa]|reservad[oa])\b/.test(t))) datosPosteriores=true;
-            return {texto,tipo,...(rol ? {rol} : {})};
+            return {texto,tipo,...(rol ? {rol} : {}),...(nombreEtiquetado && texto===nombreEtiquetado ? {titular_explicito:true} : {})};
         });
     }
     function candidatosTitular(texto) {
@@ -290,10 +297,18 @@
         }
         // Excel puede unir el final de una nota en color al nombre repetido.
         // Exigir que ese nombre completo aparezca por separado en la misma celda.
-        return [...porNombre].filter(([nombre])=>{
+        const candidatos=[...porNombre].filter(([nombre])=>{
             const repetido=nombre.match(/^no\s+mover(?=\p{L})(.+)$/u)?.[1];
             return !repetido || !porNombre.has(repetido);
         }).map(([,candidato])=>candidato);
+        const unicos=[];
+        for (const candidato of candidatos) {
+            const previo=unicos.findIndex(x=>mismaPersona(x.texto,candidato.texto));
+            if (previo<0) unicos.push(candidato);
+            else if (candidato.titular_explicito && !unicos[previo].titular_explicito) unicos[previo]=candidato;
+        }
+        const explicitos=unicos.filter(x=>x.titular_explicito);
+        return explicitos.length===1 ? unicos.filter(x=>x===explicitos[0]||!varianteTitular(x.texto,explicitos[0].texto)) : unicos;
     }
     function titular(texto) {
         const candidatos=candidatosTitular(texto);
@@ -339,15 +354,65 @@
         }
         return { cantidad: extensiones.length === 1 ? extensiones[0] : null, ambigua: extensiones.length > 1 };
     }
-    // La recuperación de titulares financieros conserva su contrato previo.
     function titularPago(texto) {
         const partes = separarCampos(texto);
+        const explicitos=partes.filter(x=>/^(?:titular|hu[eéè]sped|nombre del titular)\s*:/i.test(x)).flatMap(candidatosTitular);
+        if (explicitos.length) return explicitos.every(x=>mismaPersona(x.texto,explicitos[0].texto)) ? explicitos[0].texto : null;
         const candidato = partes.find(x => !/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normalizar(x)));
-        return candidato && /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(candidato) && candidato.split(/\s+/).length >= 2 ? candidato : null;
+        if (!candidato || /^(?:pago|abono|transf(?:erencia)?|debito|credito|tarjeta|web\s*pay|efectivo|folio|bovtar|bove|cod\.?\s*aut)\b/.test(normalizar(candidato))) return null;
+        const nombre=candidatosTitular(candidato)[0]?.texto;
+        if (nombre) return nombre;
+        const corto=/^[\p{L}\p{M}]{3,}$/u.test(candidato) && clasificarFragmentos(candidato)[0]?.tipo==='otro';
+        return corto && /\b(?:folio|bovtar|cod\.?\s*aut\.?|autorizaci[oó]n)\b/i.test(texto) ? candidato : null;
+    }
+    const textoTitular = v => normalizar(v).replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+    function clavesTitular(valor) {
+        const texto=textoTitular(valor);
+        if (!texto) return [];
+        if (/\p{N}/u.test(texto)) return [`literal:${texto}`];
+        const partes=texto.split(' ');
+        // Admite el orden del Libro y el de un comprobante, aunque falte un espacio.
+        return [`palabras:${[...partes].sort().join(' ')}`,...partes.map((_,i)=>
+            `letras:${partes.slice(i).concat(partes.slice(0,i)).join('')}`)];
     }
     function mismaPersona(a, b) {
-        const na = normalizar(a).replace(/[^a-z0-9 ]/g, ""), nb = normalizar(b).replace(/[^a-z0-9 ]/g, "");
-        return !!na && !!nb && na === nb;
+        const na=textoTitular(a),nb=textoTitular(b);
+        if (!na || !nb) return false;
+        if (na===nb) return true;
+        if (na.replaceAll(' ','').length!==nb.replaceAll(' ','').length) return false;
+        const claves=new Set(clavesTitular(na));
+        return clavesTitular(nb).some(k=>claves.has(k));
+    }
+    function errataTitular(a,b) {
+        if (Math.min(a.length,b.length)<4 || Math.abs(a.length-b.length)>1) return false;
+        const [larga,corta]=a.length>=b.length?[a,b]:[b,a];
+        let i=0;
+        while (i<corta.length && larga[i]===corta[i]) i++;
+        if (larga.length!==corta.length) return larga.slice(i+1)===corta.slice(i);
+        return larga.slice(i+1)===corta.slice(i+1) ||
+            (larga[i]===corta[i+1] && larga[i+1]===corta[i] && larga.slice(i+2)===corta.slice(i+2));
+    }
+    // Una abreviatura o errata orienta la asociación. La evidencia independiente
+    // de la reserva o del comprobante se comprueba en quien consume el resultado.
+    function varianteTitular(a,b) {
+        if (mismaPersona(a,b)) return 'equivalente';
+        const partes=v=>{
+            const texto=textoTitular(v);
+            return /\p{N}/u.test(texto) ? [] : texto.split(' ').filter(x=>x&&!/^(?:de|del|la|las|los|y)$/.test(x));
+        };
+        const restantes=partes(b),faltantes=[];
+        let compartido=false;
+        for (const parte of partes(a)) {
+            const i=restantes.indexOf(parte);
+            if (i<0) faltantes.push(parte);
+            else {
+                restantes.splice(i,1);
+                if (parte.length>=3) compartido=true;
+            }
+        }
+        if (!compartido) return null;
+        if (!faltantes.length || !restantes.length) return 'abreviado';
+        return faltantes.length===1 && restantes.length===1 && errataTitular(faltantes[0],restantes[0]) ? 'errata' : null;
     }
     function monto(v) {
         if (typeof v === "number") return Number.isSafeInteger(v) && v >= 0 ? v : null;
@@ -1303,7 +1368,16 @@
             for (const p of candidates) {
                 const transferencia = evidenciaTransferencia(p);
                 const destinoBancario = transferencia?.valida && p.tipo_movimiento === 'alojamiento';
-                if (others.length === 1 && (mismaPersona(r.titular, p.titular) || destinoBancario) && !r.advertencias.length && !p.advertencias?.length) r.pagos.push(p);
+                const reciboServicio = p.medio_pago==='webpay' ? p.codigo_autorizacion :
+                    ['credito','debito'].includes(p.medio_pago) && p.folio && p.bovtar;
+                const cabanaConcepto=Number(normalizar(p.concepto).match(/\bcab(?:ana)?[.\s]*(\d+)\b/)?.[1])||null;
+                const varianteServicio = p.tipo_movimiento==='servicio' && p.pago_recibido===true && reciboServicio &&
+                    r.cobertura_pagos && r.geometria_inequivoca && (!cabanaConcepto || cabanaConcepto===r.cabana) &&
+                    p.fecha_comprobante && p.fecha_comprobante>=r.fecha_checkin && p.fecha_comprobante<=r.fecha_checkout &&
+                    varianteTitular(r.titular,p.titular) &&
+                    !res.reservas.some(x=>x!==r&&x.fecha_checkin===r.fecha_checkin&&mismaPersona(x.titular,p.titular));
+                if (others.length === 1 && (mismaPersona(r.titular, p.titular) || destinoBancario || varianteServicio) &&
+                    !r.advertencias.length && !p.advertencias?.length) r.pagos.push(p);
                 else r.pagos_sin_asociacion.push(p);
             }
         }
@@ -1558,7 +1632,7 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, fuente, monto,
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
