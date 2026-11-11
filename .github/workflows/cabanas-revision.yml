@@ -28,6 +28,11 @@ on:
       - "tests/cabanas-sites.test.cjs"
       - "tests/cabanas-filters-browser-check.cjs"
       - "tests/revision-completa-estados.test.cjs"
+      - "js/revision-plantilla*.js"
+      - "css/revision-plantilla-v1.css"
+      - "supabase/migrations/*_haku_personalizar_revision_completa_v1.sql"
+      - "tests/*plantilla*.test.cjs"
+      - "tests/cabanas-personalizar-browser-check.cjs"
       - "tests/aseo-derivado-panel-browser-check.cjs"
       - "tests/cabanas-seguimiento-browser-check.cjs"
       - "tests/solicitudes-tipos-browser-check.cjs"
@@ -65,6 +70,12 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/aseo-derivado-panel-browser-check.cjs
+      - name: Personalizar revisiones y conservar los checks históricos
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: |
+          node --test tests/revision-plantilla-postgres.test.cjs
+          node tests/cabanas-personalizar-browser-check.cjs
       - name: Seguimiento, resumen compacto y destinos en ambos temas
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules

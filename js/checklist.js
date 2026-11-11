@@ -1680,8 +1680,15 @@ function mostrarChecklistCabana(numeroCabana) {
 
     contenedor.innerHTML = "";
 
-    const checklist =
-        checklistsCabanas[numeroCabana];
+    const base = checklistsCabanas[numeroCabana];
+    const personalizar = globalThis.HAIKU_REVISION_PLANTILLA_V1;
+    if (personalizar && contenedor.dataset) {
+        contenedor.dataset.templateVersion =
+            personalizar.contexto(fechaSeleccionada, numeroCabana)?.plantilla?.version_id || "";
+    }
+    const checklist = base
+        ? (personalizar?.aplicarChecklist(base, fechaSeleccionada, numeroCabana) ?? base)
+        : null;
 
     if (!checklist) {
 
@@ -1778,7 +1785,8 @@ function crearItemsChecklist(
     lista.className = "checklist-items";
 
 
-    items.forEach((nombre, indice) => {
+    items.forEach((item, indice) => {
+        const nombre = typeof item === "string" ? item : item.label;
 
         const label =
             document.createElement("label");
@@ -1791,8 +1799,8 @@ function crearItemsChecklist(
 
         checkbox.type = "checkbox";
 
-        checkbox.dataset.checklistId =
-            `${grupo}-${indice}`;
+        checkbox.dataset.checklistId = typeof item === "string"
+            ? `${grupo}-${indice}` : item.id;
 
         const datosDia = obtenerDatosDia(fechaSeleccionada);
 

@@ -16,6 +16,7 @@
     ]);
     const COLUMNAS_REVISION = [
         "id",
+        "plantilla_id",
         "fecha",
         "cabana_id",
         "tipo_revision",
@@ -42,6 +43,36 @@
     let detallesEditandoHasta = 0;
     let lecturaChecklistRemoto = 0;
     let listenerDetallesSeccionInstalado = false;
+    let pintarChecklistOriginal = null;
+
+    async function datosPlantilla(fecha, numero, cabana, revision, configBase) {
+        const personalizar = window.HAIKU_REVISION_PLANTILLA_V1;
+        if (!personalizar) return { config: configBase };
+        const respuesta = await personalizar.leer(fecha, cabana.id);
+        const anterior = personalizar.contexto(fecha, numero)?.plantilla;
+        const plantilla = respuesta
+            ? personalizar.plantillaDe(respuesta, numero, revision)
+            : (anterior?.revision_id === (revision?.id ?? null) &&
+               (!revision || anterior.version_id === revision.plantilla_id) ? anterior : null);
+        return { respuesta, plantilla, config: personalizar.configurarItems(configBase, plantilla) };
+    }
+
+    function aplicarPlantilla(fecha, numero, cabana, datos) {
+        const personalizar = window.HAIKU_REVISION_PLANTILLA_V1;
+        if (!personalizar || !datos.respuesta) return;
+        personalizar.publicar(fecha, numero, cabana.id, datos.respuesta, datos.plantilla);
+        if (fecha !== fechaOperativa() || String(numero) !== String(numeroRevisionAbierta())) return;
+        const contenedor = document.getElementById("revision-checklist");
+        if (contenedor && (contenedor.dataset?.templateVersion || "") !== (datos.plantilla?.version_id || "")) {
+            pintarChecklistOriginal?.call(window, numero);
+        }
+    }
+
+    function errorPlantillaCambiada() {
+        const error = new Error("La plantilla cambió. Revisa la lista actualizada y vuelve a marcar el elemento.");
+        error.plantillaCambiada = true;
+        return error;
+    }
 
     function cliente() {
         return window.haikuSupabase || null;
@@ -573,10 +604,13 @@
             return false;
         }
 
-        const config = await obtenerConfiguracion(numero, cabana.id);
+        const configBase = await obtenerConfiguracion(numero, cabana.id);
         const optimista = window.HAIKU_CHECKLIST_OPTIMISTA_V1;
         const version = optimista?.version();
-        const items = await obtenerItemsRevision(revision?.id);
+        const [items, datos] = await Promise.all([
+            obtenerItemsRevision(revision?.id),
+            datosPlantilla(fecha, numero, cabana, revision, configBase)
+        ]);
 
         if (lectura !== lecturaChecklistRemoto || fecha !== fechaOperativa() ||
             numero !== String(numeroRevisionAbierta()) ||
@@ -590,8 +624,9 @@
         }
 
         cacheRevisiones.set(claveRevision(fecha, numero), revision || null);
-        actualizarCacheLocal(fecha, numero, config, revision, items);
-        aplicarRevisionEnPantalla(numero, config, revision, items);
+        actualizarCacheLocal(fecha, numero, datos.config, revision, items);
+        aplicarPlantilla(fecha, numero, cabana, datos);
+        aplicarRevisionEnPantalla(numero, datos.config, revision, items);
         const sites = window.HAIKU_CABANAS_SITES_V1;
         sites?.actualizarConteos?.();
         sites?.pintarRevision?.(fecha);
@@ -636,10 +671,16 @@
         }
 
         const cabana = await obtenerCabana(numeroCabana);
-        const config = await obtenerConfiguracion(
+        const configBase = await obtenerConfiguracion(
             numeroCabana,
             cabana.id
         );
+        const personalizar = window.HAIKU_REVISION_PLANTILLA_V1;
+        const plantilla = personalizar?.contexto(fechaSeleccion, numeroCabana)?.plantilla;
+        if (personalizar && (checkbox.closest?.("#revision-checklist")?.dataset?.templateVersion || null) !== (plantilla?.version_id ?? null)) {
+            throw errorPlantillaCambiada();
+        }
+        const config = personalizar?.configurarItems(configBase, plantilla) ?? configBase;
         const cfg = config.get(String(legacyId));
 
         if (!cfg) {
@@ -649,6 +690,9 @@
         }
 
         const revision = await asegurarRevision(numeroCabana, fechaSeleccion);
+        if (personalizar && (revision.plantilla_id ?? null) !== (plantilla?.version_id ?? null)) {
+            throw errorPlantillaCambiada();
+        }
         const ahora = new Date().toISOString();
 
         const payload = {
@@ -1100,7 +1144,10 @@
                 console.error("HAIKU · No fue posible guardar ítem de revisión en Supabase:", error);
                 if (optimista) optimista.terminar(pendiente, error.itemPersistido === true);
                 else if (!error.itemPersistido) checkbox.checked = !valorEsperado;
-                window.HAIKU_DIALOGOS.aviso(error.itemPersistido
+                if (error.plantillaCambiada) {
+                    void refrescarChecklistAbierto().catch(causa => console.error("HAIKU · No se pudo recargar la plantilla:", causa));
+                }
+                window.HAIKU_DIALOGOS.aviso(error.plantillaCambiada ? error.message : error.itemPersistido
                     ? "El check se guardó, pero no fue posible actualizar el estado de revisión. Recarga para verificar."
                     : "No fue posible guardar este check en Supabase. Intenta nuevamente.");
             }
@@ -1181,18 +1228,15 @@
 
         try {
             const cabana = await obtenerCabana(numeroCabana);
-            const config = await obtenerConfiguracion(
-                numeroCabana,
-                cabana.id
-            );
-            const revision = await buscarRevision(
-                fecha,
-                numeroCabana,
-                cabana.id
-            );
-            const items = revision?.id
-                ? await obtenerItemsRevision(revision.id)
-                : new Map();
+            const [configBase, revision] = await Promise.all([
+                obtenerConfiguracion(numeroCabana, cabana.id),
+                buscarRevision(fecha, numeroCabana, cabana.id)
+            ]);
+            const [items, datos] = await Promise.all([
+                obtenerItemsRevision(revision?.id),
+                datosPlantilla(fecha, numeroCabana, cabana, revision, configBase)
+            ]);
+            const config = datos.config;
 
             if (fecha !== fechaOperativa() ||
                 (version !== undefined && version !== window.HAIKU_CHECKLIST_OPTIMISTA_V1?.version())) return;
@@ -1205,6 +1249,7 @@
                 items
             );
 
+            aplicarPlantilla(fecha, numeroCabana, cabana, datos);
             aplicarRevisionEnPantalla(
                 String(numeroCabana),
                 config,
@@ -1383,6 +1428,7 @@
         }
 
         const original = window.mostrarChecklistCabana;
+        pintarChecklistOriginal = original;
 
         function puente(numeroCabana) {
             const resultado = original.apply(this, arguments);
@@ -1409,19 +1455,23 @@
                 if (cabanasR.error) throw cabanasR.error;
                 const cabanas = cabanasR.data || [];
                 if (!cabanas.length) return { cabanas, revisiones: [] };
-                const revisionesR = await supabase.from("revisiones_cabana")
+                const [revisionesR, plantillas] = await Promise.all([
+                    supabase.from("revisiones_cabana")
                     .select(COLUMNAS_REVISION)
                     .eq("fecha", fecha).eq("tipo_revision", TIPO_REVISION)
                     .neq("estado", "cancelada")
                     .in("cabana_id", cabanas.map(cabana => cabana.id))
-                    .order("creado_en", { ascending: false });
+                    .order("creado_en", { ascending: false }),
+                    window.HAIKU_REVISION_PLANTILLA_V1?.leer(fecha)
+                ]);
                 if (revisionesR.error) throw revisionesR.error;
-                return { cabanas, revisiones: revisionesR.data || [] };
+                return { cabanas, revisiones: revisionesR.data || [], plantillas };
             },
             publicar: snapshot => {
                 const preparado = snapshot.datos.revision;
                 if (!preparado) return;
-                const { cabanas, revisiones } = preparado;
+                const { cabanas, revisiones, plantillas } = preparado;
+                const personalizar = window.HAIKU_REVISION_PLANTILLA_V1;
                 invalidarCiclos(snapshot.fecha);
                 const ultima = new Map();
                 revisiones.forEach(revision => {
@@ -1433,6 +1483,8 @@
                     const numero = String(cabana.numero);
                     cacheCabanas.set(numero, cabana);
                     const revision = ultima.get(String(cabana.id));
+                    if (plantillas) personalizar?.publicar(snapshot.fecha, numero, cabana.id, plantillas,
+                        personalizar.plantillaDe(plantillas, numero, revision));
                     if (!datos.cabanas[numero]) datos.cabanas[numero] = {};
                     datos.cabanas[numero].estadoRevision = estadoLegacyDesdeRevision(revision);
                     datos.cabanas[numero].revisionCompletaCiclo =
