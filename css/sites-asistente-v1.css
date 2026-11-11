@@ -1156,6 +1156,75 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
 .haku-pendiente-detalle .haku-libro-servicios.haku-libro-servicio-directo {
     border: 0; background: transparent; padding: 0; margin: 0;
 }
+.haku-pendiente-detalle:has(> .haku-libro-preparacion-zona--cancelacion:not([role="alert"])) > :not(.haku-libro-preparacion-zona--cancelacion) {
+    display: none;
+}
+.haku-pendiente-detalle > .haku-libro-preparacion-zona--cancelacion:not([role="alert"]) { margin-top: 0; }
+.haku-libro-preparacion-zona--cancelacion {
+    --cancelacion-texto: #243c31;
+    --cancelacion-secundario: #52665b;
+    --cancelacion-linea: #d5e1d9;
+    --cancelacion-suave: #f0f5f1;
+    --cancelacion-acento: #276349;
+    --cancelacion-aviso: #754b17;
+    --cancelacion-aviso-fondo: #fff2df;
+    --cancelacion-destino: #963f36;
+    --cancelacion-confirmar: #9e443a;
+    --cancelacion-confirmar-borde: #9e443a;
+}
+html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
+    --cancelacion-texto: #e4eee7;
+    --cancelacion-secundario: #b1c2b7;
+    --cancelacion-linea: #43554b;
+    --cancelacion-suave: #25352d;
+    --cancelacion-acento: #a4d6b8;
+    --cancelacion-aviso: #f2c58d;
+    --cancelacion-aviso-fondo: #35291e;
+    --cancelacion-destino: #f2aaa0;
+    --cancelacion-confirmar: #853f36;
+    --cancelacion-confirmar-borde: #b86f63;
+}
+.haku-libro-preparacion-zona--cancelacion[role="status"],
+.haku-libro-preparacion-zona--cancelacion .haiku-cancelacion-status:not(:empty),
+.haku-libro-preparacion-zona--cancelacion[role="alert"],
+.haiku-cancelacion-informe__mensajes:not(:empty) {
+    box-sizing: border-box; padding: 7px 9px; border: 0; border-radius: 5px;
+    background: var(--cancelacion-suave); color: var(--cancelacion-texto); font-size: 12px; line-height: 1.45;
+}
+.haku-libro-preparacion-zona--cancelacion .haiku-cancelacion-status { margin: 0; }
+.haku-libro-preparacion-zona--cancelacion[role="alert"],
+.haiku-cancelacion-informe__mensajes[role="alert"]:not(:empty) {
+    background: var(--cancelacion-aviso-fondo); color: var(--cancelacion-aviso);
+}
+.haiku-cancelacion-informe {
+    display: grid; gap: 6px; min-width: 0; color: var(--cancelacion-texto); font-size: 12px; line-height: 1.4;
+}
+.haiku-cancelacion-informe__cabecera,
+.haiku-cancelacion-informe__cambio,
+.haiku-cancelacion-informe__acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.haiku-cancelacion-informe__cabecera { justify-content: space-between; }
+.haiku-cancelacion-informe__cabecera > h3 { margin: 0; color: inherit; font-size: 14px; font-weight: 700; line-height: 1.35; }
+.haiku-cancelacion-informe__cabecera > .haiku-cancelacion-informe__titulo--resuelta { color: var(--cancelacion-acento); }
+.haiku-cancelacion-informe__fuente,
+.haiku-cancelacion-informe__fechas,
+.haiku-cancelacion-informe__cambio > span { color: var(--cancelacion-secundario); }
+.haiku-cancelacion-informe__cambio { padding-block: 4px; border-top: 1px solid var(--cancelacion-linea); }
+.haiku-cancelacion-informe__destino,
+.haiku-cancelacion-informe .haiku-cancelacion-pantalla__error-reserva { color: var(--cancelacion-destino); }
+.haiku-cancelacion-informe__mensajes:empty,
+.haiku-cancelacion-informe .haiku-cancelacion-pantalla__error-reserva:empty { display: none; }
+.haiku-cancelacion-informe__acciones { gap: 5px; }
+.haiku-cancelacion-informe__acciones > .haiku-cancelacion-pantalla__boton {
+    min-width: 0; max-width: 100%; min-height: 36px; margin: 0; padding: 5px 8px;
+    border: 1px solid var(--cancelacion-linea); border-radius: 6px; background: transparent; color: var(--cancelacion-acento);
+    box-shadow: none; font: inherit; font-weight: 650; white-space: normal; overflow-wrap: anywhere; cursor: pointer;
+}
+.haiku-cancelacion-informe__acciones > .haiku-cancelacion-pantalla__boton--confirmar {
+    margin-inline-start: auto; background: var(--cancelacion-confirmar); border-color: var(--cancelacion-confirmar-borde); color: #fff;
+}
+.haiku-cancelacion-informe__acciones > button:focus-visible { outline: 2px solid var(--cancelacion-acento); outline-offset: 2px; }
+.haiku-cancelacion-informe__acciones > button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px currentColor; }
+.haiku-cancelacion-informe__acciones > button:disabled { opacity: .7; cursor: default; }
 .haku-actualizacion-sites .haku-4b-preparar { margin: 0 20px 12px; }
 @media (max-width: 440px) {
     .haku-actualizacion-sites__head { padding: 14px; }
