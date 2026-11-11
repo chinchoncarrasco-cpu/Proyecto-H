@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
-const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/haiku-repaso-checklist-v1.js', 'js/supabase-repaso-v2.js', 'js/supabase-revision-ui-v1.js']);
+const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js', 'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/haiku-repaso-checklist-v1.js', 'js/supabase-repaso-v2.js', 'js/supabase-revision-ui-v1.js', 'js/revision-plantilla-core-v1.js', 'js/revision-plantilla-v1.js']);
 (async () => {
  const browser = await chromium.launch({ headless: true });
  try {
@@ -21,7 +21,13 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       revisiones_cabana:[{id:'repaso-1',fecha:'2026-11-03',cabana_id:'cab-1',tipo_revision:'repaso',estado:'pendiente',resultado:null,observaciones:'',creado_en:'2026-11-03'}],revision_items:[] };
     window.__writes=[];
     Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.__clipboard=text},readText:async()=>window.__clipboard||''}});
-    window.haikuSupabase = { rpc: async () => ({ data: [], error: null }), from(table) {
+    window.haikuSupabase = { async rpc(name) {
+      if (name !== 'haku_revision_modalidades_v1') return { data: [], error: null };
+      const revision = window.__db.revisiones_cabana.find(row => row.cabana_id === 'cab-2');
+      return { data: { can_edit: true, templates: window.__repasoTemplate ? [{
+        ...window.__repasoTemplate, cabana_id: 'cab-2', numero: 2, revision_id: revision?.id ?? null,
+      }] : [] }, error: null };
+    }, from(table) {
       let op='read',payload,filters=[],single=false;
       const q = {select(){return q},eq(k,v){filters.push(r=>r[k]===v);return q},neq(k,v){filters.push(r=>r[k]!==v);return q},in(k,v){filters.push(r=>v.includes(r[k]));return q},order(){return q},limit(){return q},
         update(v){op='update';payload=v;return q},insert(v){op='insert';payload=v;return q},upsert(v){op='upsert';payload=v;return q},
@@ -30,7 +36,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
           if(op!=='read') {await new Promise(r=>setTimeout(r,window.__writeDelay??20)); if(window.__dbFail) return resolve({data:null,error:new Error('Sin permiso')});window.__writes.push({table,op,payload});}
           let data=window.__db[table].filter(r=>filters.every(f=>f(r)));
           if(op==='update') data.forEach(r=>Object.assign(r,payload));
-          if(op==='insert'){data=[{id:`new-${table}-${window.__writes.length}`,...payload}];window.__db[table].push(...data);}
+          if(op==='insert'){data=[{plantilla_id: window.__repasoTemplate?.version_id ?? null, id:`new-${table}-${window.__writes.length}`,...payload}];window.__db[table].push(...data);}
           if(op==='upsert'){let row=window.__db[table].find(r=>r.revision_id===payload.revision_id&&r.checklist_item_id===payload.checklist_item_id);if(row)Object.assign(row,payload);else window.__db[table].push(payload);data=[payload];}
           resolve({data:structuredClone(single?data[0]||null:data),error:null});
         }catch(error){reject(error)}}};return q;
@@ -136,6 +142,25 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.evaluate(()=>{window.__repasoFail=true;window.__modeDelay=20;});await repaso.click();
    await page.waitForFunction(()=>document.querySelector('#cabinsOperation [data-cb-repaso="1"]')?.getAttribute('aria-pressed')==='true');
    await page.waitForTimeout(80);assert.equal(await repaso.getAttribute('aria-pressed'),'true','error restaura el tipo confirmado');
+   await page.evaluate(() => {
+     window.__writeDelay = 20;
+     window.__repasoTemplate = { version_id: 'qa-repaso-v1', groups: [{
+       id: 'living', label: null, items: [{ id: 'qa-cama', itemId: 'db-repaso-living-cama', label: 'Cama y manta', active: true }],
+     }] };
+     obtenerDatosDia(fechaSeleccionada).cabanas['2'] = {
+       revisionCompletaCiclo: { fecha: fechaSeleccionada, verificado: true, esRepaso: true },
+     };
+     window.HAIKU_CABANAS_SITES_V1.pintar();
+     return window.HAIKU_CABANAS_SITES_V1.abrir(2);
+   });
+   await page.getByRole('button', { name: 'Personalizar', exact: true }).waitFor();
+   await page.locator('#repaso-checklist .cb-sector-head').first().click();
+   await page.getByRole('checkbox', { name: 'Cama y manta' }).check();
+   await page.waitForFunction(() => window.__db.revisiones_cabana.some(row => row.cabana_id === 'cab-2'
+     && row.plantilla_id === 'qa-repaso-v1' && window.__db.revision_items.some(item =>
+       item.revision_id === row.id && item.checklist_item_id === 'db-repaso-living-cama')));
+   await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.abrir(1));
+   await page.waitForFunction(() => document.querySelector('#repaso-count').textContent === '1/26');
    assert.deepEqual(errors, []);
    if (process.env.HAKU_UI_SHOTS) {
     fs.mkdirSync(process.env.HAKU_UI_SHOTS, { recursive: true });

@@ -3,15 +3,28 @@
     const core = window.HAIKU_REVISION_PLANTILLA_CORE_V1;
     const contextos = new Map();
     const omitidos = new Set(["PGRST202", "42883", "42501"]);
-    const nombresArea = ["Cocina", "Baño", "Living/C", "Terraza"];
-    const iconosArea = ["kitchen", "shower", "bed", "mountain"];
+    const modalidades = {
+        completa: { label: "Revisión completa", panel: "revision-individual", areas: [
+            ["0", "Cocina", "kitchen"], ["1", "Baño", "shower"], ["2", "Living/C", "bed"], ["3", "Terraza", "mountain"]
+        ] },
+        repaso: { label: "Repaso", panel: "repaso-individual", areas: [
+            ["living", "Living / Cama", "bed"], ["kitchen", "Cocina", "kitchen"],
+            ["bathroom", "Baño", "shower"], ["terrace", "Terraza", "mountain"]
+        ] },
+        aseo_express: { label: "Revisión Express", panel: "aseo-express-individual", areas: [
+            ["kitchen", "Cocina", "kitchen"], ["bathroom", "Baño", "shower"],
+            ["living", "Living/Cama", "bed"], ["terrace", "Terraza", "mountain"]
+        ] }
+    };
     let scope = null;
     let editor = null;
     let guardado = null;
     let arrastre = null;
-    let disponible = true;
-    const clave = (fecha, numero) => fecha + "::" + numero;
-    const contexto = (fecha, numero) => contextos.get(clave(fecha, numero));
+    const indisponibles = new Set();
+    const clave = (fecha, numero, modo) => fecha + "::" + numero + "::" + modo;
+    const contexto = (fecha, numero, modo = "completa") => contextos.get(clave(fecha, numero, modo));
+    const alcance = actual => actual.modo === "completa" ? "Cabaña " + actual.numero : "Todas las cabañas";
+    const etiqueta = actual => modalidades[actual.modo].label;
     const $ = id => document.getElementById(id);
     const escapado = value => String(value ?? "").replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -26,13 +39,17 @@
         return data;
     }
 
-    async function leer(fecha, cabanaId = null) {
-        if (!disponible) return null;
+    async function leer(fecha, cabanaId = null, modo = "completa") {
+        const completa = modo === "completa";
+        const nombre = completa ? "haku_revision_plantillas_v1" : "haku_revision_modalidades_v1";
+        if (indisponibles.has(nombre)) return null;
         try {
-            const respuesta = await rpc("haku_revision_plantillas_v1", { p_fecha: fecha, p_cabana_id: cabanaId });
+            const respuesta = await rpc(nombre, completa
+                ? { p_fecha: fecha, p_cabana_id: cabanaId }
+                : { p_fecha: fecha, p_tipo: modo });
             return Array.isArray(respuesta?.templates) ? respuesta : null;
         } catch (error) {
-            if (error.code === "PGRST202" || error.code === "42883") disponible = false;
+            if (error.code === "PGRST202" || error.code === "42883") indisponibles.add(nombre);
             if (!omitidos.has(error.code)) console.warn("HAIKU · Plantillas de revisión:", error.message);
             return null;
         }
@@ -45,10 +62,10 @@
         ) || null;
     }
 
-    function publicar(fecha, numero, cabanaId, respuesta, plantilla) {
+    function publicar(fecha, numero, cabanaId, respuesta, plantilla, modo = "completa") {
         if (!respuesta) return false;
-        const anterior = contexto(fecha, numero)?.plantilla?.version_id ?? null;
-        contextos.set(clave(fecha, numero), { cabanaId, canEdit: respuesta.can_edit === true, plantilla });
+        const anterior = contexto(fecha, numero, modo)?.plantilla?.version_id ?? null;
+        contextos.set(clave(fecha, numero, modo), { cabanaId, canEdit: respuesta.can_edit === true, plantilla });
         mostrar();
         return anterior !== (plantilla?.version_id ?? null);
     }
@@ -78,32 +95,34 @@
     }
 
     function actualizarAlcance(fecha, numero, modo) {
-        const key = numero && modo === "completa" ? clave(fecha, numero) : null;
+        const key = numero && Object.hasOwn(modalidades, modo) ? clave(fecha, numero, modo) : null;
         if (key !== scope?.key && editor) cerrar(false);
-        scope = key ? { key, fecha, numero: String(numero) } : null;
+        scope = key ? { key, fecha, numero: String(numero), modo } : null;
         mostrar();
     }
 
     function mostrar() {
         const button = $("cabinsReviewCustomize");
         if (!button) return;
-        button.hidden = !scope || !contexto(scope.fecha, scope.numero)?.canEdit || Boolean(editor);
+        button.hidden = !scope || !contexto(scope.fecha, scope.numero, scope.modo)?.canEdit || Boolean(editor);
         const success = $("cabinsReviewTemplateSaved");
         success.hidden = !guardado || guardado.key !== scope?.key || Boolean(editor);
         if (!success.hidden) {
             const fecha = new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short",
                 timeZone: "America/Santiago" }).format(new Date(guardado.published_at));
-            success.innerHTML = '<strong>Cambios guardados</strong><span>Disponibles para las próximas revisiones completas.</span>'
+            const aviso = scope.modo === "completa" ? "Disponibles para las próximas revisiones completas."
+                : "Disponibles para las próximas revisiones de este tipo en todas las cabañas.";
+            success.innerHTML = '<strong>Cambios guardados</strong><span>' + aviso + '</span>'
                 + '<small>Última edición por ' + escapado(guardado.author) + " · " + escapado(fecha) + "</small>";
         }
     }
 
     async function abrir() {
-        const info = scope && contexto(scope.fecha, scope.numero);
+        const info = scope && contexto(scope.fecha, scope.numero, scope.modo);
         if (!info?.canEdit || editor) return;
         const actual = { ...scope, cabanaId: info.cabanaId, loading: true, requestNumber: 0,
-            folds: new Set(["area-0", "group-0-0"]), field: null, error: "", saving: false };
-        const operativa = $("revision-individual");
+            folds: new Set(["area-" + modalidades[scope.modo].areas[0][0], "group-0-0"]), field: null, error: "", saving: false };
+        const operativa = $(modalidades[actual.modo].panel);
         actual.inertAnterior = operativa.inert;
         operativa.inert = true;
         editor = actual;
@@ -111,7 +130,9 @@
         render();
         mostrar();
         try {
-            const result = await rpc("haku_revision_plantilla_editar_v1", { p_cabana_id: actual.cabanaId });
+            const result = actual.modo === "completa"
+                ? await rpc("haku_revision_plantilla_editar_v1", { p_cabana_id: actual.cabanaId })
+                : await rpc("haku_revision_modalidad_editar_v1", { p_tipo: actual.modo });
             if (editor !== actual) return;
             if (!Array.isArray(result?.groups) || !result.request_id) throw new Error("No se pudo abrir el editor.");
             Object.assign(actual, { baseline: result.groups, draft: result.groups, version: result.version_id,
@@ -129,7 +150,7 @@
         const anterior = editor;
         editor = null;
         arrastre = null;
-        if (anterior) $("revision-individual").inert = anterior.inertAnterior;
+        if (anterior) $(modalidades[anterior.modo].panel).inert = anterior.inertAnterior;
         const dialog = $("cabinsReviewTemplateConfirm");
         if (dialog?.open) dialog.close();
         $("cabinsDetail")?.classList.remove("pr-editing");
@@ -185,23 +206,24 @@
         host.hidden = false;
         const cambios = editor.draft ? core.changes(editor.baseline, editor.draft) : [];
         const heading = '<div class="pr-heading"><div><h3 id="cabinsReviewEditorTitle" tabindex="-1">Editor de revisiones</h3>'
-            + '<p>Cabaña ' + escapado(editor.numero) + ' · Revisión completa</p></div></div>';
+            + '<p>' + escapado(alcance(editor)) + ' · ' + etiqueta(editor) + '</p></div></div>';
         const toolbar = '<div class="pr-toolbar"><div class="pr-mode">' + icono("pencil") + '<span><strong>Modo edición</strong>'
             + '<small>' + cambios.length + (cambios.length === 1 ? ' cambio en borrador' : ' cambios en borrador')
             + '</small></span></div><span class="pr-preview">' + icono("eye") + ' Casillas de vista previa</span></div>';
         const groups = editor.draft || [];
-        const areas = nombresArea.map((label, index) => {
-            const areaGroups = groups.filter(group => group.id.split("-")[0] === String(index));
+        const definiciones = modalidades[editor.modo].areas;
+        const areas = definiciones.map(([id, label, icon]) => {
+            const areaGroups = groups.filter(group => group.id.split("-")[0] === id);
             if (!areaGroups.length) return "";
             const count = areaGroups.flatMap(group => group.items).filter(item => item.active).length;
-            return '<details class="pr-area" data-fold="area-' + index + '"' + (editor.folds.has("area-" + index) ? " open" : "")
-                + '><summary>' + icono(iconosArea[index]) + '<strong>' + label + '</strong><small>' + count
+            return '<details class="pr-area" data-fold="area-' + id + '"' + (editor.folds.has("area-" + id) ? " open" : "")
+                + '><summary>' + icono(icon) + '<strong>' + label + '</strong><small>' + count
                 + (count === 1 ? ' elemento' : ' elementos') + '</small><span class="pr-fold"></span></summary><div class="pr-area-body">'
                 + areaGroups.map(renderGrupo).join("") + '</div></details>';
         });
         const archived = groups.flatMap(group => group.items.filter(item => !item.active).map(item => (
             '<div class="pr-archived-row"><span><strong>' + escapado(item.label) + '</strong><small>'
-            + nombresArea[Number(group.id.split("-")[0])] + (group.label ? ' · ' + escapado(group.label) : '')
+            + (definiciones.find(([id]) => id === group.id.split("-")[0])?.[1] || "") + (group.label ? ' · ' + escapado(group.label) : '')
             + '</small></span><button type="button" class="pr-add" data-action="restore" data-group="' + escapado(group.id)
             + '" data-item="' + escapado(item.id) + '">' + icono("recover") + ' Recuperar</button></div>'
         )));
@@ -230,14 +252,18 @@
         if (!cambios.length || editor.field || dialog.open) return;
         const changeIcons = { rename: "pencil", add: "plus", archive: "archive", restore: "recover", move: "reorder" };
         dialog.innerHTML = '<div class="pr-confirm-heading">' + icono("clipboard")
-            + '<div><h3 id="prConfirmTitle">Guardar cambios</h3><small>Revisión completa · Cabaña ' + escapado(editor.numero) + '</small></div>'
+            + '<div><h3 id="prConfirmTitle">Guardar cambios</h3><small>' + etiqueta(editor) + ' · ' + escapado(alcance(editor)) + '</small></div>'
             + '<button type="button" data-confirm="back" aria-label="Cerrar confirmación">' + icono("close") + '</button></div>'
             + '<strong class="pr-change-count">' + cambios.length + (cambios.length === 1 ? ' cambio' : ' cambios') + '</strong>'
             + '<ul class="pr-changes">' + cambios.map(change => '<li><span>' + icono(changeIcons[change.kind]) + escapado(change.label)
                 + '</span><strong>' + escapado(change.detail) + '</strong></li>').join("") + '</ul>'
-            + '<p class="pr-confirm-info">' + icono("info") + 'El equipo verá los cambios en las próximas revisiones completas de esta cabaña. Las revisiones iniciadas conservan su lista.</p>'
+            + '<p class="pr-confirm-info">' + icono("info")
+            + (editor.modo === "completa" ? 'El equipo verá los cambios en las próximas revisiones completas de esta cabaña.'
+                : 'La lista se aplicará a las próximas revisiones de este tipo en todas las cabañas.')
+            + ' Las revisiones iniciadas conservan su lista.</p>'
             + '<p class="pr-error" role="alert" hidden></p><div class="pr-confirm-actions"><button type="button" data-confirm="back">Volver</button>'
-            + '<button class="pr-primary" type="button" data-confirm="apply">Aplicar a Cabaña ' + escapado(editor.numero) + '</button></div>';
+            + '<button class="pr-primary" type="button" data-confirm="apply">Aplicar a '
+            + (editor.modo === "completa" ? escapado(alcance(editor)) : "todas las cabañas") + '</button></div>';
         dialog.showModal();
     }
 
@@ -248,15 +274,18 @@
         const buttons = dialog.querySelectorAll("button");
         buttons.forEach(button => { button.disabled = true; });
         try {
-            const result = await rpc("haku_revision_plantilla_guardar_v1", {
-                p_cabana_id: actual.cabanaId, p_version_id: actual.version, p_request_id: actual.requestId,
-                p_groups: core.payload(actual.draft)
+            const completa = actual.modo === "completa";
+            const result = await rpc(completa ? "haku_revision_plantilla_guardar_v1" : "haku_revision_modalidad_guardar_v1", {
+                ...(completa ? { p_cabana_id: actual.cabanaId } : { p_tipo: actual.modo }),
+                p_version_id: actual.version, p_request_id: actual.requestId, p_groups: core.payload(actual.draft)
             });
             if (editor !== actual) return;
             if (!result?.version_id) throw new Error("No fue posible confirmar el guardado.");
             guardado = { ...result, key: actual.key };
             cerrar();
-            void window.HAIKU_REVISION_SUPABASE_V1?.prepararRevision(actual.numero);
+            if (completa) void window.HAIKU_REVISION_SUPABASE_V1?.prepararRevision(actual.numero);
+            else if (actual.modo === "repaso") void window.HAIKU_REPASO_V2?.hidratar(actual.fecha);
+            else void window.HAIKU_ASEO_OPERACION_V1?.hidratar(actual.fecha, { pintar: true });
         } catch (error) {
             if (editor !== actual) return;
             const notice = dialog.querySelector('[role="alert"]');

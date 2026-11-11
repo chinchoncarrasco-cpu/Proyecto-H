@@ -50,6 +50,17 @@ const oldDay = '2026-11-10', newDay = '2026-11-11';
                             })) }));
                             return { data: { version_id: qa.version, author: 'Administrador QA', published_at: newDay + 'T18:00:00Z' }, error: null };
                         }
+                        if (name === 'haku_revision_modalidad_editar_v1') {
+                            const [id, label] = args.p_tipo === 'repaso' ? ['living', 'Cama'] : ['kitchen', 'Losa'];
+                            return { data: { version_id: null, request_id: 'qa-' + args.p_tipo,
+                                groups: [{ id, label: null, items: [{ id: 'item-1', label, active: true, itemId: 'db-item-1' }] }] },
+                            error: null };
+                        }
+                        if (name === 'haku_revision_modalidad_guardar_v1') {
+                            qa.publications.push(args);
+                            return { data: { version_id: args.p_request_id, author: 'Administrador QA',
+                                published_at: newDay + 'T18:00:00Z' }, error: null };
+                        }
                         return { data: null, error: { code: 'PGRST202' } };
                     },
                     from(table) {
@@ -183,9 +194,35 @@ const oldDay = '2026-11-10', newDay = '2026-11-11';
                 return window.HAIKU_REVISION_SUPABASE_V1.prepararRevision('1');
             });
             assert.equal(await customize.isVisible(), false);
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+            for (const [modo, title] of [['repaso', 'Repaso'], ['aseo_express', 'Revisión Express']]) {
+                await page.evaluate(({ newDay, modo }) => {
+                    const editor = window.HAIKU_REVISION_PLANTILLA_V1;
+                    editor.publicar(newDay, '1', 'cab-1', { can_edit: true, templates: [] }, null, modo);
+                    editor.actualizarAlcance(newDay, '1', modo);
+                }, { newDay, modo });
+                await customize.click();
+                await editor.getByText('Todas las cabañas · ' + title, { exact: true }).waitFor();
+                await editor.getByRole('button', { name: 'Agregar elemento' }).click();
+                await editor.getByRole('textbox', { name: 'Nuevo elemento' }).fill('Elemento QA');
+                await editor.getByRole('button', { name: 'Aceptar' }).click();
+                await editor.getByRole('button', { name: 'Guardar cambios' }).click();
+                await dialog.getByText(title + ' · Todas las cabañas', { exact: true }).waitFor();
+                await dialog.getByRole('button', { name: 'Aplicar a todas las cabañas' }).click();
+                await page.getByText('Cambios guardados', { exact: true }).waitFor();
+                const publication = await page.evaluate(() => window.__templateQA.publications.at(-1));
+                assert.equal(publication.p_tipo, modo);
+                assert.equal(publication.p_cabana_id, undefined);
+                assert.equal(publication.p_groups[0].items.at(-1).label, 'Elemento QA');
+            }
+            const layout = await page.evaluate(() => ({
+                width: innerWidth, scroll: document.documentElement.scrollWidth,
+                overflowing: [...document.querySelectorAll('#cabinsDetail *')].map(node => ({ node, box: node.getBoundingClientRect() }))
+                    .filter(({ box }) => box.width > 0 && box.right > innerWidth + 1)
+                    .slice(0, 10).map(({ node, box }) => [node.id || node.className, Math.round(box.right)]),
+            }));
+            assert.ok(layout.scroll <= layout.width, JSON.stringify(layout));
             assert.deepEqual(errors, []);
-            console.log(width + 'px ' + theme + ': cancelar, confirmar, revisión previa y check con identidad estable.');
+            console.log(width + 'px ' + theme + ': Revisión completa conserva sus checks y Repaso/Express confirman el alcance común.');
             await page.close();
         }
     } finally {

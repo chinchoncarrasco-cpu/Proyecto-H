@@ -154,3 +154,81 @@ test('la publicación versiona por cabaña y deja revisiones, checks, cantidades
         await db.close();
     }
 });
+
+test('Repaso y Express versionan listas comunes sin cambiar revisiones ya iniciadas', async () => {
+    const db = new PGlite();
+    const repaso = require('../js/haiku-repaso-checklist-v1.js');
+    const express = ['Losa', 'Llave de gas', 'Té', 'Café', 'Té Hierbas', 'Cama', 'Salamandra', 'Leña',
+        'Diario', 'Amenities', 'Papel H.', 'Toallas', 'WC', 'Carbón', 'Fogón', 'Ventanas'];
+    const sharedMigration = fs.readFileSync(path.join(migrations,
+        fs.readdirSync(migrations).find(file => file.endsWith('_haku_personalizar_repaso_express_v1.sql'))), 'utf8');
+    try {
+        await db.exec(baseline);
+        await db.exec('alter table checklist_items add column activo boolean not null default true');
+        for (const section of repaso.sections) for (const item of section.items) {
+            await db.query('insert into checklist_items(nombre,categoria) values($1,$2)', [item.label, section.category]);
+        }
+        for (const label of express) {
+            await db.query('insert into checklist_items(nombre,categoria) values($1,$2)', [label, '🧹 ASEO EXPRESS']);
+        }
+        await db.exec(migration);
+        await db.exec(sharedMigration);
+        const first = async (sql, args = []) => (await db.query(sql, args)).rows[0];
+        const { today, tomorrow } = await first("select timezone('America/Santiago',now())::date::text today,(timezone('America/Santiago',now())::date+1)::text tomorrow");
+        const setUser = async (id, role = 'authenticated') => {
+            await db.exec('reset role');
+            await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]);
+            await db.exec('set role ' + role);
+        };
+        const addReview = (date, id, type) => first(
+            'insert into revisiones_cabana(cabana_id,fecha,tipo_revision) values($1,$2,$3) returning id,plantilla_id', [id, date, type]);
+        const edit = async type => (await first('select haku_revision_modalidad_editar_v1($1) r', [type])).r;
+        const save = async (type, draft, groups) => (await first(
+            'select haku_revision_modalidad_guardar_v1($1,$2,$3,$4) r',
+            [type, draft.version_id, draft.request_id, JSON.stringify(core.payload(groups))])).r;
+        const read = async (date, type = null) => (await first('select haku_revision_modalidades_v1($1,$2) r', [date, type])).r;
+
+        await setUser(team);
+        assert.deepEqual(await read(today), { can_edit: false, templates: [] });
+        await assert.rejects(edit('repaso'), error => error.code === '42501');
+        const oldRepaso = await addReview(today, cabin, 'repaso');
+        const oldExpress = await addReview(today, cabin, 'aseo_express');
+        await setUser(admin);
+        const repasoDraft = await edit('repaso');
+        assert.deepEqual(repasoDraft.groups.map(g => [g.id, g.items.map(i => [i.id, i.label])]),
+            repaso.sections.map(g => [g.id, g.items.map(i => [i.id, i.label])]));
+        const repasoItem = repasoDraft.groups[0].items[0];
+        await db.query("insert into revision_items values($1,$2,'ok',null)", [oldRepaso.id, repasoItem.itemId]);
+        let repasoChanges = core.renameItem(repasoDraft.groups, 'living', repasoItem.id, 'Cama y cojines');
+        repasoChanges = core.addItem(repasoChanges, 'living', 'nuevo-' + repasoDraft.request_id + '-1', 'Manta');
+        const repasoPublished = await save('repaso', repasoDraft, repasoChanges);
+        assert.deepEqual(await save('repaso', repasoDraft, repasoChanges), repasoPublished);
+        assert.deepEqual((await read(tomorrow, 'aseo_express')).templates, []);
+        assert.equal((await read(today, 'repaso')).templates.some(entry => entry.cabana_id === cabin), false);
+        assert.equal((await read(tomorrow, 'repaso')).templates.length, 2);
+        const newRepaso = await addReview(tomorrow, other, 'repaso');
+        assert.equal(newRepaso.plantilla_id, repasoPublished.version_id);
+        const nextRepaso = await edit('repaso');
+        const laterRepaso = await save('repaso', nextRepaso, core.setItemActive(nextRepaso.groups, 'living', repasoItem.id, false));
+        assert.notEqual(laterRepaso.version_id, newRepaso.plantilla_id);
+        assert.equal((await read(tomorrow, 'repaso')).templates.find(t => t.revision_id === newRepaso.id).version_id, newRepaso.plantilla_id);
+        assert.equal((await first('select estado from revision_items where revision_id=$1', [oldRepaso.id])).estado, 'ok');
+
+        const expressDraft = await edit('aseo_express');
+        assert.deepEqual(expressDraft.groups.flatMap(g => g.items.map(i => i.label)), express);
+        const expressItem = expressDraft.groups[0].items[0];
+        await db.query("insert into revision_items values($1,$2,'ok',1)", [oldExpress.id, expressItem.itemId]);
+        const expressChanges = core.moveItem(expressDraft.groups, 'kitchen', expressItem.id, 1);
+        const expressPublished = await save('aseo_express', expressDraft, expressChanges);
+        assert.equal((await read(today, 'aseo_express')).templates.some(entry => entry.cabana_id === cabin), false);
+        assert.equal((await addReview(tomorrow, other, 'aseo_express')).plantilla_id, expressPublished.version_id);
+        assert.equal((await addReview(tomorrow, cabin, 'completa')).plantilla_id, null);
+        assert.equal((await first('select estado from revision_items where revision_id=$1', [oldExpress.id])).estado, 'ok');
+        await assert.rejects(db.query('update revisiones_cabana set plantilla_id=$1 where id=$2',
+            [expressPublished.version_id, newRepaso.id]), error => error.code === '22023');
+        await setUser('', 'anon');
+        await assert.rejects(read(today), error => error.code === '42501');
+    } finally {
+        await db.close();
+    }
+});
