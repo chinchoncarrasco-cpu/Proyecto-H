@@ -3,7 +3,7 @@
 html[data-haiku-tema="oscuro"] .hr-public-page { color-scheme: dark; }
 .hr-public-page * { box-sizing: border-box; }
 .hr-public-page [hidden] { display: none !important; }
-.hr-public-page :is(#haiku-redes,.hr-dialog) { --hr-bg: var(--haku-compacto-superficie); --hr-panel: var(--haku-compacto-suave); --hr-ink: var(--haku-compacto-texto); --hr-muted: var(--haku-compacto-secundario); --hr-border: var(--haku-compacto-borde); --hr-green: var(--haku-compacto-primario); --hr-tint: var(--haku-compacto-seleccion); --hr-warn: var(--haku-compacto-aviso-fondo); }
+html .hr-public-page :is(#haiku-redes,.hr-dialog) { --hr-bg: var(--haku-compacto-superficie); --hr-panel: var(--haku-compacto-suave); --hr-ink: var(--haku-compacto-texto); --hr-muted: var(--haku-compacto-secundario); --hr-border: var(--haku-compacto-borde); --hr-green: var(--haku-compacto-primario); --hr-tint: var(--haku-compacto-seleccion); --hr-warn: var(--haku-compacto-aviso-fondo); }
 .hr-public-brand { padding: 24px; display: flex; align-items: center; gap: 16px; background: var(--haku-compacto-superficie); border-bottom: 1px solid var(--haku-compacto-borde); }
 .hr-public-mark { display: grid; place-items: center; background: var(--haku-compacto-seleccion); color: var(--haku-compacto-acento); border-radius: 8px; width: 32px; height: 34px; flex: 0 0 32px; font-size: 16px; font-weight: 600; }
 .hr-public-title { flex: 1; min-width: 0; }
@@ -85,3 +85,8 @@ html[data-haiku-tema="oscuro"] .hr-public-page { color-scheme: dark; }
   .hr-public-page dialog.hr-dialog { width: 100%; border-radius: 10px 10px 0 0; }
   .hr-public-footer { padding: 12px 16px; }
 }
+
+/* Los encabezados heredan las mismas medidas dentro del diálogo compartido. */
+html .hr-public-page :is(#haiku-redes,.hr-dialog) .hr-drawer-head h3 { font-size: 16px; line-height: 22px; }
+html .hr-public-page :is(#haiku-redes,.hr-dialog) .hr-drawer-body h4 { font-size: 13px; font-weight: 500; }
+html .hr-public-page :is(#haiku-redes,.hr-dialog) .hr-eyebrow { font-size: 11px; text-transform: none; letter-spacing: 0; }

@@ -226,7 +226,11 @@
             items.filter(i => lista(g.itemIds).includes(i.id)).forEach(i => caso(parent, i));
         });
         seccion("Diferencias", p.gruposConDiferencias, grupos.filter(g => g.estado === "asociada" && lista(g.diferencias).length), (parent, g) => {
-            texto(parent, g.diferencias); items.filter(i => lista(g.itemIds).includes(i.id)).forEach(i => caso(parent, i));
+            const miembros = items.filter(i => lista(g.itemIds).includes(i.id));
+            miembros.forEach(i => caso(parent, i));
+            // Conservar diferencias de grupo sin repetir las ya explicadas en cada estadía.
+            const mostradas = new Set(miembros.flatMap(i => lista(i.diferencias)));
+            texto(parent, lista(g.diferencias).filter(d => !mostradas.has(d)));
         });
         for (const [label, status, count] of [["Faltantes", "sin_coincidencia", p.faltantes], ["Ambiguas", "ambigua", p.ambiguas]])
             seccion(label, count, grupos.filter(g => g.estado === status), (parent, g) => {

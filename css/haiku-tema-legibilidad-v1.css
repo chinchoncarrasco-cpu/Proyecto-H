@@ -27,3 +27,15 @@ html #sites-resumen-reserva-drawer :is(.rd-label,.rd-muted,.rd-sub,.rd-section-h
   color: var(--haku-compacto-secundario); opacity: 1;
 }
 html .ficha-reserva .ficha-contacto > div > span { color: var(--haku-compacto-secundario); }
+html #sites-resumen-reserva-drawer :is(.sites-resumen-drawer-kicker,.rd-fact span,.rd-pay-stat span),
+html .haiku-asistente-root .haiku-asistente-titulo > span,
+html #seccion-servicios :is(.sv-metrics span,.sv-slot-occupied small,.sv-service-main > span,
+  .sv-agenda-row.realizado > time,.sv-agenda-row.cancelado > time) {
+  color: var(--haku-compacto-secundario); opacity: 1;
+}
+html .haiku-cuenta-menu-panel #haiku-cuenta-badge-estado {
+  color: var(--haku-compacto-acento); background: var(--haku-compacto-seleccion);
+}
+html #seccion-servicios .sv-status.pendiente {
+  color: var(--haku-compacto-aviso); background: var(--haku-compacto-aviso-fondo);
+}
