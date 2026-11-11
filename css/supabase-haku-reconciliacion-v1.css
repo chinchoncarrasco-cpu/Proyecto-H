@@ -1764,9 +1764,6 @@
 .haku-libro-auto.haku-libro-auto .haku-libro-auto__incorporar { background: var(--aviso-acento); color: var(--aviso-superficie); border-color: var(--aviso-acento); font-weight: 600; }
 .haku-libro-auto__incorporar[aria-busy="true"]::before { content: ''; display: inline-block; width: 11px; height: 11px; margin-right: 6px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: haku-aviso-incorporando .7s linear infinite; }
 .haku-libro-auto__resultado { padding-top: 6px; border-top: 1px solid var(--aviso-borde); font-size: 12px; line-height: 17px; overflow-wrap: anywhere; }
-.haku-libro-auto__pendientes { margin-top: 4px; font-size: 11px; }
-.haku-libro-auto__pendientes summary { cursor: pointer; }
-.haku-libro-auto.haku-libro-auto .haku-libro-auto__pendientes p { padding-top: 4px; }
 @keyframes haku-aviso-incorporando { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .haku-libro-auto__incorporar[aria-busy="true"]::before { animation: none; } }
 .haku-incorporacion-aviso { min-width: 0; }
@@ -1790,6 +1787,163 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
 .haku-libro-auto.haku-libro-auto .haku-libro-auto__prioridades .haku-libro-auto__prioridad:focus-visible { outline-offset: -2px; }
 @media (max-width: 370px) {
     .haku-libro-auto.haku-libro-auto { right: 10px; width: calc(100vw - 20px); }
+}
+
+/* Casos pendientes del aviso de incorporación (Figma 2:203 y 2:423). */
+.haku-libro-auto.haku-libro-auto--con-pendientes {
+    --aviso-fondo: #fff; --aviso-borde: #c9dacf;
+    --aviso-texto: #172c24; --aviso-secundario: #50665c; --aviso-acento: #22694e;
+    --casos-detalle: #f4f8f5; --casos-linea: #dce6df; --casos-seleccion: #e6f2eb;
+    --casos-borde-seleccion: #9cbfaa; --casos-principal: #246b52; --casos-texto-principal: #fff;
+    --casos-dato: #8d5d27; --casos-dato-fondo: #f8efe1;
+    width: min(351px, calc(100vw - 44px)); right: 22px; bottom: 74px;
+    max-height: min(540px, calc(100dvh - 88px));
+    padding: 14px; gap: 9px; border-radius: 14px;
+    box-shadow: 0 2px 5px #0917111c, 0 11px 28px -5px #09171138;
+}
+html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto--con-pendientes {
+    --aviso-borde: #4b6253; --aviso-acento: #b0dcc1;
+    --casos-detalle: #1b2621; --casos-linea: #384b40; --casos-seleccion: #30483b;
+    --casos-borde-seleccion: #5c876f; --casos-principal: #9fd2b3; --casos-texto-principal: #152c21;
+    --casos-dato: #f2c48d; --casos-dato-fondo: #44382a;
+    box-shadow: 0 2px 5px #0917111c, 0 11px 28px -5px #09171138;
+}
+.haku-libro-auto.haku-libro-auto--casos-abiertos {
+    width: min(656px, calc(100vw - 44px)); max-height: min(650px, calc(100dvh - 88px));
+    padding: 0; gap: 0; overflow: hidden;
+}
+.haku-libro-auto__aviso-incorporado { display: contents; }
+.haku-libro-auto__aviso-incorporado[hidden], .haku-libro-casos[hidden], .haku-libro-casos__detalle[hidden] { display: none; }
+.haku-libro-auto--con-pendientes .haku-libro-auto__marca { font-size: 15px; line-height: 20px; }
+.haku-libro-auto--con-pendientes .haku-libro-auto__resultado { display: grid; gap: 8px; padding-top: 9px; }
+.haku-libro-casos__confirmado { display: flex; align-items: center; gap: 5px; color: var(--aviso-acento); font-size: 11px; }
+.haku-libro-casos { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
+.haku-libro-casos :is(h2, h3, h4) { margin: 0; color: var(--aviso-texto); }
+.haku-libro-casos__cabecera {
+    display: flex; align-items: center; flex: none; min-height: 66px;
+    gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--casos-linea);
+}
+.haku-libro-casos__encabezado { flex: 1; min-width: 0; }
+.haku-libro-casos__encabezado h2 { display: flex; align-items: center; gap: 8px; font-size: 19px; line-height: 23px; font-weight: 600; letter-spacing: -.48px; }
+.haku-libro-casos__total {
+    display: inline-grid; place-items: center; flex: none; min-width: 23px; min-height: 20px; padding: 0 5px;
+    border-radius: 10px; background: var(--casos-seleccion); color: var(--aviso-acento);
+    font-size: 11px; line-height: 14px; letter-spacing: 0;
+}
+.haku-libro-casos__meta { display: block; color: var(--aviso-secundario); font-size: 11px; line-height: 15px; }
+.haku-libro-casos__encabezado .haku-libro-casos__meta { padding-top: 3px; }
+.haku-libro-casos__cuerpo { display: flex; flex: 1 1 auto; min-height: 0; max-height: 480px; }
+.haku-libro-casos__lista {
+    flex: 0 0 301px; min-width: 0; min-height: 0; padding: 7px 8px;
+    overflow-y: auto; overscroll-behavior: contain;
+}
+.haku-libro-casos__caso { position: relative; min-width: 0; margin-bottom: 2px; }
+.haku-libro-casos__caso:not(:last-child):not(:has([aria-expanded="true"]))::after {
+    content: ''; position: absolute; inset-inline: 11px; bottom: -1px; border-bottom: 1px solid var(--casos-linea);
+}
+.haku-libro-casos__caso:last-child { margin-bottom: 0; }
+.haku-libro-casos__rotulo { display: grid; min-width: 0; gap: 2px; }
+.haku-libro-casos__rotulo strong { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--aviso-texto); }
+.haku-libro-casos__detalle {
+    display: flex; flex: 1 1 auto; flex-direction: column; gap: 15px; min-width: 0;
+    padding: 19px; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--casos-detalle); border-left: 1px solid var(--casos-linea);
+}
+.haku-libro-casos__reserva { display: grid; gap: 4px; }
+.haku-libro-casos__detalle .haku-libro-casos__titular { font-size: 18px; line-height: 23px; font-weight: 600; letter-spacing: -.35px; }
+.haku-libro-casos__identidad { display: flex; flex-wrap: wrap; gap: 6px; color: var(--aviso-secundario); font-size: 12px; line-height: 16px; }
+.haku-libro-casos__cabana { color: var(--aviso-acento); font-weight: 600; }
+.haku-libro-casos__identidad time::before { content: '·'; margin-right: 6px; }
+.haku-libro-casos__grupo {
+    display: flex; flex-direction: column; gap: 8px; padding-top: 15px; border-top: 1px solid var(--casos-linea);
+}
+.haku-libro-casos__detalle .haku-libro-casos__servicio { font-size: 14px; line-height: 18px; font-weight: 600; }
+.haku-libro-casos__datos { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.haku-libro-casos__datos li { display: flex; align-items: center; gap: 9px; font-size: 13px; line-height: 17px; font-weight: 500; }
+.haku-libro-casos__datos li::before {
+    content: ''; flex: none; width: 16px; height: 16px; border-radius: 50%;
+    background: radial-gradient(circle, var(--casos-dato) 2px, var(--casos-dato-fondo) 2.5px);
+}
+.haku-libro-casos__datos-movil { display: none; }
+.haku-libro-casos__motivo { font-size: 12px; line-height: 17px; }
+.haku-libro-casos__fuente {
+    display: grid; gap: 5px; padding: 10px 11px;
+    background: var(--aviso-fondo); border: 1px solid var(--casos-linea); border-radius: 8px;
+    font-size: 12px; line-height: 17px;
+}
+.haku-libro-casos__pie {
+    display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 8px; min-height: 58px;
+    padding: 8px 12px; border-top: 1px solid var(--casos-linea);
+}
+html .haku-libro-auto.haku-libro-auto--con-pendientes :is(button.haku-libro-casos__abrir, .haku-libro-casos button) {
+    border: 1px solid var(--aviso-borde); border-radius: 8px; background: var(--aviso-fondo); color: var(--aviso-acento);
+    font-weight: 600; outline-offset: -2px;
+}
+html .haku-libro-auto--con-pendientes button.haku-libro-casos__abrir,
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__fila {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%;
+    min-height: 45px; padding: 5px 10px 5px 11px; text-align: left; font-weight: 400;
+}
+html .haku-libro-auto.haku-libro-auto--con-pendientes button.haku-libro-casos__abrir {
+    min-height: 50px; background: var(--casos-seleccion); border-color: var(--casos-borde-seleccion);
+}
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__fila {
+    border-color: transparent; color: var(--aviso-secundario);
+}
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__fila:hover { background: var(--casos-detalle); }
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__fila[aria-expanded="true"] {
+    background: var(--casos-seleccion); border-color: var(--casos-borde-seleccion); color: var(--aviso-acento);
+}
+html .haku-libro-auto--con-pendientes .haku-libro-casos button:is(.haku-libro-casos__volver, .haku-libro-casos__cerrar) {
+    display: grid; place-items: center; flex: none; width: 36px; height: 36px; padding: 0;
+}
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__cerrar {
+    border-color: transparent; color: var(--aviso-secundario);
+}
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__informe { min-height: 38px; min-width: 105px; }
+html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__completar {
+    min-height: 38px; min-width: 170px; color: var(--casos-texto-principal);
+    background: var(--casos-principal); border-color: var(--casos-principal);
+}
+.haku-libro-casos__icono {
+    display: block; flex: none; width: 16px; height: 16px; background: currentColor;
+    mask: var(--casos-icono) center / contain no-repeat;
+}
+.haku-libro-casos__icono--volver { --casos-icono: url('../assets/icons/haku-pagos-manual/back.svg'); }
+.haku-libro-casos__icono--cerrar { --casos-icono: url('../assets/icons/personalizar-revision/close.svg'); }
+.haku-libro-casos__icono--confirmado { --casos-icono: url('../assets/icons/haku-pagos-manual/check.svg'); }
+.haku-libro-casos__icono--siguiente, .haku-libro-casos__icono--desplegar { --casos-icono: url('../assets/icons/personalizar-revision/right.svg'); }
+.haku-libro-casos__icono:is(.haku-libro-casos__icono--volver, .haku-libro-casos__icono--cerrar, .haku-libro-casos__icono--siguiente) { width: 18px; height: 18px; }
+@media (max-width: 719px) {
+    .haku-libro-auto.haku-libro-auto--con-pendientes { right: 12px; bottom: 70px; width: min(366px, calc(100vw - 24px)); }
+    .haku-libro-auto.haku-libro-auto--casos-abiertos { width: min(480px, calc(100vw - 24px)); }
+    .haku-libro-casos__lista { flex: 1 1 auto; }
+    .haku-libro-casos__detalle {
+        padding: 9px 11px 10px; margin-top: 2px; gap: 6px; overflow: visible;
+        border: 0; border-radius: 8px;
+    }
+    .haku-libro-casos__identidad { font-size: 11px; line-height: 14px; }
+    .haku-libro-casos__reserva:not(:has(time)), .haku-libro-casos__identidad time::before,
+    .haku-libro-casos__detalle :is(.haku-libro-casos__titular, .haku-libro-casos__cabana, .haku-libro-casos__datos, .haku-libro-casos__datos-titulo),
+    .haku-libro-casos__detalle--simple .haku-libro-casos__servicio { display: none; }
+    .haku-libro-casos__grupo { gap: 6px; padding-top: 0; border: 0; }
+    .haku-libro-casos__datos-movil { display: block; font-size: 12px; line-height: 16px; font-weight: 500; }
+    .haku-libro-casos__fuente {
+        display: flex; flex-wrap: wrap; gap: 0 5px; padding: 0; margin: 0; border: 0; background: none;
+        color: var(--aviso-secundario); font-size: 11px; line-height: 15px;
+    }
+    .haku-libro-casos__icono--desplegar { --casos-icono: url('../assets/icons/personalizar-revision/down.svg'); }
+    .haku-libro-casos__fila[aria-expanded="true"] .haku-libro-casos__icono--desplegar { transform: rotate(180deg); }
+    .haku-libro-casos__pie { min-height: 64px; justify-content: stretch; }
+    html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__fila { min-height: 46px; }
+    html .haku-libro-auto--con-pendientes .haku-libro-casos button:is(.haku-libro-casos__volver, .haku-libro-casos__cerrar) { width: 42px; height: 42px; }
+    html .haku-libro-auto--con-pendientes .haku-libro-casos button:is(.haku-libro-casos__informe, .haku-libro-casos__completar) { min-height: 44px; }
+    html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__informe { min-width: 107px; }
+    html .haku-libro-auto--con-pendientes .haku-libro-casos button.haku-libro-casos__completar { flex: 1; min-width: 0; }
+}
+@media (max-width: 359px) {
+    .haku-libro-casos__cabecera { gap: 7px; padding-inline: 8px; }
+    .haku-libro-casos__encabezado h2 { gap: 6px; font-size: 17px; }
 }
 
 /* Resumen de actualización aprobado en Figma (32:181). Ocupa el ancho real

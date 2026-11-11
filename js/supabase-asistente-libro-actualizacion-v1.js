@@ -276,10 +276,11 @@
             (e.motivo?`<p>${escapar(e.motivo)}</p>`:'')+`<p class="haku-pendiente-estado">${escapar(e.paso)}</p></div>`+
             (item.tipo==='modificacion'?`<details class="haku-pendiente-comparacion"><summary>${pendienteFuente?'Ver última comparación guardada':'Ver comparación de datos'} (${lista(item.cambios).length})</summary><dl>${lista(item.cambios).map(cambio=>cambioPendiente(cambio,!pendienteFuente)).join('')}</dl>${c?.calendario?`<p>Celdas revisadas: ${escapar(c.calendario.hoja)} · ${escapar(c.calendario.rango)}${c.calendario.siguiente_libre?.celda?`. LIBRE: ${escapar(c.calendario.siguiente_libre.celda)}`:''}.</p>`:''}</details>`:'');
     }
+    const razonesServicio=s=>[...new Set([...String(s.razon||'').split(' · '),...lista(s.razones)])].filter(Boolean);
     function motivoServicio(s){
         if(s.estado==='en_sistema')return 'Ya registrado.';
         if(s.estado==='faltante')return 'Falta agregarlo a Proyecto H.';
-        const motivos=[...new Set([...String(s.razon||'').split(' · '),...lista(s.razones)])].filter(Boolean);
+        const motivos=razonesServicio(s);
         const sinFecha=motivos.some(x=>/^Falta una fecha inequívoca del servicio/.test(x));
         const breves=motivos.map(x=>{
             if(/^Falta una fecha inequívoca del servicio/.test(x))return 'Falta indicar el día.';
@@ -492,6 +493,27 @@
         if(!instalar())throw new Error('Haku todavía no está disponible.');
         return insertarIncorporacion(resultado);
     }
+    function pendienteParaAviso(item) {
+        const r=item.actual||item.anterior||{};
+        const cambios=lista(item.cambios);
+        const cambiosServicio=cambios.filter(c=>c.campo==='servicios');
+        const servicios=lista(item.contexto?.servicios).filter(s=>s.estado!=='en_sistema').map(s=>{
+            const motivos=razonesServicio(s);
+            return {nombre:s.concepto,fecha:s.fecha,hora:s.hora,texto:s.texto,
+                motivos:motivos.length?motivos:[motivoServicio(s)]};
+        });
+        const conceptos=[...new Set(cambiosServicio.flatMap(c=>lista(c.ahora).map(s=>s?.concepto)).filter(Boolean))];
+        return {
+            reserva:`${r.titular||'Reserva'} · CAB ${r.cabana??'—'}`,
+            titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,
+            tipo:cambiosServicio.length||servicios.length?'servicio':'reserva',
+            concepto:conceptos.length===1?conceptos[0]:null,
+            origen:r.coordenadas_origen,
+            servicios,
+            motivos:[...new Set([...lista(item.revision?.motivos),...cambios.map(c=>c.proyecto).filter(v=>typeof v==='string'),
+                typeof item.proyecto==='string'?item.proyecto:null].filter(Boolean))]
+        };
+    }
     const operacionesAviso=new WeakMap();
     function incorporarDesdeAviso(resultado){
         if(!puedeIncorporar(resultado))return Promise.reject(new Error('Necesitas una sesión de administrador para incorporar estos cambios.'));
@@ -567,11 +589,7 @@
                     estado.cierreTerminado=true;
                     pendientes=await estado.cache.obtener(resultado,{revalidar:true});
                 }
-                estado.terminado={...totales(),pendientes:lista(pendientes.items).map(item=>({
-                    reserva:`${item.actual?.titular||item.anterior?.titular||'Reserva'} · CAB ${item.actual?.cabana||item.anterior?.cabana||'—'}`,
-                    motivos:[...new Set([...lista(item.revision?.motivos),...lista(item.cambios).map(c=>c.proyecto).filter(v=>typeof v==='string'),
-                        typeof item.proyecto==='string'?item.proyecto:null].filter(Boolean))]
-                }))};
+                estado.terminado={...totales(),pendientes:lista(pendientes.items).map(pendienteParaAviso)};
                 return estado.terminado;
             }catch(error){
                 // Un rechazo anterior al envío permite preparar datos vigentes.

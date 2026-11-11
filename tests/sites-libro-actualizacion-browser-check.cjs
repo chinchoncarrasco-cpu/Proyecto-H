@@ -30,6 +30,147 @@ const server = http.createServer((request, response) => {
     catch { response.writeHead(404).end(); }
 });
 
+async function comprobarCasosDelAviso(browser, url) {
+    const page = await browser.newPage({viewport:{width:1280,height:850}});
+    const errores = [], iconos = new Set();
+    page.on('pageerror',error=>errores.push(error.message));
+    page.on('response',response=>{
+        const recurso = new URL(response.url()).pathname;
+        if(response.ok()&&recurso.endsWith('.svg'))iconos.add(path.basename(recurso));
+    });
+    try {
+        await page.goto(url);
+        await page.evaluate(()=>{
+            const fecha='2026-11-07';
+            const reserva=(i,titular,cabana)=>({id:'Nov26!AB'+(40+i),titular,cabana,fecha_checkin:fecha,
+                fecha_checkout:'2026-11-08',coordenadas_origen:{hoja:'Nov26',celda:'AB'+(40+i)}});
+            const faltaDia='Falta una fecha inequívoca del servicio; con estas noches/horario no se puede inferir sin adivinar.';
+            const faltaDato='Falta fecha u hora para comprobar el servicio existente sin adivinar.';
+            const nombres=['Amelia Torres','Iván Mella','Nicolás Rojas','Elena Salas','Rocío Vidal','Rocío Vidal','Martín Vega','Paula Rivas'];
+            const servicios=[
+                ['Tonel',[faltaDia,faltaDato]],['Tinaja',['No hay una equivalencia segura con el catálogo de servicios de Proyecto H.']],
+                ['Servicio',['No hay una equivalencia segura con el catálogo de servicios de Proyecto H.']],
+                ['Masajes',['Falta duración del masaje.','Falta horario del masaje.',faltaDia,faltaDato]],
+                ['Masaje',['Semántica ambigua: Información contradictoria de fecha del masaje.']],
+                ['Late Check-out',['Haku no puede preparar automáticamente una cortesía para Late Check-out; requiere revisión.']]
+            ];
+            const items=nombres.map((nombre,i)=>{
+                const actual=reserva(i,nombre,[3,1,10,4,9,11,9,1][i]);
+                const [concepto,motivos]=servicios[i]||['Reserva',[i===6?'Elige cómo tratar esta reserva en la comparación.':'No se pudo asociar de forma única']];
+                const cambio={campo:i<6?'servicios':'adultos',antes:[],ahora:[{concepto}],proyecto:motivos.join(' · ')};
+                const contexto={servicios:i<6?[{estado:'revisar',concepto,razon:motivos.join(' · '),razones:motivos,
+                    texto:i===3?'Masajes para 2 · Pend. horario contacto@example.test':''}]:[]};
+                return {id:actual.id,tipo:'modificacion',actual,cambios:[cambio],contexto,revision:{motivos:i===3?['Falta indicar el día.']:[]}};
+            });
+            let generacion=0,informe,registro={version:1,cambios:[]},guardada=false;
+            const panel=document.querySelector('.haiku-asistente-panel');
+            panel.hidden=true;
+            document.getElementById('haiku-asistente-texto').value='Mi consulta sigue aquí';
+            window.__abiertosCasos=0;window.__guardadosCasos=0;
+            window.HAIKU_ASISTENTE={abrir:()=>window.__abiertosCasos++};
+            window.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion}),leerCambiosDetectados:async()=>registro,
+                guardarCambiosDetectados:async value=>{registro=value;}};
+            window.HAIKU_LIBRO_DIFERENCIAS_V1={compararUltimasVersiones:async()=>informe};
+            window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async x=>x,enriquecer:async x=>x,fraseHistorial:()=>''};
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+            window.haikuSupabase={auth:{getUser:async()=>({data:{user:{id:'admin-sintetico'}}})}};
+            window.HAIKU_LIBRO_CONSULTAS={
+                revalidarCambiosDetectados:async()=>({items:structuredClone(items),resueltos:[],
+                    reservas:guardada?[]:[reserva(8,'Reserva completa',2)],comparacion:[],q:{}}),
+                prepararIncorporacion:async()=>({items:[{categoria:'nuevas',seleccionado:true,payload:{tipo:'reserva_actualizar'}}]}),
+                confirmarIncorporacion:async()=>{guardada=true;window.__guardadosCasos++;return {resultado:{ok:true,actualizaciones:1}};}
+            };
+            window.__publicarCasos=()=>{
+                generacion++;
+                window.dispatchEvent(new Event('haiku:libro-cambio'));
+                informe={estado:'ok',libro_actual:{generacion},modificadas:items.map(({actual,cambios})=>({actual,cambios}))};
+                window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
+                    detail:{carga_automatica:true,tenia_anterior:true,generacion}}));
+            };
+        });
+        for(const file of ['supabase-asistente-libro-prioridad-v1','supabase-asistente-libro-incorporacion-v1',
+            'supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])
+            await page.addScriptTag({content:read('js/'+file+'.js')});
+        await page.evaluate(()=>__publicarCasos());
+        const aviso=page.locator('.haku-libro-auto');
+        await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+        const abrir=aviso.getByRole('button',{name:/8 casos pendientes/});
+        await abrir.waitFor();
+        assert.match(await aviso.locator('.haku-libro-auto__resultado').innerText(),/Incorporado: 1 actualización/);
+        await abrir.click();
+        const panel=aviso.locator('.haku-libro-casos'),detalle=panel.locator('.haku-libro-casos__detalle');
+        const masaje=panel.getByRole('button',{name:/Elena Salas.*Faltan 3 datos/});
+        assert.equal(await panel.locator('.haku-libro-casos__fila').count(),8);
+        assert.match(await panel.locator('.haku-libro-casos__encabezado').innerText(),/6 de servicios · 2 de reservas/);
+        await masaje.click();
+        assert.deepEqual(await detalle.locator('li').allTextContents(),['Fecha del servicio','Horario','Duración']);
+        assert.match(await detalle.innerText(),/Nov26, AB43/);
+        assert.doesNotMatch(await detalle.innerText(),/sin adivinar|contacto@example\.test|Otros datos por revisar/);
+
+        const capturas=process.env.HAKU_RESUMEN_CAPTURES;
+        if(capturas)fs.mkdirSync(capturas,{recursive:true});
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const [width,height] of [[1280,850],[390,844],[320,568]]){
+                await page.setViewportSize({width,height});
+                await page.waitForFunction(movil=>{
+                    const lista=document.querySelector('.haku-libro-casos__lista');
+                    return lista.contains(document.querySelector('.haku-libro-casos__detalle'))===movil;
+                },width<720);
+                const medidas=await panel.evaluate(el=>{
+                    const aviso=el.parentElement.getBoundingClientRect();
+                    const pie=el.querySelector('footer').getBoundingClientRect();
+                    const lista=el.querySelector('.haku-libro-casos__lista');
+                    const detalle=el.querySelector('.haku-libro-casos__detalle');
+                    return {visible:aviso.top>=0&&aviso.left>=0&&aviso.right<=innerWidth&&pie.bottom<=innerHeight,
+                        sinDesborde:lista.scrollWidth<=lista.clientWidth+1,
+                        movil:lista.contains(detalle),altoBoton:el.querySelector('.haku-libro-casos__completar').offsetHeight,
+                        color:getComputedStyle(el.parentElement).backgroundColor};
+                });
+                assert.deepEqual(medidas,{visible:true,sinDesborde:true,movil:width<720,altoBoton:width<720?44:38,
+                    color:tema==='oscuro'?'rgb(32, 45, 38)':'rgb(255, 255, 255)'},tema+' '+width);
+                if(capturas)await aviso.screenshot({path:path.join(capturas,'casos-'+tema+'-'+width+'.png')});
+            }
+        }
+        await masaje.click();
+        assert.equal(await masaje.getAttribute('aria-expanded'),'false');
+        assert.equal(await detalle.isVisible(),false);
+        await masaje.click();
+        assert.match(await detalle.innerText(),/Confirma la fecha, la hora y la duración\./);
+        await page.evaluate(()=>{
+            document.querySelector('.haiku-asistente-panel').hidden=false;
+            window.dispatchEvent(new Event('haiku:panel-estado'));
+        });
+        assert.equal(await aviso.getAttribute('data-junto-haku'),'compacto');
+        assert.equal(await panel.evaluate(el=>el.querySelector('footer').getBoundingClientRect().bottom<=el.parentElement.getBoundingClientRect().bottom),true);
+        await page.setViewportSize({width:1440,height:850});
+        await page.waitForFunction(()=>document.querySelector('.haku-libro-auto').dataset.juntoHaku==='1');
+        assert.equal(await aviso.evaluate(el=>el.getBoundingClientRect().right<document.querySelector('.haiku-asistente-panel').getBoundingClientRect().left),true);
+        await panel.getByRole('button',{name:'Volver al aviso'}).press('Escape');
+        assert.equal(await abrir.isVisible(),true);
+        assert.equal(await abrir.evaluate(el=>el===document.activeElement),true);
+        await abrir.click();
+        await page.evaluate(()=>__publicarCasos());
+        assert.equal(await panel.isVisible(),true,'una versión nueva conserva la revisión abierta');
+        await panel.getByRole('button',{name:'Completar pendientes',exact:true}).click();
+        await panel.waitFor({state:'hidden'});
+        assert.equal(await page.locator('.haku-incorporacion-aviso').count(),1);
+        assert.equal(await page.evaluate(()=>__abiertosCasos),1);
+        assert.equal(await page.evaluate(()=>__guardadosCasos),1);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+        await abrir.click();
+        await panel.getByRole('button',{name:'Ver informe',exact:true}).click();
+        await panel.waitFor({state:'hidden'});
+        assert.equal(await page.locator('.haku-actualizacion-sites').count(),1);
+        assert.equal(await page.evaluate(()=>__guardadosCasos),1);
+        assert.deepEqual(errores,[]);
+        for(const icono of ['back.svg','close.svg','check.svg','right.svg','down.svg'])assert.ok(iconos.has(icono),icono);
+    } finally {
+        await page.close();
+    }
+}
+
 (async () => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const browser = await chromium.launch({ executablePath: process.env.HAKU_CHROMIUM_PATH || edge, headless: true, args:['--no-sandbox'] });
@@ -797,6 +938,7 @@ const server = http.createServer((request, response) => {
         assert.match(await informeTitular.innerText(),/Sep26 · C3 · CAB 2 · Ambas versiones/);
         assert.match(await informeTitular.innerText(),/«Lidia Salas» · «Marta López»/);
         assert.deepEqual(errors, []);
+        await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {
         await browser.close();
