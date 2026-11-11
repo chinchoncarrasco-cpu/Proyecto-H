@@ -1552,6 +1552,27 @@ test('historical preparation refuses a snapshot whose change was already applied
   generacion:3,q:pendientes.q}),/ya no tiene diferencias accionables seguras/);
  assert.doesNotMatch(h.texts(),/Confirmar incorporación/);
 });
+test('un alta ya incorporada conserva los campos que cambiaron después en el Libro',async()=>{
+ const A=require('../js/supabase-asistente-libro-actualizacion-v1.js');
+ const anterior=readyBook({adultos:2}),actual={...anterior,adultos:3};
+ const inicial=A.fusionarHistorialCambios(null,{nuevas:[{actual:anterior}]},2);
+ const actualizacion={modificadas:[{anterior,actual,cambios:[{campo:'adultos',antes:2,ahora:3}]}]};
+ const historial=A.fusionarHistorialCambios(inicial,actualizacion,3);
+ assert.equal(historial.cambios.length,1);
+ assert.deepEqual(A.fusionarHistorialCambios(historial,actualizacion,3).cambios,historial.cambios);
+ const sistema=stay(anterior),db=client([sistema]);
+ const pendientes=await Q.revalidarCambiosDetectados(historial.cambios,db,{generacion:3});
+ assert.equal(pendientes.items.length,1);
+ assert.equal(pendientes.items[0].tipo,'modificacion');
+ assert.equal(pendientes.items[0].cambios[0].campo,'adultos');
+ assert.equal(pendientes.items[0].cambios[0].ahora,3);
+ assert.deepEqual(pendientes.resueltos,[]);
+ sistema.adultos=3;
+ const completo=await Q.revalidarCambiosDetectados(historial.cambios,db,{generacion:3});
+ assert.deepEqual(completo.resueltos,[historial.cambios[0].id]);
+ assert.equal(completo.items.length,0);
+ assert.ok(!db.calls.includes('haiku_incorporar_libro_v1'));
+});
 test('confirmation button executes the atomic RPC and shows the saved result',async()=>{
  const r=readyBook({pagos:[readyPay()]}),db=client(),c=await Q.compararSistema([r],db,q),h=renderHarness(null,db);
  h.render({q,reservas:[r],comparacion:c});await h.button('Preparar incorporación').events.click();

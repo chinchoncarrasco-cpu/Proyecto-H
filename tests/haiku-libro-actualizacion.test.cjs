@@ -289,6 +289,8 @@ test('historial fusiona A→B y B→C sin inventar una auditoría mensual',()=>{
     const uno=A.fusionarHistorialCambios(null,ab,2),dos=A.fusionarHistorialCambios(uno,bc,3);
     assert.equal(dos.cambios.length,1);assert.equal(dos.cambios[0].actual.adultos,3);
     assert.deepEqual(dos.cambios[0].cambios.map(x=>x.campo).sort(),['adultos','estado_operativo']);
+    assert.equal(dos.cambios[0].detectado_en,bc.generado_en);
+    assert.deepEqual(A.fusionarHistorialCambios(dos,bc,3).cambios,dos.cambios);
 });
 
 test('cache histórica no relee XLSX y Revalidar sólo repite la consulta focal',async()=>{

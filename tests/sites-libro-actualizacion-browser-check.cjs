@@ -203,10 +203,12 @@ const server = http.createServer((request, response) => {
         await refresh.evaluate(element => element.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         assert.equal(await page.evaluate(() => window.__revalidations), before + 1, 'doble clic no duplica revalidación');
         await page.evaluate(() => window.__pending.reject(new Error('Fallo focal de prueba')));
-        await page.waitForFunction(() => document.querySelector('.haku-libro-pendientes-error')?.textContent.includes('Fallo focal de prueba'));
+        await history.getByText('Conservé los pendientes. Falta comprobarlos en Proyecto H.',{exact:true}).waitFor();
+        assert.ok(await history.locator('.haku-actualizacion-sites__pendiente').count()>0);
+        assert.equal(await history.locator('[data-haku-preparar-pendientes]').count(),0);
         await page.evaluate(() => { window.__revalidationMode = 'ready'; });
-        await report.locator('.haku-libro-pendientes-zona > button').click();
-        await report.locator('.haku-actualizacion-sites__historial').waitFor();
+        await history.getByRole('button',{name:'Volver a revisar',exact:true}).click();
+        await history.locator('[data-haku-preparar-pendientes]').waitFor();
         // Otro operador aplicó el cambio antes de preparar. Refrescar el
         // informe conserva la revisión de servicios y retira el contador viejo.
         await page.evaluate(()=>{
@@ -360,11 +362,13 @@ const server = http.createServer((request, response) => {
         const informesAntes=await page.locator('.haku-actualizacion-sites').count();
         const abiertosAntes=await page.evaluate(()=>__opened);
         await page.evaluate(()=>{
+            __registration={version:1,cambios:[]};
             __generation=6;window.dispatchEvent(new Event('haiku:libro-cambio'));
             const actual={id:'Nov26!AB10',titular:'Cristian Sintético',cabana:8,
                 fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-09',adultos:2};
             __resultadoActual={estado:'ok',libro_actual:{generacion:6},modificadas:[{actual,
                 cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'19:15'}]}]}]};
+            const [detectado]=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.extraerCambiosDetectados(__resultadoActual,6);
             __pendientesActual={items:[{id:'servicio-aviso',tipo:'modificacion',actual,
                 sistema:{reserva_id:'r-cristian'},cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]}],
                 resueltos:[],reservas:[],comparacion:[],revisionServicios:{reservas:[actual],generacion:6}};
@@ -376,7 +380,7 @@ const server = http.createServer((request, response) => {
             window.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4={crearIncorporacionAviso:scope=>{
                 window.__scopeServicio=scope;
                 return ()=>new Promise(resolve=>{__escriturasAviso++;window.__resolverGuardado=()=>{
-                    __pendientesActual={items:[],reservas:[],comparacion:[]};
+                    __pendientesActual={items:[],resueltos:[detectado.id],reservas:[],comparacion:[]};
                     resolve({ok:true,servicios_creados:1,notas_creadas:1});
                 };});
             }};
@@ -430,13 +434,15 @@ const server = http.createServer((request, response) => {
             __generation=8;window.dispatchEvent(new Event('haiku:libro-cambio'));
             const actual={id:'alta-sintetica',titular:'Alta Sintética',cabana:8,fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-08'};
             __resultadoActual={estado:'ok',libro_actual:{generacion:8},nuevas:[{actual}]};
+            const [detectado]=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.extraerCambiosDetectados(__resultadoActual,8);
             __pendientesActual={items:[{tipo:'nueva',actual}],reservas:[actual],comparacion:[],q:{}};
             HAIKU_LIBRO_CONSULTAS.prepararIncorporacion=async()=>({items:[{id:'alta',categoria:'nuevas',payload:{reserva:actual},seleccionado:true}]});
             window.__intentosAviso=0;
             HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(_r,_d,_a,plan)=>{
                 if(++__intentosAviso===1){plan.solicitudPendiente={operacionId:'op-sintetica'};throw Error('Respuesta perdida. Reintenta para comprobar el guardado.');}
                 if(plan.solicitudPendiente?.operacionId!=='op-sintetica')throw Error('Operación duplicada');
-                __pendientesActual={items:[],reservas:[],comparacion:[]};return {resultado:{ok:true,reservas_creadas:1}};
+                __pendientesActual={items:[],resueltos:[detectado.id],reservas:[],comparacion:[]};
+                return {resultado:{ok:true,reservas_creadas:1}};
             };
             window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_manual:true,tenia_anterior:true,generacion:8}}));
         });
@@ -493,8 +499,8 @@ const server = http.createServer((request, response) => {
             __generation=10;window.dispatchEvent(new Event('haiku:libro-cambio'));
             const actual={titular:'Huésped Sintético',cabana:3,fecha_checkin:'2030-11-20',fecha_checkout:'2030-11-22'};
             __resultadoActual={estado:'ok',libro_actual:{generacion:10},
-                nuevas:Array.from({length:5},(_,i)=>({actual:{...actual,id:'alta-'+i}})),
-                modificadas:Array.from({length:2},(_,i)=>({actual:{...actual,id:'cambio-'+i},cambios:[{campo:'adultos',antes:2,ahora:3}]})),
+                nuevas:Array.from({length:5},(_,i)=>({actual:{...actual,cabana:i+1,id:'alta-'+i}})),
+                modificadas:Array.from({length:2},(_,i)=>({actual:{...actual,cabana:i+6,id:'cambio-'+i},cambios:[{campo:'adultos',antes:2,ahora:3}]})),
                 advertencias:Array.from({length:3},()=>({version:'actual',hoja:'Nov30',motivo:'Aviso sintético de lectura'}))};
             window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_automatica:true,tenia_anterior:true,generacion:10}}));
         });
@@ -569,6 +575,7 @@ const server = http.createServer((request, response) => {
         await resumen.getByRole('button',{name:'3 datos por revisar',exact:true}).click();
         assert.equal(await region.locator('.haku-libro-auto__caso').count(),3,'un aviso anterior permite leer su instantánea');
         await page.evaluate(()=>{
+            __registration={version:1,cambios:[]};
             document.getElementById('haiku-asistente-mensajes').replaceChildren();
             __generation=13;window.dispatchEvent(new Event('haiku:libro-cambio'));
             __resultadoActual={estado:'ok',libro_actual:{generacion:13},nuevas:[{actual:{titular:'Persona de prueba',cabana:2,fecha_checkin:'2030-11-27',fecha_checkout:'2030-11-30'}}],
@@ -626,6 +633,7 @@ const server = http.createServer((request, response) => {
             const sinReserva = {...actual, monto:31000, cabana:12, codigo_autorizacion:'FICTICIO-SIN-RESERVA', origen:{hoja:'Oct26',celda:'P28'}};
             const hoja = (reservas,pagos) => ({hoja:'Oct26',cobertura:{geometria:true,pagos:true},fechas:['2026-10-13','2026-10-14'],reservas,pagos});
             window.__generation = 14;
+            window.__registration = {version:1,cambios:[]};
             window.haikuSesion = {usuario:{activo:true},roles:['admin']};
             window.haikuTienePermiso = () => true;
             window.__escriturasAbonos = 0;
@@ -667,6 +675,90 @@ const server = http.createServer((request, response) => {
         await page.getByRole('button',{name:'Preparar incorporación',exact:true}).click();
         await page.waitForFunction(() => document.querySelector('.haiku-incorporacion')?.textContent.includes('Persona Ficticia Libro 5'));
         assert.equal(await page.evaluate(()=>__escriturasAbonos),0);
+
+        // El aviso acumula pendientes; cada caso conserva su fecha y se retira sólo si Proyecto H lo confirma.
+        await page.evaluate(()=>{
+            __registration={version:1,cambios:[]};
+            const anterior={id:'reserva-por-actualizar',titular:'Reserva para actualizar',cabana:6,
+                fecha_checkin:'2026-11-17',fecha_checkout:'2026-11-19',adultos:2};
+            const cambio={...anterior,adultos:3};
+            const movida={...cambio,fecha_checkin:'2026-11-18'};
+            const nueva={id:'reserva-por-crear',titular:'Reserva para crear',cabana:2,
+                fecha_checkin:'2026-11-24',fecha_checkout:'2026-11-25'};
+            const mod=(anterior,actual,campo)=>({anterior,actual,cambios:[{campo,antes:anterior[campo],ahora:actual[campo]}]});
+            const versiones=[
+                {modificadas:[mod(anterior,cambio,'adultos')]},
+                {nuevas:[{actual:nueva}]},
+                {modificadas:[mod(cambio,movida,'fecha_checkin')]},
+                {advertencias:[{motivo:'Dato del Libro por revisar'}]},
+                {}
+            ];
+            window.__confirmadasAviso=new Set();
+            window.__fallaAviso=false;
+            window.HAIKU_LIBRO_CONSULTAS={...HAIKU_LIBRO_CONSULTAS,revalidarCambiosDetectados:async cambios=>{
+                if(__fallaAviso)throw Error('Fallo de consulta simulado');
+                const ya=x=>__confirmadasAviso.has(x.actual?.id);
+                return {items:cambios.filter(x=>!ya(x)).map(x=>({...x,estado:'revision',accionable:false})),
+                    resueltos:cambios.filter(ya).map(x=>x.id),reservas:[],comparacion:[]};
+            }};
+            window.HAIKU_LIBRO_DIFERENCIAS_V1={...HAIKU_LIBRO_DIFERENCIAS_V1,
+                compararUltimasVersiones:async()=>__resultadoActual};
+            window.__publicarPendientes=paso=>{
+                __generation=15+paso;window.dispatchEvent(new Event('haiku:libro-cambio'));
+                const generado_en=new Date().toISOString();
+                __resultadoActual={estado:paso<3?'ok':'sin_cambios',libro_actual:{generacion:__generation},generado_en,...versiones[paso]};
+                window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{
+                    carga_automatica:true,tenia_anterior:true,generacion:__generation}}));
+                return generado_en;
+            };
+        });
+        const primerSello=await page.evaluate(()=>__publicarPendientes(0));
+        const casosPendientes=burbuja.locator('.haku-libro-auto__resumen .haku-libro-auto__caso');
+        const casoAnterior=casosPendientes.filter({hasText:'Reserva para actualizar'});
+        const ingreso=casoAnterior.locator('.haku-libro-auto__ingreso');
+        const deteccion=casoAnterior.locator('.haku-libro-auto__hora');
+        await ingreso.waitFor();
+        assert.equal(await ingreso.innerText(),'IN: 17/11/2026');
+        assert.equal(await ingreso.getAttribute('datetime'),'2026-11-17');
+        assert.equal(await deteccion.getAttribute('datetime'),primerSello);
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1280,390,320]){
+                await page.setViewportSize({width,height:900});
+                const medidas=await casoAnterior.locator('.haku-libro-auto__cabecera').evaluate(el=>{
+                    const fecha=el.querySelector('.haku-libro-auto__ingreso').getBoundingClientRect();
+                    const hora=el.querySelector('.haku-libro-auto__hora').getBoundingClientRect();
+                    return {orden:fecha.right<hora.left,derecha:Math.abs(hora.right-el.getBoundingClientRect().right)<=1,
+                        sinDesborde:el.scrollWidth<=el.clientWidth+1};
+                });
+                assert.deepEqual(medidas,{orden:true,derecha:true,sinDesborde:true},`${tema} ${width}`);
+            }
+        }
+        await page.evaluate(()=>__publicarPendientes(1));
+        await casosPendientes.filter({hasText:'Reserva para crear'}).waitFor();
+        assert.equal(await casosPendientes.count(),2);
+        assert.match(await casoAnterior.innerText(),/Cambio pendiente/);
+        assert.equal(await deteccion.getAttribute('datetime'),primerSello);
+        await burbuja.getByRole('button',{name:'Ver informe',exact:true}).click();
+        const pendientesNormales=page.locator('.haku-actualizacion-sites').last().locator('.haku-libro-pendientes-zona');
+        await pendientesNormales.getByText(/Reserva para actualizar/).waitFor();
+        assert.match(await pendientesNormales.innerText(),/Reserva para crear/);
+
+        await page.evaluate(()=>{__confirmadasAviso.add('reserva-por-crear');__publicarPendientes(2);});
+        await casoAnterior.getByText('IN: 18/11/2026',{exact:true}).waitFor();
+        assert.equal(await casosPendientes.count(),1,'un cambio encadenado usa la última reserva y retira el caso confirmado');
+        assert.equal(await page.evaluate(()=>__registration.cambios.length),1);
+        await page.evaluate(()=>{__fallaAviso=true;__publicarPendientes(3);});
+        await burbuja.getByText('Conservé los pendientes.',{exact:false}).waitFor();
+        assert.equal(await ingreso.innerText(),'IN: 18/11/2026');
+        await burbuja.getByRole('button',{name:'Ver informe',exact:true}).click();
+        await pendientesNormales.getByText(/Reserva para actualizar/).waitFor();
+        assert.match(await pendientesNormales.innerText(),/Falta comprobarlos en Proyecto H/);
+
+        await page.evaluate(()=>{__fallaAviso=false;__confirmadasAviso.add('reserva-por-actualizar');__publicarPendientes(4);});
+        await burbuja.getByText('Sin cambios pendientes',{exact:true}).waitFor();
+        assert.equal(await casosPendientes.count(),0);
+        assert.equal(await page.evaluate(()=>__registration.cambios.length),0);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

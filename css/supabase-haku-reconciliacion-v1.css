@@ -1742,7 +1742,10 @@
 .haku-libro-auto__marca { display: block; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 600; }
 .haku-libro-auto__titulo { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
 .haku-libro-auto__cabecera { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; min-width: 0; }
-.haku-libro-auto__hora { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.haku-libro-auto__fechas { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: 0 8px; margin-inline-start: auto; min-width: 0; }
+.haku-libro-auto__ingreso, .haku-libro-auto__hora { font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.haku-libro-auto__ingreso { color: var(--aviso-texto); font-weight: 600; }
+.haku-libro-auto__hora { color: var(--aviso-secundario); font-weight: 400; }
 .haku-libro-auto__caso { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--aviso-borde); }
 .haku-libro-auto__reserva { color: var(--aviso-secundario); font-size: 12px; line-height: 16px; }
 .haku-libro-auto__detalles { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 4px 8px; margin: 2px 0 0; }

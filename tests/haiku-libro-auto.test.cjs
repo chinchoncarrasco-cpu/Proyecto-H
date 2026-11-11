@@ -176,7 +176,7 @@ function interfaz(comparar) {
         addEventListener(t,f){(listeners[t] ||= []).push(f);},
         HAIKU_LIBRO_RESERVA_V1:{estado:()=>({generacion:g})},
         HAIKU_LIBRO_DIFERENCIAS_V1:{compararUltimasVersiones(){calls++;return comparar();}}};
-    const ctx={window};
+    const ctx={window,structuredClone};
     for(const file of ['supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+file+'.js'),'utf8'),ctx);
     const emitir=(type,detail)=>{for(const f of listeners[type] || []) f({type,detail});};
     const manual=()=>{
@@ -243,7 +243,9 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     boton.dispatchEvent({type:'click'});assert.equal(entregados.length,0);
     ocupado=false;h.ids['haiku-asistente-texto'].dispatchEvent({type:'input'});
     assert.equal(boton.disabled,false);boton.dispatchEvent({type:'click'});
-    assert.deepEqual(entregados,[resultado]);assert.equal(h.abierto(),0);
+    assert.equal(entregados.length,1);assert.equal(entregados[0].nuevas.length,1);
+    assert.deepEqual(entregados[0].nuevas[0].actual,resultado.nuevas[0].actual);
+    assert.equal(entregados[0].modificadas.length,0);assert.equal(h.abierto(),0);
     assert.equal(boton.textContent,'Incorporando…');assert.equal(boton['aria-busy'],'true');
     boton.dispatchEvent({type:'click'});assert.equal(entregados.length,1);
     h.cambiar();assert.equal(h.document.body.children.length,1,'no desaparece durante el guardado');
