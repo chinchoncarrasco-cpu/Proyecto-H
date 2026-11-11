@@ -453,7 +453,7 @@
             const ok = (await window.HAIKU_DIALOGOS.confirmar(`¿Confirmas registrar ${pagos.length} ${pagos.length === 1 ? "abono" : "abonos"} en CAB ${destino.cabana_numero} · ${destino.titular_nombre}?`, {
                 titulo: 'Registrar abonos', accion: 'Registrar abonos', contexto: 'Haku · Pagos', cuerpo: '',
                 detalles: [['Reserva', `CAB ${destino.cabana_numero} · ${destino.titular_nombre}`]],
-                resumen: [['Abonos', pagos.length], ['Total', moneda(pagos.reduce((s, p) => s + Number(p.monto || 0), 0))]]
+                resumen: [['Abonos', pagos.length], ['Total', moneda(totalNuevo)]]
             }));
             if (!ok) return;
 
