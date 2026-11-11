@@ -642,7 +642,9 @@
         }
         $("#aseo-resumen").innerHTML = `<div class="cb-operation-head" aria-hidden="true"><span>Cabaña / trabajo</span><span>Encargado</span><span>Revisor</span><span>IN</span><span>OUT</span><span>Estado aseo</span><span>Estado revisión</span><span>Estado final</span><span>Abrir</span></div>${numeros.map(n => filaOperacion(fecha, n)).join("") || '<p class="cb-empty">No hay cabañas con este filtro.</p>'}`;
     }
-    function totalChecklist(numero) {
+    function totalChecklist(numero, fecha = fechaActual()) {
+        const plantilla = window.HAIKU_REVISION_PLANTILLA_V1?.contexto(fecha, numero)?.plantilla;
+        if (plantilla) return plantilla.groups.flatMap(group => group.items).filter(item => item.active).length;
         try {
             const config = typeof checklistsCabanas !== "undefined" ? checklistsCabanas?.[numero] : null;
             return (config || []).reduce((total, area) => total + (area.items?.length || 0)
@@ -654,7 +656,7 @@
         const dato = cabana(fecha, numero);
         const aseo = estadoAseo(dato);
         const tipo = expressReal(dato, fecha, numero) ? "Revisión completa / Aseo Express" : esRepaso(dato, fecha) ? "Repaso" : "Revisión completa";
-        return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${esRepaso(dato, fecha) ? dato.repasoRevision?.checked?.length || 0 : revisadosChecklist(dato)}/${esRepaso(dato, fecha) ? 26 : totalChecklist(numero)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
+        return `<article class="cb-review-row" data-cb-review-cabana="${numero}" role="listitem"><div class="cb-review-ident"><strong>Cabaña ${numero}</strong><span>${escapar(titular(dato, fecha, numero))}</span></div><div class="cb-review-clean"><small>Aseo</small><span class="cb-badge ${tono(aseo)}">${etiqueta(aseo)}</span></div><div class="cb-review-mode"><small>Tipo de revisión</small><span>${tipo}</span></div><div class="cb-review-progress"><small>Checklist</small><strong>${esRepaso(dato, fecha) ? dato.repasoRevision?.checked?.length || 0 : revisadosChecklist(dato)}/${esRepaso(dato, fecha) ? 26 : totalChecklist(numero, fecha)}</strong> <span>elementos</span></div><div class="cb-review-status"><small>Revisión</small>${selectorRevisionHTML(fecha, numero, dato)}</div><button type="button" class="cb-open" data-cb-open="${numero}" data-cb-origin="review">Abrir revisión <span aria-hidden="true">›</span></button></article>`;
     }
     function pintarRevision(fecha) {
         if (!fecha) return;
@@ -809,6 +811,7 @@
         $("#cabinsReviewMode").value = estado.modo;
         $("#cabinsReviewMode").disabled = Boolean(aperturaExpress);
         $("#cabinsReviewMode").setAttribute("aria-busy", String(Boolean(aperturaExpress)));
+        window.HAIKU_REVISION_PLANTILLA_V1?.actualizarAlcance(fechaActual(), estado.numero, estado.modo);
     }
     function pintar(fecha = fechaActual()) {
         if (!fecha) return;
