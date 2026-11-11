@@ -456,7 +456,7 @@
             const mensajeConfirmacion = filas.length > 1
                 ? `¿Confirmas crear ${filas.length} reservas sin registrar pagos?`
                 : `¿Confirmas crear la reserva de ${filas[0].titular_nombre} sin registrar pagos?`;
-            if (!window.confirm(mensajeConfirmacion)) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(mensajeConfirmacion, {"accion":"Crear reservas","contexto":"Haku · Reservas","peligro":false}))) return;
 
             guardando = true;
             boton.disabled = true;

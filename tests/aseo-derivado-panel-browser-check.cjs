@@ -18,6 +18,7 @@ const modulos = new Set([
     });
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, timezoneId: 'America/Santiago' });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
         const errores = [], avisos = [];
         page.on('pageerror', error => errores.push(error.message));
         page.on('dialog', async dialog => { avisos.push(dialog.message()); await dialog.accept(); });

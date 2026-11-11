@@ -1,0 +1,71 @@
+/* HAIKU · Figma 95:865 / 97:925 / 97:1555 / 97:2093 */
+html body .hk-dialogo, html body .hk-aviso, html body .hk-validacion {
+  --hk-surface:var(--haku-compacto-superficie,#fbfcfb); --hk-control:var(--haku-compacto-control,#f1f5f2);
+  --hk-border:var(--haku-compacto-borde,#dbe3de); --hk-text:var(--haku-compacto-texto,#172019);
+  --hk-muted:var(--haku-compacto-secundario,#586c60); --hk-accent:var(--haku-compacto-acento,#286c4e);
+  --hk-soft:var(--haku-compacto-suave,#eef4ef); --hk-danger:#a83330; --hk-danger-action:#a83330;
+  font:400 13px/19px var(--sites-shell-font,Inter,"Segoe UI",Arial,sans-serif); color:var(--hk-text); box-sizing:border-box;
+}
+html[data-haiku-tema="oscuro"] body :is(.hk-dialogo,.hk-aviso,.hk-validacion) { --hk-danger:#ffb2a9; color-scheme:dark; }
+html body .hk-dialogo { padding:0; width:min(520px,calc(100vw - 32px)); max-width:none; max-height:calc(100dvh - 32px); margin:auto; border:1px solid var(--hk-border); border-radius:12px; background:var(--hk-surface); box-shadow:0 8px 28px #00000024; overflow:hidden; }
+html body .hk-dialogo::backdrop { background:rgb(7 17 12 / .48); }
+html body .hk-dialogo:not([open]) { display:none; }
+html body .hk-dialogo-form { margin:0; padding:0; display:flex; flex-direction:column; max-height:calc(100dvh - 34px); min-height:0; }
+html body .hk-dialogo-contenido { padding:16px; display:flex; flex-direction:column; gap:12px; overflow:auto; overscroll-behavior:contain; min-height:0; }
+html body .hk-dialogo :is(p,h2,dl,dd) { margin:0; }
+html body .hk-dialogo-cabecera { display:flex; gap:12px; align-items:center; }
+html body .hk-dialogo-indicador { flex:0 0 28px; width:28px; height:28px; border-radius:6px; display:grid; place-items:center; background:var(--haku-compacto-seleccion,#e6f2eb); color:var(--hk-accent); font-size:16px; font-weight:600; }
+html body .hk-dialogo-indicador.es-peligro { color:var(--hk-danger); background:var(--haku-compacto-aviso-fondo,#fff5e5); }
+html body .hk-dialogo-titulos { min-width:0; display:grid; gap:4px; }
+html body .hk-dialogo-contexto { font-size:11px; line-height:16px; color:var(--hk-muted); }
+html body .hk-dialogo h2 { font-size:16px; line-height:22px; font-weight:600; color:var(--hk-text); overflow-wrap:anywhere; }
+html body .hk-dialogo-texto { white-space:pre-line; overflow-wrap:anywhere; }
+html body .hk-dialogo :is(.hk-dialogo-aviso,.hk-dialogo-detalles,.hk-dialogo-resumen) { padding:12px; border-radius:6px; background:var(--hk-soft); color:var(--hk-muted); }
+html body .hk-dialogo-aviso.advertencia { background:var(--haku-compacto-aviso-fondo,#fff5e5); color:var(--haku-compacto-aviso,#825016); }
+html body .hk-dialogo-detalles { display:grid; gap:8px; }
+html body .hk-dialogo-detalles > div { display:grid; grid-template-columns:90px minmax(0,1fr); gap:12px; }
+html body .hk-dialogo dt { font-size:11px; line-height:16px; color:var(--hk-muted); }
+html body .hk-dialogo dd { color:var(--hk-text); font-weight:500; overflow-wrap:anywhere; }
+html body .hk-dialogo-resumen { display:flex; gap:12px; }
+html body .hk-dialogo-resumen > div { flex:1; min-width:0; display:grid; gap:4px; }
+html body .hk-dialogo-resumen dd { font-size:16px; line-height:22px; font-weight:600; }
+html body .hk-dialogo-campos { display:grid; gap:12px; }
+html body .hk-dialogo-campos.varios { grid-template-columns:repeat(3,minmax(0,1fr)); }
+html body .hk-dialogo-campo { display:grid; gap:4px; min-width:0; }
+html body .hk-dialogo label { font-size:13px; font-weight:500; color:var(--hk-text); }
+html body .hk-dialogo :is(input,textarea) { box-sizing:border-box; width:100%; min-width:0; min-height:36px; padding:8px; border:1px solid var(--hk-border); border-radius:6px; background:var(--hk-control); color:var(--hk-text); font:inherit; margin:0; box-shadow:none; }
+html body .hk-dialogo textarea { min-height:72px; resize:vertical; }
+html body .hk-dialogo .hk-numero { min-width:0; }
+html body .hk-dialogo .hk-paso { display:none; }
+html body .hk-dialogo input[aria-invalid="true"], html body .hk-dialogo textarea[aria-invalid="true"] { border-color:var(--hk-danger); }
+html body .hk-dialogo .hk-campo-error, html body .hk-validacion { color:var(--hk-danger); font-size:11px; line-height:16px; }
+html body .hk-dialogo [hidden] { display:none!important; }
+html body .hk-dialogo-acciones { flex:none; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:8px; padding:16px; border-top:1px solid var(--hk-border); }
+html body :is(.hk-dialogo,.hk-aviso) .hk-boton { min-height:36px; width:auto; margin:0; padding:8px 12px; border:1px solid var(--hk-border); border-radius:6px; font:500 13px/18px var(--sites-shell-font,Inter,"Segoe UI",Arial,sans-serif); background:var(--hk-surface); color:var(--hk-text); box-shadow:none; text-transform:none; cursor:pointer; white-space:normal; }
+html body .hk-dialogo .hk-boton.principal { background:var(--haku-compacto-primario,#22735c); color:#fff; border-color:transparent; }
+html body .hk-dialogo .hk-boton.peligro { background:var(--hk-danger-action); color:#fff; border-color:transparent; }
+html body :is(.hk-dialogo,.hk-aviso) :is(button,input,textarea):focus-visible { outline:2px solid var(--hk-accent); outline-offset:2px; }
+html body .hk-dialogo .hk-boton:disabled { opacity:.55; cursor:wait; }
+html body .hk-avisos { position:fixed; bottom:16px; right:16px; width:min(420px,calc(100vw - 32px)); max-height:50dvh; overflow:auto; z-index:2147483600; display:grid; gap:8px; }
+html body .hk-avisos-contexto { margin:12px 0; display:grid; gap:8px; flex:0 0 100%; grid-column:1/-1; }
+html body .hk-aviso { display:flex; align-items:flex-start; gap:8px; padding:12px; border-radius:6px; border:1px solid var(--hk-border); border-left:3px solid var(--hk-danger); background:var(--hk-soft); }
+html body .hk-aviso.exito { border-left-color:var(--hk-accent); }
+html body .hk-aviso.advertencia { border-left-color:var(--haku-compacto-aviso,#825016); }
+html body .hk-aviso-copia { min-width:0; flex:1; overflow-wrap:anywhere; white-space:pre-line; }
+html body .hk-aviso-copia p { margin:0; }
+html body .hk-aviso-copia strong { display:block; margin-bottom:4px; font-weight:500; }
+html body .hk-aviso .hk-aviso-cerrar { min-width:28px; min-height:28px; padding:2px 6px; background:transparent; border:0; font-size:18px; }
+html body .hk-validacion { margin:4px 0; }
+@media(max-width:600px) {
+ html body .hk-dialogo :is(input,textarea), html body :is(.hk-dialogo,.hk-aviso) .hk-boton { min-height:44px; }
+ html body .hk-dialogo-campos.varios { grid-template-columns:1fr; }
+ html body .hk-dialogo-campos.varios .hk-dialogo-campo { grid-template-columns:minmax(0,1fr) 116px; align-items:center; }
+ html body .hk-dialogo-campos.varios .hk-campo-error { grid-column:1/-1; }
+ html body .hk-dialogo .hk-numero { display:grid; grid-template-columns:36px minmax(0,1fr) 36px; border:1px solid var(--hk-border); border-radius:6px; background:var(--hk-control); }
+ html body .hk-dialogo .hk-numero input { border:0; padding:0; text-align:center; appearance:textfield; }
+ html body .hk-dialogo .hk-numero input::-webkit-inner-spin-button { appearance:none; }
+ html body .hk-dialogo .hk-paso { display:block; padding:0; border:0; background:transparent; color:var(--hk-accent); }
+ html body .hk-dialogo-detalles > div { grid-template-columns:64px minmax(0,1fr); }
+ html body .hk-dialogo-resumen { display:grid; }
+ html body .hk-dialogo-resumen > div { display:flex; justify-content:space-between; align-items:center; }
+}

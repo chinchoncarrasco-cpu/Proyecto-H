@@ -360,12 +360,12 @@
         const codigo = codAut?.value.trim() || "";
 
         if (!montoNumero || montoNumero <= 0 || !medio || !codigo) {
-            alert("Completa Monto, Medio WebPay y CodAut.");
+            window.HAIKU_DIALOGOS.aviso("Completa Monto, Medio WebPay y CodAut.");
             return;
         }
 
         if (!['webpay_credito', 'webpay_debito'].includes(medio)) {
-            alert("Selecciona WebPay Crédito o WebPay Débito.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona WebPay Crédito o WebPay Débito.");
             return;
         }
 
@@ -388,9 +388,7 @@
             if (errorRepetidos) throw errorRepetidos;
 
             if ((repetidos || []).length) {
-                const continuar = confirm(
-                    "Ya existe un WebPay no anulado con el mismo CodAut, medio y monto.\n\n¿Quieres registrarlo de todas formas?"
-                );
+                const continuar = (await window.HAIKU_DIALOGOS.confirmar("Ya existe un WebPay no anulado con el mismo CodAut, medio y monto.\n\n¿Quieres registrarlo de todas formas?", {"accion":"Registrar de todas formas","contexto":"Pagos · WebPay","peligro":true,"titulo":"Posible pago duplicado","cancelar":"Volver a revisar"}));
                 if (!continuar) return;
             }
 
@@ -431,7 +429,7 @@
             await cargarPendientes();
         } catch (error) {
             console.error("HAIKU · WebPay: no fue posible registrar pendiente", error);
-            alert(error?.message || "No fue posible registrar el WebPay.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el WebPay.");
         } finally {
             if (boton) {
                 boton.disabled = false;
@@ -448,12 +446,12 @@
         const boton = tarjetaEl?.querySelector("[data-webpay-confirmar]");
 
         if (!pagoId || !reservaId || !destino) {
-            alert("Selecciona la reserva y qué cubre este WebPay.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona la reserva y qué cubre este WebPay.");
             return;
         }
 
         if (!manager) {
-            alert("Marca Manager · Revisado antes de confirmar.");
+            window.HAIKU_DIALOGOS.aviso("Marca Manager · Revisado antes de confirmar.");
             return;
         }
 
@@ -488,7 +486,7 @@
             }
         } catch (error) {
             console.error("HAIKU · WebPay: no fue posible asociar", error);
-            alert(error?.message || "No fue posible asociar el WebPay.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible asociar el WebPay.");
         } finally {
             if (boton && boton.isConnected) {
                 boton.disabled = false;
@@ -501,9 +499,7 @@
         const pagoId = tarjetaEl?.dataset.webpayPagoId;
         if (!pagoId) return;
 
-        const confirmar = confirm(
-            "¿Anular este WebPay pendiente?\n\nNo se borrará: quedará registrado en el historial."
-        );
+        const confirmar = (await window.HAIKU_DIALOGOS.confirmar("¿Anular este WebPay pendiente?\n\nNo se borrará: quedará registrado en el historial.", {"accion":"Anular WebPay","contexto":"Pagos · WebPay","peligro":true}));
         if (!confirmar) return;
 
         try {
@@ -515,7 +511,7 @@
             await cargarPendientes();
         } catch (error) {
             console.error("HAIKU · WebPay: no fue posible anular", error);
-            alert(error?.message || "No fue posible anular el WebPay.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible anular el WebPay.");
         }
     }
 

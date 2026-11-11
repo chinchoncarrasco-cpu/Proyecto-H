@@ -82,16 +82,16 @@ window.addEventListener("change",async e=>{
  e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();
  const card=ch.closest(".pago-abono-item"),id=String(ch.dataset.reservaId||"");if(!card||!id||busy.has(id))return;
  const amount=Number(card.querySelector(".pago-abono-monto")?.value||0),m=medio(card);
- if(amount<=0||!m){ch.checked=false;alert("Ingresa un monto de abono y selecciona el medio de pago.");return}
- if(!window.haikuTienePermiso?.("pagos.registrar")){ch.checked=false;alert("Tu usuario no tiene permiso para registrar pagos.");return}
- let x;try{x=extras(card,m)}catch(err){ch.checked=false;alert(err.message);return}
+ if(amount<=0||!m){ch.checked=false;window.HAIKU_DIALOGOS.aviso("Ingresa un monto de abono y selecciona el medio de pago.");return}
+ if(!window.haikuTienePermiso?.("pagos.registrar")){ch.checked=false;window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");return}
+ let x;try{x=extras(card,m)}catch(err){ch.checked=false;window.HAIKU_DIALOGOS.aviso(err.message);return}
  busy.add(id);ch.disabled=true;
  try{
   const s=await saldo(id);if(amount>s)throw Error(`El abono supera el saldo actual (${money(s)}).`);
   await save(id,amount,m,x,ch.dataset.pagoAbono);
   await Promise.allSettled([Promise.resolve().then(()=>window.haikuCargarAbonosSupabase?.()),Promise.resolve().then(()=>window.haikuCargarSaldosCheckinSupabase?.()),Promise.resolve().then(()=>window.haikuSincronizarReservasSupabase?.())]);
   setTimeout(later,80);
- }catch(err){console.error("HAIKU · registrar abono con detalle:",err);ch.checked=false;alert(err?.message||"No fue posible registrar el abono.")}
+ }catch(err){console.error("HAIKU · registrar abono con detalle:",err);ch.checked=false;window.HAIKU_DIALOGOS.aviso(err?.message||"No fue posible registrar el abono.")}
  finally{busy.delete(id);if(ch.isConnected&&!ch.checked)ch.disabled=false}
 },true);
 const list=document.getElementById("pagos-lista-abonos");if(list)new MutationObserver(later).observe(list,{childList:true});

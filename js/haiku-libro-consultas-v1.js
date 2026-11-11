@@ -7057,11 +7057,9 @@
             root.haikuTienePermiso?.('servicios.editar')!==true ||
             root.haikuTienePermiso?.('pagos.registrar')!==true)
             throw Error('No hay una propuesta vigente o faltan permisos de servicios y pagos.');
-        if(typeof root.confirm==='function' && !root.confirm(
-            '¿Ampliar la misma Jacuzzi a '+p.personasFinales+' personas, con total '+
+        if(!(await root.HAIKU_DIALOGOS.confirmar('¿Ampliar la misma Jacuzzi a '+p.personasFinales+' personas, con total '+
             money(p.totalFinal)+'? Se conserva el pago inicial y se genera un saldo de '+
-            money(p.montoAdicional)+'. El segundo pago NO se registrará hasta aprobarlo y confirmar la incorporación.'
-        )) return null;
+            money(p.montoAdicional)+'. El segundo pago NO se registrará hasta aprobarlo y confirmar la incorporación.', {"accion":"Ampliar Jacuzzi","contexto":"Haku · Servicios","peligro":false}))) return null;
         const {data,error}=await cliente.rpc('haiku_libro_ampliar_jacuzzi_v1',{
             p_reserva_id:p.reservaId,
             p_estadia_id:p.estadiaId,
@@ -7387,7 +7385,7 @@
                 `Se actualizarán el titular y RUT en ${seleccion.filter(i => idsEtapa.has(i.id)).length} reserva(s) exacta(s), se incorporarán ${nuevas} reserva(s) nueva(s) independiente(s) y ${pagos} pago(s) ya habilitado(s). Los pagos con actualizaciones pendientes siguen bloqueados. ¿Confirmas esta selección?` :
                 comprobanteFoco ? `Se registrará un único comprobante de ${money(comprobanteFoco.total)}. Proyecto H volverá a validar el grupo, el ajuste del 10% y que el saldo quede exactamente en cero. ¿Confirmas?` :
                 `Se incorporarán ${nuevas} reserva(s), ${estadias} estadía(s) y ${pagos} pago(s), además de ${seleccion.filter(i => i.categoria === "actualizaciones").length} actualización(es) con los datos del Libro. Proyecto H volverá a comprobar duplicados antes de guardar. ¿Confirmas?`;
-            if (typeof root.confirm === "function" && !root.confirm(texto)) return;
+            if (!(await root.HAIKU_DIALOGOS.confirmar(texto, {"accion":"Incorporar selección","contexto":"Haku · Libro","peligro":false}))) return;
             guardando = true; atras.disabled = true;
             if (cerrarVista) cerrarVista.disabled = true;
             confirmar.setAttribute("aria-busy", "true");

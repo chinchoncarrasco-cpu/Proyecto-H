@@ -27,6 +27,7 @@ const server=http.createServer((req,res)=>{
     const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
     try{
         const page=await browser.newPage({viewport:{width:1100,height:900}}),errors=[],externas=[];
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
         page.on('pageerror',e=>errors.push(e.message));
         await page.route('**/*',route=>{
             if(new URL(route.request().url()).hostname!=='127.0.0.1'){externas.push(route.request().url());return route.abort();}

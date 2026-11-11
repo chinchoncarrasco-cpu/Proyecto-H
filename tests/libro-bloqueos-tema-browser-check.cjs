@@ -13,7 +13,8 @@ const server=http.createServer((req,res)=>{
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const browser=await chromium.launch({headless:true,executablePath:process.env.HAKU_CHROMIUM_PATH,args:['--no-sandbox']});
  try{
-  const page=await browser.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
+  const page=await browser.newPage(),errors=[];
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
   const base=`http://127.0.0.1:${server.address().port}`;
   for(const width of [1280,390,320]){
    await page.setViewportSize({width,height:1000});await page.goto(base+'/');

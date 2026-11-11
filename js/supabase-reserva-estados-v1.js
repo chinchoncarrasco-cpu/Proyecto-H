@@ -154,10 +154,8 @@
     async function cancelarReservaSupabase(reservaId, opciones = {}) {
         if (!reservaId || cancelando) return;
 
-        const confirmar = window.confirm(
-            "¿Seguro que deseas cancelar esta reserva?\n\n" +
-            "La reserva desaparecerá inmediatamente del Resumen y del Calendario."
-        );
+        const confirmar = (await window.HAIKU_DIALOGOS.confirmar("¿Seguro que deseas cancelar esta reserva?\n\n" +
+            "La reserva desaparecerá inmediatamente del Resumen y del Calendario.", {"accion":"Cancelar reserva","contexto":"Reservas","peligro":true}));
 
         if (!confirmar) return;
 
@@ -165,7 +163,7 @@
         cerrarMenuEstado();
 
         try {
-            // El puente del Libro revalida después de la confirmación nativa.
+            // El puente del Libro revalida después de la confirmación del usuario.
             if (opciones.antesDeCancelar && await opciones.antesDeCancelar() === false) return {estado:'sin_cambios'};
             const { data, error } = await cliente.rpc(
                 "haiku_cancelar_reserva",
@@ -189,7 +187,7 @@
         } catch (error) {
             if (opciones.antesDeCancelar) throw error;
             console.error("HAIKU · No fue posible cancelar la reserva:", error);
-            alert(error?.message || "No fue posible cancelar la reserva.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible cancelar la reserva.");
         } finally {
             cancelando = false;
         }
@@ -396,10 +394,8 @@
     async function liberarFullDay(info, boton) {
         if (!info?.reservaId || liberandoFullDay) return;
 
-        const confirmar = window.confirm(
-            "¿Liberar esta cabaña para una nueva venta?\n\n" +
-            "Confirma solamente si el huésped del Full Day ya salió y el aseo terminó."
-        );
+        const confirmar = (await window.HAIKU_DIALOGOS.confirmar("¿Liberar esta cabaña para una nueva venta?\n\n" +
+            "Confirma solamente si el huésped del Full Day ya salió y el aseo terminó.", {"accion":"Liberar cabaña","contexto":"Reservas · Full Day","peligro":false}));
         if (!confirmar) return;
 
         liberandoFullDay = true;
@@ -430,10 +426,10 @@
                 console.warn("HAIKU · Refresco posterior a liberar Full Day:", errorRefresco);
             });
 
-            alert("Cabaña liberada. El Full Day permanece guardado en el historial, pero ya no bloquea una nueva venta.");
+            window.HAIKU_DIALOGOS.aviso("Cabaña liberada. El Full Day permanece guardado en el historial, pero ya no bloquea una nueva venta.", { tipo: 'exito' });
         } catch (error) {
             console.error("HAIKU · No fue posible liberar Full Day:", error);
-            alert(error?.message || "No fue posible liberar la cabaña.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible liberar la cabaña.");
         } finally {
             liberandoFullDay = false;
             if (boton) {

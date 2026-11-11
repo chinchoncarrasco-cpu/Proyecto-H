@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const vm = require('node:vm');
+const vm = require('./fixtures/dialogos.cjs').vm;
 const {ACCION} = require('./fixtures/libro-airbnb-confirmacion-manual.cjs');
 const {SOLICITUD_AGUSTIN, hojaAgustinFocalizado} = require('./fixtures/libro-airbnb-agustin-focalizado.cjs');
 const {PAGO_AGUSTIN_RUNTIME, resultadoAgustinRuntime} = require('./fixtures/libro-airbnb-agustin-runtime.cjs');

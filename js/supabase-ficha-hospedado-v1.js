@@ -178,23 +178,19 @@
         try { window.HAIKU_CHECKOUT_RESUMEN_V2?.aplicarColores?.(); } catch (_) {}
     }
 
-    function pedirConfirmacionReversion(estadoElegido, estadia) {
+    async function pedirConfirmacionReversion(estadoElegido, estadia) {
         const estadoDB = String(estadia?.estado_estadia || "").toLowerCase();
         const tieneCheckin = Boolean(estadia?.checkin_realizado_en);
         const tieneCheckout = Boolean(estadia?.checkout_realizado_en) || estadoDB === "checked_out";
 
         if (estadoElegido === "confirmada" && (tieneCheckin || tieneCheckout)) {
-            return window.confirm(
-                "¿Volver esta estadía a Confirmada?\n\n" +
-                "Se limpiarán el Check-in y el Check-out registrados para esta estadía."
-            );
+            return (await window.HAIKU_DIALOGOS.confirmar("¿Volver esta estadía a Confirmada?\n\n" +
+                "Se limpiarán el Check-in y el Check-out registrados para esta estadía.", {"accion":"Volver a Confirmada","contexto":"Reservas · Estado","peligro":true}));
         }
 
         if (estadoElegido === "hospedado" && tieneCheckout) {
-            return window.confirm(
-                "¿Volver esta estadía a Hospedado?\n\n" +
-                "Se eliminará el Check-out registrado y la estadía volverá a quedar activa."
-            );
+            return (await window.HAIKU_DIALOGOS.confirmar("¿Volver esta estadía a Hospedado?\n\n" +
+                "Se eliminará el Check-out registrado y la estadía volverá a quedar activa.", {"accion":"Volver a Hospedado","contexto":"Reservas · Estado","peligro":true}));
         }
 
         return true;
@@ -208,7 +204,7 @@
         const numeroCabana = String(modal?.dataset?.numeroCabana || "");
 
         if (!reservaId) {
-            alert("No fue posible identificar la reserva abierta.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible identificar la reserva abierta.");
             return;
         }
 
@@ -221,7 +217,7 @@
         try {
             const estadia = await resolverEstadia(reservaId, numeroCabana);
 
-            if (!pedirConfirmacionReversion(estadoElegido, estadia)) return;
+            if (!await pedirConfirmacionReversion(estadoElegido, estadia)) return;
 
             const mapaEstado = {
                 hospedado: "hospedada",
@@ -259,7 +255,7 @@
             );
         } catch (error) {
             console.error("HAIKU · No fue posible cambiar el estado manual:", error);
-            alert(error?.message || "No fue posible cambiar el estado. La reserva no fue modificada.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible cambiar el estado. La reserva no fue modificada.");
 
             try { await refrescarInterfaz(); } catch (_) {}
         } finally {

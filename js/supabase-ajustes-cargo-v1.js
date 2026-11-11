@@ -516,13 +516,13 @@
 
     async function abrirModal(opciones = {}) {
         if (!window.haikuSesion) {
-            alert("Debes iniciar sesión para ajustar cargos.");
+            window.HAIKU_DIALOGOS.aviso("Debes iniciar sesión para ajustar cargos.");
             return;
         }
 
         if (typeof window.haikuTienePermiso === "function" &&
             !window.haikuTienePermiso("pagos.registrar")) {
-            alert("Tu usuario no tiene permiso para ajustar cargos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para ajustar cargos.");
             return;
         }
 
@@ -747,7 +747,7 @@
             ? `¿Aplicar ${tipo.titulo}${destino}?\n\nSe descontarán ${dinero(previa.monto)} y el nuevo total será ${dinero(previa.nuevoTotal)}.`
             : `¿Aplicar ${tipo.titulo}${destino}?\n\nSe añadirán ${dinero(previa.monto)} y el nuevo total será ${dinero(previa.nuevoTotal)}.`;
 
-        if (!window.confirm(mensaje)) return;
+        if (!(await window.HAIKU_DIALOGOS.confirmar(mensaje, {"accion":"Aplicar ajuste","contexto":"Pagos · Ajuste","peligro":false}))) return;
 
         guardando = true;
         if (confirmar) {

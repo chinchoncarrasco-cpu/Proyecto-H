@@ -95,7 +95,8 @@ async function geometria(page) {
         for (const width of [320, 390, 1100]) for (const escenario of ['exito', 'rechazo', 'error', 'permiso', 'conflicto', 'invalida', 'ya-cancelada', 'pendiente']) {
             const context = await browser.newContext({ viewport:{ width, height:850 }, deviceScaleFactor:2 }), externos = [], errores = [];
             await context.route('**/*', route => { if (new URL(route.request().url()).origin === origin) return route.continue(); externos.push(route.request().url()); return route.abort(); });
-            const page = await context.newPage(); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin); await iniciar(page, escenario);
+            const page = await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin); await iniciar(page, escenario);
             const preparar = () => page.getByRole('button', { name:/^Preparar cancelación/ }).click();
             await preparar(); await page.getByRole('heading', { name:'Revisar cancelación', exact:true }).waitFor();
             const panel = page.locator('.haiku-cancelacion-pantalla');
@@ -158,7 +159,8 @@ async function geometria(page) {
         if (process.env.HAKU_CANCELACION_CAPTURAS) {
             const context = await browser.newContext({ viewport:{ width:1100, height:940 }, deviceScaleFactor:2 });
             await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
-            const page = await context.newPage(); await page.goto(origin + '/comparacion'); await iniciar(page, 'exito');
+            const page = await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page); await page.goto(origin + '/comparacion'); await iniciar(page, 'exito');
             await page.evaluate(async () => {
                 const f=window.__fixture,api=window.HAIKU_LIBRO_CANCELACIONES_V1;
                 api.adjuntar(document.getElementById('out2'),await api.detectarActual(f.hoja),f.generacion);
@@ -184,7 +186,8 @@ async function geometria(page) {
             for (const width of [320,390,1100]) {
                 const context=await browser.newContext({viewport:{width,height:850},deviceScaleFactor:2});
                 await context.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
-                const page=await context.newPage();await page.goto(origin+'/captura');await iniciar(page,'exito');
+                const page=await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);await page.goto(origin+'/captura');await iniciar(page,'exito');
                 await page.getByRole('button',{name:/^Preparar cancelación/}).click();await geometria(page);
                 const panel=page.locator('.haiku-cancelacion-pantalla');
                 await panel.screenshot({path:path.join(process.env.HAKU_CANCELACION_CAPTURAS,`revision-${width}.png`),scale:'css'});

@@ -1,5 +1,5 @@
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
+const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm, path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../js/haiku-libro-servicios-scope-v2.js'), 'utf8');
 const copy = x => JSON.parse(JSON.stringify(x));
 const textoYenny = 'TÓNEL A LAS 19:15 X PAGAR / CAB 6 YA ENTREGO SUS BATAS A RECEPCION';
@@ -366,19 +366,19 @@ test('completed service incorporation uses the current saved-result design', asy
     assert.ok(out.classList.contains('haku-incorporacion-resultado--servicios'));
     assert.ok(out.classList.contains('haku-libro-resultado-sites'));
     assert.ok(out.children[0].classList.contains('haku-libro-resultado-sites__cabecera'));
-    assert.equal(out.querySelector('.haku-libro-resultado-sites__kicker').textContent, 'LIBRO · PROYECTO H');
-    assert.equal(out.querySelector('.haku-libro-resultado-sites__titulo').textContent, 'Servicios y notas');
-    assert.equal(out.querySelector('.haku-libro-resultado-sites__chip').textContent, 'Guardado');
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__kicker').textContent, 'Asistente operativo');
+    assert.equal(out.querySelector('.haku-libro-resultado-sites__titulo').textContent, 'Haku');
+    assert.equal(out.children[0].querySelector('.haku-libro-resultado-sites__chip'), null, 'La cabecera no repite el resultado');
     assert.equal(out.querySelector('.haku-libro-resultado-sites__exito').textContent, 'Incorporación completada');
     const indicadores = out.querySelector('.haku-libro-resultado-sites__metricas').children;
     assert.deepEqual(indicadores.map(x => [x.children[0].textContent, x.children[1].textContent]), [
-        ['Servicios', '1'], ['Notas', '0'], ['Omitidos', '1']
+        ['1', 'servicio'], ['0', 'notas'], ['1', 'omitido']
     ]);
     const detalle = out.children.find(x => x.tag === 'details');
     assert.equal(detalle, undefined);
     const revision = out.querySelector('.haku-libro-resultado-sites__detalle');
     assert.ok(revision);
-    assert.match(revision.children[0].textContent, /Ver detalle de la revisión anterior/);
+    assert.match(revision.children[0].textContent, /Revisión anterior/);
     assert.ok(revision.querySelectorAll('.haku-libro-resultado-sites__fila').length > 0);
     assert.equal(out.querySelector('.haku-libro-resultado-sites__revisar').textContent, 'Revisar de nuevo');
     assert.equal(out.children.some(x => x.classList.contains('haku-libro-servicios__head')), false);

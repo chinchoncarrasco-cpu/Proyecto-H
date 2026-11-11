@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
+const vm = require('./fixtures/dialogos.cjs').vm;
 const {PAGO_AGUSTIN_RUNTIME} = require('./fixtures/libro-airbnb-agustin-runtime.cjs');
 const read = f => fs.readFileSync(path.join(__dirname,'..','js',f),'utf8');
 const S = require('../js/haiku-libro-semantica-v1.js');

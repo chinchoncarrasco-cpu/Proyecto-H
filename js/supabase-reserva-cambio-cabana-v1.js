@@ -238,7 +238,7 @@
             renderTramos();
             irASiguienteTramo();
         } catch (error) {
-            alert(error?.message || "No fue posible agregar este alojamiento.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible agregar este alojamiento.");
         }
     }
 
@@ -291,7 +291,7 @@
                 boton.dataset.haikuCambioCabana = "1";
             }
         } catch (error) {
-            alert(error?.message || "Revisa los alojamientos antes de continuar.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "Revisa los alojamientos antes de continuar.");
         }
     }
 
@@ -311,18 +311,18 @@
         if (guardando || tramosConfirmacion.length < 2) return;
         const datos = datosFormulario();
         if (!datos.titular) {
-            alert("Ingresa el nombre del titular de la reserva.");
+            window.HAIKU_DIALOGOS.aviso("Ingresa el nombre del titular de la reserva.");
             $("#reserva-nuevo-titular")?.focus();
             return;
         }
         const correo = $("#reserva-nuevo-correo");
         if (correo?.value.trim() && !correo.checkValidity()) {
-            alert("Revisa que el correo esté escrito correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Revisa que el correo esté escrito correctamente.");
             correo.focus();
             return;
         }
         if (!window.haikuTienePermiso?.("reservas.crear")) {
-            alert("Tu usuario no tiene permiso para crear reservas.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para crear reservas.");
             return;
         }
 
@@ -398,7 +398,7 @@
             console.info("HAIKU · Reserva con cambio de cabaña creada:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible crear reserva con cambio de cabaña:", error);
-            alert(error?.message || "No fue posible crear la reserva. No se guardó ningún tramo.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible crear la reserva. No se guardó ningún tramo.");
             boton.disabled = false;
             boton.textContent = texto;
         } finally {

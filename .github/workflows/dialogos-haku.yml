@@ -1,0 +1,59 @@
+name: Diálogos Haku compactos
+on:
+  pull_request:
+    paths:
+      - 'js/**'
+      - 'css/haiku-dialogos-v1.css'
+      - 'css/haiku-paleta-v1.css'
+      - 'index.html'
+      - 'panel.html'
+      - 'calendario-redes.html'
+      - 'libro-comparacion.html'
+      - 'tests/dialogos-haku*'
+      - 'tests/fixtures/dialogos.cjs'
+      - '.github/workflows/dialogos-haku.yml'
+permissions:
+  contents: read
+concurrency:
+  group: dialogos-haku-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  decisiones-y-temas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Decisiones, regresión y operaciones sintéticas
+        run: >-
+          node --test tests/dialogos-haku.test.cjs tests/airbnb-prepaid-card.test.cjs
+          tests/aseo-operacion-autoridad.test.cjs tests/cabanas-sites.test.cjs
+          tests/checklist-optimista.test.cjs tests/ficha-bove.test.cjs
+          tests/haiku-libro-incorporacion-estructurada.test.cjs tests/haiku-libro-reconciliacion.test.cjs
+          tests/haiku-libro-resumen-refresh.test.cjs tests/libro-actualizaciones-pagos-flujo.test.cjs
+          tests/libro-beneficio-tinaja-notas.test.cjs tests/libro-bloqueos-lote.test.cjs
+          tests/libro-bloqueos-retiro.test.cjs tests/libro-bloqueos.test.cjs tests/libro-cancelaciones.test.cjs
+          tests/libro-confirmacion-visual-actualizaciones.test.cjs tests/libro-historial-revision-operativa.test.cjs
+          tests/libro-horarios-abreviados.test.cjs tests/libro-resultado-incorporados.test.cjs
+          tests/libro-servicio-manual.test.cjs tests/libro-servicios-resultados-parciales.test.cjs
+          tests/nueva-reserva-ver-ficha-id.test.cjs tests/sites-cierre-v1.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs
+      - name: Navegador aislado
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-dialogos" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          node "$RUNNER_TEMP/haku-dialogos/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Escritorio y móvil, claro y oscuro
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-dialogos/node_modules
+          HAIKU_DIALOGOS_OUTPUT: ${{ runner.temp }}/haku-dialogos-capturas
+        run: node tests/dialogos-haku-browser-check.cjs
+      - name: Capturas y resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dialogos-haku
+          path: ${{ runner.temp }}/haku-dialogos-capturas
+          retention-days: 7

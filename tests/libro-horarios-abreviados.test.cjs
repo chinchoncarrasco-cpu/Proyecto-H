@@ -3,7 +3,7 @@ const S=require('../js/haiku-libro-semantica-v1.js');
 const {caso,consulta}=require('./fixtures/libro-tinaja-cambio-color.cjs');
 const {entorno,read}=require('./fixtures/libro-servicio-manual.cjs');
 const {configurarRocio,masajeReal}=require('./fixtures/libro-masaje-fragmentos.cjs');
-const vm=require('node:vm');
+const vm=require('./fixtures/dialogos.cjs').vm;
 const puro={document:{},addEventListener(){},HAIKU_LIBRO_SEMANTICA:S};
 vm.createContext(puro);vm.runInContext(read('js/haiku-libro-servicios-scope-v2.js')
     .replace('const api = Object.freeze({','const api = Object.freeze({horaTexto,'),puro);

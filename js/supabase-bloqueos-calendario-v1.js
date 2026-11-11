@@ -559,7 +559,7 @@
 
         const bloqueo = bloqueosActivos.get(id);
         if (!bloqueo) {
-            alert("Este bloqueo ya no está activo. HAIKU actualizará el calendario.");
+            window.HAIKU_DIALOGOS.aviso("Este bloqueo ya no está activo. HAIKU actualizará el calendario.");
             try { await sincronizarDesdeSupabase(); } catch (_) {}
             return;
         }

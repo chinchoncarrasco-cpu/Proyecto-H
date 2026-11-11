@@ -341,9 +341,7 @@
         const servicio = listaServicios().find(s => String(s.id) === String(id));
         if (!servicio) return;
 
-        if (!opciones.confirmadoDesdeSites && !confirm(
-            `¿Marcar como CANCELADA esta solicitud?\n\n${servicio.hora || ""} · ${servicio.nombre || "Servicio"}\nCAB ${servicio.numeroCabana || ""} · ${servicio.titular || ""}\n\nEl cobro pendiente pasará a $0, dejará de aparecer en Check-out y el horario quedará disponible.`
-        )) return;
+        if (!opciones.confirmadoDesdeSites && !(await window.HAIKU_DIALOGOS.confirmar(`¿Marcar como CANCELADA esta solicitud?\n\n${servicio.hora || ""} · ${servicio.nombre || "Servicio"}\nCAB ${servicio.numeroCabana || ""} · ${servicio.titular || ""}\n\nEl cobro pendiente pasará a $0, dejará de aparecer en Check-out y el horario quedará disponible.`, {"accion":"Cancelar servicio","contexto":"Servicios","peligro":true}))) return;
 
         procesando = true;
         try {
@@ -366,7 +364,7 @@
             console.info("HAIKU · Servicio cancelado:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible cancelar servicio:", error);
-            alert(error?.message || "No fue posible cancelar el servicio.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible cancelar el servicio.");
         } finally {
             procesando = false;
         }
@@ -389,12 +387,10 @@
 
             if (data?.ok === false && data?.motivo === "horario_ocupado") {
                 const sugerencias = Array.isArray(data.sugerencias) ? data.sugerencias : [];
-                alert(
-                    `No se puede reactivar a las ${data.hora_original || servicio.hora || ""}: ese horario ya fue ocupado.\n\n` +
+                window.HAIKU_DIALOGOS.aviso(`No se puede reactivar a las ${data.hora_original || servicio.hora || ""}: ese horario ya fue ocupado.\n\n` +
                     (sugerencias.length
                         ? `Horarios libres cercanos: ${sugerencias.join(" · ")}`
-                        : "No encontré otro horario libre cercano para ese día.")
-                );
+                        : "No encontré otro horario libre cercano para ese día."));
                 return;
             }
 
@@ -406,7 +402,7 @@
             console.info("HAIKU · Servicio reactivado:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible reactivar servicio:", error);
-            alert(error?.message || "No fue posible reactivar el servicio.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible reactivar el servicio.");
         } finally {
             procesando = false;
         }

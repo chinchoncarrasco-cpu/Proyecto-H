@@ -4942,7 +4942,7 @@ function liberarReservaCancelada(reservaId) {
     guardarDatos();
 }
 
-function cancelarReservaDesdeFicha() {
+async function cancelarReservaDesdeFicha() {
 
     const reservaId =
         fichaReservaModal
@@ -4957,10 +4957,8 @@ function cancelarReservaDesdeFicha() {
 
 
     const confirmarCancelacion =
-        confirm(
-            "¿Seguro que deseas cancelar esta reserva?\n\n" +
-            "La reserva desaparecerá del Resumen y del Calendario."
-        );
+        (await window.HAIKU_DIALOGOS.confirmar("¿Seguro que deseas cancelar esta reserva?\n\n" +
+            "La reserva desaparecerá del Resumen y del Calendario.", {"accion":"Cancelar reserva","contexto":"Reservas","peligro":true}));
 
 
     if (!confirmarCancelacion) {
@@ -5034,7 +5032,7 @@ function cancelarReservaDesdeFicha() {
 }
 
 
-function marcarReservaComoNoShowDesdeFicha() {
+async function marcarReservaComoNoShowDesdeFicha() {
 
     const reservaId =
         fichaReservaModal
@@ -5048,17 +5046,15 @@ function marcarReservaComoNoShowDesdeFicha() {
         validarNoShowReserva(reservaId);
 
     if (!validacion.permitido) {
-        alert(validacion.mensaje);
+        window.HAIKU_DIALOGOS.aviso(validacion.mensaje);
         return false;
     }
 
     const confirmarNoShow =
-        confirm(
-            "¿Seguro que deseas marcar esta reserva como No-Show?\n\n" +
+        (await window.HAIKU_DIALOGOS.confirmar("¿Seguro que deseas marcar esta reserva como No-Show?\n\n" +
             "Se retirará del Resumen y del Calendario, " +
             "pero toda su información quedará guardada " +
-            "en el buscador de reservas."
-        );
+            "en el buscador de reservas.", {"accion":"Marcar No-Show","contexto":"Reservas","peligro":true}));
 
     if (!confirmarNoShow) {
         return false;
@@ -5070,10 +5066,8 @@ function marcarReservaComoNoShowDesdeFicha() {
         );
 
     if (!guardada) {
-        alert(
-            "No fue posible guardar el registro No-Show. " +
-            "La reserva no fue modificada."
-        );
+        window.HAIKU_DIALOGOS.aviso("No fue posible guardar el registro No-Show. " +
+            "La reserva no fue modificada.");
         return false;
     }
 
@@ -5390,7 +5384,7 @@ if (btnGuardarServicioResumen) {
             CATALOGO_SERVICIOS[idServicio];
 
         if (!numeroCabana || !idServicio || !servicio) {
-            alert("Selecciona un servicio.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona un servicio.");
             return;
         }
 
@@ -5413,7 +5407,7 @@ if (btnGuardarServicioResumen) {
             requiereProgramacion &&
             (!fechaServicio || !horaServicio)
         ) {
-            alert("Selecciona fecha y hora.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona fecha y hora.");
             return;
         }
 
@@ -6869,7 +6863,7 @@ if (menuEstadoFicha) {
 
 document.addEventListener(
     "click",
-    evento => {
+    async evento => {
 
         const boton =
             evento.target.closest(
@@ -6924,41 +6918,30 @@ document.addEventListener(
             Number(cabana.mascotas) || 0;
 
 
-        const respuestaAdultos =
-            prompt(
-                "Cantidad de adultos:",
-                adultosActuales
-            );
+        let capacidadMaxima = 5;
 
 
-        if (respuestaAdultos === null) {
-            return;
+        if (
+            typeof catalogoCabanasReserva !==
+                "undefined"
+        ) {
+
+            capacidadMaxima =
+                Number(
+                    catalogoCabanasReserva[
+                        numeroCabana
+                    ]?.capacidad
+                ) || 5;
         }
 
 
-        const respuestaNinos =
-            prompt(
-                "Cantidad de niños:",
-                ninosActuales
-            );
-
-
-        if (respuestaNinos === null) {
-            return;
-        }
-
-
-        const respuestaMascotas =
-            prompt(
-                "Cantidad de mascotas:",
-                mascotasActuales
-            );
-
-
-        if (respuestaMascotas === null) {
-            return;
-        }
-
+        const ocupacion = await window.HAIKU_DIALOGOS.ocupacion({
+            adultos: adultosActuales, ninos: ninosActuales, mascotas: mascotasActuales
+        }, capacidadMaxima, `Reserva · CAB ${numeroCabana}`);
+        if (ocupacion === null) return;
+        const respuestaAdultos = ocupacion.adultos;
+        const respuestaNinos = ocupacion.ninos;
+        const respuestaMascotas = ocupacion.mascotas;
 
         const adultos =
             Number(respuestaAdultos);
@@ -6983,29 +6966,12 @@ document.addEventListener(
 
         if (!cantidadesValidas) {
 
-            alert(
-                "Ingresa cantidades válidas. Debe existir al menos un adulto."
-            );
+            window.HAIKU_DIALOGOS.aviso("Ingresa cantidades válidas. Debe existir al menos un adulto.");
 
             return;
         }
 
 
-        let capacidadMaxima = 5;
-
-
-        if (
-            typeof catalogoCabanasReserva !==
-                "undefined"
-        ) {
-
-            capacidadMaxima =
-                Number(
-                    catalogoCabanasReserva[
-                        numeroCabana
-                    ]?.capacidad
-                ) || 5;
-        }
 
 
         if (
@@ -7013,9 +6979,7 @@ document.addEventListener(
             capacidadMaxima
         ) {
 
-            alert(
-                `La cabaña admite un máximo de ${capacidadMaxima} personas entre adultos y niños.`
-            );
+            window.HAIKU_DIALOGOS.aviso(`La cabaña admite un máximo de ${capacidadMaxima} personas entre adultos y niños.`);
 
             return;
         }
@@ -7171,7 +7135,7 @@ document.addEventListener(
 
 document.addEventListener(
     "click",
-    evento => {
+    async evento => {
 
         const boton =
             evento.target.closest(
@@ -7216,10 +7180,7 @@ document.addEventListener(
 
 
         const respuesta =
-            prompt(
-                `Nuevo titular CAB ${numeroCabana}:`,
-                nombreActual
-            );
+            (await window.HAIKU_DIALOGOS.solicitar(`Nuevo titular CAB ${numeroCabana}:`, nombreActual));
 
 
         if (respuesta === null) {
@@ -7233,9 +7194,7 @@ document.addEventListener(
 
         if (!nombreFinal) {
 
-            alert(
-                "El titular no puede quedar vacío."
-            );
+            window.HAIKU_DIALOGOS.aviso("El titular no puede quedar vacío.");
 
             return;
         }
@@ -7512,7 +7471,7 @@ function quitarContinuidadesReserva(
 
 document.addEventListener(
     "click",
-    evento => {
+    async evento => {
 
         const boton =
             evento.target.closest(
@@ -7570,10 +7529,7 @@ document.addEventListener(
 
 
         const respuesta =
-            prompt(
-                `Noches CAB ${numeroCabana}:`,
-                nochesActuales
-            );
+            (await window.HAIKU_DIALOGOS.solicitar(`Noches CAB ${numeroCabana}:`, nochesActuales));
 
 
         if (respuesta === null) {
@@ -7595,9 +7551,7 @@ document.addEventListener(
             nuevasNoches < 1
         ) {
 
-            alert(
-                "Ingresa una cantidad válida de noches."
-            );
+            window.HAIKU_DIALOGOS.aviso("Ingresa una cantidad válida de noches.");
 
             return;
         }
@@ -7622,9 +7576,7 @@ document.addEventListener(
 
         if (!rangoDisponible) {
 
-            alert(
-                "No es posible aumentar las noches porque la cabaña tiene otra reserva dentro de ese rango."
-            );
+            window.HAIKU_DIALOGOS.aviso("No es posible aumentar las noches porque la cabaña tiene otra reserva dentro de ese rango.");
 
             return;
         }

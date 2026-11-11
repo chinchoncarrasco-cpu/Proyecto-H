@@ -40,6 +40,7 @@ const server = http.createServer((request, response) => {
     const browser = await chromium.launch({ executablePath: edge, headless: true });
     try {
         const page = await browser.newPage({ viewport: { width: 1000, height: 800 } });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.address().port}/`);

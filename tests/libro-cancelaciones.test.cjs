@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('./fixtures/dialogos.cjs').vm;
 const S=require('../js/haiku-libro-semantica-v1.js'),D=require('../js/haiku-libro-diferencias-v1.js');
 const r=()=>({id:'Sep26!C3',hoja:'Sep26',titular:'Carol Vega Ruiz',cabana:1,fecha_checkin:'2026-09-01',fecha_checkout:'2026-09-03',noches:2,tipo_estadia:'alojamiento',advertencias:[],correo:'carol@example.test'});
 const e=()=>({bloque:'CANCELACIONES',titular:'Carol Vega Ruiz',fecha_checkin:'2026-09-01',noches:2,correo:'carol@example.test',origen:{hoja:'Sep26',celda:'D16'}});

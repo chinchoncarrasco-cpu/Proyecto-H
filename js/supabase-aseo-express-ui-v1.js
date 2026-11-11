@@ -126,10 +126,7 @@
         try {
             texto = await leerPortapapeles();
         } catch (_) {
-            const manual = window.prompt(
-                "Tu navegador no permitió leer el portapapeles automáticamente. Pega aquí el texto y presiona Aceptar:",
-                ""
-            );
+            const manual = (await window.HAIKU_DIALOGOS.solicitar("Tu navegador no permitió leer el portapapeles automáticamente. Pega aquí el texto y presiona Aceptar:", ""));
             if (manual === null) return;
             texto = manual;
         }

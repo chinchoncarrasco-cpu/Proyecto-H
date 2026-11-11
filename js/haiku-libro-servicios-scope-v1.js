@@ -472,7 +472,7 @@
     async function importarSeleccionados(resultado, seleccionados, card, textoOriginal) {
         const ids = [...seleccionados];
         if (!ids.length) return;
-        const confirmar = root.confirm(`Se incorporarán ${ids.length} servicio${ids.length === 1 ? "" : "s"} listo${ids.length === 1 ? "" : "s"} desde el Libro. Haku revalidará antes de guardar. ¿Confirmas?`);
+        const confirmar = (await root.HAIKU_DIALOGOS.confirmar(`Se incorporarán ${ids.length} servicio${ids.length === 1 ? "" : "s"} listo${ids.length === 1 ? "" : "s"} desde el Libro. Haku revalidará antes de guardar. ¿Confirmas?`, {"accion":"Incorporar servicios","contexto":"Haku · Libro","peligro":false}));
         if (!confirmar) return;
 
         const botones = card.querySelectorAll("button,input[type=checkbox]");

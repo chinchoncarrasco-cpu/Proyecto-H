@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
 const S=require('../js/haiku-libro-semantica-v1.js');
 const nota='POSIBLE LATE CHECK OUT (X COORDINAR)';
 // Fixture sintético con las fechas y el texto reportados; no sustituye al XLSX de Drive.

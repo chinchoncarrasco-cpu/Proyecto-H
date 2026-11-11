@@ -320,22 +320,22 @@
         const f = fechas();
 
         if (!comun.titular) {
-            alert("Ingresa el nombre del titular de la reserva.");
+            window.HAIKU_DIALOGOS.aviso("Ingresa el nombre del titular de la reserva.");
             $("#reserva-nuevo-titular")?.focus();
             return;
         }
         const correo = $("#reserva-nuevo-correo");
         if (correo?.value.trim() && !correo.checkValidity()) {
-            alert("Revisa que el correo esté escrito correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Revisa que el correo esté escrito correctamente.");
             correo.focus();
             return;
         }
         if (!f.llegada || !f.salida) {
-            alert("Selecciona las fechas de la reserva.");
+            window.HAIKU_DIALOGOS.aviso("Selecciona las fechas de la reserva.");
             return;
         }
         if (!window.haikuTienePermiso?.("reservas.crear")) {
-            alert("Tu usuario no tiene permiso para crear reservas.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para crear reservas.");
             return;
         }
 
@@ -403,7 +403,7 @@
             console.info("HAIKU · Reserva múltiple creada:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible crear reserva múltiple:", error);
-            alert(error?.message || "No fue posible crear las reservas. No se guardó el grupo.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible crear las reservas. No se guardó el grupo.");
         } finally {
             guardando = false;
             const actual = document.getElementById(ID_MULTIPLE);

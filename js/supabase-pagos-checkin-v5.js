@@ -607,13 +607,13 @@
         const d = leerEditorPago(editor);
         const medioDB = codigoMedio(d.medio);
         const req = requisitosMedio(medioDB);
-        if (!medioDB) return alert("Selecciona el medio de pago.");
-        if (req.glosa && !d.glosa) return alert("Transferencia requiere Glosa.");
-        if (req.folio && !d.folio) return alert("Tarjeta requiere Folio.");
-        if (req.bovtar && !d.bovtar) return alert("Tarjeta requiere BOVTAR.");
-        if (req.codAut && !d.codAut) return alert("WebPay requiere CodAut.");
+        if (!medioDB) return window.HAIKU_DIALOGOS.aviso("Selecciona el medio de pago.");
+        if (req.glosa && !d.glosa) return window.HAIKU_DIALOGOS.aviso("Transferencia requiere Glosa.");
+        if (req.folio && !d.folio) return window.HAIKU_DIALOGOS.aviso("Tarjeta requiere Folio.");
+        if (req.bovtar && !d.bovtar) return window.HAIKU_DIALOGOS.aviso("Tarjeta requiere BOVTAR.");
+        if (req.codAut && !d.codAut) return window.HAIKU_DIALOGOS.aviso("WebPay requiere CodAut.");
         if (!window.haikuTienePermiso?.("pagos.registrar") || !window.haikuTienePermiso?.("pagos.verificar")) {
-            return alert("Tu usuario no tiene permiso para editar pagos confirmados.");
+            return window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para editar pagos confirmados.");
         }
 
         guardandoEdicionPago = true;
@@ -637,7 +637,7 @@
             await window.haikuSincronizarReservasSupabase?.();
         } catch (error) {
             console.error("HAIKU · No fue posible corregir pago confirmado:", error);
-            alert(error?.message || "No fue posible guardar la corrección.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible guardar la corrección.");
         } finally {
             guardandoEdicionPago = false;
             boton.disabled = false;
@@ -665,7 +665,7 @@
             console.info("HAIKU · Pago parcial Check-in V5 registrado:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible registrar pago Check-in V5:", error);
-            alert(error?.message || "No fue posible registrar el pago.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el pago.");
         } finally {
             boton.disabled = false;
             boton.textContent = textoAnterior;
@@ -683,7 +683,7 @@
         evento.preventDefault();
         evento.stopPropagation();
         evento.stopImmediatePropagation();
-        if (!bove) return alert("Ingresa el BOVE del alojamiento.");
+        if (!bove) return window.HAIKU_DIALOGOS.aviso("Ingresa el BOVE del alojamiento.");
 
         guardandoBove = true;
         boton.disabled = true;
@@ -703,7 +703,7 @@
                 ?.refrescar(fechaActual());
         } catch (error) {
             console.error("HAIKU · No fue posible registrar BOVE alojamiento V5:", error);
-            alert(error?.message || "No fue posible registrar el BOVE.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el BOVE.");
         } finally {
             guardandoBove = false;
             boton.disabled = false;

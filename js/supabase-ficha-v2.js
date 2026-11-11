@@ -498,7 +498,7 @@
         try {
             const { reservaId } = await resolverReserva(numeroCabana, fecha);
             if (!reservaId) {
-                alert(`CAB ${numeroCabana} no tiene una reserva activa para ${fecha}.`);
+                window.HAIKU_DIALOGOS.aviso(`CAB ${numeroCabana} no tiene una reserva activa para ${fecha}.`);
                 return;
             }
             const ficha = await cargarFicha(reservaId);
@@ -507,7 +507,7 @@
             pintarFicha(ficha);
         } catch (error) {
             console.error("HAIKU · No fue posible abrir Ficha V2:", error);
-            alert("No fue posible cargar la ficha desde Supabase.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible cargar la ficha desde Supabase.");
         } finally {
             cargando = false;
         }

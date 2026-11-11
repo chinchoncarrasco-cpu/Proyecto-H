@@ -325,7 +325,7 @@
         ).trim();
 
         if (pendientes > 0 && !resumen) {
-            alert("Quedan pendientes. Escribe un resumen de entrega antes de cerrar el turno.");
+            window.HAIKU_DIALOGOS.aviso("Quedan pendientes. Escribe un resumen de entrega antes de cerrar el turno.");
             panel.querySelector("#cierre-final-resumen")?.focus();
             return;
         }
@@ -334,7 +334,12 @@
             ? `Este cierre tiene ${pendientes} pendiente(s). ¿Cerrar igualmente y dejar el resumen para el siguiente turno?`
             : "¿Cerrar definitivamente este turno? Después quedará bloqueado para edición normal.";
 
-        if (!confirm(pregunta)) return;
+        if (!(await window.HAIKU_DIALOGOS.confirmar(pregunta, {
+            titulo: 'Cerrar el turno', accion: 'Cerrar turno', contexto: 'Cierre de turno',
+            cuerpo: 'Los controles quedarán bloqueados para edición normal.',
+            resumen: [['Fecha', fecha], ['Pendientes', pendientes]],
+            ...(pendientes > 0 ? { aviso: 'Se cerrará con pendientes y el resumen de entrega para el siguiente turno.', advertencia: true } : {})
+        }))) return;
 
         const boton = panel.querySelector("[data-cierre-final-cerrar]");
         if (boton) {
@@ -362,14 +367,12 @@
 
             await refrescarEstado();
 
-            alert(
-                data?.cierre_estado === "cerrado_con_pendientes"
+            window.HAIKU_DIALOGOS.aviso(data?.cierre_estado === "cerrado_con_pendientes"
                     ? "Turno cerrado con pendientes y entrega registrada."
-                    : "Turno cerrado correctamente."
-            );
+                    : "Turno cerrado correctamente.");
         } catch (error) {
             console.error("HAIKU · No fue posible cerrar el turno:", error);
-            alert(error?.message || "No fue posible cerrar el turno.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible cerrar el turno.");
             await refrescarEstado();
         } finally {
             if (boton) boton.disabled = false;
@@ -380,18 +383,14 @@
         const fecha = fechaActual();
         if (!fecha || !estadoActual || !esCerrado(estadoActual.cierre_estado)) return;
 
-        const motivo = prompt(
-            "Motivo de reapertura del cierre:",
-            "Corrección de cierre"
-        );
+        const motivo = (await window.HAIKU_DIALOGOS.solicitar("Motivo de reapertura del cierre:", "Corrección de cierre", { contexto: `Cierre de turno · ${fecha}` }));
 
         if (motivo === null) return;
         if (!motivo.trim()) {
-            alert("El motivo de reapertura es obligatorio.");
+            window.HAIKU_DIALOGOS.aviso("El motivo de reapertura es obligatorio.");
             return;
         }
 
-        if (!confirm("¿Reabrir este cierre? Los controles volverán a quedar editables.")) return;
 
         const panel = asegurarPanel();
         const boton = panel?.querySelector("[data-cierre-final-reabrir]");
@@ -420,10 +419,10 @@
             }
 
             await refrescarEstado();
-            alert("Cierre reabierto correctamente.");
+            window.HAIKU_DIALOGOS.aviso("Cierre reabierto correctamente.");
         } catch (error) {
             console.error("HAIKU · No fue posible reabrir el cierre:", error);
-            alert(error?.message || "No fue posible reabrir el cierre.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible reabrir el cierre.");
         } finally {
             if (boton) {
                 boton.disabled = false;

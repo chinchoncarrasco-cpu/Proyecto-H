@@ -297,7 +297,7 @@
             if(g===generation&&o===opening&&await reloadSelected())drawerNote('Archivos guardados. Ya están disponibles para el equipo.');
         });input.value='';
     }
-    function close(){if(busy)return;if(dirty&&!window.confirm('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?'))return;privacySuspended=false;privacyFocus=null;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);if(readOnly){const id=lastFocus?.dataset?.event;renderCalendar();(id?host.querySelector(`[data-event="${CSS.escape(id)}"]`):lastFocus)?.focus();}else lastFocus?.focus();}
+    async function close(){if(busy)return false;if(dirty&&!(await window.HAIKU_DIALOGOS.confirmar('Hay cambios de texto sin guardar. ¿Cerrar y descartarlos?', {"accion":"Descartar y cerrar","contexto":"Calendario · Contenido","peligro":true,"cancelar":"Seguir editando"})))return false;privacySuspended=false;privacyFocus=null;dialog.close();selected=null;dirty=false;++opening;clearTimeout(signedTimer);if(readOnly){const id=lastFocus?.dataset?.event;renderCalendar();(id?host.querySelector(`[data-event="${CSS.escape(id)}"]`):lastFocus)?.focus();}else lastFocus?.focus();return true;}
     if(readOnly)window.matchMedia('(min-width:1000px)').addEventListener('change',()=>{
         if(!dialog.open)return;
         const focus=document.activeElement;dialog.close();showDialog();
@@ -315,21 +315,21 @@
             selected=p;dirty=true;drawPost();
         }else if(e.target.name)dirty=true;
     });
-    dialog.addEventListener('click',e=>{
+    dialog.addEventListener('click',async e=>{
         const b=e.target.closest('button');if(!b||busy)return;
         if(b.hasAttribute('data-close')){close();return;}
-        if(b.dataset.campaign){filters={...defaults(),campaign:b.dataset.campaign};view='campanas';close();shell();return;}
+        if(b.dataset.campaign){if(!await close())return;filters={...defaults(),campaign:b.dataset.campaign};view='campanas';shell();return;}
         if(readOnly)return;
         if(b.hasAttribute('data-share-copy')){navigator.clipboard?.writeText(shareURL()).then(()=>drawerNote('Enlace copiado. Puedes enviarlo por WhatsApp o correo.')).catch(()=>drawerNote('Selecciona el enlace y cópialo manualmente.',true));if(!navigator.clipboard)drawerNote('Selecciona el enlace y cópialo manualmente.',true);return;}
         if(b.dataset.shareChange){
             const action=b.dataset.shareChange;
-            if(action==='rotate'&&!window.confirm('¿Cambiar el enlace? El anterior dejará de funcionar.'))return;
+            if(action==='rotate'&&!(await window.HAIKU_DIALOGOS.confirmar('¿Cambiar el enlace? El anterior dejará de funcionar.', {"accion":"Cambiar enlace","contexto":"Calendario · Compartir","peligro":false})))return;
             const g=generation,o=opening;run(async()=>{const state=await api.changeShare(shareState,action!=='disable');if(g!==generation||o!==opening)return;shareState=state;drawShare();drawerNote(action==='disable'?'Enlace desactivado.':'Enlace de solo lectura activado.');});return;
         }
         if(b.hasAttribute('data-copy')){const text=readForm().copy||'';if(!navigator.clipboard){drawerNote('Selecciona el texto y cópialo manualmente.',true);return;}navigator.clipboard.writeText(text).then(()=>drawerNote('Texto copiado.')).catch(()=>drawerNote('No se pudo copiar. Selecciona el texto y cópialo manualmente.',true));return;}
         const id=b.dataset.remove||b.dataset.download||b.dataset.up||b.dataset.down,a=assets.find(a=>a.id===id);if(!a)return;
         if(b.dataset.download){run(async()=>{const url=await api.signed(a,true);const link=document.createElement('a');link.href=url;link.download=a.filename;link.rel='noopener';link.target='_blank';document.body.append(link);link.click();link.remove();drawerNote('Descarga solicitada.');});}
-        else if(b.dataset.remove){if(!window.confirm(`¿Retirar «${a.filename}» de este contenido?`))return;run(async()=>{if(dirty)await persist();await api.remove(a);if(await reloadSelected())drawerNote('Archivo retirado. El contenido vuelve a material pendiente.');});}
+        else if(b.dataset.remove){if(!(await window.HAIKU_DIALOGOS.confirmar(`¿Retirar «${a.filename}» de este contenido?`, {"accion":"Retirar archivo","contexto":"Calendario · Contenido","peligro":true})))return;run(async()=>{if(dirty)await persist();await api.remove(a);if(await reloadSelected())drawerNote('Archivo retirado. El contenido vuelve a material pendiente.');});}
         else{run(async()=>{if(dirty)await persist();const list=assetList(a.post_id).filter(a=>a.state==='ready'),n=list.findIndex(x=>x.id===a.id),to=n+(b.dataset.up?-1:1);if(to<0||to>=list.length)return;[list[n],list[to]]=[list[to],list[n]];await api.reorder(a.post_id,list.map(a=>a.id));if(await reloadSelected())drawerNote('Orden guardado.');});}
     });
     function reset(){generation++;opening++;rows=[];assets=[];api=null;loaded=false;selected=null;shareState=null;privacySuspended=false;privacyFocus=null;dirty=false;busy=false;clearTimeout(signedTimer);dialog.close();dialog.innerHTML='';dialog.classList.remove('hr-busy');dialog.removeAttribute('aria-busy');shell();note('Inicia sesión para acceder al contenido compartido.');}

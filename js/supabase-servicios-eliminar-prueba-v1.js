@@ -122,17 +122,20 @@
         );
 
         if (!servicio) {
-            alert("No se encontró el servicio que quieres eliminar.");
+            window.HAIKU_DIALOGOS.aviso("No se encontró el servicio que quieres eliminar.");
             return;
         }
 
-        const confirmar = confirm(
-            `¿ELIMINAR DEFINITIVAMENTE este servicio?\n\n` +
+        const confirmar = (await window.HAIKU_DIALOGOS.confirmar(`¿ELIMINAR DEFINITIVAMENTE este servicio?\n\n` +
             `${servicio.hora || ""}${servicio.hora ? " · " : ""}${servicio.nombre || "Servicio"}\n` +
             `CAB ${servicio.numeroCabana || "—"}${servicio.titular ? ` · ${servicio.titular}` : ""}\n\n` +
             `Se borrará de Servicios, notificaciones y cobros. No quedará como Cancelado.\n\n` +
-            `Si ya tiene un pago aplicado, HAIKU bloqueará el borrado para proteger las finanzas.`
-        );
+            `Si ya tiene un pago aplicado, HAIKU bloqueará el borrado para proteger las finanzas.`, {
+            titulo: 'Eliminar definitivamente', accion: 'Eliminar servicio', contexto: 'Servicios', peligro: true,
+            cuerpo: 'Se borrará de Servicios, notificaciones y cobros. No quedará como Cancelado.',
+            detalles: [['Servicio', servicio.nombre || 'Servicio'], ['Reserva', `CAB ${servicio.numeroCabana || '—'}${servicio.titular ? ' · ' + servicio.titular : ''}`], ...(servicio.hora ? [['Hora', servicio.hora]] : [])],
+            aviso: 'Si tiene un pago aplicado, HAIKU bloqueará el borrado para proteger las finanzas.', advertencia: true
+        }));
 
         if (!confirmar) return;
 
@@ -160,7 +163,7 @@
             console.info("HAIKU · Servicio eliminado definitivamente:", data);
         } catch (error) {
             console.error("HAIKU · No fue posible eliminar definitivamente el servicio:", error);
-            alert(error?.message || "No fue posible eliminar el servicio.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible eliminar el servicio.");
         } finally {
             procesando = false;
         }

@@ -31,6 +31,7 @@ const { chromium } = require('playwright');
     try {
         for (const width of [1600, 1440, 1200, 1100, 390]) {
             const page = await browser.newPage({ viewport: { width, height: 900 } });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             await page.setContent(`<style>${baseStyle}\n${closingFinalStyle}\n${closingLegacyStyle}\n${style}</style><button class="menu-item" data-seccion="cabanas">Cabañas</button><button class="menu-item" data-seccion="cierre">Cierre</button><div id="cabinsDetail"></div>${section}`);

@@ -613,7 +613,7 @@
             requestAnimationFrame(() => pintarFichaSupabase(ficha));
         } catch (error) {
             console.error("HAIKU · No fue posible abrir ficha desde Supabase:", error);
-            alert("No fue posible cargar la ficha desde Supabase.");
+            window.HAIKU_DIALOGOS.aviso("No fue posible cargar la ficha desde Supabase.");
         } finally {
             boton.disabled = false;
             cargandoFicha = false;

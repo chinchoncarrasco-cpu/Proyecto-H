@@ -25,6 +25,7 @@ const server = http.createServer((req,res)=>{
     try {
         for(const [etapa,width] of [['checkin',1000],['checkout',1000],['abono',1000],['checkin',390],['checkout',390],['abono',390]]) {
             const page=await browser.newPage({viewport:{width,height:800}}), errors=[];
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
             page.on('pageerror',e=>errors.push(e.message));
             await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.abort());
             await page.goto(`http://127.0.0.1:${server.address().port}/`);

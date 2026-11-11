@@ -871,7 +871,7 @@
         if (!["historial", "auditoria"].includes(nuevo)) return;
 
         if (nuevo === "auditoria" && !permisosLocales().auditoria) {
-            alert("Tu usuario no tiene permiso para ver la auditoría técnica.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para ver la auditoría técnica.");
             return;
         }
 

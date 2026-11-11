@@ -1,6 +1,6 @@
 // Sólo fixtures sintéticos: respuestas contractuales 4C, conflicto y red incierta.
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm');
+const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm;
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
 global.HAIKU_LIBRO_PAGOS_DESTINOS_V1 = require('../js/haiku-libro-pagos-destinos-v1.js');
 const Q = require('../js/haiku-libro-consultas-v1.js');

@@ -560,7 +560,7 @@ test('empty valid book still queries and counts September system',async()=>{
  const c=await compare([], [stay()]);assert.equal(c.meta.proyecto,1);assert.equal(c.meta.faltantes,0);
 });
 test('visual report retains cards, confines coordinates to technical details and prepares decisions without writes',async()=>{
- const fs=require('node:fs'),vm=require('node:vm');
+ const fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
   append(...xs){this.children.push(...xs)} replaceChildren(...xs){this.children=xs} addEventListener(k,f){this.events[k]=f}
@@ -568,7 +568,7 @@ test('visual report retains cards, confines coordinates to technical details and
   get options(){return this.children} get text(){return this.textContent}
  }
  const document={createElement:t=>new Element(t),querySelector:()=>null};
- const context={HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document,addEventListener(){},Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
+ const context={confirm:()=>true,HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,document,addEventListener(){},Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8').replace('Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })','Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion, renderizarComparacion, renderizarIncorporacion })');
  vm.runInNewContext(source,context);
  const c=await compare([book({cabana:2,pagos:[pay()]})],[stay()]),out=new Element('div');
@@ -770,7 +770,7 @@ test('payment on a securely matched stay stays safe while another cabin awaits a
 });
 
 function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
- const fs=require('node:fs'),vm=require('node:vm');
+ const fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
  class Element {
   constructor(tag,text=''){this.tag=tag;this.textContent=text;this.children=[];this.style={};this.events={};this.dataset={};this.selectedIndex=0;}
   append(...xs){for(const x of xs){
@@ -788,7 +788,7 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null}={}) {
    selector.startsWith('.')&&(e.className||'').split(' ').includes(selector.slice(1)));}
   querySelector(selector){return this.querySelectorAll(selector)[0]||null}
  }
- const context={structuredClone,HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
+ const context={confirm:()=>true,structuredClone,HAIKU_LIBRO_SEMANTICA:global.HAIKU_LIBRO_SEMANTICA,HAIKU_LIBRO_RECONCILIACION_UX_V1:ux,
   document:{createElement:t=>new Element(t),querySelector:()=>null},addEventListener(){},
   haikuSupabase:db, reconsultar,Option:function(t,v){const e=new Element('option',t);e.value=v;return e;}};
  const source=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8')
@@ -2617,7 +2617,7 @@ test('unknown occupation does not become zero, and explicitly invalid occupation
 });
 
 test('confirmed cancellations travel from monthly query to preparation and their separate visible preview',async()=>{
- const fs=require('node:fs'),vm=require('node:vm');
+ const fs=require('node:fs'),vm=require('./fixtures/dialogos.cjs').vm;
  const xomep=book({hoja:'Sep26',titular:"Xomep Zomi Voyu",correo:"xomep@example.test"});
  const kutotu=book({id:"kutotu",hoja:'Sep26',titular:"Kutotu Kenariti",cabana:2,rut_documento:"86280995-6",fecha_checkin:'2026-09-21',fecha_checkout:'2026-09-24'});
  const evidencia={bloque:'CANCELACIONES',titular:xomep.titular,fecha_checkin:xomep.fecha_checkin,noches:3,correo:xomep.correo,origen:{hoja:'Sep26',celda:'C16'}};

@@ -266,18 +266,16 @@
         }
     }
 
-    function borrar({ confirmar = true } = {}) {
+    async function borrar({ confirmar = true } = {}) {
         if (window.HAIKU_ASISTENTE?.procesando?.()) {
-            window.alert("Haku todavía está procesando una solicitud. Espera a que termine antes de borrar la conversación.");
+            window.HAIKU_DIALOGOS.aviso("Haku todavía está procesando una solicitud. Espera a que termine antes de borrar la conversación.");
             return false;
         }
 
         if (confirmar) {
-            const aceptado = window.confirm(
-                "¿Borrar el historial de esta conversación con Haku?\n\n" +
-                "Esto sólo limpia los mensajes de este chat en esta pestaña. No borra reservas, pagos, servicios ni el Historial operativo de Proyecto H."
-            );
-            if (!aceptado) return false;
+            const aceptado = (await window.HAIKU_DIALOGOS.confirmar("¿Borrar el historial de esta conversación con Haku?\n\n" +
+                "Esto sólo limpia los mensajes de este chat en esta pestaña. No borra reservas, pagos, servicios ni el Historial operativo de Proyecto H.", {"accion":"Borrar conversación","contexto":"Haku · Conversación","peligro":true,"titulo":"¿Borrar esta conversación?","cuerpo":"Se eliminarán los mensajes de Haku en esta pestaña.","aviso":"Se conservan las reservas, pagos, servicios y el historial operativo.","cancelar":"Conservar","simbolo":"H"}));
+            if (!aceptado || window.HAIKU_ASISTENTE?.procesando?.()) return false;
         }
 
         try {

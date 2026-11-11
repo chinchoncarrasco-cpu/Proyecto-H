@@ -298,12 +298,12 @@
 
         if (monto <= 0 || !medioDB) {
             check.checked = false;
-            alert("Ingresa un monto de abono y selecciona el medio de pago.");
+            window.HAIKU_DIALOGOS.aviso("Ingresa un monto de abono y selecciona el medio de pago.");
             return;
         }
         if (!window.haikuTienePermiso?.("pagos.registrar")) {
             check.checked = false;
-            alert("Tu usuario no tiene permiso para registrar pagos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
             return;
         }
 
@@ -322,7 +322,7 @@
         } catch (error) {
             console.error("HAIKU · No fue posible registrar abono V2:", error);
             check.checked = false;
-            alert(error?.message || "No fue posible registrar el abono.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el abono.");
         } finally {
             guardandoAbono = false;
             check.disabled = false;
@@ -351,14 +351,14 @@
 
         if (!medioDB || (medioDB !== "airbnb_prepaid_card" && (!folio || !codAut || !bove)) || !manager) {
             cobrado.checked = false;
-            alert(medioDB === "airbnb_prepaid_card"
+            window.HAIKU_DIALOGOS.aviso(medioDB === "airbnb_prepaid_card"
                 ? "Para cerrar el saldo Airbnb Prepaid Card confirma la revisión de Manager."
                 : "Para cerrar el saldo completa Medio de pago, Folio, CodAut, Bove y Manager revisado.");
             return;
         }
         if (!window.haikuTienePermiso?.("pagos.registrar")) {
             cobrado.checked = false;
-            alert("Tu usuario no tiene permiso para registrar pagos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
             return;
         }
 
@@ -378,7 +378,7 @@
         } catch (error) {
             console.error("HAIKU · No fue posible registrar saldo V2:", error);
             cobrado.checked = false;
-            alert(error?.message || "No fue posible registrar el saldo.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible registrar el saldo.");
         } finally {
             guardandoSaldo = false;
             cobrado.disabled = false;
@@ -438,7 +438,7 @@
         const id = reservaEditando();
         const d = datosFormularioEdicion();
         if (!id || !d.titular || !d.cabana || !d.llegada || !d.salida) {
-            alert("Faltan datos obligatorios para guardar la edición.");
+            window.HAIKU_DIALOGOS.aviso("Faltan datos obligatorios para guardar la edición.");
             return;
         }
 
@@ -457,7 +457,7 @@
             await window.haikuSincronizarReservasSupabase?.();
         } catch (error) {
             console.error("HAIKU · No fue posible editar reserva V2:", error);
-            alert(error?.message || "No fue posible guardar la edición.");
+            window.HAIKU_DIALOGOS.aviso(error?.message || "No fue posible guardar la edición.");
         } finally {
             guardandoEdicion = false;
             boton.disabled = false;

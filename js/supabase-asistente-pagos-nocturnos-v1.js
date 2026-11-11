@@ -518,7 +518,11 @@
 
         boton.addEventListener("click", async () => {
             if (ocupado || boton.disabled) return;
-            const ok = window.confirm(`¿Confirmas registrar ${totalPagos} ${totalPagos === 1 ? "pago" : "pagos"} en ${grupos.length} ${grupos.length === 1 ? "reserva" : "reservas"}? El lote se guarda completo o no se guarda nada.`);
+            const ok = (await window.HAIKU_DIALOGOS.confirmar(`¿Confirmas registrar ${totalPagos} ${totalPagos === 1 ? "pago" : "pagos"} en ${grupos.length} ${grupos.length === 1 ? "reserva" : "reservas"}? El lote se guarda completo o no se guarda nada.`, {
+                titulo: 'Registrar pagos', accion: 'Registrar pagos', contexto: 'Haku · Pagos', cuerpo: '',
+                resumen: [['Pagos', totalPagos], ['Reservas', grupos.length], ['Total', moneda(grupos.reduce((s, g) => s + g.pagosRpc.reduce((n, p) => n + Number(p.monto || 0), 0), 0))]],
+                aviso: 'El lote se guarda completo o no se guarda nada.'
+            }));
             if (!ok) return;
 
             ocupado = true;

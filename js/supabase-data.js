@@ -705,10 +705,8 @@
                     error
                 );
 
-                alert(
-                    error?.message ||
-                    "No fue posible crear la reserva."
-                );
+                window.HAIKU_DIALOGOS.aviso(error?.message ||
+                    "No fue posible crear la reserva.");
             } finally {
                 boton.disabled = false;
                 boton.textContent = textoOriginal;

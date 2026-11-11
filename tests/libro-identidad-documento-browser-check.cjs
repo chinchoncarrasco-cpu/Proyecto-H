@@ -19,7 +19,8 @@ const server=http.createServer((req,res)=>{
         for(const width of [1100,390]) {
             const context=await browser.newContext({viewport:{width,height:850}}),externos=[],errores=[];
             await context.route('**/*',route=>{if(new URL(route.request().url()).origin===origin) return route.continue();externos.push(route.request().url());return route.abort()});
-            const page=await context.newPage();page.on('pageerror',e=>errores.push(e.message));await page.goto(origin);
+            const page=await context.newPage();
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);page.on('pageerror',e=>errores.push(e.message));await page.goto(origin);
             await page.evaluate(async f=>{
                 const Q=window.HAIKU_LIBRO_CONSULTAS;window.__calls=[];window.confirm=()=>true;
                 window.haikuSupabase={auth:{getSession:async()=>({data:{session:{user:{id:'ficticio'}}}})},from(table){

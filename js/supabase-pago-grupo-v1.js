@@ -812,7 +812,7 @@
             typeof window.haikuTienePermiso === "function" &&
             !window.haikuTienePermiso("pagos.registrar")
         ) {
-            alert("Tu usuario no tiene permiso para registrar pagos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
             return;
         }
 
@@ -879,7 +879,7 @@
 
     async function abrirModal() {
         if (!window.haikuSesion) {
-            alert("Debes iniciar sesión para registrar pagos.");
+            window.HAIKU_DIALOGOS.aviso("Debes iniciar sesión para registrar pagos.");
             return;
         }
 
@@ -887,7 +887,7 @@
             typeof window.haikuTienePermiso === "function" &&
             !window.haikuTienePermiso("pagos.registrar")
         ) {
-            alert("Tu usuario no tiene permiso para registrar pagos.");
+            window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para registrar pagos.");
             return;
         }
 

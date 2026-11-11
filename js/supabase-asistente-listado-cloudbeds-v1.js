@@ -490,7 +490,7 @@
                 "0 pagos"
             ].filter(Boolean).join(" · ");
 
-            if (!window.confirm(`¿Confirmas importar ${detalle}?`)) return;
+            if (!(await window.HAIKU_DIALOGOS.confirmar(`¿Confirmas importar ${detalle}?`, {"accion":"Importar reservas","contexto":"Haku · Cloudbeds","peligro":false}))) return;
 
             guardando = true;
             boton.disabled = true;

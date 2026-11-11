@@ -1,6 +1,6 @@
 // Datos exclusivamente sintéticos; no conecta con servicios externos.
 const test = require('node:test'), assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm');
+const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm;
 const F = require('./fixtures/libro-actualizaciones-pagos-flujo.cjs');
 const source = fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'), 'utf8');
 const api = 'Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })';
