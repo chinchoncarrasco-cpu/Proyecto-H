@@ -1294,6 +1294,7 @@
                 glosa_original:bancaria.glosa_original,numero_remitente:bancaria.numero_remitente,
                 fecha_recepcion:bancaria.fecha_recepcion}} : {}),
             ...(medioManual ? {medio_pago_manual_v1:structuredClone(medioManual.auditoria)} : {}),
+            ...(pago?.ajuste_fecha_comprobante ? {ajuste_fecha_comprobante:pago.ajuste_fecha_comprobante} : {}),
             source_fingerprint:huellaFuentePago(pago,destino),
             source_kind:'libro_reserva',
             cabana:Number(pago?.cabana || destino.cabana) || null,
@@ -3851,6 +3852,8 @@
                 const motivos = [];
                 const asociacionFinancieraSegura = asociacionFinancieraInequivoca(p, duplicado, coincidencias, destino);
                 if ((destino?.bloqueado || !r.pagos.includes(p)) && !asociacionFinancieraSegura) motivos.push('Primero confirma la asociación del movimiento con la reserva.');
+                if (p.ajuste_fecha_comprobante && duplicado.fecha_pago && 'fecha_pago' in patch.despues)
+                    motivos.push('El año interpretado del Libro difiere de la fecha registrada. Verifica el comprobante original.');
                 if (!Number.isSafeInteger(p.monto) || p.monto <= 0 || p.moneda !== 'CLP') motivos.push('El monto o la moneda requiere revisión.');
                 const aplicacionesDistribuidas = p.transaccion_distribuida && Array.isArray(p.aplicaciones_libro) &&
                     p.aplicaciones_libro.length > 1 && p.aplicaciones_libro.every(aplicacion =>
@@ -6295,7 +6298,7 @@
         else if (medio === 'efectivo') segundo = ['Concepto', pago?.concepto || 'Sin dato'];
         else if (medio === 'airbnb_prepaid_card') segundo = ['Detalle', pago?.texto_original || pago?.concepto || 'Sin dato'];
         return { medio:nombres[medio] || medio.replaceAll('_',' ') || 'Sin dato', segundo,
-            fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10)) };
+            fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10),!!pago?.ajuste_fecha_comprobante) };
     }
 
     function movimientosLibroIncorporacion(movimientos) {
@@ -7050,6 +7053,12 @@
                 meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
             }
             fila.append(meta);
+            const ajusteFecha = item.pagoLibro.ajuste_fecha_comprobante;
+            if (ajusteFecha) {
+                const accion = ajusteFecha.motivo === 'anio_omitido' ? 'completado' : 'corregido';
+                fila.append(elemento('p','haiku-incorporacion-propuesta',
+                    `Año ${accion} según la reserva · Libro «${ajusteFecha.texto_original}»`));
+            }
             if (esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, 'Cambios propuestos por el Libro'));
         } else if (vista.estadias.length) {
             const lista = elemento("div", "haiku-incorporacion-estadias");

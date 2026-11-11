@@ -114,6 +114,47 @@
         const m = String(v || "").match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/);
         return m ? iso(m[3].length === 2 ? 2000 + Number(m[3]) : m[3], m[2], m[1]) : null;
     }
+    function anioComprobanteMalEscrito(anio, esperado) {
+        const sinCerosIniciales = anio.replace(/^0+/, '');
+        if (sinCerosIniciales.length === 3)
+            return [...esperado].some((_, i) => esperado.slice(0, i) + esperado.slice(i + 1) === sinCerosIniciales);
+        return anio.length === 4 && anio !== esperado && [...anio].sort().join('') === [...esperado].sort().join('');
+    }
+    function fechaComprobanteDeFila(celda, reserva) {
+        const guardada = celda?.fechaISO || null;
+        const base = {fecha_comprobante:guardada};
+        if (!reserva || celda?.formula || celda?.errorExcel) return base;
+        const visible = celda?.valor?.trim() || '';
+        const partes = visible.match(/^(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:\s*[-/.]\s*(\d{2,4}))?$/);
+        if (!partes) return base;
+        const [,dia,mes,anio] = partes;
+        const diaMes = iso(2000,mes,dia)?.slice(5);
+        if (!diaMes || (guardada && guardada.slice(5) !== diaMes)) return base;
+
+        const {fecha_checkin:ingreso,fecha_checkout:salida,fecha_ingreso_libro:registro} = reserva;
+        const anioBloque = Number(ingreso.slice(0,4));
+        const desde = registro && registro <= ingreso ? registro : ingreso;
+        const fechaAnioBloque = iso(anioBloque,mes,dia);
+        // La fecha del comprobante puede cruzar el año de ingreso.
+        const enPeriodo = [fechaAnioBloque,iso(anioBloque - 1,mes,dia),iso(anioBloque + 1,mes,dia)]
+            .filter(fecha => fecha && fecha >= desde && fecha <= salida);
+        const anioVisibleValido = anio?.length === 2 || Number(anio) >= 1900;
+        const explicita = guardada || (anioVisibleValido ? fechaTexto(visible.replace(/\s/g,'')) : null);
+        let inferida;
+        if (anio) {
+            if (explicita && (enPeriodo.includes(explicita) || Math.abs(Number(explicita.slice(0,4)) - anioBloque) <= 1))
+                return {fecha_comprobante:explicita};
+            const corregidas = enPeriodo.filter(fecha => anioComprobanteMalEscrito(anio,fecha.slice(0,4)));
+            if (corregidas.length === 1) inferida = corregidas[0];
+        } else if (!enPeriodo.includes(guardada)) {
+            if (enPeriodo.length === 1) inferida = enPeriodo[0];
+            else if (!enPeriodo.length && fechaAnioBloque && fechaAnioBloque <= salida) inferida = fechaAnioBloque;
+        }
+        return inferida && inferida !== explicita ? {
+            fecha_comprobante:inferida,
+            ajuste_fecha_comprobante:{motivo:anio ? 'anio_mal_escrito' : 'anio_omitido',texto_original:visible,fecha_excel:guardada}
+        } : {fecha_comprobante:explicita};
+    }
     function direccion(r, c) {
         let col = "";
         for (let n = c + 1; n > 0; n = Math.floor((n - 1) / 26)) col = String.fromCharCode(65 + (n - 1) % 26) + col;
@@ -1172,12 +1213,15 @@
                 const bandaSinTitulo = !at(financialRow, h.c)?.valor?.trim() &&
                     merges.some(m => m.s.r === financialRow && m.e.r === financialRow && m.s.c === h.c && m.e.c === h.c + 3);
                 if ((!mark && !bandaSinTitulo) || (headers[i + 1] && headers[i + 1].c - h.c !== 4)) continue;
+                const candidatas = mark ? res.reservas.filter(r => r.cabana === cabana && r.fecha_checkin === h.fechaISO) : [];
+                const reservaDelBloque = candidatas.length === 1 && candidatas[0].geometria_inequivoca &&
+                    !candidatas[0].advertencias.length ? candidatas[0] : null;
                 for (let r = cab.r; r <= end; r++) {
-                    const detail = at(r, h.c + 1), concept = at(r, h.c + 2), amount = at(r, h.c + 3);
+                    const fechaCelda = at(r, h.c), detail = at(r, h.c + 1), concept = at(r, h.c + 2), amount = at(r, h.c + 3);
                     if (!detail?.valor.trim() && !concept?.valor.trim() && !amount?.valor.trim()) continue;
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
                     const t = normalizar(text), c = normalizar(concept?.valor);
-                    if (/^caba(?:n|ñ)a\s*\d+$/.test(t) && !at(r,h.c)?.valor?.trim() && !amount?.valor?.trim() && amount?.valorNumero==null) {
+                    if (/^caba(?:n|ñ)a\s*\d+$/.test(t) && !fechaCelda?.valor?.trim() && !amount?.valor?.trim() && amount?.valorNumero==null) {
                         res.anotaciones.push({tipo:'etiqueta_cabana',texto_original:text,origen:origen(detail?.valor?.trim()?detail:concept)});
                         continue;
                     }
@@ -1195,15 +1239,17 @@
                     const kind = /penalidad/.test(t) ? "penalidad" : (/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const money = monto(amount?.valorNumero ?? amount?.valor);
-                    if (!mark && (!at(r, h.c)?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
+                    if (!mark && (!fechaCelda?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
                     const cabanaConcepto = Number(c.match(/^cab\s*(\d+)\b/)?.[1]) || null;
                     const advertencias = [];
                     if (data.fidelidad?.formato===false) advertencias.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
-                    for(const dato of [at(r,h.c),detail,concept,amount])if(dato?.errorExcel)
+                    for(const dato of [fechaCelda,detail,concept,amount])if(dato?.errorExcel)
                         advertencias.push(`La celda ${direccion(dato.r,dato.c)} del Libro contiene ${dato.errorExcel}. Corrige ese dato antes de incorporar el pago.`);
                     if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
-                    const p = { fecha_bloque: h.fechaISO, fecha_comprobante: at(r, h.c)?.fechaISO || null, cabana, titular: titularPago(detail?.valor),
+                    const fechaComprobante = fechaComprobanteDeFila(fechaCelda,
+                        advertencias.length || (cabanaConcepto && cabanaConcepto !== cabana) ? null : reservaDelBloque);
+                    const p = { fecha_bloque: h.fechaISO, ...fechaComprobante, cabana, titular: titularPago(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
@@ -1216,10 +1262,10 @@
                         pago_recibido: money !== null && pending === "registrado_en_libro" && kind !== "penalidad" ? true : null,
                         evidencia_financiera: {
                             sector: "pagos", estructura_fila: "fecha_detalle_concepto_monto",
-                            columnas_ocupadas: { fecha: !!at(r,h.c)?.valor?.trim(), detalle: !!detail?.valor?.trim(), concepto: !!concept?.valor?.trim(), monto: !!amount?.valor?.trim() },
+                            columnas_ocupadas: { fecha: !!fechaCelda?.valor?.trim(), detalle: !!detail?.valor?.trim(), concepto: !!concept?.valor?.trim(), monto: !!amount?.valor?.trim() },
                             colores: { detalle: color(estilos[detail?.estiloId]?.fill?.fgColor), concepto: color(estilos[concept?.estiloId]?.fill?.fgColor), monto: color(estilos[amount?.estiloId]?.fill?.fgColor) }
                         },
-                        texto_original: [at(r, h.c)?.valor, text, amount?.valor].filter(Boolean).join(" // "), origen: { hoja, celda: `${direccion(r, h.c)}:${direccion(r, h.c + 3)}` } };
+                        texto_original: [fechaCelda?.valor, text, amount?.valor].filter(Boolean).join(" // "), origen: { hoja, celda: `${direccion(r, h.c)}:${direccion(r, h.c + 3)}` } };
                     const transferencia = evidenciaTransferencia(p);
                     if (transferencia?.glosa_original) {
                         p.detalle_bancario = detail?.valor || null;

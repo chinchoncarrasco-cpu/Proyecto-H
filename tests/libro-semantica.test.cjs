@@ -5,6 +5,31 @@ global.HAIKU_LIBRO_SEMANTICA = S;
 const Q = require('../js/haiku-libro-consultas-v1.js');
 const origen = {hoja:'Sep26',celda:'C3'};
 const reserva = {id:'a',titular:'Ana Pérez',cabana:6,fecha_checkin:'2026-09-04',fecha_checkout:'2026-09-06',advertencias:[],pagos:[],pagos_sin_asociacion:[],coordenadas_origen:origen};
+test('la fecha de pago sin año puede cruzar el año de ingreso dentro de la estadía',()=>{
+ const {leer}=require('./fixtures/libro-transferencias-bancarias.cjs');
+ const {reservas:[r],pagos:[p]}=leer([{pagos:[{fecha:null,fechaVisible:'01-01'}]}],
+  {nombreHoja:'Dic26',fechas:['2026-12-31','2027-01-01']});
+ assert.equal(r.fecha_checkin,'2026-12-31');
+ assert.equal(r.fecha_checkout,'2027-01-01');
+ assert.equal(p.fecha_bloque,'2026-12-31');
+ assert.equal(p.fecha_comprobante,'2027-01-01');
+ assert.equal(p.ajuste_fecha_comprobante.motivo,'anio_omitido');
+});
+test('el año del pago se ajusta sólo cuando la celda y la reserva lo respaldan',()=>{
+ const {leer}=require('./fixtures/libro-transferencias-bancarias.cjs');
+ for(const caso of [
+  {fechaVisible:'',esperada:null},
+  {fechaVisible:'31-02',esperada:null},
+  {fechaVisible:'25-10-0206',esperada:null},
+  {fechaVisible:'30-10-0206',concepto:'CAB 11/1 noche',esperada:null},
+  {fechaVisible:'30-10-2023',esperada:'2023-10-30'},
+  {fechaVisible:'30-10-26',esperada:'2026-10-30'}
+ ]){
+  const {pagos:[p]}=leer([{pagos:[{...caso,fecha:null}]}]);
+  assert.equal(p.fecha_comprobante,caso.esperada,caso.fechaVisible);
+  assert.equal(p.ajuste_fecha_comprobante,undefined);
+ }
+});
 function hojaDosNoches(texto){return {celdas:[
  {r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},{r:1,c:10,valor:'23 sep',fechaISO:'2026-09-23'},
  {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto},{r:24,c:2,valor:'Pagos de arriendos de hoy'}

@@ -3,9 +3,11 @@ const S=require('../../js/haiku-libro-semantica-v1.js');
 const C=require('../../js/haiku-libro-pagos-canon-v1.js');
 const L=require('../../js/haiku-libro-lenguaje-natural-v1.js').crearSemantica(S,C);
 const glosa='Transf. 0177406988 ALMONACID ERICES EXEQUIEL IGNACIO';
-function leer(casos=[{}]) {
- const celdas=[{r:1,c:2,valor:'30 oct',fechaISO:'2026-10-30'},{r:1,c:6,valor:'31 oct',fechaISO:'2026-10-31'},
-  {r:24,c:2,valor:'Pagos de arriendos de hoy'}],combinaciones=[];
+function leer(casos=[{}],{nombreHoja='Oct26',fechas}={}) {
+ const celdas=fechas?.map((fechaISO,i)=>({r:1,c:2+i*4,valor:fechaISO.split('-').reverse().join('-'),fechaISO})) ??
+  [{r:1,c:2,valor:'30 oct',fechaISO:'2026-10-30'},{r:1,c:6,valor:'31 oct',fechaISO:'2026-10-31'}];
+ celdas.push({r:24,c:2,valor:'Pagos de arriendos de hoy'});
+ const combinaciones=[];
  casos.forEach((caso,i)=>{
   const cab=caso.cabana ?? 10+i,fila=2+i,pie=25+i*6+(caso.desplazamiento || 0);
   celdas.push({r:fila,c:0,valor:'cabana '+cab},
@@ -14,14 +16,14 @@ function leer(casos=[{}]) {
   combinaciones.push({s:{r:fila,c:2},e:{r:fila,c:4}},{s:{r:pie,c:0},e:{r:pie+4,c:0}});
   for(const [j,p] of (caso.pagos || [{}]).entries()) {
    const fecha=p.fecha===undefined?'2026-10-21':p.fecha,monto=p.monto===undefined?75000:p.monto;
-   celdas.push({r:pie+1+j,c:2,valor:fecha || '',...(fecha?{fechaISO:fecha}:{})},
+   celdas.push({r:pie+1+j,c:2,valor:p.fechaVisible ?? fecha ?? '',...(fecha?{fechaISO:fecha}:{})},
     {r:pie+1+j,c:3,valor:p.glosa===undefined?glosa:p.glosa},
     {r:pie+1+j,c:4,valor:p.concepto===undefined?'cab'+cab+'/1noche':p.concepto},
     {r:pie+1+j,c:5,valor:monto==null?'':String(monto),...(monto==null?{}:{valorNumero:monto})});
   }
  });
  const hoja={celdas,combinaciones};
- return L.corregirResultado(C.corregirResultado(S.normalizarHoja(hoja,'Oct26')));
+ return L.corregirResultado(C.corregirResultado(S.normalizarHoja(hoja,nombreHoja)));
 }
 function cliente(reservas,pagos=[]) {
  const llamadas=[];
