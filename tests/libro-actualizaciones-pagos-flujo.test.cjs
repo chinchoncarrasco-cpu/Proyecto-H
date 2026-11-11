@@ -3,6 +3,49 @@ const fs = require('node:fs'), vm = require('./fixtures/dialogos.cjs').vm;
 const F = require('./fixtures/libro-actualizaciones-pagos-flujo.cjs');
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
 const Q = require('../js/haiku-libro-consultas-v1.js');
+function escenarioAviso() {
+    const f = F.crear(), [existente, , , , nueva] = f.reservas;
+    f.estadias[0].reservas.titular_nombre = existente.titular;
+    f.estadias[0].reservas.titular_numero_documento = existente.rut_documento;
+    existente.tipo_documento = nueva.tipo_documento = 'pasaporte';
+    existente.pagos[0].cabana = existente.cabana;
+    const anterior = {...existente.pagos[0], codigo_autorizacion:'FICTICIO-ANTERIOR', origen:{hoja:'Oct26',celda:'P22'}};
+    existente.pagos.unshift(anterior);
+    nueva.pagos.push({...existente.pagos[1], cabana:nueva.cabana, codigo_autorizacion:'FICTICIO-ALTA', origen:{hoja:'Oct26',celda:'P25'}});
+    const reservas = [existente,nueva], abonos = [{pago:existente.pagos[1],reservas:[existente]}, {pago:nueva.pagos[0],reservas:[nueva]}];
+    const q = {...f.q, solo_pagos:true, abonosAviso:new Set(['Oct26!P1','Oct26!P25'])};
+    const db = F.cliente(f, {conflicto:-1});
+    return {reservas,abonos,q,db};
+}
+test('aviso de abonos verifica el destino, prepara sólo los movimientos del aviso y conserva el alta atómica', async () => {
+    const {reservas,abonos,q,db} = escenarioAviso();
+    const original = global.haikuSupabase;
+    global.haikuSupabase = db;
+    try {
+        assert.deepEqual(await global.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(abonos), ['asociado','reserva_nueva']);
+    } finally { global.haikuSupabase = original; }
+    const result = {reservas,q,comparacion:await Q.compararSistema(reservas,db,q)};
+    const decisiones = new Map(), aprobados = new Set(), plan = await Q.prepararIncorporacion(result,decisiones,aprobados,db);
+    assert.equal(db.calls.length,0);
+    const items = Q.serializarIncorporacion(plan);
+    const alta = items.find(x=>x.tipo==='reserva_nueva'), pagos = items.filter(x=>x.tipo==='pago');
+    assert.equal(items.length,3);
+    assert.equal(pagos[0].reserva_id,'reserva-ficticia-1');
+    assert.equal(pagos[1].reserva_ref,alta.item_id);
+    assert.ok(pagos[1].reserva_ref);
+    assert.ok(!items.some(x=>x.argumentos?.p_codigo_autorizacion==='FICTICIO-ANTERIOR'));
+    assert.equal((await Q.confirmarIncorporacion(result,decisiones,aprobados,plan,db)).resultado.pagos_creados,2);
+});
+test('la revisión de abonos conserva la omisión de un pago registrado mientras el aviso estaba abierto', async () => {
+    const {reservas,q,db} = escenarioAviso();
+    const result = {reservas,q,comparacion:await Q.compararSistema(reservas,db,q)};
+    const decisiones = new Map(), aprobados = new Set(), plan = await Q.prepararIncorporacion(result,decisiones,aprobados,db);
+    const p = reservas[0].pagos[1];
+    db.pagos.push({...p,id:'pago-previo-ficticio',reserva_id:'reserva-ficticia-1',fecha_pago:p.fecha_comprobante,estado:'confirmado'});
+    const confirmacion = await Q.confirmarIncorporacion(result,decisiones,aprobados,plan,db);
+    assert.equal(confirmacion.resultado.pagos_creados,1);
+    assert.ok(db.calls.every(c=>!(c.args.p_items || []).some(i=>i.argumentos?.p_codigo_autorizacion===p.codigo_autorizacion)));
+});
 async function escenario(opciones) {
     const f = F.crear(), db = F.cliente(f, opciones), aprobados = new Set(), decisiones = new Map();
     const comparacion = await Q.compararSistema(f.reservas, db, f.q);

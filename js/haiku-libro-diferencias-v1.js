@@ -30,8 +30,9 @@
     }
     function finalizar(r) {
         for (const k of Object.keys(r.resumen)) r.resumen[k] = r[k].length;
-        if (r.estado === 'ok' && r.no_comparables.length && Object.values(r.resumen).some(Boolean)) r.estado = 'parcial';
-        if (r.estado === 'ok' && !Object.values(r.resumen).some(Boolean)) r.estado = r.no_comparables.length ? 'no_comparable' : 'sin_cambios';
+        const hayCambios = Object.values(r.resumen).some(Boolean) || r.abonos?.length;
+        if (r.estado === 'ok' && r.no_comparables.length && hayCambios) r.estado = 'parcial';
+        if (r.estado === 'ok' && !hayCambios) r.estado = r.no_comparables.length ? 'no_comparable' : 'sin_cambios';
         return r;
     }
     function evidenciaCancelacion(reserva, evidencia) {
@@ -132,6 +133,72 @@
         }
         return cambios;
     }
+    const claveOrigenPago = p => JSON.stringify([p.origen?.hoja, p.origen?.celda]);
+    const claveBloquePago = p => JSON.stringify([p.cabana, p.fecha_bloque, p.tipo_movimiento]);
+    const abonoRecibido = p => p.pago_recibido === true && p.estado_pago === 'registrado_en_libro' && Number(p.monto) > 0;
+    function referenciasPago(p, operacion) {
+        const id = v => texto(v).replace(/[^a-z0-9]/g, '').replace(/^0+(?=\d+$)/, '');
+        const aut = id(p.codigo_autorizacion), folio = id(p.folio), bovtar = id(p.bovtar);
+        return [aut && `aut:${aut}`, folio && bovtar && `pos:${folio}:${bovtar}`, operacion && `transferencia:${operacion}`].filter(Boolean);
+    }
+    function detectarAbonos(anterior, actual, reservas, informe) {
+        const movimientos = hojas => hojas.flatMap(h => h?.cobertura?.geometria && h.fechas?.length
+            ? (h.pagos || []).filter(abonoRecibido).map(pago => {
+                const banco = semantica.evidenciaTransferencia(pago);
+                return {pago, referencias:referenciasPago(pago,banco?.operacion_bancaria), remitente:banco?.numero_remitente};
+            }) : []);
+        const prev = movimientos(anterior), next = movimientos(actual);
+        if (!next.length) return [];
+        // Las coordenadas permiten abrir la fila, pero no identifican un pago entre copias.
+        const firma = ({pago:p, referencias, remitente}) => JSON.stringify([claveBloquePago(p), nombre(p.titular), Number(p.monto),
+            texto(p.moneda), texto(p.medio_pago), texto(p.concepto), p.fecha_comprobante, referencias, remitente]);
+        const firmaBancaria = ({pago:p, remitente}) => remitente && p.fecha_comprobante
+            ? JSON.stringify([remitente, p.fecha_comprobante, Number(p.monto), texto(p.moneda)]) : null;
+        const anterioresPorFirma = new Map(), actualesPorFirma = new Map();
+        for (const [movs, mapa] of [[prev, anterioresPorFirma], [next, actualesPorFirma]]) for (const mov of movs) {
+            const key = firma(mov);
+            if (!mapa.has(key)) mapa.set(key, []);
+            mapa.get(key).push(mov);
+        }
+        const prevRefs = new Set(prev.flatMap(m => m.referencias)), nextRefs = new Map();
+        for (const m of next) for (const ref of m.referencias) nextRefs.set(ref, (nextRefs.get(ref) || 0) + 1);
+        const retirados = prev.filter(m => !m.referencias.some(ref => nextRefs.has(ref)) &&
+            anterioresPorFirma.get(firma(m)).length > (actualesPorFirma.get(firma(m))?.length || 0));
+        const bloquesConRetiros = new Set(retirados.map(m => claveBloquePago(m.pago)));
+        const transferenciasRetiradas = new Set(retirados.map(firmaBancaria).filter(Boolean));
+        const hojasPrevias = new Map(anterior.map(h => [h?.hoja, h]));
+        const hojasActuales = new Map(actual.map(h => [h?.hoja, h]));
+        const prevAsociados = new Set(anterior.flatMap(h => (h?.reservas || []).flatMap(r => (r.pagos || []).map(claveOrigenPago))));
+        const nuevas = new Set(informe.nuevas.map(x => x.actual.id));
+        const porOrigen = new Map();
+        for (const reserva of reservas) for (const pago of [...(reserva.pagos || []), ...(reserva.pagos_sin_asociacion || [])]) {
+            const key = claveOrigenPago(pago);
+            if (!porOrigen.has(key)) porOrigen.set(key, new Set());
+            porOrigen.get(key).add(reserva);
+        }
+        return next.flatMap(movimiento => {
+            const {pago, referencias} = movimiento, key = firma(movimiento);
+            const previo = anterioresPorFirma.get(key)?.pop();
+            const referenciaPrevia = referencias.some(ref => prevRefs.has(ref));
+            const candidatas = [...(porOrigen.get(claveOrigenPago(pago)) || [])];
+            const [reserva] = candidatas;
+            const nueva = candidatas.length === 1 && nuevas.has(reserva?.id) ? reserva.id : null;
+            // Una reserva agregada también puede encontrar un abono que antes
+            // estaba en su mismo bloque sin reserva, como un pago anticipado.
+            const anticipo = nueva && previo && !prevAsociados.has(claveOrigenPago(previo.pago));
+            if ((previo || referenciaPrevia) && !anticipo) return [];
+            const hoja = pago.origen?.hoja, previa = hojasPrevias.get(hoja);
+            const bloquePrevioValido = previa?.reservas?.some(r => r.cobertura_pagos === true &&
+                Number(r.cabana) === Number(pago.cabana) && r.fecha_checkin === pago.fecha_bloque);
+            const revisar = !hoja || !pago.origen?.celda || Boolean(pago.advertencias?.length) ||
+                (previa ? previa.cobertura?.pagos !== true && !bloquePrevioValido : Boolean(informe.no_comparables.length)) ||
+                (hojasActuales.get(hoja)?.cobertura?.pagos !== true && !reserva?.cobertura_pagos) ||
+                bloquesConRetiros.has(claveBloquePago(pago)) || transferenciasRetiradas.has(firmaBancaria(movimiento)) ||
+                actualesPorFirma.get(key).length > 1 ||
+                referencias.some(ref => nextRefs.get(ref) > 1);
+            return [{pago:copia(pago), reservas:copia(candidatas), nueva, revisar}];
+        });
+    }
     // Entradas: arrays de hojas semánticas completas. null anterior = no hay línea base.
     // Sin fechas de ejecución: la función pura devuelve lo mismo para los mismos datos.
     function comparar(anterior, actual) {
@@ -211,6 +278,8 @@
             confirmadas.push({tipo:'cancelacion_confirmada',anterior:x.anterior,evidencia:copia(candidatos[0])}); return false;
         });
         if (confirmadas.length) { out.cancelaciones_confirmadas=confirmadas; out.resumen.cancelaciones_confirmadas=confirmadas.length; }
+        const abonos = detectarAbonos(anterior, actual, next, out);
+        if (abonos.length) out.abonos = abonos;
         return finalizar(out);
     }
     function mesHoja(hoja) {

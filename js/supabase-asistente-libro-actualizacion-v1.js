@@ -16,6 +16,16 @@
     const esAdministrador=()=>root.haikuSesion?.usuario?.activo===true&&lista(root.haikuSesion.roles).some(r=>
         /^(administrador|admin)$/.test(normalizar(typeof r==='string'?r:r?.codigo||r?.nombre)));
     const fecha = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v.split('-').reverse().join('-') : (v || 'Sin fecha indicada');
+    const formatearMonto = new Intl.NumberFormat('es-CL');
+    function detalleAbono(abono) {
+        const p = abono.pago, destino = abono.reservas.length === 1 ? abono.reservas[0] : null;
+        const titulo = {registrado:'Abono ya registrado', asociado:'Abono nuevo', reserva_nueva:'Abono asociado'}[abono.estado] || 'Pago por vincular';
+        const monto = (p.moneda && p.moneda !== 'CLP' ? `${p.moneda} ` : '$') + formatearMonto.format(p.monto);
+        const reserva = [destino?.titular, `CAB ${destino?.cabana ?? p.cabana ?? '—'}`].filter(Boolean).join(' · ');
+        const detalles = [{etiqueta:'Monto',texto:monto}];
+        if (p.fecha_comprobante) detalles.push({etiqueta:'Fecha de pago',texto:fecha(p.fecha_comprobante)});
+        return {titulo,monto,reserva,detalles};
+    }
     const etiquetas = {cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado de la estadía',operador:'Responsable de la reserva',telefono:'Teléfono',correo:'Correo',rut_documento:'RUT o documento',notas_importantes:'Notas',pagos_pendientes:'Pagos pendientes',servicios:'Servicios',tipo_estadia:'Tipo de estadía'};
     const estados = {sin_checkin:'Aún no ingresa',hospedada:'Huéspedes alojados',checked_in:'Huéspedes alojados',checked_out:'Huéspedes ya salieron',check_out:'Huéspedes ya salieron',confirmada:'Confirmada',pendiente:'Pendiente de confirmar',confirmada_por_color:'Confirmada según el color del Libro',pendiente_por_color:'Pendiente según el color del Libro',cancelada:'Cancelada',no_show:'No se presentó',alojamiento:'Alojamiento',full_day:'Full Day'};
     // Traducciones de presentación: conservar las decisiones y los motivos originales.
@@ -92,7 +102,7 @@
             return html + '</section></article>';
         }
         const seccion = (titulo, items) => {
-            const clase = {'Agregadas al Libro':'nuevas','Reservas con cambios':'modificadas','Ya no aparecen':'ausentes','Necesitan revisión':'revision','Canceladas en el Libro':'cancelaciones'}[titulo];
+            const clase = {'Agregadas al Libro':'nuevas','Reservas con cambios':'modificadas','Ya no aparecen':'ausentes','Necesitan revisión':'revision','Canceladas en el Libro':'cancelaciones','Abonos detectados':'modificadas'}[titulo];
             if(items.length) html += `<details class="haku-actualizacion-sites__grupo haku-actualizacion-sites__grupo--${clase}"><summary><span>${titulo} (${items.length})</span><span aria-hidden="true">⌄</span></summary><div class="haku-actualizacion-sites__grupo-contenido">${items.join('')}</div></details>`;
         };
         if (root.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1) {
@@ -101,6 +111,12 @@
         if (r.estado === 'sin_cambios') html += '<p class="haku-actualizacion-sites__sin-cambios"><strong>Sin cambios nuevos</strong> No encontré cambios en las reservas entre estas dos versiones del Libro. Aún pueden quedar cambios anteriores por guardar en Proyecto H.</p>';
         html += '<div class="haku-libro-contadores haku-actualizacion-sites__metricas">' + [['nuevas','Agregadas al Libro'],['modificadas','Con cambios'],['ya_no_aparecen','Ya no aparecen'],['ambiguas','Por revisar']].map(([k,t])=>`<div><strong>${lista(r[k]).length}</strong><span>${t}</span></div>`).join('') + '</div>';
         seccion('Agregadas al Libro',lista(r.nuevas).map(x=>`<div class="haku-libro-item"><small>AGREGADA AL LIBRO</small>${reserva(x.actual)}</div>`));
+        seccion('Abonos detectados',lista(r.abonos).map(abono => {
+            const d = detalleAbono(abono), p = abono.pago;
+            const origen = [p.origen?.hoja, p.origen?.celda].filter(Boolean).join(' · ');
+            return `<div class="haku-libro-item"><strong>${escapar(d.titulo)} · ${escapar(d.monto)}</strong><p>${escapar(d.reserva)}${p.fecha_comprobante ? ` · ${escapar(fecha(p.fecha_comprobante))}` : ''}</p>${origen ? `<small>${escapar(origen)}</small>` : ''}</div>`;
+        }));
+        if (puedeRevisarAbonos(r)) html += '<div class="haku-actualizacion-sites__historial-acciones"><button type="button" class="haku-actualizacion-sites__boton haku-actualizacion-sites__boton--primario" data-haku-revisar-abonos>Revisar abonos</button></div>';
         seccion('Reservas con cambios',lista(r.modificadas).map(x=>`<details class="haku-libro-item haku-pregunta-caso"><summary><small>CON CAMBIOS · CAB ${escapar(x.actual?.cabana ?? '—')}</small><strong>${escapar(x.actual?.titular || 'Nombre no indicado')}</strong></summary><dl>${lista(x.cambios).map(c=>`<dt>${escapar(etiquetas[c.campo] || 'Otro dato')}</dt><dd>${['rut_documento','telefono','correo'].includes(c.campo) ? 'Este dato cambió en el Libro. No se muestra aquí por privacidad.' : `Antes: ${escapar(valor(c.antes,c.campo))}<br>Ahora: ${escapar(valor(c.ahora,c.campo))}`}</dd>`).join('')}</dl></details>`));
         seccion('Ya no aparecen',lista(r.ya_no_aparecen).map(x=>`<div class="haku-libro-item"><small>YA NO APARECE</small>${reserva(x.anterior)}<p>Esta reserva estaba en la versión anterior y no aparece en la actual.</p></div>`));
         seccion('Canceladas en el Libro',lista(r.cancelaciones_confirmadas).map(x=>`<div class="haku-libro-item"><small>CANCELADA EN EL LIBRO</small>${reserva(x.anterior)}<p>${escapar(x.anterior?.titular)} aparece en CANCELACIONES de ${escapar(x.evidencia?.origen?.hoja)} · ${escapar(x.evidencia?.origen?.celda)}. Revisa la reserva y confirma la cancelación antes de guardarla en Proyecto H.</p></div>`));
@@ -425,7 +441,14 @@
             }
         };
     }
-    let instalado = false, cacheCompartida, insertarResultado, insertarIncorporacion;
+    let instalado = false, cacheCompartida, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
+    function puedeRevisarAbonos(resultado) {
+        return esAdministrador() && lista(resultado?.abonos).some(x => !x.revisar && x.reservas.length) &&
+            typeof root.HAIKU_LIBRO_CONSULTAS?.compararAbonosAviso === 'function';
+    }
+    function revisarAbonosDesdeAviso(resultado) {
+        if (puedeRevisarAbonos(resultado) && instalar()) return insertarRevisionAbonos(resultado);
+    }
     function puedeIncorporar(resultado){
         return esAdministrador()&&['ok','sin_cambios','parcial'].includes(resultado?.estado)&&
             Boolean(lista(resultado?.nuevas).length||lista(resultado?.modificadas).length);
@@ -550,6 +573,12 @@
                     if(libro.estado().generacion===g&&JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
                 }
             }catch(error){console.warn('HAIKU · No se pudo conservar el historial local de cambios:',error);}
+            if (puedeRevisarAbonos(resultado)) {
+                try {
+                    const estados = await root.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(resultado.abonos, resultado.libro_actual?.generacion);
+                    resultado.abonos.forEach((abono, i) => { if (estados[i]) abono.estado = estados[i]; });
+                } catch (_) { /* El informe del Libro sigue disponible para revisar los abonos. */ }
+            }
             return resultado;
         },()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion);
         cacheCompartida = cache;
@@ -558,9 +587,10 @@
         function mensaje(tipo,texto) {
             const el = doc.createElement('div'); el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`; el.textContent = texto; mensajes.appendChild(el); mensajes.scrollTop = mensajes.scrollHeight; return el;
         }
-        function enlazarCabecera(contenedor) {
+        function enlazarCabecera(contenedor, resultado) {
             const cerrar=contenedor.querySelector?.('[data-haku-cerrar-actualizacion]');
             cerrar?.addEventListener?.('click',()=>doc.getElementById('haiku-asistente-cerrar')?.click());
+            contenedor.querySelector?.('[data-haku-revisar-abonos]')?.addEventListener('click',()=>revisarAbonosDesdeAviso(resultado));
         }
         function adjuntarPendientes(contenedor,resultado,cacheActual=cachePendientes) {
             const zona=doc.createElement('div');zona.className='haku-libro-pendientes-zona';
@@ -722,10 +752,41 @@
             };
             void ejecutar();return el;
         };
+        const revisionesAbonos = new WeakMap();
+        insertarRevisionAbonos = resultado => {
+            const anterior = revisionesAbonos.get(resultado);
+            if (anterior?.isConnected) { anterior.scrollIntoView?.({block:'nearest'}); return anterior; }
+            const el = mensaje('asistente','');
+            revisionesAbonos.set(resultado, el);
+            const contenido = doc.createElement('div');
+            el.appendChild(contenido);
+            const revisar = async () => {
+                const generacion = generacionInforme(resultado);
+                contenido.textContent = 'Comprobando los abonos en Proyecto H…';
+                contenido.setAttribute('aria-busy','true');
+                try {
+                    if (!puedeRevisarAbonos(resultado)) throw new Error('Necesitas una sesión de administrador para revisar estos abonos.');
+                    if (generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) {
+                        contenido.textContent = 'Hay una versión más reciente del Libro. Abre el aviso actual o usa Comparar Libro para comprobar los abonos.';
+                        return;
+                    }
+                    await root.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(resultado.abonos, generacion, contenido);
+                } catch (error) {
+                    contenido.textContent = error?.message || 'No pude revisar los abonos.';
+                    const boton = doc.createElement('button');
+                    boton.type = 'button'; boton.className = 'libro-reserva-boton secundario'; boton.textContent = 'Volver a revisar';
+                    boton.addEventListener('click', revisar); contenido.appendChild(boton);
+                } finally {
+                    contenido.removeAttribute('aria-busy'); el.scrollIntoView?.({block:'nearest'});
+                }
+            };
+            void revisar();
+            return el;
+        };
         insertarResultado = resultado => {
             const el = mensaje('asistente','');
             el.innerHTML = renderizar(resultado);
-            enlazarCabecera(el);
+            enlazarCabecera(el, resultado);
             root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1?.adjuntar(el, resultado, generacionInforme(resultado));
             adjuntarPendientes(el,resultado);
             mensajes.scrollTop = mensajes.scrollHeight;
@@ -741,7 +802,7 @@
                 espera = mensaje('asistente','Comparando la última actualización del Libro…');
                 const resultado = await obtenerResultado();
                 espera.innerHTML = renderizar(resultado);
-                enlazarCabecera(espera);
+                enlazarCabecera(espera, resultado);
                 root.HAIKU_ASISTENTE_LIBRO_INCORPORACION_V1?.adjuntar(espera, resultado, generacionInforme(resultado));
                 adjuntarPendientes(espera,resultado);
                 mensajes.scrollTop = mensajes.scrollHeight;
@@ -762,8 +823,9 @@
         root.addEventListener('keydown',interceptar,true);
         return true;
     }
-    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,procesando:()=>ocupado});
+    const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,detalleAbono,extraerCambiosDetectados,fusionarHistorialCambios,
+        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,
+        puedeRevisarAbonos,revisarAbonosDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
     if (root.document && !instalar()) {
