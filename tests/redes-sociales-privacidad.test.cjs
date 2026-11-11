@@ -38,7 +38,7 @@ test('tras el minuto el PIN queda accesible; PIN erróneo no restaura el modal y
 });
 test('ficha conserva texto sin guardar y una respuesta tardía no abre Compartir sobre el bloqueo',async()=>{
  const f=await fixture();f.click('[data-action="new"]');const field=f.dialog.querySelector('[name="title"]');field.value='Borrador pendiente';field.dispatchEvent(new f.window.Event('input',{bubbles:true}));
- f.window.HAIKU_PRIVACIDAD.bloquearAhora();assert.equal(f.dialog.open,false);await f.unlock();assert.equal(f.dialog.querySelector('[name="title"]').value,'Borrador pendiente');assert.ok(f.dialog.open);f.click('[data-close]');
+ f.window.HAIKU_PRIVACIDAD.bloquearAhora();assert.equal(f.dialog.open,false);await f.unlock();assert.equal(f.dialog.querySelector('[name="title"]').value,'Borrador pendiente');assert.ok(f.dialog.open);f.click('[data-close]');await tick();
  let resolve;f.delayShare(r=>{resolve=r;});f.click('[data-action="share"]');f.window.HAIKU_PRIVACIDAD.bloquearAhora();resolve(null);await tick();assert.equal(f.dialog.open,false);await f.unlock();assert.ok(f.dialog.open);
 });
 test('cerrar sesión con un diálogo suspendido no lo vuelve a abrir',async()=>{

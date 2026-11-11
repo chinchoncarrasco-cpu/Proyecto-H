@@ -111,7 +111,15 @@
             dialogo.addEventListener('cancel', e => { e.preventDefault(); terminar(null); });
             dialogo.addEventListener('close', () => terminar(null));
             // Escape no debe cerrar el panel situado detrás del diálogo.
-            dialogo.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); terminar(null); } });
+            dialogo.addEventListener('keydown', e => {
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); terminar(null); }
+                if (e.key === 'Tab') {
+                    const controles = [...dialogo.querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[tabindex="0"]')].filter(n => n.getClientRects().length);
+                    const primero = controles[0], ultimo = controles[controles.length - 1];
+                    if (e.shiftKey && doc.activeElement === primero) { e.preventDefault(); ultimo?.focus(); }
+                    else if (!e.shiftKey && doc.activeElement === ultimo) { e.preventDefault(); primero?.focus(); }
+                }
+            });
             form.addEventListener('submit', e => {
                 e.preventDefault();
                 if (terminado || bloqueado() || usuario !== identidad()) { terminar(null, false); return; }

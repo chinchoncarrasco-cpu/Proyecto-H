@@ -30,9 +30,9 @@ const server = http.createServer((req, res) => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = `http://127.0.0.1:${server.address().port}`;
     const browser = await chromium.launch({ headless: true });
-    const errors = [], native = [], report = [];
+    const errors = [], native = [], report = []; let page;
     try {
-        const page = await browser.newPage();
+        page = await browser.newPage();
         page.on('pageerror', e => errors.push(e.message));
         page.on('dialog', d => { native.push(d.type()); d.dismiss(); });
         await page.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
@@ -120,5 +120,9 @@ const server = http.createServer((req, res) => {
         assert.deepEqual(errors, []); assert.deepEqual(native, []);
         fs.writeFileSync(path.join(out, 'resultados.json'), JSON.stringify({ report, errores: errors, ventanasNativas: native }, null, 2));
         console.log('Diálogos Haku: seis combinaciones de tema/ancho, foco, decisiones, formularios, avisos y privacidad correctos.');
+    } catch (error) {
+        await page?.screenshot({ path: path.join(out, 'fallo.png'), fullPage: true });
+        fs.writeFileSync(path.join(out, 'fallo.json'), JSON.stringify({ error: String(error), errors, native, report }, null, 2));
+        throw error;
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });
