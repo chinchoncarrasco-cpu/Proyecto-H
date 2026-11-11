@@ -15,7 +15,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    page.on('pageerror', error => errors.push(error.message));
    page.on('dialog', dialog => dialog.dismiss());
    await page.addInitScript(profile => {
-    window.haikuSesion = { auth: { id: 'test-repaso' } };
+    window.haikuSesion = { auth: { id: 'test-repaso' }, permisos: ['configuracion.gestionar','cabanas.ver','revisiones.ver'] };
     const catalog = profile.sections.flatMap(s => s.items.map(i => ({id:`db-${i.id}`,nombre:i.label,categoria:s.category,activo:true})));
     window.__db = { cabanas:Array.from({length:11},(_,i)=>({id:`cab-${i+1}`,numero:i+1,activa:true})),checklist_items:catalog,
       revisiones_cabana:[{id:'repaso-1',fecha:'2026-11-03',cabana_id:'cab-1',tipo_revision:'repaso',estado:'pendiente',resultado:null,observaciones:'',creado_en:'2026-11-03'}],revision_items:[] };
@@ -24,7 +24,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
     window.haikuSupabase = { async rpc(name) {
       if (name !== 'haku_revision_modalidades_v1') return { data: [], error: null };
       const revision = window.__db.revisiones_cabana.find(row => row.cabana_id === 'cab-2');
-      return { data: { can_edit: true, templates: window.__repasoTemplate ? [{
+      return { data: { can_edit: window.__repasoCanEdit !== false, templates: window.__repasoTemplate ? [{
         ...window.__repasoTemplate, cabana_id: 'cab-2', numero: 2, revision_id: revision?.id ?? null,
       }] : [] }, error: null };
     }, from(table) {
@@ -33,6 +33,7 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
         update(v){op='update';payload=v;return q},insert(v){op='insert';payload=v;return q},upsert(v){op='upsert';payload=v;return q},
         single(){single=true;return q},maybeSingle(){single=true;return q},
         async then(resolve,reject){try {
+          if(op==='read' && table==='checklist_items' && window.__repasoCatalogGate) await window.__repasoCatalogGate;
           if(op!=='read') {await new Promise(r=>setTimeout(r,window.__writeDelay??20)); if(window.__dbFail) return resolve({data:null,error:new Error('Sin permiso')});window.__writes.push({table,op,payload});}
           let data=window.__db[table].filter(r=>filters.every(f=>f(r)));
           if(op==='update') data.forEach(r=>Object.assign(r,payload));
@@ -56,6 +57,18 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    });
    await page.goto('http://haku-repaso.test/panel.html');
    await page.waitForFunction(() => Boolean(window.HAIKU_CABANAS_SITES_V1));
+   const revisionAssets = await page.evaluate(() => {
+    const names = ['sites-cabanas-v1.js','revision-plantilla-core-v1.js','revision-plantilla-v1.js',
+      'supabase-repaso-v2.js','supabase-aseo-operacion-v1.js','revision-plantilla-v1.css'];
+    const urls = [...document.scripts].map(node=>node.src).concat([...document.querySelectorAll('link[rel="stylesheet"]')].map(node=>node.href));
+    return names.map(name => {
+     const url = urls.find(value => value && new URL(value).pathname.endsWith('/' + name));
+     return url ? new URL(url).searchParams.get('v') : null;
+    });
+   });
+   assert.match(revisionAssets[0], /^\d+$/);
+   assert.deepEqual(revisionAssets, Array(6).fill(revisionAssets[0]), 'el panel versiona juntos los archivos de Revisión');
+
    await page.evaluate(theme => {
     document.documentElement.setAttribute('data-haiku-tema', theme);
     fechaSeleccionada = '2026-11-03';
@@ -79,7 +92,11 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    const noNeed = row.locator('[data-cb-no-requiere]');
    assert.equal(await noNeed.getAttribute('aria-pressed'),'false');
    assert.equal(await noNeed.evaluate(n=>getComputedStyle(n).textDecorationLine),'none','No requiere inactivo no se subraya');
-   await page.evaluate(()=>{window.__timeNode=document.querySelector('#cabinsOperation [data-cb-cabin="1"] input[type="time"]');window.__modeDelay=800;});
+   await page.evaluate(()=>{
+    window.__timeNode=document.querySelector('#cabinsOperation [data-cb-cabin="1"] input[type="time"]');
+    window.__modeDelay=800;
+    window.__repasoCatalogGate=new Promise(resolve=>{window.__releaseRepasoCatalog=resolve;});
+   });
    await repaso.click();
    assert.equal(await repaso.getAttribute('aria-pressed'),'true','selección optimista antes de confirmar');
    assert.equal(await repaso.textContent(),'Repaso','seleccionar el tipo no significa completar');
@@ -93,6 +110,15 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
    await page.waitForFunction(()=>document.querySelectorAll('#repaso-checklist [data-repaso-item]').length===26);
    assert.equal(await page.locator('#repaso-individual').isVisible(),true);
    assert.equal(await page.locator('#revision-individual').isVisible(),false);
+   const personalizar = page.getByRole('button', { name: 'Personalizar', exact: true });
+   await personalizar.waitFor({ timeout: 4000 });
+   await page.evaluate(() => {
+    window.__repasoCatalogGate=null;
+    window.__releaseRepasoCatalog();
+    return window.HAIKU_REPASO_V2.hidratar();
+   });
+   await page.evaluate(() => window.dispatchEvent(new CustomEvent('haiku:auth-ready', { detail: window.haikuSesion })));
+   assert.equal(await personalizar.isVisible(), true, 'la renovación de la misma cuenta conserva Personalizar');
    assert.equal(await page.locator('#repaso-count').textContent(),'0/26');
    assert.equal(await page.locator('#repaso-checklist .cb-sector-head[aria-expanded="false"]').count(),4,'todas las áreas cerradas');
    await page.locator('#repaso-checklist .cb-sector-head').first().click();
@@ -161,6 +187,14 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
        item.revision_id === row.id && item.checklist_item_id === 'db-repaso-living-cama')));
    await page.evaluate(() => window.HAIKU_CABANAS_SITES_V1.abrir(1));
    await page.waitForFunction(() => document.querySelector('#repaso-count').textContent === '1/26');
+   await page.evaluate(() => {
+    window.__repasoCanEdit=false;
+    window.haikuSesion.permisos=['cabanas.ver','revisiones.ver'];
+    window.dispatchEvent(new CustomEvent('haiku:auth-ready', { detail: window.haikuSesion }));
+    return window.HAIKU_REPASO_V2.hidratar();
+   });
+   assert.equal(await personalizar.isVisible(),false,'los permisos renovados pueden ocultar el editor');
+
    assert.deepEqual(errors, []);
    if (process.env.HAKU_UI_SHOTS) {
     fs.mkdirSync(process.env.HAKU_UI_SHOTS, { recursive: true });
