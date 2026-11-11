@@ -2466,10 +2466,10 @@ test('la aprobación mensual explica la asociación pendiente y muestra el año 
  assert.equal(operacion.reserva_id,'r1');
 });
 
-function escenarioPagoDeBloque({monto=72000, fecha='2026-10-30', otraLinea='', saldo=72000, extras=[], pagos=[]}={}) {
+function escenarioPagoDeBloque({monto=72000, fecha='2026-10-30', fechaVisible, titularComprobante='', otraLinea='', saldo=72000, extras=[], pagos=[]}={}) {
  const F=require('./fixtures/libro-transferencias-bancarias.cjs');
  const {reservas:[r]}=F.leer([{titular:'Marina Ejemplo',rut:'11111111-1',pagos:[{
-  glosa:`Débito // Folio: 001211 // BOVTAR: 003222${otraLinea}`,concepto:'CAB 10/1 noche',monto,fecha
+  glosa:`${titularComprobante}Débito // Folio: 001211 // BOVTAR: 003222${otraLinea}`,concepto:'CAB 10/1 noche',monto,fecha,fechaVisible
  }]}]);
  const s=stay(r);
  const cargos=[{cargo_id:'cargo-ficticio',reserva_id:s.reserva_id,estadia_id:s.id,tipo_cargo:'alojamiento',
@@ -2499,6 +2499,43 @@ for (const monto of [72000,36000]) test(`un débito sin titular se prepara por C
  assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
 });
 
+for (const caso of [
+ {visible:'30-10',guardada:'2023-10-30',motivo:'anio_omitido',accion:'completado'},
+ {visible:'30/10',guardada:null,motivo:'anio_omitido',accion:'completado'},
+ {visible:'30-10-0206',guardada:null,motivo:'anio_mal_escrito',accion:'corregido',titular:'Marina Ejemplo // '},
+ {visible:'30-10-2062',guardada:null,motivo:'anio_mal_escrito',accion:'corregido',titular:'Marina Ejemplo // '}
+]) test(`la fecha visible ${caso.visible} se interpreta con el año de la reserva y conserva su origen`,async()=>{
+ const h=escenarioPagoDeBloque({fecha:caso.guardada,fechaVisible:caso.visible,titularComprobante:caso.titular});
+ const [p]=[...h.r.pagos,...h.r.pagos_sin_asociacion];
+ const ajuste={motivo:caso.motivo,texto_original:caso.visible,fecha_excel:caso.guardada};
+ assert.equal(p.fecha_comprobante,'2026-10-30');
+ assert.deepEqual(p.ajuste_fecha_comprobante,ajuste);
+ assert.ok(p.texto_original.startsWith(caso.visible+' // '));
+ const comparacion=await h.comparar();
+ assert.equal(comparacion.pagosDetalle[0].estado,'nuevo_seguro');
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+ const [operacion]=Q.serializarIncorporacion(plan).filter(i=>i.tipo==='pago');
+ assert.equal(operacion.argumentos.p_fecha_pago,'2026-10-30');
+ assert.equal(operacion.aprobado_manualmente,false);
+ assert.deepEqual(operacion.datos_origen.ajuste_fecha_comprobante,ajuste);
+ const vista=renderHarness();
+ vista.Q.renderizarIncorporacion(vista.out,plan,()=>{},()=>{},async()=>{});
+ const tarjeta=vista.out.querySelector('.haiku-incorporacion-item--pagos');
+ const texto=tarjeta.querySelectorAll('*').map(e=>e.textContent).join(' ');
+ assert.match(texto,/30\/10\/2026/);
+ assert.ok(texto.includes(`Año ${caso.accion} según la reserva · Libro «${caso.visible}»`));
+});
+
+test('el año inferido deja en revisión un comprobante ya registrado con fecha distinta',async()=>{
+ const h=escenarioPagoDeBloque({fecha:'2023-10-30',fechaVisible:'30-10',titularComprobante:'Marina Ejemplo // ',
+  pagos:[{id:'previo',reserva_id:'r1',tipo_movimiento:'pago',estado:'confirmado',medio_pago:'tarjeta_debito',
+   monto:72000,moneda:'CLP',fecha_pago:'2023-10-30',folio:'1211',datos_origen:{bovtar:'3222'}}]});
+ const comparacion=await h.comparar();
+ const plan=await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+ assert.ok(plan.items.some(i=>i.motivos?.some(m=>m.includes('año interpretado del Libro')) && !i.seleccionado));
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>['pago','pago_actualizar'].includes(i.tipo)));
+});
+
 test('un anticipo WebPay sin titular puede preceder al ingreso de una reserva con fecha de registro',async()=>{
  const h=escenarioPagoDeBloque({fecha:'2026-10-23',monto:36000});
  h.r.fecha_ingreso_libro='2026-10-20';
@@ -2521,7 +2558,7 @@ test('un comprobante ya registrado se omite antes de comprobar el saldo del bloq
 
 for (const caso of [
  {nombre:'el importe excede el saldo con descuento',opciones:{monto:73000},motivo:/superan el saldo/},
- {nombre:'el año del comprobante difiere',opciones:{fecha:'2023-10-30'},motivo:/fecha del comprobante/},
+ {nombre:'el año explícito del comprobante difiere',opciones:{fecha:'2023-10-30',fechaVisible:'30-10-2023'},motivo:/fecha del comprobante/},
  {nombre:'el detalle indica otro titular',opciones:{otraLinea:' // Beatriz Ejemplo'},motivo:/titular o una cabaña diferente/},
  {nombre:'el escritor podría aplicar el pago a otra estadía',opciones:{extras:[{cargo_id:'otro',reserva_id:'r1',estadia_id:'e99',
   tipo_cargo:'alojamiento',estado:'activo',monto:20000,monto_ajustado:20000,saldo_cargo:20000}]},motivo:/qué cargos de alojamiento/},
