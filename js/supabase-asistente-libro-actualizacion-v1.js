@@ -281,7 +281,7 @@
         const principal=pendienteFuente||contradiccion||financiero;
         // Servicios, notas y la columna de cobros pueden describir la misma
         // prestación. Mostrar una sola conclusión por elemento comprobado.
-        if(!principal&&lista(c?.servicios).length)return detalleOperativo(item,generacion,historia);
+        if(!principal&&(lista(c?.servicios).length||lista(c?.notas).length))return detalleOperativo(item,generacion,historia);
         if(!principal&&detallesServicios.length&&lista(item.cambios).every(x=>x.campo==='servicios'))e.motivo='';
         const contexto=[...hechos.filter(x=>!x.startsWith('Corregir las fechas')),...detallesServicios,historia,
             ...avisos.filter(x=>x!==principal).map(x=>x.texto)].filter(Boolean);
@@ -778,7 +778,11 @@
                                     const api=root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
                                     if(!api?.abrirRevisionHistorial)throw Error('No está disponible la revisión de servicios y notas. Recarga Proyecto H.');
                                     const card=doc.createElement('div');vista.textContent='';vista.appendChild(card);
-                                    await api.abrirRevisionHistorial(card,{...revisionServicios,aprobacionManual:true});
+                                    await api.abrirRevisionHistorial(card,{...revisionServicios,aprobacionManual:true,alVolver:guardada=>{
+                                        vista.remove();
+                                        if(guardada)return cargar(true);
+                                        manual.focus?.({preventScroll:true});
+                                    }});
                                 }
                                 vista.scrollIntoView?.({block:'nearest'});
                             }catch(error){

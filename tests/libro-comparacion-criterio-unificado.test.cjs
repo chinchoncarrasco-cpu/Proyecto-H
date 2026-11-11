@@ -91,6 +91,22 @@ test('historial: una nota pendiente se conserva como nota y no habilita la incor
     assert.match(out.items[0].cambios[0].proyecto,/nota|Notas/i);
     assert.equal(out.reservas.length,0);assert.equal(out.comparacion.length,0);assert.equal(f.state.escrituras.length,0);
 });
+test('historial y comparación mensual presentan la tinaja sin tipo como nota y reconocen su guardado',async()=>{
+    const f=fixture(),{r,estancia}=f.agregar('Reserva sintética','TINAJA 22:00 // CamaAdicional');
+    estancia.estado_estadia='checked_out';
+    f.db.notas.push({id:id(777),reserva_id:estancia.reserva_id,tipo:'operativa_resumen',texto:'CamaAdicional'});
+    const registro=cambioServicios(r);
+    const [comp,pendientes]=await Promise.all([f.comparar(),f.Q.revalidarCambiosDetectados([registro],f.c.haikuSupabase,{generacion:1})]);
+    assert.equal(comp.serviciosDetalle.length,0);
+    assert.equal(comp.notasDetalle.find(n=>n.texto==='TINAJA 22:00').estado,'faltante');
+    assert.equal(pendientes.items.length,1);
+    assert.match(pendientes.items[0].cambios[0].proyecto,/Nota por revisar: TINAJA 22:00/);
+    assert.equal(pendientes.revisionServicios.reservas.length,1);
+    f.db.notas.push({id:id(778),reserva_id:estancia.reserva_id,tipo:'operativa_resumen',texto:'TINAJA 22:00'});
+    const despues=await f.Q.revalidarCambiosDetectados([registro],f.c.haikuSupabase,{generacion:1});
+    assert.equal(despues.items.length,0);assert.equal(despues.resueltos[0],registro.id);
+    assert.equal(f.state.escrituras.length,0);
+});
 test('historial: un horario distinto de tinaja sigue visible para revisión y no promete una incorporación vacía',async()=>{
     const f=fixture(),a=f.agregar('Reserva de horario sintética','TINAJA TONEL 1 HORA DE CORTESÍA 19:15 A 20:15');
     const s=f.servicio(a,'tinajaTonel',0);Object.assign(s,{fecha_servicio:'2026-10-10',hora_inicio:'18:15:00',hora_fin:'19:15:00',tipo_cobro:'cortesia'});

@@ -147,6 +147,78 @@ test('Tinaja CORTESIA sin agenda desde Notas es una nota preparable, sin crear p
     assert.ok(plan.items.some(x=>x.kind==='nota'&&x.texto==='Tinaja CORTESIA'&&x.estado==='listo'));
     assert.equal(e.state.escrituras.length,0);
 });
+
+function tinajaHistorica(texto='TINAJA 22:00'){
+    const e=casoManual(),r=e.r,estadia=e.state.db.reserva_estadias[0];
+    Object.assign(r,{fecha_checkin:'2026-11-04',fecha_checkout:'2026-11-05',coordenadas_origen:{hoja:'Nov26',celda:'C4'}});
+    Object.assign(estadia,{fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'checked_out'});
+    e.state.db.reservas[0].estado_reserva='checked_out';
+    e.c.HAIKU_LIBRO_RESERVA_V1.listarHojas=()=>['Nov26'];
+    e.c.haikuTienePermiso=p=>p==='pagos.ver'||p==='notas.gestionar';
+    const cambiar=mencion=>{
+        r.texto_original=mencion+' // CamaAdicional';
+        r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+    };
+    cambiar(texto);
+    e.state.db.notas.push({id:'cama',reserva_id:estadia.reserva_id,tipo:'operativa_resumen',texto:'CamaAdicional'});
+    return {...e,estadia,cambiar};
+}
+
+test('tinaja sin tipo en estadía terminada se confirma desde el informe con el writer de notas',async()=>{
+    const e=tinajaHistorica();let regreso=0;
+    const rpc=e.c.haikuSupabase.rpc;
+    e.c.haikuSupabase.rpc=async(...args)=>{
+        const respuesta=await rpc(...args);
+        return {data:{...respuesta.data,notas_omitidas:0,servicios_omitidos:0}};
+    };
+    const plan=await e.abrir({alVolver:()=>{regreso++;}});
+    const [nota]=plan.items.filter(i=>i.estado==='listo');
+    assert.equal(nota.kind,'nota');assert.equal(nota.texto,'TINAJA 22:00');
+    assert.equal(nota.payload.fecha_operacion,'2026-11-04');
+    assert.equal(nota.payload.estadia_id,e.estadia.id);
+    assert.equal(plan.items.filter(i=>i.kind==='servicio').length,0);
+    assert.equal(plan.items.find(i=>i.texto==='CamaAdicional').estado,'existente');
+    const boton=e.out.querySelectorAll('button').find(b=>b.textContent==='Guardar nota');
+    assert.ok(boton);assert.equal(e.state.escrituras.length,0);
+    await boton.listeners.click();
+    assert.match(e.out.textContent,/Nota guardada/);
+    assert.equal(e.state.escrituras.length,1);
+    assert.equal(e.state.escrituras[0].p_servicios.length,0);
+    assert.equal(e.state.escrituras[0].p_notas.length,1);
+    assert.equal(e.state.escrituras[0].p_notas[0].texto,'TINAJA 22:00');
+    assert.equal(e.state.escrituras[0].p_notas[0].reserva_id,e.estadia.reserva_id);
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Volver a la revisión').listeners.click();assert.equal(regreso,1);
+});
+
+test('si el Libro completa el tipo antes de confirmar, no se guarda la nota anterior',async()=>{
+    const e=tinajaHistorica();await e.abrir();e.cambiar('JACUZZI 22:00');e.state.generacion++;
+    await e.out.querySelectorAll('button').find(b=>b.textContent==='Guardar nota').listeners.click();
+    assert.match(e.out.textContent,/La nota cambió/);assert.equal(e.state.escrituras.length,0);
+});
+
+test('una coincidencia registrada o ambigua se sigue revisando como servicio',async()=>{
+    for(const cantidad of [1,2]){
+        const e=tinajaHistorica(),est=e.estadia;
+        for(let i=0;i<cantidad;i++)e.state.db.servicios.push({id:'tinaja-'+i,reserva_id:est.reserva_id,estadia_id:est.id,
+            fecha_servicio:e.r.fecha_checkin,hora_inicio:'22:00:00',hora_fin:'23:00:00',personas:2,cantidad:1,
+            estado_servicio:'programado',tipo_cobro:'normal',total:30000,catalogo_servicios:{codigo:'tinajaJacuzzi',nombre:'Jacuzzi'}});
+        const plan=await e.api.prepararHistorial({reservas:[e.r],generacion:1});
+        assert.equal(plan.items.find(i=>i.kind==='servicio').estado,cantidad===1?'existente':'revisar');
+        assert.ok(!plan.items.some(i=>i.kind==='nota'&&i.texto==='TINAJA 22:00'));
+        assert.equal(e.state.escrituras.length,0);
+    }
+});
+
+test('una tinaja con confirmación, cobro o un pago asociado sigue en revisión',async()=>{
+    for(const texto of ['TINAJA CONFIRMADA 22:00','TINAJA 22:00 X PAGAR','TINAJA 22:00 CORTESÍA X PAGAR','TINAJA 22:00']){
+        const e=tinajaHistorica(texto);
+        if(texto==='TINAJA 22:00')e.r.pagos=[{concepto:'tinaja',monto:30000}];
+        const plan=await e.api.prepararHistorial({reservas:[e.r],generacion:1});
+        assert.ok(plan.items.some(i=>i.kind==='servicio'&&i.estado==='revisar'),texto);
+        assert.ok(!plan.items.some(i=>i.kind==='nota'&&i.texto===texto),texto);
+    }
+});
+
 test('el historial antiguo de cuna se reconoce como la nota ya incorporada y deja de estar pendiente',async()=>{
     const e=caso(),r=e.r,est=e.state.db.reserva_estadias[0],texto='AGREGAR CUNA EN EL ALOJAMIENTO BEBE DE 1 AÑO';
     r.texto_original=texto;r.servicios=[{concepto:'cuna',texto_original:texto,semantica:'AMBIGUO',origen_campo:'notas_reserva',pendiente:false}];

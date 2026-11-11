@@ -5,6 +5,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const { auditarContraste } = require('./haiku-tema-browser-check.cjs');
+const { setup: setupServicios } = require('./fixtures/libro-servicio-manual.cjs');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -170,6 +171,60 @@ async function comprobarCasosDelAviso(browser, url) {
     } finally {
         await page.close();
     }
+}
+
+async function comprobarNotaTinaja(browser,url){
+    const page=await browser.newPage({viewport:{width:1100,height:900}}),errores=[];
+    page.on('pageerror',error=>errores.push(error.message));
+    try{
+        await page.goto(url);
+        await page.addScriptTag({content:read('js/haiku-libro-semantica-v1.js')});
+        await page.evaluate(setupServicios);
+        for(const nombre of ['haiku-libro-servicios-scope-v2','haiku-libro-confirm-cancel-fix-v1','supabase-asistente-libro-actualizacion-v1'])
+            await page.addScriptTag({content:read(`js/${nombre}.js`)});
+        await page.evaluate(()=>{
+            const f=fixtureServicios,r=f.reservas[0],e=f.db.reserva_estadias[0];
+            r.titular='Huésped sintético';f.db.reservas[0].titular_nombre=r.titular;
+            r.texto_original='TINAJA 22:00 // CamaAdicional';r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+            e.estado_estadia='checked_out';f.db.notas.push({reserva_id:e.reserva_id,texto:'CamaAdicional'});
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};window.haikuTienePermiso=p=>p==='notas.gestionar';
+            const rpc=haikuSupabase.rpc;
+            haikuSupabase.rpc=async(nombre,args)=>{
+                const respuesta=await rpc(nombre,args);
+                f.db.notas.push(...args.p_notas);
+                return {data:{...respuesta.data,servicios_omitidos:0,notas_omitidas:0}};
+            };
+            window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados:async registros=>{
+                const plan=await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial({reservas:[r],generacion:1});
+                const notas=plan.items.filter(i=>i.kind==='nota').map(i=>({estado:i.estado==='existente'?'en_sistema':'faltante',texto:i.texto}));
+                const pendiente=notas.some(n=>n.estado==='faltante');
+                return {items:pendiente?registros.map(x=>({...x,sistema:e,estado:'revision',accionable:false,
+                    contexto:{servicios:[],notas,hechos:['Esta estadía ya terminó.']}})):[],resueltos:pendiente?[]:registros.map(x=>x.id)};
+            }};
+            HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'ok',libro_actual:{generacion:1},
+                modificadas:[{anterior:{...r,servicios:[]},actual:r,cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]}]});
+        });
+        const caso=page.locator('.haku-pendiente-item'),fila=caso.locator('.haku-libro-nota-directa');
+        await caso.locator(':scope > summary').click();
+        assert.match(await caso.innerText(),/Nota · falta guardar\s*TINAJA 22:00/);
+        await caso.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});await fila.scrollIntoViewIfNeeded();
+                assert.equal(await fila.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+                assert.deepEqual(await page.evaluate(auditarContraste,'.haku-libro-servicio-directo'),[]);
+                if(process.env.HAKU_RESUMEN_CAPTURES&&width===390)await fila.screenshot({path:path.join(process.env.HAKU_RESUMEN_CAPTURES,`tinaja-nota-${tema}.png`)});
+            }
+        }
+        assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),0);
+        await fila.getByRole('button',{name:'Guardar nota',exact:true}).click();
+        await fila.getByText('Nota guardada.',{exact:true}).waitFor();
+        assert.deepEqual(await page.evaluate(()=>fixtureServicios.escrituras.map(x=>[x.p_servicios.length,x.p_notas.map(n=>n.texto)])),[[0,['TINAJA 22:00']]]);
+        await caso.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
+        await page.getByText('No quedan cambios pendientes en este informe.',{exact:true}).waitFor();
+        assert.deepEqual(errores,[]);
+    }finally{await page.close();}
 }
 
 (async () => {
@@ -1139,6 +1194,7 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.deepEqual(pendientesTrasActualizar,['2026-12-18']);
         assert.deepEqual(errors, []);
         await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
+        await comprobarNotaTinaja(browser,`http://127.0.0.1:${server.address().port}/`);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {
         await browser.close();

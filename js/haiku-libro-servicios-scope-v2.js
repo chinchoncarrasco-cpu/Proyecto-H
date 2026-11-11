@@ -322,7 +322,7 @@
         return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null, revision_focal:Boolean(focal) };
     }
 
-    function fuenteHistorial({reservas,generacion,aprobacionManual=false}={}){
+    function fuenteHistorial({reservas,generacion,aprobacionManual=false,alVolver}={}){
         if(!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
         if(aprobacionManual && (!esAdministrador() || reservas.length!==1))throw Error('La aprobación manual requiere un administrador y una sola reserva.');
         const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
@@ -330,7 +330,7 @@
         const formato=f=>f.split('-').reverse().join('/');
         const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
         const fuente=Object.freeze({descripcion});
-        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,claves:[...new Set(reservas.map(claveFicha))]});
+        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,alVolver,claves:[...new Set(reservas.map(claveFicha))]});
         return fuente;
     }
     async function prepararHistorial(scope){
@@ -954,6 +954,21 @@
             !s.promoTinajaMixta && !s.hora && !s.hora_fin &&
             (/\b(?:1|una)\s*(?:hora|hra?s?)\b/.test(t)||beneficioSinAgenda) &&
             !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|reservo|agendo|confirmo|contrato)\b/.test(t);
+    }
+
+    function esMencionTinajaSinTipo(item) {
+        const {servicio, reserva, asociacion} = item;
+        if (item.kind !== 'servicio' || item.semantica !== 'SERVICIO_REAL' || servicio.concepto !== 'tinaja' ||
+            item.mapa.codigo || !servicio.hora || !item.hora || asociacion.estado !== 'asociada' ||
+            (servicio.origen_campo || servicio.evidencia_origen?.origen_campo) !== 'notas_reserva' ||
+            item.promocion || esFullDay(reserva.tipo_estadia) || esFullDay(asociacion.sistema.tipo_estadia) ||
+            item.intencion_cobro !== 'no_determinada' || servicio.pendiente || servicio.evidencia_origen?.pendiente_pago ||
+            (servicio.monto != null && Number(servicio.monto) !== 0)) return false;
+        const fuente = servicio.fragmento_original || servicio.texto_original;
+        if (root.HAIKU_LIBRO_SEMANTICA?.clasificarIntencionFinanciera?.(fuente)?.evidencias?.length) return false;
+        const texto = normalizar(fuente);
+        return !/\b(?:reservad[oa]s?|agendad[oa]s?|confirmad[oa]s?|realizad[oa]s?|reservo|agendo|confirmo|contrato|solicito|pidio|uso|pagad[oa]s?)\b/.test(texto) &&
+            ![...(reserva.pagos || []), ...(reserva.pagos_sin_asociacion || [])].some(pagoEspecificoTinaja);
     }
 
     function prepararNota(reserva, texto, asociacion, semantica = "NO_SERVICIO") {
@@ -1686,11 +1701,11 @@
                 item.nocheManual, {}, regla, promo || null);
         }
 
-        // Resolver el beneficio como nota ANTES de aplicar decisiones manuales
-        // o generar propuestas. Primero preservar la autoridad de lo ya agendado.
+        // Conservar como notas los beneficios sin agenda y las menciones de
+        // tinaja sin tipo. Primero comprobar las prestaciones ya registradas.
         for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (!esBeneficioTinajaPorCoordinar(item)) continue;
+            const item = items[i], beneficio = esBeneficioTinajaPorCoordinar(item);
+            if (!beneficio && !esMencionTinajaSinTipo(item)) continue;
             const decision = decisionServicioExistente(item, existentes.servicios);
             const nota = prepararNota(item.reserva,
                 item.servicio.texto_original || item.servicio.fragmento_original,
@@ -1699,10 +1714,17 @@
             // beneficio sin agenda. Otras tinajas no lo convierten en un alta
             // ambigua; la prestación única ya identificada conserva autoridad.
             if (decision.estado === 'existente' ||
-                decision.candidatos?.length && !notaYaExiste(nota, existentes.notas)) continue;
-            nota.inferencias.push(`${item.intencion_cobro === 'cortesia' ? 'Cortesía incluida' : 'Beneficio de la promoción'} pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.`);
+                decision.candidatos?.length && (!beneficio || !notaYaExiste(nota, existentes.notas))) continue;
+            if (beneficio) nota.inferencias.push(`${item.intencion_cobro === 'cortesia' ? 'Cortesía incluida' : 'Beneficio de la promoción'} pendiente de coordinar: nota de la reserva, sin agendar tinaja ni generar cargo.`);
+            else {
+                if (item.fecha && nota.payload) nota.payload.fecha_operacion = item.fecha;
+                nota.inferencias.push('Tinaja sin tipo confirmado. Se conserva la indicación como nota de la reserva.');
+            }
+            nota.convertidaDesdeServicio = true;
             // La misma evidencia puede venir también en menciones/Notas: una sola nota.
-            if (items.some(x => x.kind === 'nota' && x.item_id === nota.item_id)) {
+            const duplicada = items.find(x => x.kind === 'nota' && x.item_id === nota.item_id);
+            if (duplicada) {
+                duplicada.convertidaDesdeServicio = true;
                 items.splice(i--, 1);
             } else items[i] = nota;
         }
@@ -2713,6 +2735,54 @@
         if (Number.isFinite(nuevoTop) && Number.isFinite(vista.anclaTop)) contenedor.scrollTop += nuevoTop - vista.anclaTop;
     }
 
+    function renderizarNotasHistorial(notas, out, resultado, texto, estado, crear) {
+        const guard = root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
+        const alVolver = entradasHistorial.get(texto)?.alVolver;
+        const volver = alVolver ? crear('button','haku-actualizacion-sites__boton haku-libro-nota-directa__volver','Volver') : null;
+        let algunaGuardada = false;
+        if (volver) {
+            volver.type = 'button';
+            volver.addEventListener('click',()=>{ if (!estado.ocupado) return alVolver(algunaGuardada); });
+        }
+        for (const nota of notas) {
+            const fila = crear('div','haku-libro-nota-directa');
+            const evidencia = crear('span','haku-libro-nota-directa__texto',nota.texto);
+            const boton = crear('button','haku-actualizacion-sites__boton haku-actualizacion-sites__boton--primario','Guardar nota');
+            boton.type = 'button';
+            const aviso = crear('div','haku-libro-nota-directa__aviso');
+            aviso.setAttribute('role','status');
+            const guardar = guard?.crearIncorporacionAviso?.({reservas:[nota.reserva],generacion:resultado.generacion},nota.payload);
+            boton.addEventListener('click',async()=>{
+                if (estado.ocupado || boton.disabled) return;
+                estado.ocupado = true; boton.disabled = true;
+                if (volver) volver.disabled = true;
+                boton.textContent = 'Guardando…'; boton.setAttribute('aria-busy','true');
+                aviso.textContent = ''; aviso.setAttribute('role','status');
+                try {
+                    if (!guardar) throw Error('Recarga Proyecto H para guardar la nota.');
+                    const recibo = await guardar();
+                    algunaGuardada = true;
+                    aviso.textContent = recibo.notas_creadas ? 'Nota guardada.' : 'La nota ya estaba guardada.';
+                    boton.remove();
+                    if (volver) {
+                        volver.textContent = 'Volver a la revisión'; volver.disabled = false;
+                        volver.focus?.({preventScroll:true});
+                    }
+                } catch (error) {
+                    aviso.setAttribute('role','alert');
+                    aviso.textContent = error?.message || 'No pude guardar la nota.';
+                    boton.textContent = 'Guardar nota';
+                } finally {
+                    estado.ocupado = false; boton.disabled = false;
+                    if (volver) volver.disabled = false;
+                    boton.removeAttribute?.('aria-busy');
+                }
+            });
+            fila.append(evidencia,boton,aviso); out.append(fila);
+        }
+        if (volver) out.append(volver);
+    }
+
     function renderizarManualHistorial(resultado, out, texto, overrides, estado) {
         out.className = 'haiku-asistente-preview haku-libro-servicios haku-libro-servicio-directo';
         const crear = (tag, clase, texto) => {
@@ -2726,6 +2796,10 @@
             : pendientes.length === 1 ? pendientes[0] : null;
         if (!esAdministrador()) {
             out.append(crear('p','haiku-manual-validacion','La aprobación manual requiere un administrador.')); return;
+        }
+        if (!estado.itemHistorial && !pendientes.length) {
+            const notas = resultado.items.filter(x => x.kind === 'nota' && x.convertidaDesdeServicio && x.estado === 'listo' && x.payload);
+            if (notas.length) return renderizarNotasHistorial(notas,out,resultado,texto,estado,crear);
         }
         if (!item) {
             const mensaje = estado.itemHistorial ? 'Este servicio ya no tiene cambios pendientes para incorporar. Vuelve a revisar el informe.'

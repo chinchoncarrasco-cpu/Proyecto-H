@@ -1156,6 +1156,22 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
 .haku-pendiente-detalle .haku-libro-servicios.haku-libro-servicio-directo {
     border: 0; background: transparent; padding: 0; margin: 0;
 }
+.haku-pendiente-detalle:has(> .haku-libro-preparacion-zona .haku-libro-nota-directa) > :not(.haku-libro-preparacion-zona) {
+    display: none;
+}
+.haku-libro-nota-directa {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px;
+    padding: 6px 0; border-top: 1px solid #d5e1d9; color: #243c31;
+}
+.haku-libro-nota-directa__texto { flex: 1 1 9rem; min-width: 0; overflow-wrap: anywhere; }
+.haku-libro-nota-directa > .haku-actualizacion-sites__boton { flex: 0 1 auto; }
+.haku-libro-nota-directa__volver { align-self: flex-start; }
+.haku-libro-nota-directa__aviso { flex: 1 0 100%; color: #276349; overflow-wrap: anywhere; }
+.haku-libro-nota-directa__aviso:empty { display: none; }
+.haku-libro-nota-directa__aviso[role="alert"] { color: #754b17; }
+html[data-haiku-tema="oscuro"] .haku-libro-nota-directa { border-color: #43554b; color: #e4eee7; }
+html[data-haiku-tema="oscuro"] .haku-libro-nota-directa__aviso { color: #a4d6b8; }
+html[data-haiku-tema="oscuro"] .haku-libro-nota-directa__aviso[role="alert"] { color: #f2c58d; }
 .haku-pendiente-detalle:has(> .haku-libro-preparacion-zona--cancelacion:not([role="alert"])) > :not(.haku-libro-preparacion-zona--cancelacion) {
     display: none;
 }
