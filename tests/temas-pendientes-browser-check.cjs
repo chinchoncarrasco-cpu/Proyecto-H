@@ -84,11 +84,11 @@ async function calendario(p,url,width,theme){
     assert.match(await p.locator('.hr-read-copy').innerText(),/Un descanso entre árboles/);
   }
   await capture(p,'calendario-detalle',width,theme,'.hr-dialog');
-  await p.setViewportSize({width:width>=1000?390:1100,height:1000});assert.equal(await p.locator('.hr-dialog').evaluate(e=>e.matches(':modal')),width>=1000);
-  await p.setViewportSize({width,height:1000});await p.keyboard.press('Escape');assert.equal(await p.locator('.hr-dialog').isVisible(),false);
+  await p.setViewportSize({width:width>=1000?390:1100,height:1000});await p.waitForFunction(modal=>document.querySelector('.hr-dialog').matches(':modal')===modal,width>=1000);
+  await p.setViewportSize({width,height:1000});await p.waitForFunction(modal=>document.querySelector('.hr-dialog').matches(':modal')===modal,width<1000);await p.keyboard.press('Escape');await p.locator('.hr-dialog').waitFor({state:'hidden'});
   await p.locator('.hr-filters > summary').click();assert.equal(await p.locator('[data-filter]').count(),8);
   await p.locator('[data-filter="search"]').fill('no-existe-este-contenido');await p.locator('[data-view="agenda"]').click();
-  assert.match(await p.locator('.hr-empty').innerText(),/No hay contenido/);
+  assert.match(await p.locator('[data-calendar] .hr-empty').innerText(),/No hay contenido/);
   await capture(p,'calendario-vacio',width,theme);
   await p.locator('[data-filter="search"]').fill('');
   for(const view of ['ano','campanas']){await p.locator(`[data-view="${view}"]`).click();await capture(p,'calendario-'+view,width,theme);}
