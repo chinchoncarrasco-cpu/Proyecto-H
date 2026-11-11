@@ -1803,6 +1803,8 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
     font: 400 13px/19px var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif); white-space: normal;
 }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__cabecera { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.haku-libro-resumen__encabezado { flex: 1; min-width: 0; }
+.haku-libro-resumen__hora { display: inline-block; margin-left: 6px; }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__titulo { flex: 1; min-width: 0; margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; color: var(--aviso-texto); }
 .haiku-asistente-panel .haku-libro-resumen button { font-family: inherit; cursor: pointer; }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__informe {

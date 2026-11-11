@@ -146,8 +146,8 @@
             }
         };
     }
-    function horaDeteccion(valor) {
-        // La comparación aporta el instante de detección; no usar la hora de renderizado ni la del archivo.
+    function horaAviso(valor,etiqueta='Detectado por Haku') {
+        // Formatea el instante aportado, sin sustituir una fecha ausente por la hora actual.
         if(typeof valor!=='string' || !Number.isFinite(Date.parse(valor)))return null;
         const instante=new Date(valor),ahora=new Date(),timeZone='America/Santiago';
         const partes=fecha=>Object.fromEntries(new Intl.DateTimeFormat('es-CL',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
@@ -156,7 +156,7 @@
         const mismoDia=['year','month','day'].every(k=>d[k]===hoy[k]);
         const fecha=`${d.day}/${d.month}${d.year===hoy.year?'':'/'+d.year}`;
         return {iso:instante.toISOString(),texto:mismoDia?hora:`${fecha} · ${hora}`,
-            descripcion:`Detectado por Haku el ${d.day}/${d.month}/${d.year} a las ${hora} (hora de Chile)`};
+            descripcion:`${etiqueta} el ${d.day}/${d.month}/${d.year} a las ${hora} (hora de Chile)`};
     }
     function instalar() {
         let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0;
@@ -220,7 +220,7 @@
                 const bloque=nodo(padre,'section','haku-libro-auto__caso');
                 const cabecera=nodo(bloque,'div','haku-libro-auto__cabecera');
                 nodo(cabecera,'strong','haku-libro-auto__titulo',caso.titulo);
-                const deteccion=horaDeteccion(caso.detectadoEn);
+                const deteccion=horaAviso(caso.detectadoEn);
                 if(deteccion){
                     const hora=nodo(cabecera,'time','haku-libro-auto__hora',deteccion.texto);
                     hora.setAttribute('datetime',deteccion.iso);
@@ -292,8 +292,15 @@
                 if(!total && !burbuja.avisos.length)return false;
                 mensaje.className+=' haku-libro-resumen';
                 const cabecera=nodo(mensaje,'div','haku-libro-resumen__cabecera');
+                const encabezado=nodo(cabecera,'div','haku-libro-resumen__encabezado');
                 const parcial=['parcial','no_comparable'].includes(resultado.estado);
-                nodo(cabecera,'strong','haku-libro-resumen__titulo',parcial?'Lectura parcial del Libro':total?`${total} ${total===1?'cambio':'cambios'} en el Libro`:'Actualización por revisar');
+                nodo(encabezado,'strong','haku-libro-resumen__titulo',parcial?'Lectura parcial del Libro':total?`${total} ${total===1?'cambio':'cambios'} en el Libro`:'Actualización por revisar');
+                // Este sello pertenece al mensaje emitido, no a la detección del cambio en el Libro.
+                const emision=horaAviso(new Date().toISOString(),'Informe emitido por Haku');
+                const hora=nodo(encabezado,'time','haku-libro-auto__hora haku-libro-resumen__hora',emision.texto);
+                hora.setAttribute('datetime',emision.iso);
+                hora.setAttribute('title',emision.descripcion);
+                hora.setAttribute('aria-label',emision.descripcion);
                 const informe=botonInforme(cabecera);informe.className='haku-libro-resumen__informe';informe.avisoCompacto=true;
                 const cifras=nodo(mensaje,'div','haku-libro-resumen__cifras');
                 for(const [cantidad,uno,varios] of [[nuevas,'agregada','agregadas'],[modificadas,'modificada','modificadas'],[ausentes,'no aparece','no aparecen'],...(canceladas?[[canceladas,'cancelada en el Libro','canceladas en el Libro']]:[])]) {
