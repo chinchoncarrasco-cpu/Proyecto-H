@@ -566,6 +566,49 @@ const server = http.createServer((request, response) => {
         assert.equal(await prioridades.count(),4);
         for(const b of await prioridades.all())assert.equal(await b.isDisabled(),true);
         assert.deepEqual(await prioridades.locator('span').allInnerTexts(),['Hoy','Mañana','Próximos','Info']);
+        await resumen.getByRole('button',{name:'3 datos por revisar',exact:true}).click();
+        assert.equal(await region.locator('.haku-libro-auto__caso').count(),3,'un aviso anterior permite leer su instantánea');
+        await page.evaluate(()=>{
+            document.getElementById('haiku-asistente-mensajes').replaceChildren();
+            __generation=13;window.dispatchEvent(new Event('haiku:libro-cambio'));
+            __resultadoActual={estado:'ok',libro_actual:{generacion:13},nuevas:[{actual:{titular:'Persona de prueba',cabana:2,fecha_checkin:'2030-11-27',fecha_checkout:'2030-11-30'}}],
+                advertencias:['anterior','actual'].map(version=>({version,hoja:'Nov30',detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))};
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_automatica:true,tenia_anterior:true,generacion:13}}));
+        });
+        await resumen.waitFor();await burbuja.getByRole('button',{name:'Cerrar',exact:true}).click();
+        const principal=resumen.locator('.haku-libro-resumen__caso'),botonDatos=resumen.locator('.haku-libro-resumen__ver-datos');
+        const hora=await resumen.locator('.haku-libro-resumen__hora').getAttribute('datetime');
+        const lecturasAntesDatos=await page.evaluate(()=>__revalidations);
+        await page.locator('#haiku-asistente-texto').fill('Conservar mi consulta');
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                await botonDatos.press('Enter');
+                assert.equal(await principal.isVisible(),false);assert.equal(await region.isVisible(),true);
+                assert.equal(await region.locator('.haku-libro-auto__caso').count(),2);
+                assert.match(await region.innerText(),/Versión anterior[\s\S]*Versión actual/);
+                assert.match(await region.innerText(),/La cantidad de noches escrita no coincide/);
+                assert.doesNotMatch(await region.innerText(),/Se agregó una reserva/);
+                assert.equal(await botonDatos.innerText(),'Volver al resumen');
+                assert.equal(await botonDatos.getAttribute('aria-expanded'),'true');
+                assert.equal(await resumen.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+                if(capturas)await resumen.screenshot({path:path.join(capturas,`datos-revisar-${tema}-${width}.png`)});
+                await botonDatos.press('Space');
+                assert.equal(await principal.isVisible(),true);assert.equal(await region.isVisible(),false);
+                assert.equal(await botonDatos.getAttribute('aria-expanded'),'false');
+            }
+        }
+        await botonDatos.click();await prioridades.last().click();
+        assert.equal(await region.locator('.haku-libro-auto__caso').count(),3);
+        assert.equal(await botonDatos.innerText(),'2 datos por revisar');
+        assert.equal(await principal.isVisible(),false,'la categoría también reemplaza el detalle sin duplicarlo');
+        await botonDatos.click();assert.equal(await region.locator('.haku-libro-auto__caso').count(),2);
+        assert.equal(await prioridades.last().getAttribute('aria-expanded'),'false');
+        await botonDatos.click();assert.equal(await principal.isVisible(),true);
+        assert.equal(await resumen.locator('.haku-libro-resumen__hora').getAttribute('datetime'),hora);
+        assert.equal(await page.evaluate(()=>__revalidations),lecturasAntesDatos);
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Conservar mi consulta');
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {

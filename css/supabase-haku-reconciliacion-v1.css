@@ -1818,6 +1818,13 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto .haku-libro-auto
 .haku-libro-resumen__cero { color: var(--aviso-secundario); font-size: 11px; line-height: 16px; }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__aviso { display: flex; align-items: baseline; gap: 6px; color: var(--resumen-aviso); font-size: 13px; line-height: 18px; font-weight: 500; }
 .haku-libro-resumen__aviso > span:first-child { flex: none; }
+.haku-libro-resumen__avisos-texto > * + *::before { content: ' · '; }
+.haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__ver-datos {
+    min-height: 24px; margin: 0; padding: 0; border: 0; border-radius: 2px;
+    background: transparent; color: inherit; font: inherit; text-align: left;
+    text-decoration: underline; text-underline-offset: 3px;
+}
+.haku-libro-resumen__caso[hidden] { display: none; }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridades { display: flex; align-items: center; min-width: 0; padding-top: 2px; border-top: 1px solid var(--aviso-borde); }
 .haiku-asistente-panel .haku-libro-resumen .haku-libro-resumen__prioridad {
     position: relative; display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: 4px;

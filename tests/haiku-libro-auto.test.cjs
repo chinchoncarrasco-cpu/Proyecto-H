@@ -415,3 +415,33 @@ test('el resumen de un cambio conserva reserva y detalle; una versión nueva des
     assert.match(textoNodo(mensaje),/Persona Prueba · CAB 8/);
     const previo=textoNodo(contenido);franja.children[0].dispatchEvent({type:'click'});assert.equal(textoNodo(contenido),previo);
 });
+test('datos por revisar reemplaza el cambio por sus dos avisos, conserva versiones y vuelve sin releer',async()=>{
+    const r=res({nuevas:[{actual:row}],advertencias:['anterior','actual'].map(version=>({version,hoja:'Oct26',
+        detalles:['Las noches escritas no coinciden con las fechas combinadas; confirmar ingreso/salida.']}))});
+    const original=JSON.stringify(r),h=interfaz(async()=>r);
+    h.window.HAIKU_ASISTENTE_LIBRO_PRIORIDAD_V1=require('../js/supabase-asistente-libro-prioridad-v1.js');
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    const mensaje=h.ids['haiku-asistente-mensajes'].children[0],nodos=n=>[n,...n.children.flatMap(nodos)];
+    const boton=nodos(mensaje).find(n=>n.className==='haku-libro-resumen__ver-datos');
+    const principal=mensaje.children.find(n=>n.className==='haku-libro-resumen__caso');
+    const contenido=mensaje.children.find(n=>n.className==='haku-libro-auto__filtrado');
+    const franja=mensaje.children.find(n=>n.className==='haku-libro-resumen__prioridades');
+    const hora=nodos(mensaje).find(n=>(n.className||'').includes('haku-libro-resumen__hora')).datetime;
+    h.ids['haiku-asistente-texto'].value='Conservar esta consulta';
+    boton.dispatchEvent({type:'click'});
+    assert.equal(principal.hidden,true);assert.equal(contenido.hidden,false);assert.equal(contenido.children.length,2);
+    assert.equal(boton.textContent,'Volver al resumen');assert.equal(boton['aria-expanded'],'true');
+    assert.match(textoNodo(contenido.children[0]),/Versión anterior.*Oct26.*La cantidad de noches escrita no coincide/);
+    assert.match(textoNodo(contenido.children[1]),/Versión actual.*Oct26.*La cantidad de noches escrita no coincide/);
+    assert.doesNotMatch(textoNodo(contenido),/Se agregó una reserva/);
+    franja.children[3].dispatchEvent({type:'click'});
+    assert.equal(contenido.children.length,3);assert.equal(principal.hidden,true);
+    assert.equal(boton.textContent,'2 datos por revisar');assert.equal(boton['aria-expanded'],'false');
+    boton.dispatchEvent({type:'click'});assert.equal(contenido.children.length,2);
+    assert.ok(franja.children.every(n=>n['aria-expanded']==='false'));
+    boton.dispatchEvent({type:'click'});assert.equal(principal.hidden,false);assert.equal(contenido.hidden,true);
+    h.cambiar();boton.dispatchEvent({type:'click'});assert.equal(contenido.children.length,2,'el aviso anterior sigue siendo consultable sin ejecutar acciones');
+    assert.equal(h.calls(),1);assert.equal(JSON.stringify(r),original);
+    assert.equal(h.ids['haiku-asistente-texto'].value,'Conservar esta consulta');
+    assert.equal(nodos(mensaje).find(n=>(n.className||'').includes('haku-libro-resumen__hora')).datetime,hora);
+});
