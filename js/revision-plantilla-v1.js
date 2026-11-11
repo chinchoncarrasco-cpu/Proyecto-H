@@ -2,6 +2,8 @@
     "use strict";
     const core = window.HAIKU_REVISION_PLANTILLA_CORE_V1;
     const contextos = new Map();
+    const permisosCompartidos = new Map();
+    const permisosEdicion = ["configuracion.gestionar", "cabanas.ver", "revisiones.ver"];
     const omitidos = new Set(["PGRST202", "42883", "42501"]);
     const modalidades = {
         completa: { label: "Revisión completa", panel: "revision-individual", areas: [
@@ -29,6 +31,19 @@
     const escapado = value => String(value ?? "").replace(/[&<>"']/g, c => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[c]);
+    function identidadSesion() {
+        const sesion = window.haikuSesion;
+        if (!sesion?.auth?.id) return "";
+        return sesion.auth.id + ":" + permisosEdicion.filter(permiso => sesion.permisos?.includes(permiso)).join(",");
+    }
+    let sesionEditor = identidadSesion();
+
+    function puedeEditar(actual) {
+        if (!actual || !sesionEditor || sesionEditor !== identidadSesion()) return false;
+        const permiso = contexto(actual.fecha, actual.numero, actual.modo)?.canEdit;
+        return (actual.modo === "completa" ? permiso : permisosCompartidos.get(actual.modo) ?? permiso) === true;
+    }
+
     const icono = name => '<span class="pr-icon pr-icon-' + name + '" aria-hidden="true"></span>';
 
     async function rpc(nombre, argumentos) {
@@ -43,13 +58,25 @@
         const completa = modo === "completa";
         const nombre = completa ? "haku_revision_plantillas_v1" : "haku_revision_modalidades_v1";
         if (indisponibles.has(nombre)) return null;
+        const sesion = identidadSesion();
         try {
             const respuesta = await rpc(nombre, completa
                 ? { p_fecha: fecha, p_cabana_id: cabanaId }
                 : { p_fecha: fecha, p_tipo: modo });
-            return Array.isArray(respuesta?.templates) ? respuesta : null;
+            if (sesion !== identidadSesion() || !Array.isArray(respuesta?.templates)) return null;
+            if (!completa && sesion) {
+                // El permiso del editor no depende de la lectura de los checks ni de su catálogo.
+                permisosCompartidos.set(modo, respuesta.can_edit === true);
+                mostrar();
+            }
+            return respuesta;
         } catch (error) {
+            if (sesion !== identidadSesion()) return null;
             if (error.code === "PGRST202" || error.code === "42883") indisponibles.add(nombre);
+            if (!completa && error.code === "42501") {
+                permisosCompartidos.set(modo, false);
+                mostrar();
+            }
             if (!omitidos.has(error.code)) console.warn("HAIKU · Plantillas de revisión:", error.message);
             return null;
         }
@@ -104,7 +131,7 @@
     function mostrar() {
         const button = $("cabinsReviewCustomize");
         if (!button) return;
-        button.hidden = !scope || !contexto(scope.fecha, scope.numero, scope.modo)?.canEdit || Boolean(editor);
+        button.hidden = !puedeEditar(scope) || Boolean(editor);
         const success = $("cabinsReviewTemplateSaved");
         success.hidden = !guardado || guardado.key !== scope?.key || Boolean(editor);
         if (!success.hidden) {
@@ -119,8 +146,8 @@
 
     async function abrir() {
         const info = scope && contexto(scope.fecha, scope.numero, scope.modo);
-        if (!info?.canEdit || editor) return;
-        const actual = { ...scope, cabanaId: info.cabanaId, loading: true, requestNumber: 0,
+        if (!puedeEditar(scope) || editor) return;
+        const actual = { ...scope, cabanaId: info?.cabanaId, loading: true, requestNumber: 0,
             folds: new Set(["area-" + modalidades[scope.modo].areas[0][0], "group-0-0"]), field: null, error: "", saving: false };
         const operativa = $(modalidades[actual.modo].panel);
         actual.inertAnterior = operativa.inert;
@@ -380,7 +407,12 @@
     }
 
     window.addEventListener("haiku:auth-ready", () => {
+        const identidad = identidadSesion();
+        if (identidad === sesionEditor) return;
+        sesionEditor = identidad;
         contextos.clear();
+        permisosCompartidos.clear();
+        indisponibles.clear();
         guardado = null;
         if (editor) cerrar(false);
         mostrar();
