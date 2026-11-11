@@ -46,6 +46,14 @@
     const cabanasPorNumero = new Map();
     const itemsPorClave = new Map();
     const revisionesExpress = new Map();
+    const editorExpress = () => window.HAIKU_REVISION_PLANTILLA_V1;
+    const plantillaExpress = (fecha, numero) => editorExpress()?.contexto(fecha, numero, TIPO_REVISION_EXPRESS)?.plantilla;
+    const areasExpress = [["kitchen", "Cocina"], ["bathroom", "Baño"], ["living", "Living/Cama"], ["terrace", "Terraza"]];
+    let areasExpressBase;
+    function itemsExpress(plantilla) {
+        return plantilla ? new Map(plantilla.groups.flatMap(grupo => grupo.items
+            .filter(item => item.active).map(item => [item.id, { id: item.itemId }]))) : itemsPorClave;
+    }
     // Sólo lecturas remotas de esta sesión. No se restaura desde localStorage
     // y sobrevive a los productores que reconstruyen el objeto de la cabaña.
     const ciclosExpressVerificados = new Map();
@@ -500,7 +508,7 @@
 
         const { data, error } = await cliente()
             .from("revisiones_cabana")
-            .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en")
+            .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en")
             .eq("fecha", fecha)
             .eq("cabana_id", ref.id)
             .eq("tipo_revision", TIPO_REVISION_EXPRESS)
@@ -548,7 +556,7 @@
         const { data, error } = await cliente()
             .from("revisiones_cabana")
             .insert(payload)
-            .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en")
+            .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en")
             .single();
 
         if (error) {
@@ -562,11 +570,15 @@
         return data;
     }
 
-    async function guardarItemExpress(fecha, numero, claveItem, marcado) {
+    async function guardarItemExpress(fecha, numero, claveItem, marcado, version) {
         await cargarReferencias();
-        const item = itemsPorClave.get(claveItem);
+        const item = itemsExpress(plantillaExpress(fecha, numero)).get(claveItem);
         if (!item) throw new Error(`Ítem Aseo Express no configurado: ${claveItem}`);
         const revision = await asegurarRevisionExpress(fecha, numero);
+        if ((revision.plantilla_id ?? null) !== version) {
+            void hidratar(fecha, { pintar: true });
+            throw new Error("La lista Express cambió. Vuelve a marcar el elemento en la lista actualizada.");
+        }
 
         const { error } = await cliente()
             .from("revision_items")
@@ -587,7 +599,7 @@
             .from("revisiones_cabana")
             .update({ observaciones: detalles.trim() || null })
             .eq("id", revision.id)
-            .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en")
+            .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en")
             .single();
         errorSiExiste(error);
         revisionesExpress.set(claveRevision(fecha, numero), data);
@@ -629,7 +641,7 @@
                 .update(payload)
                 .eq("id", revision.id)
                 .eq("tipo_revision", TIPO_REVISION_EXPRESS)
-                .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,finalizado_en,revisado_por")
+                .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en,finalizado_en,revisado_por")
                 .single();
             errorSiExiste(error);
             if (!data) throw new Error("No se pudo verificar la revisión Express guardada.");
@@ -681,7 +693,7 @@
         await cargarReferencias();
         const supabase = cliente();
 
-        const [aseosResp, solicitudesResp, revisionesResp] = await Promise.all([
+        const [aseosResp, solicitudesResp, revisionesResp, plantillas] = await Promise.all([
             supabase
                 .from("aseos")
                 .select("id,fecha,cabana_id,estado,encargado_nombre,revisor_nombre,iniciado_en,completado_en")
@@ -693,11 +705,12 @@
                 .in("categoria", Object.keys(TIPOS_SOLICITUD)),
             supabase
                 .from("revisiones_cabana")
-                .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
+                .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en,creado_en")
                 .eq("fecha", fecha)
                 .eq("tipo_revision", TIPO_REVISION_EXPRESS)
                 .neq("estado", "cancelada")
-                .order("creado_en", { ascending: false })
+                .order("creado_en", { ascending: false }),
+            editorExpress()?.leer(fecha, null, TIPO_REVISION_EXPRESS)
         ]);
 
         errorSiExiste(aseosResp.error);
@@ -724,7 +737,7 @@
                     .in("categoria", Object.keys(TIPOS_SOLICITUD)),
                 supabase
                     .from("revisiones_cabana")
-                    .select("id,fecha,cabana_id,estado,resultado,observaciones,iniciado_en,creado_en")
+                    .select("id,fecha,cabana_id,plantilla_id,estado,resultado,observaciones,iniciado_en,creado_en")
                     .eq("fecha", fecha)
                     .eq("tipo_revision", TIPO_REVISION_EXPRESS)
                     .neq("estado", "cancelada")
@@ -760,7 +773,8 @@
             aseosLegacyIncompatibles: migracionLegacy.incompatibles,
             solicitudes: solicitudesFinal.data || [],
             revisiones,
-            items
+            items,
+            plantillas
         };
     }
 
@@ -809,6 +823,11 @@
             // Una revisión aislada puede pertenecer a un ciclo histórico; sin
             // solicitud vigente no habilita ni se atribuye al bloque actual.
             const revision = solicitudVigente ? revisiones.get(cabanaId) : null;
+            const anterior = plantillaExpress(fecha, numero);
+            const plantilla = solicitudVigente && (remoto.plantillas
+                ? editorExpress().plantillaDe(remoto.plantillas, numero, revision)
+                : anterior && (!revision || anterior.version_id === revision.plantilla_id) ? anterior : null);
+            editorExpress()?.publicar(fecha, numero, cabanaId, remoto.plantillas, plantilla || null, TIPO_REVISION_EXPRESS);
             local.aseoExpressCiclo = Object.freeze({
                 fecha,
                 verificado: true,
@@ -830,8 +849,9 @@
                 local.detallesAseoExpress = revision.observaciones || "";
                 local.checklistAseoExpress = {};
 
+                const mapeo = itemsExpress(plantilla);
                 (itemsPorRevision.get(String(revision.id)) || []).forEach(item => {
-                    for (const [claveItem, refItem] of itemsPorClave) {
+                    for (const [claveItem, refItem] of mapeo) {
                         if (String(refItem.id) === String(item.checklist_item_id)) {
                             local.checklistAseoExpress[claveItem] = item.estado === "ok";
                             break;
@@ -873,9 +893,39 @@
         }
     }
 
+    function pintarListaExpress(plantilla) {
+        const host = document.getElementById("aseo-express-checklist");
+        const version = plantilla?.version_id ?? "";
+        if (!host || (host.dataset.templateVersion ?? "") === version) return;
+        host.dataset.templateVersion = version;
+        if (!plantilla) {
+            if (areasExpressBase) host.replaceChildren(...areasExpressBase);
+            return;
+        }
+        areasExpressBase ??= [...host.children];
+        host.replaceChildren(...areasExpress.map(([id, nombre]) => {
+            const area = document.createElement("div");
+            area.className = "revision-area";
+            const titulo = document.createElement("h4");
+            titulo.textContent = nombre;
+            area.append(titulo);
+            for (const item of plantilla.groups.find(grupo => grupo.id === id)?.items ?? []) {
+                if (!item.active) continue;
+                const label = document.createElement("label");
+                const check = document.createElement("input");
+                check.type = "checkbox";
+                check.dataset.aseoExpressItem = item.id;
+                label.append(check, " " + item.label);
+                area.append(label);
+            }
+            return area;
+        }));
+    }
+
     function pintarExpress(numero) {
         const fecha = fechaOperativa();
         const local = cabanaCache(fecha, String(numero), false) || {};
+        pintarListaExpress(plantillaExpress(fecha, numero));
 
         document.querySelectorAll("[data-aseo-express-item]").forEach(check => {
             check.checked = window.HAIKU_CHECKLIST_OPTIMISTA_V1?.valor(
@@ -1025,6 +1075,8 @@
                     return;
                 }
                 const claveItem = check.dataset.aseoExpressItem;
+                const version = check.closest("#aseo-express-checklist")?.dataset.templateVersion
+                    || revisionesExpress.get(claveRevision(fecha, numero))?.plantilla_id || null;
                 const marcado = check.checked;
                 const optimista = window.HAIKU_CHECKLIST_OPTIMISTA_V1;
                 const pendiente = optimista?.iniciar("express", fecha, numero, claveItem, check);
@@ -1041,7 +1093,8 @@
                         fecha,
                         numero,
                         claveItem,
-                        marcado
+                        marcado,
+                        version
                     )
                 ).then(() => {
                     optimista?.terminar(pendiente, true);

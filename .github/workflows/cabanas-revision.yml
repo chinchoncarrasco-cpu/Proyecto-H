@@ -30,7 +30,7 @@ on:
       - "tests/revision-completa-estados.test.cjs"
       - "js/revision-plantilla*.js"
       - "css/revision-plantilla-v1.css"
-      - "supabase/migrations/*_haku_personalizar_revision_completa_v1.sql"
+      - "supabase/migrations/*_haku_personalizar_*.sql"
       - "tests/*plantilla*.test.cjs"
       - "tests/cabanas-personalizar-browser-check.cjs"
       - "tests/aseo-derivado-panel-browser-check.cjs"

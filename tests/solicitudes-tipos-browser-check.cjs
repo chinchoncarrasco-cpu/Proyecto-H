@@ -5,7 +5,8 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '..');
 const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js', 'js/app.js',
-  'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/supabase-aseo-operacion-v1.js']);
+  'js/cabanas.js', 'js/sites-cabanas-v1.js', 'js/supabase-aseo-operacion-v1.js',
+  'js/revision-plantilla-core-v1.js', 'js/revision-plantilla-v1.js']);
 
 (async () => {
   const browser = await chromium.launch({ headless: true, executablePath: process.env.HAIKU_BROWSER_PATH || undefined });
@@ -45,7 +46,15 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
         };
         window.__requestRows = rows;
         window.__requestWrites = [];
-        window.haikuSupabase = { from(table) {
+        window.haikuSupabase = { async rpc(name, args) {
+          if (name === 'haku_revision_modalidades_v1' && args.p_tipo === 'aseo_express') {
+            const revision = rows.revisiones_cabana.find(row => row.tipo_revision === 'aseo_express');
+            return { data: { can_edit: true, templates: window.__expressTemplate && (!revision || revision.plantilla_id) ? [{
+              ...window.__expressTemplate, numero: 1, cabana_id: 'cab-1', revision_id: revision?.id ?? null,
+            }] : [] }, error: null };
+          }
+          return { data: null, error: { code: 'PGRST202' } };
+        }, from(table) {
           const filters = []; let payload, mutation;
           const read = () => (rows[table] || []).filter(row => filters.every(filter => filter(row)));
           const perform = () => {
@@ -55,6 +64,9 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
             let row = mutation === 'update' ? read()[0] : (rows[table] || []).find(row => row.fecha_operativa === payload.fecha_operativa && row.cabana_id === payload.cabana_id && row.categoria === payload.categoria);
             if (!row) { row = { id: table + '-' + (rows[table].length + 1) }; rows[table].push(row); }
             Object.assign(row, payload);
+            if (mutation === 'insert' && table === 'revisiones_cabana' && payload.tipo_revision === 'aseo_express') {
+              row.plantilla_id = window.__expressTemplate?.version_id ?? null;
+            }
             return { data: row, error: null };
           };
           const query = {
@@ -117,6 +129,19 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       assert.equal(await page.locator('#aseo-express-individual').isVisible(), true);
       assert.equal(await page.locator('#aseo-express-checklist input[type="checkbox"]').count(), 16);
       assert.equal(await page.locator('#cabinsDetailRequests .cb-typed-request').count(), 6);
+      await page.getByRole('button', { name: 'Personalizar', exact: true }).waitFor();
+      await page.evaluate(() => {
+        window.__expressTemplate = { version_id: 'qa-express-v1', groups: [{
+          id: 'kitchen', label: null, items: [{ id: 'new-qa', itemId: 'express-0', label: 'Loza de prueba', active: true }],
+        }] };
+        return window.HAIKU_ASEO_OPERACION_V1.hidratar(fechaSeleccionada, { pintar: true });
+      });
+      const customCheck = page.getByRole('checkbox', { name: 'Loza de prueba' });
+      await customCheck.check();
+      await page.waitForFunction(() => window.__requestWrites.some(write =>
+        write.table === 'revision_items' && write.payload.checklist_item_id === 'express-0'));
+      assert.equal(await page.evaluate(() => window.__requestRows.revisiones_cabana.find(row =>
+        row.tipo_revision === 'aseo_express')?.plantilla_id), 'qa-express-v1');
       const expressText = 'Conservar observación de Express · Cabaña 1';
       await page.locator('#aseo-express-detalles').fill(expressText);
       await page.locator('#aseo-express-detalles').blur();
@@ -206,7 +231,8 @@ const scripts = new Set(['js/historial.js', 'js/calendario.js', 'js/checklist.js
       await page.locator('#guardar-solicita').click();
       await page.waitForFunction(() => !document.querySelector('#panel-agregar-solicita').classList.contains('activo'));
       assert.equal(await page.evaluate(() => window.__requestRows.solicitudes.find(row => row.descripcion === 'Carbón para Cabaña 3').cabana_id), 'cab-3');
-      assert.equal(await page.evaluate(() => window.__requestWrites.every(write => ['solicitudes', 'revisiones_cabana'].includes(write.table))), true, 'no modifica aseos ni insumos');
+      assert.equal(await page.evaluate(() => window.__requestWrites.every(write => (['solicitudes', 'revisiones_cabana'].includes(write.table)
+        || write.table === 'revision_items' && write.payload.checklist_item_id === 'express-0'))), true, 'no modifica aseos ni insumos');
       assert.equal(await page.evaluate(() => window.__requestRows.revisiones_cabana.every(row => row.tipo_revision === 'aseo_express')), true, 'conserva la revisión completa');
       assert.deepEqual(errors, []);
       await page.close();

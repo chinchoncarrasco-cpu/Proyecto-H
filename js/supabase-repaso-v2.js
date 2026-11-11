@@ -4,7 +4,7 @@
     const profile = window.HAIKU_REPASO_CHECKLIST_V1;
     if (!profile) return;
     const fields = { living: 'detalle_living_cama', kitchen: 'detalle_cocina', bathroom: 'detalle_bano', terrace: 'detalle_terraza', observations: 'observaciones' };
-    const columns = 'id,fecha,cabana_id,tipo_revision,estado,resultado,observaciones,detalle_cocina,detalle_bano,detalle_living_cama,detalle_terraza,creado_en';
+    const columns = 'id,fecha,cabana_id,plantilla_id,tipo_revision,estado,resultado,observaciones,detalle_cocina,detalle_bano,detalle_living_cama,detalle_terraza,creado_en';
     const labels = { en_curso:'En curso',lista_para_revisar:'Lista para revisar', pendiente: 'Pendiente', en_revision: 'En revisión', 'con-detalles': 'Con detalles', lista: 'Lista', no_requiere: 'No requiere' };
     const cache = new Map(), queues = new Map(), creating = new Map(), drafts = new Map(), timers = new Map();
     let sessionUser = '', opened = null, catalog = new Map(), cabins = [], epoch = 0, sequence = 0;
@@ -14,7 +14,18 @@
     const key = (fecha, numero) => `${user()}:${fecha}:${numero}`;
     const root = () => document.getElementById('repaso-individual');
     const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-    const empty = () => ({ revision: null, checked: [] });
+    const empty = () => ({ revision: null, checked: [], plantilla: null });
+    const editor = () => window.HAIKU_REVISION_PLANTILLA_V1;
+    function sectionsFor(plantilla) {
+        return plantilla ? profile.sections.map(section => {
+            const group = plantilla.groups.find(g => g.id === section.id);
+            return { ...section, items: group ? group.items.filter(item => item.active) : section.items };
+        }) : profile.sections;
+    }
+    function catalogFor(plantilla) {
+        return plantilla ? new Map(plantilla.groups.flatMap(group => group.items
+            .filter(item => item.active).map(item => [item.id, item.itemId]))) : catalog;
+    }
     const status = row => row?.estado === 'en_proceso' ? 'en_revision' : row?.estado === 'completada'
         ? row.resultado === 'lista' ? 'lista' : ['con_detalles', 'no_lista'].includes(row.resultado) ? 'con-detalles' : 'pendiente' : 'pendiente';
     function statusPatch(value) {
@@ -25,7 +36,7 @@
     }
     function record(fecha, numero) { return cache.get(key(fecha, numero)) || empty(); }
     function projected(fecha, numero) {
-        const current = record(fecha, numero), copy = { revision: { ...current.revision }, checked: [...current.checked] };
+        const current = record(fecha, numero), copy = { ...current, revision: { ...current.revision }, checked: [...current.checked] };
         for (const q of queues.values()) if (q.context.key === key(fecha, numero)) apply(copy, q.field, q.desired);
         for (const draft of drafts.values()) if (draft.context.key === key(fecha, numero)) copy.revision[fields[draft.field]] = draft.value;
         return copy;
@@ -41,41 +52,47 @@
         if (fecha !== date() || typeof obtenerDatosDia !== 'function') return;
         const value = projected(fecha, numero), data = obtenerDatosDia(fecha);
         const cabin = data.cabanas[numero] ||= {};
-        cabin.repasoRevision = { fecha, verificado: true, ...value.revision, checked: [...value.checked] };
+        cabin.repasoRevision = { fecha, verificado: true, ...value.revision, checked: [...value.checked],
+            total: sectionsFor(value.plantilla).reduce((sum, section) => sum + section.items.length, 0) };
         window.HAIKU_CABANAS_SITES_V1?.actualizarEstadoCabana?.(numero);
         if (opened?.key === key(fecha, numero)) render();
     }
     async function prepare({ fecha }) {
         const version = sequence, currentEpoch = epoch;
-        const results = await Promise.all([
+        const [cabanasR, catalogoR, revisionesR, plantillas] = await Promise.all([
             client().from('cabanas').select('id,numero').eq('activa', true),
             client().from('checklist_items').select('id,nombre,categoria').eq('activo', true).in('categoria', profile.sections.map(s => s.category)),
-            client().from('revisiones_cabana').select(columns).eq('fecha', fecha).eq('tipo_revision', 'repaso').neq('estado', 'cancelada').order('creado_en', {ascending:false})
+            client().from('revisiones_cabana').select(columns).eq('fecha', fecha).eq('tipo_revision', 'repaso').neq('estado', 'cancelada').order('creado_en', {ascending:false}),
+            editor()?.leer(fecha, null, 'repaso')
         ]);
-        results.forEach(r => { if (r.error) throw r.error; });
+        [cabanasR, catalogoR, revisionesR].forEach(r => { if (r.error) throw r.error; });
         const mapping = new Map();
         for (const section of profile.sections) for (const item of section.items) {
-            const matches = results[1].data.filter(r => r.categoria === section.category && r.nombre === item.label);
+            const matches = catalogoR.data.filter(r => r.categoria === section.category && r.nombre === item.label);
             if (matches.length !== 1) throw new Error('No se pudo cargar la lista de Repaso. Vuelve a intentarlo.');
             mapping.set(item.id, matches[0].id);
         }
-        const revisions = results[2].data || [], ids = revisions.map(r => r.id);
+        const revisions = revisionesR.data || [], ids = revisions.map(r => r.id);
         let items = [];
         if (ids.length) {
             const response = await client().from('revision_items').select('revision_id,checklist_item_id,estado').in('revision_id', ids);
             if (response.error) throw response.error;
             items = response.data || [];
         }
-        return { version, epoch: currentEpoch, cabins: results[0].data || [], mapping, revisions, items };
+        return { version, epoch: currentEpoch, cabins: cabanasR.data || [], mapping, revisions, items, plantillas };
     }
     function accept(fecha, data) {
         if (!data || data.epoch !== epoch || data.version !== sequence) return;
         catalog = data.mapping; cabins = data.cabins;
-        const reverse = new Map([...catalog].map(([a,b]) => [b,a]));
         for (const cabin of cabins) {
             const revision = data.revisions.find(r => r.cabana_id === cabin.id) || null;
+            const previous = record(fecha, cabin.numero).plantilla;
+            const plantilla = data.plantillas ? editor().plantillaDe(data.plantillas, cabin.numero, revision)
+                : previous && (!revision || previous.version_id === revision.plantilla_id) ? previous : null;
+            const reverse = new Map([...catalogFor(plantilla)].map(([a,b]) => [b,a]));
             const checked = revision ? data.items.filter(i => i.revision_id === revision.id && i.estado === 'ok').map(i => reverse.get(i.checklist_item_id)).filter(Boolean) : [];
-            cache.set(key(fecha, cabin.numero), { revision, checked });
+            cache.set(key(fecha, cabin.numero), { revision, checked, plantilla });
+            editor()?.publicar(fecha, cabin.numero, cabin.id, data.plantillas, plantilla, 'repaso');
             publish(fecha, String(cabin.numero));
         }
     }
@@ -111,7 +128,12 @@
         const id = `${ctx.key}:${field}`;
         let q = queues.get(id);
         if (q) q.desired = value;
-        else { q = {context:ctx,field,desired:value,waiters:[],running:false}; queues.set(id,q); }
+        else {
+            const current = record(ctx.fecha, ctx.numero);
+            const templateVersion = current.plantilla?.version_id ?? current.revision?.plantilla_id ?? null;
+            q = {context:ctx,field,desired:value,waiters:[],running:false,templateVersion};
+            queues.set(id,q);
+        }
         ++sequence;
         const promise = new Promise((resolve,reject) => q.waiters.push({resolve,reject}));
         publish(ctx.fecha,ctx.numero);
@@ -130,7 +152,10 @@
                     const revision = await ensure(ctx);
                     if (ctx.user !== user() || ctx.epoch !== epoch) throw new Error('La sesión cambió.');
                     if (q.field.startsWith('check:')) {
-                        const item = catalog.get(q.field.slice(6));
+                        if ((revision.plantilla_id ?? null) !== q.templateVersion) {
+                            throw new Error('La lista de Repaso cambió. Vuelve a marcar el elemento en la lista actualizada.');
+                        }
+                        const item = catalogFor(record(ctx.fecha, ctx.numero).plantilla).get(q.field.slice(6));
                         if (!item) throw new Error('El ítem de Repaso aún no está disponible.');
                         const result = await client().from('revision_items').upsert({revision_id:revision.id,checklist_item_id:item,estado:value?'ok':'pendiente',revisado_en:new Date().toISOString()},{onConflict:'revision_id,checklist_item_id'});
                         if (result.error) throw result.error;
@@ -165,13 +190,16 @@
         const host = root(); if (!host || !opened || opened.fecha !== date() || opened.user !== user()) return;
         const ctx = opened, data = projected(ctx.fecha,ctx.numero);
         const list = host.querySelector('#repaso-checklist');
-        if (list.dataset.owner !== ctx.key) {
+        const sections = sectionsFor(data.plantilla);
+        const version = data.plantilla?.version_id ?? '';
+        if (list.dataset.owner !== ctx.key || (list.dataset.templateVersion ?? '') !== version) {
             list.dataset.owner = ctx.key;
-            list.innerHTML = profile.sections.map(s => `<section class="checklist-area cb-sector"><button type="button" class="cb-sector-head" aria-expanded="false"><span><strong>${esc(s.title)}</strong><small data-repaso-count="${s.id}"></small></span><span aria-hidden="true">+</span></button><div class="cb-sector-body" hidden><div class="checklist-items cb-group">${s.items.map(i=>`<label class="checklist-item cb-check"><input type="checkbox" data-repaso-item="${i.id}"><span>${esc(i.label)}</span></label>`).join('')}</div><div class="checklist-section-detail"><label class="checklist-section-detail-label" for="repaso-detail-${s.id}">DETALLE:</label><button type="button" class="checklist-section-detail-copy" data-repaso-copy="${s.id}" aria-label="Copiar detalle de ${esc(s.title)}" title="Copiar detalle de ${esc(s.title)}"><svg class="copy-icon copy-icon-default" viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="9" height="10" rx="1.5"></rect><path d="M4.5 13.5h-1a1.5 1.5 0 0 1-1.5-1.5V3.5A1.5 1.5 0 0 1 3.5 2h8A1.5 1.5 0 0 1 13 3.5v1"></path></svg><svg class="copy-icon copy-icon-success" viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 3.5 3.5L16 5.5"></path></svg></button><span class="checklist-section-detail-copy-status" aria-live="polite" aria-atomic="true"></span><textarea class="checklist-section-detail-input" id="repaso-detail-${s.id}" data-repaso-text="${s.id}" rows="3"></textarea></div></div></section>`).join('');
+            list.dataset.templateVersion = version;
+            list.innerHTML = sections.map(s => `<section class="checklist-area cb-sector"><button type="button" class="cb-sector-head" aria-expanded="false"><span><strong>${esc(s.title)}</strong><small data-repaso-count="${s.id}"></small></span><span aria-hidden="true">+</span></button><div class="cb-sector-body" hidden><div class="checklist-items cb-group">${s.items.map(i=>`<label class="checklist-item cb-check"><input type="checkbox" data-repaso-item="${i.id}"><span>${esc(i.label)}</span></label>`).join('')}</div><div class="checklist-section-detail"><label class="checklist-section-detail-label" for="repaso-detail-${s.id}">DETALLE:</label><button type="button" class="checklist-section-detail-copy" data-repaso-copy="${s.id}" aria-label="Copiar detalle de ${esc(s.title)}" title="Copiar detalle de ${esc(s.title)}"><svg class="copy-icon copy-icon-default" viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="6.5" width="9" height="10" rx="1.5"></rect><path d="M4.5 13.5h-1a1.5 1.5 0 0 1-1.5-1.5V3.5A1.5 1.5 0 0 1 3.5 2h8A1.5 1.5 0 0 1 13 3.5v1"></path></svg><svg class="copy-icon copy-icon-success" viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10.5 3.5 3.5L16 5.5"></path></svg></button><span class="checklist-section-detail-copy-status" aria-live="polite" aria-atomic="true"></span><textarea class="checklist-section-detail-input" id="repaso-detail-${s.id}" data-repaso-text="${s.id}" rows="3"></textarea></div></div></section>`).join('');
         }
-        host.querySelector('#repaso-count').textContent = `${data.checked.length}/26`;
+        host.querySelector('#repaso-count').textContent = `${data.checked.length}/${sections.reduce((sum, section) => sum + section.items.length, 0)}`;
         for(const input of list.querySelectorAll('[data-repaso-item]')) input.checked = data.checked.includes(input.dataset.repasoItem);
-        for(const s of profile.sections) host.querySelector(`[data-repaso-count="${s.id}"]`).textContent = `${s.items.filter(i=>data.checked.includes(i.id)).length}/${s.items.length} revisados`;
+        for(const s of sections) host.querySelector(`[data-repaso-count="${s.id}"]`).textContent = `${s.items.filter(i=>data.checked.includes(i.id)).length}/${s.items.length} revisados`;
         for(const input of host.querySelectorAll('[data-repaso-text]')) {
             const field = input.dataset.repasoText;
             const stored = readDraft(ctx,field);

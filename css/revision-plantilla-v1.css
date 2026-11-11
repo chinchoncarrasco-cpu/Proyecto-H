@@ -10,7 +10,7 @@
 #seccion-cabanas #cabinsReviewEditor[hidden],
 #seccion-cabanas #cabinsReviewTemplateSaved[hidden],
 #seccion-cabanas .pr-editing .cb-detail-review > .cb-detail-section-title { display: none; }
-#seccion-cabanas #cabinsDetail.pr-editing #revision-individual { display: none !important; }
+#seccion-cabanas #cabinsDetail.pr-editing :is(#revision-individual, #repaso-individual, #aseo-express-individual) { display: none !important; }
 #seccion-cabanas #cabinsReviewEditor {
     display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px;
     min-width: 0; color: var(--cb-text); font-size: 13px;
@@ -116,6 +116,16 @@
 #seccion-cabanas details[open] > summary .pr-fold { mask-image: url("../assets/icons/personalizar-revision/down.svg"); }
 @media (max-width: 800px) {
     #seccion-cabanas #cabinsReviewEditor { display: flex; flex-direction: column; gap: 8px; }
+    #seccion-cabanas .cb-detail-review > .cb-detail-section-title:has(.pr-button:not([hidden])) {
+        flex-wrap: wrap; gap: 8px;
+    }
+    #seccion-cabanas .cb-detail-review > .cb-detail-section-title:has(.pr-button:not([hidden])) > div {
+        flex-basis: 100%;
+    }
+    #seccion-cabanas .cb-detail-review .cb-mode-select:has(+ .pr-button:not([hidden])) {
+        flex: 1 1 9rem; min-width: 0;
+    }
+    #seccion-cabanas .cb-detail-review .pr-button { flex: 0 0 auto; white-space: nowrap; }
     #seccion-cabanas .pr-toolbar { padding: 8px 9px; justify-content: space-between; }
     #seccion-cabanas .pr-areas { columns: 1; }
     #seccion-cabanas .pr-item { min-height: 44px; }
