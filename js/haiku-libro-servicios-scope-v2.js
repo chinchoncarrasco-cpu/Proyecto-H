@@ -2538,51 +2538,52 @@
         };
 
         const cabecera = crear("header", "haku-libro-resultado-sites__cabecera");
+        const avatar = crear("span", "haku-libro-resultado-sites__avatar", "H");
+        avatar.setAttribute("aria-hidden", "true");
         const identificacion = crear("div", "haku-libro-resultado-sites__identificacion");
         identificacion.append(
-            crear("span", "haku-libro-resultado-sites__kicker", "LIBRO · PROYECTO H"),
-            crear("strong", "haku-libro-resultado-sites__titulo", "Servicios y notas")
+            crear("strong", "haku-libro-resultado-sites__titulo", "Haku"),
+            crear("span", "haku-libro-resultado-sites__kicker", "Asistente operativo")
         );
         const accionesCabecera = crear("div", "haku-libro-resultado-sites__cabecera-acciones");
-        accionesCabecera.append(crear("span", "haku-libro-resultado-sites__chip", "Guardado"));
         const cerrarHaku = document.getElementById("haiku-asistente-cerrar");
         if (cerrarHaku) {
-            const cerrar = crear("button", "haku-libro-resultado-sites__cerrar", "×");
+            const cerrar = crear("button", "haku-libro-resultado-sites__cerrar");
+            const icono = crear("span", "haiku-compacto-cerrar-icono");
+            icono.setAttribute("aria-hidden", "true");
+            cerrar.append(icono);
             cerrar.type = "button";
             cerrar.setAttribute("aria-label", "Cerrar Haku");
             cerrar.addEventListener("click", () => cerrarHaku.click());
             accionesCabecera.append(cerrar);
         }
-        cabecera.append(identificacion, accionesCabecera);
+        cabecera.append(avatar, identificacion, accionesCabecera);
 
         const tarjeta = crear("section", "haku-libro-resultado-sites__tarjeta");
         const mensaje = crear("div", "haku-libro-resultado-sites__mensaje");
-        const marca = crear("span", "haku-libro-resultado-sites__marca", "✓");
-        marca.setAttribute("aria-hidden", "true");
         const texto = crear("div", "haku-libro-resultado-sites__mensaje-texto");
-        texto.append(
-            crear("span", "haku-libro-resultado-sites__origen", "LIBRO → PROYECTO H"),
-            crear("strong", "haku-libro-resultado-sites__exito", "Incorporación completada"),
-            crear("p", "haku-libro-resultado-sites__descripcion", "Proyecto H confirmó la incorporación. El Libro original no fue modificado.")
-        );
-        mensaje.append(marca, texto);
+        texto.append(crear("strong", "haku-libro-resultado-sites__exito", "Incorporación completada"));
+        mensaje.setAttribute("role", "status");
+        mensaje.append(texto);
 
         const metricas = crear("div", "haku-libro-resultado-sites__metricas");
         for (const [etiqueta, cantidad] of [
-            ["Servicios", data.servicios_creados],
-            ["Notas", data.notas_creadas],
-            ["Omitidos", omitidos]
+            ["servicio", data.servicios_creados],
+            ["nota", data.notas_creadas],
+            ["omitido", omitidos]
         ]) {
             const metrica = crear("div", "haku-libro-resultado-sites__metrica");
-            metrica.append(crear("span", "", etiqueta), crear("strong", "", Number(cantidad || 0)));
+            metrica.append(crear("strong", "", Number(cantidad || 0)), crear("span", "", etiqueta + (Number(cantidad) === 1 ? "" : "s")));
             metricas.append(metrica);
         }
 
         const detalle = crear("details", "haku-libro-resultado-sites__detalle");
+        detalle.hidden = true;
+        detalle.id = `haku-recibo-historial-${uuid()}`;
         const resumen = crear("summary", "haku-libro-resultado-sites__detalle-cabecera");
         resumen.append(
             crear("span", "haku-libro-resultado-sites__detalle-icono", "▤"),
-            crear("span", "", "Ver detalle de la revisión anterior"),
+            crear("span", "", "Revisión anterior"),
             crear("span", "haku-libro-resultado-sites__flecha", "⌄")
         );
         const contenido = crear("div", "haku-libro-resultado-sites__detalle-contenido");
@@ -2610,6 +2611,21 @@
         detalle.append(resumen, contenido);
 
         const pie = crear("footer", "haku-libro-resultado-sites__pie");
+        const descripcion = crear("p", "haku-libro-resultado-sites__descripcion", "Guardado en Proyecto H · Libro original sin cambios");
+        const acciones = crear("div", "haku-libro-resultado-sites__acciones");
+        const anterior = crear("button", "haku-libro-resultado-sites__anterior", "Ver revisión anterior");
+        anterior.type = "button";
+        anterior.setAttribute("aria-expanded", "false");
+        anterior.setAttribute("aria-controls", detalle.id);
+        anterior.addEventListener("click", () => {
+            detalle.hidden = !detalle.hidden;
+            detalle.open = !detalle.hidden;
+            anterior.setAttribute("aria-expanded", String(!detalle.hidden));
+        });
+        detalle.addEventListener("toggle", () => {
+            if (!detalle.open) detalle.hidden = true;
+            anterior.setAttribute("aria-expanded", String(detalle.open));
+        });
         const revisar = crear("button", "haku-libro-resultado-sites__revisar", "Revisar de nuevo");
         revisar.type = "button";
         revisar.disabled = !textoOriginal;
@@ -2620,7 +2636,8 @@
                 if (revisar.isConnected) revisar.disabled = false;
             });
         });
-        pie.append(revisar);
+        acciones.append(anterior, revisar);
+        pie.append(descripcion, acciones);
         tarjeta.append(mensaje, metricas, detalle, pie);
 
         card.className = "haiku-asistente-preview haku-incorporacion-resultado haku-incorporacion-resultado--servicios haku-libro-resultado-sites";

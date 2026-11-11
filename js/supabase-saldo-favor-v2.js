@@ -12,6 +12,8 @@
     let registrando = false;
     let aplicando = false;
     let resumenModal = null;
+    let aperturaModal = 0;
+    let focoAnterior = null;
 
     const MEDIOS = Object.freeze({
         transferencia: "Transferencia",
@@ -93,16 +95,53 @@
     // ---------- Check-out ----------
     function crearModal(){
         if(document.getElementById("haiku-saldo-favor-overlay"))return;
-        const o=document.createElement("div");o.id="haiku-saldo-favor-overlay";o.className="haiku-saldo-favor-overlay";o.hidden=true;o.innerHTML=`<div class="haiku-saldo-favor-modal" role="dialog" aria-modal="true"><div class="haiku-saldo-favor-modal-head"><div><small>Control financiero</small><h3>Usar saldo a favor</h3></div><button type="button" data-credito-cerrar>×</button></div><div class="haiku-saldo-favor-modal-body"><div class="haiku-saldo-favor-total"><span>Disponible</span><strong id="credito-disponible">$0</strong></div><label class="haiku-saldo-favor-campo"><span>Aplicar a</span><select id="credito-cargo"></select></label><label class="haiku-saldo-favor-campo"><span>Monto a usar</span><div class="haiku-saldo-favor-monto"><span>$</span><input id="credito-monto" type="number" min="1" step="1000" inputmode="numeric"></div></label><div id="credito-preview" class="haiku-saldo-favor-preview"></div><div class="haiku-saldo-favor-origenes"><div class="haiku-saldo-favor-origenes-head"><span>Origen del saldo a favor</span><small>Se conservan los datos del pago original</small></div><div id="credito-fuentes"></div></div><div id="credito-estado" class="haiku-saldo-favor-estado"></div><div class="haiku-saldo-favor-actions"><button type="button" class="secundario" data-credito-cerrar>Cancelar</button><button type="button" id="credito-aplicar">Usar saldo a favor</button></div></div></div>`;document.body.appendChild(o);
+        const o=document.createElement("div");o.id="haiku-saldo-favor-overlay";o.className="haiku-saldo-favor-overlay";o.hidden=true;
+        o.innerHTML=`<div class="haiku-saldo-favor-modal" role="dialog" aria-modal="true" aria-labelledby="credito-titulo">
+            <div class="haiku-saldo-favor-modal-head"><div><h3 id="credito-titulo">Usar saldo a favor</h3><p id="credito-contexto"></p></div><button type="button" data-credito-cerrar aria-label="Cerrar saldo a favor"><span class="haiku-compacto-cerrar-icono" aria-hidden="true"></span></button></div>
+            <div class="haiku-saldo-favor-modal-body">
+                <div class="haiku-saldo-favor-total"><span>Disponible</span><strong id="credito-disponible">$0</strong></div>
+                <div class="haiku-saldo-favor-distribucion">
+                    <div class="haiku-saldo-favor-formulario">
+                        <label class="haiku-saldo-favor-campo"><span>Aplicar a</span><span class="haiku-saldo-favor-select"><select id="credito-cargo" aria-describedby="credito-cargo-detalle"></select><span class="haiku-compacto-seleccionar-icono" aria-hidden="true"></span></span></label>
+                        <p id="credito-cargo-detalle"></p>
+                        <label class="haiku-saldo-favor-campo"><span>Monto a usar</span><span class="haiku-saldo-favor-monto"><span aria-hidden="true">$</span><input id="credito-monto" type="number" min="1" step="1000" inputmode="numeric" aria-describedby="credito-estado"></span></label>
+                    </div>
+                    <div class="haiku-saldo-favor-resultado"><strong>Después de aplicar</strong><div id="credito-preview" class="haiku-saldo-favor-preview" aria-live="polite"></div></div>
+                    <div class="haiku-saldo-favor-origenes" aria-label="Origen del saldo a favor"><div id="credito-fuentes"></div></div>
+                </div>
+                <div id="credito-estado" class="haiku-saldo-favor-estado" role="status" aria-live="polite"></div>
+                <div class="haiku-saldo-favor-actions"><button type="button" class="secundario" data-credito-cerrar>Cancelar</button><button type="button" id="credito-aplicar">Usar saldo a favor</button></div>
+            </div></div>`;document.body.appendChild(o);
         o.addEventListener("click",e=>{if(e.target===o)cerrarModal()});o.querySelectorAll("[data-credito-cerrar]").forEach(b=>b.addEventListener("click",cerrarModal));o.querySelector("#credito-cargo")?.addEventListener("change",actualizarModal);o.querySelector("#credito-monto")?.addEventListener("input",preview);o.querySelector("#credito-aplicar")?.addEventListener("click",aplicarCredito);
+        o.addEventListener("keydown",e=>{
+            if(e.key==="Escape"){e.preventDefault();cerrarModal()}
+            if(e.key!=="Tab")return;
+            const controles=[...o.querySelectorAll("button,input,select")].filter(el=>!el.disabled&&!el.hidden);
+            const primero=controles[0],ultimo=controles[controles.length-1];
+            if(e.shiftKey&&document.activeElement===primero){e.preventDefault();ultimo?.focus()}
+            else if(!e.shiftKey&&document.activeElement===ultimo){e.preventDefault();primero?.focus()}
+        });
     }
-    function cerrarModal(){const o=document.getElementById("haiku-saldo-favor-overlay");if(!o||aplicando)return;o.hidden=true;document.body.style.overflow="";resumenModal=null}
+    function cerrarModal(){const o=document.getElementById("haiku-saldo-favor-overlay");if(!o||aplicando)return;aperturaModal++;o.hidden=true;document.body.style.overflow="";resumenModal=null;focoAnterior?.focus?.()}
     function cargoActual(){const id=document.getElementById("credito-cargo")?.value||"";return(resumenModal?.cargos_servicio||[]).find(c=>String(c.cargo_id)===id)}
-    function actualizarModal(){const c=cargoActual(),i=document.getElementById("credito-monto");if(!c||!i||!resumenModal)return;const max=Math.max(0,Math.min(Number(c.saldo||0),Number(resumenModal.saldo_a_favor||0)));i.max=String(max);i.value=String(max);preview()}
-    function preview(){const c=cargoActual(),p=document.getElementById("credito-preview"),i=document.getElementById("credito-monto");if(!c||!p||!i||!resumenModal)return;const credito=Number(resumenModal.saldo_a_favor||0),saldo=Number(c.saldo||0),m=Math.max(0,Math.min(Math.round(Number(i.value||0)),credito,saldo));p.innerHTML=`<div><span>Saldo servicio después</span><strong>${money(saldo-m)}</strong></div><div><span>Saldo a favor después</span><strong>${money(credito-m)}</strong></div>`}
+    function actualizarModal(){const c=cargoActual(),i=document.getElementById("credito-monto");if(!c||!i||!resumenModal)return;const max=Math.max(0,Math.min(Number(c.saldo||0),Number(resumenModal.saldo_a_favor||0)));i.max=String(max);i.value=String(max);
+        document.getElementById("credito-contexto").textContent=[c.cabana?`CAB ${c.cabana}`:"",resumenModal.titular||"Reserva"].filter(Boolean).join(" · ");
+        document.getElementById("credito-cargo-detalle").textContent=[c.fecha_servicio?fecha(fechaISO(c.fecha_servicio)):"",hora(c.hora),`Pendiente ${money(c.saldo)}`].filter(Boolean).join(" · ");preview()}
+    function preview(){const c=cargoActual(),p=document.getElementById("credito-preview"),i=document.getElementById("credito-monto");if(!c||!p||!i||!resumenModal)return;const credito=Number(resumenModal.saldo_a_favor||0),saldo=Number(c.saldo||0),m=Math.max(0,Math.min(Math.round(Number(i.value||0)),credito,saldo));p.innerHTML=`<div><span>Pendiente del servicio</span><strong>${money(saldo-m)}</strong></div><div><span>Saldo a favor restante</span><strong>${money(credito-m)}</strong></div>`}
     async function abrirModal(reservaId){
-        crearModal();const o=document.getElementById("haiku-saldo-favor-overlay");o.hidden=false;o.dataset.reservaId=String(reservaId);document.body.style.overflow="hidden";document.getElementById("credito-estado").textContent="Cargando...";document.getElementById("credito-aplicar").disabled=true;
-        try{resumenModal=await resumen(reservaId,true);const credito=Number(resumenModal?.saldo_a_favor||0),cargos=(resumenModal?.cargos_servicio||[]).filter(c=>Number(c.saldo||0)>0);if(credito<=0)throw new Error("La reserva ya no tiene saldo a favor disponible.");if(!cargos.length)throw new Error("No hay servicios pendientes donde aplicar el saldo a favor.");document.getElementById("credito-disponible").textContent=money(credito);document.getElementById("credito-cargo").innerHTML=cargos.map(c=>`<option value="${esc(c.cargo_id)}">${esc(`${c.cabana?`CAB ${c.cabana} · `:""}${c.hora?`${hora(c.hora)} · `:""}${c.concepto} · Pend. ${money(c.saldo)}`)}</option>`).join("");document.getElementById("credito-fuentes").innerHTML=(resumenModal.fuentes||[]).map(f=>`<div class="haiku-saldo-favor-fuente"><div><strong>${money(f.disponible)}</strong><span>${esc(medio(f.medio_pago))}</span></div><small>${esc(origen(f,false))}</small></div>`).join("");document.getElementById("credito-estado").textContent="";document.getElementById("credito-aplicar").disabled=false;actualizarModal()}catch(e){console.error("HAIKU · modal saldo a favor:",e);document.getElementById("credito-estado").textContent=e?.message||"No fue posible cargar el saldo a favor."}
+        if(aplicando)return;crearModal();const o=document.getElementById("haiku-saldo-favor-overlay"),turno=++aperturaModal;
+        focoAnterior=document.activeElement;resumenModal=null;o.hidden=false;o.dataset.reservaId=String(reservaId);document.body.style.overflow="hidden";
+        for(const id of ["credito-contexto","credito-cargo-detalle","credito-cargo","credito-preview","credito-fuentes"])document.getElementById(id).textContent="";
+        document.getElementById("credito-disponible").textContent="—";document.getElementById("credito-monto").value="";
+        document.getElementById("credito-estado").textContent="Cargando...";document.getElementById("credito-aplicar").disabled=true;
+        o.querySelector("[data-credito-cerrar]")?.focus();
+        try{const datos=await resumen(reservaId,true);if(turno!==aperturaModal||o.hidden)return;resumenModal=datos;
+            const credito=Number(resumenModal?.saldo_a_favor||0),cargos=(resumenModal?.cargos_servicio||[]).filter(c=>Number(c.saldo||0)>0);if(credito<=0)throw new Error("La reserva ya no tiene saldo a favor disponible.");if(!cargos.length)throw new Error("No hay servicios pendientes donde aplicar el saldo a favor.");
+            document.getElementById("credito-disponible").textContent=money(credito);
+            document.getElementById("credito-cargo").innerHTML=cargos.map(c=>`<option value="${esc(c.cargo_id)}">${esc(cargos.length===1?c.concepto:`${c.concepto} · ${c.cabana?`CAB ${c.cabana} · `:""}${c.fecha_servicio?`${fecha(fechaISO(c.fecha_servicio))} · `:""}${hora(c.hora)} · ${money(c.saldo)}`)}</option>`).join("");
+            document.getElementById("credito-fuentes").innerHTML=(resumenModal.fuentes||[]).map(f=>`<div class="haiku-saldo-favor-fuente"><div><span>${esc([`Origen: ${medio(f.medio_pago)}`,f.fecha_pago?fecha(f.fecha_pago):""].filter(Boolean).join(" · "))}</span><strong>${money(f.disponible)}</strong></div><small>${esc([f.glosa?`Glosa: ${f.glosa}`:"",f.codigo_autorizacion?`CodAut: ${f.codigo_autorizacion}`:"",f.folio?`Folio: ${f.folio}`:"",f.bovtar?`BOVTAR: ${f.bovtar}`:""].filter(Boolean).join(" · ")||"Excedente del pago de la reserva")}</small></div>`).join("");
+            document.getElementById("credito-estado").textContent="";document.getElementById("credito-aplicar").disabled=false;actualizarModal();
+        }catch(e){if(turno!==aperturaModal||o.hidden)return;console.error("HAIKU · modal saldo a favor:",e);document.getElementById("credito-estado").textContent=e?.message||"No fue posible cargar el saldo a favor."}
     }
     async function aplicarCredito(){
         if(aplicando||!resumenModal)return;const c=cargoActual(),o=document.getElementById("haiku-saldo-favor-overlay"),reservaId=o?.dataset.reservaId||"",m=Math.round(Number(document.getElementById("credito-monto")?.value||0)),max=Math.min(Number(c?.saldo||0),Number(resumenModal.saldo_a_favor||0));if(!c||!reservaId||m<=0||m>max)return document.getElementById("credito-estado").textContent="Revisa el monto a utilizar.";if(!window.haikuTienePermiso?.("pagos.registrar"))return document.getElementById("credito-estado").textContent="Tu usuario no tiene permiso para aplicar pagos.";

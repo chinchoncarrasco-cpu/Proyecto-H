@@ -17,7 +17,7 @@ async function panelSinDatos() {
         open() {}, write: s => { html = s; }, close() {} };
     await vm.runInNewContext(read('panel.html').match(/<script>([\s\S]*)<\/script>/)[1], {
         document, window: { supabase: { createClient() {} } },
-        fetch: async () => ({ ok: true, text: async () => read('index.html') }), Date, console
+        fetch: async () => ({ ok: true, text: async () => read('index.html') }), Date, console, URLSearchParams, location: {search: ""}
     });
     assert.equal((html.match(/src="js\/haiku-tema-v1.js/g) || []).length, 1);
     assert.equal((html.match(/href="css\/haiku-tema-oscuro-v1.css/g) || []).length, 1);
@@ -146,7 +146,7 @@ async function main() {
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 }
 
-function auditarContraste() {
+function auditarContraste(scope = "body") {
     const rgb = s => {
         const a = s.match(/[\d.]+/g)?.map(Number) || [0,0,0,0];
         return s.startsWith('color(') ? a.map((v,i) => i < 3 ? v*255 : v) : a;
@@ -155,7 +155,7 @@ function auditarContraste() {
     const luminance = a => a.slice(0,3).map(v => { v/=255; return v<=.04045 ? v/12.92 : ((v+.055)/1.055)**2.4; })
         .reduce((sum,v,i) => sum+v*[.2126,.7152,.0722][i],0);
     const failures = [];
-    for (const e of document.querySelectorAll('body *')) {
+    for (const e of document.querySelectorAll(scope + ' *')) {
         if (e.closest('script,style,#libro-reserva-visor table') || !e.getClientRects().length || e.closest('details:not([open])') && !e.closest('summary')) continue;
         const s = getComputedStyle(e), r = e.getBoundingClientRect();
         if (s.visibility !== 'visible' || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
@@ -171,4 +171,5 @@ function auditarContraste() {
     return failures;
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
+module.exports = {panelSinDatos, auditarContraste};

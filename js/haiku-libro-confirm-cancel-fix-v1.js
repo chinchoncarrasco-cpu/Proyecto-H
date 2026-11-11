@@ -206,18 +206,9 @@
         const grupoIncorporados = (kind, titulo, cantidad, respuesta, estadoCreado) => {
             const grupo = crear("section", "haku-libro-resultado-sites__incorporados");
             grupo.dataset.tipo = kind;
-            grupo.style.padding = '14px 15px';
-            grupo.style.borderBottom = '1px solid #dce8e0';
-            grupo.style.minWidth = '0';
             grupo.setAttribute("aria-label", titulo);
             const encabezado = crear("div", "haku-libro-resultado-sites__grupo-cabecera");
-            encabezado.style.display = 'flex';
-            encabezado.style.alignItems = 'center';
-            encabezado.style.justifyContent = 'space-between';
-            encabezado.style.gap = '8px';
             const heading = crear("h3", "", titulo);
-            heading.style.margin = '0'; heading.style.fontSize = '12px';
-            heading.style.lineHeight = '1.4'; heading.style.color = '#254531';
             encabezado.append(heading,
                 crear("span", "haku-libro-resultado-sites__chip", Number(cantidad || 0)));
             grupo.append(encabezado);
@@ -239,6 +230,8 @@
                     "El total fue confirmado, pero no se pudo identificar con seguridad el detalle. Revisa la reserva antes de repetir la operación.");
                 aviso.setAttribute("role", "status"); grupo.append(aviso);
             } else if (!cantidad) {
+                // El cero sigue acreditado en el resumen; no ocupa otro bloque.
+                grupo.hidden = true;
                 grupo.append(crear("p", "haku-libro-resultado-sites__grupo-vacio", kind === 'nota'
                     ? "No se incorporaron notas en esta operación."
                     : "No se incorporaron servicios en esta operación."));
@@ -248,27 +241,28 @@
                 const cabana = item.reserva?.cabana ? `CAB ${item.reserva.cabana} · ` : '';
                 const nombre = kind === 'nota' ? 'Nota de la reserva'
                     : item.mapa?.nombre || item.servicio?.concepto || 'Servicio';
-                fila.append(crear("strong", "", `${cabana}${item.reserva?.titular || 'Reserva'} · ${nombre}`),
-                    crear("span", "haku-libro-resultado-sites__estado", kind === 'nota' ? 'Nota incorporada' : 'Servicio incorporado'));
+                fila.append(crear("strong", "", `${cabana}${item.reserva?.titular || 'Reserva'}`));
                 const p = item.payload || {};
                 if (kind === 'servicio') {
-                    const datos = [p.fecha_servicio,
-                        p.hora ? `${p.hora}${item.hora_fin ? '–' + item.hora_fin : ''}` : null,
-                        p.cantidad != null ? `Cantidad: ${p.cantidad}` : null,
+                    const datos = [nombre, p.fecha_servicio,
+                        p.hora ? `${p.hora}${item.hora_fin ? '–' + item.hora_fin : ''}` : null].filter(Boolean);
+                    fila.append(crear("p", "haku-libro-resultado-sites__servicio", datos.join(' · ')));
+                    const condiciones = [p.cantidad != null && Number(p.cantidad) !== 1 ? `Cantidad: ${p.cantidad}` : null,
                         p.tipo_cobro === 'cortesia' ? 'Cortesía' : p.tipo_cobro === 'normal' ? 'Cobrable' : null].filter(Boolean);
-                    if (datos.length) fila.append(crear("p", "", datos.join(' · ')));
+                    if (condiciones.length) fila.append(crear("span", "haku-libro-resultado-sites__estado", condiciones.join(' · ')));
                 }
                 const descripcion = kind === 'nota' ? p.texto || item.texto : item.servicio?.texto_original;
                 if (descripcion) {
                     const texto = crear("p", "haku-libro-resultado-sites__texto-incorporado", descripcion);
-                    texto.style.whiteSpace = 'pre-wrap'; fila.append(texto);
+                    if (kind === 'nota') fila.append(texto);
+                    else {
+                        const fuente = crear("details", "haku-libro-resultado-sites__fuente");
+                        fuente.append(crear("summary", "", "Texto del Libro"), texto);
+                        fila.append(fuente);
+                    }
                 }
                 grupo.append(fila);
             }
-            grupo.querySelectorAll('.haku-libro-resultado-sites__grupo-aviso,.haku-libro-resultado-sites__grupo-vacio').forEach(p => {
-                p.style.margin = '8px 0 0'; p.style.fontSize = '10px'; p.style.lineHeight = '1.5';
-                p.style.color = p.className.endsWith('aviso') ? '#805e2e' : '#617267';
-            });
             return grupo;
         };
         const serviciosIncorporados = grupoIncorporados('servicio', 'Servicios incorporados',
@@ -278,6 +272,11 @@
 
         tarjeta.insertBefore(serviciosIncorporados, detalle);
         tarjeta.insertBefore(notasIncorporadas, detalle);
+        // Cuando sólo hay un tipo, el resumen y sus filas ya lo identifican.
+        const visibles = [serviciosIncorporados, notasIncorporadas].filter(grupo => !grupo.hidden);
+        if (visibles.length === 1 && !visibles[0].querySelector('.haku-libro-resultado-sites__grupo-aviso')) {
+            visibles[0].querySelector('.haku-libro-resultado-sites__grupo-cabecera').hidden = true;
+        }
     }
 
     async function importarSeguro(card, textoOriginal, servicioConfirmado = null) {
