@@ -60,6 +60,7 @@
 
                 mapa.set(id, {
                     reservaId: id,
+                    estadiaId: String(registro.estadiaId || ""),
                     cabana: String(cabana),
                     fecha: String(registro.fechaOrigenReserva || fecha).slice(0, 10),
                     titular: registro.titular || "Full Day"
@@ -351,7 +352,11 @@
 
             if (accion === "ver") {
                 fondo.hidden = true;
-                abrirFichaFullDay(info);
+                window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(
+                    info.reservaId,
+                    info.disparador,
+                    { estadiaId: info.estadiaId, numeroCabana: info.cabana }
+                );
                 return;
             }
 
@@ -363,9 +368,9 @@
         return fondo;
     }
 
-    function abrirModalFullDay(info) {
+    function abrirModalFullDay(info, disparador) {
         const fondo = asegurarModalFullDay();
-        fondo.__haikuFullDayInfo = info;
+        fondo.__haikuFullDayInfo = { ...info, disparador };
         fondo.querySelector("[data-fd-cabana]").textContent = `CAB ${info.cabana}`;
         fondo.querySelector("[data-fd-fecha]").textContent = formatearFechaCorta(info.fecha);
         fondo.querySelector("[data-fd-titular]").textContent = info.titular || "Full Day";
@@ -375,20 +380,6 @@
     function formatearFechaCorta(fecha) {
         const [a, m, d] = String(fecha || "").slice(0, 10).split("-");
         return a && m && d ? `${d}-${m}-${a}` : String(fecha || "—");
-    }
-
-    function abrirFichaFullDay(info) {
-        try {
-            const fechaAnterior = fechaSeleccionada;
-            fechaSeleccionada = info.fecha;
-            const botonCabana = document.querySelector(
-                `[data-ficha-cabana="${CSS.escape(String(info.cabana))}"]`
-            );
-            botonCabana?.click();
-            fechaSeleccionada = fechaAnterior;
-        } catch (error) {
-            console.warn("HAIKU · No fue posible abrir ficha Full Day:", error);
-        }
     }
 
     async function liberarFullDay(info, boton) {
@@ -470,16 +461,17 @@
                 ".calendario-reserva-barra[data-reserva-id], " +
                 ".calendario-panel-reserva[data-reserva-id]"
             );
-            if (!item) return;
+            if (item?.dataset.haikuFullday !== "1") return;
 
             const id = String(item.dataset.reservaId || "");
             const info = mapaFullDaysActivos().get(id);
-            if (!info) return;
+            if (!info || info.estadiaId !== (item.dataset.estadiaId || "") ||
+                info.cabana !== item.dataset.cabana) return;
 
             evento.preventDefault();
             evento.stopPropagation();
             evento.stopImmediatePropagation();
-            abrirModalFullDay(info);
+            abrirModalFullDay(info, item);
         },
         true
     );
