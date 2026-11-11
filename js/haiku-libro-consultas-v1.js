@@ -1267,6 +1267,7 @@
         AMBIGUO:'AMBIGUO',
         CONFLICTO:'CONFLICTO'
     });
+    const APROBACION_MANUAL_PAGO = 'Requiere aprobación manual de la asociación y el pago.';
 
     function huellaFuentePago(pago, destino = {}) {
         const referencia = pagoTieneIdentificadorFuerte(pago) ? '' :
@@ -2901,7 +2902,7 @@
             !p.advertencias?.length && !x.reserva.advertencias?.length &&
             Array.from(comp || []).filter(r => r.libro?.cabana === p.cabana &&
                 r.libro.fecha_checkin === p.fecha_bloque).length === 1;
-        const admisibles = new Set(['Requiere aprobación manual de la asociación y el pago.',
+        const admisibles = new Set([APROBACION_MANUAL_PAGO,
             'Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.']);
         if (!Number.isSafeInteger(generacion) || !/^[a-f0-9]{64}$/i.test(estado?.version || '') ||
             root.haikuTienePermiso?.('pagos.registrar') !== true || !destino ||
@@ -3374,6 +3375,36 @@
             {tipo:accion.tipo,distribucionConfirmada:accion.tipo === 'distribucion_comprobante'},true);
     }
 
+    function motivosRevisionComprobante({pago:p, reserva:r}, resolucion, pagoExtraJacuzzi) {
+        const motivos = [];
+        if (!r.pagos.includes(p)) {
+            if (!String(p.titular || '').trim()) motivos.push('Falta identificar al titular en el detalle del comprobante. Verifica a qué reserva corresponde.');
+            else if (!S.mismaPersona(r.titular,p.titular)) motivos.push('El titular del comprobante difiere del titular de la reserva. Comprueba si el pago corresponde a esta estadía.');
+            else if (r.advertencias?.length) motivos.push(...r.advertencias);
+            else if (!p.advertencias?.length) motivos.push('El Libro dejó el comprobante sin una reserva única. Verifica su cabaña y fecha de ingreso.');
+        }
+        motivos.push(...(p.advertencias || []));
+        const motivosCanonicos = resolucion && !['evidencia_insuficiente','sin_destino'].includes(resolucion.evidencia)
+            ? resolucion.motivos || [] : [];
+        motivos.push(...motivosCanonicos);
+        const medio = medioLibro(p);
+        if (!pagoTieneIdentificadorFuerte(p) && !motivosCanonicos.length && resolucion?.evidencia !== 'transferencia_bancaria_contextual') {
+            if (medio === 'transferencia') motivos.push('Falta una referencia bancaria verificable para asociar la transferencia. Revisa su comprobante.');
+            if (medio === 'efectivo') motivos.push('Comprueba la recepción del efectivo y la reserva a la que se aplica.');
+            if (medio === 'airbnb_prepaid_card') motivos.push('Comprueba la recepción del pago en Airbnb y su asociación a esta reserva.');
+            if (medio?.startsWith('webpay_')) motivos.push('Falta el código de autorización de WebPay.');
+            if (medio?.startsWith('tarjeta_')) {
+                const faltantes = [!normalizarId(p.folio) && 'el folio', !normalizarId(p.bovtar) && 'la autorización'].filter(Boolean);
+                if (faltantes.length) motivos.push(`Revisa ${faltantes.join(' y ')} en el comprobante de tarjeta.`);
+            }
+        }
+        if (p.clasificacion_financiera === 'dudoso') motivos.push(root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1?.motivoRevisionPago?.(p) ||
+            'Comprueba en el Libro si los datos de esta fila acreditan un ingreso recibido.');
+        if (pagosEfectivosMedio.has(p)) motivos.push('El medio de pago se indicó manualmente. Comprueba el comprobante y su destino.');
+        if (pagoExtraJacuzzi) motivos.push('El comprobante es por personas adicionales de la Jacuzzi. Verifica el cargo al que se aplicará.');
+        return motivos;
+    }
+
     function limitarPlanAbonosAviso(plan, origenes) {
         const porId = new Map(plan.items.map(item => [item.id, item]));
         const abonos = plan.items.filter(item => item.pagoLibro &&
@@ -3806,7 +3837,7 @@
             const manual = aprobados.has(id) && (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
             if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p) && !transferenciaContextualNueva)
                 motivos.push('Falta un identificador fuerte del comprobante; definir el medio no resuelve su identidad.');
-            if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push('Requiere aprobación manual de la asociación y el pago.');
+            if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push(APROBACION_MANUAL_PAGO);
             if (servicio4C && p.transaccion_distribuida && !manual &&
                 x.destinoFinanciero.aplicaciones.some(a => ['queque','pan','huevos'].includes(a.concepto_canon))) {
                 motivos.push('Confirma la distribución explícita del comprobante antes de preparar el pago.');
@@ -3819,7 +3850,7 @@
             if (medio === 'airbnb_prepaid_card' && !p.fecha_comprobante && pagosRelacionadosAirbnb(comp,x,confirmacionAirbnb?.referenciaExterna).length)
                 motivos.push('Existe un pago relacionado con este aviso Airbnb; vuelve a comparar y revisar su identidad antes de completar la confirmación.');
             if (conflictoIdentificador) motivos.push('Identificador repetido con monto o reserva diferente.');
-            if (!seguro && !manual) motivos.push('Requiere aprobación manual de la asociación y el pago.');
+            if (!seguro && !manual) motivos.push(APROBACION_MANUAL_PAGO);
             const movimientoAnterior = movimientosAnteriores.get(claveMovimientoRevalidado(x));
             const firmaEsperada = x.decisionPagoManual?.firmaDestino ||
                 (movimientoAnterior?.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO ?
@@ -3849,9 +3880,10 @@
                 } : {})}, aprobado_manualmente: manual };
             if (!p.fecha_comprobante && !confirmacionAirbnb) motivos.push('Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.');
             const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
-            const motivosAprobables = new Set(['Requiere aprobación manual de la asociación y el pago.', 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.',
+            const motivosAprobables = new Set([APROBACION_MANUAL_PAGO, 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.',
                 'Confirma la distribución explícita del comprobante antes de preparar el pago.']);
             item.aprobable = !transferenciaSinId && motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
+            if (motivos.includes(APROBACION_MANUAL_PAGO)) item.motivosRevisionPago = motivosRevisionComprobante(x,resolucionPago,esPagoExtraJacuzzi);
             item.destinoFinanciero = x.destinoFinanciero || null;
             item.aprobableFinancieramente = x.destinoFinanciero?.estado === 'destino_unico';
             item.backendServiciosDisponible = capacidadServicios?.disponible === true;
@@ -6127,9 +6159,9 @@
         out.querySelector(".haku-comparacion-sites-preparar").click();
     }
 
-    function fechaBreve(fecha) {
+    function fechaBreve(fecha, anioCompleto = false) {
         const m = String(fecha || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : (fecha || "sin dato");
+        return m ? `${m[3]}/${m[2]}/${anioCompleto === true ? m[1] : m[1].slice(2)}` : (fecha || "sin dato");
     }
 
     function datoIncorporacion(etiqueta, valor) {
@@ -6949,16 +6981,26 @@
             fila.append(movimientosLibroIncorporacion(item.movimientosLibro));
         }
 
-        fila.append(elemento("p", "haiku-incorporacion-propuesta", vista.detalle));
+        const motivosRevisionPago = item.categoria === 'dudosos' && item.motivos.includes(APROBACION_MANUAL_PAGO)
+            ? item.motivosRevisionPago || [] : [];
+        const origenPago = item.pagoLibro?.origen;
+        const detalle = motivosRevisionPago.length ?
+            origenPago?.hoja && origenPago.celda ? `Libro · ${origenPago.hoja} ${origenPago.celda}` : '' : vista.detalle;
+        if (detalle) fila.append(elemento("p", "haiku-incorporacion-propuesta", detalle));
         const movimiento=comparacion?.pagosDetalle?.find(x=>x.pago===item.pagoLibro);
         const franja=franjaDiferenciaPago(movimiento,comparacion);
         if (franja) fila.append(franja);
-        if (item.motivos.length) {
+        const motivosVisibles = new Set([...motivosRevisionPago, ...item.motivos.filter(motivo =>
+            !(motivosRevisionPago.length && motivo === APROBACION_MANUAL_PAGO) &&
+            !(franja && motivo === 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.'))]);
+        const fechaComprobante = item.pagoLibro?.fecha_comprobante, ingreso = item.pagoLibro?.fecha_bloque;
+        if (item.categoria === 'dudosos' && /^\d{4}-\d{2}-\d{2}$/.test(fechaComprobante || '') &&
+            /^\d{4}-\d{2}-\d{2}$/.test(ingreso || '') && fechaComprobante !== ingreso && fechaComprobante.slice(5) === ingreso.slice(5)) {
+            motivosVisibles.add(`La fecha del comprobante en el Libro es ${fechaBreve(fechaComprobante,true)} y el ingreso es ${fechaBreve(ingreso,true)}. Verifica el año del comprobante.`);
+        }
+        if (motivosVisibles.size) {
             const avisos = elemento("ul", "haiku-incorporacion-avisos");
-            item.motivos.forEach(motivo => {
-                if (franja && motivo==='Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.') return;
-                avisos.append(elemento("li", "", motivo));
-            });
+            motivosVisibles.forEach(motivo => avisos.append(elemento("li", "", motivo)));
             fila.append(avisos);
         }
         if (vista.reserva?.observaciones) {

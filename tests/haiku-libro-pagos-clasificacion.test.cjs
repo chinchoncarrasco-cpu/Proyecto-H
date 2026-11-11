@@ -44,6 +44,16 @@ const resultado = {reservas:[reserva],pagos:reserva.pagos,espacios:[],anotacione
 global.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({consultarHoja:async()=>structuredClone(resultado)});
 require('../js/haiku-libro-lenguaje-natural-v1.js');
 
+test('la explicación de una fila dudosa señala la columna que falta',()=>{
+ const api=global.HAIKU_LIBRO_LENGUAJE_NATURAL_V1, original=pago();
+ const incompleto={...original,evidencia_financiera:{...original.evidencia_financiera,
+  columnas_ocupadas:{...original.evidencia_financiera.columnas_ocupadas,concepto:false}}};
+ assert.equal(api.clasificarMovimientoFinanciero(incompleto),'dudoso');
+ assert.equal(api.motivoRevisionPago(incompleto),'Falta comprobar el concepto en el Libro.');
+ assert.equal(api.clasificarMovimientoFinanciero(original),'pago_real');
+ assert.equal(api.motivoRevisionPago(original),undefined);
+});
+
 test('Marco penalidad and Pascual refund become associated financial notes, never payments',async()=>{
  const out=await global.HAIKU_LIBRO_RESERVA_V1.consultarHoja('Sep26');
  const notas=out.anotaciones.filter(x=>x.tipo==='nota_financiera');

@@ -207,9 +207,10 @@
         return copia;
     }
 
-    function clasificarMovimientoFinanciero(pago) {
-        if (!pago || typeof pago !== "object") return "dudoso";
-        if (pago.conflicto_distribucion) return "dudoso";
+    function evaluarMovimientoFinanciero(pago) {
+        const dudoso = motivo => ({clase:"dudoso", motivo});
+        if (!pago || typeof pago !== "object") return dudoso("Faltan los datos del comprobante.");
+        if (pago.conflicto_distribucion) return dudoso("Hay datos incompatibles entre las partes del comprobante. Revisa su distribución.");
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;
         const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(String(pago.fecha_comprobante || ""));
@@ -223,7 +224,7 @@
         const importeTextual = /(?:\$|\bclp\b)\s*\d[\d.,]*/.test(texto);
         const importePropio = pago.monto !== null && pago.monto !== undefined && pago.monto !== '' && Number.isFinite(Number(pago.monto));
         const evidenciaMovimiento = importePropio || importeTextual || identificadorFuerte || ingresoExplicito || medioValido && !textoDocumental;
-        if (!evidenciaMovimiento) return "nota_financiera";
+        if (!evidenciaMovimiento) return {clase:"nota_financiera"};
         const fila = pago.evidencia_financiera?.columnas_ocupadas;
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
         const reembolso = /\b(?:reembolso|reembolsar|devolucion|nota\s+de\s+credito)\b|\bnc\s*\d+\b/.test(texto);
@@ -242,14 +243,23 @@
         // Una celda roja o amarilla dentro del bloque financiero también es una
         // nota cuando carece de todas las señales estructuradas de un comprobante.
         // El color por sí solo nunca degrada un pago con identidad financiera.
-        if (notaAdministrativa) return "dudoso";
+        if (notaAdministrativa) return dudoso("El detalle incluye una nota administrativa. Comprueba que la fila corresponda a un ingreso recibido.");
         if (reembolso || obligacion || notaDestacadaSinComprobante) {
-            return evidenciaIngresoCompleta ? "dudoso" : "nota_financiera";
+            if (!evidenciaIngresoCompleta) return {clase:"nota_financiera"};
+            return dudoso(reembolso ? "El detalle menciona un reembolso. Comprueba si la fila corresponde a un ingreso." :
+                "El detalle menciona un importe por pagar o gestionar. Comprueba si se recibió el pago.");
         }
-        if (pago.estado_pago === "por_confirmar" || pago.estado_pago === "pendiente") return "dudoso";
-        if (evidenciaIngresoCompleta) return "pago_real";
-        return "dudoso";
+        if (pago.estado_pago === "por_confirmar" || pago.estado_pago === "pendiente")
+            return dudoso("El movimiento figura como pendiente o por confirmar en el Libro.");
+        if (evidenciaIngresoCompleta) return {clase:"pago_real"};
+        const faltantes = [!montoValido && "el monto", !fechaValida && "la fecha del comprobante",
+            !medioValido && !identificadorFuerte && "el medio o el identificador del comprobante",
+            pago.evidencia_financiera?.sector !== "pagos" && "la ubicación en el bloque de pagos",
+            !fila?.detalle && "el detalle de la fila", !fila?.concepto && "el concepto"].filter(Boolean);
+        return dudoso(`Falta comprobar ${faltantes.join(", ")} en el Libro.`);
     }
+
+    const clasificarMovimientoFinanciero = pago => evaluarMovimientoFinanciero(pago).clase;
 
     function notaFinancieraDesdePago(pago, reserva) {
         return {
@@ -526,7 +536,8 @@
         ejecutarConsultaAnual(texto, consulta);
     }
 
-    root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1 = Object.freeze({clasificarMovimientoFinanciero, ajustarResultadoPagos, crearSemantica});
+    root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1 = Object.freeze({clasificarMovimientoFinanciero, ajustarResultadoPagos, crearSemantica,
+        motivoRevisionPago:pago => evaluarMovimientoFinanciero(pago).motivo});
     if (typeof module !== "undefined" && module.exports && root === globalThis)
         module.exports = root.HAIKU_LIBRO_LENGUAJE_NATURAL_V1;
     instalarCompatibilidadPagos();
