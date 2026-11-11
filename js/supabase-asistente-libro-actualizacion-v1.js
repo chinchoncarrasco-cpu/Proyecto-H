@@ -24,7 +24,7 @@
         const reserva = [destino?.titular, `CAB ${destino?.cabana ?? p.cabana ?? '—'}`].filter(Boolean).join(' · ');
         const detalles = [{etiqueta:'Monto',texto:monto}];
         if (p.fecha_comprobante) detalles.push({etiqueta:'Fecha de pago',texto:fecha(p.fecha_comprobante)});
-        return {titulo,monto,reserva,detalles};
+        return {titulo,monto,reserva,detalles,fechaIngreso:destino?.fecha_checkin};
     }
     const etiquetas = {cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado de la estadía',operador:'Responsable de la reserva',telefono:'Teléfono',correo:'Correo',rut_documento:'RUT o documento',notas_importantes:'Notas',pagos_pendientes:'Pagos pendientes',servicios:'Servicios',tipo_estadia:'Tipo de estadía'};
     const estados = {sin_checkin:'Aún no ingresa',hospedada:'Huéspedes alojados',checked_in:'Huéspedes alojados',checked_out:'Huéspedes ya salieron',check_out:'Huéspedes ya salieron',confirmada:'Confirmada',pendiente:'Pendiente de confirmar',confirmada_por_color:'Confirmada según el color del Libro',pendiente_por_color:'Pendiente según el color del Libro',cancelada:'Cancelada',no_show:'No se presentó',alojamiento:'Alojamiento',full_day:'Full Day'};
@@ -143,32 +143,34 @@
     const firmaReservaCambio=r=>JSON.stringify(['titular','rut_documento','correo','telefono','cabana','fecha_checkin','fecha_checkout','tipo_estadia','adultos','ninos','mascotas','estado_operativo','notas_importantes','pagos_pendientes','servicios'].map(k=>r?.[k]??null));
     const idCambio=x=>'cambio:'+hash(JSON.stringify([x.tipo,firmaReservaCambio(x.anterior),firmaReservaCambio(x.actual),x.cambios||[],x.evidencia||null]));
     function extraerCambiosDetectados(resultado={},generacion=null){
-        const meta={detectado_generacion:generacion,detectado_en:resultado.generado_en||new Date().toISOString()};
+        const detectado=resultado.generado_en||new Date().toISOString();
+        const meta=x=>({detectado_generacion:x.detectado_generacion??generacion,detectado_en:x.detectado_en||detectado});
         return [
-            ...lista(resultado.modificadas).map(x=>({...meta,tipo:'modificacion',anterior:structuredClone(x.anterior),actual:structuredClone(x.actual),cambios:structuredClone(x.cambios)})),
-            ...lista(resultado.nuevas).map(x=>({...meta,tipo:'nueva',anterior:null,actual:structuredClone(x.actual),cambios:[]})),
-            ...lista(resultado.cancelaciones_confirmadas).map(x=>({...meta,tipo:'cancelacion',anterior:structuredClone(x.anterior),actual:null,cambios:[],evidencia:structuredClone(x.evidencia)}))
+            ...lista(resultado.modificadas).map(x=>({...meta(x),tipo:'modificacion',anterior:structuredClone(x.anterior),actual:structuredClone(x.actual),cambios:structuredClone(x.cambios)})),
+            ...lista(resultado.nuevas).map(x=>({...meta(x),tipo:'nueva',anterior:null,actual:structuredClone(x.actual),cambios:structuredClone(lista(x.cambios))})),
+            ...lista(resultado.cancelaciones_confirmadas).map(x=>({...meta(x),tipo:'cancelacion',anterior:structuredClone(x.anterior),actual:null,cambios:[],evidencia:structuredClone(x.evidencia)}))
         ].map(x=>({...x,id:idCambio(x)}));
     }
     function mismaInstantanea(a,b){return firmaReservaCambio(a)===firmaReservaCambio(b);}
     function fusionarHistorialCambios(registro,resultado,generacion){
         const cambios=lista(registro?.cambios).map(x=>structuredClone(x)),nuevos=extraerCambiosDetectados(resultado,generacion);
+        const previos=new Set(cambios);
         for(const nuevo of nuevos){
-            if(cambios.some(x=>x.id===nuevo.id))continue;
-            const indice=cambios.findIndex(x=>x.actual&&nuevo.anterior&&mismaInstantanea(x.actual,nuevo.anterior));
-            if(indice<0){cambios.push(nuevo);continue;}
-            const anterior=cambios[indice];
-            if(nuevo.tipo==='cancelacion'){cambios[indice]=nuevo;continue;}
-            if(anterior.tipo==='nueva'){
-                const fusion={...anterior,actual:nuevo.actual,detectado_generacion:nuevo.detectado_generacion};
-                fusion.id=idCambio(fusion);cambios[indice]=fusion;continue;
-            }
+            if(cambios.some(x=>x.id===nuevo.id||lista(x.ids_detectados).includes(nuevo.id)))continue;
+            const candidatos=cambios.filter(x=>previos.has(x)&&x.actual&&nuevo.anterior&&mismaInstantanea(x.actual,nuevo.anterior));
+            if(candidatos.length!==1){cambios.push(nuevo);continue;}
+            const [anterior]=candidatos,indice=cambios.indexOf(anterior);
+            previos.delete(anterior);
+            // Abrir otra vez el informe de una versión ya fusionada no repite su cambio.
+            const ids_detectados=[...new Set([anterior.id,...lista(anterior.ids_detectados),nuevo.id])];
+            if(nuevo.tipo==='cancelacion'){cambios[indice]={...nuevo,ids_detectados};continue;}
+            const deteccion={detectado_en:nuevo.detectado_en,detectado_generacion:nuevo.detectado_generacion,ids_detectados};
             const porCampo=new Map(lista(anterior.cambios).map(x=>[x.campo,structuredClone(x)]));
             for(const cambio of lista(nuevo.cambios)){
                 const previo=porCampo.get(cambio.campo);
                 porCampo.set(cambio.campo,previo?{...cambio,antes:previo.antes}:structuredClone(cambio));
             }
-            const fusion={...anterior,actual:nuevo.actual,cambios:[...porCampo.values()],detectado_generacion:nuevo.detectado_generacion};
+            const fusion={...anterior,...deteccion,actual:nuevo.actual,cambios:[...porCampo.values()]};
             fusion.id=idCambio(fusion);cambios[indice]=fusion;
         }
         return {version:1,actualizado_en:new Date().toISOString(),cambios};
@@ -321,7 +323,8 @@
     }
     function renderizarPendientes(pendientes={}){
         const items=lista(pendientes.items),accionables=items.filter(x=>x.accionable).length;
-        let html='<section class="haku-libro-pendientes haku-pendientes-compactos haku-actualizacion-sites__historial" aria-label="Qué falta resolver en Proyecto H"><header class="haku-actualizacion-sites__historial-head"><div><span>DEL LIBRO A PROYECTO H</span><strong>Qué falta resolver en Proyecto H</strong></div><span class="haku-actualizacion-sites__chip">Revisado en Proyecto H</span></header>';
+        let html='<section class="haku-libro-pendientes haku-pendientes-compactos haku-actualizacion-sites__historial" aria-label="Qué falta resolver en Proyecto H"><header class="haku-actualizacion-sites__historial-head"><div><span>DEL LIBRO A PROYECTO H</span><strong>Qué falta resolver en Proyecto H</strong></div><span class="haku-actualizacion-sites__chip">'+(pendientes.sinVerificar?'Por comprobar':'Revisado en Proyecto H')+'</span></header>';
+        if(pendientes.sinVerificar)html+='<p class="haku-libro-pendientes-error">Conservé los pendientes. Falta comprobarlos en Proyecto H.</p>';
         if(!items.length)html+='<p class="haku-libro-sin-pendientes"><strong>No quedan cambios pendientes en este informe.</strong></p>';
         else{
             html+=`<div class="haku-actualizacion-sites__historial-metricas"><div><span>Casos pendientes</span><strong>${items.length}</strong></div><div><span>Listos para tu revisión</span><strong>${accionables}</strong></div></div>`;
@@ -402,6 +405,7 @@
                 }
                 const tarea=(async()=>{
                     const previo=soloAviso?{version:1,cambios:[]}:await leer()||{version:1,cambios:[]};
+                    validar(g);
                     let registro=fusionarHistorialCambios(previo,resultado,origen);
                     if(!soloAviso&&JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
                     validar(g);
@@ -416,11 +420,14 @@
                         resultadoPendientes.resueltos=[...new Set((resultadoPendientes.resueltos||[]).flatMap(id=>porId.get(id)?.ids_origen||[id]))];
                     }
                     validar(g);
-                    if(resultadoPendientes.resueltos?.length){
-                        const resueltos=new Set(resultadoPendientes.resueltos);
+                    const resueltos=new Set(lista(resultadoPendientes.resueltos));
+                    if(resueltos.size){
                         registro={...registro,actualizado_en:new Date().toISOString(),cambios:registro.cambios.filter(x=>!resueltos.has(x.id))};
                         if(!soloAviso)await guardar(registro);
                     }
+                    const porId=new Map(lista(resultadoPendientes.items).map(x=>[x.id,x]));
+                    Object.defineProperty(resultadoPendientes,'registrosAviso',{configurable:true,value:vigentes
+                        .filter(x=>!resueltos.has(x.id)).map(x=>porId.get(x.id)||x)});
                     resultadoPendientes.generacion=g;
                     if(resultadoPendientes.reservas?.length)Object.defineProperty(resultadoPendientes,'preparacion',{value:{
                         reservas:resultadoPendientes.reservas,comparacion:resultadoPendientes.comparacion,generacion:g,q:resultadoPendientes.q
@@ -441,7 +448,19 @@
             }
         };
     }
-    let instalado = false, cacheCompartida, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
+    let instalado = false, cacheCompartida, cachePendientesCompartida, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
+    const origenAvisos = new WeakMap(), registroLeido = new WeakMap();
+    function proyectarPendientesAviso(resultado,registros,{resueltos=false,sinVerificar=false}={}) {
+        const aviso={...resultado,nuevas:[],modificadas:[],cancelaciones_confirmadas:[],
+            pendientesResueltos:resueltos,pendientesSinVerificar:sinVerificar&&registros.length>0};
+        const secciones={nueva:aviso.nuevas,modificacion:aviso.modificadas,cancelacion:aviso.cancelaciones_confirmadas};
+        for(const x of registros)secciones[x.tipo]?.push(x);
+        const altas=new Set(aviso.nuevas.map(x=>x.actual?.id));
+        // El abono puede seguir pendiente aunque su reserva ya esté en Proyecto H.
+        aviso.abonos=lista(resultado.abonos).map(x=>x.nueva&&!altas.has(x.nueva)?{...x,nueva:null}:x);
+        origenAvisos.set(aviso,resultado);
+        return aviso;
+    }
     function puedeRevisarAbonos(resultado) {
         return esAdministrador() && lista(resultado?.abonos).some(x => !x.revisar && x.reservas.length) &&
             typeof root.HAIKU_LIBRO_CONSULTAS?.compararAbonosAviso === 'function';
@@ -547,15 +566,36 @@
                 throw Object.assign(error instanceof Error?error:new Error(error?.message||'No pude confirmar la incorporación.'),{incorporado:totales()});
             }
         };
-        estado.promesa=ejecutar().finally(()=>{estado.promesa=null;});return estado.promesa;
+        estado.promesa=ejecutar().finally(()=>{
+            if(estado.recibos.length||estado.terminado)cachePendientesCompartida?.invalidar();
+            estado.promesa=null;
+        });return estado.promesa;
     }
     function obtenerResultado() {
         if (!instalar()) return Promise.reject(new Error('Haku todavía no está disponible.'));
         return cacheCompartida.obtener();
     }
+    async function conservarRegistros(resultado){
+        if(registroLeido.has(resultado))return registroLeido.get(resultado);
+        const origen=generacionInforme(resultado);
+        try{
+            const registro=await root.HAIKU_LIBRO_RESERVA_V1?.leerCambiosDetectados?.();
+            return fusionarHistorialCambios(registro,resultado,origen).cambios;
+        }catch(_){return extraerCambiosDetectados(resultado,origen);}
+    }
+    async function obtenerResultadoAviso() {
+        const resultado=await obtenerResultado();
+        try{
+            const pendientes=await cachePendientesCompartida.obtener(resultado);
+            registroLeido.set(resultado,pendientes.registrosAviso);
+            return proyectarPendientesAviso(resultado,pendientes.registrosAviso,{resueltos:lista(pendientes.resueltos).length>0});
+        }catch(_){
+            return proyectarPendientesAviso(resultado,await conservarRegistros(resultado),{sinVerificar:true});
+        }
+    }
     function mostrarResultado(resultado) {
         if (!instalar()) throw new Error('Haku todavía no está disponible.');
-        return insertarResultado(resultado);
+        return insertarResultado(origenAvisos.get(resultado)||resultado);
     }
     function instalar() {
         if (instalado || !root.document) return instalado;
@@ -570,6 +610,7 @@
                 if(libro?.leerCambiosDetectados&&libro?.guardarCambiosDetectados&&resultado.libro_actual?.generacion===g){
                     const previo=await libro.leerCambiosDetectados()||{version:1,cambios:[]};
                     const fusion=fusionarHistorialCambios(previo,resultado,g);
+                    registroLeido.set(resultado,fusion.cambios);
                     if(libro.estado().generacion===g&&JSON.stringify(fusion.cambios)!==JSON.stringify(lista(previo.cambios)))await libro.guardarCambiosDetectados(fusion);
                 }
             }catch(error){console.warn('HAIKU · No se pudo conservar el historial local de cambios:',error);}
@@ -582,7 +623,7 @@
             return resultado;
         },()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion);
         cacheCompartida = cache;
-        const cachePendientes=crearCachePendientes();
+        const cachePendientes=cachePendientesCompartida=crearCachePendientes();
         root.addEventListener('haiku:libro-cambio',()=>{cache.invalidar();cachePendientes.invalidar();});
         function mensaje(tipo,texto) {
             const el = doc.createElement('div'); el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`; el.textContent = texto; mensajes.appendChild(el); mensajes.scrollTop = mensajes.scrollHeight; return el;
@@ -599,6 +640,7 @@
                 zona.innerHTML='<section class="haku-libro-pendientes"><p>Revisando qué falta guardar en Proyecto H…</p></section>';
                 try{
                     const pendientes=await cacheActual.obtener(resultado,{revalidar});
+                    if(cacheActual===cachePendientes)registroLeido.set(resultado,pendientes.registrosAviso);
                     zona.innerHTML=renderizarPendientes(pendientes);
                     const pendientesVigentes=async()=>{
                         await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
@@ -694,6 +736,14 @@
                         finally{preparar.removeAttribute?.('aria-busy');mensajes.scrollTop=mensajes.scrollHeight;}
                     });
                 }catch(error){
+                    const guardados=cacheActual===cachePendientes?await conservarRegistros(resultado):[];
+                    if(guardados.length){
+                        const items=guardados.map(x=>({...x,accionable:false,estado:'revision',preparacion:null,sistema:null,
+                            fuente_vigente:{estado:'no_disponible'}}));
+                        zona.innerHTML=renderizarPendientes({items,generacion:root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion,sinVerificar:true});
+                        zona.querySelector?.('[data-haku-revalidar-proyecto]')?.addEventListener('click',()=>{void cargar(true);});
+                        return;
+                    }
                     zona.innerHTML=`<section class="haku-libro-pendientes"><header class="haiku-asistente-preview-cabecera"><div><span>DEL LIBRO A PROYECTO H</span><strong>Qué falta resolver en Proyecto H</strong></div></header><p class="haku-libro-pendientes-error">No pude comprobar qué cambios siguen pendientes en Proyecto H.${error?.message ? ` ${escapar(error.message)}` : ''}</p></section>`;
                     const boton=doc.createElement('button');boton.type='button';boton.className='haku-libro-revalidar';boton.textContent='Volver a revisar';
                     boton.addEventListener?.('click',async()=>{boton.disabled=true;await cargar(true);});zona.appendChild(boton);
@@ -824,7 +874,7 @@
         return true;
     }
     const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,detalleAbono,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,
+        crearCache,crearCachePendientes,instalar,obtenerResultado,obtenerResultadoAviso,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,
         puedeRevisarAbonos,revisarAbonosDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;

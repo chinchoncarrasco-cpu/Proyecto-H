@@ -2354,7 +2354,11 @@
         const items=[],resueltos=[],resueltosDetalle=[],filasPreparacion=[],reservasPreparacion=[];
         for(let indice=0;indice<entradas.length;indice++){
             const grupo=entradas[indice],resultado=Array.from(comparacion).find(x=>x.libro?._historial_indice===indice)||Array.from(comparacion)[indice];
-            for(const registro of grupo.registros){
+            for(const detectado of grupo.registros){
+                // Un alta pendiente puede recibir cambios después de que otro
+                // operador ya guardó la reserva. Esos campos aún se comprueban.
+                const registro=detectado.tipo==='nueva'&&resultado?.estado==='asociada'&&detectado.cambios?.length
+                    ? {...detectado,tipo:'modificacion'} : detectado;
                 if(registro.fuente_vigente?.estado==='cancelada'){
                     const compatibles=(comparacion.snapshot?.estadias||[]).filter(s=>identidad(grupo.reserva,s).compatible&&
                         (s.fecha_checkin===grupo.reserva.fecha_checkin||s.fecha_checkout===grupo.reserva.fecha_checkout));
