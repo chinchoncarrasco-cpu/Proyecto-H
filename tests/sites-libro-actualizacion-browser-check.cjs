@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { auditarContraste } = require('./haiku-tema-browser-check.cjs');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
@@ -953,9 +954,10 @@ async function comprobarCasosDelAviso(browser, url) {
                     fecha_salida:reserva.fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};
             __generation=21;window.dispatchEvent(new Event('haiku:libro-cambio'));
             __registration={version:1,cambios:[caso]};
-            window.__cancelacionAviso={candidatas:0,escrituras:[],lecturas:[]};
+            window.__cancelacionAviso={candidatas:0,escrituras:[],lecturas:[],inspecciones:[],pausar:true};
             HAIKU_LIBRO_RESERVA_V1.consultarHoja=async(hoja,version)=>{
                 __cancelacionAviso.lecturas.push([hoja,version]);
+                if(__cancelacionAviso.pausar)await new Promise(resolve=>{__cancelacionAviso.continuar=resolve;});
                 return {hoja:'Dic26',cobertura:{geometria:true},reservas:[],cancelaciones:[{...evidencia,origen:{hoja:'Dic26',celda:'C22'}}]};
             };
             window.HAIKU_LIBRO_CONTEXTO_V1={actualizarDesdeLibro:async xs=>xs,enriquecer:async xs=>xs,fraseHistorial:()=>''};
@@ -975,7 +977,9 @@ async function comprobarCasosDelAviso(browser, url) {
                     return q;
                 }
             };
+            window.HAIKU_INSPECTOR_V1={abrirReserva:async id=>__cancelacionAviso.inspecciones.push(id)};
             window.HAIKU_RESERVA_ESTADOS_SUPABASE_V2={cancelar:async(id,{antesDeCancelar})=>{
+                if(__cancelacionAviso.declinar)return;
                 if(await antesDeCancelar()===false)return {estado:'sin_cambios'};
                 __cancelacionAviso.escrituras.push(id);proyecto.estado_reserva='cancelada';return {estado:'cancelada'};
             }};
@@ -986,34 +990,63 @@ async function comprobarCasosDelAviso(browser, url) {
         await casoCancelacion.locator('summary').click();
         assert.match(await casoCancelacion.innerText(),/PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR/);
         const aprobarCancelacion=casoCancelacion.getByRole('button',{name:'Aprobación manual',exact:true});
-        const revisionCancelacion=casoCancelacion.locator('.haiku-cancelacion-pantalla');
+        const revisionCancelacion=casoCancelacion.locator('.haiku-cancelacion-informe');
         const confirmarCancelacion=revisionCancelacion.getByRole('button',{name:'Confirmar cancelación',exact:true});
+        const verCancelacion=revisionCancelacion.getByRole('button',{name:'Ver reserva',exact:true});
+        const medirCancelacion=async(vista,estado,alturaMaxima)=>{
+            for(const tema of ['claro','oscuro']){
+                await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+                for(const width of [1100,390,320]){
+                    await page.setViewportSize({width,height:900});
+                    await vista.scrollIntoViewIfNeeded();
+                    const contexto=`Cancelación ${estado} · ${tema} ${width}`;
+                    assert.ok((await vista.boundingBox()).height<=alturaMaxima,contexto+' · altura');
+                    assert.equal(await vista.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,contexto+' · ancho');
+                    assert.deepEqual(await page.evaluate(auditarContraste,'.haku-pendiente-detalle:has(> .haku-libro-preparacion-zona--cancelacion)'),[],contexto+' · contraste');
+                    if(capturas&&(width===390||width===1100))await casoCancelacion.screenshot({path:path.join(capturas,`cancelacion-${estado}-${tema}-${width}.png`)});
+                }
+            }
+        };
         await aprobarCancelacion.click();
+        await page.waitForFunction(()=>typeof __cancelacionAviso.continuar==='function');
+        const cargaCancelacion=casoCancelacion.locator('.haiku-cancelacion-status');
+        assert.equal(await cargaCancelacion.innerText(),'Comprobando la cancelación…');
+        await medirCancelacion(cargaCancelacion,'carga',48);
+        assert.equal(await cargaCancelacion.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(37, 53, 45)');
+        await page.evaluate(()=>{__cancelacionAviso.pausar=false;__cancelacionAviso.continuar();});
         await revisionCancelacion.getByText('No encontré una reserva compatible con este aviso en Proyecto H.',{exact:true}).waitFor();
-        assert.equal(await confirmarCancelacion.isDisabled(),true);
+        assert.equal(await confirmarCancelacion.count(),0);
+        assert.equal(await verCancelacion.count(),0);
+        assert.equal(await aprobarCancelacion.isVisible(),false);
+        assert.doesNotMatch(await revisionCancelacion.innerText(),/Sin verificar|Asistente operativo/);
+        await medirCancelacion(revisionCancelacion,'por-revisar',180);
+        assert.equal(await revisionCancelacion.getByRole('alert').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(53, 41, 30)');
         await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
         assert.equal(await aprobarCancelacion.evaluate(el=>document.activeElement===el),true);
         assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),[]);
         await page.evaluate(()=>{__cancelacionAviso.candidatas=2;});
         await aprobarCancelacion.click();
         await revisionCancelacion.getByText('La reserva no se identifica de forma única; requiere revisión.',{exact:true}).waitFor();
-        assert.equal(await confirmarCancelacion.isDisabled(),true);
+        assert.equal(await confirmarCancelacion.count(),0);
         await revisionCancelacion.getByRole('button',{name:'Volver',exact:true}).click();
         await page.evaluate(()=>{__cancelacionAviso.candidatas=1;});
         await aprobarCancelacion.click();
         await revisionCancelacion.getByRole('heading',{name:'Revisar cancelación'}).waitFor();
         assert.equal(await confirmarCancelacion.isEnabled(),true);
-        assert.match(await revisionCancelacion.innerText(),/Dic26 · C22/);
-        for(const tema of ['claro','oscuro']){
-            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
-            for(const width of [1100,390,320]){
-                await page.setViewportSize({width,height:900});
-                assert.equal(await revisionCancelacion.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,tema+' '+width);
-            }
-        }
+        assert.match(await revisionCancelacion.innerText(),/Libro · Dic26 · C22/);
+        assert.match(await revisionCancelacion.innerText(),/Activa\s*→\s*Cancelada/);
+        await medirCancelacion(revisionCancelacion,'confirmar',200);
+        await verCancelacion.click();
+        assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.inspecciones),['reserva-cancelacion-prueba']);
+        await page.evaluate(()=>{__cancelacionAviso.declinar=true;});
+        await confirmarCancelacion.click();
+        await revisionCancelacion.getByText('Pendiente de confirmación.',{exact:true}).waitFor();
+        assert.equal(await confirmarCancelacion.isEnabled(),true);
         assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),[]);
+        await page.evaluate(()=>{__cancelacionAviso.declinar=false;});
         await confirmarCancelacion.click();
         await revisionCancelacion.getByRole('heading',{name:'Cancelación completada'}).waitFor();
+        await medirCancelacion(revisionCancelacion,'completada',150);
         assert.deepEqual(await page.evaluate(()=>__cancelacionAviso.escrituras),['reserva-cancelacion-prueba']);
         assert.ok(await page.evaluate(()=>__cancelacionAviso.lecturas.every(([hoja,version])=>hoja==='Dic26'&&version==='actual')));
         await revisionCancelacion.getByRole('button',{name:'Volver a la revisión',exact:true}).click();

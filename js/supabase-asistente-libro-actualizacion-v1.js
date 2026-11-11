@@ -711,7 +711,11 @@
                             const destino=manual.closest('.haku-pendiente-detalle');
                             destino.querySelector?.('.haku-libro-preparacion-zona')?.remove?.();
                             const vista=doc.createElement('div');vista.className='haku-libro-preparacion-zona';
-                            vista.textContent='Comprobando este cambio antes de pedir tu confirmación…';destino.appendChild(vista);
+                            if(revisionCancelacion){
+                                vista.className+=' haku-libro-preparacion-zona--cancelacion';vista.setAttribute?.('role','status');
+                            }
+                            vista.textContent=revisionCancelacion?'Comprobando la cancelación…':'Comprobando este cambio antes de pedir tu confirmación…';
+                            destino.appendChild(vista);
                             let cancelacionAbierta=false;
                             try{
                                 const actuales=await pendientesVigentes();
@@ -724,7 +728,7 @@
                                 if(revisionCancelacion){
                                     const api=root.HAIKU_LIBRO_CANCELACIONES_V1;
                                     if(!api?.abrirRevisionHistorial)throw Error('No está disponible la revisión de cancelaciones. Recarga Proyecto H.');
-                                    vista.textContent='';
+                                    vista.textContent='';vista.removeAttribute?.('role');
                                     await api.abrirRevisionHistorial(vista,item,actuales.generacion,resuelta=>{
                                         vista.remove();
                                         if(resuelta)return cargar(true);
