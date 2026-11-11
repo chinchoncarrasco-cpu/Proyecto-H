@@ -13,6 +13,23 @@ const sinEscrituras=h=>assert.ok(!h.db.llamadas.some(x=>/incorporar|registrar|ap
 const guardado=(extra={})=>({id:'pago-sintetico',reserva_id:'reserva-sintetica-0',estado:'confirmado',tipo_movimiento:'pago',
  monto:75000,moneda:'CLP',medio_pago:'transferencia',fecha_pago:'2026-10-21',referencia_externa:F.glosa,...extra});
 
+test('el aviso detecta un segundo abono por transferencia con el mismo monto y fecha de otro remitente',async()=>{
+ const D=require('../js/haiku-libro-diferencias-v1.js');
+ const reserva={titular:'Titular Sintetico',rut:'11111111-1'};
+ const primero={glosa:'Transf. 0011111111 REMITENTE FICTICIO UNO'};
+ const segundo={glosa:'Transf. 0022222222 REMITENTE FICTICIO DOS'};
+ const anterior=F.leer([{...reserva,pagos:[primero]}]),actual=F.leer([{...reserva,pagos:[primero,segundo]}]);
+ const aviso=D.comparar([anterior],[actual]);
+ assert.equal(aviso.abonos.length,1);
+ assert.equal(aviso.abonos[0].pago.evidencia_transferencia.glosa_original,segundo.glosa);
+ const db=F.cliente(actual.reservas),original=global.haikuSupabase;
+ global.haikuSupabase=db;
+ try {
+  assert.deepEqual(await global.HAIKU_LIBRO_CONSULTAS.compararAbonosAviso(aviso.abonos),['asociado']);
+  sinEscrituras({db});
+ } finally {global.haikuSupabase=original;}
+});
+
 for(const [glosa,concepto] of [
  [F.glosa,'cab10/1noche'],['0177406988 Transf. ALMONACID ERICES EXEQUIEL IGNACIO','cab10/1noche'],
  ['0177406988 ALMONACID ERICES EXEQUIEL IGNACIO','cab10/1noche // Transferencia']

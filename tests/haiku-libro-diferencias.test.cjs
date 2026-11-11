@@ -10,6 +10,43 @@ const sheet = (reservas, extra = {}) => ({hoja:'Sep26', cobertura:{geometria:tru
 const compare = (a,b) => D.comparar([sheet(a)], [sheet(b)]);
 const freeze = v => { if(v && typeof v === 'object') { Object.values(v).forEach(freeze); Object.freeze(v); } return v; };
 
+const abono = (extra = {}) => ({monto:40000, moneda:'CLP', medio_pago:'webpay', titular:'Ana Pérez', cabana:5,
+    fecha_bloque:'2026-09-03', fecha_comprobante:'2026-09-02', tipo_movimiento:'alojamiento', concepto:'CAB 5',
+    pago_recibido:true, estado_pago:'registrado_en_libro', codigo_autorizacion:'WEB123', origen:{hoja:'Sep26',celda:'B50:E50'}, ...extra});
+test('un abono recibido se muestra en la reserva nueva incluso si figuraba antes como anticipo', () => {
+    const pago = abono(), reserva = row({pagos:[pago]});
+    for (const pagos of [[], [pago]]) {
+        const r = D.comparar([sheet([], {pagos})], [sheet([reserva], {pagos:[pago]})]);
+        assert.equal(r.nuevas.length, 1);
+        assert.deepEqual(r.abonos, [{pago, reservas:[reserva], nueva:reserva.id, revisar:false}]);
+    }
+});
+test('el segundo abono de una reserva existente dispara un aviso aunque no cambien sus datos', () => {
+    const primero = abono(), segundo = abono({codigo_autorizacion:'WEB456', origen:{hoja:'Sep26',celda:'B51:E51'}});
+    const antes = sheet([row({pagos:[primero]})], {pagos:[primero]});
+    const reserva = row({pagos:[primero, segundo]});
+    const r = D.comparar([antes], [sheet([reserva], {pagos:[primero, segundo]})]);
+    assert.equal(r.estado,'ok');
+    assert.equal(r.modificadas.length,0);
+    assert.deepEqual(r.abonos,[{pago:segundo,reservas:[reserva],nueva:null,revisar:false}]);
+});
+test('mover o corregir un comprobante conocido no anuncia un pago nuevo', () => {
+    const pago = abono(), editado = abono({monto:41000, codigo_autorizacion:'WEB-123', origen:{hoja:'Sep26',celda:'B58:E58'}});
+    const anterior = sheet([row({pagos:[pago]})], {pagos:[pago]});
+    for (const actual of [editado, {...pago,codigo_autorizacion:null,origen:editado.origen}]) {
+        const r = D.comparar([anterior], [sheet([row({pagos:[actual]})], {pagos:[actual]})]);
+        assert.ok((r.abonos || []).every(x => x.revisar));
+    }
+});
+test('un pago sin reserva queda visible y una referencia repetida requiere revisión', () => {
+    const pago = abono(), repetido = {...pago, origen:{hoja:'Sep26',celda:'B51:E51'}};
+    const pendiente = abono({pago_recibido:false,estado_pago:'pendiente',codigo_autorizacion:'WEB456'});
+    const r = D.comparar([sheet([], {pagos:[]})], [sheet([], {pagos:[pago,pendiente]})]);
+    assert.deepEqual(r.abonos,[{pago,reservas:[],nueva:null,revisar:false}]);
+    const duplicado = D.comparar([sheet([])], [sheet([row({pagos:[pago,repetido]})], {pagos:[pago,repetido]})]);
+    assert.ok(duplicado.abonos.every(x=>x.revisar));
+});
+
 test('A: primera copia es línea base, nunca todas nuevas', () => {
     assert.equal(D.comparar(null,[sheet([row()])]).estado,'sin_linea_base');
     assert.equal(D.comparar(null,[sheet([row()])]).resumen.nuevas,0);

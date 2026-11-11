@@ -3374,7 +3374,33 @@
             {tipo:accion.tipo,distribucionConfirmada:accion.tipo === 'distribucion_comprobante'},true);
     }
 
-    function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null) {
+    function limitarPlanAbonosAviso(plan, origenes) {
+        const porId = new Map(plan.items.map(item => [item.id, item]));
+        const abonos = plan.items.filter(item => item.pagoLibro &&
+            origenes.has(source((pagosEfectivosMedio.get(item.pagoLibro)?.original || item.pagoLibro).origen)));
+        const ids = new Set(abonos.map(item => item.id));
+        for (const item of abonos) {
+            const actualizacion = item.payload?.tipo === 'pago_actualizar';
+            const distribucionFuera = item.distribucionManual?.ids.some(id => !ids.has(id));
+            if (actualizacion || distribucionFuera) {
+                item.categoria = 'dudosos';
+                item.seleccionado = false;
+                item.aprobable = false;
+                item.manualPago = null;
+                item.resolucionMedio = null;
+                item.payload = null;
+                item.dependeDe = [];
+                item.motivos.push(actualizacion
+                    ? 'El pago ya tiene un registro. Revisa sus datos en Comparar Libro.'
+                    : 'Revisa el comprobante completo en Comparar Libro.');
+            }
+        }
+        // Mantener el alta y las correcciones que el comparador exige para estos abonos.
+        for (const id of ids) for (const dependencia of porId.get(id)?.dependeDe || []) ids.add(dependencia);
+        plan.items = plan.items.filter(item => ids.has(item.id));
+    }
+
+    function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null, origenesAbonosAviso = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
         const add = (categoria, id, texto, payload = null, motivos = [], dependeDe = [], permisos = []) => {
@@ -3857,6 +3883,7 @@
             }
         }
         consolidarActualizacionesReserva(plan);
+        if (origenesAbonosAviso) limitarPlanAbonosAviso(plan, origenesAbonosAviso);
         const actualizacionesIdentidad = new Set(plan.items.filter(item => item.payload?.tipo === 'reserva_actualizar' &&
             ['titular_nombre','titular_numero_documento','titular_tipo_documento']
                 .some(campo => Object.prototype.hasOwnProperty.call(item.payload.reserva?.despues || {}, campo)))
@@ -4241,7 +4268,7 @@
         }
 
         fuentesComparacion.set(comparacion,estadoFuente(result));
-        const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios);
+        const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios, result.q?.abonosAviso);
         plan.contextoSeleccion = { generacion, usuario:usuariosComparacion.get(comparacion) };
         const conflictos = conflictosIdentidad.get(decisiones);
         for (const item of plan.items) {
@@ -5124,6 +5151,40 @@
         renderizarComparacion(out, result);
         return result;
     }
+    async function compararAbonosAviso(abonos, generacion, out = null) {
+        const verificables = abonos.filter(x => !x.revisar && x.reservas.length);
+        const reservas = structuredClone([...new Map(verificables.flatMap(x => x.reservas)
+            .map(r => [firmaFuente(r), r])).values()]);
+        if (!reservas.length) return [];
+        const normalizadas = reservas.map(normalizarReservaComparacion);
+        const origenes = new Set(verificables.map(x => source(x.pago.origen)));
+        const result = await revalidarEntradaEstructurada({[ENTRADA_ESTRUCTURADA]:true, reservas, generacion,
+            q:{desde:normalizadas.map(r => r.fecha_checkin).filter(Boolean).sort()[0],
+                hasta:normalizadas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1), solo_pagos:true, abonosAviso:origenes}});
+        if (out) { renderizarComparacion(out, result); return; }
+        const comp = result.comparacion;
+        const plan = crearPlanIncorporacion(reservas, comp, new Map(), new Set(), null, null, origenes);
+        const porId = new Map(plan.items.map(item => [item.id, item]));
+        const porOrigen = new Map();
+        for (const x of comp.pagosDetalle || []) {
+            const origen = source(x.pago.origen);
+            if (!origenes.has(origen)) continue;
+            if (!porOrigen.has(origen)) porOrigen.set(origen, []);
+            porOrigen.get(origen).push(x);
+        }
+        return abonos.map(abono => {
+            if (abono.revisar) return null;
+            const candidatos = porOrigen.get(source(abono.pago.origen));
+            if (candidatos?.length !== 1) return null;
+            const [x] = candidatos;
+            const item = porId.get(idMovimientoIncorporacion(x));
+            if (x.estado === 'en_sistema') return 'registrado';
+            if (item?.categoria === 'pagos' && item.seleccionado && (item.payload?.reserva_ref || item.payload?.argumentos?.p_reserva_id || x.reserva_sistema_id)) {
+                return item.payload.reserva_ref ? 'reserva_nueva' : 'asociado';
+            }
+            return null;
+        });
+    }
     async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){
         if(!root.document)throw new Error('La vista de preparación sólo está disponible en el panel.');
 
@@ -5241,7 +5302,7 @@
     let ocupado = false;
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,procesando:()=>ocupado,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
-        abrirComparacionEstructurada, abrirPreparacionComparacion, reanudarComparacionHistorica,
+        abrirComparacionEstructurada, abrirPreparacionComparacion, compararAbonosAviso, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago, verificadorFuenteConsulta});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
@@ -5570,8 +5631,8 @@
         return bloque;
     }
 
-    function gruposVistaPagos(comp) {
-        const items = comp.pagosDetalle || [];
+    function gruposVistaPagos(comp, origenesAbonosAviso) {
+        const items = (comp.pagosDetalle || []).filter(x => !origenesAbonosAviso || origenesAbonosAviso.has(source(x.pago.origen)));
         const existentes = items.filter(x => x.estado === 'en_sistema' && x.sistema?.id);
         const nuevos = items.filter(x => x.estado === 'nuevo_seguro');
         const diferentes = items.filter(x => x.estado === 'diferente');
@@ -5587,7 +5648,7 @@
     }
 
     function renderizarSoloPagos(out, result) {
-        const modelo = gruposVistaPagos(result.comparacion);
+        const modelo = gruposVistaPagos(result.comparacion, result.q.abonosAviso);
         out.className = 'haiku-asistente-preview haku-comparacion-compacta haku-pagos-compactos';
         out.replaceChildren();
         const header = elemento('div', 'haiku-asistente-preview-cabecera');
@@ -5789,7 +5850,7 @@
         const aprobados = ui.aprobados || new Set();
         const vista = elemento("div");
         let preguntas = null;
-        if (ambiguas.length && !result.q.solo_pagos) {
+        if (ambiguas.length && (!result.q.solo_pagos || result.q.abonosAviso)) {
             preguntas = elemento("div", "haiku-asistente-preview-lista" + (ui.preguntasAbiertas ? " haiku-reconciliacion-abierto" : ""));
             preguntas.append(elemento("strong", "", "Preguntas necesarias · sólo para esta vista previa"));
             ambiguas.forEach(g => {

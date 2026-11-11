@@ -6,7 +6,7 @@
     const dia=f=>typeof f==='string' && /^\d{4}-\d{2}-\d{2}$/.test(f) && Number.isFinite(Date.parse(f)) && new Date(f).toISOString().slice(0,10)===f ? Date.parse(f)/86400000 : null;
     const grupos=['hoy','manana','proximos','informativos'];
     const nombres=['🔴 Hoy','🟠 Mañana','🟡 Próximos días','🟢 Informativos'];
-    const tipos={nueva:'Agregada al Libro',modificada:'Reserva con cambios',ausencia:'Ya no aparece en el Libro',cancelacion:'Cancelada en el Libro',ambigua:'Necesita revisión',advertencia:'Dato por revisar',cobertura:'No pude revisar toda la información'};
+    const tipos={nueva:'Agregada al Libro',modificada:'Reserva con cambios',abono:'Abono detectado',ausencia:'Ya no aparece en el Libro',cancelacion:'Cancelada en el Libro',ambigua:'Necesita revisión',advertencia:'Dato por revisar',cobertura:'No pude revisar toda la información'};
     const etiquetasCambios={cabana:'Cabaña',fecha_checkin:'Entrada',fecha_checkout:'Salida',noches:'Noches',tipo_estadia:'Tipo de estadía',titular:'Titular',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',estado_confirmacion:'Confirmación',estado_operativo:'Estado de la estadía',operador:'Responsable de la reserva',rut_documento:'RUT o documento',correo:'Correo',telefono:'Teléfono',notas_importantes:'Notas o solicitudes',pagos_pendientes:'Pagos pendientes',servicios:'Servicios'};
     function detalleAvisoBasico(aviso){
         if(typeof aviso==='string')return aviso;
@@ -52,6 +52,7 @@
         }
         for(const x of lista(resultado.nuevas))agregar('nueva',[[x.actual,'Actual']],null,[],null,x);
         for(const x of lista(resultado.modificadas))agregar('modificada',[[x.anterior,'Anterior'],[x.actual,'Actual']],null,x.cambios,null,x);
+        for(const x of lista(resultado.abonos).filter(a=>!a.nueva))agregar('abono',lista(x.reservas).map(s=>[s,'Actual']),null,[],null,x);
         for(const x of lista(resultado.ya_no_aparecen))agregar('ausencia',[[x.anterior,'Anterior']],null,[],null,x);
         for(const x of lista(resultado.cancelaciones_confirmadas))agregar('cancelacion',[[x.anterior,'Anterior']],null,[],null,x);
         for(const x of lista(resultado.ambiguas))agregar('ambigua',[...lista(x.anteriores).map(s=>[s,'Candidato anterior']),...lista(x.actuales).map(s=>[s,'Candidato actual'])],null,[],null,x);

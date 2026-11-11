@@ -609,6 +609,64 @@ const server = http.createServer((request, response) => {
         assert.equal(await resumen.locator('.haku-libro-resumen__hora').getAttribute('datetime'),hora);
         assert.equal(await page.evaluate(()=>__revalidations),lecturasAntesDatos);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Conservar mi consulta');
+
+        // Recorrer el aviso y su preparación con los comparadores reales y una base ficticia.
+        for (const file of ['js/haiku-libro-semantica-v1.js','js/haiku-libro-diferencias-v1.js','js/haiku-libro-consultas-v1.js']) {
+            await page.addScriptTag({ content: read(file) });
+        }
+        await page.evaluate(({reservas,estadias}) => {
+            const [existente,,,,nueva] = reservas;
+            existente.tipo_documento = nueva.tipo_documento = 'pasaporte';
+            estadias[0].reservas.titular_nombre = existente.titular;
+            estadias[0].reservas.titular_numero_documento = existente.rut_documento;
+            const actual = {...existente.pagos[0], cabana:existente.cabana};
+            const anterior = {...actual, codigo_autorizacion:'FICTICIO-ANTERIOR', origen:{hoja:'Oct26',celda:'P22'}};
+            existente.pagos = [anterior,actual];
+            nueva.pagos = [{...actual, cabana:nueva.cabana, codigo_autorizacion:'FICTICIO-ALTA', origen:{hoja:'Oct26',celda:'P25'}}];
+            const sinReserva = {...actual, monto:31000, cabana:12, codigo_autorizacion:'FICTICIO-SIN-RESERVA', origen:{hoja:'Oct26',celda:'P28'}};
+            const hoja = (reservas,pagos) => ({hoja:'Oct26',cobertura:{geometria:true,pagos:true},fechas:['2026-10-13','2026-10-14'],reservas,pagos});
+            window.__generation = 14;
+            window.haikuSesion = {usuario:{activo:true},roles:['admin']};
+            window.haikuTienePermiso = () => true;
+            window.__escriturasAbonos = 0;
+            window.haikuSupabase = {
+                auth:{getSession:async()=>({data:{session:{user:{id:'operador-ficticio'}}}})},
+                from(tabla) {
+                    const filas = tabla==='reserva_estadias' ? estadias : [];
+                    const q = {select:()=>q, order:()=>q, in:()=>q, range:async(a,b)=>({data:filas.slice(a,b+1)})};
+                    return q;
+                },
+                rpc:async nombre=>{
+                    if (nombre==='haiku_incorporar_libro_v1') window.__escriturasAbonos++;
+                    return {data:null};
+                }
+            };
+            window.HAIKU_LIBRO_DIFERENCIAS_V1 = {...window.HAIKU_LIBRO_DIFERENCIAS_V1,
+                compararUltimasVersiones:async()=>({...window.HAIKU_LIBRO_DIFERENCIAS_V1.comparar(
+                    [hoja([{...existente,pagos:[anterior]}],[anterior])],
+                    [hoja([existente,nueva],[...existente.pagos,...nueva.pagos,sinReserva])]),libro_actual:{generacion:14}})};
+            window.dispatchEvent(new CustomEvent('haiku:libro-cambio'));
+            window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_automatica:true,tenia_anterior:true,generacion:14}}));
+        }, require('./fixtures/libro-identidad-documento.cjs')());
+        const avisoAbonos = page.locator('.haku-libro-auto');
+        const revisarAbonos = avisoAbonos.getByRole('button',{name:'Revisar abonos'});
+        await revisarAbonos.waitFor({state:'visible'});
+        for (const tema of ['claro','oscuro']) {
+            await page.evaluate(tema=>document.documentElement.setAttribute('data-haiku-tema',tema),tema);
+            for (const width of [1280,390]) {
+                await page.setViewportSize({width,height:900});
+                const texto = await avisoAbonos.innerText();
+                assert.match(texto,/Reserva nueva · 1 abono asociado/);
+                assert.match(texto,/Abono nuevo/);
+                assert.match(texto,/Pago por vincular/);
+                assert.equal(await avisoAbonos.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+                assert.equal(await revisarAbonos.isVisible(),true);
+            }
+        }
+        await revisarAbonos.click();
+        await page.getByRole('button',{name:'Preparar incorporación',exact:true}).click();
+        await page.waitForFunction(() => document.querySelector('.haiku-incorporacion')?.textContent.includes('Persona Ficticia Libro 5'));
+        assert.equal(await page.evaluate(()=>__escriturasAbonos),0);
         assert.deepEqual(errors, []);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {
