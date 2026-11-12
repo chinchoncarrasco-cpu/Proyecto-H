@@ -112,6 +112,7 @@ function entorno() {
     const ventana = {
         haikuSesion: { usuario: { id: "u" } }, haikuSupabase: cliente,
         haikuTienePermiso: nombre => nombre === "servicios.crear",
+        HAIKU_ASISTENTE_LENGUAJE_V1: require("../js/haiku-asistente-lenguaje-v1.js"),
         haikuSincronizarServiciosDesdeSupabase: async () => { hidrataciones++; return [servicioDb]; },
         cargarCabanasDia() {}, actualizarResumenDia() {}
     };
@@ -252,6 +253,32 @@ test("salida sola abre servicio únicamente con reserva y estadía salientes coi
     assert.equal(h.campos.get("resumen-servicio-guardar").disabled, true);
     assert.match(h.campos.get("resumen-servicio-sites-estado").textContent,
         /estadía visible ya no coincide/);
+});
+
+test("Haku precarga una tinaja en el formulario y guarda sólo con confirmación explícita", async () => {
+    const h=entorno();
+    assert.equal(await h.api.abrirDesdeHaku({cabana:6,fecha:"2026-09-23",titular:"Valentina Araya",
+        codigo:"tinajaTonel",hora:"19:15",cantidad:1,personas:2,observaciones:"Timbre lateral"}),true);
+    const valor=id=>h.campos.get("resumen-servicio-"+id).value;
+    assert.deepEqual([valor("producto"),valor("fecha"),valor("hora"),valor("personas"),valor("observaciones")],
+        ["tinajaTonel","2026-09-23","19:15","2","Timbre lateral"]);
+    assert.equal(h.llamadas.filter(x=>x.nombre==="haiku_registrar_servicio").length,0);
+    const guardado=h.api.confirmar();
+    await new Promise(resolve=>setImmediate(resolve));
+    const [envio]=h.llamadas.filter(x=>x.nombre==="haiku_registrar_servicio");
+    assert.deepEqual([envio.args.p_reserva_id,envio.args.p_estadia_id,envio.args.p_hora],[RESERVA,ESTADIA,"19:15"]);
+    h.resolver();
+    assert.equal(await guardado,true);
+});
+
+test("el titular indicado por Haku debe corresponder a la estadía operativa", async () => {
+    const h=entorno();
+    assert.equal(await h.api.abrirDesdeHaku({cabana:6,fecha:"2026-09-23",titular:"Ana Vera",
+        codigo:"tinajaTonel",hora:"19:15"}),false);
+    assert.equal(h.campos.get("resumen-servicio-guardar").disabled,true);
+    assert.match(h.campos.get("resumen-servicio-sites-estado").textContent,/titular indicado difiere/);
+    assert.equal(await h.api.confirmar(),false);
+    assert.equal(h.llamadas.filter(x=>x.nombre==="haiku_registrar_servicio").length,0);
 });
 
 test("formulario exige catálogo activo, fecha de estadía, horario, personas y motivo", () => {

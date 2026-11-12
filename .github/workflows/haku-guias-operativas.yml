@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - "js/haiku-guias-operativas-v1.js"
+      - "js/haiku-ayuda-v1.js"
+      - "js/haiku-asistente-lenguaje-v1.js"
+      - "js/haiku-asistente-acciones-v1.js"
+      - "js/supabase-asistente-totales-v1.js"
+      - "js/sites-resumen-servicio-v1.js"
       - "js/supabase-asistente-v1.js"
       - "js/haiku-libro-consultas-v1.js"
       - "js/supabase-asistente-historial-v1.js"
@@ -10,6 +15,11 @@ on:
       - "css/sites-asistente-v1.css"
       - "assets/guias/**"
       - "tests/haku-guias-operativas*.cjs"
+      - "tests/haku-lenguaje-operativo.test.cjs"
+      - "tests/haku-ayuda-browser-check.cjs"
+      - "tests/totales-asistente.test.cjs"
+      - "tests/resumen-servicio-sites.test.cjs"
+      - "panel.html"
       - "tests/haku-comparacion-mes-siguiente-browser-check.cjs"
       - ".github/workflows/haku-guias-operativas.yml"
 permissions:
@@ -26,7 +36,10 @@ jobs:
         with:
           node-version: 24
       - name: Reglas de los manuales y contratos del asistente
-        run: node --test tests/haku-guias-operativas.test.cjs tests/haku-panel-scroll.test.cjs tests/haku-reserva-convivencia-v1.test.cjs tests/airbnb-prepaid-card.test.cjs tests/haiku-libro-auto.test.cjs
+        run: >-
+          node --test tests/haku-guias-operativas.test.cjs tests/haku-panel-scroll.test.cjs
+          tests/haku-reserva-convivencia-v1.test.cjs tests/airbnb-prepaid-card.test.cjs tests/haiku-libro-auto.test.cjs
+          tests/haku-lenguaje-operativo.test.cjs tests/totales-asistente.test.cjs tests/resumen-servicio-sites.test.cjs
       - name: Navegador aislado
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-guias" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
@@ -39,6 +52,10 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: node tests/haku-comparacion-mes-siguiente-browser-check.cjs
+      - name: Ayuda, lenguaje natural y formularios en ambos temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
+        run: node tests/haku-ayuda-browser-check.cjs
       - name: Capturas de la interfaz
         if: always()
         uses: actions/upload-artifact@v4

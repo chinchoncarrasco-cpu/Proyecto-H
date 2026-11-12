@@ -1,6 +1,7 @@
 /* TOTAL 1: vista previa, segunda lectura y una única RPC transaccional. */
 (function(root){
  'use strict';if(root.HAIKU_ASISTENTE_TOTALES_V1)return;
+ const lenguaje=root.HAIKU_ASISTENTE_LENGUAJE_V1||(typeof module!=='undefined'&&module.exports?require('./haiku-asistente-lenguaje-v1.js'):null);
  const MAX=20,RPC='haiku_cambiar_totales_lote_v1',previews=new WeakMap();
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
  const copia=v=>JSON.parse(JSON.stringify(v));
@@ -8,6 +9,7 @@
  const dinero=v=>'CLP $'+Number(v).toLocaleString('es-CL');
  function monto(v){const t=String(v).replace(/^(?:CLP\s*\$?|\$)\s*/i,'');if(!/^(?:\d+|\d{1,3}(?:\.\d{3})+)$/.test(t))return null;const n=Number(t.replace(/\./g,''));return Number.isSafeInteger(n)&&n>0?n:null;}
  function interpretar(texto){
+  if(lenguaje)return lenguaje.interpretarTotal(texto,{max:MAX});
   let t=String(texto).trim().replace(/^haku[ ,:]*/i,'');
   // La variante reserva primero se traduce al formato existente; no cambia la resolución.
   const reservaPrimero=t.match(/^reserva\s+(.+?)\s+(cambia|modifica|fija)\s+(?:el\s+)?total\s+a\s+((?:CLP\s*\$?\s*|\$\s*)?[\d.]+)$/i);
@@ -79,7 +81,9 @@
  }
  function soloIva(ajustes){return ajustes.length>0&&ajustes.every(a=>a.operacion_id&&a.tipo_ajuste==='iva_exento'&&Number(a.signo)===-1&&Number(a.porcentaje)===19)&&new Set(ajustes.map(a=>a.operacion_id)).size===1;}
  async function writerDisponible(cliente){
-  try{const {data,error}=await cliente.rpc('haiku_capacidad_totales_v1');return !error&&data?.writer_disponible===true&&['total1_financiero_v2','total1_financiero_v3','total1_financiero_v31'].includes(data?.version);}
+  try{const {data,error}=await cliente.rpc('haiku_capacidad_totales_v1');return !error&&data?.writer_disponible===true&&
+   (['total1_financiero_v2','total1_financiero_v3','total1_financiero_v31'].includes(data.version)||
+    data.version==='total1_financiero_v32'&&data.servicios_separados===true);}
   catch(_){return false;}
  }
  async function leerPlanIva(cliente,id,objetivo,actual){
@@ -87,6 +91,15 @@
   if(error)throw Error('La vista previa IVA no está disponible o requiere revisión. '+error.message);
   if(data?.reserva_id!==id||Number(data.total_actual)!==actual||Number(data.total_objetivo)!==objetivo||Number(data.total_final_esperado)!==objetivo||typeof data.firma!=='string'||!data.firma||!Array.isArray(data.filas)||!data.filas.length||['base_actual','base_nueva','iva_actual','iva_nuevo'].some(k=>!Number.isSafeInteger(Number(data[k]))||Number(data[k])<0))throw Error('Plan IVA no verificable. No se permite confirmar.');
   return data;
+ }
+ function coincideReserva(r,entrada,admiteVariante=false){
+  const fecha=entrada.fecha;
+  if(fecha&&['cancelada','no_show'].includes(r.estado_reserva))return false;
+  const nombre=!entrada.titular||(lenguaje?.coincideNombre(r.titular_nombre,entrada.titular,admiteVariante)??norm(r.titular_nombre)===norm(entrada.titular));
+  if(!nombre)return false;
+  if(!entrada.cabana&&!fecha)return true;
+  return r.estadias?.some(e=>(!entrada.cabana||Number(e.cabanas?.numero)===entrada.cabana)&&
+   (!fecha||!['cancelada','no_show'].includes(e.estado_estadia)&&lenguaje?.coincideFecha(e,fecha,entrada.modoFecha)));
  }
  async function preparar(fuente,opciones={}){
   const q=typeof fuente==='string'?interpretar(fuente):{entradas:copia(fuente)};
@@ -99,10 +112,12 @@
    const candidatas=entradas.some(e=>!e.reserva_id)?await filas(()=>cliente.from('reservas').select(campos).order('id')):[];
    const items=[],errores=[];
    for(const entrada of entradas){
-    const cs=entrada.reserva_id?[{id:entrada.reserva_id}]:candidatas.filter(r=>norm(r.titular_nombre)===norm(entrada.titular)&&(!entrada.cabana||r.estadias?.some(e=>Number(e.cabanas?.numero)===entrada.cabana)));
-    if(cs.length!==1){errores.push(`${entrada.titular||entrada.reserva_id}: ${cs.length?'varias reservas compatibles; indica CAB o revisa la ficha':'no se encontró una reserva compatible'}.`);continue;}
+    const admiteVariante=Boolean(entrada.cabana&&entrada.fecha);
+    let cs=entrada.reserva_id?[{id:entrada.reserva_id}]:candidatas.filter(r=>coincideReserva(r,entrada));
+    if(!cs.length&&admiteVariante)cs=candidatas.filter(r=>coincideReserva(r,entrada,true));
+    if(cs.length!==1){errores.push(`${entrada.titular||entrada.reserva_id}: ${cs.length?'varias reservas compatibles; indica CAB y fecha o revisa la ficha':'no se encontró una reserva compatible'}.`);continue;}
     const v=await leer(cliente,cs[0].id),r=v.reserva;
-    if(entrada.titular&&norm(r.titular_nombre)!==norm(entrada.titular)||entrada.cabana&&!r.estadias?.some(e=>Number(e.cabanas?.numero)===entrada.cabana))throw Error('La identificación cambió durante la preparación.');
+    if(!coincideReserva(r,entrada,admiteVariante))throw Error('La identificación cambió durante la preparación.');
     if(entrada.total_actual!=null&&Number(entrada.total_actual)!==v.total)throw Error('El total esperado por la fuente ya cambió.');
     let error=motivo(r,v.total,entrada.total_objetivo,v.ajustes),plan_iva=null;
     if(soloIva(v.ajustes)){

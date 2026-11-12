@@ -8,7 +8,7 @@
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     const FECHA = /^\d{4}-\d{2}-\d{2}$/;
     const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
-    const estado = { identidad: null, catalogo: new Map(), ocupada: false, consumida: false, version: 0, origen: "resumen" };
+    const estado = { identidad: null, catalogo: new Map(), ocupada: false, consumida: false, version: 0, origen: "resumen", fechaHaku: "" };
 
     const elemento = id => document.getElementById(id);
     // Una sesión autenticada jamás puede caer en el guardado local si falla el cliente.
@@ -18,8 +18,8 @@
         try { return String(fechaSeleccionada || "").slice(0, 10); }
         catch { return ""; }
     };
-    const fechaOrigen = () => estado.origen === "servicios"
-        ? String(elemento("sites-servicios-fecha")?.value || "") : fechaActual();
+    const fechaOrigen = () => estado.origen === "haku" ? estado.fechaHaku :
+        estado.origen === "servicios" ? String(elemento("sites-servicios-fecha")?.value || "") : fechaActual();
 
     function identidadOperacion(fila) {
         if (!fila) return null;
@@ -278,48 +278,57 @@
     async function abrir(numeroCabana, opciones = {}) {
         const modal = elemento("resumen-servicio-modal");
         const guardar = elemento("resumen-servicio-guardar");
-        if (!modal || !guardar) return;
+        if (!modal || !guardar) return false;
+        if (opciones.origen === "haku" && (estado.ocupada || !modal.hidden))
+            throw new Error("Cierra el formulario abierto antes de preparar otro servicio.");
         const version = ++estado.version;
-        estado.origen = opciones.origen === "servicios" ? "servicios" : "resumen";
+        estado.origen = ["servicios","haku"].includes(opciones.origen) ? opciones.origen : "resumen";
+        estado.fechaHaku = estado.origen === "haku" ? String(opciones.fecha || "") : "";
         estado.identidad = null;
         estado.catalogo = new Map();
         estado.consumida = false;
-        const fecha = estado.origen === "servicios" ? String(opciones.fecha || "") : fechaActual();
+        const fecha = estado.origen === "servicios" ? String(opciones.fecha || "") : fechaOrigen();
         modal.hidden = false;
         guardar.disabled = true;
-        elemento("resumen-servicio-observaciones").value = "";
+        elemento("resumen-servicio-observaciones").value = opciones.observaciones || "";
         elemento("resumen-servicio-kicker").textContent = `CABAÑA ${numeroCabana}`;
         elemento("resumen-servicio-titulo").textContent = "Agregar servicio";
         elemento("resumen-servicio-contexto").textContent = "Comprobando la reserva de Proyecto H…";
         estadoVisible("Comprobando reserva, estadía y catálogo de Proyecto H…");
         try {
             const identidad = await identidadVigente(numeroCabana, fecha);
+            if (opciones.titular && !window.HAIKU_ASISTENTE_LENGUAJE_V1?.coincideNombre(identidad.titular,opciones.titular,true))
+                throw new Error("El titular indicado difiere de la estadía operativa de esa cabaña y fecha. Revisa la ficha.");
             const catalogo = await catalogoReal();
-            if (version !== estado.version || modal.hidden) return;
+            if (version !== estado.version || modal.hidden) return false;
             estado.identidad = identidad;
             estado.catalogo = new Map(catalogo.map(fila => [String(fila.codigo), fila]));
             const producto = elemento("resumen-servicio-producto");
             producto.replaceChildren(new Option("Seleccionar servicio", ""),
                 ...catalogo.map(fila => new Option(fila.nombre, fila.codigo)));
-            producto.value = "";
+            producto.value = estado.catalogo.has(opciones.codigo) ? opciones.codigo : "";
             elemento("resumen-servicio-cabana").value = `Cabaña ${numeroCabana}`;
             elemento("resumen-servicio-cabana").dataset.numeroCabana = numeroCabana;
             elemento("resumen-servicio-contexto").textContent = contextoReserva(identidad);
-            elemento("resumen-servicio-cantidad").value = "1";
-            campoPersonas().value = "1";
-            campoMotivo().value = "";
+            elemento("resumen-servicio-cantidad").value = String(opciones.cantidad || 1);
+            campoPersonas().value = String(opciones.personas || 1);
+            campoMotivo().value = opciones.motivo || "";
             elemento("resumen-servicio-fecha").value = fecha;
-            elemento("resumen-servicio-hora").value = "";
+            elemento("resumen-servicio-hora").value = opciones.hora || "";
             elemento("resumen-servicio-precio-manual").value = "";
-            document.querySelector('input[name="resumen-servicio-tipo-cobro"][value="normal"]').checked = true;
+            const cobro = opciones.cortesia ? "cortesia" : "normal";
+            document.querySelector('input[name="resumen-servicio-tipo-cobro"][value="'+cobro+'"]').checked = true;
             pintarSeleccion();
             guardar.disabled = false;
-            estadoVisible("Reserva y catálogo comprobados. Guardar servicio modificará Proyecto H.");
+            estadoVisible(opciones.codigo && !producto.value ? "El servicio indicado ya no está activo. Elige uno del catálogo." :
+                "Reserva y catálogo comprobados. Guardar servicio modificará Proyecto H.");
             producto.focus();
+            return true;
         } catch (error) {
             if (version !== estado.version) return;
             estadoVisible(error?.message || "No fue posible comprobar este servicio.", true);
             guardar.disabled = true;
+            return false;
         }
     }
 
@@ -465,6 +474,7 @@
 
     window.HAIKU_RESUMEN_SERVICIO_SITES_V1 = Object.freeze({
         identidadOperacion, validarFormulario, precioCatalogo, abrir, confirmar,
-        abrirDesdeServicios: (numeroCabana, fecha) => abrir(numeroCabana, { origen: "servicios", fecha })
+        abrirDesdeServicios: (numeroCabana, fecha) => abrir(numeroCabana, { origen: "servicios", fecha }),
+        abrirDesdeHaku: solicitud => abrir(String(solicitud.cabana), { ...solicitud, origen: "haku" })
     });
 })();

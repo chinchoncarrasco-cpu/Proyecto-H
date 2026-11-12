@@ -148,6 +148,7 @@
     function clonarSeguro() {
         const copia = mensajes.cloneNode(true);
         copia.removeAttribute("id");
+        copia.querySelectorAll("[data-haku-ayuda]").forEach(ayuda => ayuda.remove());
         convertirEnHistorial(copia);
 
         while (copia.children.length > MAX_ITEMS) {
