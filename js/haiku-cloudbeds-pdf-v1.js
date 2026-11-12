@@ -483,7 +483,7 @@
         return entradas;
     }
 
-    async function leerPDF(bytes, { pdfjs, timeout = 30000 } = {}) {
+    async function leerPaginasPDF(bytes, { pdfjs, timeout = 30000 } = {}) {
         const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
         if (data.length > 12 * 1024 * 1024) throw new Error("El PDF supera 12 MB.");
         if (new TextDecoder().decode(data.slice(0, 5)) !== "%PDF-") throw new Error("Archivo PDF inválido.");
@@ -515,7 +515,7 @@
                             }))
                         });
                     }
-                    return parsearPaginas(pages);
+                    return pages;
                 })(),
                 new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("El PDF tardó demasiado. Intenta con un archivo más pequeño.")), timeout); })
             ]);
@@ -523,6 +523,10 @@
             clearTimeout(timer);
             await task.destroy();
         }
+    }
+
+    async function leerPDF(bytes, opciones) {
+        return parsearPaginas(await leerPaginasPDF(bytes, opciones));
     }
 
     function sumarDiasIso(valor, dias) {
@@ -1056,7 +1060,7 @@
     const api = Object.freeze({
         MAPA, CLASES, CERTEZAS, HEAD, COLUMNAS: DEFINICIONES_COLUMNAS, MATRIZ_CAPACIDADES,
         TOLERANCIA_CLP, IVA_REFERENCIAL, TARIFA_FULLDAY_PERSONA_CLP, MIN_PERSONAS_FULLDAY,
-        dinero, fecha, tokensNombre, clasificarNombres, normalizar, columnas, parsearPaginas, leerPDF, esVentanaFullDay, comparar, filtrarInforme, consultar, renderizar
+        dinero, fecha, tokensNombre, clasificarNombres, normalizar, columnas, parsearPaginas, leerPaginasPDF, leerPDF, esVentanaFullDay, comparar, filtrarInforme, consultar, renderizar
     });
     root.HAIKU_CLOUDBEDS_PDF_V1 = api;
     if (typeof module !== "undefined") module.exports = api;

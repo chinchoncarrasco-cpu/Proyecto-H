@@ -12,10 +12,15 @@ on:
       - "js/supabase-asistente-totales-v1.js"
       - "js/sites-resumen-servicio-v1.js"
       - "js/supabase-asistente-v1.js"
+      - "js/haiku-cloudbeds-informes-v1.js"
+      - "js/supabase-asistente-cloudbeds-informes-v1.js"
+      - "js/haiku-cloudbeds-pdf-v1.js"
+      - "js/supabase-libro-reserva-worker-v1.js"
       - "js/haiku-libro-consultas-v1.js"
       - "js/supabase-asistente-historial-v1.js"
       - "js/supabase-asistente-libro-auto-v1.js"
       - "css/sites-asistente-v1.css"
+      - "css/supabase-asistente-v1.css"
       - "assets/guias/**"
       - "tests/haku-guias-operativas*.cjs"
       - "tests/haku-lenguaje-operativo.test.cjs"
@@ -24,6 +29,7 @@ on:
       - "supabase/migrations/*_haku_operaciones_chat.sql"
       - "supabase/migrations/20260910180000_bove_registro_atomico.sql"
       - "tests/haku-ayuda-browser-check.cjs"
+      - "tests/cloudbeds-informes.test.cjs"
       - "tests/totales-asistente.test.cjs"
       - "tests/resumen-servicio-sites.test.cjs"
       - "panel.html"
@@ -48,6 +54,7 @@ jobs:
           tests/haku-reserva-convivencia-v1.test.cjs tests/airbnb-prepaid-card.test.cjs tests/haiku-libro-auto.test.cjs
           tests/haku-lenguaje-operativo.test.cjs tests/totales-asistente.test.cjs tests/resumen-servicio-sites.test.cjs
           tests/haku-operaciones-chat.test.cjs tests/bove-escritura-*.test.cjs tests/bove-routing.test.cjs
+          tests/cloudbeds-informes.test.cjs tests/cloudbeds-pdf.test.cjs tests/cloudbeds-haku-tarifas-2e.test.cjs
       - name: Navegador aislado
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-guias" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 @electric-sql/pglite@0.5.8

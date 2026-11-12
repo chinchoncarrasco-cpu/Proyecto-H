@@ -175,6 +175,13 @@ async function ayuda(browser,ancho,tema) {
         assert.equal(await campo.inputValue(),frase);
         assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),0);
         assert.deepEqual(await page.evaluate(()=>prueba.rpc),[]);
+        await buscador.fill("informes cloudbeds");
+        const selector = page.waitForEvent("filechooser");
+        await panel.getByRole("button",{name:"Adjuntar informes",exact:true}).click();
+        const archivos = await selector;
+        assert.equal(archivos.isMultiple(),true);
+        assert.match(await archivos.element().getAttribute("accept"),/\.pdf,.*\.xlsx/);
+        assert.equal(await campo.inputValue(),frase);
         await panel.getByRole("button",{name:"Cerrar Ayuda"}).click();
         assert.equal(await panel.count(),0);
         await campo.fill("Haku, ¿qué te puedo pedir?");

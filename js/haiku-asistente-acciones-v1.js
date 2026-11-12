@@ -334,7 +334,9 @@
         if (!clic && !tecla || campo.disabled || root.HAIKU_ASISTENTE?.procesando?.()) return;
         const original=campo.value;
         const texto=original.trim();
-        if (!texto || root.HAIKU_ASISTENTE?.adjuntos?.().some(a=>a.tipo==="application/pdf")) return;
+        if (!texto || root.HAIKU_CLOUDBEDS_INFORMES_V1?.esSolicitud(texto) ||
+            doc.querySelector("#haiku-asistente-adjuntos [data-documento]") ||
+            root.HAIKU_ASISTENTE?.adjuntos?.().some(a=>a.tipo==="application/pdf")) return;
         const adjuntos=doc.getElementById("haiku-asistente-adjuntos")?.querySelector(".haiku-asistente-adjunto");
         const envio=Boolean(clic || evento.ctrlKey || evento.metaKey);
         const reclamar=()=>{evento.preventDefault();evento.stopImmediatePropagation();};

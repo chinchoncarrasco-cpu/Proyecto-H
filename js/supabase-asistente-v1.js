@@ -12,11 +12,16 @@
     const cliente = window.haikuSupabase;
     if (!cliente) return;
 
-    const MAX_IMAGENES = 6;
+    const MAX_ADJUNTOS = 6;
     const MAX_ARCHIVO_BYTES = 5 * 1024 * 1024;
     const MAX_TOTAL_BYTES = 12 * 1024 * 1024;
+    const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const ACEPTAR_IMAGENES = "image/png,image/jpeg,image/webp";
+    const ACEPTAR_INFORMES = "application/pdf,.pdf," + MIME_XLSX + ",.xlsx";
 
     const adjuntos = [];
+    let selectorInformes = false;
+    let modoInformes = false;
     let procesando = false;
     let guardandoReserva = false;
     let ultimaPreview = null;
@@ -63,6 +68,7 @@
                         <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
                         <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
                         <button type="button" data-haiku-accion-rapida="consultar-documento">Cloudbeds · Tarifas</button>
+                        <button type="button" data-haiku-accion-rapida="informes-cloudbeds">Informes Cloudbeds</button>
                         <button type="button" data-haiku-accion-rapida="ingresos-manager">Ingresos Manager</button>
                         <button type="button" data-haiku-accion-rapida="proceso-reservas">Proceso de reservas</button>
                         <button type="button" data-haiku-accion-rapida="tareas-hoy">Tareas de hoy</button>
@@ -90,7 +96,7 @@
                     <button type="button" class="haiku-asistente-enviar" id="haiku-asistente-enviar">Enviar</button>
                 </div>
 
-                <input id="haiku-asistente-archivos" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" multiple hidden>
+                <input id="haiku-asistente-archivos" type="file" accept="${ACEPTAR_IMAGENES},${ACEPTAR_INFORMES}" multiple hidden>
                 </div>
             </div>
         </section>
@@ -106,6 +112,7 @@
     const mensajes = root.querySelector("#haiku-asistente-mensajes");
     const campo = root.querySelector("#haiku-asistente-texto");
     const adjuntar = root.querySelector("#haiku-asistente-adjuntar");
+    const pistaAdjuntos = root.querySelector(".haiku-asistente-pista");
     const archivosInput = root.querySelector("#haiku-asistente-archivos");
     const adjuntosWrap = root.querySelector("#haiku-asistente-adjuntos");
     const enviar = root.querySelector("#haiku-asistente-enviar");
@@ -186,7 +193,19 @@
     }
 
     function liberarAdjunto(adjunto) {
-        try { URL.revokeObjectURL(adjunto.url); } catch {}
+        if (adjunto.url) URL.revokeObjectURL(adjunto.url);
+    }
+
+    function formatoAdjunto(file) {
+        if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return "pdf";
+        if (file.type === MIME_XLSX || /\.xlsx$/i.test(file.name)) return "xlsx";
+        return /^image\/(png|jpeg|webp)$/i.test(file.type) ? "imagen" : null;
+    }
+
+    function usarInformes(texto) {
+        const documentos = adjuntos.filter(a => a.formato !== "imagen");
+        return modoInformes || documentos.length > 1 || documentos.some(a => a.formato === "xlsx") ||
+            window.HAIKU_CLOUDBEDS_INFORMES_V1?.esSolicitud(texto) === true;
     }
 
     function renderizarAdjuntos() {
@@ -196,11 +215,12 @@
             const item = document.createElement("div");
             item.className = "haiku-asistente-adjunto";
 
-            const esPDF = adjunto.file.type === "application/pdf";
-            const icono = document.createElement(esPDF ? "span" : "img");
-            if (esPDF) {
+            const documento = adjunto.formato !== "imagen";
+            const icono = document.createElement(documento ? "span" : "img");
+            if (documento) {
+                item.dataset.documento = adjunto.formato;
                 icono.className = "haiku-asistente-adjunto-icono";
-                icono.textContent = "PDF";
+                icono.textContent = adjunto.formato.toUpperCase();
             } else {
                 icono.src = adjunto.url;
                 icono.alt = "";
@@ -218,6 +238,7 @@
                 if (procesando || guardandoReserva) return;
                 const [eliminado] = adjuntos.splice(indice, 1);
                 if (eliminado) liberarAdjunto(eliminado);
+                if (!adjuntos.some(a => a.formato !== "imagen")) modoInformes = false;
                 renderizarAdjuntos();
                 actualizarEnviar();
             });
@@ -230,6 +251,7 @@
     function limpiarAdjuntos() {
         adjuntos.forEach(liberarAdjunto);
         adjuntos.length = 0;
+        modoInformes = false;
         archivosInput.value = "";
         renderizarAdjuntos();
     }
@@ -250,7 +272,11 @@
         botonesRapidos.forEach(botonRapido => {
             botonRapido.disabled = ocupado && !['ingresos-manager','proceso-reservas'].includes(botonRapido.dataset.haikuAccionRapida);
         });
-        enviar.textContent = procesando ? "Analizando…" : "Enviar";
+        const informes = usarInformes(campo.value);
+        enviar.textContent = procesando ? "Analizando…" : informes ? "Comparar" : "Enviar";
+        if (informes) enviar.setAttribute("aria-label", enviar.textContent);
+        else enviar.removeAttribute("aria-label");
+        pistaAdjuntos.textContent = informes ? "Informes Cloudbeds · PDF o XLSX" : "Puedes pegar una captura aquí.";
     }
 
     function periodoCalendarioChile(desplazamiento = 0, instante = new Date()) {
@@ -333,6 +359,12 @@
         ayuda.mostrar({mensajes, campo, ejecutar:ejecutarAccionRapida});
     }
 
+    function elegirArchivos(aceptar, informes = false) {
+        selectorInformes = informes;
+        archivosInput.accept = aceptar;
+        archivosInput.click();
+    }
+
     function ejecutarAccionRapida(accion) {
         if (accion === 'ingresos-manager' || accion === 'proceso-reservas') {
             mostrarGuia(accion === 'ingresos-manager' ? 'manager' : 'reservas');
@@ -340,12 +372,10 @@
         }
         if (estaOcupado()) return;
         if (accion === "ayuda") { mostrarAyuda(); return; }
-        if (accion === "revisar-captura" || accion === "consultar-documento") {
-            archivosInput.accept = accion === "consultar-documento"
-                ? "application/pdf"
-                : "image/png,image/jpeg,image/webp";
+        if (accion === "revisar-captura" || accion === "consultar-documento" || accion === "informes-cloudbeds") {
             rapidas.open = false;
-            archivosInput.click();
+            const informes = accion === "informes-cloudbeds";
+            elegirArchivos(informes ? ACEPTAR_INFORMES : accion === "consultar-documento" ? "application/pdf,.pdf" : ACEPTAR_IMAGENES, informes);
             return;
         }
         if (accion === "preparar-reserva") {
@@ -367,30 +397,28 @@
         return adjuntos.reduce((total, item) => total + Number(item.file?.size || 0), 0);
     }
 
-    function incorporarArchivos(files) {
+    function incorporarArchivos(files, informes = false) {
         if (procesando || guardandoReserva) return;
         let omitidos = 0;
 
         [...files].forEach(file => {
-            if (adjuntos.length >= MAX_IMAGENES) {
+            const formato = formatoAdjunto(file);
+            if (adjuntos.length >= MAX_ADJUNTOS || !formato || informes && formato === "imagen") {
                 omitidos++;
                 return;
             }
 
-            if (!/^(?:image\/(png|jpeg|webp)|application\/pdf)$/i.test(file.type || "")) {
-                omitidos++;
-                return;
-            }
-
-            if (file.size > (file.type === "application/pdf" ? MAX_TOTAL_BYTES : MAX_ARCHIVO_BYTES) || bytesAdjuntos() + file.size > MAX_TOTAL_BYTES) {
+            if (file.size > (formato === "imagen" ? MAX_ARCHIVO_BYTES : MAX_TOTAL_BYTES) || bytesAdjuntos() + file.size > MAX_TOTAL_BYTES) {
                 omitidos++;
                 return;
             }
 
             adjuntos.push({
                 file,
-                url: URL.createObjectURL(file)
+                formato,
+                url: formato === "imagen" ? URL.createObjectURL(file) : null
             });
+            if (informes) modoInformes = true;
         });
 
         archivosInput.value = "";
@@ -400,7 +428,7 @@
         if (omitidos) {
             agregarMensaje(
                 "asistente",
-                `No adjunté ${omitidos} archivos. Se admiten PNG/JPG/WEBP (5 MB por imagen) y un PDF Cloudbeds de sólo lectura (12 MB). Máximo 12 MB en total.`,
+                `No adjunté ${omitidos} archivos. ${informes ? "Usa PDF o XLSX de Cloudbeds." : "Usa PNG, JPG o WEBP (5 MB por imagen), PDF o XLSX."} Hasta 6 archivos y 12 MB en total.`,
                 "haiku-asistente-mensaje--error"
             );
         }
@@ -1620,15 +1648,51 @@
         return data;
     }
 
+    async function compararInformes(archivos, texto) {
+        const api = window.HAIKU_ASISTENTE_CLOUDBEDS_INFORMES_V1;
+        if (!api) {
+            agregarMensaje("asistente", "Informes Cloudbeds no se cargó. Recarga Proyecto H.", "haiku-asistente-mensaje--error");
+            return;
+        }
+        if (!archivos.length || archivos.some(a => a.formato === "imagen")) {
+            agregarMensaje("asistente", "Adjunta PDF de Reservas o Notas, o XLSX de Transacciones o Cancelaciones para comparar con Proyecto H y el Libro.");
+            return;
+        }
+        procesando = true;
+        actualizarEnviar();
+        agregarMensaje("usuario", texto || "Comparar Informes Cloudbeds").dataset.hakuInformesCloudbeds = "";
+        const estado = agregarMensaje("asistente", "Leyendo informes Cloudbeds…", "haiku-asistente-mensaje--procesando");
+        estado.dataset.hakuInformesCloudbeds = "";
+        campo.value = "";
+        limpiarAdjuntos();
+        try {
+            const modelo = await api.analizar(archivos.map(a => ({ file: a.file, tipo: a.formato })), cliente,
+                () => { estado.textContent = "Comparando con Proyecto H y el Libro…"; });
+            api.montar(estado, modelo);
+        } catch (error) {
+            estado.classList.add("haiku-asistente-mensaje--error");
+            estado.textContent = error?.message || "No pude completar la comparación.";
+        } finally {
+            estado.classList.remove("haiku-asistente-mensaje--procesando");
+            procesando = false;
+            actualizarEnviar();
+            if (estado.isConnected) estado.scrollIntoView({ block: "start" });
+        }
+    }
+
     async function enviarMensaje() {
         if (estaOcupado()) return;
 
         const texto = campo.value.trim();
         if (!texto && adjuntos.length === 0) return;
+        if (usarInformes(texto)) {
+            await compararInformes([...adjuntos], texto);
+            return;
+        }
 
         const cantidad = adjuntos.length;
         const archivosActuales = adjuntos.map(item => item.file);
-        if (archivosActuales.some(file => file.type === "application/pdf")) {
+        if (adjuntos.some(a => a.formato === "pdf")) {
             if (archivosActuales.length !== 1) {
                 agregarMensaje("asistente", "Para revisar Cloudbeds, deja sólo un PDF adjunto, sin imágenes.", "haiku-asistente-mensaje--error");
                 return;
@@ -1636,13 +1700,24 @@
             const lector = window.HAIKU_CLOUDBEDS_PDF_V1;
             if (!lector) { agregarMensaje("asistente", "No se cargó el lector local de PDF. Recarga el panel.", "haiku-asistente-mensaje--error"); return; }
             procesando = true; actualizarEnviar();
-            agregarMensaje("usuario", texto || "Revisar PDF Cloudbeds");
+            const mensajePDF = agregarMensaje("usuario", texto || "Revisar PDF Cloudbeds");
             const estadoPDF = agregarMensaje("asistente", "Leyendo PDF Cloudbeds localmente…");
             campo.value = ""; limpiarAdjuntos();
             let limite;
             try {
-                const entradas = await Promise.race([(async () => lector.leerPDF(await archivosActuales[0].arrayBuffer()))(), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La lectura del PDF tardó demasiado.")), 45000); })]);
+                const archivo = archivosActuales[0];
+                const paginas = await Promise.race([(async () => lector.leerPaginasPDF(await archivo.arrayBuffer()))(), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La lectura del PDF tardó demasiado.")), 45000); })]);
                 clearTimeout(limite);
+                const formatos = window.HAIKU_CLOUDBEDS_INFORMES_V1;
+                const informes = window.HAIKU_ASISTENTE_CLOUDBEDS_INFORMES_V1;
+                if (informes && formatos?.esPDFNotas(paginas)) {
+                    mensajePDF.dataset.hakuInformesCloudbeds = "";
+                    estadoPDF.dataset.hakuInformesCloudbeds = "";
+                    estadoPDF.textContent = "Comparando las notas con Proyecto H y el Libro…";
+                    informes.montar(estadoPDF, await informes.analizar([], cliente, null, [formatos.parsearPDF(paginas, archivo.name)]));
+                    return;
+                }
+                const entradas = lector.parsearPaginas(paginas);
                 estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";
                 const informe = await Promise.race([lector.consultar(entradas, cliente), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La consulta tardó demasiado. Vuelve a intentarlo.")), 30000); })]);
                 const tarifas = window.HAIKU_CLOUDBEDS_TARIFAS_V1;
@@ -1728,11 +1803,14 @@
     });
     adjuntar.addEventListener("click", () => {
         if (!procesando && !guardandoReserva) {
-            archivosInput.accept = "image/png,image/jpeg,image/webp,application/pdf";
-            archivosInput.click();
+            const informes = usarInformes(campo.value);
+            elegirArchivos(informes ? ACEPTAR_INFORMES : `${ACEPTAR_IMAGENES},${ACEPTAR_INFORMES}`, informes);
         }
     });
-    archivosInput.addEventListener("change", () => incorporarArchivos(archivosInput.files || []));
+    archivosInput.addEventListener("change", () => {
+        incorporarArchivos(archivosInput.files || [], selectorInformes);
+        selectorInformes = false;
+    });
     campo.addEventListener("input", actualizarEnviar);
     campo.addEventListener("paste", evento => {
         if (procesando || guardandoReserva) return;
@@ -1750,15 +1828,15 @@
         }
     });
     enviar.addEventListener("click", enviarMensaje);
-    // Reclamar PDF antes de los interceptores de imágenes y de cualquier writer.
-    function interceptarPDF(evento) {
+    // Los documentos tienen su propia lectura y no pasan por acciones de escritura.
+    function interceptarDocumentos(evento) {
         const accion = evento.type === "click" ? evento.target?.closest?.("#haiku-asistente-enviar") : evento.target === campo && (evento.ctrlKey || evento.metaKey) && evento.key === "Enter";
-        if (!accion || !adjuntos.some(a => a.file.type === "application/pdf")) return;
+        if (!accion || !usarInformes(campo.value) && !adjuntos.some(a => a.formato !== "imagen")) return;
         evento.preventDefault(); evento.stopImmediatePropagation();
         void enviarMensaje();
     }
-    window.addEventListener("click", interceptarPDF, true);
-    window.addEventListener("keydown", interceptarPDF, true);
+    window.addEventListener("click", interceptarDocumentos, true);
+    window.addEventListener("keydown", interceptarDocumentos, true);
 
     window.addEventListener("haiku:auth-ready", () => {
         mostrarSiCorresponde();
@@ -1767,6 +1845,11 @@
     if (cliente?.auth?.onAuthStateChange) {
         cliente.auth.onAuthStateChange(evento => {
             if (evento === "SIGNED_OUT") {
+                mensajes.querySelectorAll("[data-haku-informes-cloudbeds]").forEach(n => n.remove());
+                if (adjuntos.some(a => a.formato !== "imagen")) {
+                    limpiarAdjuntos();
+                    actualizarEnviar();
+                }
                 cerrarPanel();
                 root.hidden = true;
             } else if (evento === "SIGNED_IN") {
@@ -1788,7 +1871,7 @@
         ultimaPreview: () => ultimaPreview,
         adjuntos: () => adjuntos.map(item => ({
             nombre: item.file.name,
-            tipo: item.file.type,
+            tipo: item.formato === "pdf" ? "application/pdf" : item.formato === "xlsx" ? MIME_XLSX : item.file.type,
             bytes: item.file.size
         }))
     };

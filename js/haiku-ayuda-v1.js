@@ -104,6 +104,8 @@
                 ejemplos:["Haku, lee este listado de reservas de Cloudbeds","Haku, revisa la captura de Actividad de hoy"]},
             {titulo:"Comparar tarifas con un PDF de Cloudbeds",detalle:"Adjunta el PDF del listado. Haku cruza importes y estadías y prepara los ajustes compatibles.",
                 atajo:"consultar-documento",rotulo:"Adjuntar PDF"},
+            {titulo:"Informes Cloudbeds",detalle:"Adjunta uno o varios PDF de Reservas o Notas y XLSX de Transacciones o Cancelaciones. Haku compara los datos con Proyecto H y el Libro.",
+                ejemplos:["Haku, contrasta estos informes Cloudbeds con el Libro","Haku, revisa las transacciones de Cloudbeds"],atajo:"informes-cloudbeds",rotulo:"Adjuntar informes"},
             {titulo:"Ingresos Manager",detalle:"Abre la guía operativa de ingreso de pagos en Manager.",atajo:"ingresos-manager",rotulo:"Abrir guía"},
             {titulo:"Proceso de reservas",detalle:"Abre la guía de recepción y registro de reservas.",atajo:"proceso-reservas",rotulo:"Abrir guía"}
         ]},
