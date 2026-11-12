@@ -1,6 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const api = require('../js/haiku-cloudbeds-pdf-v1');
+
+test('el lector de listados Cloudbeds se inicia y expone la clasificación de categoría y plan', () => {
+  const window = { haikuSupabase: {}, HAIKU_ASISTENTE: {} };
+  const document = { getElementById: () => ({ addEventListener() {} }) };
+  const script = fs.readFileSync(require.resolve('../js/supabase-asistente-listado-cloudbeds-v2.js'), 'utf8');
+  vm.runInNewContext(script, { window, document, console: { info() {} } });
+  const listado = window.HAIKU_ASISTENTE_LISTADO_CLOUDBEDS_V2;
+  assert.equal(listado.tipoDesdeCategoria('Full Day'), 'fullday');
+  assert.equal(listado.tipoDesdeCategoria('Loft Clásico', 'Full Day'), 'fullday');
+  assert.equal(listado.tipoDesdeCategoria('Loft Clásico'), 'alojamiento');
+});
 
 const raw = (extra = {}) => ({
   reserva_cloudbeds: '9000000000001',
