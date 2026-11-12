@@ -471,7 +471,7 @@
     }, true);
 
     window.HAIKU_ASISTENTE_LISTADO_CLOUDBEDS_V2 = Object.freeze({
-        cabanaDesdeCodigo, tipoDesdeCategoria, estadoDesdeCloudbeds, tarifasDesdeTotal, problemasFilas
+        cabanaDesdeCodigo, tipoDesdeCategoria: tipoDesdeCategoriaOPlan, estadoDesdeCloudbeds, tarifasDesdeTotal, problemasFilas
     });
     console.info("HAKU · Listado Cloudbeds V2 preparado · ID opcional · teléfono enmascarado conservado.");
 })();
