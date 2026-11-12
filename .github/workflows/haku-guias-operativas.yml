@@ -4,6 +4,7 @@ on:
     paths:
       - "js/haiku-guias-operativas-v1.js"
       - "js/supabase-asistente-v1.js"
+      - "js/haiku-libro-consultas-v1.js"
       - "js/supabase-asistente-historial-v1.js"
       - "js/supabase-asistente-libro-auto-v1.js"
       - "css/sites-asistente-v1.css"
@@ -34,7 +35,7 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: node tests/haku-guias-operativas-browser-check.cjs
-      - name: Acciones rápidas de pagos, reservas y servicios
+      - name: Acciones rápidas y consultas de titulares
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: node tests/haku-comparacion-mes-siguiente-browser-check.cjs

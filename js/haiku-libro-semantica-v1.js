@@ -298,12 +298,23 @@
             return {texto,tipo,...(rol ? {rol} : {}),...(nombreEtiquetado && texto===nombreEtiquetado ? {titular_explicito:true} : {})};
         });
     }
-    function candidatosTitular(texto) {
+    function candidatosTitular(texto, reservaConFormato = false) {
         const porNombre=new Map();
-        for (const candidato of clasificarFragmentos(texto)) {
+        const fragmentos=clasificarFragmentos(texto);
+        for (const candidato of fragmentos) {
             if (candidato.tipo!=='posible_titular') continue;
             const nombre=normalizar(candidato.texto);
             if (!porNombre.has(nombre)) porNombre.set(nombre,candidato);
+        }
+        // Un nombre corto sin etiqueta necesita el bloque de reserva, más
+        // ocupación y un dato de identidad escrito en la propia celda.
+        const primero=fragmentos.find(x=>x.tipo!=='etiqueta');
+        if (reservaConFormato && primero?.tipo==='otro' && /^[\p{Lu}][\p{Ll}\p{M}]{2,}$/u.test(primero.texto)) {
+            const datos=fragmentos.filter(f=>f.tipo==='dato_estructurado'&&!f.rol);
+            const ocupacion=datos.some(f=>/^\d+\s*(?:adl|adlt|adultos?|noches?)\b/.test(normalizar(f.texto)));
+            const contacto=datos.some(f=>/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(f.texto) ||
+                /^\+\d[\d ()-]{7,}\d$/.test(f.texto) || Boolean(documentoDelLibro(f.texto)));
+            if (ocupacion && contacto) porNombre.set(normalizar(primero.texto),{...primero,titular_parcial:true});
         }
         // Excel puede unir el final de una nota en color al nombre repetido.
         // Exigir que ese nombre completo aparezca por separado en la misma celda.
@@ -358,7 +369,7 @@
     }
     function extensionNochesReserva(texto) {
         const extensiones = [];
-        const patron = /\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar))\s+(\d+)\s*noches?\b/g;
+        const patron = /(?:^(?:se\s+)?(?:extiende|exteinde)|\b(?:(?:se\s+)?extendio|(?:se\s+)?agrego|(?:pidio|solicito)\s+(?:extender|agregar)))\s+(\d+)\s*noches?\b/g;
         for (const fragmento of separarCampos(texto)) {
             for (const match of normalizar(fragmento).matchAll(patron)) extensiones.push(Number(match[1]));
         }
@@ -1285,7 +1296,9 @@
                     continue;
                 }
                 const t = normalizar(cell.valor);
-                const candidatos = candidatosTitular(cell.valor);
+                const fondo = color(estilos[cell.estiloId]?.fill?.fgColor);
+                const reservaConFormato = ["B4A7D6","D9D2E9","D5A6BD","F4CCCC","EAD1DC"].includes(fondo);
+                const candidatos = candidatosTitular(cell.valor, reservaConFormato);
                 const nombre = candidatos.length===1 ? candidatos[0].texto : null;
                 if (/^(libre|full\s*day)$/.test(t) || !nombre && /mantencion|mantenimiento|bloquead/.test(t)) {
                     res.espacios.push({ fecha: h.fechaISO, cabana, estado: t === "libre" ? "libre_explicito" : "bloque_o_marca", texto_original: cell.valor, origen: origen(cell) }); continue;
@@ -1316,6 +1329,7 @@
                 const nochesTextoEfectivas = nochesTexto === null ? null : nochesTexto + (nochesExtensionTexto ?? 0);
                 const nochesGeometria = fd ? 0 : dias.length;
                 const dudas = [];
+                if (candidatos[0]?.titular_parcial) dudas.push("El Libro indica un solo nombre para el titular; confirmar la identidad.");
                 if (data.fidelidad?.formato===false) dudas.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
                 const notasInterpretacion = [];
                 const advertenciasInformativas = [];

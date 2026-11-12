@@ -1430,3 +1430,81 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
 }
 .haku-libro-servicios__acciones-item > button:disabled { opacity: .55; cursor: default; }
 @media (max-width: 440px) { .haku-libro-servicio-manual { margin-inline: 10px; } }
+.haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haku-titulares-periodo {
+    width: 100%; padding: 0; border: 0; background: transparent;
+}
+.haku-titulares {
+    container: haku-titulares / inline-size;
+    min-width: 0;
+    border: 1px solid var(--haku-compacto-borde, #dbe3de);
+    border-radius: 8px;
+    color: var(--haku-compacto-texto, #172019);
+    background: var(--haku-compacto-superficie, #fbfcfb);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.haku-titulares__cabecera { padding: 10px 12px; }
+.haku-titulares__cabecera h3 { margin: 0 0 3px; color: inherit; font-size: 15px; }
+.haku-titulares__meta {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px;
+    color: var(--haku-compacto-secundario, #586c60);
+    font-size: 11px;
+}
+.haku-titulares__columnas { display: none; }
+.haku-titulares__filas, .haku-titulares__casos { margin: 0; padding: 0; list-style: none; }
+.haku-titulares__fila, .haku-titulares__caso {
+    padding: 7px 12px;
+    border-top: 1px solid var(--haku-compacto-borde, #dbe3de);
+}
+.haku-titulares__fila {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(max-content, auto);
+    grid-template-areas: "nombre cabana" "ingreso salida" "nota nota";
+    align-items: baseline;
+    gap: 2px 8px;
+}
+.haku-titulares__nombre { grid-area: nombre; min-width: 0; }
+.haku-titulares__cabana { grid-area: cabana; justify-self: end; white-space: nowrap; }
+.haku-titulares__ingreso { grid-area: ingreso; }
+.haku-titulares__salida { grid-area: salida; }
+.haku-titulares__ingreso, .haku-titulares__salida { font-size: 11px; font-variant-numeric: tabular-nums; }
+.haku-titulares__etiqueta-fecha {
+    margin-inline-end: 4px;
+    color: var(--haku-compacto-secundario, #586c60);
+}
+.haku-titulares__movimiento {
+    margin-inline-start: 5px;
+    color: var(--haku-compacto-acento, #286c4e);
+    font-size: 11px;
+}
+.haku-titulares__nota, .haku-titulares__cobertura, .haku-titulares__caso > strong {
+    color: var(--haku-compacto-aviso, #825016);
+}
+.haku-titulares__fila > .haku-titulares__nota { grid-area: nota; margin: 0; font-size: 11px; }
+.haku-titulares__caso p { margin: 3px 0 0; }
+.haku-titulares__detalle, .haku-titulares__cobertura, .haku-titulares__vacio {
+    margin: 0;
+    border-top: 1px solid var(--haku-compacto-borde, #dbe3de);
+}
+.haku-titulares__detalle > summary { padding: 8px 12px; cursor: pointer; }
+.haku-titulares__detalle > summary:focus-visible { outline: 2px solid var(--haku-compacto-acento, #286c4e); outline-offset: -2px; }
+.haku-titulares__detalle > .haku-titulares__nota, .haku-titulares__cobertura, .haku-titulares__vacio { margin: 0; padding: 7px 12px; }
+@media (min-width: 701px) {
+    @container haku-titulares (min-width: 360px) {
+        .haku-titulares__columnas, .haku-titulares__fila {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 50px repeat(2, 68px);
+            gap: 2px 8px;
+        }
+        .haku-titulares__fila { grid-template-areas: "nombre cabana ingreso salida" "nota nota nota nota"; }
+        .haku-titulares__columnas {
+            padding: 5px 12px;
+            color: var(--haku-compacto-secundario, #586c60);
+            background: var(--haku-compacto-suave, #eef4ef);
+            font-size: 10px;
+        }
+        .haku-titulares__cabana { justify-self: start; }
+        .haku-titulares__etiqueta-fecha { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    }
+}

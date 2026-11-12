@@ -53,6 +53,7 @@
     const comprobantesActualizaciones = new WeakMap(); // evidencia confirmada, sólo en memoria durante este flujo
     const DEFINIR_MEDIO_PAGO = 'definir_medio_pago';
     const nombresMes = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+    const mesesEnTexto = [...nombresMes, "setiembre"].join("|");
     const etiquetas = {
         sin_checkin: "Sin Check-In según texto negro",
         hospedada: "Hospedada según texto blanco",
@@ -62,7 +63,83 @@
         pendiente_por_color: "Pendiente de confirmación según fondo rosado"
     };
 
+    function intencionTitulares(texto) {
+        const t = S.normalizar(texto);
+        if (/\b(?:pagos?|abonos?|servicios?|aseo|bloqueos?|disponibilidad|libres|cancelaciones|incorpora(?:r)?|actualiza(?:r)?|registra(?:r)?|modifica(?:r)?|agrega(?:r)?|crea(?:r)?|edita(?:r)?|elimina(?:r)?|borra(?:r)?|cancela(?:r)?|cambia(?:r)?)\b/.test(t)) return null;
+        const quien = t.match(/\bquien(?:es)?\s+(?:se\s+)?(ingresan?|entran?|llegan?|salen?|est(?:a|an)(?=\s+(?:hospedad|alojad|en\s+(?:la\s+)?cab))|continuan?|hospedan?|quedan?|es\s+el\s+titular|son\s+los\s+titulares)\b/)?.[1];
+        if (!quien && !/\btitulares\b|\b(?:que|cual es el)\s+titular\b|\btitular\s+(?:de|en)\s+(?:la\s+)?cab(?:ana)?\b/.test(t)) return null;
+        if (/\b(?:a nombre de|por nombre|informe de actualizacion|version(?:es)?|cambios?)\b/.test(t)) return null;
+        const libro = /\blibro\b/.test(t);
+        const enProyecto = /\b(?:en|del?|desde)\s+(?:el\s+)?proyecto\s+h\b/.test(t);
+        if (!libro && !enProyecto && !/\btitular(?:es)?\b/.test(t) && /\bquienes\b/.test(t)) return null;
+        const comparar = /\b(?:compara(?:r)?|comparacion|audita(?:r)?|auditoria)\b|\b(?:vs\.?|contra|con)\s+(?:el\s+)?proyecto\s+h\b/.test(t);
+        const proyecto = !comparar && (enProyecto || !libro && Boolean(quien) && !/\btitular(?:es)?\b/.test(t));
+        let movimiento;
+        if (/^(?:ingres|entr|lleg)/.test(quien || "") || /\b(?:ingresos?|entradas?|llegadas?|check[\s-]*in)\b/.test(t)) movimiento = "ingresos";
+        if (/^sal/.test(quien || "") || /\b(?:salidas?|check[\s-]*out)\b/.test(t)) movimiento = movimiento ? null : "salidas";
+        if (/^(?:esta|continua|hospeda|queda)/.test(quien || "")) movimiento = "ocupacion";
+        return {t, quien, comparar, proyecto, movimiento};
+    }
+
+    const numeroMes = mes => nombresMes.indexOf(mes === "setiembre" ? "septiembre" : mes) + 1;
+    function finDeMes(year, month) {
+        return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    }
+
+    function interpretarTitulares(texto, {t, quien, comparar, proyecto, movimiento}, hojas) {
+        const hoy = fechaCalendarioChile(new Date());
+        const [yearActual, mesActual] = hoy.split("-").map(Number);
+        const year = Number(t.match(/\b20\d{2}\b/)?.[0]) || yearActual;
+        const fechas = [...t.matchAll(/\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})|\d{1,2}\/\d{1,2})\b/g)]
+            .map(([f]) => /^\d{4}-/.test(f) ? S.iso(...f.split("-")) :
+                /^\d{1,2}\/\d{1,2}$/.test(f) ? S.fechaTexto(`${f}/${year}`) : S.fechaTexto(f));
+        const mes = t.match(new RegExp(`\\b(${mesesEnTexto})\\b`))?.[1];
+        const fechasConMes = new RegExp(`(?:\\b(\\d{1,2})(?:\\s+(?:al|hasta|y)\\s+(?:el\\s+)?|\\s*[–—-]\\s*))?\\b(\\d{1,2})\\s+(?:de\\s+)?(${mesesEnTexto})(?:\\s+(?:del?\\s+)?(20\\d{2}))?\\b`, "g");
+        if (!fechas.length) for (const [,diaInicial,dia,mesTexto,anio] of t.matchAll(fechasConMes)) {
+            if (diaInicial) fechas.push(S.iso(anio || year, numeroMes(mesTexto), diaInicial));
+            fechas.push(S.iso(anio || year, numeroMes(mesTexto), dia));
+        }
+        if (fechas.length > 2 || fechas.some(f => !f)) throw new Error("Revisa las fechas. Indica un día o un intervalo de dos fechas válidas.");
+        let [desde, hasta = desde] = fechas;
+        const desplazamiento = /\b(?:proximo mes|mes siguiente|mes que viene)\b/.test(t) ? 1 : /\b(?:mes anterior|mes pasado)\b/.test(t) ? -1 : 0;
+        const relativa = [...t.matchAll(/\b(hoy|manana|ayer)\b/g)].map(([f]) =>
+            f === "hoy" ? hoy : S.sumarDias(hoy, f === "manana" ? 1 : -1));
+        const hojaLiteral = t.match(/\b(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s?(\d{2})\b/);
+        if (!desde && !mes && !hojaLiteral && relativa.length) {
+            if (relativa.length > 2) throw new Error("Indica un día o un intervalo de dos fechas.");
+            [desde, hasta = desde] = relativa;
+        }
+        if (!desde && quien && !mes && !hojaLiteral && !/\bmes\b/.test(t)) desde = hasta = hoy;
+        if (!desde) {
+            const inicio = mes ? S.iso(year, numeroMes(mes), 1) :
+                hojaLiteral ? S.iso(2000 + Number(hojaLiteral[2]), S.meses.indexOf(hojaLiteral[1]) + 1, 1) :
+                new Date(Date.UTC(yearActual, mesActual - 1 + desplazamiento, 1)).toISOString().slice(0,10);
+            desde = inicio;
+            hasta = finDeMes(Number(inicio.slice(0,4)), Number(inicio.slice(5,7)));
+        }
+        if (hasta < desde) throw new Error("La fecha final debe ser igual o posterior a la inicial.");
+        if ((Date.parse(hasta) - Date.parse(desde)) / 86400000 > 62) throw new Error("Consulta como máximo 62 días a la vez.");
+        const cabana = Number(t.match(/\b(?:cab\.?|cabana)\s*(\d{1,2})\b/)?.[1]) || null;
+        const seleccion = [];
+        let hojaPrevia;
+        const claveHoja = fecha => S.meses[Number(fecha.slice(5,7)) - 1] + fecha.slice(2,4);
+        if (!proyecto) {
+            const porClave = new Map(hojas.map(h => [S.normalizar(h).replace(/\s/g, ""), h]));
+            const clavePrevia = claveHoja(S.sumarDias(desde.slice(0,7) + "-01", -1));
+            hojaPrevia = porClave.get(clavePrevia);
+            for (let fecha = desde; fecha <= hasta; fecha = S.sumarDias(fecha, 1)) {
+                const clave = claveHoja(fecha), hoja = porClave.get(clave);
+                if (!hoja) throw new Error(`Falta la hoja ${clave} para consultar ese período en el Libro.`);
+                if (!seleccion.includes(hoja)) seleccion.push(hoja);
+            }
+            if (hojaPrevia) seleccion.unshift(hojaPrevia);
+        }
+        return {texto, desde, hasta, cabana, hojas:seleccion, hojaPrevia, titulares:true, comparar, proyecto, movimiento};
+    }
+
     function interpretar(texto, hojas) {
+        const titulares = intencionTitulares(texto);
+        if (titulares) return interpretarTitulares(texto, titulares, hojas);
         const t = S.normalizar(texto), warnings = [];
         const soloPagos = /\b(?:proyecto h|sistema|supabase)\b/.test(t) &&
             /^(?:(?:haku[, :]*)?\s*libro\s*:\s*)?(?:(?:compara|revisa)\s+(?:(?:solo|solamente|exclusivamente|los)\s+)*pagos?\b|pagos?\b.*\b(?:vs|contra|con)\b)/.test(t);
@@ -166,9 +243,14 @@
         return { checkin, checkout, ocupadas };
     }
 
+    const busquedaTitularSoloLectura = q => Boolean(q.nombre && !q.comparar && !q.versiones && !q.escribir);
+    const coincideNombreConsulta = (titular, nombre) => S.normalizar(titular).includes(nombre) || S.mismaPersona(titular, nombre);
+
     function filtrar(r, q) {
         if (q.cabana && !(r?.cabanas || [r?.cabana]).some(c => Number(c) === Number(q.cabana))) return false;
-        if (q.nombre && !S.normalizar(r?.titular).includes(q.nombre)) return false;
+        if (q.nombre && !(busquedaTitularSoloLectura(q) ?
+            coincideNombreConsulta(r?.titular, q.nombre) || q.nombre.includes(" ") && S.varianteTitular(r?.titular, q.nombre) :
+            S.normalizar(r?.titular).includes(q.nombre))) return false;
         if (!q.desde) return true;
         const rango = rangoReserva(r);
         if (rango.ocupadas.some(d => d >= q.desde && d <= q.hasta)) return true;
@@ -1893,30 +1975,24 @@
     const leerPagosSistema = cliente => paginas(() => cliente.from("pagos")
         .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
 
-    async function compararSistema(reservas, cliente, q = {}) {
+    async function leerEstadiasSistema(cliente, {desde, hasta, focal} = {}) {
         if (!cliente?.auth?.getSession) throw new Error("Inicia sesión en Proyecto H para comparar.");
         const { data: sesion, error } = await cliente.auth.getSession();
         if (error || !sesion?.session) throw new Error("Inicia sesión en Proyecto H para comparar.");
-
-        const detectadasLibro = Array.isArray(reservas) ? reservas.length : 0;
-        let validas = (reservas || []).map(normalizarReservaComparacion).filter(esReservaValida);
-        const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
-        const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
-        if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
 
         const consultaEstadias = () => {
             let consulta=cliente.from("reserva_estadias")
                 .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)");
             // El informe histórico sólo necesita el pequeño intervalo de sus cambios.
             // Los clientes de prueba/legacy sin estos filtros conservan el recorrido normal.
-            if(q.focal===true&&typeof consulta.lte==='function'&&typeof consulta.gte==='function'){
+            if(focal===true&&typeof consulta.lte==='function'&&typeof consulta.gte==='function'){
                 consulta=consulta.lte('fecha_ingreso',hasta).gte('fecha_salida',desde);
             }
             return consulta;
         };
         const raw = await paginas(consultaEstadias);
 
-        const systemAll = raw.map(e => ({
+        const estadias = raw.map(e => ({
             id: e.id,
             reserva_id: e.reserva_id,
             grupo_reserva_id: e.reservas?.grupo_reserva_id,
@@ -1933,40 +2009,10 @@
             adultos: e.adultos, ninos: e.ninos, mascotas: e.mascotas, observaciones: e.reservas?.observaciones,
             tipo_documento: e.reservas?.titular_tipo_documento
         }));
-        const system = systemAll.filter(candidatoElegible);
+        return {estadias, usuario:sesion.session.user.id};
+    }
 
-        validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
-
-        const visiblesRango = system.filter(s =>
-            s.fecha_checkin <= hasta && s.fecha_checkout >= desde &&
-            !/cancelad|no.?show/.test(S.normalizar(s.estado_operativo)) &&
-            !/cancelad|no.?show/.test(S.normalizar(s.estado_reserva))
-        );
-        const reservasSistema = new Set(visiblesRango.map(s => s.reserva_id).filter(Boolean));
-
-        if (!validas.length) {
-            const pagos = q.por_fecha_pago && q.incluirFinanzas !== false ? await leerPagosSistema(cliente) : [];
-            const vacio = [];
-            vacio.meta = {
-                libro: 0,
-                libro_detectadas: detectadasLibro,
-                proyecto: reservasSistema.size,
-                asociadas: 0,
-                faltantes: 0,
-                ambiguas: 0,
-                con_diferencias: 0,
-                pagos_faltantes: 0,
-                pagos_revisar: 0,
-                servicios_revisar: 0
-            };
-            vacio.grupos = [];
-            vacio.pagosDetalle = [];
-            vacio.serviciosDetalle = [];
-            vacio.snapshot = { estadias: system, estadias_todas: systemAll, pagos: pagos.filter(pagoSistemaVigente), pagos_todos: pagos, finanzas: null,
-                efectivo_aplicado: null };
-            return vacio;
-        }
-
+    function asociarEstadiasComparacion(validas, system) {
         // Reserve only exact, unequivocal 1↔1 stays before offering looser candidates.
         // This prevents an exact stay from also appearing as a possible match for another Libro row.
         const propuestasExactas = validas.map((libro, indice) => {
@@ -2010,6 +2056,50 @@
             r.candidatosDetalle = [r.sistema]; delete r.sistema;
         }
 
+        return resultados;
+    }
+
+    async function compararSistema(reservas, cliente, q = {}) {
+        const detectadasLibro = Array.isArray(reservas) ? reservas.length : 0;
+        let validas = (reservas || []).map(normalizarReservaComparacion).filter(esReservaValida);
+        const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
+        const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
+        if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
+        const {estadias:systemAll,usuario} = await leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal});
+        const system = systemAll.filter(candidatoElegible);
+
+        validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
+        const visiblesRango = system.filter(s =>
+            s.fecha_checkin <= hasta && s.fecha_checkout >= desde &&
+            !/cancelad|no.?show/.test(S.normalizar(s.estado_operativo)) &&
+            !/cancelad|no.?show/.test(S.normalizar(s.estado_reserva))
+        );
+        const reservasSistema = new Set(visiblesRango.map(s => s.reserva_id).filter(Boolean));
+
+        if (!validas.length) {
+            const pagos = q.por_fecha_pago && q.incluirFinanzas !== false ? await leerPagosSistema(cliente) : [];
+            const vacio = [];
+            vacio.meta = {
+                libro: 0,
+                libro_detectadas: detectadasLibro,
+                proyecto: reservasSistema.size,
+                asociadas: 0,
+                faltantes: 0,
+                ambiguas: 0,
+                con_diferencias: 0,
+                pagos_faltantes: 0,
+                pagos_revisar: 0,
+                servicios_revisar: 0
+            };
+            vacio.grupos = [];
+            vacio.pagosDetalle = [];
+            vacio.serviciosDetalle = [];
+            vacio.snapshot = { estadias: system, estadias_todas: systemAll, pagos: pagos.filter(pagoSistemaVigente), pagos_todos: pagos, finanzas: null,
+                efectivo_aplicado: null };
+            return vacio;
+        }
+
+        const resultados = asociarEstadiasComparacion(validas, system);
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
         // Global identifier check: a payment on another reservation is a conflict, never new.
         const pagos = q.incluirFinanzas===false ? [] : await leerPagosSistema(cliente);
@@ -2284,7 +2374,7 @@
             resultados.meta.pagos_actualizar = resultados.pagosDetalle.filter(x => x.actualizacionExistente).length;
             resultados.meta.pagos_revisar = resultados.pagosDetalle.filter(x => !x.actualizacionExistente && ['revisar','diferente'].includes(x.estado)).length;
         }
-        usuariosComparacion.set(resultados,sesion.session.user.id);
+        usuariosComparacion.set(resultados,usuario);
         return resultados;
     }
 
@@ -5038,13 +5128,135 @@
     }
 
 
+    function salidaDeclarada(r) {
+        const noches = r.noches_texto_efectivas;
+        if (r.tipo_estadia !== "alojamiento" || r.noches_extension_ambigua ||
+            !Number.isSafeInteger(noches) || noches < 1 || noches === r.noches) return null;
+        const checkin = rangoReserva(r).checkin;
+        const salida = new Date(Date.parse(checkin) + noches * 86400000);
+        return Number.isFinite(salida.getTime()) ? salida.toISOString().match(/^\d{4}-\d{2}-\d{2}/)?.[0] || null : null;
+    }
+
+    function estadiaTitularesEnPeriodo(r, q) {
+        const {checkin, checkout} = rangoReserva(r);
+        if (!checkin || !checkout || q.cabana && q.cabana !== cabanaNumero(r.cabana)) return false;
+        if (q.movimiento === "ingresos") return fechaEnPeriodo(checkin, q);
+        const escrita = salidaDeclarada(r);
+        if (q.movimiento === "salidas") return fechaEnPeriodo(checkout, q) || fechaEnPeriodo(escrita, q);
+        const fin = escrita && escrita > checkout ? escrita : checkout;
+        return checkin <= q.hasta && (q.movimiento === "ocupacion" && checkin !== checkout ? fin > q.desde : fin >= q.desde);
+    }
+
+    function filaTitular(r, q) {
+        const {checkin, checkout} = rangoReserva(r), escrita = salidaDeclarada(r);
+        const fullDay = r.tipo_estadia === "fullday" || r.tipo_estadia === "full_day";
+        const dia = q.desde === q.hasta ? q.desde : null;
+        const salidaEnDuda = escrita && (q.movimiento === "salidas" ||
+            dia && dia >= (escrita < checkout ? escrita : checkout));
+        const movimiento = fullDay ? "Full Day" : salidaEnDuda ? "Salida por confirmar" :
+            dia === checkin ? "Ingresa" : dia === checkout ? "Sale" : dia ? "Continúa" : "";
+        return { titular:r.titular || "Titular sin dato", cabana:cabanaNumero(r.cabana), ingreso:checkin, salida:checkout,
+            salida_escrita:escrita, movimiento, referencia:r.coordenadas_origen ? source(r.coordenadas_origen) : null,
+            fecha_incierta:r.advertencias?.some(a => /geometr[ií]a|formato original/i.test(a)) || false,
+            titular_parcial:r.advertencias?.some(a => a.includes("un solo nombre para el titular")) || false };
+    }
+
+    function compararTitulares(reservas, sistema, q, dudas, coberturaCompleta) {
+        const cruces = asociarEstadiasComparacion(reservas, sistema);
+        const incidencias = [], coincidencias = [], usados = new Set();
+        const opciones = c => c.sistema ? [c.sistema] : c.candidatosDetalle || [];
+        for (const c of cruces) {
+            const l = c.libro, libro = filaTitular(l, q);
+            const candidatas = opciones(c);
+            const s = candidatas.length === 1 && cruces.filter(otro => opciones(otro).some(o => o.id === candidatas[0].id)).length === 1
+                ? candidatas[0] : null;
+            if (s) {
+                const proyecto = filaTitular(s, q);
+                const diferencias = [];
+                if (!S.mismaPersona(l.titular, s.titular)) {
+                    const variante = S.varianteTitular(l.titular, s.titular);
+                    diferencias.push(variante ? (identidad(l,s).fuerte ? "Variante de nombre con identidad verificada" : "Variante de nombre por confirmar") : "Titular distinto");
+                }
+                if (libro.cabana !== proyecto.cabana) diferencias.push("Cabaña distinta");
+                if (libro.ingreso !== proyecto.ingreso) diferencias.push("Ingreso distinto");
+                if (libro.salida !== proyecto.salida) diferencias.push("Salida distinta");
+                if ((libro.movimiento === "Full Day") !== (proyecto.movimiento === "Full Day")) diferencias.push("Tipo de estadía distinto");
+                if (!diferencias.length && c.estado === "asociada") {
+                    coincidencias.push(libro);
+                    usados.add(s.id);
+                    continue;
+                }
+                const mismoInicio = libro.cabana === proyecto.cabana && libro.ingreso === proyecto.ingreso;
+                const motivo = mismoInicio && S.mismaPersona(l.titular, s.titular) ? "Coinciden el titular, la cabaña y el ingreso." : c.pregunta;
+                incidencias.push({estado:diferencias.join(" · ") || "Identidad o fechas por confirmar", libro, proyecto, motivo});
+                usados.add(s.id);
+            } else {
+                incidencias.push({estado:c.estado === "sin_coincidencia" ? "Solo en el Libro" : "Asociación por confirmar",
+                    libro, candidatas:candidatas.map(candidata => filaTitular(candidata, q))});
+            }
+        }
+        for (const s of sistema.filter(x => !usados.has(x.id))) {
+            const identidadPendiente = dudas.some(a => Number(a.cabana) === Number(s.cabana) &&
+                (a.fechas_ocupadas?.length ? a.fechas_ocupadas : [a.fecha])
+                    .some(f => f >= s.fecha_checkin && f <= s.fecha_checkout));
+            const anteriorSinHoja = !q.hojaPrevia && s.fecha_checkin < q.desde.slice(0,7) + "-01";
+            const posible = !coberturaCompleta || anteriorSinHoja || identidadPendiente || cruces.some(c => opciones(c).some(o => o.id === s.id));
+            incidencias.push({estado:posible ? "Por verificar en el Libro" : "Solo en Proyecto H", proyecto:filaTitular(s, q)});
+        }
+        return {coincidencias, incidencias, cantidad_proyecto:sistema.length};
+    }
+
+    async function consultarTitulares(q, libro, estado, cliente) {
+        const reservas = [], dudas = [], avisos = [];
+        let coberturaCompleta = true;
+        if (!q.proyecto && !q.hojaPrevia) avisos.push("Falta la hoja del mes anterior. Las estadías que empezaron allí podrían quedar fuera.");
+        const lote = q.hojas.length && libro.consultarHojas ? await libro.consultarHojas(q.hojas) : null;
+        for (const [i,hoja] of q.hojas.entries()) {
+            const data = lote ? lote[i] : await libro.consultarHoja(hoja);
+            if (!data) throw new Error(`No pude leer ${hoja} en el Libro.`);
+            if (data.cobertura?.geometria !== true) {
+                coberturaCompleta = false;
+                avisos.push(`La hoja ${hoja} tiene fechas o cabañas que no pude verificar.`);
+            }
+            reservas.push(...(data.reservas || []).filter(r => estadiaTitularesEnPeriodo(r, q) &&
+                !/cancelad|no[\s_-]*show/.test(S.normalizar(`${r.estado_operativo || ""} ${r.estado_reserva || ""}`)) &&
+                !S.separarCampos(r.texto_original || "").some(p => /^(?:reserva\s+)?(?:cancelad[ao]|anulad[ao]|no\s*show)$/.test(S.normalizar(p)))));
+            dudas.push(...(data.anotaciones || []).filter(a => a.tipo === "reserva_por_identificar" &&
+                (!q.cabana || Number(a.cabana) === q.cabana) && (a.fechas_ocupadas?.length ? a.fechas_ocupadas : [a.fecha])
+                    .some(f => fechaEnPeriodo(f, q) || q.movimiento !== "ingresos" && f && fechaEnPeriodo(S.sumarDias(f,1), q))));
+        }
+        let sistema = [];
+        if (q.proyecto || q.comparar) {
+            if (typeof root.haikuTienePermiso === "function" && !root.haikuTienePermiso("reservas.ver"))
+                throw new Error("Tu cuenta necesita acceso a Reservas para consultar Proyecto H.");
+            const {estadias} = await leerEstadiasSistema(cliente, {...q, focal:true});
+            sistema = estadias.filter(s => candidatoElegible(s) && estadiaTitularesEnPeriodo(s,q));
+        }
+        if (libro && libro.estado().generacion !== estado.generacion)
+            throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
+        const campoOrden = q.movimiento === "salidas" ? "checkout" : "checkin";
+        const ordenar = (a,b) => rangoReserva(a)[campoOrden].localeCompare(rangoReserva(b)[campoOrden]) || a.cabana - b.cabana;
+        reservas.sort(ordenar);
+        sistema.sort(ordenar);
+        const filas = (q.proyecto ? sistema : reservas).map(r => filaTitular(r,q));
+        const comparacion = q.comparar
+            ? compararTitulares(reservas.map(normalizarReservaComparacion).filter(esReservaValida), sistema, q, dudas, coberturaCompleta)
+            : null;
+        return {q, archivo:estado?.nombre, generacion:estado?.generacion,
+            reservas:q.proyecto ? sistema : reservas, reservas_por_identificar:dudas, advertencias:avisos,
+            titularidad:{filas, comparacion}};
+    }
+
     async function consultar(texto, libro = root.HAIKU_LIBRO_RESERVA_V1, cliente = root.haikuSupabase) {
+        const titulares = intencionTitulares(texto);
+        if (titulares?.proyecto) return consultarTitulares(interpretarTitulares(texto, titulares, []), null, null, cliente);
         if (!libro) throw new Error("Abre Libro de Reserva y carga un XLSX primero.");
         if (libro.crearLectura) libro = await libro.crearLectura();
         await libro.listo();
         const estado = libro.estado(), hojas = libro.listarHojas();
         if (!estado.cargado) throw new Error("Carga primero un XLSX en Libro de Reserva.");
         const q = interpretar(texto, hojas);
+        if (q.titulares) return consultarTitulares(q, libro, estado, cliente);
         // Between-book queries never enter the system reconciliation/write flow.
         if (q.versiones) q.comparar = false;
         if (q.listar) return { q, archivo: estado.nombre, hojas, reservas: [], aseos: [], espacios: [], anotaciones: [], cambios: [], comparacion: [] };
@@ -5069,7 +5281,9 @@
         };
 
         if (q.nombre && !q.desde && libro.buscarHojas && !q.versiones) {
-            const matches = await libro.buscarHojas(q.nombre);
+            const partes = q.nombre.match(/\p{L}{3,}/gu) || [];
+            const terminos = busquedaTitularSoloLectura(q) ? [...new Set([q.nombre,...partes])] : q.nombre;
+            const matches = await libro.buscarHojas(terminos);
             q.hojas = q.hojas.filter(h => matches.hojas.includes(h));
         }
 
@@ -5136,6 +5350,12 @@
                 const old = await libro.consultarHoja(h, "anterior");
                 versionesAnterior.push(old); versionesActual.push(data);
             }
+        }
+
+        if (busquedaTitularSoloLectura(q) && resultado.reservas.length) {
+            const exactas = resultado.reservas.filter(r => coincideNombreConsulta(r.titular,q.nombre));
+            if (exactas.length) resultado.reservas = exactas;
+            else resultado.advertencias.push("Encontré una variante del nombre. Comprueba la cabaña y las fechas de la reserva.");
         }
 
         if (q.por_fecha_pago && q.comparar) {
@@ -5293,8 +5513,60 @@
         return lines.join("\n");
     }
 
+    function encabezadoTitulares(result) {
+        const {q, titularidad} = result;
+        const c = titularidad.comparacion;
+        const intervalo = q.desde === q.hasta ? fechaBreve(q.desde,true) : `${fechaBreve(q.desde,true)} al ${fechaBreve(q.hasta,true)}`;
+        const titulo = c ? "Comparación de titulares" :
+            ({ingresos:"Ingresos",salidas:"Salidas",ocupacion:"Ocupación"}[q.movimiento] || "Titulares y cabañas");
+        const total = titularidad.filas.length;
+        return {
+            titulo,
+            periodo: intervalo + (q.cabana ? ` · CAB ${q.cabana}` : ""),
+            resumen: c ? `Libro ${total} · Proyecto H ${c.cantidad_proyecto} · ${c.coincidencias.length} coinciden` :
+                `${q.proyecto ? "Proyecto H" : "Libro"} · ${total} ${total === 1 ? "estadía" : "estadías"}`
+        };
+    }
+
+    function avisoFechasTitular(fila) {
+        const detalle = [
+            fila.salida_escrita ? `Salida según las noches escritas ${fechaBreve(fila.salida_escrita,true)}` : "",
+            fila.fecha_incierta ? "Fechas del bloque por confirmar" : "",
+            fila.titular_parcial ? "Nombre incompleto en el Libro" : ""
+        ].filter(Boolean);
+        if (detalle.length && fila.referencia) detalle.push(fila.referencia);
+        return detalle.join(" · ");
+    }
+
+    function descripcionFilaTitular(fila) {
+        return [fila.cabana ? `CAB ${fila.cabana}` : "Cabaña sin dato",fila.titular,`Ingreso ${fechaBreve(fila.ingreso,true)}`,
+            `Salida ${fechaBreve(fila.salida,true)}`,fila.movimiento,avisoFechasTitular(fila)].filter(Boolean).join(" · ");
+    }
+
+    function lineasIncidenciaTitular(incidencia) {
+        return [
+            incidencia.libro && `Libro · ${descripcionFilaTitular(incidencia.libro)}`,
+            incidencia.proyecto && `Proyecto H · ${descripcionFilaTitular(incidencia.proyecto)}`,
+            ...(incidencia.candidatas || []).map(f => `Posible en Proyecto H · ${descripcionFilaTitular(f)}`),
+            incidencia.motivo
+        ].filter(Boolean);
+    }
+
+    function respuestaTitulares(result) {
+        const {titulo,periodo,resumen} = encabezadoTitulares(result);
+        const {filas,comparacion} = result.titularidad;
+        return [
+            titulo, periodo, resumen,
+            ...(comparacion ? comparacion.incidencias.flatMap(i => [i.estado,...lineasIncidenciaTitular(i)]) : []),
+            ...(comparacion ? comparacion.coincidencias : filas).map(descripcionFilaTitular),
+            ...result.reservas_por_identificar.map(descripcionReservaPorIdentificar),
+            ...result.advertencias
+        ].join("\n");
+    }
+
     function respuesta(result) {
         const q = result.q;
+        if (q.titulares) return respuestaTitulares(result);
         if (q.listar) return `Libro ${result.archivo}: ${result.hojas.join(", ")}.`;
         if (q.versiones) return respuestaVersiones(result);
         if (q.comparar) return respuestaComparacion(result);
@@ -5643,7 +5915,7 @@
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
-    const esLibro = texto => /\blibro\b/i.test(texto);
+    const esLibro = texto => /\blibro\b/i.test(texto) || Boolean(intencionTitulares(texto));
 
     function mensaje(tipo, texto) {
         const el = document.createElement("div");
@@ -5683,6 +5955,77 @@
         const box = elemento("div", "haiku-asistente-preview-dato");
         box.append(elemento("span", "", label), elemento("strong", "", valor));
         grid.append(box);
+    }
+
+    function listaTitulares(filas) {
+        const contenedor = elemento("div", "haku-titulares__listado");
+        if (!filas.length) {
+            contenedor.append(elemento("p", "haku-titulares__vacio", "Sin estadías identificadas para este período."));
+            return contenedor;
+        }
+        const columnas = elemento("div", "haku-titulares__columnas");
+        columnas.setAttribute("aria-hidden","true");
+        for (const etiqueta of ["Titular","Cabaña","Ingreso","Salida"]) columnas.append(elemento("span","",etiqueta));
+        const lista = elemento("ul", "haku-titulares__filas");
+        for (const f of filas) {
+            const fila = elemento("li", "haku-titulares__fila");
+            const nombre = elemento("div", "haku-titulares__nombre");
+            nombre.append(elemento("strong","",f.titular));
+            if (f.movimiento) nombre.append(elemento("span","haku-titulares__movimiento",f.movimiento));
+            fila.append(nombre,elemento("span","haku-titulares__cabana",f.cabana ? `CAB ${f.cabana}` : "Sin cabaña"));
+            for (const [campo,etiqueta] of [["ingreso","Ingreso"],["salida","Salida"]]) {
+                const fecha = elemento("div", `haku-titulares__${campo}`);
+                const time = elemento("time","",fechaBreve(f[campo],true));
+                time.dateTime = f[campo];
+                fecha.append(elemento("span","haku-titulares__etiqueta-fecha",etiqueta),time);
+                fila.append(fecha);
+            }
+            const aviso = avisoFechasTitular(f);
+            if (aviso) fila.append(elemento("p","haku-titulares__nota",aviso));
+            lista.append(fila);
+        }
+        contenedor.append(columnas,lista);
+        return contenedor;
+    }
+
+    function renderizarTitulares(out, result) {
+        const {titulo,periodo,resumen} = encabezadoTitulares(result);
+        const {filas,comparacion} = result.titularidad;
+        out.className = "haiku-asistente-mensaje haiku-asistente-mensaje--asistente haku-libro-consulta haku-titulares-periodo";
+        out.dataset.haikuTitularesOrigen = result.q.proyecto ? "proyecto" : "libro";
+        const card = elemento("article","haku-titulares");
+        const head = elemento("header","haku-titulares__cabecera");
+        const meta = elemento("div","haku-titulares__meta");
+        meta.append(elemento("span","",periodo),elemento("span","",resumen));
+        head.append(elemento("h3","",titulo),meta);
+        card.append(head);
+        if (comparacion) {
+            const casos = elemento("ul","haku-titulares__casos");
+            for (const i of comparacion.incidencias) {
+                const caso = elemento("li","haku-titulares__caso");
+                caso.append(elemento("strong","",i.estado));
+                for (const linea of lineasIncidenciaTitular(i)) caso.append(elemento("p","",linea));
+                casos.append(caso);
+            }
+            if (casos.children.length) card.append(casos);
+            if (comparacion.coincidencias.length) {
+                const coincidencias = elemento("details","haku-titulares__detalle");
+                const fechasDudosas = comparacion.coincidencias.filter(f => avisoFechasTitular(f)).length;
+                const etiqueta = `Ver coincidencias (${comparacion.coincidencias.length})` +
+                    (fechasDudosas ? ` · ${fechasDudosas} con fechas del Libro por revisar` : "");
+                coincidencias.append(elemento("summary","",etiqueta),listaTitulares(comparacion.coincidencias));
+                card.append(coincidencias);
+            } else if (!casos.children.length) card.append(listaTitulares([]));
+        } else card.append(listaTitulares(filas));
+        if (result.reservas_por_identificar.length) {
+            const dudas = elemento("details","haku-titulares__detalle");
+            dudas.open = true;
+            dudas.append(elemento("summary","",`Titulares por identificar (${result.reservas_por_identificar.length})`));
+            for (const a of result.reservas_por_identificar) dudas.append(elemento("p","haku-titulares__nota",descripcionReservaPorIdentificar(a)));
+            card.append(dudas);
+        }
+        for (const aviso of result.advertencias) card.append(elemento("p","haku-titulares__cobertura",aviso));
+        out.replaceChildren(card);
     }
 
     function renderizarConsultaLibro(out, result) {
@@ -7898,11 +8241,13 @@
     }
 
     function avisarVersionAnterior(out) {
-        if (!out || out.querySelector?.('[data-haiku-libro-aviso-version]')) return;
+        if (!out || out.dataset?.haikuTitularesOrigen === "proyecto" || out.querySelector?.('[data-haiku-libro-aviso-version]')) return;
         const aviso = document.createElement('p');
         aviso.className = 'haiku-libro-nota';
         aviso.dataset.haikuLibroAvisoVersion = '1';
-        aviso.textContent = 'Llegó una actualización del Libro. Puedes continuar: comprobaré los datos de esta consulta al incorporar.';
+        aviso.textContent = out.dataset.haikuTitularesOrigen === "libro" ?
+            "El Libro cargado cambió. Repite la consulta para ver la nueva versión." :
+            'Llegó una actualización del Libro. Puedes continuar: comprobaré los datos de esta consulta al incorporar.';
         out.appendChild(aviso);
     }
 
@@ -7914,10 +8259,11 @@
         campo.value = "";
         campo.dispatchEvent(new Event("input", { bubbles: true }));
         mensaje("usuario", texto);
-        const out = mensaje("asistente", "Leyendo la estructura del Libro local…");
+        const out = mensaje("asistente", intencionTitulares(texto)?.proyecto ? "Consultando titulares en Proyecto H…" : "Leyendo la estructura del Libro local…");
         try {
             const result = await consultar(texto);
-            if (result.q.versiones) renderizarVersiones(out, result);
+            if (result.q.titulares) renderizarTitulares(out, result);
+            else if (result.q.versiones) renderizarVersiones(out, result);
             else if (result.q.comparar) renderizarComparacion(out, result);
             else renderizarConsultaLibro(out, result);
             if (result.generacion !== undefined && result.generacion !== root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion) avisarVersionAnterior(out);

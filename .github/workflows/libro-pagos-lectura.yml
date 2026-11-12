@@ -15,6 +15,7 @@ on:
       - "tests/libro-lector-suite.cjs"
       - "tests/haiku-libro-incorporacion-estructurada.test.cjs"
       - "tests/libro-reservas-identificacion.test.cjs"
+      - "tests/libro-titulares-periodo.test.cjs"
       - "tests/libro-pagos-lectura-estable.test.cjs"
       - "tests/libro-transferencias-bancarias.test.cjs"
       - "tests/libro-glosa-sin-nombre.test.cjs"
@@ -60,5 +61,5 @@ jobs:
         run: node --test tests/libro-glosa-sin-nombre.test.cjs tests/libro-indice-lectura.test.cjs
       - name: Auditoría de pagos por fecha del comprobante
         run: node --test tests/libro-auditoria-pagos-mes.test.cjs
-      - name: Reservas WALK IN y dudas de lectura visibles
-        run: node --test tests/libro-reservas-identificacion.test.cjs tests/libro-titular-fragmentos.test.cjs
+      - name: Identificación y consultas de titulares
+        run: node --test tests/libro-reservas-identificacion.test.cjs tests/libro-titular-fragmentos.test.cjs tests/libro-titulares-periodo.test.cjs
