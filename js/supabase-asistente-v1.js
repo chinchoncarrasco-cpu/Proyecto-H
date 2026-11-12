@@ -68,6 +68,7 @@
                         <button type="button" data-haiku-accion-rapida="actualizacion">Información de actualización</button>
                         <button type="button" data-haiku-accion-rapida="libro">Comparar Libro mes actual con Proyecto H</button>
                         <button type="button" data-haiku-accion-rapida="libro-siguiente">Comparar Libro mes siguiente con Proyecto H</button>
+                        <button type="button" data-haiku-accion-rapida="pagos">Comparar pagos del mes actual</button>
                         <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
                         <button type="button" data-haiku-accion-rapida="servicios-siguiente">Comparar servicios mes siguiente con Proyecto H</button>
                     </div>
@@ -271,15 +272,12 @@
     function textoAccionRapida(accion) {
         if (accion === "tareas-hoy") return "Haku, resumen del día";
         if (accion === "actualizacion") return "Haku, informe de actualización";
-        const tipo = accion === "libro" || accion === "libro-siguiente" ? "libro"
-            : accion === "servicios" || accion === "servicios-siguiente" ? "servicios" : null;
-        if (!tipo) return "";
+        const asunto = { libro: "las reservas", servicios: "servicios", pagos: "pagos" }[accion.replace(/-siguiente$/, "")];
+        if (typeof asunto !== "string") return "";
         const periodo = periodoCalendarioChile(accion.endsWith("-siguiente") ? 1 : 0);
         const fechaVisible = iso => iso.split("-").reverse().join("-");
         const rango = `(del ${fechaVisible(periodo.inicioPeriodo)} al ${fechaVisible(periodo.finPeriodo)})`;
-        if (tipo === "libro") return `Libro: compara las reservas de ${periodo.etiqueta} ${rango} con Proyecto H`;
-        if (tipo === "servicios") return `Libro: compara servicios de ${periodo.etiqueta} ${rango} con Proyecto H`;
-        return "";
+        return `Libro: compara ${asunto} de ${periodo.etiqueta} ${rango} con Proyecto H`;
     }
 
     function cargarGuias() {

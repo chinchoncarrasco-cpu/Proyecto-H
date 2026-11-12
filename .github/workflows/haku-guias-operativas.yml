@@ -9,6 +9,7 @@ on:
       - "css/sites-asistente-v1.css"
       - "assets/guias/**"
       - "tests/haku-guias-operativas*.cjs"
+      - "tests/haku-comparacion-mes-siguiente-browser-check.cjs"
       - ".github/workflows/haku-guias-operativas.yml"
 permissions:
   contents: read
@@ -33,6 +34,10 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: node tests/haku-guias-operativas-browser-check.cjs
+      - name: Acciones rápidas de pagos, reservas y servicios
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
+        run: node tests/haku-comparacion-mes-siguiente-browser-check.cjs
       - name: Capturas de la interfaz
         if: always()
         uses: actions/upload-artifact@v4
