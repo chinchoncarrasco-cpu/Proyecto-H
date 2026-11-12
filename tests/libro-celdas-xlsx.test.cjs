@@ -1,4 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');
+const fs=require('node:fs'),vm=require('node:vm');
 const assets=process.env.HAIKU_LIBRO_WORKER_ASSETS||'/tmp/haku-lectura-assets';
 const XLSX=require(path.join(assets,'xlsx.full.min.js')),JSZip=require(path.join(assets,'jszip.min.js'));
 const {crearLector}=require('../js/supabase-libro-reserva-worker-v1.js');
@@ -48,4 +49,25 @@ test('el fallo OOXML conserva valores pero declara lectura parcial y evita apare
  assert.equal(h.reservas[0].titular,'Ana Pérez');
  assert.match(h.reservas[0].advertencias.join(' '),/formato original/);
  assert.ok(h.pagos.every(p=>p.advertencias.some(a=>/formato original/.test(a))));
+});
+
+test('el índice de titulares encuentra variantes en cadenas compartidas, directas e inline',async()=>{
+ const entorno={XLSX,JSZip,addEventListener:(_,fn)=>{entorno.procesar=fn;}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../js/supabase-libro-reserva-worker-v1.js'),'utf8'),
+  {self:entorno,Uint8Array,ArrayBuffer});
+ const buscar=(buffer,nombreHoja)=>new Promise(resolve=>{
+  entorno.postMessage=resolve;
+  entorno.procesar({data:{id:1,tipo:'buscar',buffer,nombreHoja}});
+ });
+ const w=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(w,XLSX.utils.aoa_to_sheet([['Vera Marta Solís']]),'Nov26');
+ for(const bookSST of [true,false]){
+  const bytes=XLSX.write(w,{type:'buffer',bookType:'xlsx',bookSST});
+  const literal=await buscar(bytes,'marta solis vera');
+  assert.equal(literal.ok,true,literal.error);assert.deepEqual([...literal.resultado.hojas],[]);
+  const alternativas=await buscar(bytes,['marta solis vera','marta','solis','vera']);
+  assert.equal(alternativas.ok,true,alternativas.error);assert.deepEqual([...alternativas.resultado.hojas],['Nov26']);
+ }
+ const inline=await buscar(await archivo(),['perez ana','perez','ana']);
+ assert.equal(inline.ok,true,inline.error);assert.deepEqual([...inline.resultado.hojas],['Nov26']);
 });

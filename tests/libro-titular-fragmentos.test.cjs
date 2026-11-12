@@ -5,6 +5,29 @@ function hoja(texto,desplazada=false){return {celdas:[
  {r:2,c:0,valor:'cabaña 2'},{r:2,c:desplazada?3:2,valor:texto},
  {r:24,c:2,valor:'Pagos de arriendos de hoy'}],combinaciones:[{s:{r:2,c:desplazada?3:2},e:{r:2,c:4}}]};}
 const normalizar=t=>S.normalizarHoja(hoja(t),'Sep26');
+test('un nombre solo necesita el formato de reserva y señales independientes de la estadía',()=>{
+ const texto='Irene // irene@example.test // 2 ADL // 1 NOCHE // Masajista: Rosa Vera';
+ const conFormato=t=>{
+  const d=hoja(t);
+  d.estilos={1:{fill:{patternType:'solid',fgColor:{rgb:'FFB4A7D6'}}}};
+  d.celdas.find(c=>c.r===2&&c.c===2).estiloId=1;
+  return S.normalizarHoja(d,'Sep26');
+ };
+ const res=conFormato(texto).reservas[0];
+ assert.equal(res.titular,'Irene');
+ assert.match(res.advertencias.join(' '),/un solo nombre/);
+ assert.equal(normalizar(texto).reservas.length,0);
+ assert.equal(conFormato('Irene // 2 ADL // 1 NOCHE').reservas.length,0);
+ assert.equal(conFormato('Irene // Rosa Vera // irene@example.test // 2 ADL').reservas.length,0);
+});
+test('una errata en el verbo no borra la extensión explícita de noches',()=>{
+ const d=hoja('Ana Pérez // 1 NOCHE // EXTEINDE 1 NOCHE DIRECTAMENTE');
+ d.combinaciones[0].e.c=8;
+ const [r]=S.normalizarHoja(d,'Sep26').reservas;
+ assert.equal(r.noches,2);
+ assert.equal(r.noches_texto_efectivas,2);
+ assert.deepEqual(r.notas_interpretacion,[]);
+});
 test('reported operational notes preserve all thirteen guest blocks',()=>{
  const casos=[['Yerko Baeza','articulos de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Yuly Barbieri T.','cenicero y art de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Paulina Varas','solicitar rut'],['Katherine Rubiños','CENICERO Y ART DE ASADO'],['Bruno Borge','tienen llave de caja fuerte // tienen tenazas y sacacorcho'],['Yenny Acuña Berrios','se le presta articulos de asado'],['Edgardo Andrés Gálvez Miranda','pedir rut'],['Aneti Dupont','pedir rut // reserva booking'],['Matias Fernandez','CORTESÍA CHOCOLATES Y ESPUMANTE'],['Macarena Hurtado','se le vendio full day'],['Alejandra Calderon Arrigoni','pedir rut']];
  for(const [nombre,nota] of casos){

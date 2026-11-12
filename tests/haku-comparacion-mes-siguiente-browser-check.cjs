@@ -1,4 +1,4 @@
-// Botones reales de Haku con los interceptores del Libro, pagos y servicios.
+// Botones reales de Haku con los interceptores del Libro, pagos, servicios y titulares.
 // El lector XLSX se sustituye en memoria; no hay escritura ni red.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -223,6 +223,56 @@ async function pagosDelMes(browser, ancho, tema) {
     } finally { await page.close(); }
 }
 
+async function titularesDelMes(browser, ancho, tema) {
+    const page = await browser.newPage({timezoneId:"America/Santiago",viewport:{width:ancho,height:800}});
+    const errores = [];
+    page.on("pageerror",e=>errores.push(e.message));
+    try {
+        await abrirPaginaPrueba(page,"2026-12-01T02:30:00Z");
+        await page.evaluate(tema => {
+            document.documentElement.dataset.haikuTema = tema;
+            window.haikuSesion = {auth:{id:"usuario-sintetico"}};
+            window.haikuSupabase = {auth:{onAuthStateChange:()=>({})},
+                functions:{invoke:()=>{throw Error("La consulta debe resolverse en el lector");}}};
+            const anterior = {titular:"Ana Dolores de los Ríos Fernández",cabana:11,fecha_checkin:"2026-10-30",
+                fecha_checkout:"2026-11-01",tipo_estadia:"alojamiento",coordenadas_origen:{hoja:"Oct26",celda:"AO13"}};
+            const actual = {titular:"Sara Mena",cabana:2,fecha_checkin:"2026-11-01",
+                fecha_checkout:"2026-11-01",tipo_estadia:"full_day",coordenadas_origen:{hoja:"Nov26",celda:"D4"}};
+            window.HAIKU_LIBRO_RESERVA_V1 = {
+                listo:async ()=>{},estado:()=>({cargado:true,generacion:1}),
+                listarHojas:()=>["Oct26","Nov26"],
+                consultarHoja:async hoja=>({cobertura:{geometria:true},reservas:[hoja==="Oct26"?anterior:actual]})
+            };
+        },tema);
+        for (const nombre of ["supabase-asistente-v1.css","haiku-paleta-v1.css","sites-asistente-v1.css","haiku-tema-oscuro-v1.css","haiku-tema-v1.css"])
+            await page.addStyleTag({content:fs.readFileSync(path.join(raiz,"css",nombre),"utf8")});
+        for (const nombre of scripts) await page.addScriptTag({content:leer(nombre)});
+
+        await page.getByRole("button",{name:"Abrir Haku",exact:true}).click();
+        await page.locator("#haiku-asistente-rapidas summary").click();
+        await page.getByRole("button",{name:"Titulares y cabañas del mes",exact:true}).click();
+        const vista = page.locator(".haku-titulares-periodo").last();
+        await vista.waitFor();
+        assert.match(await vista.innerText(),/01\/11\/2026 al 30\/11\/2026/);
+        assert.equal(await vista.locator(".haku-titulares__fila").count(),2);
+        const estilo = await vista.evaluate(el=>({
+            desborde:el.querySelector("article").scrollWidth > el.querySelector("article").clientWidth+1,
+            columnas:getComputedStyle(el.querySelector(".haku-titulares__columnas")).display,
+            fondo:getComputedStyle(el.querySelector("article")).backgroundColor
+        }));
+        assert.equal(estilo.desborde,false);
+        assert.equal(estilo.columnas,ancho>=701?"grid":"none");
+        assert.equal(estilo.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+
+        await page.locator("#haiku-asistente-texto").fill("Haku, titulares y cabañas el 1 de noviembre de 2026");
+        await page.locator("#haiku-asistente-texto").press("Control+Enter");
+        await page.waitForFunction(()=>document.querySelectorAll(".haku-titulares-periodo").length===2);
+        assert.deepEqual(await vista.locator(".haku-titulares__movimiento").allTextContents(),["Sale","Full Day"]);
+        assert.equal(await vista.getByText("CAB 11").count(),1);
+        assert.deepEqual(errores,[]);
+    } finally { await page.close(); }
+}
+
 (async () => {
     const browser = await chromium.launch({ executablePath:process.env.HAKU_CHROMIUM_PATH || (process.platform==='win32' ? edge : undefined), headless:true });
     try {
@@ -245,8 +295,10 @@ async function pagosDelMes(browser, ancho, tema) {
         ], 390);
         await consultasPendientes(browser,1280);
         await consultasPendientes(browser,390);
-        for (const ancho of [1280,390,320]) for (const tema of ['claro','oscuro'])
+        for (const ancho of [1280,390,320]) for (const tema of ['claro','oscuro']) {
             await pagosDelMes(browser,ancho,tema);
-        console.log('Haku: atajos, bloqueo compartido, períodos Chile y pagos mensuales en ambos temas OK');
+            await titularesDelMes(browser,ancho,tema);
+        }
+        console.log('Haku: atajos, bloqueo compartido, períodos Chile, pagos y titulares en ambos temas OK');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

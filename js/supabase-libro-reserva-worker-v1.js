@@ -469,20 +469,32 @@ async function buscarHojasBove(buffer, numero) {
 async function buscarHojas(buffer, nombre) {
     asegurarZip();
     const n = v => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    if (nombre.length < 3) throw new Error("Escribe al menos tres letras del titular.");
+    const alternativas = Array.isArray(nombre);
+    const terminos = (alternativas ? nombre : [nombre]).map(n).filter(t => t.length >= 3);
+    if (!terminos.length) throw new Error("Escribe al menos tres letras del titular.");
+    const compactos = alternativas ? terminos.map(t => t.replace(/\s+/g,"")).filter(t => t.length >= 6) : [];
+    const coincideTexto = valor => {
+        const texto = n(valor);
+        if (terminos.some(t => texto.includes(t))) return true;
+        if (!compactos.length) return false;
+        const compacto = texto.replace(/\s+/g,"");
+        return compactos.some(t => compacto.includes(t));
+    };
     const zip = await self.JSZip.loadAsync(buffer);
     const xml = await zip.file("xl/sharedStrings.xml")?.async("text") || "";
     const indices = new Set();
-    bloques(xml, "si").forEach((si, i) => { if (n(textoDeTagsT(si.inner)).includes(n(nombre))) indices.add(i); });
+    bloques(xml, "si").forEach((si, i) => { if (coincideTexto(textoDeTagsT(si.inner))) indices.add(i); });
     const nombres = indiceLibro(buffer).nombres;
     const hojas = [];
     for (const hoja of nombres) {
         const ruta = await rutaHojaDesdeNombre(zip, hoja);
         const contenido = ruta && await zip.file(ruta)?.async("text");
         if (!contenido) continue;
-        const coincide = bloques(contenido, "c").some(c => c.attrs.t === "s"
-            ? indices.has(Number(primerTag(c.inner, "v")?.inner))
-            : c.attrs.t === "inlineStr" && n(textoDeTagsT(c.inner)).includes(n(nombre)));
+        const coincide = bloques(contenido, "c").some(c => {
+            if (c.attrs.t === "s") return indices.has(Number(primerTag(c.inner, "v")?.inner));
+            if (c.attrs.t === "inlineStr") return coincideTexto(textoDeTagsT(c.inner));
+            return c.attrs.t === "str" && coincideTexto(decodificarXml(primerTag(c.inner, "v")?.inner || ""));
+        });
         if (coincide) hojas.push(hoja);
     }
     return { hojas };
