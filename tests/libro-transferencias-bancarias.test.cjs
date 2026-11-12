@@ -251,6 +251,29 @@ function reciboHistorico(libro, cambios={}) {
    origen_libro:p.origen,item_id:'pago:reserva-historica:'+p.origen.hoja+'!'+p.origen.celda+':'+JSON.stringify(p)},...cambios});
 }
 
+for (const [cambio, diferencia] of [
+ [{fecha:'2026-10-22'},'fecha de pago diferente'],
+ [{monto:80000},'monto/moneda diferente']
+]) test('editar la misma fila de una transferencia histórica deja visible '+diferencia,async()=>{
+ const g=reciboHistorico(F.leer()),h=await comparar([{pagos:[cambio]}],[g]);
+ const x=movimiento(h);
+ assert.equal(x.estado,'diferente');assert.equal(x.sistema.id,g.id);
+ assert.ok(x.diferencias.includes(diferencia));
+ const inicial=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ const item=inicial.items.find(i=>i.pagoLibro);
+ assert.equal(item.payload,null);assert.equal(item.aprobable,false);
+ const conAprobacion=await Q.prepararIncorporacion(h.result,new Map(),new Set([item.id]),h.db);
+ assert.ok(!Q.serializarIncorporacion(conAprobacion).some(i=>i.tipo==='pago'||i.tipo==='pago_actualizar'));
+ sinEscrituras(h);
+});
+
+test('otro abono del mismo remitente en una fila distinta conserva su identidad propia',async()=>{
+ const g=reciboHistorico(F.leer());
+ const h=await comparar([{pagos:[{}, {fecha:'2026-10-22'}]}],[g]);
+ assert.deepEqual(h.c.pagosDetalle.map(x=>x.estado),['en_sistema','nuevo_seguro']);
+ sinEscrituras(h);
+});
+
 for(const mes of ['Oct26','Sep26']) test('reagendar la misma reserva conserva su transferencia aunque cambie el bloque y la hoja '+mes,async()=>{
  const anterior=F.leer();anterior.pagos[0].fecha_bloque='2026-09-10';anterior.pagos[0].origen.hoja=mes;
  const g=reciboHistorico(anterior),h=await comparar([{}],[g]);
