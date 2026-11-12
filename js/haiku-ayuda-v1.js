@@ -125,7 +125,7 @@
     const normalizar=valor=>String(valor || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
     const cantidad=n=>n===1?"1 acción":`${n} acciones`;
 
-    function mostrar({mensajes,campo,ejecutar}) {
+    function mostrar({mensajes,campo,ejecutar,enviarComando}) {
         const doc=mensajes.ownerDocument;
         mensajes.querySelector("[data-haku-ayuda]")?.remove();
         const crear=(tag,texto,clase) => {
@@ -153,7 +153,7 @@
         const identidad=crear("div","","haku-ayuda__identidad");
         const titulo=crear("h2","Ayuda");
         titulo.tabIndex=-1;
-        identidad.append(titulo,crear("p","Elige un ejemplo para llevarlo al borrador."));
+        identidad.append(titulo,crear("p","Toca un ejemplo para enviarlo a Haku."));
         const cerrar=boton("×","haku-ayuda__icono","Cerrar Ayuda");
         const cerrarAyuda=()=>{panel.remove();campo.focus();};
         cerrar.addEventListener("click",cerrarAyuda);
@@ -216,12 +216,7 @@
                     control.addEventListener("click",evento);
                     cuerpo.append(control);
                 };
-                for (const ejemplo of accion.ejemplos || []) usar(ejemplo,()=>{
-                    if (campo.disabled) return;
-                    campo.value=ejemplo;
-                    campo.dispatchEvent(new root.Event("input",{bubbles:true}));
-                    campo.focus();
-                });
+                for (const ejemplo of accion.ejemplos || []) usar(ejemplo,()=>enviarComando(ejemplo));
                 if (accion.atajo) usar(accion.rotulo,()=>ejecutar(accion.atajo));
                 detalle.append(resumen,cuerpo);
                 li.append(detalle);

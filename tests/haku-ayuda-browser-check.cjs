@@ -243,6 +243,15 @@ async function ayuda(browser,ancho,tema,webview=false) {
         await panel.getByRole("button",{name:"Haku, resumen de hoy",exact:true}).waitFor();
         await panel.locator("summary").getByText("Ingresos",{exact:true}).click();
         assert.equal(await panel.locator("details[open]:visible").count(),1);
+        await panel.locator("summary").getByText("Cabañas disponibles",{exact:true}).click();
+        await panel.getByRole("button",{name:"Haku, ¿qué cabañas quedan libres mañana?",exact:true}).click();
+        await page.locator(".haku-disponibilidad-card").waitFor({state:"visible"});
+        assert.equal(await campo.inputValue(),"");
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),1);
+        assert.deepEqual(await page.evaluate(()=>prueba.rpc),[{
+            nombre:"haiku_cabanas_disponibles",
+            args:{p_fecha_ingreso:"2026-11-13",p_fecha_salida:"2026-11-14",p_tipo_estadia:"alojamiento"}
+        }]);
         if (escritorio) {
             const nav=panel.getByRole("navigation",{name:"Categorías de ayuda"});
             assert.equal(await nav.getByRole("button").count(),8);
@@ -264,18 +273,27 @@ async function ayuda(browser,ancho,tema,webview=false) {
         await buscador.fill("ingresaservicio");
         const ejemplo=panel.getByRole("button",{name:/ingresaservicio tinaja/});
         await ejemplo.waitFor({state:"visible"});
-        const frase=await ejemplo.locator("span").first().innerText();
-        await ejemplo.click();
-        assert.equal(await campo.inputValue(),frase);
-        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),0);
-        assert.deepEqual(await page.evaluate(()=>prueba.rpc),[]);
+        await ejemplo.press("Enter");
+        const servicio=page.locator(".haku-orden").filter({hasText:"Agendar servicio"});
+        await servicio.getByRole("button",{name:"Revisar servicio",exact:true}).waitFor();
+        assert.match(await servicio.innerText(),/CAB 3[\s\S]*20:45/);
+        assert.equal(await campo.inputValue(),"");
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),2);
+        await buscador.fill("dejar dos batas");
+        await panel.getByRole("button",{name:/anota nota de CAB 3 hoy/}).click();
+        const nota=page.locator("[data-haku-operacion]").last();
+        await nota.getByRole("button",{name:"Guardar nota",exact:true}).waitFor();
+        assert.match(await nota.innerText(),/Dejar dos batas/);
+        assert.equal(await campo.inputValue(),"");
+        assert.deepEqual(await page.evaluate(()=>prueba.tablas),[]);
+        assert.deepEqual(await page.evaluate(()=>prueba.edge),[]);
         await buscador.fill("informes cloudbeds");
         const selector = page.waitForEvent("filechooser");
         await panel.getByRole("button",{name:"Adjuntar informes",exact:true}).click();
         const archivos = await selector;
         assert.equal(archivos.isMultiple(),true);
         assert.match(await archivos.element().getAttribute("accept"),/\.pdf,.*\.xlsx/);
-        assert.equal(await campo.inputValue(),frase);
+        assert.equal(await campo.inputValue(),"");
         await panel.getByRole("button",{name:"Cerrar Ayuda"}).click();
         assert.equal(await panel.count(),0);
         await campo.fill("Haku, ¿qué te puedo pedir?");
