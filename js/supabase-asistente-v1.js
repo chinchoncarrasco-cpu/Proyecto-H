@@ -356,13 +356,22 @@
             agregarMensaje("asistente", "Ayuda todavía no está disponible. Recarga Proyecto H.");
             return;
         }
-        ayuda.mostrar({mensajes, campo, ejecutar:ejecutarAccionRapida});
+        ayuda.mostrar({mensajes, campo, ejecutar:ejecutarAccionRapida, enviarComando});
     }
 
     function elegirArchivos(aceptar, informes = false) {
         selectorInformes = informes;
         archivosInput.accept = aceptar;
         archivosInput.click();
+    }
+
+    function enviarComando(texto) {
+        if (!texto || campo.disabled || estaOcupado()) return;
+        campo.value = texto;
+        campo.dispatchEvent(new Event("input", { bubbles: true }));
+        rapidas.open = false;
+        // El clic de Enviar permite que cada módulo de Haku atienda su comando.
+        enviar.click();
     }
 
     function ejecutarAccionRapida(accion) {
@@ -385,12 +394,7 @@
             campo.focus();
             return;
         }
-        const texto = textoAccionRapida(accion);
-        if (!texto) return;
-        campo.value = texto;
-        campo.dispatchEvent(new Event("input", { bubbles: true }));
-        rapidas.open = false;
-        enviar.click();
+        enviarComando(textoAccionRapida(accion));
     }
 
     function bytesAdjuntos() {
