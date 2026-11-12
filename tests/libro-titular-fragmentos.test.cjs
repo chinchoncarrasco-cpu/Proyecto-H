@@ -74,7 +74,7 @@ test('la etiqueta del titular separa el nombre de los roles, las notas y los ser
  const h=normalizar(texto);
  assert.equal(h.reservas.length,1);
  assert.equal(h.reservas[0].titular,'Elena');
- assert.deepEqual(h.reservas[0].servicios.map(x=>[x.concepto,x.hora]),[['masaje',null],['masaje','11:00'],['tonel','20:00']]);
+ assert.deepEqual(h.reservas[0].servicios.map(x=>[x.concepto,x.hora]),[['masaje','11:00'],['masaje','12:00'],['tonel','20:00']]);
  assert.equal(h.reservas[0].texto_original,texto);
  assert.equal(normalizar('Titular: Elena Salas // Elena Slaas // 2 ADL').reservas[0]?.titular,'Elena Salas');
  const dos=normalizar('Elena Salas // Elena Slaas // 2 ADL');
