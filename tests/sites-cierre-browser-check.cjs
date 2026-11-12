@@ -86,6 +86,11 @@ async function comprobarFlujo(page) {
     assert.equal(await page.locator('#cierre-porcentaje').textContent(), '93%');
 
     await abrir(caja);
+    const respaldoGuardado = caja.locator('[data-evidencia="manager-caja"]');
+    await respaldoGuardado.getByText('1 adjunto', { exact: true }).waitFor();
+    assert.equal(await caja.locator('[data-cierre-campo="manager-caja"]').isChecked(), false);
+    await respaldoGuardado.getByRole('button', { name: 'Ver respaldo' }).click();
+    assert.equal(await respaldoGuardado.locator('a').getAttribute('href'), 'https://cierre.test/adjunto-caja-guardado.png');
     await page.evaluate(() => { __cierre.permitir = false; HAIKU_SITES_CIERRE_V1.actualizar(); });
     assert.equal(await caja.locator('[data-cierre-campo="manager-caja"]').isDisabled(), true);
     assert.equal(await caja.locator('[data-turno-no-aplica]:visible').count(), 3);

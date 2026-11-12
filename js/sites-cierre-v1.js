@@ -422,7 +422,7 @@
             item.vista.replaceChildren();
         });
         window.dispatchEvent(new CustomEvent("haiku:cierre-fecha-cambiada", { detail: { fecha } }));
-        refrescarEvidencias();
+        if (!window.haikuSupabase) refrescarEvidencias();
     }
 
     window.addEventListener("haiku:cierre-estado-actualizado", event => {
@@ -439,7 +439,7 @@
     });
     document.querySelector('.menu-item[data-seccion="cierre"]')?.addEventListener("click", () => {
         window.cargarCierreDia?.(fechaActual());
-        refrescarEvidencias();
+        if (!window.haikuSupabase) refrescarEvidencias();
     });
     document.addEventListener("click", event => {
         const volver = document.getElementById("sites-cierre-volver");
@@ -447,5 +447,5 @@
     });
     document.addEventListener("haiku:revision-estado-guardado", actualizarCabanas);
     cargarUnidades(plantilla.unidades.respaldo);
-    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({ actualizar, cargarUnidades, mostrarFecha, estadoCabana });
+    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({ actualizar, cargarUnidades, mostrarFecha, estadoCabana, refrescarEvidencias });
 })();
