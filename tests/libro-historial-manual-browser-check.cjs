@@ -122,6 +122,22 @@ const server=http.createServer((req,res)=>{
                 const p=fixtureServicios.escrituras[2].p_servicios[0];
                 return [p.codigo_servicio,p.fecha_servicio,p.tipo_cobro,p.hora,p.cantidad];
             }),['lateCheckout','2026-10-12','cortesia','12:00',3]);
+
+            await page.evaluate(()=>{
+                const f=fixtureServicios,r=f.reservas[0],e=f.db.reserva_estadias[0];
+                r.texto_original='Late check out hasta las 18:00 hrs; x cobrar $30.000';
+                r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+                f.db.servicios.push({id:'late-registrado',reserva_id:e.reserva_id,estadia_id:e.id,fecha_servicio:e.fecha_salida,
+                    hora_inicio:'18:00:00',hora_fin:'19:00:00',total:10000,cantidad:1,personas:0,tipo_cobro:'normal',
+                    estado_servicio:'programado',catalogo_servicios:{codigo:'lateCheckout',nombre:'Late Check-out'}});
+                return abrirManualHistorial();
+            });
+            const diferencias=out.getByRole('table',{name:'Diferencias entre el Libro y Proyecto H'});
+            assert.deepEqual(await diferencias.getByRole('columnheader').allTextContents(),['Dato','En el Libro','En Proyecto H']);
+            assert.deepEqual(await diferencias.locator('tbody td').allInnerTexts(),['18:00','19:00','$30.000','$10.000']);
+            assert.ok(await diferencias.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+            assert.equal(await out.getByRole('button',{name:'Confirmar servicio',exact:true}).count(),0);
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),3);
             await page.close();
         }
         assert.deepEqual(errors,[]);assert.deepEqual(externos,[]);

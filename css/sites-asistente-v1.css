@@ -1387,6 +1387,16 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
 .haku-libro-servicio-manual { margin: 10px 12px; min-width: 0; }
 .haku-libro-servicio-manual__motivos:empty { display: none; }
 .haku-libro-servicios__cuerpo { min-width: 0; }
+.haku-libro-servicios__diferencias {
+    width: 100%; table-layout: fixed; border-collapse: collapse; margin: 4px 0 6px;
+    color: inherit; font-size: .72rem; line-height: 1.45;
+}
+.haku-libro-servicios__diferencias :is(th, td) {
+    padding: 5px 6px; text-align: left; vertical-align: top; white-space: normal; overflow-wrap: anywhere;
+    border-bottom: 1px solid var(--sites-shell-line, #dce5e0);
+}
+.haku-libro-servicios__diferencias thead th:first-child { width: 23%; }
+.haku-libro-servicios__diferencias th { font-weight: 650; }
 .haiku-asistente-root .haku-libro-servicios-sites .haku-libro-servicios__item--revisar {
     padding-block: 7px; border-bottom-color: var(--sites-shell-line, #dce5e0);
     color: var(--sites-shell-ink, #172522); overflow-wrap: anywhere;

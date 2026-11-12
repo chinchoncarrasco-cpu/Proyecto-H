@@ -16,6 +16,10 @@ on:
       - "tests/libro-personas-adultos.test.cjs"
       - "tests/libro-resoluciones-ocupacion.test.cjs"
       - "tests/libro-servicio-manual-postgres.test.cjs"
+      - "tests/libro-auditoria-servicios-notas.test.cjs"
+      - "tests/libro-masaje-registro-cuna-acciones.test.cjs"
+      - "tests/libro-historial-manual-browser-check.cjs"
+      - "css/sites-asistente-v1.css"
       - "supabase/migrations/*_libro_late_checkout_cortesia_v1.sql"
       - ".github/workflows/libro-notas-operativas.yml"
 
@@ -39,6 +43,8 @@ jobs:
         run: node --test tests/libro-personas-adultos.test.cjs tests/libro-resoluciones-ocupacion.test.cjs tests/libro-fullday-tarifa-adl.test.cjs
       - name: Roles, aseo, notas, pagos y profesionales del Libro
         run: node --test tests/libro-roles-contexto.test.cjs tests/libro-reservas-identificacion.test.cjs tests/libro-notas-evidencia-propia.test.cjs tests/libro-pagos-lectura-estable.test.cjs tests/libro-masajes-parser.test.cjs tests/libro-masaje-fragmentos.test.cjs
+      - name: Diferencias y lectura de servicios y notas del mes
+        run: node --test tests/libro-auditoria-servicios-notas.test.cjs tests/libro-masaje-registro-cuna-acciones.test.cjs
       - name: Confirmación de cortesía sin altas duplicadas ni revisión repetida
         run: node --test tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-cortesia-confirmacion-directa.test.cjs tests/libro-servicio-manual.test.cjs tests/libro-servicio-manual-compacto.test.cjs tests/haku-asistente-servicios-cortesia.test.cjs tests/haku-asistente-servicios-cortesia-rpc.test.cjs
       - name: Dependencias aisladas de prueba
