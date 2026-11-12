@@ -407,13 +407,13 @@
     async function renderizarLote(preview) {
         const entradas = Array.isArray(preview?.reservas) ? preview.reservas : [];
         const card = document.createElement("article");
-        card.className = "haiku-asistente-preview";
+        card.className = "haiku-asistente-preview haku-propuesta-compacta";
 
         const cabecera = document.createElement("div");
         cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
         const marca = document.createElement("span");
-        marca.textContent = "PAGOS NOCTURNOS · LOTE · NADA GUARDADO";
+        marca.textContent = "Lote de abonos";
         const nombre = document.createElement("strong");
         nombre.textContent = entradas.length ? `${entradas.length} reservas por revisar` : "Pagos por revisar";
         titulo.append(marca, nombre);
@@ -425,7 +425,7 @@
 
         const explicacion = document.createElement("p");
         explicacion.className = "haiku-asistente-preview-resumen";
-        explicacion.textContent = "Este flujo busca reservas que YA existen. Plan tarifario, categoría, estado Cloudbeds e ID Cloudbeds no son requisitos para registrar estos pagos.";
+        explicacion.textContent = "Revisa los abonos y las reservas de destino.";
         card.appendChild(explicacion);
 
         mensajes.appendChild(card);

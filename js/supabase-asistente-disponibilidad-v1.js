@@ -37,91 +37,6 @@
 
         let ocupado = false;
 
-        function instalarEstilos() {
-            if (document.getElementById("haku-disponibilidad-estilos-v2")) return;
-            const style = document.createElement("style");
-            style.id = "haku-disponibilidad-estilos-v2";
-            style.textContent = `
-                .haku-disponibilidad-card {
-                    --haku-disp-accent:#26704c;
-                    --haku-disp-soft:#edf7f0;
-                    --haku-disp-border:#c8ded0;
-                    border:1px solid var(--haku-disp-border);
-                    border-radius:16px;
-                    background:linear-gradient(180deg,#fbfdfb 0%,#f7faf8 100%);
-                    padding:14px;
-                    display:flex;
-                    flex-direction:column;
-                    gap:10px;
-                    box-shadow:0 5px 16px rgba(28,69,47,.055);
-                }
-                .haku-disponibilidad-card--servicio {
-                    --haku-disp-accent:#356d62;
-                    --haku-disp-soft:#eef7f5;
-                    --haku-disp-border:#c8dfd9;
-                }
-                .haku-disponibilidad-head {
-                    display:flex;align-items:flex-start;justify-content:space-between;
-                    gap:12px;padding-bottom:9px;border-bottom:1px solid #deebe2;
-                }
-                .haku-disponibilidad-kicker {
-                    margin:0 0 2px;font-size:10px;line-height:1.2;font-weight:800;
-                    letter-spacing:.09em;text-transform:uppercase;color:var(--haku-disp-accent);
-                }
-                .haku-disponibilidad-title {
-                    margin:0;font-size:19px;line-height:1.15;font-weight:800;color:#17251c;
-                }
-                .haku-disponibilidad-fecha {
-                    flex:0 0 auto;display:inline-flex;align-items:center;min-height:26px;
-                    padding:4px 9px;border:1px solid var(--haku-disp-border);border-radius:999px;
-                    background:var(--haku-disp-soft);color:var(--haku-disp-accent);
-                    font-size:11px;line-height:1;font-weight:800;white-space:nowrap;
-                }
-                .haku-disponibilidad-resumen {
-                    display:flex;align-items:center;gap:10px;min-height:46px;padding:9px 11px;
-                    border:1px solid #dbe8df;border-radius:12px;background:rgba(255,255,255,.86);
-                    color:#344039;font-size:12px;
-                }
-                .haku-disponibilidad-cantidad {
-                    flex:0 0 auto;display:grid;place-items:center;min-width:34px;height:34px;
-                    padding:0 5px;border-radius:10px;background:var(--haku-disp-accent);
-                    color:#fff;font-size:16px;font-weight:900;box-sizing:border-box;
-                }
-                .haku-disponibilidad-listado { display:flex;flex-wrap:wrap;gap:6px; }
-                .haku-disponibilidad-cab,
-                .haku-disponibilidad-hora {
-                    display:inline-flex;align-items:center;justify-content:center;min-height:27px;
-                    padding:4px 9px;border:1px solid #d6e5db;border-radius:9px;background:#fff;
-                    color:#315b43;font-size:10px;font-weight:850;
-                }
-                .haku-disponibilidad-servicios { display:grid;gap:8px; }
-                .haku-disponibilidad-servicio {
-                    border:1px solid #dbe8df;border-radius:12px;background:#fff;padding:9px;
-                    display:flex;flex-direction:column;gap:7px;
-                }
-                .haku-disponibilidad-servicio-head {
-                    display:flex;justify-content:space-between;gap:8px;align-items:center;
-                    color:#294a39;font-size:11px;font-weight:850;
-                }
-                .haku-disponibilidad-vacio {
-                    padding:9px 10px;border:1px dashed var(--haku-disp-border);border-radius:10px;
-                    background:var(--haku-disp-soft);color:#53645a;font-size:11px;
-                }
-                .haku-disponibilidad-nota { color:#6b776f;font-size:10px;line-height:1.35; }
-                .haku-disponibilidad-pie {
-                    padding-top:7px;border-top:1px solid #e0e9e3;color:#758078;
-                    font-size:10px;line-height:1.25;
-                }
-                @media (max-width:620px) {
-                    .haku-disponibilidad-card { padding:11px;gap:8px; }
-                    .haku-disponibilidad-title { font-size:17px; }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-
-        instalarEstilos();
-
         function quitarHaku(valor) {
             const fn = window.haikuQuitarVocativoAsistente;
             if (typeof fn === "function") return fn(valor);
@@ -331,139 +246,66 @@
             return horariosDisponiblesFallback(tipo, fecha);
         }
 
-        function cabeceraCard(titulo, fecha, servicio = false) {
-            const card = document.createElement("div");
-            card.className = `haiku-asistente-preview haku-disponibilidad-card${servicio ? " haku-disponibilidad-card--servicio" : ""}`;
-            const head = document.createElement("div");
-            head.className = "haku-disponibilidad-head";
-            const izq = document.createElement("div");
-            const kicker = document.createElement("div");
-            kicker.className = "haku-disponibilidad-kicker";
-            kicker.textContent = "Consulta · sólo lectura";
-            const h3 = document.createElement("h3");
-            h3.className = "haku-disponibilidad-title";
-            h3.textContent = titulo;
-            izq.append(kicker, h3);
-            const chip = document.createElement("span");
-            chip.className = "haku-disponibilidad-fecha";
-            chip.textContent = fechaVisible(fecha);
-            head.append(izq, chip);
+        function nodo(tag, clase, texto = "") {
+            const el = document.createElement(tag);
+            el.className = clase;
+            el.textContent = texto;
+            return el;
+        }
+
+        function cabeceraCard(titulo, fecha, contexto) {
+            const card = nodo("article", "haku-respuesta-compacta haku-disponibilidad-card");
+            const head = nodo("header", "haku-respuesta__cabecera");
+            head.append(nodo("h3", "haku-disponibilidad-title", titulo),
+                nodo("span", "haku-respuesta__contexto", [fechaVisible(fecha), contexto].filter(Boolean).join(" · ")));
             card.appendChild(head);
             return card;
         }
 
-        function agregarPie(card, textoNota) {
-            if (textoNota) {
-                const nota = document.createElement("div");
-                nota.className = "haku-disponibilidad-nota";
-                nota.textContent = textoNota;
-                card.appendChild(nota);
-            }
-            const pie = document.createElement("div");
-            pie.className = "haku-disponibilidad-pie";
-            pie.textContent = "Sólo lectura · esta consulta no modificó ninguna reserva ni servicio.";
-            card.appendChild(pie);
+        function montar(card, fuente) {
+            card.appendChild(nodo("p", "haku-respuesta__nota", fuente));
             mensajes.appendChild(card);
-            requestAnimationFrame(() => { mensajes.scrollTop = mensajes.scrollHeight; });
+            requestAnimationFrame(() => card.scrollIntoView?.({ block: "start" }));
+        }
+
+        function etiquetas(valores) {
+            const lista = nodo("ul", "haku-respuesta__etiquetas");
+            for (const valor of valores) lista.appendChild(nodo("li", "", valor));
+            return lista;
         }
 
         function renderizarCabanas(fecha, disponibles) {
-            const card = cabeceraCard("Cabañas por vender", fecha, false);
-            const resumen = document.createElement("div");
-            resumen.className = "haku-disponibilidad-resumen";
-            const cantidad = document.createElement("span");
-            cantidad.className = "haku-disponibilidad-cantidad";
-            cantidad.textContent = String(disponibles.length);
-            const texto = document.createElement("span");
-            texto.textContent = disponibles.length === 1
-                ? `Queda 1 cabaña por vender para la noche del ${fechaVisible(fecha)}.`
-                : `Quedan ${disponibles.length} cabañas por vender para la noche del ${fechaVisible(fecha)}.`;
-            resumen.append(cantidad, texto);
-            card.appendChild(resumen);
-
+            const cantidad = `${disponibles.length} ${disponibles.length === 1 ? "disponible" : "disponibles"}`;
+            const card = cabeceraCard("Cabañas por vender", fecha, cantidad);
             if (disponibles.length) {
-                const listado = document.createElement("div");
-                listado.className = "haku-disponibilidad-listado";
-                disponibles.forEach(fila => {
-                    const item = document.createElement("span");
-                    item.className = "haku-disponibilidad-cab";
-                    item.textContent = fila?.numero ? `CAB ${fila.numero}` : (fila?.nombre || "Cabaña");
-                    listado.appendChild(item);
-                });
-                card.appendChild(listado);
+                card.appendChild(etiquetas(disponibles.map(fila => fila?.numero ? `CAB ${fila.numero}` : (fila?.nombre || "Cabaña"))));
             } else {
-                const vacio = document.createElement("div");
-                vacio.className = "haku-disponibilidad-vacio";
-                vacio.textContent = "No quedan cabañas disponibles para vender como alojamiento esa noche.";
-                card.appendChild(vacio);
+                card.appendChild(nodo("p", "haku-respuesta__vacio", "Sin cabañas disponibles para alojamiento esa noche."));
             }
-
-            agregarPie(card, "Calculado con la disponibilidad real de HAKU: reservas vigentes y bloqueos activos.");
+            montar(card, "Disponibilidad de la noche según reservas vigentes y bloqueos activos.");
         }
 
         function bloqueServicio(titulo, horarios) {
-            const bloque = document.createElement("div");
-            bloque.className = "haku-disponibilidad-servicio";
-            const head = document.createElement("div");
-            head.className = "haku-disponibilidad-servicio-head";
-            const nombre = document.createElement("strong");
-            nombre.textContent = titulo;
-            const cuenta = document.createElement("span");
-            cuenta.textContent = `${horarios.length} de ${HORARIOS_TINAJAS.length} libres`;
-            head.append(nombre, cuenta);
+            const bloque = nodo("section", "haku-disponibilidad-servicio");
+            const head = nodo("header", "haku-disponibilidad-servicio-head");
+            head.append(nodo("strong", "", titulo),
+                nodo("span", "haku-respuesta__contexto", `${horarios.length} de ${HORARIOS_TINAJAS.length} libres`));
             bloque.appendChild(head);
-
-            if (horarios.length) {
-                const lista = document.createElement("div");
-                lista.className = "haku-disponibilidad-listado";
-                horarios.forEach(h => {
-                    const chip = document.createElement("span");
-                    chip.className = "haku-disponibilidad-hora";
-                    chip.textContent = `${h.inicio}–${h.fin}`;
-                    lista.appendChild(chip);
-                });
-                bloque.appendChild(lista);
-            } else {
-                const vacio = document.createElement("div");
-                vacio.className = "haku-disponibilidad-vacio";
-                vacio.textContent = "Sin horarios disponibles.";
-                bloque.appendChild(vacio);
-            }
+            bloque.appendChild(horarios.length ? etiquetas(horarios.map(h => `${h.inicio}–${h.fin}`))
+                : nodo("p", "haku-respuesta__vacio", "Sin horarios disponibles."));
             return bloque;
         }
 
         async function renderizarServicio(fecha, tipo) {
-            const pedirAmbas = tipo === "ambas";
-            const titulo = pedirAmbas
-                ? "Disponibilidad de tinajas"
-                : tipo === "jacuzzi" ? "Disponibilidad de Jacuzzi" : "Disponibilidad de Tinaja Tónel";
-            const card = cabeceraCard(titulo, fecha, true);
-
-            const resultados = {};
-            if (pedirAmbas || tipo === "tonel") resultados.tonel = await buscarHorariosServicio("tonel", fecha);
-            if (pedirAmbas || tipo === "jacuzzi") resultados.jacuzzi = await buscarHorariosServicio("jacuzzi", fecha);
-
-            const totalLibre = Object.values(resultados).reduce((n, lista) => n + lista.length, 0);
-            const totalSlots = Object.keys(resultados).length * HORARIOS_TINAJAS.length;
-            const resumen = document.createElement("div");
-            resumen.className = "haku-disponibilidad-resumen";
-            const cantidad = document.createElement("span");
-            cantidad.className = "haku-disponibilidad-cantidad";
-            cantidad.textContent = String(totalLibre);
-            const texto = document.createElement("span");
-            texto.textContent = pedirAmbas
-                ? `${totalLibre} de ${totalSlots} horarios están libres entre ambas tinajas el ${fechaVisible(fecha)}.`
-                : `${totalLibre} de ${HORARIOS_TINAJAS.length} horarios están libres el ${fechaVisible(fecha)}.`;
-            resumen.append(cantidad, texto);
-            card.appendChild(resumen);
-
-            const servicios = document.createElement("div");
-            servicios.className = "haku-disponibilidad-servicios";
-            if (resultados.tonel) servicios.appendChild(bloqueServicio("TINAJA TÓNEL", resultados.tonel));
-            if (resultados.jacuzzi) servicios.appendChild(bloqueServicio("TINAJA JACUZZI", resultados.jacuzzi));
+            const ambas = tipo === "ambas";
+            const titulo = ambas ? "Horarios libres de tinajas" : tipo === "jacuzzi" ? "Horarios libres · Jacuzzi" : "Horarios libres · Tónel";
+            const card = cabeceraCard(titulo, fecha);
+            card.classList.add("haku-disponibilidad-card--servicio");
+            const servicios = nodo("div", "haku-disponibilidad-servicios");
+            if (ambas || tipo === "tonel") servicios.appendChild(bloqueServicio("Tónel", await buscarHorariosServicio("tonel", fecha)));
+            if (ambas || tipo === "jacuzzi") servicios.appendChild(bloqueServicio("Jacuzzi", await buscarHorariosServicio("jacuzzi", fecha)));
             card.appendChild(servicios);
-
-            agregarPie(card, "Calculado desde los servicios registrados en HAKU; los servicios cancelados liberan el horario.");
+            montar(card, "Los servicios cancelados liberan su horario.");
         }
 
         async function procesar(textoOriginal) {
@@ -489,8 +331,8 @@
 
             try {
                 if (esServicio) {
-                    espera.remove();
                     await renderizarServicio(fecha, tipoServicio);
+                    espera.remove();
                 } else {
                     const disponibles = await buscarDisponibles(fecha);
                     espera.remove();

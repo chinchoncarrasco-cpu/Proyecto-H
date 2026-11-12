@@ -228,13 +228,13 @@
         const filtroCabanas = Array.isArray(cabanasSolicitadas) && cabanasSolicitadas.length > 0;
 
         const card = document.createElement("div");
-        card.className = "haiku-asistente-preview";
+        card.className = "haiku-asistente-preview haku-propuesta-compacta";
 
         const cabecera = document.createElement("div");
         cabecera.className = "haiku-asistente-preview-cabecera";
         const izq = document.createElement("div");
         const small = document.createElement("small");
-        small.textContent = "CAMBIO DE ESTADO · NADA GUARDADO";
+        small.textContent = "Vista previa de check-in";
         const h3 = document.createElement("h3");
         h3.textContent = "Cambiar a Hospedado";
         izq.append(small, h3);

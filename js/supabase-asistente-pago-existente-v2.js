@@ -343,13 +343,13 @@
     async function renderizarPagoExistente(preview) {
         const entradas = Array.isArray(preview?.reservas) ? preview.reservas : [];
         const card = document.createElement("article");
-        card.className = "haiku-asistente-preview";
+        card.className = "haiku-asistente-preview haku-propuesta-compacta";
 
         const cabecera = document.createElement("div");
         cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
         const marca = document.createElement("span");
-        marca.textContent = "PAGO EN RESERVA EXISTENTE · NADA GUARDADO";
+        marca.textContent = "Pago en reserva existente";
         const nombre = document.createElement("strong");
         nombre.textContent = entradas[0]?.reserva?.titular_nombre || "Pago por revisar";
         titulo.append(marca, nombre);

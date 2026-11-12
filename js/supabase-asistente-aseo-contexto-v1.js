@@ -84,7 +84,7 @@
         return !s || /^(?:\?|\-\s*|sin dato)$/i.test(s) ? null : s;
     }
 
-    function nombreCheckout(valor) {
+    function referenciaCheckout(valor) {
         const original = quitarVocativo(String(valor || ""));
         const patrones = [
             /despu[eé]s\s+(?:del|de)\s+(?:check\s*-?\s*out|checkout|checked\s*out)\s+de\s+(.+?)(?=[?.!,;]|$)/i,
@@ -93,7 +93,11 @@
         ];
         for (const patron of patrones) {
             const m = original.match(patron);
-            if (m?.[1]) return m[1].replace(/[*_]/g, "").trim();
+            if (!m?.[1]) continue;
+            const nombreConCabana = m[1].replace(/[*_]/g, "").trim();
+            const sufijo = nombreConCabana.match(/\s+en\s+(?:la\s+)?(?:cab|cabaña|cabana)\s*(\d+)$/i);
+            const nombre = sufijo ? nombreConCabana.slice(0, sufijo.index) : nombreConCabana;
+            return { nombre, numero: sufijo ? Number(sufijo[1]) : null };
         }
         return null;
     }
@@ -114,7 +118,7 @@
             /\b(?:despues|tras)\b.{0,28}\b(?:check\s*-?\s*out|checkout|checked\s*out)\b/.test(t) ||
             /\b(?:check\s*-?\s*out|checkout|checked\s*out)\b.{0,35}\b(?:despues|posterior)\b/.test(t);
 
-        return preguntaRevisor && contextoAseo && despuesCheckout && nombreCheckout(valor)
+        return preguntaRevisor && contextoAseo && despuesCheckout && referenciaCheckout(valor)
             ? "revision_post_checkout"
             : null;
     }
@@ -128,7 +132,7 @@
         return !/\b(?:cancelad|anulad|no show|noshow)\b/.test(s);
     }
 
-    async function buscarEstadiaPorTitular(db, nombre) {
+    async function buscarEstadiaPorTitular(db, nombre, cabanaId = null) {
         const buscado = normNombre(nombre);
         if (!buscado) return { estadia: null, ambiguo: false };
 
@@ -151,12 +155,13 @@
         if (!exactas.length && nombres.length > 1) return { estadia: null, ambiguo: true };
         if (!candidatas.length) return { estadia: null, ambiguo: false };
 
-        const { data: estadias, error: e2 } = await db
-            .from("reserva_estadias")
+        let consulta = db.from("reserva_estadias")
             .select("id,reserva_id,cabana_id,fecha_ingreso,fecha_salida,estado_estadia,checkout_realizado_en,reservas(titular_nombre,estado_reserva)")
             .in("reserva_id", candidatas.map(r => r.id).filter(Boolean))
             .order("fecha_salida", { ascending: false })
             .limit(80);
+        if (cabanaId) consulta = consulta.eq("cabana_id", cabanaId);
+        const { data: estadias, error: e2 } = await consulta;
         if (e2) throw e2;
 
         const hoy = hoyChile();
@@ -283,18 +288,15 @@
     function renderResultado(mensajes, info) {
         const { nombre, numero, fecha, revisor, fuente, ingreso, salida } = info;
         const card = document.createElement("div");
-        card.className = `haku-aseo-card${fuente.startsWith("Libro") ? " haku-aseo-card--libro" : ""}`;
+        card.className = `haku-respuesta-compacta haku-aseo-card${fuente.startsWith("Libro") ? " haku-aseo-card--libro" : ""}`;
         card.dataset.hakuAseoContexto = "1";
         card.dataset.cabana = String(numero);
         card.dataset.fecha = fecha;
 
-        const head = document.createElement("div"); head.className = "haku-aseo-head";
-        const izq = document.createElement("div");
-        const kicker = document.createElement("div"); kicker.className = "haku-aseo-kicker"; kicker.textContent = "CONSULTA · SÓLO LECTURA";
+        const head = document.createElement("header"); head.className = "haku-respuesta__cabecera";
         const title = document.createElement("h3"); title.className = "haku-aseo-title"; title.textContent = "Revisión de aseo posterior al check-out";
-        izq.append(kicker, title);
-        const badge = document.createElement("span"); badge.className = "haku-aseo-badge"; badge.textContent = fuente;
-        head.append(izq, badge);
+        const badge = document.createElement("span"); badge.className = "haku-respuesta__contexto haku-aseo-badge"; badge.textContent = fuente;
+        head.append(title, badge);
 
         const chips = document.createElement("div"); chips.className = "haku-aseo-resumen";
         for (const txt of [`CAB ${numero}`, fechaVisible(fecha)]) {
@@ -305,9 +307,8 @@
         grid.append(dato("Huésped de salida", nombre), dato("Estadía", `${fechaVisible(ingreso)} → ${fechaVisible(salida)}`), dato("Revisó el aseo", revisor));
 
         const pie = document.createElement("div"); pie.className = "haku-aseo-pie";
-        pie.textContent = fuente.startsWith("Proyecto H")
-            ? `Haku identificó automáticamente la CAB ${numero} y el ${fechaVisible(fecha)} desde la estadía de ${nombre}. Proyecto H respondió la pregunta, por lo que no fue necesario consultar el Libro.`
-            : `Haku identificó automáticamente la CAB ${numero} y el ${fechaVisible(fecha)} desde la estadía de ${nombre}. Proyecto H no tenía quién revisó el aseo y se usó el Libro de Reserva como respaldo.`;
+        pie.textContent = fuente.startsWith("Proyecto H") ? "Contexto tomado de la estadía de salida."
+            : "Proyecto H no tiene revisor registrado. Se usó el Libro como respaldo.";
         card.append(head, chips, grid, pie);
         mensajes.appendChild(card);
         guardarContexto({ nombre, numero, fecha, ingreso, salida, revisor, fuente });
@@ -329,18 +330,15 @@
     function renderDetalles(mensajes, ctx, detalles, fuente) {
         const libro = fuente.startsWith("Libro");
         const card = document.createElement("div");
-        card.className = `haku-aseo-card${libro ? " haku-aseo-card--libro" : ""}`;
+        card.className = `haku-respuesta-compacta haku-aseo-card${libro ? " haku-aseo-card--libro" : ""}`;
         card.dataset.hakuAseoContexto = "1";
         card.dataset.cabana = String(ctx.numero);
         card.dataset.fecha = ctx.fecha;
 
-        const head = document.createElement("div"); head.className = "haku-aseo-head";
-        const izq = document.createElement("div");
-        const kicker = document.createElement("div"); kicker.className = "haku-aseo-kicker"; kicker.textContent = "SEGUIMIENTO · SÓLO LECTURA";
+        const head = document.createElement("header"); head.className = "haku-respuesta__cabecera";
         const title = document.createElement("h3"); title.className = "haku-aseo-title"; title.textContent = "Detalles de esa revisión";
-        izq.append(kicker, title);
-        const badge = document.createElement("span"); badge.className = "haku-aseo-badge"; badge.textContent = fuente;
-        head.append(izq, badge);
+        const badge = document.createElement("span"); badge.className = "haku-respuesta__contexto haku-aseo-badge"; badge.textContent = fuente;
+        head.append(title, badge);
 
         const chips = document.createElement("div"); chips.className = "haku-aseo-resumen";
         for (const txt of [`CAB ${ctx.numero}`, fechaVisible(ctx.fecha), ctx.nombre || "Contexto anterior"]) {
@@ -360,8 +358,8 @@
 
         const pie = document.createElement("div"); pie.className = "haku-aseo-pie";
         pie.textContent = libro
-            ? "Proyecto H no tenía detalles suficientes; Haku usó el Libro de Reserva como respaldo manteniendo la CAB y fecha de la conversación anterior."
-            : "Haku reutilizó automáticamente la CAB y la fecha de la consulta anterior. Proyecto H fue la fuente primaria.";
+            ? "Detalles del Libro como respaldo para la cabaña y fecha de la consulta anterior."
+            : "Cabaña y fecha de la consulta anterior.";
         card.appendChild(pie);
         mensajes.appendChild(card);
         requestAnimationFrame(() => { mensajes.scrollTop = mensajes.scrollHeight; });
@@ -369,14 +367,20 @@
 
     async function consultarRevisionPostCheckout(textoUsuario) {
         const { db, campo, enviar, mensajes } = elementos();
-        const nombre = nombreCheckout(textoUsuario);
+        const { nombre, numero } = referenciaCheckout(textoUsuario) || {};
         if (!db || !campo || !enviar || !mensajes || !nombre || ocupado) return;
 
         ocupado = true; enviar.disabled = true; campo.disabled = true;
         agregarMensaje(mensajes, "usuario", textoUsuario); campo.value = "";
         const estado = agregarMensaje(mensajes, "asistente", `Buscando la estadía de ${nombre} y la revisión de aseo posterior a su check-out…`, "haiku-asistente-mensaje--procesando");
         try {
-            const hallazgo = await buscarEstadiaPorTitular(db, nombre);
+            const filtroCabana = numero === null ? null : await cabanaPorNumero(db, numero);
+            if (numero !== null && !filtroCabana) {
+                estado.classList.remove("haiku-asistente-mensaje--procesando");
+                estado.textContent = `No encontré la CAB ${numero} en Proyecto H.`;
+                return;
+            }
+            const hallazgo = await buscarEstadiaPorTitular(db, nombre, filtroCabana?.id);
             if (hallazgo.ambiguo) {
                 estado.classList.remove("haiku-asistente-mensaje--procesando");
                 estado.textContent = `Encontré más de un huésped parecido a “${nombre}”. Indícame el nombre completo para no asociar el aseo a la persona equivocada.`;
@@ -388,7 +392,7 @@
                 estado.textContent = `No encontré una estadía finalizada de “${nombre}” en Proyecto H.`;
                 return;
             }
-            const cabana = await cabanaPorId(db, estadia.cabana_id);
+            const cabana = filtroCabana || await cabanaPorId(db, estadia.cabana_id);
             if (!cabana?.numero) throw new Error("No pude identificar la cabaña de esa estadía");
             const fecha = estadia.fecha_salida;
             const aseo = await aseoProyecto(db, fecha, cabana.id);
@@ -410,6 +414,10 @@
                 numero: cabana.numero, fecha, revisor, fuente,
                 ingreso: estadia.fecha_ingreso, salida: estadia.fecha_salida
             });
+        } catch (error) {
+            estado.classList.remove("haiku-asistente-mensaje--procesando");
+            estado.classList.add("haiku-asistente-mensaje--error");
+            estado.textContent = `No pude consultar la revisión de aseo. ${error?.message || "Intenta nuevamente."}`;
         } finally {
             ocupado = false; enviar.disabled = false; campo.disabled = false;
             campo.dispatchEvent(new Event("input", { bubbles: true })); campo.focus();

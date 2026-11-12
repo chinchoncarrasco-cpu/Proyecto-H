@@ -34,36 +34,6 @@
         let ocupado = false;
         const cacheCabanas = new Map();
 
-        function css() {
-            if (document.getElementById("haku-aseo-consultas-v1-css")) return;
-            const style = document.createElement("style");
-            style.id = "haku-aseo-consultas-v1-css";
-            style.textContent = `
-                .haku-aseo-card{--ac:#277352;--soft:#edf7f1;--bd:#cadfd2;border:1px solid var(--bd);border-radius:16px;background:linear-gradient(180deg,#fbfdfb,#f7faf8);padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:0 5px 16px rgba(28,69,47,.055)}
-                .haku-aseo-card--libro{--ac:#80652c;--soft:#fff8e8;--bd:#e8d9ad}
-                .haku-aseo-card--alerta{--ac:#9a5147;--soft:#fff1ef;--bd:#e8cbc6}
-                .haku-aseo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:9px;border-bottom:1px solid #deebe2}
-                .haku-aseo-kicker{margin:0 0 2px;font-size:10px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:var(--ac)}
-                .haku-aseo-title{margin:0;font-size:18px;line-height:1.15;color:#17251c}
-                .haku-aseo-badge{flex:0 0 auto;display:inline-flex;align-items:center;min-height:25px;padding:4px 9px;border:1px solid var(--bd);border-radius:999px;background:var(--soft);color:var(--ac);font-size:9px;font-weight:900;white-space:nowrap}
-                .haku-aseo-resumen{display:flex;gap:7px;flex-wrap:wrap}
-                .haku-aseo-chip{display:inline-flex;align-items:center;padding:5px 8px;border-radius:8px;background:var(--soft);color:var(--ac);font-size:10px;font-weight:850}
-                .haku-aseo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
-                .haku-aseo-dato{min-width:0;padding:8px 9px;border:1px solid #e0e9e3;border-radius:10px;background:#fff}
-                .haku-aseo-dato span{display:block;margin-bottom:3px;color:#7a867e;font-size:8px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
-                .haku-aseo-dato strong{display:block;overflow-wrap:anywhere;color:#29362e;font-size:11px;line-height:1.3}
-                .haku-aseo-seccion{padding-top:8px;border-top:1px solid #e0e9e3}
-                .haku-aseo-seccion h4{margin:0 0 6px;color:#3d5848;font-size:10px}
-                .haku-aseo-lista{margin:0;padding-left:17px;color:#47564d;font-size:10px;line-height:1.5}
-                .haku-aseo-nota{padding:8px 9px;border-radius:10px;background:var(--soft);color:#53645a;font-size:10px;line-height:1.4;white-space:pre-wrap}
-                .haku-aseo-pie{padding-top:7px;border-top:1px solid #e0e9e3;color:#748078;font-size:9px;line-height:1.35}
-                .haku-aseo-ok{color:#277352;font-weight:850}.haku-aseo-diff{color:#a04e43;font-weight:850}
-                @media(max-width:620px){.haku-aseo-card{padding:11px}.haku-aseo-grid{grid-template-columns:1fr 1fr}.haku-aseo-title{font-size:16px}}
-            `;
-            document.head.appendChild(style);
-        }
-        css();
-
         function quitarVocativo(v) {
             const fn = window.haikuQuitarVocativoAsistente;
             if (typeof fn === "function") return fn(v);
@@ -284,10 +254,9 @@
             const x=document.createElement(tag); if(clase)x.className=clase; if(texto!=null)x.textContent=texto; return x;
         }
         function cardBase(titulo,fecha,numero,fuente,clase="") {
-            const card=el("div",`haku-aseo-card ${clase}`.trim());
-            const head=el("div","haku-aseo-head");
-            const izq=el("div"); izq.append(el("div","haku-aseo-kicker","CONSULTA · SÓLO LECTURA"),el("h3","haku-aseo-title",titulo));
-            head.append(izq,el("span","haku-aseo-badge",fuente));
+            const card=el("article",`haku-respuesta-compacta haku-aseo-card ${clase}`.trim());
+            const head=el("header","haku-respuesta__cabecera");
+            head.append(el("h3","haku-aseo-title",titulo),el("span","haku-respuesta__contexto haku-aseo-badge",fuente));
             const resumen=el("div","haku-aseo-resumen");
             if(numero)resumen.append(el("span","haku-aseo-chip",`CAB ${numero}`));
             if(fecha)resumen.append(el("span","haku-aseo-chip",fechaVisible(fecha)));
@@ -366,7 +335,7 @@
             const nota=el("div","haku-aseo-nota",diferencias.length?`Encontré ${diferencias.length} diferencia(s) material(es).`:`Sin inconsistencias materiales. Diferencias de ${TOLERANCIA_MINUTOS} minutos o menos en tiempos de aseo se consideran equivalentes.`);
             card.append(nota);
             if(diferencias.length){const ul=el("ul","haku-aseo-lista");diferencias.forEach(x=>ul.append(el("li","haku-aseo-diff",x)));card.append(ul);}
-            card.append(el("div","haku-aseo-pie","Esta comparación es sólo lectura. Proyecto H mantiene prioridad operativa; el Libro funciona como respaldo."));
+            card.append(el("div","haku-aseo-pie","Proyecto H es la fuente operativa. El Libro sirve de respaldo."));
             mensajes.appendChild(card);requestAnimationFrame(()=>{mensajes.scrollTop=mensajes.scrollHeight;});
         }
         function renderHuesped(titulo,numero,estadia,extra=[]) {

@@ -1239,13 +1239,13 @@
         const reservas = reservasMultiplesDesdePreview(preview);
 
         const lote = document.createElement("article");
-        lote.className = "haiku-asistente-preview";
+        lote.className = "haiku-asistente-preview haku-propuesta-compacta";
 
         const cabecera = document.createElement("div");
         cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
         const marca = document.createElement("span");
-        marca.textContent = "VISTA PREVIA DE LOTE · NADA GUARDADO";
+        marca.textContent = "Vista previa del lote";
         const nombre = document.createElement("strong");
         nombre.textContent = `${reservas.length} reservas detectadas`;
         titulo.append(marca, nombre);
@@ -1345,6 +1345,12 @@
         );
         const puedeCrear = problemas.length === 0 && tienePermisoReserva && tienePermisoPago;
 
+        agregarLista(lote, "Requisitos para guardar", [
+            ...problemas,
+            ...(!tienePermisoReserva ? ["Tu cuenta necesita permiso para crear reservas."] : []),
+            ...(!tienePermisoPago ? ["Tu cuenta necesita permisos para registrar y verificar abonos."] : [])
+        ], "haiku-asistente-preview-lista--alerta");
+
         const pie = document.createElement("div");
         pie.className = "haiku-asistente-preview-pie";
         const estado = document.createElement("span");
@@ -1418,13 +1424,13 @@
         ultimaPreview = preview;
 
         const card = document.createElement("article");
-        card.className = "haiku-asistente-preview";
+        card.className = "haiku-asistente-preview haku-propuesta-compacta";
 
         const cabecera = document.createElement("div");
         cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
         const marca = document.createElement("span");
-        marca.textContent = "VISTA PREVIA · NADA GUARDADO";
+        marca.textContent = "Vista previa de reserva";
         const nombre = document.createElement("strong");
         nombre.textContent = preview?.reserva?.titular_nombre || "Reserva por revisar";
         titulo.append(marca, nombre);
@@ -1538,7 +1544,7 @@
                 ? `Confirmar reserva + ${cantidadPagos} ${cantidadPagos === 1 ? "abono" : "abonos"}`
                 : "Confirmar y crear"
             : r.tipo_estadia === "full_day"
-                ? "Full Day · próxima etapa"
+                ? "Vista previa de Full Day"
                 : "Crear reserva · revisar datos";
 
         if (problemas.length) botonCrear.title = problemas.join(" ");
@@ -1606,6 +1612,11 @@
             }
         });
 
+        agregarLista(card, "Requisitos para guardar", [
+            ...problemas,
+            ...(!tienePermisoReserva ? ["Tu cuenta necesita permiso para crear reservas."] : []),
+            ...(!tienePermisoPago ? ["Tu cuenta necesita permisos para registrar y verificar abonos."] : [])
+        ], "haiku-asistente-preview-lista--alerta");
         pie.append(estado, botonCrear);
         card.appendChild(pie);
 
