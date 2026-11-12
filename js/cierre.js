@@ -90,6 +90,7 @@ function obtenerCierreDia(fecha) {
     const cierre = datos.cierre ||= {};
     cierre.cabanasCierre ||= {};
     cierre.llavesRecepcion ||= {};
+    cierre.tareasPersonificadas ||= {};
     return cierre;
 }
 
@@ -106,7 +107,8 @@ function respuestaDeControlCierre(input) {
         valor = Object.fromEntries([...cierreSeccion.querySelectorAll("[data-cierre-llave]")]
             .map(check => [check.dataset.cierreLlave, check.checked]));
     }
-    return { codigo, cabanaNumero, valor, estado: valor === false ? "pendiente" : "confirmado" };
+    return { codigo, cabanaNumero, valor, llave: input.dataset.cierreLlave,
+        estado: valor === false ? "pendiente" : "confirmado" };
 }
 
 function cargarCierreDia(fecha) {
@@ -120,7 +122,7 @@ function cargarCierreDia(fecha) {
         const { cierreCodigo: codigo, cierreCabana: numero, cierreLlave: llave } = input.dataset;
         const campo = cierrePlantilla.campos[codigo]?.campo;
         const valor = numero ? cierre.cabanasCierre[numero]?.[codigo.slice(7)]
-            : llave ? cierre.llavesRecepcion[llave] : cierre[campo];
+            : llave ? cierre.llavesRecepcion[llave] : campo ? cierre[campo] : cierre.tareasPersonificadas[codigo];
         input.checked = input.type === "radio" ? input.value === valor : valor === true;
         input.dataset.cierreExento = String(exentos.has(claveRespuestaCierre(codigo, numero)));
         if (cierreSeccion.classList.contains("haiku-cierre-bloqueado")) input.disabled = true;
@@ -144,8 +146,10 @@ cierreSeccion?.addEventListener("change", event => {
         if (cabanaNumero) {
             const cabana = cierre.cabanasCierre[cabanaNumero] ||= {};
             cabana[codigo.slice(7)] = valor;
-        } else {
+        } else if (cierrePlantilla.campos[codigo]) {
             cierre[cierrePlantilla.campos[codigo].campo] = valor;
+        } else {
+            cierre.tareasPersonificadas[codigo] = valor;
         }
         const clave = claveRespuestaCierre(codigo, cabanaNumero);
         cierre._cierreExentos = (cierre._cierreExentos || []).filter(exento => exento !== clave);
@@ -192,6 +196,7 @@ function adjuntarEvidenciaCierre(archivo, nombre, fecha) {
     lector.onerror = () => window.HAIKU_DIALOGOS.aviso("No fue posible leer la imagen.");
     lector.onload = async () => {
         try {
+            await window.haikuEsperarGuardadosCierre?.(fecha);
             await guardarEvidencia(fecha, nombre, lector.result);
         } catch (error) {
             // El adaptador Supabase avisa si debe usar el respaldo local.

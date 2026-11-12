@@ -27,13 +27,14 @@
         return actual;
     }
 
-    function guardarRespuesta(fecha, { codigo, estado, valor, cabanaNumero }) {
+    function guardarRespuesta(fecha, { codigo, estado, valor, cabanaNumero, llave }, version) {
         return encolarGuardado(fecha, async () => {
-            const { error } = await cliente.rpc("haiku_guardar_respuesta_cierre", {
+            const { error } = await cliente.rpc("haiku_guardar_respuesta_cierre_personificado_v1", {
                 p_fecha: fecha,
                 p_codigo: codigo,
                 p_estado: estado,
-                p_valor: valor,
+                p_valor: llave ? { [llave]: valor[llave] } : valor,
+                p_version: version,
                 p_observacion: null,
                 p_cabana_numero: cabanaNumero,
                 p_tipo_turno: TIPO_TURNO
@@ -70,6 +71,7 @@
         Object.values(plantilla.campos).forEach(item => delete cierre[item.campo]);
         cierre.llavesRecepcion = {};
         cierre.cabanasCierre = {};
+        cierre.tareasPersonificadas = {};
         cierre._cierreExentos = [];
         for (const respuesta of respuestas) {
             const codigo = respuesta.cierre_checklist_items?.codigo;
@@ -84,6 +86,8 @@
             } else if (numero && codigo.startsWith("cabana_")) {
                 const datos = cierre.cabanasCierre[numero] ||= {};
                 datos[codigo.slice(7)] = respuesta.valor === true;
+            } else if (codigo.startsWith("tarea_")) {
+                cierre.tareasPersonificadas[codigo] = respuesta.valor === true;
             }
         }
         if (!notasPendientes.has(fecha)) cierre.novedades = cierreRemoto.novedades || "";
@@ -102,20 +106,24 @@
         const cierreId = base?.cierre_id;
         if (!cierreId) throw new Error("No se encontró el cierre del día.");
 
-        const [respuestas, cierre, unidades] = await Promise.all([
+        const [respuestas, cierre, unidades, version] = await Promise.all([
             cliente.from("cierre_respuestas")
                 .select("estado,valor,observacion,cabana_id,cierre_checklist_items(codigo),cabanas(numero,nombre)")
                 .eq("cierre_id", cierreId),
             cliente.from("cierres_turno").select("estado,novedades,resumen_entrega").eq("id", cierreId).single(),
-            cliente.from("cabanas").select("numero,nombre").eq("activa", true).order("numero")
+            cliente.from("cabanas").select("numero,nombre").eq("activa", true).order("numero"),
+            cliente.rpc("haiku_cierre_plantilla_turno_v1", { p_cierre_id: cierreId })
         ]);
         if (respuestas.error) throw respuestas.error;
         if (cierre.error) throw cierre.error;
+        if (version.error) throw version.error;
+        if (!version.data?.plantilla || !Number.isInteger(version.data.version)) throw new Error("No se pudo cargar la plantilla.");
         const filas = respuestas.data || [];
         if (revision !== revisionLocal) return null;
         aplicarRespuestas(fecha, cierreId, cierre.data, filas);
 
         if (forzarRender && fecha === fechaActual()) {
+            window.HAIKU_SITES_CIERRE_V1?.cargarPlantilla(version.data);
             const puedeVerUnidades = typeof window.haikuTienePermiso !== "function" || window.haikuTienePermiso("cabanas.ver");
             if (!unidades.error && puedeVerUnidades) {
                 const visibles = new Map((unidades.data || []).map(unidad => [unidad.numero, unidad]));
@@ -128,9 +136,12 @@
                 window.HAIKU_SITES_CIERRE_V1?.cargarUnidades([...visibles.values()].sort((a, b) => a.numero - b.numero));
             }
             cargarLocal(fecha);
+            window.dispatchEvent(new CustomEvent("haiku:cierre-plantilla-cargada", {
+                detail: { fecha, version: version.data.version }
+            }));
             window.HAIKU_SITES_CIERRE_V1?.refrescarEvidencias?.();
         }
-        return { ...base, cierre: cierre.data, respuestas: filas };
+        return { ...base, cierre: cierre.data, respuestas: filas, version: version.data.version };
     }
 
     function cargarCierreSupabase(fecha, opciones = {}) {
@@ -149,12 +160,13 @@
     seccion.addEventListener("change", event => {
         const fecha = fechaActual();
         const respuesta = respuestaDeControlCierre(event.target);
-        if (!fecha || !respuesta) return;
+        const version = window.HAIKU_SITES_CIERRE_V1?.version();
+        if (!fecha || !respuesta || !version) return;
         revisionLocal++;
-        guardarRespuesta(fecha, respuesta).catch(async error => {
+        guardarRespuesta(fecha, respuesta, version).catch(async error => {
             console.error("HAIKU · No se guardó un control del cierre:", respuesta.codigo, error);
             const fila = event.target.closest("[data-turno-control]");
-            const texto = plantilla.campos[respuesta.codigo]?.texto || fila?.textContent.trim() || "el control de cierre";
+            const texto = fila?.querySelector(".turno-check span, .turno-question")?.textContent || plantilla.campos[respuesta.codigo]?.texto || "el control de cierre";
             window.HAIKU_DIALOGOS.aviso(`No fue posible guardar «${texto}».`);
             await cargas.get(fecha);
             await cargarCierreSupabase(fecha);

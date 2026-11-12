@@ -15,6 +15,10 @@
     let filtro = "todas";
     let fechaVista = "";
     let listaUnidades = "";
+    let ultimasUnidades = plantilla.unidades.respaldo;
+    let configuracion = plantilla.aplicar();
+    let version = null;
+    let contadorLlaves;
 
     function crear(tag, clase, texto) {
         const elemento = document.createElement(tag);
@@ -145,7 +149,7 @@
     }
 
     const escritorio = matchMedia("(min-width: 760px)").matches;
-    const cabanas = panel(plantilla.unidades.titulo, escritorio);
+    const cabanas = panel(configuracion.unidades.titulo, escritorio);
     cabanas.elemento.id = "sites-cierre-cabanas";
     const barraFiltros = crear("div", "turno-filters");
     barraFiltros.setAttribute("role", "group");
@@ -168,7 +172,8 @@
         const firma = JSON.stringify(unidades);
         if (listaUnidades === firma) return;
         listaUnidades = firma;
-        const modelo = plantilla.unidades;
+        ultimasUnidades = unidades;
+        const modelo = configuracion.unidades;
         lista.replaceChildren(...unidades.map(({ numero, nombre }) => {
             const ficha = panel(nombre || `Cabaña ${numero}`);
             ficha.elemento.className = "turno-cabin";
@@ -195,45 +200,66 @@
     }
 
     const procedimientos = crear("div", "turno-procedures");
-    const inventario = panel(plantilla.inventario.titulo);
-    inventario.elemento.className = "turno-inventory";
-    const llaves = crear("div", "turno-inventory-list");
-    plantilla.inventario.llaves.forEach(([id, texto, detalle]) => llaves.append(check(texto, {
-        cierreCodigo: plantilla.inventario.codigo, cierreLlave: id
-    }, detalle)));
-    inventario.cuerpo.append(llaves);
+    function montarControles() {
+        const abiertos = new Map([...procedimientos.querySelectorAll("details[data-turno-grupo]")]
+            .map(elemento => [elemento.dataset.turnoGrupo, elemento.open]));
+        procedimientos.replaceChildren();
+        revisiones.length = 0;
+        evidencias.clear();
+        configuracion.controles.forEach(grupo => {
+            const vista = panel(grupo.titulo, abiertos.get(grupo.id) ?? (grupo.abrir || (escritorio && grupo.abrirEnEscritorio)));
+            vista.elemento.dataset.turnoGrupo = grupo.id;
+            if (grupo.llaves) {
+                const llaves = crear("div", "turno-inventory-list");
+                grupo.llaves.forEach(([id, texto, detalle]) => llaves.append(check(texto, {
+                    cierreCodigo: plantilla.inventario.codigo, cierreLlave: id
+                }, detalle)));
+                vista.cuerpo.append(llaves);
+                contadorLlaves = vista.contador;
+            } else {
+                const filas = grupo.items.map(control);
+                vista.cuerpo.append(...filas);
+                if (grupo.seccion) {
+                    const acceso = boton(grupo.enlace, "turno-link");
+                    acceso.addEventListener("click", () => abrirSeccion(grupo.seccion));
+                    vista.cuerpo.append(acceso);
+                }
+                revisiones.push({ ...vista, filas });
+            }
+            procedimientos.append(vista.elemento);
+        });
+        pendientes.replaceChildren(...configuracion.entrega.items.map(control), notas);
+        tituloEntrega.textContent = configuracion.entrega.titulo;
+        notas.firstElementChild.textContent = configuracion.entrega.novedades;
+        cabanas.elemento.querySelector(":scope > summary > strong").textContent = configuracion.unidades.titulo;
+        $("#sites-cierre-titulo").textContent = configuracion.titulo;
+        const etiquetaResumen = final.querySelector("[data-cierre-final-resumen-wrap] > span");
+        if (etiquetaResumen) etiquetaResumen.textContent = configuracion.entrega.resumen;
+        listaUnidades = "";
+        cargarUnidades(ultimasUnidades);
+    }
 
-    plantilla.controles.forEach(grupo => {
-        const vista = panel(grupo.titulo, grupo.abrir || (escritorio && grupo.abrirEnEscritorio));
-        vista.elemento.dataset.turnoGrupo = grupo.id;
-        const filas = grupo.items.map(control);
-        vista.cuerpo.append(...filas);
-        if (grupo.inventario) vista.cuerpo.append(inventario.elemento);
-        if (grupo.seccion) {
-            const acceso = boton(grupo.enlace, "turno-link");
-            acceso.addEventListener("click", () => abrirSeccion(grupo.seccion));
-            vista.cuerpo.append(acceso);
-        }
-        revisiones.push({ ...vista, filas });
-        procedimientos.append(vista.elemento);
-    });
+    function cargarPlantilla(respuesta) {
+        if (!respuesta || version === respuesta.version) return;
+        configuracion = plantilla.aplicar(respuesta.plantilla);
+        version = respuesta.version;
+        montarControles();
+    }
 
     const entrega = crear("section", "turno-panel turno-handover");
     entrega.id = "sites-cierre-entrega";
     entrega.tabIndex = -1;
     entrega.setAttribute("aria-labelledby", "sites-cierre-entrega-titulo");
-    const tituloEntrega = crear("h2", "turno-handover-heading", plantilla.entrega.titulo);
+    const tituloEntrega = crear("h2", "turno-handover-heading");
     tituloEntrega.id = "sites-cierre-entrega-titulo";
     const columnas = crear("div", "turno-handover-grid");
     const pendientes = crear("div", "turno-handover-notes");
-    pendientes.append(...plantilla.entrega.items.map(control));
     const notas = crear("label", "turno-field");
     const novedades = crear("textarea");
     novedades.dataset.cierreCampo = "novedades";
     novedades.rows = 3;
     novedades.placeholder = "Ej. Revisar calefactor de la cabaña 4";
-    notas.append(crear("span", "", "Novedades del turno"), novedades);
-    pendientes.append(notas);
+    notas.append(crear("span"), novedades);
     const final = crear("div", "turno-final-slot");
     final.id = "sites-cierre-final-slot";
     columnas.append(pendientes, final);
@@ -297,7 +323,7 @@
         actualizarCabanas();
         const checksLlaves = $$("[data-cierre-llave]");
         const devueltas = checksLlaves.filter(revisado).length;
-        inventario.contador.textContent = `${devueltas}/${checksLlaves.length} devueltas`;
+        contadorLlaves.textContent = `${devueltas}/${checksLlaves.length} devueltas`;
         revisiones.forEach(({ contador, filas }) => {
             const hechos = filas.filter(fila => [...fila.querySelectorAll("[data-cierre-codigo]")].some(revisado)).length;
             contador.textContent = `${hechos}/${filas.length}`;
@@ -306,7 +332,7 @@
         const puede = window.haikuTienePermiso;
         $$("[data-turno-control]").forEach(fila => {
             const codigo = fila.dataset.turnoControl;
-            const permiso = plantilla.campos[codigo].permiso;
+            const permiso = plantilla.campos[codigo]?.permiso;
             const exento = !!fila.querySelector('[data-cierre-exento="true"]');
             const restringido = permiso && typeof puede === "function" && !puede(permiso);
             const detalle = fila.querySelector("[data-turno-no-aplica]");
@@ -343,7 +369,7 @@
                 fallo = true;
             }
         }
-        if (item.solicitud !== solicitud || fecha !== fechaActual()) return;
+        if (evidencias.get(id) !== item || item.solicitud !== solicitud || fecha !== fechaActual()) return;
         item.cantidad = archivos.length;
         item.status.textContent = archivos.length
             ? `${archivos.length} ${archivos.length === 1 ? "adjunto" : "adjuntos"}`
@@ -446,6 +472,9 @@
         if (volver && event.target.closest(".menu-item[data-seccion]")) volver.hidden = true;
     });
     document.addEventListener("haiku:revision-estado-guardado", actualizarCabanas);
-    cargarUnidades(plantilla.unidades.respaldo);
-    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({ actualizar, cargarUnidades, mostrarFecha, estadoCabana, refrescarEvidencias });
+    montarControles();
+    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({
+        actualizar, cargarUnidades, mostrarFecha, estadoCabana, refrescarEvidencias, cargarPlantilla,
+        version: () => version
+    });
 })();

@@ -91,15 +91,16 @@
             resumen.value = estado.resumen_entrega || "";
             fechaResumen = fecha;
         }
-        reintentar.hidden = true;
-        resumen.closest("label").hidden = cerrado;
+        const lista = window.HAIKU_SITES_CIERRE_V1?.version() === estado.plantilla_version;
+        reintentar.hidden = lista;
+        resumen.closest("label").hidden = cerrado || !lista;
         resumen.required = !cerrado && pendientes > 0;
-        cerrar.hidden = cerrado;
+        cerrar.hidden = cerrado || !lista;
         cerrar.textContent = pendientes ? `Cerrar con pendientes (${pendientes})` : "Cerrar turno";
         reabrir.hidden = !cerrado || !puedeReabrirLocal();
         info.hidden = !cerrado;
         info.replaceChildren();
-        bloquearEdicion(cerrado);
+        bloquearEdicion(cerrado || !lista);
 
         if (cerrado) {
             mensaje.textContent = estado.cierre_estado === "cerrado"
@@ -114,14 +115,14 @@
             }
             if (estado.resumen_entrega) {
                 const titulo = document.createElement("strong");
-                titulo.textContent = "Resumen de entrega";
+                titulo.textContent = resumen.closest("label").querySelector("span").textContent;
                 const entrega = document.createElement("p");
                 entrega.textContent = estado.resumen_entrega;
                 info.append(titulo, entrega);
             }
             info.hidden = !info.childElementCount;
         } else {
-            mensaje.textContent = pendientes > 0
+            mensaje.textContent = !lista ? "Cargando controles del turno…" : pendientes > 0
                 ? "Si cierras con pendientes, escribe un resumen de entrega."
                 : "Puedes cerrar el turno. El resumen es opcional.";
         }
@@ -164,6 +165,11 @@
             lectura = null;
             renderEstado(estado, fecha);
             if (esCerrado(estado.cierre_estado)) return;
+            const version = window.HAIKU_SITES_CIERRE_V1?.version();
+            if (version !== estado.plantilla_version) {
+                await window.haikuCargarCierreSupabase?.(fecha);
+                return;
+            }
             const pendientes = Number(estado.pendientes || 0);
             const texto = resumen.value.trim();
             if (pendientes > 0 && !texto) {
@@ -182,8 +188,8 @@
             if (fecha !== fechaActual()) return;
 
             cerrar.textContent = "Cerrando…";
-            const { data, error } = await cliente.rpc("haiku_cerrar_turno_dia", {
-                p_fecha: fecha, p_resumen_entrega: texto || null, p_tipo_turno: TIPO_TURNO
+            const { data, error } = await cliente.rpc("haiku_cerrar_turno_personificado_v1", {
+                p_fecha: fecha, p_resumen_entrega: texto || null, p_tipo_turno: TIPO_TURNO, p_version: version
             });
             if (error) throw error;
             lectura = null;
@@ -245,6 +251,14 @@
     window.addEventListener("haiku:cierre-fecha-cambiada", () => {
         prepararFecha();
         if (seccion.classList.contains("activa")) refrescarEstado();
+    });
+    window.addEventListener("haiku:cierre-plantilla-cargada", event => {
+        if (!estadoActual || event.detail.fecha !== fechaEstado) return;
+        if (event.detail.version === estadoActual.plantilla_version) renderEstado(estadoActual, fechaEstado);
+        else {
+            lectura = null;
+            refrescarEstado();
+        }
     });
     window.addEventListener("haiku:cierre-respuesta-guardada", event => {
         if (event.detail?.fecha !== fechaActual()) return;
