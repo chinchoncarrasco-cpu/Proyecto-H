@@ -6,7 +6,7 @@
     const controles = [
         {
             id: "recepcion", titulo: "Recepción y reservas", abrir: true, seccion: "resumen", enlace: "Ver Resumen",
-            inventario: true, items: [
+            items: [
                 { codigo: "salida_temprana", campo: "salidaTemprana", texto: "¿Se confirmó la hora de salida temprana?",
                     opciones: [["si", "Sí"], ["no-hay", "No hubo"]] },
                 { codigo: "salio_antes", campo: "salioAntes", texto: "¿Hubo salidas antes de lo previsto?", opciones: opcionesSiNo },
@@ -50,7 +50,7 @@
 
     const inventario = {
         titulo: "Llaves y accesos", codigo: "llaves_recepcion", campo: "llavesRecepcion",
-        // El servidor deriva llaves_retiradas a partir de estos identificadores.
+        // Identificadores de las llaves de la plantilla inicial.
         llaves: [
             ["tonel", "Tonel", "Negra"], ["jacuzzi", "Jacuzzi", "Azul"],
             ["lavanderia", "Lavandería"], ["masajes", "Sala de masajes", "Verde claro"],
@@ -77,5 +77,45 @@
         { codigo: "llaves_retiradas", campo: "llavesRetiradas" }
     ].map(item => [item.codigo, item]));
 
-    window.HAIKU_CIERRE_PLANTILLA_V1 = Object.freeze({ controles, entrega, inventario, unidades, campos });
+    const protegidos = ["pago_registrado", "manager_pagos", "manager_caja", "manager_vale_salida", "hay_novedades"];
+    const fila = (id, texto) => ({ id, texto, activo: true });
+    const grupo = seccion => ({
+        id: seccion.id, titulo: seccion.titulo, items: seccion.items.map(item => fila(item.codigo, item.texto))
+    });
+    const base = {
+        titulo: "Cierre de turno",
+        grupos: [
+            grupo(controles[0]),
+            { id: "llaves", titulo: inventario.titulo, items: inventario.llaves.map(([id, texto, detalle]) => ({
+                ...fila(id, texto), detalle: detalle || ""
+            })) },
+            ...controles.slice(1).map(grupo)
+        ],
+        cabanas: { titulo: unidades.titulo, ocupada: unidades.ocupada[1],
+            items: unidades.items.map(([id, texto]) => fila(`cabana_${id}`, texto)) },
+        entrega: { ...grupo(entrega), novedades: "Novedades del turno", resumen: "Resumen de entrega" }
+    };
+
+    function aplicar(config = base) {
+        const items = grupo => grupo.items.filter(item => item.activo).map(item => ({
+            ...campos[item.id], codigo: item.id, texto: item.texto
+        }));
+        return {
+            titulo: config.titulo,
+            controles: config.grupos.map(grupo => {
+                if (grupo.id === "llaves") return {
+                    id: "llaves", titulo: grupo.titulo,
+                    llaves: grupo.items.filter(item => item.activo).map(({ id, texto, detalle }) => [id, texto, detalle])
+                };
+                return { ...controles.find(base => base.id === grupo.id), id: grupo.id, titulo: grupo.titulo, items: items(grupo) };
+            }).filter(grupo => grupo.llaves || grupo.items.length),
+            unidades: {
+                ...unidades, titulo: config.cabanas.titulo, ocupada: ["ocupada", config.cabanas.ocupada],
+                items: config.cabanas.items.filter(item => item.activo).map(item => [item.id.slice(7), item.texto])
+            },
+            entrega: { ...config.entrega, items: items(config.entrega) }
+        };
+    }
+
+    window.HAIKU_CIERRE_PLANTILLA_V1 = Object.freeze({ controles, entrega, inventario, unidades, campos, base, aplicar, protegidos });
 })();

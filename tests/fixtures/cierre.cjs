@@ -2,7 +2,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = file => readFileSync(path.join(root, file), 'utf8');
-const scripts = ['cierre-plantilla-v1', 'sites-cierre-v1', 'cierre', 'supabase-cierre-v1', 'supabase-cierre-final-v1'];
+const scripts = ['cierre-plantilla-v1', 'sites-cierre-v1', 'cierre', 'cierre-personificar-v1', 'supabase-cierre-v1', 'supabase-cierre-final-v1'];
 
 async function prepararCierre(page, fecha = '2026-11-12') {
     await page.evaluate(fecha => {
@@ -11,11 +11,11 @@ async function prepararCierre(page, fecha = '2026-11-12') {
         const modelo = {
             llamadas: [], avisos: [], confirmaciones: [], abiertas: [],
             respaldos: { [fecha]: { 'manager-caja': [{ url: 'https://cierre.test/adjunto-caja-guardado.png' }] } },
-            permitir: true, confirmar: true, motivo: 'Corrección de prueba', demora: 0,
+            permitir: true, permitirEditor: true, version: 1, plantillas: {}, confirmar: true, motivo: 'Corrección de prueba', demora: 0,
             remoto: {
                 [fecha]: { estado: 'borrador', pendientes: 2, novedades: '', resumen_entrega: '', respuestas: [] },
                 [previa]: {
-                    estado: 'cerrado_con_pendientes', pendientes: 3, novedades: 'Novedad de ayer',
+                    estado: 'cerrado_con_pendientes', version: 1, pendientes: 3, novedades: 'Novedad de ayer',
                     resumen_entrega: 'Entrega de ayer', cerrado_en: '2026-11-12T02:00:00Z',
                     respuestas: [{
                         estado: 'confirmado', valor: 'no-hay', cierre_checklist_items: { codigo: 'salida_temprana' }
@@ -35,6 +35,7 @@ async function prepararCierre(page, fecha = '2026-11-12') {
             const total = 30;
             return {
                 fecha_operativa: fecha, cierre_estado: datos.estado, pendientes: datos.pendientes,
+                plantilla_version: datos.version || modelo.version,
                 completados: total - datos.pendientes, total_requeridos: total,
                 porcentaje: Math.round((total - datos.pendientes) / total * 100),
                 resumen_entrega: datos.resumen_entrega, cerrado_en: datos.cerrado_en
@@ -48,7 +49,7 @@ async function prepararCierre(page, fecha = '2026-11-12') {
         };
         window.guardarDatos = () => {};
         window.haikuSesion = { permisos: ['cierres.reabrir'], roles: ['administrador'] };
-        window.haikuTienePermiso = () => modelo.permitir;
+        window.haikuTienePermiso = codigo => codigo === 'configuracion.gestionar' ? modelo.permitirEditor : modelo.permitir;
         window.HAIKU_CABANAS_SITES_V1 = {
             estadoFinal: datos => datos.estadoRevision,
             abrir: numero => {
@@ -63,19 +64,35 @@ async function prepararCierre(page, fecha = '2026-11-12') {
             solicitar: async () => modelo.motivo
         };
         window.haikuSupabase = {
-            async rpc(nombre, args) {
+            async rpc(nombre, args = {}) {
                 modelo.llamadas.push({ nombre, args });
+                const base = () => structuredClone(window.HAIKU_CIERRE_PLANTILLA_V1.base);
+                if (nombre === 'haiku_cierre_plantilla_editar_v1') {
+                    return { data: { version: modelo.version, plantilla: modelo.plantillas[modelo.version] || base() } };
+                }
+                if (nombre === 'haiku_cierre_plantilla_publicar_v1') {
+                    if (args.p_version !== modelo.version) return { error: new Error('Conflicto de versión') };
+                    modelo.plantillas[++modelo.version] = structuredClone(args.p_plantilla);
+                    return { data: { version: modelo.version } };
+                }
+                if (nombre === 'haiku_cierre_plantilla_turno_v1') {
+                    const version = dia(args.p_cierre_id).version || modelo.version;
+                    return { data: { version, plantilla: modelo.plantillas[version] || base() } };
+                }
                 const fecha = args.p_fecha;
                 const datos = dia(fecha);
                 if (nombre === 'haiku_asegurar_cierre_dia') return { data: { cierre_id: fecha } };
                 if (nombre === 'haiku_estado_cierre_dia') return { data: estado(fecha) };
-                if (nombre === 'haiku_guardar_respuesta_cierre') {
+                if (nombre === 'haiku_guardar_respuesta_cierre_personificado_v1') {
                     if (modelo.demora) await new Promise(resolve => setTimeout(resolve, modelo.demora));
+                    datos.version ||= modelo.version;
                     const { p_codigo, p_estado, p_valor, p_cabana_numero } = args;
-                    datos.respuestas = datos.respuestas.filter(r => r.cierre_checklist_items.codigo !== p_codigo ||
-                        (r.cabanas?.numero ?? null) !== p_cabana_numero);
+                    const coincide = r => r.cierre_checklist_items.codigo === p_codigo &&
+                        (r.cabanas?.numero ?? null) === p_cabana_numero;
+                    const previo = datos.respuestas.find(coincide);
+                    datos.respuestas = datos.respuestas.filter(r => !coincide(r));
                     datos.respuestas.push({
-                        estado: p_estado, valor: p_valor, cierre_checklist_items: { codigo: p_codigo },
+                        estado: p_estado, valor: p_codigo === 'llaves_recepcion' ? { ...previo?.valor, ...p_valor } : p_valor, cierre_checklist_items: { codigo: p_codigo },
                         cabanas: unidades.find(u => u.numero === p_cabana_numero)
                     });
                     return { data: {} };
@@ -84,7 +101,8 @@ async function prepararCierre(page, fecha = '2026-11-12') {
                     datos.novedades = args.p_novedades;
                     return { data: {} };
                 }
-                if (nombre === 'haiku_cerrar_turno_dia') {
+                if (nombre === 'haiku_cerrar_turno_personificado_v1') {
+                    datos.version ||= modelo.version;
                     datos.estado = datos.pendientes ? 'cerrado_con_pendientes' : 'cerrado';
                     datos.resumen_entrega = args.p_resumen_entrega;
                     datos.cerrado_en = '2026-11-12T23:00:00Z';

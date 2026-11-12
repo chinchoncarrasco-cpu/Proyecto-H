@@ -74,15 +74,16 @@ async function comprobarFlujo(page) {
     await page.locator('#sites-cierre-ir-entrega').click();
     assert.equal(await entrega.evaluate(el => el === document.activeElement), true);
 
-    await abrir(recepcion.locator('.turno-inventory'));
+    const llaves = page.locator('[data-turno-grupo="llaves"]');
+    assert.equal(await recepcion.locator('[data-cierre-llave]').count(), 0);
+    await abrir(llaves);
     await page.locator('[data-cierre-llave="tonel"]').check();
     await page.locator('[data-cierre-llave="jacuzzi"]').check();
     await page.waitForFunction(() => __cierre.llamadas.filter(c => c.args.p_codigo === 'llaves_recepcion').length === 2);
-    assert.match(await recepcion.locator('.turno-inventory .turno-count').textContent(), /2\/11 devueltas/);
-    assert.deepEqual(await page.evaluate(() => {
-        const valor = __cierre.llamadas.filter(c => c.args.p_codigo === 'llaves_recepcion').at(-1).args.p_valor;
-        return [valor.tonel, valor.jacuzzi, Object.keys(valor).length];
-    }), [true, true, 11]);
+    assert.match(await llaves.locator('.turno-count').textContent(), /2\/11 devueltas/);
+    assert.deepEqual(await page.evaluate(() =>
+        __cierre.llamadas.filter(c => c.args.p_codigo === 'llaves_recepcion').map(c => c.args.p_valor)
+    ), [{ tonel: true }, { jacuzzi: true }]);
     assert.equal(await page.locator('#cierre-porcentaje').textContent(), '93%');
 
     await abrir(caja);
@@ -135,12 +136,12 @@ async function comprobarFlujo(page) {
     const cerrar = page.locator('[data-cierre-final-cerrar]');
     await cerrar.click();
     await page.waitForFunction(() => __cierre.avisos.some(a => a.includes('resumen de entrega')));
-    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_dia')), false);
+    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_personificado_v1')), false);
     await page.locator('#cierre-final-resumen').fill('Trasladar los pendientes a la mañana');
     await page.evaluate(() => { __cierre.confirmar = false; });
     await cerrar.click();
     await page.waitForFunction(() => __cierre.confirmaciones.length === 1);
-    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_dia')), false);
+    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_personificado_v1')), false);
 
     await entrega.locator('[name="hay-novedades"][value="si"]').check();
     const notas = entrega.locator('[data-cierre-campo="novedades"]');
@@ -153,7 +154,7 @@ async function comprobarFlujo(page) {
     assert.equal(await page.locator('[data-cierre-final-info]').getByText('Trasladar los pendientes a la mañana').isVisible(), true);
     assert.equal(await page.evaluate(() => {
         const guardado = __cierre.llamadas.findIndex(c => c.nombre === 'haiku_guardar_novedades_cierre');
-        const cierre = __cierre.llamadas.findIndex(c => c.nombre === 'haiku_cerrar_turno_dia');
+        const cierre = __cierre.llamadas.findIndex(c => c.nombre === 'haiku_cerrar_turno_personificado_v1');
         return guardado >= 0 && guardado < cierre && __cierre.remoto['2026-11-12'].novedades === 'Novedad registrada antes de cerrar';
     }), true);
 
@@ -199,8 +200,71 @@ async function comprobarFlujo(page) {
     await esperarEstado(page, 'Listo para cerrar');
     await cerrar.click();
     await esperarEstado(page, 'Cerrado');
-    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_dia' &&
+    assert.equal(await page.evaluate(() => __cierre.llamadas.some(c => c.nombre === 'haiku_cerrar_turno_personificado_v1' &&
         c.args.p_fecha === '2026-11-13' && c.args.p_resumen_entrega === null)), true);
+}
+
+async function comprobarPersonificar(page, width, tema) {
+    const editor = page.locator('.turno-editor');
+    const acceso = page.locator('#sites-cierre-personificar');
+    const elegir = async id => {
+        if (width < 650) await editor.getByRole('combobox', { name: 'Sección para editar' }).selectOption(id);
+        else await editor.locator(`[data-zona="${id}"]`).click();
+    };
+    await page.evaluate(() => {
+        __cierre.permitirEditor = false;
+        window.dispatchEvent(new Event('haiku:auth-ready'));
+    });
+    assert.equal(await acceso.isHidden(), true);
+    await page.evaluate(() => {
+        __cierre.permitirEditor = true;
+        window.dispatchEvent(new Event('haiku:auth-ready'));
+    });
+    await acceso.click();
+    await editor.getByRole('textbox', { name: 'Título de la pantalla' }).fill('Cierre de recepción');
+    await elegir('llaves');
+    assert.equal(await editor.getByRole('textbox', { name: 'Nombre de la llave' }).count(), 11);
+    await editor.getByRole('button', { name: '+ Llave' }).click();
+    await editor.getByRole('textbox', { name: 'Nombre de la llave' }).last().fill('Bodega del turno');
+    await editor.getByRole('textbox', { name: 'Detalle de la llave' }).last().fill('Gris');
+    await editor.locator('[data-item^="llave_"]').getByRole('button', { name: 'Subir elemento' }).click();
+    assert.equal(await editor.getByRole('textbox', { name: 'Nombre de la llave' }).nth(10).inputValue(), 'Bodega del turno');
+    await editor.locator('[data-item="tonel"]').getByRole('button', { name: 'Ocultar' }).click();
+    await editor.screenshot({ path: path.join(salida, `personificar-${width}-${tema}.png`) });
+    assert.equal(await editor.evaluate(el => el.scrollWidth <= el.clientWidth), true);
+
+    const agregar = width < 650 ? editor.locator('.turno-editor-select [data-accion="agregar-seccion"]')
+        : editor.locator('nav [data-accion="agregar-seccion"]');
+    await agregar.click();
+    await editor.getByRole('textbox', { name: 'Nombre de la sección' }).fill('Áreas comunes');
+    await editor.getByRole('button', { name: '+ Control' }).click();
+    await editor.getByRole('textbox', { name: 'Texto del control' }).fill('Cerrar portón');
+    await elegir('entrega');
+    await editor.getByRole('textbox', { name: 'Campo del resumen' }).fill('Entrega a recepción');
+    await elegir('cabanas');
+    await editor.getByRole('button', { name: '+ Control' }).click();
+    await editor.getByRole('textbox', { name: 'Texto del control' }).last().fill('Revisar terraza');
+
+    await editor.getByRole('button', { name: 'Guardar plantilla' }).click();
+    await editor.waitFor({ state: 'hidden' });
+    await page.getByRole('heading', { name: 'Cierre de recepción' }).waitFor();
+    const llaves = page.locator('[data-turno-grupo="llaves"]');
+    await abrir(llaves);
+    assert.equal(await llaves.locator('[data-cierre-llave="tonel"]').count(), 0);
+    await llaves.getByRole('checkbox', { name: 'Bodega del turno Gris' }).check();
+    const areas = page.locator('[data-turno-grupo^="seccion_"]');
+    await abrir(areas);
+    await areas.getByRole('checkbox', { name: 'Cerrar portón' }).check();
+    await page.waitForFunction(() => __cierre.llamadas.some(c => c.args.p_codigo?.startsWith('tarea_') && c.args.p_version === 2));
+    assert.equal(await page.locator('[data-cierre-final-resumen-wrap] > span').textContent(), 'Entrega a recepción');
+    await page.evaluate(async () => {
+        fechaSeleccionada = '2026-11-11';
+        cargarCierreDia(fechaSeleccionada);
+        await Promise.all([haikuCargarCierreSupabase(fechaSeleccionada), haikuRefrescarEstadoCierre()]);
+    });
+    await page.getByRole('heading', { name: 'Cierre de turno' }).waitFor();
+    assert.equal(await page.locator('[data-turno-grupo="llaves"] [data-cierre-llave="tonel"]').count(), 1);
+    assert.equal(await page.locator('[data-turno-grupo^="seccion_"]').count(), 0);
 }
 
 (async () => {
@@ -242,10 +306,13 @@ async function comprobarFlujo(page) {
                     await abrir(root.locator('#sites-cierre-cabanas'));
                     await abrir(root.locator('[data-sites-cierre-cabin="1"]'));
                     await abrir(root.locator('[data-turno-grupo="instalaciones"]'));
-                    await abrir(root.locator('.turno-inventory'));
+                    await abrir(root.locator('[data-turno-grupo="llaves"]'));
                     assert.equal(await root.locator('.turno-cabin-checks').first().evaluate(el =>
                         getComputedStyle(el).gridTemplateColumns.split(' ').length), 1);
                     assert.equal(await root.evaluate(el => el.scrollWidth <= el.clientWidth), true);
+                }
+                if ((width === 1440 && tema === 'oscuro') || width === 390) {
+                    await comprobarPersonificar(page, width, tema);
                 }
                 assert.deepEqual(errores, []);
                 await page.close();

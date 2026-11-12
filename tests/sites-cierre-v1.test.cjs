@@ -10,7 +10,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 test('Cierre monta la plantilla antes de cargar respuestas y el panel conserva el orden', () => {
     const html = read('index.html');
     const panel = read('panel.html');
-    const ordered = ['cierre-plantilla-v1', 'sites-cierre-v1', 'cierre'];
+    const ordered = ['cierre-plantilla-v1', 'sites-cierre-v1', 'cierre', 'cierre-personificar-v1'];
     for (const script of ordered) {
         assert.ok(html.includes(`src="js/${script}.js"`));
         assert.ok(panel.includes(`"${script}"`));
@@ -29,6 +29,7 @@ test('La plantilla general conserva los códigos y opciones de respuesta de los 
     const p = JSON.parse(JSON.stringify(context.window.HAIKU_CIERRE_PLANTILLA_V1));
     assert.deepEqual(p.controles.map(grupo => grupo.id), ['recepcion', 'caja', 'instalaciones']);
     assert.equal(p.entrega.id, 'entrega');
+    assert.deepEqual(p.base.grupos.map(grupo => grupo.id), ['recepcion', 'llaves', 'caja', 'instalaciones']);
     const campos = Object.values(p.campos);
     assert.equal(campos.length, 18);
     assert.equal(new Set(campos.map(item => item.campo)).size, campos.length);
@@ -51,7 +52,7 @@ test('La plantilla general conserva los códigos y opciones de respuesta de los 
 
 test('La finalización y la reapertura pasan por Supabase y por los diálogos de confirmación', () => {
     const final = read('js/supabase-cierre-final-v1.js');
-    for (const nombre of ['haiku_estado_cierre_dia', 'haiku_cerrar_turno_dia', 'haiku_reabrir_cierre_dia']) {
+    for (const nombre of ['haiku_estado_cierre_dia', 'haiku_cerrar_turno_personificado_v1', 'haiku_reabrir_cierre_dia']) {
         assert.ok(final.includes(nombre));
     }
     assert.match(final, /if \(!\(await window\.HAIKU_DIALOGOS\.confirmar\(pregunta,[\s\S]+?\}\)\)\) return/);

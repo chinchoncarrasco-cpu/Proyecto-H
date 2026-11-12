@@ -3591,10 +3591,16 @@
     <div class="sites-cierre-workspace">
         <header class="sites-cierre-heading">
             <div>
-                <h1>Cierre de turno</h1>
+                <h1 id="sites-cierre-titulo">Cierre de turno</h1>
                 <p id="sites-cierre-fecha"></p>
             </div>
-            <button type="button" class="turno-button" id="sites-cierre-ir-entrega">Ir a entrega <span aria-hidden="true">↓</span></button>
+            <div class="turno-heading-actions">
+                <button type="button" class="turno-button" id="sites-cierre-personificar" hidden>
+                    <svg viewBox="0 0 24 24" aria-hidden="true" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 5l5 5M4 20l5-1 11-11a2.8 2.8 0 0 0-4-4L5 15z"/></svg>
+                    Personificar
+                </button>
+                <button type="button" class="turno-button" id="sites-cierre-ir-entrega">Ir a entrega <span aria-hidden="true">↓</span></button>
+            </div>
         </header>
         <div class="turno-status">
             <span class="turno-badge" id="sites-cierre-estado">Preparando cierre…</span>
@@ -4683,6 +4689,7 @@
     <script src="js/cierre-plantilla-v1.js"></script>
     <script src="js/sites-cierre-v1.js"></script>
     <script src="js/cierre.js"></script>
+    <script src="js/cierre-personificar-v1.js"></script>
     <script src="js/pagos.js"></script>
     <script src="js/servicios.js"></script>
     <script src="js/sites-servicios-v1.js"></script>
