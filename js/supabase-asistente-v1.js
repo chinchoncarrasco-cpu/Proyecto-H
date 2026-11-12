@@ -375,7 +375,7 @@
         if (accion === "revisar-captura" || accion === "consultar-documento" || accion === "informes-cloudbeds") {
             rapidas.open = false;
             const informes = accion === "informes-cloudbeds";
-            elegirArchivos(informes ? ACEPTAR_INFORMES : accion === "consultar-documento" ? "application/pdf,.pdf" : ACEPTAR_IMAGENES, informes);
+            elegirArchivos(informes ? ACEPTAR_INFORMES : accion === "consultar-documento" ? "application/pdf" : ACEPTAR_IMAGENES, informes);
             return;
         }
         if (accion === "preparar-reserva") {
