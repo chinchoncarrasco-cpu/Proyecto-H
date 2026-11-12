@@ -5,7 +5,9 @@ const {chromium} = require("playwright");
 const raiz = path.resolve(__dirname,"..");
 const leer=(carpeta,nombre)=>fs.readFileSync(path.join(raiz,carpeta,nombre),"utf8");
 const scripts=[
-    "haiku-libro-semantica-v1","haiku-asistente-lenguaje-v1","haiku-ayuda-v1","haiku-asistente-acciones-v1",
+    "haiku-libro-semantica-v1","haiku-reserva-estado-manual-v1","haiku-asistente-lenguaje-v1",
+    "haiku-asistente-operaciones-v1","supabase-asistente-operaciones-v1","haiku-ayuda-v1","haiku-asistente-acciones-v1",
+    "supabase-asistente-bove-escritura-v1",
     "supabase-asistente-totales-v1","haiku-libro-consultas-v1","sites-resumen-servicio-v1",
     "supabase-asistente-v1","supabase-asistente-pagos-nocturnos-v1","supabase-asistente-pago-existente-v2",
     "supabase-asistente-consulta-ingresos-v1","supabase-asistente-resumen-dia-v1",
@@ -16,22 +18,32 @@ function fuentes(tema) {
     document.documentElement.dataset.haikuTema=tema;
     window.haikuSesion={auth:{id:"usuario"}};
     window.haikuTienePermiso=()=>true;
-    window.prueba={rpc:[],edge:[],select:[],fichas:[]};
+    window.prueba={rpc:[],edge:[],select:[],fichas:[],tablas:[]};
     const titular="Inés Lucía Rojas Vera";
     const uno={id:"11111111-1111-4111-8111-111111111111",titular_nombre:titular,
-        codigo_haiku:"H-20261112-03-ABCDEF",estado_reserva:"confirmada",grupo_reserva_id:null};
+        codigo_haiku:"H-20261112-03-ABCDEF",estado_reserva:"confirmada",grupo_reserva_id:null,
+        actualizado_en:"2026-11-12T12:00:00+00:00",telefono_contacto:"+56911110000",correo_contacto:"reserva@example.com"};
     const dos={...uno,id:"22222222-2222-4222-8222-222222222222",codigo_haiku:"H-20261112-10-FEDCBA"};
     const estadia=(id,reserva,numero)=>({
         id,reserva_id:reserva.id,cabanas:{numero},reservas:reserva,estado_estadia:"confirmada",
         fecha_ingreso:"2026-11-12",fecha_salida:"2026-11-13",tipo_estadia:"alojamiento",
-        adultos:2,ninos:0,noches:[{fecha:"2026-11-12",tarifa:160000}]
+        adultos:2,ninos:0,mascotas:0,noches:[{fecha:"2026-11-12",tarifa:160000}]
     });
     const cab3=estadia("33333333-3333-4333-8333-333333333333",uno,3);
     const cab10=estadia("44444444-4444-4444-8444-444444444444",dos,10);
     const tablas={
         reserva_estadias:[cab3,cab10],
         reservas:[{...uno,estadias:[cab3]},{...dos,estadias:[cab10]}],
-        vista_saldos_alojamiento_reserva:[{reserva_id:uno.id,total_alojamiento:160000},{reserva_id:dos.id,total_alojamiento:160000}],
+        vista_saldos_alojamiento_reserva:[{reserva_id:uno.id,total_alojamiento:160000,saldo_alojamiento:0},{reserva_id:dos.id,total_alojamiento:160000,saldo_alojamiento:0}],
+        vista_estado_cargos:[],aseos:[],
+        cabanas:[{id:"cab3",numero:3,activa:true,precio_base:160000},{id:"cab4",numero:4,activa:true,precio_base:170000}],
+        revisiones_cabana:[{id:"revision",cabana_id:"cab3",fecha:"2026-11-12",estado:"en_proceso",resultado:null,
+            tipo_revision:"aseo_express",actualizado_en:uno.actualizado_en}],
+        servicios:[{id:"servicio",reserva_id:uno.id,estadia_id:cab3.id,fecha_servicio:"2026-11-12",hora_inicio:"18:00:00",
+            hora_fin:"19:00:00",estado_servicio:"programado",total:30000,actualizado_en:uno.actualizado_en,
+            catalogo_servicios:{codigo:"tinajaTonel",nombre:"Tinaja Tónel de Madera",categoria:"tinaja"}}],
+        pagos:[{id:"pago",reserva_id:uno.id,tipo_movimiento:"pago",estado:"confirmado",etapa_operativa:"abono",
+            medio_pago:"transferencia",moneda:"CLP",monto:80000,folio:"00123",fecha_pago:"2026-11-12T12:00:00+00:00",actualizado_en:uno.actualizado_en}],
         cargo_ajustes:[],
         catalogo_servicios:[{codigo:"tinajaTonel",nombre:"Tinaja Tónel de Madera",categoria:"tinaja",
             requiere_horario:true,activo:true,precio_base:30000,capacidad_maxima:3,permite_cortesia:true}]
@@ -39,6 +51,19 @@ function fuentes(tema) {
     window.HAIKU_INSPECTOR_V1={abrirReserva:async (id,boton,seleccion)=>{
         prueba.fichas.push({id,seleccion});return true;
     }};
+    window.haikuLeerFichaSupabaseV2=async id=>{
+        const reserva=[uno,dos].find(r=>r.id===id);
+        const e=[cab3,cab10].find(f=>f.reserva_id===id);
+        return reserva && {reserva,estadias:[{...e,cabana_numero:e.cabanas.numero}],huespedes:[],
+            noches:e.noches.map(n=>({...n,estadia_id:e.id})),saldo:{saldo:80000},pagos:[]};
+    };
+    window.HAIKU_NOTAS_RESUMEN_SUPABASE_V1={guardar:async nota=>{
+        prueba.tablas.push({tabla:"notas",nota});return {id:"nota"};
+    }};
+    window.HAIKU_ASEO_OPERACION_V1={
+        fechaHoraSantiagoAISO:(dia,hora)=>dia+"T"+hora+":00-03:00",
+        horaSantiago:t=>t?.slice(11,16)
+    };
     window.haikuSupabase={
         auth:{onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{user:{id:"usuario"}}}})},
         functions:{invoke:async (nombre,{body})=>{
@@ -55,6 +80,13 @@ function fuentes(tema) {
             }]};
             if (nombre==="haiku_capacidad_totales_v1") return {data:{version:"total1_financiero_v32",writer_disponible:true,servicios_separados:true}};
             if (nombre==="haiku_cabanas_disponibles" || nombre==="haiku_confirmadas_sin_abono_asistente") return {data:[]};
+            if (nombre==="haiku_editar_reserva_asistente_v1") return {data:{reserva_id:args.p_reserva_id}};
+            if (nombre==="haiku_cambiar_estado_reserva_manual_v1") return {data:{ok:true,estado:args.p_estado}};
+            if (nombre==="haiku_pago_asistente_v1") return {data:{ok:true,pago_id:args.p_pago_id}};
+            if (nombre==="haiku_registrar_bloqueo_calendario") return {data:{bloqueo_id:"bloqueo"}};
+            if (nombre==="haiku_reprogramar_servicio_asistente_v1")
+                return {data:{servicio_id:args.p_servicio_id,fecha_servicio:args.p_fecha}};
+            if (nombre==="haiku_guardar_bove_asistente_v1") return {data:{reserva_id:args.p_reserva_id,bove:args.p_bove}};
             throw Error("Operación inesperada: "+nombre);
         },
         from(tabla) {
@@ -62,14 +94,27 @@ function fuentes(tema) {
             prueba.select.push(tabla);
             const filtros=[];
             const valor=(fila,k)=>k.split(".").reduce((a,b)=>a?.[b],fila);
+            const coincide=(f,k,p)=>{
+                const [primero,...resto]=k.split(".");
+                return Array.isArray(f[primero]) ? f[primero].some(r=>p(valor(r,resto.join(".")))) : p(valor(f,k));
+            };
             const datos=()=>tablas[tabla].filter(f=>filtros.every(p=>p(f)));
+            let mutacion;
             const q={
-                select:()=>q,order:()=>q,
+                select:()=>q,order:()=>q,limit:()=>q,
                 eq(k,v){filtros.push(f=>valor(f,k)===v);return q;},
-                lte(k,v){filtros.push(f=>valor(f,k)<=v);return q;},
-                gte(k,v){filtros.push(f=>valor(f,k)>=v);return q;},
+                neq(k,v){filtros.push(f=>valor(f,k)!==v);return q;},
+                in(k,v){filtros.push(f=>v.includes(valor(f,k)));return q;},
+                lte(k,v){filtros.push(f=>coincide(f,k,x=>x<=v));return q;},
+                gte(k,v){filtros.push(f=>coincide(f,k,x=>x>=v));return q;},
                 range:async (a,b)=>({data:datos().slice(a,b+1)}),
                 single:async ()=>({data:datos()[0]}),
+                insert(parche){mutacion={tabla,parche};return q;},
+                update(parche){mutacion={tabla,parche};return q;},
+                maybeSingle:async ()=>{
+                    if (!mutacion) return {data:datos()[0]};
+                    prueba.tablas.push(mutacion);return {data:{id:"escritura-fixture"}};
+                },
                 then(ok,no){return Promise.resolve({data:datos()}).then(ok,no);}
             };
             return q;
@@ -108,7 +153,7 @@ async function ayuda(browser,ancho,tema) {
         await page.getByRole("button",{name:"Ayuda",exact:true}).click();
         const panel=page.getByRole("region",{name:"Ayuda de Haku"});
         assert.equal(await campo.inputValue(),"Borrador para revisar");
-        assert.equal(await panel.locator("summary").count(),7);
+        assert.equal(await panel.locator("summary").count(),8);
         const estilos=await panel.evaluate(el=>({
             desborde:el.scrollWidth>el.clientWidth+1,
             columnas:getComputedStyle(el.querySelector("details[open] ul")).gridTemplateColumns,
@@ -120,8 +165,8 @@ async function ayuda(browser,ancho,tema) {
         const buscador=panel.getByRole("searchbox");
         await buscador.fill("remboso inexistente");
         await panel.getByText("No encontré una acción con esa búsqueda.").waitFor({state:"visible"});
-        await buscador.fill("reembolsar");
-        await panel.getByText("Editar, anular o reembolsar un pago",{exact:true}).waitFor({state:"visible"});
+        await buscador.fill("reembolso");
+        await panel.getByText("Preparar y registrar un reembolso",{exact:true}).waitFor({state:"visible"});
         await buscador.fill("ingresaservicio");
         const ejemplo=panel.getByRole("button",{name:/ingresaservicio tinaja/});
         await ejemplo.waitFor({state:"visible"});
@@ -185,11 +230,66 @@ async function comandos(browser) {
     } finally {await page.close();}
 }
 
+async function operaciones(browser,ancho,tema) {
+    const {page,errores}=await abrir(browser,ancho,tema);
+    const campo=page.locator("#haiku-asistente-texto");
+    const enviar=async texto=>{
+        await campo.fill(texto);
+        await campo.press("Control+Enter");
+        return page.locator("[data-haku-operacion]").last();
+    };
+    const confirmar=async (orden,boton,resultado)=>{
+        const tarjeta=await enviar(orden);
+        const cuenta=await page.evaluate(()=>prueba.rpc.length+prueba.tablas.length);
+        await tarjeta.getByRole("button",{name:boton,exact:true}).waitFor();
+        assert.equal(await page.evaluate(()=>prueba.rpc.length+prueba.tablas.length),cuenta);
+        const medidas=await tarjeta.evaluate(e=>({ancho:e.clientWidth,scroll:e.scrollWidth,tema:getComputedStyle(e).backgroundColor}));
+        assert.ok(medidas.scroll<=medidas.ancho+1);
+        assert.equal(medidas.tema,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+        await tarjeta.getByRole("button",{name:boton,exact:true}).click();
+        await tarjeta.getByRole("status").getByText(resultado).waitFor();
+        return tarjeta;
+    };
+    try {
+        const edicion=await confirmar("Haku, modifca el correo de CAB 3 hoy a nuevo@example.com","Guardar cambios","Cambios de la reserva guardados.");
+        assert.match(await edicion.innerText(),/reserva@example\.com → nuevo@example\.com/);
+        await confirmar("cancela reserva de CAB 3 hoy","Confirmar cancelación","Estado guardado · Cancelada.");
+        await confirmar("mueve el Tónel de CAB 3 hoy de las 18:00 a las 20.45","Confirmar horario",/Servicio reprogramado.*20:45–21:45/);
+        await confirmar("corrige el abono folio 00123 de CAB 3 hoy a 90 lucas","Guardar corrección","Corrección del pago guardada.");
+        await confirmar("anula el abono folio 00123 de CAB 3 hoy motivo: Duplicado","Anular registro","Registro anulado en Proyecto H.");
+        await confirmar("registra devolución del abono folio 00123 de CAB 3 hoy, fecha hoy, medio transferencia, comprobante DEV-123, motivo: Duplicado",
+            "Registrar devolución realizada","Devolución registrada en Proyecto H.");
+        await confirmar("bloquea CAB 4 mañana por mantención","Confirmar bloqueo","Bloqueo guardado.");
+        await confirmar("anota nota de CAB 3 hoy: Dejar dos batas","Guardar nota","Nota guardada.");
+        await confirmar("registra aseo de CAB 3 hoy IN 10:00 OUT 11:30 encargado María Paz","Guardar aseo","Aseo guardado.");
+        await confirmar("marca revisión express lista de CAB 3 hoy","Guardar estado","Estado de revisión guardado.");
+        const msg=await enviar("Haku, envía WhatsApp a CAB 3 hoy: Hola, ¿a qué hora llegan?");
+        const href=await msg.getByRole("link",{name:"Abrir WhatsApp"}).getAttribute("href");
+        assert.equal(new URL(href).pathname,"/56911110000");
+        assert.equal(new URL(href).searchParams.get("text"),"Hola, ¿a qué hora llegan?");
+
+        await enviar("ingresa BOVE 19800 de alojamiento a CAB3");
+        const bove=page.locator(".haku-bove-preparacion");
+        await bove.getByRole("button",{name:"Confirmar BOVE"}).waitFor();
+        assert.equal(await page.evaluate(()=>prueba.rpc.filter(x=>x.nombre==="haiku_guardar_bove_asistente_v1").length),0);
+        await bove.getByRole("button",{name:"Confirmar BOVE"}).click();
+        await bove.getByRole("status").getByText("BOVE 19800 de alojamiento guardado en Proyecto H.").waitFor();
+        const llamadas=await page.evaluate(()=>prueba.rpc);
+        assert.deepEqual(llamadas.find(x=>x.nombre==="haiku_editar_reserva_asistente_v1").args.p_datos,
+            {campo:"correo_contacto",valor:"nuevo@example.com"});
+        assert.equal(llamadas.find(x=>x.nombre==="haiku_reprogramar_servicio_asistente_v1").args.p_hora,"20:45");
+        assert.equal(llamadas.find(x=>x.nombre==="haiku_pago_asistente_v1").args.p_datos.monto,90000);
+        assert.equal(llamadas.find(x=>x.nombre==="haiku_guardar_bove_asistente_v1").args.p_estadias[0].cabana_numero,3);
+        assert.deepEqual(errores,[]);
+    } finally {await page.close();}
+}
+
 (async()=>{
     const browser=await chromium.launch({executablePath:process.env.HAKU_CHROMIUM_PATH || undefined,headless:true});
     try {
         await comandos(browser);
         for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await ayuda(browser,ancho,tema);
-        console.log("Haku Ayuda y rutas de ingresos, total, abono, servicio y ficha verificadas");
+        for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await operaciones(browser,ancho,tema);
+        console.log("Haku Ayuda, órdenes nuevas y rutas anteriores verificadas en escritorio, móvil y ambos temas");
     } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
