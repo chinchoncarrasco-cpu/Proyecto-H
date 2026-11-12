@@ -123,6 +123,8 @@
     ];
 
     const normalizar=valor=>String(valor || "").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+    const cantidad=n=>n===1?"1 acción":`${n} acciones`;
+
     function mostrar({mensajes,campo,ejecutar}) {
         const doc=mensajes.ownerDocument;
         mensajes.querySelector("[data-haku-ayuda]")?.remove();
@@ -135,33 +137,84 @@
         const panel=crear("section","","haku-ayuda");
         panel.dataset.hakuAyuda="1";
         panel.setAttribute("aria-label","Ayuda de Haku");
-        const cab=crear("header","","haku-ayuda__cabecera");
-        const cerrar=crear("button","×");
-        cerrar.type="button";
-        cerrar.setAttribute("aria-label","Cerrar Ayuda");
-        cerrar.addEventListener("click",()=>{panel.remove();campo.focus();});
-        cab.append(crear("h2","Ayuda"),cerrar);
-        const descripcion=crear("p","Escribe como hablas. Para una reserva o servicio, indica la cabaña, el día y el titular si lo sabes. Revisa la vista previa o el formulario antes de guardar.");
+        const boton=(texto,clase,etiqueta)=>{
+            const el=crear("button",texto,clase);
+            el.type="button";
+            if (etiqueta) el.setAttribute("aria-label",etiqueta);
+            return el;
+        };
+        const indicador=texto=>{
+            const el=crear("span",texto,"haku-ayuda__indicador");
+            el.setAttribute("aria-hidden","true");
+            return el;
+        };
+        const encabezado=crear("div","","haku-ayuda__encabezado");
+        const cabecera=crear("header","","haku-ayuda__cabecera");
+        const identidad=crear("div","","haku-ayuda__identidad");
+        const titulo=crear("h2","Ayuda");
+        titulo.tabIndex=-1;
+        identidad.append(titulo,crear("p","Elige un ejemplo para llevarlo al borrador."));
+        const cerrar=boton("×","haku-ayuda__icono","Cerrar Ayuda");
+        const cerrarAyuda=()=>{panel.remove();campo.focus();};
+        cerrar.addEventListener("click",cerrarAyuda);
+        cabecera.append(identidad,cerrar);
+
+        const buscador=crear("div","","haku-ayuda__buscador");
         const busqueda=crear("input");
         busqueda.type="search";
         busqueda.setAttribute("aria-label","Buscar una acción de Haku");
         busqueda.placeholder="Buscar una acción…";
-        const vacio=crear("p","No encontré una acción con esa búsqueda.");
-        vacio.hidden=true;
-        vacio.setAttribute("role","status");
-        panel.append(cab,descripcion,busqueda,vacio);
+        const limpiar=boton("×","haku-ayuda__limpiar","Limpiar búsqueda");
+        buscador.append(busqueda,limpiar);
+
+        const selector=crear("div","","haku-ayuda__selector");
+        const categorias=crear("select");
+        categorias.setAttribute("aria-label","Categoría de ayuda");
+        selector.append(categorias,indicador("⌄"));
+        encabezado.append(cabecera,buscador,selector);
+
+        const contenido=crear("div","","haku-ayuda__contenido");
+        const nav=crear("nav","","haku-ayuda__categorias");
+        nav.setAttribute("aria-label","Categorías de ayuda");
+        nav.append(crear("p","Categorías","haku-ayuda__etiqueta"));
+        const resultados=crear("div","","haku-ayuda__resultados");
+        const estado=crear("p","","haku-ayuda__estado");
+        estado.setAttribute("role","status");
+        resultados.append(estado);
+        contenido.append(nav,resultados);
+        panel.append(encabezado,contenido);
+
+        let activa=0;
         const grupos=secciones.map((grupo,i)=>{
-            const detalle=crear("details");
-            detalle.open=i===0;
-            const lista=crear("ul");
+            const seccion=crear("section","","haku-ayuda__grupo");
+            seccion.id=`haku-ayuda-grupo-${i}`;
+            const meta=crear("header","","haku-ayuda__grupo-cabecera");
+            const h3=crear("h3",grupo.nombre);
+            h3.id=`haku-ayuda-categoria-${i}`;
+            seccion.setAttribute("aria-labelledby",h3.id);
+            const totalGrupo=crear("small");
+            meta.append(h3,totalGrupo);
+            const opcion=crear("option",grupo.nombre);
+            opcion.value=String(i);
+            categorias.append(opcion);
+            const categoria=boton(grupo.nombre,"haku-ayuda__categoria");
+            categoria.setAttribute("aria-controls",seccion.id);
+            categoria.addEventListener("click",()=>seleccionar(i));
+            nav.append(categoria);
+            const lista=crear("ul","","haku-ayuda__acciones");
             const acciones=grupo.acciones.map(accion=>{
                 const li=crear("li");
-                li.append(crear("strong",accion.titulo),crear("p",accion.detalle));
+                const detalle=crear("details");
+                detalle.setAttribute("name",seccion.id);
+                const resumen=crear("summary");
+                resumen.append(crear("span",accion.titulo),indicador("⌄"));
+                const cuerpo=crear("div","","haku-ayuda__detalle");
+                cuerpo.append(crear("p",accion.detalle));
                 const usar=(texto,evento)=>{
-                    const boton=crear("button",texto);
-                    boton.type="button";
-                    boton.addEventListener("click",evento);
-                    li.append(boton);
+                    const control=boton("","haku-ayuda__ejemplo");
+                    control.append(crear("span",texto),indicador("↵"));
+                    control.addEventListener("click",evento);
+                    cuerpo.append(control);
                 };
                 for (const ejemplo of accion.ejemplos || []) usar(ejemplo,()=>{
                     if (campo.disabled) return;
@@ -170,31 +223,61 @@
                     campo.focus();
                 });
                 if (accion.atajo) usar(accion.rotulo,()=>ejecutar(accion.atajo));
+                detalle.append(resumen,cuerpo);
+                li.append(detalle);
                 lista.append(li);
-                return {li,contenido:normalizar([grupo.nombre,accion.titulo,accion.detalle,...(accion.ejemplos || [])].join(" "))};
+                return {li,detalle,contenido:normalizar([grupo.nombre,accion.titulo,accion.detalle,accion.rotulo,...(accion.ejemplos || [])].join(" "))};
             });
-            detalle.append(crear("summary",grupo.nombre),lista);
-            panel.append(detalle);
-            return {detalle,acciones,abierto:detalle.open};
+            seccion.append(meta,lista);
+            resultados.append(seccion);
+            return {seccion,totalGrupo,categoria,acciones};
         });
-        let filtrando=false;
-        busqueda.addEventListener("input",()=>{
+
+        function actualizar() {
             const consulta=normalizar(busqueda.value).split(/\s+/).filter(Boolean);
-            let total=0;
-            for (const g of grupos) {
-                if (!filtrando) g.abierto=g.detalle.open;
-                for (const a of g.acciones) a.li.hidden=!consulta.every(p=>a.contenido.includes(p));
-                const visibles=g.acciones.filter(a=>!a.li.hidden).length;
-                g.detalle.hidden=!visibles;
-                g.detalle.open=consulta.length ? Boolean(visibles) : g.abierto;
-                total+=visibles;
+            const buscando=Boolean(consulta.length), coincidencias=[];
+            panel.classList.toggle("haku-ayuda--buscando",buscando);
+            limpiar.hidden=!busqueda.value;
+            estado.hidden=!buscando;
+            categorias.value=String(activa);
+            for (const [i,g] of grupos.entries()) {
+                const visibles=g.acciones.filter(a=>consulta.every(p=>a.contenido.includes(p)));
+                for (const a of g.acciones) a.li.hidden=!visibles.includes(a);
+                g.seccion.hidden=buscando ? visibles.length===0 : i!==activa;
+                g.categoria.setAttribute("aria-pressed",String(i===activa));
+                g.totalGrupo.textContent=cantidad(visibles.length);
+                if (buscando) coincidencias.push(...visibles);
             }
-            filtrando=Boolean(consulta.length);
-            vacio.hidden=Boolean(total);
+            estado.textContent=coincidencias.length ? cantidad(coincidencias.length)+(coincidencias.length===1?" encontrada":" encontradas") :
+                "No encontré una acción con esa búsqueda.";
+            if (coincidencias.length===1) coincidencias[0].detalle.open=true;
+        }
+        function seleccionar(i) {
+            activa=i;
+            busqueda.value="";
+            actualizar();
+        }
+        function limpiarBusqueda() {
+            busqueda.value="";
+            actualizar();
+            busqueda.focus();
+        }
+        categorias.addEventListener("change",()=>seleccionar(Number(categorias.value)));
+        busqueda.addEventListener("input",actualizar);
+        limpiar.addEventListener("click",limpiarBusqueda);
+        panel.addEventListener("keydown",evento=>{
+            if (evento.key!=="Escape") return;
+            evento.preventDefault();
+            evento.stopPropagation();
+            if (busqueda.value) limpiarBusqueda();
+            else cerrarAyuda();
         });
+        actualizar();
         mensajes.append(panel);
-        panel.scrollIntoView?.({block:"nearest"});
-        busqueda.focus({preventScroll:true});
+        panel.scrollIntoView?.({block:"start"});
+        const movil=doc.documentElement.dataset.hakuMobileAssistant==="1" ||
+            root.matchMedia?.("(max-width: 700px), (pointer: coarse)")?.matches;
+        (movil ? titulo : busqueda).focus({preventScroll:true});
         return panel;
     }
 
