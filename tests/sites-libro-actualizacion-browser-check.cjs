@@ -199,7 +199,8 @@ async function comprobarNotaTinaja(browser,url){
                 const notas=plan.items.filter(i=>i.kind==='nota').map(i=>({estado:i.estado==='existente'?'en_sistema':'faltante',texto:i.texto}));
                 const pendiente=notas.some(n=>n.estado==='faltante');
                 return {items:pendiente?registros.map(x=>({...x,sistema:e,estado:'revision',accionable:false,
-                    contexto:{servicios:[],notas,hechos:['Esta estadía ya terminó.']}})):[],resueltos:pendiente?[]:registros.map(x=>x.id)};
+                    contexto:{servicios:[],notas,hechos:['Esta estadía ya terminó.']}})):[],resueltos:pendiente?[]:registros.map(x=>x.id),
+                    resueltosDetalle:pendiente?[]:registros.map(x=>({...x,sistema:e,motivo:'ya_coincide'}))};
             }};
             HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'ok',libro_actual:{generacion:1},
                 modificadas:[{anterior:{...r,servicios:[]},actual:r,cambios:[{campo:'servicios',antes:[],ahora:r.servicios}]}]});
@@ -221,8 +222,101 @@ async function comprobarNotaTinaja(browser,url){
         await fila.getByRole('button',{name:'Guardar nota',exact:true}).click();
         await fila.getByText('Nota guardada.',{exact:true}).waitFor();
         assert.deepEqual(await page.evaluate(()=>fixtureServicios.escrituras.map(x=>[x.p_servicios.length,x.p_notas.map(n=>n.texto)])),[[0,['TINAJA 22:00']]]);
-        await caso.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
         await page.getByText('No quedan cambios pendientes en este informe.',{exact:true}).waitFor();
+        await caso.getByRole('button',{name:'Volver a la revisión',exact:true}).click();
+        assert.equal(await fila.count(),0);
+        assert.deepEqual(errores,[]);
+    }finally{await page.close();}
+}
+
+async function comprobarPendientesTrasConfirmar(browser,url){
+    const page=await browser.newPage({viewport:{width:1100,height:900}}),errores=[];
+    page.on('pageerror',error=>errores.push(error.message));
+    try{
+        await page.goto(url);
+        for(const nombre of ['haiku-libro-semantica-v1','haiku-servicios-identidad-v1'])
+            await page.addScriptTag({content:read(`js/${nombre}.js`)});
+        await page.evaluate(setupServicios);
+        for(const nombre of ['haiku-libro-servicios-scope-v2','haiku-libro-confirm-cancel-fix-v1','supabase-asistente-libro-actualizacion-v1'])
+            await page.addScriptTag({content:read(`js/${nombre}.js`)});
+        await page.evaluate(()=>{
+            const f=fixtureServicios,[r,otra]=f.reservas;
+            r.texto_original='1 HORA DE CORTESIA TINAJA CONFIRMADA A LAS 22:00 // MASAJE TERAPÉUTICO DE 1 HORA A LAS 10:00 X PAGAR';
+            r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+            f.db.reserva_estadias[0].estado_estadia='checked_out';
+            window.haikuSesion={usuario:{activo:true},roles:['administrador']};
+            window.haikuTienePermiso=p=>p==='servicios.crear';
+            window.__cierresHaku=0;
+            document.getElementById('haiku-asistente-cerrar').onclick=()=>window.__cierresHaku++;
+            const rpc=haikuSupabase.rpc;
+            haikuSupabase.rpc=async(nombre,args)=>{
+                const respuesta=await rpc(nombre,args);
+                for(const p of args?.p_servicios||[]){
+                    const c=f.db.catalogo_servicios.find(x=>x.codigo===p.codigo_servicio);
+                    f.db.servicios.push({id:p.item_id,reserva_id:p.reserva_id,estadia_id:p.estadia_id,fecha_servicio:p.fecha_servicio,
+                        hora_inicio:p.hora,hora_fin:p.servicio_manual_v1.resuelto.hora_fin,catalogo_servicios:c,tipo_cobro:p.tipo_cobro,
+                        total:p.servicio_manual_v1.resuelto.total,cantidad:p.cantidad,personas:p.personas,estado_servicio:'programado',
+                        observaciones:`[HAKU-LIBRO-SERVICIO:${p.item_id}]`});
+                }
+                return respuesta;
+            };
+            window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados:async registros=>{
+                if(window.__fallarActualizacion)throw Error('Lectura temporalmente no disponible');
+                const plan=await HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial({reservas:[r,otra],generacion:1});
+                const items=[],resueltosDetalle=[];
+                for(const registro of registros){
+                    const servicios=plan.items.filter(i=>i.kind==='servicio'&&i.reserva.cabana===registro.actual.cabana)
+                        .map(i=>({estado:i.estado==='existente'?'en_sistema':i.estado==='listo'?'faltante':'revisar',
+                            concepto:i.mapa.nombre||i.servicio.concepto,fecha:i.fecha,hora:i.hora,razones:i.razones}));
+                    const sistema=f.db.reserva_estadias.find(e=>f.db.cabanas.some(c=>c.id===e.cabana_id&&c.numero===registro.actual.cabana));
+                    if(servicios.every(s=>s.estado==='en_sistema'))resueltosDetalle.push({...registro,sistema,motivo:'ya_coincide'});
+                    else items.push({...registro,sistema,estado:'revision',contexto:{servicios}});
+                }
+                return {items,resueltosDetalle,resueltos:resueltosDetalle.map(x=>x.id)};
+            }};
+            HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.mostrarResultado({estado:'ok',libro_actual:{generacion:1},
+                modificadas:[r,otra].map(actual=>({actual,cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]}))});
+        });
+        const history=page.locator('.haku-actualizacion-sites__historial');
+        const caso=history.locator('[data-haku-caso]').filter({hasText:'CAB 4'});
+        const otro=history.locator('[data-haku-caso]').filter({hasText:'CAB 5'});
+        await otro.locator(':scope > summary').click();
+        await otro.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        const borrador=await otro.locator('.haku-libro-servicio-manual').elementHandle();
+        assert.ok(borrador);
+        await caso.locator(':scope > summary').click();
+        await caso.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        await caso.getByRole('button',{name:/tinaja.*22:00/i}).click();
+        await caso.getByLabel('Tipo de tinaja').selectOption('tinajaTonel');
+        await caso.getByRole('button',{name:'Confirmar servicio',exact:true}).click();
+        await caso.locator('.haku-pendiente-contexto p').filter({hasText:'Ya registrado.'}).waitFor();
+        const recibo=caso.locator('.haku-libro-resultado-sites');
+        await recibo.getByText('Incorporación completada',{exact:true}).waitFor();
+        assert.equal(await recibo.getByRole('button',{name:'Revisar de nuevo',exact:true}).count(),0);
+        assert.equal(await borrador.evaluate(el=>el.isConnected&&el.closest('details').open),true);
+        assert.deepEqual(await history.locator('.haku-actualizacion-sites__historial-metricas strong').allInnerTexts(),['2','0']);
+        for(const [tema,width] of [['claro',1100],['oscuro',1100],['claro',390],['oscuro',390],['claro',320],['oscuro',320]]){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            await page.setViewportSize({width,height:900});
+            assert.equal(await recibo.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+        }
+        await recibo.getByRole('button',{name:'Cerrar confirmación'}).click();
+        assert.equal(await caso.locator(':scope > summary').evaluate(el=>el.parentElement.open),true);
+        await caso.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+        await page.evaluate(()=>window.__fallarActualizacion=true);
+        await caso.getByRole('button',{name:'Confirmar servicio',exact:true}).click();
+        await recibo.getByText('Incorporación completada',{exact:true}).waitFor();
+        await history.getByText('Por comprobar',{exact:true}).waitFor();
+        await page.evaluate(()=>window.__fallarActualizacion=false);
+        await history.getByRole('button',{name:'Volver a revisar',exact:true}).click();
+        const resuelto=history.locator('.haku-pendientes-resueltos').locator('[data-haku-caso]').filter({hasText:'CAB 4'});
+        await resuelto.getByText('Incorporación completada',{exact:true}).waitFor();
+        assert.equal(await resuelto.getByRole('button',{name:'Aprobación manual',exact:true}).count(),0);
+        assert.deepEqual(await history.locator('.haku-actualizacion-sites__historial-metricas strong').allInnerTexts(),['1','0']);
+        await resuelto.getByRole('button',{name:'Cerrar confirmación'}).click();
+        assert.match(await resuelto.innerText(),/El aviso anterior ya no requiere cambios/);
+        assert.equal(await page.evaluate(()=>window.__cierresHaku),0);
+        assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),2);
         assert.deepEqual(errores,[]);
     }finally{await page.close();}
 }
@@ -1195,6 +1289,7 @@ async function comprobarNotaTinaja(browser,url){
         assert.deepEqual(errors, []);
         await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
         await comprobarNotaTinaja(browser,`http://127.0.0.1:${server.address().port}/`);
+        await comprobarPendientesTrasConfirmar(browser,`http://127.0.0.1:${server.address().port}/`);
         console.log('Actualización Sites: informe real, categorías, historial, controles, error, scroll y móvil OK');
     } finally {
         await browser.close();
