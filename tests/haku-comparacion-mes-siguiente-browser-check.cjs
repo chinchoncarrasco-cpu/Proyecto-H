@@ -1,4 +1,4 @@
-// Botones reales de Haku con los interceptores reales del Libro y Servicios.
+// Botones reales de Haku con los interceptores del Libro, pagos y servicios.
 // El lector XLSX se sustituye en memoria; no hay escritura ni red.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -14,14 +14,21 @@ const scripts = ['haiku-libro-semantica-v1.js','supabase-asistente-libro-actuali
     'haiku-libro-consultas-v1.js','supabase-asistente-v1.js'];
 const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
+async function abrirPaginaPrueba(page, instante) {
+    const url = 'https://haku-atajos.test/';
+    await page.route('**/*',route => route.request().url() === url
+        ? route.fulfill({ contentType:'text/html', body:'<!doctype html><html lang="es"><meta name="viewport" content="width=device-width, initial-scale=1"><body></body></html>' })
+        : route.abort());
+    await page.clock.install({ time:new Date(instante) });
+    await page.goto(url);
+}
+
 async function escenario(browser, instante, hojas, acciones, ancho = 1280) {
     const page = await browser.newPage({ timezoneId: 'America/Santiago', viewport: { width: ancho, height: 800 } });
     const errores = [];
     page.on('pageerror', error => errores.push(error.message));
     try {
-        await page.route('**/*', route => route.abort());
-        await page.clock.install({ time: new Date(instante) });
-        await page.goto('about:blank');
+        await abrirPaginaPrueba(page,instante);
         await page.evaluate(nombres => {
             window.haikuSesion = { auth: { id: 'usuario-prueba' } };
             window.haikuSupabase = { auth: { onAuthStateChange: () => ({}) } };
@@ -40,6 +47,7 @@ async function escenario(browser, instante, hojas, acciones, ancho = 1280) {
         for (const nombre of scripts) {
             await page.addScriptTag({ content: leer(nombre) });
         }
+        assert.deepEqual(errores,[]);
         await page.locator('#haiku-asistente-boton').click();
         for (const accion of acciones) {
             const antes = await page.locator('#haiku-asistente-mensajes .haiku-asistente-mensaje--usuario').count();
@@ -82,9 +90,7 @@ async function consultasPendientes(browser, ancho) {
     const page=await browser.newPage({timezoneId:'America/Santiago',viewport:{width:ancho,height:800}}),errores=[];
     page.on('pageerror',e=>errores.push(e.message));
     try {
-        await page.route('**/*',r=>r.abort());
-        await page.clock.install({time:new Date('2026-10-22T12:00:00Z')});
-        await page.goto('about:blank');
+        await abrirPaginaPrueba(page,'2026-10-22T12:00:00Z');
         await page.evaluate(()=>{
             window.haikuSesion={auth:{id:'usuario-sintetico'}};
             const lectura=()=>new Proxy({},{get:(_,k)=>k==='then'?(ok,no)=>Promise.resolve({data:[]}).then(ok,no):()=>lectura()});
@@ -96,21 +102,33 @@ async function consultasPendientes(browser, ancho) {
                 if(id)window.__eventos.push({tipo,id,real:e.isTrusted,disabled:document.getElementById('haiku-asistente-enviar')?.disabled});
             },true);
             window.HAIKU_LIBRO_RESERVA_V1={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Oct26','Nov26'],
-                consultarHoja:hoja=>{window.__lecturas.push(hoja);return new Promise((resolve,reject)=>{
-                    window.__soltar=error=>error?reject(Error('LECTURA CONTROLADA')):resolve({reservas:[],advertencias:[]});
-                });}};
+                consultarHoja:hoja=>{
+                    window.__lecturas.push(hoja);
+                    const resultado={reservas:[],advertencias:[]};
+                    if (!window.__pausarProximaLectura) return Promise.resolve(resultado);
+                    window.__pausarProximaLectura=false;
+                    return new Promise((resolve,reject)=>{
+                        window.__soltar=error=>error?reject(Error('LECTURA CONTROLADA')):resolve(resultado);
+                    });
+                }};
         });
         for(const nombre of scripts)await page.addScriptTag({content:leer(nombre)});
         await page.locator('#haiku-asistente-boton').click();
         const acciones=['libro','libro-siguiente','servicios','servicios-siguiente'];
         for(const [i,accion] of acciones.entries()) {
+            const lecturasAntes = await page.evaluate(() => {
+                window.__pausarProximaLectura = true;
+                return window.__lecturas.length;
+            });
             await page.locator('#haiku-asistente-rapidas summary').click();
             await page.locator(`[data-haiku-accion-rapida="${accion}"]`).click();
-            await page.waitForFunction(n=>window.__lecturas.length===n,i+1);
+            await page.waitForFunction(n=>window.__lecturas.length===n,lecturasAntes+1);
             assert.equal(await page.evaluate(()=>window.HAIKU_ASISTENTE.procesando()),true);
             assert.equal(await page.locator('#haiku-asistente-texto').isDisabled(),true);
             assert.equal(await page.locator('#haiku-asistente-enviar').isDisabled(),true);
-            assert.equal(await page.locator('[data-haiku-accion-rapida]:not(:disabled)').count(),0);
+            const disponibles = await page.locator('[data-haiku-accion-rapida]:not(:disabled)')
+                .evaluateAll(botones => botones.map(boton => boton.dataset.haikuAccionRapida));
+            assert.deepEqual(disponibles,['ingresos-manager','proceso-reservas']);
             // Ni input sintético ni un clic forzado deben desbloquear o sustituir la consulta activa.
             await page.evaluate(()=>{
                 document.getElementById('haiku-asistente-texto').dispatchEvent(new Event('input',{bubbles:true}));
@@ -118,14 +136,14 @@ async function consultasPendientes(browser, ancho) {
             });
             assert.equal(await page.locator('#haiku-asistente-enviar').isDisabled(),true);
             assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'');
-            assert.equal(await page.evaluate(()=>window.__lecturas.length),i+1);
+            assert.equal(await page.evaluate(()=>window.__lecturas.length),lecturasAntes+1);
             await page.evaluate(error=>window.__soltar(error),i%2===0);
             await page.waitForFunction(()=>!window.HAIKU_ASISTENTE.procesando());
             assert.equal(await page.locator('[data-haiku-accion-rapida]:disabled').count(),0);
             assert.equal(await page.locator('#haiku-asistente-enviar').isDisabled(),true,'vacío al terminar éxito o error');
             assert.equal(await page.locator('#haiku-asistente-texto').isDisabled(),false);
         }
-        assert.deepEqual(await page.evaluate(()=>window.__lecturas),['Oct26','Nov26','Oct26','Nov26']);
+        assert.deepEqual(await page.evaluate(()=>window.__lecturas),['Oct26','Nov26','Oct26','Nov26','Oct26']);
         assert.equal(await page.locator('.haiku-asistente-mensaje--usuario').count(),4);
         const eventos=await page.evaluate(()=>window.__eventos);
         assert.equal(eventos.filter(e=>e.tipo==='click'&&e.id==='haiku-asistente-enviar').length,4);
@@ -146,8 +164,67 @@ async function consultasPendientes(browser, ancho) {
     } finally {await page.close();}
 }
 
+async function pagosDelMes(browser, ancho, tema) {
+    const page = await browser.newPage({ timezoneId:'America/Santiago', viewport:{ width:ancho,height:800 } });
+    const errores = [];
+    page.on('pageerror',error => errores.push(error.message));
+    try {
+        await abrirPaginaPrueba(page,'2026-12-01T02:30:00Z');
+        await page.evaluate(tema => {
+            document.documentElement.dataset.haikuTema = tema;
+            window.haikuSesion = { auth:{ id:'usuario-prueba' } };
+            const auth = { onAuthStateChange:() => ({}), getSession:async () => ({ data:{ session:{ user:{ id:'usuario-prueba' } } } }) };
+            const consulta = { select:() => consulta, order:() => consulta, range:async () => ({ data:[] }) };
+            window.haikuSupabase = { auth, from:() => consulta, rpc:() => { throw Error('Operación no permitida'); } };
+            window.__lecturas = [];
+            const pago = {
+                titular:'Persona de prueba', cabana:3, medio_pago:'debito', monto:12000, moneda:'CLP',
+                fecha_bloque:'2026-10-31', fecha_comprobante:'2026-11-02', origen:{ hoja:'Oct26',celda:'C28:F28' },
+                texto_original:'Débito folio 1002 BOVTAR 1003', concepto:'arriendo', tipo_movimiento:'alojamiento',
+                estado_pago:'registrado_en_libro', pago_recibido:true,
+                evidencia_financiera:{ sector:'pagos', columnas_ocupadas:{ fecha:true,detalle:true,concepto:true,monto:true } }
+            };
+            window.HAIKU_LIBRO_RESERVA_V1 = {
+                listo:async () => {},
+                estado:() => ({ cargado:true,nombre:'Libro de prueba.xlsx',generacion:1 }),
+                listarHojas:() => ['Oct26','Nov26','Dic26'],
+                consultarHoja:async hoja => {
+                    window.__lecturas.push(hoja);
+                    const anterior = { ...pago, fecha_comprobante:'2026-10-30', origen:{ hoja,celda:'C29:F29' } };
+                    return { reservas:[], pagos:hoja==='Oct26' ? [pago,anterior] : [] };
+                }
+            };
+        },tema);
+        for (const nombre of ['supabase-asistente-v1.css','sites-asistente-v1.css','haiku-tema-oscuro-v1.css','haiku-tema-v1.css'])
+            await page.addStyleTag({ content:fs.readFileSync(path.join(raiz,'css',nombre),'utf8') });
+        for (const nombre of scripts) await page.addScriptTag({ content:leer(nombre) });
+
+        await page.getByRole('button',{name:'Abrir Haku',exact:true}).click();
+        await page.locator('#haiku-asistente-rapidas summary').click();
+        const atajo = page.getByRole('button',{name:'Comparar pagos del mes actual',exact:true});
+        assert.equal(await atajo.evaluate(e => e.scrollWidth <= e.clientWidth+1),true);
+        await atajo.click();
+
+        const resultado = page.locator('.haku-pagos-compactos');
+        await resultado.waitFor();
+        const texto = await page.locator('.haiku-asistente-mensaje--usuario').allTextContents();
+        assert.deepEqual(texto,['Libro: compara pagos de noviembre 2026 (del 01-11-2026 al 30-11-2026) con Proyecto H']);
+        assert.deepEqual(await page.evaluate(() => window.__lecturas),['Nov26','Oct26','Dic26']);
+        assert.match(await resultado.locator('.haku-pagos-periodo').textContent(),/noviembre 2026/);
+        const fila = resultado.locator('.haku-pago-fila');
+        assert.equal(await fila.count(),1);
+        await fila.evaluate(el => {
+            el.closest('.haku-pagos-seccion').open = true;
+            el.open = true;
+        });
+        assert.match(await fila.locator(':scope > summary').innerText(),/02\/11\/2026/);
+        assert.match(await fila.innerText(),/Oct26!C28:F28/);
+        assert.deepEqual(errores,[]);
+    } finally { await page.close(); }
+}
+
 (async () => {
-    const browser = await chromium.launch({ executablePath: edge, headless: true });
+    const browser = await chromium.launch({ executablePath:process.env.HAKU_CHROMIUM_PATH || (process.platform==='win32' ? edge : undefined), headless:true });
     try {
         // Aún es septiembre en Santiago cuando UTC ya pasó a octubre.
         await escenario(browser, '2026-10-01T02:30:00Z', ['Sep26', 'Oct26'], [
@@ -168,6 +245,8 @@ async function consultasPendientes(browser, ancho) {
         ], 390);
         await consultasPendientes(browser,1280);
         await consultasPendientes(browser,390);
-        console.log('Haku: clic real único, bloqueo compartido, recuperación éxito/error, adjuntos, períodos Chile y móvil OK');
+        for (const ancho of [1280,390,320]) for (const tema of ['claro','oscuro'])
+            await pagosDelMes(browser,ancho,tema);
+        console.log('Haku: atajos, bloqueo compartido, períodos Chile y pagos mensuales en ambos temas OK');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
