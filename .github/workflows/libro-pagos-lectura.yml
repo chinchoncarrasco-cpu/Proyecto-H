@@ -18,6 +18,7 @@ on:
       - "tests/libro-pagos-lectura-estable.test.cjs"
       - "tests/libro-transferencias-bancarias.test.cjs"
       - "tests/libro-glosa-sin-nombre.test.cjs"
+      - "tests/libro-auditoria-pagos-mes.test.cjs"
       - ".github/workflows/libro-pagos-lectura.yml"
 
 permissions:
@@ -57,5 +58,7 @@ jobs:
         run: node --test tests/libro-pagos-lectura-estable.test.cjs tests/libro-transferencias-bancarias.test.cjs tests/haiku-libro-pagos-canon.test.cjs tests/haiku-libro-pagos-clasificacion.test.cjs tests/haiku-libro-pagos-focalizados.test.cjs tests/haiku-libro-auto.test.cjs tests/libro-comparacion-readonly.test.cjs tests/libro-pagos-existentes-visibles.test.cjs tests/haiku-libro-pagos-aprobacion-manual.test.cjs tests/haiku-libro-pago-snapshot-manual.test.cjs tests/haiku-libro-medio-pago-manual.test.cjs tests/libro-actualizaciones-pagos-flujo.test.cjs tests/libro-semantica.test.cjs tests/libro-penalidad-pago-manual.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-historial-revision-operativa.test.cjs
       - name: Glosas bancarias e índices de lectura
         run: node --test tests/libro-glosa-sin-nombre.test.cjs tests/libro-indice-lectura.test.cjs
+      - name: Auditoría de pagos por fecha del comprobante
+        run: node --test tests/libro-auditoria-pagos-mes.test.cjs
       - name: Reservas WALK IN y dudas de lectura visibles
         run: node --test tests/libro-reservas-identificacion.test.cjs tests/libro-titular-fragmentos.test.cjs

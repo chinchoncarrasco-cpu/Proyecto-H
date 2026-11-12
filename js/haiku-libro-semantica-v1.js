@@ -129,6 +129,8 @@
         return anio.length === 4 && anio !== esperado && [...anio].sort().join('') === [...esperado].sort().join('');
     }
     function fechaComprobanteDeFila(celda, reserva) {
+        if (/\b(?:today|now|hoy|ahora)\s*\(/i.test(celda?.formula || ''))
+            return {fecha_comprobante:null, fecha_comprobante_variable:true};
         const guardada = celda?.fechaISO || null;
         const base = {fecha_comprobante:guardada};
         if (!reserva || celda?.formula || celda?.errorExcel) return base;
@@ -1368,10 +1370,13 @@
                     texto_original: cell.valor, coordenadas_origen: src, formato: colors, advertencias: dudas, pagos: [], pagos_sin_asociacion: [], cobertura_pagos: false });
             }
         }
-        for (let k = 0; k < paymentCabs.length; k++) {
-            const cab = paymentCabs[k], cabana = Number(cab.valor.match(/\d+/)[0]);
-            const end = finBloquePago(cab);
-            if (!marker.length || !bloquesPagoValidos.includes(cab)) continue;
+        const bloquesVentas = etiquetasPrimarias.filter(c => c.r > financialRow &&
+            /^otras\s+ventas\s+no\s+asociadas\s+al\s+check[\s-]*in\s+del\s+dia$/.test(normalizar(c.valor)));
+        for (const bloque of [...bloquesPagoValidos, ...bloquesVentas]) {
+            const ventaSinReserva = bloquesVentas.includes(bloque);
+            const cabana = ventaSinReserva ? null : Number(bloque.valor.match(/\d+/)[0]);
+            const end = finBloquePago(bloque) ?? bloque.r;
+            if (!marker.length) continue;
             for (let i = 0; i < headers.length; i++) {
                 const h = headers[i];
                 if (h.duda_fecha) continue;
@@ -1383,10 +1388,10 @@
                 const bandaSinTitulo = !at(financialRow, h.c)?.valor?.trim() &&
                     merges.some(m => m.s.r === financialRow && m.e.r === financialRow && m.s.c === h.c && m.e.c === h.c + 3);
                 if ((!mark && !bandaSinTitulo) || (headers[i + 1] && headers[i + 1].c - h.c !== 4)) continue;
-                const candidatas = mark ? res.reservas.filter(r => r.cabana === cabana && r.fecha_checkin === h.fechaISO) : [];
+                const candidatas = mark && !ventaSinReserva ? res.reservas.filter(r => r.cabana === cabana && r.fecha_checkin === h.fechaISO) : [];
                 const reservaDelBloque = candidatas.length === 1 && candidatas[0].geometria_inequivoca &&
                     !candidatas[0].advertencias.length ? candidatas[0] : null;
-                for (let r = cab.r; r <= end; r++) {
+                for (let r = bloque.r; r <= end; r++) {
                     const fechaCelda = at(r, h.c), detail = at(r, h.c + 1), concept = at(r, h.c + 2), amount = at(r, h.c + 3);
                     if (!detail?.valor.trim() && !concept?.valor.trim() && !amount?.valor.trim()) continue;
                     const text = [detail?.valor, concept?.valor].filter(Boolean).join(" // ");
@@ -1408,8 +1413,12 @@
                     const ref = re => text.match(re)?.[1]?.trim() || null;
                     const kind = /penalidad/.test(t) ? "penalidad" : (/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
-                    const money = monto(amount?.valorNumero ?? amount?.valor);
+                    const valorOriginal = amount?.valorNumero ?? amount?.valor;
+                    const money = monto(valorOriginal);
+                    const reembolso = /^reembolso\b|^devolucion\b/.test(c) &&
+                        String(valorOriginal ?? '').trim().match(/^-\s*\$?\s*(\d+(?:[.,]\d{3})*)$/);
                     if (!mark && (!fechaCelda?.fechaISO || !titularPago(detail?.valor) || !(money > 0) || !c)) continue;
+                    if (ventaSinReserva && (!mark || !fechaCelda?.valor?.trim() || !detail?.valor?.trim() || !c || !(money > 0))) continue;
                     const cabanaConcepto = Number(c.match(/^cab\s*(\d+)\b/)?.[1]) || null;
                     const advertencias = [];
                     if (data.fidelidad?.formato===false) advertencias.push('No se pudo verificar el formato original del Libro. Vuelve a cargar el archivo antes de incorporar cambios.');
@@ -1419,8 +1428,12 @@
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
                     const fechaComprobante = fechaComprobanteDeFila(fechaCelda,
                         advertencias.length || (cabanaConcepto && cabanaConcepto !== cabana) ? null : reservaDelBloque);
+                    if (fechaComprobante.fecha_comprobante_variable)
+                        advertencias.push('La fecha del Libro se calcula con el día actual. Comprueba la fecha del comprobante original.');
                     const p = { fecha_bloque: h.fechaISO, ...fechaComprobante, cabana, titular: titularPago(detail?.valor),
                         monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
+                        ...(reembolso ? { monto_referencial:-Number(reembolso[1].replace(/[.,]/g,'')) } : {}),
+                        ...(ventaSinReserva ? { venta_sin_reserva:true } : {}),
                         codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manager/.test(t),
