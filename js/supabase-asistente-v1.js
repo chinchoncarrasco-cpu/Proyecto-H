@@ -1706,18 +1706,29 @@
             let limite;
             try {
                 const archivo = archivosActuales[0];
-                const paginas = await Promise.race([(async () => lector.leerPaginasPDF(await archivo.arrayBuffer()))(), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La lectura del PDF tardó demasiado.")), 45000); })]);
-                clearTimeout(limite);
                 const formatos = window.HAIKU_CLOUDBEDS_INFORMES_V1;
                 const informes = window.HAIKU_ASISTENTE_CLOUDBEDS_INFORMES_V1;
-                if (informes && formatos?.esPDFNotas(paginas)) {
+                const leer = async () => {
+                    const bytes = await archivo.arrayBuffer();
+                    if (!informes || !formatos || typeof lector.leerPaginasPDF !== "function") {
+                        return { entradas: await lector.leerPDF(bytes) };
+                    }
+                    const paginas = await lector.leerPaginasPDF(bytes);
+                    return formatos.esPDFNotas(paginas)
+                        ? { documento: formatos.parsearPDF(paginas, archivo.name) }
+                        : { entradas: lector.parsearPaginas(paginas) };
+                };
+                const { entradas, documento } = await Promise.race([leer(), new Promise((_, reject) => {
+                    limite = setTimeout(() => reject(new Error("La lectura del PDF tardó demasiado.")), 45000);
+                })]);
+                clearTimeout(limite);
+                if (documento) {
                     mensajePDF.dataset.hakuInformesCloudbeds = "";
                     estadoPDF.dataset.hakuInformesCloudbeds = "";
                     estadoPDF.textContent = "Comparando las notas con Proyecto H y el Libro…";
-                    informes.montar(estadoPDF, await informes.analizar([], cliente, null, [formatos.parsearPDF(paginas, archivo.name)]));
+                    informes.montar(estadoPDF, await informes.analizar([], cliente, null, [documento]));
                     return;
                 }
-                const entradas = lector.parsearPaginas(paginas);
                 estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";
                 const informe = await Promise.race([lector.consultar(entradas, cliente), new Promise((_, reject) => { limite = setTimeout(() => reject(new Error("La consulta tardó demasiado. Vuelve a intentarlo.")), 30000); })]);
                 const tarifas = window.HAIKU_CLOUDBEDS_TARIFAS_V1;
