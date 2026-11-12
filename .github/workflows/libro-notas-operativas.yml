@@ -15,6 +15,8 @@ on:
       - "tests/libro-servicio-confirmacion-unica.test.cjs"
       - "tests/libro-personas-adultos.test.cjs"
       - "tests/libro-resoluciones-ocupacion.test.cjs"
+      - "tests/libro-servicio-manual-postgres.test.cjs"
+      - "supabase/migrations/*_libro_late_checkout_cortesia_v1.sql"
       - ".github/workflows/libro-notas-operativas.yml"
 
 permissions:
@@ -44,7 +46,7 @@ jobs:
       - name: PostgreSQL aislado, auditoría y conservación de pagos
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
-        run: node --test tests/libro-aprobacion-admin-postgres.test.cjs
+        run: node --test tests/libro-aprobacion-admin-postgres.test.cjs tests/libro-servicio-manual-postgres.test.cjs
       - name: Chromium de prueba
         run: node "$RUNNER_TEMP/haku-libro-test/node_modules/playwright/cli.js" install chromium --with-deps
       - name: Cambio del Libro en escritorio y teléfono
