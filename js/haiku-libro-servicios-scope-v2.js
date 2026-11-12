@@ -323,7 +323,7 @@
         return { ...rango, hojas, reservas, archivo: estado.nombre, generacion: estado.generacion, version_libro: estado.version || null, revision_focal:Boolean(focal) };
     }
 
-    function fuenteHistorial({reservas,generacion,aprobacionManual=false,alVolver}={}){
+    function fuenteHistorial({reservas,generacion,aprobacionManual=false,alVolver,alGuardar}={}){
         if(!Array.isArray(reservas)||!reservas.length||generacion==null)throw Error('No hay fichas identificadas para revisar servicios.');
         if(aprobacionManual && (!esAdministrador() || reservas.length!==1))throw Error('La aprobación manual requiere un administrador y una sola reserva.');
         const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')).sort();
@@ -331,8 +331,14 @@
         const formato=f=>f.split('-').reverse().join('/');
         const descripcion=`Libro: compara servicios del ${formato(fechas[0])} al ${formato(fechas.at(-1))}`;
         const fuente=Object.freeze({descripcion});
-        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,alVolver,claves:[...new Set(reservas.map(claveFicha))]});
+        entradasHistorial.set(fuente,{descripcion,generacion,aprobacionManual,alVolver,alGuardar,claves:[...new Set(reservas.map(claveFicha))]});
         return fuente;
+    }
+    function notificarGuardadoHistorial(fuente){
+        const alGuardar=entradasHistorial.get(fuente)?.alGuardar;
+        if(alGuardar)void Promise.resolve().then(alGuardar).catch(error=>{
+            console.warn('HAIKU · No pude actualizar los pendientes después del guardado:',error);
+        });
     }
     async function prepararHistorial(scope){
         return construir(fuenteHistorial(scope));
@@ -2585,6 +2591,7 @@
     // La revisión anterior se conserva como datos, sin clonar controles del DOM.
     function renderizarResultadoServicios(card, data, revision, elegidos, textoOriginal) {
         if (!data?.ok) throw new Error("Proyecto H no confirmó la incorporación.");
+        const historial = entradasHistorial.get(textoOriginal);
         const seleccionados = new Set(elegidos.map(item => item.item_id));
         const resultados = new Map([...(data.servicios || []), ...(data.notas || [])].map(item => [item.item_id, item]));
         const omitidos = Number(data.servicios_omitidos || 0) + Number(data.notas_omitidas || 0);
@@ -2612,7 +2619,7 @@
         cerrar.setAttribute("aria-label", "Cerrar confirmación");
         cerrar.addEventListener("click", () => {
             card.remove();
-            entradasHistorial.get(textoOriginal)?.alVolver?.();
+            historial?.alVolver?.();
         });
         accionesCabecera.append(cerrar);
         cabecera.append(avatar, identificacion, accionesCabecera);
@@ -2684,22 +2691,26 @@
             if (!detalle.open) detalle.hidden = true;
             anterior.setAttribute("aria-expanded", String(detalle.open));
         });
-        const revisar = crear("button", "haku-libro-resultado-sites__revisar", "Revisar de nuevo");
-        revisar.type = "button";
-        revisar.disabled = !textoOriginal;
-        revisar.addEventListener("click", () => {
-            if (revisar.disabled || !textoOriginal) return;
-            revisar.disabled = true;
-            Promise.resolve(procesar(textoOriginal)).finally(() => {
-                if (revisar.isConnected) revisar.disabled = false;
+        acciones.append(anterior);
+        if (!historial?.alGuardar) {
+            const revisar = crear("button", "haku-libro-resultado-sites__revisar", "Revisar de nuevo");
+            revisar.type = "button";
+            revisar.disabled = !textoOriginal;
+            revisar.addEventListener("click", () => {
+                if (revisar.disabled || !textoOriginal) return;
+                revisar.disabled = true;
+                Promise.resolve(procesar(textoOriginal)).finally(() => {
+                    if (revisar.isConnected) revisar.disabled = false;
+                });
             });
-        });
-        acciones.append(anterior, revisar);
+            acciones.append(revisar);
+        }
         pie.append(descripcion, acciones);
         tarjeta.append(mensaje, metricas, detalle, pie);
 
         card.className = "haiku-asistente-preview haku-incorporacion-resultado haku-incorporacion-resultado--servicios haku-libro-resultado-sites";
         card.replaceChildren(cabecera, tarjeta);
+        notificarGuardadoHistorial(textoOriginal);
     }
 
     async function importarSeleccionados(seleccionados, card, textoOriginal, overrides = new Map()) {
@@ -2803,6 +2814,7 @@
                         volver.textContent = 'Volver a la revisión'; volver.disabled = false;
                         volver.focus?.({preventScroll:true});
                     }
+                    notificarGuardadoHistorial(texto);
                 } catch (error) {
                     aviso.setAttribute('role','alert');
                     aviso.textContent = error?.message || 'No pude guardar la nota.';
