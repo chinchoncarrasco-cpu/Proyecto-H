@@ -1866,7 +1866,7 @@ html[data-haku-mobile-assistant="1"] .haku-respuesta-compacta summary { min-heig
 .haku-ayuda__identidad { min-width: 0; }
 .haku-ayuda__identidad h2 { margin: 0; color: inherit; font-size: 17px; line-height: 22px; font-weight: 700; }
 .haku-ayuda__identidad p { margin: 1px 0 0; color: var(--ayuda-secundario); line-height: 17px; }
-.haku-ayuda :is(button, input, select) {
+.haku-ayuda :is(button, input, select, textarea) {
     min-width: 0;
     color: inherit;
     font: inherit;
@@ -1984,9 +1984,51 @@ html[data-haiku-tema="oscuro"] .haku-ayuda select { color-scheme: dark; }
     overflow-wrap: anywhere;
 }
 .haku-ayuda__ejemplo .haku-ayuda__indicador { color: inherit; }
+.haku-ayuda__ejemplo .haku-ayuda__completar { font-size: 11px; }
+.haku-ayuda .haku-ayuda__ejemplo[aria-expanded="true"] { background: var(--ayuda-seleccion); }
+.haku-ayuda__formulario {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 8px;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 6px;
+    background: var(--ayuda-superficie);
+}
+.haku-ayuda__campos { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px 8px; }
+.haku-ayuda__campo { display: grid; align-content: start; gap: 3px; min-width: 0; font-weight: 600; }
+.haku-ayuda .haku-ayuda__campo :is(input, textarea) {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    padding: 6px 8px;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 5px;
+    background: var(--ayuda-control);
+    font-weight: 400;
+    line-height: 18px;
+}
+.haku-ayuda .haku-ayuda__campo textarea { resize: vertical; }
+.haku-ayuda .haku-ayuda__campo textarea::placeholder { color: var(--ayuda-secundario); }
+.haku-ayuda__formulario-acciones { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.haku-ayuda .haku-ayuda__formulario-acciones button {
+    min-height: 44px;
+    padding: 6px 10px;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 5px;
+    background: var(--ayuda-control);
+    font-weight: 600;
+}
+.haku-ayuda .haku-ayuda__formulario-acciones .haku-ayuda__enviar {
+    border-color: var(--ayuda-acento);
+    background: var(--ayuda-seleccion);
+    color: var(--ayuda-acento);
+}
 .haku-ayuda :is(summary, .haku-ayuda__icono, .haku-ayuda__limpiar):hover { background: var(--ayuda-suave); }
 .haku-ayuda .haku-ayuda__ejemplo:hover { background: var(--ayuda-seleccion); }
-.haku-ayuda :is(button, summary, input, select):focus-visible {
+.haku-ayuda :is(button, summary, input, select, textarea):focus-visible {
     outline: 2px solid var(--ayuda-acento);
     outline-offset: -2px;
 }
@@ -2007,6 +2049,9 @@ html[data-haiku-tema="oscuro"] .haku-ayuda select { color-scheme: dark; }
 }
 @media (min-width: 701px) {
     @container haku-ayuda (min-width: 418px) {
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda__campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda__campo--ancho { grid-column: 1 / -1; }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda .haku-ayuda__formulario-acciones button { min-height: 36px; }
         html:not([data-haku-mobile-assistant="1"]) .haku-ayuda:not(.haku-ayuda--buscando) .haku-ayuda__contenido {
             grid-template-columns: 143px minmax(0, 1fr);
         }

@@ -75,9 +75,39 @@ test("exige alcance, identidad y evidencia según la acción", () => {
     }
 });
 
-test("los ejemplos nuevos de Ayuda llegan a la acción que describen", () => {
+test("los comandos de Ayuda llegan a la acción que describen al completar sus campos", () => {
     const acciones = ayuda.secciones.flatMap(g => g.acciones);
-    const soportadas = new Set(acciones.flatMap(a => a.ejemplos || []).map(t => leer(t)?.accion).filter(Boolean));
+    const datos = {
+        Fecha:"12/11/2026", Cabaña:"3", Titular:"Inés Lucía Rojas Vera",
+        "Hora de inicio":"10:00", "Hora de término":"11:30", Encargado:"María Paz",
+        Nota:"Dejar cuna extra", Motivo:"Mantención", "Fecha de inicio":"12/11/2026", "Fecha de liberación":"15/11/2026",
+        "Fecha de ingreso":"15/11/2026", "Fecha de salida":"17/11/2026", Adultos:"2",
+        Reservas:"Inés Rojas, CAB 3, del 15 al 17/11/2026", "Titular o código de reserva":"H-20261112-03-ABCDEF",
+        "Cabaña actual":"3", "Cabaña nueva":"4", "Fecha de la reserva":"12/11/2026",
+        "Nuevo ingreso":"15/11/2026", "Nueva salida":"17/11/2026", "Nuevo titular":"Rosa Miranda",
+        Correo:"reserva@example.com", Niños:"0", "Tarifa CLP":"180000", "Fecha de la noche":"12/11/2026",
+        "Total CLP":"180000", "Nueva hora":"20:45", "Fecha actual":"12/11/2026", "Hora actual":"11:00",
+        "Nueva fecha":"13/11/2026", "Tipo de tinaja":"Tónel", Hora:"18:00", Minutos:"60",
+        "Monto CLP":"90000", "Medio y referencia del pago":"efectivo", "Fecha del pago":"12/11/2026",
+        Pagos:"Inés Rojas, CAB 3, $90.000 efectivo 12/11/2026", Folio:"00123", "Folio actual":"00123",
+        "Folio nuevo":"00124", "Código de autorización":"000345", "Fecha del abono":"12/11/2026",
+        "Fecha de devolución":"12/11/2026", "Medio de devolución":"transferencia", Comprobante:"DEV-123",
+        "Números BOVE":"16989 y 16990", "Número BOVE":"16989", "Fecha desde":"12/11/2026",
+        "Fecha hasta":"15/11/2026", Año:"2026", "Mes y año":"noviembre de 2026", Mensaje:"Llegamos a las 20:00"
+    };
+    const textos = acciones.flatMap(a => a.ejemplos || []).map(e => {
+        if (typeof e === "string") {
+            assert.doesNotMatch(e, /\d|[{}]/, e);
+            return e;
+        }
+        if (e.archivo) return e.texto;
+        assert.match(e.texto, /\{[^{}]+\}/, e.rotulo);
+        return e.texto.replace(/\{([^{}]+)\}/g, (_, campo) => {
+            assert.ok(Object.hasOwn(datos, campo), campo);
+            return datos[campo];
+        });
+    });
+    const soportadas = new Set(textos.map(t => leer(t)?.accion).filter(Boolean));
     assert.deepEqual([...soportadas].sort(), [...new Set(casos.map(c => c[1]))].sort());
-    for (const texto of acciones.flatMap(a => a.ejemplos || [])) assert.equal(leer(texto)?.error, undefined, texto);
+    for (const texto of textos) assert.equal(leer(texto)?.error, undefined, texto);
 });
