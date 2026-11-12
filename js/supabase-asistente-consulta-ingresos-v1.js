@@ -28,29 +28,11 @@
         diciembre: 12
     });
 
-    const CONFIG = Object.freeze({
-        ingresan: {
-            titulo: "Ingresos del día",
-            etiquetaUno: "Reserva que ingresa",
-            etiquetaVarios: "Reservas que ingresan",
-            resumenUno: "reserva ingresa",
-            resumenVarios: "reservas ingresan"
-        },
-        salen: {
-            titulo: "Salidas del día",
-            etiquetaUno: "Reserva que sale",
-            etiquetaVarios: "Reservas que salen",
-            resumenUno: "reserva sale",
-            resumenVarios: "reservas salen"
-        },
-        continuan: {
-            titulo: "Continúan en estadía",
-            etiquetaUno: "Reserva que continúa",
-            etiquetaVarios: "Reservas que continúan",
-            resumenUno: "reserva continúa",
-            resumenVarios: "reservas continúan"
-        }
-    });
+    const TITULOS = {
+        ingresan: "Ingresos del día",
+        salen: "Salidas del día",
+        continuan: "Continúan en estadía"
+    };
 
     function instalar() {
         if (window.HAIKU_ASISTENTE_CONSULTA_OPERACION_FECHA_V1) return true;
@@ -64,235 +46,6 @@
         if (!cliente || !campo || !enviar || !mensajes) return false;
 
         let ocupado = false;
-
-        function instalarEstilos() {
-            if (document.getElementById("haku-operacion-fecha-estilos-v2")) return;
-
-            const style = document.createElement("style");
-            style.id = "haku-operacion-fecha-estilos-v2";
-            style.textContent = `
-                .haku-operacion-card {
-                    --haku-op-accent: #1f7650;
-                    --haku-op-soft: #edf7f0;
-                    --haku-op-border: #c9ddd0;
-                    border: 1px solid var(--haku-op-border);
-                    border-radius: 16px;
-                    background: linear-gradient(180deg, #fbfdfb 0%, #f7faf8 100%);
-                    padding: 14px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                    box-shadow: 0 5px 16px rgba(28, 69, 47, .055);
-                }
-
-                .haku-operacion-card--salen {
-                    --haku-op-accent: #a24f46;
-                    --haku-op-soft: #fbefed;
-                    --haku-op-border: #e4c9c5;
-                }
-
-                .haku-operacion-card--continuan {
-                    --haku-op-accent: #397082;
-                    --haku-op-soft: #edf5f7;
-                    --haku-op-border: #c9dde2;
-                }
-
-                .haku-operacion-head {
-                    display: flex;
-                    align-items: flex-start;
-                    justify-content: space-between;
-                    gap: 12px;
-                    padding-bottom: 9px;
-                    border-bottom: 1px solid #deebe2;
-                }
-
-                .haku-operacion-kicker {
-                    margin: 0 0 2px;
-                    font-size: 10px;
-                    line-height: 1.2;
-                    font-weight: 800;
-                    letter-spacing: .09em;
-                    text-transform: uppercase;
-                    color: var(--haku-op-accent);
-                }
-
-                .haku-operacion-title {
-                    margin: 0;
-                    font-size: 19px;
-                    line-height: 1.15;
-                    font-weight: 800;
-                    color: #17251c;
-                }
-
-                .haku-operacion-fecha {
-                    flex: 0 0 auto;
-                    display: inline-flex;
-                    align-items: center;
-                    min-height: 26px;
-                    padding: 4px 9px;
-                    border: 1px solid var(--haku-op-border);
-                    border-radius: 999px;
-                    background: var(--haku-op-soft);
-                    color: var(--haku-op-accent);
-                    font-size: 11px;
-                    line-height: 1;
-                    font-weight: 800;
-                    white-space: nowrap;
-                }
-
-                .haku-operacion-resumen {
-                    display: flex;
-                    align-items: center;
-                    gap: 9px;
-                    min-height: 42px;
-                    padding: 8px 11px;
-                    border: 1px solid #dbe8df;
-                    border-radius: 12px;
-                    background: rgba(255,255,255,.84);
-                    color: #344039;
-                    font-size: 12px;
-                }
-
-                .haku-operacion-cantidad {
-                    flex: 0 0 auto;
-                    display: grid;
-                    place-items: center;
-                    width: 28px;
-                    height: 28px;
-                    border-radius: 9px;
-                    background: var(--haku-op-accent);
-                    color: #fff;
-                    font-size: 13px;
-                    font-weight: 900;
-                    box-shadow: 0 3px 8px rgba(31, 80, 55, .14);
-                }
-
-                .haku-operacion-listado-wrap {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                    min-height: 0;
-                }
-
-                .haku-operacion-listado-titulo {
-                    margin: 0 1px;
-                    font-size: 11px;
-                    font-weight: 800;
-                    color: #3f5848;
-                }
-
-                .haku-operacion-lista {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 5px;
-                    max-height: 235px;
-                    overflow-y: auto;
-                    padding-right: 2px;
-                    scrollbar-width: thin;
-                }
-
-                .haku-operacion-item {
-                    display: grid;
-                    grid-template-columns: auto minmax(0, 1fr) auto;
-                    align-items: center;
-                    gap: 9px;
-                    min-height: 43px;
-                    padding: 6px 8px;
-                    border: 1px solid #e0e9e3;
-                    border-radius: 11px;
-                    background: #fff;
-                }
-
-                .haku-operacion-cab {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    min-width: 48px;
-                    min-height: 25px;
-                    padding: 3px 7px;
-                    border-radius: 8px;
-                    background: var(--haku-op-soft);
-                    color: var(--haku-op-accent);
-                    font-size: 10px;
-                    font-weight: 900;
-                    white-space: nowrap;
-                }
-
-                .haku-operacion-main {
-                    min-width: 0;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 1px;
-                }
-
-                .haku-operacion-titular {
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                    font-size: 12px;
-                    line-height: 1.25;
-                    font-weight: 800;
-                    color: #222f27;
-                }
-
-                .haku-operacion-meta {
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                    font-size: 10px;
-                    line-height: 1.25;
-                    color: #78847b;
-                }
-
-                .haku-operacion-estado {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    min-height: 23px;
-                    padding: 3px 8px;
-                    border: 1px solid #d7e7dc;
-                    border-radius: 999px;
-                    background: #f3f7f4;
-                    color: #476254;
-                    font-size: 9px;
-                    font-weight: 800;
-                    white-space: nowrap;
-                }
-
-                .haku-operacion-vacio {
-                    padding: 8px 10px;
-                    border: 1px dashed var(--haku-op-border);
-                    border-radius: 10px;
-                    background: var(--haku-op-soft);
-                    color: #627068;
-                    font-size: 11px;
-                }
-
-                .haku-operacion-pie {
-                    padding-top: 7px;
-                    border-top: 1px solid #e0e9e3;
-                    color: #758078;
-                    font-size: 10px;
-                    line-height: 1.25;
-                }
-
-                @media (max-width: 620px) {
-                    .haku-operacion-card { padding: 11px; gap: 8px; }
-                    .haku-operacion-title { font-size: 17px; }
-                    .haku-operacion-item {
-                        grid-template-columns: auto minmax(0, 1fr);
-                        gap: 7px;
-                    }
-                    .haku-operacion-estado {
-                        grid-column: 2;
-                        justify-self: start;
-                    }
-                }
-            `;
-            document.head.appendChild(style);
-        }
-
-        instalarEstilos();
 
         function quitarHaku(valor) {
             const fn = window.haikuQuitarVocativoAsistente;
@@ -439,95 +192,40 @@
         }
 
         function renderizar(fecha, tipo, filas) {
-            const config = CONFIG[tipo] || CONFIG.ingresan;
-            const card = document.createElement("div");
-            card.className = `haiku-asistente-preview haku-operacion-card haku-operacion-card--${tipo}`;
-
-            const cabecera = document.createElement("div");
-            cabecera.className = "haku-operacion-head";
-
-            const izq = document.createElement("div");
-            const etiqueta = document.createElement("div");
-            etiqueta.className = "haku-operacion-kicker";
-            etiqueta.textContent = "Consulta · sólo lectura";
-            const titulo = document.createElement("h3");
-            titulo.className = "haku-operacion-title";
-            titulo.textContent = config.titulo;
-            izq.append(etiqueta, titulo);
-
-            const fechaChip = document.createElement("span");
-            fechaChip.className = "haku-operacion-fecha";
-            fechaChip.textContent = fechaVisible(fecha);
-            cabecera.append(izq, fechaChip);
-            card.appendChild(cabecera);
-
-            const resumen = document.createElement("div");
-            resumen.className = "haku-operacion-resumen";
-            const cantidad = document.createElement("span");
-            cantidad.className = "haku-operacion-cantidad";
-            cantidad.textContent = String(filas.length);
-            const resumenTexto = document.createElement("span");
-            resumenTexto.textContent = `${filas.length === 1 ? config.resumenUno : config.resumenVarios} el ${fechaVisible(fecha)}.`;
-            resumen.append(cantidad, resumenTexto);
-            card.appendChild(resumen);
+            const nodo = (tag, clase, texto) => {
+                const el = document.createElement(tag);
+                el.className = clase;
+                el.textContent = texto;
+                return el;
+            };
+            const card = nodo("article", `haku-respuesta-compacta haku-operacion-card haku-operacion-card--${tipo}`, "");
+            const head = nodo("header", "haku-respuesta__cabecera", "");
+            const cantidad = `${filas.length} ${filas.length === 1 ? "reserva" : "reservas"}`;
+            head.append(
+                nodo("h3", "haku-operacion-title", TITULOS[tipo]),
+                nodo("span", "haku-respuesta__contexto", `${fechaVisible(fecha)} · ${cantidad}`)
+            );
+            card.appendChild(head);
 
             if (filas.length) {
-                const bloque = document.createElement("div");
-                bloque.className = "haku-operacion-listado-wrap";
-
-                const tituloBloque = document.createElement("div");
-                tituloBloque.className = "haku-operacion-listado-titulo";
-                tituloBloque.textContent = filas.length === 1 ? config.etiquetaUno : config.etiquetaVarios;
-                bloque.appendChild(tituloBloque);
-
-                const lista = document.createElement("div");
-                lista.className = "haku-operacion-lista";
-
-                filas
-                    .slice()
-                    .sort((a, b) => Number(a?.cabana_numero || 99) - Number(b?.cabana_numero || 99))
-                    .forEach(fila => {
-                        const item = document.createElement("div");
-                        item.className = "haku-operacion-item";
-
-                        const cab = document.createElement("span");
-                        cab.className = "haku-operacion-cab";
-                        cab.textContent = fila?.cabana_numero ? `CAB ${fila.cabana_numero}` : "CAB —";
-
-                        const main = document.createElement("div");
-                        main.className = "haku-operacion-main";
-                        const titular = document.createElement("div");
-                        titular.className = "haku-operacion-titular";
-                        titular.textContent = fila?.titular_nombre || "Sin titular";
-                        const meta = document.createElement("div");
-                        meta.className = "haku-operacion-meta";
-                        meta.textContent = metaFila(tipo, fila);
-                        main.append(titular, meta);
-
-                        const estado = document.createElement("span");
-                        estado.className = "haku-operacion-estado";
-                        estado.textContent = estadoVisible(fila);
-
-                        item.append(cab, main, estado);
-                        lista.appendChild(item);
-                    });
-
-                bloque.appendChild(lista);
-                card.appendChild(bloque);
+                const lista = nodo("ul", "haku-respuesta__lista haku-operacion-lista", "");
+                const ordenadas = [...filas].sort((a, b) => Number(a?.cabana_numero || 99) - Number(b?.cabana_numero || 99));
+                for (const fila of ordenadas) {
+                    const item = nodo("li", "haku-respuesta__fila haku-operacion-item", "");
+                    const principal = nodo("div", "haku-respuesta__principal", "");
+                    principal.append(nodo("strong", "haku-operacion-titular", fila?.titular_nombre || "Sin titular"),
+                        nodo("span", "haku-respuesta__secundario haku-operacion-meta", metaFila(tipo, fila)));
+                    item.append(nodo("span", "haku-respuesta__cab haku-operacion-cab", fila?.cabana_numero ? `CAB ${fila.cabana_numero}` : "CAB —"),
+                        principal, nodo("span", "haku-respuesta__estado haku-operacion-estado", estadoVisible(fila)));
+                    lista.appendChild(item);
+                }
+                card.appendChild(lista);
             } else {
-                const vacio = document.createElement("div");
-                vacio.className = "haku-operacion-vacio";
-                vacio.textContent = `No encontré reservas que ${tipo === "salen" ? "salgan" : tipo === "continuan" ? "continúen" : "ingresen"} en esa fecha.`;
-                card.appendChild(vacio);
+                const verbo = tipo === "salen" ? "salgan" : tipo === "continuan" ? "continúen" : "ingresen";
+                card.appendChild(nodo("p", "haku-respuesta__vacio", `No encontré reservas que ${verbo} en esa fecha.`));
             }
-
-            const pie = document.createElement("div");
-            pie.className = "haku-operacion-pie";
-            pie.textContent = "Sólo lectura · esta consulta no modificó ninguna reserva.";
-            card.appendChild(pie);
-
             mensajes.appendChild(card);
-            requestAnimationFrame(() => { mensajes.scrollTop = mensajes.scrollHeight; });
+            requestAnimationFrame(() => card.scrollIntoView?.({ block: "start" }));
         }
 
         async function procesar(textoOriginal) {
@@ -547,8 +245,7 @@
             }
 
             ocupado = true;
-            const config = CONFIG[tipo] || CONFIG.ingresan;
-            const espera = agregarMensaje("asistente", `Revisando ${config.titulo.toLowerCase()} del ${fechaVisible(fecha)}…`);
+            const espera = agregarMensaje("asistente", `Consultando reservas del ${fechaVisible(fecha)}…`);
 
             try {
                 const filas = await buscar(fecha, tipo);

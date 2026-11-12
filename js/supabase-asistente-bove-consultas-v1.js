@@ -229,12 +229,18 @@
   return [...grupos].map(([serie,n])=>`${serie}: mayor número observado ${n}`).join('\n')||'No encontré números BOVE.';
  }
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function renderizar(r){
+ function tarjeta(titulo,contexto,contenido){
+  return `<article class="haku-bove-consulta haku-respuesta-compacta"><header class="haku-respuesta__cabecera"><h3>${esc(titulo)}</h3><span class="haku-respuesta__contexto">${esc(contexto)}</span></header>${contenido}</article>`;
+ }
+ function renderizar(r,detalle=false){
   const labels={coinciden:'Coinciden',conflicto:'Conflicto · requiere revisión',pendiente:'Pendiente',solo_libro:'Sólo en Libro',solo_proyecto_h:'Sólo en Proyecto H',no_determinado:'No determinado · requiere revisión',encontrado:'Encontrado',no_encontrado:'No encontrado'};
-  if(r.q.error_rango)return `<article class="haku-bove-consulta"><h3>Consulta BOVE</h3><p>${esc(r.q.error_rango)}</p></article>`;
+  if(r.q.error_rango)return tarjeta('Consulta BOVE',r.dia,`<p class="haku-respuesta__vacio">${esc(r.q.error_rango)}</p>`);
   if(r.por_numero?.length>1){
    const totales=new Map();for(const x of r.por_numero)totales.set(x.estado,(totales.get(x.estado)||0)+1);
-   return `<article class="haku-bove-consulta"><h3>BOVE consultados · ${r.por_numero.length}</h3><p>${[...totales].map(([e,n])=>`${n} ${labels[e]}`).join(' · ')}</p>${r.por_numero.map(x=>`<section><p>Estado: ${labels[x.estado]}</p>${renderizar({...r,...x,por_numero:null,q:{...r.q,numero:x.numero,numeros:[x.numero]}})}</section>`).join('')}</article>`;
+   const resumen=`<p class="haku-respuesta__nota">${[...totales].map(([e,n])=>`${n} ${esc(labels[e])}`).join(' · ')}</p>`;
+   const avisos=r.avisos.map(a=>`<p class="haku-respuesta__nota">${esc(a)}</p>`).join('');
+   const lista=r.por_numero.map(x=>`<details><summary><strong>BOVE ${esc(x.numero)}</strong><span>${esc(labels[x.estado])}</span></summary>${renderizar({...r,...x,avisos:[],por_numero:null,q:{...r.q,numero:x.numero,numeros:[x.numero]}},true)}</details>`).join('');
+   return tarjeta('BOVE consultados',`${r.por_numero.length} números · ${r.dia}`,resumen+avisos+lista);
   }
   const notaPendiente=e=>{
    if(r.q.accion!=='pendientes'||e.fuente!=='proyecto_h')return '';
@@ -247,22 +253,26 @@
    return posibles.length?`<p>Posible contexto del Libro, sin asociación inequívoca: ${posibles.map(l=>esc(`${l.numero||'sin número'} · ${l.origen?.hoja||''}!${l.origen?.celda||''}`)).join('; ')}.</p>`:'<p>Libro: no hay evidencia inequívocamente asociada en esta consulta.</p>';
   };
   const fila=e=>`<div class="haku-bove-item"><strong>${esc(e.numero||(e.estado==='pendiente'?'BOVE pendiente':'BOVE no determinado'))}</strong> · ${esc(e.tipos.join(' / '))}<p>${esc(e.titular||e.titular_resuelto||'Titular no determinado')} ${esc(e.segmentos.map(s=>`· CAB ${s.cabana??'—'} · ${s.fecha} → ${s.hasta}`).join(' '))}</p>${e.origen?`<small>${esc(e.origen.hoja)} · ${esc(e.origen.celda)}${e.fecha_bloque?` · Contexto del bloque: CAB ${esc(e.cabana_contexto)} · ${esc(e.fecha_bloque)} (sin asociación automática)`:''}</small>`:''}${e.resolucion==='contexto_unico'?'<p>Identificado por contexto único de estadía.</p>':e.resolucion==='contexto_ambiguo'?`<p>Más de una estadía compatible con CAB ${esc(e.cabana_contexto)} · ${esc(e.fecha_bloque)}. Titular no determinado.</p>`:''}${notaPendiente(e)}</div>`;
-  let h=`<article class="haku-bove-consulta"><h3>${r.q.accion==='pendientes'?`BOVE pendientes · ${r.q.desde} → ${r.q.hasta} · ${r.proyecto.length} requieren revisión`:r.q.numero?`BOVE ${esc(r.q.numero)}`:'Consulta BOVE'}</h3><p>Sólo lectura · ${esc(r.dia)}</p>`;
-  if(r.q.accion==='pendientes')h+='<p>Sólo ingresos con check-in acreditado o estadía Hospedada/Checked Out. Confirmadas sin check-in no se consideran atrasadas.</p>';
-  for(const a of r.avisos)h+=`<p>${esc(a)}</p>`;
-  if(r.q.accion==='ultimo')h+=`<p style="white-space:pre-line">${esc(resumenUltimos([...r.libro,...r.proyecto]))}</p><p>Mayor número observado no certifica orden de registro ni serie tributaria. Las longitudes se muestran separadas.</p>`;
+  const pendientes=r.q.accion==='pendientes', ultimo=r.q.accion==='ultimo';
+  const titulo=pendientes?'BOVE pendientes':ultimo?'Últimos BOVE observados':r.q.numero?`BOVE ${r.q.numero}`:'Consulta BOVE';
+  const contexto=pendientes?`${r.q.desde} → ${r.q.hasta} · ${r.proyecto.length} por revisar`:r.dia;
+  let h=r.avisos.map(a=>`<p class="haku-respuesta__nota">${esc(a)}</p>`).join('');
+  if(ultimo)h+=`<ul class="haku-respuesta__lista">${resumenUltimos([...r.libro,...r.proyecto]).split('\n').map(l=>`<li class="haku-bove-item">${esc(l)}</li>`).join('')}</ul><p class="haku-respuesta__nota">Mayor número observado por longitud. El orden de registro y la serie tributaria requieren verificación.</p>`;
   else{
    for(const [key,titulo] of [['proyecto','Proyecto H'],['libro','Libro de Reservas']]){
     if(r.q.fuente==='libro'&&key==='proyecto'||r.q.fuente==='proyecto_h'&&key==='libro')continue;
-    h+=`<details${r.q.accion==='comparar'?'':' open'}><summary>${titulo} · ${r[key].length}</summary>${r[key].map(fila).join('')||`<p>${key==='libro'&&r.incompleto?'Lectura no disponible.':'Sin coincidencias en esta consulta.'}</p>`}</details>`;
+    h+=`<details${r.q.accion==='comparar'?'':' open'}><summary><strong>${titulo}</strong><span>${r[key].length}</span></summary>${r[key].map(fila).join('')||`<p class="haku-respuesta__vacio">${key==='libro'&&r.incompleto?'Lectura no disponible.':'Sin coincidencias en esta consulta.'}</p>`}</details>`;
    }
    if(r.comparacion.length)h+='<section><h4>Comparación</h4>'+r.comparacion.filter(c=>!r.q.direccion||c.estado===('solo_'+r.q.direccion)||['conflicto','no_determinado'].includes(c.estado)).map(c=>`<p><strong>${labels[c.estado]}</strong> · ${esc(c.libro?.titular||c.proyecto?.titular||'Contexto no determinado')} · Libro: ${esc(c.libro?.numero||'sin número')} · Proyecto H: ${esc(c.proyecto?.numero||'sin número')}</p>`).join('')+'</section>';
   }
-  return h+'<p>Las evidencias sin contexto seguro no prueban ausencia ni identidad. No se ofrecen acciones de guardado.</p></article>';
+  if(!ultimo&&!detalle){
+   const alcance=pendientes?'Se consideran ingresos con check-in acreditado o estadías Hospedadas o Checked Out. ':'';
+   h+=`<details><summary>Criterio de revisión</summary><p class="haku-respuesta__nota">${alcance}La asociación de un BOVE requiere evidencia inequívoca del titular y la estadía.</p></details>`;
+  }
+  return detalle?h:tarjeta(titulo,contexto,h);
  }
  function instalar(){
   const doc=root.document;if(!doc)return;let campo,mensajes;
-  const style=doc.createElement('style');style.textContent='.haku-bove-consulta{border:1px solid #cbded1;border-radius:14px;padding:14px;background:#f6faf7;color:#263e30;overflow-wrap:anywhere}.haku-bove-consulta h3{font-size:17px;margin:0}.haku-bove-consulta p{font-size:12px;line-height:1.5;margin:6px 0}.haku-bove-consulta h4{font-size:13px;margin:14px 0 6px}.haku-bove-item{padding:8px;border:1px solid #dce8df;border-radius:9px;background:white;margin:6px 0;font-size:12px}';doc.head.appendChild(style);
   let ocupado=false;
   const mensaje=(tipo,texto)=>{const el=doc.createElement('div');el.className=`haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`;el.textContent=texto;mensajes.appendChild(el);return el;};
   async function procesar(t){if(ocupado)return;ocupado=true;campo.value='';campo.dispatchEvent(new root.Event('input',{bubbles:true}));mensaje('usuario',t);const el=mensaje('asistente','Consultando BOVE…');

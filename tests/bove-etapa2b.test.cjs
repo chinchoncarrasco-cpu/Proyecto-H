@@ -22,7 +22,7 @@ test('varios números: una búsqueda, una lectura de hoja y un SELECT focalizado
  const r=await B.consultar('busca los BOVE 16968 y 16981',{libro:l,cliente:c,dia});
  assert.equal(l.calls.filter(x=>x[0]==='buscar').length,1);assert.deepEqual(l.calls.find(x=>x[0]==='buscar')[1],['16968','16981']);assert.equal(l.calls.filter(x=>x[0]==='hoja').length,1);
  assert.equal(c.calls.filter(x=>x[0]==='from').length,1);assert.match(c.calls.find(x=>x[0]==='or')[1],/16968/);assert.match(c.calls.find(x=>x[0]==='or')[1],/16981/);assert.equal(r.por_numero.length,2);
- const html=B.renderizar(r);assert.match(html,/BOVE consultados · 2/);
+ const html=B.renderizar(r);assert.match(html,/<h3>BOVE consultados<\/h3>.*>2 números/);
 });
 test('inexistente y ambiguo no contaminan el número coincidente',async()=>{
  const l=libro([e('16968'),e('327',{origen:{hoja:'Sep26',celda:'Z90',fila:90,columna:26}})],[rLibro()]);

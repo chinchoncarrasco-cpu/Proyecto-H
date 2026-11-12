@@ -167,9 +167,39 @@
   return `<p>Total base de alojamiento: <b>${importe(d.total_base)}</b></p>${d.operaciones.map((op,i)=>`<div><strong>Operación de ajuste activa ${i+1}</strong>${op.partes.map(a=>`<p>${esc(a.concepto||'Concepto no disponible')}<br>Tipo: ${esc(a.tipo||'No disponible')} · ${Number(a.signo)===1?'+':Number(a.signo)===-1?'−':'Signo no disponible: '}${importe(a.monto)}</p>${a.bases.some(b=>b.porcentaje!=null||b.base_calculo!=null)?`<details><summary>Porcentaje y base por cargo</summary>${a.bases.map(b=>`<p>Porcentaje: ${b.porcentaje==null?'No disponible':esc(b.porcentaje)+'%'} · Base: ${importe(b.base_calculo)}</p>`).join('')}</details>`:''}${a.cargos_activos?'':'<p>Hay ajustes vinculados a cargos fuera del alojamiento activo consultado; requieren revisión.</p>'}`).join('')}</div>`).join('')}<p>Total final actual: <b>${importe(d.total_ajustado)}</b><br>Nuevo total solicitado: <b>${dinero(objetivo)}</b></p>${d.error?`<p>${esc(d.error)}</p>`:''}${d.discrepancia?'<p>Las lecturas financieras no coinciden. Revisa nuevamente; no se recalculó el total.</p>':''}<p><strong>Requiere definir tratamiento del ajuste antes de modificar.</strong></p>`;
  }
  function renderizarPlanIva(e){const p=e.plan_iva;return `<p>Se conserva la operación IVA exento. ${p.solo_lectura===true?'Vista previa del <b>total final</b>. Guardado bloqueado.':'Confirmas el <b>total final</b>.'}</p><p>Base: ${dinero(p.base_actual)} → <b>${dinero(p.base_nueva)}</b><br>IVA exento: −${dinero(p.iva_actual)} → <b>−${dinero(p.iva_nuevo)}</b><br>Total final: ${dinero(e.total_actual)} → <b>${dinero(p.total_final_esperado)}</b></p><details><summary>Distribución exacta por noche</summary>${p.filas.map(f=>`<p>${esc(f.fecha)} · Base ${dinero(f.base_nueva)} · IVA −${dinero(f.iva_nuevo)}</p>`).join('')}</details>`;}
- function renderizar(p){return `<article class="haku-totales"><h3>${p.items?`${p.estado==='bloqueada'?'Diagnóstico de totales':'Cambiar totales'} · ${p.solicitados||p.items.length} reserva(s)`:'Cambio de total'}</h3><p>${esc(p.mensaje)}</p>${(p.items||[]).map(e=>`<section><strong>CAB ${esc(e.cabana)} · ${esc(e.titular)}</strong><p>${esc(e.ingreso)} → ${esc(e.salida)}</p>${e.plan_iva?renderizarPlanIva(e):e.diagnostico?renderizarDiagnostico(e.diagnostico,e.total_objetivo):`<p>${dinero(e.total_actual)} → <b>${dinero(e.total_objetivo)}</b></p><small>Diferencia: ${e.total_objetivo>=e.total_actual?'+':'−'}${dinero(Math.abs(e.total_objetivo-e.total_actual))}</small>`}${p.estado==='bloqueada'?`<p>${e.error?'⚠ '+esc(e.error):'✓ Sin bloqueo detectado en esta entrada; no se aplicará mientras el lote esté bloqueado.'}</p>`:''}</section>`).join('')}${p.estado==='propuesta'?`<p>Una operación atómica. Si alguna entrada falla, el lote se revierte.</p><div><button type="button" data-total-confirmar>Confirmar ${p.cambios} cambio(s)</button> <button type="button" data-total-cancelar>Cancelar</button></div>`:''}</article>`;}
+ function renderizar(p){
+  const titulos={
+   bloqueada:p.items?'Diagnóstico de totales':'Cambio de total bloqueado',
+   completada:'Totales actualizados',cancelada:'Cambio de total cancelado',
+   sin_cambios:'Totales al día',previsualizacion:'Vista previa de totales'
+  };
+  const titulo=titulos[p.estado]||'Cambiar total de alojamiento';
+  const cantidad=p.solicitados||p.items?.length||0;
+  const contexto=cantidad?`<span class="haku-respuesta__contexto">${cantidad} ${cantidad===1?'reserva':'reservas'}</span>`:'';
+  const aviso=['bloqueada','previsualizacion'].includes(p.estado)?' haku-totales__aviso':'';
+  const casos=(p.items||[]).map(e=>{
+   const estadia=`<header><strong>CAB ${esc(e.cabana)} · ${esc(e.titular)}</strong><span class="haku-respuesta__contexto">${esc(e.ingreso)} → ${esc(e.salida)}</span></header>`;
+   const diferencia=e.total_objetivo-e.total_actual;
+   const detalle=e.plan_iva?renderizarPlanIva(e):e.diagnostico?renderizarDiagnostico(e.diagnostico,e.total_objetivo):
+    `<dl class="haku-totales__montos">
+     <div><dt>Anterior</dt><dd>${dinero(e.total_actual)}</dd></div>
+     <div><dt>${p.estado==='completada'?'Guardado':'Propuesto'}</dt><dd>${dinero(e.total_objetivo)}</dd></div>
+     <div><dt>Diferencia</dt><dd>${diferencia>0?'+':diferencia<0?'−':''}${dinero(Math.abs(diferencia))}</dd></div>
+    </dl>`;
+   const alerta=p.estado==='bloqueada'?`<p class="haku-totales__aviso">${e.error?esc(e.error):'Sin bloqueo detectado en esta entrada. El lote sigue pendiente.'}</p>`:'';
+   return `<section>${estadia}${detalle}${alerta}</section>`;
+  }).join('');
+  const acciones=p.estado==='propuesta'?`<footer class="haku-totales__acciones">
+   <button type="button" data-total-cancelar>Cancelar</button>
+   <button type="button" data-total-confirmar>Confirmar ${p.cambios} ${p.cambios===1?'cambio':'cambios'}</button>
+  </footer>`:'';
+  return `<article class="haku-totales haku-respuesta-compacta">
+   <header class="haku-respuesta__cabecera"><h3>${titulo}</h3>${contexto}</header>
+   <p class="haku-respuesta__nota${aviso}">${esc(p.mensaje)}</p>${casos}${acciones}
+  </article>`;
+ }
  function instalar(){
-  const doc=root.document,style=doc.createElement('style');style.textContent='.haku-totales{border:1px solid #cbded1;border-radius:14px;padding:14px;background:#f6faf7;color:#263e30;font:12px/1.5 system-ui;overflow-wrap:anywhere}.haku-totales h3{font-size:16px;margin:0}.haku-totales section{border:1px solid #dce8df;background:white;border-radius:9px;margin:8px 0;padding:10px}.haku-totales button{font:inherit;border-radius:9px;padding:8px 12px;border:1px solid #b7cec0;margin:4px 0;cursor:pointer}.haku-totales [data-total-confirmar]{background:#295a3d;color:white}.haku-totales button:disabled{opacity:.6;cursor:wait}';doc.head.appendChild(style);let ocupado=false;
+  const doc=root.document;let ocupado=false;
   async function enviar(t,campo,mensajes){if(ocupado)return;ocupado=true;campo.value='';campo.dispatchEvent(new root.Event('input',{bubbles:true}));
    const agregar=(tipo,texto)=>{const el=doc.createElement('div');el.className='haiku-asistente-mensaje haiku-asistente-mensaje--'+tipo;el.textContent=texto;mensajes.appendChild(el);return el;};agregar('usuario',t);const el=agregar('asistente','Preparando vista previa de totales…');
    try{const p=await preparar(t);el.innerHTML=renderizar(p);let activo=false;

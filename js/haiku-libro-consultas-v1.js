@@ -6030,35 +6030,55 @@
 
     function renderizarConsultaLibro(out, result) {
         const q = result.q;
-        if (q.listar || q.libres) { out.textContent = respuesta(result); return; }
-        const rs = result.reservas.filter(r =>
+        if (q.libres) { out.textContent = respuesta(result); return; }
+        const rs = (result.reservas || []).filter(r =>
             (!q.checkedout || r.estado_operativo === 'checked_out') &&
             (!q.pendientes || q.cabana || r.pagos_pendientes.length || [...r.pagos, ...r.pagos_sin_asociacion].some(p => p.bove_pendiente || p.manager_pendiente || p.estado_pago !== 'registrado_en_libro')) &&
             (!q.alertas || q.cabana || r.notas_importantes.length));
-        out.replaceChildren();
+        const card = elemento('article', 'haku-respuesta-compacta haku-libro-lectura');
+        const cabecera = elemento('header', 'haku-respuesta__cabecera');
+        const cantidad = q.listar ? result.hojas.length : rs.length;
+        const unidad = q.listar ? (cantidad === 1 ? 'hoja' : 'hojas') : (cantidad === 1 ? 'reserva' : 'reservas');
+        cabecera.append(elemento('h3', '', q.listar ? 'Hojas del Libro' : 'Reservas del Libro'),
+            elemento('span', 'haku-respuesta__contexto', `${cantidad} ${unidad}`));
+        card.append(cabecera, elemento('p', 'haku-respuesta__nota', `Copia cargada · ${result.archivo}`));
+        out.replaceChildren(card);
         out.className = 'haiku-asistente-mensaje haiku-asistente-mensaje--asistente haku-libro-consulta';
+        if (q.listar) {
+            const hojas = elemento('ul', 'haku-respuesta__etiquetas');
+            result.hojas.forEach(hoja => hojas.append(elemento('li', '', hoja)));
+            card.append(hojas);
+            return;
+        }
+
         const linea = (parent, text, clase = '') => parent.append(elemento('p', clase, text));
-        out.append(elemento('span', 'haku-libro-consulta-sello', 'LIBRO · SÓLO LECTURA'));
-        linea(out, result.archivo, 'haku-libro-consulta-fuente');
-        linea(out, q.desde ? `Consulta: ${q.desde} al ${q.hasta}${q.cabana ? ` · CAB ${q.cabana}` : ''}` : 'Búsqueda por titular.');
-        linea(out, `${rs.length} reserva${rs.length === 1 ? '' : 's'} identificada${rs.length === 1 ? '' : 's'}. Los datos describen la copia cargada, no una actualización en vivo.`);
-        if (q.escribir) linea(out, 'Esta etapa sólo lee y compara. No crearé reservas, pagos ni servicios desde el Libro; primero debemos validar su interpretación.');
+        if (q.desde) {
+            const periodo = q.desde === q.hasta ? fechaBreve(q.desde) : `${fechaBreve(q.desde)} → ${fechaBreve(q.hasta)}`;
+            linea(card, q.cabana ? `CAB ${q.cabana} · ${periodo}` : periodo, 'haku-respuesta__nota');
+        }
+        if (!rs.length) linea(card, 'Sin reservas identificadas para esta consulta.', 'haku-respuesta__vacio');
+        if (q.escribir) linea(card, 'Consulta de solo lectura. Revisa las diferencias antes de preparar cambios.', 'haku-respuesta__nota');
         for (const r of rs) {
-            const card = elemento('article', 'haku-libro-consulta-tarjeta');
-            const head = elemento('header', 'haku-libro-consulta-cabecera');
-            head.append(elemento('strong', '', r.titular), elemento('span', 'haku-libro-consulta-sello', `CAB ${r.cabana}`));
-            card.append(head);
-            const chips = elemento('div', 'haku-libro-consulta-chips');
-            for (const value of [`${r.fecha_checkin} → ${r.fecha_checkout}`, r.tipo_estadia === 'full_day' ? 'Full Day' : `${r.noches} noche${r.noches === 1 ? '' : 's'}`,
-                etiquetas[r.estado_confirmacion] || r.estado_confirmacion, etiquetas[r.estado_operativo] || r.estado_operativo]) chips.append(elemento('span', '', value));
-            card.append(chips);
-            const details = elemento('details', 'haku-libro-consulta-detalles');
+            const details = elemento('details', 'haku-libro-lectura__reserva');
             details.open = rs.length === 1;
-            details.append(elemento('summary', '', 'Ver detalles'));
+            const head = elemento('summary', 'haku-respuesta__fila');
+            const principal = elemento('span', 'haku-respuesta__principal');
+            principal.append(elemento('strong', '', r.titular),
+                elemento('span', 'haku-respuesta__secundario', `${fechaBreve(r.fecha_checkin)} → ${fechaBreve(r.fecha_checkout)}`));
+            const estadia = r.tipo_estadia === 'full_day' ? 'Full Day' : `${r.noches} noche${r.noches === 1 ? '' : 's'}`;
+            head.append(elemento('span', 'haku-respuesta__cab', `CAB ${r.cabana}`), principal,
+                elemento('span', 'haku-respuesta__estado', estadia));
+            details.append(head);
+            const estados = [r.estado_confirmacion, r.estado_operativo].filter(Boolean).map(e => etiquetas[e] || e);
+            if (estados.length) linea(details, [...new Set(estados)].join(' · '), 'haku-respuesta__nota');
             const section = title => { const node = elemento('section', 'haku-libro-consulta-seccion'); node.append(elemento('h4', '', title)); details.append(node); return node; };
-            const guest = section('Datos del huésped'), grid = elemento('div', 'haku-libro-consulta-grid');
+            const guest = section('Datos del huésped'), grid = elemento('dl', 'haku-respuesta__datos');
             for (const [label, value] of [['RUT / documento', r.rut_documento], ['Correo', r.correo], ['Teléfono', r.telefono],
-                ['Adultos', r.adultos], ['Niños', r.ninos], ['Mascotas', r.mascotas]]) agregarDato(grid, label, value ?? 'Sin dato');
+                ['Adultos', r.adultos], ['Niños', r.ninos], ['Mascotas', r.mascotas]]) {
+                const dato = elemento('div', 'haku-respuesta__dato');
+                dato.append(elemento('dt', '', label), elemento('dd', '', String(value ?? 'Sin dato')));
+                grid.append(dato);
+            }
             guest.append(grid);
             const reserva = section('Reserva');
             linea(reserva, `Ingreso al Libro: ${r.fecha_ingreso_libro || 'sin fecha'} · operador ${r.operador || 'sin dato'}.`);
@@ -6078,20 +6098,19 @@
             if (!r.pagos.length && !r.pagos_sin_asociacion.length) linea(pagos, r.cobertura_pagos ? 'El bloque revisado no registra movimientos; no es una certificación de deuda.' : 'No pude verificar el bloque financiero; no puedo concluir que no tenga abonos.');
             if (r.servicios.length) { const servicios = section('Servicios'); r.servicios.forEach(s => linea(servicios, `Servicio: ${s.concepto} · ${s.texto_original}`)); }
             if (r.advertencias.length) { const avisos = section('Advertencias'); r.advertencias.forEach(w => linea(avisos, `Revisar: ${w}`)); }
+            linea(details, `Fuente · ${source(r.coordenadas_origen)}`, 'haku-respuesta__nota');
             card.append(details);
-            linea(card, `Fuente: ${source(r.coordenadas_origen)}`, 'haku-libro-consulta-fuente');
-            out.append(card);
         }
         if (q.aseo || q.cabana) {
-            const aseos = elemento('details', 'haku-libro-consulta-detalles');
+            const aseos = elemento('details', 'haku-libro-lectura__aseos');
             aseos.append(elemento('summary', '', 'Aseo del intervalo consultado'));
-            for (const a of result.aseos) linea(aseos, `${a.fecha} · CAB ${a.cabana} · ${source(a.origen)}: salida ${a.checkout_por || 'no registrada'}; aseo ${a.camarero || 'no registrado'}; ${a.hora_inicio || '?'}–${a.hora_fin || '?'}; IN ${a.ingreso || 'no registrado'}; revisó ${a.revisado_por || 'no registrado'}.`);
-            if (!result.aseos.length) linea(aseos, 'No encontré un registro de aseo para esas fechas; no inferí quién lo hizo.');
-            out.append(aseos);
+            for (const a of result.aseos) linea(aseos, `${a.fecha} · CAB ${a.cabana} · ${source(a.origen)}: salida ${a.checkout_por || 'no registrada'}; aseo ${a.camarero || 'no registrado'}; ${a.hora_inicio || '?'}–${a.hora_fin || '?'}; IN ${a.ingreso || 'no registrado'}; revisó ${a.revisado_por || 'no registrado'}.`, 'haku-respuesta__nota');
+            if (!result.aseos.length) linea(aseos, 'Sin registros de aseo para estas fechas.', 'haku-respuesta__vacio');
+            card.append(aseos);
         }
-        mostrarReservasPorIdentificar(out, result.reservas_por_identificar || []);
-        for (const a of result.anotaciones.filter(a=>a.tipo!=='reserva_por_identificar')) linea(out, `Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`);
-        [...new Set(result.advertencias || [])].forEach(w => linea(out, w));
+        mostrarReservasPorIdentificar(card, result.reservas_por_identificar || []);
+        for (const a of result.anotaciones.filter(a=>a.tipo!=='reserva_por_identificar')) linea(card, `Coincidencia textual sin asociación automática · ${source(a.origen)}: ${a.texto_original}`, 'haku-respuesta__nota');
+        [...new Set(result.advertencias || [])].forEach(w => linea(card, w, 'haku-respuesta__nota'));
     }
 
     // Sólo divide las descripciones ya calculadas para darles jerarquía visual.

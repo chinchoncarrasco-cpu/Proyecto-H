@@ -333,12 +333,12 @@
         const tiposAsumidos = filas.filter(f => f.tipo_asumido);
 
         const card = document.createElement("article");
-        card.className = "haiku-asistente-preview";
+        card.className = "haiku-asistente-preview haku-propuesta-compacta";
         card.dataset.hakuListadoCloudbedsV2 = "1";
 
         const cabecera = document.createElement("div"); cabecera.className = "haiku-asistente-preview-cabecera";
         const titulo = document.createElement("div");
-        const marca = document.createElement("span"); marca.textContent = filas.length > 1 ? "LISTADO CLOUDBEDS · LOTE · NADA GUARDADO" : "LISTADO CLOUDBEDS · NADA GUARDADO";
+        const marca = document.createElement("span"); marca.textContent = "Listado Cloudbeds";
         const nombre = document.createElement("strong"); nombre.textContent = filas.length > 1 ? `${filas.length} reservas detectadas` : (filas[0]?.titular_nombre || "Reserva por revisar");
         titulo.append(marca, nombre);
         const confianza = document.createElement("span"); confianza.className = `haiku-asistente-confianza haiku-asistente-confianza--${lectura?.confianza || "baja"}`; confianza.textContent = `Confianza ${lectura?.confianza || "baja"}`;
@@ -375,8 +375,8 @@
             card.appendChild(bloque);
         });
 
-        const regla = document.createElement("div"); regla.className = "haiku-asistente-preview-observacion";
-        const rl = document.createElement("span"); rl.textContent = "REGLAS DE IMPORTACIÓN";
+        const regla = document.createElement("details"); regla.className = "haiku-asistente-preview-observacion";
+        const rl = document.createElement("summary"); rl.textContent = "Reglas de importación";
         const rp = document.createElement("p"); rp.textContent = "El ID Cloudbeds es opcional. Precio Total ya incluye IVA. Depósito y Saldo Pendiente son sólo informativos y no crean pagos. Teléfono y Móvil se consideran el mismo dato; el número enmascarado se conserva tal como aparece para permitir búsquedas por sus últimos dígitos. Los correos enmascarados no se guardan.";
         regla.append(rl, rp); card.appendChild(regla);
 

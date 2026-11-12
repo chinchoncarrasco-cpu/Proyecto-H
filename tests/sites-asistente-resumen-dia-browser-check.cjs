@@ -8,14 +8,14 @@ const { chromium } = require('playwright');
 
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const navegador = process.env.HAKU_CHROMIUM_PATH || process.env.CHROMIUM_PATH || undefined;
 const capturas = path.join(os.tmpdir(), 'haiku-tareas-hoy-ui');
 fs.mkdirSync(capturas, { recursive: true });
 const server = http.createServer((request, response) => {
     const pathname = new URL(request.url, 'http://localhost').pathname;
     if (pathname === '/') {
         response.setHeader('Content-Type', 'text/html; charset=utf-8');
-        response.end('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/styles.css"><link rel="stylesheet" href="/css/sites-shell-v1.css"><link rel="stylesheet" href="/css/supabase-asistente-v1.css"><link rel="stylesheet" href="/css/sites-asistente-v1.css"></head><body><main style="height:3000px">Página de fondo</main></body></html>');
+        response.end('<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/css/styles.css"><link rel="stylesheet" href="/css/sites-shell-v1.css"><link rel="stylesheet" href="/css/supabase-asistente-v1.css"><link rel="stylesheet" href="/css/sites-asistente-v1.css"><link rel="stylesheet" href="/css/haiku-paleta-v1.css"><link rel="stylesheet" href="/css/haiku-tema-oscuro-v1.css"><link rel="stylesheet" href="/css/haiku-tema-v1.css"></head><body><main style="height:3000px">Página de fondo</main></body></html>');
         return;
     }
     const file = path.resolve(root, '.' + pathname);
@@ -24,7 +24,8 @@ const server = http.createServer((request, response) => {
     catch { response.writeHead(404).end(); }
 });
 
-async function setup(page) {
+async function setup(page, tema = 'claro', webview = false) {
+    await page.clock.install({ time: new Date('2026-09-12T14:00:00Z') });
     await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
     await page.addInitScript(() => {
         window.haikuSesion = { usuario: { id: 'resumen-test' } };
@@ -72,6 +73,14 @@ async function setup(page) {
         };
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.evaluate(({ tema, webview }) => {
+        document.documentElement.dataset.haikuTema = tema;
+        if (webview) {
+            document.documentElement.dataset.hakuMobileAssistant = '1';
+            document.documentElement.classList.add('haku-mobile-assistant-ready');
+        }
+    }, { tema, webview });
+    if (webview) await page.addStyleTag({ content: read('css/haku-mobile-assistant-v1.css') });
     // Carga el puente sin iniciar el refresh/migración propios del tablero Resumen.
     await page.evaluate(() => { window.__sesionPrevia = window.haikuSesion; window.haikuSesion = null; });
     const notas = read('js/supabase-notas-resumen-v1.js');
@@ -79,7 +88,8 @@ async function setup(page) {
     await page.evaluate(() => { window.haikuSesion = window.__sesionPrevia; delete window.__sesionPrevia; });
     await page.addScriptTag({ content: read('js/supabase-asistente-v1.js') });
     await page.addScriptTag({ content: read('js/supabase-asistente-resumen-dia-v1.js') });
-    await page.locator('#haiku-asistente-boton').click();
+    if (webview) await page.evaluate(() => HAIKU_ASISTENTE.abrir());
+    else await page.locator('#haiku-asistente-boton').click();
 }
 
 async function consultar(page, texto, datos) {
@@ -100,7 +110,7 @@ const fila = (numero, tipo) => ({
     ...(tipo === 'salida' ? { salida_estadia_id: `s-${numero}`, salida_titular: `Titular ${numero}` } : {}),
     ...(tipo === 'continua' ? { continua_estadia_id: `c-${numero}`, continua_titular: `Titular ${numero}` } : {})
 });
-const categorias = ['Ingresan', 'Salen', 'Continúan', 'Servicios', 'Pagos', 'Notas de hoy'];
+const categorias = ['Ingresan', 'Salen', 'Continúan', 'Servicios', 'Pagos pendientes'];
 const nota = (campos = {}) => ({
     id: 'nota-1', tipo: 'operativa_resumen', fecha_operacion: '2026-09-12', cabana_id: 'cab-4',
     texto: 'Cama adicional\nCoordinar antes de las 18:00.', creado_en: '2026-09-12T10:00:00Z', ...campos
@@ -108,12 +118,11 @@ const nota = (campos = {}) => ({
 
 async function verificarBloques(vista, contadores) {
     const lecturasAntes = await vista.page().evaluate(() => window.__lecturas.length);
-    assert.deepEqual(await vista.locator('.haku-dia-sites__valor').allInnerTexts(), contadores.map(String));
-    assert.deepEqual(await vista.locator('.haku-dia-sites__etiqueta').allTextContents(), categorias);
-    assert.deepEqual(await vista.locator('.haku-dia-sites__seccion-nombre').allTextContents(), categorias);
+    const notas = await vista.locator('h3').innerText() === 'Tareas de hoy' ? 'Notas de hoy' : 'Notas';
+    assert.deepEqual(await vista.locator('.haku-dia-sites__seccion-nombre').allTextContents(), [...categorias, notas]);
     assert.deepEqual(await vista.locator('.haku-dia-sites__seccion-contador').allTextContents(), contadores.map(String));
     assert.equal(await vista.locator('details[open]').count(), 0, 'los bloques comienzan cerrados');
-    for (let i = 0; i < categorias.length; i++) {
+    for (let i = 0; i < contadores.length; i++) {
         const bloque = vista.locator('details').nth(i);
         const cabecera = bloque.locator('summary');
         await cabecera.click();
@@ -128,36 +137,45 @@ async function verificarBloques(vista, contadores) {
     assert.equal(await vista.page().evaluate(() => window.__lecturas.length), lecturasAntes, 'desplegar reutiliza los datos contados sin otra consulta');
 }
 
-async function verificarDiseno(vista) {
+async function verificarDiseno(vista, tema = 'claro') {
     const layout = await vista.evaluate(el => {
         const card = el.querySelector('.haku-dia-sites__tarjeta');
-        const cajas = [...el.querySelectorAll('.haku-dia-sites__metrica')].map(nodo => {
-            const caja = nodo.getBoundingClientRect();
-            return { x: caja.x, y: caja.y, width: caja.width, height: caja.height };
+        const width = card.clientWidth;
+        const escritorio = innerWidth > 700 && width >= 415 && document.documentElement.dataset.hakuMobileAssistant !== '1';
+        const secciones = [...el.querySelectorAll('.haku-dia-sites__seccion')].map(nodo => {
+            const resumen = nodo.firstElementChild.getBoundingClientRect();
+            return { abierto: nodo.open, ancho: resumen.width, alto: resumen.height, y: resumen.y };
         });
         return {
-            cajas,
-            overflow: card.scrollWidth > card.clientWidth + 1,
+            width, escritorio, secciones,
+            fondo: getComputedStyle(card).backgroundColor,
+            texto: getComputedStyle(card).color,
+            overflow: card.scrollWidth > width + 1,
             paginaOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-            tipografia: [...el.querySelectorAll('.haku-dia-sites__etiqueta, .haku-dia-sites__principal > span')].map(nodo => parseFloat(getComputedStyle(nodo).fontSize)),
+            tipografia: [...el.querySelectorAll('.haku-dia-sites__seccion-nombre, .haku-dia-sites__principal > span')].map(nodo => parseFloat(getComputedStyle(nodo).fontSize)),
             filas: [...el.querySelectorAll('.haku-dia-sites__fila')].map(nodo => ({ border: getComputedStyle(nodo).borderTopWidth, radio: getComputedStyle(nodo).borderRadius }))
         };
     });
     assert.equal(layout.overflow, false, 'tarjeta sin overflow');
     assert.equal(layout.paginaOverflow, false, 'página sin overflow');
-    assert.equal(layout.cajas.length, 6);
-    const primera = layout.cajas[0];
-    for (let i = 0; i < 6; i++) {
-        assert.ok(Math.abs(layout.cajas[i].width - primera.width) <= 1, 'ancho uniforme de contadores');
-        assert.ok(Math.abs(layout.cajas[i].height - primera.height) <= 1, 'alto uniforme de contadores');
-        assert.ok(Math.abs(layout.cajas[i].y - layout.cajas[i < 3 ? 0 : 3].y) <= 1, 'grilla de tres columnas');
+    assert.equal(layout.fondo, tema === 'oscuro' ? 'rgb(27, 38, 33)' : 'rgb(251, 252, 251)');
+    assert.equal(layout.texto, tema === 'oscuro' ? 'rgb(232, 239, 234)' : 'rgb(23, 32, 25)');
+    assert.equal(layout.secciones.length, 6);
+    for (let i = 0; i < layout.secciones.length; i += 2) {
+        const [primera, segunda] = layout.secciones.slice(i, i + 2);
+        if (layout.escritorio && !primera.abierto && !segunda.abierto) {
+            assert.ok(Math.abs(primera.y - segunda.y) <= 1, 'dos columnas para categorías cerradas');
+            assert.ok(Math.abs(primera.ancho + segunda.ancho - layout.width) <= 2);
+        } else {
+            assert.ok(segunda.y > primera.y, 'filas individuales para desplegados y móvil');
+            assert.ok([primera, segunda].every(s => Math.abs(s.ancho - layout.width) <= 1), 'aprovecha todo el ancho');
+        }
     }
-    assert.ok(layout.cajas[3].y > primera.y, 'dos filas');
-    assert.ok(layout.tipografia.every(size => size >= 10), 'texto secundario legible');
+    if (!layout.escritorio) assert.ok(layout.secciones.every(s => s.alto >= 44), 'objetivos táctiles');
+    assert.ok(layout.tipografia.every(size => size >= 11), 'texto secundario legible');
     assert.ok(layout.filas.every(fila => fila.border === '0px' && fila.radio === '0px'), 'filas compactas, sin tarjetas individuales');
     assert.equal(await vista.locator('summary > svg[aria-hidden="true"]').count(), 12, 'icono y chevron por categoría');
-    assert.equal(await vista.locator('.haku-dia-sites__pie > svg[aria-hidden="true"]').count(), 1, 'candado decorativo');
-    assert.match(await vista.locator('.haku-dia-sites__pie').innerText(), /^Consulta de solo lectura\. No modifica reservas, pagos, servicios ni notas\.$/);
+    assert.equal(await vista.locator('.haku-dia-sites__metrica, .haku-dia-sites__pie').count(), 0);
 }
 
 async function capturar(page, vista, nombre) {
@@ -170,7 +188,7 @@ async function capturar(page, vista, nombre) {
 
 (async () => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    const browser = await chromium.launch({ executablePath: edge, headless: true });
+    const browser = await chromium.launch({ executablePath: navegador, headless: true });
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
         const errores = [];
@@ -197,22 +215,16 @@ async function capturar(page, vista, nombre) {
             }]
         };
         const vista = await consultar(page, 'Haku, resumen del día 12 de septiembre de 2026', datos);
-        assert.equal(await vista.locator('.haku-dia-sites__mensaje-usuario').innerText(), 'Haku, resumen del día 12 de septiembre de 2026');
-        assert.equal(await page.locator('#haiku-asistente-titulo').innerText(), 'Tareas de hoy');
-        assert.equal(await page.locator('.haiku-asistente-titulo span').innerText(), 'HAKU · ASISTENTE OPERATIVO');
-        assert.equal(await page.locator('.haku-dia-sites__cabecera-chip').innerText(), 'Solo lectura');
-        assert.equal(await vista.locator('.haku-dia-sites__fecha').innerText(), '12 sep 2026');
-        assert.equal(await vista.locator('.haku-dia-sites__tarjeta-titulos > span').innerText(), 'RESUMEN OPERATIVO');
+        assert.equal(await page.locator('.haiku-asistente-mensaje--usuario').last().innerText(), 'Haku, resumen del día 12 de septiembre de 2026');
+        assert.equal(await page.locator('#haiku-asistente-titulo').innerText(), 'Haku');
+        assert.equal(await vista.locator('time').getAttribute('datetime'), fecha);
+        assert.equal(await vista.locator('time').innerText(), '12 sep 2026');
         assert.equal(await vista.locator('h3').innerText(), 'Tareas de hoy');
-        assert.equal(await vista.locator('.haku-dia-sites__descripcion').innerText(), 'Tu operación del día, ordenada por categoría.');
-        assert.equal(await vista.locator('.haku-dia-sites__ayuda').innerText(), 'Despliega una categoría para ver el detalle.');
         await verificarDiseno(vista);
         assert.equal(await vista.locator('details[open]').count(), 0);
-        const pagosAcento = await vista.locator('.haku-dia-sites__metrica--pagos').evaluate(el => getComputedStyle(el).backgroundColor);
-        assert.equal(pagosAcento, 'rgb(255, 242, 223)', 'acento ámbar de Sites');
-        assert.equal(await vista.locator('.haku-dia-sites__alerta').innerText(), '1 pago pendiente · $16.000 CLP');
-        assert.equal(await vista.locator('.haku-dia-sites__alerta > svg').count(), 1);
-        assert.equal(await vista.locator('.haku-dia-sites__alerta').evaluate(el => getComputedStyle(el).backgroundColor), pagosAcento);
+        const pagoResumen = vista.locator('.haku-dia-sites__seccion--pagos > summary');
+        assert.equal(await pagoResumen.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 245, 229)', 'acento ámbar');
+        assert.equal(await pagoResumen.locator('.haku-dia-sites__importe').innerText(), '$16.000 CLP');
         await capturar(page, vista, '01-inicial-cerrada');
         const serviciosBloque = vista.locator('details').nth(3);
         await serviciosBloque.locator('summary').click();
@@ -266,7 +278,7 @@ async function capturar(page, vista, nombre) {
         assert.match(await vista.innerText(), /CAB 5\s+Servicio real\s+Masaje\s+17:00\s+Pendiente/);
         assert.doesNotMatch(await vista.innerText(), /Cancelado|No show/);
         assert.match(await vista.innerText(), /Cobro check-in pendiente\s+\$16\.000/);
-        assert.match(await vista.locator('.haku-dia-sites__alerta').innerText(), /1 pago pendiente.*\$16\.000/);
+        assert.equal(await pagoResumen.locator('.haku-dia-sites__importe').innerText(), '$16.000 CLP');
         const notasVisibles = vista.locator('.haku-dia-sites__fila--nota');
         assert.deepEqual(await notasVisibles.locator('.haku-dia-sites__cab').allInnerTexts(), ['CAB 7', 'CAB 4']);
         assert.equal(await notasVisibles.first().locator('.haku-dia-sites__principal > span').innerText(), nota().texto);
@@ -279,7 +291,6 @@ async function capturar(page, vista, nombre) {
         assert.equal(await page.locator('#haku-resumen-dia-v1-css').count(), 0, 'sin CSS legacy inyectado');
         assert.equal(await vista.locator('.haku-dia-sites__tarjeta').count(), 1, 'Sites desde el primer render');
         assert.doesNotMatch(await vista.innerText(), /Vista visual|En Haku real|datos de muestra|prototipo|demostración/i);
-        assert.match(await vista.locator('.haku-dia-sites__pie').innerText(), /Consulta de solo lectura/);
         await page.screenshot({ path: path.join(os.tmpdir(), 'haku-resumen-dia-sites-desktop.png') });
 
         const vacio = await consultar(page, 'Haku, resumen del día 13 de septiembre de 2026', { operacion: [fila(2, 'salida')], servicios: [], pagos: [] });
@@ -288,10 +299,11 @@ async function capturar(page, vista, nombre) {
         await vacio.locator('details[open]').evaluateAll(nodos => nodos.forEach(nodo => { nodo.open = false; }));
         await vacio.locator('details').first().locator('summary').click();
         await capturar(page, vacio, '05-categoria-vacia');
-        assert.equal(await vacio.locator('.haku-dia-sites__alerta').count(), 0);
-        assert.equal(await vacio.locator('.haku-dia-sites__metrica--pagos').count(), 0, 'sin acento de pagos si no hay pendientes');
+        assert.equal(await vacio.locator('h3').innerText(), 'Tareas de mañana');
+        assert.equal(await vacio.locator('.haku-dia-sites__seccion--pagos').count(), 0, 'sin acento de pagos si no hay pendientes');
 
         const sinDatos = await consultar(page, 'Haku, resumen del día 15 de septiembre de 2026', { operacion: [], servicios: [], pagos: [] });
+        assert.equal(await sinDatos.locator('h3').innerText(), 'Operación del día');
         await verificarBloques(sinDatos, [0, 0, 0, 0, 0, 0]);
         await verificarDiseno(sinDatos);
         assert.equal(await sinDatos.locator('.haku-dia-sites__tarjeta > .haku-dia-sites__vacio').innerText(), 'No encontré movimientos operativos para esta fecha.');
@@ -343,7 +355,7 @@ async function capturar(page, vista, nombre) {
         await verificarBloques(sinCabana, [0, 0, 0, 1, 1, 0]);
         assert.equal(await sinCabana.locator('.haku-dia-sites__cab').count(), 0, 'sin badge si no hay cabaña');
         assert.match(await sinCabana.locator('details').nth(3).innerText(), /Masaje\s+Sin hora\s+Realizado · Cortesía/);
-        assert.equal(await sinCabana.locator('.haku-dia-sites__alerta').innerText(), '1 pago pendiente · $90.000 CLP');
+        assert.equal(await sinCabana.locator('.haku-dia-sites__importe').innerText(), '$90.000 CLP');
         for (const width of [390, 320]) {
             await page.setViewportSize({ width, height: 844 });
             await verificarDiseno(sinCabana);
@@ -388,16 +400,13 @@ async function capturar(page, vista, nombre) {
 
         await page.setViewportSize({ width: 390, height: 844 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), true);
-        assert.equal(await largo.locator('.haku-dia-sites__metrica').count(), 6);
+        assert.equal(await largo.locator('.haku-dia-sites__seccion-contador').count(), 6);
         assert.equal(await page.evaluate(() => {
             const card = document.querySelector('.haku-dia-sites:last-child .haku-dia-sites__tarjeta');
             return card.scrollWidth <= card.clientWidth + 1;
         }), true);
         await page.screenshot({ path: path.join(os.tmpdir(), 'haku-resumen-dia-sites.png') });
-        await page.evaluate(() => document.getElementById('haiku-asistente-mensajes').appendChild(document.createElement('div')));
-        await page.waitForFunction(() => document.getElementById('haiku-asistente-titulo').textContent === 'Haku');
-        await page.evaluate(() => document.getElementById('haiku-asistente-mensajes').lastElementChild.remove());
-        await page.waitForFunction(() => document.getElementById('haiku-asistente-titulo').textContent === 'Tareas de hoy');
+        assert.equal(await page.locator('#haiku-asistente-titulo').innerText(), 'Haku');
         await page.locator('#haiku-asistente-cerrar').click();
         assert.equal(await page.locator('#haiku-asistente-panel').isVisible(), false);
         assert.deepEqual([...new Set((await page.evaluate(() => window.__lecturas)).map(x => x.nombre))].sort(),
@@ -405,16 +414,27 @@ async function capturar(page, vista, nombre) {
         assert.deepEqual(await page.evaluate(() => window.__escrituras), []);
         assert.equal(errores.length, 0, errores.join('\n'));
 
+        const oscura = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+        await setup(oscura, 'oscuro');
+        const resumenOscuro = await consultar(oscura, 'Haku, resumen de hoy', datos);
+        await verificarDiseno(resumenOscuro, 'oscuro');
+        assert.equal(await resumenOscuro.locator('.haku-dia-sites__seccion--pagos summary').evaluate(el => getComputedStyle(el).backgroundColor),
+            'rgb(57, 43, 28)');
+        await capturar(oscura, resumenOscuro, 'escritorio-oscuro');
+        await oscura.close();
+
         const movil = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         try {
             const paginaTactil = await movil.newPage();
-            await setup(paginaTactil);
+            await setup(paginaTactil, 'oscuro', true);
             const vistaTactil = await consultar(paginaTactil, 'Haku, resumen del día 14 de septiembre de 2026', { operacion: muchos, servicios: [], pagos: [] });
-            await verificarDiseno(vistaTactil);
             await vistaTactil.locator('details').first().locator('summary').tap();
             assert.equal(await vistaTactil.locator('details').first().evaluate(el => el.open), true);
+            await verificarDiseno(vistaTactil, 'oscuro');
+            await capturar(paginaTactil, vistaTactil, 'movil-oscuro');
             await vistaTactil.locator('details').first().locator('summary').tap();
             assert.equal(await vistaTactil.locator('details').first().evaluate(el => el.open), false);
+            await verificarDiseno(vistaTactil, 'oscuro');
             await vistaTactil.locator('details').first().locator('summary').tap();
             const mensajesMovil = paginaTactil.locator('#haiku-asistente-mensajes');
             await mensajesMovil.evaluate(el => { el.scrollTop = 0; });
@@ -430,7 +450,7 @@ async function capturar(page, vista, nombre) {
             await paginaTactil.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 20);
             assert.equal(await paginaTactil.evaluate(() => window.scrollY), 0);
         } finally { await movil.close(); }
-        console.log('Tareas de hoy: UI inicial/Servicios/Pagos/Notas/vacío/error, 3×2, iconos, alineación, ámbar, footer, 390/320px, listas/contadores, teclado/touch y regresiones OK; sin escrituras ni red externa');
+        console.log('Tareas de hoy: Servicios/Pagos/Notas/vacío/error, temas, ancho útil, 390/320px, teclado/touch y regresiones OK; sin escrituras ni red externa');
         console.log(`Capturas de revisión: ${capturas}`);
     } finally {
         await browser.close();

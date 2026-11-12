@@ -7,10 +7,13 @@ const leer=(carpeta,nombre)=>fs.readFileSync(path.join(raiz,carpeta,nombre),"utf
 const scripts=[
     "haiku-libro-semantica-v1","haiku-reserva-estado-manual-v1","haiku-asistente-lenguaje-v1",
     "haiku-asistente-operaciones-v1","supabase-asistente-operaciones-v1","haiku-ayuda-v1","haiku-asistente-acciones-v1",
-    "supabase-asistente-bove-escritura-v1",
+    "supabase-asistente-bove-escritura-v1","supabase-asistente-bove-consultas-v1",
+    "supabase-asistente-servicios-cortesia-v1","supabase-asistente-servicios-cancelacion-v1",
+    "supabase-asistente-servicios-reactivacion-v1","supabase-asistente-servicios-realizado-v1",
     "supabase-asistente-totales-v1","haiku-libro-consultas-v1","sites-resumen-servicio-v1",
     "supabase-asistente-v1","supabase-asistente-pagos-nocturnos-v1","supabase-asistente-pago-existente-v2",
-    "supabase-asistente-consulta-ingresos-v1","supabase-asistente-resumen-dia-v1",
+    "supabase-asistente-estados-v1","supabase-asistente-aseo-v1","supabase-asistente-aseo-contexto-v1",
+    "supabase-asistente-consulta-ingresos-v1","supabase-asistente-resumen-dia-v1","supabase-asistente-listado-cloudbeds-v2",
     "supabase-asistente-disponibilidad-v1","supabase-asistente-confirmadas-sin-abono-v1"
 ];
 
@@ -25,7 +28,7 @@ function fuentes(tema) {
         actualizado_en:"2026-11-12T12:00:00+00:00",telefono_contacto:"+56911110000",correo_contacto:"reserva@example.com"};
     const dos={...uno,id:"22222222-2222-4222-8222-222222222222",codigo_haiku:"H-20261112-10-FEDCBA"};
     const estadia=(id,reserva,numero)=>({
-        id,reserva_id:reserva.id,cabanas:{numero},reservas:reserva,estado_estadia:"confirmada",
+        id,reserva_id:reserva.id,cabana_id:"cab"+numero,cabanas:{numero},reservas:reserva,estado_estadia:"confirmada",
         fecha_ingreso:"2026-11-12",fecha_salida:"2026-11-13",tipo_estadia:"alojamiento",
         adultos:2,ninos:0,mascotas:0,noches:[{fecha:"2026-11-12",tarifa:160000}]
     });
@@ -35,7 +38,10 @@ function fuentes(tema) {
         reserva_estadias:[cab3,cab10],
         reservas:[{...uno,estadias:[cab3]},{...dos,estadias:[cab10]}],
         vista_saldos_alojamiento_reserva:[{reserva_id:uno.id,total_alojamiento:160000,saldo_alojamiento:0},{reserva_id:dos.id,total_alojamiento:160000,saldo_alojamiento:0}],
-        vista_estado_cargos:[],aseos:[],
+        vista_estado_cargos:[],
+        aseos:[],
+        revision_items:[{revision_id:"revision",estado:"ok",checklist_items:{nombre:"Toallas",categoria:"Baño"}}],
+        solicitudes:[],usuarios:[],
         cabanas:[{id:"cab3",numero:3,activa:true,precio_base:160000},{id:"cab4",numero:4,activa:true,precio_base:170000}],
         revisiones_cabana:[{id:"revision",cabana_id:"cab3",fecha:"2026-11-12",estado:"en_proceso",resultado:null,
             tipo_revision:"aseo_express",actualizado_en:uno.actualizado_en}],
@@ -64,10 +70,62 @@ function fuentes(tema) {
         fechaHoraSantiagoAISO:(dia,hora)=>dia+"T"+hora+":00-03:00",
         horaSantiago:t=>t?.slice(11,16)
     };
+    const candidato = {reserva_id:uno.id,estadia_id:cab3.id,titular_nombre:titular,cabana_numero:3,
+        fecha_ingreso:"2026-11-12",fecha_salida:"2026-11-13",estado_estadia:"confirmada",estado_reserva:"confirmada",
+        total_alojamiento:160000,pagado_alojamiento:0,saldo_alojamiento:160000,tipo_estadia:"alojamiento",
+        telefono_contacto:uno.telefono_contacto,codigo_haiku:uno.codigo_haiku,apta:true};
+    const extraida = {titular_nombre:"Ana Pérez",fecha_llegada:"2026-11-13",fecha_salida:"2026-11-14",tipo_estadia:"alojamiento",
+        cabana:4,adultos:2,ninos:0,noches:1,cloudbeds_id:"TEST0001",monto_total:170000};
+    const pagoLeido = {monto:30000,medio:"efectivo",moneda:"CLP",fecha:"2026-11-12",detectado:true};
+    window.cargarRespuestasDePrueba=()=>{
+        prueba.respuestas=true;
+        tablas.aseos.push({id:"aseo",fecha:"2026-11-12",cabana_id:"cab3",estado:"completado",
+            encargado_nombre:"María Paz",revisor_nombre:"Rosa Vega",iniciado_en:"2026-11-12T13:00:00Z",
+            completado_en:"2026-11-12T14:30:00Z",observaciones:"Dejar dos batas."});
+        tablas.reservas[0].bove_cierre="16989";
+        const huespedAnterior={id:"55555555-5555-4555-8555-555555555555",titular_nombre:"Persona Anterior",estado_reserva:"checked_out"};
+        const estadiaAnterior={...estadia("66666666-6666-4666-8666-666666666666",huespedAnterior,3),
+            estado_estadia:"checked_out",fecha_ingreso:"2026-11-11",fecha_salida:"2026-11-12"};
+        tablas.reservas.push({...huespedAnterior,estadias:[estadiaAnterior]});
+        tablas.reserva_estadias.push(estadiaAnterior);
+        window.HAIKU_LIBRO_RESERVA_V1={
+            listo:async()=>{},estado:()=>({cargado:true,nombre:"Libro de prueba.xlsx",generacion:1}),
+            listarHojas:()=>["Nov26","Dic26"],
+            consultarHoja:async hoja=>({reservas:hoja==="Nov26"?[{
+                titular:"Ana Pérez",cabana:3,fecha_checkin:"2026-11-13",fecha_checkout:"2026-11-14",
+                noches:1,fechas_ocupadas:["2026-11-13"],adultos:2,estado_confirmacion:"confirmada",
+                pagos:[],pagos_pendientes:[],pagos_sin_asociacion:[],notas_importantes:["Dejar dos batas"],
+                servicios:[{concepto:"Tinaja",texto_original:"Tónel 20:00"}],advertencias:[],
+                coordenadas_origen:{hoja,celda:"M7"}
+            }]:[],aseos:[{fecha:"2026-11-12",cabana:3,camarero:"María Paz"}],
+                cobertura:{geometria:true},anotaciones:[],advertencias:[]})
+        };
+        window.HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1={horariosDisponibles:async tipo=>{
+            if (prueba.errorTinaja) throw Error("Agenda temporalmente no disponible.");
+            return tipo==="tonel"?[{inicio:"18:00",fin:"19:00"},{inicio:"20:00",fin:"21:00"}]:[];
+        }};
+    };
     window.haikuSupabase={
         auth:{onAuthStateChange:()=>({}),getSession:async()=>({data:{session:{user:{id:"usuario"}}}})},
         functions:{invoke:async (nombre,{body})=>{
             prueba.edge.push({nombre,body});
+            if (prueba.respuestas) {
+                if (nombre==="haiku-asistente-reserva") {
+                    const reserva=/full day/i.test(body.mensaje)?{...extraida,tipo_estadia:"full_day",fecha_salida:extraida.fecha_llegada,noches:0}:extraida;
+                    const reservas=/dos reservas/i.test(body.mensaje)?[{reserva},{reserva:{...reserva,titular_nombre:"Rosa Vega",cabana:5,cloudbeds_id:"TEST0002"}}]:undefined;
+                    return {data:{ok:true,preview:{confianza:"alta",reserva,reservas}}};
+                }
+                if (nombre.startsWith("haiku-asistente-pago-existente")) {
+                    const entrada={reserva:{titular_nombre:titular,cabana:3},pagos:[pagoLeido]};
+                    const reservas=/lote|estos pagos/i.test(body.mensaje)?[entrada,{...entrada,reserva:{titular_nombre:titular,cabana:10}}]:[entrada];
+                    return {data:{ok:true,preview:{tipo_operacion:"registrar_pago",confianza:"alta",reservas}}};
+                }
+                if (nombre==="haiku-asistente-listado-reservas-cloudbeds-v2") return {data:{ok:true,lectura:{
+                    aplica:true,confianza:"alta",reservas:[{nombre:"Ana",apellido:"Pérez",habitacion_codigo:"CAB 4",
+                        categoria_habitacion:"Alojamiento",check_in:"2026-11-13",check_out:"2026-11-14",
+                        precio_total:170000,adultos:2,estado:"Confirmada"}]
+                }}};
+            }
             return {error:{message:"Analizador aislado"}};
         }},
         rpc:async (nombre,args)=>{
@@ -79,7 +137,9 @@ function fuentes(tema) {
                 numero:3,estado_operativo:"libre-ingresa",ingreso_reserva_id:uno.id,ingreso_estadia_id:cab3.id
             }]};
             if (nombre==="haiku_capacidad_totales_v1") return {data:{version:"total1_financiero_v32",writer_disponible:true,servicios_separados:true}};
-            if (nombre==="haiku_cabanas_disponibles" || nombre==="haiku_confirmadas_sin_abono_asistente") return {data:[]};
+            if (nombre==="haiku_cabanas_disponibles") return {data:prueba.respuestas?[{numero:4},{numero:8}]:[]};
+            if (nombre==="haiku_confirmadas_sin_abono_asistente") return {data:prueba.respuestas?[candidato]:[]};
+            if (nombre==="haiku_buscar_checkins_fecha_asistente" || nombre==="haiku_buscar_reservas_pago_asistente") return {data:[candidato]};
             if (nombre==="haiku_editar_reserva_asistente_v1") return {data:{reserva_id:args.p_reserva_id}};
             if (nombre==="haiku_cambiar_estado_reserva_manual_v1") return {data:{ok:true,estado:args.p_estado}};
             if (nombre==="haiku_pago_asistente_v1") return {data:{ok:true,pago_id:args.p_pago_id}};
@@ -101,8 +161,10 @@ function fuentes(tema) {
             const datos=()=>tablas[tabla].filter(f=>filtros.every(p=>p(f)));
             let mutacion;
             const q={
-                select:()=>q,order:()=>q,limit:()=>q,
+                select:()=>q,order:()=>q,limit:()=>q,or:()=>q,
                 eq(k,v){filtros.push(f=>valor(f,k)===v);return q;},
+                ilike(k,v){filtros.push(f=>String(valor(f,k)).toLowerCase().includes(v.replaceAll("%","").toLowerCase()));return q;},
+                lt(k,v){filtros.push(f=>valor(f,k)<v);return q;},
                 neq(k,v){filtros.push(f=>valor(f,k)!==v);return q;},
                 in(k,v){filtros.push(f=>v.includes(valor(f,k)));return q;},
                 lte(k,v){filtros.push(f=>coincide(f,k,x=>x<=v));return q;},
@@ -137,7 +199,7 @@ async function abrir(browser,ancho,tema,webview=false) {
         const fuente=new DOMParser().parseFromString(html,"text/html");
         document.body.append(document.importNode(fuente.getElementById("resumen-servicio-modal"),true));
     },leer("","index.html"));
-    for (const css of ["supabase-asistente-v1","haiku-paleta-v1","sites-asistente-v1","haiku-tema-oscuro-v1","haiku-tema-v1"])
+    for (const css of ["supabase-asistente-v1","supabase-haku-reconciliacion-v1","haiku-paleta-v1","sites-asistente-v1","haiku-tema-oscuro-v1","haiku-tema-v1"])
         await page.addStyleTag({content:leer("css",css+".css")});
     if (webview) {
         await page.evaluate(()=>{
@@ -329,10 +391,132 @@ async function operaciones(browser,ancho,tema) {
     } finally {await page.close();}
 }
 
+async function comprobarTarjeta(tarjeta, tema) {
+    await tarjeta.waitFor({ state:"visible",timeout:5000 });
+    const estilo=await tarjeta.evaluate(el=>{
+        const rect=el.getBoundingClientRect();
+        const chat=el.closest(".haiku-asistente-mensajes");
+        const css=getComputedStyle(chat);
+        const ancho=chat.clientWidth-parseFloat(css.paddingLeft)-parseFloat(css.paddingRight);
+        const luminosidad=color=>{
+            const componentes=color.match(/[\d.]+/g).slice(0,3).map(x=>Number(x)/255);
+            const lineal=componentes.map(x=>x<=.04045?x/12.92:((x+.055)/1.055)**2.4);
+            return .2126*lineal[0]+.7152*lineal[1]+.0722*lineal[2];
+        };
+        const estilo=getComputedStyle(el);
+        const titulo=el.querySelector("h3, .haiku-asistente-preview-cabecera strong");
+        const texto=luminosidad(getComputedStyle(titulo || el).color);
+        const fondo=luminosidad(estilo.backgroundColor);
+        return {margen:Math.abs(rect.width-ancho),desborde:el.scrollWidth>el.clientWidth+1,
+            fondo:estilo.backgroundColor,contraste:(Math.max(texto,fondo)+.05)/(Math.min(texto,fondo)+.05)};
+    });
+    assert.ok(estilo.margen<=2, `aprovecha el ancho del panel: ${estilo.margen}`);
+    assert.equal(estilo.desborde,false);
+    assert.equal(estilo.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
+    assert.ok(estilo.contraste>=4.5,`contraste del encabezado: ${estilo.contraste}`);
+}
+
+async function respuestas(browser, ancho, tema, webview) {
+    const {page,errores}=await abrir(browser,ancho,tema,webview);
+    const campo=page.locator("#haiku-asistente-texto");
+    const boton=page.locator("#haiku-asistente-enviar");
+    const chat=page.locator("#haiku-asistente-mensajes");
+    const enviar=async orden=>{await campo.fill(orden);await boton.click();};
+    const vista=async (orden,selector,texto)=>{
+        const tarjetas=chat.locator(selector);
+        const previas=await tarjetas.count();
+        await enviar(orden);
+        const tarjeta=tarjetas.nth(previas);
+        await comprobarTarjeta(tarjeta,tema);
+        if(texto) assert.match(await tarjeta.innerText(),texto,orden);
+        return tarjeta;
+    };
+    const revisarCuadricula=async (tarjeta,selector,columnasWeb=2)=>{
+        const columnas=await tarjeta.locator(selector).first().evaluate(el=>getComputedStyle(el).gridTemplateColumns);
+        assert.equal(columnas.split(" ").length,webview?1:columnasWeb);
+    };
+    const png={name:"captura-de-prueba.png",mimeType:"image/png",buffer:Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC5sAAAAASUVORK5CYII=","base64")};
+    try {
+        await page.evaluate(()=>cargarRespuestasDePrueba());
+        for (const [consulta,tipo] of [["dame los ingresos de hoy","ingresan"],["pásame las salidas de mañana","salen"],
+            ["¿qué reservas continúan hoy?","continuan"]]) {
+            const tarjeta=await vista(`Haku, ${consulta}`,`.haku-operacion-card--${tipo}`,/Inés Lucía Rojas Vera/);
+            assert.equal(await tarjeta.locator(".haku-respuesta__fila").count(),1);
+            assert.match(await tarjeta.locator(".haku-respuesta__contexto").innerText(),/1 reserva$/);
+        }
+        await vista("Haku, ¿qué cabañas quedan libres mañana?",".haku-disponibilidad-card",/CAB 4\s+CAB 8/);
+        const tinajas=await vista("Haku, pásame los horarios de las tinajas de hoy",".haku-disponibilidad-card--servicio",/18:00–19:00/);
+        await revisarCuadricula(tinajas,".haku-disponibilidad-servicios");
+        assert.match(await tinajas.innerText(),/Jacuzzi[\s\S]*Sin horarios disponibles/);
+        await page.evaluate(()=>{prueba.errorTinaja=true;});
+        await enviar("Haku, ¿qué horas tiene libres el Tónel mañana?");
+        await chat.getByText("Agenda temporalmente no disponible.",{exact:true}).waitFor({timeout:5000});
+        const confirmadas=await vista("Haku, muéstrame las reservas confirmadas sin abono",".haku-confirmadas-sin-abono",/Saldo pendiente \$160\.000/);
+        await confirmadas.locator("summary").click();
+        assert.match(await confirmadas.innerText(),/Reserva Haiku[\s\S]*H-20261112-03-ABCDEF/);
+
+        await vista("Haku, ¿quién hizo el aseo de CAB 3 hoy?",".haku-aseo-card",/María Paz/);
+        await vista("Haku, checklist de aseo express de CAB 3 hoy",".haku-aseo-card",/Toallas/);
+        await vista("Haku, compara el aseo de CAB 3 el 12/11/2026",".haku-aseo-card",/Proyecto H[\s\S]*Libro/);
+        await vista("Haku, ¿quién estuvo antes que Inés Lucía Rojas Vera en CAB 3?",".haku-aseo-card",/Persona Anterior/);
+        await vista("Haku, ¿quién revisó el aseo después del check-out de Persona Anterior en CAB 3?",
+            "[data-haku-aseo-contexto]",/Rosa Vega/);
+        await vista("Haku, dime detalles de esa revisión","[data-haku-aseo-contexto]",/Dejar dos batas/);
+
+        await vista("Haku, busca BOVE 16989 en Proyecto H",".haku-bove-consulta",/16989[\s\S]*Inés Lucía Rojas Vera/);
+        const varios=await vista("Haku, busca BOVE 16989 y 18000 en Proyecto H",".haku-bove-consulta",/2 números/);
+        assert.equal(await varios.locator(":scope > details").count(),2);
+        await varios.locator(":scope > details > summary").first().click();
+        assert.match(await varios.innerText(),/Inés Lucía Rojas Vera/);
+        await vista("Haku, ¿cuál es el último BOVE?",".haku-bove-consulta",/mayor número observado 16989/i);
+        await vista("Haku, ¿qué BOVE están pendientes hoy?",".haku-bove-consulta",/BOVE pendientes/);
+        await vista("Haku, compara los BOVE del Libro con Proyecto H",".haku-bove-consulta",/Libro de Reservas/);
+        await vista("Libro: lista las hojas",".haku-libro-lectura",/Nov26\s+Dic26/);
+        const libro=await vista("Libro: CAB 3 el 13/11/2026",".haku-libro-lectura",/Ana Pérez/);
+        await revisarCuadricula(libro,".haku-respuesta__datos");
+        assert.match(await libro.innerText(),/Tónel 20:00[\s\S]*Nov26!M7/);
+        await vista("Libro: CAB 3 el 18/11/2026",".haku-libro-lectura",/Sin reservas identificadas/);
+
+        const total=await vista("Haku, cambia el precio del CAB 10 de Inés Rojas de hoy a CLP 180.000",".haku-totales",/Propuesto[\s\S]*180\.000/);
+        await revisarCuadricula(total,".haku-totales__montos",3);
+        await total.locator("[data-total-cancelar]").click();
+        assert.match(await total.innerText(),/Cambio de total cancelado/);
+
+        const previa=".haku-propuesta-compacta";
+        const reserva=await vista("Haku, prepara una reserva para Ana Pérez del 13 al 14 de noviembre de 2026 en CAB 4 para 2 adultos",previa,/Ana Pérez/);
+        await revisarCuadricula(reserva,".haiku-asistente-preview-grid");
+        assert.equal(await reserva.getByRole("button",{name:"Confirmar y crear"}).isEnabled(),true);
+        const fullDay=await vista("Haku, crea un Full Day para Ana Pérez el 13/11/2026 en CAB 4 para 2 adultos",previa,/Full Day[\s\S]*Requisitos para guardar/);
+        assert.equal(await fullDay.getByRole("button",{name:"Vista previa de Full Day"}).isDisabled(),true);
+        await vista("Haku, prepara estas dos reservas. Ana Pérez, CAB 4, 13 al 14/11/2026. Rosa Vega, CAB 5, 13 al 14/11/2026.",previa,/2 reservas detectadas/);
+        await vista("Haku, marca como hospedadas las reservas que ingresan hoy en CAB 3",previa,/Estado actual[\s\S]*Nuevo estado\s+Hospedado/);
+        await vista("Haku, registra un abono de $30.000 en efectivo pagado hoy por Inés Rojas, CAB 3",previa,/\$30\.000/);
+        await vista("Haku, carga estos pagos a reservas existentes: Inés Rojas CAB 3 $30.000 en efectivo e Inés Rojas CAB 10 $30.000 en efectivo",
+            previa,/2 reservas por revisar/);
+
+        const archivos=page.locator("#haiku-asistente-archivos");
+        await archivos.setInputFiles(png);
+        await vista("Haku, revisa esta captura de una reserva",previa,/Ana Pérez/);
+        await archivos.setInputFiles(png);
+        const listado=await vista("Haku, lee este listado de reservas de Cloudbeds","[data-haku-listado-cloudbeds-v2]",/Precio Total/);
+        await listado.getByText("Reglas de importación",{exact:true}).click();
+        assert.match(await listado.innerText(),/Depósito y Saldo Pendiente son sólo informativos/);
+
+        assert.equal(await page.evaluate(()=>prueba.rpc.some(x=>/hospedar_lote|cambiar_totales_lote|registrar_abonos|crear_reserva/.test(x.nombre))),false);
+        assert.deepEqual(await page.evaluate(()=>prueba.tablas),[]);
+        assert.deepEqual(errores,[]);
+    } finally {await page.close();}
+}
+
 (async()=>{
     const browser=await chromium.launch({executablePath:process.env.HAKU_CHROMIUM_PATH || undefined,headless:true});
     try {
         await comandos(browser);
+        for (const tema of ["claro","oscuro"]) {
+            await respuestas(browser,1280,tema,false);
+            await respuestas(browser,390,tema,true);
+        }
         for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await ayuda(browser,ancho,tema);
         for (const tema of ["claro","oscuro"]) await ayuda(browser,390,tema,true);
         for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await operaciones(browser,ancho,tema);
