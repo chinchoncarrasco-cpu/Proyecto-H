@@ -252,6 +252,13 @@ async function ayuda(browser,ancho,tema,webview=false) {
             nombre:"haiku_cabanas_disponibles",
             args:{p_fecha_ingreso:"2026-11-13",p_fecha_salida:"2026-11-14",p_tipo_estadia:"alojamiento"}
         }]);
+        await panel.getByRole("button",{name:"Consultar otra fecha",exact:true}).click();
+        const otraFecha=panel.getByRole("form",{name:"Consultar otra fecha"});
+        assert.equal(await otraFecha.getByLabel("Fecha",{exact:true}).inputValue(),"");
+        await otraFecha.getByLabel("Fecha",{exact:true}).fill("14/11/2026");
+        await otraFecha.getByRole("button",{name:"Enviar a Haku"}).click();
+        await page.locator(".haku-disponibilidad-card").nth(1).waitFor();
+        assert.equal(await page.evaluate(()=>prueba.rpc[1].args.p_fecha_ingreso),"2026-11-14");
         if (escritorio) {
             const nav=panel.getByRole("navigation",{name:"Categorías de ayuda"});
             assert.equal(await nav.getByRole("button").count(),8);
@@ -270,20 +277,66 @@ async function ayuda(browser,ancho,tema,webview=false) {
         await pagos.waitFor();
         await buscador.fill("reembolso");
         await panel.getByText("Preparar y registrar un reembolso",{exact:true}).waitFor({state:"visible"});
-        await buscador.fill("ingresaservicio");
-        const ejemplo=panel.getByRole("button",{name:/ingresaservicio tinaja/});
-        await ejemplo.waitFor({state:"visible"});
-        await ejemplo.press("Enter");
+        await buscador.fill("abrir ficha o ubicar una reserva para editar");
+        const buscar=panel.getByRole("button",{name:"Buscar por titular, cabaña y fecha",exact:true});
+        await campo.fill("Borrador propio");
+        await buscar.click();
+        const ficha=panel.getByRole("form",{name:"Buscar por titular, cabaña y fecha"});
+        const titular=ficha.getByLabel("Titular",{exact:true});
+        assert.equal(await titular.evaluate(n=>n===document.activeElement),true);
+        assert.deepEqual(await ficha.locator("input").evaluateAll(nodos=>nodos.map(n=>n.value)),["","",""]);
+        assert.equal(await campo.inputValue(),"Borrador propio");
+        const medidasFicha=await ficha.evaluate(el=>({
+            ancho:el.clientWidth,scroll:el.scrollWidth,fondo:getComputedStyle(el).backgroundColor,
+            columnas:getComputedStyle(el.querySelector(".haku-ayuda__campos")).gridTemplateColumns.split(" ").length
+        }));
+        assert.ok(medidasFicha.scroll<=medidasFicha.ancho+1);
+        assert.equal(medidasFicha.fondo,estilos.fondo);
+        assert.equal(medidasFicha.columnas,escritorio?2:1);
+        await ficha.getByRole("button",{name:"Enviar a Haku"}).click();
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),2);
+        await titular.fill("Inés Lucía Rojas Vera");
+        await ficha.getByLabel("Cabaña",{exact:true}).fill("3");
+        await ficha.getByLabel("Fecha",{exact:true}).fill("12/11/2026");
+        await ficha.getByRole("button",{name:"Enviar a Haku"}).click();
+        assert.equal(await ficha.count(),0);
+        const resultadoFicha=page.locator(".haku-orden").filter({hasText:"Buscar reserva"});
+        await resultadoFicha.getByRole("button",{name:/Inés Lucía Rojas Vera · CAB 3/}).waitFor();
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").last().innerText(),
+            "Haku, abre la ficha de Inés Lucía Rojas Vera en CAB 3 el 12/11/2026");
+
+        await panel.getByRole("button",{name:"Buscar por titular o código",exact:true}).click();
+        const codigo=panel.getByLabel("Titular o código de reserva",{exact:true});
+        await codigo.fill("H-20261112-03-ABCDEF");
+        await codigo.press("Escape");
+        assert.equal(await codigo.count(),0);
+        assert.equal(await panel.isVisible(),true);
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),3);
+
+        await buscador.fill("agendar tinaja");
+        await panel.getByRole("button",{name:"Agendar tinaja",exact:true}).press("Enter");
+        const formularioServicio=panel.getByRole("form",{name:"Agendar tinaja"});
+        await formularioServicio.getByLabel("Tipo de tinaja",{exact:true}).fill("Tónel");
+        assert.equal(await formularioServicio.getByLabel("Fecha",{exact:true}).inputValue(),"");
+        await formularioServicio.getByLabel("Hora",{exact:true}).fill("20:45");
+        await formularioServicio.getByLabel("Cabaña",{exact:true}).fill("3");
+        await formularioServicio.getByRole("button",{name:"Enviar a Haku"}).click();
         const servicio=page.locator(".haku-orden").filter({hasText:"Agendar servicio"});
         await servicio.getByRole("button",{name:"Revisar servicio",exact:true}).waitFor();
         assert.match(await servicio.innerText(),/CAB 3[\s\S]*20:45/);
+        assert.match(await page.locator(".haiku-asistente-mensaje--usuario").last().innerText(),/para hoy a las 20:45/);
         assert.equal(await campo.inputValue(),"");
-        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),2);
-        await buscador.fill("dejar dos batas");
-        await panel.getByRole("button",{name:/anota nota de CAB 3 hoy/}).click();
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),4);
+        await buscador.fill("escribir nota operativa");
+        await panel.getByRole("button",{name:"Escribir nota operativa",exact:true}).click();
+        const formularioNota=panel.getByRole("form",{name:"Escribir nota operativa"});
+        await formularioNota.getByLabel("Cabaña",{exact:true}).fill("3");
+        await formularioNota.getByLabel("Fecha",{exact:true}).fill("12/11/2026");
+        await formularioNota.getByLabel("Nota",{exact:true}).fill("Dejar cuna extra");
+        await formularioNota.getByRole("button",{name:"Enviar a Haku"}).click();
         const nota=page.locator("[data-haku-operacion]").last();
         await nota.getByRole("button",{name:"Guardar nota",exact:true}).waitFor();
-        assert.match(await nota.innerText(),/Dejar dos batas/);
+        assert.match(await nota.innerText(),/Dejar cuna extra/);
         assert.equal(await campo.inputValue(),"");
         assert.deepEqual(await page.evaluate(()=>prueba.tablas),[]);
         assert.deepEqual(await page.evaluate(()=>prueba.edge),[]);
@@ -294,6 +347,12 @@ async function ayuda(browser,ancho,tema,webview=false) {
         assert.equal(archivos.isMultiple(),true);
         assert.match(await archivos.element().getAttribute("accept"),/\.pdf,.*\.xlsx/);
         assert.equal(await campo.inputValue(),"");
+        await buscador.fill("registrar un pago en una reserva existente");
+        const selectorComprobante=page.waitForEvent("filechooser");
+        await panel.getByRole("button",{name:"Adjuntar comprobante",exact:true}).click();
+        assert.match(await (await selectorComprobante).element().getAttribute("accept"),/image\/png/);
+        assert.equal(await campo.inputValue(),"Haku, ingresa este pago");
+        assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),5);
         await panel.getByRole("button",{name:"Cerrar Ayuda"}).click();
         assert.equal(await panel.count(),0);
         await campo.fill("Haku, ¿qué te puedo pedir?");

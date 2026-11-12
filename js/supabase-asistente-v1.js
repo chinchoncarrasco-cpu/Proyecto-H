@@ -366,12 +366,13 @@
     }
 
     function enviarComando(texto) {
-        if (!texto || campo.disabled || estaOcupado()) return;
+        if (!texto || campo.disabled || estaOcupado()) return false;
         campo.value = texto;
         campo.dispatchEvent(new Event("input", { bubbles: true }));
         rapidas.open = false;
         // El clic de Enviar permite que cada módulo de Haku atienda su comando.
         enviar.click();
+        return true;
     }
 
     function ejecutarAccionRapida(accion) {
