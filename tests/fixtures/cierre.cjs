@@ -9,7 +9,8 @@ async function prepararCierre(page, fecha = '2026-11-12') {
         const unidades = Array.from({ length: 11 }, (_, i) => ({ numero: i + 1, nombre: 'Cabaña ' + (i + 1), activa: true }));
         const previa = '2026-11-11';
         const modelo = {
-            llamadas: [], avisos: [], confirmaciones: [], abiertas: [], respaldos: {},
+            llamadas: [], avisos: [], confirmaciones: [], abiertas: [],
+            respaldos: { [fecha]: { 'manager-caja': [{ url: 'https://cierre.test/adjunto-caja-guardado.png' }] } },
             permitir: true, confirmar: true, motivo: 'Corrección de prueba', demora: 0,
             remoto: {
                 [fecha]: { estado: 'borrador', pendientes: 2, novedades: '', resumen_entrega: '', respuestas: [] },
@@ -61,11 +62,6 @@ async function prepararCierre(page, fecha = '2026-11-12') {
             confirmar: async mensaje => { modelo.confirmaciones.push(mensaje); return modelo.confirmar; },
             solicitar: async () => modelo.motivo
         };
-        window.HAIKU_CIERRE_EVIDENCIAS_V1 = {
-            listar: async (fecha, id) => modelo.respaldos[fecha]?.[id] || [],
-            obtenerLocal: async () => null
-        };
-
         window.haikuSupabase = {
             async rpc(nombre, args) {
                 modelo.llamadas.push({ nombre, args });
@@ -123,6 +119,10 @@ async function prepararCierre(page, fecha = '2026-11-12') {
     }, fecha);
     for (const script of scripts) await page.addScriptTag({ content: read('js/' + script + '.js') });
     await page.evaluate(async () => {
+        window.HAIKU_CIERRE_EVIDENCIAS_V1 = {
+            listar: async (fecha, id) => window.__cierre.respaldos[fecha]?.[id] || [],
+            obtenerLocal: async () => null
+        };
         window.guardarEvidencia = async (fecha, id, imagen) => {
             const respaldos = window.__cierre.respaldos[fecha] ||= {};
             const archivos = respaldos[id] ||= [];

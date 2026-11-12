@@ -128,6 +128,7 @@
                 window.HAIKU_SITES_CIERRE_V1?.cargarUnidades([...visibles.values()].sort((a, b) => a.numero - b.numero));
             }
             cargarLocal(fecha);
+            window.HAIKU_SITES_CIERRE_V1?.refrescarEvidencias?.();
         }
         return { ...base, cierre: cierre.data, respuestas: filas };
     }
