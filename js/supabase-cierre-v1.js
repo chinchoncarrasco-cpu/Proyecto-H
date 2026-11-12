@@ -1,398 +1,183 @@
-// ========================================
-// HAIKU · CIERRE DE TURNO · SUPABASE V1
-// Mantiene la UI actual, pero Supabase pasa a ser la fuente persistente.
-// ========================================
-
+// HAIKU · Cierre de turno. Persistencia de las respuestas y de las novedades.
 (() => {
     "use strict";
 
     const cliente = window.haikuSupabase;
-    if (!cliente) return;
+    const plantilla = window.HAIKU_CIERRE_PLANTILLA_V1;
+    const seccion = document.getElementById("seccion-cierre");
+    if (!cliente || !plantilla || !seccion) return;
 
     const TIPO_TURNO = "cierre_diario";
-    const originalCargarCierreDia = window.cargarCierreDia;
-    let cargandoDesdeSupabase = false;
-    let timerNovedades = null;
+    const cargarLocal = window.cargarCierreDia;
+    const cargas = new Map();
+    const guardados = new Map();
+    const notasPendientes = new Map();
+    let revisionLocal = 0;
 
-    const MAPA_GLOBAL = {
-        salida_temprana: "salidaTemprana",
-        salio_antes: "salioAntes",
-        llaves_retiradas: "llavesRetiradas",
-        registro_guardado: "registroGuardado",
-        reserva_marcada: "reservaMarcada",
-        pago_registrado: "pagoRegistrado",
-        llaves_recepcion: "llavesRecepcion",
-        manager_pagos: "managerPagos",
-        manager_caja: "managerCaja",
-        manager_vale_salida: "managerValeSalida",
-        detalles_cabanas: "detallesCabanas",
-        pendientes_hacer: "pendientesHacer",
-        hay_novedades: "hayNovedades",
-        tinaja_tonel_apagado: "tinajaTonelApagado",
-        tinaja_jacuzzi_apagado: "tinajaJacuzziApagado",
-        tinaja_tonel_funcionamiento: "tinajaTonelFuncionamiento",
-        tinaja_jacuzzi_funcionamiento: "tinajaJacuzziFuncionamiento",
-        tinaja_cojines_retirados: "tinajaCojinesRetirados"
-    };
+    const fechaActual = () => typeof fechaSeleccionada === "string" ? fechaSeleccionada.slice(0, 10) : "";
 
-    const MAPA_CABANA = {
-        cabana_ocupada: "ocupada",
-        cabana_perillas: "perillas",
-        cabana_gas: "gas",
-        cabana_refri: "refri",
-        cabana_calefactor: "calefactor",
-        cabana_tv: "tv",
-        cabana_ac: "ac",
-        cabana_luces: "luces"
-    };
-
-    function fechaActual() {
-        try {
-            return String(fechaSeleccionada || "").slice(0, 10);
-        } catch {
-            return "";
-        }
+    function encolarGuardado(fecha, operacion) {
+        const anterior = guardados.get(fecha) || Promise.resolve();
+        const actual = anterior.catch(() => {}).then(operacion);
+        guardados.set(fecha, actual);
+        const liberar = () => {
+            if (guardados.get(fecha) === actual) guardados.delete(fecha);
+        };
+        actual.then(liberar, liberar);
+        return actual;
     }
 
-    function valorJson(valor) {
-        return valor === undefined ? null : valor;
-    }
-
-    async function asegurarCierre(fecha) {
-        const { data, error } = await cliente.rpc(
-            "haiku_asegurar_cierre_dia",
-            {
-                p_fecha: fecha,
-                p_tipo_turno: TIPO_TURNO
-            }
-        );
-
-        if (error) throw error;
-        return data;
-    }
-
-    async function guardarRespuesta({
-        codigo,
-        estado,
-        valor,
-        observacion = null,
-        cabanaNumero = null
-    }) {
-        if (cargandoDesdeSupabase) return;
-
-        const fecha = fechaActual();
-        if (!fecha || !codigo) return;
-
-        const { error } = await cliente.rpc(
-            "haiku_guardar_respuesta_cierre",
-            {
+    function guardarRespuesta(fecha, { codigo, estado, valor, cabanaNumero }) {
+        return encolarGuardado(fecha, async () => {
+            const { error } = await cliente.rpc("haiku_guardar_respuesta_cierre", {
                 p_fecha: fecha,
                 p_codigo: codigo,
                 p_estado: estado,
-                p_valor: valorJson(valor),
-                p_observacion: observacion,
+                p_valor: valor,
+                p_observacion: null,
                 p_cabana_numero: cabanaNumero,
                 p_tipo_turno: TIPO_TURNO
-            }
-        );
-
-        if (error) {
-            console.error("HAIKU · No se guardó respuesta de cierre:", codigo, error);
-            window.HAIKU_DIALOGOS.aviso(`No fue posible guardar “${codigo}” en Supabase.`);
-            await cargarCierreSupabase(fecha, { forzarRender: true });
-            throw error;
-        }
-
-        console.info("HAIKU · Cierre guardado en Supabase:", fecha, codigo, cabanaNumero || "global");
-        window.dispatchEvent(new CustomEvent("haiku:cierre-respuesta-guardada", {
-            detail: { fecha, codigo, cabanaNumero }
-        }));
-    }
-
-    function limpiarObjetoLegacy(cierre) {
-        if (!cierre) return;
-
-        Object.values(MAPA_GLOBAL).forEach(campo => {
-            if (campo === "llavesRecepcion") {
-                cierre[campo] = {};
-                return;
-            }
-
-            const esBooleano = [
-                "registroGuardado",
-                "reservaMarcada",
-                "pagoRegistrado",
-                "managerPagos",
-                "managerCaja",
-                "managerValeSalida",
-                "tinajaTonelApagado",
-                "tinajaJacuzziApagado",
-                "tinajaTonelFuncionamiento",
-                "tinajaJacuzziFuncionamiento",
-                "tinajaCojinesRetirados"
-            ].includes(campo);
-
-            cierre[campo] = esBooleano ? false : "";
+            });
+            if (error) throw error;
+            window.dispatchEvent(new CustomEvent("haiku:cierre-respuesta-guardada", {
+                detail: { fecha, codigo, cabanaNumero }
+            }));
         });
+    }
 
-        cierre.novedades = "";
+    function guardarNovedades(fecha) {
+        const pendiente = notasPendientes.get(fecha);
+        if (!pendiente) return Promise.resolve();
+        if (pendiente.guardado) return pendiente.guardado;
+        clearTimeout(pendiente.timer);
+        pendiente.guardado = encolarGuardado(fecha, async () => {
+            const { error } = await cliente.rpc("haiku_guardar_novedades_cierre", {
+                p_fecha: fecha, p_novedades: pendiente.valor, p_tipo_turno: TIPO_TURNO
+            });
+            if (error) throw error;
+            if (notasPendientes.get(fecha) === pendiente) notasPendientes.delete(fecha);
+        }).catch(error => {
+            pendiente.guardado = null;
+            console.error("HAIKU · No se guardaron las novedades del turno:", error);
+            window.HAIKU_DIALOGOS.aviso("No fue posible guardar las novedades del turno.");
+            throw error;
+        });
+        return pendiente.guardado;
+    }
+
+    function aplicarRespuestas(fecha, cierreId, cierreRemoto, respuestas) {
+        const cierre = obtenerCierreDia(fecha);
+        Object.values(plantilla.campos).forEach(item => delete cierre[item.campo]);
+        cierre.llavesRecepcion = {};
         cierre.cabanasCierre = {};
-    }
-
-    function aplicarRespuestaLegacy(cierre, respuesta) {
-        const codigo = respuesta?.cierre_checklist_items?.codigo;
-        if (!codigo) return;
-
-        const valor = respuesta.valor;
-
-        if (MAPA_GLOBAL[codigo]) {
-            cierre[MAPA_GLOBAL[codigo]] = valor ?? (
-                respuesta.estado === "confirmado" ? true : false
-            );
-            return;
-        }
-
-        if (MAPA_CABANA[codigo]) {
-            const numero = Number(respuesta?.cabanas?.numero || 0);
-            if (!numero) return;
-
-            if (!cierre.cabanasCierre[numero]) {
-                cierre.cabanasCierre[numero] = {};
+        cierre._cierreExentos = [];
+        for (const respuesta of respuestas) {
+            const codigo = respuesta.cierre_checklist_items?.codigo;
+            if (!codigo) continue;
+            const numero = Number(respuesta.cabanas?.numero) || null;
+            const item = plantilla.campos[codigo];
+            if (respuesta.estado === "no_corresponde") {
+                cierre._cierreExentos.push(claveRespuestaCierre(codigo, numero));
             }
-
-            cierre.cabanasCierre[numero][MAPA_CABANA[codigo]] =
-                valor === true || respuesta.estado === "confirmado";
+            if (item) {
+                cierre[item.campo] = respuesta.valor ?? (respuesta.estado === "confirmado");
+            } else if (numero && codigo.startsWith("cabana_")) {
+                const datos = cierre.cabanasCierre[numero] ||= {};
+                datos[codigo.slice(7)] = respuesta.valor === true;
+            }
         }
+        if (!notasPendientes.has(fecha)) cierre.novedades = cierreRemoto.novedades || "";
+        cierre._supabaseEstado = cierreRemoto.estado || "borrador";
+        cierre._supabaseCierreId = cierreId;
+        guardarDatos();
     }
 
-    async function cargarCierreSupabase(fecha, opciones = {}) {
+    async function cargar(fecha, forzarRender) {
+        await guardados.get(fecha)?.catch(() => {});
+        const revision = revisionLocal;
+        const { data: base, error } = await cliente.rpc("haiku_asegurar_cierre_dia", {
+            p_fecha: fecha, p_tipo_turno: TIPO_TURNO
+        });
+        if (error) throw error;
+        const cierreId = base?.cierre_id;
+        if (!cierreId) throw new Error("No se encontró el cierre del día.");
+
+        const [respuestas, cierre, unidades] = await Promise.all([
+            cliente.from("cierre_respuestas")
+                .select("estado,valor,observacion,cabana_id,cierre_checklist_items(codigo),cabanas(numero,nombre)")
+                .eq("cierre_id", cierreId),
+            cliente.from("cierres_turno").select("estado,novedades,resumen_entrega").eq("id", cierreId).single(),
+            cliente.from("cabanas").select("numero,nombre").eq("activa", true).order("numero")
+        ]);
+        if (respuestas.error) throw respuestas.error;
+        if (cierre.error) throw cierre.error;
+        const filas = respuestas.data || [];
+        if (revision !== revisionLocal) return null;
+        aplicarRespuestas(fecha, cierreId, cierre.data, filas);
+
+        if (forzarRender && fecha === fechaActual()) {
+            const puedeVerUnidades = typeof window.haikuTienePermiso !== "function" || window.haikuTienePermiso("cabanas.ver");
+            if (!unidades.error && puedeVerUnidades) {
+                const visibles = new Map((unidades.data || []).map(unidad => [unidad.numero, unidad]));
+                // Los cierres previos también muestran las respuestas de cabañas desactivadas después.
+                if (["cerrado", "cerrado_con_pendientes"].includes(cierre.data.estado)) {
+                    filas.forEach(({ cabanas }) => {
+                        if (cabanas?.numero && !visibles.has(cabanas.numero)) visibles.set(cabanas.numero, cabanas);
+                    });
+                }
+                window.HAIKU_SITES_CIERRE_V1?.cargarUnidades([...visibles.values()].sort((a, b) => a.numero - b.numero));
+            }
+            cargarLocal(fecha);
+        }
+        return { ...base, cierre: cierre.data, respuestas: filas };
+    }
+
+    function cargarCierreSupabase(fecha, opciones = {}) {
         fecha = String(fecha || "").slice(0, 10);
-        if (!fecha || cargandoDesdeSupabase) return null;
-
-        cargandoDesdeSupabase = true;
-
-        try {
-            const base = await asegurarCierre(fecha);
-            const cierreId = base?.cierre_id;
-            if (!cierreId) throw new Error("Supabase no devolvió cierre_id.");
-
-            const [respuestasResp, cierreResp] = await Promise.all([
-                cliente
-                    .from("cierre_respuestas")
-                    .select("estado,valor,observacion,cabana_id,cierre_checklist_items(codigo),cabanas(numero)")
-                    .eq("cierre_id", cierreId),
-                cliente
-                    .from("cierres_turno")
-                    .select("estado,novedades,resumen_entrega")
-                    .eq("id", cierreId)
-                    .single()
-            ]);
-
-            if (respuestasResp.error) throw respuestasResp.error;
-            if (cierreResp.error) throw cierreResp.error;
-
-            if (typeof obtenerCierreDia !== "function") return base;
-
-            const cierreLegacy = obtenerCierreDia(fecha);
-            limpiarObjetoLegacy(cierreLegacy);
-
-            for (const respuesta of (respuestasResp.data || [])) {
-                aplicarRespuestaLegacy(cierreLegacy, respuesta);
-            }
-
-            cierreLegacy.novedades = cierreResp.data?.novedades || "";
-            cierreLegacy._supabaseCierreId = cierreId;
-            cierreLegacy._supabaseEstado = cierreResp.data?.estado || "borrador";
-
-            try {
-                if (typeof guardarDatos === "function") guardarDatos();
-            } catch {}
-
-            if (opciones.forzarRender !== false && typeof originalCargarCierreDia === "function") {
-                originalCargarCierreDia(fecha);
-                if (typeof actualizarCierreTurno === "function") actualizarCierreTurno();
-            }
-
-            console.info(
-                "HAIKU · Cierre cargado desde Supabase:",
-                fecha,
-                cierreResp.data?.estado,
-                (respuestasResp.data || []).length,
-                "respuestas"
-            );
-
-            return {
-                ...base,
-                cierre: cierreResp.data,
-                respuestas: respuestasResp.data || []
-            };
-        } catch (error) {
+        if (!fecha) return Promise.resolve(null);
+        if (fecha === fechaActual()) window.HAIKU_SITES_CIERRE_V1?.mostrarFecha(fecha);
+        if (cargas.has(fecha)) return cargas.get(fecha);
+        const carga = cargar(fecha, opciones.forzarRender !== false).catch(error => {
             console.error("HAIKU · No fue posible cargar Cierre desde Supabase:", error);
             return null;
-        } finally {
-            cargandoDesdeSupabase = false;
-        }
+        }).finally(() => cargas.delete(fecha));
+        cargas.set(fecha, carga);
+        return carga;
     }
 
-    // -------------------------------------------------
-    // GUARDADO DE CONTROLES GLOBALES
-    // -------------------------------------------------
-
-    const RADIO_CODIGOS = {
-        "salida-temprana": "salida_temprana",
-        "salio-antes": "salio_antes",
-        "llaves-retiradas": "llaves_retiradas",
-        "detalles-cabanas": "detalles_cabanas",
-        "pendientes-hacer": "pendientes_hacer",
-        "hay-novedades": "hay_novedades"
-    };
-
-    const CAMPO_CODIGOS = {
-        "registro-guardado": "registro_guardado",
-        "reserva-marcada": "reserva_marcada",
-        "pago-registrado": "pago_registrado",
-        "manager-pagos": "manager_pagos",
-        "manager-caja": "manager_caja",
-        "manager-vale-salida": "manager_vale_salida",
-        "tinaja-tonel-apagado": "tinaja_tonel_apagado",
-        "tinaja-jacuzzi-apagado": "tinaja_jacuzzi_apagado",
-        "tinaja-tonel-funcionamiento": "tinaja_tonel_funcionamiento",
-        "tinaja-jacuzzi-funcionamiento": "tinaja_jacuzzi_funcionamiento",
-        "tinaja-cojines-retirados": "tinaja_cojines_retirados"
-    };
-
-    document.addEventListener("change", event => {
-        if (cargandoDesdeSupabase) return;
-
-        const el = event.target;
-        if (!(el instanceof HTMLElement)) return;
-
-        if (el.matches("input[type='radio'][name]")) {
-            const codigo = RADIO_CODIGOS[el.getAttribute("name")];
-            if (codigo && el.checked) {
-                guardarRespuesta({
-                    codigo,
-                    estado: "confirmado",
-                    valor: el.value
-                }).catch(() => {});
-            }
-            return;
-        }
-
-        const campo = el.getAttribute("data-cierre-campo");
-        if (campo && CAMPO_CODIGOS[campo] && el instanceof HTMLInputElement && el.type === "checkbox") {
-            guardarRespuesta({
-                codigo: CAMPO_CODIGOS[campo],
-                estado: el.checked ? "confirmado" : "pendiente",
-                valor: el.checked
-            }).catch(() => {});
-            return;
-        }
-
-        if (el.hasAttribute("data-cierre-llave")) {
-            const llaves = {};
-            document.querySelectorAll("[data-cierre-llave]").forEach(check => {
-                llaves[check.dataset.cierreLlave] = check.checked === true;
-            });
-
-            guardarRespuesta({
-                codigo: "llaves_recepcion",
-                estado: "confirmado",
-                valor: llaves
-            }).catch(() => {});
-            return;
-        }
-
-        if (el.hasAttribute("data-cierre-cabana-ocupada")) {
-            const numero = Number(el.getAttribute("data-cierre-cabana-ocupada"));
-            guardarRespuesta({
-                codigo: "cabana_ocupada",
-                estado: el.checked ? "confirmado" : "pendiente",
-                valor: el.checked,
-                cabanaNumero: numero
-            }).catch(() => {});
-            return;
-        }
-
-        if (el.hasAttribute("data-cierre-cabana") && el.hasAttribute("data-item")) {
-            const numero = Number(el.getAttribute("data-cierre-cabana"));
-            const item = String(el.getAttribute("data-item") || "");
-            const codigo = `cabana_${item}`;
-
-            if (MAPA_CABANA[codigo]) {
-                guardarRespuesta({
-                    codigo,
-                    estado: el.checked ? "confirmado" : "pendiente",
-                    valor: el.checked,
-                    cabanaNumero: numero
-                }).catch(() => {});
-            }
-        }
-    }, true);
-
-    // Novedades es texto libre del cierre, no un check.
-    document.addEventListener("input", event => {
-        const el = event.target;
-        if (!(el instanceof HTMLElement)) return;
-        if (el.getAttribute("data-cierre-campo") !== "novedades") return;
-
-        clearTimeout(timerNovedades);
-        timerNovedades = setTimeout(async () => {
-            const fecha = fechaActual();
-            if (!fecha || cargandoDesdeSupabase) return;
-
-            const { error } = await cliente.rpc(
-                "haiku_guardar_novedades_cierre",
-                {
-                    p_fecha: fecha,
-                    p_novedades: el.value || "",
-                    p_tipo_turno: TIPO_TURNO
-                }
-            );
-
-            if (error) {
-                console.error("HAIKU · No se guardaron novedades de cierre:", error);
-                window.HAIKU_DIALOGOS.aviso("No fue posible guardar las novedades del cierre en Supabase.");
-            }
-        }, 450);
-    }, true);
-
-    // -------------------------------------------------
-    // CARGA DESDE SUPABASE
-    // -------------------------------------------------
-
-    if (typeof originalCargarCierreDia === "function") {
-        window.cargarCierreDia = function cargarCierreDiaSupabase(fecha) {
-            const resultado = originalCargarCierreDia.apply(this, arguments);
-            setTimeout(() => cargarCierreSupabase(fecha, { forzarRender: true }), 0);
-            return resultado;
-        };
-    }
-
-    window.haikuCargarCierreSupabase = cargarCierreSupabase;
-
-    window.addEventListener("haiku:auth-ready", () => {
-        setTimeout(() => {
-            const fecha = fechaActual();
-            if (fecha) cargarCierreSupabase(fecha, { forzarRender: true });
-        }, 180);
+    seccion.addEventListener("change", event => {
+        const fecha = fechaActual();
+        const respuesta = respuestaDeControlCierre(event.target);
+        if (!fecha || !respuesta) return;
+        revisionLocal++;
+        guardarRespuesta(fecha, respuesta).catch(async error => {
+            console.error("HAIKU · No se guardó un control del cierre:", respuesta.codigo, error);
+            const fila = event.target.closest("[data-turno-control]");
+            const texto = plantilla.campos[respuesta.codigo]?.texto || fila?.textContent.trim() || "el control de cierre";
+            window.HAIKU_DIALOGOS.aviso(`No fue posible guardar «${texto}».`);
+            await cargas.get(fecha);
+            await cargarCierreSupabase(fecha);
+        });
     });
 
-    document.addEventListener("click", event => {
-        const enlace = event.target?.closest?.('[data-seccion="cierre"], [data-seccion="cierre-turno"]');
-        if (!enlace) return;
-
-        setTimeout(() => {
-            const fecha = fechaActual();
-            if (fecha) cargarCierreSupabase(fecha, { forzarRender: true });
-        }, 80);
-    }, true);
-
-    setTimeout(() => {
-        if (!window.haikuSesion) return;
+    seccion.addEventListener("input", event => {
+        const input = event.target;
         const fecha = fechaActual();
-        if (fecha) cargarCierreSupabase(fecha, { forzarRender: true });
-    }, 500);
+        if (!fecha || input.disabled || !input.matches('textarea[data-cierre-campo="novedades"]')) return;
+        revisionLocal++;
+        clearTimeout(notasPendientes.get(fecha)?.timer);
+        const pendiente = { valor: input.value };
+        notasPendientes.set(fecha, pendiente);
+        pendiente.timer = setTimeout(() => guardarNovedades(fecha).catch(() => {}), 450);
+    });
 
-    console.info("HAIKU · Cierre Supabase V1 preparado.");
+    window.cargarCierreDia = function cargarCierreDiaSupabase(fecha) {
+        cargarLocal(fecha);
+        if (seccion.classList.contains("activa")) cargarCierreSupabase(fecha);
+    };
+    window.haikuCargarCierreSupabase = cargarCierreSupabase;
+    window.haikuEsperarGuardadosCierre = async fecha => {
+        await guardarNovedades(fecha);
+        await guardados.get(fecha);
+    };
 })();

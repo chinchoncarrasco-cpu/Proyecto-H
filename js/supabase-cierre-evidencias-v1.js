@@ -222,7 +222,7 @@
     // Sobrescribimos las funciones globales que ya usa cierre.js.
     window.guardarEvidencia = guardarEvidenciaSupabase;
     window.obtenerEvidencia = obtenerEvidenciaSupabase;
-    window.HAIKU_CIERRE_EVIDENCIAS_V1 = Object.freeze({ listar: listarEvidenciasSupabase });
+    window.HAIKU_CIERRE_EVIDENCIAS_V1 = Object.freeze({ listar: listarEvidenciasSupabase, obtenerLocal: obtenerLegacy });
 
     console.info("HAIKU · Evidencias de Cierre Supabase V1 preparadas.");
 })();
