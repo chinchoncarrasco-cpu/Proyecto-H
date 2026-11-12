@@ -122,7 +122,7 @@ function fuentes(tema) {
     };
 }
 
-async function abrir(browser,ancho,tema) {
+async function abrir(browser,ancho,tema,webview=false) {
     const page=await browser.newPage({timezoneId:"America/Santiago",viewport:{width:ancho,height:850}});
     const errores=[];
     page.on("pageerror",error=>errores.push(error.message));
@@ -139,13 +139,21 @@ async function abrir(browser,ancho,tema) {
     },leer("","index.html"));
     for (const css of ["supabase-asistente-v1","haiku-paleta-v1","sites-asistente-v1","haiku-tema-oscuro-v1","haiku-tema-v1"])
         await page.addStyleTag({content:leer("css",css+".css")});
+    if (webview) {
+        await page.evaluate(()=>{
+            document.documentElement.dataset.hakuMobileAssistant="1";
+            document.documentElement.classList.add("haku-mobile-assistant-ready");
+        });
+        await page.addStyleTag({content:leer("css","haku-mobile-assistant-v1.css")});
+    }
     for (const script of scripts) await page.addScriptTag({content:leer("js",script+".js")});
-    await page.getByRole("button",{name:"Abrir Haku",exact:true}).click();
+    if (webview) await page.evaluate(()=>HAIKU_ASISTENTE.abrir());
+    else await page.getByRole("button",{name:"Abrir Haku",exact:true}).click();
     return {page,errores};
 }
 
-async function ayuda(browser,ancho,tema) {
-    const {page,errores}=await abrir(browser,ancho,tema);
+async function ayuda(browser,ancho,tema,webview=false) {
+    const {page,errores}=await abrir(browser,ancho,tema,webview);
     try {
         const campo=page.locator("#haiku-asistente-texto");
         await campo.fill("Borrador para revisar");
@@ -153,24 +161,48 @@ async function ayuda(browser,ancho,tema) {
         await page.getByRole("button",{name:"Ayuda",exact:true}).click();
         const panel=page.getByRole("region",{name:"Ayuda de Haku"});
         assert.equal(await campo.inputValue(),"Borrador para revisar");
-        assert.equal(await panel.locator("summary").count(),8);
+        assert.equal(await panel.locator(".haku-ayuda__grupo:visible").count(),1);
+        assert.equal(await panel.locator("details[open]:visible").count(),0);
         const estilos=await panel.evaluate(el=>({
             desborde:el.scrollWidth>el.clientWidth+1,
-            columnas:getComputedStyle(el.querySelector("details[open] ul")).gridTemplateColumns,
+            tapaAcciones:el.querySelector(".haku-ayuda__encabezado").getBoundingClientRect().bottom >
+                el.querySelector(".haku-ayuda__contenido").getBoundingClientRect().top+1,
+            columnas:getComputedStyle(el.querySelector(".haku-ayuda__contenido")).gridTemplateColumns,
             fondo:getComputedStyle(el).backgroundColor
         }));
+        const escritorio=ancho>=701&&!webview;
         assert.equal(estilos.desborde,false);
-        assert.equal(estilos.columnas.split(" ").length,ancho>=701?2:1);
+        assert.equal(estilos.tapaAcciones,false);
+        assert.equal(estilos.columnas.split(" ").length,escritorio?2:1);
         assert.equal(estilos.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
         const buscador=panel.getByRole("searchbox");
+        if (!escritorio) assert.equal(await buscador.evaluate(n=>n===document.activeElement),false);
+        await panel.getByText("Resumen del día",{exact:true}).click();
+        await panel.getByRole("button",{name:"Haku, resumen de hoy",exact:true}).waitFor();
+        await panel.locator("summary").getByText("Ingresos",{exact:true}).click();
+        assert.equal(await panel.locator("details[open]:visible").count(),1);
+        if (escritorio) {
+            const nav=panel.getByRole("navigation",{name:"Categorías de ayuda"});
+            assert.equal(await nav.getByRole("button").count(),8);
+            await nav.getByRole("button",{name:"Pagos y BOVE",exact:true}).click();
+            assert.equal(await nav.getByRole("button",{name:"Pagos y BOVE",exact:true}).getAttribute("aria-pressed"),"true");
+        } else {
+            const categorias=panel.getByRole("combobox",{name:"Categoría de ayuda"});
+            assert.equal(await categorias.locator("option").count(),8);
+            await categorias.selectOption({label:"Pagos y BOVE"});
+        }
+        const pagos=panel.getByRole("region",{name:"Pagos y BOVE"});
+        await pagos.waitFor();
         await buscador.fill("remboso inexistente");
         await panel.getByText("No encontré una acción con esa búsqueda.").waitFor({state:"visible"});
+        await panel.getByRole("button",{name:"Limpiar búsqueda"}).click();
+        await pagos.waitFor();
         await buscador.fill("reembolso");
         await panel.getByText("Preparar y registrar un reembolso",{exact:true}).waitFor({state:"visible"});
         await buscador.fill("ingresaservicio");
         const ejemplo=panel.getByRole("button",{name:/ingresaservicio tinaja/});
         await ejemplo.waitFor({state:"visible"});
-        const frase=await ejemplo.innerText();
+        const frase=await ejemplo.locator("span").first().innerText();
         await ejemplo.click();
         assert.equal(await campo.inputValue(),frase);
         assert.equal(await page.locator(".haiku-asistente-mensaje--usuario").count(),0);
@@ -187,6 +219,12 @@ async function ayuda(browser,ancho,tema) {
         await campo.fill("Haku, ¿qué te puedo pedir?");
         await campo.press("Control+Enter");
         await panel.waitFor({state:"visible"});
+        await buscador.fill("informes cloudbeds");
+        await buscador.press("Escape");
+        assert.equal(await buscador.inputValue(),"");
+        await buscador.press("Escape");
+        assert.equal(await panel.count(),0);
+        assert.equal(await page.locator("#haiku-asistente-panel").isVisible(),true);
         assert.deepEqual(errores,[]);
     } finally {await page.close();}
 }
@@ -296,6 +334,7 @@ async function operaciones(browser,ancho,tema) {
     try {
         await comandos(browser);
         for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await ayuda(browser,ancho,tema);
+        for (const tema of ["claro","oscuro"]) await ayuda(browser,390,tema,true);
         for (const ancho of [1280,390,320]) for (const tema of ["claro","oscuro"]) await operaciones(browser,ancho,tema);
         console.log("Haku Ayuda, órdenes nuevas y rutas anteriores verificadas en escritorio, móvil y ambos temas");
     } finally {await browser.close();}

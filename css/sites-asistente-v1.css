@@ -238,6 +238,7 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
 .haiku-asistente-root .haiku-asistente-bienvenida-acciones button:hover { background: #e7f2e9; }
 
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes {
+    --haku-mensajes-padding-inicio: 18px;
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
@@ -249,7 +250,7 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     scrollbar-width: thin;
     scrollbar-color: #a9b9af transparent;
     scrollbar-gutter: stable;
-    padding: 18px 20px 24px;
+    padding: var(--haku-mensajes-padding-inicio) 20px 24px;
     background: #fbfcfb;
 }
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes::-webkit-scrollbar { display: block; width: 9px; }
@@ -466,7 +467,10 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     }
     .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-cabecera { flex-basis: 60px; min-height: 60px; padding: 0 15px; }
     .haiku-asistente-root .haiku-asistente-bienvenida { margin: 15px 15px 0; }
-    .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes { padding: 15px; }
+    .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes {
+        --haku-mensajes-padding-inicio: 15px;
+        padding: var(--haku-mensajes-padding-inicio);
+    }
     .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-rapidas > summary { padding: 10px 15px; }
     .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-rapidas-lista { padding: 0 15px 11px; }
     .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-compositor { padding: 10px 12px max(10px, env(safe-area-inset-bottom)); }
@@ -1520,36 +1524,231 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
     line-height: 1.4;
     overflow-wrap: anywhere;
 }
-.haku-ayuda { width: 100%; container: haku-ayuda / inline-size; }
-.haku-ayuda__cabecera {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 8px 11px 4px;
+.haku-ayuda {
+    width: 100%;
+    container: haku-ayuda / inline-size;
+    scroll-margin-block-start: var(--haku-mensajes-padding-inicio, 0px);
+    --ayuda-borde: var(--haku-compacto-borde, #dbe3de);
+    --ayuda-superficie: var(--haku-compacto-superficie, #fbfcfb);
+    --ayuda-control: var(--haku-compacto-control, #f1f5f2);
+    --ayuda-secundario: var(--haku-compacto-secundario, #586c60);
+    --ayuda-acento: var(--haku-compacto-acento, #286c4e);
+    --ayuda-suave: var(--haku-compacto-suave, #eef4ef);
+    --ayuda-seleccion: var(--haku-compacto-seleccion, #e6f2eb);
+    font-family: var(--sites-shell-font, Inter, "Segoe UI", Arial, sans-serif);
 }
-.haku-ayuda__cabecera h2, .haku-orden h3 { margin: 0; color: inherit; font-size: 15px; }
-.haku-ayuda > p { margin: 0 11px 7px; }
-.haku-ayuda > input {
-    box-sizing: border-box;
-    width: calc(100% - 22px);
-    min-height: 32px;
-    margin: 0 11px 8px;
-    padding: 5px 8px;
-    border: 1px solid var(--haku-compacto-borde, #dbe3de);
-    border-radius: 6px;
-    background: var(--haku-compacto-control, #f1f5f2);
+.haku-ayuda [hidden] { display: none !important; }
+.haku-ayuda__encabezado {
+    position: sticky;
+    top: calc(-1 * var(--haku-mensajes-padding-inicio, 0px));
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-bottom: 1px solid var(--ayuda-borde);
+    border-radius: 8px 8px 0 0;
+    background: var(--ayuda-superficie);
+}
+.haku-ayuda__cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.haku-ayuda__identidad { min-width: 0; }
+.haku-ayuda__identidad h2 { margin: 0; color: inherit; font-size: 17px; line-height: 22px; font-weight: 700; }
+.haku-ayuda__identidad p { margin: 1px 0 0; color: var(--ayuda-secundario); line-height: 17px; }
+.haku-ayuda :is(button, input, select) {
+    min-width: 0;
     color: inherit;
     font: inherit;
 }
-.haku-ayuda > details {
-    border-top: 1px solid var(--haku-compacto-borde, #dbe3de);
+.haku-ayuda button { cursor: pointer; }
+.haku-ayuda .haku-ayuda__icono {
+    flex: 0 0 34px;
+    width: 34px;
+    min-height: 34px;
+    padding: 0;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 6px;
+    background: var(--ayuda-superficie);
+    color: var(--ayuda-secundario);
+    font-size: 16px;
 }
-.haku-ayuda summary { padding: 8px 11px; cursor: pointer; font-weight: 650; }
-.haku-ayuda ul, .haku-orden ul { margin: 0; padding: 0; list-style: none; }
-.haku-ayuda li { padding: 7px 11px; border-top: 1px solid var(--haku-compacto-borde, #dbe3de); }
-.haku-ayuda li p, .haku-orden p {
+.haku-ayuda__buscador, .haku-ayuda__selector { position: relative; min-width: 0; }
+.haku-ayuda :is(input, select) {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    padding-inline-end: 36px;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 6px;
+    background: var(--ayuda-control);
+    font-size: 13px;
+    line-height: 18px;
+}
+.haku-ayuda input { min-height: 38px; }
+.haku-ayuda input::placeholder { color: var(--ayuda-secundario); opacity: 1; }
+.haku-ayuda input::-webkit-search-cancel-button { display: none; }
+.haku-ayuda .haku-ayuda__limpiar, .haku-ayuda__selector > span {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ayuda-secundario);
+}
+.haku-ayuda select { min-height: 44px; appearance: none; font-weight: 500; cursor: pointer; }
+.haku-ayuda__selector > span { pointer-events: none; }
+html[data-haiku-tema="oscuro"] .haku-ayuda select { color-scheme: dark; }
+.haku-ayuda__contenido { display: grid; grid-template-columns: minmax(0, 1fr); }
+.haku-ayuda__categorias { display: none; }
+.haku-ayuda__grupo-cabecera {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 36px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--ayuda-borde);
+}
+.haku-ayuda__grupo-cabecera h3 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    color: inherit;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 600;
+}
+.haku-ayuda__grupo-cabecera small, .haku-ayuda__etiqueta {
+    color: var(--ayuda-secundario);
+    font-size: 11px;
+    line-height: 16px;
+}
+.haku-ayuda__acciones { margin: 0; padding: 0; list-style: none; }
+.haku-ayuda__acciones li:not([hidden]) ~ li:not([hidden]),
+.haku-ayuda__grupo:not([hidden]) ~ .haku-ayuda__grupo:not([hidden]) {
+    border-top: 1px solid var(--ayuda-borde);
+}
+.haku-ayuda__acciones summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 44px;
+    padding: 8px 10px;
+    cursor: pointer;
+    list-style: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+}
+.haku-ayuda__acciones summary::-webkit-details-marker { display: none; }
+.haku-ayuda__indicador { flex-shrink: 0; color: var(--ayuda-secundario); font-size: 14px; line-height: 18px; }
+.haku-ayuda__acciones details[open] { background: var(--ayuda-suave); }
+.haku-ayuda__acciones details[open] summary .haku-ayuda__indicador { transform: rotate(180deg); }
+.haku-ayuda__detalle { display: grid; gap: 6px; min-width: 0; padding: 0 10px 10px; }
+.haku-ayuda__detalle p { margin: 0; color: var(--ayuda-secundario); line-height: 17px; }
+.haku-ayuda .haku-ayuda__ejemplo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid var(--ayuda-borde);
+    border-radius: 6px;
+    background: var(--ayuda-control);
+    color: var(--ayuda-acento);
+    line-height: 17px;
+    font-weight: 500;
+    text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.haku-ayuda__ejemplo .haku-ayuda__indicador { color: inherit; }
+.haku-ayuda :is(summary, .haku-ayuda__icono, .haku-ayuda__limpiar):hover { background: var(--ayuda-suave); }
+.haku-ayuda .haku-ayuda__ejemplo:hover { background: var(--ayuda-seleccion); }
+.haku-ayuda :is(button, summary, input, select):focus-visible {
+    outline: 2px solid var(--ayuda-acento);
+    outline-offset: -2px;
+}
+.haku-ayuda__estado {
+    margin: 0;
+    padding: 10px;
+    border-bottom: 1px solid var(--ayuda-borde);
+    color: var(--ayuda-acento);
+    font-weight: 600;
+}
+.haku-ayuda--buscando :is(.haku-ayuda__selector, .haku-ayuda__grupo-cabecera small) { display: none; }
+.haku-ayuda--buscando .haku-ayuda__grupo-cabecera h3 {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+}
+@media (min-width: 701px) {
+    @container haku-ayuda (min-width: 418px) {
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda:not(.haku-ayuda--buscando) .haku-ayuda__contenido {
+            grid-template-columns: 143px minmax(0, 1fr);
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda:not(.haku-ayuda--buscando) .haku-ayuda__categorias {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 10px 6px;
+            border-inline-end: 1px solid var(--ayuda-borde);
+            border-end-start-radius: 8px;
+            background: var(--ayuda-control);
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda__selector { display: none; }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda__grupo-cabecera h3 {
+            position: static;
+            width: auto;
+            height: auto;
+            overflow: visible;
+            clip-path: none;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-ayuda__acciones summary { min-height: 38px; }
+        .haku-ayuda__etiqueta { margin: 0; padding: 4px; font-weight: 600; }
+        .haku-ayuda .haku-ayuda__categoria {
+            width: 100%;
+            min-height: 34px;
+            padding: 6px 8px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            line-height: 16px;
+            font-weight: 500;
+            text-align: start;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+        .haku-ayuda .haku-ayuda__categoria:hover { background: var(--ayuda-suave); }
+        .haku-ayuda .haku-ayuda__categoria[aria-pressed="true"] {
+            background: var(--ayuda-seleccion);
+            color: var(--ayuda-acento);
+            font-weight: 600;
+        }
+    }
+}
+.haku-orden h3 { margin: 0; color: inherit; font-size: 15px; }
+.haku-orden ul { margin: 0; padding: 0; list-style: none; }
+.haku-orden p {
     margin: 2px 0 4px;
     color: var(--haku-compacto-secundario, #586c60);
 }
-.haku-ayuda button, .haku-orden button {
+.haku-orden button {
     max-width: 100%;
     min-height: 30px;
     padding: 4px 7px;
@@ -1563,9 +1762,7 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
     white-space: normal;
     overflow-wrap: anywhere;
 }
-.haku-ayuda__cabecera > button { min-width: 30px; text-align: center; }
-.haku-ayuda li > button { margin: 2px 4px 2px 0; }
-.haku-ayuda :is(button,summary,input):focus-visible, .haku-orden button:focus-visible {
+.haku-orden button:focus-visible {
     outline: 2px solid var(--haku-compacto-acento, #286c4e); outline-offset: 1px;
 }
 .haku-orden { padding: 9px 11px; }
@@ -1603,7 +1800,4 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
 .haku-orden [data-guardado] { margin-top: 6px; color: var(--haku-compacto-acento, #286c4e); font-weight: 650; }
 @media (min-width: 701px) {
     .haku-orden__datos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
-    @container haku-ayuda (min-width: 370px) {
-        .haku-ayuda details > ul { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
-    }
 }
