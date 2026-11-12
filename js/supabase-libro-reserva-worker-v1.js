@@ -631,7 +631,26 @@ async function indiceNombres(buffer) {
     if (!nombres.length) throw new Error('Índice de nombres no disponible.');
     return { nombres };
 }
-const lector = Object.freeze({ leerHoja, leerHojas, indiceNombres });
+function leerTablasCloudbeds(buffer) {
+    if (buffer?.byteLength > 12 * 1024 * 1024) throw new Error("El XLSX supera 12 MB.");
+    const firma = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
+    if (firma.join(",") !== "80,75,3,4") throw new Error("Archivo XLSX inválido.");
+    asegurarLector();
+    const libro = self.XLSX.read(buffer, { type: "array", cellDates: true, cellFormula: false, sheetRows: 5001 });
+    if (libro.SheetNames.length > 8) throw new Error("El XLSX supera 8 hojas.");
+    return libro.SheetNames.flatMap(hoja => {
+        const tabla = libro.Sheets[hoja];
+        if (!tabla?.["!ref"]) return [];
+        const rango = self.XLSX.utils.decode_range(tabla["!fullref"] || tabla["!ref"]);
+        if (rango.e.r - rango.s.r >= 5000 || rango.e.c - rango.s.c >= 48) {
+            throw new Error("Una hoja del informe supera 5.000 filas o 48 columnas.");
+        }
+        const filas = self.XLSX.utils.sheet_to_json(tabla, { header: 1, raw: true, defval: null, blankrows: true });
+        return [{ hoja, primeraFila: rango.s.r + 1, filas }];
+    });
+}
+
+const lector = Object.freeze({ leerHoja, leerHojas, indiceNombres, leerTablasCloudbeds });
 // Conserva las utilidades globales del worker usadas por sus contratos Web.
 if (typeof self.addEventListener === "function") Object.assign(self, {
     coloresTemaXml, parsearEstilosXml, parsearTextoEnriquecido, parsearCeldasXml, huellasLibro
@@ -642,6 +661,10 @@ if (typeof module !== "undefined" && module.exports) module.exports = Object.fre
 if (typeof self.addEventListener === "function") self.addEventListener("message", async (evento) => {
     const { id, tipo, nombreHoja, nombresHojas, buffer } = evento.data || {};
     try {
+        if (tipo === "cloudbeds_tablas") {
+            self.postMessage({ id, ok: true, resultado: leerTablasCloudbeds(buffer) });
+            return;
+        }
         if(tipo==='semantica_lote'){
             const hojas=await leerHojas(buffer,nombresHojas);
             if(!self.HAIKU_LIBRO_SEMANTICA)importScripts(`haiku-libro-semantica-v1.js${self.location.search}`);
