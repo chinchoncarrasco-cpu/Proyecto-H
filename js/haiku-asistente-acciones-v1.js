@@ -186,6 +186,108 @@
     }
 
     let buscandoFicha=false;
+    let preparandoOperacion=false;
+
+    async function responderOperacion(q, campo, texto, api) {
+        preparandoOperacion=!q.error;
+        const {out,articulo}=prepararRespuesta(campo,texto,api.titulos[q.accion] || "Acción en Proyecto H");
+        articulo.dataset.hakuOperacion="1";
+        const cuerpo=elemento("div");
+        const estado=elemento("p",q.error || "Comprobando en Proyecto H…");
+        estado.setAttribute("role","status");
+        articulo.append(cuerpo,estado);
+        if (q.error) {
+            out.scrollIntoView?.({block:"nearest"});
+            return;
+        }
+        const usuario=api.usuario();
+        let ejecutando=false;
+        const mismaSesion=()=>Boolean(usuario && usuario===api.usuario() && articulo.isConnected);
+        const seguir=async (accion, textoEspera) => {
+            if (ejecutando) return;
+            if (!mismaSesion()) {estado.textContent="La sesión cambió. Pide la acción de nuevo.";return;}
+            ejecutando=true;
+            const botones=[...cuerpo.querySelectorAll("button")];
+            botones.forEach(b=>{b.disabled=true;});
+            estado.textContent=textoEspera;
+            try {await accion();}
+            catch (error) {estado.textContent=error?.message || "No se pudo completar la acción. Revisa Proyecto H.";}
+            finally {ejecutando=false;botones.forEach(b=>{b.disabled=false;});}
+        };
+        function mostrar(p) {
+            if (!mismaSesion()) return;
+            cuerpo.replaceChildren();
+            estado.textContent="";
+            if (p.identidad) cuerpo.append(elemento("strong",p.identidad));
+            if (p.filas?.length) {
+                const dl=elemento("dl","","haku-orden__datos");
+                for (const [k,v] of p.filas) {
+                    const fila=elemento("div");
+                    fila.append(elemento("dt",k),elemento("dd",v));
+                    dl.append(fila);
+                }
+                cuerpo.append(dl);
+            }
+            if (p.texto) cuerpo.append(elemento("blockquote",p.texto,"haku-orden__texto"));
+            if (p.detalle) cuerpo.append(elemento("p",p.detalle));
+            const acciones=elemento("div","","haku-orden__acciones");
+            acciones.dataset.hakuOperacionAcciones="1";
+            const boton=(etiqueta,ejecutar,principal=false)=>{
+                const b=elemento("button",etiqueta,principal ? "haku-orden__principal" : "");
+                b.type="button";
+                b.addEventListener("click",ejecutar);
+                acciones.append(b);
+            };
+            for (const o of p.opciones || []) {
+                boton(o.etiqueta,()=>void seguir(async()=>mostrar(await o.cargar()),"Comprobando selección…"));
+            }
+            if (p.guardar) {
+                boton(p.etiqueta,()=>void seguir(async()=>{
+                    const resultado=await p.guardar();
+                    acciones.remove();
+                    estado.textContent=resultado;
+                    estado.dataset.guardado="1";
+                },"Guardando…"),true);
+                boton("Descartar",()=>{
+                    if (ejecutando) return;
+                    acciones.remove();
+                    estado.textContent="Propuesta descartada.";
+                });
+            }
+            if (p.copiar) boton(p.etiqueta,()=>void seguir(async()=>{
+                await root.navigator.clipboard.writeText(p.copiar);
+                estado.textContent="Copiado.";
+            },"Copiando…"));
+            if (p.enlace) {
+                const enlace=elemento("a",p.enlace.etiqueta,"haku-orden__principal");
+                enlace.href=p.enlace.url;
+                if (enlace.protocol==="https:") {
+                    enlace.target="_blank";
+                    enlace.rel="noopener noreferrer";
+                }
+                enlace.addEventListener("click",event=>{
+                    if (mismaSesion()) return;
+                    event.preventDefault();
+                    estado.textContent="La sesión cambió. Pide la acción de nuevo.";
+                });
+                acciones.append(enlace);
+            }
+            if (acciones.childElementCount) cuerpo.append(acciones);
+            out.scrollIntoView?.({block:"nearest"});
+        }
+        try {
+            const propuesta=await api.preparar(q,buscarFichas);
+            if (!mismaSesion()) throw new Error("La sesión cambió. Pide la acción de nuevo.");
+            mostrar(propuesta);
+        } catch (error) {
+            estado.textContent=error?.message || "No se pudo comprobar la acción.";
+        } finally {
+            preparandoOperacion=false;
+            campo.dispatchEvent(new root.Event("input",{bubbles:true}));
+            out.scrollIntoView?.({block:"nearest"});
+        }
+    }
+
     async function responderFicha(q,campo,texto) {
         buscandoFicha=true;
         const {out,articulo}=prepararRespuesta(campo,texto,q.editar?"Ubicar reserva para editar":"Buscar reserva");
@@ -239,6 +341,15 @@
         if (envio && esAyuda(texto) && !adjuntos && root.HAIKU_ASISTENTE?.mostrarAyuda) {
             reclamar();campo.value="";campo.dispatchEvent(new root.Event("input",{bubbles:true}));root.HAIKU_ASISTENTE.mostrarAyuda();return;
         }
+        const operativa=root.HAIKU_ASISTENTE_OPERACIONES_SUPABASE_V1;
+        const operacion=operativa && root.HAIKU_ASISTENTE_OPERACIONES_V1?.interpretar(texto);
+        if (envio && operacion) {
+            reclamar();
+            if (adjuntos) {mensaje("asistente","Retira los adjuntos para usar este comando con los datos del texto.");return;}
+            if (!preparandoOperacion) void responderOperacion(operacion,campo,texto,operativa);
+            return;
+        }
+        if (!envio && operacion) return;
         const servicio=interpretarServicio(texto);
         const ficha=servicio || L.interpretarTotal(texto) ? null : interpretarFicha(texto);
         if (envio && (servicio || ficha)) {
@@ -268,7 +379,8 @@
         },0);
     }
 
-    const api=Object.freeze({interpretarServicio,interpretarFicha,buscarFichas,esAyuda,procesando:()=>buscandoFicha});
+    const api=Object.freeze({interpretarServicio,interpretarFicha,buscarFichas,esAyuda,
+        procesando:()=>buscandoFicha || preparandoOperacion});
     root.HAIKU_ASISTENTE_ACCIONES_V1=api;
     if (typeof module!=="undefined") module.exports=api;
     if (doc) for (const tipo of ["click","keydown"]) root.addEventListener(tipo,interceptar,true);

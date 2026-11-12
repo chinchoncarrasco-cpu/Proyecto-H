@@ -6,6 +6,9 @@ on:
       - "js/haiku-ayuda-v1.js"
       - "js/haiku-asistente-lenguaje-v1.js"
       - "js/haiku-asistente-acciones-v1.js"
+      - "js/haiku-asistente-operaciones-v1.js"
+      - "js/supabase-asistente-operaciones-v1.js"
+      - "js/supabase-asistente-bove-escritura-v1.js"
       - "js/supabase-asistente-totales-v1.js"
       - "js/sites-resumen-servicio-v1.js"
       - "js/supabase-asistente-v1.js"
@@ -16,6 +19,10 @@ on:
       - "assets/guias/**"
       - "tests/haku-guias-operativas*.cjs"
       - "tests/haku-lenguaje-operativo.test.cjs"
+      - "tests/haku-operaciones-*.cjs"
+      - "tests/bove-*.cjs"
+      - "supabase/migrations/*_haku_operaciones_chat.sql"
+      - "supabase/migrations/20260910180000_bove_registro_atomico.sql"
       - "tests/haku-ayuda-browser-check.cjs"
       - "tests/totales-asistente.test.cjs"
       - "tests/resumen-servicio-sites.test.cjs"
@@ -40,10 +47,17 @@ jobs:
           node --test tests/haku-guias-operativas.test.cjs tests/haku-panel-scroll.test.cjs
           tests/haku-reserva-convivencia-v1.test.cjs tests/airbnb-prepaid-card.test.cjs tests/haiku-libro-auto.test.cjs
           tests/haku-lenguaje-operativo.test.cjs tests/totales-asistente.test.cjs tests/resumen-servicio-sites.test.cjs
+          tests/haku-operaciones-chat.test.cjs tests/bove-escritura-*.test.cjs tests/bove-routing.test.cjs
       - name: Navegador aislado
         run: |
-          npm install --prefix "$RUNNER_TEMP/haku-guias" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          npm install --prefix "$RUNNER_TEMP/haku-guias" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 @electric-sql/pglite@0.5.8
           node "$RUNNER_TEMP/haku-guias/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Confirmaciones de Haku y BOVE en PostgreSQL aislado
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
+        run: |
+          node tests/haku-operaciones-postgres.cjs
+          node tests/bove-rpc-postgres.cjs
       - name: Guías reales en escritorio y móvil, historial y consulta en curso
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules

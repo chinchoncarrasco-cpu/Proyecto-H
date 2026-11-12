@@ -114,11 +114,11 @@ test("el catálogo describe las acciones y los límites del chat y se carga ante
     const titulos=ayuda.secciones.flatMap(g=>g.acciones.map(a=>a.titulo));
     assert.equal(new Set(titulos).size,titulos.length);
     assert.ok(titulos.length>=35);
-    const pendientes=ayuda.secciones.find(g=>g.nombre==="Pendiente por chat").acciones;
-    assert.ok(pendientes.length>=6);
-    assert.equal(pendientes.some(a=>a.ejemplos || a.atajo),false);
+    const externos=ayuda.secciones.find(g=>g.nombre==="Casos que requieren otro canal").acciones;
+    assert.ok(externos.length>=3);
+    assert.equal(externos.some(a=>a.ejemplos || a.atajo),false);
     const html=fs.readFileSync("panel.html","utf8");
-    const indices=["haiku-asistente-lenguaje-v1","haiku-ayuda-v1","haiku-asistente-acciones-v1","supabase-asistente-totales-v1","haiku-libro-consultas-v1"]
+    const indices=["haiku-asistente-lenguaje-v1","haiku-asistente-operaciones-v1","supabase-asistente-operaciones-v1","haiku-ayuda-v1","haiku-asistente-acciones-v1","supabase-asistente-totales-v1","haiku-libro-consultas-v1"]
         .map(nombre=>html.indexOf("'"+nombre+"'"));
     assert.ok(indices.every((n,i)=>n>=0 && (!i || n>indices[i-1])));
 });

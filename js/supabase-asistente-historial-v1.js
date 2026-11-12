@@ -108,6 +108,7 @@
 
     function convertirEnHistorial(contenedor) {
         contenedor.querySelectorAll("script,style,iframe,object,embed,input,textarea,select").forEach(n => n.remove());
+        contenedor.querySelectorAll("[data-haku-operacion-acciones]").forEach(n => n.remove());
 
         contenedor.querySelectorAll("*").forEach(elemento => {
             quitarAtributosPeligrosos(elemento);

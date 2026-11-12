@@ -21,7 +21,7 @@ for(const texto of [
  const q=api.interpretar(texto,dia);assert.equal(q.fecha,'2026-09-03');assert.equal(q.numero,'19800');
  const e=entorno(),p=await e.preparar(texto);assert.equal(p.estado,'propuesta');assert.equal(p.reserva.id,'r1');assert.equal(p.q.tipo,'alojamiento');assert.equal(p.dia,'2026-09-03');
  assert.deepEqual(e.llamadas[0].filtros,[['lte','estadias.fecha_ingreso','2026-09-03'],['gte','estadias.fecha_salida','2026-09-03']]);
- assert.match(api.renderizar(p),/Confirmar BOVE · bloqueado/);assert.equal((await api.confirmar(p)).estado,'bloqueada');
+ assert.match(api.renderizar(p),/Inicia sesión para confirmar el BOVE/);assert.equal((await api.confirmar(p)).estado,'bloqueada');
 });
 test('titular y CAB se aplican conjuntamente, sin parecido débil',async()=>{
  const e=entorno([reserva('r1','Otra Persona'),reserva('r2')]);assert.equal((await e.preparar()).reserva.id,'r2');
@@ -58,7 +58,7 @@ test('propuesta Macarena filtra Sep26 y compacta segmentos sin cambiar reserva',
  assert.deepEqual(p.libro.evidencias.map(e=>e.origen.celda),['L27']);
  const html=api.renderizar(p);assert.match(html,/L27/);assert.match(html,/PEND BOVE/);assert.match(html,/BOVE 19800 no encontrado/);
  assert.doesNotMatch(html,/16965|16967|L100|L101|L102|L103|CAB 10/);assert.match(html,/Reserva con otro segmento asociado/);
- assert.match(html,/Confirmar BOVE · bloqueado/);
+ assert.match(html,/Inicia sesión para confirmar el BOVE/);
 });
 
 test('número solicitado sin vínculo seguro se muestra; resto mensual no',async()=>{
@@ -84,7 +84,7 @@ for(const relacionado of [false,true])test(`muchos PEND con titular ajeno no son
  }
  const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Sep26'],buscarHojasBove:async()=>({hojas:[]}),consultarHoja:async()=>({reservas,evidencias_bove})};
  const p=await entorno().preparar(frase,{libro}),html=api.renderizar(p);
- assert.equal(p.estado,'propuesta');assert.doesNotMatch(html,/Sep26!AZ\d+/);assert.match(html,/19800 no encontrado/);assert.match(html,/Confirmar BOVE · bloqueado/);
+ assert.equal(p.estado,'propuesta');assert.doesNotMatch(html,/Sep26!AZ\d+/);assert.match(html,/19800 no encontrado/);assert.match(html,/Inicia sesión para confirmar el BOVE/);
  assert.equal(p.libro.evidencias.length,relacionado?1:0);
  if(relacionado){assert.match(html,/El Libro aún figura PEND BOVE/);assert.match(html,/Sep26!L27/);}
  else{assert.match(html,/El Libro contiene pendientes, pero ninguno puede asociarse de forma segura a esta reserva/);assert.doesNotMatch(html,/El Libro aún figura PEND BOVE/);}

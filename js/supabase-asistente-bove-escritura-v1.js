@@ -1,19 +1,19 @@
-/* BOVE ETAPA 3: preparación y revalidación sólo lectura.
- * Confirmación bloqueada hasta desplegar y verificar la protección atómica.
- * No hay writer, RPC, flag de habilitación ni evento de guardado en este módulo.
- */
+// BOVE con contraste del Libro y confirmación atómica en Proyecto H.
 (function(root){
  'use strict';
  if(root.HAIKU_ASISTENTE_BOVE_ESCRITURA_V1)return;
- const bloqueo='Confirmación bloqueada: falta desplegar y verificar la migración atómica BOVE en Supabase.';
  const norm=v=>String(v??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
  const numero=v=>/^\d+(?:[.,]\d{3})*$/.test(String(v??'').trim())?String(v).trim().replace(/[.,]/g,''):null;
  const hoy=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
  const fecha=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
- const campos='id,titular_nombre,estado_reserva,bove_cierre,bove_checkout,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,checkin_realizado_en,checkout_realizado_en,cabanas(numero))';
+ const campos='id,titular_nombre,estado_reserva,actualizado_en,grupo_reserva_id,bove_cierre,bove_checkout,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,checkin_realizado_en,checkout_realizado_en,cabanas(numero))';
  const propuestas=new WeakMap();
+ const confirmando=new WeakSet();
+ const identidad=()=>root.haikuSesion?.auth?.id;
  function interpretar(texto,diaActual=hoy()){
-  let t=norm(texto).replace(/^haku[ ,:]*/,'').replace(/\s+por favor[.!]?$/,'').replace(/[.!]$/,'');
+  let t=norm(texto).replace(/^(?:(?:oye|hola)\s+)?(?:haku|haiku)[ ,:]*/,'')
+   .replace(/^(?:por favor|porfa)[ ,:]+|\s+(?:por favor|porfa)[.!]?$/g,'').replace(/[.!]$/,'')
+   .replace(/\b(?:ingresa|ingesa|agrega|regsitra|rejistra)\s+(?=(?:el\s+)?bove\b)/,'registra ');
   if(!/\bbove\b/.test(t)||! /\b(pon|ponle|registra|registrar|guarda|asigna|completa|escribe|edita)\b/.test(t))return null;
   const error=mensaje=>({error:mensaje});
   if(/\balojamiento\b/.test(t)&&/\b(servicios|checkout|check-out)\b/.test(t))return error('La operación combinada de alojamiento y servicios requiere revisión; prepara un alcance a la vez.');
@@ -36,7 +36,7 @@
   if(m[1]&&m[4])return error('Indica un único destino para el BOVE.');
   const n=numero(m[2]),destino=m[1]||m[4]||'';
   if(!n)return error('Indica un número BOVE válido, sin calcular el siguiente número.');
-  const cab=destino.match(/^cab(?:ana)?\s+(\d+)(?:\s+(.+))?$/),titular=cab?cab[2]||null:destino;
+  const cab=destino.match(/^cab(?:ana)?\.?\s*(\d+)(?:\s+(.+))?$/),titular=cab?cab[2]||null:destino;
   if((!cab&&!titular)||titular&&(!/^[a-z]+(?:[ '-][a-z]+)+$/.test(titular)||/\b(hoy|ayer|manana|pasado|libro|bove|cab|del|reserva)\b/.test(titular)))return error('Indica CAB y número, o el titular completo; puedes agregar una fecha explícita.');
   if(cab&&Number(cab[1])<=0)return error('Indica una cabaña válida.');
   if(diaExplicito&&m[5])return error('No combines hoy con otra fecha. Indica una única fecha.');
@@ -45,7 +45,7 @@
  function operativa(r,dia,explicita=false){
   return !['cancelada','no_show'].includes(r.estado_reserva)&&(r.estadias||[]).some(e=>
    !['cancelada','no_show'].includes(e.estado_estadia)&&fecha(e.fecha_ingreso)&&fecha(e.fecha_salida)&&
-   (e.tipo_estadia==='full_day'?e.fecha_ingreso===dia&&e.fecha_salida===dia:e.fecha_ingreso<=dia&&(explicita?dia<e.fecha_salida:dia<=e.fecha_salida)));
+   (['fullday','full_day'].includes(e.tipo_estadia)?e.fecha_ingreso===dia&&e.fecha_salida===dia:e.fecha_ingreso<=dia&&(explicita?dia<e.fecha_salida:dia<=e.fecha_salida)));
  }
  function compatibleDestino(r,q,dia){
   return operativa(r,dia,!!q.fecha)&&(!q.titular||norm(r.titular_nombre)===norm(q.titular))&&
@@ -145,8 +145,12 @@
     if(saldos.length!==1||saldos[0].saldo_alojamiento==null||Number(saldos[0].saldo_alojamiento)!==0)return {estado:'bloqueada',reserva:r,mensaje:'No se acredita el pago completo del alojamiento.'};finanzas=saldos[0];}
    const contraste=await comprobarLibro(r,{...q,tipo},libro,lectura,control);control();
    if(contraste.conflicto)return {estado:'bloqueada',reserva:r,libro:contraste,mensaje:contraste.mensaje};
-   const p={estado:'propuesta',q:{...q,tipo},reserva:r,libro:contraste,dia,mensaje:`Se propone registrar BOVE ${q.numero} en ${tipo}. Fecha de referencia: ${dia}.${q.ano_inferido?' Año no indicado: se usa el año actual de America/Santiago.':''}`,bloqueo};
-   propuestas.set(p,{q:{...q,tipo},id:r.id,sello:sello(r),finanzas:JSON.stringify(finanzas),dia,opciones:{...opciones,libro,lectura,cliente,permiso}});return p;
+   const usuario=(opciones.identidad || identidad)();
+   const p={estado:'propuesta',q:{...q,tipo},reserva:r,libro:contraste,dia,
+    mensaje:`BOVE ${q.numero} · ${tipo} · ${dia}${q.ano_inferido?' · Año no indicado: se usa el actual':''}`,
+    puedeConfirmar:Boolean(usuario && r.actualizado_en && !r.grupo_reserva_id)};
+   propuestas.set(p,{q:{...q,tipo},id:r.id,sello:sello(r),finanzas:JSON.stringify(finanzas),dia,
+    usuario,generacion:contraste.generacion,opciones:{...opciones,libro,lectura,cliente,permiso}});return p;
   };
   try{return await Promise.race([ejecutar(),new Promise((_,reject)=>{timer=setTimeout(()=>{vencida=true;try{control();}catch(e){reject(e);}},opciones.timeoutMs??20000);})]);}
   catch(e){return {estado:'bloqueada',mensaje:'No pude completar la preparación. '+e.message};}finally{clearTimeout(timer);}
@@ -156,10 +160,42 @@
   if(!original.q.fecha&&(original.opciones.dia||hoy())!==original.dia)return {estado:'bloqueada',mensaje:'Cambió el día operativo. Prepara una propuesta nueva.'};
   const nueva=await preparar(original.q,{...original.opciones,reservaId:original.id,tipo:original.q.tipo});
   const datos=propuestas.get(nueva);
-  if(!datos||datos.sello!==original.sello||datos.finanzas!==original.finanzas)return {estado:'bloqueada',mensaje:'Proyecto H o la comprobación del Libro cambió desde que preparaste esta acción. Revisa la propuesta nuevamente. '+(nueva.mensaje||'')};
-  return {...nueva,estado:'revalidada',mensaje:'Segunda revalidación completada. No se guardó ningún BOVE.',bloqueo};
+  if(!datos||datos.sello!==original.sello||datos.finanzas!==original.finanzas||datos.usuario!==original.usuario||
+   datos.generacion!==original.generacion)return {estado:'bloqueada',mensaje:'Proyecto H o el Libro cambió. Vuelve a pedir el BOVE. '+(nueva.mensaje||'')};
+  const pRevalidada={...nueva,estado:'revalidada',mensaje:'BOVE revalidado. No se guardó ningún número.'};
+  propuestas.set(pRevalidada,datos);
+  return pRevalidada;
  }
- async function confirmar(){return {estado:'bloqueada',mensaje:bloqueo};}
+ async function confirmar(p){
+  const original=propuestas.get(p);
+  if(!original||!p.puedeConfirmar||!original.usuario||(original.opciones.identidad||identidad)()!==original.usuario)
+   return {estado:'bloqueada',mensaje:'Prepara el BOVE en la sesión actual antes de confirmarlo.'};
+  if(confirmando.has(p))return {estado:'en_curso',mensaje:'El BOVE ya se está guardando.'};
+  confirmando.add(p);
+  try{
+   const nueva=await revalidar(p);
+   if(nueva.estado!=='revalidada')return nueva;
+   if((original.opciones.identidad||identidad)()!==original.usuario)return {estado:'bloqueada',mensaje:'La sesión cambió. Vuelve a pedir el BOVE.'};
+   const r=nueva.reserva,q=original.q;
+   const estadias=r.estadias.map(e=>({id:e.id,cabana_numero:Number(e.cabanas?.numero),fecha_ingreso:e.fecha_ingreso,
+    fecha_salida:e.fecha_salida,tipo_estadia:e.tipo_estadia,estado_estadia:e.estado_estadia}))
+    .sort((a,b)=>a.id.localeCompare(b.id));
+   const {data,error}=await original.opciones.cliente.rpc('haiku_guardar_bove_asistente_v1',{
+    p_reserva_id:r.id,p_version:r.actualizado_en,p_estadias:estadias,p_tipo:q.tipo,p_bove:q.numero
+   });
+   if(error)throw error;
+   if(data?.reserva_id!==r.id||String(data[q.tipo==='servicios'?'bove_checkout':'bove'])!==q.numero)
+    throw Error('Comprueba el número en la ficha de la reserva.');
+   propuestas.delete(p);
+   root.dispatchEvent?.(new root.CustomEvent('haiku:bove-actualizado',{detail:{reservaId:r.id,tipo:q.tipo}}));
+   void Promise.allSettled([
+    Promise.resolve().then(()=>root.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada?.('BOVE guardado desde Haku')),
+    Promise.resolve().then(()=>root.haikuRefrescarFichaSupabaseV2?.(r.id))
+   ]);
+   return {...nueva,estado:'guardado',mensaje:`BOVE ${q.numero} de ${q.tipo} guardado en Proyecto H.`};
+  }catch(e){return {estado:'bloqueada',mensaje:e?.message||'Comprueba el BOVE en la ficha.'};}
+  finally{confirmando.delete(p);}
+ }
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const descripcion=r=>`${r.titular_nombre} · ${(r.estadias||[]).map(e=>`CAB ${e.cabanas?.numero??'—'} · ${e.fecha_ingreso} → ${e.fecha_salida}`).join(' / ')}`;
  function encabezado(p){
@@ -169,10 +205,15 @@
   return descripcion({...r,estadias:segmentos})+(r.estadias.length>1?' · Reserva con otro segmento asociado':'');
  }
  function renderizar(p){
-  return `<article class="haku-bove-preparacion"><h3>Preparación BOVE</h3><p>Sólo lectura · sin guardado</p>${p.reserva?`<strong>${esc(encabezado(p))}</strong>`:''}<p>${esc(p.mensaje)}</p>${p.libro?`<p>${esc(p.libro.mensaje)}</p>${p.libro.evidencias.map(e=>`<small>${esc(e.numero||e.estado)} · ${esc(e.origen?.hoja)}!${esc(e.origen?.celda)}</small>`).join('<br>')}`:''}${['propuesta','revalidada'].includes(p.estado)?`<p>Proyecto H: BOVE ${esc(p.q.tipo)} pendiente.</p><p>${esc(bloqueo)}</p>`:''}<div class="haku-bove-acciones">${p.estado==='elegir_reserva'?p.candidatas.map((r,i)=>`<button type="button" data-bove-elegir="${i}">${esc(descripcion(r))}</button>`).join(''):p.estado==='elegir_tipo'?'<button type="button" data-bove-tipo="alojamiento">Alojamiento</button><button type="button" data-bove-tipo="servicios">Servicios</button>':''}${p.estado==='propuesta'?'<button type="button" data-bove-revalidar>Revalidar propuesta</button>':''}${['propuesta','revalidada'].includes(p.estado)?'<button type="button" disabled aria-disabled="true" title="Protección atómica pendiente">Confirmar BOVE · bloqueado</button>':''}<button type="button" data-bove-cancelar>Cancelar</button></div></article>`;
+  const propuesta=['propuesta','revalidada'].includes(p.estado);
+  const opciones=p.estado==='elegir_reserva'?p.candidatas.map((r,i)=>`<button type="button" data-bove-elegir="${i}">${esc(descripcion(r))}</button>`).join(''):
+   p.estado==='elegir_tipo'?'<button type="button" data-bove-tipo="alojamiento">Alojamiento</button><button type="button" data-bove-tipo="servicios">Servicios</button>':'';
+  const confirmar=propuesta&&p.puedeConfirmar?'<button type="button" class="haku-orden__principal" data-bove-confirmar>Confirmar BOVE</button>':'';
+  const motivo=propuesta&&!p.puedeConfirmar?(p.reserva.grupo_reserva_id?'Usa Pagos por titular para registrar el BOVE de esta reserva conjunta.':'Inicia sesión para confirmar el BOVE.'):'';
+  return `<article class="haku-bove-preparacion haku-orden"><h3>${p.estado==='guardado'?'BOVE guardado':'Registrar BOVE'}</h3>${p.reserva?`<strong>${esc(encabezado(p))}</strong>`:''}<p role="status">${esc(p.mensaje)}</p>${p.libro?`<p>${esc(p.libro.mensaje)}</p>${p.libro.evidencias.map(e=>`<small>${esc(e.numero||e.estado)} · ${esc(e.origen?.hoja)}!${esc(e.origen?.celda)}</small>`).join('<br>')}`:''}${motivo?`<p>${esc(motivo)}</p>`:''}${opciones||confirmar?`<div class="haku-orden__acciones" data-haku-operacion-acciones>${opciones}${confirmar}<button type="button" data-bove-cancelar>Descartar</button></div>`:''}</article>`;
  }
  function instalar(){
-  const doc=root.document,style=doc.createElement('style');style.textContent='.haku-bove-preparacion{background:#f6faf7;color:#263e30;border:1px solid #cbded1;border-radius:14px;padding:14px;overflow-wrap:anywhere;font-size:12px}.haku-bove-preparacion h3{font-size:16px;margin:0 0 8px}.haku-bove-preparacion p{line-height:1.5}.haku-bove-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.haku-bove-acciones button{font:inherit;border:1px solid #b7cec0;border-radius:9px;padding:8px 12px;background:white;color:#294b37;cursor:pointer;max-width:100%}.haku-bove-acciones button:disabled{background:#eef1ef;color:#68766d;cursor:not-allowed}.haku-bove-acciones button:focus-visible{outline:2px solid #356949;outline-offset:2px}';doc.head.appendChild(style);
+  const doc=root.document;
   let ocupado=false;
   async function procesar(t,campo,mensajes){
    if(ocupado)return;ocupado=true;campo.value='';campo.dispatchEvent(new root.Event('input',{bubbles:true}));
@@ -183,10 +224,12 @@
    el.addEventListener('click',async e=>{
     const boton=e.target?.closest?.('button');if(!boton)return;
     e.preventDefault();e.stopPropagation();
-    if(boton.hasAttribute('data-bove-cancelar')){cancelada=true;el.textContent='Preparación cancelada. No se guardó ningún BOVE.';return;}
     if(enCurso||cancelada)return;enCurso=true;boton.disabled=true;
     try{let siguiente;
-     if(boton.hasAttribute('data-bove-revalidar')&&p.estado==='propuesta')siguiente=await revalidar(p);
+     if(boton.hasAttribute('data-bove-cancelar')){cancelada=true;el.textContent='Propuesta de BOVE descartada.';return;}
+     if(boton.hasAttribute('data-bove-confirmar')&&['propuesta','revalidada'].includes(p.estado)){
+      boton.textContent='Revalidando y guardando…';siguiente=await confirmar(p);
+     }
      else if(boton.hasAttribute('data-bove-elegir')&&p.estado==='elegir_reserva'){const r=p.candidatas[Number(boton.dataset.boveElegir)];if(r)siguiente=await preparar(p.q,{reservaId:r.id});}
      else if(boton.hasAttribute('data-bove-tipo')&&p.estado==='elegir_tipo')siguiente=await preparar(p.q,{reservaId:p.reserva.id,tipo:boton.dataset.boveTipo});
      if(siguiente&&!cancelada){p=siguiente;el.innerHTML=renderizar(p);}

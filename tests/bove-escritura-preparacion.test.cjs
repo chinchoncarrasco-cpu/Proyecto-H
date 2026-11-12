@@ -41,10 +41,10 @@ test('error de Libro no se disfraza de ausencia',async()=>{const l=libro([]);l.c
 test('revalidación lee nuevamente el mismo ID y vuelve a contrastar',async()=>{const e=entorno(),l=libro([]),p=await e.preparar(undefined,{libro:l});const n=e.llamadas.length;const r=await api.revalidar(p);assert.equal(r.estado,'revalidada');assert.ok(e.llamadas.length>n);assert.match(r.mensaje,/No se guardó/);});
 for(const campo of ['bove_cierre','estado_reserva','titular_nombre'])test('segunda lectura detecta cambio en '+campo,async()=>{const e=entorno(),p=await e.preparar();e.tablas.reservas[0][campo]=campo==='estado_reserva'?'cancelada':'otro';assert.equal((await api.revalidar(p)).estado,'bloqueada');});
 test('segunda lectura detecta finanzas y permiso revocado',async()=>{const e=entorno(),p=await e.preparar();e.tablas.vista_saldos_alojamiento_reserva[0].total_alojamiento=200000;assert.equal((await api.revalidar(p)).estado,'bloqueada');let permitido=true;const p2=await e.preparar(undefined,{permiso:()=>permitido});permitido=false;assert.equal((await api.revalidar(p2)).estado,'bloqueada');});
-test('rechaza propuestas falsificadas y confirmar siempre bloquea',async()=>{assert.equal((await api.revalidar({})).estado,'bloqueada');const e=entorno(),p=await e.preparar();for(const v of [undefined,p,{...p,habilitado:true,force:true}])assert.equal((await api.confirmar(v,{habilitado:true})).estado,'bloqueada');});
+test('rechaza propuestas falsificadas y confirmaciones sin sesión',async()=>{assert.equal((await api.revalidar({})).estado,'bloqueada');const e=entorno(),p=await e.preparar();for(const v of [undefined,p,{...p,habilitado:true,force:true}])assert.equal((await api.confirmar(v,{habilitado:true})).estado,'bloqueada');});
 test('timeout termina sin resultado tardío usable',async()=>{const e=entorno();e.opciones.cliente.from=()=>({select(){return this;},lte(){return this;},gte(){return this;},order(){return this;},range:()=>new Promise(()=>{})});assert.match((await e.preparar(undefined,{timeoutMs:5})).mensaje,/tiempo de espera/);});
-test('tarjeta escapa contenido y muestra bloqueo independiente del botón',async()=>{const e=entorno([reserva({titular_nombre:'<img onerror=alert(1)>'})]),p=await e.preparar();const html=api.renderizar(p);assert.doesNotMatch(html,/<img/);assert.match(html,/disabled aria-disabled="true"/);assert.match(html,/Revalidar propuesta/);assert.match(html,/falta desplegar/);});
-test('módulo no contiene writer, confirm nativo, persistencia ni eventos falsos',()=>{const s=fs.readFileSync('js/supabase-asistente-bove-escritura-v1.js','utf8');assert.doesNotMatch(s,/\.rpc\s*\(|\.update\s*\(|\.insert\s*\(|localStorage|indexedDB|haiku:bove-actualizado|root\.confirm\s*\(/);});
+test('tarjeta escapa contenido y exige sesión para confirmar',async()=>{const e=entorno([reserva({titular_nombre:'<img onerror=alert(1)>'})]),p=await e.preparar();const html=api.renderizar(p);assert.doesNotMatch(html,/<img/);assert.doesNotMatch(html,/data-bove-confirmar/);assert.match(html,/Inicia sesión para confirmar/);});
+test('módulo escribe sólo mediante la RPC atómica y conserva la confirmación propia',()=>{const s=fs.readFileSync('js/supabase-asistente-bove-escritura-v1.js','utf8');assert.match(s,/\.rpc\('haiku_guardar_bove_asistente_v1'/);assert.doesNotMatch(s,/\.update\s*\(|\.insert\s*\(|localStorage|indexedDB|root\.confirm\s*\(/);});
 
 test('segunda revalidación detecta un conflicto nuevo del Libro',async()=>{
  const e=entorno(),l=libro([]),p=await e.preparar(undefined,{libro:l});
@@ -56,20 +56,37 @@ test('CAB sólo coincide con el segmento operativo correspondiente',async()=>{
  assert.equal((await entorno([r]).preparar('ponle BOVE 16989 a CAB 8')).estado,'bloqueada');
  assert.equal((await entorno([r]).preparar()).estado,'propuesta');
 });
-test('UI real prepara, revalida y cancela sin RPC ni guardado aun retirando disabled',async()=>{
+test('UI real prepara y descarta sin escritura. Sólo la confirmación válida registra el BOVE',async()=>{
  const vm=require('node:vm'),listeners=[],nodos=new Map();
  const elemento=()=>({value:'',children:[],handlers:{},appendChild(e){this.children.push(e);},dispatchEvent(){},addEventListener(t,f){this.handlers[t]=f;},querySelector(){return null;}});
  const doc={head:elemento(),createElement:elemento,getElementById:id=>nodos.get(id)};
  const e=entorno(),dia=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
- Object.assign(e.tablas.reservas[0].estadias[0],{fecha_ingreso:dia,fecha_salida:dia,tipo_estadia:'full_day'});
- const w={document:doc,haikuSupabase:e.opciones.cliente,haikuTienePermiso:()=>true,Event:class{},addEventListener:(t,f)=>listeners.push({t,f})};
+ Object.assign(e.tablas.reservas[0].estadias[0],{fecha_ingreso:dia,fecha_salida:dia,tipo_estadia:'fullday'});
+ e.tablas.reservas[0].actualizado_en=dia+'T12:00:00Z';
+ const escrituras=[];
+ e.opciones.cliente.rpc=async(nombre,args)=>{
+  escrituras.push({nombre,args});return {data:{reserva_id:args.p_reserva_id,bove:args.p_bove}};
+ };
+ const w={document:doc,haikuSesion:{auth:{id:'usuario'}},haikuSupabase:e.opciones.cliente,haikuTienePermiso:()=>true,Event:class{},addEventListener:(t,f)=>listeners.push({t,f})};
  vm.runInNewContext(fs.readFileSync('js/supabase-asistente-bove-escritura-v1.js','utf8'),{window:w,setTimeout,clearTimeout,Intl});
  const campo=elemento(),mensajes=elemento();nodos.set('haiku-asistente-texto',campo);nodos.set('haiku-asistente-mensajes',mensajes);campo.value='ponle BOVE 16989 a CAB 6';
  listeners.find(l=>l.t==='click').f({type:'click',target:{closest:()=>({})},preventDefault(){},stopImmediatePropagation(){}});
  await new Promise(r=>setImmediate(r));
- const tarjeta=mensajes.children[1];assert.match(tarjeta.innerHTML,/Revalidar propuesta/);
- const click=async atributo=>tarjeta.handlers.click({target:{closest:()=>({hasAttribute:a=>a===atributo,dataset:{},disabled:false})},preventDefault(){},stopPropagation(){}});
- const n=e.llamadas.length;await click('data-bove-revalidar');assert.ok(e.llamadas.length>n);assert.match(tarjeta.innerHTML,/Segunda revalidación completada/);
- const html=tarjeta.innerHTML;await click('data-bove-confirmar');assert.equal(tarjeta.innerHTML,html);
- await click('data-bove-cancelar');assert.match(tarjeta.textContent,/cancelada/);assert.equal(e.tablas.reservas[0].bove_cierre,null);
+ const tarjeta=mensajes.children[1];assert.match(tarjeta.innerHTML,/Confirmar BOVE/);
+ const click=async (nodo,atributo)=>nodo.handlers.click({target:{closest:()=>({hasAttribute:a=>a===atributo,dataset:{},disabled:false})},preventDefault(){},stopPropagation(){}});
+ assert.deepEqual(escrituras,[]);
+ await click(tarjeta,'data-bove-cancelar');assert.match(tarjeta.textContent,/descartada/);assert.deepEqual(escrituras,[]);
+ campo.value='ponle BOVE 16989 a CAB 6';
+ listeners.find(l=>l.t==='click').f({type:'click',target:{closest:()=>({})},preventDefault(){},stopImmediatePropagation(){}});
+ await new Promise(r=>setImmediate(r));
+ const confirmable=mensajes.children[3],n=e.llamadas.length;
+ await click(confirmable,'data-bove-confirmar');
+ assert.ok(e.llamadas.length>n);
+ assert.match(confirmable.innerHTML,/BOVE 16989 de alojamiento guardado/);
+ assert.equal(escrituras.length,1);
+ assert.equal(escrituras[0].nombre,'haiku_guardar_bove_asistente_v1');
+ assert.equal(escrituras[0].args.p_bove,'16989');
+ assert.equal(escrituras[0].args.p_estadias[0].cabana_numero,6);
+ await click(confirmable,'data-bove-confirmar');
+ assert.equal(escrituras.length,1);
 });

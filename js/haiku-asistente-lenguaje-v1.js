@@ -238,11 +238,12 @@
         if (!ingreso || !salida) return false;
         if (modo === "ingreso") return ingreso === fecha;
         if (modo === "salida") return salida === fecha;
+        if (modo === "incluyeSalida") return ingreso <= fecha && fecha <= salida;
         return ingreso === salida ? fecha === ingreso : ingreso <= fecha && fecha < salida;
     }
 
     const api = Object.freeze({normalizar,orden,limpiarOrden,corregirEntidadInicial,adaptarOrden,hoy,extraerFecha,extraerCabana,limpiarTitular,nombreValido,
-        interpretarTotal,coincideNombre,coincideFecha});
+        importeClp,interpretarTotal,coincideNombre,coincideFecha});
     root.HAIKU_ASISTENTE_LENGUAJE_V1 = api;
     if (typeof module !== "undefined") module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

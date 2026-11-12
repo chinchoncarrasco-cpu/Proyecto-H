@@ -1572,7 +1572,37 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
 .haku-orden h3 { margin-bottom: 5px; }
 .haku-orden li { margin-top: 4px; }
 .haku-orden p:empty { display: none; }
+.haku-orden__datos { display: grid; gap: 4px 12px; margin: 6px 0; }
+.haku-orden__datos dt { color: var(--haku-compacto-secundario, #586c60); font-size: 11px; }
+.haku-orden__datos dd { margin: 0; }
+.haku-orden__texto {
+    margin: 6px 0;
+    padding: 5px 8px;
+    border-inline-start: 2px solid var(--haku-compacto-acento, #286c4e);
+    background: var(--haku-compacto-suave, #eef4ef);
+    white-space: pre-wrap;
+}
+.haku-orden__acciones { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.haku-orden__acciones a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 4px 7px;
+    border: 1px solid var(--haku-compacto-borde, #dbe3de);
+    border-radius: 5px;
+    font: inherit;
+    text-decoration: none;
+}
+.haku-orden__acciones .haku-orden__principal {
+    background: var(--haku-compacto-suave, #eef4ef);
+    color: var(--haku-compacto-texto, #172019);
+    border-color: var(--haku-compacto-acento, #286c4e);
+    font-weight: 650;
+}
+.haku-orden__acciones button:disabled { opacity: .65; cursor: wait; }
+.haku-orden [data-guardado] { margin-top: 6px; color: var(--haku-compacto-acento, #286c4e); font-weight: 650; }
 @media (min-width: 701px) {
+    .haku-orden__datos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); }
     @container haku-ayuda (min-width: 370px) {
         .haku-ayuda details > ul { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
     }

@@ -19,7 +19,15 @@
             {titulo:"Checklist y aseo express",detalle:"Abre el detalle registrado del checklist o compara el aseo con el Libro.",
                 ejemplos:["Haku, checklist de aseo express de CAB 3 hoy","Haku, compara el aseo de CAB 3 el 12/11/2026"]},
             {titulo:"Huésped anterior y revisión tras la salida",detalle:"Ubica la estadía anterior o quién revisó después del check-out. Puedes pedir detalles de esa revisión en el mismo chat.",
-                ejemplos:["Haku, ¿quién estuvo antes que Ana Pérez en CAB 3?","Haku, ¿quién revisó el aseo después del check-out de Ana Pérez en CAB 3?"]}
+                ejemplos:["Haku, ¿quién estuvo antes que Ana Pérez en CAB 3?","Haku, ¿quién revisó el aseo después del check-out de Ana Pérez en CAB 3?"]},
+            {titulo:"Registrar aseo",detalle:"Indica IN, OUT y encargado según corresponda. También puedes marcar No requiere cuando el aseo está sin horas.",
+                ejemplos:["Haku, registra aseo de CAB 3 hoy IN 10:00 OUT 11:30 encargado María Paz","Haku, marca aseo no requiere de CAB 3 hoy"]},
+            {titulo:"Iniciar o cambiar el estado de una revisión",detalle:"Inicia una revisión completa o un repaso. Para actualizar un ciclo existente, indica completa, express o repaso si hay más de uno.",
+                ejemplos:["Haku, inicia revisión completa de CAB 3 hoy","Haku, marca revisión express lista de CAB 3 hoy"]},
+            {titulo:"Guardar notas",detalle:"Pon el texto después de «:». Para asociarlo a la reserva, agrega el titular o pide una nota de reserva.",
+                ejemplos:["Haku, anota nota de CAB 3 hoy: Dejar dos batas","Haku, guarda nota de reserva de Ana Pérez CAB 3 hoy: Pasa por recepción"]},
+            {titulo:"Bloquear una cabaña",detalle:"Para un día, indica la fecha. Para varios días, indica desde cuándo queda bloqueada y la fecha en que vuelve a estar disponible.",
+                ejemplos:["Haku, bloquea CAB 3 mañana por mantención","Haku, bloquea CAB 3 del 15 al 17 de noviembre de 2026 por mantención"]}
         ]},
         {nombre:"Reservas",acciones:[
             {titulo:"Crear una reserva o Full Day",detalle:"Prepara la vista previa con titular, ingreso, salida, cabaña y ocupación. Puedes añadir acompañantes y abonos con respaldo.",
@@ -28,14 +36,26 @@
                 ejemplos:["Haku, prepara estas dos reservas. Ana Pérez, CAB 3, 13 al 14/11/2026. Rosa Vega, CAB 4, 13 al 15/11/2026."]},
             {titulo:"Abrir ficha o ubicar una reserva para editar",detalle:"Indica titular, cabaña y fecha, o el código. La ficha ofrece el editor y las acciones de estado.",
                 ejemplos:["Haku, abre la ficha de Ana Pérez en CAB 3 el 13/11/2026","Haku, modifca reserva Ana Pérez CAB 3 del 13/11/2026"]},
+            {titulo:"Editar fechas o cabaña",detalle:"Indica primero la reserva actual. Después de «a» o «para», escribe el destino. Revisa las fechas y el total antes de guardar.",
+                ejemplos:["Haku, cambia la cabaña de Ana Pérez CAB 3 hoy a CAB 4","Haku, cambia las fechas de CAB 3 Ana Pérez hoy al 15/11/2026 hasta el 17/11/2026"]},
+            {titulo:"Editar titular, contacto u ocupación",detalle:"Usa el nombre del campo y luego el valor nuevo. Para la ocupación puedes indicar adultos, niños o mascotas.",
+                ejemplos:["Haku, corrige el titular de CAB 3 hoy a Ana María Pérez","Haku, cambia el correo de CAB 3 hoy a reservas@example.com","Haku, deja la ocupación de CAB 3 hoy en 2 adultos y 1 niño"]},
+            {titulo:"Cambiar tarifa por noche",detalle:"Indica una noche concreta o aplica la misma tarifa a todas. Haku muestra el efecto en el total de alojamiento.",
+                ejemplos:["Haku, fija la tarifa por noche de Ana Pérez CAB 3 hoy a 180 lucas","Haku, cambia la tarifa de la noche del 13/11/2026 de Ana Pérez CAB 3 a $180.000"]},
             {titulo:"Cambiar total de alojamiento",detalle:"Muestra total actual, nuevo total y fechas. Si coincide la reserva y la operación es compatible, puedes confirmar uno o varios cambios.",
                 ejemplos:["Haku, cambia el precio del CAB 10 de Ana Pérez de hoy a CLP 180.000","Haku, modifca el total de CAB10 Ana Pérez hoy a 180 lucas"]},
             {titulo:"Marcar ingresos como hospedados",detalle:"Prepara el check-in de las reservas de ingreso para la fecha y cabañas solicitadas.",
-                ejemplos:["Haku, marca como hospedadas las reservas que ingresan hoy en CAB 3"]}
+                ejemplos:["Haku, marca como hospedadas las reservas que ingresan hoy en CAB 3"]},
+            {titulo:"Check-out, No Show, cancelar o reactivar",detalle:"Muestra el estado anterior y el nuevo. La reactivación comprueba abonos, bloqueos y disponibilidad.",
+                ejemplos:["Haku, haz el check-out de CAB 3 hoy","Haku, marca No Show de la reserva de Ana Pérez CAB 3 hoy","Haku, cancela reserva de Ana Pérez CAB 3 hoy","Haku, reactiva reserva de Ana Pérez CAB 3 hoy"]}
         ]},
         {nombre:"Servicios",acciones:[
             {titulo:"Horarios libres de tinajas",detalle:"Consulta ambos tipos o elige Tónel o Jacuzzi para una fecha.",
                 ejemplos:["Haku, ¿qué horas tiene libres el Tónel mañana?","Haku, pásame los horarios de las tinajas de hoy"]},
+            {titulo:"Consultar agenda de masajes y servicios",detalle:"Muestra las citas registradas. Confirma los horarios libres de masaje con el profesional.",
+                ejemplos:["Haku, dame los horarios de masajes de mañana","Haku, consulta la agenda de servicios del 15/11/2026"]},
+            {titulo:"Reprogramar un servicio",detalle:"Identifica el servicio programado por cabaña, día y hora original si hay varios. Conserva duración e importe.",
+                ejemplos:["Haku, mueve el Tónel de CAB 3 hoy a las 20:45","Haku, reprograma el masaje de CAB 3 hoy de las 11:00 para mañana a las 12:00"]},
             {titulo:"Agendar o agregar un servicio",detalle:"Indica cabaña, tipo y hora. Usa hoy si omites el día. El formulario permite revisar catálogo, titular, personas y cobro.",
                 ejemplos:["Haku, ingresaservicio tinaja las 20.45 tonel en cab 3","Haku, agenda un masaje terapéutico 60 min para mañana a las 11:00 en CAB 3"]},
             {titulo:"Cambiar tinaja a cortesía o cobro normal",detalle:"Indica la tinaja existente, titular y datos de horario. El cobro normal prepara el cargo del servicio.",
@@ -50,9 +70,15 @@
                 ejemplos:["Haku, ingresa este pago","Haku, registra un abono de $30.000 en efectivo pagado hoy por Ana Pérez, CAB 3"]},
             {titulo:"Registrar varios abonos",detalle:"Pega cada pago en su línea o adjunta los comprobantes. Haku separa importes y reservas para la confirmación.",
                 ejemplos:["Haku, carga estos pagos a reservas existentes"]},
+            {titulo:"Corregir un pago",detalle:"Identifica el pago con folio, CodAut o referencia. En abonos puedes corregir monto o fecha. También puedes corregir el medio y sus referencias.",
+                ejemplos:["Haku, corrige el abono folio 00123 de CAB 3 hoy a $90.000","Haku, cambia el pago folio 00123 de CAB 3 hoy a folio 00124"]},
+            {titulo:"Anular un registro de pago",detalle:"Incluye el motivo si ya estaba confirmado. El movimiento se conserva en el historial.",
+                ejemplos:["Haku, anula el pago folio 00123 de CAB 3 hoy motivo: Registro duplicado","Haku, anula WebPay pendiente CodAut 001234"]},
+            {titulo:"Preparar y registrar un reembolso",detalle:"Para reembolsar, prepara los datos del pago y devuelve el dinero en el medio original. Registra luego la devolución completa con su comprobante.",
+                ejemplos:["Haku, reembolsa el abono folio 00123 de CAB 3 hoy","Haku, registra devolución del abono folio 00123 de CAB 3 hoy, fecha 12/11/2026, medio transferencia, comprobante DEV-123, motivo: Cobro duplicado"]},
             {titulo:"Buscar, comparar y revisar BOVE",detalle:"Busca uno o varios números, consulta el último registrado, los pendientes o las diferencias con el Libro.",
                 ejemplos:["Haku, busca BOVE 16989","Haku, ¿cuál es el último BOVE?","Haku, ¿qué BOVE están pendientes hoy?","Haku, compara los BOVE del Libro con Proyecto H"]},
-            {titulo:"Preparar un BOVE",detalle:"Haku comprueba número, destino y posibles conflictos. El flujo de chat llega a la vista previa.",
+            {titulo:"Guardar un BOVE",detalle:"Indica número y alcance. Haku comprueba la reserva, el pago completo y el Libro antes de habilitar la confirmación.",
                 ejemplos:["Haku, ponle BOVE 16989 de alojamiento a CAB 6 del 12 de noviembre de 2026"]}
         ]},
         {nombre:"Libro de Reserva",acciones:[
@@ -81,14 +107,16 @@
             {titulo:"Ingresos Manager",detalle:"Abre la guía operativa de ingreso de pagos en Manager.",atajo:"ingresos-manager",rotulo:"Abrir guía"},
             {titulo:"Proceso de reservas",detalle:"Abre la guía de recepción y registro de reservas.",atajo:"proceso-reservas",rotulo:"Abrir guía"}
         ]},
-        {nombre:"Pendiente por chat",acciones:[
-            {titulo:"Editar campos de una reserva",detalle:"Fechas, cabaña, titular, contacto, ocupación y tarifas por noche se editan en la ficha. Haku puede localizarla."},
-            {titulo:"Cambiar otros estados de reserva",detalle:"Check-out, cancelación, reactivación y no-show se realizan desde la ficha. El informe del Libro tiene su propio flujo de cancelaciones."},
-            {titulo:"Editar, anular o reembolsar un pago",detalle:"Usa Pagos o la ficha. Haku puede registrar y comparar abonos."},
-            {titulo:"Guardar un BOVE desde el chat",detalle:"El comando prepara la validación. Usa Pagos o Cierre para guardar."},
-            {titulo:"Reprogramar un servicio existente",detalle:"Consulta la agenda en Servicios para revisar un cambio de fecha, hora o profesional. La disponibilidad por chat cubre tinajas."},
-            {titulo:"Registrar aseo, revisión, bloqueos o notas por orden libre",detalle:"Usa el módulo operativo correspondiente. Las notas y los bloqueos del Libro se revisan desde su comparación."},
-            {titulo:"Cobrar al huésped o enviar mensajes",detalle:"Haku registra comprobantes y consulta datos del panel. Los cobros y mensajes se hacen en sus canales."}
+        {nombre:"Contacto con huéspedes",acciones:[
+            {titulo:"Preparar un cobro de saldo",detalle:"Usa el saldo que figura en la ficha y el teléfono del titular. Haku prepara el texto para abrirlo en WhatsApp.",
+                ejemplos:["Haku, cobra el saldo de Ana Pérez CAB 3 hoy"]},
+            {titulo:"Redactar un WhatsApp o correo",detalle:"Indica la reserva, el canal y el texto después de «:». Revisa el destinatario y envía desde tu aplicación.",
+                ejemplos:["Haku, envía WhatsApp a CAB 3 hoy: Hola, ¿a qué hora estiman llegar?","Haku, prepara correo a Ana Pérez CAB 3 hoy: Tu reserva está confirmada."]}
+        ]},
+        {nombre:"Casos que requieren otro canal",acciones:[
+            {titulo:"Ejecutar cobros o devoluciones",detalle:"Procesa el dinero en el medio de pago. Haku prepara los datos y puede registrar el comprobante de una devolución completa."},
+            {titulo:"Pagos y BOVE conjuntos",detalle:"En Pagos por titular puedes revisar la distribución entre cabañas y registrar el BOVE del grupo."},
+            {titulo:"Confirmar horarios o cambiar profesional de masaje",detalle:"La disponibilidad del profesional se coordina con su agenda. Haku muestra las citas que están en Proyecto H."}
         ]}
     ];
 
