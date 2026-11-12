@@ -1508,3 +1508,72 @@ html[data-haiku-tema="oscuro"] .haku-libro-preparacion-zona--cancelacion {
         .haku-titulares__etiqueta-fecha { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     }
 }
+
+.haku-ayuda, .haku-orden {
+    box-sizing: border-box;
+    min-width: 0;
+    border: 1px solid var(--haku-compacto-borde, #dbe3de);
+    border-radius: 8px;
+    background: var(--haku-compacto-superficie, #fbfcfb);
+    color: var(--haku-compacto-texto, #172019);
+    font-size: 12px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+.haku-ayuda { width: 100%; container: haku-ayuda / inline-size; }
+.haku-ayuda__cabecera {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 11px 4px;
+}
+.haku-ayuda__cabecera h2, .haku-orden h3 { margin: 0; color: inherit; font-size: 15px; }
+.haku-ayuda > p { margin: 0 11px 7px; }
+.haku-ayuda > input {
+    box-sizing: border-box;
+    width: calc(100% - 22px);
+    min-height: 32px;
+    margin: 0 11px 8px;
+    padding: 5px 8px;
+    border: 1px solid var(--haku-compacto-borde, #dbe3de);
+    border-radius: 6px;
+    background: var(--haku-compacto-control, #f1f5f2);
+    color: inherit;
+    font: inherit;
+}
+.haku-ayuda > details {
+    border-top: 1px solid var(--haku-compacto-borde, #dbe3de);
+}
+.haku-ayuda summary { padding: 8px 11px; cursor: pointer; font-weight: 650; }
+.haku-ayuda ul, .haku-orden ul { margin: 0; padding: 0; list-style: none; }
+.haku-ayuda li { padding: 7px 11px; border-top: 1px solid var(--haku-compacto-borde, #dbe3de); }
+.haku-ayuda li p, .haku-orden p {
+    margin: 2px 0 4px;
+    color: var(--haku-compacto-secundario, #586c60);
+}
+.haku-ayuda button, .haku-orden button {
+    max-width: 100%;
+    min-height: 30px;
+    padding: 4px 7px;
+    border: 1px solid var(--haku-compacto-borde, #dbe3de);
+    border-radius: 5px;
+    background: var(--haku-compacto-control, #f1f5f2);
+    color: var(--haku-compacto-acento, #286c4e);
+    font: inherit;
+    cursor: pointer;
+    text-align: start;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.haku-ayuda__cabecera > button { min-width: 30px; text-align: center; }
+.haku-ayuda li > button { margin: 2px 4px 2px 0; }
+.haku-ayuda :is(button,summary,input):focus-visible, .haku-orden button:focus-visible {
+    outline: 2px solid var(--haku-compacto-acento, #286c4e); outline-offset: 1px;
+}
+.haku-orden { padding: 9px 11px; }
+.haku-orden h3 { margin-bottom: 5px; }
+.haku-orden li { margin-top: 4px; }
+.haku-orden p:empty { display: none; }
+@media (min-width: 701px) {
+    @container haku-ayuda (min-width: 370px) {
+        .haku-ayuda details > ul { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
+    }
+}

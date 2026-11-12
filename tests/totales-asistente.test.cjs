@@ -34,6 +34,32 @@ test('orden natural mantiene titular exacto, CAB segura y no escribe durante pre
 });
 for(const version of ['total1_financiero_v3','total1_financiero_v31'])test('capacidad '+version+' usa la misma confirmación y RPC de lote',async()=>{const e=entorno(),rpc=e.cliente.rpc.bind(e.cliente);e.cliente.rpc=(n,p)=>n==='haiku_capacidad_totales_v1'?Promise.resolve({data:{version,writer_disponible:true}}):rpc(n,p);const propuesta=await e.preparar();assert.equal(propuesta.estado,'propuesta');assert.equal(e.calls.length,0);assert.equal((await api.confirmar(propuesta)).estado,'completada');assert.equal(e.calls.length,1);assert.equal(e.calls[0].n,'haiku_cambiar_totales_lote_v1');});
 test('V3 no disponible sigue bloqueando escritura',async()=>{const e=entorno();e.cliente.rpc=async()=>({data:{version:'total1_financiero_v3',writer_disponible:false}});const p=await e.preparar();assert.equal(p.estado,'previsualizacion');assert.equal((await api.confirmar(p)).estado,'bloqueada');assert.equal(e.calls.length,0);});
+test('el contrato v32 de producción mantiene la confirmación y el destino exacto por fecha',async()=>{
+ const anterior=r('r1','Inés María Rojas Vega',10);
+ const actual=r('r2','Inés María Rojas Vega',10);
+ Object.assign(actual.estadias[0],{fecha_ingreso:'2026-11-12',fecha_salida:'2026-11-15',
+  noches:['12','13','14'].map(d=>({fecha:'2026-11-'+d,tarifa:150000}))});
+ const e=entorno([anterior,actual]),rpc=e.cliente.rpc.bind(e.cliente);
+ const capacidad={version:'total1_financiero_v32',writer_disponible:true,servicios_separados:true};
+ e.cliente.rpc=(n,p)=>n==='haiku_capacidad_totales_v1'?Promise.resolve({data:capacidad}):rpc(n,p);
+ const consulta='Haku modifca el precio del CAB10 de Inés Rojas el 12 de noviembre de 2026 a 180 lucas';
+ const p=await e.preparar(consulta);
+ assert.equal(p.estado,'propuesta');
+ assert.deepEqual([p.items[0].reserva_id,p.items[0].titular,p.items[0].total_objetivo],['r2','Inés María Rojas Vega',180000]);
+ assert.equal(e.calls.length,0);
+ assert.equal((await api.confirmar(p)).estado,'completada');
+ assert.deepEqual(e.calls[0].p.p_cambios,[{reserva_id:'r2',total_actual:450000,total_objetivo:180000}]);
+ capacidad.servicios_separados=false;
+ assert.equal((await e.preparar(consulta)).estado,'previsualizacion');
+ assert.equal(e.calls.length,1);
+});
+test('un nombre parcial con la misma fecha y cabaña sigue bloqueado si hay dos candidatas',async()=>{
+ const e=entorno([r('r1','Ana Vega Rojas',3),r('r2','Ana Vega Mora',3)]);
+ const p=await e.preparar('cambia precio CAB 3 Ana Vega el 05/09/2026 a $180.000');
+ assert.equal(p.estado,'bloqueada');
+ assert.match(p.mensaje,/varias reservas compatibles/);
+ assert.equal(e.calls.length,0);
+});
 function entorno(rs=[r()]){
  const tablas={reservas:rs,vista_saldos_alojamiento_reserva:rs.map(r=>({reserva_id:r.id,total_alojamiento:450000})),cargo_ajustes:[],vista_estado_cargos:[]},calls=[];let permiso=true;
  const cliente={from(t){const filtros=[];const q={select(){return q;},order(){return q;},eq(k,v){filtros.push(r=>r[k]===v);return q;},async range(a,b){return {data:JSON.parse(JSON.stringify(tablas[t].filter(r=>filtros.every(f=>f(r))).slice(a,b+1))) };}};return q;},async rpc(n,p){if(n==='haiku_capacidad_totales_v1')return {data:{writer_disponible:true,version:'total1_financiero_v2'}};calls.push({n,p});return {data:{ok:true,resultados:p.p_cambios.map(e=>({reserva_id:e.reserva_id,total_nuevo:e.total_objetivo}))}};}};

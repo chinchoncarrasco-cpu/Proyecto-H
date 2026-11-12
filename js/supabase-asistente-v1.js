@@ -59,6 +59,7 @@
                 <details class="haiku-asistente-rapidas" id="haiku-asistente-rapidas">
                     <summary>Acciones rápidas<span class="haiku-asistente-rapidas-flecha" aria-hidden="true">⌄</span></summary>
                     <div class="haiku-asistente-rapidas-lista" aria-label="Acciones rápidas de Haku">
+                        <button type="button" data-haiku-accion-rapida="ayuda">Ayuda</button>
                         <button type="button" data-haiku-accion-rapida="revisar-captura">Revisar captura</button>
                         <button type="button" data-haiku-accion-rapida="preparar-reserva">Preparar reserva</button>
                         <button type="button" data-haiku-accion-rapida="consultar-documento">Cloudbeds · Tarifas</button>
@@ -235,6 +236,7 @@
 
     function estaOcupado() {
         return procesando || guardandoReserva || window.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true ||
+            window.HAIKU_ASISTENTE_ACCIONES_V1?.procesando?.() === true ||
             window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true ||
             window.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.procesando?.() === true;
     }
@@ -321,12 +323,23 @@
         });
     }
 
+    function mostrarAyuda() {
+        rapidas.open = false;
+        const ayuda = window.HAIKU_AYUDA_V1;
+        if (!ayuda) {
+            agregarMensaje("asistente", "Ayuda todavía no está disponible. Recarga Proyecto H.");
+            return;
+        }
+        ayuda.mostrar({mensajes, campo, ejecutar:ejecutarAccionRapida});
+    }
+
     function ejecutarAccionRapida(accion) {
         if (accion === 'ingresos-manager' || accion === 'proceso-reservas') {
             mostrarGuia(accion === 'ingresos-manager' ? 'manager' : 'reservas');
             return;
         }
         if (estaOcupado()) return;
+        if (accion === "ayuda") { mostrarAyuda(); return; }
         if (accion === "revisar-captura" || accion === "consultar-documento") {
             archivosInput.accept = accion === "consultar-documento"
                 ? "application/pdf"
@@ -1771,6 +1784,7 @@
         abierta: () => !panel.hidden,
         procesando: estaOcupado,
         restaurarGuias,
+        mostrarAyuda,
         ultimaPreview: () => ultimaPreview,
         adjuntos: () => adjuntos.map(item => ({
             nombre: item.file.name,
