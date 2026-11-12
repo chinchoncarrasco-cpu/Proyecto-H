@@ -186,11 +186,12 @@
     function registrarFilasPeriodo(data, q, pagos, reembolsos) {
         for (const p of data.pagos || []) {
             if (!p.origen?.hoja || !p.origen.celda || !Number.isSafeInteger(p.monto) || p.monto <= 0 ||
-                q.cabana && Number(p.cabana) !== q.cabana) continue;
+                q.cabana && Number(p.cabana) !== q.cabana || q.nombre && !S.normalizar(p.titular).includes(q.nombre)) continue;
             if (fechaEnPeriodo(p.fecha_comprobante || p.fecha_bloque,q)) pagos.set(source(p.origen),p);
         }
         for (const a of data.anotaciones || []) {
             if (a.tipo === 'nota_financiera' && a.monto_referencial < 0 &&
+                (!q.nombre || S.normalizar(a.titular).includes(q.nombre)) &&
                 (!q.cabana || Number(a.cabana) === q.cabana) && fechaEnPeriodo(a.fecha_comprobante || a.fecha,q))
                 reembolsos.set(source(a.origen),a);
         }
@@ -200,8 +201,7 @@
         const porId = new Map();
         for (const x of movimientos) {
             if (x.estado !== 'en_sistema' || !x.sistema?.id || !fechaEnPeriodo(x.pago.fecha_comprobante,q)) continue;
-            if (!porId.has(x.sistema.id)) porId.set(x.sistema.id,[]);
-            porId.get(x.sistema.id).push(x);
+            porId.set(x.sistema.id,x.sistema);
         }
         const ids = [...porId.keys()], aplicadoPorPago = new Map();
         try {
@@ -214,15 +214,14 @@
                 }
             }
         } catch (_) { return null; }
-        let pendientes = 0;
-        for (const [id,xs] of porId) {
+        const pendientes = new Map();
+        for (const [id,pago] of porId) {
             const aplicado = aplicadoPorPago.get(id) || 0;
-            const sinAplicar = Number(xs[0].sistema.monto) - aplicado;
+            const sinAplicar = Number(pago.monto) - aplicado;
             if (sinAplicar <= 0 || !Number.isFinite(sinAplicar)) continue;
-            pendientes++;
-            for (const x of xs) x.importeAplicado = {aplicado,sinAplicar};
+            pendientes.set(id,{aplicado,sinAplicar});
         }
-        return pendientes;
+        return Object.fromEntries(pendientes);
     }
 
     async function resumenPeriodoPagos(comp, q, pagosLeidos, reembolsos, cliente) {
@@ -250,12 +249,14 @@
             if (!pagoConfirmadoSistema(p) || !fechaEnPeriodo(fecha,q) || cotejados.has(p.id)) continue;
             const destinos = estadias.filter(e => e.reserva_id === p.reserva_id);
             if (q.cabana && !destinos.some(e => e.cabana === q.cabana)) continue;
+            if (q.nombre && !destinos.some(e => S.normalizar(e.titular).includes(q.nombre))) continue;
             const reserva = destinos.length === 1 ? destinos[0] : { titular:destinos[0]?.titular };
             soloProyecto.push({ pago:{...p,fecha_comprobante:fecha}, sistema:p, reserva, reserva_sistema_id:p.reserva_id,
                 estado:'solo_proyecto', motivos:['Pago confirmado en Proyecto H. Falta verificar su comprobante en el Libro.'] });
         }
-        const pagosSinAplicar = await importesAplicadosPeriodo(comp.pagosDetalle || [],cliente,q);
-        return {sinEstadia, soloProyecto, reembolsos:[...reembolsos.values()], pagosSinAplicar};
+        const importesAplicados = await importesAplicadosPeriodo(comp.pagosDetalle || [],cliente,q);
+        const pagosSinAplicar = importesAplicados ? Object.keys(importesAplicados).length : null;
+        return {sinEstadia, soloProyecto, reembolsos:[...reembolsos.values()], pagosSinAplicar, importesAplicados};
     }
 
     function tituloRealReserva(r) {
@@ -6044,9 +6045,10 @@
                     ['Folio',p.folio], ['Autorización',p.bovtar], ['CodAut',p.codigo_autorizacion], ['Origen XLSX',origenesComprobante(p).join(' · ')]]) {
                     if (valor !== null && valor !== undefined && valor !== '') agregarDato(datos, etiqueta, String(valor));
                 }
-                if (x.importeAplicado) {
-                    agregarDato(datos,'Aplicado a cargos',money(x.importeAplicado.aplicado));
-                    agregarDato(datos,'Sin aplicar a cargos',money(x.importeAplicado.sinAplicar));
+                const importe = periodo?.importesAplicados?.[x.sistema?.id];
+                if (importe) {
+                    agregarDato(datos,'Aplicado a cargos',money(importe.aplicado));
+                    agregarDato(datos,'Sin aplicar a cargos',money(importe.sinAplicar));
                 }
                 detalle.append(datos);
                 for (const parte of p.aplicaciones_libro || [])

@@ -93,7 +93,7 @@ test('el importe pendiente de aplicar se muestra sobre el pago existente y conse
     const r = await e.consultar();
     const item = r.comparacion.pagosDetalle.find(x => x.sistema?.id==='registrado');
     assert.equal(item.estado,'en_sistema');
-    assert.deepEqual(plain(item.importeAplicado),{aplicado:12000,sinAplicar:3000});
+    assert.deepEqual(plain(r.pagosPeriodo.importesAplicados.registrado),{aplicado:12000,sinAplicar:3000});
     assert.equal(r.pagosPeriodo.pagosSinAplicar,1);
 
     const error = F.cliente(e.cliente.db,{errorTabla:'pago_aplicaciones'});
