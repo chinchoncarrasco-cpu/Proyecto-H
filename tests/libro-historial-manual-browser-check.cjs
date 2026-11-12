@@ -105,6 +105,23 @@ const server=http.createServer((req,res)=>{
             await confirmar.click();
             await out.getByText('Incorporación completada',{exact:true}).waitFor();
             assert.equal(await page.evaluate(()=>fixtureServicios.escrituras[1].p_servicios[0].fecha_servicio),'2026-10-11');
+
+            await page.evaluate(()=>{
+                const r=fixtureServicios.reservas[0];r.texto_original='CORTESÍA LATE OUT HASTA LAS 15.00 HRS';
+                r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+                fixtureServicios.db.catalogo_servicios.find(x=>x.codigo==='lateCheckout').permite_cortesia=true;
+                return abrirManualHistorial();
+            });
+            assert.equal(await panel.locator('.haku-servicio-compacto__horario').innerText(),'12:00–15:00');
+            assert.equal(await panel.locator('.haku-servicio-compacto__importe').innerText(),'$0');
+            assert.equal(await panel.locator('.haku-servicio-compacto__cobro').innerText(),'Cortesía');
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),2);
+            await confirmar.click();
+            await out.getByText('Incorporación completada',{exact:true}).waitFor();
+            assert.deepEqual(await page.evaluate(()=>{
+                const p=fixtureServicios.escrituras[2].p_servicios[0];
+                return [p.codigo_servicio,p.fecha_servicio,p.tipo_cobro,p.hora,p.cantidad];
+            }),['lateCheckout','2026-10-12','cortesia','12:00',3]);
             await page.close();
         }
         assert.deepEqual(errors,[]);assert.deepEqual(externos,[]);

@@ -22,6 +22,7 @@
     const estadosPorVista = new WeakMap();
     const CODIGOS_MANUALES = Object.freeze(['tinajaTonel', 'tinajaJacuzzi', 'masajeTerapeutico30',
         'masajeTerapeutico60', 'masajeDescontracturante30', 'masajeDescontracturante60', 'lateCheckout']);
+    const motivoCortesiaLate = 'Cortesía indicada en el Libro.';
 
     function normalizar(valor) {
         return String(valor || "")
@@ -886,7 +887,9 @@
         if (intencion_cobro === "no_determinada") razones.push(promocion && esTinajaServicio(servicio)
             ? 'La promoción incluye 1 hora de cortesía. Confirma el horario real y los pagos de las horas adicionales antes de incorporar.'
             : "Falta definir si el servicio es cobrable o cortesía; Haku no lo convertirá automáticamente en cobrable.");
-        if (cortesia && mapa.codigo && !mapa.permiteCortesia) razones.push(`Haku no puede preparar automáticamente una cortesía para ${mapa.nombre}; requiere revisión.`);
+        const cortesiaLatePermitida = esLate && resueltos.cortesia_late_checkout === true && intencionOriginal === 'cortesia';
+        if (cortesia && mapa.codigo && !mapa.permiteCortesia && !cortesiaLatePermitida) razones.push(esLate && intencionOriginal === 'cortesia'
+            ? motivoCortesiaLate : `Haku no puede preparar automáticamente una cortesía para ${mapa.nombre}; requiere revisión.`);
         const itemId = claveServicio(reserva, servicio);
         const razonesUnicas = [...new Set(razones.filter(Boolean))];
         const completitud = razonesUnicas.length ? "FALTAN_DATOS" : "COMPLETO";
@@ -1558,11 +1561,31 @@
             throw new Error('La hora explícita del Libro no se puede sustituir.');
         if (datos.hora && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(datos.hora)) throw new Error('Indica una hora de inicio válida.');
         if (datos.fecha && (!/^\d{4}-\d{2}-\d{2}$/.test(datos.fecha) || iso(...datos.fecha.split('-')) !== datos.fecha)) throw new Error('Indica una fecha válida.');
+        let horasCortesiaLate = null, salidaCortesiaLate = null;
+        if (codigo === 'lateCheckout' && base.intencion_cobro === 'cortesia' && c?.permite_cortesia) {
+            const hasta = base.servicio.hora_fin || base.hora;
+            const horas = (minutosHora(hasta) - 12 * 60) / 60;
+            const texto = normalizar(base.servicio.texto_original);
+            const declaradas = [...texto.matchAll(/(?<![.,:\d])\b(\d+)\s+horas?\b/g)]
+                .filter(m => !/\b(?:a|hasta)\s+las?\s*$/.test(texto.slice(0, m.index)))
+                .map(m => Number(m[1]));
+            if (!Number.isInteger(horas) || horas < 1 || base.reserva.fecha_checkin >= base.reserva.fecha_checkout ||
+                (base.servicio.hora_fin && base.servicio.hora !== '12:00') ||
+                /\b(?:no(?:\s+es)?|sin)\s+(?:co+rtesia|regalo)\b/.test(texto) ||
+                (importeLibro(base.servicio) ?? 0) !== 0 || declaradas.some(n => n !== horas)) {
+                razonesExtra.push('La cortesía requiere una hora de salida explícita y una extensión en horas completas desde las 12:00.');
+            } else {
+                datos.hora = '12:00';
+                datos.cortesia_late_checkout = true;
+                horasCortesiaLate = horas;
+                salidaCortesiaLate = hasta;
+            }
+        }
         const item = prepararServicio(base.reserva, base.servicio, base.asociacion, null, datos, base.reglaFullDay, base.reglaPromo);
         if (!c) razonesExtra.push('El servicio elegido no está activo en el catálogo actual.');
         const horas = base.servicio.concepto === 'lateout' || /^tinaja/.test(codigo || '')
             ? normalizar(base.servicio.texto_original).match(/\b(\d+)\s*horas?\b/) : null;
-        const cantidad = base.servicio.promoTinajaMixta?.version === 1 ? 2 : horas ? Number(horas[1]) : (base.servicio.cantidad ?? 1);
+        const cantidad = horasCortesiaLate ?? (base.servicio.promoTinajaMixta?.version === 1 ? 2 : horas ? Number(horas[1]) : (base.servicio.cantidad ?? 1));
         if (!Number.isSafeInteger(cantidad) || cantidad < 1) razonesExtra.push('La cantidad contractual debe ser un entero positivo.');
         if (c && /^tinaja|lateCheckout$/.test(codigo || '') && c.unidad !== 'hora') razonesExtra.push('La unidad del catálogo no coincide con las horas del Libro.');
         if (c && /^masaje/.test(codigo || '') && Number(c.duracion_minutos) !== datos.duracion_minutos) razonesExtra.push('La duración del catálogo cambió; requiere revisión.');
@@ -1576,7 +1599,7 @@
         if (fin != null && fin >= 1440) razonesExtra.push('El término del servicio debe quedar en el mismo día.');
         if (fin != null) item.hora_fin = `${String(Math.floor(fin / 60)).padStart(2, '0')}:${String(fin % 60).padStart(2, '0')}`;
         if (base.hora_fin && item.hora_fin && base.hora_fin !== item.hora_fin) razonesExtra.push('El término calculado contradice el horario explícito del Libro.');
-        if (base.servicio.concepto === 'lateout' && /\bhasta\b/.test(normalizar(base.servicio.texto_original)) && item.hora_fin && item.hora_fin !== base.hora) razonesExtra.push('El término calculado contradice la hora de salida indicada en el Libro.');
+        if (base.servicio.concepto === 'lateout' && (salidaCortesiaLate || /\bhasta\b/.test(normalizar(base.servicio.texto_original))) && item.hora_fin && item.hora_fin !== (salidaCortesiaLate || base.hora)) razonesExtra.push('El término calculado contradice la hora de salida indicada en el Libro.');
         if ((normalizar(base.reserva.tipo_estadia) === 'full_day' || base.reserva.fecha_checkin === base.reserva.fecha_checkout) && fin != null && fin > 1290) razonesExtra.push('El término queda fuera del Full Day (09:30–21:30).');
         const adicional = c && c.precio_persona_adicional != null && c.capacidad_incluida != null
             ? Math.max(0, item.personas - Number(c.capacidad_incluida)) * Number(c.precio_persona_adicional) : 0;
@@ -2310,7 +2333,7 @@
         const conflicto = document.createElement('p'); conflicto.className = 'haiku-manual-aviso haiku-manual-aviso--revision';
         // Las preguntas del formulario ya explican estos datos faltantes.
         // Los conflictos adicionales siguen visibles y la evidencia conserva todos los motivos.
-        const motivoExtra = item.razones.find(r => !/^(?:Falta una fecha inequívoca del servicio;|Falta fecha u hora para comprobar el servicio existente|Falta un horario inequívoco del servicio\.|Falta horario del masaje\.|Falta tipo de masaje\.|No hay una equivalencia segura con el catálogo de servicios de Proyecto H\.)/.test(r));
+        const motivoExtra = item.razones.find(r => r !== motivoCortesiaLate && !/^(?:Falta una fecha inequívoca del servicio;|Falta fecha u hora para comprobar el servicio existente|Falta un horario inequívoco del servicio\.|Falta horario del masaje\.|Falta tipo de masaje\.|No hay una equivalencia segura con el catálogo de servicios de Proyecto H\.)/.test(r));
         conflicto.textContent = item.conflicto_tipo_masaje ? detalleMasajeRegistrado(item) + ' Revisar aquí no cambia el servicio existente.'
             : base.asociacion.estado !== 'asociada' ? 'Primero hay que identificar la reserva de este servicio.' : motivoExtra || '';
         conflicto.hidden = !conflicto.textContent;
@@ -2345,7 +2368,7 @@
             if (redibujarCampos) {
                 campos.textContent = '';
                 if (codigosManual(base).length > 1 || !base.mapa.codigo) campo('codigo_servicio', base.servicio.concepto === 'masaje' ? (base.servicio.duracion_minutos ? 'Tipo de masaje' : 'Tipo y duración del masaje') : 'Tipo de tinaja', 'text', calculo.opciones.map(c => [c, contrato.catalogo.find(x => x.codigo === c).nombre]));
-                if (!base.hora || (base.servicio.concepto === 'lateout' && /\bhasta\b/.test(normalizar(base.servicio.texto_original)))) campo('hora', 'Hora de inicio', 'time');
+                if (!base.hora || (base.servicio.concepto === 'lateout' && !calculo.datos.cortesia_late_checkout && /\bhasta\b/.test(normalizar(base.servicio.texto_original)))) campo('hora', 'Hora de inicio', 'time');
                 const sinOpcionales = calcularManual(base, { ...borrador, fecha: null, personas: undefined }, contrato).item;
                 if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', '¿Qué día será?', 'date');
                 if (calculo.catalogo && /^tinaja/.test(calculo.catalogo.codigo) && (!Number.isInteger(sinOpcionales.personas) || sinOpcionales.personas < 1 || sinOpcionales.personas > Number(calculo.catalogo.capacidad_maxima || Infinity))) campo('personas', 'Personas', 'number');

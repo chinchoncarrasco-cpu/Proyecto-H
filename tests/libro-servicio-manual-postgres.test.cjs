@@ -1,8 +1,9 @@
 const test = require('node:test'), assert = require('node:assert/strict'), { randomUUID } = require('node:crypto');
 const { PGlite } = require(process.env.HAKU_PGLITE_MODULE || '@electric-sql/pglite');
-const { read, entorno } = require('./fixtures/libro-servicio-manual.cjs');
+const { read, entorno, consulta } = require('./fixtures/libro-servicio-manual.cjs');
 const migration = read('supabase/migrations/20261007225155_libro_servicio_manual_v1.sql');
 const lockMigration = read('supabase/migrations/20261008202641_libro_servicios_lock_permission.sql');
+const cortesiaLateMigration = read('supabase/migrations/20261112010107_libro_late_checkout_cortesia_v1.sql');
 async function aplicarManual(db, fix = true) {
     await db.exec(migration);
     if (fix) await db.exec(lockMigration);
@@ -225,6 +226,54 @@ test('Late manual reutiliza existente con checkout e inicio/término exactos con
         await h.importar([h.payload[1]]); await h.importar([h.payload[1]]);
         assert.deepEqual((await h.db.query('select * from servicios')).rows[0], antes);
         assert.deepEqual(await h.contar(), { servicios: 1, cargos: 1, notas: 0 });
+    } finally { await h.db.close(); }
+});
+
+test('Late Out de cortesía hasta las 15:00 se confirma a cero por cada estadía de la reserva', async () => {
+    const h = await preparar();
+    try {
+        const e = h.frontend, [cab9, cab11] = e.state.reservas;
+        const [primera, segunda] = e.state.db.reserva_estadias;
+        cab11.titular = cab9.titular;
+        segunda.reserva_id = primera.reserva_id;
+        await h.db.query('update reserva_estadias set reserva_id=$1 where id=$2', [primera.reserva_id, segunda.id]);
+        for (const [r, texto] of [[cab9, 'CORTESIA LATE OUT 15.00 HRS'], [cab11, 'CORTESÍA LATE OUT DE 12:00 A 15:00']]) {
+            r.texto_original = texto;
+            r.servicios = e.c.HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original, { origen_campo: 'notas_reserva' });
+        }
+        const catalogo = e.state.db.catalogo_servicios.find(x => x.codigo === 'lateCheckout');
+        const bloqueado = await e.resolver(0, {});
+        assert.ok(bloqueado.items.every(x => !x.payload));
+        await h.db.exec(cortesiaLateMigration);
+        await h.db.exec(cortesiaLateMigration);
+        assert.equal((await h.db.query("select permite_cortesia from catalogo_servicios where codigo='lateCheckout'")).rows[0].permite_cortesia, true);
+        catalogo.permite_cortesia = true;
+        assert.ok((await e.api.construir(consulta)).items.every(x => !x.payload && x.razones.includes('Cortesía indicada en el Libro.')));
+        await e.resolver(0, {});
+        const plan = await e.resolver(1, {});
+        const items = JSON.parse(JSON.stringify(plan.items.map(x => x.payload)));
+        assert.equal(items.length, 2);
+        assert.deepEqual(items.map(x => x.estadia_id), [primera.id, segunda.id]);
+        assert.ok(items.every(x => x.tipo_cobro === 'cortesia' && x.cantidad === 3 && x.hora === '12:00' && x.fecha_servicio === '2026-10-11'));
+        await permisosOperador(h);
+        const importar = (items, op) => conRol(h, 'authenticated', () => h.importar(items, op));
+        const sinRevision = structuredClone(items[0]); delete sinRevision.servicio_manual_v1;
+        await assert.rejects(importar([sinRevision]), /Confirma esta cortesía/);
+        const sinEvidencia = structuredClone(items[0]); sinEvidencia.servicio_manual_v1.evidencia_original.texto = 'LATE OUT 15:00';
+        await assert.rejects(importar([sinEvidencia]), /requiere la hora de salida explícita/);
+        sinEvidencia.servicio_manual_v1.evidencia_original.texto = 'LATE OUT 15:00 SIN CORTESÍA';
+        await assert.rejects(importar([sinEvidencia]), /requiere la hora de salida explícita/);
+        const otraSalida = structuredClone(items[0]); otraSalida.servicio_manual_v1.evidencia_original.hora = '14:00';
+        await assert.rejects(importar([otraSalida]), /requiere la hora de salida explícita/);
+        assert.deepEqual(await h.contar(), { servicios: 0, cargos: 0, notas: 0 });
+        const op = randomUUID();
+        await importar(items, op);
+        await importar(items, op);
+        await importar(items);
+        assert.deepEqual(await h.contar(), { servicios: 2, cargos: 0, notas: 0 });
+        const filas = (await h.db.query('select estadia_id, hora_inicio, hora_fin, total, tipo_cobro from servicios order by estadia_id')).rows;
+        assert.deepEqual(filas.map(s => [s.estadia_id, s.hora_inicio, s.hora_fin, Number(s.total), s.tipo_cobro]),
+            [primera, segunda].map(x => [x.id, '12:00:00', '15:00:00', 0, 'cortesia']));
     } finally { await h.db.close(); }
 });
 
