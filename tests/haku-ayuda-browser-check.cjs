@@ -119,11 +119,12 @@ async function ayuda(browser,ancho,tema) {
         assert.equal(estilos.fondo,tema==="oscuro"?"rgb(27, 38, 33)":"rgb(251, 252, 251)");
         const buscador=panel.getByRole("searchbox");
         await buscador.fill("remboso inexistente");
-        assert.equal(await panel.getByText("No encontré una acción con esa búsqueda.").isVisible(),true);
+        await panel.getByText("No encontré una acción con esa búsqueda.").waitFor({state:"visible"});
         await buscador.fill("reembolsar");
-        assert.equal(await panel.getByText("Editar, anular o reembolsar un pago",{exact:true}).isVisible(),true);
+        await panel.getByText("Editar, anular o reembolsar un pago",{exact:true}).waitFor({state:"visible"});
         await buscador.fill("ingresaservicio");
         const ejemplo=panel.getByRole("button",{name:/ingresaservicio tinaja/});
+        await ejemplo.waitFor({state:"visible"});
         const frase=await ejemplo.innerText();
         await ejemplo.click();
         assert.equal(await campo.inputValue(),frase);
@@ -133,7 +134,7 @@ async function ayuda(browser,ancho,tema) {
         assert.equal(await panel.count(),0);
         await campo.fill("Haku, ¿qué te puedo pedir?");
         await campo.press("Control+Enter");
-        assert.equal(await panel.isVisible(),true);
+        await panel.waitFor({state:"visible"});
         assert.deepEqual(errores,[]);
     } finally {await page.close();}
 }
