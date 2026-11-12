@@ -181,6 +181,35 @@ test('una fecha de otro masaje separado no completa la fecha del primero', async
     assert.equal(items[0].payload, null);
 });
 
+test('dos masajes con inicio común quedan consecutivos y respetan la simultaneidad explícita', async () => {
+    for (const [modo,horas] of [['', ['11:00','12:00']], [' NO SON SIMULTÁNEOS', ['11:00','12:00']], [' SIMULTÁNEOS', ['11:00','11:00']]]) {
+        const e=entorno();
+        configurarRocio(e, `1 MASAJE RELAJANTE DE HORA & 1 DESCONTRACTURANTE DE 1 HORA${modo} COMENZANDO A LAS 11.00 AM CON JOSEFINA X PAGAR`);
+        const items=rocio(await e.construir());
+        assert.deepEqual(Array.from(items,x=>x.hora),horas);
+        assert.deepEqual(Array.from(items,x=>x.servicio.duracion_minutos),[60,60]);
+        assert.ok(items.every(x=>!x.fecha&&!x.payload),'la hora compartida no elige el día en varias noches');
+        assert.equal(new Set(items.map(x=>x.item_id)).size,2);
+    }
+    const [grupo]=parsear('2 MASAJES RELAJANTES DE 1 HORA COMENZANDO A LAS 11.00 AM');
+    assert.deepEqual(grupo.unidad_servicio.turnos_masaje,['11:00','12:00']);
+    assert.equal(grupo.cantidad,2);
+    assert.deepEqual(parsear('1 MASAJE RELAJANTE DE 1 HORA Y 1 DESCONTRACTURANTE DE 1 HORA A LAS 11 AM').map(x=>x.hora),[null,'11:00']);
+});
+
+test('el reloj con punto no contradice la fecha de un masaje en la mañana de salida', async () => {
+    for(const hora of ['10.00','11.00']){
+        const e=entorno(),r=configurarRocio(e,`1 MASAJE RELAJANTE DE 1 HORA // PARA EL 24 // ${hora}`);
+        r.fecha_checkout='2026-10-24';r.noches=1;
+        e.state.db.reserva_estadias[1].fecha_salida=r.fecha_checkout;
+        const [masaje]=rocio(await e.construir());
+        assert.equal(masaje.semantica,'SERVICIO_REAL');
+        assert.equal(masaje.fecha,'2026-10-24');
+        assert.equal(masaje.payload.hora,hora.replace('.',':'));
+        assert.equal(e.state.escrituras.length,0);
+    }
+});
+
 test('varias prestaciones candidatas mantienen el atributo separado y ambiguo', () => {
     const s = parsear('1 masaje de 1 hora / 1 masaje de 30 min / DESCONTRACTURANTE PARA EL 24');
     assert.equal(s.length, 3); assert.equal(s[2].semantica, 'AMBIGUO'); assert.equal(s[2].cantidad, null);

@@ -390,6 +390,8 @@
 
     function textoSinHorasParaFecha(texto) {
         // Un reloj declarado por contexto o sufijo no es una fecha dd.mm.
+        const quitarHoras = root.HAIKU_LIBRO_SEMANTICA?.textoSinHorasParaFecha;
+        if (quitarHoras) return quitarHoras(texto);
         return normalizar(texto)
             .replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, "-")
             .replace(/\b(?:a|desde|hasta)\s+las?\s+(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:1[0-2]|0?[1-9])[:.,][0-5]\d\s*(?:am|pm)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\s*(?:hra?s?|hs|h)\b/g, " ");
@@ -839,7 +841,11 @@
             (horaEstructurada || (!horarioCanonicoMasaje && horaTexto(textoHorario)) || null))) : null;
         const hora_fin = requiereHorario && !esLate ? (horaFinEstructurada || (!horarioCanonicoMasaje && horaFinTexto(textoHorario)) || null) : null;
         if (requiereHorario && !hora) razones.push(servicio.concepto === "masaje" ? "Falta horario del masaje." : "Falta un horario inequívoco del servicio.");
-        const fechaInfo = esLate ? { fecha: reserva.fecha_checkout, inferida: false, detalle: null } : inferirFechaServicio(reserva, servicio, hora);
+        const inicioSecuencia = servicio.unidad_servicio?.inicio_secuencia_masaje;
+        const turnosMasaje = servicio.unidad_servicio?.turnos_masaje;
+        if (inicioSecuencia) inferencias.push(`Masajes consecutivos desde las ${inicioSecuencia}, según la duración de cada turno.`);
+        if (turnosMasaje?.length) inferencias.push(`Inicio de cada masaje: ${turnosMasaje.join(' · ')}.`);
+        const fechaInfo = esLate ? { fecha: reserva.fecha_checkout, inferida: false, detalle: null } : inferirFechaServicio(reserva, servicio, inicioSecuencia || hora);
         if (!fechaInfo.fecha && !fechaInfo.conflicto && resueltos.fecha) {
             const diaMasaje = servicio.concepto === 'masaje' && fechaDiaMasaje(servicio, reserva, resueltos.fecha);
             if (diaMasaje && (!diaMasaje.fecha || diaMasaje.contradiccion))
@@ -892,7 +898,7 @@
         const proveniencia = Object.freeze({
             concepto: mapa.codigo ? "EXPLICITO" : "AUSENTE",
             fecha: fechaDeclarada ? "EXPLICITO" : fecha ? "INFERIDA_SEGURA" : "AUSENTE",
-            hora_inicio: hora ? "EXPLICITO" : "AUSENTE",
+            hora_inicio: hora ? (inicioSecuencia && hora !== inicioSecuencia ? "INFERIDA_SEGURA" : "EXPLICITO") : "AUSENTE",
             hora_fin: hora_fin ? "EXPLICITO" : "AUSENTE",
             personas: provenienciaPersonas,
             cantidad: /\bx\s*\d+\b|\b\d+\s*(?:servicios?|tinajas?|jacuzzis?|toneles?|masajes?|camas?|cunas?)\b/.test(normalizar(servicio?.texto_original))
@@ -2324,29 +2330,35 @@
             input.value = borrador[clave] ?? ''; input.required = true;
             if (tipo === 'number') { input.min = '1'; input.step = '1'; }
             if (tipo === 'date') { input.min = base.reserva.fecha_checkin; input.max = base.reserva.fecha_checkout; }
-            input.addEventListener('change', () => { borrador[clave] = tipo === 'number' ? Number(input.value) : input.value; actualizar(); });
+            input.addEventListener('change', () => {
+                borrador[clave] = tipo === 'number' ? Number(input.value) : input.value;
+                // El campo nativo emite cambios entre dígitos. Conserva su edición y el foco.
+                actualizar(tipo !== 'date');
+            });
             label.append(input); campos.append(label);
         };
-        const actualizar = () => {
+        const actualizar = (redibujarCampos = true) => {
             aviso.textContent = '';
             let calculo;
             try { calculo = calcularManual(base, borrador, contrato); } catch (e) { aviso.textContent = e.message; confirmar.disabled = true; return; }
-            campos.textContent = '';
             const actual = calculo.item;
-            if (codigosManual(base).length > 1 || !base.mapa.codigo) campo('codigo_servicio', base.servicio.concepto === 'masaje' ? (base.servicio.duracion_minutos ? 'Tipo de masaje' : 'Tipo y duración del masaje') : 'Tipo de tinaja', 'text', calculo.opciones.map(c => [c, contrato.catalogo.find(x => x.codigo === c).nombre]));
-            if (!base.hora || (base.servicio.concepto === 'lateout' && /\bhasta\b/.test(normalizar(base.servicio.texto_original)))) campo('hora', 'Hora de inicio', 'time');
-            const sinOpcionales = calcularManual(base, { ...borrador, fecha: null, personas: undefined }, contrato).item;
-            if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', '¿Qué día será?', 'date');
-            if (calculo.catalogo && /^tinaja/.test(calculo.catalogo.codigo) && (!Number.isInteger(sinOpcionales.personas) || sinOpcionales.personas < 1 || sinOpcionales.personas > Number(calculo.catalogo.capacidad_maxima || Infinity))) campo('personas', 'Personas', 'number');
-            if (base.intencion_cobro === 'no_determinada') campo('tipo_cobro', 'Tipo de cobro', 'text', [['normal', 'Cobrable'], ...(calculo.catalogo?.permite_cortesia && /^tinaja/.test(calculo.catalogo.codigo) ? [['cortesia', 'Cortesía']] : [])]);
-            if (actual.precio.distinto) {
-                const opcionesPrecio = [
-                    ...(base.servicio.promoTinajaMixta?.version === 1 ? [] :
-                        [['catalogo', `Usar catálogo: $${actual.precio.precio_catalogo.toLocaleString('es-CL')}`]]),
-                    ...(actual.precio.puedePrecioLibro ?
-                        [['libro', `Usar Libro: $${actual.precio.monto_libro.toLocaleString('es-CL')} · unitario técnico $${(actual.precio.monto_libro / calculo.cantidad).toLocaleString('es-CL')}`]] : [])
-                ];
-                campo('precio_decision','Confirmar precio contractual','text',opcionesPrecio);
+            if (redibujarCampos) {
+                campos.textContent = '';
+                if (codigosManual(base).length > 1 || !base.mapa.codigo) campo('codigo_servicio', base.servicio.concepto === 'masaje' ? (base.servicio.duracion_minutos ? 'Tipo de masaje' : 'Tipo y duración del masaje') : 'Tipo de tinaja', 'text', calculo.opciones.map(c => [c, contrato.catalogo.find(x => x.codigo === c).nombre]));
+                if (!base.hora || (base.servicio.concepto === 'lateout' && /\bhasta\b/.test(normalizar(base.servicio.texto_original)))) campo('hora', 'Hora de inicio', 'time');
+                const sinOpcionales = calcularManual(base, { ...borrador, fecha: null, personas: undefined }, contrato).item;
+                if (actual.hora && !sinOpcionales.fecha && !actual.razones.some(r => /noche indicada es contradictoria/.test(r))) campo('fecha', '¿Qué día será?', 'date');
+                if (calculo.catalogo && /^tinaja/.test(calculo.catalogo.codigo) && (!Number.isInteger(sinOpcionales.personas) || sinOpcionales.personas < 1 || sinOpcionales.personas > Number(calculo.catalogo.capacidad_maxima || Infinity))) campo('personas', 'Personas', 'number');
+                if (base.intencion_cobro === 'no_determinada') campo('tipo_cobro', 'Tipo de cobro', 'text', [['normal', 'Cobrable'], ...(calculo.catalogo?.permite_cortesia && /^tinaja/.test(calculo.catalogo.codigo) ? [['cortesia', 'Cortesía']] : [])]);
+                if (actual.precio.distinto) {
+                    const opcionesPrecio = [
+                        ...(base.servicio.promoTinajaMixta?.version === 1 ? [] :
+                            [['catalogo', `Usar catálogo: $${actual.precio.precio_catalogo.toLocaleString('es-CL')}`]]),
+                        ...(actual.precio.puedePrecioLibro ?
+                            [['libro', `Usar Libro: $${actual.precio.monto_libro.toLocaleString('es-CL')} · unitario técnico $${(actual.precio.monto_libro / calculo.cantidad).toLocaleString('es-CL')}`]] : [])
+                    ];
+                    campo('precio_decision','Confirmar precio contractual','text',opcionesPrecio);
+                }
             }
             const tieneCampoFecha = [...campos.querySelectorAll('input')].some(x => x.dataset.campoManual === 'fecha');
             fechaConocida.textContent = actual.fecha && !tieneCampoFecha ? `Día del servicio · ${fechaManualBreve(actual.fecha)}` : '';
@@ -2569,17 +2581,17 @@
             crear("span", "haku-libro-resultado-sites__kicker", "Asistente operativo")
         );
         const accionesCabecera = crear("div", "haku-libro-resultado-sites__cabecera-acciones");
-        const cerrarHaku = document.getElementById("haiku-asistente-cerrar");
-        if (cerrarHaku) {
-            const cerrar = crear("button", "haku-libro-resultado-sites__cerrar");
-            const icono = crear("span", "haiku-compacto-cerrar-icono");
-            icono.setAttribute("aria-hidden", "true");
-            cerrar.append(icono);
-            cerrar.type = "button";
-            cerrar.setAttribute("aria-label", "Cerrar Haku");
-            cerrar.addEventListener("click", () => cerrarHaku.click());
-            accionesCabecera.append(cerrar);
-        }
+        const cerrar = crear("button", "haku-libro-resultado-sites__cerrar");
+        const icono = crear("span", "haiku-compacto-cerrar-icono");
+        icono.setAttribute("aria-hidden", "true");
+        cerrar.append(icono);
+        cerrar.type = "button";
+        cerrar.setAttribute("aria-label", "Cerrar confirmación");
+        cerrar.addEventListener("click", () => {
+            card.remove();
+            entradasHistorial.get(textoOriginal)?.alVolver?.();
+        });
+        accionesCabecera.append(cerrar);
         cabecera.append(avatar, identificacion, accionesCabecera);
 
         const tarjeta = crear("section", "haku-libro-resultado-sites__tarjeta");

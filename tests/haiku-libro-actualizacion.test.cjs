@@ -259,6 +259,19 @@ test('un cambio histórico accionable muestra valores y habilita preparar sin ex
     assert.match(html,/Revisar cambios/);assert.doesNotMatch(html,/privado@example|999999999|12345678/);
 });
 
+test('una posible coincidencia muestra noches por fuente y sólo muestra orden con versiones del Libro',()=>{
+    const actual={...reserva,cabana:9,fecha_checkin:'2026-11-13',fecha_checkout:'2026-11-14'};
+    const candidato={...actual,fecha_checkout:'2026-11-15'};
+    const item={tipo:'nueva',actual,estado:'revision',proyecto:'ambigua',revision:{candidatos:[candidato]}};
+    const sinHistorial=A.renderizarPendientes({items:[item]});
+    assert.match(sinHistorial,/En el Libro<\/strong><br>CAB 9 · 13-11-2026 → 14-11-2026 · 1 noche/);
+    assert.match(sinHistorial,/Posible coincidencia en Proyecto H<\/strong><br>CAB 9 · 13-11-2026 → 15-11-2026 · 2 noches/);
+    assert.doesNotMatch(sinHistorial,/Antes en el Libro|Ahora en el Libro|La salida cambió/);
+    const conHistorial=A.renderizarPendientes({items:[{...item,tipo:'modificacion',anterior:candidato,
+        cambios:[{campo:'fecha_checkout',antes:candidato.fecha_checkout,ahora:actual.fecha_checkout}]}]});
+    assert.match(conHistorial,/Antes en el Libro<\/strong><br>[^<]*15-11-2026 · 2 noches[\s\S]*Ahora en el Libro<\/strong><br>[^<]*14-11-2026 · 1 noche/);
+});
+
 test('un cambio detectado en la generación actual se distingue como cambio de esta actualización',()=>{
     const actual={...reserva,adultos:3};
     const html=A.renderizarPendientes({generacion:7,items:[{tipo:'modificacion',actual,detectado_generacion:7,estado:'pendiente',accionable:true,

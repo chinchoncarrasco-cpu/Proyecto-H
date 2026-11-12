@@ -9,10 +9,10 @@ const server=http.createServer((req,res)=>{
         '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
         ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-tema-oscuro-v1','haiku-tema-v1','haiku-tema-finanzas-compactas-v1']
             .map(s=>`<link rel="stylesheet" href="/css/${s}.css">`).join('')+
-        '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel">'+
-        '<header class="haiku-asistente-cabecera">Haku</header><div class="haiku-asistente-mensajes">'+
+        '</head><body style="margin:0"><div class="haiku-asistente-root"><div class="haiku-asistente-panel" id="haiku-asistente-panel">'+
+        '<header class="haiku-asistente-cabecera">Haku<button id="haiku-asistente-cerrar" aria-label="Cerrar Haku">×</button></header><div class="haiku-asistente-mensajes">'+
         '<details class="haku-actualizacion-sites__pendiente" open><summary>CAB 4 · Reserva de prueba</summary>'+
-        '<div class="haku-pendiente-detalle"><div id="out"></div></div></details></div></div></div></body></html>');
+        '<div class="haku-pendiente-detalle"><button id="aprobar" type="button">Aprobación manual</button></div></details></div></div></div></body></html>');
     const file=path.resolve(root,'.'+pathname);
     if(!file.startsWith(root+path.sep))return res.writeHead(403).end();
     try{res.writeHead(200,{'Content-Type':file.endsWith('.css')?'text/css':'image/svg+xml'}).end(fs.readFileSync(file));}
@@ -39,8 +39,19 @@ const server=http.createServer((req,res)=>{
                 fixtureServicios.db.pagos=[];fixtureServicios.db.vista_estado_cargos=[];
                 const r=fixtureServicios.reservas[0];r.texto_original='PROMO HAIKU // 18hrs jacuzzi // DEJAR BATAS';
                 r.servicios=HAIKU_LIBRO_SEMANTICA.servicios('18hrs jacuzzi',{origen_campo:'notas_reserva'});
-                window.abrirManualHistorial=()=>HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(document.getElementById('out'),{
-                    reservas:[r],generacion:1,aprobacionManual:true});
+                const asistente=document.getElementById('haiku-asistente-panel');
+                document.getElementById('haiku-asistente-cerrar').onclick=()=>{asistente.hidden=true;};
+                window.abrirManualHistorial=()=>{
+                    const aprobar=document.getElementById('aprobar'),destino=aprobar.parentElement;
+                    destino.querySelector('.haku-libro-preparacion-zona')?.remove();
+                    const zona=document.createElement('div'),out=document.createElement('div');
+                    zona.className='haku-libro-preparacion-zona';out.id='out';zona.append(out);destino.append(zona);
+                    return HAIKU_LIBRO_SERVICIOS_SCOPE_V2.abrirRevisionHistorial(out,{
+                        reservas:[r],generacion:1,aprobacionManual:true,alVolver:()=>{
+                            zona.remove();aprobar.focus({preventScroll:true});
+                        }
+                    });
+                };
                 await abrirManualHistorial();
             },tema);
             const out=page.locator('#out'),panel=out.locator('.haku-libro-servicio-manual');
@@ -65,6 +76,35 @@ const server=http.createServer((req,res)=>{
             assert.equal(payload.p_servicios.length,1);assert.equal(payload.p_notas.length,0);assert.equal(payload.p_servicios[0].tipo_cobro,'cortesia');
             await out.getByText('Incorporación completada',{exact:true}).waitFor();
             assert.equal(await page.locator('details.haku-actualizacion-sites__pendiente').evaluate(el=>el.open),true);
+            await out.locator('.haku-libro-resultado-sites__cerrar').click();
+            assert.equal(await page.locator('#haiku-asistente-panel').isVisible(),true);
+            assert.equal(await page.locator('.haku-libro-preparacion-zona').count(),0);
+            assert.equal(await page.locator('details.haku-actualizacion-sites__pendiente').evaluate(el=>el.open),true);
+            assert.equal(await page.evaluate(()=>document.activeElement.id),'aprobar');
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),1);
+
+            await page.evaluate(()=>{
+                const r=fixtureServicios.reservas[0];r.fecha_checkout='2026-10-12';r.noches=2;
+                fixtureServicios.db.reserva_estadias[0].fecha_salida=r.fecha_checkout;
+                r.texto_original='1 HORA TINAJA TONEL A LAS 17:15 X PAGAR';
+                r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+                return abrirManualHistorial();
+            });
+            const fecha=panel.getByLabel('¿Qué día será?'),confirmar=panel.getByRole('button',{name:'Confirmar servicio',exact:true});
+            assert.equal(await confirmar.isDisabled(),true);
+            await fecha.fill('0202-10-11');
+            assert.equal(await confirmar.isDisabled(),true);
+            const input=await fecha.elementHandle();
+            await fecha.click({position:{x:16,y:15}});
+            await page.keyboard.press('ArrowRight');
+            await page.keyboard.press('ArrowRight');
+            await page.keyboard.type('2026');
+            assert.equal(await fecha.inputValue(),'2026-10-11');
+            assert.ok(await input.evaluate(el=>el.isConnected&&document.activeElement===el),'el año conserva el mismo campo y foco');
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras.length),1);
+            await confirmar.click();
+            await out.getByText('Incorporación completada',{exact:true}).waitFor();
+            assert.equal(await page.evaluate(()=>fixtureServicios.escrituras[1].p_servicios[0].fecha_servicio),'2026-10-11');
             await page.close();
         }
         assert.deepEqual(errors,[]);assert.deepEqual(externos,[]);
