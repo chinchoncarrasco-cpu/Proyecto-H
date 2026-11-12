@@ -209,7 +209,29 @@
         if(/notas|pagos_pendientes|servicios/i.test(campo))return `<dt>${escapar(etiqueta)}</dt><dd>Antes en el Libro: ${escapar(resumenNota(valor(antes)))}<br>${actual}: ${escapar(resumenNota(valor(ahora)))}<br>En Proyecto H: ${escapar(resumenNota(explicar(cambio.proyecto)))}</dd>`;
         return `<dt>${escapar(etiqueta)}</dt><dd>${sensible(campo)?'Este dato cambió en el Libro. No se muestra aquí por privacidad.':`Antes en el Libro: ${escapar(valor(antes,campo))}<br>${actual}: ${escapar(valor(ahora,campo))}<br>En Proyecto H: ${escapar(valor(cambio.proyecto,campo))}`}</dd>`;
     }
-    function explicarPendiente(item,generacion){
+    function comparacionEstadiaPendiente(item){
+        const {anterior,actual,sistema}=item;
+        if(!actual)return '';
+        const candidatos=lista(item.revision?.candidatos);
+        const posible=!sistema&&candidatos.length===1?candidatos[0]:null;
+        const fechasDistintas=(a,b)=>a&&b&&a.fecha_checkin&&a.fecha_checkout&&b.fecha_checkin&&b.fecha_checkout&&
+            (a.fecha_checkin!==b.fecha_checkin||a.fecha_checkout!==b.fecha_checkout);
+        const cambioLibro=fechasDistintas(anterior,actual)&&lista(item.cambios).some(c=>['fecha_checkin','fecha_checkout'].includes(c.campo));
+        if(!cambioLibro&&!fechasDistintas(posible,actual))return '';
+        const fila=(etiqueta,r)=>{
+            const noches=(Date.parse(r.fecha_checkout)-Date.parse(r.fecha_checkin))/86400000;
+            const duracion=r.tipo_estadia==='full_day'?' · Full Day':Number.isInteger(noches)&&noches>0
+                ?` · ${noches} noche${noches===1?'':'s'}`:'';
+            const titular=r===posible&&normalizar(r.titular)!==normalizar(actual.titular)&&r.titular?`${r.titular} · `:'';
+            return `<p><strong>${etiqueta}</strong><br>${escapar(`${titular}CAB ${r.cabana??'—'} · ${fecha(r.fecha_checkin)} → ${fecha(r.fecha_checkout)}${duracion}`)}</p>`;
+        };
+        const fuente=item.fuente_vigente&&item.fuente_vigente.estado!=='verificada'
+            ?'Última lectura del Libro':cambioLibro?'Ahora en el Libro':'En el Libro';
+        return '<div class="haku-pendiente-contexto">'+(cambioLibro?fila('Antes en el Libro',anterior):'')+
+            fila(fuente,actual)+(posible?fila('Posible coincidencia en Proyecto H',posible)
+                :sistema?.fecha_checkin&&sistema?.fecha_checkout?fila('En Proyecto H',sistema):'')+'</div>';
+    }
+    function explicarPendiente(item,generacion,fechasVisibles=false){
         const cambios=lista(item.cambios),r=item.actual||item.anterior||{};
         const motivos=lista(item.revision?.motivos).filter(x=>x!=='Elige cómo tratar esta reserva en la comparación.').map(explicar);
         const candidatos=lista(item.revision?.candidatos);
@@ -228,21 +250,23 @@
         };
         if(!item.sistema){
             const candidato=candidatos.length===1?candidatos[0]:null;
-            const mismaUbicacion=candidato&&Number(r.cabana)===Number(candidato.cabana)&&r.fecha_checkin===candidato.fecha_checkin&&r.fecha_checkout===candidato.fecha_checkout;
+            const mismasFechas=candidato&&r.fecha_checkin===candidato.fecha_checkin&&r.fecha_checkout===candidato.fecha_checkout;
+            const mismaUbicacion=mismasFechas&&Number(r.cabana)===Number(candidato.cabana);
             const encontro=contexto|| (mismaUbicacion
                 ?item.revision?.categoria==='modificacion_titular'
                     ?'Hay otra reserva con la misma cabaña y fechas, pero los datos del huésped no coinciden.'
                     :'Encontré una reserva con la misma cabaña y fechas, pero hay datos del Libro por aclarar.'
-                :candidato?'Encontré una posible reserva, pero tiene otra cabaña o fechas.'
+                :candidato?`Encontré una posible reserva en Proyecto H con ${mismasFechas?'otra cabaña':'fechas distintas'}.`
                 :candidatos.length>1?'Encontré varias reservas posibles. No puedo elegir una sin tu revisión.'
                 :item.proyecto==='sin_coincidencia'?'No encontré esta reserva en Proyecto H, pero faltan datos válidos para incorporarla.'
                 :'No pude identificar con certeza esta reserva en Proyecto H.');
-            const detalle=candidato?`${candidato.titular||'Sin nombre'} · CAB ${candidato.cabana??'—'} · ${fecha(candidato.fecha_checkin)} al ${fecha(candidato.fecha_checkout)}.`:'';
+            const detalle=candidato&&!fechasVisibles?`${candidato.titular||'Sin nombre'} · CAB ${candidato.cabana??'—'} · ${fecha(candidato.fecha_checkin)} al ${fecha(candidato.fecha_checkout)}.`:'';
             return {encontro,motivo:[detalle,...motivos].filter(Boolean).join(' ')||'La incorporación queda detenida hasta aclarar este caso.',
                 paso:candidatos.length||contexto?'Busca esta reserva en «Reservas» y comprueba si corresponde. Después pulsa «Volver a revisar».':'Revisa los datos indicados en el Libro y pulsa «Volver a revisar».'};
         }
         const frases=[];
         for(const c of cambios){
+            if(fechasVisibles&&['fecha_checkin','fecha_checkout','noches'].includes(c.campo))continue;
             if(['fecha_checkin','fecha_checkout'].includes(c.campo))frases.push(`La ${c.campo==='fecha_checkin'?'entrada':'salida'} cambió del ${fecha(c.antes)} al ${fecha(c.ahora)}.`);
             else if(c.campo==='noches'&&cambios.some(x=>['fecha_checkin','fecha_checkout'].includes(x.campo)))frases.push(`Pasa de ${valor(c.antes)} noche${Number(c.antes)===1?'':'s'} a ${valor(c.ahora)}.`);
             else if(c.campo==='servicios')frases.push('Hay cambios en los servicios o sus notas.');
@@ -263,10 +287,10 @@
             if(cambios.some(c=>c.campo==='noches'&&!c.accionable))motivo='La cantidad de noches no coincide con las fechas o falta un cambio de entrada o salida que la explique.';
             paso='Abre «Ver reserva», comprueba estos datos con el Libro y pulsa «Volver a revisar».';
         }
-        return {encontro:frases.slice(0,2).join(' ')+(frases.length>2?` Hay ${frases.length-2} cambio${frases.length===3?'':'s'} más en el detalle.`:''),motivo,paso};
+        return {encontro:(frases.slice(0,2).join(' ')||(fechasVisibles?'El Libro cambió las fechas de la estadía.':''))+(frases.length>2?` Hay ${frases.length-2} cambio${frases.length===3?'':'s'} más en el detalle.`:''),motivo,paso};
     }
-    function detallePendiente(item,generacion){
-        const e=explicarPendiente(item,generacion);
+    function detallePendiente(item,generacion,fechasVisibles){
+        const e=explicarPendiente(item,generacion,fechasVisibles);
         const c=item.contexto,avisos=lista(c?.avisos),hechos=lista(c?.hechos);
         const pendienteFuente=avisos.find(x=>['libro_no_verificado','cancelada_en_libro'].includes(x.codigo));
         const contradiccion=avisos.find(x=>['noches_contradictorias','cambio_en_ambas_fuentes','promocion_segunda_noche'].includes(x.codigo));
@@ -281,7 +305,7 @@
         const principal=pendienteFuente||contradiccion||financiero;
         // Servicios, notas y la columna de cobros pueden describir la misma
         // prestación. Mostrar una sola conclusión por elemento comprobado.
-        if(!principal&&(lista(c?.servicios).length||lista(c?.notas).length))return detalleOperativo(item,generacion,historia);
+        if(!principal&&(lista(c?.servicios).length||lista(c?.notas).length))return detalleOperativo(item,generacion,historia,fechasVisibles);
         if(!principal&&detallesServicios.length&&lista(item.cambios).every(x=>x.campo==='servicios'))e.motivo='';
         const contexto=[...hechos.filter(x=>!x.startsWith('Corregir las fechas')),...detallesServicios,historia,
             ...avisos.filter(x=>x!==principal).map(x=>x.texto)].filter(Boolean);
@@ -304,7 +328,7 @@
         }).filter(Boolean);
         return [...new Set(breves)].join(' ')||'Falta aclarar sus datos.';
     }
-    function detalleOperativo(item,generacion,historia){
+    function detalleOperativo(item,generacion,historia,fechasVisibles){
         const c=item.contexto,servicios=lista(c.servicios),notas=lista(c.notas);
         const operativos=new Set(['servicios','notas_importantes','pagos_pendientes']);
         const otros=lista(item.cambios).filter(x=>!operativos.has(x.campo));
@@ -330,7 +354,7 @@
             }
         }
         const extra=[...lista(c.hechos),historia,...lista(c.avisos).map(x=>x.texto)].filter(Boolean);
-        const explicacion=otros.length?explicarPendiente({...item,cambios:otros},generacion).encontro:'';
+        const explicacion=otros.length?explicarPendiente({...item,cambios:otros},generacion,fechasVisibles).encontro:'';
         const accion=esAdministrador()&&revisionServiciosPendiente(item,generacion)
             ?'Revisa estos datos en «Aprobación manual».' : 'Revisa estos datos en «Ver reserva».';
         // El detalle conserva la evidencia original una sola vez, sin repetir
@@ -369,7 +393,9 @@
                 const revisionManual=item.preparacion||revisionServiciosPendiente(item,pendientes.generacion)||
                     revisionCancelacionPendiente(item,pendientes.generacion);
                 const etiqueta=item.detectado_generacion===pendientes.generacion?'DE ESTA ACTUALIZACIÓN':'PENDIENTE DE UNA ACTUALIZACIÓN ANTERIOR';
-                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small><p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>${detallePendiente(item,pendientes.generacion)}<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&revisionManual?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
+                const comparacionEstadia=comparacionEstadiaPendiente(item);
+                const estadia=comparacionEstadia||`<p>Entrada: ${escapar(fecha(r.fecha_checkin))} · Salida: ${escapar(fecha(r.fecha_checkout))}${r.tipo_estadia==='full_day'?' · Full Day':''}</p>`;
+                html+=`<details class="haku-pendiente-item haku-actualizacion-sites__pendiente ${item.accionable?'':'haku-actualizacion-sites__pendiente--revision'}"><summary><span>CAB ${escapar(r.cabana??'—')} · ${escapar(r.titular||'Nombre no indicado')}</span><span aria-hidden="true">⌄</span></summary><div class="haku-pendiente-detalle"><small>${etiqueta}</small>${estadia}${detallePendiente(item,pendientes.generacion,Boolean(comparacionEstadia))}<div class="haku-actualizacion-sites__historial-acciones" style="padding:0;border:0">${item.sistema?.reserva_id?`<button type="button" class="haku-actualizacion-sites__boton" data-haku-ver-reserva="${indice}">Ver reserva</button>`:''}${esAdministrador()&&revisionManual?`<button type="button" class="haku-actualizacion-sites__boton haiku-incorporacion-manual-accion" data-haku-aprobar-pendiente="${indice}">Aprobación manual</button>`:''}</div></div></details>`;
             }
         }
         const resueltos=lista(pendientes.resueltosDetalle);

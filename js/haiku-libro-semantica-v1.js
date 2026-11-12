@@ -505,7 +505,14 @@
         if (minutos) return Number(minutos[1]);
         for (const hora of t.matchAll(/\b(?:1|una)\s*(?:hora|hra?s?|h)\b/g)) if (!esHoraProgramada(original, hora.index)) return 60;
         if (/\bmedia\s+hora\b/.test(t)) return 30;
+        if (/\bde\s+hora\b/.test(t)) return 60;
         return null;
+    }
+
+    function textoSinHorasParaFecha(texto) {
+        // 10.00 y 10.30 son relojes: el segundo componente no puede ser un mes.
+        return normalizar(texto).replace(/[\u2010-\u2015\u2212\uFE63\uFF0D]/g, '-').replace(
+            /\b(?:a|desde|hasta)\s+las?\s+(?:[01]?\d|2[0-3])[:.,][0-5]\d\b|\b(?:1[0-2]|0?[1-9])[:.,][0-5]\d\s*(?:am|pm)\b|\b(?:[01]?\d|2[0-3])[:.,][0-5]\d\s*(?:hra?s?|hs|h)\b|(?<!\d\.)\b(?:[01]?\d|2[0-3])\.(?:00|1[3-9]|[2-5]\d)(?!\.\d)\b/g, ' ');
     }
 
     function textoSinDuracionMasaje(texto) {
@@ -567,6 +574,39 @@
         return null;
     }
 
+    function masajesSimultaneos(texto) {
+        return /\bsimultane(?:o|a|os|as)\b/.test(normalizar(texto)
+            .replace(/\b(?:no\s+(?:son\s+)?|sin\s+)simultane(?:o|a|os|as)\b/g, ''));
+    }
+
+    function inferirTurnosMasaje(unidades, original, simultaneos) {
+        const conHora = unidades.filter(u => u.hora), primera = unidades[0];
+        if (pendienteDeCoordinarOConfirmar(original) || conHora.length !== 1 ||
+            unidades.some(u => !u.ancla_prestacion || !u.duracion_minutos || u.hora_fin)) return;
+        const hora = conHora[0].hora;
+        const [h, m] = hora.split(':').map(Number), inicio = h * 60 + m;
+        const reloj = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
+        if (unidades.length === 1) {
+            const { cantidad, duracion_minutos } = primera;
+            if (!Number.isInteger(cantidad) || cantidad < 2 || inicio + cantidad * duracion_minutos >= 1440) return;
+            primera.turnos_masaje = Array.from({ length: cantidad }, (_, i) => reloj(inicio + (simultaneos ? 0 : i * duracion_minutos)));
+            return;
+        }
+        // Sólo secuencias de prestaciones enlazadas en el mismo fragmento.
+        // Una hora en la segunda prestación es común si declara «comenzando».
+        if (simultaneos || unidades.some(u => u.cantidad !== 1) ||
+            !unidades.slice(1).every((u, i) => /^(?:y|e)\s/i.test(u.texto) || /&\s*$/.test(unidades[i].texto)) ||
+            conHora[0] !== primera && !/\bcomenzando\s+a\s+las?\b/.test(normalizar(conHora[0].texto))) return;
+        const fechas = textoSinHorasParaFecha(original).match(/\b(?:para\s+)?el\s+\d{1,2}\b|\b\d{1,2}[-/.]\d{1,2}(?:[-/.]\d{2,4})?\b/g) || [];
+        if (new Set(fechas).size > 1 || inicio + unidades.reduce((s, u) => s + u.duracion_minutos, 0) >= 1440) return;
+        let turno = inicio;
+        for (const unidad of unidades) {
+            unidad.hora = reloj(turno);
+            unidad.inicio_secuencia_masaje = hora;
+            turno += unidad.duracion_minutos;
+        }
+    }
+
     function unidadesMasajeOriginales(texto) {
         const original = String(texto || "").trim(), anclas = anclasMasaje(original);
         if (!anclas.length) return [];
@@ -589,14 +629,15 @@
                 posicion_inicio: inicios[indice] + original.slice(inicios[indice], inicios[indice + 1] ?? original.length).indexOf(segmento),
                 tipo: tipoMasaje(segmento), duracion_minutos: duracionMasaje(segmento),
                 cantidad: cantidadMasaje(segmento, ancla.cantidad), hora: horas[0] || null, hora_fin: horas[1] || null,
-                simultaneo: /\bsimultane(?:o|a|os|as)\b/.test(normalizar(segmento)), profesionales,
+                simultaneo: masajesSimultaneos(segmento), profesionales,
                 asignacion_profesional: null, marcadores_distribucion: [...new Set(marcadores)],
                 modalidad_horario: /\bdesde\s+las?\b/.test(normalizar(segmento)) ? "desde" : /\ba\s+las?\b/.test(normalizar(segmento)) ? "a_las" : null,
                 texto: segmento, texto_original: segmento, texto_fuente_completo: original,
                 intencion_financiera: financiera.intencion, evidencias_financieras: financiera.evidencias
             };
         });
-        const simultaneidadGlobal = /\bsimultane(?:o|a|os|as)\b/.test(normalizar(original));
+        const simultaneidadGlobal = masajesSimultaneos(original);
+        inferirTurnosMasaje(unidades, original, simultaneidadGlobal);
         const profesionalesCompartidos = profesionalesMasaje(original);
         const horasGlobales = [...new Set(unidades.map(u => u.hora).filter(Boolean))];
         const comparteProfesional = simultaneidadGlobal || /\bambos?\s+con\b/.test(normalizar(original));
@@ -628,7 +669,7 @@
         const t = normalizar(texto);
         const resto = t
             .replace(/\b(?:descontractur\w*|descontratur\w*|relajant\w*|reljant\w*|holistic\w*|terapeut\w*)\b/g, '')
-            .replace(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b/g, '')
+            .replace(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b|\bde\s+hora\b/g, '')
             .replace(/\b(?:para\s+)?el\s+\d{1,2}(?!\d|[-/.])\b/g, '')
             // Consumir el meridiano junto con los minutos antes de buscar dd.mm.
             .replace(/\b\d{1,2}(?:\s*[:.,]\s*\d{2})?\s*(?:am|pm|hra?s?|hs|h)\b/g,
@@ -650,10 +691,10 @@
             if (distintos(campo)) conflictos.push(`Información contradictoria de ${nombre} del masaje.`);
         }
         const texto = normalizar(unidades.map(u => u.texto).join(' '));
-        const duraciones = [...texto.matchAll(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b/g)]
+        const duraciones = [...texto.matchAll(/\b(?:30|60)\s*min(?:uto)?s?\b|\b(?:1|una|media)\s*(?:hora|hra?s?|h)\b|\bde\s+hora\b/g)]
             .filter(m => !esHoraProgramada(texto, m.index)).map(m => duracionMasaje(m[0]));
         if (new Set(duraciones).size > 1 && !conflictos.some(c => c.includes('duración'))) conflictos.push('Información contradictoria de duración del masaje.');
-        const textoFechas = texto.replace(/\b(?:a|desde|hasta)\s+las?\s+\d{1,2}[:.,]\d{2}(?:\s*(?:am|pm|hra?s?|hs|h))?\b|\b\d{1,2}[:.,]\d{2}\s*(?:am|pm|hra?s?|hs|h)\b/g, ' ');
+        const textoFechas = textoSinHorasParaFecha(texto);
         const dias = [...textoFechas.matchAll(/\b(?:para\s+)?el\s+(\d{1,2})(?!\d|[-/.])\b|\b(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{4}|\d{2}))?\b/g)];
         if (new Set(dias.map(m => Number(m[1] || m[2]))).size > 1 ||
             new Set(dias.filter(m => m[3]).map(m => Number(m[3]))).size > 1 ||
@@ -1633,7 +1674,7 @@
         return cambios;
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
-        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);
