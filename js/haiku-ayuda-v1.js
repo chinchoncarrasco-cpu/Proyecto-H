@@ -86,7 +86,7 @@
             {titulo:"Cambiar otros estados de reserva",detalle:"Check-out, cancelación, reactivación y no-show se realizan desde la ficha. El informe del Libro tiene su propio flujo de cancelaciones."},
             {titulo:"Editar, anular o reembolsar un pago",detalle:"Usa Pagos o la ficha. Haku puede registrar y comparar abonos."},
             {titulo:"Guardar un BOVE desde el chat",detalle:"El comando prepara la validación. Usa Pagos o Cierre para guardar."},
-            {titulo:"Reprogramar un servicio existente",detalle:"El cambio directo de fecha, hora o profesional se hace en Servicios. La consulta de horarios por chat cubre tinajas."},
+            {titulo:"Reprogramar un servicio existente",detalle:"Consulta la agenda en Servicios para revisar un cambio de fecha, hora o profesional. La disponibilidad por chat cubre tinajas."},
             {titulo:"Registrar aseo, revisión, bloqueos o notas por orden libre",detalle:"Usa el módulo operativo correspondiente. Las notas y los bloqueos del Libro se revisan desde su comparación."},
             {titulo:"Cobrar al huésped o enviar mensajes",detalle:"Haku registra comprobantes y consulta datos del panel. Los cobros y mensajes se hacen en sus canales."}
         ]}
