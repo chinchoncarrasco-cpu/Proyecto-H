@@ -1,471 +1,451 @@
-// Presentación Sites del Cierre. Los controles y los RPC existentes conservan la autoridad.
+// Presentación del Cierre. El estado definitivo proviene de Supabase.
 (() => {
     "use strict";
+
     const root = document.getElementById("seccion-cierre");
-    if (!root) return;
+    const plantilla = window.HAIKU_CIERRE_PLANTILLA_V1;
+    if (!root || !plantilla) return;
+
     const $ = selector => root.querySelector(selector);
     const $$ = selector => [...root.querySelectorAll(selector)];
-    const filters = ["todas", "pendientes", "observaciones", "completas"];
-    let filter = "todas";
-    let rpcState = null;
-    let baselineDone = null;
-    let navigatingFromClosing = false;
-    const date = () => {
-        try { return String(fechaSeleccionada || "").slice(0, 10); }
-        catch { return ""; }
-    };
-    const dateLabel = value => value ? new Intl.DateTimeFormat("es-CL", {
-        weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago"
-    }).format(new Date(`${value}T12:00:00`)) : "Fecha operativa no disponible";
-    const cabinData = number => {
-        try { return obtenerDatosDia(date())?.cabanas?.[String(number)] || {}; }
-        catch { return {}; }
-    };
-    const cabinState = number => window.HAIKU_CABANAS_SITES_V1?.estadoFinal?.(cabinData(number), date()) || "pendiente";
-    const cabinCategory = state => state === "con-detalles" ? "observaciones"
-        : state === "lista" || state === "no_requiere" ? "completas" : "pendientes";
-    const cabinLabel = state => ({ lista: "Completa", "con-detalles": "Con observaciones",
-        pendiente: "Por revisar", en_curso: "En curso", lista_para_revisar: "Lista para revisar",
-        no_requiere: "No requiere" })[state] || "Por revisar";
-    const titleWithoutIcon = text => String(text || "").replace(/^[^\p{L}\p{N}]+/u, "").trim();
-    const node = (tag, cls, text) => {
-        const element = document.createElement(tag);
-        if (cls) element.className = cls;
-        if (text !== undefined) element.textContent = text;
-        return element;
-    };
-    function assembleSubBlocks(stage) {
-        stage.querySelectorAll(".cierre-bloque").forEach((block, index) => {
-            const old = block.querySelector(":scope > .cierre-bloque-titulo");
-            if (!old) return;
-            const title = titleWithoutIcon(old.textContent);
-            const body = node("div", "sites-cierre-sub-body");
-            while (old.nextSibling) body.appendChild(old.nextSibling);
-            if (stage.dataset.cierreEtapa === "1" && (index === 0 || index === 3)) {
-                const target = index === 0 ? "resumen" : "pagos";
-                const link = node("button", "sites-cierre-source-link", index === 0
-                    ? "Ver salidas en Resumen ›" : "Ver pagos y BOVE ›");
-                link.type = "button";
-                link.addEventListener("click", () => document.querySelector(`.menu-item[data-seccion="${target}"]`)?.click());
-                body.appendChild(link);
-            }
-            const head = node("button", "sites-cierre-sub-head");
-            head.type = "button";
-            head.setAttribute("aria-expanded", String(stage.dataset.cierreEtapa === "1" && index === 0));
-            head.append(node("strong", "", title), node("small", "sites-cierre-sub-count", ""),
-                node("span", "", head.getAttribute("aria-expanded") === "true" ? "⌃" : "⌄"));
-            body.hidden = head.getAttribute("aria-expanded") !== "true";
-            old.replaceWith(head);
-            block.appendChild(body);
-            head.addEventListener("click", () => {
-                const open = body.hidden;
-                body.hidden = !open;
-                head.setAttribute("aria-expanded", String(open));
-                head.lastElementChild.textContent = open ? "⌃" : "⌄";
+    const fechaActual = () => typeof fechaSeleccionada === "string" ? fechaSeleccionada.slice(0, 10) : "";
+    const filtros = { todas: "Todas", pendientes: "Pendientes", observaciones: "Observaciones", completas: "Revisadas" };
+    const evidencias = new Map();
+    const revisiones = [];
+    let filtro = "todas";
+    let fechaVista = "";
+    let listaUnidades = "";
+
+    function crear(tag, clase, texto) {
+        const elemento = document.createElement(tag);
+        if (clase) elemento.className = clase;
+        if (texto) elemento.textContent = texto;
+        return elemento;
+    }
+
+    function boton(texto, clase = "turno-button") {
+        const elemento = crear("button", clase, texto);
+        elemento.type = "button";
+        return elemento;
+    }
+
+    function panel(titulo, abierto = false) {
+        const elemento = crear("details", "turno-panel");
+        elemento.open = Boolean(abierto);
+        const cabecera = crear("summary", "turno-panel-heading");
+        const contador = crear("small", "turno-count");
+        cabecera.append(crear("strong", "", titulo), contador);
+        const cuerpo = crear("div", "turno-panel-body");
+        elemento.append(cabecera, cuerpo);
+        return { elemento, contador, cuerpo };
+    }
+
+    function check(texto, datos, detalle) {
+        const label = crear("label", "turno-check");
+        const input = crear("input");
+        input.type = "checkbox";
+        Object.assign(input.dataset, datos);
+        const nombre = crear("span", "", texto);
+        if (detalle) nombre.append(crear("small", "turno-detail", detalle));
+        label.append(input, nombre);
+        return label;
+    }
+
+    function evidencia(config, control) {
+        const bloque = crear("div", "turno-evidence");
+        bloque.dataset.evidencia = config.id;
+        bloque.hidden = true;
+        const status = crear("small", "turno-evidence-status", "Sin adjuntos");
+        const titulo = crear("div", "turno-evidence-title");
+        titulo.append(crear("strong", "", config.titulo), status);
+        const acciones = crear("div", "turno-actions");
+        const input = crear("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.hidden = true;
+        input.dataset.evidenciaInput = config.id;
+        const adjuntar = boton("Adjuntar imagen");
+        adjuntar.dataset.evidenciaAdjuntar = config.id;
+        adjuntar.addEventListener("click", () => input.click());
+        const pegar = boton("Pegar imagen");
+        pegar.dataset.evidenciaPegar = config.id;
+        pegar.title = "Con el botón enfocado, pega una imagen desde el portapapeles";
+        const ver = boton("Ver respaldo", "turno-link");
+        ver.hidden = true;
+        ver.setAttribute("aria-expanded", "false");
+        const vista = crear("div", "turno-evidence-preview");
+        vista.hidden = true;
+        ver.addEventListener("click", () => {
+            vista.hidden = !vista.hidden;
+            ver.setAttribute("aria-expanded", String(!vista.hidden));
+            ver.textContent = vista.hidden ? "Ver respaldo" : "Ocultar respaldo";
+        });
+        acciones.append(input, adjuntar, pegar, ver);
+        bloque.append(titulo, acciones, vista);
+        evidencias.set(config.id, { bloque, control, status, ver, vista, cantidad: 0, solicitud: 0 });
+        return bloque;
+    }
+
+    function control(item) {
+        const fila = crear("div", "turno-control");
+        fila.dataset.turnoControl = item.codigo;
+        if (item.opciones) {
+            fila.classList.add("turno-choice-row");
+            const label = crear("span", "turno-question", item.texto);
+            label.id = `turno-label-${item.codigo}`;
+            const opciones = crear("div", "turno-choices");
+            opciones.setAttribute("role", "radiogroup");
+            opciones.setAttribute("aria-labelledby", label.id);
+            item.opciones.forEach(([valor, texto]) => {
+                const opcion = crear("label");
+                const input = crear("input");
+                input.type = "radio";
+                input.name = item.codigo.replaceAll("_", "-");
+                input.value = valor;
+                input.dataset.cierreCodigo = item.codigo;
+                opcion.append(input, crear("span", "", texto));
+                opciones.append(opcion);
             });
-        });
-    }
-    function assemblePending(stage) {
-        stage.querySelectorAll(".sites-cierre-pending-item").forEach(card => {
-            const head = card.querySelector(".sites-cierre-pending-head");
-            const body = card.querySelector(".sites-cierre-pending-body");
-            if (!head || !body) return;
-            head.addEventListener("click", () => {
-                body.hidden = !body.hidden;
-                head.setAttribute("aria-expanded", String(!body.hidden));
-                head.querySelector(".sites-cierre-pending-chevron").textContent = body.hidden ? "⌄" : "⌃";
-            });
-        });
-    }
-    function updatePendingFields() {
-        const stage = $(".sites-cierre-stage[data-cierre-etapa='2']");
-        if (!stage) return;
-        const block = stage.querySelector('[data-sites-pending="hay-novedades"]');
-        const control = block?.querySelector(".sites-cierre-pending-field");
-        if (control) control.hidden = !block.querySelector('input[name="hay-novedades"][value="si"]:checked');
-    }
-    function assembleCabins(stage) {
-        const body = stage.querySelector(".sites-cierre-stage-body");
-        const grid = body?.querySelector(".cierre-cabanas-grid");
-        if (!grid) return;
-        const summary = node("div", "sites-cierre-cabin-summary");
-        summary.id = "sites-cierre-cabin-summary";
-        const toolbar = node("div", "sites-cierre-filters");
-        toolbar.setAttribute("role", "group");
-        toolbar.setAttribute("aria-label", "Filtrar cabañas");
-        filters.forEach(key => {
-            const button = node("button", "", "");
-            button.type = "button";
-            button.dataset.sitesCierreFilter = key;
-            toolbar.appendChild(button);
-        });
-        grid.before(summary, toolbar);
-        grid.querySelectorAll(".cierre-cabana-card").forEach(card => {
-            const oldHead = card.querySelector(":scope > .cierre-cabana-header");
-            const number = Number(card.querySelector("[data-cierre-cabana-ocupada]")?.dataset.cierreCabanaOcupada);
-            if (!number || !oldHead) return;
-            card.classList.add("sites-cierre-cabin");
-            card.dataset.sitesCierreCabin = String(number);
-            const detail = node("div", "sites-cierre-cabin-body");
-            while (card.firstChild) detail.appendChild(card.firstChild);
-            detail.hidden = true;
-            const heading = node("div", "sites-cierre-cabin-head");
-            const toggle = node("button", "", "");
-            toggle.type = "button";
-            toggle.setAttribute("aria-expanded", "false");
-            toggle.append(node("strong", "sites-cierre-cabin-name", `⌂ Cabaña ${number}`),
-                node("small", "sites-cierre-cabin-fraction", "0/7 checks"),
-                node("span", "sites-cierre-badge", "Por revisar"), node("span", "", "⌄"));
-            toggle.addEventListener("click", () => {
-                detail.hidden = !detail.hidden;
-                toggle.setAttribute("aria-expanded", String(!detail.hidden));
-                toggle.lastElementChild.textContent = detail.hidden ? "⌄" : "⌃";
-            });
-            const open = node("button", "sites-cierre-cabin-open", "Abrir ficha ›");
-            open.type = "button";
-            open.setAttribute("aria-label", `Abrir ficha operativa de cabaña ${number}`);
-            open.addEventListener("click", () => openCabin(number));
-            heading.append(toggle, open);
-            card.append(heading, detail);
-        });
-        toolbar.addEventListener("click", event => {
-            const button = event.target.closest("[data-sites-cierre-filter]");
-            if (!button) return;
-            filter = button.dataset.sitesCierreFilter;
-            update();
-        });
-    }
-    function assembleTinajaNote(stage) {
-        const body = stage.querySelector(".sites-cierre-stage-body");
-        if (!body) return;
-        const note = node("div", "sites-cierre-tinaja-note");
-        note.append(node("strong", "", "Observaciones / novedades del turno"),
-            node("p", "", "Las anomalías de tinajas se informan en Novedades del turno."));
-        const link = node("button", "sites-cierre-cabin-open", "Abrir novedades del turno ›");
-        link.type = "button";
-        link.addEventListener("click", () => {
-            const stageTwo = $(".sites-cierre-stage[data-cierre-etapa='2']");
-            if (stageTwo?.querySelector(".sites-cierre-stage-body")?.hidden) stageTwo.querySelector(".sites-cierre-stage-head")?.click();
-            const text = stageTwo?.querySelector('textarea[data-cierre-campo="novedades"]');
-            const block = text?.closest(".sites-cierre-pending-item");
-            if (block?.querySelector(".sites-cierre-pending-body")?.hidden) block.querySelector(".sites-cierre-pending-head")?.click();
-            text?.focus();
-            text?.scrollIntoView({ block: "center" });
-        });
-        note.append(link);
-        body.appendChild(note);
-    }
-    function openCabin(number) {
-        const link = document.querySelector('.menu-item[data-seccion="cabanas"]');
-        if (!link || !window.HAIKU_CABANAS_SITES_V1?.abrir) return;
-        navigatingFromClosing = true;
-        link.click();
-        navigatingFromClosing = false;
-        window.HAIKU_CABANAS_SITES_V1.abrir(number);
-        const detail = document.getElementById("cabinsDetail");
-        if (!detail) return;
-        let back = document.getElementById("sites-cierre-volver");
-        if (!back) {
-            back = node("button", "sites-cierre-back", "‹ Volver a Cierre de turno");
-            back.type = "button";
-            back.id = "sites-cierre-volver";
-            detail.prepend(back);
-            back.addEventListener("click", () => {
-                back.hidden = true;
-                window.HAIKU_CABANAS_SITES_V1?.cerrar?.();
-                document.querySelector('.menu-item[data-seccion="cierre"]')?.click();
-            });
+            fila.append(label, opciones);
+        } else {
+            const opcion = check(item.texto, { cierreCodigo: item.codigo, cierreCampo: item.codigo.replaceAll("_", "-") });
+            fila.append(opcion);
+            if (item.evidencia) fila.append(evidencia(item.evidencia, opcion.querySelector("input")));
         }
-        back.hidden = false;
+        const noAplica = crear("small", "turno-detail", "No aplica");
+        noAplica.dataset.turnoNoAplica = "";
+        noAplica.hidden = true;
+        fila.append(noAplica);
+        return fila;
     }
-    const evidenceLabels = {
-        registro: "registros",
-        "cloudbeds-reserva": "reserva en CloudBeds",
-        "cloudbeds-pago": "pago en CloudBeds",
-        "manager-pagos": "pagos de Manager",
-        "manager-caja": "caja de Manager"
-    };
-    const evidenceBlocks = new Map();
-    function syncEvidence(block) {
-        const preview = block.querySelector("[data-evidencia-preview]");
-        const toggle = block.querySelector(".cierre-evidencia-toggle");
-        const links = block.querySelector(".sites-cierre-evidence-links");
-        const count = Math.max(Number(block.dataset.sitesEvidenceCount || 0), preview?.querySelector("img") ? 1 : 0);
-        const status = block.querySelector(".sites-cierre-evidence-status");
-        const label = count ? `${count} ${count === 1 ? "adjunto" : "adjuntos"}` : "Sin adjuntos";
-        if (status && status.textContent !== label) status.textContent = label;
-        if (!toggle) return;
-        toggle.hidden = count === 0;
-        if (!count) preview.style.display = "none";
-        const open = count > 0 && preview.style.display !== "none";
-        const buttonLabel = open ? "Ocultar evidencia" : "Ver evidencia";
-        if (toggle.textContent !== buttonLabel) toggle.textContent = buttonLabel;
-        if (links) links.hidden = !open || !links.childElementCount;
+
+    function abrirSeccion(id) {
+        document.querySelector(`.menu-item[data-seccion="${id}"]`)?.click();
     }
-    function assembleEvidence() {
-        $$('[data-evidencia]').forEach(block => {
-            const key = block.dataset.evidencia;
-            const title = block.querySelector(".cierre-evidencia-titulo");
-            const actions = block.querySelector(".cierre-evidencia-acciones");
-            const preview = block.querySelector("[data-evidencia-preview]");
-            if (!title || !actions || !preview) return;
-            block.classList.add("sites-cierre-evidence");
-            title.replaceChildren(node("strong", "", `Evidencia · ${evidenceLabels[key] || key}`),
-                node("small", "sites-cierre-evidence-status", "Sin adjuntos"));
-            const upload = actions.querySelector("label.cierre-evidencia-boton");
-            const input = upload?.querySelector("[data-evidencia-input]");
-            if (upload && input) upload.replaceChildren(document.createTextNode("Adjuntar imágenes"), input);
-            const paste = actions.querySelector("[data-evidencia-pegar]");
-            if (paste) {
-                paste.textContent = "Pegar imagen";
-                paste.title = "Haz clic aquí y presiona Ctrl+V para pegar una imagen";
-            }
-            const links = node("div", "sites-cierre-evidence-links");
-            links.hidden = true;
-            preview.after(links);
-            const toggle = block.querySelector(".cierre-evidencia-toggle");
-            toggle?.addEventListener("click", () => syncEvidence(block));
-            new MutationObserver(() => syncEvidence(block)).observe(preview, { childList: true });
-            evidenceBlocks.set(key, block);
-            syncEvidence(block);
-        });
-    }
-    async function refreshEvidence(key) {
-        const block = evidenceBlocks.get(key);
-        if (!block) return;
-        const selectedDate = date();
-        const request = String(Number(block.dataset.sitesEvidenceRequest || 0) + 1);
-        block.dataset.sitesEvidenceRequest = request;
-        const links = block.querySelector(".sites-cierre-evidence-links");
-        block.dataset.sitesEvidenceCount = "0";
-        links.replaceChildren();
-        syncEvidence(block);
-        try {
-            const list = await window.HAIKU_CIERRE_EVIDENCIAS_V1?.listar?.(selectedDate, key);
-            if (block.dataset.sitesEvidenceRequest !== request || date() !== selectedDate || !Array.isArray(list)) return;
-            block.dataset.sitesEvidenceCount = String(list.length);
-            links.replaceChildren();
-            list.forEach((item, index) => {
-                if (!item.url) return;
-                const link = node("a", "", `Adjunto ${index + 1}`);
-                link.href = item.url;
-                link.target = "_blank";
-                link.rel = "noopener noreferrer";
-                links.appendChild(link);
-            });
-            syncEvidence(block);
-        } catch (error) {
-            console.warn("No fue posible listar las evidencias del cierre:", error);
-            syncEvidence(block);
+
+    function abrirCabana(numero, volverAFoco) {
+        if (!window.HAIKU_CABANAS_SITES_V1?.abrir) return;
+        abrirSeccion("cabanas");
+        window.HAIKU_CABANAS_SITES_V1.abrir(numero);
+        const detalle = document.getElementById("cabinsDetail");
+        if (!detalle) return;
+        let volver = document.getElementById("sites-cierre-volver");
+        if (!volver) {
+            volver = boton("‹ Volver a Cierre de turno", "sites-cierre-back turno-button");
+            volver.id = "sites-cierre-volver";
+            detalle.prepend(volver);
         }
-    }
-    function refreshAllEvidence() {
-        evidenceBlocks.forEach((block, key) => refreshEvidence(key));
-    }
-    function assemble() {
-        const progress = $(".sites-cierre-legacy .cierre-progreso");
-        if (progress) $("#sites-cierre-progress-slot").appendChild(progress);
-        const slot = $("#sites-cierre-stages");
-        slot.replaceChildren();
-        const stages = $$(".sites-cierre-legacy .cierre-etapa");
-        stages.forEach((stage, index) => {
-            stage.dataset.cierreEtapa = String(index + 1);
-            stage.classList.add("sites-cierre-stage");
-            const old = stage.querySelector(":scope > .cierre-etapa-cabecera, :scope > .cierre-etapa-header");
-            const title = old?.querySelector("h2,h3")?.textContent.trim() || `Etapa ${index + 1}`;
-            const description = old?.querySelector("p")?.textContent.replace(/\s+/g, " ").trim() || "";
-            const body = node("div", "sites-cierre-stage-body");
-            while (old?.nextSibling) body.appendChild(old.nextSibling);
-            const head = node("button", "sites-cierre-stage-head");
-            head.type = "button";
-            head.setAttribute("aria-expanded", String(index === 0));
-            const titleWrap = node("span", "sites-cierre-stage-title");
-            titleWrap.append(node("strong", "", title), node("small", "", description));
-            head.append(node("span", "sites-cierre-stage-number", String(index + 1).padStart(2, "0")),
-                titleWrap, node("span", "sites-cierre-stage-count", "—"),
-                node("span", "sites-cierre-badge", "Pendiente"), node("span", "sites-cierre-chevron", index === 0 ? "⌃" : "⌄"));
-            body.hidden = index !== 0;
-            old?.replaceWith(head);
-            stage.appendChild(body);
-            slot.appendChild(stage);
-            head.addEventListener("click", () => {
-                body.hidden = !body.hidden;
-                head.setAttribute("aria-expanded", String(!body.hidden));
-                head.lastElementChild.textContent = body.hidden ? "⌄" : "⌃";
-            });
-            if (index === 0) assembleSubBlocks(stage);
-            if (index === 1) assemblePending(stage);
-            if (index === 2) {
-                stage.querySelectorAll(".cierre-card h3").forEach(title => {
-                    title.textContent = titleWithoutIcon(title.textContent);
-                });
-                assembleTinajaNote(stage);
-            }
-            if (index === 3) assembleCabins(stage);
-        });
-        assembleEvidence();
-        root.classList.remove("sites-cierre-pending");
-        root.classList.add("sites-cierre-ready");
-    }
-    function radioCount(stage) {
-        const names = [...new Set([...stage.querySelectorAll('input[type="radio"][name]')].map(input => input.name))];
-        return { done: names.filter(name => !!stage.querySelector(`input[name="${name}"]:checked`)).length, total: names.length };
-    }
-    function stageCount(stage, index) {
-        if (index === 3) {
-            const cards = [...stage.querySelectorAll(".sites-cierre-cabin")];
-            const done = cards.filter(card => card.querySelector("[data-cierre-cabana-ocupada]")?.checked ||
-                [...card.querySelectorAll("[data-cierre-cabana][data-item]")].every(input => input.checked)).length;
-            return { done, total: cards.length };
-        }
-        const radios = radioCount(stage);
-        const boxes = [...stage.querySelectorAll('input[type="checkbox"]')];
-        return { done: radios.done + boxes.filter(input => input.checked).length,
-            total: radios.total + boxes.length };
-    }
-    function updateCabins() {
-        const cards = $$(".sites-cierre-cabin");
-        const counts = { todas: cards.length, pendientes: 0, observaciones: 0, completas: 0 };
-        cards.forEach(card => {
-            const number = Number(card.dataset.sitesCierreCabin);
-            const state = cabinState(number);
-            const category = cabinCategory(state);
-            counts[category]++;
-            const checks = [...card.querySelectorAll("[data-cierre-cabana][data-item]")];
-            const complete = checks.filter(input => input.checked).length;
-            card.querySelector(".sites-cierre-cabin-fraction").textContent = `${complete}/${checks.length} checks`;
-            const badge = card.querySelector(".sites-cierre-badge");
-            badge.textContent = cabinLabel(state);
-            badge.classList.toggle("complete", category === "completas");
-            card.hidden = filter !== "todas" && category !== filter;
-        });
-        const summary = $("#sites-cierre-cabin-summary");
-        if (summary) summary.textContent = `${counts.pendientes} pendientes / por revisar · ${counts.observaciones} con observaciones · ${counts.completas} completas`;
-        $$("[data-sites-cierre-filter]").forEach(button => {
-            const key = button.dataset.sitesCierreFilter;
-            const label = ({ todas: "Todas", pendientes: "Pendientes", observaciones: "Observaciones", completas: "Completas" })[key];
-            button.textContent = `${label} ${counts[key]}`;
-            button.classList.toggle("active", key === filter);
-            button.setAttribute("aria-pressed", String(key === filter));
-        });
-        $("#sites-cierre-cabanas-pendientes").textContent = String(counts.pendientes);
-        $("#sites-cierre-observaciones").textContent = String(counts.observaciones);
-        return counts;
-    }
-    function update() {
-        $("#sites-cierre-fecha").textContent = dateLabel(date());
-        updatePendingFields();
-        const stages = $$(".sites-cierre-stage");
-        let complete = 0;
-        stages.forEach((stage, index) => {
-            const { done, total } = stageCount(stage, index);
-            const isComplete = total > 0 && done === total;
-            if (isComplete) complete++;
-            const head = stage.querySelector(".sites-cierre-stage-head");
-            head.querySelector(".sites-cierre-stage-count").textContent = `${done}/${total} revisados`;
-            const badge = head.querySelector(".sites-cierre-badge");
-            badge.textContent = isComplete ? "Completa" : "Pendiente";
-            badge.classList.toggle("complete", isComplete);
-            stage.querySelectorAll(".cierre-bloque").forEach(block => {
-                const count = block.classList.contains("cierre-llaves-recepcion")
-                    ? { done: block.querySelectorAll('input[type="checkbox"]:checked').length,
-                        total: block.querySelectorAll('input[type="checkbox"]').length }
-                    : { done: radioCount(block).done + block.querySelectorAll('input[type="checkbox"]:checked').length,
-                        total: radioCount(block).total + block.querySelectorAll('input[type="checkbox"]').length };
-                const label = block.querySelector(".sites-cierre-sub-count");
-                if (label && count.total) label.textContent = `${count.done}/${count.total} ${block.classList.contains("cierre-llaves-recepcion") ? "devueltas" : "revisados"}`;
-            });
-            if (index === 1) stage.querySelectorAll(".sites-cierre-pending-item").forEach(card => {
-                const count = card.querySelector('input[type="radio"]:checked') ? 1 : 0;
-                card.querySelector(".sites-cierre-pending-count").textContent = `${count}/1 revisados`;
-            });
-        });
-        $("#sites-cierre-etapas-completas").textContent = `${complete}/${stages.length}`;
-        updateCabins();
-        if (rpcState) renderDashboard(rpcState, baselineDone === null ? 0 : localDone() - baselineDone);
-    }
-    function localDone() {
-        return $$(".sites-cierre-stage").reduce((sum, stage, index) => sum + stageCount(stage, index).done, 0);
-    }
-    function renderWarnings(state) {
-        const panel = $("#cierre-final-supabase");
-        if (!panel) return;
-        let warnings = panel.querySelector(".sites-cierre-warnings");
-        if (!warnings) {
-            warnings = node("div", "sites-cierre-warnings");
-            warnings.append(node("strong", "", "Antes de cerrar"), node("ul"));
-            panel.querySelector(".cierre-final-resumen-wrap")?.before(warnings);
-        }
-        const list = warnings.querySelector("ul");
-        list.replaceChildren();
-        $$(".sites-cierre-stage").forEach((stage, index) => {
-            const count = stageCount(stage, index);
-            const missing = count.total - count.done;
-            if (missing) {
-                const title = stage.querySelector(".sites-cierre-stage-title strong")?.textContent || `Etapa ${index + 1}`;
-                list.appendChild(node("li", "", `${title}: ${missing} ${index === 3 ? "cabañas" : "controles"} sin completar`));
-            }
-        });
-        const observed = Number($("#sites-cierre-observaciones")?.textContent || 0);
-        if (observed) list.appendChild(node("li", "", `${observed} cabañas con observaciones en su estado final`));
-        if (!list.children.length) list.appendChild(node("li", "", Number(state.pendientes || 0)
-            ? `${state.pendientes} pendientes según el estado del cierre` : "Controles completos"));
-    }
-    function renderDashboard(state, change = 0) {
-        const pending = Math.max(0, Number(state.pendientes || 0) - change);
-        const total = Number(state.total_requeridos || 0);
-        const percentage = change === 0 ? Number(state.porcentaje || 0)
-            : total ? Math.round(Math.max(0, Math.min(total, Number(state.completados || 0) + change)) / total * 100) : 0;
-        const closed = ["cerrado", "cerrado_con_pendientes"].includes(state.cierre_estado);
-        $("#sites-cierre-estado").textContent = closed ? "Turno cerrado"
-            : pending ? "Cierre con pendientes" : "Cierre listo";
-        $("#sites-cierre-resumen").textContent = `${pending} controles pendientes · ${total} controles requeridos`;
-        $("#sites-cierre-pendientes").textContent = String(pending);
-        $("#sites-cierre-turno").textContent = ({ cerrado: "Cerrado",
-            cerrado_con_pendientes: "Cerrado con pendientes", reabierto: "Reabierto" })[state.cierre_estado] || "Borrador";
-        const percent = $("#cierre-porcentaje");
-        const bar = $("#cierre-barra-progreso");
-        if (percent) percent.textContent = `${percentage}%`;
-        if (bar) bar.style.width = `${percentage}%`;
-        renderWarnings(state);
-    }
-    function applyRpcState(state) {
-        rpcState = state;
-        baselineDone = localDone();
-        renderDashboard(state);
-    }
-    assemble();
-    const originalLoad = window.cargarCierreDia;
-    if (typeof originalLoad === "function") {
-        window.cargarCierreDia = function cargarCierreDiaSites() {
-            const result = originalLoad.apply(this, arguments);
-            queueMicrotask(update);
-            refreshAllEvidence();
-            return result;
+        volver.onclick = () => {
+            volver.hidden = true;
+            window.HAIKU_CABANAS_SITES_V1.cerrar?.();
+            abrirSeccion("cierre");
+            volverAFoco.focus();
         };
+        volver.hidden = false;
     }
-    root.addEventListener("change", event => {
-        if (event.target.matches("input[type='checkbox'],input[type='radio']")) queueMicrotask(update);
+
+    const escritorio = matchMedia("(min-width: 760px)").matches;
+    const cabanas = panel(plantilla.unidades.titulo, escritorio);
+    cabanas.elemento.id = "sites-cierre-cabanas";
+    const barraFiltros = crear("div", "turno-filters");
+    barraFiltros.setAttribute("role", "group");
+    barraFiltros.setAttribute("aria-label", "Filtrar cabañas");
+    const lista = crear("div", "turno-cabins");
+    const sinUnidades = crear("p", "turno-empty");
+    cabanas.cuerpo.append(barraFiltros, lista, sinUnidades);
+    const botonesFiltro = Object.entries(filtros).map(([id, texto]) => {
+        const item = boton(texto);
+        item.dataset.sitesCierreFilter = id;
+        item.addEventListener("click", () => {
+            filtro = id;
+            actualizarCabanas();
+        });
+        barraFiltros.append(item);
+        return [id, item];
     });
-    root.addEventListener("input", event => {
-        if (event.target.matches("textarea[data-cierre-campo]")) queueMicrotask(update);
+
+    function cargarUnidades(unidades) {
+        const firma = JSON.stringify(unidades);
+        if (listaUnidades === firma) return;
+        listaUnidades = firma;
+        const modelo = plantilla.unidades;
+        lista.replaceChildren(...unidades.map(({ numero, nombre }) => {
+            const ficha = panel(nombre || `Cabaña ${numero}`);
+            ficha.elemento.className = "turno-cabin";
+            ficha.elemento.dataset.sitesCierreCabin = numero;
+            ficha.contador.classList.add("turno-cabin-count");
+            const operativo = crear("small", "turno-cabin-operativo");
+            const estado = crear("span", "turno-badge");
+            ficha.contador.before(operativo, estado);
+
+            const opciones = crear("div", "turno-cabin-checks");
+            modelo.items.forEach(([id, texto]) => opciones.append(check(texto, {
+                cierreCodigo: `cabana_${id}`, cierreCabana: numero, item: id
+            })));
+            ficha.cuerpo.append(check(modelo.ocupada[1], {
+                cierreCodigo: "cabana_ocupada", cierreCabana: numero, cierreCabanaOcupada: numero
+            }), opciones);
+            if (numero <= plantilla.unidades.respaldo.length) {
+                const ver = boton("Abrir ficha operativa", "turno-link");
+                ver.addEventListener("click", () => abrirCabana(numero, ver));
+                ficha.cuerpo.append(ver);
+            }
+            return ficha.elemento;
+        }));
+    }
+
+    const procedimientos = crear("div", "turno-procedures");
+    const inventario = panel(plantilla.inventario.titulo);
+    inventario.elemento.className = "turno-inventory";
+    const llaves = crear("div", "turno-inventory-list");
+    plantilla.inventario.llaves.forEach(([id, texto, detalle]) => llaves.append(check(texto, {
+        cierreCodigo: plantilla.inventario.codigo, cierreLlave: id
+    }, detalle)));
+    inventario.cuerpo.append(llaves);
+
+    plantilla.controles.forEach(grupo => {
+        const vista = panel(grupo.titulo, grupo.abrir || (escritorio && grupo.abrirEnEscritorio));
+        vista.elemento.dataset.turnoGrupo = grupo.id;
+        const filas = grupo.items.map(control);
+        vista.cuerpo.append(...filas);
+        if (grupo.inventario) vista.cuerpo.append(inventario.elemento);
+        if (grupo.seccion) {
+            const acceso = boton(grupo.enlace, "turno-link");
+            acceso.addEventListener("click", () => abrirSeccion(grupo.seccion));
+            vista.cuerpo.append(acceso);
+        }
+        revisiones.push({ ...vista, filas });
+        procedimientos.append(vista.elemento);
     });
-    window.addEventListener("haiku:cierre-estado-actualizado", event => applyRpcState(event.detail));
-    window.addEventListener("haiku:auth-ready", () => setTimeout(() => { update(); refreshAllEvidence(); }, 0));
+
+    const entrega = crear("section", "turno-panel turno-handover");
+    entrega.id = "sites-cierre-entrega";
+    entrega.tabIndex = -1;
+    entrega.setAttribute("aria-labelledby", "sites-cierre-entrega-titulo");
+    const tituloEntrega = crear("h2", "turno-handover-heading", plantilla.entrega.titulo);
+    tituloEntrega.id = "sites-cierre-entrega-titulo";
+    const columnas = crear("div", "turno-handover-grid");
+    const pendientes = crear("div", "turno-handover-notes");
+    pendientes.append(...plantilla.entrega.items.map(control));
+    const notas = crear("label", "turno-field");
+    const novedades = crear("textarea");
+    novedades.dataset.cierreCampo = "novedades";
+    novedades.rows = 3;
+    novedades.placeholder = "Ej. Revisar calefactor de la cabaña 4";
+    notas.append(crear("span", "", "Novedades del turno"), novedades);
+    pendientes.append(notas);
+    const final = crear("div", "turno-final-slot");
+    final.id = "sites-cierre-final-slot";
+    columnas.append(pendientes, final);
+    entrega.append(tituloEntrega, columnas);
+
+    $("#sites-cierre-stages").replaceChildren(cabanas.elemento, procedimientos, entrega);
+    $("#sites-cierre-ir-entrega").addEventListener("click", () => {
+        entrega.scrollIntoView({ block: "start" });
+        entrega.focus({ preventScroll: true });
+    });
+
+    function estadoCabana(numero) {
+        const datos = typeof obtenerDatosDia === "function" ? obtenerDatosDia(fechaActual())?.cabanas?.[numero] : null;
+        return window.HAIKU_CABANAS_SITES_V1?.estadoFinal?.(datos || {}, fechaActual()) || "pendiente";
+    }
+
+    function revisado(input) {
+        return input.checked || input.dataset.cierreExento === "true";
+    }
+
+    function actualizarCabanas() {
+        const cuenta = { todas: 0, pendientes: 0, observaciones: 0, completas: 0 };
+        lista.querySelectorAll(".turno-cabin").forEach(ficha => {
+            const numero = Number(ficha.dataset.sitesCierreCabin);
+            const exencion = ficha.querySelector("[data-cierre-cabana-ocupada]");
+            const ocupada = revisado(exencion);
+            const checks = [...ficha.querySelectorAll("[data-item]")];
+            const hechos = checks.filter(revisado).length;
+            const completa = ocupada || hechos === checks.length;
+            const estadoOperativo = estadoCabana(numero);
+            const operacion = {
+                lista: "Lista", "con-detalles": "Con observaciones", en_curso: "En curso",
+                lista_para_revisar: "Lista para revisar", no_requiere: "No requiere"
+            }[estadoOperativo] || "Pendiente";
+
+            ficha.querySelector(".turno-cabin-count").textContent = ocupada ? "" : `${hechos}/${checks.length}`;
+            const badge = ficha.querySelector(".turno-badge");
+            badge.textContent = ocupada ? (exencion.checked ? "Ocupada" : "No requiere")
+                : completa ? "Revisada" : "Por revisar";
+            badge.dataset.tono = completa ? "ok" : "pendiente";
+            const statusOperativo = ficha.querySelector(".turno-cabin-operativo");
+            statusOperativo.textContent = `Operación · ${operacion}`;
+            statusOperativo.dataset.observada = String(estadoOperativo === "con-detalles");
+            ficha.querySelector(".turno-cabin-checks").hidden = ocupada;
+            cuenta.todas++;
+            cuenta[completa ? "completas" : "pendientes"]++;
+            if (estadoOperativo === "con-detalles") cuenta.observaciones++;
+            ficha.hidden = filtro !== "todas" &&
+                (filtro === "observaciones" ? estadoOperativo !== "con-detalles" : completa !== (filtro === "completas"));
+        });
+        cabanas.contador.textContent = `${cuenta.completas}/${cuenta.todas} revisadas`;
+        botonesFiltro.forEach(([id, item]) => {
+            item.textContent = `${filtros[id]} ${cuenta[id]}`;
+            item.setAttribute("aria-pressed", String(filtro === id));
+        });
+        sinUnidades.hidden = cuenta[filtro] > 0;
+        sinUnidades.textContent = cuenta.todas ? "No hay cabañas en este filtro." : "Sin cabañas activas.";
+    }
+
+    function actualizar() {
+        actualizarCabanas();
+        const checksLlaves = $$("[data-cierre-llave]");
+        const devueltas = checksLlaves.filter(revisado).length;
+        inventario.contador.textContent = `${devueltas}/${checksLlaves.length} devueltas`;
+        revisiones.forEach(({ contador, filas }) => {
+            const hechos = filas.filter(fila => [...fila.querySelectorAll("[data-cierre-codigo]")].some(revisado)).length;
+            contador.textContent = `${hechos}/${filas.length}`;
+        });
+        const cerrado = root.classList.contains("haiku-cierre-bloqueado");
+        const puede = window.haikuTienePermiso;
+        $$("[data-turno-control]").forEach(fila => {
+            const codigo = fila.dataset.turnoControl;
+            const permiso = plantilla.campos[codigo].permiso;
+            const exento = !!fila.querySelector('[data-cierre-exento="true"]');
+            const restringido = permiso && typeof puede === "function" && !puede(permiso);
+            const detalle = fila.querySelector("[data-turno-no-aplica]");
+            detalle.hidden = !exento && (!restringido || cerrado || !!fila.querySelector("input:checked"));
+            detalle.textContent = exento ? "No aplica" : "Requiere permiso de validación";
+            if (permiso) {
+                fila.querySelector("input").disabled = cerrado || restringido;
+            }
+        });
+        notas.hidden = !novedades.value.trim() && !$('input[name="hay-novedades"][value="si"]:checked');
+        evidencias.forEach(item => {
+            item.bloque.hidden = !item.control.checked && !item.cantidad;
+        });
+    }
+
+    async function refrescarEvidencia(id, abrir = false) {
+        const item = evidencias.get(id);
+        const fecha = fechaActual();
+        if (!fecha) return;
+        const solicitud = ++item.solicitud;
+        const api = window.HAIKU_CIERRE_EVIDENCIAS_V1;
+        let archivos = [];
+        let fallo = false;
+        try {
+            archivos = await api?.listar(fecha, id) || [];
+        } catch {
+            fallo = true;
+        }
+        if (!archivos.length) {
+            try {
+                const local = await (api?.obtenerLocal || window.obtenerEvidencia)?.(fecha, id);
+                if (local) archivos = [{ url: local }];
+            } catch {
+                fallo = true;
+            }
+        }
+        if (item.solicitud !== solicitud || fecha !== fechaActual()) return;
+        item.cantidad = archivos.length;
+        item.status.textContent = archivos.length
+            ? `${archivos.length} ${archivos.length === 1 ? "adjunto" : "adjuntos"}`
+            : fallo ? "No se pudo cargar el respaldo" : "Sin adjuntos";
+        item.vista.replaceChildren();
+        const primera = archivos.find(archivo => archivo.url);
+        if (primera) {
+            const img = crear("img");
+            img.src = primera.url;
+            img.alt = "Último respaldo del control";
+            img.loading = "lazy";
+            item.vista.append(img);
+            const enlaces = crear("div", "turno-actions");
+            archivos.forEach(({ url }, index) => {
+                if (!url || url.startsWith("data:")) return;
+                const enlace = crear("a", "turno-link", `Adjunto ${index + 1}`);
+                enlace.href = url;
+                enlace.target = "_blank";
+                enlace.rel = "noopener noreferrer";
+                enlaces.append(enlace);
+            });
+            item.vista.append(enlaces);
+        }
+        item.ver.hidden = !primera;
+        item.vista.hidden = !primera || (!abrir && item.vista.hidden);
+        item.ver.textContent = item.vista.hidden ? "Ver respaldo" : "Ocultar respaldo";
+        item.ver.setAttribute("aria-expanded", String(!item.vista.hidden));
+        item.bloque.hidden = !item.control.checked && !archivos.length;
+    }
+
+    function refrescarEvidencias() {
+        if (root.classList.contains("activa")) evidencias.forEach((_, id) => refrescarEvidencia(id));
+    }
+
+    function mostrarEstado(estado) {
+        const badge = $("#sites-cierre-estado");
+        const progreso = $("#cierre-barra-progreso");
+        if (!estado) {
+            badge.textContent = "Preparando cierre…";
+            badge.dataset.tono = "";
+            $("#cierre-porcentaje").textContent = "—";
+            $("#sites-cierre-resumen").textContent = "Cargando controles del turno";
+            progreso.removeAttribute("value");
+            return;
+        }
+        const pendientes = Number(estado.pendientes);
+        const porcentaje = Number(estado.porcentaje);
+        const etiqueta = {
+            cerrado: "Cerrado", cerrado_con_pendientes: "Cerrado con pendientes", reabierto: "Reabierto"
+        }[estado.cierre_estado];
+        badge.textContent = etiqueta || (pendientes ? "En revisión" : "Listo para cerrar");
+        badge.dataset.tono = estado.cierre_estado === "cerrado" || !pendientes ? "ok" : "pendiente";
+        $("#cierre-porcentaje").textContent = `${porcentaje}%`;
+        $("#sites-cierre-resumen").textContent = `${estado.completados}/${estado.total_requeridos} controles · ${pendientes} pendientes`;
+        progreso.value = porcentaje;
+    }
+
+    function mostrarFecha(fecha) {
+        if (!fecha || fecha === fechaVista) return;
+        fechaVista = fecha;
+        $("#sites-cierre-fecha").textContent = new Intl.DateTimeFormat("es-CL", {
+            weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago"
+        }).format(new Date(`${fecha}T12:00:00`));
+        mostrarEstado(null);
+        if (!window.haikuSupabase) {
+            $("#sites-cierre-estado").textContent = "Modo local";
+            $("#sites-cierre-resumen").textContent = "Conecta el panel para consultar el cierre guardado";
+        }
+        evidencias.forEach(item => {
+            item.solicitud++;
+            item.cantidad = 0;
+            item.status.textContent = "Sin adjuntos";
+            item.ver.hidden = true;
+            item.ver.setAttribute("aria-expanded", "false");
+            item.vista.hidden = true;
+            item.vista.replaceChildren();
+        });
+        window.dispatchEvent(new CustomEvent("haiku:cierre-fecha-cambiada", { detail: { fecha } }));
+        refrescarEvidencias();
+    }
+
+    window.addEventListener("haiku:cierre-estado-actualizado", event => {
+        const estado = event.detail;
+        if (estado?.fecha_operativa && estado.fecha_operativa !== fechaActual()) return;
+        mostrarEstado(estado);
+        actualizar();
+    });
+    window.addEventListener("haiku:auth-ready", actualizar);
     window.addEventListener("haiku:cierre-evidencia-guardada", event => {
-        if (event.detail?.fecha === date()) refreshEvidence(event.detail.nombre);
-    });
-    document.querySelector('.menu-item[data-seccion="cierre"]')?.addEventListener("click", () => setTimeout(() => {
-        update();
-        refreshAllEvidence();
-    }, 0));
-    document.addEventListener("click", event => {
-        if (event.target.closest(".menu-item[data-seccion]") && !navigatingFromClosing) {
-            const back = document.getElementById("sites-cierre-volver");
-            if (back) back.hidden = true;
+        if (event.detail?.fecha === fechaActual() && evidencias.has(event.detail.nombre)) {
+            refrescarEvidencia(event.detail.nombre, true);
         }
     });
-    document.addEventListener("haiku:revision-estado-guardado", () => setTimeout(update, 0));
-    update();
-    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({ actualizar: update, estadoCabana: cabinState });
+    document.querySelector('.menu-item[data-seccion="cierre"]')?.addEventListener("click", () => {
+        window.cargarCierreDia?.(fechaActual());
+        refrescarEvidencias();
+    });
+    document.addEventListener("click", event => {
+        const volver = document.getElementById("sites-cierre-volver");
+        if (volver && event.target.closest(".menu-item[data-seccion]")) volver.hidden = true;
+    });
+    document.addEventListener("haiku:revision-estado-guardado", actualizarCabanas);
+    cargarUnidades(plantilla.unidades.respaldo);
+    window.HAIKU_SITES_CIERRE_V1 = Object.freeze({ actualizar, cargarUnidades, mostrarFecha, estadoCabana });
 })();
