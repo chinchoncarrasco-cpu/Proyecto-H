@@ -1684,7 +1684,7 @@
         try {
             const modelo = await api.analizar(archivos.map(a => ({ file: a.file, tipo: a.formato })), cliente,
                 () => { estado.textContent = "Comparando con Proyecto H y el Libro…"; });
-            api.montar(estado, modelo);
+            await api.montar(estado, modelo);
         } catch (error) {
             estado.classList.add("haiku-asistente-mensaje--error");
             estado.textContent = error?.message || "No pude completar la comparación.";
@@ -1742,7 +1742,7 @@
                     mensajePDF.dataset.hakuInformesCloudbeds = "";
                     estadoPDF.dataset.hakuInformesCloudbeds = "";
                     estadoPDF.textContent = "Comparando las notas con Proyecto H y el Libro…";
-                    informes.montar(estadoPDF, await informes.analizar([], cliente, null, [documento]));
+                    await informes.montar(estadoPDF, await informes.analizar([], cliente, null, [documento]));
                     return;
                 }
                 estadoPDF.textContent = "Comparando con Proyecto H · sólo lectura…";

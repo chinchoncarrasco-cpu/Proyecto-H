@@ -14,6 +14,7 @@ on:
       - "js/supabase-asistente-v1.js"
       - "js/haiku-cloudbeds-informes-v1.js"
       - "js/supabase-asistente-cloudbeds-informes-v1.js"
+      - "css/haku-cloudbeds-informes-v1.css"
       - "js/haiku-cloudbeds-pdf-v1.js"
       - "js/supabase-libro-reserva-worker-v1.js"
       - "js/haiku-libro-consultas-v1.js"
@@ -30,6 +31,7 @@ on:
       - "supabase/migrations/20260910180000_bove_registro_atomico.sql"
       - "tests/haku-ayuda-browser-check.cjs"
       - "tests/cloudbeds-informes.test.cjs"
+      - "tests/cloudbeds-informes-browser-check.cjs"
       - "tests/cloudbeds-pago-alojamiento-postgres.cjs"
       - "supabase/migrations/*_cloudbeds_guardia_pago_alojamiento.sql"
       - "tests/totales-asistente.test.cjs"
@@ -80,6 +82,10 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
         run: node tests/haku-ayuda-browser-check.cjs
+      - name: Navegación de Informes Cloudbeds
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules
+        run: node tests/cloudbeds-informes-browser-check.cjs
       - name: Capturas de la interfaz
         if: always()
         uses: actions/upload-artifact@v4
