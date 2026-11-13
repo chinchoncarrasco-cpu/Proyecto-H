@@ -139,9 +139,28 @@ test('estadías, actualizaciones y omitidos: acciones concretas y contador de re
         detalle_omitidos:[{item_id:'duplicado',tipo:'pago',pago_id:'existente',motivo:'Ya existe el comprobante.'}]};
     const detalle=h.Q.detalleResultadoIncorporacion(s,resultado);h.render({resultado,detalle,omitidosAlRevalidar:1});
     assert.equal(detalle.estadias.length,1);assert.equal(detalle.actualizaciones.length,1);assert.equal(detalle.omitidos.length,2);
-    assert.match(h.texts(),/Teléfono: sin dato → CONTACTO-FICTICIO/);assert.match(h.texts(),/Omitidos \(2\)/);
+    const telefono=h.out.querySelector('.haku-comprobante-campo');
+    assert.equal(telefono.children[0].textContent,'Teléfono');
+    assert.equal(telefono.querySelector('.haku-comprobante-antes').querySelector('.haku-comprobante-valor').textContent,'sin dato');
+    assert.equal(telefono.querySelector('.haku-comprobante-guardado').querySelector('.haku-comprobante-valor').textContent,'CONTACTO-FICTICIO');
+    assert.match(h.texts(),/Omitidos \(2\)/);
     assert.match(h.texts(),/Ya existe el comprobante/);assert.match(h.texts(),/Seleccionado retirado/);
     assert.deepEqual(limpio(detalle.estadias[0].identidad.seleccion),{estadiaId:ESTADIA,numeroCabana:'2'});
+});
+
+test('una corrección de pago muestra sólo el parche del movimiento que confirmó Proyecto H',()=>{
+    const h=harness(), enviado={tipo:'pago_actualizar',item_id:'actualizar-pago',reserva_id:RESERVA,pago_id:'pago-ficticio',
+        pago:{antes:{monto:120000,medio_pago:'tarjeta_credito',fecha_pago:'2026-10-04 00:00:00+00'},
+            despues:{monto:130000,medio_pago:'webpay_credito',fecha_pago:'2026-10-05T12:00:00Z'}}};
+    const s=solicitud(h,[enviado],[{id:enviado.item_id,texto:'Titular ficticio · CAB 2',
+        cambios:[{campo:'Folio',libro:'NO-ENVIADO'}],payload:enviado}]);
+    const resultado={actualizaciones:1,resultados:[{tipo:enviado.tipo,item_id:enviado.item_id,reserva_id:RESERVA,pago_id:enviado.pago_id}]};
+    const detalle=h.Q.detalleResultadoIncorporacion(s,resultado);h.render({resultado,detalle});
+    const valores=h.out.querySelectorAll('.haku-comprobante-valor').map(e=>e.textContent);
+    assert.deepEqual(valores,['$120.000','$130.000','Tarjeta Crédito','WebPay Crédito','04/10/2026','05/10/2026']);
+    assert.doesNotMatch(h.texts(),/NO-ENVIADO/);
+    resultado.resultados[0].pago_id='otro-pago';
+    assert.equal(h.Q.detalleResultadoIncorporacion(s,resultado).actualizaciones.length,0);
 });
 
 test('no presenta envíos como confirmados ni acepta resultados de ítems ajenos o tipos distintos',()=>{

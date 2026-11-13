@@ -1640,6 +1640,76 @@
     margin: 4px 0 0; color: #5b6c63; font-size: .69rem; line-height: 1.45;
 }
 .haku-incorporacion-resultado .haku-incorporacion-final-vacio { padding: 9px 10px; margin: 0; }
+.haku-incorporacion-resultado .haku-incorporacion-final-item--actualizacion {
+    container: haku-comprobante / inline-size;
+    padding-block: 7px;
+}
+.haku-incorporacion-resultado .haku-incorporacion-final-item--actualizacion > p {
+    margin: 1px 0 0; font-size: .61rem; line-height: 1.35;
+}
+.haku-incorporacion-final-item--actualizacion > .haiku-pago-ver-reserva { margin-top: 5px; }
+.haku-comprobante-cambios {
+    display: grid; gap: 4px; margin-top: 4px; min-width: 0;
+    color: var(--haku-compacto-texto, #172019); font-size: .63rem; line-height: 1.35;
+}
+.haku-comprobante-columnas { display: none; }
+.haku-comprobante-campos { list-style: none; margin: 0; padding: 0; }
+.haku-comprobante-campo {
+    display: grid; gap: 1px; align-items: baseline; min-width: 0; padding: 3px 0;
+}
+.haku-comprobante-campo + .haku-comprobante-campo { border-top: 1px solid var(--haku-compacto-borde, var(--rec-borde)); }
+.haku-comprobante-campo > strong, .haku-comprobante-guardado > .haku-comprobante-valor { font-weight: 650; }
+.haku-comprobante-antes { color: var(--haku-compacto-secundario, #586c60); }
+.haku-comprobante-guardado { color: var(--haku-compacto-acento, #286c4e); }
+.haku-comprobante-dato { display: grid; grid-template-columns: 3.375rem minmax(0,1fr); gap: 8px; }
+.haku-comprobante-etiqueta { font-size: .61rem; font-weight: 500; }
+.haku-comprobante-notas { min-width: 0; }
+.haku-comprobante-notas > summary {
+    display: flex; align-items: center; gap: 5px; width: fit-content; max-width: 100%;
+    min-height: 24px; padding: 2px 5px 2px 1px; border-radius: 4px; list-style: none;
+    color: var(--haku-compacto-acento, #286c4e); font-size: .61rem; font-weight: 550; cursor: pointer;
+}
+.haku-comprobante-notas > summary::-webkit-details-marker { display: none; }
+.haku-comprobante-notas > summary::before {
+    content: ""; flex: 0 0 4px; width: 4px; height: 4px;
+    border: solid currentColor; border-width: 0 1px 1px 0; transform: rotate(-45deg);
+}
+.haku-comprobante-notas[open] > summary::before { transform: rotate(45deg); }
+.haku-comprobante-notas > summary:hover { background: var(--haku-compacto-suave, #eef4ef); }
+.haku-comprobante-notas > summary:focus-visible {
+    outline: 2px solid var(--haku-compacto-acento, #286c4e); outline-offset: 1px;
+}
+.haku-comprobante-notas-pares { display: grid; gap: 4px; margin: 2px 0; }
+.haku-comprobante-nota { min-width: 0; padding: 5px 7px; border-radius: 4px; }
+.haku-comprobante-nota.haku-comprobante-antes { background: var(--haku-compacto-control, #f1f5f2); }
+.haku-comprobante-nota.haku-comprobante-guardado { background: var(--haku-compacto-suave, #eef4ef); }
+.haku-comprobante-nota > strong { display: block; margin-bottom: 2px; font-size: .61rem; font-weight: 600; }
+.haku-comprobante-nota > ul { margin: 0; padding: 0; list-style: none; }
+.haku-comprobante-nota li + li { margin-top: 3px; }
+.haku-comprobante-nota > p { margin: 0; white-space: pre-wrap; }
+@media (pointer: coarse) {
+    .haku-comprobante-notas > summary { min-height: 40px; }
+}
+html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-height: 40px; }
+@media (min-width: 701px) {
+    @container haku-comprobante (min-width: 360px) {
+        html:not([data-haku-mobile-assistant="1"]) :is(.haku-comprobante-columnas,.haku-comprobante-campo) {
+            display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-columnas {
+            padding: 3px 0; border-bottom: 1px solid var(--haku-compacto-borde, var(--rec-borde));
+            color: var(--haku-compacto-secundario, #586c60); font-size: .61rem; font-weight: 600;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-dato { display: block; }
+        html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-etiqueta {
+            position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+            clip-path: inset(50%); white-space: nowrap;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-comprobante-notas-pares {
+            grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 8px;
+        }
+    }
+}
 .haiku-asistente-panel .haku-incorporacion-resultado--servicios > .haku-incorporacion-resultado-resumen {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
