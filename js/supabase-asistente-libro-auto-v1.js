@@ -288,8 +288,8 @@
         panel.classList.add('haku-libro-auto__detalle-listo--flotante');
         panel.style.width=`${ancho}px`;
         panel.style.left=`${izquierda}px`;
-        panel.hidden=false;
-        panel.style.top=`${Math.max(margen,Math.min(arriba,root.innerHeight-panel.offsetHeight-margen))}px`;
+        panel.style.insetBlock=`${margen}px`;
+        panel.style.setProperty('--haku-detalle-arriba',`${Math.max(0,arriba-margen)}px`);
     }
     function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
         const total=pendientes.length;
@@ -656,11 +656,17 @@
                         if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
                         return;
                     }
-                    cerrarDetalleListo();
+                    // Una vista integrada sí puede mover la ficha que viene debajo.
+                    if(vistaLista&&!vistaLista.flotante)cerrarDetalleListo();
                     const posicion=origen!=='toque'?medirDetalleListo(boton,toast):null;
-                    if(!panel.children.length)mostrarDetalleListo(panel,grupo);
+                    cerrarDetalleListo();
+                    if(!panel.children.length){
+                        const contenido=nodo(null,'div','haku-libro-auto__detalle-contenido');
+                        mostrarDetalleListo(contenido,grupo);
+                        panel.appendChild(contenido);
+                    }
                     if(posicion)posicionarDetalleListo(panel,posicion);
-                    else panel.hidden=false;
+                    panel.hidden=false;
                     boton.setAttribute('aria-expanded','true');
                     vistaLista={boton,panel,flotante:Boolean(posicion),origen,fijado:false};
                 };
@@ -672,7 +678,7 @@
                         return;
                     }
                     // Un cruce rápido o un desplazamiento no abre la vista previa.
-                    aperturaDetalle={boton,timer:root.setTimeout(()=>abrir('mouse'),80)};
+                    aperturaDetalle={boton,timer:root.setTimeout(()=>abrir('mouse'),32)};
                 });
                 fila.addEventListener('pointerleave',e=>{
                     if(e.pointerType!=='mouse')return;

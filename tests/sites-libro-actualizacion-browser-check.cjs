@@ -50,9 +50,10 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
                     cabana:i%11+1,fecha_checkin:'2099-11-13',fecha_checkout:'2099-11-15'},
                     cambios:[{campo:'noches',antes:3,ahora:2},{campo:'notas_importantes',antes:[],
                         ahora:['Nota ficticia de la reserva para comprobar el desplazamiento.']}]}));
-                const listos=modificadas.map(({actual:r})=>({titular:r.titular,cabana:r.cabana,
+                const listos=modificadas.map(({actual:r},i)=>({titular:r.titular,cabana:r.cabana,
                     fechaIngreso:r.fecha_checkin,fechaSalida:r.fecha_checkout,resumen:['Actualizar reserva','Noches'],
-                    vista:{accion:'Actualizar reserva',campos:[{etiqueta:'Noches',anterior:'3',propuesto:'2'}]}}));
+                    vista:{accion:'Actualizar reserva',campos:[{etiqueta:'Noches',anterior:'3',propuesto:i===3?'1':'2'}],
+                        notas:i===3?Array.from({length:75},(_,j)=>`Nota extensa de prueba ${j+1}`):[]}}));
                 const pendientes=modificadas.map(({actual:r},i)=>({titular:`Pendiente ficticio ${i+1}`,cabana:r.cabana,
                     tipo:'servicio',fechaIngreso:r.fecha_checkin,servicios:[{nombre:'Masaje',hora:'16:00',
                         motivos:['Falta duración del masaje.'],texto:'Evidencia ficticia de la ficha '+(i+1)}]}));
@@ -81,6 +82,14 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
             assert.equal(await fichas.count(),total);
             await fichas.nth(2).evaluate(el=>{window.__primeraFichaExtra=el;});
             if(!movil){
+                await page.evaluate(()=>{
+                    const altura=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'offsetHeight');
+                    window.__medidasDetalle=0;
+                    Object.defineProperty(HTMLElement.prototype,'offsetHeight',{...altura,get(){
+                        if(this.classList.contains('haku-libro-auto__detalle-listo'))window.__medidasDetalle++;
+                        return altura.get.call(this);
+                    }});
+                });
                 // Pasar por varias filas durante el desplazamiento no monta ninguna vista previa.
                 await fichas.evaluateAll(filas=>{
                     for(const el of filas.slice(2,10)){
@@ -98,7 +107,23 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
             assert.match(await cambio.textContent(),/Noches.*3.*2/s);
             assert.equal(await aviso.locator('.haku-libro-auto__detalle-operacion').count(),1);
             if(movil)await primera.tap();
-            else await primera.press('Escape');
+            else{
+                const siguiente=fichas.nth(3);
+                await siguiente.hover();
+                await cambio.getByText('1',{exact:true}).waitFor();
+                assert.equal(await cambio.getAttribute('id'),await siguiente.getAttribute('aria-controls'));
+                const medidas=await cambio.locator('.haku-libro-auto__detalle-contenido').evaluate(el=>{
+                    const caja=el.getBoundingClientRect();
+                    return {dentro:caja.top>=0&&caja.bottom<=innerHeight,desplazable:el.scrollHeight>el.clientHeight};
+                });
+                assert.deepEqual(medidas,{dentro:true,desplazable:true});
+                await primera.hover();
+                await cambio.getByText('2',{exact:true}).waitFor();
+                assert.equal(await cambio.getAttribute('id'),await primera.getAttribute('aria-controls'));
+                assert.equal(await aviso.locator('.haku-libro-auto__detalle-operacion').count(),2,'la ficha abierta se reutiliza');
+                assert.equal(await page.evaluate(()=>window.__medidasDetalle),0,'el hover evita medir la altura del detalle');
+                await primera.press('Escape');
+            }
             const extras=aviso.getByText(/^Ver más casos listos/);
             await extras.click();
             await extras.click();
@@ -247,15 +272,16 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.doesNotMatch(await aviso.innerText(),/Elena Salas|Amelia Torres/);
         const ficha=aviso.getByRole('button',{name:'Ver cambios de Reserva completa · CAB 2'});
         const vista=aviso.locator('.haku-libro-auto__detalle-listo');
+        const contenido=vista.locator('.haku-libro-auto__detalle-contenido');
         assert.equal(await ficha.getAttribute('aria-expanded'),'false');
         await ficha.hover();
         await vista.waitFor();
         assert.match(await vista.innerText(),/Antes.*Se guardará.*Adultos.*2.*3/s);
         assert.match(await vista.innerText(),/Notas que se retirarán.*18:00.*Notas que se añadirán.*20:00/s);
         assert.doesNotMatch(await vista.innerText(),/contacto@example\.test|AB123456/);
-        const posicion=await vista.evaluate(el=>{
+        const posicion=await contenido.evaluate(el=>{
             const caja=el.getBoundingClientRect(),aviso=el.closest('.haku-libro-auto').getBoundingClientRect();
-            return {flotante:getComputedStyle(el).position==='fixed',alCostado:caja.right<=aviso.left,
+            return {flotante:getComputedStyle(el.parentElement).position==='fixed',alCostado:caja.right<=aviso.left,
                 visible:caja.top>=0&&caja.left>=0&&caja.right<=innerWidth&&caja.bottom<=innerHeight};
         });
         assert.deepEqual(posicion,{flotante:true,alCostado:true,visible:true});
@@ -264,12 +290,12 @@ async function comprobarCasosDelAviso(browser, url) {
             fs.mkdirSync(capturas,{recursive:true});
             for(const tema of ['claro','oscuro']){
                 await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
-                const a=await aviso.boundingBox(),b=await vista.boundingBox();
+                const a=await aviso.boundingBox(),b=await contenido.boundingBox();
                 await page.screenshot({path:path.join(capturas,`listos-${tema}-1280.png`),
                     clip:{x:b.x-5,y:a.y-5,width:a.x+a.width-b.x+10,height:Math.max(a.height,b.y+b.height-a.y)+10}});
             }
         }
-        await vista.hover();
+        await contenido.hover();
         assert.equal(await vista.isVisible(),true,'el mouse puede entrar al detalle sin cerrarlo');
         await page.mouse.move(2,2);
         await vista.waitFor({state:'hidden'});
@@ -292,7 +318,7 @@ async function comprobarCasosDelAviso(browser, url) {
                 return {integrado:estilos.position!=='fixed',tipografia:parseFloat(estilos.fontSize),
                     legible:getComputedStyle(anterior).color!==getComputedStyle(nuevo).color,
                     apilado:anterior.getBoundingClientRect().top<nuevo.getBoundingClientRect().top,
-                    sinDesborde:el.scrollWidth<=el.clientWidth+1};
+                    sinDesborde:el.firstElementChild.scrollWidth<=el.firstElementChild.clientWidth+1};
             });
             assert.deepEqual(compacto,{integrado:true,tipografia:10.08,legible:true,apilado:true,sinDesborde:true});
             if(capturas)await aviso.screenshot({path:path.join(capturas,`listos-${tema}-320.png`)});
