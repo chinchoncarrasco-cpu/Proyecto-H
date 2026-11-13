@@ -710,6 +710,98 @@ html[data-haiku-tema="oscuro"] .haku-guia-imagen {
     border-radius: 0; background: #fbfdfb; box-shadow: none;
 }
 .haku-incorporacion-sites .haiku-incorporacion-item:last-child { border-bottom: 0; }
+
+/* Cambios de reserva dentro de «Actualizar Proyecto H con el Libro». */
+.haku-incorporacion-sites .haiku-incorporacion-seccion--actualizaciones {
+    container: haku-actualizaciones / inline-size;
+}
+.haiku-asistente-root .haiku-asistente-panel .haku-incorporacion-sites .haiku-incorporacion-seccion--actualizaciones > summary {
+    min-height: 44px; font-size: 12px !important;
+}
+.haku-incorporacion-sites .haku-actualizacion-libro__guia {
+    margin: 0; padding: 7px 10px;
+    background: var(--haku-compacto-suave); color: var(--haku-compacto-secundario);
+    font-size: 11px; line-height: 1.4;
+}
+.haiku-asistente-root .haku-incorporacion-sites .haiku-incorporacion-seccion--actualizaciones .haku-actualizacion-libro {
+    padding: 4px 10px; border-bottom-color: var(--haku-compacto-borde);
+    background: var(--haku-compacto-superficie); color: var(--haku-compacto-texto);
+    font-size: 12px; line-height: 1.4;
+}
+.haku-actualizacion-libro .haiku-incorporacion-seleccion {
+    align-items: center; min-height: 42px; gap: 9px; padding-block: 3px;
+}
+.haku-actualizacion-libro .haiku-incorporacion-seleccion input {
+    width: 16px; height: 16px; margin: 0; accent-color: var(--haku-compacto-acento);
+}
+.haku-actualizacion-libro .haiku-incorporacion-identidad > strong {
+    color: var(--haku-compacto-texto); font-size: 13px; font-weight: 650; line-height: 1.3;
+}
+.haku-actualizacion-libro .haiku-incorporacion-identidad > small {
+    color: var(--haku-compacto-secundario); font-size: 11px; line-height: 1.35;
+}
+.haku-actualizacion-libro__detalle { display: grid; gap: 4px; margin: 0 0 3px 25px; }
+.haku-actualizacion-libro__columnas { display: none; }
+.haku-actualizacion-libro__valores > .haiku-incorporacion-cambios {
+    margin: 0; padding: 0; list-style: none;
+}
+.haku-actualizacion-libro__cambio {
+    display: grid; grid-template-columns: fit-content(46%) auto minmax(0, max-content);
+    align-items: baseline; justify-content: start; gap: 2px 8px;
+    padding: 5px 0; overflow-wrap: anywhere;
+}
+.haku-actualizacion-libro__cambio + .haku-actualizacion-libro__cambio { border-top: 1px solid var(--haku-compacto-borde); }
+.haku-actualizacion-libro__cambio > .haku-cambio-campo { grid-column: 1 / -1; color: var(--haku-compacto-texto); font-weight: 650; }
+.haku-actualizacion-libro__cambio > :is(.haku-cambio-actual, .haku-cambio-flecha) { color: var(--haku-compacto-secundario); }
+.haku-actualizacion-libro__cambio > .haku-cambio-libro { color: var(--haku-compacto-acento); font-weight: 650; }
+.haku-actualizacion-libro .haiku-incorporacion-notas-comparacion > summary {
+    display: flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; min-height: 32px;
+    padding: 4px 8px; border-radius: 5px; background: var(--haku-compacto-suave);
+    color: var(--haku-compacto-acento); font-size: 11px; font-weight: 650; cursor: pointer;
+}
+.haku-actualizacion-libro .haiku-incorporacion-notas-comparacion > summary::-webkit-details-marker { display: none; }
+.haku-actualizacion-libro .haiku-incorporacion-notas-comparacion > summary::before {
+    content: ""; width: 5px; height: 5px; flex: 0 0 5px;
+    border: solid currentColor; border-width: 0 1px 1px 0; transform: rotate(-45deg);
+}
+.haku-actualizacion-libro .haiku-incorporacion-notas-comparacion[open] > summary::before { transform: rotate(45deg); }
+.haku-actualizacion-libro .haiku-incorporacion-notas-contenido { display: grid; gap: 4px; margin-top: 4px; }
+.haku-actualizacion-libro .haiku-incorporacion-notas-fuente {
+    min-width: 0; padding: 6px 8px; border: 1px solid var(--haku-compacto-borde); border-radius: 5px;
+    background: var(--haku-compacto-control); color: var(--haku-compacto-texto); overflow-wrap: anywhere;
+}
+.haku-actualizacion-libro .haiku-incorporacion-notas-fuente--libro { background: var(--haku-compacto-suave); }
+.haku-actualizacion-libro .haiku-incorporacion-notas-fuente > h4 {
+    margin: 0 0 4px; color: var(--haku-compacto-secundario); font-size: 11px; font-weight: 650;
+}
+.haku-actualizacion-libro .haiku-incorporacion-notas-fuente > ul { margin: 0; padding: 0; list-style: none; }
+.haku-actualizacion-libro .haiku-incorporacion-notas-fuente li + li { margin-top: 4px; }
+.haku-actualizacion-libro .haiku-incorporacion-notas-vacio { margin: 0; color: var(--haku-compacto-secundario); }
+.haku-actualizacion-libro__nota-retirada {
+    display: inline-block; margin-inline-start: 5px; padding: 1px 4px; border-radius: 4px;
+    background: var(--haku-compacto-aviso-fondo); color: var(--haku-compacto-aviso); font-size: 11px;
+}
+@media (max-width: 700px) {
+    .haku-actualizacion-libro .haiku-incorporacion-notas-comparacion > summary { min-height: 40px; }
+}
+html[data-haku-mobile-assistant="1"] .haku-actualizacion-libro .haiku-incorporacion-notas-comparacion > summary { min-height: 40px; }
+@media (min-width: 701px) {
+    @container haku-actualizaciones (min-width: 360px) {
+        html:not([data-haku-mobile-assistant="1"]) :is(.haku-actualizacion-libro__columnas, .haku-actualizacion-libro__cambio) {
+            display: grid; grid-template-columns: minmax(0, 1.15fr) repeat(2, minmax(0, 1.1fr)); gap: 8px;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-actualizacion-libro__columnas {
+            padding: 3px 0; border-bottom: 1px solid var(--haku-compacto-borde);
+            color: var(--haku-compacto-secundario); font-size: 11px; font-weight: 600;
+        }
+        html:not([data-haku-mobile-assistant="1"]) .haku-actualizacion-libro__cambio > .haku-cambio-campo { grid-column: auto; }
+        html:not([data-haku-mobile-assistant="1"]) .haku-actualizacion-libro__cambio > .haku-cambio-flecha { display: none; }
+        html:not([data-haku-mobile-assistant="1"]) .haku-actualizacion-libro .haiku-incorporacion-notas-contenido {
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+    }
+}
+
 .haiku-asistente-root .haku-incorporacion-sites .haiku-incorporacion-vacio { padding: 10px 3px; text-align: left; }
 .haiku-asistente-root .haku-incorporacion-sites .haiku-incorporacion-ayuda > ul { margin: 0; padding: 10px 12px 12px 26px; color: #617266; font-size: 11px; }
 .haiku-asistente-root .haku-incorporacion-sites .haiku-incorporacion-atajos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 10px 3px; }

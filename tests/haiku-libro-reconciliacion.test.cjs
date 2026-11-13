@@ -2450,6 +2450,13 @@ test('update preview shows old and Libro values and remains behind explicit conf
  const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{throw Error('Must not save without confirmation')});
  assert.match(h.texts(),/Actualizar Proyecto H con el Libro/);assert.match(h.texts(),/951597 → PV8951597/);
  assert.match(h.texts(),/El Libro de Reservas tiene prioridad/);
+ const fila=h.out.querySelector('.haku-actualizacion-libro');
+ assert.ok(fila);
+ assert.equal(fila.querySelector('small').textContent,'CAB 1 · 17/09–20/09/26 · 3 noches');
+ assert.ok(fila.querySelectorAll('.haku-actualizacion-libro__cambio').some(cambio=>cambio['aria-label']==='RUT/pasaporte. Proyecto H: 951597. Libro: PV8951597.'));
+ assert.equal(fila.querySelector('.haiku-incorporacion-contacto'),null);
+ assert.equal(fila.querySelector('.haiku-incorporacion-estado'),null);
+ assert.equal(h.out.querySelectorAll('.haku-actualizacion-libro__guia').length,1);
 });
 
 test('payment update preview identifies the transaction before showing proposed changes',async()=>{
@@ -2781,6 +2788,9 @@ test('notes update shows ordered current and new fragments without internal mark
  assert.match(texto(fuentes[0]),/Proyecto H actual.*2 alojamientos.*Neviy Bitaporax Runiy.*NO MOVER/);
  assert.match(texto(fuentes[1]),/Notas nuevas del Libro.*Bofore Kebi.*CAMA ADICIONAL/);
  assert.doesNotMatch(texto(fuentes[1]),/Neviy Bitaporax Runiy/);
+ assert.equal(detalle.querySelector('summary').textContent,'Notas del Libro · 2 añadidas · 1 retirada');
+ assert.equal(fuentes[0].querySelector('.haku-actualizacion-libro__nota-retirada').textContent.trim(),'Se retira');
+ assert.notEqual(detalle.open,true);
  assert.doesNotMatch(texto(detalle),/\[\/?DATOS DEL LIBRO\]|\/\//);
  assert.match(plan.items.find(item=>item.categoria==='actualizaciones').payload.reserva.despues.observaciones,/\[DATOS DEL LIBRO\]/);
 });
