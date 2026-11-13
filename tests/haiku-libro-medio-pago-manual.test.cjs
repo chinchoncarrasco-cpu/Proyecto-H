@@ -4,7 +4,7 @@ const botones=fila=>fila.querySelectorAll('button');
 const boton=(fila,t)=>botones(fila).find(e=>e.textContent===t);
 const escrituras=h=>h.llamadas.filter(x=>x.nombre&&!x.nombre.includes('capacidad'));
 
-for(const signal of ['TDC','PrePago','FC','PrePago / FC','TC','TD']) test(signal+' sigue desconocido sin elección explícita',()=>{
+for(const signal of ['PrePago','FC','PrePago / FC','TC','TD']) test(signal+' sigue desconocido sin elección explícita',()=>{
     const h=entorno({signal});assert.equal(h.C.medioDesdeTexto({texto_original:signal}),null);assert.equal(h.r.pagos[0].medio_pago,null);
     const celdas=[],combinaciones=[],cell=(r,c,valor,extra={})=>celdas.push({r,c,valor,...extra});
     for(const [c,d] of [[10,'03'],[14,'04']]) {
@@ -31,7 +31,7 @@ test('medio único faltante y aprobable=false ofrecen formulario con siete medio
     await boton(fila,'Cancelar revisión').events.click();assert.equal(selector.value,'');assert.equal(panel.hidden,true);
     assert.equal(JSON.stringify(h.r),original);assert.equal(h.aprobados.size,0);assert.equal(escrituras(h).length,0);
 });
-for(const medio of ['tarjeta_credito','webpay_credito','transferencia','tarjeta_debito','webpay_debito','efectivo','airbnb_prepaid_card']) test('TDC + '+medio+' revalida sin aprobar/seleccionar, con ID original estable',async()=>{
+for(const medio of ['tarjeta_credito','webpay_credito','transferencia','tarjeta_debito','webpay_debito','efectivo','airbnb_prepaid_card']) test('TC + '+medio+' revalida sin aprobar/seleccionar, con ID original estable',async()=>{
     const h=entorno(),plan=await h.preparar(),id=h.item(plan).id,original=JSON.stringify(h.r);
     const next=await h.definir(plan,medio),i=h.item(next);
     assert.equal(i.id,id);assert.equal(i.pagoLibro.medio_pago,medio);assert.equal(i.categoria,'dudosos');assert.equal(i.seleccionado,false);

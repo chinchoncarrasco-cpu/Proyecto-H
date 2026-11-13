@@ -1442,6 +1442,9 @@
         CONFLICTO:'CONFLICTO'
     });
     const APROBACION_MANUAL_PAGO = 'Requiere aprobación manual de la asociación y el pago.';
+    const WEBPAY_PENDIENTE = 'El Libro indica WebPay por confirmar. Verifica que el pago se recibió.';
+    const AIRBNB_LIQUIDACION_PENDIENTE = 'Confirma la recepción, la fecha y el monto liquidado por Airbnb.';
+    const TRANSFERENCIA_NO_HABILITADA = 'La transferencia está identificada. Proyecto H aún no habilita guardarla desde esta comparación.';
     const PAGO_BLOQUE_VERIFICADO = 'bloque_alojamiento_verificado';
     const PAGO_BLOQUE_REVISION = 'bloque_alojamiento_revision';
 
@@ -1563,6 +1566,30 @@
         if (pagoSistema?.fecha_pago && item.p?.fecha_comprobante &&
             !mismaFechaCalendario(pagoSistema.fecha_pago,item.p.fecha_comprobante)) diferencias.push('fecha de pago diferente');
         return diferencias;
+    }
+
+    function transferenciasConTotalCompartido(items) {
+        const grupos = new Map();
+        for (const {p, result} of items) {
+            if (medioLibro(p) !== 'transferencia' || !['alojamiento','servicio'].includes(p.tipo_movimiento) ||
+                !p.detalle_bancario || !p.origen?.hoja || !p.origen.celda || p.conflicto_distribucion) continue;
+            const total = root.HAIKU_LIBRO_PAGOS_CANON_V1?.montoTotalDeclarado({texto_original:p.detalle_bancario});
+            if (!(total > Number(p.monto))) continue;
+            const banco = S.evidenciaTransferencia?.(p);
+            if (!banco?.valida) continue;
+            const clave = JSON.stringify([claveReserva(result.libro),p.origen.hoja,p.cabana,p.fecha_bloque,
+                p.fecha_comprobante,p.moneda,S.normalizar(banco.glosa_original),banco.operacion_bancaria,total]);
+            if (!grupos.has(clave)) grupos.set(clave,{total,partes:[]});
+            grupos.get(clave).partes.push(p);
+        }
+        return [...grupos.values()].filter(grupo => grupo.partes.length > 1).map(grupo => {
+            const {partes,total} = grupo;
+            const conceptos = new Set(partes.map(p => S.normalizar(p.concepto)));
+            const completo = !conceptos.has('') && conceptos.size === partes.length &&
+                new Set(partes.map(p => source(p.origen))).size === partes.length &&
+                partes.reduce((suma,p) => suma+Number(p.monto),0) === total;
+            return {...grupo,completo};
+        });
     }
 
     function resolverPagosExistentes(resultados, pagos, capacidadTransferencias = false, capacidadGlosaSinNombre = false) {
@@ -1747,7 +1774,7 @@
                 resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
                     ['Existe una transferencia posiblemente duplicada o contradictoria: revisa glosa, recepción, monto y reserva destino.']);
             } else if (!capacidadTransferencias) resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
-                ['Falta instalar el contrato SQL de transferencias v2; el writer vigente exige aprobación manual y no conserva la evidencia bancaria.']);
+                [TRANSFERENCIA_NO_HABILITADA]);
             else if (!item.banco.nombre_remitente && !capacidadGlosaSinNombre) resolver(item,estados.AMBIGUO,null,'transferencia_bancaria_contextual',
                 ['La glosa bancaria está reconocida. Falta habilitar en Proyecto H las transferencias cuyo banco no incluye el nombre del remitente.']);
             else resolver(item,estados.NUEVO_SEGURO,null,'transferencia_bancaria_contextual');
@@ -1888,6 +1915,10 @@
         for (const item of items.filter(item=>!resoluciones.has(item.p))) {
             if (item.result.estado !== 'asociada' || !item.result.sistema?.reserva_id) {
                 resolver(item,estados.AMBIGUO,null,'sin_destino',['Primero debe resolverse la reserva destino.']);
+            } else if (item.p.airbnb_liquidacion_pendiente) {
+                resolver(item,estados.AMBIGUO,null,'airbnb_liquidacion_pendiente',[AIRBNB_LIQUIDACION_PENDIENTE]);
+            } else if (item.p.webpay_por_confirmar && medioLibro(item.p)?.startsWith('webpay_')) {
+                resolver(item,estados.AMBIGUO,null,'webpay_por_confirmar',[WEBPAY_PENDIENTE]);
             } else if (item.asociado && pagoTieneIdentificadorFuerte(item.p) && medioLibro(item.p) &&
                 item.p.clasificacion_financiera !== 'dudoso' && item.p.tipo_movimiento !== 'penalidad' &&
                 item.p.pago_recibido !== false && !/pendiente|por.confirmar|rechazad|anulad/.test(S.normalizar(item.p.estado_pago)) &&
@@ -1895,6 +1926,19 @@
                 resolver(item,estados.NUEVO_SEGURO,null,'identificador_nuevo');
             } else {
                 resolver(item,estados.AMBIGUO,null,'evidencia_insuficiente',['No existe una correspondencia financiera única y confirmada.']);
+            }
+        }
+        for (const grupo of transferenciasConTotalCompartido(items)) {
+            const registrados = grupo.partes.filter(p => resoluciones.get(p)?.estado === estados.EXISTENTE_SEGURO);
+            const reparto = {...grupo,registrados};
+            for (const p of grupo.partes) {
+                const anterior = resoluciones.get(p);
+                if (registrados.includes(p) || anterior.estado === estados.CONFLICTO) continue;
+                const motivo = grupo.completo
+                    ? `Las partes suman ${money(grupo.total)}. Comprueba el movimiento bancario completo y sus cargos antes de registrarlo.`
+                    : `La glosa indica un total de ${money(grupo.total)}. Comprueba qué conceptos cubre ese movimiento bancario.`;
+                resoluciones.set(p,{...anterior,estado:estados.AMBIGUO,evidencia:'transferencia_repartida',
+                    motivos:[motivo],reparto});
             }
         }
         return resoluciones;
@@ -3853,7 +3897,9 @@
         motivos.push(...motivosCanonicos);
         const medio = medioLibro(p);
         if (!pagoTieneIdentificadorFuerte(p) && !motivosCanonicos.length && resolucion?.evidencia !== 'transferencia_bancaria_contextual') {
-            if (medio === 'transferencia') motivos.push('Falta una referencia bancaria verificable para asociar la transferencia. Revisa su comprobante.');
+            if (medio === 'transferencia') motivos.push(S.evidenciaTransferencia?.(p)?.valida
+                ? 'La glosa identifica al remitente. Comprueba el número de operación y el cargo que cubre.'
+                : 'Falta una referencia bancaria verificable para asociar la transferencia. Revisa su comprobante.');
             if (medio === 'efectivo') motivos.push('Comprueba la recepción del efectivo y la reserva a la que se aplica.');
             if (medio === 'airbnb_prepaid_card') motivos.push('Comprueba la recepción del pago en Airbnb y su asociación a esta reserva.');
             if (medio?.startsWith('webpay_')) motivos.push('Falta el código de autorización de WebPay.');
@@ -4143,6 +4189,7 @@
         destinosFinancierosSeguros.forEach((valor,clave) => destinosFinancieros.set(clave,valor));
         const distribuciones = distribucionesManuales(comp, destinosFinancieros);
         const comprobantesDistribuidosRevisados = new Set();
+        const transferenciasRepartidasVistas = new Set();
         const vistos = [];
         const claveMovimientoRevalidado = movimiento => [source(movimiento?.pago?.origen),
             huellaFuentePago(movimiento?.pago, {cabana:movimiento?.reserva?.cabana})].join('|');
@@ -4177,6 +4224,32 @@
                         ' · El componente ya está representado por un comprobante distribuido confirmado de Proyecto H.' :
                         ' · El pago ya existe en Proyecto H para la reserva elegida y no se incorporará nuevamente.'));
                 item.pagoYaRegistrado = resolucionPago.evidencia === 'recibo_webpay_historico';
+                continue;
+            }
+            if (resolucionPago?.evidencia === 'transferencia_repartida') {
+                const {reparto,motivos} = resolucionPago;
+                if (transferenciasRepartidasVistas.has(reparto)) continue;
+                transferenciasRepartidasVistas.add(reparto);
+                const banco = S.evidenciaTransferencia(p);
+                const faltanCargos = comp.pagosDetalle.filter(movimiento => reparto.partes.includes(movimiento.pago) &&
+                    !reparto.registrados.includes(movimiento.pago))
+                    .flatMap(movimiento => (movimiento.destinoFinanciero?.aplicaciones || [])
+                        .filter(aplicacion => aplicacion.estado === 'sin_destino').map(aplicacion => aplicacion.concepto?.trim()))
+                    .filter(Boolean);
+                const avisos = [...motivos];
+                if (!banco.operacion_bancaria) avisos.push('Falta el número de operación del comprobante bancario.');
+                if (faltanCargos.length) avisos.push('Falta un cargo en Proyecto H para ' +
+                    new Intl.ListFormat('es-CL').format([...new Set(faltanCargos)]) + '.');
+                if (reparto.registrados.length) avisos.push('Parte del monto ya está registrada. Verifica cuánto queda por aplicar.');
+                const titulo = `${r.titular} · CAB ${r.cabana} · ${money(reparto.total)} · Transferencia repartida · Check-In ${r.fecha_checkin}`;
+                const item = add('dudosos',id,titulo,null,avisos);
+                item.pagoLibro = {...p,monto:reparto.total,texto_original:banco.glosa_original};
+                item.transferenciaRepartida = reparto;
+                continue;
+            }
+            if (p.airbnb_liquidacion_pendiente) {
+                const item = add('dudosos',id,texto,null,[AIRBNB_LIQUIDACION_PENDIENTE]);
+                item.pagoLibro = p;
                 continue;
             }
             if (['transferencia_fuente_editada','recibo_webpay_historico'].includes(resolucionPago?.evidencia)) {
@@ -4349,16 +4422,32 @@
             if (resolucionPago?.evidencia === 'transferencia_bancaria_contextual' && resolucionPago.estado === ESTADOS_RESOLUCION_PAGO.AMBIGUO)
                 motivos.push(...(resolucionPago.motivos || []).filter(m =>
                     !(x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO && x.decisionPagoManual.auditoria.tipo === 'cabana_transferencia' && motivoCabanaPago(m))));
-            if (!destino || destino.bloqueado) motivos.push('Primero resuelve los datos y la asociación de la reserva.');
+            if (!destino || destino.bloqueado) {
+                const candidatos = comp.find(resultado => resultado.libro === r)?.candidatosDetalle || [];
+                const candidato = candidatos.length === 1 && candidatos[0];
+                motivos.push(candidato && Number(candidato.cabana) === Number(r.cabana) && candidato.fecha_checkin === r.fecha_checkin &&
+                    candidato.fecha_checkout && candidato.fecha_checkout !== r.fecha_checkout && identidad(r,candidato).compatible
+                    ? `Revisa la salida de la reserva. Libro ${fechaBreve(r.fecha_checkout)} · Proyecto H ${fechaBreve(candidato.fecha_checkout)}.`
+                    : 'Primero resuelve los datos y la asociación de la reserva.');
+            }
             if (!(Number.isSafeInteger(p.monto) && p.monto > 0)) motivos.push('Falta un monto válido.');
             if (p.moneda !== 'CLP') motivos.push('Moneda no compatible con el contrato actual.');
             if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
             const servicio4C = x.destinoFinanciero?.estado === 'destino_unico';
-            if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero, capacidadServicios));
-            if (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro') motivos.push('El Libro no confirma un pago recibido.');
+            if (p.tipo_movimiento === 'otro' && !p.concepto) motivos.push('Falta indicar a qué corresponde el pago en el Libro.');
+            else if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero, capacidadServicios));
             const medio = medioLibro(p);
-            if (!medio) motivos.push('Falta precisar el medio de pago (Webpay crédito o débito, si corresponde).');
+            const webpayPendiente = p.webpay_por_confirmar && (p.medio_pago === 'webpay' || medio?.startsWith('webpay_'));
+            if (!webpayPendiente && (p.pago_recibido !== true || p.estado_pago !== 'registrado_en_libro'))
+                motivos.push('El Libro no confirma un pago recibido.');
+            if (!medio) motivos.push(p.medio_pago === 'webpay' ? 'Falta precisar el medio de pago de WebPay. Revisa si es crédito o débito.' :
+                'Falta precisar el medio de pago. Revisa el comprobante.');
             const asociadoLibro = r.pagos.includes(p) || bloqueVerificado;
+            const webpayAprobable = webpayPendiente && asociadoLibro && medio?.startsWith('webpay_') &&
+                normalizarId(p.codigo_autorizacion) && p.fecha_comprobante && p.clasificacion_financiera === 'pago_real' &&
+                p.estado_pago === 'registrado_en_libro' && p.pago_recibido === true && !p.advertencias?.length &&
+                !p.transaccion_distribuida && !p.conflicto_distribucion && !conflictoIdentificador && !duplicado;
+            if (webpayPendiente && !(webpayAprobable && aprobados.has(id))) motivos.push(WEBPAY_PENDIENTE);
             // La revalidación canónica ya decidió si el movimiento sigue siendo
             // nuevo y seguro. Preparación comprueba que el payload todavía sea
             // construible, pero no vuelve a exigir una aprobación intermedia.
@@ -4376,7 +4465,8 @@
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
                 x.decisionPagoManual.confirmacionRecibida === true && fechaConfirmacionAirbnbValida(x.decisionPagoManual.fechaPago)
                 ? x.decisionPagoManual : null;
-            const manual = aprobados.has(id) && (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
+            const manual = aprobados.has(id) && (!webpayPendiente || webpayAprobable) &&
+                (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
             if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p) && !transferenciaContextualNueva)
                 motivos.push('Falta un identificador fuerte del comprobante; definir el medio no resuelve su identidad.');
             if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push(APROBACION_MANUAL_PAGO);
@@ -4384,8 +4474,9 @@
                 x.destinoFinanciero.aplicaciones.some(a => ['queque','pan','huevos'].includes(a.concepto_canon))) {
                 motivos.push('Confirma la distribución explícita del comprobante antes de preparar el pago.');
             }
-            const mismoMontoSinIdentificador = !fuerte && (
-                snapshot.pagos.some(v => destino?.reserva_id && v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda)) ||
+            const mismoMontoRegistrado = fuerte ? [] : snapshot.pagos.filter(v => destino?.reserva_id &&
+                v.reserva_id === destino.reserva_id && Number(v.monto) === Number(p.monto) && (!v.moneda || v.moneda === p.moneda));
+            const mismoMontoSinIdentificador = !fuerte && (mismoMontoRegistrado.length ||
                 vistos.some(v => v.destino === destinoActual && Number(v.pago.monto) === Number(p.monto) && v.pago.moneda === p.moneda)
             );
             if (mismoMontoSinIdentificador && !manual && !transferenciaContextualNueva) motivos.push('Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.');
@@ -4407,8 +4498,10 @@
                 // guardia sin agregar un segundo botón de aprobación.
                 payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas,
                     manual || nuevoSeguroCanonico, id, transferenciaSinId || x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? x.decisionPagoManual : null) : null;
-            if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual))
-                motivos.push('La propuesta financiera no cumple el contrato seguro de pagos de servicios.');
+            if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual) &&
+                motivos.every(motivo => motivo === APROBACION_MANUAL_PAGO)) {
+                motivos.push('Hace falta un comprobante que permita aplicar el pago al cargo de servicio.');
+            }
             const payload = servicio4C ? payloadServicio : { contrato: 'haiku_incorporar_libro_v1', reserva_ref: destino?.reserva_ref || null,
                 argumentos: { p_reserva_id: destino?.reserva_id || null, p_monto: p.monto, p_medio_pago: medio || null, p_etapa_operativa: 'abono', p_referencia_externa: (medio === 'airbnb_prepaid_card' ? confirmacionAirbnb?.referenciaExterna || p.referencia_externa : p.texto_original) || null,
                     p_fecha_pago: confirmacionAirbnb?.fechaPago || p.fecha_comprobante || null, p_folio: confirmacionAirbnb ? null : p.folio || null, p_codigo_autorizacion: confirmacionAirbnb ? null : p.codigo_autorizacion || null,
@@ -4422,11 +4515,22 @@
                         generacion:confirmacionAirbnb.generacion,reserva_id:confirmacionAirbnb.reservaId,monto:p.monto,origen:p.origen}
                 } : {})}, aprobado_manualmente: manual };
             if (!p.fecha_comprobante && !confirmacionAirbnb) motivos.push('Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago.');
-            const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, motivos, destino?.dependeDe || [], ['pagos.registrar']);
+            const item = add(motivos.length ? 'dudosos' : 'pagos', id, texto + (destino?.reserva_ref ? ' · Asociar después de crear la reserva' : destino?.reserva_id ? ' · Reserva ' + destino.reserva_id : ''), payload, [...new Set(motivos)], destino?.dependeDe || [], ['pagos.registrar']);
             const motivosAprobables = new Set([APROBACION_MANUAL_PAGO, 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.',
                 'Confirma la distribución explícita del comprobante antes de preparar el pago.']);
             item.aprobable = !transferenciaSinId && motivos.length > 0 && motivos.every(motivo => motivosAprobables.has(motivo));
+            if (webpayAprobable && motivos.includes(WEBPAY_PENDIENTE) &&
+                motivos.every(motivo => motivo === WEBPAY_PENDIENTE || motivo === APROBACION_MANUAL_PAGO)) {
+                item.aprobable = true;
+                item.etiquetaAprobacion = 'Confirmar recepción WebPay';
+            }
             if (motivos.includes(APROBACION_MANUAL_PAGO)) item.motivosRevisionPago = motivosRevisionComprobante(x,resolucionPago,esPagoExtraJacuzzi);
+            const comparable = mismoMontoRegistrado.length === 1 ? mismoMontoRegistrado[0] : null;
+            if (medio === 'efectivo' && comparable && pagoConfirmadoSistema(comparable) &&
+                medioSistema(comparable) === 'transferencia' && comparable.fecha_pago && p.fecha_comprobante &&
+                !mismaFechaCalendario(comparable.fecha_pago,p.fecha_comprobante) && !manual) {
+                item.aviso = `Proyecto H tiene una transferencia del ${fechaBreve(fechaCalendarioChile(comparable.fecha_pago))} por el mismo monto. Confirma el efectivo anotado en el Libro.`;
+            }
             if (bloqueVerificado) {
                 item.verificacionBloquePago = verificacion;
                 item.aviso = `Asociado por CAB ${r.cabana} y fecha de ingreso. Alojamiento ${money(verificacion.total)} · saldo antes del pago ${money(verificacion.saldo)}.`;
@@ -4442,11 +4546,11 @@
         for (const x of comp.pagosDetalle || []) {
             const id = idMovimientoIncorporacion(x);
             const item = plan.items.find(i => i.id === id);
-            if (!item) continue;
+            if (!item || item.transferenciaRepartida) continue;
             item.pagoLibro = x.pago;
             item.pagoSistema = x.sistema || null;
             // Una aprobación previa del pago no puede deshacer «Dejar pendiente».
-            if (item.reservaPendiente) continue;
+            if (item.reservaPendiente || x.pago.airbnb_liquidacion_pendiente) continue;
             item.decisionPagoManual = x.decisionPagoManual || null;
             item.resolucionMedio = propuestaMedioPago(item,comp,estadoComparacion(comp)?.generacion);
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
@@ -4608,7 +4712,9 @@
                 item.categoria='dudosos';item.aprobable=false;
                 item.motivos=[parecido||mismo.length
                     ? 'Ya existe un pago posiblemente correspondiente a esta penalidad. Revisa antes de duplicarlo.'
-                    : !saldoOk ? 'El saldo del alojamiento cambió o ya fue pagado. Revisa antes de registrar otro abono.'
+                    : !saldoOk && alojamiento.length === 1 && Number.isSafeInteger(Number(alojamiento[0].saldo_cargo))
+                        ? `El saldo de alojamiento es ${money(alojamiento[0].saldo_cargo)}. Revisa cómo se aplicaron los abonos antes de registrar la penalidad de ${money(monto)}.`
+                    : !saldoOk ? 'Verifica el saldo de alojamiento y sus abonos antes de registrar el pago de la penalidad.'
                     : 'Faltan datos verificables de la transferencia de penalidad.'];
                 item.aviso='Cargo de penalidad registrado; pago todavía por comprobar.';
                 return true;
@@ -6463,9 +6569,9 @@
         if (candidatos.length!==1 || candidatos[0].reserva_id!==fila.sistema.reserva_id) return null;
         const s=candidatos[0], diferencias=[];
         if (p.fecha_comprobante && s.fecha_pago && !mismaFechaCalendario(p.fecha_comprobante,s.fecha_pago)) diferencias.push(`Fecha distinta · Libro ${fechaBreve(p.fecha_comprobante)} · Proyecto H ${fechaBreve(fechaCalendarioChile(s.fecha_pago))}`);
-        if (p.monto!=null && s.monto!=null && Number(p.monto)!==Number(s.monto)) diferencias.push(`Monto mifiriyi · Libro ${money(p.monto)} · Proyecto H ${money(s.monto)}`);
+        if (p.monto!=null && s.monto!=null && Number(p.monto)!==Number(s.monto)) diferencias.push(`Monto distinto · Libro ${money(p.monto)} · Proyecto H ${money(s.monto)}`);
         if (p.moneda && s.moneda && p.moneda!==s.moneda) diferencias.push(`Moneda distinta · Libro ${p.moneda} · Proyecto H ${s.moneda}`);
-        if (medioSistema(s) && medioSistema(s)!==medioLibro(p)) diferencias.push(`Medio mifiriyi · Libro transferencia · Proyecto H ${medioSistema(s).replaceAll('_',' ')}`);
+        if (medioSistema(s) && medioSistema(s)!==medioLibro(p)) diferencias.push(`Medio distinto · Libro transferencia · Proyecto H ${medioSistema(s).replaceAll('_',' ')}`);
         if (!diferencias.length) return null;
         const franja=elemento('div','haiku-pago-diferencia-compacta');
         franja.append(elemento('span','',`⚠ ${diferencias.join(' · ')}`));
@@ -6500,6 +6606,10 @@
 
     function identidadInspectorItem(item, comparacion) {
         if (!item?.pagoLibro) return null;
+        if (item.transferenciaRepartida) {
+            const parte = item.transferenciaRepartida.partes[0];
+            return identidadInspectorMovimiento(comparacion?.pagosDetalle?.find(x => x.pago === parte), comparacion);
+        }
         const componentes = item.distribucionManual?.componentes || [];
         const componentesItem = componentes.filter(componente => componente.item_id === item.id);
         if (componentesItem.length === 1) {
@@ -7129,13 +7239,13 @@
     function datosPagoIncorporacion(pago) {
         const medio = medioLibro(pago) || String(pago?.medio_pago || '').toLowerCase();
         const nombres = { transferencia:'Transferencia', webpay_credito:'WebPay Crédito', webpay_debito:'WebPay Débito',
-            tarjeta_credito:'Tarjeta Crédito', tarjeta_debito:'Tarjeta Débito', airbnb_prepaid_card: "Airbnb Prepaid Card", efectivo:'Efectivo' };
+            tarjeta_credito:'Tarjeta Crédito', tarjeta_debito:'Tarjeta Débito', airbnb_prepaid_card: 'Prepago Airbnb', efectivo:'Efectivo' };
         let segundo = ['Detalle', pago?.texto_original || pago?.concepto || 'Sin dato'];
         if (medio === 'transferencia') segundo = ['Glosa', pago?.texto_original || 'Sin dato'];
         else if (medio.startsWith('webpay_')) segundo = ['CodAut', pago?.codigo_autorizacion || 'Sin dato'];
         else if (medio.startsWith('tarjeta_')) segundo = ['Folio / Autorización', [pago?.folio && `Folio ${pago.folio}`, pago?.bovtar && `Autorización ${pago.bovtar}`].filter(Boolean).join(' · ') || 'Sin dato'];
         else if (medio === 'efectivo') segundo = ['Concepto', pago?.concepto || 'Sin dato'];
-        else if (medio === 'airbnb_prepaid_card') segundo = ['Detalle', pago?.texto_original || pago?.concepto || 'Sin dato'];
+        else if (pago?.airbnb_liquidacion_pendiente) segundo = ['Concepto', 'Alojamiento'];
         return { medio:nombres[medio] || medio.replaceAll('_',' ') || 'Sin dato', segundo,
             fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10),!!pago?.ajuste_fecha_comprobante) };
     }
@@ -7309,14 +7419,20 @@
         if (item.categoria === "estadias") detalle = `Se propone añadir ${estadias.length} estadía${estadias.length === 1 ? "" : "s"} a la reserva existente.`;
         if (item.categoria === "asociadas") detalle = "La reserva ya está asociada. No se creará otra.";
         if (item.categoria === "pagos") detalle = item.payload?.reserva_ref ? "Se asociará cuando se cree la reserva seleccionada." : "Pago listo para incorporar.";
-        if (item.categoria === "dudosos") detalle = "Este movimiento necesita revisión antes de poder prepararse.";
+        if (item.categoria === "dudosos" && !item.motivos.length) detalle = "Este movimiento necesita revisión antes de poder prepararse.";
         if (item.categoria === "pendientes") detalle = "No se incorporará mientras siga pendiente.";
         if (item.categoria === "omitidos") detalle = item.pagoYaRegistrado ? "El pago ya está registrado en Proyecto H." :
             /Ya existe un pago/i.test(item.texto) ? "Ya existe un pago con este identificador." :
             /estadías ya existen/i.test(item.texto) ? "La estadía ya existe en Proyecto H." : "Se omitió para evitar un posible duplicado.";
         let estado = item.etapaSiguiente ? 'Paso 2 · después del titular' :
             item.pagoYaRegistrado && item.categoria === 'omitidos' ? 'Ya registrado' : etiquetasEstado[item.categoria] || "Revisar";
-        if (item.ampliacionJacuzzi) {
+        if (item.transferenciaRepartida) {
+            estado = 'Transferencia repartida';
+        } else if (item.pagoLibro?.airbnb_liquidacion_pendiente) {
+            estado = 'Liquidación pendiente';
+        } else if (item.motivos?.includes(WEBPAY_PENDIENTE)) {
+            estado = 'WebPay por confirmar';
+        } else if (item.ampliacionJacuzzi) {
             estado = 'Ampliar Jacuzzi';
             detalle = 'Primero actualiza la misma Jacuzzi para reflejar las personas extra y generar el saldo correcto. Después revisa el segundo pago; el primero se conserva.';
         } else if (item.penalidadPagoPendiente) {
@@ -7958,6 +8074,22 @@
                 meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
             }
             fila.append(meta);
+            if (item.transferenciaRepartida) {
+                const reparto = elemento('div', 'haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle');
+                for (const parte of item.transferenciaRepartida.partes) {
+                    const concepto = parte.tipo_movimiento === 'alojamiento' ? 'Alojamiento' : parte.concepto.trim();
+                    reparto.append(datoIncorporacion(concepto, money(parte.monto)));
+                }
+                fila.append(reparto);
+            }
+            if (item.pagoLibro.airbnb_liquidacion_pendiente) {
+                const origen = item.pagoLibro.origen;
+                const detalle = elemento('details', 'haiku-incorporacion-notas');
+                detalle.append(elemento('summary', '', 'Ver desglose del Libro'),
+                    elemento('p', '', [item.pagoLibro.texto_original, origen?.hoja && origen?.celda ? `Libro · ${origen.hoja} ${origen.celda}` : '']
+                        .filter(Boolean).join('\n')));
+                fila.append(detalle);
+            }
             const ajusteFecha = item.pagoLibro.ajuste_fecha_comprobante;
             if (ajusteFecha) {
                 const accion = ajusteFecha.motivo === 'anio_omitido' ? 'completado' : 'corregido';
@@ -8012,7 +8144,8 @@
         const motivosRevisionPago = item.categoria === 'dudosos' && item.motivos.includes(APROBACION_MANUAL_PAGO)
             ? item.motivosRevisionPago || [] : [];
         const origenPago = item.pagoLibro?.origen;
-        const detalle = motivosRevisionPago.length ?
+        const detalle = item.transferenciaRepartida ? `Libro · ${origenPago.hoja} ${item.transferenciaRepartida.partes.map(p => p.origen.celda).join(', ')}` :
+            motivosRevisionPago.length ?
             origenPago?.hoja && origenPago.celda ? `Libro · ${origenPago.hoja} ${origenPago.celda}` : '' :
             actualizacionReserva && !item.etapaSiguiente ? '' : vista.detalle;
         if (detalle) fila.append(elemento("p", "haiku-incorporacion-propuesta", detalle));
@@ -8020,7 +8153,7 @@
         const franja=franjaDiferenciaPago(movimiento,comparacion);
         if (franja) fila.append(franja);
         const motivosVisibles = new Set([...motivosRevisionPago, ...item.motivos.filter(motivo =>
-            !(motivosRevisionPago.length && motivo === APROBACION_MANUAL_PAGO) &&
+            !((motivosRevisionPago.length || esPagoLibro && item.motivos.length > 1) && motivo === APROBACION_MANUAL_PAGO) &&
             !(franja && motivo === 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.'))]);
         const fechaComprobante = item.pagoLibro?.fecha_comprobante, ingreso = item.pagoLibro?.fecha_bloque;
         if (item.categoria === 'dudosos' && /^\d{4}-\d{2}-\d{2}$/.test(fechaComprobante || '') &&

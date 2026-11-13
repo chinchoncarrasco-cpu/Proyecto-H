@@ -13,7 +13,7 @@ const api = 'Object.freeze({ interpretar, consultar, compararSistema, respuesta,
 const consultas = read('js/haiku-libro-consultas-v1.js').replace(api,api.replace(' })',', renderizarItemIncorporacion, renderizarIncorporacion, continuarVistaManualPago, resolucionManualDisponible, contextoVisualPlanes })'));
 const source = read('tests/haiku-libro-pagos-aprobacion-manual.test.cjs');
 const setup = source.slice(source.indexOf('const id ='),source.indexOf('const itemPago=plan'));
-function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='TDC',fuerte=true,conComparacion=false}={}) {
+function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='TC',fuerte=true,conComparacion=false}={}) {
     const assert=require('node:assert/strict');
     const ctx={structuredClone,console:{info(){}},HAIKU_LIBRO_SEMANTICA:S,HAIKU_LIBRO_PAGOS_DESTINOS_V1:D,
         document:{readyState:'complete',getElementById:()=>null,createElement:t=>new Element(t),head:{appendChild(){}},querySelector:()=>null},
@@ -59,7 +59,7 @@ function agregarCasosAcumulados(h,{servicioB=true,servicioA=false,mismaReserva=f
     a.titular=pa.titular='Kyleigh Laughlan';ea.reservas.titular_nombre=a.titular;
     pa.medio_pago=null;pa.tipo_movimiento=servicioA?'servicio':'alojamiento';pa.concepto=servicioA?'Tinaja Tonel':'cab2/1noche';
     pa.evidencia_financiera={sector:'pagos',columnas_ocupadas:{detalle:true,concepto:true,monto:true,fecha:true}};
-    pa.codigo_autorizacion='KYLEIGH30';pa.texto_original='Kyleigh Laughlan // TDC // CodAut KYLEIGH30 // $30.000';
+    pa.codigo_autorizacion='KYLEIGH30';pa.texto_original='Kyleigh Laughlan // TC // CodAut KYLEIGH30 // $30.000';
     if(servicioA)h.agregar(3,30000);
     const b=mismaReserva?a:structuredClone(a),pb=structuredClone(pa);
     pb.titular=mismaReserva?a.titular:'Joseph Vargas';pb.cabana=mismaReserva?a.cabana:3;

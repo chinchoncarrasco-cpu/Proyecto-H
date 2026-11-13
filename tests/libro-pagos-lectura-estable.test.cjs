@@ -60,14 +60,22 @@ test('actualizar el Libro conserva consulta, reglas y generación; la próxima c
  assert.equal((await nueva.consultarHoja('Oct26')).reservas.length,0);
 });
 
-test('consulta → comparación → preparación no presenta BOVE como pago ni pierde el medio WebPay',async()=>{
+test('WebPay pendiente conserva el subtipo y sólo se prepara al confirmar la recepción',async()=>{
  const h=pagina(),db=F.cliente([reserva]);
  const result=await h.ctx.HAIKU_LIBRO_CONSULTAS.consultar('compara libro octubre 2026 con proyecto h',h.api(),db);
  const plan=await h.ctx.HAIKU_LIBRO_CONSULTAS.prepararIncorporacion(result,new Map(),new Set(),db);
  const items=plan.items.filter(i=>i.pagoLibro);
- assert.equal(items.length,1);assert.equal(items[0].categoria,'pagos',items[0].motivos.join(' '));
+ assert.equal(items.length,1);assert.equal(items[0].categoria,'dudosos');
+ assert.equal(items[0].etiquetaAprobacion,'Confirmar recepción WebPay');
+ assert.equal(items[0].aprobable,true);
+ assert.equal(items[0].seleccionado,false);
+ assert.equal(h.ctx.HAIKU_LIBRO_CONSULTAS.serializarIncorporacion(plan).length,0);
  assert.equal(items[0].payload.argumentos.p_medio_pago,'webpay_credito');
  assert.equal(items[0].pagoLibro.codigo_autorizacion,'123456');
+ const revisado=await h.ctx.HAIKU_LIBRO_CONSULTAS.prepararIncorporacion(result,new Map(),new Set([items[0].id]),db);
+ assert.equal(revisado.items.find(i=>i.id===items[0].id).categoria,'pagos');
+ const enviados=h.ctx.HAIKU_LIBRO_CONSULTAS.serializarIncorporacion(revisado);
+ assert.equal(enviados.length,1);assert.equal(enviados[0].aprobado_manualmente,true);
  const fuente=await (await h.api().crearLectura()).consultarHoja('Oct26');
  assert.equal(fuente.anotaciones.filter(x=>x.tipo==='nota_financiera').length,1);
  assert.ok(!db.llamadas.some(n=>/registrar|incorporar/.test(n)));

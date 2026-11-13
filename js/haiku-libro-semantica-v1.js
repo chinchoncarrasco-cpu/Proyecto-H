@@ -1445,7 +1445,7 @@
                     if (fechaComprobante.fecha_comprobante_variable)
                         advertencias.push('La fecha del Libro se calcula con el día actual. Comprueba la fecha del comprobante original.');
                     const p = { fecha_bloque: h.fechaISO, ...fechaComprobante, cabana, titular: titularPago(detail?.valor),
-                        monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /credito/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
+                        monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /\b(?:credito|tdc)\b/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         ...(reembolso ? { monto_referencial:-Number(reembolso[1].replace(/[.,]/g,'')) } : {}),
                         ...(ventaSinReserva ? { venta_sin_reserva:true } : {}),
                         codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),

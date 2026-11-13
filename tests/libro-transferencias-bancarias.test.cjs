@@ -1,5 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const F=require('./fixtures/libro-transferencias-bancarias.cjs');
+global.HAIKU_LIBRO_PAGOS_CANON_V1=require('../js/haiku-libro-pagos-canon-v1.js');
 global.HAIKU_LIBRO_SEMANTICA=F.S;
 const Q=require('../js/haiku-libro-consultas-v1.js');
 const q={desde:'2026-10-01',hasta:'2026-10-31'};
@@ -214,9 +215,30 @@ test('sin capacidad SQL no se anuncia un pago nuevo seguro ni se permite forzar 
  const libro=F.leer(),db=F.cliente(libro.reservas),rpc=db.rpc;
  db.rpc=n=>n==='haiku_libro_transferencias_capacidad_v2'?Promise.resolve({error:{message:'no existe'}}):rpc(n);
  const c=await Q.compararSistema(libro.reservas,db,q);
- assert.equal(c.pagosDetalle[0].estado,'revisar');assert.match(c.pagosDetalle[0].motivos.join(' '),/contrato SQL/);
+ assert.equal(c.pagosDetalle[0].estado,'revisar');assert.match(c.pagosDetalle[0].motivos.join(' '),/transferencia está identificada.*aún no habilita/);
  const plan=await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion:c},new Map(),new Set(),db);
  plan.items.forEach(i=>{i.seleccionado=true;});assert.deepEqual(Q.serializarIncorporacion(plan),[]);
+});
+test('una glosa con total repartido queda en una ficha sin preparar partes independientes',async()=>{
+ const glosa=F.glosa+' // GO (220.000 TOTAL)';
+ const libro=F.leer([{pagos:[
+  {glosa,monto:150000,concepto:'cab10/1noche'},
+  {glosa,monto:30000,concepto:'TINAJA'},
+  {glosa,monto:40000,concepto:'LATE CHECK OUT'}
+ ]}]);
+ const db=F.cliente(libro.reservas);
+ const comparacion=await Q.compararSistema(libro.reservas,db,q);
+ const plan=await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion},new Map(),new Set(),db);
+ assert.equal(comparacion.pagosDetalle.length,3);
+ assert.ok(comparacion.pagosDetalle.every(x=>x.estado==='revisar'));
+ const items=plan.items.filter(x=>x.pagoLibro);
+ assert.equal(items.length,1);
+ assert.equal(items[0].pagoLibro.monto,220000);
+ assert.equal(items[0].transferenciaRepartida.completo,true);
+ assert.deepEqual(items[0].transferenciaRepartida.partes.map(p=>p.monto),[150000,30000,40000]);
+ assert.equal(items[0].payload,null);
+ assert.match(items[0].motivos.join(' '),/Falta el número de operación/);
+ assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
 });
 test('sólo la confirmación final envía el indicador al writer, sin aprobación manual ficticia',async()=>{
  const h=await comparar([{pagos:[{glosa:F.glosa+' // Operacion 901'}]}]);

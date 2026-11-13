@@ -67,9 +67,13 @@
         return String(valor || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
     }
 
+    function liquidacionAirbnbPendiente(texto) {
+        return /\bpendiente\s+(?:por\s+|de\s+)?recibir\s+(?:la\s+)?(?:transf(?:erencia)?\.?|liquidacion|pago)\s+(?:de\s+)?airbnb\b/.test(normalizarTexto(texto));
+    }
+
     function firmaComprobanteAirbnb(texto) {
         const t = normalizarTexto(texto);
-        if (!/\bel viajero ha pagado\b/.test(t)) return false;
+        if (!/\bel viajero ha pagado\b/.test(t) && !liquidacionAirbnbPendiente(t)) return false;
         // Dos rótulos distintos del mismo comprobante; ni un canal, un monto
         // ni repetir una señal acreditan el medio. No agrega fecha o identidad.
         const desglose = [
@@ -84,12 +88,15 @@
 
     function medioDesdeTexto(pago) {
         const t = normalizarTexto(`${pago?.texto_original || ""} ${pago?.concepto || ""}`);
-        if (/\bairbnb\s+prepaid\s+card\b/.test(t) || firmaComprobanteAirbnb(pago?.texto_original)) return "airbnb_prepaid_card";
-        const webpay = /\bweb\s*pay\b|\bwebpay\b/.test(t);
-        if (webpay && /\bdebito\b/.test(t)) return "webpay_debito";
-        if (webpay && /\bcredito\b/.test(t)) return "webpay_credito";
-        if (/\bdebito\b/.test(t)) return "debito";
-        if (/\bcredito\b/.test(t)) return "credito";
+        if (/\b(?:airbnb\s+prepaid\s+card|prepago\s+(?:de\s+)?airbnb)\b/.test(t) || firmaComprobanteAirbnb(pago?.texto_original))
+            return "airbnb_prepaid_card";
+        const webpay = /\bweb\s*pay(?=\b|(?:x|por)\s*confirmar\b|confirmad[oa]\b)/.test(t);
+        const debito = /\bdebito\b/.test(t);
+        const tdc = /\btdc\b/.test(t);
+        const credito = tdc || /\bcredito\b/.test(t);
+        if (tdc && (debito || /\b(?:transf(?:erencia)?|efectivo)\b/.test(t))) return webpay ? "webpay" : null;
+        if (debito) return webpay ? "webpay_debito" : "debito";
+        if (credito) return webpay ? "webpay_credito" : "credito";
         if (/\btransf(?:erencia)?\b/.test(t)) return "transferencia";
         if (/\befectivo\b/.test(t)) return "efectivo";
         if (webpay) return "webpay";
@@ -106,7 +113,8 @@
 
     function montoTotalDeclarado(pago) {
         const texto = String(pago?.texto_original || "");
-        const coincidencia = texto.match(/\b(?:monto|total)\b\s*:?[ \t]*(?:clp)?[ \t]*\$?[ \t]*([\d.,]+)/i);
+        const coincidencia = texto.match(/\b(?:monto|total)\b\s*:?[ \t]*(?:clp)?[ \t]*\$?[ \t]*([\d.,]+)/i) ||
+            texto.match(/\(\s*(?:clp\s*)?\$?\s*([\d.,]+)\s+total\s*\)/i);
         if (!coincidencia) return null;
         const numero = Number(coincidencia[1].replace(/[.,]/g, ""));
         return Number.isSafeInteger(numero) && numero > 0 ? numero : null;
@@ -211,6 +219,11 @@
         copia.bove = pago.bove || null;
         copia.bove_administrativo = pago.bove || null;
         copia.medio_pago = medioDesdeTexto(pago);
+        if (copia.medio_pago === "airbnb_prepaid_card" && liquidacionAirbnbPendiente(pago.texto_original)) {
+            copia.airbnb_liquidacion_pendiente = true;
+            copia.estado_pago = "por_confirmar";
+            copia.pago_recibido = null;
+        }
         if (copia.medio_pago === "airbnb_prepaid_card" && !copia.referencia_externa) {
             const referencias = [...String(pago.texto_original || "").matchAll(
                 /\b(?:referencia\s+(?:airbnb|cloudbeds|externa)|(?:airbnb|cloudbeds)\s+ref(?:erencia)?)\s*[:#]\s*([0-9A-Z][0-9A-Z._-]*)/gi
@@ -282,7 +295,7 @@
 
     // El cálculo también se usa sin UI; instalar sólo envuelve la fuente Web.
     const api = Object.freeze({ mediosCanonicos, pagoConMedioManual, corregirPago,
-        corregirResultado, medioDesdeTexto, agruparTransaccionesDistribuidas, montoTotalDeclarado });
+        corregirResultado, medioDesdeTexto, liquidacionAirbnbPendiente, agruparTransaccionesDistribuidas, montoTotalDeclarado });
     root.HAIKU_LIBRO_PAGOS_CANON_V1 = api;
     if (typeof module !== "undefined" && module.exports) module.exports = api;
     if (!root.document) return;

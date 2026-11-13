@@ -6,6 +6,8 @@ global.HAIKU_LIBRO_SEMANTICA=F.S;
 const Q=require('../js/haiku-libro-consultas-v1.js');
 const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
 const candidata='supabase/candidates/libro-glosa-sin-nombre/01-writer.sql',numero='0123456701';
+const guardiaCloudbeds='supabase/migrations/20261113032624_cloudbeds_guardia_pago_alojamiento.sql';
+const capacidadActualizada='supabase/migrations/20261113193000_libro_capacidad_transferencias_cloudbeds.sql';
 async function entorno(instalar=true) {
  const db=new PGlite(),id=randomUUID(),estadia=randomUUID(),cab=randomUUID(),usuario=randomUUID();
  try {
@@ -123,6 +125,34 @@ test('SQL: capacidad no se anuncia si cambia el validador; sin permiso no regist
   await h.db.exec(def.replace('\nbegin','\n-- cambio posterior\nbegin'));
   assert.equal((await h.db.query('select haiku_libro_transferencias_capacidad_v2() r')).rows[0].r.glosa_sin_nombre,false);
   assert.equal((await h.front()).item,undefined);assert.equal((await pagos(h)).length,0);
+ }finally{await h.db.close();}
+});
+test('SQL: la guardia Cloudbeds conserva la validación bancaria y se reconoce su writer',async()=>{
+ const h=await entorno();
+ const capacidad=async()=> (await h.db.query('select haiku_libro_transferencias_capacidad_v2() r')).rows[0].r;
+ const md5=async()=> (await h.db.query("select md5(prosrc) hash from pg_proc where oid='public.haiku_incorporar_libro_v1(uuid,jsonb)'::regprocedure")).rows[0].hash;
+ try {
+  await h.db.exec(read(guardiaCloudbeds));
+  assert.equal((await capacidad()).confirmacion_final,false);
+  const writer=await md5(),antes=await metadatos(h);
+  const reservas=await h.db.query('select * from reservas'),cargos=await h.db.query('select * from cargos');
+  await h.db.exec(read(capacidadActualizada));
+  assert.equal(await md5(),writer);
+  assert.deepEqual(await metadatos(h),antes);
+  assert.deepEqual(await h.db.query('select * from reservas'),reservas);
+  assert.deepEqual(await h.db.query('select * from cargos'),cargos);
+  assert.equal((await pagos(h)).length,0);
+  await h.db.exec('set role authenticated');
+  assert.deepEqual(await capacidad(),{version:2,confirmacion_final:true,glosa_sin_nombre:true});
+  await h.db.exec('reset role');
+  const {item}=await h.front();
+  assert.ok(item);
+  await assert.rejects(h.guardar(item));
+  await h.guardar({...item,confirmacion_final:true});
+  assert.equal((await pagos(h))[0].datos_origen.evidencia_transferencia.numero_remitente,numero);
+  const definicion=(await h.db.query("select pg_get_functiondef('public.haiku_incorporar_libro_v1(uuid,jsonb)'::regprocedure) d")).rows[0].d;
+  await h.db.exec(definicion.replace('\nbegin','\n-- cambio posterior\nbegin'));
+  assert.deepEqual(await capacidad(),{version:2,confirmacion_final:false,glosa_sin_nombre:false});
  }finally{await h.db.close();}
 });
 test('SQL: baseline desconocido aborta sin reemplazar definiciones ni tocar datos',async()=>{
