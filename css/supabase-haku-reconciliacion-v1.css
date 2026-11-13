@@ -1827,6 +1827,11 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 }
 .haku-libro-auto.haku-libro-auto p { margin: 0; }
 .haku-libro-auto__cambios, .haku-libro-auto__resumen, .haku-libro-auto__filtrado { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.haku-libro-auto__categoria { display: grid; gap: 6px; min-width: 0; }
+/* Las listas largas difieren el pintado de las filas fuera de la vista. */
+.haku-libro-auto__categoria:has(> :nth-child(13)) > .haku-libro-auto__caso {
+    content-visibility: auto; contain-intrinsic-block-size: auto 96px;
+}
 .haku-libro-auto :is(.haku-libro-auto__cambios, .haku-libro-auto__resumen, .haku-libro-auto__filtrado, .haku-libro-auto__incorporar, .haku-libro-auto__desplegable, .haku-libro-auto__pendientes)[hidden] { display: none; }
 .haku-libro-auto__resumen:empty { display: none; }
 .haku-libro-auto__cambios:not(:has(> :not(:empty))) { display: none; }
@@ -1904,7 +1909,8 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-libro-auto__marca { display: block; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--aviso-borde); font-size: 13px; font-weight: 650; }
 .haku-libro-auto__cuerpo {
     display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; min-height: 0;
-    padding: 7px 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    padding: 7px 12px; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-gutter: stable;
 }
 .haku-libro-auto__cuerpo > * { flex: 0 0 auto; }
 .haku-libro-auto__titulo { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
@@ -2012,9 +2018,12 @@ html[data-haiku-tema="oscuro"] .haku-libro-auto.haku-libro-auto--con-pendientes 
 .haku-libro-casos__cuerpo { display: flex; flex: 1 1 auto; min-height: 0; max-height: 396px; }
 .haku-libro-casos__lista {
     flex: 0 0 44%; min-width: 0; min-height: 0; padding: 4px 6px;
-    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-gutter: stable;
 }
 .haku-libro-casos__caso { position: relative; min-width: 0; margin-bottom: 2px; }
+.haku-libro-casos__lista:has(> :nth-child(13)) > .haku-libro-casos__caso:not(:has(> [aria-expanded="true"])) {
+    content-visibility: auto; contain-intrinsic-block-size: auto 44px;
+}
 .haku-libro-casos__caso:not(:last-child):not(:has([aria-expanded="true"]))::after {
     content: ''; position: absolute; inset-inline: 11px; bottom: -1px; border-bottom: 1px solid var(--casos-linea);
 }
