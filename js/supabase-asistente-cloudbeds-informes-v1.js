@@ -284,7 +284,8 @@
                     partes(fila.medio, informes.dia(fila.comprobante.fecha))));
                 const destinos = elemento("ul", "haku-cloudbeds-informes__pago-destinos");
                 for (const d of preparacion.destinos) {
-                    destinos.append(elemento("li", "", partes(d.nombre, informes.dia(d.fecha), d.hora,
+                    const nombre = Number(d.cantidad) > 1 ? `${d.cantidad} × ${d.nombre}` : d.nombre;
+                    destinos.append(elemento("li", "", partes(nombre, informes.dia(d.fecha), d.hora,
                         preparacion.destinos.length > 1 && informes.pesos(d.monto))));
                 }
                 const controles = elemento("div", "haku-cloudbeds-informes__acciones");
@@ -303,7 +304,7 @@
                     try {
                         const resultado = await preparacion.confirmar();
                         registrarResultado(resultado.creado);
-                        await Promise.allSettled([
+                        void Promise.allSettled([
                             Promise.resolve().then(() => root.haikuCargarAbonosSupabase?.()),
                             Promise.resolve().then(() => root.haikuCargarSaldosCheckinSupabase?.()),
                             Promise.resolve().then(() => root.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("pago de Informes Cloudbeds")),
