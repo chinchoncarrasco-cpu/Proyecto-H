@@ -417,6 +417,7 @@
                 throw Error('Proyecto H no confirmó el resultado de esta nota. Reintenta para comprobarlo.');
             const confirmados=['servicio','nota'].flatMap(kind=>(filasConfirmadas(data,elegidos,kind)||[]).map(item=>({
                 titular:item.reserva?.titular,cabana:item.reserva?.cabana,fechaIngreso:item.reserva?.fecha_checkin,
+                reservaId:item.payload.reserva_id,
                 detalles:[kind==='nota'?['Nota de la reserva',item.payload.texto]:
                     [item.mapa?.nombre||item.servicio?.concepto||'Servicio',item.payload.fecha_servicio,item.payload.hora?.slice(0,5)]]
             })));

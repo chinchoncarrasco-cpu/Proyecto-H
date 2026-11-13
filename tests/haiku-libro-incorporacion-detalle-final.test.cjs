@@ -206,6 +206,9 @@ test('estadías de una reserva nueva: se detallan las adicionales sólo si el co
     const resultado={reservas_creadas:1,estadias_agregadas:1,resultados:[{item_id:'nueva',tipo:'reserva_nueva',reserva_id:RESERVA}]};
     const detalle=h.Q.detalleResultadoIncorporacion(s,resultado);
     assert.equal(detalle.reservas.length,1);assert.equal(detalle.estadias.length,1);assert.equal(detalle.estadias[0].cabana,'CAB 4');
+    assert.equal(detalle.reservas[0].cabana,'CAB 2');
+    assert.equal(detalle.reservas[0].periodo,'06/10/26 → 06/10/26');
+    assert.equal(detalle.reservas[0].identidad.reservaId,detalle.estadias[0].identidad.reservaId);
     assert.equal(detalle.estadias[0].identidad.seleccion,null,'no inventar un UUID de estadía');
     assert.equal(h.Q.detalleResultadoIncorporacion(s,{...resultado,estadias_agregadas:0}).estadias.length,0);
 });

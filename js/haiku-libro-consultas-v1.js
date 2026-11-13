@@ -4921,13 +4921,17 @@
         const filaEstadia = (ctx,r,e) => ({...fila(ctx,r,'Estadía añadida'),
             cabana:e ? `CAB ${e.cabana}` : '',
             periodo:e ? `${fechaBreve(e.desde)} → ${fechaBreve(e.hasta)}` : '',
-            identidad:identidad(ctx,r,e)});
+            fechaIngreso:e?.desde,identidad:identidad(ctx,r,e)});
         for (const r of resultados) {
             const ctx = enviados.get(r.item_id);
             if (!ctx || ctx.tipo !== r.tipo) continue;
             if (r.tipo === 'reserva_nueva') {
-                const ubicaciones = ctx.estadias.map(e => `CAB ${e.cabana} · ${fechaBreve(e.desde)} → ${fechaBreve(e.hasta)}`);
-                detalle.reservas.push({...fila(ctx,r,'Reserva incorporada'),cabana:'',periodo:ubicaciones.join(' / ')});
+                const principal = ctx.estadias[0];
+                detalle.reservas.push({...fila(ctx,r,'Reserva incorporada'),
+                    cabana:principal ? `CAB ${principal.cabana}` : '',
+                    periodo:principal ? `${fechaBreve(principal.desde)} → ${fechaBreve(principal.hasta)}` : '',
+                    fechaIngreso:principal?.desde,
+                    conEstadiasAdicionales:ctx.estadias.length > 1});
             } else if (r.tipo === 'estadia') {
                 const confirmadas = resultados.filter(x => x.item_id === r.item_id && x.tipo === r.tipo);
                 const excluidos = omitidos.filter(x => x.item_id === r.item_id && x.tipo === r.tipo);
