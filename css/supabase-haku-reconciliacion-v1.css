@@ -1857,14 +1857,22 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
     display: grid; gap: 1px; min-width: 0; color: inherit; font-size: .75rem;
 }
 .haku-libro-auto__detalle-rotulo > small { color: var(--aviso-secundario); font-size: .63rem; line-height: 1.35; }
-.haku-libro-auto__detalle-listo {
-    padding: 5px 8px; border-inline-start: 2px solid var(--aviso-borde); border-radius: 4px;
-    background: var(--haku-compacto-suave, var(--aviso-superficie)); font-size: .63rem; line-height: 1.4;
-}
+.haku-libro-auto__detalle-listo { font-size: .63rem; line-height: 1.4; }
 .haku-libro-auto__detalle-listo[hidden] { display: none; }
+.haku-libro-auto__detalle-contenido {
+    padding: 5px 8px; border-inline-start: 2px solid var(--aviso-borde); border-radius: 4px;
+    background: var(--haku-compacto-suave, var(--aviso-superficie));
+}
 .haku-libro-auto__detalle-listo--flotante {
-    position: fixed; box-sizing: border-box; z-index: 1; max-height: calc(100dvh - 16px); overflow: auto;
-    overscroll-behavior: contain;
+    position: fixed; z-index: 1; display: flex; flex-direction: column; pointer-events: none;
+}
+/* El espacio sobre la vista se reduce si su contenido llega al borde inferior. */
+.haku-libro-auto__detalle-listo--flotante::before {
+    content: ''; flex: 0 1 var(--haku-detalle-arriba); min-height: 0;
+}
+.haku-libro-auto__detalle-listo--flotante > .haku-libro-auto__detalle-contenido {
+    box-sizing: border-box; flex: none; max-height: 100%; min-height: 0;
+    overflow: auto; overscroll-behavior: contain; pointer-events: auto;
     padding: 8px 10px; border: 1px solid var(--aviso-borde); border-radius: 6px;
     background: var(--aviso-superficie); box-shadow: 0 5px 18px #09171129;
 }
