@@ -174,6 +174,26 @@
         });
     }
 
+    function filasConfirmadas(data, elegidos, kind) {
+        const esNota = kind === 'nota';
+        const lista = valor => Array.isArray(valor) ? valor : [];
+        const cantidad = esNota ? data.notas_creadas : data.servicios_creados;
+        const recibidos = lista(esNota ? data.notas : data.servicios);
+        const todos = [...lista(data.servicios), ...lista(data.notas)];
+        const nuevos = recibidos.filter(r => r?.estado === (esNota ? 'creada' : 'creado'));
+        if (!Number.isSafeInteger(cantidad) || cantidad < 0 || nuevos.length !== cantidad) return null;
+        const filas = [];
+        for (const r of nuevos) {
+            const candidatos = elegidos.filter(i => i.item_id === r.item_id && i.kind === kind && i.estado === 'listo');
+            const item = candidatos[0];
+            if (!r.item_id || candidatos.length !== 1 || todos.filter(x => x?.item_id === r.item_id).length !== 1 ||
+                r.reserva_id != null && r.reserva_id !== item.payload?.reserva_id ||
+                r.estadia_id != null && r.estadia_id !== item.payload?.estadia_id) return null;
+            filas.push(item);
+        }
+        return filas;
+    }
+
     // Detalle del recibo: separado por tipo y sólo después del OK del RPC.
     // No consulta ni modifica reservas, servicios, notas o pagos.
     function completarRecibo(card, data, elegidos) {
@@ -190,7 +210,7 @@
         };
         // Sólo el resultado por item_id del RPC acredita una incorporación.
         // No confundir elegidos, ya existentes u omitidos con elementos nuevos.
-        const grupoIncorporados = (kind, titulo, cantidad, respuesta, estadoCreado) => {
+        const grupoIncorporados = (kind, titulo, cantidad) => {
             const grupo = crear("section", "haku-libro-resultado-sites__incorporados");
             grupo.dataset.tipo = kind;
             grupo.setAttribute("aria-label", titulo);
@@ -199,20 +219,8 @@
             encabezado.append(heading,
                 crear("span", "haku-libro-resultado-sites__chip", Number(cantidad || 0)));
             grupo.append(encabezado);
-            const totalValido = Number.isSafeInteger(cantidad) && cantidad >= 0;
-            const recibidos = Array.isArray(respuesta) ? respuesta : [];
-            const nuevos = recibidos.filter(r => r?.estado === estadoCreado);
-            const filas = nuevos.map(r => {
-                const candidatos = elegidos.filter(i => i.item_id === r.item_id && i.kind === kind && i.estado === 'listo');
-                const veces = [...(data.servicios || []), ...(data.notas || [])]
-                    .filter(x => x?.item_id === r.item_id).length;
-                const item = candidatos.length === 1 && veces === 1 ? candidatos[0] : null;
-                if (!r.item_id || !item ||
-                    r.reserva_id != null && r.reserva_id !== item.payload?.reserva_id ||
-                    r.estadia_id != null && r.estadia_id !== item.payload?.estadia_id) return null;
-                return item;
-            });
-            if (!totalValido || nuevos.length !== cantidad || filas.some(i => !i)) {
+            const filas = filasConfirmadas(data, elegidos, kind);
+            if (!filas) {
                 const aviso = crear("p", "haku-libro-resultado-sites__grupo-aviso",
                     "El total fue confirmado, pero no se pudo identificar con seguridad el detalle. Revisa la reserva antes de repetir la operación.");
                 aviso.setAttribute("role", "status"); grupo.append(aviso);
@@ -254,9 +262,9 @@
             return grupo;
         };
         const serviciosIncorporados = grupoIncorporados('servicio', 'Servicios incorporados',
-            data.servicios_creados, data.servicios, 'creado');
+            data.servicios_creados);
         const notasIncorporadas = grupoIncorporados('nota', 'Notas incorporadas',
-            data.notas_creadas, data.notas, 'creada');
+            data.notas_creadas);
 
         tarjeta.insertBefore(serviciosIncorporados, detalle);
         tarjeta.insertBefore(notasIncorporadas, detalle);
@@ -361,8 +369,12 @@
     // El clic en Incorporar del aviso es la confirmación. El lote usa las mismas
     // comprobaciones y writer; no crea una tarjeta ni pide otro diálogo.
     function crearIncorporacionAviso(scope,notaConfirmada){
-        let solicitud,usuario,resultado,pendiente;
+        let solicitud,usuario,resultado,pendiente,elegidos;
         const firmaNota=notaConfirmada&&JSON.stringify(notaConfirmada);
+        const seleccion=scope.seleccionAviso;
+        const idsSeleccionados=new Set(seleccion?.ids);
+        const claveEstadia=r=>JSON.stringify([r?.titular,r?.cabana,r?.fecha_checkin,r?.fecha_checkout]);
+        const fichasNuevas=new Set((seleccion?.nuevas||[]).map(claveEstadia));
         const permiso=()=>{
             const s=root.haikuSesion;
             if(s?.usuario?.activo!==true||!s.roles?.some(r=>/^(admin|administrador)$/i.test(typeof r==='string'?r:r?.codigo||r?.nombre||'')))
@@ -379,7 +391,8 @@
             if(resultado)return resultado;
             if(!solicitud){
                 const actual=await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial(scope);
-                const elegidos=actual.items.filter(x=>x.estado==='listo'&&x.payload&&!x.resolucionManual&&
+                elegidos=actual.items.filter(x=>x.estado==='listo'&&x.payload&&!x.resolucionManual&&
+                    (!seleccion||idsSeleccionados.has(x.item_id)||fichasNuevas.has(claveEstadia(x.reserva)))&&
                     (firmaNota ? x.kind==='nota'&&JSON.stringify(x.payload)===firmaNota :
                         x.kind==='nota'||x.kind==='servicio'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'));
                 if(firmaNota&&elegidos.length!==1)throw Error('La nota cambió o ya está guardada. Vuelve a revisar el informe.');
@@ -388,7 +401,8 @@
                 if(actual.generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
                     throw Error('El Libro cambió durante la comprobación. Pulsa Reintentar para usar sus datos actuales.');
                 solicitud={p_operacion_id:uuid(),p_servicios:[],p_notas:[]};
-                elegidos.forEach((x,i)=>solicitud[x.kind==='nota'?'p_notas':'p_servicios'].push(corregidos[i]));
+                elegidos=elegidos.map((x,i)=>({...x,payload:corregidos[i]}));
+                for(const x of elegidos)solicitud[x.kind==='nota'?'p_notas':'p_servicios'].push(x.payload);
             }
             permiso();
             const sesion=await root.haikuSupabase.auth.getUser();
@@ -401,7 +415,12 @@
                 .every(k=>Number.isSafeInteger(data[k])&&data[k]>=0))throw Error('Proyecto H no confirmó el resultado. Reintenta para comprobarlo sin duplicar.');
             if(firmaNota&&(data.notas_creadas+data.notas_omitidas!==1||data.servicios_creados||data.servicios_omitidos))
                 throw Error('Proyecto H no confirmó el resultado de esta nota. Reintenta para comprobarlo.');
-            resultado=data;return resultado;
+            const confirmados=['servicio','nota'].flatMap(kind=>(filasConfirmadas(data,elegidos,kind)||[]).map(item=>({
+                titular:item.reserva?.titular,cabana:item.reserva?.cabana,fechaIngreso:item.reserva?.fecha_checkin,
+                detalles:[kind==='nota'?['Nota de la reserva',item.payload.texto]:
+                    [item.mapa?.nombre||item.servicio?.concepto||'Servicio',item.payload.fecha_servicio,item.payload.hora?.slice(0,5)]]
+            })));
+            resultado={...data,confirmados};return resultado;
         };
         return ()=>{
             if(!pendiente)pendiente=ejecutar().finally(()=>{pendiente=null;});

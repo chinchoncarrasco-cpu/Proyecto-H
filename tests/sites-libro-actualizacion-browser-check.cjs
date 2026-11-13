@@ -56,14 +56,16 @@ async function comprobarCasosDelAviso(browser, url) {
                 ['Masaje',['Semántica ambigua: Información contradictoria de fecha del masaje.']],
                 ['Late Check-out',['Haku no puede preparar automáticamente una cortesía para Late Check-out; requiere revisión.']]
             ];
-            const items=nombres.map((nombre,i)=>{
+            const pendientes=nombres.map((nombre,i)=>{
                 const actual=reserva(i,nombre,[3,1,10,4,9,11,9,1][i]);
                 const [concepto,motivos]=servicios[i]||['Reserva',[i===6?'Elige cómo tratar esta reserva en la comparación.':'No se pudo asociar de forma única']];
                 const cambio={campo:i<6?'servicios':'adultos',antes:[],ahora:[{concepto}],proyecto:motivos.join(' · ')};
                 const contexto={servicios:i<6?[{estado:'revisar',concepto,razon:motivos.join(' · '),razones:motivos,
                     texto:i===3?'Masajes para 2 · Pend. horario contacto@example.test':''}]:[]};
-                return {id:actual.id,tipo:'modificacion',actual,cambios:[cambio],contexto,revision:{motivos:i===3?['Falta indicar el día.']:[]}};
+                return {tipo:'modificacion',actual,cambios:[cambio],contexto,revision:{motivos:i===3?['Falta indicar el día.']:[]}};
             });
+            const listaCompleta={tipo:'modificacion',actual:reserva(8,'Reserva completa',2),accionable:true,
+                cambios:[{campo:'adultos',antes:2,ahora:3,accionable:true}]};
             let generacion=0,informe,registro={version:1,cambios:[]},guardada=false;
             const panel=document.querySelector('.haiku-asistente-panel');
             panel.hidden=true;
@@ -77,15 +79,23 @@ async function comprobarCasosDelAviso(browser, url) {
             window.haikuSesion={usuario:{activo:true},roles:['administrador']};
             window.haikuSupabase={auth:{getUser:async()=>({data:{user:{id:'admin-sintetico'}}})}};
             window.HAIKU_LIBRO_CONSULTAS={
-                revalidarCambiosDetectados:async()=>({items:structuredClone(items),resueltos:[],
-                    reservas:guardada?[]:[reserva(8,'Reserva completa',2)],comparacion:[],q:{}}),
+                revalidarCambiosDetectados:async cambios=>{
+                    const porId=new Map([...pendientes,listaCompleta].map(x=>[x.actual.id,x]));
+                    const items=cambios.map(x=>({...x,...porId.get(x.actual.id)}));
+                    const listos=items.filter(x=>x.accionable);
+                    return {items:guardada?items.filter(x=>!x.accionable):items,
+                        resueltos:guardada?listos.map(x=>x.id):[],reservas:guardada?[]:listos.map(x=>x.actual),comparacion:[],q:{}};
+                },
                 prepararIncorporacion:async()=>({items:[{categoria:'nuevas',seleccionado:true,payload:{tipo:'reserva_actualizar'}}]}),
-                confirmarIncorporacion:async()=>{guardada=true;window.__guardadosCasos++;return {resultado:{ok:true,actualizaciones:1}};}
+                confirmarIncorporacion:async()=>{
+                    guardada=true;window.__guardadosCasos++;
+                    return {resultado:{ok:true,actualizaciones:1},detalle:{actualizaciones:[{titular:listaCompleta.actual.titular,cabana:'CAB 2'}]}};
+                }
             };
             window.__publicarCasos=()=>{
                 generacion++;
                 window.dispatchEvent(new Event('haiku:libro-cambio'));
-                informe={estado:'ok',libro_actual:{generacion},modificadas:items.map(({actual,cambios})=>({actual,cambios}))};
+                informe={estado:'ok',libro_actual:{generacion},modificadas:[...pendientes,listaCompleta].map(({actual,cambios})=>({actual,cambios}))};
                 window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
                     detail:{carga_automatica:true,tenia_anterior:true,generacion}}));
             };
@@ -95,10 +105,21 @@ async function comprobarCasosDelAviso(browser, url) {
             await page.addScriptTag({content:read('js/'+file+'.js')});
         await page.evaluate(()=>__publicarCasos());
         const aviso=page.locator('.haku-libro-auto');
-        await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+        await aviso.getByText('Listos para incorporar (1)',{exact:true}).waitFor();
+        assert.match(await aviso.innerText(),/Reserva completa · CAB 2/);
+        assert.doesNotMatch(await aviso.innerText(),/Elena Salas|Amelia Torres/);
         const abrir=aviso.getByRole('button',{name:/8 casos pendientes/});
-        await abrir.waitFor();
-        assert.match(await aviso.locator('.haku-libro-auto__resultado').innerText(),/Incorporado: 1 actualización/);
+        assert.equal(await abrir.getAttribute('aria-expanded'),'false');
+        await abrir.click();
+        assert.equal(await aviso.locator('.haku-libro-casos__fila').count(),8);
+        assert.equal(await aviso.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
+        await aviso.getByRole('button',{name:'Volver al aviso'}).click();
+        await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+        const recibo=aviso.locator('.haku-libro-auto__resultado');
+        await recibo.getByText('Incorporado: 1 actualización.',{exact:true}).waitFor();
+        assert.match(await recibo.innerText(),/Reserva completa · CAB 2/);
+        assert.doesNotMatch(await aviso.innerText(),/Listos para incorporar|Elena Salas/);
+        assert.equal(await aviso.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
         await abrir.click();
         const panel=aviso.locator('.haku-libro-casos'),detalle=panel.locator('.haku-libro-casos__detalle');
         const masaje=panel.getByRole('button',{name:/Elena Salas.*Faltan 3 datos/});
@@ -160,7 +181,9 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.equal(await page.evaluate(()=>__abiertosCasos),1);
         assert.equal(await page.evaluate(()=>__guardadosCasos),1);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
-        await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+        await abrir.waitFor();
+        assert.equal(await aviso.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
+        assert.doesNotMatch(await aviso.innerText(),/Reserva completa|Amelia Torres/);
         await abrir.click();
         await panel.getByRole('button',{name:'Ver informe',exact:true}).click();
         await panel.waitFor({state:'hidden'});
@@ -658,12 +681,24 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             __generation=6;window.dispatchEvent(new Event('haiku:libro-cambio'));
             const actual={id:'Nov26!AB10',titular:'Cristian Sintético',cabana:8,
                 fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-09',adultos:2};
+            const jacuzzi={concepto:'jacuzzi',hora:'19:15'};
+            const masaje={concepto:'masaje',hora:'16:00'};
+            const cambios=[{campo:'servicios',antes:[],ahora:[jacuzzi,masaje]}];
             __resultadoActual={estado:'ok',libro_actual:{generacion:6},modificadas:[{actual,
-                cambios:[{campo:'servicios',antes:[],ahora:[{concepto:'jacuzzi',hora:'19:15'}]}]}]};
+                cambios}]};
             const [detectado]=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.extraerCambiosDetectados(__resultadoActual,6);
-            __pendientesActual={items:[{id:'servicio-aviso',tipo:'modificacion',actual,
-                sistema:{reserva_id:'r-cristian'},cambios:[{campo:'servicios',antes:[],ahora:actual.servicios}]}],
-                resueltos:[],reservas:[],comparacion:[],revisionServicios:{reservas:[actual],generacion:6}};
+            const razon='El Libro indica coordinación pendiente para un masaje que figura programado.';
+            const revisar={...detectado,sistema:{reserva_id:'r-cristian'},contexto:{servicios:[
+                {estado:'revisar',concepto:'Masaje',hora:'16:00',razon}
+            ]}};
+            const campo={canonico:true,reserva:actual};
+            __pendientesActual={items:[revisar],resueltos:[],reservas:[],comparacion:[],revisionServicios:{reservas:[actual],generacion:6},
+                serviciosContexto:[
+                    {...campo,estado:'faltante',item_id:'srv:jacuzzi',servicio:jacuzzi,lectura:{nombre:'Jacuzzi',fecha:'2026-11-07',hora:'19:15'}},
+                    {...campo,estado:'revisar',item_id:'srv:masaje',servicio:masaje,lectura:{nombre:'Masaje',hora:'16:00'},razon}
+                ],
+                notasContexto:[{...campo,estado:'faltante',item_id:'nota:batas',texto:'Dejar batas'}]};
+            window.haikuTienePermiso=()=>true;
             window.__scopesAviso=[];window.__escriturasAviso=0;
             HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async cambios=>{
                 __scopesAviso.push(structuredClone(cambios));return structuredClone(__pendientesActual);
@@ -672,8 +707,12 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             window.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4={crearIncorporacionAviso:scope=>{
                 window.__scopeServicio=scope;
                 return ()=>new Promise(resolve=>{__escriturasAviso++;window.__resolverGuardado=()=>{
-                    __pendientesActual={items:[],resueltos:[detectado.id],reservas:[],comparacion:[]};
-                    resolve({ok:true,servicios_creados:1,notas_creadas:1});
+                    __pendientesActual={...__pendientesActual,items:[{...revisar,cambios:[{campo:'servicios',ahora:[masaje],proyecto:razon}]}],
+                        serviciosContexto:__pendientesActual.serviciosContexto.filter(x=>x.estado==='revisar'),notasContexto:[]};
+                    resolve({ok:true,servicios_creados:1,notas_creadas:1,confirmados:[
+                        {titular:actual.titular,cabana:8,fechaIngreso:actual.fecha_checkin,detalles:[['Jacuzzi','2026-11-07','19:15']]},
+                        {titular:actual.titular,cabana:8,fechaIngreso:actual.fecha_checkin,detalles:[['Nota de la reserva','Dejar batas']]}
+                    ]});
                 };});
             }};
             window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
@@ -681,11 +720,17 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             }));
         });
         const burbuja=page.locator('.haku-libro-auto');
+        await burbuja.getByText('Listos para incorporar (1)',{exact:true}).waitFor();
+        const pendienteMixto=burbuja.getByRole('button',{name:/1 caso pendiente/});
+        assert.equal(await pendienteMixto.getAttribute('aria-expanded'),'false');
+        assert.match(await burbuja.innerText(),/Jacuzzi.*19:15[\s\S]*Dejar batas/);
+        assert.doesNotMatch(await burbuja.innerText(),/Masaje|coordinación pendiente/);
         await burbuja.getByRole('button',{name:'Incorporar',exact:true}).click();
         await page.waitForFunction(()=>typeof __resolverGuardado==='function');
         const incorporando=burbuja.getByRole('button',{name:'Incorporando…',exact:true});
         assert.equal(await incorporando.isDisabled(),true);
         await incorporando.dispatchEvent('click');
+        await burbuja.getByText('Cambios detectados por fecha',{exact:true}).click();
         const categoriasGuardando=burbuja.locator('.haku-libro-auto__prioridad');
         await categoriasGuardando.last().click();
         assert.equal(await incorporando.getAttribute('aria-busy'),'true','filtrar no interrumpe la incorporación');
@@ -708,8 +753,27 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         assert.equal(await incorporando.count(),1,'otra versión no oculta el guardado');
         await page.evaluate(()=>__resolverGuardado());
         await incorporando.waitFor({state:'detached'});
-        assert.match(await burbuja.locator('.haku-libro-auto__resultado').innerText(),/Incorporado: 1 servicio · 1 nota\./,
+        const reciboMixto=burbuja.locator('.haku-libro-auto__resultado');
+        assert.match(await reciboMixto.innerText(),/Incorporado: 1 servicio · 1 nota\./,
             'recibo conservado al llegar otro aviso; errores: '+JSON.stringify(errors));
+        assert.match(await reciboMixto.innerText(),/Cristian Sintético · CAB 8[\s\S]+Jacuzzi[\s\S]+Dejar batas/);
+        assert.equal(await reciboMixto.getByText('Cristian Sintético · CAB 8',{exact:true}).count(),1);
+        assert.equal(await pendienteMixto.getAttribute('aria-expanded'),'false');
+        assert.doesNotMatch(await burbuja.innerText(),/Listos para incorporar|Masaje|coordinación pendiente/);
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1280,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: recibo sin desbordes`);
+                assert.equal(await pendienteMixto.isVisible(),true);
+                if(process.env.HAKU_RESUMEN_CAPTURES)
+                    await burbuja.screenshot({path:path.join(process.env.HAKU_RESUMEN_CAPTURES,`aviso-guardado-${tema}-${width}.png`)});
+            }
+        }
+        await pendienteMixto.click();
+        assert.match(await burbuja.locator('.haku-libro-casos__detalle').innerText(),/coordinación pendiente/);
+        assert.doesNotMatch(await burbuja.locator('.haku-libro-casos__detalle').innerText(),/Jacuzzi|Dejar batas/);
+        await burbuja.getByRole('button',{name:'Volver al aviso'}).click();
         assert.equal(await page.evaluate(()=>__escriturasAviso),1);
         assert.equal(await page.evaluate(()=>__scopeServicio.reservas[0].id),'Nov26!AB10');
         assert.equal(await page.evaluate(()=>__scopesAviso.every(rows=>rows.length===1&&rows[0].actual.id==='Nov26!AB10')),true);
@@ -727,7 +791,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             const actual={id:'alta-sintetica',titular:'Alta Sintética',cabana:8,fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-08'};
             __resultadoActual={estado:'ok',libro_actual:{generacion:8},nuevas:[{actual}]};
             const [detectado]=HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.extraerCambiosDetectados(__resultadoActual,8);
-            __pendientesActual={items:[{tipo:'nueva',actual}],reservas:[actual],comparacion:[],q:{}};
+            __pendientesActual={items:[{...detectado,accionable:true}],reservas:[actual],comparacion:[],q:{}};
             HAIKU_LIBRO_CONSULTAS.prepararIncorporacion=async()=>({items:[{id:'alta',categoria:'nuevas',payload:{reserva:actual},seleccionado:true}]});
             window.__intentosAviso=0;
             HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(_r,_d,_a,plan)=>{
@@ -747,6 +811,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
         // Los dos informativos se pueden leer en el aviso, sin entrar al informe.
         await page.evaluate(()=>{
+            __registration={version:1,cambios:[]};
             __generation=9;window.dispatchEvent(new Event('haiku:libro-cambio'));
             __resultadoActual={estado:'sin_cambios',libro_actual:{generacion:9},
                 advertencias:['anterior','actual'].map(version=>({version,hoja:'Oct26',
@@ -951,6 +1016,15 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         const avisoAbonos = page.locator('.haku-libro-auto');
         const revisarAbonos = avisoAbonos.getByRole('button',{name:'Revisar abonos'});
         await revisarAbonos.waitFor({state:'visible'});
+        const contextoAbonos=avisoAbonos.getByText('Cambios detectados por fecha',{exact:true});
+        if(await contextoAbonos.isVisible()){
+            await contextoAbonos.click();
+            const filtros=avisoAbonos.locator('.haku-libro-auto__prioridad');
+            for(const filtro of await filtros.all()){
+                await filtro.click();
+                if((await avisoAbonos.locator('.haku-libro-auto__filtrado').innerText()).includes('Abono nuevo'))break;
+            }
+        }
         for (const tema of ['claro','oscuro']) {
             await page.evaluate(tema=>document.documentElement.setAttribute('data-haiku-tema',tema),tema);
             for (const width of [1280,390]) {
@@ -1005,31 +1079,38 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             };
         });
         const primerSello=await page.evaluate(()=>__publicarPendientes(0));
-        const casosPendientes=burbuja.locator('.haku-libro-auto__resumen .haku-libro-auto__caso');
+        const pendientesAviso=burbuja.getByRole('button',{name:/casos? pendientes?/});
+        const casosPendientes=burbuja.locator('.haku-libro-casos__fila');
         const casoAnterior=casosPendientes.filter({hasText:'Reserva para actualizar'});
-        const ingreso=casoAnterior.locator('.haku-libro-auto__ingreso');
-        const deteccion=casoAnterior.locator('.haku-libro-auto__hora');
-        await ingreso.waitFor();
-        assert.equal(await ingreso.innerText(),'IN: 17/11/2026');
+        const detalleCaso=burbuja.locator('.haku-libro-casos__detalle');
+        const ingreso=detalleCaso.locator('time').first();
+        const deteccion=detalleCaso.locator('.haku-libro-auto__hora');
+        await pendientesAviso.waitFor();
+        assert.equal(await pendientesAviso.getAttribute('aria-expanded'),'false');
+        assert.equal(await burbuja.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
+        assert.doesNotMatch(await burbuja.innerText(),/Reserva para actualizar/);
+        await pendientesAviso.click();
+        assert.equal(await ingreso.innerText(),'IN 17/11/2026');
         assert.equal(await ingreso.getAttribute('datetime'),'2026-11-17');
         assert.equal(await deteccion.getAttribute('datetime'),primerSello);
         for(const tema of ['claro','oscuro']){
             await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
             for(const width of [1280,390,320]){
                 await page.setViewportSize({width,height:900});
-                const medidas=await casoAnterior.locator('.haku-libro-auto__cabecera').evaluate(el=>{
-                    const fecha=el.querySelector('.haku-libro-auto__ingreso').getBoundingClientRect();
-                    const hora=el.querySelector('.haku-libro-auto__hora').getBoundingClientRect();
-                    return {orden:fecha.right<hora.left,derecha:Math.abs(hora.right-el.getBoundingClientRect().right)<=1,
+                const medidas=await detalleCaso.locator('.haku-libro-casos__identidad').evaluate(el=>{
+                    const [entrada,deteccion]=el.querySelectorAll('time');
+                    return {entrada:entrada.dateTime,deteccion:deteccion.dateTime,
                         sinDesborde:el.scrollWidth<=el.clientWidth+1};
                 });
-                assert.deepEqual(medidas,{orden:true,derecha:true,sinDesborde:true},`${tema} ${width}`);
+                assert.deepEqual(medidas,{entrada:'2026-11-17',deteccion:primerSello,sinDesborde:true},`${tema} ${width}`);
             }
         }
+        await burbuja.getByRole('button',{name:'Cerrar burbuja',exact:true}).click();
         await page.evaluate(()=>__publicarPendientes(1));
+        await pendientesAviso.click();
         await casosPendientes.filter({hasText:'Reserva para crear'}).waitFor();
         assert.equal(await casosPendientes.count(),2);
-        assert.match(await casoAnterior.innerText(),/Cambio pendiente/);
+        if(await casoAnterior.getAttribute('aria-expanded')!=='true')await casoAnterior.click();
         assert.equal(await deteccion.getAttribute('datetime'),primerSello);
         await burbuja.getByRole('button',{name:'Ver informe',exact:true}).click();
         const pendientesNormales=page.locator('.haku-actualizacion-sites').last().locator('.haku-libro-pendientes-zona');
@@ -1037,12 +1118,17 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         assert.match(await pendientesNormales.innerText(),/Reserva para crear/);
 
         await page.evaluate(()=>{__confirmadasAviso.add('reserva-por-crear');__publicarPendientes(2);});
-        await casoAnterior.getByText('IN: 18/11/2026',{exact:true}).waitFor();
+        await pendientesAviso.click();
+        await detalleCaso.getByText('IN 18/11/2026',{exact:true}).waitFor();
         assert.equal(await casosPendientes.count(),1,'un cambio encadenado usa la última reserva y retira el caso confirmado');
         assert.equal(await page.evaluate(()=>__registration.cambios.length),1);
+        await burbuja.getByRole('button',{name:'Cerrar burbuja',exact:true}).click();
         await page.evaluate(()=>{__fallaAviso=true;__publicarPendientes(3);});
         await burbuja.getByText('Conservé los pendientes.',{exact:false}).waitFor();
-        assert.equal(await ingreso.innerText(),'IN: 18/11/2026');
+        assert.equal(await burbuja.getByRole('button',{name:'Incorporar',exact:true}).count(),0);
+        await pendientesAviso.click();
+        assert.equal(await ingreso.innerText(),'IN 18/11/2026');
+        assert.match(await detalleCaso.innerText(),/Falta comprobar este cambio en Proyecto H/);
         await burbuja.getByRole('button',{name:'Ver informe',exact:true}).click();
         await pendientesNormales.getByText(/Reserva para actualizar/).waitFor();
         assert.match(await pendientesNormales.innerText(),/Falta comprobarlos en Proyecto H/);
