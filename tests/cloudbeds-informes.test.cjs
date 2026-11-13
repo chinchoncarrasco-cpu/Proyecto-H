@@ -148,6 +148,103 @@ const pagoProyecto = { estado: "confirmado", tipo_movimiento: "pago", monto: 300
 const pagoLibro = { titular, cabana: 4, fecha_bloque: entrada, fecha_comprobante: diaPago, pago_recibido: true,
     estado_pago: "registrado_en_libro", monto: 30000, medio_pago: "debito", folio: "000438", bovtar: "001235", origen: { hoja: "Nov26", celda: "AB43:AE43" } };
 
+test("Sólo ofrece incorporar un pago faltante respaldado por la misma estadía del Libro", () => {
+    const movimientos = pagar(fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 30000));
+    const p = { ...pagoLibro, tipo_movimiento: "servicio", bove: "17900" };
+    const reservaLibro = { ...libro.reservas[0], pagos: [p] };
+    const fuentes = (r, extra = {}) => ({
+        libro: { hojas: [{ ...libro, reservas: [r], pagos: r.pagos || [p] }] },
+        proyecto: { pagosDisponibles: true, ...extra }
+    });
+    const [faltante] = comparar(movimientos, fuentes(reservaLibro));
+    assert.deepEqual(faltante.pagoIncorporable, { reservaLibro, origen: p.origen, destino: faltante.destino });
+    for (const datos of [
+        fuentes(libro.reservas[0]),
+        fuentes({ ...reservaLibro, pagos: [{ ...p, bove: "17901" }] }),
+        fuentes(reservaLibro, { pagos: new Map([["r", [pagoProyecto]]]) }),
+        fuentes(reservaLibro, { pagosDisponibles: false }),
+        fuentes(reservaLibro, { reservas: [{ ...estadia, cloudbedsId: id, salida: "2026-11-10" }] })
+    ]) assert.equal(comparar(movimientos, datos)[0].pagoIncorporable, null);
+    const [reversado] = comparar(pagar(
+        fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 30000),
+        fila("Tarjeta de Debito - Anulación Registrada", "9000V", 0, -30000)
+    ), fuentes(reservaLibro));
+    assert.equal(reversado.pagoIncorporable, null);
+});
+
+test("Incorporar desde Cloudbeds prepara y confirma sólo el comprobante elegido para el cargo de la estadía", async t => {
+    require("../js/haiku-libro-pagos-destinos-v1.js");
+    const libroConsultas = require("../js/haiku-libro-consultas-v1.js");
+    const p = { ...pagoLibro, tipo_movimiento: "servicio", concepto: "masaje", texto_original: comprobante,
+        moneda: "CLP", bove: "17900" };
+    const otroPago = { ...p, tipo_movimiento: "alojamiento", concepto: "estadía", monto: 100000, folio: "001111",
+        bovtar: "001112", origen: { hoja: "Nov26", celda: "AB44:AE44" } };
+    const r = { ...libro.reservas[0], id: "reserva-libro", titular, tipo_estadia: "alojamiento",
+        pagos: [p, otroPago], advertencias: [] };
+    const servicio = { id: "s", reserva_id: "r", estadia_id: "e", fecha_servicio: entrada, hora_inicio: "19:30:00",
+        total: 30000, tipo_cobro: "normal", estado_servicio: "programado", catalogo_servicios: { nombre: "Masaje Terapéutico 30 min" } };
+    const cargo = { cargo_id: "c", servicio_id: servicio.id, reserva_id: "r", estadia_id: "e", tipo_cargo: "servicio",
+        concepto: "Masaje", monto: 30000, monto_ajustado: 30000, aplicado_neto: 0, saldo_cargo: 30000, estado: "activo" };
+    const tablas = { reserva_estadias: [{
+        id: "e", reserva_id: "r", fecha_ingreso: entrada, fecha_salida: salida, estado_estadia: "checked_out",
+        tipo_estadia: "alojamiento", cabanas: { numero: 4 },
+        reservas: { id: "r", titular_nombre: titular, estado_reserva: "checked_out" }
+    }], pagos: [], servicios: [servicio], vista_estado_cargos: [cargo] };
+    const estado = { generacion: 1, version: "a".repeat(64) };
+    let permite = true, autor = "operador";
+    const escrituras = [];
+    global.HAIKU_LIBRO_RESERVA_V1 = { estado: () => estado };
+    global.haikuTienePermiso = () => permite;
+    t.after(() => {
+        delete global.HAIKU_LIBRO_RESERVA_V1;
+        delete global.haikuTienePermiso;
+    });
+    const cliente = {
+        auth: { getSession: async () => ({ data: { session: { user: { id: autor } } } }) },
+        from(tabla) {
+            const consulta = { select: () => consulta, in: () => consulta, eq: () => consulta, order: () => consulta,
+                lte: () => consulta, gte: () => consulta,
+                range: async (a, z) => ({ data: structuredClone((tablas[tabla] || []).slice(a, z + 1)) }) };
+            return consulta;
+        },
+        async rpc(nombre, args) {
+            if (nombre === "haiku_libro_aplicaciones_servicio_capacidad_v1") return { data: { version: 1,
+                contrato: "aplicaciones_servicio_v1", rpc: "haiku_incorporar_pago_servicios_libro_v1", efectivo_sin_identificador: false } };
+            assert.equal(nombre, "haiku_incorporar_pago_servicios_libro_v1");
+            escrituras.push(args);
+            if (escrituras.length === 1) throw new Error("Conexión interrumpida");
+            return { data: { ok: true, pagos_creados: 1, omitidos: 0 } };
+        }
+    };
+    const datos = { ...estado, autor, reservaLibro: r, origen: p.origen,
+        destino: { reservaId: "r", estadiaId: "e", cabana: 4, fecha: entrada } };
+    const preparar = (cambios = {}) => libroConsultas.prepararPagoInformeCloudbeds({ ...datos, ...cambios }, cliente);
+    await assert.rejects(preparar({ destino: { ...datos.destino, estadiaId: "otra" } }), /estadía destino/);
+    const revision = await preparar();
+    assert.deepEqual(revision.destinos, [{ nombre: "Masaje Terapéutico 30 min", fecha: entrada, hora: "19:30", monto: 30000 }]);
+    permite = false;
+    await assert.rejects(revision.confirmar(), /permiso/);
+    permite = true;
+    autor = "otra-sesion";
+    await assert.rejects(revision.confirmar(), /sesión/);
+    autor = datos.autor;
+    cargo.saldo_cargo = 29000;
+    await assert.rejects(revision.confirmar());
+    cargo.saldo_cargo = 30000;
+    assert.equal(escrituras.length, 0);
+    await assert.rejects(revision.confirmar(), { pagoInformePendiente: true });
+    assert.deepEqual(await revision.confirmar(), { creado: true });
+    assert.deepEqual(escrituras[0], escrituras[1], "el reintento conserva la operación idempotente");
+    const item = escrituras[1].p_item;
+    assert.equal(item.reserva_id, "r");
+    assert.deepEqual(
+        [item.argumentos.p_monto, item.argumentos.p_fecha_pago, item.argumentos.p_folio, item.argumentos.p_bove],
+        [p.monto, diaPago, p.folio, p.bovtar]
+    );
+    assert.deepEqual(item.datos_origen.origen_libro, p.origen);
+    assert.deepEqual(item.datos_origen.aplicaciones_servicio_v1.aplicaciones.map(a => a.cargo_id), ["c"]);
+});
+
 test("Pago coteja folio y autorización, y usa la fecha del comprobante en horario Chile", () => {
     const movimientos = pagar(fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 30000));
     const conPago = p => ({ pagosDisponibles: true, pagos: new Map([["r", [p]]]) });

@@ -3779,6 +3779,39 @@
         plan.items = plan.items.filter(item => ids.has(item.id));
     }
 
+    function limitarPagoInformeCloudbeds(plan, comparacion, {pago, destino, autor}) {
+        if (plan.contextoSeleccion.usuario !== autor) throw Error('La sesión cambió. Vuelve a comparar los informes.');
+        const movimientos = comparacion.pagosDetalle.filter(x => source(x.pago.origen) === source(pago.origen));
+        const [movimiento] = movimientos;
+        const estadia = comparacion.find(x => x.estado === 'asociada' && x.libro === movimiento?.reserva)?.sistema;
+        const camposComprobante = ['monto','fecha_comprobante','folio','bovtar','codigo_autorizacion'];
+        if (movimientos.length !== 1 || estadia?.reserva_id !== destino.reservaId || estadia?.id !== destino.estadiaId ||
+            Number(estadia.cabana) !== destino.cabana || estadia.fecha_checkin !== destino.fecha ||
+            estadia.fecha_checkout !== movimiento.reserva.fecha_checkout ||
+            camposComprobante.some(campo => movimiento.pago[campo] !== pago[campo]) ||
+            medioLibro(movimiento.pago) !== medioLibro(pago))
+            throw Error('Cambió el comprobante del Libro o la estadía destino. Vuelve a comparar los informes.');
+        const item = plan.items.find(x => x.id === idMovimientoIncorporacion(movimiento));
+        const pagoExistente = movimiento.sistema || movimiento.resolucionPago?.pagoSistema;
+        if (item?.categoria === 'omitidos' && pagoExistente?.reserva_id === destino.reservaId) {
+            plan.items = [item];
+            return;
+        }
+        const aplicaciones = movimiento.destinoFinanciero?.aplicaciones || [];
+        const servicio = item?.payload?.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato;
+        // Una reserva puede reunir cargos de varias estadías.
+        const cargoVerificado = servicio && aplicaciones.length > 0 && aplicaciones.every(a =>
+            a.estado === 'destino_unico' && a.cargo?.estadia_id === estadia.id && a.cargo?.servicio?.estadia_id === estadia.id);
+        const alojamiento = pago.tipo_movimiento === 'alojamiento' && movimiento.pago.tipo_movimiento === 'alojamiento' &&
+            item?.payload?.argumentos?.p_modo_aplicacion === 'alojamiento';
+        if (!item || item.dependeDe.length || item.distribucionManual || item.payload?.reserva_ref ||
+            item.payload?.argumentos?.p_reserva_id !== destino.reservaId || (!alojamiento && !cargoVerificado) ||
+            (!item.seleccionado && item.manualPago?.tipo !== 'asociacion_pago')) {
+            throw Error(item?.motivos[0] || 'Revisa el cargo y el comprobante en Comparar Libro para confirmar este pago.');
+        }
+        plan.items = [item];
+    }
+
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null, origenesAbonosAviso = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
@@ -4686,6 +4719,7 @@
             return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1);
         }
         adjuntarConflictosFuente(plan,result,contexto,decisiones,aprobados,cliente);
+        if (result.pagoInformeCloudbeds) limitarPagoInformeCloudbeds(plan, comparacion, result.pagoInformeCloudbeds);
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
         if (result.cancelaciones_confirmadas?.length) {
@@ -5793,6 +5827,53 @@
             return null;
         });
     }
+
+    async function prepararPagoInformeCloudbeds({reservaLibro, origen, destino, generacion, version, autor}, cliente = root.haikuSupabase) {
+        const verificarAcceso = async () => {
+            const {data, error} = await cliente.auth.getSession();
+            if (error || data?.session?.user?.id !== autor || root.haikuTienePermiso?.('pagos.registrar') !== true)
+                throw Error('Tu sesión debe tener permiso para registrar pagos. Vuelve a comparar los informes.');
+        };
+        await verificarAcceso();
+        const reserva = structuredClone(reservaLibro);
+        const pago = reserva.pagos.find(p => source(p.origen) === source(origen));
+        if (!pago) throw Error('No encontré el comprobante asociado a la reserva en el Libro.');
+        const result = {reservas:[reserva], generacion, version_libro:version,
+            pagoInformeCloudbeds:{pago,destino,autor},
+            q:{desde:reservaLibro.fecha_checkin, hasta:reservaLibro.fecha_checkout,
+                solo_pagos:true, focal:true, abonosAviso:new Set([source(origen)])}};
+        const decisiones = new Map(), aprobados = new Set();
+        let plan = await prepararIncorporacion(result, decisiones, aprobados, cliente);
+        await verificarAcceso();
+        const [item] = plan.items;
+        if (item.categoria === 'omitidos') return {registrado:true};
+        const comparacion = contextoVisualPlanes.get(plan);
+        const movimiento = comparacion.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id);
+        const destinos = item.payload.argumentos.p_modo_aplicacion === 'alojamiento' ? [{nombre:'Alojamiento'}] :
+            movimiento.destinoFinanciero.aplicaciones.map(a => ({
+                nombre:a.cargo.servicio.catalogo_servicios?.nombre || a.cargo.concepto,
+                fecha:a.cargo.servicio.fecha_servicio, hora:a.cargo.servicio.hora_inicio?.slice(0,5), monto:a.monto
+            }));
+        const confirmar = async () => {
+            try {
+                await verificarAcceso();
+                if (!plan.items[0].seleccionado) {
+                    plan = await resolverAprobacionManualPago(result, decisiones, aprobados, plan, item.id,
+                        {tipo:'asociacion_pago'}, cliente);
+                }
+                const ejecucion = await confirmarIncorporacion(result, decisiones, aprobados, plan, cliente);
+                const creado = ejecucion.resultado.pagos_creados === 1;
+                if (!creado && ejecucion.resultado.omitidos !== 1)
+                    throw Error('Proyecto H no confirmó el estado del pago. Vuelve a comparar los informes.');
+                return {creado};
+            } catch (error) {
+                if (plan.solicitudPendiente && !plan.solicitudPendiente.confirmada) error.pagoInformePendiente = true;
+                throw error;
+            }
+        };
+        return {destinos, confirmar};
+    }
+
     async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){
         if(!root.document)throw new Error('La vista de preparación sólo está disponible en el panel.');
 
@@ -5910,7 +5991,7 @@
     let ocupado = false;
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,procesando:()=>ocupado,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
-        abrirComparacionEstructurada, abrirPreparacionComparacion, compararAbonosAviso, reanudarComparacionHistorica,
+        abrirComparacionEstructurada, abrirPreparacionComparacion, compararAbonosAviso, prepararPagoInformeCloudbeds, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago, verificadorFuenteConsulta});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;

@@ -1,4 +1,4 @@
-/* Haku · Fuentes de sólo lectura y vista de Informes Cloudbeds. */
+/* Haku · Comparación de Informes Cloudbeds y revisión de pagos. */
 (function (root) {
     "use strict";
 
@@ -136,7 +136,7 @@
         const seleccion = lectura.listarHojas().filter(h => meses.has(informes.normalizar(h).replace(/\s/g, "")));
         if (!seleccion.length) return { hojas: [] };
         const hojas = (await lectura.consultarHojas(seleccion)).filter(Boolean);
-        return { hojas, finanzas };
+        return { hojas, finanzas, estado: lectura.estado?.() };
     }
 
     function permisos() {
@@ -186,7 +186,8 @@
             throw new Error("Cambió la sesión o los permisos. Vuelve a adjuntar los informes.");
         }
         return { documentos, errores, filas: informes.comparar(filas, { proyecto, libro }),
-            proyectoDisponible: proyecto?.disponible === true, hojas: (libro?.hojas || []).map(h => h.hoja) };
+            proyectoDisponible: proyecto?.disponible === true, hojas: (libro?.hojas || []).map(h => h.hoja),
+            autor, fuenteLibro: libro?.estado };
     }
 
     function elemento(tag, clase, texto) {
@@ -223,16 +224,15 @@
         return bloque;
     }
 
-    function abrirReserva(fila, contenedor) {
+    const seleccionReserva = f => ({ estadiaId: f.estadiaId, numeroCabana: String(f.cabana), fecha: f.fecha });
+
+    function abrirReserva(fila, acciones, aviso) {
         const accion = elemento("button", "", "Ver reserva");
         accion.type = "button";
-        const aviso = elemento("small");
-        aviso.setAttribute("role", "status");
         accion.addEventListener("click", async () => {
             accion.disabled = true;
-            aviso.textContent = "";
             const f = fila.destino;
-            const seleccion = { estadiaId: f.estadiaId, numeroCabana: String(f.cabana), fecha: f.fecha };
+            const seleccion = seleccionReserva(f);
             try {
                 const inspector = root.HAIKU_INSPECTOR_V1;
                 const abierta = inspector?.abrirReserva ? await inspector.abrirReserva(f.reservaId, accion, seleccion) :
@@ -241,23 +241,123 @@
             } catch (_) { aviso.textContent = "No pude abrir la reserva. Vuelve a consultar."; }
             finally { accion.disabled = false; }
         });
-        contenedor.append(accion, aviso);
+        acciones.append(accion);
+        return accion;
     }
 
-    function montarFila(fila) {
+    function incorporarPago(fila, acciones, aviso, revision, verReserva, {autor, fuenteLibro}, cliente, conciliar, bloquearCierre) {
+        const libro = root.HAIKU_LIBRO_CONSULTAS;
+        if (!fila.pagoIncorporable || !Number.isSafeInteger(fuenteLibro?.generacion) ||
+            root.haikuTienePermiso?.("pagos.registrar") !== true || !libro?.prepararPagoInformeCloudbeds) return;
+        const incorporar = elemento("button", "haku-cloudbeds-informes__principal", "Incorporar pago");
+        incorporar.type = "button";
+        incorporar.setAttribute("aria-expanded", "false");
+        acciones.prepend(incorporar);
+        const limpiarRevision = () => {
+            revision.replaceChildren();
+            revision.hidden = true;
+            incorporar.setAttribute("aria-expanded", "false");
+            incorporar.disabled = false;
+        };
+        const registrarResultado = creado => {
+            bloquearCierre(false);
+            limpiarRevision();
+            incorporar.remove();
+            fila.pagoIncorporable = null;
+            const mensaje = creado ? "Pago incorporado en Proyecto H." : "El pago ya está registrado en Proyecto H.";
+            fila.proyecto = { estado: "coincide", detalle: mensaje };
+            conciliar();
+            aviso.textContent = mensaje;
+            verReserva.focus();
+        };
+        incorporar.addEventListener("click", async () => {
+            incorporar.disabled = true;
+            aviso.textContent = "Verificando comprobante y destino…";
+            try {
+                const preparacion = await libro.prepararPagoInformeCloudbeds({
+                    ...fila.pagoIncorporable, ...fuenteLibro, autor
+                }, cliente);
+                if (preparacion.registrado) { registrarResultado(false); return; }
+                const importe = informes.pesos(fila.credito);
+                const datos = elemento("div", "haku-cloudbeds-informes__pago-datos");
+                datos.append(elemento("strong", "", importe), elemento("small", "",
+                    partes(fila.medio, informes.dia(fila.comprobante.fecha))));
+                const destinos = elemento("ul", "haku-cloudbeds-informes__pago-destinos");
+                for (const d of preparacion.destinos) {
+                    destinos.append(elemento("li", "", partes(d.nombre, informes.dia(d.fecha), d.hora,
+                        preparacion.destinos.length > 1 && informes.pesos(d.monto))));
+                }
+                const controles = elemento("div", "haku-cloudbeds-informes__acciones");
+                const confirmar = elemento("button", "haku-cloudbeds-informes__principal", "Confirmar pago");
+                const cancelar = elemento("button", "", "Cancelar");
+                confirmar.type = cancelar.type = "button";
+                cancelar.addEventListener("click", () => {
+                    limpiarRevision();
+                    aviso.textContent = "";
+                    incorporar.focus();
+                });
+                confirmar.addEventListener("click", async () => {
+                    confirmar.disabled = cancelar.disabled = true;
+                    bloquearCierre(true);
+                    aviso.textContent = "Confirmando pago…";
+                    try {
+                        const resultado = await preparacion.confirmar();
+                        registrarResultado(resultado.creado);
+                        await Promise.allSettled([
+                            Promise.resolve().then(() => root.haikuCargarAbonosSupabase?.()),
+                            Promise.resolve().then(() => root.haikuCargarSaldosCheckinSupabase?.()),
+                            Promise.resolve().then(() => root.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("pago de Informes Cloudbeds")),
+                            Promise.resolve().then(() => {
+                                const inspector = root.HAIKU_INSPECTOR_V1?.estado?.();
+                                const {reservaId} = fila.destino;
+                                if (inspector?.reservaAbierta && inspector.entidadInspector === reservaId) {
+                                    return root.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId?.(reservaId, verReserva,
+                                        inspector.seleccionInspector || seleccionReserva(fila.destino));
+                                }
+                            })
+                        ]);
+                    } catch (error) {
+                        bloquearCierre(!!error.pagoInformePendiente);
+                        confirmar.disabled = !error.pagoInformePendiente;
+                        confirmar.textContent = error.pagoInformePendiente ? "Reintentar confirmación" : "Confirmar pago";
+                        cancelar.disabled = !!error.pagoInformePendiente;
+                        aviso.textContent = error.pagoInformePendiente
+                            ? "La confirmación está pendiente. Reintenta desde aquí."
+                            : error?.message || "Proyecto H no confirmó el pago.";
+                    }
+                });
+                controles.append(confirmar, cancelar);
+                const aplicacion = elemento("div");
+                aplicacion.append(elemento("strong", "", "Aplicar pago a"), destinos);
+                const resumenPago = elemento("div", "haku-cloudbeds-informes__pago-resumen");
+                resumenPago.append(aplicacion, datos);
+                revision.append(resumenPago, controles);
+                revision.hidden = false;
+                incorporar.setAttribute("aria-expanded", "true");
+                aviso.textContent = "";
+                confirmar.focus();
+            } catch (error) {
+                aviso.textContent = error?.message || "No pude preparar el pago.";
+                incorporar.disabled = false;
+            }
+        });
+    }
+
+    function montarFila(fila, modelo, cliente, actualizarConteo, bloquearCierre) {
         const detalle = elemento("details", "haku-cloudbeds-informes__fila");
         const resumen = elemento("summary", "");
         const identidad = elemento("span", "haku-cloudbeds-informes__identidad");
         identidad.append(elemento("strong", "", partes(informes.titulos[fila.tipo], fila.titular || (fila.id ? `#${fila.id}` : "Sin reserva"),
             informes.cab(fila.cabana) || fila.cabanas?.map(informes.cab).join(", "))),
             elemento("small", "", partes(fila.tipo !== "reserva" && fila.entrada && `IN ${informes.dia(fila.entrada)}`, resumenFila(fila))));
-        resumen.append(identidad, elemento("span", "haku-cloudbeds-informes__indicadores"));
-        for (const [nombre, r] of [["Proyecto H", fila.proyecto], ["Libro", fila.libro]]) {
+        const indicadores = elemento("span", "haku-cloudbeds-informes__indicadores");
+        resumen.append(identidad, indicadores);
+        const actualizarIndicadores = () => indicadores.replaceChildren(...[["Proyecto H", fila.proyecto], ["Libro", fila.libro]].map(([nombre, r]) => {
             const corto = nombre === "Proyecto H" ? "H" : "Libro";
-            const indicador = elemento("span", `haku-cloudbeds-informes__indicador is-${r.estado}`,
+            return elemento("span", `haku-cloudbeds-informes__indicador is-${r.estado}`,
                 r.estado === "falta" ? etiqueta(nombre, r) : `${corto} · ${etiqueta(nombre, r)}`);
-            resumen.lastElementChild.append(indicador);
-        }
+        }));
+        actualizarIndicadores();
         detalle.append(resumen);
         // Sólo se montan los detalles al abrir la fila.
         detalle.addEventListener("toggle", () => {
@@ -287,7 +387,22 @@
             const fuentes = elemento("div", "haku-cloudbeds-informes__fuentes");
             fuentes.append(bloqueFuente("Proyecto H", fila.proyecto), bloqueFuente("Libro", fila.libro));
             cuerpo.append(evidencia, fuentes);
-            if (fila.destino) abrirReserva(fila, cuerpo);
+            if (fila.destino) {
+                const acciones = elemento("div", "haku-cloudbeds-informes__acciones");
+                const revision = elemento("section", "haku-cloudbeds-informes__revision-pago");
+                revision.hidden = true;
+                const aviso = elemento("small", "haku-cloudbeds-informes__aviso");
+                aviso.setAttribute("role", "status");
+                const avisoReserva = elemento("small", "haku-cloudbeds-informes__aviso");
+                avisoReserva.setAttribute("role", "status");
+                const verReserva = abrirReserva(fila, acciones, avisoReserva);
+                incorporarPago(fila, acciones, aviso, revision, verReserva, modelo, cliente, () => {
+                    fuentes.firstElementChild.replaceWith(bloqueFuente("Proyecto H", fila.proyecto));
+                    actualizarIndicadores();
+                    actualizarConteo();
+                }, bloquearCierre);
+                cuerpo.append(acciones, revision, aviso, avisoReserva);
+            }
             detalle.append(cuerpo);
         });
         return detalle;
@@ -316,14 +431,14 @@
         return campo;
     }
 
-    function montar(contenedor, modelo) {
+    function montar(contenedor, modelo, cliente = root.haikuSupabase) {
         const { documentos, errores, filas, proyectoDisponible, hojas } = modelo;
         const articulo = elemento("article", "haku-cloudbeds-informes");
         articulo.dataset.cloudbedsInformes = "";
         const cabecera = elemento("header", "");
         const titulo = elemento("div", "");
         titulo.append(elemento("h2", "", "Informes Cloudbeds"),
-            elemento("small", "", partes("Solo lectura", cantidad(documentos.length, "archivo"), cantidad(filas.length, "registro"))));
+            elemento("small", "", partes(cantidad(documentos.length, "archivo"), cantidad(filas.length, "registro"))));
         const cerrar = elemento("button", "", "×");
         cerrar.type = "button";
         cerrar.setAttribute("aria-label", "Cerrar informe Cloudbeds");
@@ -362,12 +477,23 @@
             articulo.append(controles, resultados, mas);
 
             let visibles = [], desde = 0;
+            const montadas = new WeakMap(), confirmaciones = new Set();
+            const actualizarConteo = () => {
+                conteo.textContent = `${desde} de ${visibles.length} · ${visibles.filter(diferencias).length} con diferencias`;
+            };
             function mostrarMas() {
                 const lote = visibles.slice(desde, desde + 20);
-                resultados.append(...lote.map(montarFila));
+                resultados.append(...lote.map(fila => {
+                    if (!montadas.has(fila)) montadas.set(fila, montarFila(fila, modelo, cliente, actualizarConteo, ocupado => {
+                        if (ocupado) confirmaciones.add(fila);
+                        else confirmaciones.delete(fila);
+                        cerrar.disabled = tipos.disabled = filtros.disabled = confirmaciones.size > 0;
+                    }));
+                    return montadas.get(fila);
+                }));
                 desde += lote.length;
                 mas.hidden = desde >= visibles.length;
-                conteo.textContent = `${desde} de ${visibles.length} · ${visibles.filter(diferencias).length} con diferencias`;
+                actualizarConteo();
             }
             function filtrar() {
                 visibles = filas.filter(f => porCategoria(f, tipos.value) && porEstado(f, filtros.value));
