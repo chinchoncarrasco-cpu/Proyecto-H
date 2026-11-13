@@ -5,6 +5,7 @@
     if (!DOC) return;
 
     const STYLE_ID = "haiku-libro-consulta-anual-ui-v1-style";
+    const RESPUESTA = ".haiku-asistente-mensaje--asistente";
 
     function asegurarEstilos() {
         if (DOC.getElementById(STYLE_ID)) return;
@@ -241,29 +242,33 @@
         out.append(elemento("p", "haiku-anual-pie", "Sólo lectura · no se modificó el Libro ni Proyecto H."));
     }
 
-    function procesar(el) {
-        if (!(el instanceof root.HTMLElement)) return;
-        const candidatos = el.matches?.(".haiku-asistente-mensaje--asistente") ? [el] : [...el.querySelectorAll?.(".haiku-asistente-mensaje--asistente") || []];
-        for (const out of candidatos) {
-            if (out.dataset.haikuAnualCompacto === "1") continue;
-            const data = parsear(out.textContent);
-            if (data) renderizar(out, data);
-        }
+    function procesar(out) {
+        if (!out.isConnected || out.dataset.haikuAnualCompacto === "1") return;
+        const texto = out.textContent;
+        if (!texto.trimStart().startsWith("LIBRO · CONSULTA ANUAL ·")) return;
+        const data = parsear(texto);
+        if (data) renderizar(out, data);
     }
 
     function iniciar() {
         asegurarEstilos();
-        procesar(DOC.body);
+        const area = DOC.getElementById("haiku-asistente-mensajes") || DOC.body;
+        area.querySelectorAll(RESPUESTA).forEach(procesar);
         const observer = new MutationObserver(mutations => {
+            const candidatos = new Set();
             for (const m of mutations) {
-                if (m.type === "characterData") procesar(m.target.parentElement);
-                else {
-                    procesar(m.target);
-                    m.addedNodes.forEach(n => n.nodeType === 1 && procesar(n));
+                const origen = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                const respuesta = origen?.closest(RESPUESTA);
+                if (respuesta) candidatos.add(respuesta);
+                for (const nodo of m.addedNodes) {
+                    if (nodo.nodeType !== 1) continue;
+                    if (nodo.matches(RESPUESTA)) candidatos.add(nodo);
+                    else if (nodo.childElementCount) nodo.querySelectorAll(RESPUESTA).forEach(out => candidatos.add(out));
                 }
             }
+            candidatos.forEach(procesar);
         });
-        observer.observe(DOC.body, { subtree: true, childList: true, characterData: true });
+        observer.observe(area, { subtree: true, childList: true, characterData: true });
     }
 
     if (DOC.readyState === "loading") DOC.addEventListener("DOMContentLoaded", iniciar, { once: true });

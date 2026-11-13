@@ -34,14 +34,14 @@
         if (!document.getElementById("haiku-libro-pagos-ui-v1-script")) {
             const script = document.createElement("script");
             script.id = "haiku-libro-pagos-ui-v1-script";
-            script.src = "js/haiku-libro-pagos-ui-v1.js?v=3";
+            script.src = "js/haiku-libro-pagos-ui-v1.js?v=4";
             script.defer = true;
             document.head.appendChild(script);
         }
         if (!document.getElementById("haiku-libro-pagos-seleccion-v1-script")) {
             const seleccion = document.createElement("script");
             seleccion.id = "haiku-libro-pagos-seleccion-v1-script";
-            seleccion.src = "js/haiku-libro-pagos-seleccion-v1.js?v=1";
+            seleccion.src = "js/haiku-libro-pagos-seleccion-v1.js?v=2";
             seleccion.defer = true;
             document.head.appendChild(seleccion);
         }

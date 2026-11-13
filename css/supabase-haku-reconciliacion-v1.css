@@ -713,6 +713,25 @@
 .haiku-incorporacion-item--omitidos { border-left-color: #a7b0aa; background: #fafbfa; }
 .haiku-incorporacion-item--pagos { border-left-color: #4b9b70; }
 
+/* Haku conserva los controles y el historial de cada ficha. El navegador
+   difiere el diseño y pintado del contenido que queda fuera de la vista. */
+.haiku-asistente-mensajes .haiku-incorporacion-lista > .haiku-incorporacion-item,
+.haiku-asistente-mensajes .haku-incorporacion-final-lista > .haku-incorporacion-final-item {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 96px;
+}
+
+/* La revisión activa conserva sus dimensiones al pasar a la sección de preparados. */
+.haiku-asistente-mensajes .haiku-incorporacion-item:has(.haiku-incorporacion-manual-pago-panel:not([hidden])) {
+    content-visibility: visible;
+}
+
+.haiku-asistente-mensajes .haiku-comparacion-acordeon > ul > .haku-comparacion-fila,
+.haiku-asistente-mensajes .haku-pagos-seccion > .haku-pago-fila {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 48px;
+}
+
 .haiku-incorporacion-item-cabecera {
     display: flex;
     align-items: flex-start;

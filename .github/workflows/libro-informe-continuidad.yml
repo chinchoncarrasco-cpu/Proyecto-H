@@ -6,6 +6,9 @@ on:
       - "js/supabase-asistente-libro-actualizacion-v1.js"
       - "js/supabase-asistente-libro-auto-v1.js"
       - "js/haiku-libro-consultas-v1.js"
+      - "js/haiku-libro-consulta-anual-ui-v1.js"
+      - "js/haiku-libro-pagos-ui-v1.js"
+      - "js/haiku-libro-pagos-seleccion-v1.js"
       - "js/haiku-libro-bloqueos-v1.js"
       - "js/haiku-libro-bloqueos-retiro-v1.js"
       - "tests/libro-bloqueos.test.cjs"
@@ -16,6 +19,7 @@ on:
       - "js/supabase-libro-reserva-v1.js"
       - "tests/libro-consulta-incorporacion-continua.test.cjs"
       - "tests/libro-consulta-incorporacion-browser-check.cjs"
+      - "tests/sites-asistente-scroll-browser-check.cjs"
       - "js/supabase-asistente-libro-prioridad-v1.js"
       - "tests/haiku-libro-prioridad.test.cjs"
       - "js/haiku-libro-confirm-cancel-fix-v1.js"
@@ -76,6 +80,7 @@ jobs:
           resultado=0
           node tests/libro-bloqueos-tema-browser-check.cjs || resultado=$?
           node tests/libro-consulta-incorporacion-browser-check.cjs || resultado=$?
+          node tests/sites-asistente-scroll-browser-check.cjs || resultado=$?
           node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
           node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
           exit "$resultado"

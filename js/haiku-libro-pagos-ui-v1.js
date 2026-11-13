@@ -7,10 +7,12 @@
     "use strict";
     if (!root.document) return;
 
+    const TARJETA_SIN_DETALLE = ".haiku-asistente-preview.haiku-incorporacion " +
+        ":is(.haiku-incorporacion-item--pagos, .haiku-incorporacion-item--dudosos):not([data-haiku-pago-ui-v1])";
     const CACHE = new Map();
+    const pendientes = new Set();
     let programado = false;
     let procesando = false;
-    let restauracionScrollPendiente = null;
 
     function asegurarCss() {
         if (document.getElementById("haiku-libro-pagos-ui-v1-css")) return;
@@ -68,43 +70,6 @@
         const checkin = fechaIsoDesdeBreve(bloqueVisual);
         const concepto = textoDato(card, "Concepto");
         return { card, titular, cab, monto, bloqueVisual, checkin, concepto };
-    }
-
-    function capturarScroll(origen) {
-        const estados = [];
-        for (let nodo = origen?.parentElement; nodo; nodo = nodo.parentElement) {
-            if (nodo.scrollHeight > nodo.clientHeight + 1 || nodo.scrollWidth > nodo.clientWidth + 1) {
-                estados.push({ nodo, top: nodo.scrollTop, left: nodo.scrollLeft });
-            }
-        }
-        const ventana = { x: root.scrollX || 0, y: root.scrollY || 0 };
-        return () => {
-            for (const estado of estados) {
-                if (!estado.nodo?.isConnected) continue;
-                estado.nodo.scrollTop = estado.top;
-                estado.nodo.scrollLeft = estado.left;
-            }
-            root.scrollTo?.(ventana.x, ventana.y);
-        };
-    }
-
-    function prepararFeedbackAprobacion(boton) {
-        restauracionScrollPendiente = capturarScroll(boton);
-        boton.setAttribute("aria-busy", "true");
-        boton.textContent = boton.classList.contains("haiku-incorporacion-atajo--aprobar")
-            ? "Aprobando pagos… ⏳"
-            : "Aprobando… ⏳";
-    }
-
-    function restaurarScrollSiCorresponde() {
-        if (!restauracionScrollPendiente) return;
-        const vistaCompleta = document.querySelector(
-            ".haiku-asistente-preview.haiku-incorporacion .haiku-incorporacion-seccion"
-        );
-        if (!vistaCompleta) return;
-        const restaurar = restauracionScrollPendiente;
-        restauracionScrollPendiente = null;
-        requestAnimationFrame(() => requestAnimationFrame(restaurar));
     }
 
     const prefijosMes = [
@@ -258,17 +223,12 @@
     }
 
     async function mejorarPagos() {
-        if (procesando) return;
+        const cards = [...pendientes].filter(card => card.isConnected && card.matches(TARJETA_SIN_DETALLE));
+        pendientes.clear();
+        const api = root.HAIKU_LIBRO_RESERVA_V1;
+        if (!cards.length || !api?.consultarHoja || !api?.listarHojas) return;
         procesando = true;
         try {
-            const api = root.HAIKU_LIBRO_RESERVA_V1;
-            if (!api?.consultarHoja || !api?.listarHojas) return;
-            const cards = Array.from(document.querySelectorAll(
-                ".haiku-asistente-preview.haiku-incorporacion .haiku-incorporacion-item--pagos:not([data-haiku-pago-ui-v1])," +
-                ".haiku-asistente-preview.haiku-incorporacion .haiku-incorporacion-item--dudosos:not([data-haiku-pago-ui-v1])"
-            ));
-            if (!cards.length) return;
-
             const infos = cards.map(identidadCard).filter(x => x.checkin && x.titular && x.monto != null);
             const porHoja = new Map();
             for (const info of infos) {
@@ -284,17 +244,19 @@
                 catch (_) { continue; }
                 const candidatos = pagosDeData(data);
                 for (const info of items) {
+                    if (!info.card.isConnected) continue;
                     const pago = elegirPago(info, candidatos);
                     if (pago) aplicarPago(info, pago);
                 }
             }
         } finally {
             procesando = false;
+            programar();
         }
     }
 
     function programar() {
-        if (programado) return;
+        if (programado || procesando || !pendientes.size) return;
         programado = true;
         requestAnimationFrame(() => {
             programado = false;
@@ -302,31 +264,25 @@
         });
     }
 
-    asegurarCss();
-    document.addEventListener("click", event => {
-        const botonAprobar = event.target?.closest?.(
-            ".haiku-incorporacion-aprobar, .haiku-incorporacion-atajo--aprobar"
-        );
-        if (botonAprobar) prepararFeedbackAprobacion(botonAprobar);
-        if (event.target?.closest?.("button.libro-reserva-boton, .haiku-asistente-preview details > summary")) {
-            setTimeout(programar, 0);
-        }
-    }, true);
-    window.addEventListener("haiku:libro-cambio", () => {
-        CACHE.clear();
-        restauracionScrollPendiente = null;
-    });
+    function recogerTarjetas(nodo) {
+        if (nodo.nodeType !== 1) return;
+        if (nodo.matches(TARJETA_SIN_DETALLE)) pendientes.add(nodo);
+        if (nodo.childElementCount) nodo.querySelectorAll(TARJETA_SIN_DETALLE).forEach(card => pendientes.add(card));
+    }
 
-    const observer = new MutationObserver(mutations => {
-        if (mutations.some(m => m.addedNodes?.length)) {
+    function iniciar() {
+        const area = document.getElementById("haiku-asistente-mensajes") || document.body;
+        const observer = new MutationObserver(mutations => {
+            for (const m of mutations) m.addedNodes.forEach(recogerTarjetas);
             programar();
-            restaurarScrollSiCorresponde();
-        }
-    });
-    const iniciar = () => {
-        observer.observe(document.body, { childList: true, subtree: true });
+        });
+        observer.observe(area, { childList: true, subtree: true });
+        recogerTarjetas(area);
         programar();
-    };
+        root.addEventListener("haiku:libro-cambio", () => CACHE.clear());
+    }
+
+    asegurarCss();
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar, { once: true });
     else iniciar();
 })(typeof window !== "undefined" ? window : globalThis);
