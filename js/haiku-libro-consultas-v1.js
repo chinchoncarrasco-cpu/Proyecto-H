@@ -7159,9 +7159,11 @@
             const anterior = valorVisible(c.campo, c.anterior);
             const propuesto = valorVisible(c.campo, c.libro);
             const fila = elemento('li', compacta ? 'haku-actualizacion-libro__cambio' : '');
-            if (compacta) fila.setAttribute('aria-label', `${c.campo}. Proyecto H: ${anterior}. Libro: ${propuesto}.`);
             const flecha = elemento('span','haku-cambio-flecha','→');
-            flecha.setAttribute('aria-hidden','true');
+            if (compacta) {
+                fila.setAttribute('aria-label', `${c.campo}. Proyecto H: ${anterior}. Libro: ${propuesto}.`);
+                flecha.setAttribute('aria-hidden','true');
+            }
             fila.append(elemento('strong','haku-cambio-campo',c.campo + (compacta ? '' : ':')),
                 elemento('span','haku-cambio-actual',anterior), flecha, elemento('span','haku-cambio-libro',propuesto));
             cambios.append(fila);
