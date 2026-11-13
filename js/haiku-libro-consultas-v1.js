@@ -2219,7 +2219,8 @@
                     const detalle = { estado, canonico:true, item_id:item.item_id, reserva:r,
                         servicio:item.servicio, texto:item.texto, sistema:item.servicio_existente,
                         lectura:{nombre:item.mapa?.nombre,fecha:item.fecha,hora:item.hora,
-                            cantidad:item.payload?.cantidad,razones:item.razones || []},
+                            cantidad:item.payload?.cantidad,cortesia:item.payload?.tipo_cobro==='cortesia',
+                            razones:item.razones || []},
                         finanzas:item.finanzas_existente,
                         razon: !identidadSegura ? 'La asociación de la reserva requiere revisión antes de incorporar.' :
                             item.razones?.join(' · ') || (estado === 'en_sistema' ? 'Ya existe en Proyecto H.' : 'Preparado para incorporar.'),
@@ -2606,8 +2607,10 @@
     function evaluarFilaHistorial(fila,comparacion){
         if(!fila)return {accionable:false,revision:{motivos:['No pude leer todos los datos de esta reserva. Revisa su entrada, salida y cabaña en el Libro.'],candidatos:[]}};
         const plan=crearPlanIncorporacion([fila.libro],comparacionPreparacionHistorial([fila],comparacion));
+        const elegido=plan.items.find(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria));
         return {
-            accionable:plan.items.some(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria)),
+            accionable:Boolean(elegido),
+            propuesta:elegido?.payload,
             revision:{categoria:fila.categoria,motivos:[...new Set([
                 ...(fila.libro.advertencias||[]),...plan.items.flatMap(x=>x.motivos||[])
             ])],candidatos:(fila.candidatosDetalle||[]).map(s=>({titular:s.titular,cabana:s.cabana,
@@ -2689,6 +2692,7 @@
                     const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable&&
                         (!registro.fuente_vigente||registro.fuente_vigente.estado==='verificada');
                     items.push({...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
+                        ...(accionable?{vistaIncorporacion:vistaIncorporacionHistorial(evaluacion.propuesta)}:{}),
                         proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'});
                     if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
                     continue;
@@ -2731,8 +2735,11 @@
                 const evaluacion=evaluarFilaHistorial(fila,comparacion);
                 const accionable=pendientes.every(x=>x.accionable)&&evaluacion.accionable;
                 const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico,revision:evaluacion.revision};
-                if(accionable)item.preparacion={reservas:[libro],comparacion:comparacionPreparacionHistorial([fila],comparacion),generacion,
-                    q:{...q,incluirServicios:false,serviciosOperativos:false}};
+                if(accionable){
+                    item.vistaIncorporacion=vistaIncorporacionHistorial(evaluacion.propuesta,pendientes,sistemaHistorico);
+                    item.preparacion={reservas:[libro],comparacion:comparacionPreparacionHistorial([fila],comparacion),generacion,
+                        q:{...q,incluirServicios:false,serviciosOperativos:false}};
+                }
                 items.push(item);
                 if(accionable){
                     filasPreparacion.push(fila);reservasPreparacion.push(libro);
@@ -2786,6 +2793,53 @@
             if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
         }
         return [...unicos.values()];
+    }
+
+    function diferenciasObservaciones(anterior,guardado) {
+        const antes=fragmentosObservaciones(anterior), despues=fragmentosObservaciones(guardado);
+        const clavesAntes=new Set(antes.map(claveFragmentoObservacion));
+        const clavesDespues=new Set(despues.map(claveFragmentoObservacion));
+        return {
+            añadidas:despues.filter(n=>!clavesAntes.has(claveFragmentoObservacion(n))),
+            retiradas:antes.filter(n=>!clavesDespues.has(claveFragmentoObservacion(n)))
+        };
+    }
+
+    function vistaIncorporacionHistorial(propuesta,detectados=[],sistema=null) {
+        const alta=propuesta.estadias?.[0];
+        const campos=[];
+        const agregar=(campo,libro,anterior)=>{
+            const privado=['titular_numero_documento','telefono_contacto','correo_contacto'].includes(campo);
+            const etiqueta=({fecha_ingreso:'Entrada',fecha_salida:'Salida',titular_nombre:'Titular',
+                estado_estadia:detectados.some(c=>c.campo==='estado_confirmacion')?'Confirmación':'Estado de la estadía',
+                noches:'Noches'})[campo]||etiquetasActualizacion[campo]||campo;
+            const mostrar=v=>privado&&v!=null&&v!==''?'Dato registrado':valorCambioIncorporacion(etiquetasActualizacion[campo],v,true);
+            campos.push({etiqueta,propuesto:privado?'Dato del Libro':mostrar(libro),
+                ...(anterior===undefined?{}:{anterior:mostrar(anterior)})});
+        };
+        if(alta){
+            for(const campo of ['fecha_ingreso','fecha_salida','tipo_estadia','adultos','ninos','mascotas','estado_estadia']){
+                if(alta.datos[campo]!=null)agregar(campo,alta.datos[campo]);
+            }
+            if(alta.noches>0)agregar('noches',alta.noches);
+            return {campos, notas:diferenciasObservaciones(null,propuesta.reserva?.observaciones)};
+        }
+        const {reserva,estadia}=propuesta;
+        for(const parche of [reserva,estadia]){
+            for(const [campo,libro] of Object.entries(parche?.despues||{})){
+                if(campo!=='observaciones')agregar(campo,libro,parche.antes[campo]);
+            }
+        }
+        if(sistema&&estadia&&['fecha_ingreso','fecha_salida','tipo_estadia'].some(c=>Object.hasOwn(estadia.despues,c))){
+            const cambios=estadia.despues;
+            const antes=nochesSistema(sistema), despues=nochesSistema({...sistema,
+                fecha_checkin:cambios.fecha_ingreso??sistema.fecha_checkin,fecha_checkout:cambios.fecha_salida??sistema.fecha_checkout,
+                tipo_estadia:cambios.tipo_estadia??sistema.tipo_estadia});
+            if(Number.isInteger(despues)&&despues>=0&&antes!==despues)agregar('noches',despues,Number.isInteger(antes)?antes:null);
+        }
+        const notas=Object.hasOwn(reserva?.despues||{},'observaciones')
+            ?diferenciasObservaciones(reserva.antes.observaciones,reserva.despues.observaciones):null;
+        return {campos,notas};
     }
 
     function unirObservacionesLibro(antes, propuestas, {conservarAnteriores=false,retirar=[]}={}) {
@@ -8047,11 +8101,8 @@
     function notasResultadoIncorporacion(cambio) {
         const {anterior,libro,tieneAnterior} = cambio;
         const limpiar = valor => String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi,'').trim();
-        const antes = fragmentosObservaciones(anterior), guardadas = fragmentosObservaciones(libro);
-        const clavesAntes = new Set(antes.map(claveFragmentoObservacion));
-        const clavesGuardadas = new Set(guardadas.map(claveFragmentoObservacion));
-        const añadidas = tieneAnterior ? guardadas.filter(n => !clavesAntes.has(claveFragmentoObservacion(n))) : [];
-        const retiradas = antes.filter(n => !clavesGuardadas.has(claveFragmentoObservacion(n)));
+        const diferencias=diferenciasObservaciones(anterior,libro);
+        const añadidas=tieneAnterior?diferencias.añadidas:[], retiradas=diferencias.retiradas;
         const notas = elemento('details','haku-comprobante-notas');
         const cuenta = [
             añadidas.length ? `${añadidas.length} añadida${añadidas.length === 1 ? '' : 's'}` : '',

@@ -608,13 +608,25 @@
                 ? operaciones.get(clave(r))||[] : [];
             const preparados=operativo.filter(x=>x.listo);
             if(puedeGuardarReserva||preparados.length){
-                const detalles=preparados.map(({tipo,detalle:x})=>tipo==='nota'?['Nota de la reserva',x.texto]:
-                    [x.lectura?.nombre||x.servicio?.concepto||'Servicio',x.lectura?.fecha,x.lectura?.hora?.slice(0,5)]);
-                if(puedeGuardarReserva)detalles.unshift(item.tipo==='nueva'?
-                    ['Reserva nueva',r.fecha_checkin,r.fecha_checkout,
-                        tieneServiciosAviso(r)?'También revisa los servicios y notas de la ficha':null]:
-                    ['Actualizar reserva',...new Set(cambios.map(c=>c.campo==='pagos_pendientes'?'Nota de cobro':etiquetas[c.campo]).filter(Boolean))]);
-                listos.push({titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,detalles});
+                const alta=puedeGuardarReserva&&item.tipo==='nueva';
+                const reserva=puedeGuardarReserva?item.vistaIncorporacion:null;
+                const servicios=preparados.filter(x=>x.tipo==='servicio').map(({detalle:x})=>({
+                    nombre:x.lectura?.nombre||x.servicio?.concepto||'Servicio',fecha:x.lectura?.fecha,
+                    hora:x.lectura?.hora?.slice(0,5),cantidad:x.lectura?.cantidad,
+                    cortesia:x.lectura?.cortesia===true
+                }));
+                const notas=preparados.filter(x=>x.tipo==='nota').map(({detalle:x})=>x.texto).filter(Boolean);
+                const accionReserva=alta?'Reserva nueva':'Actualizar reserva';
+                const resumen=[...(puedeGuardarReserva?[accionReserva]:[]),
+                    ...(!alta?lista(reserva?.campos).map(c=>c.etiqueta):[]),
+                    ...(!alta&&(lista(reserva?.notas?.añadidas).length||lista(reserva?.notas?.retiradas).length)?['Notas']:[]),
+                    ...(servicios.length?[`${servicios.length} ${servicios.length===1?'servicio':'servicios'}`]:[]),
+                    ...(notas.length?[`${notas.length} ${notas.length===1?'nota':'notas'}`]:[])];
+                listos.push({titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,fechaSalida:r.fecha_checkout,
+                    resumen:[...new Set(resumen)],
+                    vista:{accion:alta?'Crear reserva':puedeGuardarReserva?accionReserva:'Añadir a la reserva',
+                        campos:lista(reserva?.campos),notasReserva:reserva?.notas,servicios,notas,
+                        revisarServiciosAlta:alta&&tieneServiciosAviso(r)}});
                 for(const {detalle} of preparados)operacionesListas.push({id:detalle.item_id,reserva:r.id});
                 if(puedeGuardarReserva)reservasListas.push(r.id);
             }
