@@ -32,7 +32,7 @@ const server=http.createServer((req,res)=>{
                 window.start=async servicio=>{
                     const h=entorno({distribuido:false,conServicios:false});window.h=h;window.haikuSupabase=h.db;
                     const estado=HAIKU_LIBRO_RESERVA_V1.estado;window.HAIKU_LIBRO_RESERVA_V1={estado:()=>({...estado(),version:'a'.repeat(64)})};
-                    const p=h.r.pagos[0];p.medio_pago=null;p.texto_original+=' // '+(servicio?'PrePago / FC':'TDC');
+                    const p=h.r.pagos[0];p.medio_pago=null;p.texto_original+=' // '+(servicio?'PrePago / FC':'TC');
                     p.evidencia_financiera={sector:'pagos',columnas_ocupadas:{detalle:true,concepto:true,monto:true,fecha:true}};
                     if(!servicio){p.tipo_movimiento='alojamiento';p.concepto='cab2/1noche';}
                     window.original=JSON.stringify(h.r);window.gate=false;window.release=null;window.inc=0;window.actions=0;

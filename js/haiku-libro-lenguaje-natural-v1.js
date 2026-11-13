@@ -186,18 +186,27 @@
         const webpayPorConfirmar = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(texto);
         const copia = { ...pago, webpay_por_confirmar: webpayPorConfirmar };
 
-        const webpay = /web\s*pay/.test(texto);
-        if (root.HAIKU_LIBRO_PAGOS_CANON_V1?.medioDesdeTexto(pago) === "airbnb_prepaid_card" || /\bairbnb\s+prepaid\s+card\b/.test(texto)) copia.medio_pago = "airbnb_prepaid_card";
-        else if (webpay && /\bdebito\b/.test(texto)) copia.medio_pago = "webpay_debito";
-        else if (webpay && /\bcredito\b/.test(texto)) copia.medio_pago = "webpay_credito";
-        else if (/\bdebito\b/.test(texto)) copia.medio_pago = "debito";
-        else if (/\bcredito\b/.test(texto)) copia.medio_pago = "credito";
-        else if (/transf/.test(texto)) copia.medio_pago = "transferencia";
-        else if (/efectivo/.test(texto)) copia.medio_pago = "efectivo";
-        else if (webpay) copia.medio_pago = "webpay";
+        const canon = root.HAIKU_LIBRO_PAGOS_CANON_V1;
+        if (canon?.medioDesdeTexto) copia.medio_pago = canon.medioDesdeTexto(pago);
+        else {
+            const webpay = /web\s*pay/.test(texto);
+            const debito = /\bdebito\b/.test(texto), tdc = /\btdc\b/.test(texto);
+            if (/\bairbnb\s+prepaid\s+card\b/.test(texto)) copia.medio_pago = "airbnb_prepaid_card";
+            else if (tdc && (debito || /\b(?:transf(?:erencia)?|efectivo)\b/.test(texto))) copia.medio_pago = webpay ? "webpay" : null;
+            else if (debito) copia.medio_pago = webpay ? "webpay_debito" : "debito";
+            else if (tdc || /\bcredito\b/.test(texto)) copia.medio_pago = webpay ? "webpay_credito" : "credito";
+            else if (/transf/.test(texto)) copia.medio_pago = "transferencia";
+            else if (/efectivo/.test(texto)) copia.medio_pago = "efectivo";
+            else if (webpay) copia.medio_pago = "webpay";
+        }
 
         const montoValido = Number.isFinite(Number(copia.monto)) && Number(copia.monto) > 0;
-        if (copia.tipo_movimiento !== "penalidad" && montoValido && !pendienteCliente) {
+        if (copia.medio_pago === "airbnb_prepaid_card" &&
+            (pago.airbnb_liquidacion_pendiente || canon?.liquidacionAirbnbPendiente?.(pago.texto_original))) {
+            copia.airbnb_liquidacion_pendiente = true;
+            copia.estado_pago = "por_confirmar";
+            copia.pago_recibido = null;
+        } else if (copia.tipo_movimiento !== "penalidad" && montoValido && !pendienteCliente) {
             copia.estado_pago = "registrado_en_libro";
             copia.pago_recibido = true;
         } else if (pendienteCliente) {
@@ -210,6 +219,7 @@
     function evaluarMovimientoFinanciero(pago) {
         const dudoso = motivo => ({clase:"dudoso", motivo});
         if (!pago || typeof pago !== "object") return dudoso("Faltan los datos del comprobante.");
+        if (pago.airbnb_liquidacion_pendiente) return dudoso("Confirma la recepción, la fecha y el monto liquidado por Airbnb.");
         if (pago.conflicto_distribucion) return dudoso("Hay datos incompatibles entre las partes del comprobante. Revisa su distribución.");
         const texto = normalizarBase(pago.texto_original || "");
         const montoValido = Number.isFinite(Number(pago.monto)) && Number(pago.monto) > 0;

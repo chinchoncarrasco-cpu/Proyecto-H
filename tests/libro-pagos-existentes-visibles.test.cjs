@@ -196,11 +196,13 @@ test('un voucher físico con el mismo número conserva su identidad independient
     assert.deepEqual(h.cliente.mutaciones,[]);
 });
 
-test('el pago sin registrar sigue siendo nuevo seguro y la nota administrativa no crea otro pago', async () => {
+test('el WebPay por confirmar sin registro exige revisión y la nota administrativa no crea otro pago', async () => {
     const h = caso(); h.cliente.db.pagos.length = 0;
     const r = await h.consultar(F.consulta), modelo = h.Q.modeloPresentacionComparacion(r);
     assert.equal(r.comparacion.pagosDetalle.length, 1);
-    assert.equal(modelo.pagosFaltan.length, 1); assert.equal(modelo.pagosExistentes?.length, 0);
+    assert.equal(modelo.pagosFaltan.length, 0); assert.equal(modelo.pagosExistentes?.length, 0);
+    assert.equal(modelo.pagosRevisar.length,1);
+    assert.match(r.comparacion.pagosDetalle[0].motivos[0],/WebPay por confirmar/);
     const v = vista(h.w); v.render(r); assert.equal(v.existentes(), undefined);
     assert.deepEqual(h.cliente.mutaciones, []);
 });

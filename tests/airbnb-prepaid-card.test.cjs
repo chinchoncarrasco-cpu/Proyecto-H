@@ -99,6 +99,31 @@ test('isolated channel, paid-traveler text, generic commission, amounts and insu
         concepto:'Precio de la habitación'}),null);
 });
 
+test('una liquidación pendiente con desglose Airbnb acredita el medio y queda fuera de la incorporación',async()=>{
+    const F = require('./fixtures/libro-transferencias-bancarias.cjs');
+    const desglose = 'Pendiente por recibir transf Airbnb // Comisión de servicio del viajero // ' +
+        'Precio de la habitación // Comisión de servicio del anfitrión // Ganás $110.000';
+    assert.equal(C.medioDesdeTexto({texto_original:'Prepago Airbnb'}),METHOD);
+    assert.equal(C.medioDesdeTexto({texto_original:'Transferencia de huésped // reserva Airbnb'}),'transferencia');
+    assert.equal(C.medioDesdeTexto({texto_original:'Pendiente por recibir transf Airbnb'}),'transferencia');
+    const libro = F.leer([{titular:'Persona Prueba',pagos:[{glosa:'Persona Prueba // '+desglose,
+        concepto:'cab10/1noche',fecha:null,monto:120000}]}]);
+    const [p] = libro.pagos;
+    assert.equal(p.medio_pago,METHOD);
+    assert.equal(p.fecha_comprobante,null);
+    assert.equal(p.pago_recibido,null);
+    assert.equal(p.estado_pago,'por_confirmar');
+    assert.equal(p.clasificacion_financiera,'dudoso');
+    const q={desde:'2026-10-01',hasta:'2026-10-31'}, cliente=F.cliente(libro.reservas);
+    const comparacion=await Q.compararSistema(libro.reservas,cliente,q);
+    const plan=await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion},new Map(),new Set(),cliente);
+    const [item]=plan.items.filter(x=>x.pagoLibro);
+    assert.equal(item.categoria,'dudosos');
+    assert.equal(item.payload,null);
+    assert.match(item.motivos.join(' '),/recepción, la fecha y el monto liquidado por Airbnb/);
+    assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
+});
+
 test('full Agustin receipt recognizes Airbnb without inventing date/reference or mutating the source',()=>{
     const original = Object.freeze({texto_original:AIRBNB_AGUSTIN,monto:165598,fecha_comprobante:null,
         fecha_bloque:'2026-10-06',medio_pago:null});

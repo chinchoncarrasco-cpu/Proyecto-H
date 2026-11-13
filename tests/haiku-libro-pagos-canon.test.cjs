@@ -14,6 +14,16 @@ global.HAIKU_LIBRO_RESERVA_V1 = Object.freeze({
 require('../js/haiku-libro-pagos-canon-v1.js');
 const C = global.HAIKU_LIBRO_PAGOS_CANON_V1;
 
+test('TDC identifica crédito en voucher físico y en WebPay, con revisión si el medio se contradice',()=>{
+    assert.equal(C.medioDesdeTexto({texto_original:'BOVTAR: 002900 // FOLIO: 003012 // TDC'}),'credito');
+    assert.equal(C.medioDesdeTexto({texto_original:'WebPay x confirmar // Cod. aut. 12345 // TDC'}),'webpay_credito');
+    assert.equal(C.medioDesdeTexto({texto_original:'WebPayconfirmado // Crédito'}),'webpay_credito');
+    assert.equal(C.medioDesdeTexto({texto_original:'WebPayXconfirmar // TDC'}),'webpay_credito');
+    assert.equal(C.medioDesdeTexto({texto_original:'WebPay // TDC // Débito'}),'webpay');
+    assert.equal(C.medioDesdeTexto({texto_original:'TDC // Transferencia'}),null);
+    assert.equal(C.medioDesdeTexto({texto_original:'Folio 003012 // BOVTAR 002900'}),null);
+});
+
 test('WebPay keeps its channel together with debit or credit card type',()=>{
     assert.equal(C.medioDesdeTexto({texto_original:'WEBPAY // CREDITO // CodAut 285466'}),'webpay_credito');
     assert.equal(C.medioDesdeTexto({texto_original:'WEBPAY // DEBITO // CodAut 285466'}),'webpay_debito');
