@@ -544,7 +544,8 @@
         const listaServicios = estado.drawer.querySelector("[data-reserva-servicios]");
         listaServicios.replaceChildren();
         for (const servicio of servicios) {
-            const nombreServicio = servicio.catalogo_servicios?.nombre || "Servicio";
+            const nombre = servicio.catalogo_servicios?.nombre || "Servicio";
+            const nombreServicio = Number(servicio.cantidad) > 1 ? `${servicio.cantidad} × ${nombre}` : nombre;
             const hora = String(servicio.hora_inicio || "").slice(0, 5);
             itemLista(listaServicios, nombreServicio,
                 [fechaVisible(servicio.fecha_servicio), hora].filter(x => x && x !== "—").join(" · "),

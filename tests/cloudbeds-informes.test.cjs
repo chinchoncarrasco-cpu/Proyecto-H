@@ -182,7 +182,7 @@ test("Incorporar desde Cloudbeds prepara y confirma sólo el comprobante elegido
     const r = { ...libro.reservas[0], id: "reserva-libro", titular, tipo_estadia: "alojamiento",
         pagos: [p, otroPago], advertencias: [] };
     const servicio = { id: "s", reserva_id: "r", estadia_id: "e", fecha_servicio: entrada, hora_inicio: "19:30:00",
-        total: 30000, tipo_cobro: "normal", estado_servicio: "programado", catalogo_servicios: { nombre: "Masaje Terapéutico 30 min" } };
+        cantidad: 2, total: 30000, tipo_cobro: "normal", estado_servicio: "programado", catalogo_servicios: { nombre: "Masaje Terapéutico 30 min" } };
     const cargo = { cargo_id: "c", servicio_id: servicio.id, reserva_id: "r", estadia_id: "e", tipo_cargo: "servicio",
         concepto: "Masaje", monto: 30000, monto_ajustado: 30000, aplicado_neto: 0, saldo_cargo: 30000, estado: "activo" };
     const tablas = { reserva_estadias: [{
@@ -192,7 +192,7 @@ test("Incorporar desde Cloudbeds prepara y confirma sólo el comprobante elegido
     }], pagos: [], servicios: [servicio], vista_estado_cargos: [cargo] };
     const estado = { generacion: 1, version: "a".repeat(64) };
     let permite = true, autor = "operador";
-    const escrituras = [];
+    const escrituras = [], lecturas = [];
     global.HAIKU_LIBRO_RESERVA_V1 = { estado: () => estado };
     global.haikuTienePermiso = () => permite;
     t.after(() => {
@@ -204,12 +204,18 @@ test("Incorporar desde Cloudbeds prepara y confirma sólo el comprobante elegido
         from(tabla) {
             const consulta = { select: () => consulta, in: () => consulta, eq: () => consulta, order: () => consulta,
                 lte: () => consulta, gte: () => consulta,
-                range: async (a, z) => ({ data: structuredClone((tablas[tabla] || []).slice(a, z + 1)) }) };
+                range: async (a, z) => {
+                    lecturas.push(tabla);
+                    return { data: structuredClone((tablas[tabla] || []).slice(a, z + 1)) };
+                } };
             return consulta;
         },
         async rpc(nombre, args) {
-            if (nombre === "haiku_libro_aplicaciones_servicio_capacidad_v1") return { data: { version: 1,
-                contrato: "aplicaciones_servicio_v1", rpc: "haiku_incorporar_pago_servicios_libro_v1", efectivo_sin_identificador: false } };
+            if (nombre === "haiku_libro_aplicaciones_servicio_capacidad_v1") {
+                lecturas.push(nombre);
+                return { data: { version: 1, contrato: "aplicaciones_servicio_v1",
+                    rpc: "haiku_incorporar_pago_servicios_libro_v1", efectivo_sin_identificador: false } };
+            }
             assert.equal(nombre, "haiku_incorporar_pago_servicios_libro_v1");
             escrituras.push(args);
             if (escrituras.length === 1) throw new Error("Conexión interrumpida");
@@ -221,18 +227,24 @@ test("Incorporar desde Cloudbeds prepara y confirma sólo el comprobante elegido
     const preparar = (cambios = {}) => libroConsultas.prepararPagoInformeCloudbeds({ ...datos, ...cambios }, cliente);
     await assert.rejects(preparar({ destino: { ...datos.destino, estadiaId: "otra" } }), /estadía destino/);
     const revision = await preparar();
-    assert.deepEqual(revision.destinos, [{ nombre: "Masaje Terapéutico 30 min", fecha: entrada, hora: "19:30", monto: 30000 }]);
+    assert.deepEqual(revision.destinos, [{ nombre: "Masaje Terapéutico 30 min", cantidad: 2, fecha: entrada, hora: "19:30", monto: 30000 }]);
     permite = false;
     await assert.rejects(revision.confirmar(), /permiso/);
     permite = true;
     autor = "otra-sesion";
     await assert.rejects(revision.confirmar(), /sesión/);
     autor = datos.autor;
+    servicio.cantidad = 1;
+    await assert.rejects(revision.confirmar(), /destino o los datos financieros/);
+    servicio.cantidad = 2;
     cargo.saldo_cargo = 29000;
     await assert.rejects(revision.confirmar());
     cargo.saldo_cargo = 30000;
     assert.equal(escrituras.length, 0);
+    lecturas.length = 0;
     await assert.rejects(revision.confirmar(), { pagoInformePendiente: true });
+    assert.equal(lecturas.filter(x => x === "servicios").length, 1);
+    assert.equal(lecturas.filter(x => x === "haiku_libro_aplicaciones_servicio_capacidad_v1").length, 1);
     assert.deepEqual(await revision.confirmar(), { creado: true });
     assert.deepEqual(escrituras[0], escrituras[1], "el reintento conserva la operación idempotente");
     const item = escrituras[1].p_item;

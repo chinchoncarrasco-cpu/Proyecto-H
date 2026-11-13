@@ -143,6 +143,16 @@ test("Ver reserva usa UUID y estadía exactos, muestra lectura real y cálculo c
     assert.equal(caso.drawer.get("[data-reserva-estado-operativo]").dataset.reservaEstado, "hospedada");
 });
 
+test("La ficha muestra las unidades de un servicio agrupado", async () => {
+    const datos = fixture();
+    datos.servicios.push({ ...datos.servicios[0], cantidad: 2,
+        catalogo_servicios: { nombre: "Masaje Terapéutico 30 min" } });
+    const caso = montar({ ficha: datos });
+    assert.equal(await caso.api.abrirDesdeBoton(caso.boton), true);
+    const items = caso.drawer.get("[data-reserva-servicios]").children;
+    assert.deepEqual(items.map(item => item.children[0].textContent), ["Tinaja Tonel", "2 × Masaje Terapéutico 30 min"]);
+});
+
 test("la ficha asigna el tono visual de cada estado sin cambiar el flujo del selector", async () => {
     for (const [codigo, reserva, estadia] of [
         ["pendiente", "pendiente", "pendiente"],

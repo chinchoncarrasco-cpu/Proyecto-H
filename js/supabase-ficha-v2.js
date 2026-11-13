@@ -113,7 +113,7 @@
         const [serviciosR, cargosR, notasR, solicitudesR, pagosR, bovesR] = await Promise.all([
             cliente
                 .from("servicios")
-                .select("id,fecha_servicio,hora_inicio,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
+                .select("id,fecha_servicio,hora_inicio,cantidad,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
                 .eq("reserva_id", reservaId)
                 .order("fecha_servicio", { ascending: true }),
             cliente
@@ -317,7 +317,8 @@
         const partes = [];
         if (servicio.fecha_servicio) partes.push(formatearFecha(servicio.fecha_servicio));
         if (servicio.hora_inicio) partes.push(String(servicio.hora_inicio).slice(0,5));
-        partes.push(catalogo.nombre || "Servicio");
+        const nombre = catalogo.nombre || "Servicio";
+        partes.push(Number(servicio.cantidad) > 1 ? `${servicio.cantidad} × ${nombre}` : nombre);
         izquierda.textContent = partes.join(" · ");
         const derecha = document.createElement("span");
         derecha.textContent = servicio.tipo_cobro === "cortesia"

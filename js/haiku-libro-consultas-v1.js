@@ -1975,6 +1975,15 @@
     const leerPagosSistema = cliente => paginas(() => cliente.from("pagos")
         .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
 
+    async function leerFinanzasServicios(cliente, ids) {
+        try {
+            return await D.leerSnapshot(cliente, ids);
+        } catch (err) {
+            return { disponible: false, cargos: [], servicios: [], aplicaciones: [], pagos: [],
+                error: `No fue posible leer el destino financiero: ${err?.message || err}` };
+        }
+    }
+
     async function leerEstadiasSistema(cliente, {desde, hasta, focal} = {}) {
         if (!cliente?.auth?.getSession) throw new Error("Inicia sesión en Proyecto H para comparar.");
         const { data: sesion, error } = await cliente.auth.getSession();
@@ -2065,7 +2074,16 @@
         const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
         const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
-        const {estadias:systemAll,usuario} = await leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal});
+        const reservaInforme = q.incluirFinanzas !== false && q.reservaPagoCloudbeds;
+        const leerCargosInforme = reservaInforme && D && validas.some(r =>
+            [...r.pagos, ...r.pagos_sin_asociacion].some(p => D.aplicacionesLibro(p).length));
+        // La reserva destino se conoce desde la fila. Leer sus cargos en paralelo
+        // con las estadías y la comprobación global de duplicados del Libro.
+        const [{estadias:systemAll,usuario}, pagosInforme, finanzasInforme] = await Promise.all([
+            leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal}),
+            reservaInforme ? leerPagosSistema(cliente) : null,
+            leerCargosInforme ? leerFinanzasServicios(cliente, [reservaInforme]) : null
+        ]);
         const system = systemAll.filter(candidatoElegible);
 
         validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
@@ -2077,7 +2095,7 @@
         const reservasSistema = new Set(visiblesRango.map(s => s.reserva_id).filter(Boolean));
 
         if (!validas.length) {
-            const pagos = q.por_fecha_pago && q.incluirFinanzas !== false ? await leerPagosSistema(cliente) : [];
+            const pagos = q.por_fecha_pago && q.incluirFinanzas !== false ? pagosInforme || await leerPagosSistema(cliente) : [];
             const vacio = [];
             vacio.meta = {
                 libro: 0,
@@ -2102,7 +2120,7 @@
         const resultados = asociarEstadiasComparacion(validas, system);
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
         // Global identifier check: a payment on another reservation is a conflict, never new.
-        const pagos = q.incluirFinanzas===false ? [] : await leerPagosSistema(cliente);
+        const pagos = q.incluirFinanzas===false ? [] : pagosInforme || await leerPagosSistema(cliente);
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
         let capacidadTransferencias = false, capacidadGlosaSinNombre = false;
         if (resultados.some(r => [...(r.libro.pagos || []),...(r.libro.pagos_sin_asociacion || [])].some(p => S.evidenciaTransferencia?.(p)?.valida))) {
@@ -2115,7 +2133,9 @@
         const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias, capacidadGlosaSinNombre);
         if (q.incluirFinanzas !== false) await verificarPagosDeBloque(resultados,reservas || [],systemAll,pagos,resolucionesPago,cliente);
         const servicios = [];
-        if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
+        const serviciosLeidos = finanzasInforme?.disponible && ids.length === 1 && ids[0] === reservaInforme;
+        if (q.incluirServicios !== false && serviciosLeidos) servicios.push(...finanzasInforme.servicios);
+        else if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
             const grupo = ids.slice(i, i + 50);
             servicios.push(...await paginas(() => cliente.from("servicios")
                 .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
@@ -2279,12 +2299,8 @@
                 item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
             const idsDestino = [...new Set(candidatosDestino
                 .map(item => reservaSistemaPorLibro.get(claveReserva(item.reserva))).filter(Boolean))];
-            try {
-                snapshotFinanciero = await D.leerSnapshot(cliente, idsDestino);
-            } catch (err) {
-                snapshotFinanciero = { disponible: false, cargos: [], servicios: [], aplicaciones: [], pagos: [],
-                    error: `No fue posible leer el destino financiero: ${err?.message || err}` };
-            }
+            snapshotFinanciero = finanzasInforme && idsDestino.length === 1 && idsDestino[0] === reservaInforme
+                ? finanzasInforme : await leerFinanzasServicios(cliente, idsDestino);
             const serviciosAplicados = [];
             for (const item of candidatosDestino) {
                 item.reserva_sistema_id = reservaSistemaPorLibro.get(claveReserva(item.reserva)) || null;
@@ -3812,6 +3828,18 @@
         plan.items = [item];
     }
 
+    function destinosPagoInformeCloudbeds(item) {
+        if (item.payload.argumentos.p_modo_aplicacion === 'alojamiento') return [{nombre:'Alojamiento'}];
+        return item.destinoFinanciero.aplicaciones.map(a => {
+            const servicio = a.cargo.servicio;
+            return {
+                nombre:servicio.catalogo_servicios?.nombre || a.cargo.concepto,
+                cantidad:servicio.cantidad,
+                fecha:servicio.fecha_servicio, hora:servicio.hora_inicio?.slice(0,5), monto:a.monto
+            };
+        });
+    }
+
     function crearPlanIncorporacion(reservas, comp, decisiones = new Map(), aprobados = new Set(), anterior = null, capacidadServicios = null, origenesAbonosAviso = null) {
         const plan = { escrituraHabilitada: ESCRITURA_LIBRO, items: [], permisos: [], alcance: 'Registros visibles con la sesión actual' };
         const snapshot = comp.snapshot || { estadias: [], pagos: [] };
@@ -4643,7 +4671,10 @@
         const revision = contexto.verificada;
         const reservasOriginales = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
             ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(seleccion, result.generacion, cliente, () => estadoFuente(result)) : seleccion;
-        const {reservas,comparacion} = await compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion);
+        const [{reservas,comparacion}, capacidadInforme] = await Promise.all([
+            compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion),
+            D?.aplicacionesLibro(result.pagoInformeCloudbeds?.pago).length ? consultarCapacidadPagosServicio(cliente) : null
+        ]);
 
         for (const decision of [...decisiones.values()].filter(d => d?.itemId)) {
             const x = comparacion.pagosDetalle?.find(x => source(x.pago.origen) === decision.fuente && x.reserva.id === decision.reservaLibroId);
@@ -4689,7 +4720,7 @@
             item.estado !== 'en_sistema' && item.resolucionPago?.estado !== ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO &&
             (esAdminPagos() && casoRevisionAdminPago(comparacion,item) || item.destinoFinanciero?.estado === 'destino_unico' ||
                 item.destinoFinanciero?.aplicaciones?.some(a => a.estado === 'sin_destino')));
-        const capacidadServicios = requiereBackendServicios ? await consultarCapacidadPagosServicio(cliente) : null;
+        const capacidadServicios = requiereBackendServicios ? capacidadInforme || await consultarCapacidadPagosServicio(cliente) : null;
         for (const x of comparacion.pagosDetalle || []) {
             if (x.decisionPagoManual && x.decisionPagoManual.tipo !== CONFIRMACION_AIRBNB && (!capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones) ||
                     x.decisionPagoManual.tipo === REVISION_ADMIN_PAGO && capacidadServicios.revision_pago_admin_v1 !== true)) {
@@ -4980,7 +5011,9 @@
         vigente();
         const usaServicios4C = plan.items.some(i => i.seleccionado && i.payload?.contrato === CAPACIDAD_PAGOS_SERVICIO_4C.contrato) ||
             (plan.solicitudPendiente?.servicios || []).length > 0;
-        if (usaServicios4C) {
+        // La preparación vigente del pago Cloudbeds comprueba la capacidad en
+        // paralelo a sus lecturas. Un reintento usa la solicitud ya preparada.
+        if (usaServicios4C && (!result.pagoInformeCloudbeds || plan.solicitudPendiente)) {
             const capacidadServicios = await consultarCapacidadPagosServicio(cliente);
             if (!capacidadServicios.disponible) {
                 throw new Error('El pago tiene un destino financiero seguro, pero la escritura protegida de servicios todavía no está disponible.');
@@ -5028,7 +5061,9 @@
                     {code:'HLC01',haikuConflictoDatos:true});
                 if (item.pagoLibro && nuevo?.payload && ['pagos','actualizaciones'].includes(nuevo.categoria) &&
                     (JSON.stringify(item.payload) !== JSON.stringify(nuevo.payload) ||
-                        JSON.stringify(item.verificacionBloquePago) !== JSON.stringify(nuevo.verificacionBloquePago))) throw Object.assign(
+                        JSON.stringify(item.verificacionBloquePago) !== JSON.stringify(nuevo.verificacionBloquePago) ||
+                        result.pagoInformeCloudbeds && JSON.stringify(destinosPagoInformeCloudbeds(item)) !==
+                            JSON.stringify(destinosPagoInformeCloudbeds(nuevo)))) throw Object.assign(
                     Error('El destino o los datos financieros del pago cambiaron desde la selección. Vuelve a comparar y confirma el destino actualizado.'),
                     {code:'HLC01',haikuConflictoDatos:true});
                 if (nuevo?.decisionManualInvalidada) throw Object.assign(
@@ -5841,19 +5876,13 @@
         const result = {reservas:[reserva], generacion, version_libro:version,
             pagoInformeCloudbeds:{pago,destino,autor},
             q:{desde:reservaLibro.fecha_checkin, hasta:reservaLibro.fecha_checkout,
-                solo_pagos:true, focal:true, abonosAviso:new Set([source(origen)])}};
+                solo_pagos:true, focal:true, reservaPagoCloudbeds:destino.reservaId, abonosAviso:new Set([source(origen)])}};
         const decisiones = new Map(), aprobados = new Set();
         let plan = await prepararIncorporacion(result, decisiones, aprobados, cliente);
         await verificarAcceso();
         const [item] = plan.items;
         if (item.categoria === 'omitidos') return {registrado:true};
-        const comparacion = contextoVisualPlanes.get(plan);
-        const movimiento = comparacion.pagosDetalle.find(x => idMovimientoIncorporacion(x) === item.id);
-        const destinos = item.payload.argumentos.p_modo_aplicacion === 'alojamiento' ? [{nombre:'Alojamiento'}] :
-            movimiento.destinoFinanciero.aplicaciones.map(a => ({
-                nombre:a.cargo.servicio.catalogo_servicios?.nombre || a.cargo.concepto,
-                fecha:a.cargo.servicio.fecha_servicio, hora:a.cargo.servicio.hora_inicio?.slice(0,5), monto:a.monto
-            }));
+        const destinos = destinosPagoInformeCloudbeds(item);
         const confirmar = async () => {
             try {
                 await verificarAcceso();
