@@ -7086,52 +7086,106 @@
         return seccion;
     }
 
-    function listaCambiosIncorporacion(item, titulo = null) {
+    function listaCambiosIncorporacion(item, titulo = null, compacta = false) {
         if (!item.cambios?.length) return null;
-        const contenedor = elemento('div', titulo ? 'haiku-incorporacion-cambios-propuestos' : '');
+        const contenedor = elemento('div', compacta ? 'haku-actualizacion-libro__detalle' : titulo ? 'haiku-incorporacion-cambios-propuestos' : '');
         if (titulo) contenedor.append(elemento('strong', 'haiku-incorporacion-cambios-titulo', titulo));
         const cambios = elemento('ul','haiku-incorporacion-cambios');
-        const bloqueNotas = (tituloBloque, fragmentos, clase) => {
+        const detallesNotas = [];
+        if (compacta) cambios.setAttribute('role', 'list');
+        const bloqueNotas = (tituloBloque, fragmentos, clase, retiradas) => {
             const bloque = elemento('section', `haiku-incorporacion-notas-fuente ${clase}`);
-            bloque.append(elemento('h4', '', tituloBloque));
+            if (tituloBloque) bloque.append(elemento('h4', '', tituloBloque));
             if (!fragmentos.length) bloque.append(elemento('p', 'haiku-incorporacion-notas-vacio', 'Sin información.'));
             else {
                 const lista = elemento('ul');
-                fragmentos.forEach(fragmento => lista.append(elemento('li', '', fragmento)));
+                for (const fragmento of fragmentos) {
+                    const nota = elemento('li', '', fragmento);
+                    if (retiradas?.has(fragmento)) nota.append(elemento('span', 'haku-actualizacion-libro__nota-retirada', ' Se retira'));
+                    lista.append(nota);
+                }
                 bloque.append(lista);
             }
             return bloque;
         };
         const valorVisible = (campo, valor) => {
             if (valor === null || valor === undefined || valor === '') return 'sin dato';
+            if (compacta) {
+                if (campo === 'Estado de estadía' || campo === 'Estado de reserva')
+                    return root.HAIKU_RESERVA_ESTADO_MANUAL_V1?.etiqueta(valor) || String(valor);
+                if (campo === 'Cabaña') return `CAB ${valor}`;
+                if (campo === 'Check-In' || campo === 'Check-Out') return fechaBreve(valor, true);
+                if (campo === 'Tipo de estadía') return ({ full_day:'Full Day', fullday:'Full Day', alojamiento:'Alojamiento' })[valor] || String(valor);
+            }
             if (campo !== 'Fecha de pago') return String(valor);
             const fecha = fechaCalendarioChile(valor), partes = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
             return partes ? `${partes[3]}/${partes[2]}/${partes[1]}` : String(valor);
         };
         for (const c of item.cambios) {
-            const fila = elemento('li');
             if (c.campo === 'Notas y detalles del Libro') {
                 const actuales = fragmentosObservaciones(c.anterior);
                 const clavesActuales = new Set(actuales.map(claveFragmentoObservacion));
-                const nuevas = fragmentosObservaciones(c.libro).filter(x => !clavesActuales.has(claveFragmentoObservacion(x)));
+                const propuestas = fragmentosObservaciones(c.libro);
+                const nuevas = propuestas.filter(x => !clavesActuales.has(claveFragmentoObservacion(x)));
                 const notas = elemento('details', 'haiku-incorporacion-notas-comparacion');
                 const contenido = elemento('div', 'haiku-incorporacion-notas-contenido');
-                contenido.append(
-                    bloqueNotas('Proyecto H actual', actuales, 'haiku-incorporacion-notas-fuente--actual'),
-                    bloqueNotas('Notas nuevas del Libro', nuevas, 'haiku-incorporacion-notas-fuente--libro')
-                );
-                notas.append(elemento('summary','',c.campo),contenido);
-                fila.append(notas);
-            } else {
-                fila.append(elemento('strong','haku-cambio-campo',c.campo + ':'),
-                    elemento('span','haku-cambio-actual',valorVisible(c.campo, c.anterior)),
-                    elemento('span','haku-cambio-flecha','→'),
-                    elemento('span','haku-cambio-libro',valorVisible(c.campo, c.libro)));
+                const retiradas = new Set();
+                if (compacta) {
+                    const clavesPropuestas = new Set(propuestas.map(claveFragmentoObservacion));
+                    for (const nota of actuales) {
+                        if (!clavesPropuestas.has(claveFragmentoObservacion(nota))) retiradas.add(nota);
+                    }
+                }
+                const cuenta = [
+                    nuevas.length ? `${nuevas.length} añadida${nuevas.length === 1 ? '' : 's'}` : '',
+                    retiradas.size ? `${retiradas.size} retirada${retiradas.size === 1 ? '' : 's'}` : ''
+                ].filter(Boolean).join(' · ');
+                const resumen = compacta ? ['Notas del Libro', cuenta].filter(Boolean).join(' · ') : c.campo;
+                if (!compacta || actuales.length) contenido.append(
+                    bloqueNotas('Proyecto H actual', actuales, 'haiku-incorporacion-notas-fuente--actual', retiradas));
+                if (!compacta || nuevas.length) contenido.append(
+                    bloqueNotas(compacta && !actuales.length ? '' : 'Notas nuevas del Libro', nuevas, 'haiku-incorporacion-notas-fuente--libro'));
+                if (compacta && !nuevas.length && !retiradas.size) contenido.append(
+                    bloqueNotas('Libro propuesto', propuestas, 'haiku-incorporacion-notas-fuente--libro'));
+                notas.append(elemento('summary','',resumen),contenido);
+                if (compacta) detallesNotas.push(notas);
+                else {
+                    const fila = elemento('li');
+                    fila.append(notas);
+                    cambios.append(fila);
+                }
+                continue;
             }
+            const anterior = valorVisible(c.campo, c.anterior);
+            const propuesto = valorVisible(c.campo, c.libro);
+            const fila = elemento('li', compacta ? 'haku-actualizacion-libro__cambio' : '');
+            if (compacta) fila.setAttribute('aria-label', `${c.campo}. Proyecto H: ${anterior}. Libro: ${propuesto}.`);
+            const flecha = elemento('span','haku-cambio-flecha','→');
+            flecha.setAttribute('aria-hidden','true');
+            fila.append(elemento('strong','haku-cambio-campo',c.campo + (compacta ? '' : ':')),
+                elemento('span','haku-cambio-actual',anterior), flecha, elemento('span','haku-cambio-libro',propuesto));
             cambios.append(fila);
         }
-        contenedor.append(cambios);
+        if (cambios.children.length) {
+            if (compacta) {
+                const columnas = elemento('div','haku-actualizacion-libro__columnas');
+                columnas.setAttribute('aria-hidden','true');
+                columnas.append(...['Campo','Proyecto H','Libro'].map(c => elemento('span','',c)));
+                const datos = elemento('div','haku-actualizacion-libro__valores');
+                datos.append(columnas,cambios);
+                contenedor.append(datos);
+            } else contenedor.append(cambios);
+        }
+        contenedor.append(...detallesNotas);
         return contenedor;
+    }
+
+    function periodoActualizacion(periodo) {
+        const [inicio, fin] = String(periodo || '').split(' → ');
+        if (!fin || inicio === fin) return inicio;
+        if (/^\d{2}\/\d{2}\/\d{2}$/.test(inicio) && /^\d{2}\/\d{2}\/\d{2}$/.test(fin) && inicio.slice(-2) === fin.slice(-2))
+            return `${inicio.slice(0,5)}–${fin}`;
+        return periodo;
     }
 
     function presentacionIncorporacion(item) {
@@ -7761,7 +7815,9 @@
         const vista = presentacionIncorporacion(item);
         const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
         const esPagoLibro = Boolean(item.pagoLibro);
+        const actualizacionReserva = item.categoria === 'actualizaciones' && item.payload?.tipo === 'reserva_actualizar';
         const fila = elemento("article", `haiku-incorporacion-item haiku-incorporacion-item--${item.categoria}`);
+        if (actualizacionReserva) fila.className += ' haku-actualizacion-libro';
         if (esPagoLibro) {
             fila.dataset.haikuPagoOrigenHoja = item.pagoLibro?.origen?.hoja || "";
             fila.dataset.haikuPagoOrigenCelda = item.pagoLibro?.origen?.celda || "";
@@ -7777,13 +7833,16 @@
         controles.set(item.id, check);
         check.addEventListener("change", () => { item.seleccionado = check.checked; actualizar(); });
         const identidad = elemento("span", "haiku-incorporacion-identidad");
-        identidad.append(elemento("strong", "", vista.titular), elemento("small", "", [vista.cabana, vista.monto,
-            esPagoLibro && item.pagoLibro?.fecha_bloque ? `Check-in ${fechaBreve(item.pagoLibro.fecha_bloque)}` : null].filter(Boolean).join(" · ")));
+        const contexto = actualizacionReserva ? [vista.cabana, periodoActualizacion(vista.periodo), vista.tipo] :
+            [vista.cabana, vista.monto, esPagoLibro && item.pagoLibro?.fecha_bloque ? `Check-in ${fechaBreve(item.pagoLibro.fecha_bloque)}` : null];
+        identidad.append(elemento("strong", "", vista.titular), elemento("small", "", contexto.filter(Boolean).join(" · ")));
         label.append(check, identidad);
-        cabecera.append(label, elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
+        cabecera.append(label);
+        if (!actualizacionReserva || item.etapaSiguiente) cabecera.append(
+            elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
         fila.append(cabecera);
         if (item.aviso) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
-        if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item));
+        if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, null, actualizacionReserva));
 
         if (esPagoLibro) {
             const datos = datosPagoIncorporacion(item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB
@@ -7822,7 +7881,7 @@
                 lista.append(tarjeta);
             }
             fila.append(lista);
-        } else if (vista.monto || vista.cabana) {
+        } else if (!actualizacionReserva && (vista.monto || vista.cabana)) {
             const meta = elemento("div", "haiku-incorporacion-meta-item");
             if (vista.monto) meta.append(datoIncorporacion("Monto", vista.monto));
             if (vista.concepto) meta.append(datoIncorporacion("Concepto", vista.concepto));
@@ -7834,7 +7893,7 @@
             fila.append(meta);
         }
 
-        if (vista.reserva) {
+        if (vista.reserva && !actualizacionReserva) {
             const contacto = elemento("div", "haiku-incorporacion-contacto");
             contacto.append(
                 datoIncorporacion("Documento", vista.reserva.titular_numero_documento || "sin dato"),
@@ -7852,7 +7911,8 @@
             ? item.motivosRevisionPago || [] : [];
         const origenPago = item.pagoLibro?.origen;
         const detalle = motivosRevisionPago.length ?
-            origenPago?.hoja && origenPago.celda ? `Libro · ${origenPago.hoja} ${origenPago.celda}` : '' : vista.detalle;
+            origenPago?.hoja && origenPago.celda ? `Libro · ${origenPago.hoja} ${origenPago.celda}` : '' :
+            actualizacionReserva && !item.etapaSiguiente ? '' : vista.detalle;
         if (detalle) fila.append(elemento("p", "haiku-incorporacion-propuesta", detalle));
         const movimiento=comparacion?.pagosDetalle?.find(x=>x.pago===item.pagoLibro);
         const franja=franjaDiferenciaPago(movimiento,comparacion);
@@ -7870,7 +7930,7 @@
             motivosVisibles.forEach(motivo => avisos.append(elemento("li", "", motivo)));
             fila.append(avisos);
         }
-        if (vista.reserva?.observaciones) {
+        if (!actualizacionReserva && vista.reserva?.observaciones) {
             const notas = elemento("details", "haiku-incorporacion-notas");
             notas.append(elemento("summary", "", "Ver notas y solicitudes"), elemento("p", "", vista.reserva.observaciones));
             fila.append(notas);
@@ -8253,6 +8313,8 @@
                     elemento("span", "haku-incorporacion-sites-fila-flecha", "⌄"));
                 seccion.append(summary);
                 const contenido = elemento("div", "haiku-incorporacion-lista haku-incorporacion-sites-fila-detalle");
+                if (categoria === "actualizaciones" && items.some(item => item.payload?.tipo === "reserva_actualizar"))
+                    contenido.append(elemento("p", "haku-actualizacion-libro__guia", "Los cambios seleccionados se guardan al confirmar."));
                 if (!items.length) contenido.append(elemento("p", "haiku-incorporacion-vacio", "Sin elementos en esta categoría."));
                 else items.forEach(item => contenido.append(renderizarItemIncorporacion(item, controles, actualizar, aprobar, contextoVisualPlanes.get(plan),plan)));
                 seccion.append(contenido);
