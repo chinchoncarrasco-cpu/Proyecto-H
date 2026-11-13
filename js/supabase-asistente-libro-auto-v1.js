@@ -7,12 +7,14 @@
     const normalizar = x => String(x ?? '').normalize('NFC').trim().replace(/\s+/g,' ').toLowerCase();
     const breve = (x,max=100) => { const s=String(x??'').trim().replace(/\s+/g,' '); return s.length>max?s.slice(0,max-1)+'…':s; };
     // El aviso es visible fuera del chat: no copiar contactos, documentos ni montos.
-    function notaBreve(x,max=84) {
-        return breve(String(x??'').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[correo]')
+    function ocultarDatosAviso(x) {
+        return String(x??'').replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi,'[correo]')
             .replace(/(?:\$|\bCLP\s*|\bUSD\s*)\s*\d[\d.,]*/gi,'[monto]')
             .replace(/\b\d{1,2}\.\d{3}\.\d{3}-[\dk]\b|\b\d{7,8}-[\dk]\b/gi,'[documento]')
-            .replace(/\+?\d[\d ()-]{6,}\d/g,s=>/^\d{4}-\d{2}-\d{2}$/.test(s)||/^\d{2}-\d{2}-\d{4}$/.test(s)?s:s.replace(/\D/g,'').length>=8?'[dato]':s),max);
+            .replace(/\b(rut|dni|pasaporte|documento|carnet)\s*[#:.-]?\s*[a-z]{0,3}\d[\w.-]{3,}/gi,'$1 [documento]')
+            .replace(/\+?\d[\d ()-]{6,}\d/g,s=>/^\d{4}-\d{2}-\d{2}$/.test(s)||/^\d{2}-\d{2}-\d{4}$/.test(s)?s:s.replace(/\D/g,'').length>=8?'[dato]':s);
     }
+    const notaBreve=(x,max=84)=>breve(ocultarDatosAviso(x),max);
     function fechaCorta(x,conAno=false) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(x||'')) return 'Sin fecha';
         const [ano,mes,dia]=x.split('-');
@@ -263,11 +265,27 @@
         const grupos=new Map();
         for(const fila of movimientos){
             const clave=fila.reservaId || (vistaPrevia&&fila.cabana&&fila.fechaIngreso
-                ? JSON.stringify([fila.titular,fila.cabana,fila.fechaIngreso]) : Symbol());
+                ? JSON.stringify([fila.titular,fila.cabana,fila.fechaIngreso,fila.fechaSalida]) : Symbol());
             if(!grupos.has(clave))grupos.set(clave,[]);
             grupos.get(clave).push(fila);
         }
         return [...grupos.values()];
+    }
+    function posicionarDetalleListo(panel,boton,aviso) {
+        if(!root.matchMedia?.('(min-width: 720px) and (hover: hover) and (pointer: fine)').matches)return false;
+        const margen=8, separacion=5, anchoMinimo=264;
+        const caja=aviso.getBoundingClientRect();
+        const izquierda=caja.left-margen-separacion, derecha=root.innerWidth-caja.right-margen-separacion;
+        const alCostadoIzquierdo=izquierda>=anchoMinimo;
+        const ancho=Math.min(356,alCostadoIzquierdo?izquierda:derecha);
+        if(ancho<anchoMinimo)return false;
+        panel.classList.add('haku-libro-auto__detalle-listo--flotante');
+        panel.style.width=`${ancho}px`;
+        panel.style.left=`${alCostadoIzquierdo?caja.left-ancho-separacion:caja.right+separacion}px`;
+        panel.hidden=false;
+        const ancla=boton.getBoundingClientRect();
+        panel.style.top=`${Math.max(margen,Math.min(ancla.top,root.innerHeight-panel.offsetHeight-margen))}px`;
+        return true;
     }
     function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
         const casos=pendientes.map(casoPendiente);
@@ -402,7 +420,7 @@
         }};
     }
     function instalar() {
-        let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0,adaptarPendientes;
+        let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0,adaptarPendientes,cerrarVistaLista;
         const consultando = () => root.HAIKU_ASISTENTE?.procesando?.() === true || root.HAIKU_LIBRO_CONSULTAS?.procesando?.() === true || root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1?.procesando?.() === true;
         const consultaVisible = () => consultando() || Boolean(root.document.querySelector?.('#haiku-asistente-mensajes [data-haiku-libro-respuesta="1"], #haiku-asistente-mensajes .haiku-asistente-preview, #haiku-asistente-mensajes .haku-guia-operativa')) || Boolean(root.document.getElementById('haiku-asistente-texto')?.value?.trim());
         root.document.getElementById('haiku-asistente-texto')?.addEventListener('input',()=>{
@@ -411,6 +429,7 @@
         });
         function posicionarAviso() {
             if(!toast?.style)return;
+            cerrarVistaLista?.();
             const panel=root.document.getElementById('haiku-asistente-panel') || root.document.querySelector?.('.haiku-asistente-panel');
             const caja=panel?.hidden===false ? panel.getBoundingClientRect?.() : null;
             const ancho=root.innerWidth || root.document.documentElement?.clientWidth || 0;
@@ -440,8 +459,12 @@
         }
         root.addEventListener('haiku:panel-estado',posicionarAviso);
         root.addEventListener('resize',posicionarAviso);
+        root.addEventListener('keydown',e=>{
+            if(e.key==='Escape'&&cerrarVistaLista?.())e.preventDefault();
+        },true);
         function limpiar() {
             if(avisoProtegido)return;
+            cerrarVistaLista?.();cerrarVistaLista=null;
             toast?.remove();toast=null;estadoConsulta=null;adaptarPendientes=null;
             for (const boton of acciones) {
                 boton.informeAnterior=true;boton.disabled=true;
@@ -451,6 +474,7 @@
             acciones=[];
         }
         function cerrarAviso(){
+            cerrarVistaLista?.();cerrarVistaLista=null;
             avisoProtegido=false;toast?.remove();toast=null;adaptarPendientes=null;
             if(!avisoDiferido)return;
             const siguiente=avisoDiferido;avisoDiferido=null;
@@ -472,6 +496,7 @@
                 estilo.textContent='.haku-libro-auto{position:fixed;right:18px;bottom:88px;width:min(340px,calc(100vw - 36px));box-sizing:border-box;z-index:10000;background:#f7faf8;color:#26342c;border:1px solid #cadfd1;border-radius:16px;padding:14px;box-shadow:0 6px 22px #183e2426;font:13px/1.5 system-ui;overflow-wrap:anywhere;max-height:45vh;overflow:auto}.haku-libro-auto--revision{background:#fffaf1;border-color:#ead8bc}.haku-libro-auto p{margin:7px 0}.haku-libro-auto button{cursor:pointer;background:white;color:#245438;border:1px solid #cadfd1;border-radius:8px;padding:6px 10px;margin:5px 6px 0 0}.haku-libro-auto button:disabled{cursor:default;opacity:.6}';
                 doc.head.appendChild(estilo);
             }
+            cerrarVistaLista?.();
             toast?.remove();adaptarPendientes=null;toast=doc.createElement('aside');toast.className='haku-libro-auto'+(revision?' haku-libro-auto--revision':'');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');
             const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre.appendChild(el);return el;};
             const api=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
@@ -480,6 +505,19 @@
             const vistaAviso=nodo(toast,'div','haku-libro-auto__aviso-incorporado');
             nodo(vistaAviso,'strong','haku-libro-auto__marca',incorporacion?'Haku · Libro de Reserva':'Haku');
             const cuerpoAviso=nodo(vistaAviso,'div','haku-libro-auto__cuerpo');
+            let vistaLista;
+            const cerrarDetalleListo=()=>{
+                if(!vistaLista)return;
+                if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
+                vistaLista.boton.setAttribute('aria-expanded','false');
+                vistaLista.panel.hidden=true;
+                vistaLista.panel.classList.remove('haku-libro-auto__detalle-listo--flotante');
+                vistaLista.panel.removeAttribute('style');
+                vistaLista=null;
+                return true;
+            };
+            cerrarVistaLista=cerrarDetalleListo;
+            cuerpoAviso.addEventListener('scroll',()=>{if(vistaLista?.flotante)cerrarDetalleListo();},{passive:true});
             let guardando=false,finalizado=false,estadoGuardado,vistaPendientes,avisoSiguiente;
             const mostrarCaso=(padre,caso)=>{
                 const bloque=nodo(padre,'section','haku-libro-auto__caso');
@@ -504,6 +542,108 @@
                 const detalles=nodo(bloque,'dl','haku-libro-auto__detalles');
                 for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}
             };
+            function mostrarDetalleListo(panel,grupo) {
+                const linea=(padre,etiqueta,propuesto,anterior)=>{
+                    const fila=nodo(padre,'div','haku-libro-auto__detalle-campo');
+                    nodo(fila,'dt','',etiqueta);
+                    const dato=(clase,rotulo,valor)=>{
+                        const celda=nodo(fila,'dd',clase);
+                        if(rotulo)nodo(celda,'span','haku-libro-auto__detalle-etiqueta',rotulo);
+                        nodo(celda,'span','haku-libro-auto__detalle-valor',valor);
+                    };
+                    if(anterior!==undefined)dato('haku-libro-auto__antes','Antes',anterior);
+                    dato('haku-libro-auto__propuesto',anterior!==undefined?'Se guardará':'',propuesto);
+                };
+                const notas=(padre,etiqueta,textos,clase)=>{
+                    if(!textos.length)return;
+                    const fila=nodo(padre,'div','haku-libro-auto__detalle-notas '+clase);
+                    nodo(fila,'strong','',etiqueta);
+                    const items=nodo(fila,'ul','');
+                    for(const texto of new Set(textos.map(ocultarDatosAviso).filter(Boolean)))nodo(items,'li','',texto);
+                };
+                for(const x of grupo){
+                    const vista=x.vista;
+                    if(!vista)continue;
+                    const seccion=nodo(panel,'div','haku-libro-auto__detalle-operacion');
+                    nodo(seccion,'strong','haku-libro-auto__detalle-titulo',vista.accion);
+                    const campos=lista(vista.campos);
+                    if(campos.length){
+                        const compara=campos.some(c=>c.anterior!==undefined);
+                        if(compara){
+                            const cabecera=nodo(seccion,'div','haku-libro-auto__detalle-campo haku-libro-auto__detalle-columnas');
+                            cabecera.setAttribute('aria-hidden','true');
+                            nodo(cabecera,'span','','Campo');
+                            nodo(cabecera,'span','haku-libro-auto__antes','Antes');
+                            nodo(cabecera,'span','haku-libro-auto__propuesto','Se guardará');
+                        }
+                        const cambios=nodo(seccion,'dl','haku-libro-auto__detalle-campos');
+                        for(const c of campos)linea(cambios,c.etiqueta,notaBreve(c.propuesto,110),compara?notaBreve(c.anterior??'—',110):undefined);
+                    }
+                    const retiradas=lista(vista.notasReserva?.retiradas), añadidas=lista(vista.notasReserva?.añadidas);
+                    notas(seccion,'Notas que se retirarán',retiradas,'haku-libro-auto__antes');
+                    notas(seccion,'Notas que se añadirán',[...añadidas,...lista(vista.notas)],'haku-libro-auto__propuesto');
+                    const servicios=lista(vista.servicios);
+                    if(servicios.length){
+                        nodo(seccion,'strong','','Servicios que se añadirán');
+                        const items=nodo(seccion,'ul','haku-libro-auto__detalle-servicios haku-libro-auto__propuesto');
+                        for(const servicio of servicios){
+                            const cuando=[servicio.fecha&&fechaCorta(servicio.fecha),servicio.hora,servicio.cortesia&&'Cortesía'].filter(Boolean);
+                            const cantidad=Number(servicio.cantidad)>1?`${servicio.cantidad} × `:'';
+                            nodo(items,'li','',notaBreve([cantidad+servicio.nombre,...cuando].join(' · '),110));
+                        }
+                    }
+                    if(vista.revisarServiciosAlta)nodo(seccion,'p','haku-libro-auto__aviso','Los servicios y notas asociados se comprobarán al incorporar.');
+                    if(!campos.length&&!añadidas.length&&!retiradas.length&&!lista(vista.notas).length&&!servicios.length)
+                        nodo(seccion,'p','haku-libro-auto__aviso','Abre «Ver informe» para revisar el detalle.');
+                }
+            }
+            function adjuntarDetalleListo(fila,grupo,reserva) {
+                const boton=nodo(fila,'button','haku-libro-auto__ver-detalle');
+                boton.type='button';
+                boton.setAttribute('aria-label',`Ver cambios de ${reserva}`);
+                const panel=nodo(fila,'div','haku-libro-auto__detalle-listo');
+                panel.id='haku-aviso-detalle-'+(++numeroAviso);
+                panel.hidden=true;
+                boton.setAttribute('aria-controls',panel.id);
+                boton.setAttribute('aria-expanded','false');
+                panel.setAttribute('role','region');
+                panel.setAttribute('aria-label',`Cambios de ${reserva}`);
+                const cabecera=nodo(boton,'span','haku-libro-auto__detalle-rotulo');
+                nodo(cabecera,'strong','',reserva);
+                const resumen=[...new Set(grupo.flatMap(x=>lista(x.resumen)))];
+                nodo(cabecera,'small','',notaBreve(resumen.join(' · '),110));
+                const abrir=origen=>{
+                    if(vistaLista?.boton===boton){
+                        if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
+                        return;
+                    }
+                    cerrarDetalleListo();
+                    if(!panel.children.length)mostrarDetalleListo(panel,grupo);
+                    const flotante=origen!=='toque'&&posicionarDetalleListo(panel,boton,toast);
+                    panel.hidden=false;
+                    boton.setAttribute('aria-expanded','true');
+                    vistaLista={boton,panel,flotante,origen,fijado:false};
+                };
+                fila.addEventListener('pointerenter',e=>{
+                    if(e.pointerType==='mouse')abrir('mouse');
+                });
+                fila.addEventListener('pointerleave',e=>{
+                    if(e.pointerType!=='mouse'||vistaLista?.boton!==boton||vistaLista.fijado)return;
+                    if(vistaLista.flotante)vistaLista.retraso=root.setTimeout(cerrarDetalleListo,180);
+                    else cerrarDetalleListo();
+                });
+                boton.addEventListener('focus',()=>{if(boton.matches?.(':focus-visible'))abrir('teclado');});
+                boton.addEventListener('blur',()=>{
+                    if(vistaLista?.boton===boton&&vistaLista.origen==='teclado'&&!vistaLista.fijado)cerrarDetalleListo();
+                });
+                boton.addEventListener('click',e=>{
+                    if(vistaLista?.boton===boton&&(vistaLista.fijado||vistaLista.origen!=='mouse'||!e.detail)){
+                        cerrarDetalleListo();return;
+                    }
+                    abrir(e.pointerType==='touch'?'toque':'mouse');
+                    vistaLista.fijado=true;
+                });
+            }
             function mostrarMovimientos(padre,movimientos,etiqueta) {
                 const cabana=fila=>String(fila.cabana??'').replace(/^(?:CAB|Cabaña)\s+/i,'');
                 const mostrar=(seccion,filas)=>{
@@ -512,8 +652,9 @@
                         const fila=nodo(movimientos,'li','haku-libro-auto__movimiento');
                         const cabanas=[...new Set(grupo.map(cabana).filter(Boolean))];
                         const unica=cabanas.length===1?cabanas[0]:'';
-                        const reserva=[grupo[0].titular||'Reserva',unica&&'CAB '+unica].filter(Boolean).join(' · ');
-                        nodo(fila,'strong','',notaBreve(reserva,90));
+                        const reserva=notaBreve([grupo[0].titular||'Reserva',unica&&'CAB '+unica].filter(Boolean).join(' · '),90);
+                        if(etiqueta&&grupo.some(x=>x.vista)){adjuntarDetalleListo(fila,grupo,reserva);continue;}
+                        nodo(fila,'strong','',reserva);
                         const estadias=grupo.filter(x=>['reservas','estadias'].includes(x.grupo));
                         const periodo=estadias[0]?.periodo;
                         const mismoPeriodo=periodo&&cabanas.length>1&&estadias.length>1&&estadias.every(x=>x.periodo===periodo&&cabana(x));
@@ -544,6 +685,9 @@
                     const mas=nodo(padre,'details','haku-libro-auto__desplegable');
                     nodo(mas,'summary','',`${etiqueta} (${filas.length-limite})`);
                     mostrar(mas,filas.slice(limite));
+                    mas.addEventListener('toggle',()=>{
+                        if(!mas.open&&vistaLista&&mas.contains(vistaLista.boton))cerrarDetalleListo();
+                    });
                 }
             }
             function presentarPendientes(contenedor,pendientes){
@@ -558,6 +702,7 @@
                     id:'haku-casos-pendientes-'+(++numeroAviso),cerrar:cerrarAviso,posicionar:posicionarAviso,revisar,
                     abrirPendientes:()=>{
                         if(guardando)return false;
+                        cerrarDetalleListo();
                         avisoProtegido=true;
                         return true;
                     }});
@@ -749,7 +894,7 @@
                 botonesIncorporar.push(boton);
                 boton.addEventListener('click',async()=>{
                     if(boton.disabled||consultando()||guardando||finalizado)return;
-                    guardando=true;avisoProtegido=true;
+                    guardando=true;avisoProtegido=true;cerrarDetalleListo();
                     if(!estadoGuardado){
                         estadoGuardado=nodo(cuerpoAviso,'div','haku-libro-auto__resultado');
                         estadoGuardado.setAttribute('role','status');

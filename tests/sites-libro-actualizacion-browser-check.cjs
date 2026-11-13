@@ -64,8 +64,10 @@ async function comprobarCasosDelAviso(browser, url) {
                     texto:i===3?'Masajes para 2 · Pend. horario contacto@example.test':''}]:[]};
                 return {tipo:'modificacion',actual,cambios:[cambio],contexto,revision:{motivos:i===3?['Falta indicar el día.']:[]}};
             });
-            const listaCompleta={tipo:'modificacion',actual:reserva(8,'Reserva completa',2),accionable:true,
-                cambios:[{campo:'adultos',antes:2,ahora:3,accionable:true}]};
+            const listaCompleta={tipo:'modificacion',actual:{...reserva(8,'Reserva completa',2),adultos:3},accionable:true,
+                cambios:[{campo:'adultos',antes:5,ahora:3,proyecto:2,accionable:true}],
+                vistaIncorporacion:{campos:[{etiqueta:'Adultos',anterior:'2',propuesto:'3'}],
+                    notas:{retiradas:['Llegada a las 18:00'],añadidas:['Llegada a las 20:00 · contacto@example.test · DNI AB123456']}}};
             let generacion=0,informe,registro={version:1,cambios:[]},guardada=false;
             const panel=document.querySelector('.haiku-asistente-panel');
             panel.hidden=true;
@@ -108,6 +110,64 @@ async function comprobarCasosDelAviso(browser, url) {
         await aviso.getByText('Listos para incorporar (1)',{exact:true}).waitFor();
         assert.match(await aviso.innerText(),/Reserva completa · CAB 2/);
         assert.doesNotMatch(await aviso.innerText(),/Elena Salas|Amelia Torres/);
+        const ficha=aviso.getByRole('button',{name:'Ver cambios de Reserva completa · CAB 2'});
+        const vista=aviso.locator('.haku-libro-auto__detalle-listo');
+        assert.equal(await ficha.getAttribute('aria-expanded'),'false');
+        await ficha.hover();
+        await vista.waitFor();
+        assert.match(await vista.innerText(),/Antes.*Se guardará.*Adultos.*2.*3/s);
+        assert.match(await vista.innerText(),/Notas que se retirarán.*18:00.*Notas que se añadirán.*20:00/s);
+        assert.doesNotMatch(await vista.innerText(),/contacto@example\.test|AB123456/);
+        const posicion=await vista.evaluate(el=>{
+            const caja=el.getBoundingClientRect(),aviso=el.closest('.haku-libro-auto').getBoundingClientRect();
+            return {flotante:getComputedStyle(el).position==='fixed',alCostado:caja.right<=aviso.left,
+                visible:caja.top>=0&&caja.left>=0&&caja.right<=innerWidth&&caja.bottom<=innerHeight};
+        });
+        assert.deepEqual(posicion,{flotante:true,alCostado:true,visible:true});
+        const capturas=process.env.HAKU_RESUMEN_CAPTURES;
+        if(capturas){
+            fs.mkdirSync(capturas,{recursive:true});
+            for(const tema of ['claro','oscuro']){
+                await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+                const a=await aviso.boundingBox(),b=await vista.boundingBox();
+                await page.screenshot({path:path.join(capturas,`listos-${tema}-1280.png`),
+                    clip:{x:b.x-5,y:a.y-5,width:a.x+a.width-b.x+10,height:Math.max(a.height,b.y+b.height-a.y)+10}});
+            }
+        }
+        await vista.hover();
+        assert.equal(await vista.isVisible(),true,'el mouse puede entrar al detalle sin cerrarlo');
+        await page.mouse.move(2,2);
+        await vista.waitFor({state:'hidden'});
+        await page.keyboard.press('Tab');
+        await ficha.focus();
+        await vista.waitFor();
+        await ficha.press('Escape');
+        assert.equal(await ficha.getAttribute('aria-expanded'),'false');
+        assert.equal(await ficha.evaluate(el=>el===document.activeElement),true);
+
+        const tactil=await page.context().newCDPSession(page);
+        await tactil.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+        await page.setViewportSize({width:320,height:568});
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            await ficha.click();
+            const compacto=await vista.evaluate(el=>{
+                const estilos=window.getComputedStyle(el),fila=el.querySelector('.haku-libro-auto__detalle-campo:not(.haku-libro-auto__detalle-columnas)');
+                const anterior=fila.querySelector('.haku-libro-auto__antes'),nuevo=fila.querySelector('.haku-libro-auto__propuesto');
+                return {integrado:estilos.position!=='fixed',tipografia:parseFloat(estilos.fontSize),
+                    legible:getComputedStyle(anterior).color!==getComputedStyle(nuevo).color,
+                    apilado:anterior.getBoundingClientRect().top<nuevo.getBoundingClientRect().top,
+                    sinDesborde:el.scrollWidth<=el.clientWidth+1};
+            });
+            assert.deepEqual(compacto,{integrado:true,tipografia:10.08,legible:true,apilado:true,sinDesborde:true});
+            if(capturas)await aviso.screenshot({path:path.join(capturas,`listos-${tema}-320.png`)});
+            await ficha.click();
+            assert.equal(await vista.isVisible(),false);
+        }
+        await tactil.send('Emulation.setTouchEmulationEnabled',{enabled:false});
+        await tactil.detach();
+        await page.setViewportSize({width:1280,height:850});
+        assert.equal(await page.evaluate(()=>__guardadosCasos),0);
         const abrir=aviso.getByRole('button',{name:/8 casos pendientes/});
         assert.equal(await abrir.getAttribute('aria-expanded'),'false');
         await abrir.click();
@@ -136,8 +196,6 @@ async function comprobarCasosDelAviso(browser, url) {
         assert.match(await detalle.innerText(),/Nov26, AB43/);
         assert.doesNotMatch(await detalle.innerText(),/sin adivinar|contacto@example\.test|Otros datos por revisar/);
 
-        const capturas=process.env.HAKU_RESUMEN_CAPTURES;
-        if(capturas)fs.mkdirSync(capturas,{recursive:true});
         for(const tema of ['claro','oscuro']){
             await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
             for(const [width,height] of [[1280,850],[390,844],[320,568]]){
@@ -784,7 +842,10 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         await burbuja.getByText('Listos para incorporar (1)',{exact:true}).waitFor();
         const pendienteMixto=burbuja.getByRole('button',{name:/1 caso pendiente/});
         assert.equal(await pendienteMixto.getAttribute('aria-expanded'),'false');
-        assert.match(await burbuja.innerText(),/Jacuzzi.*19:15[\s\S]*Dejar batas/);
+        const fichaMixta=burbuja.getByRole('button',{name:/Ver cambios de Cristian Sintético/});
+        await fichaMixta.click();
+        const vistaMixta=burbuja.locator('.haku-libro-auto__detalle-listo');
+        assert.match(await vistaMixta.innerText(),/Añadir a la reserva.*Dejar batas.*Jacuzzi.*19:15/s);
         assert.doesNotMatch(await burbuja.innerText(),/Masaje|coordinación pendiente/);
         await burbuja.getByRole('button',{name:'Incorporar',exact:true}).click();
         await page.waitForFunction(()=>typeof __resolverGuardado==='function');

@@ -4,7 +4,8 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const S=require('../js/haiku-libro-semantica-v1.js');
 
-const context={structuredClone,console,Intl,Date,HAIKU_LIBRO_SEMANTICA:S};
+const context={structuredClone,console,Intl,Date,HAIKU_LIBRO_SEMANTICA:S,
+    HAIKU_RESERVA_ESTADO_MANUAL_V1:require('../js/haiku-reserva-estado-manual-v1.js')};
 vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),context);
 const libro=(extra={})=>({id:'Sep26!A3',titular:'Persona Ejemplo',cabana:10,fecha_checkin:'2026-09-19',fecha_checkout:'2026-09-20',
     noches:1,tipo_estadia:'alojamiento',adultos:2,ninos:0,mascotas:0,estado_confirmacion:'confirmada_por_color',estado_operativo:'sin_checkin',
@@ -80,6 +81,9 @@ test('nota parcial sustituye sólo el fragmento cambiado y conserva los demás',
     const texto=h.operaciones[0].reserva.despues.observaciones;
     assert.match(texto,/Llegada a las 20:00/);assert.doesNotMatch(texto,/Llegada a las 18:00/);
     assert.ok(texto.includes(masajeNota));assert.match(texto,/^Manual\n/);
+    const {notas}=h.out.items[0].vistaIncorporacion;
+    assert.deepEqual(Array.from(notas.retiradas),['Llegada a las 18:00']);
+    assert.deepEqual(Array.from(notas.añadidas),['Llegada a las 20:00']);
 });
 test('pago pendiente parcial conserva comentarios ajenos y no escribe pagos',async()=>{
     const h=await prepararNotasParciales({campo:'pagos_pendientes',antes:[],ahora:['Pendiente factura'],
@@ -206,15 +210,35 @@ test('historial: pendiente frente a confirmada por color prepara sólo la confir
     const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
     assert.equal(update.payload.estadia.despues.estado_estadia,'confirmada');
     assert.deepEqual(Object.keys(update.payload.estadia.despues),['estado_estadia']);
+    assert.deepEqual(JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion.campos)),[
+        {etiqueta:'Confirmación',anterior:'Confirmación Pendiente',propuesto:'Confirmada'}
+    ]);
 });
 test('historial: un cambio de adultos no arrastra una confirmación por color ajena al cambio',async()=>{
-    const anterior=libro({adultos:2}),actual=libro({adultos:3}),registro={id:'adultos-sin-color',tipo:'modificacion',anterior,actual,
-        cambios:[{campo:'adultos',antes:2,ahora:3}]};
+    const anterior=libro({adultos:5}),actual=libro({adultos:3}),registro={id:'adultos-sin-color',tipo:'modificacion',anterior,actual,
+        cambios:[{campo:'adultos',antes:5,ahora:3}]};
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],
         clienteFocal({reserva_estadias:[filaSistema('pendiente')]},[]),{generacion:3});
     const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(out.reservas,out.comparacion);
     const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
     assert.deepEqual(Object.keys(update.payload.estadia.despues),['adultos']);
+    assert.deepEqual(JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion.campos)),[
+        {etiqueta:'Adultos',anterior:'2',propuesto:'3'}
+    ]);
+});
+test('historial: el alta muestra los datos de la estadía que se creará y distingue una reserva nueva',async()=>{
+    const actual=libro({notas_importantes:['Preparar dos batas'],rut_documento:'12.345.678-9',correo:'persona@example.test'});
+    const registro={id:'alta-lista',tipo:'nueva',actual,
+        cambios:[{campo:'notas_importantes',antes:[],ahora:actual.notas_importantes}]};
+    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({},[]),{generacion:3});
+    assert.equal(out.items[0].accionable,true);
+    const vista=JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion));
+    assert.ok(vista.campos.some(c=>c.etiqueta==='Entrada'&&c.propuesto==='19/09/2026'));
+    assert.ok(vista.campos.some(c=>c.etiqueta==='Noches'&&c.propuesto==='1'));
+    assert.ok(vista.campos.some(c=>c.etiqueta==='Estado de la estadía'&&c.propuesto==='Confirmada'));
+    assert.ok(vista.campos.every(c=>!Object.hasOwn(c,'anterior')));
+    assert.deepEqual(vista.notas.añadidas,['Preparar dos batas']);
+    assert.doesNotMatch(JSON.stringify(vista),/example\.test|12\.345\.678/);
 });
 test('historial: el contador seguro exige una propuesta seleccionable del plan de incorporación',async()=>{
     const actual=libro({adultos:0}),registro={id:'adultos-no-validos',tipo:'modificacion',anterior:libro(),actual,
@@ -269,6 +293,10 @@ test('checkout y noches coherentes abren una preparación individual sin arrastr
     const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(prep.reservas,prep.comparacion);
     const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
     assert.deepEqual({...update.payload.estadia.despues},{fecha_salida:'2026-09-13'});
+    assert.deepEqual(JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion.campos)),[
+        {etiqueta:'Salida',anterior:'14/09/2026',propuesto:'13/09/2026'},
+        {etiqueta:'Noches',anterior:'2',propuesto:'1'}
+    ]);
     assert.match(update.aviso,/cargos de alojamiento/);assert.ok(update.permisos.includes('pagos.verificar'));
     actual.noches=3;
     const incoherente=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});

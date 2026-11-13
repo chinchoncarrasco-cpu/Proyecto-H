@@ -1816,6 +1816,66 @@ html[data-haku-mobile-assistant="1"] .haku-comprobante-notas > summary { min-hei
 .haku-libro-auto__movimiento + .haku-libro-auto__movimiento { border-top: 1px solid var(--aviso-borde); }
 .haku-libro-auto__movimiento strong { font-weight: 600; }
 .haku-libro-auto__movimiento span { color: var(--aviso-secundario); font-size: 11px; }
+.haku-libro-auto.haku-libro-auto button.haku-libro-auto__ver-detalle {
+    display: grid; grid-template-columns: minmax(0, 1fr) 12px; align-items: center; gap: 8px;
+    width: 100%; min-height: 30px; padding: 3px 5px; border: 0;
+    background: transparent; color: var(--aviso-texto); text-align: left; line-height: 15px;
+}
+.haku-libro-auto__ver-detalle::after {
+    content: ""; justify-self: center; width: 5px; height: 5px;
+    border: solid var(--aviso-acento); border-width: 0 1px 1px 0; transform: rotate(45deg);
+}
+.haku-libro-auto__ver-detalle[aria-expanded="true"]::after { transform: rotate(225deg); }
+.haku-libro-auto.haku-libro-auto button.haku-libro-auto__ver-detalle:is(:hover,[aria-expanded="true"]) {
+    background: var(--haku-compacto-suave, var(--aviso-superficie));
+}
+.haku-libro-auto__ver-detalle .haku-libro-auto__detalle-rotulo {
+    display: grid; gap: 1px; min-width: 0; color: inherit; font-size: .75rem;
+}
+.haku-libro-auto__detalle-rotulo > small { color: var(--aviso-secundario); font-size: .63rem; line-height: 1.35; }
+.haku-libro-auto__detalle-listo {
+    padding: 5px 8px; border-inline-start: 2px solid var(--aviso-borde); border-radius: 4px;
+    background: var(--haku-compacto-suave, var(--aviso-superficie)); font-size: .63rem; line-height: 1.4;
+}
+.haku-libro-auto__detalle-listo[hidden] { display: none; }
+.haku-libro-auto__detalle-listo--flotante {
+    position: fixed; box-sizing: border-box; z-index: 1; max-height: calc(100dvh - 16px); overflow: auto;
+    overscroll-behavior: contain;
+    padding: 8px 10px; border: 1px solid var(--aviso-borde); border-radius: 6px;
+    background: var(--aviso-superficie); box-shadow: 0 5px 18px #09171129;
+}
+.haku-libro-auto__detalle-operacion { display: grid; gap: 3px; }
+.haku-libro-auto__detalle-operacion + .haku-libro-auto__detalle-operacion {
+    margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--aviso-borde);
+}
+.haku-libro-auto__detalle-titulo { font-size: .69rem; }
+.haku-libro-auto__detalle-campos { margin: 0; }
+.haku-libro-auto__detalle-campo {
+    display: grid; grid-template-columns: minmax(0,1fr); gap: 1px; align-items: baseline; padding: 2px 0;
+}
+.haku-libro-auto__detalle-campo + .haku-libro-auto__detalle-campo { border-top: 1px solid var(--aviso-borde); }
+.haku-libro-auto__detalle-campo > dt { font-weight: 600; }
+.haku-libro-auto__detalle-campo > dd { display: grid; grid-template-columns: 4rem minmax(0,1fr); gap: 6px; margin: 0; }
+.haku-libro-auto__detalle-campo > dd:only-of-type { display: block; }
+.haku-libro-auto__movimiento .haku-libro-auto__detalle-listo span { color: inherit; font-size: inherit; }
+.haku-libro-auto__detalle-columnas { display: none; border-bottom: 1px solid var(--aviso-borde); font-weight: 600; }
+.haku-libro-auto__antes { color: var(--aviso-secundario); }
+.haku-libro-auto__propuesto { color: var(--aviso-acento); }
+.haku-libro-auto__propuesto .haku-libro-auto__detalle-valor { font-weight: 600; }
+.haku-libro-auto__detalle-listo ul { margin: 0; padding-inline-start: 13px; }
+.haku-libro-auto .haku-libro-auto__detalle-listo .haku-libro-auto__aviso { font-size: inherit; line-height: inherit; }
+.haku-libro-auto__detalle-listo--flotante .haku-libro-auto__detalle-campo {
+    grid-template-columns: minmax(0,.85fr) repeat(2,minmax(0,1fr)); gap: 6px;
+}
+.haku-libro-auto__detalle-listo--flotante .haku-libro-auto__detalle-columnas { display: grid; }
+.haku-libro-auto__detalle-listo--flotante .haku-libro-auto__detalle-campo > dd { display: block; }
+.haku-libro-auto__detalle-listo--flotante .haku-libro-auto__detalle-campo > dd:only-of-type { grid-column: span 2; }
+.haku-libro-auto__detalle-listo--flotante .haku-libro-auto__detalle-etiqueta {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (max-width: 719px), (pointer: coarse) {
+    .haku-libro-auto.haku-libro-auto button.haku-libro-auto__ver-detalle { min-height: 40px; }
+}
 .haku-libro-auto__cabanas-guardadas { display: flex; flex-wrap: wrap; gap: 3px 8px; }
 .haku-libro-auto__cabanas-guardadas span { color: var(--aviso-acento); }
 .haku-libro-auto__desplegable > summary { cursor: pointer; color: var(--aviso-acento); padding: 3px 0; }
