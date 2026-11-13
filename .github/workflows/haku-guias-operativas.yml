@@ -30,6 +30,8 @@ on:
       - "supabase/migrations/20260910180000_bove_registro_atomico.sql"
       - "tests/haku-ayuda-browser-check.cjs"
       - "tests/cloudbeds-informes.test.cjs"
+      - "tests/cloudbeds-pago-alojamiento-postgres.cjs"
+      - "supabase/migrations/*_cloudbeds_guardia_pago_alojamiento.sql"
       - "tests/totales-asistente.test.cjs"
       - "tests/resumen-servicio-sites.test.cjs"
       - "panel.html"
@@ -65,6 +67,7 @@ jobs:
         run: |
           node tests/haku-operaciones-postgres.cjs
           node tests/bove-rpc-postgres.cjs
+          node tests/cloudbeds-pago-alojamiento-postgres.cjs
       - name: Guías reales en escritorio y móvil, historial y consulta en curso
         env:
           NODE_PATH: ${{ runner.temp }}/haku-guias/node_modules

@@ -83,7 +83,7 @@
         const extraer = patron => t.match(patron)?.[1] || null;
         return {
             folio: extraer(/\bfolio\s*[:#]?\s*(\d{3,})(?!\d)/),
-            autorizacion: extraer(/\b(?:bo?v[\s-]*tar|bovt|cod\.?\s*aut\.?|codigo (?:de )?autorizacion|autorizacion)\s*[:#]?\s*(\d{3,})(?!\d)/),
+            autorizacion: extraer(/\b(?:bo?v[\s-]*tar|bovt|cod\.?\s*aut\.?|codigo (?:de )?autorizacion|autorizacion)\s*[:#]?\s*(\d{3,}[a-z0-9]*)\b/)?.toUpperCase() || null,
             bove: extraer(/\bbove\s*[:#]?\s*(\d{3,})(?!\d)/),
             fecha: fecha(extraer(/^(\d{1,2}[/.-]\d{1,2}[/.-](?:\d{4}|\d{2}))(?!\d)/))
         };
@@ -119,9 +119,12 @@
         const descripcion = texto(raw.descripcion), codigo = texto(raw.codigo).toUpperCase();
         const concepto = normalizar(descripcion);
         const nota = texto(raw.nota);
+        const medioInforme = medio(descripcion);
         const mediosNota = unico(nota.split(/\/{2,}/).filter(s =>
             /^(?:(?:medio(?: de pago)?|forma de pago)\s*:\s*)?(?:tarjeta\s+(?:de\s+)?)?(?:debito|credito|efectivo|web\s*pay(?:\s+(?:debito|credito))?|transf\.?|transferencia(?:\s+bancaria)?)$/.test(normalizar(s)))
             .map(s => medio(s) || (clave(s) === "transf" ? "transferencia" : null)));
+        const comparables = unico(mediosNota.map(m => medioNotaComparable({medio:medioInforme, medioNota:m})));
+        const variantesNota = comparables.filter(m => m !== "webpay" || !comparables.some(x => x.startsWith("webpay ")));
         const d = debito ?? 0, c = credito ?? 0;
         let tipo = "movimiento";
         if (d && c || texto(raw.debito) && debito === null || texto(raw.credito) && credito === null) tipo = "movimiento";
@@ -134,7 +137,8 @@
         return {
             tipo, debito, credito, descripcion, codigo, referencia: texto(raw.referencia) || null,
             registradoEn: fecha(raw.registradoEn), horaRegistro: hora(raw.registradoEn), servicioEn: fecha(raw.servicioEn),
-            nota: nota || null, medio: medio(descripcion), medioNota: mediosNota.length === 1 ? mediosNota[0] : null, comprobante: datosComprobante(nota)
+            nota: nota || null, medio: medioInforme, medioNota: mediosNota.length === 1 ? mediosNota[0] : variantesNota[0],
+            mediosNotaDistintos: variantesNota.length > 1, comprobante: datosComprobante(nota)
         };
     }
 
@@ -366,7 +370,7 @@
     function filaLibro(r) {
         return {
             titular: r.titular, cabana: r.cabana, entrada: r.fecha_checkin, salida: r.fecha_checkout,
-            fullDay: r.tipo_estadia === "full_day", estado: estado(r.estado_operativo) || estado(r.estado_confirmacion),
+            fullDay: ["full_day", "fullday"].includes(r.tipo_estadia), estado: estado(r.estado_operativo) || estado(r.estado_confirmacion),
             confirmacion: estado(r.estado_confirmacion), noches: r.noches,
             nochesTexto: r.noches_texto_efectivas ?? r.noches_texto, geometriaSegura: r.geometria_inequivoca === true,
             origen: r.coordenadas_origen, notas: [...lista(r.notas_importantes), r.texto_original],
@@ -466,8 +470,8 @@
             estado: p.estado, origenLibro: p.datos_origen?.origen_libro };
     }
 
-    function pagoLibro(p) {
-        const medioLibro = root.HAIKU_LIBRO_PAGOS_CANON_V1?.medioDesdeTexto(p) || p.medio_pago;
+    function pagoLibro(p, medioCotejado) {
+        const medioLibro = medioCotejado || root.HAIKU_LIBRO_PAGOS_CANON_V1?.medioDesdeTexto(p) || p.medio_pago;
         return { tipo: "pago", vigente: p.pago_recibido === true && p.estado_pago === "registrado_en_libro" &&
             !p.fecha_comprobante_variable && !lista(p.advertencias).length, importe: dinero(p.monto), moneda: p.moneda || "CLP",
             fecha: p.fecha_comprobante_variable ? null : p.fecha_comprobante, medio: medio(medioLibro),
@@ -477,28 +481,92 @@
     const mismoMedio = (a, b) => a && b && (a === b || a === "webpay" && b.startsWith("webpay ") || b === "webpay" && a.startsWith("webpay "));
     const datoPago = p => [pesos(p.importe), dia(p.fecha), p.medio, p.estado].filter(Boolean).join(" · ");
     const mismaCelda = (a, b) => a?.hoja && a?.celda && a.hoja === b?.hoja && a.celda === b?.celda;
-    function pagoIncorporable(fila, proyecto, libro, destino, ph, li) {
+    const medioNotaComparable = fila => fila.medio?.startsWith("webpay") && ["crédito", "débito"].includes(fila.medioNota)
+        ? "webpay " + fila.medioNota : fila.medioNota;
+    const medioComprobante = fila => fila.medio === "webpay" && medioNotaComparable(fila)?.startsWith("webpay ")
+        ? medioNotaComparable(fila) : fila.medio;
+    const medioContradictorio = fila => fila.medioNota && !mismoMedio(fila.medio, medioNotaComparable(fila));
+
+    function cotejarPagoAlojamiento(fila, reserva) {
+        if (!reserva || fila.tipo !== "pago" || !equivalente(fila.titular, reserva.titular) ||
+            fila.cabana !== Number(reserva.cabana) || fila.entrada !== reserva.fecha_checkin ||
+            !mismasFechas(fila, {entrada:reserva.fecha_checkin, salida:reserva.fecha_checkout,
+                fullDay:["full_day", "fullday"].includes(reserva.tipo_estadia)}) ||
+            lista(reserva.advertencias).length || fila.conflicto || fila.repetida ||
+            fila.posibleReversa || fila.comprobanteCompartido || fila.mediosNotaDistintos || medioContradictorio(fila)) return null;
+        const c = fila.comprobante;
+        if (!c.fecha || !/^\d+$/.test(refCanon(c.autorizacion)) ||
+            !Number.isSafeInteger(fila.credito) || fila.credito <= 0) return null;
+        const asociados = lista(reserva.pagos), sinAsociar = lista(reserva.pagos_sin_asociacion);
+        const candidatos = [...asociados, ...sinAsociar].filter(p => p.tipo_movimiento === "alojamiento" &&
+            [p.codigo_autorizacion, p.bovtar].some(v => refCanon(v) === refCanon(c.autorizacion)));
+        if (candidatos.length !== 1) return null;
+        const [p] = candidatos;
+        if (!p.origen?.celda || p.origen.hoja !== reserva.coordenadas_origen?.hoja ||
+            Number(p.cabana) !== fila.cabana || p.fecha_bloque !== fila.entrada || p.fecha_comprobante !== c.fecha ||
+            p.monto !== fila.credito || p.moneda !== "CLP" || p.pago_recibido !== true || p.estado_pago !== "registrado_en_libro" ||
+            p.fecha_comprobante_variable || p.webpay_por_confirmar || p.transaccion_distribuida || p.conflicto_distribucion ||
+            ["dudoso", "nota_financiera"].includes(p.clasificacion_financiera) ||
+            p.bove && c.bove && refCanon(p.bove) !== refCanon(c.bove)) return null;
+        const advertencias = lista(p.advertencias);
+        if (sinAsociar.includes(p)) {
+            const evidencia = p.evidencia_financiera;
+            // Un comprobante completo en el bloque sin encabezado se puede
+            // asociar si ambos documentos identifican el mismo pago y titular.
+            if (!reserva.geometria_inequivoca || !equivalente(p.titular, reserva.titular) ||
+                evidencia?.sector !== "pagos" || evidencia.estructura_fila !== "fecha_detalle_concepto_monto" ||
+                !["fecha", "detalle", "concepto", "monto"].every(k => evidencia.columnas_ocupadas?.[k] === true) ||
+                advertencias.some(a => !a.startsWith("El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos;"))) return null;
+        } else if (advertencias.length) return null;
+        const cabanaConcepto = normalizar(p.concepto).match(/^cab\s*(\d+)\b/)?.[1];
+        if (cabanaConcepto && Number(cabanaConcepto) !== fila.cabana) return null;
+
+        const medioInforme = medioComprobante(fila), medioLibro = pagoLibro(p).medio;
+        const textoLibro = normalizar(p.texto_original);
+        if (/\bdebito\b/.test(textoLibro) && /\bcredito\b/.test(textoLibro)) return null;
+        let medioPago;
+        if (medioInforme?.startsWith("webpay")) {
+            if (p.folio || p.bovtar || c.folio || refCanon(p.codigo_autorizacion) !== refCanon(c.autorizacion)) return null;
+            const tarjeta = ["webpay crédito", "webpay débito"].find(m =>
+                mismoMedio(m, medioInforme) && (mismoMedio(m, medioLibro) ||
+                    m === medioInforme && m.endsWith(" " + medioLibro) &&
+                    !/\b(?:pos|transbank|bovtar)\b/.test(textoLibro)));
+            if (!tarjeta || (medioInforme === "webpay" && medioLibro === "webpay")) return null;
+            medioPago = tarjeta === "webpay crédito" ? "webpay_credito" : "webpay_debito";
+        } else {
+            if (!["crédito", "débito"].includes(medioInforme) || medioLibro !== medioInforme ||
+                !/^\d+$/.test(refCanon(c.folio)) || refCanon(p.folio) !== refCanon(c.folio) ||
+                refCanon(p.bovtar) !== refCanon(c.autorizacion)) return null;
+            medioPago = medioInforme === "crédito" ? "tarjeta_credito" : "tarjeta_debito";
+        }
+        return { ...p, medio_pago: medioPago, advertencias: [] };
+    }
+
+    function pagoIncorporable(fila, proyecto, libro, destino, ph, li, alojamiento) {
         if (fila.tipo !== "pago" || ph.estado !== "falta" || li.estado !== "coincide" ||
             !destino?.reservaId || !destino.estadiaId || !proyecto || !libro ||
             !mismaCabana(fila, proyecto) || !mismaCabana(fila, libro) ||
             !mismasFechas(fila, proyecto) || !mismasFechas(fila, libro) ||
             !variante(fila.titular, proyecto.titular) ||
             [fila, proyecto, libro].some(r => cancelada(r) || r.estado === "no_show")) return null;
+        if (mismaCelda(alojamiento?.origen, li.origen)) return { reservaLibro: libro.reservaLibro, origen: li.origen,
+            destino, comprobanteCloudbeds: fila };
         const asociados = libro.pagos.filter(p => mismaCelda(p.origen, li.origen));
         const pago = asociados[0];
-        if (asociados.length !== 1 || !["alojamiento", "servicio", "distribuido"].includes(pago.tipo_movimiento) ||
+        if (asociados.length !== 1 || !["servicio", "distribuido"].includes(pago.tipo_movimiento) ||
             !fila.comprobante.fecha || pago.fecha_comprobante !== fila.comprobante.fecha ||
             pago.bove && fila.comprobante.bove && refCanon(pago.bove) !== refCanon(fila.comprobante.bove)) return null;
         return { reservaLibro: libro.reservaLibro, origen: li.origen, destino };
     }
     function compararPago(fila, pagos, segura, origenConfirmado) {
         if (!fila.medio) return revision("Cloudbeds no identifica un medio de pago comparable en esta fila.");
-        if (fila.medioNota && !mismoMedio(fila.medio, fila.medioNota) &&
-            !(fila.medio === "webpay" && ["débito", "crédito"].includes(fila.medioNota))) {
+        if (fila.mediosNotaDistintos) return revision("La nota de Cloudbeds indica más de un medio de pago.");
+        if (medioContradictorio(fila)) {
             return revision(`La transacción registra ${fila.medio} y la nota del comprobante dice ${fila.medioNota}.`);
         }
+        const medioFila = medioComprobante(fila);
         const monto = Math.abs(fila.credito);
-        const comprobante = { ...fila.comprobante, medio: fila.medio };
+        const comprobante = { ...fila.comprobante, medio: medioFila };
         const porReferencia = pagos.filter(p => mismaReferencia(comprobante, p) || mismaCelda(origenConfirmado, p.origenLibro));
         if (fila.posibleReversa) return revision("Hay una anulación o reembolso compatible en los archivos. Comprueba el pago original.");
         if (porReferencia.length > 1) return revision("El comprobante aparece en varios movimientos. Revisa si está distribuido o duplicado.");
@@ -509,7 +577,7 @@
             if (!p.moneda || !p.medio || !p.fecha || p.importe === null) return revision("Coincide el comprobante. Faltan datos para verificar el movimiento.", datoPago(p), p.origen);
             const distintos = [
                 (fila.tipo === "reembolso" ? Math.abs(p.importe) : p.importe) !== monto && "monto", p.moneda !== "CLP" && "moneda",
-                !mismoMedio(p.medio, fila.medio) && "medio",
+                !mismoMedio(p.medio, medioFila) && "medio",
                 !anulado && comprobante.fecha && comprobante.fecha !== p.fecha && "fecha del comprobante",
                 p.folio && comprobante.folio && refCanon(p.folio) !== refCanon(comprobante.folio) && "folio",
                 p.autorizacion && comprobante.autorizacion && refCanon(p.autorizacion) !== refCanon(comprobante.autorizacion) && "autorización"
@@ -520,10 +588,16 @@
                     "Coincide con el comprobante del Libro asociado al pago en Proyecto H.";
             return resultado("coincide", evidencia, datoPago(p), p.origen || origenConfirmado);
         }
-        const posibles = pagos.filter(p => p.importe === monto ||
-            mismoMedio(p.medio, fila.medio) && p.fecha && [comprobante.fecha, fila.registradoEn].includes(p.fecha) ||
-            comprobante.folio && refCanon(comprobante.folio) === refCanon(p.folio) ||
-            comprobante.autorizacion && refCanon(comprobante.autorizacion) === refCanon(p.autorizacion));
+        const posibles = pagos.filter(p => {
+            const auth = refCanon(comprobante.autorizacion), otra = refCanon(p.autorizacion);
+            const folio = refCanon(comprobante.folio), otroFolio = refCanon(p.folio);
+            if (fila.tipo === "pago" && auth && otra && auth !== otra &&
+                (medioFila?.startsWith("webpay") && p.medio?.startsWith("webpay") ||
+                    folio && otroFolio && folio !== otroFolio)) return false;
+            return p.importe === monto ||
+                mismoMedio(p.medio, medioFila) && p.fecha && [comprobante.fecha, fila.registradoEn].includes(p.fecha) ||
+                folio && folio === otroFolio || auth && auth === otra;
+        });
         if (posibles.length) return revision("Encontré movimientos compatibles. Comprueba la referencia antes de dar el pago por conciliado.",
             posibles.length === 1 ? datoPago(posibles[0]) : "", posibles.length === 1 ? posibles[0].origen : null);
         if (fila.tipo !== "pago") return revision("Comprueba este movimiento con el pago original y la evidencia del reverso.");
@@ -571,7 +645,7 @@
         for (const f of filas.filter(f => f.tipo === "pago" && f.id && f.medio)) {
             const auth = refCanon(f.comprobante.autorizacion), folio = refCanon(f.comprobante.folio);
             if (!auth || !folio && !f.medio.startsWith("webpay")) continue;
-            const k = JSON.stringify([f.id, auth, f.medio.startsWith("webpay") ? "webpay" : folio]);
+            const k = JSON.stringify([auth, f.medio.startsWith("webpay") ? "webpay" : folio]);
             if (!recibos.has(k)) recibos.set(k, []);
             recibos.get(k).push(f);
         }
@@ -616,6 +690,29 @@
         return destinos;
     }
 
+    function agruparPagos(filas) {
+        const grupos = new Map();
+        for (const f of filas) {
+            if (!["pago", "anulacion", "reembolso"].includes(f.tipo) || f.conflicto) continue;
+            if (!contextoCompleto(f)) continue;
+            const contexto = [f.cabana, f.entrada, f.salida];
+            const clave = f.destino?.estadiaId ? JSON.stringify(["estadia", f.destino.reservaId, f.destino.estadiaId, ...contexto]) :
+                f.id ? JSON.stringify(["cloudbeds", f.id, ...contexto]) : null;
+            if (!clave) continue;
+            if (!grupos.has(clave)) grupos.set(clave, []);
+            grupos.get(clave).push(f);
+        }
+        const porFila = new Map();
+        for (const movimientos of grupos.values()) {
+            if (movimientos.length === 1) continue;
+            movimientos.sort((a, b) =>
+                (a.comprobante.fecha || a.registradoEn || "").localeCompare(b.comprobante.fecha || b.registradoEn || "") ||
+                momentoRegistro(a).localeCompare(momentoRegistro(b)));
+            for (const fila of movimientos) porFila.set(fila, movimientos);
+        }
+        return porFila;
+    }
+
     function comparar(filas, { proyecto, libro }) {
         const hojas = libro?.hojas || [];
         const reservasLibro = hojas.flatMap(h => lista(h.reservas)).map(filaLibro);
@@ -631,7 +728,7 @@
                 : "La misma fila aparece más de una vez en un informe. Comprueba si son movimientos distintos.")
                 : fila.noches != null && noches !== null && fila.noches !== noches
                     ? revision("Las noches declaradas en Cloudbeds difieren de las fechas de la estadía.") : null;
-            let ph = general || noProyecto, li = general || noLibro;
+            let ph = general || noProyecto, li = general || noLibro, alojamiento;
             if (!general && ["reserva", "cancelacion"].includes(fila.tipo)) {
                 if (proyecto?.disponible) ph = compararEstadia(fila, p) || (p.duda ? revision(p.duda) :
                     fila.tipo === "reserva" ? resultado("falta", "No encontré esta estadía en Proyecto H.") :
@@ -662,16 +759,21 @@
                     const porCelda = new Map([...dePeriodo, ...deReserva].map(x => [
                         x.origen?.hoja && x.origen?.celda ? x.origen.hoja + "!" + x.origen.celda : x, x
                     ]));
+                    alojamiento = libro?.finanzas ? cotejarPagoAlojamiento(fila, l.fila?.reservaLibro) : null;
+                    if (alojamiento) porCelda.set(alojamiento.origen.hoja + "!" + alojamiento.origen.celda, alojamiento);
                     const dudaComprobante = fila.comprobanteCompartido
                         ? revision(fila.posibleReversa
                             ? "Hay una anulación o reembolso compatible y más de un pago usa este comprobante."
                             : "Más de un pago de Cloudbeds usa este comprobante. Revisa si se repitió o se repartió.") : null;
                     li = dudaComprobante || (libro?.finanzas && (l.fila || porCelda.size)
-                        ? compararPago(fila, [...porCelda.values()].map(pagoLibro),
+                        ? compararPago(fila, [...porCelda.values()].map(p => pagoLibro(p, p === alojamiento ? p.medio_pago : null)),
                             Boolean(l.fila && refsFuertes && fila.comprobante.fecha &&
                                 cobertura(hojas, fila.entrada, "pagos") && cobertura(hojas, fila.comprobante.fecha, "pagos")))
                         : revision(l.duda || "Falta identificar la estadía o comprobar los pagos del Libro."));
                     const datosProyecto = proyecto?.pagos?.get(p.fila?.reservaId) || [];
+                    if (li.estado === "coincide" && mismaCelda(li.origen, alojamiento?.origen)) {
+                        li.detalle = "Coinciden el importe, la fecha y la autorización del pago de alojamiento.";
+                    }
                     ph = dudaComprobante || (proyecto?.pagosDisponibles && p.fila
                         ? compararPago(fila, datosProyecto.map(pagoProyecto), refsFuertes, li.estado === "coincide" ? li.origen : null)
                         : revision(p.duda || "Falta identificar la reserva o consultar sus pagos en Proyecto H."));
@@ -687,13 +789,14 @@
             const destino = general ? null : p.fila && { reservaId: p.fila.reservaId,
                 estadiaId: p.fila.estadiaId, cabana: p.fila.cabana, fecha: p.fila.entrada };
             return { ...fila, titular: fila.titular || (p.evidencia === "id" ? p.fila.titular : null),
-                proyecto: ph, libro: li, destino, pagoIncorporable: pagoIncorporable(fila, p.fila, l.fila, destino, ph, li) };
+                proyecto: ph, libro: li, destino, pagoIncorporable: pagoIncorporable(fila, p.fila, l.fila, destino, ph, li, alojamiento) };
         };
         return filas.map(compararFila);
     }
 
     const api = Object.freeze({ parsearXLSX, parsearPDF, esPDFNotas: paginas => paginas.some(p => cabeceraNotas(p)), esSolicitud,
-        preparar, comparar, destinosProyecto, gruposMovimiento, titulos, dia, cab, pesos, datoEstadia, estado, normalizar, idCloudbeds });
+        preparar, comparar, destinosProyecto, agruparPagos, cotejarPagoAlojamiento, medioComprobante, gruposMovimiento,
+        titulos, dia, cab, pesos, datoEstadia, estado, normalizar, idCloudbeds });
     root.HAIKU_CLOUDBEDS_INFORMES_V1 = api;
     if (typeof module !== "undefined") module.exports = api;
 })(typeof window === "undefined" ? globalThis : window);

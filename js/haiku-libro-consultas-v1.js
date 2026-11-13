@@ -1984,6 +1984,12 @@
         }
     }
 
+    function leerCargosAlojamiento(cliente, reservaId) {
+        return paginas(() => cliente.from('vista_estado_cargos')
+            .select('cargo_id,reserva_id,estadia_id,tipo_cargo,estado,monto_ajustado,saldo_cargo')
+            .eq('reserva_id',reservaId).eq('tipo_cargo','alojamiento').eq('estado','activo'), 'cargo_id');
+    }
+
     async function leerEstadiasSistema(cliente, {desde, hasta, focal} = {}) {
         if (!cliente?.auth?.getSession) throw new Error("Inicia sesión en Proyecto H para comparar.");
         const { data: sesion, error } = await cliente.auth.getSession();
@@ -2079,10 +2085,11 @@
             [...r.pagos, ...r.pagos_sin_asociacion].some(p => D.aplicacionesLibro(p).length));
         // La reserva destino se conoce desde la fila. Leer sus cargos en paralelo
         // con las estadías y la comprobación global de duplicados del Libro.
-        const [{estadias:systemAll,usuario}, pagosInforme, finanzasInforme] = await Promise.all([
+        const [{estadias:systemAll,usuario}, pagosInforme, finanzasInforme, cargosAlojamiento] = await Promise.all([
             leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal}),
             reservaInforme ? leerPagosSistema(cliente) : null,
-            leerCargosInforme ? leerFinanzasServicios(cliente, [reservaInforme]) : null
+            leerCargosInforme ? leerFinanzasServicios(cliente, [reservaInforme]) : null,
+            reservaInforme && q.pagoAlojamientoCloudbeds ? leerCargosAlojamiento(cliente, reservaInforme) : null
         ]);
         const system = systemAll.filter(candidatoElegible);
 
@@ -2346,7 +2353,7 @@
             }
         }
 
-        resultados.snapshot = { capacidadTransferencias, capacidadGlosaSinNombre, estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero,
+        resultados.snapshot = { capacidadTransferencias, capacidadGlosaSinNombre, estadias: system, estadias_todas:systemAll, pagos: pagosVigentes, pagos_todos:pagos, finanzas: snapshotFinanciero, cargosAlojamiento,
             efectivo_aplicado: snapshotEfectivoAplicado };
         resultados.grupos = grupos;
         resultados.pagosDetalle = [...pagosUnicos.values()];
@@ -3825,11 +3832,30 @@
             (!item.seleccionado && item.manualPago?.tipo !== 'asociacion_pago')) {
             throw Error(item?.motivos[0] || 'Revisa el cargo y el comprobante en Comparar Libro para confirmar este pago.');
         }
+        if (alojamiento) {
+            const cargos = (comparacion.snapshot.cargosAlojamiento || []).filter(c =>
+                c.reserva_id === estadia.reserva_id && c.tipo_cargo === 'alojamiento' && c.estado === 'activo');
+            const pendientes = cargos.filter(c => Number(c.saldo_cargo) > 0);
+            const saldo = pendientes.reduce((total,c) => total + Number(c.saldo_cargo), 0);
+            if (!pendientes.length || !Number.isSafeInteger(saldo) || saldo < pago.monto ||
+                cargos.some(c => c.saldo_cargo == null || c.monto_ajustado == null ||
+                    !Number.isSafeInteger(Number(c.saldo_cargo)) || !Number.isSafeInteger(Number(c.monto_ajustado)) ||
+                    Number(c.saldo_cargo) < 0 || Number(c.saldo_cargo) > Number(c.monto_ajustado)) ||
+                pendientes.some(c => !c.cargo_id || c.estadia_id !== estadia.id)) {
+                throw Error('Comprueba el saldo de alojamiento y los cargos de esta estadía antes de confirmar.');
+            }
+            item.saldoAlojamiento = saldo;
+            item.payload.datos_origen.alojamiento_cloudbeds_v1 = {
+                estadia_id:estadia.id, salida:estadia.fecha_checkout,
+                cargos:pendientes.map(c => ({id:c.cargo_id,saldo:Number(c.saldo_cargo)})).sort((a,b) => a.id.localeCompare(b.id))
+            };
+        }
         plan.items = [item];
     }
 
     function destinosPagoInformeCloudbeds(item) {
-        if (item.payload.argumentos.p_modo_aplicacion === 'alojamiento') return [{nombre:'Alojamiento'}];
+        if (item.payload.argumentos.p_modo_aplicacion === 'alojamiento')
+            return [{nombre:'Alojamiento',saldo:item.saldoAlojamiento}];
         return item.destinoFinanciero.aplicaciones.map(a => {
             const servicio = a.cargo.servicio;
             return {
@@ -4669,8 +4695,21 @@
         const contexto = await verificarFuenteConsulta(result), generacion = result.generacion;
         const seleccion = reservasVigentes(result,contexto);
         const revision = contexto.verificada;
-        const reservasOriginales = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
+        let reservasOriginales = root.HAIKU_LIBRO_RESOLUCIONES_V1 && result.generacion !== undefined
             ? await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(seleccion, result.generacion, cliente, () => estadoFuente(result)) : seleccion;
+        const comprobante = result.pagoInformeCloudbeds?.comprobante;
+        if (comprobante) {
+            // El lector verifica la reserva original. El cotejo sólo completa el
+            // medio y la asociación en la copia que usa esta confirmación.
+            reservasOriginales = reservasOriginales.map(r => {
+                const pago = root.HAIKU_CLOUDBEDS_INFORMES_V1?.cotejarPagoAlojamiento(comprobante,r);
+                if (!pago || source(pago.origen) !== source(result.pagoInformeCloudbeds.pago.origen))
+                    throw Error('Cambió el respaldo del comprobante. Vuelve a comparar los informes.');
+                const conservar = p => source(p.origen) !== source(pago.origen);
+                return {...r,pagos:[...(r.pagos || []).filter(conservar),pago],
+                    pagos_sin_asociacion:(r.pagos_sin_asociacion || []).filter(conservar)};
+            });
+        }
         const [{reservas,comparacion}, capacidadInforme] = await Promise.all([
             compararConMediosManuales(reservasOriginales,result,decisiones,aprobados,cliente,generacion),
             D?.aplicacionesLibro(result.pagoInformeCloudbeds?.pago).length ? consultarCapacidadPagosServicio(cliente) : null
@@ -5863,7 +5902,7 @@
         });
     }
 
-    async function prepararPagoInformeCloudbeds({reservaLibro, origen, destino, generacion, version, autor}, cliente = root.haikuSupabase) {
+    async function prepararPagoInformeCloudbeds({reservaLibro, origen, destino, comprobanteCloudbeds, generacion, version, autor}, cliente = root.haikuSupabase) {
         const verificarAcceso = async () => {
             const {data, error} = await cliente.auth.getSession();
             if (error || data?.session?.user?.id !== autor || root.haikuTienePermiso?.('pagos.registrar') !== true)
@@ -5871,12 +5910,16 @@
         };
         await verificarAcceso();
         const reserva = structuredClone(reservaLibro);
-        const pago = reserva.pagos.find(p => source(p.origen) === source(origen));
-        if (!pago) throw Error('No encontré el comprobante asociado a la reserva en el Libro.');
+        const alojamiento = comprobanteCloudbeds && root.HAIKU_CLOUDBEDS_INFORMES_V1?.cotejarPagoAlojamiento(comprobanteCloudbeds,reserva);
+        const pago = comprobanteCloudbeds ? alojamiento : reserva.pagos.find(p => source(p.origen) === source(origen));
+        if (!pago || source(pago.origen) !== source(origen)) throw Error('No encontré el comprobante asociado a la reserva en el Libro.');
+        if (pago.tipo_movimiento === 'alojamiento' && (!alojamiento || pago.fecha_comprobante > fechaCalendarioChile(new Date())))
+            throw Error('Comprueba la fecha y el respaldo del pago de alojamiento en los informes.');
         const result = {reservas:[reserva], generacion, version_libro:version,
-            pagoInformeCloudbeds:{pago,destino,autor},
+            pagoInformeCloudbeds:{pago,destino,autor,comprobante:comprobanteCloudbeds},
             q:{desde:reservaLibro.fecha_checkin, hasta:reservaLibro.fecha_checkout,
-                solo_pagos:true, focal:true, reservaPagoCloudbeds:destino.reservaId, abonosAviso:new Set([source(origen)])}};
+                solo_pagos:true, focal:true, incluirServicios:!alojamiento, reservaPagoCloudbeds:destino.reservaId,
+                pagoAlojamientoCloudbeds:Boolean(alojamiento), abonosAviso:new Set([source(origen)])}};
         const decisiones = new Map(), aprobados = new Set();
         let plan = await prepararIncorporacion(result, decisiones, aprobados, cliente);
         await verificarAcceso();
@@ -5900,7 +5943,7 @@
                 throw error;
             }
         };
-        return {destinos, confirmar};
+        return {destinos, medio:datosPagoIncorporacion(item.pagoLibro).medio, confirmar};
     }
 
     async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){

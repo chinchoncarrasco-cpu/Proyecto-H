@@ -280,6 +280,118 @@ test("Discordancia entre el medio del reporte y su nota queda explícita", () =>
     assert.match(r.proyecto.detalle, /registra débito.*dice crédito/);
 });
 
+test("WebPay de alojamiento coteja el anticipo y agrupa el comprobante contradictorio en la misma estadía", () => {
+    const notaWebpay = "08-11-2026 Elena Rojas Vera // Cod Aut 012031 // CREDITO";
+    const notaDebito = "07-11-2026 Elena Rojas Vera // Cod Aut 08552I // CREDITO";
+    const movimientos = pagar(fila("Webpay - Pago Registrada", "9000", 0, 159840, { 13:notaWebpay }),
+        fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 160, { 13:notaDebito }));
+    const p = { ...pagoLibro, monto:159840, moneda:"CLP", tipo_movimiento:"alojamiento", concepto:"cab4/2noche",
+        medio_pago:"credito", codigo_autorizacion:"012031", folio:null, bovtar:null, texto_original:notaWebpay,
+        advertencias:["El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión."],
+        evidencia_financiera:{sector:"pagos",estructura_fila:"fecha_detalle_concepto_monto",
+            columnas_ocupadas:{fecha:true,detalle:true,concepto:true,monto:true}} };
+    const ficha = { ...libro.reservas[0], titular, pagos_sin_asociacion:[p] };
+    const fuentes = (pago = p, extra = {}) => ({
+        proyecto:{pagosDisponibles:true,...extra},
+        libro:{hojas:[{...libro,reservas:[{...ficha,pagos_sin_asociacion:[pago]}],pagos:[pago]}]}
+    });
+    const [incorporable, revision] = comparar(movimientos, fuentes());
+    assert.equal(incorporable.proyecto.estado, "falta");
+    assert.equal(incorporable.libro.estado, "coincide");
+    assert.equal(incorporable.pagoIncorporable.comprobanteCloudbeds.comprobante.autorizacion, "012031");
+    assert.equal(revision.pagoIncorporable, null);
+    assert.equal(revision.comprobante.autorizacion, "08552I");
+    assert.match(revision.proyecto.detalle, /registra débito.*dice crédito/);
+    const otraEstadia = {...revision, salida:"2026-11-10", destino:{...revision.destino,estadiaId:"e2"}};
+    const grupos = api.agruparPagos([incorporable, otraEstadia, revision]);
+    assert.deepEqual(grupos.get(incorporable), [revision, incorporable]);
+    assert.equal(grupos.has(otraEstadia), false);
+    assert.equal(comparar(movimientos, fuentes({...p, advertencias:["Fecha contradictoria"]}))[0].pagoIncorporable, null);
+    assert.equal(comparar(movimientos, fuentes({...p, medio_pago:"debito",texto_original:"DÉBITO"}))[0].pagoIncorporable, null);
+    const otroVoucher = {...pagoProyecto, monto:159840, medio_pago:"webpay_credito", codigo_autorizacion:"118877", folio:null};
+    assert.ok(comparar(movimientos, fuentes(p, {pagos:new Map([["r",[otroVoucher]]])}))[0].pagoIncorporable);
+    const mismoVoucher = {...otroVoucher,codigo_autorizacion:"12031"};
+    assert.equal(comparar(movimientos, fuentes(p, {pagos:new Map([["r",[mismoVoucher]]])}))[0].pagoIncorporable, null);
+});
+
+test("Un abono con tarjeta requiere que coincidan tanto el folio como el BOVTAR", () => {
+    const movimientos = pagar(fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 30000));
+    const p = {...pagoLibro, moneda:"CLP", tipo_movimiento:"alojamiento", concepto:"cab4/2noche", texto_original:comprobante};
+    const compararComprobante = abono => comparar(movimientos, {proyecto:{pagosDisponibles:true},
+        libro:{hojas:[{...libro,reservas:[{...libro.reservas[0],titular,pagos:[abono]}],pagos:[abono]}]}})[0];
+    assert.ok(compararComprobante(p).pagoIncorporable);
+    for (const campo of ["folio","bovtar"]) {
+        assert.equal(compararComprobante({...p,[campo]:"009876"}).pagoIncorporable,null);
+    }
+});
+
+test("El anticipo de alojamiento revalida tres lecturas y confirma el comprobante, su estadía y saldo", async t => {
+    const consultas = require("../js/haiku-libro-consultas-v1.js");
+    const nota = "01-11-2026 Elena Rojas Vera // Cod Aut 012031 // CREDITO";
+    const monto = 159840, fecha = "2026-11-01";
+    const p = { ...pagoLibro, monto, moneda:"CLP", tipo_movimiento:"alojamiento", concepto:"cab4/2noche",
+        fecha_comprobante:fecha, medio_pago:"credito", codigo_autorizacion:"012031", folio:null, bovtar:null, texto_original:nota };
+    const reservaLibro = { ...libro.reservas[0], id:"libro", titular, tipo_estadia:"alojamiento",
+        pagos:[p], pagos_sin_asociacion:[], advertencias:[] };
+    const [movimiento] = pagar(fila("Webpay - Pago Registrada", "9000", 0, monto, {13:nota}));
+    const [filaLista] = comparar([movimiento], {proyecto:{pagosDisponibles:true},
+        libro:{hojas:[{...libro,reservas:[reservaLibro],pagos:[p]}]}});
+    const cargo = {cargo_id:"c",reserva_id:"r",estadia_id:"e",tipo_cargo:"alojamiento",estado:"activo",
+        monto_ajustado:320000,saldo_cargo:320000};
+    const tablas = {reserva_estadias:[{
+        id:"e",reserva_id:"r",fecha_ingreso:entrada,fecha_salida:salida,estado_estadia:"confirmada",tipo_estadia:"alojamiento",
+        cabanas:{numero:4},reservas:{id:"r",titular_nombre:titular,estado_reserva:"confirmada"}
+    }],pagos:[],vista_estado_cargos:[cargo]};
+    const estado = {generacion:1,version:"a".repeat(64)};
+    global.HAIKU_LIBRO_RESERVA_V1 = {estado:() => estado};
+    global.haikuTienePermiso = () => true;
+    t.after(() => {
+        delete global.HAIKU_LIBRO_RESERVA_V1;
+        delete global.haikuTienePermiso;
+    });
+    const lecturas = [], escrituras = [];
+    const cliente = {
+        auth:{getSession:async () => ({data:{session:{user:{id:"operador"}}}})},
+        from(tabla) {
+            const q = {select:() => q,eq:() => q,order:() => q,lte:() => q,gte:() => q,
+                range:async () => { lecturas.push(tabla); return {data:structuredClone(tablas[tabla])}; }};
+            return q;
+        },
+        async rpc(nombre, args) {
+            assert.equal(nombre,"haiku_incorporar_libro_v1");
+            escrituras.push(args);
+            if (escrituras.length === 1) throw Error("Conexión interrumpida");
+            return {data:{ok:true,pagos_creados:1,omitidos:0}};
+        }
+    };
+    const preparar = () => consultas.prepararPagoInformeCloudbeds({...filaLista.pagoIncorporable,...estado,autor:"operador"},cliente);
+    const revision = await preparar();
+    assert.deepEqual(lecturas.sort(),["pagos","reserva_estadias","vista_estado_cargos"]);
+    assert.deepEqual(revision.destinos,[{nombre:"Alojamiento",saldo:320000}]);
+    assert.equal(revision.medio,"WebPay Crédito");
+    assert.equal(escrituras.length,0);
+    cargo.saldo_cargo = 200000;
+    await assert.rejects(revision.confirmar(), /datos financieros del pago cambiaron/);
+    cargo.saldo_cargo = 320000;
+    const duplicadoAjeno = {...pagoProyecto,id:"duplicado",reserva_id:"ajena",medio_pago:"webpay_credito",
+        folio:null,codigo_autorizacion:"12031",monto,fecha_pago:fecha};
+    tablas.pagos.push(duplicadoAjeno);
+    await assert.rejects(preparar(), /identificador|Proyecto H|comprobante/i);
+    tablas.pagos.length = 0;
+    assert.equal(escrituras.length,0);
+    lecturas.length = 0;
+    await assert.rejects(revision.confirmar(), {pagoInformePendiente:true});
+    assert.deepEqual(lecturas.sort(),["pagos","reserva_estadias","vista_estado_cargos"]);
+    lecturas.length = 0;
+    assert.deepEqual(await revision.confirmar(),{creado:true});
+    assert.deepEqual(lecturas,[]);
+    assert.deepEqual(escrituras[0],escrituras[1]);
+    const [item] = escrituras[0].p_items;
+    assert.deepEqual([item.tipo,item.reserva_id,item.argumentos.p_monto,item.argumentos.p_fecha_pago,item.argumentos.p_medio_pago,
+        item.argumentos.p_codigo_autorizacion],["pago","r",monto,fecha,"webpay_credito","012031"]);
+    assert.deepEqual(item.datos_origen.alojamiento_cloudbeds_v1,{estadia_id:"e",salida,cargos:[{id:"c",saldo:320000}]});
+});
+
 test("La conciliación usa BOVTAR histórico y la celda del comprobante guardada en Proyecto H", () => {
     const movimientos = pagar(fila("Tarjeta de Debito - Pago Registrada", "9000", 0, 30000));
     const [historico] = comparar(movimientos, { proyecto: { pagosDisponibles: true, pagos: new Map([["r", [

@@ -925,14 +925,18 @@
 .haku-cloudbeds-informes :is(button, select, summary):focus-visible { outline: 2px solid var(--informe-acento); outline-offset: -2px; }
 .haku-cloudbeds-informes :is(summary, button):hover { background: var(--informe-suave); }
 .haku-cloudbeds-informes summary { cursor: pointer; }
-.haku-cloudbeds-informes__archivos, .haku-cloudbeds-informes__fila { border-top: 1px solid var(--informe-borde); }
+.haku-cloudbeds-informes__archivos, .haku-cloudbeds-informes__fila, .haku-cloudbeds-informes__grupo { border-top: 1px solid var(--informe-borde); }
 .haku-cloudbeds-informes__archivos > summary { padding: 6px 11px; color: var(--informe-acento); }
 .haku-cloudbeds-informes__archivos ul { margin: 0; padding: 0 11px 7px 25px; }
 .haku-cloudbeds-informes__archivos li + li { margin-top: 4px; }
 .haku-cloudbeds-informes__controles { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; padding: 6px 11px; border-top: 1px solid var(--informe-borde); }
 .haku-cloudbeds-informes__controles select { max-width: 100%; }
 .haku-cloudbeds-informes__controles small { flex: 1 0 100%; }
-.haku-cloudbeds-informes__fila > summary { padding: 6px 11px; }
+.haku-cloudbeds-informes__fila > summary, .haku-cloudbeds-informes__grupo > summary { padding: 6px 11px; }
+.haku-cloudbeds-informes__grupo > summary { background: var(--informe-suave); }
+.haku-cloudbeds-informes__grupo-estado { margin: 2px 0 0 12px; }
+.haku-cloudbeds-informes__grupo-pagos { margin-inline-start: 9px; border-inline-start: 1px solid var(--informe-borde); }
+.haku-cloudbeds-informes__grupo-pagos .haku-cloudbeds-informes__fila > summary { padding-block: 5px; }
 .haku-cloudbeds-informes__identidad { display: inline-block; max-width: calc(100% - 20px); vertical-align: top; }
 .haku-cloudbeds-informes__indicadores { display: flex; flex-wrap: wrap; gap: 3px 5px; margin: 3px 0 0 12px; }
 .haku-cloudbeds-informes__indicador {
@@ -977,7 +981,7 @@
         .haku-cloudbeds-informes__fuentes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .haku-cloudbeds-informes__pago-resumen { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
         .haku-cloudbeds-informes__pago-datos { display: block; text-align: right; }
-        .haku-cloudbeds-informes__fila > summary {
+        .haku-cloudbeds-informes__fila > summary, .haku-cloudbeds-informes__grupo > summary {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             align-items: start;
@@ -985,9 +989,12 @@
             padding-left: 22px;
             position: relative;
         }
-        .haku-cloudbeds-informes__fila > summary::before { content: "▸"; position: absolute; left: 10px; top: 6px; color: var(--informe-secundario); }
-        .haku-cloudbeds-informes__fila[open] > summary::before { content: "▾"; }
+        .haku-cloudbeds-informes :is(.haku-cloudbeds-informes__fila, .haku-cloudbeds-informes__grupo) > summary::before {
+            content: "▸"; position: absolute; left: 10px; top: 6px; color: var(--informe-secundario);
+        }
+        .haku-cloudbeds-informes :is(.haku-cloudbeds-informes__fila, .haku-cloudbeds-informes__grupo)[open] > summary::before { content: "▾"; }
         .haku-cloudbeds-informes__identidad { max-width: none; }
         .haku-cloudbeds-informes__indicadores { margin: 0; display: grid; justify-items: end; }
+        .haku-cloudbeds-informes__grupo-estado { margin: 0; max-width: 16em; text-align: right; }
     }
 }
