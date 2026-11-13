@@ -259,7 +259,17 @@
             cabana:`CAB ${p.cabana??legado?.[2]??'—'}`,fechaIngreso,detectadoEn:p.detectadoEn,esServicio,
             origen,resumen:`${principal.nombre} · ${motivoCortoPendiente(principal)}`,bloques};
     }
-    function crearVistaPendientes({toast,aviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
+    function agruparMovimientos(movimientos, vistaPrevia) {
+        const grupos=new Map();
+        for(const fila of movimientos){
+            const clave=fila.reservaId || (vistaPrevia&&fila.cabana&&fila.fechaIngreso
+                ? JSON.stringify([fila.titular,fila.cabana,fila.fechaIngreso]) : Symbol());
+            if(!grupos.has(clave))grupos.set(clave,[]);
+            grupos.get(clave).push(fila);
+        }
+        return [...grupos.values()];
+    }
+    function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
         const casos=pendientes.map(casoPendiente);
         const deServicios=casos.filter(c=>c.esServicio).length;
         const deReservas=casos.length-deServicios;
@@ -267,10 +277,11 @@
         const icono=(padre,nombre)=>nodo(padre,'span',`haku-libro-casos__icono haku-libro-casos__icono--${nombre}`).setAttribute('aria-hidden','true');
         const boton=(padre,clase,texto)=>{const el=nodo(padre,'button',clase,texto);el.type='button';return el;};
         const abrir=boton(contenedor,'haku-libro-casos__abrir');
-        const rotulo=nodo(abrir,'span','haku-libro-casos__rotulo');
-        nodo(rotulo,'strong','',`${casos.length} ${casos.length===1?'caso pendiente':'casos pendientes'}`);
-        nodo(rotulo,'span','haku-libro-casos__meta',recuento);
+        icono(abrir,'pendiente');
+        nodo(abrir,'strong','haku-libro-casos__enlace-titulo','Casos pendientes');
+        nodo(abrir,'span','haku-libro-auto__cantidad',String(casos.length)).setAttribute('aria-hidden','true');
         icono(abrir,'siguiente');
+        abrir.setAttribute('aria-label',`${casos.length} ${casos.length===1?'caso pendiente':'casos pendientes'}`);
         abrir.setAttribute('aria-controls',id);
         abrir.setAttribute('aria-expanded','false');
 
@@ -298,8 +309,8 @@
             const completar=boton(pie,'haku-libro-casos__completar','Completar pendientes');
             completar.addEventListener('click',revisar);
         }
-        let indice=0, desplazamiento=0;
-        const movil=()=>root.matchMedia?.('(max-width: 719px)').matches===true;
+        let indice=-1, desplazamiento=0;
+        const movil=()=>root.matchMedia?.('(max-width: 719px), (pointer: coarse)').matches===true;
         const filas=casos.map((c,i)=>{
             const fila=nodo(listaCasos,'div','haku-libro-casos__caso');
             const control=boton(fila,'haku-libro-casos__fila');
@@ -373,19 +384,19 @@
             else ubicarDetalle();
         };
         function cambiarVista(abierta) {
-            if(abierta)desplazamiento=toast.scrollTop;
+            if(abierta)desplazamiento=cuerpoAviso.scrollTop;
             panel.hidden=!abierta;aviso.hidden=abierta;
             abrir.setAttribute('aria-expanded',String(abierta));
             toast.classList.toggle('haku-libro-auto--casos-abiertos',abierta);
             posicionar();
-            toast.scrollTop=abierta?0:desplazamiento;
+            if(!abierta)cuerpoAviso.scrollTop=desplazamiento;
             (abierta?volver:abrir).focus?.({preventScroll:true});
         }
         toast.classList.add('haku-libro-auto--con-pendientes');
         abrir.addEventListener('click',()=>{if(abrirPendientes())cambiarVista(true);});
         volver.addEventListener('click',()=>cambiarVista(false));
         panel.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();cambiarVista(false);}});
-        seleccionar(0);
+        detalle.hidden=true;
         return {adaptar,retirar(){
             abrir.remove();panel.remove();toast.classList.remove('haku-libro-auto--con-pendientes');
         }};
@@ -408,7 +419,7 @@
             toast.style.removeProperty('bottom');toast.style.removeProperty('max-height');
             if(caja && caja.width>0 && ancho>0) {
                 const margen=12;
-                const anchoAviso=toast.classList?.contains('haku-libro-auto--con-pendientes')?toast.offsetWidth:Math.min(340,ancho-2*margen);
+                const anchoAviso=toast.offsetWidth;
                 if(caja.left>=anchoAviso+2*margen) {
                     toast.style.right=`${ancho-caja.left+margen}px`;
                     toast.style.bottom=`${Math.max(margen,alto-caja.bottom)}px`;
@@ -419,8 +430,8 @@
                     const abajo=Math.max(margen,alto-caja.bottom);
                     toast.style.right=`${margen}px`;toast.style.bottom=`${abajo}px`;
                     const abierto=toast.classList?.contains('haku-libro-auto--casos-abiertos');
-                    const altura=abierto?Math.min(alto-abajo-margen,650,Math.max(240,caja.height)):
-                        Math.max(120,Math.min(alto*.38,caja.height-24));
+                    const altura=abierto?Math.min(alto-abajo-margen,430,Math.max(210,caja.height)):
+                        Math.max(140,Math.min(alto*.46,caja.height-24));
                     toast.style.maxHeight=`${altura}px`;
                     toast.dataset.juntoHaku='compacto';
                 }
@@ -467,7 +478,9 @@
             const incorporacion=resultado?.incorporacion;
             const listos=lista(incorporacion?.listos),pendientesIniciales=lista(incorporacion?.pendientes);
             const vistaAviso=nodo(toast,'div','haku-libro-auto__aviso-incorporado');
-            let guardando=false,finalizado=false,estadoGuardado,vistaPendientes;
+            nodo(vistaAviso,'strong','haku-libro-auto__marca',incorporacion?'Haku · Libro de Reserva':'Haku');
+            const cuerpoAviso=nodo(vistaAviso,'div','haku-libro-auto__cuerpo');
+            let guardando=false,finalizado=false,estadoGuardado,vistaPendientes,avisoSiguiente;
             const mostrarCaso=(padre,caso)=>{
                 const bloque=nodo(padre,'section','haku-libro-auto__caso');
                 const cabecera=nodo(bloque,'div','haku-libro-auto__cabecera');
@@ -492,31 +505,45 @@
                 for(const d of caso.detalles){nodo(detalles,'dt','',d.etiqueta);nodo(detalles,'dd','',d.texto);}
             };
             function mostrarMovimientos(padre,movimientos,etiqueta) {
+                const cabana=fila=>String(fila.cabana??'').replace(/^(?:CAB|Cabaña)\s+/i,'');
                 const mostrar=(seccion,filas)=>{
                     const movimientos=nodo(seccion,'ul','haku-libro-auto__movimientos');
-                    for(const x of filas){
+                    for(const grupo of filas){
                         const fila=nodo(movimientos,'li','haku-libro-auto__movimiento');
-                        const cabana=String(x.cabana??'').replace(/^(?:CAB|Cabaña)\s+/i,'');
-                        const reserva=[x.titular||'Reserva',cabana&&'CAB '+cabana].filter(Boolean).join(' · ');
+                        const cabanas=[...new Set(grupo.map(cabana).filter(Boolean))];
+                        const unica=cabanas.length===1?cabanas[0]:'';
+                        const reserva=[grupo[0].titular||'Reserva',unica&&'CAB '+unica].filter(Boolean).join(' · ');
                         nodo(fila,'strong','',notaBreve(reserva,90));
-                        for(const detalle of lista(x.detalles)){
-                            const texto=lista(detalle).map(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')?fechaCorta(d):notaBreve(d,90));
-                            if(texto.some(Boolean))nodo(fila,'span','',texto.filter(Boolean).join(' · '));
+                        const estadias=grupo.filter(x=>['reservas','estadias'].includes(x.grupo));
+                        const periodo=estadias[0]?.periodo;
+                        const mismoPeriodo=periodo&&cabanas.length>1&&estadias.length>1&&estadias.every(x=>x.periodo===periodo&&cabana(x));
+                        if(mismoPeriodo){
+                            const principal=estadias.find(x=>x.grupo==='reservas');
+                            const adicionales=[...new Set(estadias.filter(x=>x!==principal).map(cabana))];
+                            nodo(fila,'span','',periodo);
+                            const ubicaciones=nodo(fila,'div','haku-libro-auto__cabanas-guardadas');
+                            if(principal)nodo(ubicaciones,'span','',`Principal · CAB ${cabana(principal)}`);
+                            const numeros=new Intl.ListFormat('es-CL').format(adicionales);
+                            nodo(ubicaciones,'span','',`${adicionales.length===1?'Añadida':'Añadidas'} · CAB ${numeros}`);
+                        }
+                        for(const x of grupo){
+                            if(mismoPeriodo&&estadias.includes(x))continue;
+                            const ubicacion=cabana(x)&&!unica?`CAB ${cabana(x)}`:null;
+                            const detalles=lista(x.detalles).map(detalle=>[ubicacion,...lista(detalle)]);
+                            for(const detalle of detalles){
+                                const texto=detalle.map(d=>/^\d{4}-\d{2}-\d{2}$/.test(d||'')?fechaCorta(d):notaBreve(d,90));
+                                if(texto.some(Boolean))nodo(fila,'span','',texto.filter(Boolean).join(' · '));
+                            }
                         }
                     }
                 };
-                const grupos=new Map();
-                for(const x of movimientos){
-                    const clave=x.cabana&&x.fechaIngreso?JSON.stringify([x.titular,x.cabana,x.fechaIngreso]):Symbol();
-                    if(!grupos.has(clave))grupos.set(clave,{titular:x.titular,cabana:x.cabana,detalles:[]});
-                    grupos.get(clave).detalles.push(...x.detalles);
-                }
-                const filas=[...grupos.values()];
-                mostrar(padre,filas.slice(0,3));
-                if(filas.length>3){
+                const filas=agruparMovimientos(movimientos,Boolean(etiqueta));
+                const limite=etiqueta?2:filas.length;
+                mostrar(padre,filas.slice(0,limite));
+                if(filas.length>limite){
                     const mas=nodo(padre,'details','haku-libro-auto__desplegable');
-                    nodo(mas,'summary','',`${etiqueta} (${filas.length-3})`);
-                    mostrar(mas,filas.slice(3));
+                    nodo(mas,'summary','',`${etiqueta} (${filas.length-limite})`);
+                    mostrar(mas,filas.slice(limite));
                 }
             }
             function presentarPendientes(contenedor,pendientes){
@@ -527,7 +554,7 @@
                     if(guardando||consultando())return;
                     api.revisarDesdeAviso(resultado);root.HAIKU_ASISTENTE?.abrir?.();cerrarAviso();
                 }:null;
-                vistaPendientes=crearVistaPendientes({toast,aviso:vistaAviso,contenedor,pendientes,nodo,botonInforme,
+                vistaPendientes=crearVistaPendientes({toast,aviso:vistaAviso,cuerpoAviso,contenedor,pendientes,nodo,botonInforme,
                     id:'haku-casos-pendientes-'+(++numeroAviso),cerrar:cerrarAviso,posicionar:posicionarAviso,revisar,
                     abrirPendientes:()=>{
                         if(guardando)return false;
@@ -536,8 +563,8 @@
                     }});
                 adaptarPendientes=vistaPendientes.adaptar;
             }
-            nodo(vistaAviso,'strong','haku-libro-auto__marca',incorporacion?'Haku · Libro de Reserva':'Haku');
-            const vistaCambios=nodo(vistaAviso,'div','haku-libro-auto__cambios');
+            const vistaCambios=nodo(cuerpoAviso,'div','haku-libro-auto__cambios');
+            let vistaFechas;
             if (burbuja) {
                 const resumido=listos.length||pendientesIniciales.length;
                 const resumen=nodo(vistaCambios,'div','haku-libro-auto__resumen');
@@ -556,7 +583,10 @@
                 if(burbuja.avisos.length)nodo(resumen,'p','haku-libro-auto__aviso',burbuja.avisos.join(' '));
                 if(burbuja.prioridades.length&&(!resumido||burbuja.prioridades.some(p=>p.total))){
                     const fechaVista=resumido?nodo(vistaCambios,'details','haku-libro-auto__desplegable'):vistaCambios;
-                    if(resumido)nodo(fechaVista,'summary','','Cambios detectados por fecha');
+                    if(resumido){
+                        vistaFechas=fechaVista;
+                        nodo(fechaVista,'summary','','Cambios detectados por fecha');
+                    }
                     const franja=nodo(fechaVista,'div','haku-libro-auto__prioridades');franja.setAttribute('role','group');franja.setAttribute('aria-label','Cambios y avisos por fecha');
                     const contenido=nodo(fechaVista,'div','haku-libro-auto__filtrado');
                     contenido.id='haku-aviso-categoria-'+(++numeroAviso);contenido.hidden=true;contenido.setAttribute('role','region');
@@ -577,18 +607,18 @@
                                 if(!p.total)nodo(contenido,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
                             }
                             // Sólo cambia la vista de este aviso; no relee el Libro ni toca la consulta.
-                            toast.scrollTop=0;
                         });
                     }
                 }
             } else nodo(vistaCambios,'p','haku-libro-auto__aviso',texto);
-            const bloquePendientes=nodo(vistaAviso,'div','haku-libro-auto__pendientes');
+            const bloquePendientes=nodo(cuerpoAviso,'div','haku-libro-auto__pendientes');
             bloquePendientes.hidden=!pendientesIniciales.length;
+            if(vistaFechas)cuerpoAviso.appendChild(vistaFechas);
             const conservarConsulta=consultaVisible();
             if (conservarConsulta) {
                 const aviso=doc.createElement('p');estadoConsulta=aviso;aviso.className='haku-libro-auto__aviso';
                 aviso.textContent=consultando()?'Tu consulta sigue en proceso.':'Tu consulta y revisión se conservan.';
-                vistaAviso.appendChild(aviso);
+                cuerpoAviso.appendChild(aviso);
             }
             let insertado=false,mensajeInforme=null;
             function botonInforme(contenedor) {
@@ -689,19 +719,28 @@
             }
             const botonesIncorporar=[];
             const tiposGuardados=[
-                ['reservas_creadas','reserva','reservas'],['estadias_agregadas','estadía','estadías'],
+                ['reservas_creadas','reserva','reservas'],['estadias_agregadas','estadía añadida','estadías añadidas'],
                 ['actualizaciones','actualización','actualizaciones'],['servicios_creados','servicio','servicios'],['notas_creadas','nota','notas']
             ];
             const resumenGuardado=fin=>tiposGuardados.filter(([k])=>fin?.[k]>0).map(([k,uno,varios])=>`${fin[k]} ${fin[k]===1?uno:varios}`).join(' · ');
             function mostrarRecibo(fin,resumen) {
                 estadoGuardado.textContent='';
-                const confirmado=nodo(estadoGuardado,'p','haku-libro-casos__confirmado');
-                nodo(confirmado,'span','haku-libro-casos__icono haku-libro-casos__icono--confirmado').setAttribute('aria-hidden','true');
-                nodo(confirmado,'span','',`Incorporado: ${resumen}.`);
                 const filas=lista(fin.confirmados);
-                if(filas.length)mostrarMovimientos(estadoGuardado,filas,'Ver más cambios guardados');
                 const total=tiposGuardados.reduce((s,[k])=>s+(fin[k]||0),0);
-                if(filas.length<total)nodo(estadoGuardado,'p','haku-libro-auto__aviso','El total está confirmado. Parte del detalle por reserva no está disponible.');
+                const recibo=nodo(estadoGuardado,'details','haku-libro-auto__recibo');
+                const cabecera=nodo(recibo,'summary','haku-libro-auto__recibo-cabecera');
+                nodo(cabecera,'span','haku-libro-casos__icono haku-libro-casos__icono--confirmado').setAttribute('aria-hidden','true');
+                const rotulo=nodo(cabecera,'span','haku-libro-auto__recibo-rotulo');
+                nodo(rotulo,'strong','','Incorporado');
+                nodo(rotulo,'span','haku-libro-auto__recibo-total',resumen);
+                nodo(cabecera,'span','haku-libro-casos__icono haku-libro-casos__icono--siguiente').setAttribute('aria-hidden','true');
+                const detalle=nodo(recibo,'div','haku-libro-auto__recibo-detalle');
+                recibo.addEventListener('toggle',()=>{
+                    if(!recibo.open||detalle.children.length)return;
+                    if(filas.length)mostrarMovimientos(detalle,filas);
+                    if(filas.length<total)nodo(detalle,'p','haku-libro-auto__aviso',
+                        filas.length?'Parte del detalle por reserva no está disponible.':'El detalle por reserva no está disponible.');
+                });
             }
             function botonIncorporar(contenedor){
                 if(!api?.puedeIncorporar?.(resultado))return;
@@ -712,10 +751,10 @@
                     if(boton.disabled||consultando()||guardando||finalizado)return;
                     guardando=true;avisoProtegido=true;
                     if(!estadoGuardado){
-                        estadoGuardado=nodo(vistaAviso,'div','haku-libro-auto__resultado');
+                        estadoGuardado=nodo(cuerpoAviso,'div','haku-libro-auto__resultado');
                         estadoGuardado.setAttribute('role','status');
                         estadoGuardado.tabIndex=-1;
-                        vistaAviso.insertBefore(estadoGuardado,contenedor);
+                        cuerpoAviso.insertBefore(estadoGuardado,bloquePendientes);
                     }
                     estadoGuardado.textContent='Guardando estos cambios en Proyecto H…';
                     for(const b of acciones){b.disabled=true;b.incorporacionBloqueada=true;}
@@ -724,14 +763,19 @@
                     try{
                         const fin=await api.incorporarDesdeAviso(resultado),resumen=resumenGuardado(fin);
                         const pendientes=lista(fin?.pendientes);finalizado=true;
-                        vistaCambios.hidden=true;bloquePendientes.hidden=true;
+                        vistaCambios.hidden=true;
+                        if(vistaFechas)vistaFechas.hidden=true;
                         if(resumen)mostrarRecibo(fin,resumen);
-                        else estadoGuardado.textContent=pendientes.length?'Quedaron casos por revisar.':'No quedan cambios pendientes en este aviso.';
-                        presentarPendientes(estadoGuardado,pendientes);
-                        posicionarAviso();toast.scrollTop=0;
+                        else estadoGuardado.textContent=pendientes.length?'':'No quedan cambios pendientes en este aviso.';
+                        bloquePendientes.hidden=!pendientes.length;
+                        presentarPendientes(bloquePendientes,pendientes);
+                        posicionarAviso();cuerpoAviso.scrollTop=0;
                         for(const b of botonesIncorporar){
                             b.textContent=resumen?'Incorporado':pendientes.length?'Pendiente':'Ya incorporado';
-                            if(doc.activeElement===b)estadoGuardado.focus?.({preventScroll:true});
+                            if(doc.activeElement===b){
+                                const destino=estadoGuardado.querySelector('summary')||bloquePendientes.querySelector('button')||estadoGuardado;
+                                destino.focus?.({preventScroll:true});
+                            }
                             b.hidden=true;
                         }
                     }catch(error){
@@ -739,6 +783,7 @@
                         const motivo=notaBreve(error?.message||'No pude confirmar el guardado. Reintenta para comprobarlo sin duplicar.',320);
                         if(confirmado){
                             vistaCambios.hidden=true;bloquePendientes.hidden=true;
+                            if(vistaFechas)vistaFechas.hidden=true;
                             mostrarRecibo(error.incorporado,confirmado);
                             nodo(estadoGuardado,'p','haku-libro-auto__aviso',motivo);
                         }else estadoGuardado.textContent=motivo;
@@ -747,7 +792,8 @@
                         guardando=false;cerrar.disabled=false;
                         for(const b of acciones){b.incorporacionBloqueada=finalizado&&botonesIncorporar.includes(b);b.disabled=b.incorporacionBloqueada||consultando();}
                         for(const b of botonesIncorporar)b.removeAttribute('aria-busy');
-                        if(avisoDiferido)nodo(estadoGuardado,'p','haku-libro-auto__aviso','Hay otro aviso disponible al cerrar este.');
+                        if(avisoDiferido&&!avisoSiguiente)
+                            avisoSiguiente=nodo(cuerpoAviso,'p','haku-libro-auto__aviso','Hay otro aviso disponible al cerrar este.');
                     }
                 });
                 contenedor.appendChild(boton);acciones.push(boton);

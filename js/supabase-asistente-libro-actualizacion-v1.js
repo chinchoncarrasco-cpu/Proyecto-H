@@ -644,7 +644,9 @@
             .flatMap(([grupo,total,accion])=>{
                 const filas=lista(fin.detalle?.[grupo]);
                 return filas.length===fin.resultado[total]?filas.map(x=>({
-                    titular:x.titular,cabana:x.cabana,detalles:[[accion,x.periodo]]
+                    titular:x.titular,cabana:x.cabana,reservaId:x.identidad?.reservaId,
+                    periodo:x.periodo,grupo,fechaIngreso:x.fechaIngreso,
+                    detalles:[[grupo==='reservas'&&x.conEstadiasAdicionales?'Estadía principal':accion,x.periodo]]
                 })):[];
             });
         return {...fin.resultado,confirmados};

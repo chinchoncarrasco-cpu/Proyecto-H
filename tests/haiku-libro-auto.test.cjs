@@ -266,7 +266,10 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     assert.equal(boton['aria-busy'],undefined);
     assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
     assert.equal(h.document.body.children.length,1);assert.equal(h.abierto(),0);
-    assert.ok(h.nodos().some(x=>x.textContent==='Incorporado: 1 servicio.'));
+    const recibo=h.nodos().find(x=>x.className==='haku-libro-auto__recibo');
+    assert.ok(recibo);
+    assert.notEqual(recibo.open,true);
+    assert.deepEqual(recibo.children[0].children[1].children.map(x=>x.textContent),['Incorporado','1 servicio']);
 });
 test('Incorporar se desactiva al llegar otra generación y no aparece para avisos sin cambios',async()=>{
     const h=interfaz(async()=>res({nuevas:[{actual:row}],incorporacion:{listos:[{...row,detalles:[['Reserva nueva']]}],pendientes:[]}}));

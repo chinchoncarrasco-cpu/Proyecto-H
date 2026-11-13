@@ -155,5 +155,7 @@ test('reserva real: motor canónico envía el RPC desde el aviso y revalida el r
  const fin=await h.api.incorporarDesdeAviso(h.informe);
  assert.equal(calls.length,1);assert.equal(fin.reservas_creadas,1);assert.equal(fin.pendientes.length,0,JSON.stringify(fin.pendientes));
  assert.equal(fin.confirmados[0].titular,r.titular);
- assert.match(fin.confirmados[0].detalles[0].join(' '),/Reserva incorporada.*CAB 8/);
+ assert.equal(fin.confirmados[0].cabana,'CAB 8');
+ assert.equal(fin.confirmados[0].reservaId,rows[0].reserva_id);
+ assert.match(fin.confirmados[0].detalles[0].join(' '),/Reserva incorporada.*07\/11\/26 → 08\/11\/26/);
 });
