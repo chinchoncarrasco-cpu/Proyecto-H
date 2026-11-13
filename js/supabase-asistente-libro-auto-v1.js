@@ -184,12 +184,14 @@
             }
         };
     }
+    const formatoHoraAviso=new Intl.DateTimeFormat('es-CL',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',
+        day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+    const formatoListaAviso=new Intl.ListFormat('es-CL');
     function horaAviso(valor,etiqueta='Detectado por Haku') {
         // Formatea el instante aportado, sin sustituir una fecha ausente por la hora actual.
         if(typeof valor!=='string' || !Number.isFinite(Date.parse(valor)))return null;
-        const instante=new Date(valor),ahora=new Date(),timeZone='America/Santiago';
-        const partes=fecha=>Object.fromEntries(new Intl.DateTimeFormat('es-CL',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
-            .formatToParts(fecha).map(p=>[p.type,p.value]));
+        const instante=new Date(valor),ahora=new Date();
+        const partes=fecha=>Object.fromEntries(formatoHoraAviso.formatToParts(fecha).map(p=>[p.type,p.value]));
         const d=partes(instante),hoy=partes(ahora),hora=`${d.hour}:${d.minute}`;
         const mismoDia=['year','month','day'].every(k=>d[k]===hoy[k]);
         const fecha=`${d.day}/${d.month}${d.year===hoy.year?'':'/'+d.year}`;
@@ -258,7 +260,7 @@
         const fechaIngreso=/^\d{4}-\d{2}-\d{2}$/.test(p.fechaIngreso||'')?p.fechaIngreso:null;
         const origen=[p.origen?.hoja,p.origen?.celda].filter(Boolean).map(v=>notaBreve(v,24)).join(', ');
         return {titular:notaBreve(p.titular||legado?.[1]||p.reserva,100)||'Reserva',
-            cabana:`CAB ${p.cabana??legado?.[2]??'—'}`,fechaIngreso,detectadoEn:p.detectadoEn,esServicio,
+            cabana:`CAB ${p.cabana??legado?.[2]??'—'}`,fechaIngreso,detectadoEn:p.detectadoEn,
             origen,resumen:`${principal.nombre} · ${motivoCortoPendiente(principal)}`,bloques};
     }
     function agruparMovimientos(movimientos, vistaPrevia) {
@@ -271,57 +273,73 @@
         }
         return [...grupos.values()];
     }
-    function posicionarDetalleListo(panel,boton,aviso) {
-        if(!root.matchMedia?.('(min-width: 720px) and (hover: hover) and (pointer: fine)').matches)return false;
+    function medirDetalleListo(boton,aviso) {
+        if(!root.matchMedia?.('(min-width: 720px) and (hover: hover) and (pointer: fine)').matches)return null;
         const margen=8, separacion=5, anchoMinimo=264;
         const caja=aviso.getBoundingClientRect();
         const izquierda=caja.left-margen-separacion, derecha=root.innerWidth-caja.right-margen-separacion;
         const alCostadoIzquierdo=izquierda>=anchoMinimo;
         const ancho=Math.min(356,alCostadoIzquierdo?izquierda:derecha);
-        if(ancho<anchoMinimo)return false;
+        if(ancho<anchoMinimo)return null;
+        return {ancho,margen,izquierda:alCostadoIzquierdo?caja.left-ancho-separacion:caja.right+separacion,
+            arriba:boton.getBoundingClientRect().top};
+    }
+    function posicionarDetalleListo(panel,{ancho,margen,izquierda,arriba}) {
         panel.classList.add('haku-libro-auto__detalle-listo--flotante');
         panel.style.width=`${ancho}px`;
-        panel.style.left=`${alCostadoIzquierdo?caja.left-ancho-separacion:caja.right+separacion}px`;
+        panel.style.left=`${izquierda}px`;
         panel.hidden=false;
-        const ancla=boton.getBoundingClientRect();
-        panel.style.top=`${Math.max(margen,Math.min(ancla.top,root.innerHeight-panel.offsetHeight-margen))}px`;
-        return true;
+        panel.style.top=`${Math.max(margen,Math.min(arriba,root.innerHeight-panel.offsetHeight-margen))}px`;
     }
     function crearVistaPendientes({toast,aviso,cuerpoAviso,contenedor,pendientes,nodo,id,botonInforme,cerrar,revisar,abrirPendientes,posicionar}) {
-        const casos=pendientes.map(casoPendiente);
-        const deServicios=casos.filter(c=>c.esServicio).length;
-        const deReservas=casos.length-deServicios;
-        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`].filter(Boolean).join(' · ');
+        const total=pendientes.length;
         const icono=(padre,nombre)=>nodo(padre,'span',`haku-libro-casos__icono haku-libro-casos__icono--${nombre}`).setAttribute('aria-hidden','true');
         const boton=(padre,clase,texto)=>{const el=nodo(padre,'button',clase,texto);el.type='button';return el;};
         const abrir=boton(contenedor,'haku-libro-casos__abrir');
         icono(abrir,'pendiente');
         nodo(abrir,'strong','haku-libro-casos__enlace-titulo','Casos pendientes');
-        nodo(abrir,'span','haku-libro-auto__cantidad',String(casos.length)).setAttribute('aria-hidden','true');
+        nodo(abrir,'span','haku-libro-auto__cantidad',String(total)).setAttribute('aria-hidden','true');
         icono(abrir,'siguiente');
-        abrir.setAttribute('aria-label',`${casos.length} ${casos.length===1?'caso pendiente':'casos pendientes'}`);
+        abrir.setAttribute('aria-label',`${total} ${total===1?'caso pendiente':'casos pendientes'}`);
         abrir.setAttribute('aria-controls',id);
         abrir.setAttribute('aria-expanded','false');
 
         const panel=nodo(toast,'section','haku-libro-casos');
         panel.hidden=true;panel.id=id;panel.setAttribute('aria-labelledby',id+'-titulo');
         panel.setAttribute('aria-live','off');
-        const cabecera=nodo(panel,'header','haku-libro-casos__cabecera');
+        let vista;
+        toast.classList.add('haku-libro-auto--con-pendientes');
+        abrir.addEventListener('click',()=>{
+            if(!abrirPendientes())return;
+            vista??=montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton});
+            vista.abrir();
+        });
+        return {adaptar:()=>vista?.adaptar(),retirar(){
+            abrir.remove();panel.remove();toast.classList.remove('haku-libro-auto--con-pendientes');
+        }};
+    }
+    function montarVistaPendientes({panel,toast,aviso,cuerpoAviso,pendientes,nodo,botonInforme,cerrar,revisar,posicionar,abrir,icono,boton}) {
+        const id=panel.id;
+        const deServicios=pendientes.filter(p=>p.tipo==='servicio').length;
+        const deReservas=pendientes.length-deServicios;
+        const recuento=[deServicios&&`${deServicios} de servicios`,deReservas&&`${deReservas} de reservas`].filter(Boolean).join(' · ');
+        const contenido=root.document.createDocumentFragment();
+        const cabecera=nodo(contenido,'header','haku-libro-casos__cabecera');
         const volver=boton(cabecera,'haku-libro-casos__volver');
         volver.setAttribute('aria-label','Volver al aviso');icono(volver,'volver');
         const encabezado=nodo(cabecera,'div','haku-libro-casos__encabezado');
         const titulo=nodo(encabezado,'h2','','Casos pendientes');titulo.id=id+'-titulo';
-        nodo(titulo,'span','haku-libro-casos__total',String(casos.length));
+        nodo(titulo,'span','haku-libro-casos__total',String(pendientes.length));
         nodo(encabezado,'p','haku-libro-casos__meta',recuento);
         const salir=boton(cabecera,'haku-libro-casos__cerrar');
         salir.setAttribute('aria-label','Cerrar burbuja');icono(salir,'cerrar');
         salir.addEventListener('click',cerrar);
 
-        const cuerpo=nodo(panel,'div','haku-libro-casos__cuerpo');
+        const cuerpo=nodo(contenido,'div','haku-libro-casos__cuerpo');
         const listaCasos=nodo(cuerpo,'div','haku-libro-casos__lista');
         const detalle=nodo(cuerpo,'section','haku-libro-casos__detalle');
         detalle.id=id+'-detalle';
-        const pie=nodo(panel,'footer','haku-libro-casos__pie');
+        const pie=nodo(contenido,'footer','haku-libro-casos__pie');
         botonInforme(pie).className='haku-libro-casos__informe';
         if(revisar){
             const completar=boton(pie,'haku-libro-casos__completar','Completar pendientes');
@@ -329,12 +347,13 @@
         }
         let indice=-1, desplazamiento=0;
         const movil=()=>root.matchMedia?.('(max-width: 719px), (pointer: coarse)').matches===true;
-        const filas=casos.map((c,i)=>{
+        const filas=pendientes.map((pendiente,i)=>{
+            const caso=casoPendiente(pendiente);
             const fila=nodo(listaCasos,'div','haku-libro-casos__caso');
             const control=boton(fila,'haku-libro-casos__fila');
             const texto=nodo(control,'span','haku-libro-casos__rotulo');
-            nodo(texto,'strong','',c.titular);
-            nodo(texto,'span','haku-libro-casos__meta',`${c.cabana} · ${c.resumen}`);
+            nodo(texto,'strong','',caso.titular);
+            nodo(texto,'span','haku-libro-casos__meta',`${caso.cabana} · ${caso.resumen}`);
             icono(control,'desplegar');
             control.setAttribute('aria-controls',detalle.id);
             control.setAttribute('aria-expanded','false');
@@ -342,27 +361,35 @@
                 const esMovil=movil();
                 seleccionar(esMovil&&indice===i?-1:i);
                 if(esMovil&&indice>=0){
-                    const exceso=detalle.getBoundingClientRect().bottom-listaCasos.getBoundingClientRect().bottom;
-                    if(exceso>0)listaCasos.scrollTop+=exceso;
+                    const area=listaCasos.getBoundingClientRect();
+                    const fila=control.getBoundingClientRect();
+                    const exceso=fila.top<area.top?fila.top-area.top:
+                        Math.min(Math.max(0,detalle.getBoundingClientRect().bottom-area.bottom),fila.top-area.top);
+                    if(exceso)listaCasos.scrollTop+=exceso;
                 }
             });
-            return {fila,control};
+            return {fila,control,caso};
         });
         function ubicarDetalle() {
             const destino=movil()&&indice>=0?filas[indice].fila:cuerpo;
             if(detalle.parentElement!==destino)destino.appendChild(detalle);
         }
         function seleccionar(i) {
+            if(i===indice)return;
+            filas[indice]?.control.setAttribute('aria-expanded','false');
             indice=i;
-            for(const [j,{control}] of filas.entries())control.setAttribute('aria-expanded',String(i===j));
+            filas[indice]?.control.setAttribute('aria-expanded','true');
             ubicarDetalle();
-            detalle.replaceChildren();
-            detalle.hidden=i<0;
-            if(i<0)return;
-            const c=casos[i];
+            if(i<0){
+                detalle.hidden=true;
+                detalle.replaceChildren();
+                return;
+            }
+            const c=filas[i].caso;
             const simple=c.bloques.length===1&&c.bloques[0].titulo===c.bloques[0].nombre;
             detalle.className='haku-libro-casos__detalle'+(simple?' haku-libro-casos__detalle--simple':'');
-            const reserva=nodo(detalle,'div','haku-libro-casos__reserva');
+            const contenido=root.document.createDocumentFragment();
+            const reserva=nodo(contenido,'div','haku-libro-casos__reserva');
             nodo(reserva,'h3','haku-libro-casos__titular',c.titular);
             const info=nodo(reserva,'div','haku-libro-casos__identidad');
             nodo(info,'strong','haku-libro-casos__cabana',c.cabana);
@@ -377,23 +404,25 @@
                 hora.setAttribute('aria-label',deteccion.descripcion);
             }
             for(const bloque of c.bloques){
-                const grupo=nodo(detalle,'div','haku-libro-casos__grupo');
+                const grupo=nodo(contenido,'div','haku-libro-casos__grupo');
                 nodo(grupo,'h4','haku-libro-casos__servicio',bloque.titulo);
                 if(bloque.datos.length){
                     nodo(grupo,'p','haku-libro-casos__meta haku-libro-casos__datos-titulo','Datos por confirmar');
                     const datos=nodo(grupo,'ul','haku-libro-casos__datos');
                     for(const campo of bloque.datos)nodo(datos,'li','',campo[0]);
-                    const faltantes=new Intl.ListFormat('es-CL').format(bloque.datos.map(campo=>campo[1]));
+                    const faltantes=formatoListaAviso.format(bloque.datos.map(campo=>campo[1]));
                     nodo(grupo,'p','haku-libro-casos__datos-movil',`Confirma ${faltantes}.`);
                 }
                 for(const motivo of bloque.otros)nodo(grupo,'p','haku-libro-casos__motivo',motivo);
             }
             const fuentes=[...new Set(c.bloques.map(b=>b.texto).filter(Boolean))];
             if(fuentes.length||c.origen){
-                const fuente=nodo(detalle,'div','haku-libro-casos__fuente');
+                const fuente=nodo(contenido,'div','haku-libro-casos__fuente');
                 nodo(fuente,'span','haku-libro-casos__meta',`En el Libro${c.origen?' · '+c.origen:''}`);
                 for(const texto of fuentes)nodo(fuente,'p','',`«${texto}»`);
             }
+            detalle.replaceChildren(contenido);
+            detalle.hidden=false;
             detalle.scrollTop=0;
         }
         const adaptar=()=>{
@@ -410,14 +439,11 @@
             if(!abierta)cuerpoAviso.scrollTop=desplazamiento;
             (abierta?volver:abrir).focus?.({preventScroll:true});
         }
-        toast.classList.add('haku-libro-auto--con-pendientes');
-        abrir.addEventListener('click',()=>{if(abrirPendientes())cambiarVista(true);});
         volver.addEventListener('click',()=>cambiarVista(false));
         panel.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();cambiarVista(false);}});
         detalle.hidden=true;
-        return {adaptar,retirar(){
-            abrir.remove();panel.remove();toast.classList.remove('haku-libro-auto--con-pendientes');
-        }};
+        panel.appendChild(contenido);
+        return {adaptar,abrir:()=>cambiarVista(true)};
     }
     function instalar() {
         let toast, estadoConsulta, acciones=[],avisoProtegido=false,avisoDiferido,numeroAviso=0,adaptarPendientes,cerrarVistaLista;
@@ -434,11 +460,11 @@
             const caja=panel?.hidden===false ? panel.getBoundingClientRect?.() : null;
             const ancho=root.innerWidth || root.document.documentElement?.clientWidth || 0;
             const alto=root.innerHeight || root.document.documentElement?.clientHeight || 0;
+            const anchoAviso=caja?.width>0&&ancho>0?toast.offsetWidth:0;
             toast.style.removeProperty('right');toast.style.removeProperty('left');
             toast.style.removeProperty('bottom');toast.style.removeProperty('max-height');
             if(caja && caja.width>0 && ancho>0) {
                 const margen=12;
-                const anchoAviso=toast.offsetWidth;
                 if(caja.left>=anchoAviso+2*margen) {
                     toast.style.right=`${ancho-caja.left+margen}px`;
                     toast.style.bottom=`${Math.max(margen,alto-caja.bottom)}px`;
@@ -498,14 +524,20 @@
             }
             cerrarVistaLista?.();
             toast?.remove();adaptarPendientes=null;toast=doc.createElement('aside');toast.className='haku-libro-auto'+(revision?' haku-libro-auto--revision':'');toast.setAttribute('role','status');toast.setAttribute('aria-live','polite');
-            const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre.appendChild(el);return el;};
+            const nodo=(padre,tag,clase,contenido)=>{const el=doc.createElement(tag);el.className=clase;if(contenido)el.textContent=contenido;padre?.appendChild(el);return el;};
             const api=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
             const incorporacion=resultado?.incorporacion;
             const listos=lista(incorporacion?.listos),pendientesIniciales=lista(incorporacion?.pendientes);
             const vistaAviso=nodo(toast,'div','haku-libro-auto__aviso-incorporado');
             nodo(vistaAviso,'strong','haku-libro-auto__marca',incorporacion?'Haku · Libro de Reserva':'Haku');
             const cuerpoAviso=nodo(vistaAviso,'div','haku-libro-auto__cuerpo');
-            let vistaLista;
+            let vistaLista, aperturaDetalle;
+            const cancelarAperturaDetalle=boton=>{
+                if(!aperturaDetalle||(boton&&aperturaDetalle.boton!==boton))return false;
+                root.clearTimeout(aperturaDetalle.timer);
+                aperturaDetalle=null;
+                return true;
+            };
             const cerrarDetalleListo=()=>{
                 if(!vistaLista)return;
                 if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
@@ -516,8 +548,14 @@
                 vistaLista=null;
                 return true;
             };
-            cerrarVistaLista=cerrarDetalleListo;
-            cuerpoAviso.addEventListener('scroll',()=>{if(vistaLista?.flotante)cerrarDetalleListo();},{passive:true});
+            cerrarVistaLista=()=>{
+                const cancelado=cancelarAperturaDetalle();
+                return cerrarDetalleListo()||cancelado;
+            };
+            cuerpoAviso.addEventListener('scroll',()=>{
+                cancelarAperturaDetalle();
+                if(vistaLista?.flotante)cerrarDetalleListo();
+            },{passive:true});
             let guardando=false,finalizado=false,estadoGuardado,vistaPendientes,avisoSiguiente;
             const mostrarCaso=(padre,caso)=>{
                 const bloque=nodo(padre,'section','haku-libro-auto__caso');
@@ -613,22 +651,33 @@
                 const resumen=[...new Set(grupo.flatMap(x=>lista(x.resumen)))];
                 nodo(cabecera,'small','',notaBreve(resumen.join(' · '),110));
                 const abrir=origen=>{
+                    cancelarAperturaDetalle();
                     if(vistaLista?.boton===boton){
                         if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
                         return;
                     }
                     cerrarDetalleListo();
+                    const posicion=origen!=='toque'?medirDetalleListo(boton,toast):null;
                     if(!panel.children.length)mostrarDetalleListo(panel,grupo);
-                    const flotante=origen!=='toque'&&posicionarDetalleListo(panel,boton,toast);
-                    panel.hidden=false;
+                    if(posicion)posicionarDetalleListo(panel,posicion);
+                    else panel.hidden=false;
                     boton.setAttribute('aria-expanded','true');
-                    vistaLista={boton,panel,flotante,origen,fijado:false};
+                    vistaLista={boton,panel,flotante:Boolean(posicion),origen,fijado:false};
                 };
                 fila.addEventListener('pointerenter',e=>{
-                    if(e.pointerType==='mouse')abrir('mouse');
+                    if(e.pointerType!=='mouse')return;
+                    cancelarAperturaDetalle();
+                    if(vistaLista?.boton===boton){
+                        if(vistaLista.retraso)root.clearTimeout(vistaLista.retraso);
+                        return;
+                    }
+                    // Un cruce rápido o un desplazamiento no abre la vista previa.
+                    aperturaDetalle={boton,timer:root.setTimeout(()=>abrir('mouse'),80)};
                 });
                 fila.addEventListener('pointerleave',e=>{
-                    if(e.pointerType!=='mouse'||vistaLista?.boton!==boton||vistaLista.fijado)return;
+                    if(e.pointerType!=='mouse')return;
+                    cancelarAperturaDetalle(boton);
+                    if(vistaLista?.boton!==boton||vistaLista.fijado)return;
                     if(vistaLista.flotante)vistaLista.retraso=root.setTimeout(cerrarDetalleListo,180);
                     else cerrarDetalleListo();
                 });
@@ -647,7 +696,7 @@
             function mostrarMovimientos(padre,movimientos,etiqueta) {
                 const cabana=fila=>String(fila.cabana??'').replace(/^(?:CAB|Cabaña)\s+/i,'');
                 const mostrar=(seccion,filas)=>{
-                    const movimientos=nodo(seccion,'ul','haku-libro-auto__movimientos');
+                    const movimientos=nodo(null,'ul','haku-libro-auto__movimientos');
                     for(const grupo of filas){
                         const fila=nodo(movimientos,'li','haku-libro-auto__movimiento');
                         const cabanas=[...new Set(grupo.map(cabana).filter(Boolean))];
@@ -664,7 +713,7 @@
                             nodo(fila,'span','',periodo);
                             const ubicaciones=nodo(fila,'div','haku-libro-auto__cabanas-guardadas');
                             if(principal)nodo(ubicaciones,'span','',`Principal · CAB ${cabana(principal)}`);
-                            const numeros=new Intl.ListFormat('es-CL').format(adicionales);
+                            const numeros=formatoListaAviso.format(adicionales);
                             nodo(ubicaciones,'span','',`${adicionales.length===1?'Añadida':'Añadidas'} · CAB ${numeros}`);
                         }
                         for(const x of grupo){
@@ -677,6 +726,7 @@
                             }
                         }
                     }
+                    seccion.appendChild(movimientos);
                 };
                 const filas=agruparMovimientos(movimientos,Boolean(etiqueta));
                 const limite=etiqueta?2:filas.length;
@@ -684,9 +734,13 @@
                 if(filas.length>limite){
                     const mas=nodo(padre,'details','haku-libro-auto__desplegable');
                     nodo(mas,'summary','',`${etiqueta} (${filas.length-limite})`);
-                    mostrar(mas,filas.slice(limite));
                     mas.addEventListener('toggle',()=>{
-                        if(!mas.open&&vistaLista&&mas.contains(vistaLista.boton))cerrarDetalleListo();
+                        if(mas.open){
+                            if(mas.children.length===1)mostrar(mas,filas.slice(limite));
+                            return;
+                        }
+                        if(aperturaDetalle&&mas.contains(aperturaDetalle.boton))cancelarAperturaDetalle();
+                        if(vistaLista&&mas.contains(vistaLista.boton))cerrarDetalleListo();
                     });
                 }
             }
@@ -702,7 +756,7 @@
                     id:'haku-casos-pendientes-'+(++numeroAviso),cerrar:cerrarAviso,posicionar:posicionarAviso,revisar,
                     abrirPendientes:()=>{
                         if(guardando)return false;
-                        cerrarDetalleListo();
+                        cerrarVistaLista();
                         avisoProtegido=true;
                         return true;
                     }});
@@ -741,17 +795,23 @@
                         item.setAttribute('title',p.clave==='proximos'?'Próximos 2 a 7 días':p.clave==='informativos'?'Informativos, incluidos casos sin fecha':p.nombre);
                         item.setAttribute('aria-controls',contenido.id);item.setAttribute('aria-expanded','false');
                         nodo(item,'span','',p.nombre);nodo(item,'strong','',String(p.total));
+                        let casos;
                         item.addEventListener('click',()=>{
-                            seleccion=seleccion===p.clave?null:p.clave;
-                            for(const boton of franja.children)boton.setAttribute('aria-expanded',String(seleccion!==null&&boton===item));
-                            contenido.replaceChildren();contenido.hidden=seleccion===null;
-                            if(!resumido)resumen.hidden=seleccion!==null;
-                            if(seleccion!==null){
+                            const mostrar=seleccion!==item;
+                            if(seleccion)seleccion.setAttribute('aria-expanded','false');
+                            if(mostrar){
+                                if(!casos){
+                                    casos=nodo(null,'div','haku-libro-auto__categoria');
+                                    for(const caso of p.casos)mostrarCaso(casos,caso);
+                                    if(!p.total)nodo(casos,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
+                                }
+                                contenido.replaceChildren(casos);
+                                item.setAttribute('aria-expanded','true');
                                 contenido.setAttribute('aria-label',p.nombre+' · '+p.total);
-                                for(const caso of p.casos)mostrarCaso(contenido,caso);
-                                if(!p.total)nodo(contenido,'p','haku-libro-auto__aviso','No hay cambios ni avisos en esta categoría.');
-                            }
-                            // Sólo cambia la vista de este aviso; no relee el Libro ni toca la consulta.
+                            }else contenido.replaceChildren();
+                            seleccion=mostrar?item:null;
+                            contenido.hidden=!mostrar;
+                            if(!resumido)resumen.hidden=mostrar;
                         });
                     }
                 }
@@ -894,7 +954,7 @@
                 botonesIncorporar.push(boton);
                 boton.addEventListener('click',async()=>{
                     if(boton.disabled||consultando()||guardando||finalizado)return;
-                    guardando=true;avisoProtegido=true;cerrarDetalleListo();
+                    guardando=true;avisoProtegido=true;cerrarVistaLista();
                     if(!estadoGuardado){
                         estadoGuardado=nodo(cuerpoAviso,'div','haku-libro-auto__resultado');
                         estadoGuardado.setAttribute('role','status');

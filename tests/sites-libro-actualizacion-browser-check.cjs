@@ -32,6 +32,141 @@ const server = http.createServer((request, response) => {
     catch { response.writeHead(404).end(); }
 });
 
+async function comprobarNavegacionAvisoLargo(browser,url) {
+    const total=60;
+    for(const [width,height] of [[1280,850],[390,844]]){
+        const movil=width<720;
+        const page=await browser.newPage({viewport:{width,height},hasTouch:movil,isMobile:movil});
+        const errores=[];
+        page.on('pageerror',e=>errores.push(e.message));
+        try{
+            await page.goto(url);
+            await page.evaluate(total=>{
+                const mensajes=document.getElementById('haiku-asistente-mensajes');
+                document.querySelector('.haiku-asistente-panel').hidden=true;
+                document.getElementById('haiku-asistente-texto').value='Borrador de prueba';
+                mensajes.textContent='Conversación conservada';
+                const modificadas=Array.from({length:total},(_,i)=>({actual:{id:'r'+i,titular:`Reserva ficticia ${i+1}`,
+                    cabana:i%11+1,fecha_checkin:'2099-11-13',fecha_checkout:'2099-11-15'},
+                    cambios:[{campo:'noches',antes:3,ahora:2},{campo:'notas_importantes',antes:[],
+                        ahora:['Nota ficticia de la reserva para comprobar el desplazamiento.']}]}));
+                const listos=modificadas.map(({actual:r})=>({titular:r.titular,cabana:r.cabana,
+                    fechaIngreso:r.fecha_checkin,fechaSalida:r.fecha_checkout,resumen:['Actualizar reserva','Noches'],
+                    vista:{accion:'Actualizar reserva',campos:[{etiqueta:'Noches',anterior:'3',propuesto:'2'}]}}));
+                const pendientes=modificadas.map(({actual:r},i)=>({titular:`Pendiente ficticio ${i+1}`,cabana:r.cabana,
+                    tipo:'servicio',fechaIngreso:r.fecha_checkin,servicios:[{nombre:'Masaje',hora:'16:00',
+                        motivos:['Falta duración del masaje.'],texto:'Evidencia ficticia de la ficha '+(i+1)}]}));
+                const resultado={estado:'ok',libro_actual:{generacion:1},generado_en:'2026-11-13T20:00:00.000Z',
+                    modificadas,incorporacion:{listos,pendientes}};
+                window.__navegacionAviso={lecturas:0,chat:0,escrituras:0};
+                window.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion:1})};
+                window.HAIKU_ASISTENTE={abrir:()=>__navegacionAviso.chat++};
+                window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={
+                    obtenerResultadoAviso:async()=>{__navegacionAviso.lecturas++;return resultado;},
+                    puedeIncorporar:()=>true,incorporarDesdeAviso:async()=>{__navegacionAviso.escrituras++;},
+                    mostrarResultado:()=>__navegacionAviso.chat++
+                };
+            },total);
+            for(const file of ['supabase-asistente-libro-prioridad-v1','supabase-asistente-libro-auto-v1'])
+                await page.addScriptTag({content:read('js/'+file+'.js')});
+            await page.evaluate(()=>dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{
+                detail:{carga_automatica:true,tenia_anterior:true,generacion:1}})));
+            const aviso=page.locator('body > .haku-libro-auto');
+            await aviso.getByText(`Listos para incorporar (${total})`,{exact:true}).waitFor();
+            assert.equal(await aviso.locator('.haku-libro-casos__fila').count(),0);
+            const fichas=aviso.locator('.haku-libro-auto__ver-detalle');
+            assert.equal(await fichas.count(),2);
+            await aviso.getByText(/^Ver más casos listos/).press('Space');
+            await page.waitForFunction(n=>document.querySelectorAll('body > .haku-libro-auto .haku-libro-auto__ver-detalle').length===n,total);
+            assert.equal(await fichas.count(),total);
+            await fichas.nth(2).evaluate(el=>{window.__primeraFichaExtra=el;});
+            if(!movil){
+                // Pasar por varias filas durante el desplazamiento no monta ninguna vista previa.
+                await fichas.evaluateAll(filas=>{
+                    for(const el of filas.slice(2,10)){
+                        el.parentElement.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+                        el.parentElement.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
+                    }
+                });
+            }
+            const primera=fichas.nth(2);
+            if(movil)await primera.tap();
+            else await primera.hover();
+            const cambio=aviso.locator('.haku-libro-auto__detalle-listo:visible');
+            await cambio.getByText('Se guardará',{exact:false}).first().waitFor({state:'attached'});
+            await cambio.waitFor();
+            assert.match(await cambio.textContent(),/Noches.*3.*2/s);
+            assert.equal(await aviso.locator('.haku-libro-auto__detalle-operacion').count(),1);
+            if(movil)await primera.tap();
+            else await primera.press('Escape');
+            const extras=aviso.getByText(/^Ver más casos listos/);
+            await extras.click();
+            await extras.click();
+            assert.equal(await primera.evaluate(el=>el===window.__primeraFichaExtra),true);
+            await extras.click();
+
+            await aviso.getByText('Cambios detectados por fecha',{exact:true}).click();
+            const info=aviso.locator('.haku-libro-auto__prioridad').last();
+            await info.click();
+            const categoria=aviso.locator('.haku-libro-auto__categoria');
+            assert.equal(await categoria.locator('.haku-libro-auto__caso').count(),total);
+            await categoria.evaluate(el=>{window.__categoriaAviso=el;});
+            await info.click();
+            await info.press('Enter');
+            assert.equal(await categoria.evaluate(el=>el===window.__categoriaAviso),true);
+            const cuerpo=aviso.locator('.haku-libro-auto__cuerpo');
+            const ultima=categoria.locator('.haku-libro-auto__caso').last();
+            assert.equal(await ultima.locator('dd').first().evaluate(el=>el.checkVisibility({contentVisibilityAuto:true})),false);
+            const area=await cuerpo.boundingBox();
+            const anterior=await cuerpo.evaluate(el=>el.scrollTop);
+            const x=Math.round(area.x+area.width*.55),y=Math.round(area.y+area.height*.75);
+            if(movil){
+                const cdp=await page.context().newCDPSession(page);
+                await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+                for(let i=1;i<=5;i++)await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-i*22}]});
+                await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+                await cdp.detach();
+            }else{
+                await page.mouse.move(x,y);
+                await page.mouse.wheel(0,220);
+            }
+            await page.waitForFunction(top=>document.querySelector('.haku-libro-auto__cuerpo').scrollTop>top+30,anterior);
+            await ultima.evaluate(el=>el.scrollIntoView({block:'center'}));
+            await page.waitForFunction(()=>[...document.querySelectorAll('.haku-libro-auto__categoria .haku-libro-auto__caso')]
+                .at(-1).querySelector('dd').checkVisibility({contentVisibilityAuto:true}));
+
+            const pendientes=aviso.getByRole('button',{name:`${total} casos pendientes`});
+            const posicion=await pendientes.evaluate(async el=>{
+                el.scrollIntoView({block:'center'});
+                await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+                const top=el.closest('.haku-libro-auto__cuerpo').scrollTop;
+                el.click();
+                return top;
+            });
+            const filas=aviso.locator('.haku-libro-casos__fila');
+            assert.equal(await filas.count(),total);
+            if(movil)assert.equal(await aviso.locator('.haku-libro-casos__fila[aria-expanded="true"]').count(),0);
+            const ultimaFila=filas.last();
+            await ultimaFila.evaluate(el=>el.parentElement.scrollIntoView({block:'center'}));
+            await ultimaFila.click();
+            const detalle=aviso.locator('.haku-libro-casos__detalle');
+            assert.match(await detalle.textContent(),new RegExp(`Evidencia ficticia de la ficha ${total}`));
+            assert.equal(await ultimaFila.getAttribute('aria-expanded'),'true');
+            if(movil)assert.equal(await ultimaFila.evaluate(el=>{
+                const fila=el.getBoundingClientRect(),lista=el.closest('.haku-libro-casos__lista').getBoundingClientRect();
+                return fila.bottom>lista.top&&fila.top<lista.bottom;
+            }),true);
+            await aviso.getByRole('button',{name:'Volver al aviso'}).click();
+            const restaurada=await cuerpo.evaluate(el=>el.scrollTop);
+            assert.ok(Math.abs(restaurada-posicion)<=2,`${width}: la burbuja conserva su posición al volver (${posicion} → ${restaurada})`);
+            assert.equal(await page.locator('#haiku-asistente-mensajes').textContent(),'Conversación conservada');
+            assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Borrador de prueba');
+            assert.deepEqual(await page.evaluate(()=>__navegacionAviso),{lecturas:1,chat:0,escrituras:0});
+            assert.deepEqual(errores,[]);
+        }finally{await page.close();}
+    }
+}
+
 async function comprobarCasosDelAviso(browser, url) {
     const page = await browser.newPage({viewport:{width:1280,height:850}});
     const errores = [], iconos = new Set();
@@ -1505,6 +1640,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         });
         assert.deepEqual(pendientesTrasActualizar,['2026-12-18']);
         assert.deepEqual(errors, []);
+        await comprobarNavegacionAvisoLargo(browser,`http://127.0.0.1:${server.address().port}/`);
         await comprobarCasosDelAviso(browser,`http://127.0.0.1:${server.address().port}/`);
         await comprobarNotaTinaja(browser,`http://127.0.0.1:${server.address().port}/`);
         await comprobarPendientesTrasConfirmar(browser,`http://127.0.0.1:${server.address().port}/`);
