@@ -370,7 +370,7 @@
             confirmacion: estado(r.estado_confirmacion), noches: r.noches,
             nochesTexto: r.noches_texto_efectivas ?? r.noches_texto, geometriaSegura: r.geometria_inequivoca === true,
             origen: r.coordenadas_origen, notas: [...lista(r.notas_importantes), r.texto_original],
-            pagos: lista(r.pagos), servicios: lista(r.servicios)
+            pagos: lista(r.pagos), servicios: lista(r.servicios), reservaLibro: r
         };
     }
 
@@ -477,6 +477,20 @@
     const mismoMedio = (a, b) => a && b && (a === b || a === "webpay" && b.startsWith("webpay ") || b === "webpay" && a.startsWith("webpay "));
     const datoPago = p => [pesos(p.importe), dia(p.fecha), p.medio, p.estado].filter(Boolean).join(" · ");
     const mismaCelda = (a, b) => a?.hoja && a?.celda && a.hoja === b?.hoja && a.celda === b?.celda;
+    function pagoIncorporable(fila, proyecto, libro, destino, ph, li) {
+        if (fila.tipo !== "pago" || ph.estado !== "falta" || li.estado !== "coincide" ||
+            !destino?.reservaId || !destino.estadiaId || !proyecto || !libro ||
+            !mismaCabana(fila, proyecto) || !mismaCabana(fila, libro) ||
+            !mismasFechas(fila, proyecto) || !mismasFechas(fila, libro) ||
+            !variante(fila.titular, proyecto.titular) ||
+            [fila, proyecto, libro].some(r => cancelada(r) || r.estado === "no_show")) return null;
+        const asociados = libro.pagos.filter(p => mismaCelda(p.origen, li.origen));
+        const pago = asociados[0];
+        if (asociados.length !== 1 || !["alojamiento", "servicio", "distribuido"].includes(pago.tipo_movimiento) ||
+            !fila.comprobante.fecha || pago.fecha_comprobante !== fila.comprobante.fecha ||
+            pago.bove && fila.comprobante.bove && refCanon(pago.bove) !== refCanon(fila.comprobante.bove)) return null;
+        return { reservaLibro: libro.reservaLibro, origen: li.origen, destino };
+    }
     function compararPago(fila, pagos, segura, origenConfirmado) {
         if (!fila.medio) return revision("Cloudbeds no identifica un medio de pago comparable en esta fila.");
         if (fila.medioNota && !mismoMedio(fila.medio, fila.medioNota) &&
@@ -670,9 +684,10 @@
                     })));
                 }
             }
+            const destino = general ? null : p.fila && { reservaId: p.fila.reservaId,
+                estadiaId: p.fila.estadiaId, cabana: p.fila.cabana, fecha: p.fila.entrada };
             return { ...fila, titular: fila.titular || (p.evidencia === "id" ? p.fila.titular : null),
-                proyecto: ph, libro: li, destino: general ? null : p.fila && { reservaId: p.fila.reservaId,
-                    estadiaId: p.fila.estadiaId, cabana: p.fila.cabana, fecha: p.fila.entrada } };
+                proyecto: ph, libro: li, destino, pagoIncorporable: pagoIncorporable(fila, p.fila, l.fila, destino, ph, li) };
         };
         return filas.map(compararFila);
     }
