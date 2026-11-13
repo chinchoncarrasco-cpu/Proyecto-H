@@ -43,9 +43,10 @@ function vista(w) {
     w.document.createElement = t => new Nodo(t);
     w.document.getElementById = () => null;
     vm.runInContext(fuente.replace('const apiConsultas = Object.freeze({ interpretar,',
-        'const apiConsultas = Object.freeze({ renderizarComparacion, interpretar,'), w);
+        'const apiConsultas = Object.freeze({ renderizarComparacion, renderizarIncorporacion, interpretar,'), w);
     const out = new Nodo('div');
     return { out, render:r => w.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out, r),
+        renderPlan:p => w.HAIKU_LIBRO_CONSULTAS.renderizarIncorporacion(out,p,()=>{},()=>{},()=>{}),
         existentes:() => out.querySelectorAll('details').find(d =>
             d.querySelector('summary')?.['aria-label'] === 'Pagos · Ya registrados (1)') };
 }
@@ -127,6 +128,72 @@ test('preparar conserva el pago existente como omitido, sin registrarlo otra vez
     const item = plan.items.find(i => i.pagoLibro?.codigo_autorizacion === '004321');
     assert.ok(item); assert.equal(item.categoria, 'omitidos'); assert.equal(item.seleccionado, false);
     assert.deepEqual(h.cliente.mutaciones, []);
+});
+
+function webpayHistorico({ modificar = () => {}, duplicado = false } = {}) {
+    const r = F.reserva(), glosa = 'Abono ficticio // WEBPAY CodAut 654321 // Crédito // BOVE pendiente';
+    const anterior = F.pago({ titular:r.titular, folio:null, bovtar:null, codigo_autorizacion:'654321',
+        medio_pago:'credito', texto_original:glosa, origen:F.origen('D28') });
+    const actual = { ...anterior, medio_pago:'webpay_credito', origen:F.origen('E28') };
+    const pago = F.pagoH({ tipo_movimiento:'pago', medio_pago:'tarjeta_credito', folio:null, codigo_autorizacion:anterior.codigo_autorizacion,
+        fecha_pago:anterior.fecha_comprobante + 'T00:00:00Z', referencia_externa:glosa,
+        datos_origen:{ contexto:'haku_libro_incorporacion', operacion_id:'operacion-ficticia',
+            item_id:'pago:recibo-ficticio:Oct26!D28:' + JSON.stringify(anterior) } });
+    modificar(actual,pago);
+    r.pagos = [actual];
+    const datos = F.caso('asociacion_segura').data;
+    datos.reservas = [r];
+    datos.pagos = [actual];
+    const pagos = [pago];
+    if (duplicado) pagos.push({...pago,id:'pago-ficticio-2',medio_pago:'webpay_credito',datos_origen:{}});
+    const w = F.web(datos), cliente = F.cliente({ reserva_estadias:[F.estadia(r)], pagos });
+    return { w, cliente, r, pago, Q:w.HAIKU_LIBRO_CONSULTAS };
+}
+
+test('reconoce el WebPay histórico aun con el canal guardado como tarjeta y la fila del Libro desplazada', async () => {
+    const h = webpayHistorico(), r = await h.Q.consultar(F.consulta,h.w.HAIKU_LIBRO_RESERVA_V1,h.cliente);
+    const movimiento = r.comparacion.pagosDetalle[0];
+    assert.equal(movimiento.estado,'en_sistema');
+    assert.equal(movimiento.sistema.id,h.pago.id);
+    assert.equal(movimiento.resolucionPago.evidencia,'recibo_webpay_historico');
+    assert.equal(h.Q.modeloPresentacionComparacion(r).pagosExistentes.length,1);
+    const plan = await h.Q.prepararIncorporacion(r,new Map(),new Set(),h.cliente);
+    const existente = plan.items.find(i => i.pagoLibro);
+    assert.equal(existente.categoria,'omitidos');
+    assert.equal(existente.pagoYaRegistrado,true);
+    assert.equal(existente.seleccionado,false);
+    assert.ok(h.Q.serializarIncorporacion(plan).every(i => !i.tipo.startsWith('pago')));
+    const v = vista(h.w);
+    v.render(r);
+    assert.match(v.existentes().textContent,/La glosa confirma WebPay/);
+    v.renderPlan(plan);
+    const omitidos = v.out.querySelector('.haiku-incorporacion-seccion--omitidos');
+    assert.ok(omitidos);
+    assert.doesNotMatch(omitidos.textContent,/654321/);
+    assert.match(v.out.textContent,/MOVIMIENTOS DEL LIBRO RELACIONADOS.*Ya existe en Proyecto H.*654321/);
+    assert.equal(h.pago.medio_pago,'tarjeta_credito');
+    assert.deepEqual(h.cliente.mutaciones,[]);
+});
+
+test('una autorización histórica en conflicto conserva la revisión y queda fuera de lo incorporable', async () => {
+    for (const opciones of [{ modificar:(_actual,pago) => { pago.monto *= 2; } },
+        { modificar:(_actual,pago) => { pago.reserva_id = 'reserva-distinta-ficticia'; } },
+        { modificar:(_actual,pago) => { pago.estado = 'pendiente'; } }, { duplicado:true }]) {
+        const h = webpayHistorico(opciones), r = await h.Q.consultar(F.consulta,h.w.HAIKU_LIBRO_RESERVA_V1,h.cliente);
+        assert.ok(['revisar','diferente'].includes(r.comparacion.pagosDetalle[0].estado));
+        const plan = await h.Q.prepararIncorporacion(r,new Map(),new Set(),h.cliente);
+        assert.equal(plan.items.find(i => i.pagoLibro).categoria,'dudosos');
+        assert.ok(h.Q.serializarIncorporacion(plan).every(i => !i.tipo.startsWith('pago')));
+        assert.deepEqual(h.cliente.mutaciones,[]);
+    }
+});
+
+test('un voucher físico con el mismo número conserva su identidad independiente', async () => {
+    const h = webpayHistorico({ modificar:(_actual,pago) => { pago.folio = '654'; pago.datos_origen = {bovtar:'654321'}; } });
+    const r = await h.Q.consultar(F.consulta,h.w.HAIKU_LIBRO_RESERVA_V1,h.cliente);
+    assert.equal(r.comparacion.pagosDetalle[0].estado,'revisar');
+    assert.equal(h.Q.modeloPresentacionComparacion(r).pagosExistentes.length,0);
+    assert.deepEqual(h.cliente.mutaciones,[]);
 });
 
 test('el pago sin registrar sigue siendo nuevo seguro y la nota administrativa no crea otro pago', async () => {

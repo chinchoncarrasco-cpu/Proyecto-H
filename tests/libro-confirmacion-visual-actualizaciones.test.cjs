@@ -14,15 +14,26 @@ function vista(db) {
     }
     const context = { structuredClone, haikuSupabase: db, confirm: () => true,
         HAIKU_LIBRO_SEMANTICA: require('../js/haiku-libro-semantica-v1.js'),
+        HAIKU_RESERVA_ESTADO_MANUAL_V1: require('../js/haiku-reserva-estado-manual-v1.js'),
         document: { createElement: t => new Element(t), querySelector: () => null, getElementById: () => null }, addEventListener() {},
         Option: function(t, v) { const e = new Element('option'); e.textContent = t; e.value = v; return e; } };
     assert.ok(source.includes(api));
-    vm.runInNewContext(source.replace(api, api.replace(' })', ', renderizarComparacion, renderizarIncorporacion, restaurarSeleccionIncorporacion, contextoDetalleIncorporacion, detalleResultadoIncorporacion, ENTRADA_ESTRUCTURADA })')), context);
+    vm.runInNewContext(source.replace(api, api.replace(' })', ', renderizarComparacion, renderizarIncorporacion, renderizarResultadoIncorporacion, restaurarSeleccionIncorporacion, contextoDetalleIncorporacion, detalleResultadoIncorporacion, ENTRADA_ESTRUCTURADA })')), context);
     const out = new Element('div'), text = e => e.querySelectorAll('*').map(x => x.textContent).join(' ');
     return { Q: context.HAIKU_LIBRO_CONSULTAS, context, out, text: () => text(out),
         receipt: () => out.querySelector('.haku-incorporacion-actualizacion-completada'), receiptText() { return text(this.receipt()); },
         button: t => out.querySelectorAll('button').find(e => e.textContent === t),
         render(plan) { this.Q.renderizarIncorporacion(out, plan, () => {}, () => {}, () => {}); } };
+}
+function verificarCampo(out, campo, anterior, guardado) {
+    const fila = out.querySelectorAll('.haku-comprobante-campo').find(e => e.children[0].textContent === campo &&
+        e.querySelector('.haku-comprobante-antes').querySelector('.haku-comprobante-valor').textContent === anterior);
+    assert.ok(fila, `${campo} con valor anterior ${anterior}`);
+    for (const [clase,etiqueta,valor] of [['antes','Antes',anterior],['guardado','Guardado',guardado]]) {
+        const celda = fila.querySelector('.haku-comprobante-' + clase);
+        assert.equal(celda.querySelector('.haku-comprobante-etiqueta').textContent, etiqueta);
+        assert.equal(celda.querySelector('.haku-comprobante-valor').textContent, valor);
+    }
 }
 async function escenario(opciones = { conflicto: -1 }, configurar = () => {}) {
     const f = F.crear(); configurar(f);
@@ -46,10 +57,10 @@ test('guardado confirmado muestra cuatro reservas y sólo los campos enviados, e
     const rows = h.v.receipt().querySelectorAll('.haku-incorporacion-final-item'); assert.equal(rows.length, 4);
     for (let i = 1; i <= 4; i++) {
         assert.match(h.v.receiptText(), new RegExp(`Persona Ficticia Libro ${i}`)); assert.match(h.v.receiptText(), new RegExp(`CAB ${i}`));
-        assert.match(h.v.receiptText(), new RegExp(`Nombre: Persona Ficticia Proyecto ${i} → Persona Ficticia Libro ${i}`));
-        assert.match(h.v.receiptText(), new RegExp(`RUT/pasaporte: FICTICIO-PROYECTO-${i} → FICTICIO-LIBRO-${i}`));
+        verificarCampo(h.v.receipt(), 'Nombre', `Persona Ficticia Proyecto ${i}`, `Persona Ficticia Libro ${i}`);
+        verificarCampo(h.v.receipt(), 'RUT/pasaporte', `FICTICIO-PROYECTO-${i}`, `FICTICIO-LIBRO-${i}`);
     }
-    assert.doesNotMatch(h.v.receiptText(), /Adultos:|Pagos incorporados|registrados/);
+    assert.doesNotMatch(h.v.receiptText(), /Adultos|Pagos incorporados|registrados/);
     assert.match(h.v.text(), /Paso 2 de 2 · Aprobar pagos/);
     assert.ok(h.v.out.children.indexOf(h.v.receipt()) < h.v.out.children.indexOf(h.v.out.querySelector('.haku-incorporacion-sites-cabecera')));
     assert.equal(h.db.calls.length, 1); assert.equal(h.db.pagos.length, 0);
@@ -59,7 +70,7 @@ test('detalle usa antes/después exactos del envío, nunca una etiqueta o compar
     const h = await escenario(), guardado = await h.confirmar(h.plan);
     h.f.reservas[0].titular = 'Persona Ficticia Otra Comparación'; h.plan.items.forEach(i => { i.texto = 'Etiqueta posterior ficticia'; });
     const nuevo = h.v.Q.restaurarSeleccionIncorporacion(await h.preparar(), h.plan); h.v.render(nuevo);
-    assert.match(h.v.receiptText(), /Nombre: Persona Ficticia Proyecto 1 → Persona Ficticia Libro 1/);
+    verificarCampo(h.v.receipt(), 'Nombre', 'Persona Ficticia Proyecto 1', 'Persona Ficticia Libro 1');
     assert.doesNotMatch(h.v.receiptText(), /Otra Comparación|Etiqueta posterior/);
     assert.equal(guardado.detalle.actualizaciones.length, 4); assert.equal(h.db.calls.length, 1);
 });
@@ -85,6 +96,7 @@ test('omisión contractual se distingue de las tres actualizaciones realmente co
     assert.match(actual.querySelector('summary').textContent, /\(3\)/);
     assert.doesNotMatch(actual.querySelectorAll('*').map(e => e.textContent).join(' '), /Persona Ficticia Libro 1/);
     assert.match(omitido.querySelector('summary').textContent, /\(1\)/); assert.match(h.v.receiptText(), /Ya coincide; omitido ficticio/);
+    assert.equal(omitido.open, false, 'los omitidos quedan disponibles bajo el desplegable');
 });
 test('error rechazado y respuesta incierta no generan confirmación visual; retry recupera una sola evidencia', async () => {
     for (const incierta of [false, true]) {
@@ -138,7 +150,7 @@ test('relectura fallida conserva detalle confirmado y aviso, sin afirmar paso de
     h.db.rpc = async (...a) => { const r = await rpc(...a); if (r.data?.ok) h.db.lecturaFallida = true; return r; };
     await h.abrir(); await h.v.button('Actualizar titular y RUT').events.click();
     assert.match(h.v.text(), /Incorporación completada/); assert.match(h.v.text(), /No se pudo volver a leer los pagos/);
-    assert.match(h.v.text(), /Nombre: Persona Ficticia Proyecto 1 → Persona Ficticia Libro 1/);
+    verificarCampo(h.v.out, 'Nombre', 'Persona Ficticia Proyecto 1', 'Persona Ficticia Libro 1');
     assert.doesNotMatch(h.v.text(), /Paso 2 de 2|No se guardó nada/); assert.equal(h.db.calls.length, 1);
     h.db.lecturaFallida = false; await h.v.button('Volver a la comparación').events.click(); await h.v.button('Preparar incorporación').events.click();
     assert.ok(h.v.receipt()); assert.match(h.v.text(), /Paso 2 de 2 · Aprobar pagos/); assert.equal(h.db.calls.length, 1);
@@ -158,7 +170,7 @@ test('contador confirmado sin filas atribuibles informa detalle no disponible en
     assert.match(h.v.receiptText(), /4 elementos sin detalle individual disponible/);
     assert.equal(h.v.receipt().querySelectorAll('.haku-incorporacion-final-item').length, 0);
 });
-test('antes desconocido muestra sólo lo nuevo; null conocido permite indicar sin dato, sin campos opcionales ajenos', async () => {
+test('antes desconocido se distingue de null, y el comprobante excluye campos opcionales ajenos', async () => {
     const h = await escenario();
     const enviado = { item_id:'parche-ficticio',tipo:'reserva_actualizar',reserva_id:'reserva-ficticia-1',
         reserva:{antes:{titular_tipo_documento:null},despues:{titular_nombre:'Persona Ficticia',titular_tipo_documento:'pasaporte'}},
@@ -167,8 +179,11 @@ test('antes desconocido muestra sólo lo nuevo; null conocido permite indicar si
         texto:'CAB 1 · Persona Ficticia',cambios:[{campo:'Teléfono',libro:'CAMBIO-NO-ENVIADO-FICTICIO'}],payload:enviado }] });
     const detalle = h.v.Q.detalleResultadoIncorporacion({ items:[enviado],detalleContexto:contexto },
         { ok:true,actualizaciones:1,resultados:[{ item_id:enviado.item_id,tipo:enviado.tipo,reserva_id:enviado.reserva_id }] });
-    assert.match(detalle.actualizaciones[0].descripcion, /Nombre: Persona Ficticia · Tipo de documento: sin dato → pasaporte · Adultos: 1 → 2/);
-    assert.doesNotMatch(detalle.actualizaciones[0].descripcion, /Nombre:.*→.*Persona Ficticia|CAMBIO-NO-ENVIADO/);
+    h.v.Q.renderizarResultadoIncorporacion(h.v.out,{resultado:{actualizaciones:1},detalle},()=>{});
+    verificarCampo(h.v.out, 'Nombre', 'No disponible', 'Persona Ficticia');
+    verificarCampo(h.v.out, 'Tipo de documento', 'sin dato', 'pasaporte');
+    verificarCampo(h.v.out, 'Adultos', '1', '2');
+    assert.doesNotMatch(h.v.text(), /CAMBIO-NO-ENVIADO|Teléfono/);
 });
 test('cero actualizaciones, resultado no contractual o resultado contradictorio nunca inventan una reserva actualizada', async () => {
     for (const tipo of ['cero','ok-no-contractual','destino-distinto','estadia-distinta','omitido-y-confirmado','fila-duplicada']) {
