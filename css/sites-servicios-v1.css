@@ -81,6 +81,16 @@
 .sites-servicios-cargando{min-height:170px;display:grid;place-items:center;background:#fff;border:1px solid #dce6de;border-radius:8px;color:#60786a}
 .sites-servicios-copia-estado{min-height:0;margin:0 18px 8px;color:#2b6149;font-size:11px}
 .sv-slot-conflict,.sv-slot-unknown{font-size:11px;color:#995b48}
+.sv-slot-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.sv-slot-column .sv-slot-head{display:block;min-height:0}
+.sv-slot-column .sv-slot-head>span{display:flex;align-items:center;min-height:37px}
+.sites-servicios .sv-slot-column .sv-slot-row{grid-template-columns:minmax(100px,auto) minmax(0,1fr)}
+.sv-slot-past{opacity:.75}
+@media(max-width:680px){
+    .sv-slot-columns{grid-template-columns:minmax(0,1fr);gap:6px}
+    .sv-slot-column .sv-slot-head>span{min-height:32px;font-size:11px}
+    .sv-slot-column .sv-slot-occupied small{display:inline}
+}
 .sv-agenda .sv-empty,.sv-extras .sv-empty{padding:18px}
 .sv-payment{white-space:normal}
 .sv-payment.annulled small{display:block}
