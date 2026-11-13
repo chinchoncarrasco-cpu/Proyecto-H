@@ -155,12 +155,17 @@ test('resumen no expone contactos ni cambios financieros',()=>{
     for(const r of [res({nuevas:[{actual:datos}]}),res({modificadas:[{actual:datos,cambios:[{campo:'correo',antes:'secret@example.test',ahora:'new@example.test'},{campo:'pagos_pendientes',antes:'$999',ahora:'$888'}]}]})])
         assert.doesNotMatch(A.resumir(r).texto,/12345678|example.test|999999999|\$999|\$888/);
 });
-function interfaz(comparar) {
+function interfaz(comparar,{proyectar=false}={}) {
     class El {
-        constructor(){this.children=[];this.listeners={};this.value='';this.textContent='';}
-        appendChild(x){x.parent=this;this.children.push(x);return x;}
+        constructor(){
+            this.children=[];this.listeners={};this.value='';this.textContent='';
+            this.classList={add(){},remove(){},toggle(){}};
+        }
+        get parentElement(){return this.parent;}
+        appendChild(x){x.remove();x.parent=this;this.children.push(x);return x;}
+        insertBefore(x,otro){x.remove();x.parent=this;this.children.splice(this.children.indexOf(otro),0,x);return x;}
         replaceChildren(...xs){for(const x of this.children)x.parent=null;this.children=[];for(const x of xs)this.appendChild(x);}
-        remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);}
+        remove(){if(this.parent)this.parent.children=this.parent.children.filter(x=>x!==this);this.parent=null;}
         setAttribute(k,v){this[k]=v;}
         removeAttribute(k){delete this[k];}
         addEventListener(t,f){(this.listeners[t] ||= []).push(f);}
@@ -178,6 +183,10 @@ function interfaz(comparar) {
         HAIKU_LIBRO_DIFERENCIAS_V1:{compararUltimasVersiones(){calls++;return comparar();}}};
     const ctx={window,structuredClone};
     for(const file of ['supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+file+'.js'),'utf8'),ctx);
+    if(!proyectar){
+        const actualizacion=window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
+        window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={...actualizacion,obtenerResultadoAviso:actualizacion.obtenerResultado};
+    }
     const emitir=(type,detail)=>{for(const f of listeners[type] || []) f({type,detail});};
     const manual=()=>{
         ids['haiku-asistente-texto'].value='Haku, informe de actualización';
@@ -231,7 +240,8 @@ test('aviso en segundo plano conserva conversación, borrador y posición y espe
 
 const burbuja=r=>A.resumir(res(r)).burbuja;
 test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el borrador',async()=>{
-    const resultado=res({nuevas:[{actual:row}]}),h=interfaz(async()=>resultado);
+    const resultado=res({nuevas:[{actual:row}],incorporacion:{listos:[{...row,detalles:[['Reserva nueva']]}],pendientes:[]}});
+    const h=interfaz(async()=>resultado);
     const entregados=[];let ocupado=true,resolver;
     h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
     h.window.HAIKU_ASISTENTE.procesando=()=>ocupado;
@@ -252,13 +262,14 @@ test('Incorporar espera a la consulta, entrega el aviso exacto y conserva el bor
     assert.equal(boton.textContent,'Incorporando…');
     resolver({servicios_creados:1,pendientes:[]});await tick();
     assert.equal(boton.textContent,'Incorporado');assert.equal(boton.disabled,true);
+    assert.equal(boton.hidden,true);
     assert.equal(boton['aria-busy'],undefined);
     assert.equal(h.ids['haiku-asistente-texto'].value,'Mi consulta pendiente');
     assert.equal(h.document.body.children.length,1);assert.equal(h.abierto(),0);
     assert.ok(h.nodos().some(x=>x.textContent==='Incorporado: 1 servicio.'));
 });
 test('Incorporar se desactiva al llegar otra generación y no aparece para avisos sin cambios',async()=>{
-    const h=interfaz(async()=>res({nuevas:[{actual:row}]}));
+    const h=interfaz(async()=>res({nuevas:[{actual:row}],incorporacion:{listos:[{...row,detalles:[['Reserva nueva']]}],pendientes:[]}}));
     h.window.haikuSesion={usuario:{activo:true},roles:['administrador']};
     h.emitir('haiku:libro-version-cargada',evento(2));await tick();
     const boton=h.nodos().find(x=>x.textContent==='Incorporar');assert.ok(boton);

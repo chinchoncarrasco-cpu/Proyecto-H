@@ -544,39 +544,115 @@
     function revisarAbonosDesdeAviso(resultado) {
         if (puedeRevisarAbonos(resultado) && instalar()) return insertarRevisionAbonos(resultado);
     }
-    function puedeIncorporar(resultado){
+    function puedeRevisarDesdeAviso(resultado){
         return esAdministrador()&&['ok','sin_cambios','parcial'].includes(resultado?.estado)&&
-            Boolean(lista(resultado?.nuevas).length||lista(resultado?.modificadas).length);
+            Boolean(lista(resultado?.nuevas).length||lista(resultado?.modificadas).length||lista(resultado?.cancelaciones_confirmadas).length);
+    }
+    function puedeIncorporar(resultado){
+        return puedeRevisarDesdeAviso(resultado)&&lista(resultado.incorporacion?.listos).length>0;
     }
     function revisarDesdeAviso(resultado){
-        if(!puedeIncorporar(resultado))throw new Error('La incorporación de cambios requiere una sesión de administrador.');
+        if(!puedeRevisarDesdeAviso(resultado))throw new Error('La revisión de cambios requiere una sesión de administrador.');
         if(!instalar())throw new Error('Haku todavía no está disponible.');
         return insertarIncorporacion(resultado);
     }
-    function pendienteParaAviso(item) {
+    function pendienteParaAviso(item,{operaciones,notas,porComprobar=false}={}) {
         const r=item.actual||item.anterior||{};
         const cambios=lista(item.cambios);
         const cambiosServicio=cambios.filter(c=>c.campo==='servicios');
-        const servicios=lista(item.contexto?.servicios).filter(s=>s.estado!=='en_sistema').map(s=>{
+        const servicios=(operaciones??lista(item.contexto?.servicios).filter(s=>s.estado!=='en_sistema')).map(s=>{
             const motivos=razonesServicio(s);
             return {nombre:s.concepto,fecha:s.fecha,hora:s.hora,texto:s.texto,
                 motivos:motivos.length?motivos:[motivoServicio(s)]};
         });
         const conceptos=[...new Set(cambiosServicio.flatMap(c=>lista(c.ahora).map(s=>s?.concepto)).filter(Boolean))];
+        const motivosCambio=cambios.filter(c=>operaciones===undefined||c.campo!=='servicios')
+            .map(c=>c.proyecto).filter(v=>typeof v==='string');
         return {
             reserva:`${r.titular||'Reserva'} · CAB ${r.cabana??'—'}`,
-            titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,
+            titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,detectadoEn:item.detectado_en,
             tipo:cambiosServicio.length||servicios.length?'servicio':'reserva',
             concepto:conceptos.length===1?conceptos[0]:null,
             origen:r.coordenadas_origen,
             servicios,
-            motivos:[...new Set([...lista(item.revision?.motivos),...cambios.map(c=>c.proyecto).filter(v=>typeof v==='string'),
+            motivos:porComprobar?['Falta comprobar este cambio en Proyecto H.']:[...new Set([
+                ...lista(item.revision?.motivos),...motivosCambio,...lista(notas),
+                item.tipo==='cancelacion'?'Confirma la cancelación en Proyecto H.':null,
                 typeof item.proyecto==='string'?item.proyecto:null].filter(Boolean))]
         };
     }
+    function clasificarIncorporacionAviso(pendientes) {
+        const listos=[],porRevisar=[],operacionesListas=[],reservasListas=[];
+        const clave=r=>JSON.stringify([r?.id,normalizar(r?.titular),normalizar(r?.rut_documento),
+            Number(r?.cabana),r?.fecha_checkin,r?.fecha_checkout]);
+        const ambitoServicios=new Set(lista(pendientes.revisionServicios?.reservas).map(clave));
+        const operaciones=new Map();
+        for(const [tipo,contexto,permiso] of [
+            ['servicio',pendientes.serviciosContexto,'servicios.crear'],
+            ['nota',pendientes.notasContexto,'notas.gestionar']
+        ]){
+            for(const x of lista(contexto)){
+                if(x.estado==='en_sistema'||!x.reserva?.id||!x.canonico)continue;
+                const firma=clave(x.reserva);
+                if(!operaciones.has(firma))operaciones.set(firma,[]);
+                operaciones.get(firma).push({tipo,detalle:x,listo:x.estado==='faltante'&&Boolean(x.item_id)&&
+                    root.haikuTienePermiso?.(permiso)===true});
+            }
+        }
+        for(const item of lista(pendientes.items)){
+            const r=item.actual, cambios=lista(item.cambios);
+            const verificado=r?.id&&item.tipo!=='cancelacion'&&(!item.fuente_vigente||item.fuente_vigente.estado==='verificada');
+            const puedeGuardarReserva=verificado&&item.accionable===true&&
+                root.haikuTienePermiso?.(item.tipo==='nueva'?'reservas.crear':'reservas.editar')!==false;
+            const operativo=verificado&&ambitoServicios.has(clave(r))&&cambios.some(c=>c.campo==='servicios')
+                ? operaciones.get(clave(r))||[] : [];
+            const preparados=operativo.filter(x=>x.listo);
+            if(puedeGuardarReserva||preparados.length){
+                const detalles=preparados.map(({tipo,detalle:x})=>tipo==='nota'?['Nota de la reserva',x.texto]:
+                    [x.lectura?.nombre||x.servicio?.concepto||'Servicio',x.lectura?.fecha,x.lectura?.hora?.slice(0,5)]);
+                if(puedeGuardarReserva)detalles.unshift(item.tipo==='nueva'?
+                    ['Reserva nueva',r.fecha_checkin,r.fecha_checkout,
+                        tieneServiciosAviso(r)?'También revisa los servicios y notas de la ficha':null]:
+                    ['Actualizar reserva',...new Set(cambios.map(c=>c.campo==='pagos_pendientes'?'Nota de cobro':etiquetas[c.campo]).filter(Boolean))]);
+                listos.push({titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,detalles});
+                for(const {detalle} of preparados)operacionesListas.push({id:detalle.item_id,reserva:r.id});
+                if(puedeGuardarReserva)reservasListas.push(r.id);
+            }
+            const revisar=operativo.filter(x=>!x.listo);
+            const otros=cambios.some(c=>c.campo!=='servicios');
+            if(!puedeGuardarReserva&&(!preparados.length||revisar.length||otros)){
+                const opciones=operativo.length?{
+                    operaciones:revisar.filter(x=>x.tipo==='servicio').map(({detalle:x})=>({
+                        estado:x.estado,concepto:x.lectura?.nombre||x.servicio?.concepto,
+                        fecha:x.lectura?.fecha,hora:x.lectura?.hora||x.servicio?.hora,
+                        texto:x.servicio?.fragmento_original||x.servicio?.texto_original,
+                        razon:x.estado==='faltante'?'Tu sesión requiere permiso para agregar este servicio.':x.razon,
+                        razones:x.lectura?.razones
+                    })),
+                    notas:revisar.filter(x=>x.tipo==='nota').map(({detalle:x})=>x.estado==='faltante'?
+                        'Tu sesión requiere permiso para guardar esta nota.':x.razon||'Falta revisar una nota.')
+                }:undefined;
+                porRevisar.push(pendienteParaAviso(item,opciones));
+            }
+        }
+        return {listos,pendientes:porRevisar,operacionesListas,reservasListas};
+    }
+    const tieneServiciosAviso=r=>lista(r?.servicios).length>0||lista(r?.menciones_servicio).length>0;
+    function reciboReservas(fin) {
+        const confirmados=[['reservas','reservas_creadas','Reserva incorporada'],
+            ['estadias','estadias_agregadas','Estadía añadida'],['actualizaciones','actualizaciones','Reserva actualizada']]
+            .flatMap(([grupo,total,accion])=>{
+                const filas=lista(fin.detalle?.[grupo]);
+                return filas.length===fin.resultado[total]?filas.map(x=>({
+                    titular:x.titular,cabana:x.cabana,detalles:[[accion,x.periodo]]
+                })):[];
+            });
+        return {...fin.resultado,confirmados};
+    }
     const operacionesAviso=new WeakMap();
     function incorporarDesdeAviso(resultado){
-        if(!puedeIncorporar(resultado))return Promise.reject(new Error('Necesitas una sesión de administrador para incorporar estos cambios.'));
+        if(!puedeRevisarDesdeAviso(resultado))return Promise.reject(new Error('Necesitas una sesión de administrador para incorporar estos cambios.'));
+        if(!puedeIncorporar(resultado))return Promise.reject(new Error('Este aviso no contiene cambios completos para incorporar. Revisa los pendientes.'));
         let estado=operacionesAviso.get(resultado);
         if(!estado){estado={cache:crearCachePendientes({soloAviso:true}),decisiones:new Map(),aprobados:new Set(),recibos:[]};operacionesAviso.set(resultado,estado);}
         if(estado.terminado)return Promise.resolve(estado.terminado);
@@ -587,18 +663,29 @@
             if(auth?.error||!id||estado.usuario&&estado.usuario!==id)throw Error('La sesión cambió. Revisa el aviso con tu sesión actual.');
             estado.usuario=id;
         };
-        const totales=()=>estado.recibos.reduce((s,r)=>{
-            for(const k of ['reservas_creadas','estadias_agregadas','actualizaciones','servicios_creados','notas_creadas'])s[k]=(s[k]||0)+(r[k]||0);
-            return s;
-        },{});
+        const totales=()=>{
+            const confirmados=estado.recibos.flatMap(r=>lista(r.confirmados));
+            return estado.recibos.reduce((s,r)=>{
+                for(const k of ['reservas_creadas','estadias_agregadas','actualizaciones','servicios_creados','notas_creadas'])s[k]=(s[k]||0)+(r[k]||0);
+                return s;
+            },{confirmados});
+        };
         const ejecutar=async()=>{
             try{
                 await validarSesion();
                 const api=root.HAIKU_LIBRO_CONSULTAS;
                 if(!estado.inicial)estado.inicial=await estado.cache.obtener(resultado,{revalidar:true});
+                const idsAutorizados=new Set(resultado.incorporacion.reservasListas);
+                const idsOperaciones=new Set(lista(resultado.incorporacion?.operacionesListas).map(x=>x.reserva));
+                const limitarPreparacion=(preparacion,cierre=false)=>{
+                    if(!preparacion)return preparacion;
+                    const reservas=preparacion.reservas.filter(r=>idsAutorizados.has(r.id)||cierre&&idsOperaciones.has(r.id));
+                    return {...preparacion,reservas};
+                };
                 if(!estado.reservasTerminadas){
-                    if(!estado.plan&&estado.inicial.preparacion?.reservas?.length){
-                        estado.entrada=estado.inicial.preparacion;
+                    const entrada=limitarPreparacion(estado.inicial.preparacion);
+                    if(!estado.plan&&entrada?.reservas.length){
+                        estado.entrada=entrada;
                         estado.plan=await api.prepararIncorporacion(estado.entrada,estado.decisiones,estado.aprobados);
                         // Los avisos de «pagos pendientes» son notas. Este acceso
                         // no confirma cobros ni decisiones manuales de pagos.
@@ -609,17 +696,20 @@
                         await validarSesion();
                         const fin=await api.confirmarIncorporacion(estado.entrada,estado.decisiones,estado.aprobados,estado.plan);
                         if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
-                        estado.recibos.push(fin.resultado);
+                        estado.recibos.push(reciboReservas(fin));
                     }
                     estado.reservasTerminadas=true;
                 }
                 if(!estado.serviciosTerminados){
-                    const anteriores=lista(estado.inicial.revisionServicios?.reservas);
-                    const nuevas=lista(estado.inicial.items).filter(x=>x.tipo==='nueva'&&x.accionable&&
-                        (lista(x.actual?.servicios).length||lista(x.actual?.menciones_servicio).length)).map(x=>x.actual);
+                    const operaciones=lista(resultado.incorporacion.operacionesListas);
+                    const anteriores=lista(estado.inicial.revisionServicios?.reservas)
+                        .filter(r=>idsOperaciones.has(r.id));
+                    const nuevas=lista(estado.inicial.items).filter(x=>x.tipo==='nueva'&&x.accionable&&tieneServiciosAviso(x.actual)&&
+                        idsAutorizados.has(x.actual.id)).map(x=>x.actual);
                     const scope={generacion:estado.inicial.generacion,reservas:[...new Map([...anteriores,...nuevas]
-                        .map(r=>[JSON.stringify([r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]),r])).values()]};
-                    if(scope?.reservas?.length){
+                        .map(r=>[JSON.stringify([r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]),r])).values()],
+                        seleccionAviso:{ids:operaciones.map(x=>x.id),nuevas}};
+                    if(scope.reservas.length){
                         if(!estado.guardarServicios){
                             const guard=root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
                             if(!guard?.crearIncorporacionAviso)throw Error('La incorporación de servicios todavía no está disponible.');
@@ -633,9 +723,10 @@
                 let pendientes=await estado.cache.obtener(resultado,{revalidar:true});
                 // Al guardar un servicio pueden quedar sus notas listas para el
                 // writer de la reserva. Completar esa etapa en el mismo clic.
-                if(!estado.cierreTerminado&&(estado.planFinal?.solicitudPendiente||pendientes.preparacion?.reservas?.length)){
+                const entradaFinal=limitarPreparacion(pendientes.preparacion,true);
+                if(!estado.cierreTerminado&&(estado.planFinal?.solicitudPendiente||entradaFinal?.reservas.length)){
                     if(!estado.planFinal){
-                        estado.entradaFinal=pendientes.preparacion;
+                        estado.entradaFinal=entradaFinal;
                         estado.planFinal=await api.prepararIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados);
                         for(const item of estado.planFinal.items)item.seleccionado=Boolean(item.seleccionado&&
                             (['nuevas','estadias'].includes(item.categoria)||item.payload?.tipo==='reserva_actualizar'));
@@ -644,7 +735,7 @@
                         await validarSesion();
                         const fin=await api.confirmarIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados,estado.planFinal);
                         if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
-                        estado.recibos.push(fin.resultado);
+                        estado.recibos.push(reciboReservas(fin));
                     }
                     estado.cierreTerminado=true;
                     pendientes=await estado.cache.obtener(resultado,{revalidar:true});
@@ -682,9 +773,14 @@
         try{
             const pendientes=await cachePendientesCompartida.obtener(resultado);
             registroLeido.set(resultado,pendientes.registrosAviso);
-            return proyectarPendientesAviso(resultado,pendientes.registrosAviso,{resueltos:lista(pendientes.resueltos).length>0});
+            const aviso=proyectarPendientesAviso(resultado,pendientes.registrosAviso,{resueltos:lista(pendientes.resueltos).length>0});
+            aviso.incorporacion=clasificarIncorporacionAviso(pendientes);
+            return aviso;
         }catch(_){
-            return proyectarPendientesAviso(resultado,await conservarRegistros(resultado),{sinVerificar:true});
+            const registros=await conservarRegistros(resultado);
+            const aviso=proyectarPendientesAviso(resultado,registros,{sinVerificar:true});
+            aviso.incorporacion={listos:[],pendientes:registros.map(x=>pendienteParaAviso(x,{porComprobar:true,operaciones:[]}))};
+            return aviso;
         }
     }
     function mostrarResultado(resultado) {
@@ -954,7 +1050,7 @@
             }
             const el=mensaje('asistente',''),estado={el};incorporaciones.set(resultado,estado);
             el.classList.add('haku-incorporacion-aviso');
-            el.innerHTML='<strong>Incorporar cambios</strong><div class="haku-incorporacion-aviso__contenido"></div>';
+            el.innerHTML='<strong>Revisar cambios del aviso</strong><div class="haku-incorporacion-aviso__contenido"></div>';
             const contenido=el.querySelector('.haku-incorporacion-aviso__contenido');
             // Este acceso trabaja sólo con el aviso pulsado; el historial general
             // conserva sus otros pendientes y sus resoluciones.
@@ -964,9 +1060,9 @@
                 contenido.textContent='Comprobando estos cambios en Proyecto H…';
                 contenido.setAttribute('aria-busy','true');
                 try{
-                    if(!puedeIncorporar(resultado))throw new Error('Inicia sesión como administrador para incorporar estos cambios.');
+                    if(!puedeRevisarDesdeAviso(resultado))throw new Error('Inicia sesión como administrador para revisar estos cambios.');
                     const pendientes=await cacheAviso.obtener(resultado,{revalidar:true});
-                    if(!puedeIncorporar(resultado))throw new Error('Inicia sesión como administrador para incorporar estos cambios.');
+                    if(!puedeRevisarDesdeAviso(resultado))throw new Error('Inicia sesión como administrador para revisar estos cambios.');
                     contenido.textContent='';
                     if(!pendientes.items?.length){contenido.textContent='Estos cambios ya están resueltos en Proyecto H.';return;}
                     let preparadas=false,servicios=false;
@@ -1067,7 +1163,7 @@
         return true;
     }
     const api = Object.freeze({esConsulta,renderizar,renderizarPendientes,detalleAviso,detalleTitularAmbiguo,detalleAbono,extraerCambiosDetectados,fusionarHistorialCambios,
-        crearCache,crearCachePendientes,instalar,obtenerResultado,obtenerResultadoAviso,mostrarResultado,puedeIncorporar,incorporarDesdeAviso,revisarDesdeAviso,
+        crearCache,crearCachePendientes,instalar,obtenerResultado,obtenerResultadoAviso,mostrarResultado,puedeIncorporar,puedeRevisarDesdeAviso,incorporarDesdeAviso,revisarDesdeAviso,
         puedeRevisarAbonos,revisarAbonosDesdeAviso,procesando:()=>ocupado});
     root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
