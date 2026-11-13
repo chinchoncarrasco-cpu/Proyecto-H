@@ -84,33 +84,51 @@
 
     function disponibilidad(fecha) {
         const api = window.HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1;
-        const horarios = api?.horarios || [];
         const servicios = api?.serviciosTinajaDelDia?.(fecha) || [];
-        const celda = (tipo, horario) => {
-            const info = api?.estadoHorario?.(tipo, horario, servicios);
-            if (!info) return '<span class="sv-slot-unknown">Por verificar</span>';
-            if (info.estado === "libre") return '<span class="sv-slot-free">Libre</span>';
-            if (info.estado === "conflicto") return '<span class="sv-slot-conflict">Conflicto · revisar</span>';
-            const cabana = info.activos?.[0]?.numeroCabana;
-            return `<span class="sv-slot-occupied">Ocupado${cabana ? ` <small>· CAB ${esc(cabana)}</small>` : ""}</span>`;
-        };
-        const libres = tipo => horarios.filter(h =>
-            api.estadoHorario(tipo, h, servicios).estado === "libre").length;
+        const tonel = api?.programacion?.("tonel", fecha, servicios);
+        const jacuzzi = api?.programacion?.("jacuzzi", fecha, servicios);
+        const ajustada = tonel?.ajustada || jacuzzi?.ajustada;
+        const subtitulo = ajustada ? "Turnos de 1 hora · 30 min entre usos" :
+            tonel ? `Tonel y Jacuzzi · ${tonel.filas.length} turnos por día` : "Horarios por verificar";
+        const agenda = tonel && jacuzzi ? (ajustada ? `<div class="sv-slot-table sv-slot-columns">
+            ${columnaTinaja("Tinaja Tonel", tonel)}${columnaTinaja("Tinaja Jacuzzi", jacuzzi)}</div>` :
+            tablaTinajas(tonel, jacuzzi)) : '<p class="sv-empty sv-slot-table">No fue posible verificar los horarios.</p>';
         return `<section class="sv-surface sv-availability"><div class="sv-section-top"><div>
             <div class="sites-servicios-eyebrow">DISPONIBILIDAD OPERATIVA</div><h2>Horarios de tinajas</h2>
-            <p>Tonel y Jacuzzi · ${horarios.length ? `${horarios.length} turnos por día` : "horarios por verificar"}</p></div>
+            <p>${subtitulo}</p></div>
             <div class="sv-availability-actions"><label class="sv-date-control">Fecha
                 <input id="sites-servicios-fecha" type="date" value="${esc(fecha)}" aria-label="Fecha de disponibilidad y agenda"></label>
                 <div class="sv-copy-actions"><button type="button" data-sites-servicios-copiar="tonel">Copiar Tonel</button>
                 <button type="button" data-sites-servicios-copiar="jacuzzi">Copiar Jacuzzi</button>
                 <button type="button" data-sites-servicios-copiar="ambos">Copiar ambos</button></div></div></div>
-            <div class="sv-slot-table"><div class="sv-slot-head"><span>Horario</span>
-                <span>Tinaja Tonel <small>${api ? `${libres("tonel")}/${horarios.length} libres` : "Por verificar"}</small></span>
-                <span>Tinaja Jacuzzi <small>${api ? `${libres("jacuzzi")}/${horarios.length} libres` : "Por verificar"}</small></span></div>
-                ${horarios.map(h => `<div class="sv-slot-row"><strong>${esc(h.inicio)}–${esc(h.fin)}</strong>
-                    ${celda("tonel", h)}${celda("jacuzzi", h)}</div>`).join("")}
-                ${horarios.length ? "" : '<p class="sv-empty">No fue posible verificar los horarios.</p>'}
-            </div><p id="sites-servicios-copia-estado" class="sites-servicios-copia-estado" role="status"></p></section>`;
+            ${agenda}<p id="sites-servicios-copia-estado" class="sites-servicios-copia-estado" role="status"></p></section>`;
+    }
+
+    function celdaTinaja(fila, libre = true) {
+        if (fila.estado === "libre") return libre ? '<span class="sv-slot-free">Libre</span>' :
+            '<span class="sv-slot-past">Transcurrido</span>';
+        if (fila.estado === "conflicto") return '<span class="sv-slot-conflict">Conflicto · revisar</span>';
+        const cabana = fila.activos[0]?.numeroCabana;
+        return `<span class="sv-slot-occupied">Ocupado${cabana ? ` <small>· CAB ${esc(cabana)}</small>` : ""}</span>`;
+    }
+
+    function filaTinaja(horario, estados) {
+        return `<div class="sv-slot-row"><strong>${esc(horario.inicio)}–${esc(horario.fin)}</strong>${estados}</div>`;
+    }
+
+    function tablaTinajas(tonel, jacuzzi) {
+        const libres = agenda => `${agenda.filas.filter(h => h.estado === "libre").length}/${agenda.filas.length} libres`;
+        return `<div class="sv-slot-table"><div class="sv-slot-head"><span>Horario</span>
+            <span>Tinaja Tonel <small>${libres(tonel)}</small></span>
+            <span>Tinaja Jacuzzi <small>${libres(jacuzzi)}</small></span></div>
+            ${tonel.filas.map((h, i) => filaTinaja(h, celdaTinaja(h) + celdaTinaja(jacuzzi.filas[i]))).join("")}</div>`;
+    }
+
+    function columnaTinaja(titulo, agenda) {
+        const disponibles = new Set(agenda.disponibles.map(h => h.inicio));
+        return `<section aria-label="${titulo}" class="sv-slot-column">
+            <div class="sv-slot-head"><span>${titulo}<small>${disponibles.size} libres</small></span></div>
+            ${agenda.filas.map(h => filaTinaja(h, celdaTinaja(h, disponibles.has(h.inicio)))).join("")}</section>`;
     }
 
     function estadoVisual(servicio) {

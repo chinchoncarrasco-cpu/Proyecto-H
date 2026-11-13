@@ -16,15 +16,6 @@
         noviembre: 11, diciembre: 12
     });
 
-    const HORARIOS_TINAJAS = Object.freeze([
-        { inicio: "14:45", fin: "15:45" },
-        { inicio: "16:15", fin: "17:15" },
-        { inicio: "17:45", fin: "18:45" },
-        { inicio: "19:15", fin: "20:15" },
-        { inicio: "20:45", fin: "21:45" },
-        { inicio: "22:15", fin: "23:15" }
-    ]);
-
     function instalar() {
         if (window.HAIKU_ASISTENTE_DISPONIBILIDAD_V1) return true;
 
@@ -175,75 +166,13 @@
                 .sort((a, b) => Number(a?.numero || 999) - Number(b?.numero || 999));
         }
 
-        function listaServiciosLocal() {
-            try {
-                if (typeof serviciosRegistrados !== "undefined" && Array.isArray(serviciosRegistrados)) {
-                    return serviciosRegistrados;
-                }
-            } catch {}
-            try {
-                const lista = JSON.parse(localStorage.getItem("haikuServicios") || "[]");
-                return Array.isArray(lista) ? lista : [];
-            } catch { return []; }
-        }
-
-        function minutos(hora) {
-            const [h, m] = String(hora || "").slice(0, 5).split(":").map(Number);
-            return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
-        }
-
-        function servicioTipo(servicio) {
-            const t = normalizar(`${servicio?.tipoServicio || ""} ${servicio?.nombre || ""}`);
-            if (t.includes("jacuzzi")) return "jacuzzi";
-            if (t.includes("tonel")) return "tonel";
-            return null;
-        }
-
-        function servicioCancelado(servicio) {
-            const e = normalizar(servicio?.estadoServicioDb || servicio?.estadoServicio || "");
-            return ["cancelado", "cancelada", "no show", "no_show"].includes(e);
-        }
-
-        function rangoServicio(servicio) {
-            const inicio = minutos(servicio?.hora || servicio?.hora_inicio);
-            if (inicio === null) return null;
-            let fin = minutos(servicio?.horaFin || servicio?.hora_fin);
-            if (fin === null || fin <= inicio) fin = inicio + Math.max(1, Number(servicio?.duracionMinutos || 60));
-            return { inicio, fin };
-        }
-
-        function horariosDisponiblesFallback(tipo, fecha) {
-            const servicios = listaServiciosLocal().filter(s =>
-                String(s?.fechaServicio || s?.fecha || "").slice(0, 10) === fecha &&
-                servicioTipo(s) === tipo &&
-                !servicioCancelado(s)
-            );
-            const hoy = fechaChileHoy();
-            const ahora = (() => {
-                const p = new Intl.DateTimeFormat("en-CA", {
-                    timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit", hourCycle: "h23"
-                }).formatToParts(new Date());
-                const o = Object.fromEntries(p.map(x => [x.type, x.value]));
-                return Number(o.hour || 0) * 60 + Number(o.minute || 0);
-            })();
-
-            return HORARIOS_TINAJAS.filter(slot => {
-                const a = minutos(slot.inicio), b = minutos(slot.fin);
-                if (fecha === hoy && a < ahora) return false;
-                return !servicios.some(servicio => {
-                    const r = rangoServicio(servicio);
-                    return r && a < r.fin && r.inicio < b;
-                });
-            });
-        }
-
         async function buscarHorariosServicio(tipo, fecha) {
             try { await window.haikuSincronizarServiciosDesdeSupabase?.(); } catch {}
             const api = window.HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1;
-            if (api && typeof api.horariosDisponibles === "function") {
-                return api.horariosDisponibles(tipo, fecha);
+            if (typeof api?.horariosDisponibles !== "function") {
+                throw new Error("No pude comprobar los horarios de tinaja. Vuelve a intentarlo.");
             }
-            return horariosDisponiblesFallback(tipo, fecha);
+            return api.horariosDisponibles(tipo, fecha);
         }
 
         function nodo(tag, clase, texto = "") {
@@ -289,7 +218,7 @@
             const bloque = nodo("section", "haku-disponibilidad-servicio");
             const head = nodo("header", "haku-disponibilidad-servicio-head");
             head.append(nodo("strong", "", titulo),
-                nodo("span", "haku-respuesta__contexto", `${horarios.length} de ${HORARIOS_TINAJAS.length} libres`));
+                nodo("span", "haku-respuesta__contexto", `${horarios.length} ${horarios.length === 1 ? "libre" : "libres"}`));
             bloque.appendChild(head);
             bloque.appendChild(horarios.length ? etiquetas(horarios.map(h => `${h.inicio}–${h.fin}`))
                 : nodo("p", "haku-respuesta__vacio", "Sin horarios disponibles."));

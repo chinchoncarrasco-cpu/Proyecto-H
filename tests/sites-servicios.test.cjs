@@ -5,6 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const fuente = fs.readFileSync(path.join(__dirname, '../js/sites-servicios-v1.js'), 'utf8');
+const fuenteHorarios = fs.readFileSync(path.join(__dirname, '../js/supabase-servicios-tinajas-horarios-v1.js'), 'utf8');
+const fuenteCopia = fs.readFileSync(path.join(__dirname, '../js/supabase-servicios-tinajas-copiar-v2.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 const partesFecha = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit'
@@ -36,7 +38,9 @@ function entorno(lista = []) {
         'sites-servicios-cancelar-contenido', 'sites-servicios-cancelar-confirmar'].forEach(nodo);
     const escuchas = {};
     const documento = { getElementById: id => nodos.get(id) || null,
+        querySelector: () => ({}),
         addEventListener(tipo, fn) { (escuchas[tipo] ||= []).push(fn); } };
+    nodos.get('seccion-servicios').querySelector = () => null;
     const tiempos = [];
     const llamadas = [];
     const ventana = {
@@ -76,19 +80,6 @@ function entorno(lista = []) {
             const item = contexto.serviciosRegistrados.find(s => s.id === id);
             if (item) item.estadoServicioDb = 'cancelado';
         },
-        HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1: {
-            horarios: [{ inicio: '19:15', fin: '20:15' }],
-            serviciosTinajaDelDia: dia => contexto.serviciosRegistrados.filter(s =>
-                s.fechaServicio === dia && s.categoria === 'tinaja'),
-            estadoHorario(tipo, horario, items) {
-                const activos = items.filter(s => s.hora === horario.inicio &&
-                    !['cancelado', 'no_show'].includes(s.estadoServicioDb) &&
-                    (tipo === 'tonel' ? /tonel/i : /jacuzzi/i).test(s.nombre));
-                return { estado: activos.length ? 'tomada' : 'libre', activos };
-            },
-            textoWhatsApp: () => 'Ambos'
-        },
-        HAIKU_SERVICIOS_TINAJAS_COPIAR_V2: { textoTipo: tipo => tipo },
         haikuEstadoTemporalServicio: () => ({ clave: 'pendiente' }),
         addEventListener(tipo, fn) { (escuchas[`window:${tipo}`] ||= []).push(fn); }
     };
@@ -96,9 +87,12 @@ function entorno(lista = []) {
         setTimeout: fn => { tiempos.push(fn); return tiempos.length; },
         navigator: { clipboard: { async writeText(texto) { llamadas.push(['copiar', texto]); } } },
         Intl, Date, console };
+    vm.runInNewContext(fuenteHorarios, contexto, { filename: 'supabase-servicios-tinajas-horarios-v1.js' });
+    vm.runInNewContext(fuenteCopia, contexto, { filename: 'supabase-servicios-tinajas-copiar-v2.js' });
     vm.runInNewContext(fuente, contexto, { filename: 'sites-servicios-v1.js' });
     return {
         api: ventana.HAIKU_SITES_SERVICIOS_V1, nodos, escuchas, llamadas, tiempos, contexto,
+        horarios: ventana.HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1,
         html: () => nodos.get('sites-servicios-contenido').innerHTML,
         emitir(tipo) { for (const fn of escuchas[tipo] || []) fn({}); },
         cambiarFecha(valor) {
@@ -156,14 +150,65 @@ test('cortesía, pagado, pendiente parcial y finanzas no verificadas', () => {
     assert.match(e.html(), /Finanzas por verificar/);
 });
 
-test('disponibilidad usa API existente; cancelado libera turno', () => {
+test('un servicio en la parrilla conserva los seis turnos y una cancelación libera su turno', () => {
     const lista = [servicio('tonel', '19:15'),
         servicio('jacuzzi', '19:15', { nombre: 'Tinaja Jacuzzi', estadoServicioDb: 'cancelado', saldoPendienteVerificado: 0 })];
     const e = entorno(lista); e.emitir('haiku:servicios-hidratados');
     assert.match(e.html(), /Ocupado <small>· CAB 6/);
-    assert.match(e.html(), /Tinaja Jacuzzi <small>1\/1 libres/);
+    assert.match(e.html(), /Tinaja Jacuzzi <small>6\/6 libres/);
     lista[1].estadoServicioDb = 'programado'; e.api.renderizar();
-    assert.match(e.html(), /Tinaja Jacuzzi <small>0\/1 libres/);
+    assert.match(e.html(), /Tinaja Jacuzzi <small>5\/6 libres/);
+});
+
+test('Jacuzzi a las 20:00 figura una vez y los textos de copia usan sus cupos ajustados', async () => {
+    const e = entorno([
+        servicio('tonel', '14:45', { fechaServicio: fechaSiguiente }),
+        servicio('jacuzzi', '20:00:00', { nombre: 'Tinaja Jacuzzi', horaFin: '21:00:00',
+            fechaServicio: fechaSiguiente, numeroCabana: 4 })
+    ]);
+    e.emitir('haiku:servicios-hidratados');
+    e.cambiarFecha(fechaSiguiente);
+    const agenda = e.horarios.programacion('jacuzzi', fechaSiguiente);
+    assert.equal(agenda.ajustada, true);
+    assert.deepEqual(Array.from(agenda.filas.filter(h => h.estado === 'tomada'), h => [h.inicio, h.fin]),
+        [['20:00', '21:00']]);
+    assert.deepEqual(Array.from(agenda.disponibles, h => h.inicio),
+        ['14:45', '16:15', '17:45', '21:30']);
+    assert.equal(e.horarios.programacion('tonel', fechaSiguiente).ajustada, false);
+    const vista = e.html().split('Agenda del día')[0];
+    assert.match(vista, /sv-slot-columns/);
+    assert.equal((vista.match(/20:00–21:00/g) ?? []).length, 1);
+    assert.match(vista, /20:00–21:00<\/strong><span class="sv-slot-occupied">Ocupado <small>· CAB 4/);
+    assert.match(vista, /21:30–22:30<\/strong><span class="sv-slot-free">Libre/);
+    for (const tipo of ['jacuzzi', 'ambos']) {
+        e.click('[data-sites-servicios-copiar]', { sitesServiciosCopiar: tipo });
+        await new Promise(setImmediate);
+        assert.match(e.llamadas.at(-1)[1], /• 21:30 a 22:30/);
+    }
+});
+
+test('se conserva el margen antes de otra reserva, se detectan traslapes reales y no-show libera el horario', () => {
+    const personalizado = servicio('especial', '20:00', { horaFin: '21:00' });
+    const ultimo = servicio('ultimo', '22:15', { horaFin: '23:15' });
+    const e = entorno();
+    const reloj = { fecha: fechaSiguiente, minutos: 0 };
+    const plan = () => e.horarios.programacion('tonel', fecha, [personalizado, ultimo], reloj);
+    assert.deepEqual(Array.from(plan().disponibles, h => h.inicio), ['14:45', '16:15', '17:45']);
+    ultimo.hora = '20:30'; ultimo.horaFin = '21:30';
+    assert.equal(plan().filas.filter(h => h.estado === 'conflicto').length, 2);
+    personalizado.estadoServicioDb = 'no_show';
+    assert.equal(plan().filas.filter(h => h.estado === 'tomada').length, 1);
+    assert.equal(plan().filas.filter(h => h.estado === 'conflicto').length, 0);
+    ultimo.hora = '22:15'; ultimo.horaFin = '23:15';
+    assert.equal(plan().ajustada, false);
+});
+
+test('si la primera propuesta ya pasó, ofrece una hora completa que todavía cabe antes del cierre', () => {
+    const e = entorno();
+    const cita = servicio('especial', '20:00', { horaFin: '21:00' });
+    const plan = minutos => e.horarios.programacion('tonel', fecha, [cita], { fecha, minutos });
+    assert.deepEqual(Array.from(plan(22 * 60).disponibles, h => [h.inicio, h.fin]), [['22:00', '23:00']]);
+    assert.equal(plan(22 * 60 + 16).disponibles.length, 0);
 });
 
 test('marcar realizado prepara la acción manual por ID y sólo confirma mediante el RPC protegido', async () => {
@@ -231,6 +276,7 @@ test('cancelar muestra confirmación Sites y reutiliza el RPC legacy sólo al co
 
 test('alta reutiliza el drawer real, una sola escucha y respeta fecha', async () => {
     const e = entorno(); e.emitir('haiku:servicios-hidratados');
+    const escuchasIniciales = e.escuchas['haiku:servicios-hidratados'].length;
     assert.equal(e.nodos.get('sites-servicios-root').listeners.click.length, 1);
     e.cambiarFecha(fechaSiguiente);
     e.click('[data-sites-servicios-registrar]');
@@ -242,7 +288,7 @@ test('alta reutiliza el drawer real, una sola escucha y respeta fecha', async ()
     e.contexto.serviciosRegistrados = [servicio('nuevo', '22:15', { fechaServicio: fechaSiguiente })];
     await e.api.refrescar();
     assert.match(e.html(), /Tinaja Tonel de Madera/);
-    assert.equal(e.escuchas['haiku:servicios-hidratados'].length, 1);
+    assert.equal(e.escuchas['haiku:servicios-hidratados'].length, escuchasIniciales);
 });
 
 test('panel carga estructura Sites y conserva nodos de los handlers reales', () => {

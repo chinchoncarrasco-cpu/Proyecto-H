@@ -32,6 +32,10 @@
         { inicio: "20:45", fin: "21:45" },
         { inicio: "22:15", fin: "23:15" }
     ]);
+    const APERTURA = minutos(HORARIOS[0].inicio);
+    const CIERRE = minutos(HORARIOS.at(-1).fin);
+    const DURACION = minutos(HORARIOS[0].fin) - APERTURA;
+    const PAUSA = minutos(HORARIOS[1].inicio) - minutos(HORARIOS[0].fin);
 
     const TIPOS = Object.freeze([
         { clave: "tonel", titulo: "TINAJA TÓNEL" },
@@ -97,19 +101,25 @@
     }
 
     function minutos(hora) {
-        const partes = String(hora || "").slice(0, 5).split(":").map(Number);
-        if (partes.length !== 2 || !Number.isFinite(partes[0]) || !Number.isFinite(partes[1])) return null;
-        return partes[0] * 60 + partes[1];
+        const partes = /^(\d{1,2}):([0-5]\d)(?::[0-5]\d(?:\.\d+)?)?$/.exec(String(hora || "").trim());
+        if (!partes) return null;
+        const horaDia = Number(partes[1]);
+        const minuto = Number(partes[2]);
+        return horaDia < 24 || (horaDia === 24 && minuto === 0) ? horaDia * 60 + minuto : null;
+    }
+
+    function horaCorta(valor) {
+        return `${String(Math.floor(valor / 60) % 24).padStart(2, "0")}:${String(valor % 60).padStart(2, "0")}`;
     }
 
     function rangoServicio(servicio) {
         const inicio = minutos(servicio?.hora);
-        if (inicio === null) return null;
+        if (inicio === null || inicio >= 24 * 60) return null;
 
         let fin = minutos(servicio?.horaFin);
         if (fin === null || fin <= inicio) {
-            const duracion = Math.max(1, Number(servicio?.duracionMinutos || 60));
-            fin = inicio + duracion;
+            const duracion = Number(servicio?.duracionMinutos);
+            fin = inicio + (Number.isFinite(duracion) && duracion > 0 ? Math.max(1, Math.round(duracion)) : DURACION);
         }
         return { inicio, fin };
     }
@@ -175,6 +185,45 @@
             return { estado: "tomada", activos, cancelados };
         }
         return { estado: "libre", activos: [], cancelados };
+    }
+
+    function programacion(tipo, fecha, serviciosDia = serviciosTinajaDelDia(fecha), reloj = fechaChileActual()) {
+        const desde = fecha === reloj.fecha ? reloj.minutos : 0;
+        const citas = serviciosDia.filter(s => tipoTinaja(s) === tipo && !estaCancelado(s))
+            .map(servicio => ({ servicio, rango: rangoServicio(servicio) }))
+            .filter(cita => cita.rango)
+            .sort((a, b) => a.rango.inicio - b.rango.inicio || a.rango.fin - b.rango.fin);
+        const ajustada = citas.some(({ rango }) => !HORARIOS.some(h =>
+            minutos(h.inicio) === rango.inicio && minutos(h.fin) === rango.fin));
+
+        const filas = ajustada ? horariosAjustados(tipo, citas, serviciosDia, desde) :
+            HORARIOS.map(h => ({ ...h, ...estadoHorario(tipo, h, serviciosDia) }));
+        const disponibles = filas.filter(h => h.estado === "libre" && minutos(h.inicio) >= desde)
+            .map(({ inicio, fin }) => ({ inicio, fin }));
+        return { filas, disponibles, ajustada };
+    }
+
+    function horariosAjustados(tipo, citas, serviciosDia, desde) {
+        const filas = [];
+        let cursor = Math.max(APERTURA, desde);
+        function llenarHueco(limite) {
+            const hasta = Math.min(limite, CIERRE);
+            for (let inicio = cursor; inicio + DURACION <= hasta; inicio += DURACION + PAUSA) {
+                const horario = { inicio: horaCorta(inicio), fin: horaCorta(inicio + DURACION) };
+                filas.push({ ...horario, ...estadoHorario(tipo, horario, serviciosDia) });
+            }
+        }
+        for (const cita of citas) {
+            const { inicio, fin } = cita.rango;
+            llenarHueco(inicio - PAUSA);
+            const conflicto = citas.some(otra => otra !== cita &&
+                seSuperponen(inicio, fin, otra.rango.inicio, otra.rango.fin));
+            filas.push({ inicio: horaCorta(inicio), fin: horaCorta(fin),
+                estado: conflicto ? "conflicto" : "tomada", activos: [cita.servicio], cancelados: [] });
+            cursor = Math.max(cursor, fin + PAUSA);
+        }
+        llenarHueco(CIERRE);
+        return filas;
     }
 
     function crearBloqueSiFalta() {
@@ -253,8 +302,7 @@
             .replace(/'/g, "&#039;");
     }
 
-    function htmlHorario(tipo, horario, serviciosDia) {
-        const info = estadoHorario(tipo, horario, serviciosDia);
+    function htmlHorario(info) {
         const canceladas = info.cancelados.length;
         const clase = `haiku-tinajas-fila haiku-tinajas-fila--${info.estado}`;
 
@@ -270,7 +318,7 @@
         return `
             <div class="${clase}">
                 <div class="haiku-tinajas-fila-top">
-                    <strong class="haiku-tinajas-hora">${horario.inicio}–${horario.fin}</strong>
+                    <strong class="haiku-tinajas-hora">${info.inicio}–${info.fin}</strong>
                     <span class="haiku-tinajas-estado">${etiquetaEstado(info.estado)}</span>
                 </div>
                 ${contenido}
@@ -288,25 +336,25 @@
         const alertas = bloque.querySelector("#haiku-tinajas-alertas-v1");
         if (!grid || !alertas) return;
 
-        grid.innerHTML = TIPOS.map(tipo => {
-            const libres = HORARIOS.filter(h => estadoHorario(tipo.clave, h, serviciosDia).estado === "libre").length;
+        const reloj = fechaChileActual();
+        const agendas = TIPOS.map(tipo => ({ ...tipo, ...programacion(tipo.clave, fecha, serviciosDia, reloj) }));
+        grid.innerHTML = agendas.map(({ titulo, filas, ajustada, disponibles }) => {
+            const libres = filas.filter(h => h.estado === "libre").length;
             return `
                 <article class="haiku-tinajas-tipo">
                     <header>
-                        <strong>${tipo.titulo}</strong>
-                        <span>${libres} de ${HORARIOS.length} libres</span>
+                        <strong>${titulo}</strong>
+                        <span>${ajustada ? `${disponibles.length} libres` : `${libres} de ${HORARIOS.length} libres`}</span>
                     </header>
                     <div class="haiku-tinajas-lista">
-                        ${HORARIOS.map(h => htmlHorario(tipo.clave, h, serviciosDia)).join("")}
+                        ${filas.map(htmlHorario).join("")}
                     </div>
                 </article>
             `;
         }).join("");
 
         const sinHoraValida = serviciosDia.filter(servicio => rangoServicio(servicio) === null);
-        const conflictos = TIPOS.reduce((total, tipo) =>
-            total + HORARIOS.filter(h => estadoHorario(tipo.clave, h, serviciosDia).estado === "conflicto").length,
-        0);
+        const conflictos = agendas.flatMap(agenda => agenda.filas).filter(h => h.estado === "conflicto").length;
 
         const mensajes = [];
         if (conflictos) mensajes.push(`⚠ ${conflictos} ${conflictos === 1 ? "conflicto de horario detectado" : "conflictos de horario detectados"}.`);
@@ -317,16 +365,7 @@
     }
 
     function horariosDisponibles(tipo, fecha) {
-        const serviciosDia = serviciosTinajaDelDia(fecha);
-        const reloj = fechaChileActual();
-        return HORARIOS.filter(horario => {
-            if (estadoHorario(tipo, horario, serviciosDia).estado !== "libre") return false;
-            if (fecha === reloj.fecha) {
-                const inicio = minutos(horario.inicio);
-                if (inicio === null || inicio < reloj.minutos) return false;
-            }
-            return true;
-        });
+        return programacion(tipo, fecha).disponibles;
     }
 
     function textoWhatsApp(fecha) {
@@ -406,6 +445,7 @@
         renderizar,
         textoWhatsApp,
         horariosDisponibles,
+        programacion,
         horarios: HORARIOS,
         serviciosTinajaDelDia,
         estadoHorario

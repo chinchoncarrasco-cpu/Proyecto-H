@@ -74,9 +74,9 @@ function entorno({ fallo = null } = {}) {
         HAIKU_RESUMEN_REFRESH_V1: coordinador,
         haikuTienePermiso: () => true,
         HAIKU_SERVICIOS_TINAJAS_HORARIOS_V1: {
-            horarios: [{ inicio: '19:15', fin: '20:15' }],
             serviciosTinajaDelDia: () => [],
-            estadoHorario: () => ({ estado: 'libre', activos: [] })
+            programacion: () => ({ filas: [{ inicio: '19:15', fin: '20:15', estado: 'libre' }],
+                disponibles: [{ inicio: '19:15', fin: '20:15' }], ajustada: false })
         },
         async haikuSincronizarFinanzasServicios() {
             llamadas.finanzas++;
