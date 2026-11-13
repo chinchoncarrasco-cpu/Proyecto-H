@@ -37,6 +37,7 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
     d.cabanas[7]={revisionCompletaCiclo:cycle('completada','lista')};
     d.cabanas[8]={revisionCompletaCiclo:cycle('pendiente',null),aseoExpressCiclo:{fecha:fechaSeleccionada,verificado:true,existe:true,estadoRevision:'completada',resultadoRevision:'lista'}};
     d.cabanas[9]={revisionCompletaCiclo:cycle('completada','lista',true),repasoRevision:cycle('en_proceso',null)};
+    d.cabanas[10]={aseoIn:'09:15',aseoOut:'10:15',revisionCompletaCiclo:cycle('pendiente',null)};
     window.HAIKU_ASEO_OPERACION_V1={obtenerCicloExpress:(day,n)=>obtenerDatosDia(day).cabanas[n]?.aseoExpressCiclo};
     window.HAIKU_CABANAS_SITES_V1.pintar();
     window.__filterOriginal=JSON.stringify(d.cabanas);
@@ -46,6 +47,40 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
    const choose=async value=>{await selector.locator('summary').click();await selector.locator(`[data-cb-filter-category="${value}"]`).click();assert.equal(await chips.locator('[data-cb-filter="todas"]').getAttribute('aria-pressed'),'true');};
    const ids=()=>page.locator('#cabinsOperation article:visible').evaluateAll(rows=>rows.map(r=>Number(r.dataset.cbCabin)));
    assert.equal(await page.locator('#cabinsFilterLabel').textContent(),'Filtrar: General');
+   const general=await chips.evaluate(n=>({width:n.clientWidth,full:n.scrollWidth,height:n.clientHeight}));
+   assert.ok(general.height<=34,'General conserva una fila de filtros');
+   assert.equal(general.full>general.width,width<700,'General ocupa el ancho disponible');
+   for(const [nombre,cabanas] of [
+    ['Pendientes · 2',[1,11]], ['Por revisar · 1',[10]], ['En revisión · 2',[5,9]],
+    ['Con detalles · 1',[6]], ['Listas · 3',[2,7,8]], ['No requiere · 1',[3]]
+   ]) {
+    const chip=chips.getByRole('button',{name:nombre,exact:true});
+    await chip.click();
+    assert.deepEqual(await ids(),cabanas,nombre);
+    assert.equal(await chip.getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('#cabinsFilterCount').textContent(),cabanas.length===1?'1 cabaña visible':`${cabanas.length} cabañas visibles`);
+   }
+   const conDetalles=chips.getByRole('button',{name:'Con detalles · 1',exact:true});
+   await conDetalles.click();
+   if(process.env.HAKU_UI_SHOTS){
+    fs.mkdirSync(process.env.HAKU_UI_SHOTS,{recursive:true});
+    const operacion=page.locator('#cabinsOperation');
+    await operacion.evaluate(n=>n.scrollIntoView({block:'center'}));
+    await operacion.screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`filters-general-${width}-${theme}.png`)});
+   }
+   await page.evaluate(()=>{
+    const ciclo=obtenerDatosDia(fechaSeleccionada).cabanas[6].revisionCompletaCiclo;
+    ciclo.resultado='lista';
+    HAIKU_CABANAS_SITES_V1.pintar();
+   });
+   assert.deepEqual(await ids(),[]);
+   assert.equal(await chips.getByRole('button',{name:'Con detalles · 0',exact:true}).getAttribute('aria-pressed'),'true');
+   assert.equal(await chips.getByRole('button',{name:'Listas · 4',exact:true}).count(),1);
+   await page.evaluate(()=>{
+    obtenerDatosDia(fechaSeleccionada).cabanas[6].revisionCompletaCiclo.resultado='con_detalles';
+    HAIKU_CABANAS_SITES_V1.pintar();
+   });
+   assert.deepEqual(await ids(),[6]);
    await chips.locator('[data-cb-filter="en_curso"]').click();
    assert.equal(await page.locator('.cb-tracking-row').count(),1);
    await choose('revision');
@@ -55,11 +90,13 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
    assert.equal(await page.locator('#cabinsFilterCount').textContent(),'3 cabañas visibles');
    await chips.getByRole('button',{name:'En revisión · 2',exact:true}).click();
    assert.deepEqual(await ids(),[5,9]);
+   await chips.getByRole('button',{name:'Con detalles · 1',exact:true}).click();
+   assert.deepEqual(await ids(),[6]);
    await chips.getByRole('button',{name:'No requiere · 1',exact:true}).click();
    assert.deepEqual(await ids(),[3]);
    await choose('aseo');
-   await chips.getByRole('button',{name:'Pendiente · 8',exact:true}).click();
-   assert.deepEqual(await ids(),[1,2,6,7,8,9,10,11]);
+   await chips.getByRole('button',{name:'Pendiente · 7',exact:true}).click();
+   assert.deepEqual(await ids(),[1,2,6,7,8,9,11]);
    await chips.getByRole('button',{name:'En curso · 1',exact:true}).click();
    assert.deepEqual(await ids(),[4]);assert.equal(await page.locator('.cb-tracking-row').count(),0);
    await choose('final');
@@ -73,7 +110,7 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
     await chips.hover();await page.mouse.wheel(300,0);
     await page.waitForFunction(()=>document.querySelector('#cabinsFilters').scrollLeft>0);
    }
-   await page.locator('#cabinsSummary [data-cb-filter="listas"]').click();
+   await page.getByRole('button',{name:/Listas para operar: 4/}).click();
    assert.equal(await page.locator('#cabinsFilterLabel').textContent(),'Filtrar: General');
    assert.deepEqual(await ids(),[2,3,7,8]);
    await selector.locator('summary').focus();await page.keyboard.press('Enter');
