@@ -245,10 +245,13 @@
         return accion;
     }
 
-    function incorporarPago(fila, acciones, aviso, revision, verReserva, {autor, fuenteLibro}, cliente, conciliar, bloquearCierre) {
+    const puedeIncorporarPago = (f, modelo) => Boolean(f.pagoIncorporable && Number.isSafeInteger(modelo.fuenteLibro?.generacion) &&
+        root.haikuTienePermiso?.("pagos.registrar") === true && root.HAIKU_LIBRO_CONSULTAS?.prepararPagoInformeCloudbeds);
+
+    function incorporarPago(fila, acciones, aviso, revision, verReserva, modelo, cliente, conciliar, bloquearCierre) {
+        if (!puedeIncorporarPago(fila, modelo)) return;
         const libro = root.HAIKU_LIBRO_CONSULTAS;
-        if (!fila.pagoIncorporable || !Number.isSafeInteger(fuenteLibro?.generacion) ||
-            root.haikuTienePermiso?.("pagos.registrar") !== true || !libro?.prepararPagoInformeCloudbeds) return;
+        const {autor, fuenteLibro} = modelo;
         const incorporar = elemento("button", "haku-cloudbeds-informes__principal", "Incorporar pago");
         incorporar.type = "button";
         incorporar.setAttribute("aria-expanded", "false");
@@ -281,11 +284,12 @@
                 const importe = informes.pesos(fila.credito);
                 const datos = elemento("div", "haku-cloudbeds-informes__pago-datos");
                 datos.append(elemento("strong", "", importe), elemento("small", "",
-                    partes(fila.medio, informes.dia(fila.comprobante.fecha))));
+                    partes(preparacion.medio || informes.medioComprobante(fila), informes.dia(fila.comprobante.fecha))));
                 const destinos = elemento("ul", "haku-cloudbeds-informes__pago-destinos");
                 for (const d of preparacion.destinos) {
                     const nombre = Number(d.cantidad) > 1 ? `${d.cantidad} × ${d.nombre}` : d.nombre;
                     destinos.append(elemento("li", "", partes(nombre, informes.dia(d.fecha), d.hora,
+                        d.saldo != null && `Saldo después ${informes.pesos(d.saldo - fila.credito)}`,
                         preparacion.destinos.length > 1 && informes.pesos(d.monto))));
                 }
                 const controles = elemento("div", "haku-cloudbeds-informes__acciones");
@@ -344,19 +348,22 @@
         });
     }
 
-    function montarFila(fila, modelo, cliente, actualizarConteo, bloquearCierre) {
+    function montarFila(fila, modelo, cliente, actualizarConteo, bloquearCierre, enGrupo) {
         const detalle = elemento("details", "haku-cloudbeds-informes__fila");
         const resumen = elemento("summary", "");
         const identidad = elemento("span", "haku-cloudbeds-informes__identidad");
-        identidad.append(elemento("strong", "", partes(informes.titulos[fila.tipo], fila.titular || (fila.id ? `#${fila.id}` : "Sin reserva"),
+        identidad.append(elemento("strong", "", enGrupo ? partes(informes.titulos[fila.tipo], informes.pesos(fila.credito || fila.debito)) :
+            partes(informes.titulos[fila.tipo], fila.titular || (fila.id ? `#${fila.id}` : "Sin reserva"),
             informes.cab(fila.cabana) || fila.cabanas?.map(informes.cab).join(", "))),
-            elemento("small", "", partes(fila.tipo !== "reserva" && fila.entrada && `IN ${informes.dia(fila.entrada)}`, resumenFila(fila))));
+            elemento("small", "", enGrupo ? partes(informes.dia(fila.comprobante.fecha || fila.registradoEn),
+                informes.medioComprobante(fila)) : partes(fila.tipo !== "reserva" && fila.entrada && `IN ${informes.dia(fila.entrada)}`, resumenFila(fila))));
         const indicadores = elemento("span", "haku-cloudbeds-informes__indicadores");
         resumen.append(identidad, indicadores);
         const actualizarIndicadores = () => indicadores.replaceChildren(...[["Proyecto H", fila.proyecto], ["Libro", fila.libro]].map(([nombre, r]) => {
             const corto = nombre === "Proyecto H" ? "H" : "Libro";
+            const rotulo = nombre === "Proyecto H" && puedeIncorporarPago(fila, modelo) ? "Por incorporar" : etiqueta(nombre, r);
             return elemento("span", `haku-cloudbeds-informes__indicador is-${r.estado}`,
-                r.estado === "falta" ? etiqueta(nombre, r) : `${corto} · ${etiqueta(nombre, r)}`);
+                r.estado === "falta" ? rotulo : `${corto} · ${rotulo}`);
         }));
         actualizarIndicadores();
         detalle.append(resumen);
@@ -463,6 +470,8 @@
         articulo.append(archivos);
 
         if (filas.length) {
+            const grupos = informes.agruparPagos(filas);
+            const bloques = [...new Set(filas.map(f => grupos.get(f) || f))];
             const controles = elemento("div", "haku-cloudbeds-informes__controles");
             const tipos = selector("Tipo de registro", Object.fromEntries(Object.entries(categorias).flatMap(([k, label]) => {
                 const total = filas.filter(f => porCategoria(f, k)).length;
@@ -478,28 +487,82 @@
             articulo.append(controles, resultados, mas);
 
             let visibles = [], desde = 0;
+            const filasDe = bloque => Array.isArray(bloque) ? bloque : [bloque];
+            const puedeIncorporar = f => puedeIncorporarPago(f, modelo);
+            const mostradas = new Map();
             const montadas = new WeakMap(), confirmaciones = new Set();
             const actualizarConteo = () => {
-                conteo.textContent = `${desde} de ${visibles.length} · ${visibles.filter(diferencias).length} con diferencias`;
+                const cantidadVisible = visibles.reduce((n,b) => n + mostradas.get(b).length, 0);
+                const cantidadMontada = visibles.slice(0, desde).reduce((n,b) => n + mostradas.get(b).length, 0);
+                const conDiferencias = visibles.reduce((n,b) => n + mostradas.get(b).filter(diferencias).length, 0);
+                conteo.textContent = `${cantidadMontada} de ${cantidadVisible} · ${conDiferencias} con diferencias`;
             };
+            const bloquearCierre = (fila, ocupado) => {
+                if (ocupado) confirmaciones.add(fila);
+                else confirmaciones.delete(fila);
+                cerrar.disabled = tipos.disabled = filtros.disabled = confirmaciones.size > 0;
+            };
+            const montarRegistro = (fila, actualizar, enGrupo = false) => {
+                if (!montadas.has(fila)) montadas.set(fila, montarFila(fila, modelo, cliente, actualizar,
+                    ocupado => bloquearCierre(fila, ocupado), enGrupo));
+                return montadas.get(fila);
+            };
+            const gruposMontados = new WeakMap();
+            function montarGrupo(grupo) {
+                if (!gruposMontados.has(grupo)) {
+                    const primera = grupo[0];
+                    const detalle = elemento("details", "haku-cloudbeds-informes__grupo");
+                    const resumen = elemento("summary");
+                    const identidad = elemento("span", "haku-cloudbeds-informes__identidad");
+                    const fechas = [primera.entrada, primera.salida].filter(Boolean).map(informes.dia).join(" → ");
+                    identidad.append(elemento("strong", "", partes(primera.titular || `#${primera.id}`, informes.cab(primera.cabana))),
+                        elemento("small", "", fechas));
+                    const estado = elemento("small", "haku-cloudbeds-informes__grupo-estado");
+                    resumen.append(identidad, estado);
+                    const contenido = elemento("div", "haku-cloudbeds-informes__grupo-pagos");
+                    detalle.append(resumen, contenido);
+                    const actualizarGrupo = (filas = mostradas.get(grupo) || []) => {
+                        const pendientes = filas.filter(puedeIncorporar).length;
+                        const revisar = filas.filter(f => !puedeIncorporar(f) && (dudas(f) || diferencias(f))).length;
+                        const soloPagos = filas.every(f => f.tipo === "pago");
+                        estado.textContent = partes(cantidad(filas.length, soloPagos ? "pago" : "movimiento"),
+                            pendientes && `${pendientes} por incorporar`, revisar && `${revisar} por revisar`);
+                    };
+                    const actualizar = () => {
+                        actualizarGrupo();
+                        actualizarConteo();
+                    };
+                    const actualizarFilas = () => {
+                        const filas = mostradas.get(grupo);
+                        if (!filas) return;
+                        actualizarGrupo(filas);
+                        if (detalle.open) contenido.replaceChildren(...filas.map(f => montarRegistro(f, actualizar, true)));
+                    };
+                    detalle.addEventListener("toggle", actualizarFilas);
+                    gruposMontados.set(grupo, {detalle, actualizarFilas});
+                }
+                const vista = gruposMontados.get(grupo);
+                vista.actualizarFilas();
+                return vista.detalle;
+            }
             function mostrarMas() {
                 const lote = visibles.slice(desde, desde + 20);
-                resultados.append(...lote.map(fila => {
-                    if (!montadas.has(fila)) montadas.set(fila, montarFila(fila, modelo, cliente, actualizarConteo, ocupado => {
-                        if (ocupado) confirmaciones.add(fila);
-                        else confirmaciones.delete(fila);
-                        cerrar.disabled = tipos.disabled = filtros.disabled = confirmaciones.size > 0;
-                    }));
-                    return montadas.get(fila);
-                }));
+                resultados.append(...lote.map(b => Array.isArray(b) ? montarGrupo(b) : montarRegistro(b, actualizarConteo)));
                 desde += lote.length;
                 mas.hidden = desde >= visibles.length;
                 actualizarConteo();
             }
             function filtrar() {
-                visibles = filas.filter(f => porCategoria(f, tipos.value) && porEstado(f, filtros.value));
-                visibles.sort((a, b) => Number(diferencias(b)) - Number(diferencias(a)) ||
-                    Number(informes.gruposMovimiento.has(a.tipo)) - Number(informes.gruposMovimiento.has(b.tipo)));
+                mostradas.clear();
+                visibles = bloques.filter(b => {
+                    const coinciden = filasDe(b).filter(f => porCategoria(f, tipos.value) && porEstado(f, filtros.value));
+                    if (!coinciden.length) return false;
+                    mostradas.set(b, coinciden);
+                    return true;
+                });
+                const prioridad = b => mostradas.get(b).some(puedeIncorporar) ? 0 :
+                    mostradas.get(b).some(diferencias) ? 1 : mostradas.get(b).some(dudas) ? 2 : 3;
+                visibles.sort((a, b) => prioridad(a) - prioridad(b));
                 desde = 0;
                 resultados.replaceChildren();
                 mostrarMas();
