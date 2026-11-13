@@ -1523,11 +1523,13 @@ test("el resumen distribuye las once cabañas sin duplicar revisión y enumera l
         5: { estadoRevision: "con-detalles" }
     });
     const g = h.api.gruposCabanas(FECHA);
-    assert.equal(g.trabajo.length + g.por_revisar.length + g.listas.length, 11);
+    assert.equal(g.trabajo.length + g.por_revisar.length + g.listas_para_operar.length, 11);
     assert.equal(g.en_curso.join(","), "2");
     assert.equal(g.por_revisar.join(","), "3");
-    assert.equal(g.listas.join(","), "1,4");
-    assert.equal(new Set([...g.trabajo, ...g.por_revisar, ...g.listas]).size, 11);
+    assert.equal(g.listas.join(","), "4");
+    assert.equal(g.no_requiere.join(","), "1");
+    assert.equal(g.listas_para_operar.join(","), "1,4");
+    assert.equal(new Set([...g.trabajo, ...g.por_revisar, ...g.listas_para_operar]).size, 11);
     assert.match(h.nodos.get("#cabinsSummary").innerHTML, /Listas para operar: 2\. Cabañas: 1, 4/);
     assert.match(h.nodos.get("#cabinsFilters").innerHTML, /En curso · 1/);
 });
@@ -1593,17 +1595,26 @@ test('filtros por Aseo, Revisión y Final son independientes y usan Express o Re
         4: { aseoIn: '10:00', estadoRevision: 'pendiente' },
         5: { aseoIn: '10:00', aseoOut: '10:30', estadoRevision: 'en_revision' },
         6: { estadoRevision: 'con-detalles' },
+        7: { aseoIn: '10:00', aseoOut: '10:30' },
     };
     const h = arnes(cabanas);
     const ids = (category, value) => Array.from({length:11},(_,i)=>i+1).filter(n=>h.api.coincideFiltro(FECHA,n,category,value)).join(',');
+    assert.equal(ids('general','pendientes'),'1,8,9,10,11');
+    assert.equal(ids('general','por_revisar'),'7');
+    assert.equal(ids('general','en_revision'),'5');
+    assert.equal(ids('general','con-detalles'),'6');
+    assert.equal(ids('general','listas'),'2');
+    assert.equal(ids('general','no_requiere'),'3');
+    assert.equal(ids('general','trabajo'),'1,4,5,6,8,9,10,11');
+    assert.equal(ids('general','listas_para_operar'),'2,3');
     assert.equal(ids('revision','lista'),'2');
     assert.equal(ids('revision','pendiente'),'1,4,7,8,9,10,11','Express pendiente no hereda Lista completa');
     assert.equal(ids('revision','no_requiere'),'3');
     assert.equal(ids('revision','en_revision'),'5');
     assert.equal(ids('revision','con-detalles'),'6');
-    assert.equal(ids('aseo','pendiente'),'1,2,6,7,8,9,10,11');
+    assert.equal(ids('aseo','pendiente'),'1,2,6,8,9,10,11');
     assert.equal(ids('aseo','en_curso'),'4');
-    assert.equal(ids('aseo','lista_para_revisar'),'5');
+    assert.equal(ids('aseo','lista_para_revisar'),'5,7');
     assert.equal(ids('final','lista'),'2');
     assert.equal(ids('final','no_requiere'),'3');
     assert.equal(ids('final','con-detalles'),'6');

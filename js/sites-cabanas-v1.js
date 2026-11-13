@@ -20,7 +20,20 @@
         lista_para_revisar: "Lista para revisar", "con-detalles": "Con detalles",
         lista: "Lista", no_requiere: "No requiere" });
     const CATEGORIAS_FILTRO = Object.freeze({ general: "General", aseo: "Aseo", revision: "Revisión", final: "Final" });
-    const FILTROS_GENERAL = [["todas", "Todas"], ["pendientes", "Pendientes"], ["en_curso", "En curso"], ["por_revisar", "Por revisar"], ["listas", "Listas"]];
+    const FILTROS_GENERAL = [
+        ["todas", "Todas"],
+        ["pendientes", "Pendientes"],
+        ["en_curso", "En curso"],
+        ["por_revisar", "Por revisar"],
+        ["en_revision", REVISIONES.en_revision],
+        ["con-detalles", FINALES["con-detalles"]],
+        ["listas", "Listas"],
+        ["no_requiere", FINALES.no_requiere]
+    ];
+    const GRUPOS_RESUMEN = {
+        trabajo: ["pendientes", "en_curso", "en_revision", "con-detalles"],
+        listas_para_operar: ["listas", "no_requiere"]
+    };
     const estado = { tab: "operation", categoriaFiltro: "general", filtro: "todas", numero: "", origen: "operation", modo: "completa", fecha: "" };
     const CLAVE_CONTEXTO = "haikuCabanasContextoPestanaV1";
     const panelAutenticado = document.documentElement.classList.contains("haiku-cabanas-pendiente");
@@ -333,26 +346,33 @@
         }, 0);
     }
     function grupoCabana(dato, fecha, numero) {
-        if (dato?.aseoIn && !dato.aseoOut) return "en_curso";
-        const final = estadoFinal(dato, fecha, numero);
-        if (["lista", "no_requiere"].includes(final)) return "listas";
-        return final === "lista_para_revisar" ? "por_revisar" : "pendientes";
+        const aseo = estadoAseo(dato);
+        if (aseo === "en_curso") return aseo;
+        const rev = revision(dato, fecha, numero);
+        if (rev === "lista") return "listas";
+        if (rev !== "pendiente") return rev;
+        return aseo === "lista_para_revisar" ? "por_revisar" : "pendientes";
     }
     function gruposCabanas(fecha) {
-        const grupos = { todas: [], pendientes: [], en_curso: [], por_revisar: [], listas: [], trabajo: [] };
+        const resumen = Object.entries(GRUPOS_RESUMEN);
+        const claves = [...FILTROS_GENERAL.map(([clave]) => clave), ...resumen.map(([clave]) => clave)];
+        const grupos = Object.fromEntries(claves.map(clave => [clave, []]));
         for (let numero = 1; numero <= 11; numero++) {
             const grupo = grupoCabana(cabana(fecha, numero), fecha, numero);
             grupos.todas.push(numero); grupos[grupo].push(numero);
-            if (grupo === "pendientes" || grupo === "en_curso") grupos.trabajo.push(numero);
+            for (const [clave, estados] of resumen) {
+                if (estados.includes(grupo)) grupos[clave].push(numero);
+            }
         }
         return grupos;
     }
     function resumen(fecha) {
         const grupos = gruposCabanas(fecha);
-        $("#cabinsSummary").innerHTML = [["trabajo", "En trabajo o pendientes"], ["por_revisar", "Por revisar"], ["listas", "Listas para operar"]]
+        $("#cabinsSummary").innerHTML = [["trabajo", "En trabajo o pendientes"], ["por_revisar", "Por revisar"], ["listas_para_operar", "Listas para operar"]]
             .map(([clave, texto]) => {
                 const numeros = grupos[clave];
-                const activo = estado.categoriaFiltro === "general" && (estado.filtro === clave || (clave === "trabajo" && ["pendientes", "en_curso"].includes(estado.filtro)));
+                const activo = estado.categoriaFiltro === "general" &&
+                    (estado.filtro === clave || GRUPOS_RESUMEN[clave]?.includes(estado.filtro) === true);
                 return `<button type="button" class="cb-summary-group" data-cb-filter="${clave}" data-cb-summary="true" aria-pressed="${activo}" aria-label="${texto}: ${numeros.length}. Cabañas: ${numeros.join(", ") || "ninguna"}"><strong class="cb-summary-count">${numeros.length}</strong><span class="cb-summary-label">${texto}</span><span class="cb-summary-numbers">${numeros.map(n => `<span class="cb-cabin-number">${n}</span>`).join("") || '<span class="cb-summary-none">—</span>'}</span></button>`;
             }).join("");
     }
@@ -528,7 +548,7 @@
         const dato = cabana(fecha, numero);
         if (categoria === "general") {
             const grupo = grupoCabana(dato, fecha, numero);
-            return valor === grupo || (valor === "trabajo" && ["pendientes", "en_curso"].includes(grupo));
+            return valor === grupo || GRUPOS_RESUMEN[valor]?.includes(grupo) === true;
         }
         const actual = categoria === "aseo" ? estadoAseo(dato) : categoria === "revision" ? revision(dato, fecha, numero) : estadoFinal(dato, fecha, numero);
         return actual === valor;
@@ -630,7 +650,7 @@
         if (enfocado && $("#aseo-resumen")?.contains(enfocado) && enfocado.matches?.("input, select, textarea")) return;
         const numeros = Array.from({ length: 11 }, (_, i) => i + 1).filter(numero => filtro(fecha, numero));
         const seguimiento = estado.categoriaFiltro === "general" && estado.filtro === "en_curso";
-        $("#cabinsFilterCount").textContent = `${numeros.length} cabañas visibles`;
+        $("#cabinsFilterCount").textContent = `${numeros.length} ${numeros.length === 1 ? "cabaña visible" : "cabañas visibles"}`;
         const titulo = $("#cabinsOperation h2");
         if (titulo) titulo.textContent = seguimiento ? "Seguimiento de camareros" : "Operación de hoy";
         $("#cabinsOperationDescription").textContent = seguimiento
