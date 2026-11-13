@@ -58,9 +58,92 @@ async function position(page, messages) {
         page: window.scrollY }));
 }
 
+async function revisarDesplegables(page, messages) {
+    const errores = [];
+    const recogerError = error => errores.push(error.message);
+    page.on('pageerror', recogerError);
+    const consultas = read('js/haiku-libro-consultas-v1.js');
+    const exportacion = 'const apiConsultas = Object.freeze({ interpretar,';
+    assert.ok(consultas.includes(exportacion));
+    await page.addScriptTag({ content: read('js/haiku-libro-semantica-v1.js') });
+    await page.addScriptTag({ content: consultas.replace(exportacion, exportacion.replace('interpretar,', 'renderizarIncorporacion, interpretar,')) });
+    await page.evaluate(() => {
+        window.__busquedasPagos = 0;
+        const buscar = document.querySelectorAll.bind(document);
+        document.querySelectorAll = selector => {
+            if (selector.includes('haiku-incorporacion-item--pagos')) window.__busquedasPagos++;
+            return buscar(selector);
+        };
+        window.HAIKU_LIBRO_RESERVA_V1 = { consultarHoja: async () => ({ reservas: [] }), listarHojas: () => [] };
+    });
+    for (const modulo of ['pagos-ui', 'pagos-seleccion', 'consulta-anual-ui']) {
+        await page.addScriptTag({ url: `/js/haiku-libro-${modulo}-v1.js` });
+    }
+    await messages.evaluate(area => {
+        const respuesta = document.createElement('div');
+        respuesta.className = 'haiku-asistente-mensaje haiku-asistente-mensaje--asistente';
+        area.append(respuesta);
+        respuesta.textContent = 'LIBRO · CONSULTA ANUAL · 2026\nReserva ficticia · 1 reserva\n' +
+            '• CAB 2 · Reserva ficticia · 2026-11-12 → 2026-11-13 · 1 noche';
+    });
+    await messages.locator('.haiku-anual-persona').getByText('Reserva ficticia', { exact: true }).waitFor();
+    await messages.evaluate(area => {
+        const plan = {
+            escrituraHabilitada: true,
+            permisos: [],
+            items: Array.from({ length: 80 }, (_, i) => ({
+                id: String(i), categoria: 'pagos', dependeDe: [], motivos: [], seleccionado: true,
+                texto: `Reserva ficticia ${i} · CAB 2 · $10.000 CLP`,
+                pagoLibro: {
+                    monto: 10000, fecha_bloque: '2026-11-12', fecha_comprobante: '2026-11-10',
+                    medio_pago: 'transferencia', referencia_externa: `Glosa de prueba ${i}`
+                },
+                payload: { tipo: 'pago' }
+            }))
+        };
+        const salida = document.createElement('div');
+        area.replaceChildren(salida);
+        window.__rehacerPlanHaku = () => window.HAIKU_LIBRO_CONSULTAS.renderizarIncorporacion(
+            salida, structuredClone(plan), () => {}, null, () => {}
+        );
+        window.__rehacerPlanHaku();
+    });
+    const seccion = messages.locator('.haiku-incorporacion-seccion--pagos');
+    const resumen = seccion.locator('summary').first();
+    const checks = seccion.locator('input[type="checkbox"]');
+    await page.waitForFunction(() => document.querySelector('[data-haiku-pago-seleccion-key]'));
+    assert.equal(await checks.count(), 80, 'las fichas plegadas conservan sus datos');
+    assert.equal(await seccion.locator('article').first().evaluate(el => getComputedStyle(el).contentVisibility), 'auto');
+    await resumen.press('Space');
+    await checks.first().uncheck();
+    assert.equal(await checks.last().evaluate(el => el.checkVisibility({ contentVisibilityAuto: true })), false);
+    const zona = await messages.boundingBox();
+    const inicio = (await position(page, messages)).top;
+    await page.mouse.move(zona.x + zona.width / 2, zona.y + zona.height / 2);
+    await page.mouse.wheel(0, 500);
+    await page.waitForFunction(top => document.getElementById('haiku-asistente-mensajes').scrollTop > top + 100, inicio);
+    assert.equal((await position(page, messages)).page, 0);
+    await checks.last().evaluate(el => el.closest('article').scrollIntoView({ block: 'center' }));
+    await page.waitForFunction(() => {
+        const tarjetas = document.querySelectorAll('.haiku-incorporacion-seccion--pagos article');
+        return tarjetas[tarjetas.length - 1]?.querySelector('input').checkVisibility({ contentVisibilityAuto: true });
+    });
+    await resumen.click();
+    await resumen.click();
+    assert.equal(await checks.first().isChecked(), false);
+    assert.equal(await messages.evaluate(el => el.scrollWidth <= el.clientWidth + 1), true);
+    await page.evaluate(() => window.__rehacerPlanHaku());
+    await page.waitForFunction(() => !document.querySelector('.haiku-incorporacion-seccion--pagos input').checked);
+    assert.equal(await checks.last().isChecked(), true);
+    assert.equal(await page.evaluate(() => window.__busquedasPagos), 0, 'la navegación evita recorrer los pagos de toda la página');
+    assert.deepEqual(errores, []);
+    page.off('pageerror', recogerError);
+}
+
 (async () => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    const browser = await chromium.launch({ executablePath: edge, headless: true });
+    const executablePath = process.env.HAKU_CHROMIUM_PATH || (fs.existsSync(edge) ? edge : undefined);
+    const browser = await chromium.launch({ executablePath, headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] });
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
         const { messages, insert } = await setup(page);
@@ -93,11 +176,16 @@ async function position(page, messages) {
         assert.equal(await page.locator('#haiku-asistente-texto').isVisible(), true);
         assert.equal(await page.locator('#haiku-asistente-rapidas').isVisible(), true);
 
-        await messages.evaluate(el => { el.scrollTop = 0; });
+        const insetBarra = await messages.evaluate(async el => {
+            el.scrollTop = 0;
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            return (el.offsetWidth - el.clientWidth) / 2;
+        });
         const scrollbarBox = await messages.boundingBox();
-        await page.mouse.move(scrollbarBox.x + scrollbarBox.width - 3, scrollbarBox.y + 12);
+        const scrollX = scrollbarBox.x + scrollbarBox.width - insetBarra;
+        await page.mouse.move(scrollX, scrollbarBox.y + scrollbarBox.height * .14);
         await page.mouse.down();
-        await page.mouse.move(scrollbarBox.x + scrollbarBox.width - 3, scrollbarBox.y + scrollbarBox.height * .72, { steps: 8 });
+        await page.mouse.move(scrollX, scrollbarBox.y + scrollbarBox.height * .72, { steps: 8 });
         await page.mouse.up();
         await page.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 50);
 
@@ -107,6 +195,7 @@ async function position(page, messages) {
         await page.mouse.wheel(0, 520);
         await page.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 100);
         assert.equal((await position(page, messages)).page, 0);
+        await revisarDesplegables(page, messages);
 
         const mobile = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
         try {
@@ -124,8 +213,11 @@ async function position(page, messages) {
             await touchPage.waitForFunction(() => document.getElementById('haiku-asistente-mensajes').scrollTop > 20);
             assert.equal((await position(touchPage, mobileMessages)).page, 0);
             assert.equal(await touchPage.locator('#haiku-asistente-texto').isVisible(), true);
+            await touchPage.addStyleTag({ url: '/css/haiku-tema-oscuro-v1.css' });
+            await touchPage.evaluate(() => { document.documentElement.dataset.haikuTema = 'oscuro'; });
+            await revisarDesplegables(touchPage, mobileMessages);
         } finally { await mobile.close(); }
-        console.log('Haku Sites: contenido corto/largo, wheel, trackpad, touch, footer fijo y scrollbar arrastrable OK');
+        console.log('Haku Sites: desplazamiento, desplegables, selección y posición del compositor en escritorio y móvil OK');
     } finally {
         await browser.close();
         await new Promise(resolve => server.close(resolve));
