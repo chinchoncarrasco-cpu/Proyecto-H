@@ -71,6 +71,9 @@ function colorDesdeAttrs(attrs) {
     if (attrs.theme != null) salida.theme = numeroFinito(attrs.theme);
     if (attrs.tint != null) salida.tint = numeroFinito(attrs.tint);
     if (attrs.auto != null) salida.auto = booleanoXml(attrs.auto);
+    if (['theme','indexed'].some(k => attrs[k] != null && !/^\d+$/.test(attrs[k])) ||
+        attrs.tint != null && (!String(attrs.tint).trim() || salida.tint === null || Math.abs(salida.tint) > 1) ||
+        attrs.auto != null && !/^(?:0|1|true|false)$/i.test(attrs.auto)) salida.noResuelto = true;
     return Object.keys(salida).length ? salida : null;
 }
 
@@ -152,8 +155,37 @@ function coloresTemaXml(xml) {
 }
 
 function resolverColorTema(c, temas) {
-    if (!c || c.rgb || !Number.isInteger(c.theme) || !temas?.[c.theme]) return c;
-    return { ...c, rgb: `FF${String(temas[c.theme]).slice(-6).toUpperCase()}` };
+    if (!c || c.rgb) return c;
+    const rgb = Number.isInteger(c.theme) ? temas?.[c.theme] : Number.isInteger(c.indexed) ?
+        (temas?.indexados || COLORES_INDEXADOS)[c.indexed] : null;
+    return rgb && /^(?:[a-f\d]{6}|[a-f\d]{8})$/i.test(rgb) ? { ...c, rgb: `FF${rgb.slice(-6).toUpperCase()}` } :
+        c.indexed != null ? {...c, noResuelto:true} : c;
+}
+
+// Paleta OOXML estándar, índices 0–63. 64/65 son colores de sistema, sin RGB fijo.
+const COLORES_INDEXADOS = ('000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF ' +
+    '000000 FFFFFF FF0000 00FF00 0000FF FFFF00 FF00FF 00FFFF ' +
+    '800000 008000 000080 808000 800080 008080 C0C0C0 808080 9999FF 993366 FFFFCC CCFFFF ' +
+    '660066 FF8080 0066CC CCCCCC 000080 FF00FF FFFF00 00FFFF 800080 800000 008080 0000FF ' +
+    '00CCFF CCFFFF CCFFCC FFFF99 99CCFF FF99CC CC99FF FFCC99 3366FF 33CCCC 99CC00 FFCC00 ' +
+    'FF9900 FF6600 666699 969696 003366 339966 003300 333300 993300 993366 333399 333333').split(' ');
+
+function contextoColoresXml(xml, temas = []) {
+    const contexto = [...temas];
+    const custom = primerTag(xml, 'indexedColors');
+    contexto.indexados = custom ? bloques(custom.inner, 'rgbColor').map(x => x.attrs.rgb || null) : COLORES_INDEXADOS;
+    return contexto;
+}
+
+function formatosCeldaXml(xml) {
+    const bases = bloques(primerTag(xml, 'cellStyleXfs')?.inner || '', 'xf');
+    return bloques(primerTag(xml, 'cellXfs')?.inner || '', 'xf').map(xf => {
+        const base = bases[Number(xf.attrs.xfId || 0)];
+        const attrs = {...base?.attrs, ...xf.attrs};
+        for (const [id, apply] of [['fontId','applyFont'],['fillId','applyFill'],['borderId','applyBorder'],['numFmtId','applyNumberFormat']])
+            if (xf.attrs[apply] != null && !booleanoXml(xf.attrs[apply])) attrs[id] = base?.attrs[id] || '0';
+        return {attrs, inner:xf.inner || base?.inner || ''};
+    });
 }
 
 function resolverFuenteTema(font, temas) {
@@ -162,10 +194,10 @@ function resolverFuenteTema(font, temas) {
 
 function parsearEstilosXml(xml, temas = []) {
     if (!xml) return [];
+    temas = contextoColoresXml(xml, temas);
     const fontsCont = primerTag(xml, "fonts")?.inner || "";
     const fillsCont = primerTag(xml, "fills")?.inner || "";
     const bordersCont = primerTag(xml, "borders")?.inner || "";
-    const xfsCont = primerTag(xml, "cellXfs")?.inner || "";
 
     const fonts = bloques(fontsCont, "font").map((b) => resolverFuenteTema(parsearFuente(b.inner), temas));
     const fills = bloques(fillsCont, "fill").map((b) => {
@@ -179,11 +211,13 @@ function parsearEstilosXml(xml, temas = []) {
             valor?.color ? { ...valor, color: resolverColorTema(valor.color, temas) } : valor]));
     });
 
-    return bloques(xfsCont, "xf").map((xf) => {
+    return formatosCeldaXml(xml).map((xf) => {
         const salida = {};
         const fontId = Number(xf.attrs.fontId || 0);
         const fillId = Number(xf.attrs.fillId || 0);
         const borderId = Number(xf.attrs.borderId || 0);
+        if (!Number.isInteger(fontId) || fontId < 0 || fontId >= fonts.length ||
+            !Number.isInteger(fillId) || fillId < 0 || fillId >= fills.length) salida.formatoVerificado = false;
         if (fonts[fontId]) salida.font = fonts[fontId];
         if (fills[fillId]) salida.fill = fills[fillId];
         if (borders[borderId]) salida.border = borders[borderId];
@@ -284,14 +318,30 @@ function parsearDimensionesHoja(xml) {
     return { columnas, filas };
 }
 
+function estilosHeredadosHoja(xml) {
+    const filas = new Map(bloques(xml, 'row').filter(x => x.attrs.s != null && booleanoXml(x.attrs.customFormat))
+        .map(x => [Number(x.attrs.r)-1, Number(x.attrs.s)]));
+    const columnas = bloques(primerTag(xml, 'cols')?.inner, 'col').filter(x => x.attrs.style != null);
+    return attrs => {
+        if (attrs.s != null) return Number(attrs.s);
+        const pos = posicionDesdeDireccion(attrs.r);
+        return filas.get(pos?.r) ?? Number(columnas.find(x => pos?.c+1 >= Number(x.attrs.min) && pos?.c+1 <= Number(x.attrs.max))?.attrs.style || 0);
+    };
+}
+
 function parsearCeldasXml(xml, textosCompartidos = [], temas = []) {
     const mapa = new Map();
+    const estiloHeredado = estilosHeredadosHoja(xml);
+    const condicionales = bloques(xml,'conditionalFormatting').flatMap(cf => String(cf.attrs.sqref || '').split(/\s+/).map(ref => {
+        const [a,b=a] = ref.replace(/\$/g,'').split(':');
+        return {s:posicionDesdeDireccion(a),e:posicionDesdeDireccion(b)};
+    }));
     for (const celda of bloques(xml, "c")) {
         const direccion = celda.attrs.r;
         if (!direccion) continue;
         const pos = posicionDesdeDireccion(direccion);
         if (!pos) continue;
-        const estiloId = celda.attrs.s != null ? Number(celda.attrs.s) : 0;
+        const estiloId = estiloHeredado(celda.attrs);
         const tipo = String(celda.attrs.t || "");
         let runs = [];
 
@@ -306,7 +356,8 @@ function parsearCeldasXml(xml, textosCompartidos = [], temas = []) {
         mapa.set(direccion, {
             r: pos.r,
             c: pos.c,
-            estiloId: Number.isInteger(estiloId) ? estiloId : 0,
+            estiloId: Number.isInteger(estiloId) && estiloId >= 0 ? estiloId : -1,
+            ...(condicionales.some(x => !x.s || !x.e || pos.r>=x.s.r && pos.r<=x.e.r && pos.c>=x.s.c && pos.c<=x.e.c) ? {formatoCondicional:true} : {}),
             runs: runs.length ? runs : null
         });
     }
@@ -353,8 +404,9 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
 
     try {
         const zip = compartido?.zip || await self.JSZip.loadAsync(buffer);
-        const temas = compartido?.temas || coloresTemaXml(await zip.file("xl/theme/theme1.xml")?.async("text") || "");
+        let temas = compartido?.temas || coloresTemaXml(await zip.file("xl/theme/theme1.xml")?.async("text") || "");
         const xmlEstilos=compartido?.estilos ? null : await zip.file("xl/styles.xml")?.async("text");
+        if (xmlEstilos) temas = contextoColoresXml(xmlEstilos, temas);
         estilos = compartido?.estilos || parsearEstilosXml(xmlEstilos || "", temas);
         if (!estilos.length) throw new Error('No se pudieron leer los estilos del archivo.');
         const textosCompartidos = compartido?.textos || await leerTextosCompartidos(zip, temas);
@@ -395,6 +447,8 @@ async function leerHoja(buffer, nombreHoja, compartido = null) {
             valorNumero: celda.t === "n" && Number.isFinite(celda.v) ? celda.v : null,
             fechaISO: celda.t === "d" && celda.v instanceof Date && Number.isFinite(celda.v.getTime()) ? celda.v.toISOString().slice(0, 10) : null,
             estiloId: Number.isInteger(estiloId) ? estiloId : -1,
+            formatoVerificado: fidelidad.formato && !!infoXml && !infoXml.formatoCondicional && Number.isInteger(estiloId) && estiloId >= 0 && estiloId < estilos.length && estilos[estiloId]?.formatoVerificado !== false,
+            ...(infoXml?.formatoCondicional ? {formatoCondicional:true} : {}),
             runs: infoXml?.runs || null
         });
     });
@@ -432,8 +486,9 @@ async function leerHojas(buffer, nombres) {
     asegurarLector(); asegurarZip();
     const libro=self.XLSX.read(buffer,{type:'array',sheets:nombres,cellDates:true,cellStyles:true,cellNF:true,cellFormula:true,sheetStubs:true});
     const zip=await self.JSZip.loadAsync(buffer);
-    const temas=coloresTemaXml(await zip.file('xl/theme/theme1.xml')?.async('text')||'');
-    const estilos=parsearEstilosXml(await zip.file('xl/styles.xml')?.async('text')||'',temas);
+    const xmlEstilos=await zip.file('xl/styles.xml')?.async('text')||'';
+    const temas=contextoColoresXml(xmlEstilos,coloresTemaXml(await zip.file('xl/theme/theme1.xml')?.async('text')||''));
+    const estilos=parsearEstilosXml(xmlEstilos,temas);
     const textos=await leerTextosCompartidos(zip,temas),compartido={libro,zip,temas,estilos,textos},salida=[];
     for(const hoja of nombres)salida.push({hoja,datos:await leerHoja(buffer,hoja,compartido)});
     return salida;
@@ -503,18 +558,16 @@ async function buscarHojas(buffer, nombre) {
 // Proyección canónica de celdas; no interpreta reservas ni ejecuta fórmulas.
 function prepararCanonHuellas(styles, shared, theme) {
     const tabla = (container, tag) => bloques(primerTag(styles, container)?.inner || '', tag);
-    const fonts = tabla('fonts','font'), fills = tabla('fills','fill'), xfs = tabla('cellXfs','xf');
+    const fonts = tabla('fonts','font'), fills = tabla('fills','fill'), xfs = formatosCeldaXml(styles);
     const formatos = new Map(tabla('numFmts','numFmt').map(f => [Number(f.attrs.numFmtId), f.attrs.formatCode]));
     const strings = bloques(shared,'si'), textos = new Map(), estilos = new Map();
     const normalizar = s => String(s ?? '').normalize('NFC').replace(/\r\n?/g,'\n').split('\n').map(l => l.replace(/[\t ]+/g,' ').trim()).join('\n').trim();
-    const temas = ['lt1','dk1','lt2','dk2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink'].map(k => {
-        const inner = primerTag(theme,`a:${k}`)?.inner;
-        return primerTag(inner,'a:srgbClr')?.attrs.val || primerTag(inner,'a:sysClr')?.attrs.lastClr;
-    });
+    const temas = contextoColoresXml(styles, coloresTemaXml(theme));
     function color(c) {
         if (!c) return null;
-        const rgb = c.rgb || (c.theme != null ? temas[c.theme] : null);
-        return [rgb ? String(rgb).slice(-6).toUpperCase() : c.indexed != null ? `indexed:${c.indexed}` : c.theme != null ? `theme:${c.theme}` : 'auto', Number(c.tint || 0)];
+        const resolved = resolverColorTema(c, temas), rgb = resolved.rgb;
+        if (resolved.noResuelto) return ['no_resuelto',c.indexed ?? c.theme ?? null];
+        return [c.auto ? 'auto' : rgb ? (/^(?:[a-f\d]{6}|[a-f\d]{8})$/i.test(rgb) ? rgb.slice(-6).toUpperCase() : String(rgb)) : c.indexed != null ? `indexed:${c.indexed}` : c.theme != null ? `theme:${c.theme}` : 'auto', Number(c.tint || 0)];
     }
     function textoRico(inner) {
         return {texto: normalizar(textoDeTagsT(inner)), runs: bloques(inner,'r').map(r => ({texto:textoDeTagsT(r.inner), color:color(colorDeTag(primerTag(r.inner,'rPr')?.inner,'color'))}))};
@@ -530,7 +583,8 @@ function prepararCanonHuellas(styles, shared, theme) {
             fondo:color(colorDeTag(p?.inner,'fgColor')), formato:formatos.get(formato) ?? formato};
         estilos.set(id,value); return value;
     }
-    return {normalizar,color,estilo,textoRico,compartido(id) {
+    const dxfs = tabla('dxfs','dxf');
+    return {normalizar,color,estilo,textoRico,diferencial:id => dxfs[Number(id)] || null,compartido(id) {
         if (!strings[id]) throw new Error('Texto compartido no disponible.');
         if (!textos.has(id)) textos.set(id,textoRico(strings[id].inner));
         return textos.get(id);
@@ -540,6 +594,7 @@ function prepararCanonHuellas(styles, shared, theme) {
 function canonHojaHuellas(xml, ctx, fecha1904) {
     const partes = {valores:[], formulas:[], rich_text:[], colores_semanticos:[], estructura:[]};
     const cells = [];
+    const estiloHeredado = estilosHeredadosHoja(xml);
     // Las exportaciones incluyen miles de celdas vacías con estilo. Evitar incluso
     // decodificar sus atributos; sólo el contenido y las fórmulas entran al canon.
     for (const m of xml.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/gi)) {
@@ -564,7 +619,7 @@ function canonHojaHuellas(xml, ctx, fecha1904) {
         // Los estilos de celdas vacías no determinan estados ni contenido.
         if (valor === '' && !formula) continue;
         if (!coord) throw new Error('Celda con contenido sin coordenada.');
-        const st = ctx.estilo(Number(c.attrs.s || 0));
+        const st = ctx.estilo(estiloHeredado(c.attrs));
         partes.valores.push([coord,rico || tipo === 'str' ? 'texto' : tipo,valor]);
         if (formula) {
             const f = formula.attrs.t === 'shared' ? sharedFormulas.get(formula.attrs.si) : {formula:decodificarXml(formula.inner)};
@@ -584,6 +639,8 @@ function canonHojaHuellas(xml, ctx, fecha1904) {
         }
     }
     partes.estructura.push(['fecha1904',fecha1904],['combinaciones',bloques(xml,'mergeCell').map(m=>m.attrs.ref).sort()]);
+    for (const cf of bloques(xml,'conditionalFormatting')) partes.estructura.push(['formato_condicional',cf.attrs.sqref,cf.inner,
+        bloques(cf.inner,'cfRule').map(r => r.attrs.dxfId == null ? null : ctx.diferencial(r.attrs.dxfId))]);
     return partes;
 }
 

@@ -187,8 +187,8 @@ test('volver a la pestaña o recuperar internet comprueba cambios sin esperar al
     const b = browser(); await b.api.conectar(); const before = b.requests.length;
     b.advance(4000); b.visibility('hidden'); await b.idle(); assert.equal(b.requests.length, before);
     b.meta.version = '2'; b.cambiarContenido(); b.visibility('visible'); b.event('focus'); await b.idle();
-    assert.equal(b.requests.length, before + 2); assert.equal(b.loads.length, 2);
-    b.advance(4000); b.event('online'); await b.idle(); assert.equal(b.requests.length, before + 3);
+    assert.equal(b.requests.length, before + 3); assert.equal(b.loads.length, 2); // M0, bytes, M1.
+    b.advance(4000); b.event('online'); await b.idle(); assert.equal(b.requests.length, before + 4);
     assert.equal(b.loads.length, 2); // Mismo archivo: sólo metadata, sin aviso duplicado.
 });
 
@@ -199,6 +199,29 @@ test('un cambio de versión con igual fecha se reintenta si falla la descarga', 
     await b.api.conectar(); b.meta.version = '2'; b.cambiarContenido(); fail = true;
     [...b.intervals.values()][0].f(); await b.idle(); assert.equal(b.loads.length, 1);
     fail = false; [...b.intervals.values()][0].f(); await b.idle(); assert.equal(b.loads.length, 2);
+});
+
+test('409 por guardado concurrente se recupera una vez sin esperar el sondeo; un segundo 409 queda como error',async()=>{
+ for(const persistente of [false,true]){
+  let descargas=0;
+  const b=browser({server:true,serverFetcher:async(init,meta,bytes)=>{
+   if(init.body.accion==='metadata')return {data:{...meta},error:null};
+   descargas++;
+   if(persistente||descargas===1){meta.version=String(Number(meta.version)+1);return serverError(409,'FUENTE_CAMBIADA');}
+   return {data:new Blob([bytes]),error:null};
+  }});
+  await b.idle();
+  assert.equal(descargas,2);assert.equal(b.loads.length,persistente?0:1);
+  assert.equal(b.api.estado().ultimaSincronizacion.error,persistente?'FUENTE_CAMBIADA':undefined);
+ }
+});
+
+test('sondeo OAuth descarta bytes de otra versión antes de cargar y no confunde checksum con un estado actual',async()=>{
+ const b=browser({fetcher:async(url,_init,meta,bytes)=>url.includes('alt=media')?
+  new Response(Buffer.concat([bytes,Buffer.from('otra versión')])):new Response(JSON.stringify(meta))});
+ await b.api.conectar();assert.equal(b.loads.length,0);assert.equal(b.api.estado().error.code,'FUENTE_CAMBIADA');
+ const m=b.api.estado().ultimaSincronizacion;assert.ok(m);assert.equal(m.copia_actualizada,false);assert.equal(m.error,'FUENTE_CAMBIADA');
+ assert.ok(!JSON.stringify(m).includes('token-ficticio'));
 });
 
 test('al recargar, una fecha idéntica no basta para confiar en una copia sin SHA-256 coincidente', async () => {

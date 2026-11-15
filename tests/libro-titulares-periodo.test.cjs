@@ -80,6 +80,16 @@ test("incluye salidas del mes anterior y cada cabaña de una misma persona",asyn
     assert.match(Q.respuesta(salidas),/Salida según las noches escritas 06\/11\/2026 · Nov26!P6/);
 });
 
+test('Ingresa, Continúa y Sale describen fechas; no equivalen a check-in o check-out por color',async()=>{
+ for(const estado_operativo of ['sin_checkin','hospedada','checked_out','no_determinado']){
+  const e=entrada('Nov26','C3','Ana Pérez',4,'2026-11-10','2026-11-12',{estado_operativo});
+  for(const [dia,movimiento] of [[10,'Ingresa'],[11,'Continúa'],[12,'Sale']]){
+   const r=await Q.consultar(`Titulares y cabañas el ${dia} de noviembre de 2026`,libro({Oct26:[],Nov26:[e]}));
+   assert.equal(r.titularidad.filas[0].movimiento,movimiento);
+  }
+ }
+});
+
 test("audita en los dos sentidos y expone las dos fechas sin leer pagos ni servicios",async () => {
     const lecturas = [];
     const otro = entrada("Nov26","L7","Adela Pino",5,"2026-11-03","2026-11-04");

@@ -172,9 +172,13 @@
         const valores = (parent, entries) => { const dl = el("dl", ""); for (const [k, v] of entries) dl.append(el("dt", "", k), el("dd", "", visible(v))); parent.append(dl); };
         const texto = (parent, xs) => lista(xs).forEach(t => parent.append(el("p", "", t)));
         const titulo = r => `CAB ${visible(r?.cabana || lista(r?.cabanas).join(", "))} · ${visible(r?.titular)}`;
+        const estadoLegible = v => ({sin_checkin:'Sin check-in',hospedada:'Check-in realizado',checked_out:'Check-out realizado',
+            pendiente:'Pendiente',confirmada:'Confirmada',cancelada:'Cancelada',no_show:'No-show',no_determinado:'No determinado'})[v] || visible(v);
         const caso = (parent, i) => {
             parent.append(el("h3", "", titulo(i.libro)), el("p", "", `${visible(i.libro?.fecha_checkin)} – ${visible(i.libro?.fecha_checkout)}`));
             valores(parent, [["Estado", i.estado], ["Clasificación", i.categoria], ["Referencia visible", i.libro?.fecha_ingreso_libro || i.libro?.estado_confirmacion]]);
+            valores(parent, [["Estado leído del Libro", estadoLegible(i.libro?.estado_operativo)],
+                ["Estado registrado en Proyecto H", estadoLegible((i.proyecto || i.proyectoNoActivo)?.estado_operativo || (i.proyecto || i.proyectoNoActivo)?.estado_reserva)]]);
             if (i.motivo) parent.append(el("p", "", i.motivo));
             texto(parent, i.libro?.notasImportantes); texto(parent, i.libro?.notasInterpretacion);
             texto(parent, i.libro?.pagosPendientes); texto(parent, i.libro?.advertencias);

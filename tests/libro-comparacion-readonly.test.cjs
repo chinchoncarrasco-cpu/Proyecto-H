@@ -4,6 +4,20 @@ const F = require('./fixtures/libro-comparacion-readonly.cjs');
 const nucleo = R.crearNucleo();
 const periodo = { desde: '2026-10-01', hasta: '2026-10-31' };
 const fuente = data => ({ nombre: 'fixture-ficticio.xlsx', version: 'fixture-v1', hojas: { Oct26: data } });
+
+test('todos los estados de Proyecto H permanecen distintos; cancelada/No-show sólo aportan diagnóstico',async()=>{
+ for(const estado of ['pendiente','confirmada','hospedada','checked_out','cancelada','no_show']){
+  const f=F.caso('estado',(r,db)=>{r.estado_operativo='hospedada';db.reserva_estadias[0].estado_estadia=estado;db.reserva_estadias[0].reservas.estado_reserva=estado;});
+  const antes=JSON.stringify(f.db),cliente=F.cliente(f.db);
+  const d=await nucleo.compararMes({fuente:fuente(f.data),cliente,ahora:F.ahora}),i=d.comparacion.items[0];
+  assert.equal(i.libro.estado_operativo,'hospedada');
+  if(['cancelada','no_show'].includes(estado)){
+   assert.equal(i.proyecto,null);assert.equal(i.proyectoNoActivo.estado_operativo,estado);
+   assert.match(i.motivo,new RegExp(estado));assert.match(i.motivo,/revisión manual/);assert.equal(i.estado,'sin_coincidencia');
+  }else assert.equal(i.proyecto.estado_operativo,estado);
+  assert.equal(JSON.stringify(f.db),antes);assert.deepEqual(cliente.mutaciones,[]);validarIdsPublicos(d);
+ }
+});
 const plain = x => JSON.parse(JSON.stringify(x));
 const visibleProyecto = x => x ? Object.fromEntries(['titular', 'cabana', 'fecha_checkin', 'fecha_checkout', 'tipo_estadia',
     'adultos', 'ninos', 'mascotas', 'estado_reserva'].map(k => [k, x[k] ?? null])) : null;

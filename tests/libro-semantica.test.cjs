@@ -30,15 +30,64 @@ test('el año del pago se ajusta sólo cuando la celda y la reserva lo respaldan
   assert.equal(p.ajuste_fecha_comprobante,undefined);
  }
 });
-function hojaDosNoches(texto){return {celdas:[
+function hojaDosNoches(texto){return {estilos:[{font:{color:{rgb:'000000'}}}],celdas:[
  {r:1,c:2,valor:'21 sep',fechaISO:'2026-09-21'},{r:1,c:6,valor:'22 sep',fechaISO:'2026-09-22'},{r:1,c:10,valor:'23 sep',fechaISO:'2026-09-23'},
- {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
+ {r:2,c:0,valor:'cabaña 6'},{r:2,c:2,valor:texto,estiloId:0},{r:24,c:2,valor:'Pagos de arriendos de hoy'}
 ],combinaciones:[{s:{r:2,c:2},e:{r:2,c:8}}]};}
 test('rich text separates operational state, red notes and yellow debt',()=>{
  const c={valor:'Ana / factura / jacuzzi',estiloId:0,runs:[{texto:'Ana',font:{color:{rgb:'FFFFFFFF'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'factura',font:{color:{rgb:'FFFF0000'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}},{texto:'jacuzzi',font:{color:{rgb:'FFFFFF00'}}}]};
+ c.valor=c.runs.map(r=>r.texto).join('');
  const f=S.fuente(c,[{font:{color:{rgb:'FF000000'}},fill:{fgColor:{rgb:'FFB4A7D6'}}}]);
  assert.equal(f.estado,'hospedada');assert.deepEqual(f.notas,['factura']);assert.deepEqual(f.pendientes,['jacuzzi']);
  c.runs.push({texto:'other',font:{color:{rgb:'FF0000FF'}}});assert.equal(S.fuente(c,[]).estado,'no_determinado');
+});
+
+const runColor = (texto,rgb) => ({texto,font:{color:{rgb}}});
+test('negro → blanco → azul conserva estado, notas y pendientes sin interpretar separadores',()=>{
+ for(const [rgb,estado] of [['000000','sin_checkin'],['FFFFFF','hospedada'],['0000FF','checked_out']]){
+  const runs=[runColor('Ana Pérez // 2 ADL',rgb),runColor('// ','000000'),runColor('Nota roja','FF0000'),
+   runColor(' // ','FFFFFF'),runColor('Jacuzzi por pagar','FFFF00')];
+  const f=S.fuente({valor:runs.map(r=>r.texto).join(''),runs},[]);
+  assert.equal(f.estado,estado);assert.deepEqual(f.motivos_estado,[]);
+  assert.deepEqual(f.notas,['Nota roja']);assert.deepEqual(f.pendientes,['Jacuzzi por pagar']);
+ }
+});
+
+test('color de nota, mezcla real, color desconocido y formato parcial nunca acreditan ingreso o salida',()=>{
+ const casos=[
+  [runColor('Ana Pérez','FF0000'),runColor(' // Nota: retirar llaves','0000FF')],
+  [runColor('Ana Pérez','FFFF00'),runColor(' // Nota: retirar llaves','FFFFFF')],
+  [runColor('Ana ','FFFFFF'),runColor('Pérez','0000FF')],
+  [runColor('Ana ','FFFFFF'),runColor('Pérez','F3F3F3')],
+  [runColor('Ana Pérez','FFFFFF'),{texto:' // 2 ADL',font:{color:{theme:3}}}]
+ ];
+ for(const runs of casos){const f=S.fuente({valor:runs.map(r=>r.texto).join(''),runs},[]);
+  assert.equal(f.estado,'no_determinado');assert.ok(f.motivos_estado.length);}
+ for(const cell of [
+  {valor:'Ana Pérez // 2 ADL',runs:[runColor('Ana Pérez','0000FF')]},
+  {valor:'Ana Pérez',estiloId:0,formatoVerificado:false}
+ ]) assert.equal(S.fuente(cell,[{font:{color:{rgb:'FFFFFF'}}}]).estado,'no_determinado');
+});
+
+test('RGB y ARGB exactos; un matiz o un valor mal formado no es equivalente',()=>{
+ for(const rgb of ['ffffff','FFFFFFFF','00FFFFFF']) assert.equal(S.fuente({valor:'Ana Pérez',estiloId:0},[{font:{color:{rgb}}}]).estado,'hospedada');
+ for(const color of [{rgb:'F3F3F3'},{rgb:'444444'},{rgb:'prefijoFFFFFF'},{rgb:'FFFFFF',tint:0.1},{indexed:-1},{indexed:64},{auto:true,rgb:'FFFFFF'}]){
+  const f=S.fuente({valor:'Ana Pérez',estiloId:0},[{font:{color}}]);assert.equal(f.estado,'no_determinado');assert.ok(f.motivos_estado.length);
+ }
+});
+
+test('motivo de estado desconocido llega a la reserva normalizada',()=>{
+ const d=hojaDosNoches('Ana Pérez // 2 ADL');d.celdas.find(c=>c.r===2&&c.c===2).estiloId=0;
+ d.estilos=[{font:{color:{rgb:'F3F3F3'}}}];const r=S.normalizarHoja(d,'Sep26').reservas[0];
+ assert.equal(r.estado_operativo,'no_determinado');assert.match(r.notas_interpretacion.join(' '),/Estado del Libro no determinado.*color desconocido/);
+});
+
+test('fondos mantienen confirmación independiente del estado operativo sin aceptar tonos cercanos',()=>{
+ for(const [fondo,esperado] of [['B4A7D6','confirmada_por_color'],['D9D2E9','confirmada_por_color'],
+  ['D5A6BD','pendiente_por_color'],['F4CCCC','pendiente_por_color'],['EAD1DC','pendiente_por_color'],['B4A7D5','no_determinado']]){
+  const d=hojaDosNoches('Ana Pérez // 2 ADL');d.estilos[0].fill={fgColor:{rgb:fondo}};
+  const r=S.normalizarHoja(d,'Sep26').reservas[0];assert.equal(r.estado_confirmacion,esperado);assert.equal(r.estado_operativo,'sin_checkin');
+ }
 });
 test('strict matching refuses duplicate identity and conflicting document',()=>{
  assert.equal(S.asociar(reserva,[{...reserva,id:'system'}]).estado,'asociada');

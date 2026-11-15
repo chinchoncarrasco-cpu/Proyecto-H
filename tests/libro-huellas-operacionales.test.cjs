@@ -100,6 +100,46 @@ test('cambio del sistema de fechas modifica huella global',async()=>{
     const a=files(),b=files();b['xl/workbook.xml']=b['xl/workbook.xml'].replace('date1904="0"','date1904="1"');
     assert.notEqual((await fingerprint(a)).result.huellas.Sep26.sha256,(await fingerprint(b)).result.huellas.Sep26.sha256);
 });
+
+test('huellas incluyen herencia de fuente, paleta indexada y estilos de fila o columna',async()=>{
+ for(const tipo of ['base','indexada','fila','columna']){
+  const a=files(),b=files();
+  if(tipo==='base'){
+   a['xl/styles.xml']=styles.replace('<xf fontId="0" xfId="0"/>','<xf xfId="0"/>');
+   b['xl/styles.xml']=a['xl/styles.xml'].replace('<cellStyleXfs><xf fontId="0"/>','<cellStyleXfs><xf fontId="1"/>');
+  }else if(tipo==='indexada'){
+   a['xl/styles.xml']=styles.replace('rgb="FF000000"','indexed="0"').replace('</styleSheet>','<colors><indexedColors><rgbColor rgb="FF000000"/></indexedColors></colors></styleSheet>');
+   b['xl/styles.xml']=a['xl/styles.xml'].replace('<rgbColor rgb="FF000000"/>','<rgbColor rgb="FFFFFFFF"/>');
+  }else{
+   a['xl/worksheets/sheet1.xml']=xmlSheet().replace(' s="0"','');
+   b['xl/worksheets/sheet1.xml']=tipo==='fila'?a['xl/worksheets/sheet1.xml'].replace('<row r="1">','<row r="1" s="1" customFormat="1">'):
+    a['xl/worksheets/sheet1.xml'].replace('<sheetData>','<cols><col min="1" max="1" style="1"/></cols><sheetData>');
+  }
+  assert.notEqual((await fingerprint(a)).result.huellas.Sep26.sha256,(await fingerprint(b)).result.huellas.Sep26.sha256,tipo);
+ }
+});
+
+test('cambiar una regla condicional o un color malformado invalida su huella',async()=>{
+ const a=files(),b=files();
+ a['xl/styles.xml']=styles.replace('rgb="FF000000"','rgb="FFFFFF" tint="error"');
+ b['xl/styles.xml']=styles.replace('rgb="FF000000"','rgb="FFFFFF"');
+ assert.notEqual((await fingerprint(a)).result.huellas.Sep26.sha256,(await fingerprint(b)).result.huellas.Sep26.sha256);
+ a['xl/worksheets/sheet1.xml']=xmlSheet().replace('</worksheet>',
+  '<conditionalFormatting sqref="A1"><cfRule type="expression" dxfId="0" priority="1"><formula>1</formula></cfRule></conditionalFormatting></worksheet>');
+ b['xl/worksheets/sheet1.xml']=a['xl/worksheets/sheet1.xml'].replace('<formula>1</formula>','<formula>0</formula>');
+ assert.notEqual((await fingerprint(a)).result.huellas.Sep26.sha256,(await fingerprint(b)).result.huellas.Sep26.sha256);
+});
+
+test('el informe usa un lote por versión y nunca vuelve a leer por separado un lote completo',async()=>{
+ const names=['Oct26','Nov26','Dic26'],a=catalog(names),b=structuredClone(a),reads=[];
+ names.forEach(n=>b.huellas[n].sha256='cambió');
+ const libro={listo:async()=>{},estado:()=>({generacion:1}),consultarIndice:async()=>({nombres:names}),
+  consultarHuellas:async v=>v==='anterior'?a:b,
+  consultarHojas:async(ns,v)=>{reads.push([ns,v]);return ns.map(hoja=>({hoja,cobertura:{geometria:true},fechas:['2026-11-01'],reservas:[]}));},
+  consultarHoja:()=>assert.fail('No debe duplicar el lote')};
+ const r=await D.compararUltimasVersiones({libro,fechaReferencia:'2026-11-15'});
+ assert.deepEqual(reads,[[[...names].sort(),'anterior'],[[...names].sort(),'actual']]);assert.equal(r.diagnostico.lecturas_semanticas,6);
+});
 const catalog = nombres => ({version_huella:1,nombres,huellas:Object.fromEntries(nombres.map(n=>[n,{sha256:'igual'}]))});
 test('rango por nombre, nunca posición; enero incluye diciembre anterior',()=>{
     assert.equal(D.mesHoja('Ago26'),'2026-08');assert.equal(D.mesHoja('sep 2026'),'2026-09');

@@ -171,20 +171,49 @@
         return col + (r + 1);
     }
     function color(c) {
-        if (!c || c.auto) return null;
+        if (!c || c.auto || c.noResuelto) return null;
         const indexed = ["000000", "FFFFFF", "FF0000", "00FF00", "0000FF", "FFFF00", "FF00FF", "00FFFF"];
-        const base = c.rgb?.slice(-6).toUpperCase() || (Number.isInteger(c.indexed) && c.indexed < 16 ? indexed[c.indexed % 8] : null);
+        const base = typeof c.rgb === 'string' && /^(?:[a-f\d]{6}|[a-f\d]{8})$/i.test(c.rgb) ? c.rgb.slice(-6).toUpperCase() :
+            c.rgb == null && Number.isInteger(c.indexed) && c.indexed >= 0 && c.indexed < 16 ? indexed[c.indexed % 8] : null;
         // Theme colors require the workbook theme. Unknown is safer than guessing.
         return c.tint ? null : base;
     }
-    function fuente(cell, estilos) {
+    function fuente(cell, estilos = []) {
         const estilo = estilos[cell?.estiloId] || {};
         const runs = cell?.runs?.length ? cell.runs : [{ texto: cell?.valor || "", font: estilo.font }];
         const fragmentos = runs.map(run => ({ texto: run.texto, color: color(run.font?.color || estilo.font?.color) }));
         const textosUnicos = valores => [...new Map(valores.map(valor => [normalizar(valor), valor])).values()];
-        const principales = new Set(fragmentos.filter(x => /\S/.test(x.texto) && ["000000", "FFFFFF", "0000FF"].includes(x.color)).map(x => x.color));
-        const estado = principales.size === 1 ? ({ "000000": "sin_checkin", "FFFFFF": "hospedada", "0000FF": "checked_out" })[[...principales][0]] : "no_determinado";
-        return { estado, fondo: color(estilo.fill?.fgColor), fragmentos,
+        // Un slash entre campos no expresa un estado. Google puede conservar su
+        // estilo negro aunque todo el contenido de la reserva haya pasado a blanco.
+        const contenido = x => /[^\s/]/.test(x.texto);
+        const operativos = { "000000": "sin_checkin", "FFFFFF": "hospedada", "0000FF": "checked_out" };
+        const principales = new Set(fragmentos.filter(x => contenido(x) && operativos[x.color]).map(x => x.color));
+        const motivos = [];
+        if (cell?.formatoCondicional) motivos.push('La celda tiene formato condicional no evaluado; sus colores visibles no están verificados.');
+        if (cell?.formatoVerificado === false || estilo.formatoVerificado === false) motivos.push('No se pudo verificar el formato original de esta celda.');
+        if (cell?.runs?.length && runs.map(r => r.texto).join('') !== String(cell.valor || ''))
+            motivos.push('Los fragmentos de texto enriquecido no cubren exactamente el texto de la celda.');
+        if (fragmentos.some(x => contenido(x) && ![...Object.keys(operativos),'FF0000','FFFF00'].includes(x.color)))
+            motivos.push('Hay texto con color desconocido, automático, de tema sin resolver o ajeno al contrato.');
+        if (principales.size > 1) motivos.push('El contenido combina colores de distintos estados operativos.');
+        if (!principales.size) motivos.push('No hay texto principal negro, blanco o azul que determine el estado.');
+        // Una nota azul/blanca nunca basta: el titular también debe acreditar el
+        // mismo estado. Rojo y amarillo siguen siendo notas/deuda, sin inferencias.
+        const candidatos = candidatosTitular(cell?.valor || '', true);
+        if (candidatos.length === 1 && principales.size === 1) {
+            const nombre = candidatos[0].texto, inicio = String(cell.valor).indexOf(nombre);
+            let offset = 0;
+            const titular = fragmentos.flatMap(f => {
+                const desde = Math.max(inicio, offset), hasta = Math.min(inicio + nombre.length, offset + f.texto.length);
+                const texto = hasta > desde ? f.texto.slice(desde-offset,hasta-offset) : '';
+                offset += f.texto.length;
+                return /\S/.test(texto) ? [{color:f.color}] : [];
+            });
+            if (inicio < 0 || !titular.length || titular.some(f => f.color !== [...principales][0]))
+                motivos.push('El color del titular no confirma el estado; un color de una nota no determina ingreso ni salida.');
+        }
+        const estado = !motivos.length && principales.size === 1 ? operativos[[...principales][0]] : "no_determinado";
+        return { estado, motivos_estado: motivos, fondo: color(estilo.fill?.fgColor), fragmentos,
             notas: textosUnicos(fragmentos.filter(x => x.color === "FF0000" && x.texto.trim()).map(x => x.texto.trim())),
             pendientes: textosUnicos(fragmentos.filter(x => x.color === "FFFF00" && x.texto.trim()).map(x => x.texto.trim())) };
     }
@@ -1408,7 +1437,8 @@
                 else if (!geometriaInequivoca) dudas.push("La geometría de la reserva es incompleta o ambigua; confirmar ingreso/salida.");
                 if (extensionTexto.ambigua) notasInterpretacion.push("El texto del Libro contiene más de una extensión de noches; la duración se obtiene de la geometría del calendario.");
                 else if (nochesTextoEfectivas !== null && nochesTextoEfectivas !== noches) notasInterpretacion.push(`El texto del Libro indica ${nochesTextoEfectivas} ${nochesTextoEfectivas===1?'noche':'noches'}, pero la geometría abarca ${noches} ${noches===1?'noche':'noches'}.`);
-                const colors = fuente(cell, estilos);
+                const colors = fuente(data.fidelidad?.formato === false || data.fidelidad?.texto_enriquecido === false ? {...cell,formatoVerificado:false} : cell, estilos);
+                if (colors.estado === 'no_determinado') notasInterpretacion.push(...colors.motivos_estado.map(m => `Estado del Libro no determinado: ${m}`));
                 const conceptosServicio = servicios(cell.valor, { origen_campo: "notas_reserva", coordenadas_origen: src, formato:colors });
                 const camposIdentidad=clasificarFragmentos(cell.valor).filter(f=>!f.rol&&(['posible_titular','dato_estructurado'].includes(f.tipo)||
                     /^(?:pedir|solicitar)\s+(?:(?:rut|dni|documento|pasaporte|telefono|correo|email)\b\s*:?\s*\S|[\d+])/.test(normalizar(f.texto)))).map(f=>f.texto).join(' // ');

@@ -27,7 +27,8 @@ function lector({pc=true, anterior=true, guardado=true}={}) {
         }},
         Worker:class {
             constructor(url){this.url=url;workers.push(this);}
-            postMessage(message){this.message=message;queueMicrotask(()=>this.onmessage({data:{ok:true,resultado:{nombres:['Sep26'],hojas:[]}}}));}
+            postMessage(message){this.message=message;queueMicrotask(()=>this.onmessage({data:{ok:true,resultado:message.tipo==='semantica_lote'?
+                message.nombresHojas.map(hoja=>({hoja,marca:new Uint8Array(message.buffer)[0]})):{nombres:['Sep26'],hojas:[]}}}));}
             terminate(){this.terminated=true;}
         }
     });
@@ -38,6 +39,8 @@ function lector({pc=true, anterior=true, guardado=true}={}) {
         libroIndice = {SheetNames:['Sep26']};
         persistenciaConfirmada = ${guardado};
         window.consultaTest = consultarHoja;
+        window.lecturaTest = crearLectura;
+        window.cambioTest = () => { operacionLibro++; archivoBuffer = new Uint8Array([3]).buffer; cacheConsultas.clear(); };
     `;
     vm.runInContext(source.replace(/\}\)\(\);\s*$/,hook+'})();'),context);
     return {context,transactions,requests,workers};
@@ -82,4 +85,14 @@ test('historial de cambios reutiliza el almacén local y no crea otra base ni ta
     assert.match(source,/almacen\.put\(registro, "cambios_detectados"\)/);
     assert.match(source,/leerCambiosDetectados/);assert.match(source,/guardarCambiosDetectados/);
     assert.equal((source.match(/indexedDB\.open\("haiku-libro-reserva-local"/g)||[]).length,1);
+});
+
+test('lotes de ambas versiones comparten caché sólo dentro de su instantánea; una carga nueva no recicla estados',async()=>{
+ const h=lector(),lectura=await h.context.lecturaTest();
+ const a=await lectura.consultarHojas(['Sep26'],'anterior'),b=await lectura.consultarHojas(['Sep26']);
+ assert.equal(a[0].marca,2);assert.equal(b[0].marca,1);const total=h.workers.length;
+ b[0].marca=99;assert.equal((await lectura.consultarHojas(['Sep26']))[0].marca,1);assert.equal(h.workers.length,total);
+ h.context.cambioTest();const nueva=await h.context.lecturaTest();
+ assert.equal((await nueva.consultarHojas(['Sep26']))[0].marca,3);
+ assert.equal((await lectura.consultarHojas(['Sep26']))[0].marca,1);
 });

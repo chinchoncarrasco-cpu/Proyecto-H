@@ -377,7 +377,17 @@
             const leer = async (indice, version) => {
                 if (!Array.isArray(indice?.nombres) || !indice.nombres.length) throw new Error('Índice de hojas no disponible.');
                 const hojas = [];
-                for (const hoja of seleccionadas.filter(h => indice.nombres.includes(h))) {
+                const nombres = seleccionadas.filter(h => indice.nombres.includes(h));
+                if (nombres.length && typeof libro.consultarHojas === 'function') {
+                    try {
+                        const lote = await libro.consultarHojas(nombres, version); comprobar();
+                        if (!Array.isArray(lote) || lote.length !== nombres.length || lote.some((h,i) => h?.hoja !== nombres[i]))
+                            throw new Error('El lote de hojas está incompleto o no corresponde a la selección.');
+                        diagnostico.lecturas_semanticas += nombres.length;
+                        return lote;
+                    } catch (_) { comprobar(); /* Aislar una hoja fallida conservando el diagnóstico por hoja. */ }
+                }
+                for (const hoja of nombres) {
                     diagnostico.lecturas_semanticas++;
                     try { hojas.push(await libro.consultarHoja(hoja, version, 'semantica')); }
                     catch (e) { hojas.push({hoja, cobertura: {geometria: false}, advertencias: [String(e.message || e)]}); }
