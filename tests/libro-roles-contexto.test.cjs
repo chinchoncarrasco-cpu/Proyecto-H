@@ -109,6 +109,25 @@ test('préstamos, instrucciones, insumos y no show se conservan como contexto de
  }
 });
 
+test('un aviso de boda conserva la nota de la reserva y deja visibles los nombres reales', () => {
+ const titular='Ana Pérez';
+ const nota='SE CASAN HOY CORTESIAS DE  BODAS';
+ for(const texto of [`${titular} // 2 ADL // 2 noches // ${nota}`,
+  `Mañana se casan\n${titular}\n2 ADL\n2 noches`]) {
+  const d=leer(texto);
+  assert.equal(d.reservas.length,1);
+  assert.equal(d.reservas[0].titular,titular);
+  assert.equal(d.reservas[0].texto_original,texto);
+  assert.equal(d.reservas[0].servicios.length,0);
+  assert.equal(d.pagos.length,0);
+  assert.equal(d.anotaciones.filter(a=>a.tipo==='reserva_por_identificar').length,0);
+ }
+ assert.equal(leer(nota).reservas.length,0);
+ const ambigua=leer(`${titular} // ${nota} // ROCÍO CASÁN MORA // 2 noches`);
+ assert.equal(ambigua.reservas.length,0);
+ assert.deepEqual(ambigua.anotaciones[0].titulares_posibles,[titular,'ROCÍO CASÁN MORA']);
+});
+
 test('el canal con separador conserva el nombre; NO SHOW describe la reserva, no al titular', () => {
  for(const canal of ['BOOKING-','Booking:','AIRBNB —','WALK IN -']) {
   const texto=`${canal} Ana Pérez // 2 ADL // 2 noches // NO SHOW`;
