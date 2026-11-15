@@ -109,7 +109,7 @@ async function validarLoginCanonico(browser, origin, width) {
     try {
         browser = await chromium.launch({ executablePath: process.env.HAIKU_BROWSER_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
         for (const width of [390, 1100]) await validarLoginCanonico(browser, origin, width);
-        for (const width of [320, 360, 390, 1100]) {
+        for (const [width,tema] of [[320,'claro'],[360,'claro'],[390,'claro'],[390,'oscuro'],[1100,'claro'],[1100,'oscuro']]) {
             const context = await browser.newContext({ viewport: { width, height: 850 } });
             await context.route('**/*', route => {
                 const url = route.request().url(); if (new URL(url).origin === origin) return route.continue();
@@ -166,6 +166,7 @@ async function validarLoginCanonico(browser, origin, width) {
                     tx.oncomplete = () => { db.close(); ok(); }; };
             }), [...bytes]);
             await page.goto(origin + '/Proyecto-H/libro-comparacion.html');
+            if(tema==='oscuro')await page.evaluate(()=>document.documentElement.setAttribute('data-haiku-tema','oscuro'));
             await page.waitForFunction(() => document.getElementById('informe-estado').dataset.estado === 'google_desconectado', null, { timeout: 5000 })
                 .catch(async () => { throw Error('Initial state: ' + await page.locator('#informe-estado').innerText() + '; script errors: ' + errors.join('; ')); });
             assert.equal(await page.evaluate(() => HAIKU_LIBRO_RESERVA_V1.estado().cargado), false);
@@ -191,7 +192,7 @@ async function validarLoginCanonico(browser, origin, width) {
             assert.ok(check.open >= 1); assert.equal(check.overflow, false); assert.ok(check.heights.every(h => width > 700 ? h === 0 : h >= 40));
             assert.equal(check.idb, 0); assert.deepEqual(check.storage, []); assert.ok(check.rpc.every(n => n === 'haiku_sesion_actual'));
             assert.equal(check.globalsManual, false); assert.ok(check.logs.every(s => !/Ficticio|Apellid|TOKEN_|CONTENIDO_PRIVADO/.test(s)));
-            await page.screenshot({ path: path.join(screenshots,'informe-' + width + '.png'), fullPage: true });
+            await page.screenshot({ path: path.join(screenshots,'informe-' + width + '-' + tema + '.png'), fullPage: true });
             // Este XLSX anonimizado contiene faltantes y servicios; abrir categorías con evidencia real.
             const categoryControl=width>700?'.informe-nav button':'.informe-categoria > summary';
             if(await page.locator('.informe-categoria').nth(2).getAttribute('open')===null)await page.locator(categoryControl).nth(2).click();

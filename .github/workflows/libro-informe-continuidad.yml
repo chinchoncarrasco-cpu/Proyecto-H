@@ -35,6 +35,9 @@ on:
       - "tests/libro-google-sesion.test.cjs"
       - "tests/sites-libro-actualizacion-browser-check.cjs"
       - "tests/libro-web-fuente-oficial-browser-check.cjs"
+      - "tests/libro-estados-xlsx-browser-check.cjs"
+      - "supabase/functions/_shared/libroDriveSource.ts"
+      - "supabase/functions/haku-libro-enlace-readonly/handler.ts"
       - ".github/workflows/libro-informe-continuidad.yml"
 
 permissions:
@@ -69,6 +72,8 @@ jobs:
         env:
           HAIKU_LIBRO_WORKER_ASSETS: ${{ runner.temp }}/haku-libro-worker
         run: node --test tests/libro-bloqueos.test.cjs tests/libro-bloqueos-lote.test.cjs tests/libro-bloqueos-retiro.test.cjs tests/libro-consulta-incorporacion-continua.test.cjs tests/haiku-libro-actualizacion.test.cjs tests/haiku-libro-auto.test.cjs tests/haiku-libro-prioridad.test.cjs tests/haiku-libro-incorporar-aviso.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs tests/libro-historial-revision-operativa.test.cjs tests/libro-servicios-resultados-parciales.test.cjs tests/haiku-libro-contexto.test.cjs tests/libro-web-fuente-oficial.test.cjs tests/libro-google-sesion.test.cjs tests/supabase-libro-google-carga.test.cjs tests/libro-pagos-lectura-estable.test.cjs
+      - name: Descarga verificada y rechazo temprano de versiones obsoletas
+        run: node --test tests/libro-drive-source-readonly.test.cjs tests/libro-enlace-servidor.test.cjs
       - name: Informe operativo y lector real en escritorio y móvil
         env:
           NODE_PATH: ${{ runner.temp }}/haku-informe/node_modules
@@ -83,6 +88,7 @@ jobs:
           node tests/sites-asistente-scroll-browser-check.cjs || resultado=$?
           node tests/sites-libro-actualizacion-browser-check.cjs || resultado=$?
           node tests/libro-web-fuente-oficial-browser-check.cjs || resultado=$?
+          node tests/libro-estados-xlsx-browser-check.cjs || resultado=$?
           exit "$resultado"
       - name: Capturas del resumen compacto
         if: always()

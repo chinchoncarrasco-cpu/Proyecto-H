@@ -147,6 +147,7 @@
         const refs = (rows, xs, key, project) => unico(lista(xs).map(x => idMovimiento(rows, x, key, project)));
         const items = comp.map(x => ({ id: itemIds.get(x), ...campos(x, ["estado", "categoria", "confianza", "pregunta"]),
             motivo: escalar(x.pregunta), libro: reserva(x.libro), proyecto: estadia(x.sistema), diferencias: textos(x.diferencias),
+            proyectoNoActivo: estadia(x.proyectoNoActivo),
             candidatos: lista(x.candidatosDetalle).map(estadia),
             pagoIds: refs(ps, x.pagosComparacion, "pago", pago), servicioIds: refs(ss, x.serviciosComparacion, "servicio", servicio) }));
         const grupos = comp.grupos.map(g => ({ id: grupoIds.get(g), ...campos(g, ["estado", "categoria", "confianza", "pregunta"]),

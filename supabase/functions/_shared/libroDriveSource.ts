@@ -143,10 +143,16 @@ export function createLibroDriveSource(options: LibroDriveSourceOptions) {
     }
     if (stampKeys.some(key => current[key] !== stamp[key])) throw new LibroDriveError("FUENTE_CAMBIADA");
   }
-  async function obtain(): Promise<LibroDriveSource> {
+  async function obtain(expectedVersion?: string): Promise<LibroDriveSource> {
+    if (expectedVersion !== undefined && (typeof expectedVersion !== 'string' || !/^\d{1,19}$/.test(expectedVersion)))
+      throw new LibroDriveError('CONFIG_INVALIDA');
     const op = transport.operation();
     const initial = await metadata(op);
     validateInitial(initial.stamp);
+    // Rechazar un pedido ya obsoleto antes de transferir el XLSX completo.
+    // Para una versión coincidente se conservan descarga, checksums y M1.
+    if (expectedVersion !== undefined && initial.stamp.driveVersion !== expectedVersion)
+      throw new LibroDriveError('FUENTE_CAMBIADA');
     const consume = async (response: Response, signal: AbortSignal) => {
       const length = response.headers.get("Content-Length");
       const encoding = response.headers.get("Content-Encoding");

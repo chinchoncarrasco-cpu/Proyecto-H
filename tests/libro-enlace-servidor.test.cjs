@@ -108,6 +108,7 @@ test('un cambio M0/M1 impide entregar la descarga', async () => {
 test('versión solicitada anterior impide usar bytes distintos en una comparación', async () => {
     const s = setup(); const r = await s.request({ accion: 'descargar', version: '24' });
     assert.equal(r.status, 409); assert.equal((await r.json()).code, 'FUENTE_CAMBIADA');
+    assert.equal(s.calls.filter(c=>c.url.includes('drive.google.com')||c.url.includes('drive.usercontent.google.com')).length,0);
 });
 test('checksum incorrecto impide entregar bytes y conserva el error concreto', async () => {
     const s = setup({ bytes: Buffer.alloc(fixture.length) }); const r = await s.request({ accion: 'descargar', version: '25' });

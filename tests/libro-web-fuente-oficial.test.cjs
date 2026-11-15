@@ -261,7 +261,7 @@ function web(options = {}) {
                 { error: 'access_denied', error_description: 'CONTENIDO_PRIVADO_NO_EXPORTAR' } : { access_token: 'TOKEN_FICTICIO_WEB', expires_in: 3600 });
                 if (!options.delayOAuth) tokenCallback(); } }; return client; }, revoke(_token, done) { done(); } } } },
         fetch: async (url, init) => { requests.push({ url, method: init.method, authorization: init.headers.Authorization, redirect: init.redirect });
-            if (options.esperaM0 && requests.length === 3) await options.esperaM0.promise;
+            if (options.esperaM0 && requests.length === 4) await options.esperaM0.promise;
             if (options.responseError) return new Response('TOKEN_FICTICIO_CONTENIDO_PRIVADO', { status: options.responseError });
             if (options.networkError) throw new Error('TOKEN_FICTICIO_CONTENIDO_PRIVADO');
             return url.includes('alt=media') ? new Response(bytes) : new Response(JSON.stringify(original())); }
@@ -286,8 +286,8 @@ test('conector sólo usa el FILE_ID configurado; no acepta autoridad desde pará
     assert.equal(w.oauthRequests(), 1); assert.equal(w.api.fuenteVerificada(h).version, hash('sha256'));
     assert.ok(w.requests.every(r => new URL(r.url).pathname === '/drive/v3/files/' + fileId && r.method === 'GET'));
     assert.ok(w.requests.every(r => r.authorization === 'Bearer TOKEN_FICTICIO_WEB'));
-    assert.ok(w.requests.slice(0, 2).every(r => r.redirect === 'follow'));
-    assert.ok(w.requests.slice(2).every(r => r.redirect === 'error'));
+    assert.ok(w.requests.slice(0, 3).every(r => r.redirect === 'follow')); // Sondeo: M0/bytes/M1.
+    assert.ok(w.requests.slice(3).every(r => r.redirect === 'error'));
     assert.ok(w.requests.some(r => new URL(r.url).searchParams.get('fields').includes('version,md5Checksum,sha256Checksum')));
     assert.doesNotMatch(JSON.stringify(w.api.estado()) + JSON.stringify(h) + JSON.stringify(w.api.fuenteVerificada(h)), /TOKEN_FICTICIO_WEB|Authorization|access_token/);
     assert.deepEqual(w.logs, []); await w.api.verificarVigencia(h);
@@ -330,10 +330,10 @@ test('Sincronizar ahora sigue disponible y sustituir la copia invalida su sello'
 test('Sincronizar ahora explícito puede cancelar una verificación pendiente; la antigua no certifica', async () => {
     const gate = deferred(), w = web({ esperaM0: gate }); await w.api.conectar();
     const pending = w.api.obtenerFuenteVerificada(), rejected = rechazo(pending, 'SOLICITUD_OBSOLETA');
-    while (w.requests.length < 3) await new Promise(ok => setImmediate(ok));
+    while (w.requests.length < 4) await new Promise(ok => setImmediate(ok));
     await w.api.sincronizar(); gate.resolve(); await rejected;
     assert.equal(w.api.estado().archivoLocalCargado, true);
-    assert.equal(w.requests.length, 5);
+    assert.equal(w.requests.length, 7);
     assert.throws(() => w.api.fuenteVerificada({}), { code: 'FUENTE_CAMBIADA' });
 });
 test('no hay activación backend, comparación, bridge, endpoint ni persistencia adicional de secretos', () => {

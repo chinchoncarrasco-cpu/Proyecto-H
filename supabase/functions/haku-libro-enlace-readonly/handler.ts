@@ -76,7 +76,7 @@ export function createHandler(config: Config) {
           ...init, signal: AbortSignal.any([abort.signal, init.signal!]),
         }) });
       if (input.accion === "metadata") return json(200, await source.readMetadata());
-      const file = await source.obtain(); // M0, XLSX bytes/checksums, M1; never trust a client stamp.
+      const file = await source.obtain(input.version); // M0, XLSX bytes/checksums, M1; never trust a client stamp.
       if (file.metadata.driveVersion !== input.version) return json(409, { code: "FUENTE_CAMBIADA" });
       if (abort.signal.aborted) return json(504, { code: "GOOGLE_TIMEOUT" });
       return new Response(file.bytes as BodyInit, { headers: {

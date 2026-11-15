@@ -1000,15 +1000,16 @@
         return Object.freeze({
             listo: () => Promise.resolve(), estado: () => ({...estado}), listarHojas: () => [...hojas],
             consultarHoja: consultar,
-            consultarHojas: async nombres => {
+            consultarHojas: async (nombres, version = 'actual') => {
+                if (!['actual','anterior'].includes(version)) throw new Error('Versión no válida');
                 const seleccion=[...new Set(nombres)],salida=new Map();
                 const faltantes=seleccion.filter(h=>{
-                    const key=`actual:semantica:${JSON.stringify(h)}`;
+                    const key=`${version}:semantica:${JSON.stringify(h)}`;
                     if(cache.has(key)){salida.set(h,structuredClone(cache.get(key)));return false;}
                     return true;
                 });
                 for(let i=0;i<faltantes.length;i+=8){
-                    for(const data of await consultar(faltantes.slice(i,i+8),'actual','semantica_lote'))salida.set(data.hoja,data);
+                    for(const data of await consultar(faltantes.slice(i,i+8),version,'semantica_lote'))salida.set(data.hoja,data);
                 }
                 return seleccion.map(h=>salida.get(h));
             },

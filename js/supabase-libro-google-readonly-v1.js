@@ -32,6 +32,7 @@
     let clienteAuth = null;
     let ultimaComprobacion = 0;
     let ultimaComprobacionCorrecta = 0;
+    let ultimaMedicion = null;
     let comprobacionAbort = null;
     let conexionServidor = false;
     let servidorPendiente = null;
@@ -439,9 +440,21 @@
             buffer = await archivo.arrayBuffer();
         } else {
             const respuesta = await driveFetch(url, signal, verificada);
-            buffer = verificada ? await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerBytes(respuesta, undefined, signal) : await respuesta.arrayBuffer();
+            buffer = await root.HAIKU_LIBRO_FUENTE_OFICIAL_V1.leerBytes(respuesta, undefined, signal);
         }
         if (!buffer.byteLength) throw fallo("FUENTE_INVALIDA");
+        // El canal servidor y la fuente oficial ya verifican M0/bytes/M1.
+        // El sondeo OAuth también debe hacerlo antes de etiquetar la copia como actual.
+        if (!conexionServidor && !verificada) {
+            const bytes = new Uint8Array(buffer), size = Number(metadata.size);
+            if (Number.isFinite(size) && size > 0 && bytes.byteLength !== size) throw fallo('FUENTE_CAMBIADA');
+            const F = root.HAIKU_LIBRO_FUENTE_OFICIAL_V1;
+            if (metadata.sha256Checksum && metadata.sha256Checksum.toLowerCase() !== await F.sha256(bytes,root.crypto) ||
+                metadata.md5Checksum && metadata.md5Checksum.toLowerCase() !== F.md5Hex(bytes)) throw fallo('CHECKSUM_INVALIDO');
+            const posterior = await obtenerMetadata({signal});
+            if (['id','mimeType','version','modifiedTime','size','md5Checksum','sha256Checksum','trashed'].some(k => metadata[k] !== posterior[k]) ||
+                posterior.capabilities?.canDownload === false) throw fallo('FUENTE_CAMBIADA');
+        }
         const nombreBase = String(metadata?.name || "Libro de reservas actual 2025.xlsx");
         const nombre = /\.xlsx$/i.test(nombreBase) ? nombreBase : `${nombreBase}.xlsx`;
         return new File([buffer], nombre, { type: MIME_XLSX, lastModified: Date.parse(metadata?.modifiedTime || "") || Date.now() });
@@ -504,7 +517,13 @@
 
     function sincronizar(forzar = false) {
         if (sincronizacionPendiente) return sincronizacionPendiente;
-        const trabajo = ejecutarSincronizacion(forzar);
+        const trabajo = (async () => {
+            const ok = await ejecutarSincronizacion(forzar);
+            // Google puede guardar entre metadata y descarga. Una sola lectura
+            // nueva recupera esa carrera sin esperar otro sondeo ni omitir guards.
+            if (!ok && ultimoError?.code === 'FUENTE_CAMBIADA' && autorizado()) return ejecutarSincronizacion(forzar);
+            return ok;
+        })();
         sincronizacionPendiente = trabajo;
         return trabajo.finally(() => { if (sincronizacionPendiente === trabajo) sincronizacionPendiente = null; });
     }
@@ -519,6 +538,8 @@
         sincronizando = true;
         ultimoError = null;
         ultimaComprobacion = Date.now();
+        const medicion = {iniciada_en:new Date(ultimaComprobacion).toISOString(),metadata_ms:0,descarga_ms:0,entrega_ms:0,total_ms:0,descargada:false,copia_actualizada:false};
+        const inicioMedicion = ultimaComprobacion;
         const autorizacionInforme = revisionAutorizacion;
         const comprobarInforme = () => {
             if (!autorizado() || autorizacionInforme !== revisionAutorizacion) throw fallo("SOLICITUD_OBSOLETA");
@@ -531,7 +552,9 @@
             await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
             comprobarInforme();
             if (abort?.signal.aborted) throw fallo("GOOGLE_ERROR");
+            let etapa = Date.now();
             const metadata = await obtenerMetadata({ signal: abort?.signal });
+            medicion.metadata_ms = Date.now() - etapa;
             comprobarInforme();
             const verificadaVigente = fuenteControl?.observarMetadata(metadata) === true;
             const previa = metadataActual;
@@ -554,10 +577,16 @@
             if (descargarCopia) {
                 fuenteControl?.invalidar();
                 pintar("trabajando", "Libro online", "Comprobando la copia de Google…");
+                etapa = Date.now();
                 const archivo = await descargar(metadata, { signal: abort?.signal });
+                medicion.descarga_ms = Date.now() - etapa;
+                medicion.descargada = true;
                 comprobarInforme(); // El body puede terminar después del logout, aunque los headers fueran válidos.
                 if (abort?.signal.aborted) throw fallo("GOOGLE_ERROR");
+                etapa = Date.now();
                 copiaActualizada = await entregarAlLibro(archivo) !== false;
+                medicion.entrega_ms = Date.now() - etapa;
+                medicion.copia_actualizada = copiaActualizada;
                 comprobarInforme();
                 if (metadata.modifiedTime) {
                     modifiedMemoria = metadata.modifiedTime;
@@ -568,6 +597,8 @@
             }
 
             metadataActual = metadata;
+            medicion.version_google = metadata.version;
+            medicion.version_local = root.HAIKU_LIBRO_RESERVA_V1?.estado?.().version || null;
             ultimaComprobacionCorrecta = Date.now();
             pintar(
                 "ok",
@@ -581,9 +612,12 @@
             if (autorizacionInforme !== revisionAutorizacion) return false;
             fuenteControl?.invalidar();
             ultimoError = errorSeguro(error);
+            medicion.error = ultimoError.code;
             pintar("error", "Libro online", ultimoError.message);
             return false;
         } finally {
+            medicion.total_ms = Date.now() - inicioMedicion;
+            ultimaMedicion = medicion;
             if (timeout) clearTimeout(timeout);
             if (comprobacionAbort === abort) comprobacionAbort = null;
             sincronizando = false;
@@ -699,7 +733,8 @@
             sincronizando,
             error: ultimoError ? { ...ultimoError } : null,
             metadata: metadataActual ? { ...metadataActual } : null,
-            archivoLocalCargado: libroLocalCargado()
+            archivoLocalCargado: libroLocalCargado(),
+            ultimaSincronizacion: ultimaMedicion ? {...ultimaMedicion} : null
         })
     });
 

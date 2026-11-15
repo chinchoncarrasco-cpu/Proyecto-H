@@ -26,7 +26,7 @@ test('una errata en el verbo no borra la extensión explícita de noches',()=>{
  const [r]=S.normalizarHoja(d,'Sep26').reservas;
  assert.equal(r.noches,2);
  assert.equal(r.noches_texto_efectivas,2);
- assert.deepEqual(r.notas_interpretacion,[]);
+ assert.deepEqual(r.notas_interpretacion.filter(n=>!n.startsWith('Estado del Libro no determinado:')),[]);
 });
 test('reported operational notes preserve all thirteen guest blocks',()=>{
  const casos=[['Yerko Baeza','articulos de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Yuly Barbieri T.','cenicero y art de asado'],['Marco Iturrieta Rojas','NO MOVER'],['Paulina Varas','solicitar rut'],['Katherine Rubiños','CENICERO Y ART DE ASADO'],['Bruno Borge','tienen llave de caja fuerte // tienen tenazas y sacacorcho'],['Yenny Acuña Berrios','se le presta articulos de asado'],['Edgardo Andrés Gálvez Miranda','pedir rut'],['Aneti Dupont','pedir rut // reserva booking'],['Matias Fernandez','CORTESÍA CHOCOLATES Y ESPUMANTE'],['Macarena Hurtado','se le vendio full day'],['Alejandra Calderon Arrigoni','pedir rut']];

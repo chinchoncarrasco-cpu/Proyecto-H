@@ -102,6 +102,13 @@ function providerCase({ raw, credentialPatch, response, fetchOverride, ...option
     fetch, crypto: webcrypto, ...time, ...options });
   return { provider, calls, time };
 }
+
+test('versión solicitada obsoleta se rechaza en M0, sin descargar ni eliminar M1 en la ruta vigente',async()=>{
+  const stale=sourceCase();await errorCode(()=>stale.adapter.obtain('1'),'FUENTE_CAMBIADA');
+  assert.deepEqual(stale.stats(),{metadataReads:1,downloads:0});
+  const current=sourceCase();const file=await current.adapter.obtain(metadata().version);
+  assert.equal(file.bytes.length,bytesFixture.length);assert.deepEqual(current.stats(),{metadataReads:2,downloads:1});
+});
 function assertSafe(error) {
   assert.ok(error instanceof common.LibroDriveError);
   const serialized = JSON.stringify({ ...error, message: error.message, stack: error.stack });

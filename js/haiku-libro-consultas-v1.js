@@ -2215,6 +2215,16 @@
         }
 
         const resultados = asociarEstadiasComparacion(validas, system);
+        // Diagnóstico de lectura: una cancelada/No-show no es una asociación
+        // operativa ni un destino para writes, pero tampoco debe parecer ausente.
+        for (const item of resultados.filter(x => x.estado === 'sin_coincidencia')) {
+            const cerradas = systemAll.filter(s => /cancelad|cancelled|canceled|no[\s_-]*show/.test(S.normalizar(`${s.estado_reserva} ${s.estado_operativo}`)) &&
+                puntuarCandidato(item.libro,s).segura);
+            if (cerradas.length === 1) {
+                item.proyectoNoActivo = cerradas[0];
+                item.pregunta = `La estadía existe en Proyecto H con estado ${cerradas[0].estado_operativo || cerradas[0].estado_reserva}. Está excluida de las asociaciones operativas; requiere revisión manual.`;
+            } else if (cerradas.length > 1) item.pregunta = 'Hay varias estadías canceladas o No-show compatibles en Proyecto H; requiere revisión manual.';
+        }
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
         let capacidadTransferencias = false, capacidadGlosaSinNombre = false;

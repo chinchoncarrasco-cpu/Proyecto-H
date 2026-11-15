@@ -49,6 +49,54 @@ test('el fallo OOXML conserva valores pero declara lectura parcial y evita apare
  assert.equal(h.reservas[0].titular,'Ana Pérez');
  assert.match(h.reservas[0].advertencias.join(' '),/formato original/);
  assert.ok(h.pagos.every(p=>p.advertencias.some(a=>/formato original/.test(a))));
+ assert.equal(h.reservas[0].estado_operativo,'no_determinado');
+});
+
+test('versiones XLSX consecutivas negro/blanco/azul con notas y separadores, compartido e inline',async()=>{
+ const lector=crearLector({XLSX,JSZip}),D=require('../js/haiku-libro-diferencias-v1.js');
+ const resultados=[];
+ for(const compartido of [false,true]){
+  let previo=null;
+  for(const [rgb,estado] of [['000000','sin_checkin'],['FFFFFF','hospedada'],['0000FF','checked_out']]){
+   const z=await JSZip.loadAsync(await archivo());
+   const rich=`<r><rPr><color rgb="${rgb}"/></rPr><t>Ana Pérez // 2 ADL // 1 noche</t></r>`+
+    '<r><rPr><color rgb="000000"/></rPr><t> // </t></r><r><rPr><color rgb="FF0000"/></rPr><t>Nota: llaves</t></r>'+
+    '<r><rPr><color rgb="FFFF00"/></rPr><t> // Jacuzzi por pagar</t></r>';
+   let xml=await z.file('xl/worksheets/sheet1.xml').async('text');
+   xml=xml.replace(/<c r="C3"[^>]*>[\s\S]*?<\/c>/,compartido?'<c r="C3" t="s"><v>0</v></c>':`<c r="C3" t="inlineStr"><is>${rich}</is></c>`);
+   z.file('xl/worksheets/sheet1.xml',xml);
+   if(compartido){
+    z.file('xl/sharedStrings.xml',`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si>${rich}</si></sst>`);
+    z.file('[Content_Types].xml',(await z.file('[Content_Types].xml').async('text')).replace('</Types>',
+     '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>'));
+    z.file('xl/_rels/workbook.xml.rels',(await z.file('xl/_rels/workbook.xml.rels').async('text')).replace('</Relationships>',
+     '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>'));
+   }
+   const bytes=await z.generateAsync({type:'nodebuffer'}),d=await lector.leerHoja(bytes,'Nov26'),h=S.normalizarHoja(d,'Nov26');
+   const r=h.reservas[0];assert.equal(r.estado_operativo,estado);assert.ok(r.notas_importantes.length);assert.ok(r.pagos_pendientes.length);
+   if(previo){const diff=D.comparar([previo],[h]);assert.ok(diff.modificadas.some(x=>x.cambios.some(c=>c.campo==='estado_operativo'&&c.ahora===estado)));}
+   previo=h;resultados.push(estado);
+  }
+ }
+ assert.equal(resultados.length,6);
+});
+
+test('un estilo inválido o una cobertura rich text incompleta no acredita estado aun con valores legibles',async()=>{
+ const z=await JSZip.loadAsync(await archivo());
+ z.file('xl/worksheets/sheet1.xml',(await z.file('xl/worksheets/sheet1.xml').async('text')).replace('<c r="C3"','<c s="999" r="C3"'));
+ const d=await crearLector({XLSX,JSZip}).leerHoja(await z.generateAsync({type:'nodebuffer'}),'Nov26');
+ assert.equal(d.celdas.find(c=>c.r===2&&c.c===2).formatoVerificado,false);
+ const r=S.normalizarHoja(d,'Nov26').reservas[0];assert.equal(r.estado_operativo,'no_determinado');
+ assert.match(r.notas_interpretacion.join(' '),/formato original/);
+});
+
+test('formato condicional de una reserva no se presenta como color operativo verificado',async()=>{
+ const z=await JSZip.loadAsync(await archivo());
+ z.file('xl/worksheets/sheet1.xml',(await z.file('xl/worksheets/sheet1.xml').async('text')).replace('</worksheet>',
+  '<conditionalFormatting sqref="C3:E3"><cfRule type="expression" priority="1"><formula>1</formula></cfRule></conditionalFormatting></worksheet>'));
+ const d=await crearLector({XLSX,JSZip}).leerHoja(await z.generateAsync({type:'nodebuffer'}),'Nov26');
+ const r=S.normalizarHoja(d,'Nov26').reservas[0];assert.equal(r.estado_operativo,'no_determinado');
+ assert.match(r.notas_interpretacion.join(' '),/formato condicional/);
 });
 
 test('el índice de titulares encuentra variantes en cadenas compartidas, directas e inline',async()=>{
