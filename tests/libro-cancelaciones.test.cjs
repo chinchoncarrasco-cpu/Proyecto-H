@@ -72,9 +72,11 @@ test('review uses real reservation data and only a saved cancellation opens the 
  for(const text of ['Carol Vega Ruiz','CAB 1','CANCELACIONES · Sep26 · D16','Confirmada en el Libro','Haku · por verificar','2 noches'])assert.ok(x.text().includes(text),text);
  const button=x.nodes().find(n=>n.tag==='button');assert.equal(button.textContent,'Preparar cancelación');assert.equal(typeof button.events.click,'function');
  await button.events.click();assert.equal(x.calls(),0);
- for(const text of ['Haku','Asistente operativo','REVISIÓN DEL LIBRO · SEPTIEMBRE 2026','Revisar cancelación','1 sep → 3 sep 2026 · 2 noches','EN EL LIBRO','Cancelación confirmada','CAMBIO EN HAKU','Actual','Activa','Después de confirmar','Cancelada','Pendiente de confirmar','La cancelación se aplicará al confirmar'])assert.ok(x.text().includes(text),text);
+ for(const text of ['Revisar cancelación','Carol Vega Ruiz','CAB 1','1 sep → 3 sep 2026 · 2 noches','Libro · Sep26 · D16 Cancelada','Proyecto H','Activa → Cancelada','Ver reserva'])assert.ok(x.text().includes(text),text);
  const confirmar=x.nodes().find(n=>n.textContent==='Confirmar cancelación');await confirmar.events.click();assert.equal(x.calls(),1);
- for(const text of ['Cancelación completada','La reserva ya está actualizada en Haku','Cambio confirmado','ESTADO ACTUAL EN HAKU','Volver a la revisión'])assert.ok(x.text().includes(text),text);
+ for(const text of ['Cancelación completada','Carol Vega Ruiz','Libro · Sep26 · D16','Proyecto H','Cancelada','Volver a la revisión'])assert.ok(x.text().includes(text),text);
+ assert.equal(x.nodes().filter(n=>n.textContent==='Carol Vega Ruiz').length,1);
+ assert.equal(x.nodes().filter(n=>n.textContent==='Cancelación completada').length,1);
  assert.equal(x.nodes().filter(n=>n.textContent==='Confirmar cancelación').length,0);
  await x.nodes().find(n=>n.textContent==='Volver a la revisión').events.click();assert.match(x.text(),/Proyecto H: Cancelada/);
  await button.events.click();assert.equal(x.calls(),1,'detached or double-clicked action cannot cancel twice');
@@ -150,7 +152,7 @@ test('concurrent confirmation is single-flight, and returning an already-cancell
   const button=x.nodes().find(n=>n.textContent==='Confirmar cancelación'),saving=button.events.click();await button.events.click();
   await x.nodes().find(n=>n.textContent==='Volver').events.click();assert.equal(calls,1);
   if(coincide)x.row.estado_reserva='cancelada';release();await saving;
-  assert.match(x.text(),coincide?/Ya coincide/:/Cambio confirmado/);if(coincide)assert.doesNotMatch(x.text(),/Cancelación completada/);
+  assert.match(x.text(),coincide?/Ya estaba cancelada/:/Cancelación completada/);if(coincide)assert.doesNotMatch(x.text(),/Cancelación completada/);
  }
 });
 test('resolved and manual-review cards preserve all cases and have no cancellation buttons',async()=>{
