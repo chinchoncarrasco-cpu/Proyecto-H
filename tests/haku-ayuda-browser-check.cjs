@@ -356,7 +356,7 @@ async function ayuda(browser,ancho,tema,webview=false) {
         await panel.getByRole("button",{name:"Cerrar Ayuda"}).click();
         assert.equal(await panel.count(),0);
         await campo.fill("Haku, ¿qué te puedo pedir?");
-        await campo.press("Control+Enter");
+        await campo.press("Enter");
         await panel.waitFor({state:"visible"});
         await buscador.fill("informes cloudbeds");
         await buscador.press("Escape");
@@ -364,6 +364,26 @@ async function ayuda(browser,ancho,tema,webview=false) {
         await buscador.press("Escape");
         assert.equal(await panel.count(),0);
         assert.equal(await page.locator("#haiku-asistente-panel").isVisible(),true);
+
+        const enviosAntes=await page.evaluate(()=>prueba.edge.length);
+        await campo.press("Enter");
+        assert.equal(await campo.inputValue(),"","Enter vacío deja el campo vacío");
+        await campo.fill("Necesito revisar esta información.");
+        await campo.press("End");
+        await campo.press("Shift+Enter");
+        await page.keyboard.insertText("Incluye el detalle.");
+        const texto="Necesito revisar esta información.\nIncluye el detalle.";
+        assert.equal(await campo.inputValue(),texto);
+        await campo.dispatchEvent("keydown",{key:"Enter",isComposing:true,bubbles:true,cancelable:true});
+        await campo.dispatchEvent("keydown",{key:"Enter",repeat:true,bubbles:true,cancelable:true});
+        assert.equal(await page.evaluate(()=>prueba.edge.length),enviosAntes);
+        assert.equal(await campo.inputValue(),texto);
+        await campo.press("Enter");
+        await page.waitForFunction(antes=>prueba.edge.length>antes,enviosAntes);
+        const envios=await page.evaluate(antes=>prueba.edge.slice(antes),enviosAntes);
+        assert.equal(envios.length,1);
+        assert.equal(envios[0].nombre,"haiku-asistente-reserva");
+        assert.equal(envios[0].body.mensaje,texto);
         assert.deepEqual(errores,[]);
     } finally {await page.close();}
 }
