@@ -89,6 +89,7 @@
                     id="haiku-asistente-texto"
                     placeholder="Escribe una consulta o instrucción…"
                     aria-label="Mensaje para el asistente"
+                    enterkeyhint="send"
                 ></textarea>
 
                 <div class="haiku-asistente-acciones">
@@ -1849,6 +1850,16 @@
         evento.preventDefault();
         incorporarArchivos(imagenes);
     });
+    window.addEventListener("keydown", evento => {
+        if (evento.target !== campo || evento.key !== "Enter" || evento.defaultPrevented ||
+            evento.shiftKey || evento.ctrlKey || evento.metaKey || evento.altKey) return;
+
+        // Enviar por el mismo botón conserva las rutas de consulta y adjuntos.
+        evento.stopImmediatePropagation();
+        if (evento.isComposing || evento.keyCode === 229) return;
+        evento.preventDefault();
+        if (!evento.repeat) enviar.click();
+    }, true);
     campo.addEventListener("keydown", evento => {
         if ((evento.ctrlKey || evento.metaKey) && evento.key === "Enter") {
             evento.preventDefault();
