@@ -161,6 +161,7 @@
         }
         resumen.append(metricas, el("p", "informe-contexto", `${conocido(p.gruposAsociados)} grupos asociados · ${conocido(p.gruposLibro)} grupos Libro · ${conocido(p.gruposConDiferencias)} grupos con diferencias. Registros accesibles con tu sesión.`));
         if (dto.status === "incompleto") resumen.append(el("p", "informe-aviso", "Cobertura incompleta. Los resultados no demuestran ausencia en todo el Libro o Proyecto H."));
+        if (lista(dto.contexto?.reservasPorIdentificar).length) resumen.append(el("p", "informe-aviso", `${lista(dto.contexto.reservasPorIdentificar).length} reservas por identificar. Revisa los candidatos y el motivo antes de asociarlas.`));
         if (p.pagosRevisar !== 0) resumen.append(el("p", "informe-aviso", `⚠ ${conocido(p.pagosRevisar)} pagos requieren revisión`));
         contenedor.append(resumen);
         const tecnicos = (parent, origenes) => {
@@ -239,6 +240,13 @@
         for (const [label, status, count] of [["Faltantes", "sin_coincidencia", p.faltantes], ["Ambiguas", "ambigua", p.ambiguas]])
             seccion(label, count, grupos.filter(g => g.estado === status), (parent, g) => {
                 if (g.pregunta) parent.append(el("p", "", g.pregunta)); items.filter(i => lista(g.itemIds).includes(i.id)).forEach(i => caso(parent, i));
+            });
+        if (lista(dto.contexto?.reservasPorIdentificar).length) seccion("Reservas por identificar", p.reservasPorIdentificar,
+            dto.contexto.reservasPorIdentificar, (parent, row) => {
+                parent.append(el("h3", "", `CAB ${visible(row.cabana)} · Titular por identificar`), el("p", "", visible(row.fecha)));
+                valores(parent, [["Candidatos del Libro", lista(row.titularesPosibles).join(' / ') || 'Sin nombre identificable'],
+                    ["Motivo", row.motivo_identificacion || lista(row.motivosIdentificacion).join(' ') || 'Falta aclarar quién es el titular.']]);
+                tecnicos(parent, [row.origen]);
             });
         const relacion = row => items.find(i => lista(row.itemIds).includes(i.id))?.libro;
         seccion("Pagos", p.pagosRevisar, lista(dto.pagosDetalle), (parent, row) => {

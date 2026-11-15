@@ -260,15 +260,15 @@
     // El papel explícito de una persona prevalece sobre su apariencia de nombre.
     // Estas señales sólo clasifican texto del bloque de reserva: no crean servicios,
     // pagos ni bloqueos, ni toman datos prestados de una celda vecina.
-    function rolNoTitular(texto) {
+    function rolNoTitular(texto, mejorado = true) {
         const t = normalizar(texto).replace(/[.:\s]+$/, '');
         const etiquetas = [
             ['aseo', /^(?:camarer[oa]|(?:responsable|encargad[oa])\s+(?:de|del)\s+aseo)\b/],
             ['profesional_servicio', /^(?:masajista|terapeuta|(?:responsable|encargad[oa])\s+del\s+servicio|atendid[oa]\s+por)\b/],
             ['pagador', /^(?:pagador[ae]?|(?:pago|abono)\s+(?:(?:realizado|hecho|efectuado)\s+)?por|(?:transferencia|transf)\s+de)\b/],
-            ['intermediario', /^(?:booker\b|agencia\s*:)/],
-            ['facturacion', /^(?:(?:razon\s+social|sociedad\s+comercial|datos\s+de\s+facturacion)\b|empresa\s*:)/],
-            ['acompanante', /^acompanante\b/],
+            ['intermediario', mejorado ? /^(?:booker\b|agencia\s*:|reserva\s+(?:hecha|realizada|efectuada)\s+por\b)/ : /^(?:booker\b|agencia\s*:)/],
+            ['facturacion', mejorado ? /^(?:(?:razon\s+social|sociedad\s+comercial|datos\s+(?:de\s+)?facturacion)\b|empresa\s*:)/ : /^(?:(?:razon\s+social|sociedad\s+comercial|datos\s+de\s+facturacion)\b|empresa\s*:)/],
+            ['acompanante', mejorado ? /^acompanantes?\b/ : /^acompanante\b/],
             ['contacto', /^(?:persona\s+de\s+contacto|contacto\s+de\s+la\s+reserva)\b/]
         ];
         for (const [rol, patron] of etiquetas) {
@@ -279,27 +279,41 @@
             /^[\p{L}][\p{L}\s.'’()-]+\s+(?:realizo|hizo|completo)\s+(?:el\s+)?(?:aseo|limpieza)\b/u.test(t);
         return aseo ? { rol: 'aseo', esperaNombre: /\bpor$/.test(t) } : null;
     }
-    function clasificarFragmentos(texto) {
-        let humanoPrevio=false, datosPosteriores=false, rolPendiente=null;
+    // Vocabulario de tareas observado en el Libro, nunca una lista de personas.
+    // Se exige la frase administrativa o acción completa; un apellido aislado no
+    // permite descartar a nadie. No interpreta estados, servicios ni pagos.
+    function notaAdministrativaTitular(texto) {
+        const t = normalizar(texto);
+        const registro = /^(?:(?:check[\s-]*in|check[\s-]*out)(?:\s+(?:en\s+)?acordeon\b|\s+(?:cb|realizad[oa]|pendiente)\b)|reserva\s+(?:(?:en\s+)?acordeon|reagendada|realizada|modificada)\b)/;
+        const tarifa = /^(?:(?:tarifa|descuento|precio)\s+(?:de\s+descuento|especial|autorizad[oa]|acordad[oa])\b|autorizado\s*por\b|se\s+le\s+respeta\s+(?:el\s+)?(?:precio|tarifa)\b)/;
+        const gestion = /^(?:(?:se\s+(?:(?:les?|ne)\s+)?)?(?:presto|prestaron|entregaron|repuso|repone|guardo|puso)\s+|(?:debe\s+)?present(?:a|o|ar)\s+(?:pdi|pasaporte|documento)\b|(?:dar\s+prioridad\s+en|extender\s+(?:una|\d+)\s+noche|modificada\s+la\s+estadia)\b)/;
+        const objeto = /^(?:(?:saca\s*corchos?|descorchador|juguera|alargador|utensilios?|utencilios?|chispero|batas?|ceniceros?)\s+(?:prestad[oa]s?|entregad[oa]s?)\b|saca\s+corchos?\s*$|extra\s+de\s+carbon\b)/;
+        const celebracion = /^(?:(?:atencion|atecion|cotesia)\s+(?:de\s+)?(?:aniversario|cumpleanos)\b|cumpleanos\s+(?:aval|respaldo)\b)/;
+        const administrativo = /^(?:grupo\s+(?:agencia\s+de\s+viaje|familiar)\s*$|(?:numero\s+)?telefonico\s*$|numero\s+(?:de\s+)?telefono\s*$|check[\s-]*in\s+en\b|late\s+(?:x|por)\s+pagar\b|el\s+contrato\s+de\s+mascotas\b|(?:viene|vienen)\s+con\s+(?:un\s+conejo|dos\s+autos)\b|saca\s*corchos?\s*,|utencilios\s+de\s+parrilla\b|cobro\s+hecho\s+sin\s+iva\b|paga\s+diferencia\s+promo\b)/;
+        return registro.test(t) || tarifa.test(t) || gestion.test(t) || objeto.test(t) || celebracion.test(t) || administrativo.test(t);
+    }
+    function clasificarFragmentos(texto, mejorado = true) {
+        let humanoPrevio=false, datosPosteriores=false, rolPendiente=null, facturacion=false;
         const clasificar = texto => {
             const t=normalizar(texto);
-            if (rolNoTitular(texto)) return 'nota_operativa';
+            if (rolNoTitular(texto,mejorado)) return 'nota_operativa';
             // Canal de llegada, no un segundo huésped. Sólo el campo completo:
             // un nombre que contenga «Walk» sigue siendo candidato a titular.
             if (/^walk[\s-]*in$/.test(t)) return 'etiqueta';
             if (/^(?:(?:reserva\s+)?(?:airbnb|booking)|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|x hacer|por hacer|pendiente|sin titular|trato especial)\b/.test(t)) return 'etiqueta';
-            if (notaDeTitular(texto, datosPosteriores)) return 'nota_operativa';
+            if (notaDeTitular(texto, datosPosteriores) || mejorado && notaAdministrativaTitular(texto)) return 'nota_operativa';
             if (/^(?:telefono|celular|correo|email|rut|dni|id|documento|carnet|pasaporte|adultos?|ninos?|mascotas?|noches?|fecha|check\s*in|check\s*out|confirmad[oa]|pagad[oa]|reservad[oa]|sin abono|por confirmar|jacuzzi|tinaja|tonel|cuna|masaje|cama adicional|late\s*out|early\s*check\s*in)\b/.test(t) ||
                 /@|\d/.test(texto) || /^[A-Z]{2,4}$/.test(texto)) return 'dato_estructurado';
             if (/^[\p{Lu}][\p{Ll}\p{M}]{2,}(?:[\p{Lu}][\p{Ll}\p{M}]{2,})+$/u.test(texto))
                 return clasificar(texto.replace(/([\p{Ll}\p{M}])(?=\p{Lu})/gu,'$1 '));
-            const conComa=/^[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}\s*,\s*[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}$/u.test(texto);
-            return conComa || (/^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(texto) && texto.split(/\s+/).length>=2) ? 'posible_titular' : 'otro';
+            const patronComa=mejorado ? /^[\p{Lu}][\p{L}\p{M}.'’\p{Pd}]*(?:\s+[\p{L}\p{M}.'’\p{Pd}]+){0,3}\s*,\s*[\p{Lu}][\p{L}\p{M}.'’\p{Pd}]*(?:\s+[\p{L}\p{M}.'’\p{Pd}]+){0,3}$/u : /^[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}\s*,\s*[\p{Lu}][\p{L}\p{M}.'’-]*(?:\s+[\p{L}\p{M}.'’-]+){0,2}$/u;
+            const patronNombre=mejorado ? /^[\p{L}][\p{L}\p{M}\s.'’()\p{Pd}]+$/u : /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u;
+            return patronComa.test(texto) || (patronNombre.test(texto) && texto.split(/\s+/).length>=2) ? 'posible_titular' : 'otro';
         };
         const campos=separarCampos(texto).flatMap(campo=>{
             // Separar un nombre de su documento sólo ante una etiqueta explícita
             // o un RUT completo. Nunca desarmar el nombre de un pagador/personal.
-            if (rolNoTitular(campo)) return [campo];
+            if (rolNoTitular(campo,mejorado)) return [campo];
             const limpio=campo.includes('@')?campo:campo.replace(/^[\s"“”«»•.\-–—]+/, '').replace(/[,"“”«»]+$/, '').trim();
             const junto=limpio.match(/^([\p{L}][\p{L}\p{M}\s.'’()-]+?)\s+(rut\s*:?\s*\d.*)$/iu) ||
                 limpio.match(/^([\p{L}][\p{L}\p{M}\s.'’()-]+?)\s*:?\s*(\d{1,2}\.?\d{3}\.?\d{3}(?:-[\dkK]|[kK]))$/u);
@@ -307,18 +321,23 @@
         });
         return campos.map(texto=>{
             let tipo=clasificar(texto);
-            const rolExplicito=rolNoTitular(texto);
+            const rolExplicito=rolNoTitular(texto,mejorado);
+            // El bloque de facturación puede abarcar varias líneas. Sus nombres,
+            // giro y dirección no son huéspedes. Sólo una nueva etiqueta de
+            // titular o datos de estadía reabren el bloque de la reserva.
+            if (/^(?:titular|hu[eéè]sped|nombre del titular)\s*[:：]/i.test(texto) || /^\d+\s*(?:adl|adlt|adultos?|noches?)\b/i.test(texto)) facturacion=false;
+            if (mejorado && rolExplicito?.rol==='facturacion') facturacion=true;
             // «Camarero // Rosa Vega» y «Camarero: Rosa Vega» expresan el mismo rol.
             // Sólo consumir el campo inmediato; un dato intermedio rompe el vínculo.
             const nombreDelRol=rolPendiente && !rolExplicito &&
                 (tipo==='posible_titular' || (tipo==='otro' && /^[\p{L}\p{M}]+$/u.test(texto)));
-            const rol=rolExplicito?.rol || (nombreDelRol ? rolPendiente : null);
-            if (nombreDelRol) tipo='nota_operativa';
+            const rol=rolExplicito?.rol || (facturacion ? 'facturacion' : nombreDelRol ? rolPendiente : null);
+            if (nombreDelRol || facturacion) tipo='nota_operativa';
             rolPendiente=rolExplicito?.esperaNombre ? rolExplicito.rol : null;
             // FULL DAY admite nombre contiguo. Para un canal exigir separador
             // explícito («BOOKING - Ana Pérez»), y validar el sufijo como nombre.
             // Mantener intacta la celda original para notas, servicios y pagos.
-            const nombreEtiquetado=texto.match(/^(?:titular|hu[eéè]sped|nombre del titular)\s*:\s*(.+)$/i)?.[1].trim();
+            const nombreEtiquetado=texto.match(mejorado ? /^(?:titular|hu[eéè]sped|nombre del titular)\s*[:：]\s*(.+)$/i : /^(?:titular|hu[eéè]sped|nombre del titular)\s*:\s*(.+)$/i)?.[1].trim();
             const nombreConCanal=(texto.match(/^full\s*day\s+(.+)$/i) ||
                 texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i) ||
                 texto.match(/^promo\s+h(?:aiku|aku)\s+(?:[:–—-]\s*)?(.+)$/i))?.[1].trim();
@@ -327,9 +346,12 @@
             // Una nota explícita también puede estar junto al nombre en un solo campo.
             const juntoANota=campoConNombre.match(/^(.+?)(?:\s+[–—-]\s+|[:;]\s*)(\S.*)$/u) ||
                 campoConNombre.match(/^(.+?)\s+\(([^()]+)\)$/u);
+            const juntoAAdministracion=campoConNombre.match(/^(.+?)\s+[–—-]\s+(\S.*)$/u) || campoConNombre.match(/^(.+?)\s+\(([^()]+)\)$/u);
+            const administracionAdjunta=mejorado && juntoAAdministracion && clasificar(juntoAAdministracion[1].trim())==='posible_titular' &&
+                (notaAdministrativaTitular(juntoAAdministracion[2]) || /^(?:llega(?:ra)?|llegan)\s+tarde\b/.test(normalizar(juntoAAdministracion[2])));
             const notaAdjunta=juntoANota && notaContextualReserva(normalizar(juntoANota[2])) &&
                 !notaContextualReserva(normalizar(campoConNombre));
-            const nombre=notaAdjunta ? juntoANota[1].trim() : nombreIndicado;
+            const nombre=notaAdjunta ? juntoANota[1].trim() : administracionAdjunta ? juntoAAdministracion[1].trim() : nombreIndicado;
             const nombreSimple=nombreEtiquetado && /^[\p{L}\p{M}]{3,}$/u.test(nombre) &&
                 clasificar(nombre.toLowerCase())==='otro';
             if (!rol && nombre && (nombreSimple || clasificar(nombre)==='posible_titular')) {
@@ -342,13 +364,15 @@
             return {texto,tipo,...(rol ? {rol} : {}),...(nombreEtiquetado && texto===nombre ? {titular_explicito:true} : {})};
         });
     }
-    function candidatosTitular(texto, reservaConFormato = false) {
+    function analizarTitular(texto, reservaConFormato = false, mejorado = true) {
         const porNombre=new Map();
-        const fragmentos=clasificarFragmentos(texto);
+        const fragmentos=clasificarFragmentos(texto,mejorado);
+        let duplicados=0;
         for (const candidato of fragmentos) {
             if (candidato.tipo!=='posible_titular') continue;
             const nombre=normalizar(candidato.texto);
             if (!porNombre.has(nombre)) porNombre.set(nombre,candidato);
+            else { duplicados++; if(mejorado && candidato.titular_explicito)porNombre.set(nombre,candidato); }
         }
         // Un nombre corto sin etiqueta necesita el bloque de reserva, más
         // ocupación y un dato de identidad escrito en la propia celda.
@@ -364,19 +388,35 @@
         // Exigir que ese nombre completo aparezca por separado en la misma celda.
         const candidatos=[...porNombre].filter(([nombre])=>{
             const repetido=nombre.match(/^no\s+mover(?=\p{L})(.+)$/u)?.[1];
-            return !repetido || !porNombre.has(repetido);
+            const descartar=repetido && porNombre.has(repetido);
+            if(descartar)duplicados++;
+            return !descartar;
         }).map(([,candidato])=>candidato);
         const unicos=[];
         for (const candidato of candidatos) {
             const previo=unicos.findIndex(x=>mismaPersona(x.texto,candidato.texto));
             if (previo<0) unicos.push(candidato);
-            else if (candidato.titular_explicito && !unicos[previo].titular_explicito) unicos[previo]=candidato;
+            else { duplicados++; if (candidato.titular_explicito && !unicos[previo].titular_explicito) unicos[previo]=candidato; }
         }
         const explicitos=unicos.filter(x=>x.titular_explicito);
-        return explicitos.length===1 ? unicos.filter(x=>x===explicitos[0]||!varianteTitular(x.texto,explicitos[0].texto)) : unicos;
+        const salida=explicitos.length===1 ? unicos.filter(x=>x===explicitos[0]||!varianteTitular(x.texto,explicitos[0].texto)) : unicos;
+        duplicados+=unicos.length-salida.length;
+        const motivos=salida.length>1 ? [explicitos.length>1 ? 'Hay etiquetas de titular contradictorias; no se eligió una arbitrariamente.' :
+            'Hay varios nombres sin un rol o una etiqueta que permita distinguir variantes de personas distintas.'] :
+            !salida.length ? ['No hay un nombre identificable fuera de las notas y roles de otras personas.'] : [];
+        if (salida.length>1 && salida.some((a,i)=>salida.slice(i+1).some(b=>varianteTitular(a.texto,b.texto))))
+            motivos.push('El parecido sugiere una abreviación o errata, pero no confirma que sean la misma persona.');
+        return {version:1,estado:salida.length===1?'identificado':salida.length?'ambiguo':'sin_titular',candidatos:salida,
+            criterio:salida.length===1?(salida[0].titular_explicito?'etiqueta_explicita':salida[0].titular_parcial?'nombre_parcial_con_contexto':'nombre_en_bloque'):null,
+            duplicados_descartados:duplicados,roles_descartados:fragmentos.filter(f=>f.rol).length,motivos};
+    }
+    function candidatosTitular(texto, reservaConFormato = false) {
+        return analizarTitular(texto,reservaConFormato).candidatos;
     }
     function titular(texto) {
-        const candidatos=candidatosTitular(texto);
+        // Las bajas y los comprobantes conservan su contrato anterior. Las
+        // mejoras de titulares se aplican únicamente al bloque de reserva.
+        const candidatos=analizarTitular(texto,false,false).candidatos;
         return candidatos.length===1?candidatos[0].texto:null;
     }
     function fechasRegistroReserva(texto) {
@@ -421,13 +461,14 @@
     }
     function titularPago(texto) {
         const partes = separarCampos(texto);
-        const explicitos=partes.filter(x=>/^(?:titular|hu[eéè]sped|nombre del titular)\s*:/i.test(x)).flatMap(candidatosTitular);
+        const candidatosPago=t=>analizarTitular(t,false,false).candidatos;
+        const explicitos=partes.filter(x=>/^(?:titular|hu[eéè]sped|nombre del titular)\s*:/i.test(x)).flatMap(candidatosPago);
         if (explicitos.length) return explicitos.every(x=>mismaPersona(x.texto,explicitos[0].texto)) ? explicitos[0].texto : null;
         const candidato = partes.find(x => !/^(full\s*day|promo\b|voucher\b|lista arcoiris|booking\b)/.test(normalizar(x)));
         if (!candidato || /^(?:pago|abono|transf(?:erencia)?|debito|credito|tarjeta|web\s*pay|efectivo|folio|bovtar|bove|cod\.?\s*aut)\b/.test(normalizar(candidato))) return null;
-        const nombre=candidatosTitular(candidato)[0]?.texto;
+        const nombre=candidatosPago(candidato)[0]?.texto;
         if (nombre) return nombre;
-        const corto=/^[\p{L}\p{M}]{3,}$/u.test(candidato) && clasificarFragmentos(candidato)[0]?.tipo==='otro';
+        const corto=/^[\p{L}\p{M}]{3,}$/u.test(candidato) && clasificarFragmentos(candidato,false)[0]?.tipo==='otro';
         return corto && /\b(?:folio|bovtar|cod\.?\s*aut\.?|autorizaci[oó]n)\b/i.test(texto) ? candidato : null;
     }
     const textoTitular = v => normalizar(v).replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -1237,7 +1278,7 @@
                     return titularMarcado ? [titularMarcado[1]] : [];
                 });
                 const contenido = sinMotivo.join(' // ');
-                const candidatos = candidatosTitular(contenido);
+                const candidatos = analizarTitular(contenido,false,false).candidatos;
                 const nombre = candidatos.length === 1 ? candidatos[0].texto : null;
                 if (!explicita && !nombre && campos.length < 2) continue;
                 vistos.add(cell);
@@ -1377,7 +1418,9 @@
                 const t = normalizar(cell.valor);
                 const fondo = color(estilos[cell.estiloId]?.fill?.fgColor);
                 const reservaConFormato = ["B4A7D6","D9D2E9","D5A6BD","F4CCCC","EAD1DC"].includes(fondo);
-                const candidatos = candidatosTitular(cell.valor, reservaConFormato);
+                const analisisTitular = analizarTitular(cell.valor, reservaConFormato);
+                const candidatos = analisisTitular.candidatos;
+                const diagnosticoTitular = { ...analisisTitular }; delete diagnosticoTitular.candidatos;
                 const nombre = candidatos.length===1 ? candidatos[0].texto : null;
                 if (/^(libre|full\s*day)$/.test(t) || !nombre && /mantencion|mantenimiento|bloquead/.test(t)) {
                     res.espacios.push({ fecha: h.fechaISO, cabana, estado: t === "libre" ? "libre_explicito" : "bloque_o_marca", texto_original: cell.valor, origen: origen(cell) }); continue;
@@ -1390,6 +1433,7 @@
                     res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
                         ...(ambigua||sinTitular?{tipo:'reserva_por_identificar',
                             titulares_posibles:candidatos.map(x=>x.texto),
+                            analisis_titular:diagnosticoTitular,
                             fechas_ocupadas:headers.filter(d=>d.c>=h.c&&d.c<=(origen(cell).merge?.e.c??h.c)).map(d=>d.fechaISO),
                             ...(avisoTitular?{advertencia_hoja:avisoTitular}:{}),
                             ...(sinTitular&&!ambigua?{motivo_identificacion:'El bloque tiene datos de estadía, pero no un titular identificable. Completa el nombre en esa celda del Libro.'}:{}),
@@ -1447,7 +1491,7 @@
                 const documento = documentoDelLibro(camposIdentidad);
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));
-                res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, fecha_checkin: fechaCheckin,
+                res.reservas.push({ id: `${hoja}!${src.celda}`, hoja, cabana, titular: nombre, analisis_titular:diagnosticoTitular, fecha_checkin: fechaCheckin,
                     fecha_checkout: fechaCheckout, fechas_ocupadas: fechasOcupadas, noches, noches_texto: nochesTexto,
                     noches_extension_texto: nochesExtensionTexto, noches_extension_ambigua: extensionTexto.ambigua, noches_texto_efectivas: nochesTextoEfectivas,
                     geometria_inequivoca: geometriaInequivoca, geometria_resuelta_texto: geometriaResueltaTexto,
@@ -1584,14 +1628,18 @@
     function asociar(reserva, candidatas) {
         const scores = candidatas.map(s => {
             const nombre = mismaPersona(reserva.titular, s.titular);
-            const doc = reserva.rut_documento && s.rut_documento && documentoCanon(reserva.rut_documento, reserva.tipo_documento) === documentoCanon(s.rut_documento, s.tipo_documento);
+            const docA = documentoCanon(reserva.rut_documento, reserva.tipo_documento), docB = documentoCanon(s.rut_documento, s.tipo_documento);
+            const doc = Boolean(docA && docA === docB);
             const correo = reserva.correo && s.correo && normalizar(reserva.correo) === normalizar(s.correo);
             const telefono = reserva.telefono && s.telefono && digitos(reserva.telefono) === digitos(s.telefono);
-            const fechas = reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
-            const cab = reserva.cabana === Number(s.cabana);
+            const fechas = /^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkin || '') && /^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkout || '') &&
+                reserva.fecha_checkin === s.fecha_checkin && reserva.fecha_checkout === s.fecha_checkout;
+            const cab = Number(reserva.cabana)>0 && Number(reserva.cabana) === Number(s.cabana);
             const fuerte = !!doc || (!!correo && !!telefono);
             const conflictoDocumento = reserva.rut_documento && s.rut_documento && !doc;
-            return { s, segura: !conflictoDocumento && !reserva.advertencias?.length && ((nombre && fechas && cab) || (fuerte && (fechas || cab))), posible: nombre || fuerte || (fechas && cab) };
+            // La identidad de una persona no identifica una estadía: exigir el
+            // mismo rango y CAB incluso cuando coincide su documento/contacto.
+            return { s, segura: !conflictoDocumento && !reserva.advertencias?.length && fechas && cab && (nombre || doc), posible: nombre || fuerte || (fechas && cab) };
         });
         const seguros = scores.filter(x => x.segura);
         return seguros.length === 1 ? { estado: "asociada", sistema: seguros[0].s } : { estado: scores.some(x => x.posible) ? "ambigua" : "sin_coincidencia", candidatos: scores.filter(x => x.posible).map(x => x.s.id) };
@@ -1828,7 +1876,7 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;

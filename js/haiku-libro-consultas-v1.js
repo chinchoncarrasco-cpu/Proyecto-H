@@ -493,19 +493,23 @@
         const fuerte = Boolean((docA && docA === docB) || (correoA && correoA === correoB) ||
             (telA.length >= 9 && telB.length >= 9 && telA === telB));
         const nombre = S.mismaPersona(a.titular, b.titular);
-        return { compatible: !conflicto && (fuerte || nombre), fuerte: fuerte && !conflicto, conflicto };
+        // Un teléfono o correo puede pertenecer a un pagador, agencia o familia.
+        // Sirve para proponer una revisión, no para confirmar otro nombre.
+        const confirmable = !conflicto && (nombre || Boolean(docA && docA === docB));
+        return { compatible: !conflicto && (fuerte || nombre), confirmable, fuerte: fuerte && !conflicto, conflicto };
     }
 
     const mismasFechas = (a, b) => a.fecha_checkin === b.fecha_checkin && a.fecha_checkout === b.fecha_checkout &&
         (a.fecha_checkin === a.fecha_checkout) === (b.fecha_checkin === b.fecha_checkout);
 
     function puntuarCandidato(reserva, sistema) {
-        const fechas = reserva.fecha_checkin === sistema.fecha_checkin && reserva.fecha_checkout === sistema.fecha_checkout;
-        const cab = Number(reserva.cabana) === Number(sistema.cabana);
+        const fechas = /^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkin || '') && /^\d{4}-\d{2}-\d{2}$/.test(reserva.fecha_checkout || '') &&
+            reserva.fecha_checkin === sistema.fecha_checkin && reserva.fecha_checkout === sistema.fecha_checkout;
+        const cab = Number(reserva.cabana)>0 && Number(reserva.cabana) === Number(sistema.cabana);
         const persona = identidad(reserva, sistema);
         return {
             s: sistema,
-            segura: !reserva.advertencias?.length && cab && fechas && persona.compatible,
+            segura: !reserva.advertencias?.length && cab && fechas && persona.confirmable,
             posible: (cab && fechas) || persona.compatible
         };
     }
@@ -528,7 +532,7 @@
         const salidaEsperada = S.sumarDias(reserva.fecha_checkin, nochesTexto);
         const compatibles = candidatas.filter(sistema => {
             const duracion = (Date.parse(sistema.fecha_checkout) - Date.parse(sistema.fecha_checkin)) / 86400000;
-            return candidatoElegible(sistema) && identidad(reserva, sistema).compatible &&
+            return candidatoElegible(sistema) && identidad(reserva, sistema).confirmable &&
                 Number(reserva.cabana) === Number(sistema.cabana) &&
                 sistema.fecha_checkin === reserva.fecha_checkin && sistema.fecha_checkout === salidaEsperada &&
                 Number.isInteger(duracion) && duracion === nochesTexto;
@@ -635,9 +639,10 @@
         opciones.push(candidatos.length ? { valor: "independiente", categoria: "independientes",
             texto: opciones.some(o => o.categoria === "estadias") ? "Son reservas independientes" : "Son reservas distintas",
             efecto: "no asocia con la existente; propondría una reserva separada para la estadía del Libro" } :
-            { valor: "nueva", categoria: "nuevas", texto: "Tratar como reserva nueva", efecto: "propondría crear una nueva reserva" });
+            { valor: "nueva", categoria: "nuevas", texto: g.items.length>1 ? "Confirmar una reserva multicabaña nueva" : "Tratar como reserva nueva", efecto: "propondría crear una nueva reserva" });
         return { comparaciones, opciones, razon: candidatos.length ?
             "Revisa Libro vs Proyecto H y elige cómo tratar esta reserva en la vista previa." :
+            g.items.length>1 ? "Coinciden nombre y fechas en varias CAB. Confirma si pertenecen a una reserva multicabaña o a reservas independientes." :
             "No hay candidato real en Proyecto H. No se neviy automáticamente como faltante porque el Libro tiene advertencias.", avisos };
     }
 
@@ -676,7 +681,7 @@
         for (const c of resultados) {
             // Complete-link grouping prevents a shared contact from bridging conflicting identities.
             const compatibles = mapa.filter(g => g.items.every(x => mismasFechas(x.libro, c.libro) &&
-                identidad(x.libro, c.libro).compatible && Number(x.libro.cabana) !== Number(c.libro.cabana)));
+                identidad(x.libro, c.libro).confirmable && Number(x.libro.cabana) !== Number(c.libro.cabana)));
             if (compatibles.length === 1) compatibles[0].items.push(c);
             else mapa.push({ clave: claveReserva(c.libro), items: [c] });
         }
@@ -685,8 +690,11 @@
             const estados = g.items.map(x => x.estado);
             const ids = new Set(g.items.filter(x => x.sistema).map(x =>
                 x.sistema.grupo_reserva_id ? `grupo:${x.sistema.grupo_reserva_id}` : `reserva:${x.sistema.reserva_id}`));
+            // Varias CAB con el mismo nombre y fechas son una propuesta de
+            // grupo. Sólo la asociación existente en Proyecto H lo confirma;
+            // no preparar una única reserva nueva para estadías independientes.
             const estado = estados.every(x => x === "asociada") && ids.size === 1 ? "asociada" :
-                estados.every(x => x === "sin_coincidencia") ? "sin_coincidencia" : "ambigua";
+                estados.every(x => x === "sin_coincidencia") && g.items.length===1 ? "sin_coincidencia" : "ambigua";
             const parcial = ids.size === 1 && estados.includes("asociada") && estados.some(x => x !== "asociada");
             return {
                 ...g,
@@ -5510,7 +5518,7 @@
                 const diferencias = [];
                 if (!S.mismaPersona(l.titular, s.titular)) {
                     const variante = S.varianteTitular(l.titular, s.titular);
-                    diferencias.push(variante ? (identidad(l,s).fuerte ? "Variante de nombre con identidad verificada" : "Variante de nombre por confirmar") : "Titular distinto");
+                    diferencias.push(variante ? (identidad(l,s).confirmable ? "Variante de nombre con identidad verificada" : "Variante de nombre por confirmar") : "Titular distinto");
                 }
                 if (libro.cabana !== proyecto.cabana) diferencias.push("Cabaña distinta");
                 if (libro.ingreso !== proyecto.ingreso) diferencias.push("Ingreso distinto");
@@ -6574,7 +6582,7 @@
 
     function descripcionReservaPorIdentificar(a) {
         if (a.motivo_identificacion) return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — ${a.motivo_identificacion}`;
-        return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — Aparecen varios nombres: ${(a.titulares_posibles || []).join(' / ')}. Falta aclarar quién es el titular.`;
+        return `CAB ${a.cabana} · ${a.fecha} · ${source(a.origen)} — Aparecen varios nombres: ${(a.titulares_posibles || []).join(' / ')}. Falta aclarar quién es el titular.${a.analisis_titular?.motivos?.length ? ' ' + a.analisis_titular.motivos.join(' ') : ''}`;
     }
     function mostrarReservasPorIdentificar(out, items) {
         if (!items.length) return;
