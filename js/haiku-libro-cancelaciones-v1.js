@@ -65,11 +65,13 @@
    const grupo=ids.slice(i,i+50);
    reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
   }
-  return reservas;
+  return {reservas,hayEstadias:ids.length>0};
  }
  async function resolver(caso,cliente,evidencia){
   const r=caso.fuente==='libro_actual'?caso.evidencia:caso.anterior;
-  return resolverDesdeReservas(caso,await leerReservasParaFechas(cliente,[r.fecha_checkin]),evidencia);
+  const {reservas,hayEstadias}=await leerReservasParaFechas(cliente,[r.fecha_checkin]);
+  if(!hayEstadias)throw sinReserva('No encontré la reserva exacta en Proyecto H.');
+  return resolverDesdeReservas(caso,reservas,evidencia);
  }
  function compatible(r,v){
   const e=v.estadias?.find(e=>e.fecha_ingreso===r.fecha_checkin);if(!e)return false;
@@ -133,7 +135,10 @@
   const session=await cliente?.auth?.getSession();
   if(session?.error||!session?.data?.session)throw Error('Inicia sesión para revisar las cancelaciones.');
   const fechas=[...new Set(revisadas.validas.map(e=>e.fecha_checkin))];
-  try{return clasificarEnProyecto(revisadas,await leerReservasParaFechas(cliente,fechas),q);}
+  try{
+   const {reservas}=await leerReservasParaFechas(cliente,fechas);
+   return clasificarEnProyecto(revisadas,reservas,q);
+  }
   catch(error){
    for(const e of revisadas.validas)revisadas.out.cancelaciones_revision.push(avisoRevision(e,'No se pudo consultar su reserva en Proyecto H. Intenta revalidar el informe.'));
    return revisadas.out;
