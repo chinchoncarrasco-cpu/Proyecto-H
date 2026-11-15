@@ -209,10 +209,13 @@
         const insumosAdicionales = /^(?:implementos\s+(?:de\s+|para\s+)?asado|minipimer\b|mortero\b|tabla\s+de\s+picar\b)/.test(t);
         const noShow = /^(?:reserva\s+)?no\s*show$/.test(t);
         const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
+        const avisoDeBoda = /^(?:(?:hoy|manana|ayer)\s+)?se\s+(?:casa(?:n|ron|ra|ran)?|caso)\b/.test(t);
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
         const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
-        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) || entregaInsumos.test(t) || tareaRecepcion || insumosAdicionales || noShow || acompanamientoMascota.test(t) || contextoPosterior;
+        return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) ||
+            entregaInsumos.test(t) || tareaRecepcion || insumosAdicionales || noShow || acompanamientoMascota.test(t) ||
+            avisoDeBoda || contextoPosterior;
     }
     // El papel explícito de una persona prevalece sobre su apariencia de nombre.
     // Estas señales sólo clasifican texto del bloque de reserva: no crean servicios,
