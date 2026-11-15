@@ -233,9 +233,16 @@
         const ingresoExplicito = /\b(?:pago|abono|deposito|transferencia|web\s*pay)\s+(?:recibid[oa]|confirmad[oa]|realizad[oa]|efectuad[oa]|registrad[oa])\b/.test(texto);
         const importeTextual = /(?:\$|\bclp\b)\s*\d[\d.,]*/.test(texto);
         const importePropio = pago.monto !== null && pago.monto !== undefined && pago.monto !== '' && Number.isFinite(Number(pago.monto));
+        const fila = pago.evidencia_financiera?.columnas_ocupadas;
+        // Una BOVE anotada con su importe describe la boleta. La fila completa
+        // del comprobante se evalúa por separado y conserva su evidencia.
+        if (fila?.detalle && !fila.fecha && !fila.concepto && !fila.monto && !importePropio && !identificadorFuerte && !medioValido &&
+            /^bove\b/.test(texto) && base.separarCampos(texto).every(campo =>
+                /^bove\s*:?\s*\d[\d.,]*(?:\s+por\s+(?:\$|clp)\s*\d[\d.,]*)?(?:\s+nc\s*:?\s*\d[\d.,]*)?$/.test(campo))) {
+            return {clase:"nota_financiera"};
+        }
         const evidenciaMovimiento = importePropio || importeTextual || identificadorFuerte || ingresoExplicito || medioValido && !textoDocumental;
         if (!evidenciaMovimiento) return {clase:"nota_financiera"};
-        const fila = pago.evidencia_financiera?.columnas_ocupadas;
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
         const reembolso = /\b(?:reembolso|reembolsar|devolucion|nota\s+de\s+credito)\b|\bnc\s*\d+\b/.test(texto);
         const obligacion = /\bpenalidad\b|\b(?:por|x)\s+pagar\b|\bsaldo\s+(?:restante|pendiente)\b|\bpor\s+gestionar\b/.test(texto);

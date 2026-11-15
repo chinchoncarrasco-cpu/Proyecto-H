@@ -19,6 +19,30 @@ test('CANCELACIONES boundaries follow primary labels, preserve source and exclud
  const res=S.normalizarHoja(data,'Sep26');assert.equal(res.cancelaciones.length,1);assert.equal(res.cancelaciones[0].titular,'Carol Vega Ruiz');assert.equal(res.cancelaciones[0].origen.fila,fila+1);assert.equal(res.cancelaciones[0].fecha_checkin,'2026-09-01');assert.deepEqual(res.pagos,[]);
  }
 });
+test('la fila inmediatamente anterior a CANCELACIONES se lee aparte de la cabaña activa',()=>{
+ const data={celdas:[
+  {r:1,c:2,valor:'1 nov',fechaISO:'2026-11-01'},{r:1,c:6,valor:'2 nov',fechaISO:'2026-11-02'},
+  {r:12,c:0,valor:'cabaña 11'},{r:12,c:6,valor:'Susana Activa // 2 ADL // 1 noche'},
+  {r:13,c:2,valor:'Cancelado por tiempo caducado'},
+  {r:13,c:6,valor:'Reserva cancelada por pago // Laura Ejemplo // pedir RUT // laura@example.test // 1 noche'},
+  {r:14,c:0,valor:'CANCELACIONES'},
+  {r:24,c:2,valor:'Pagos de arriendos de hoy'},{r:25,c:0,valor:'cabaña 11'},
+  {r:26,c:3,valor:'Reserva cancelada // Otra Persona // 1 noche'}
+ ],combinaciones:[
+  {s:{r:12,c:6},e:{r:12,c:8}}, {s:{r:14,c:0},e:{r:22,c:0}}, {s:{r:25,c:0},e:{r:28,c:0}}
+ ]};
+ const h=S.normalizarHoja(data,'Nov26');
+ assert.equal(h.reservas[0].titular,'Susana Activa');
+ assert.equal(h.cancelaciones.length,1);
+ const [baja]=h.cancelaciones;
+ assert.equal(baja.titular,'Laura Ejemplo');
+ assert.equal(baja.fecha_checkin,'2026-11-02');
+ assert.equal(baja.noches,1);
+ assert.equal(baja.origen.celda,'G14');
+ assert.equal(baja.cabana,undefined);
+ assert.equal(h.cancelaciones_por_identificar.length,1);
+ assert.equal(h.cancelaciones_por_identificar[0].origen.celda,'C14');
+});
 function environment(){
  let g=1,allow=true,writerCalls=0,confirmAccepted=true;const caso=compare([e()]).cancelaciones_confirmadas[0];
  const row={id:'r1',titular_nombre:r().titular,correo_contacto:r().correo,estado_reserva:'confirmada',estadias:[{id:'s1',fecha_ingreso:r().fecha_checkin,fecha_salida:r().fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};
@@ -216,6 +240,26 @@ test('Libro vs Proyecto H consultation reads current CANCELACIONES without reque
  const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Sep26'],consultarHoja:async(h,v)=>{reads.push(v||'actual');assert.notEqual(v,'anterior');return sheet([],[e()]);}};
  const out=await ctx.HAIKU_LIBRO_CONSULTAS.consultar('Libro: compara septiembre 2026',libro,x.cliente);
  assert.equal(out.cancelaciones_confirmadas.length,1);assert.equal(out.comparacion.length,0);assert.deepEqual(reads,['actual']);
+});
+test('el atajo mensual lee sólo las reservas candidatas y conserva los avisos sin titular',async()=>{
+ const x=environment(),lecturas=[],desde='2026-09-01';
+ const hoja={...sheet([],[e()]),cancelaciones_por_identificar:[{
+  bloque:'CANCELACIONES',fecha_checkin:desde,origen:{hoja:'Sep26',celda:'G14'},advertencias:['Falta un titular inequívoco.']
+ }]};
+ const ctx={structuredClone,HAIKU_LIBRO_SEMANTICA:S,HAIKU_LIBRO_CANCELACIONES_V1:x.api,
+  Date:class extends Date{constructor(...args){super(...(args.length?args:['2026-09-15T12:00:00Z']));}}};
+ vm.runInNewContext(fs.readFileSync('js/haiku-libro-consultas-v1.js','utf8'),ctx);
+ const libro={listo:async()=>{},estado:()=>({cargado:true,generacion:1}),listarHojas:()=>['Ago26','Sep26','Oct26'],
+  consultarHoja:async(h,version)=>{assert.equal(h,'Sep26');assert.equal(version,undefined);return hoja;}};
+ const cliente={...x.cliente,from(t){lecturas.push(t);return x.cliente.from(t);}};
+ const Q=ctx.HAIKU_LIBRO_CONSULTAS,out=await Q.consultar('Libro: compara cancelaciones del mes actual con Proyecto H',libro,cliente);
+ assert.equal(out.q.desde,desde);
+ assert.equal(out.q.hasta,'2026-09-30');
+ assert.equal(out.cancelaciones_confirmadas.length,1);
+ assert.equal(out.cancelaciones_revision.length,1);
+ assert.match(Q.respuesta(out),/Sep26 · G14.*Falta un titular inequívoco/);
+ assert.deepEqual(lecturas,['reserva_estadias','reservas']);
+ assert.equal(x.calls(),0);
 });
 test('preview is read-only and cancellation uses existing confirmation with second reading',async()=>{const x=environment(),p=await x.api.preparar(x.caso,1);assert.equal(p.estado,'propuesta');assert.equal(x.calls(),0);assert.equal((await x.api.confirmar(p)).estado,'cancelada');assert.equal(x.calls(),1);await assert.rejects(x.api.confirmar(p),/no válida/)});
 test('already cancelled is no-op; confirmation refusal never writes',async()=>{const x=environment();x.row.estado_reserva='cancelada';const p=await x.api.preparar(x.caso,1);assert.equal(p.estado,'ya_coincide');await x.api.confirmar(p);assert.equal(x.calls(),0);const y=environment(),q=await y.api.preparar(y.caso,1);y.rejectConfirm();await y.api.confirmar(q);assert.equal(y.calls(),0)});

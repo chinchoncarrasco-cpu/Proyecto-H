@@ -43,6 +43,8 @@
    const mensaje='No encontré una reserva compatible con este aviso en Proyecto H.';
    throw candidatos.length?Error(mensaje):sinReserva(mensaje);
   }
+  if(!candidatos.length)throw sinReserva('La reserva no se identifica con ese titular y fecha de ingreso en Proyecto H.');
+  if(!compatibles.length)throw Error('Encontré al titular con ese ingreso, pero falta confirmar su identidad, la cantidad de noches o la cabaña.');
   if(compatibles.length!==1)throw Error('La reserva no se identifica de forma única; requiere revisión.');
   const v=compatibles[0];if(v.estadias.length!==1)throw Error('La reserva contiene varios segmentos; requiere revisión antes de cancelar.');
   if(v.estado_reserva!=='cancelada'&&!['pendiente','confirmada','hospedada','sin_checkin'].includes(v.estadias[0].estado_estadia))throw Error('Estado de estadía incompatible; requiere revisión manual.');
@@ -52,12 +54,22 @@
   }
   return v;
  }
+ async function leerReservasParaFechas(cliente,fechas){
+  const estadias=await filas(()=>{
+   const consulta=cliente.from('reserva_estadias').select('id,reserva_id');
+   return (fechas.length===1?consulta.eq('fecha_ingreso',fechas[0]):consulta.in('fecha_ingreso',fechas)).order('id');
+  });
+  const ids=[...new Set(estadias.map(e=>e.reserva_id))];
+  const reservas=[];
+  for(let i=0;i<ids.length;i+=50){
+   const grupo=ids.slice(i,i+50);
+   reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
+  }
+  return reservas;
+ }
  async function resolver(caso,cliente,evidencia){
   const r=caso.fuente==='libro_actual'?caso.evidencia:caso.anterior;
-  const estadias=await filas(()=>cliente.from('reserva_estadias').select('id,reserva_id').eq('fecha_ingreso',r.fecha_checkin).order('id'));
-  const ids=[...new Set(estadias.map(e=>e.reserva_id))];if(!ids.length)throw sinReserva('No encontré la reserva exacta en Proyecto H.');
-  const rs=await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',ids).order('id'));
-  return resolverDesdeReservas(caso,rs,evidencia);
+  return resolverDesdeReservas(caso,await leerReservasParaFechas(cliente,[r.fecha_checkin]),evidencia);
  }
  function compatible(r,v){
   const e=v.estadias?.find(e=>e.fecha_ingreso===r.fecha_checkin);if(!e)return false;
@@ -76,33 +88,58 @@
  }
  function comprobarEvidencia(e,hoja){
   const mismos=(hoja.cancelaciones||[]).filter(x=>normal(x.titular)===normal(e.titular)&&x.fecha_checkin===e.fecha_checkin);
-  if(!hoja.cobertura?.geometria||e.bloque!=='CANCELACIONES'||!normal(e.titular)||!e.origen?.hoja||e.origen.hoja!==hoja.hoja||e.advertencias?.length||!/^\d{4}-\d{2}-\d{2}$/.test(e.fecha_checkin)||
-   mismos.length!==1||JSON.stringify(mismos[0])!==JSON.stringify(e)||
-   (hoja.reservas||[]).some(r=>normal(r.titular)===normal(e.titular)&&r.fecha_checkin===e.fecha_checkin))
-   throw Error('La evidencia de cancelación no es única o tiene conflictos; requiere revisión manual.');
+  if(e.advertencias?.length)throw Error(e.advertencias.join(' '));
+  if(!hoja.cobertura?.geometria||e.bloque!=='CANCELACIONES'||!normal(e.titular)||!e.origen?.hoja||e.origen.hoja!==hoja.hoja||!/^\d{4}-\d{2}-\d{2}$/.test(e.fecha_checkin))
+   throw Error('Faltan datos verificables en la anotación del Libro.');
+  if(mismos.length!==1||JSON.stringify(mismos[0])!==JSON.stringify(e))
+   throw Error('Hay más de una anotación o la evidencia cambió en el Libro.');
+  if((hoja.reservas||[]).some(r=>normal(r.titular)===normal(e.titular)&&r.fecha_checkin===e.fecha_checkin))
+   throw Error('El titular también aparece con una reserva activa para esa fecha en el Libro. Revisa ambas entradas.');
  }
- async function detectarActual(hoja,cliente=root.haikuSupabase){
+ function avisoRevision(evidencia,motivo){
+  const lugar=[evidencia.origen?.hoja,evidencia.origen?.celda,fechaVisual(evidencia.fecha_checkin,true)].filter(Boolean).join(' · ');
+  return (evidencia.titular||'Cancelación sin titular')+' · '+lugar+': '+[evidencia.motivo_libro,motivo].filter(Boolean).join(' · ');
+ }
+ function revisarEvidencias(hojas,q){
   const out={cancelaciones_confirmadas:[],cancelaciones_revision:[],cancelaciones_ya_coinciden:[]};
-  if(hoja.cancelaciones?.length){
-   const session=await cliente?.auth?.getSession();
-   if(session?.error||!session?.data?.session)throw Error('Inicia sesión para revisar las cancelaciones.');
+  const validas=[];
+  for(const hoja of hojas)for(const evidencia of [...(hoja.cancelaciones||[]),...(hoja.cancelaciones_por_identificar||[])]){
+   const fecha=evidencia.fecha_checkin;
+   if(q.nombre&&!normal(evidencia.titular).includes(q.nombre)||q.cabana&&evidencia.cabana&&Number(evidencia.cabana)!==Number(q.cabana)||
+    q.desde&&fecha&&(fecha<q.desde||fecha>q.hasta))continue;
+   try{comprobarEvidencia(evidencia,hoja);validas.push(evidencia);}
+   catch(error){out.cancelaciones_revision.push(avisoRevision(evidencia,error.message));}
   }
-  for(const evidencia of hoja.cancelaciones||[]){
+  return {out,validas};
+ }
+ function clasificarEnProyecto({out,validas},reservas,q){
+  for(const evidencia of validas){
    try{
-    comprobarEvidencia(evidencia,hoja);
     const caso={tipo:'cancelacion_confirmada',fuente:'libro_actual',evidencia:structuredClone(evidencia)};
-    const v=await resolver(caso,cliente),e=v.estadias[0];
+    const v=resolverDesdeReservas(caso,reservas),e=v.estadias[0];
+    if(q.cabana&&Number(e.cabanas?.numero)!==Number(q.cabana))continue;
     caso.actual={...evidencia,cabana:e.cabanas?.numero,fecha_checkout:e.fecha_salida};
     caso.reserva_id=v.id;caso.estado_proyecto=v.estado_reserva;
     if(v.estado_reserva==='cancelada')out.cancelaciones_ya_coinciden.push(caso);
     else if(!['pendiente','confirmada','hospedada'].includes(v.estado_reserva))throw Error('Estado de Proyecto H no activo; requiere revisión manual.');
     else out.cancelaciones_confirmadas.push(caso);
-   }catch(error){out.cancelaciones_revision.push(`${evidencia.titular} · ${evidencia.origen?.hoja}: ${error.message}`);}
+   }catch(error){out.cancelaciones_revision.push(avisoRevision(evidencia,error.message));}
   }
   return out;
  }
+ async function detectarActual(hoja,cliente=root.haikuSupabase,q={}){
+  const revisadas=revisarEvidencias(Array.isArray(hoja)?hoja:[hoja],q);
+  if(!revisadas.validas.length)return revisadas.out;
+  const session=await cliente?.auth?.getSession();
+  if(session?.error||!session?.data?.session)throw Error('Inicia sesión para revisar las cancelaciones.');
+  const fechas=[...new Set(revisadas.validas.map(e=>e.fecha_checkin))];
+  try{return clasificarEnProyecto(revisadas,await leerReservasParaFechas(cliente,fechas),q);}
+  catch(error){
+   for(const e of revisadas.validas)revisadas.out.cancelaciones_revision.push(avisoRevision(e,'No se pudo consultar su reserva en Proyecto H. Intenta revalidar el informe.'));
+   return revisadas.out;
+  }
+ }
  function detectarActualConSnapshot(hojas,estadias){
-  const out={cancelaciones_confirmadas:[],cancelaciones_revision:[],cancelaciones_ya_coinciden:[]};
   const grupos=new Map();
   for(const e of estadias||[]){
    if(!e?.reserva_id)continue;
@@ -110,19 +147,7 @@
     correo_contacto:e.correo,telefono_contacto:e.telefono,estado_reserva:e.estado_reserva,estadias:[]});
    grupos.get(e.reserva_id).estadias.push({id:e.id,fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout,estado_estadia:e.estado_operativo,cabanas:{numero:e.cabana}});
   }
-  const reservas=[...grupos.values()];
-  for(const hoja of hojas||[])for(const evidencia of hoja?.cancelaciones||[]){
-   try{
-    comprobarEvidencia(evidencia,hoja);
-    const caso={tipo:'cancelacion_confirmada',fuente:'libro_actual',evidencia:structuredClone(evidencia)};
-    const v=resolverDesdeReservas(caso,reservas),e=v.estadias[0];
-    caso.actual={...evidencia,cabana:e.cabanas?.numero,fecha_checkout:e.fecha_salida};caso.reserva_id=v.id;caso.estado_proyecto=v.estado_reserva;
-    if(v.estado_reserva==='cancelada')out.cancelaciones_ya_coinciden.push(caso);
-    else if(!['pendiente','confirmada','hospedada'].includes(v.estado_reserva))throw Error('Estado de Proyecto H no activo; requiere revisión manual.');
-    else out.cancelaciones_confirmadas.push(caso);
-   }catch(error){out.cancelaciones_revision.push(`${evidencia.titular} · ${evidencia.origen?.hoja}: ${error.message}`);}
-  }
-  return out;
+  return clasificarEnProyecto(revisarEvidencias((hojas||[]).filter(Boolean),{}),[...grupos.values()],{});
  }
  async function preparar(caso,g,{libro=root.HAIKU_LIBRO_RESERVA_V1,cliente=root.haikuSupabase}={}){
   permiso();const session=await cliente.auth.getSession();if(session.error||!session.data?.session)throw Error('Inicia sesión para revisar la cancelación.');

@@ -196,6 +196,8 @@
                     completar("Comparar reservas de un mes", "Libro: compara las reservas de {Mes y año} con Proyecto H"),
                     "Haku, compara titulares del mes actual con Proyecto H"
                 ]},
+            {titulo:"Comparar cancelaciones",detalle:"Revisa las cancelaciones del Libro por fecha de ingreso. Las que coinciden con una reserva activa se pueden preparar y confirmar.",
+                atajo:"cancelaciones",rotulo:"Comparar cancelaciones del mes actual"},
             {titulo:"Comparar pagos y abonos",detalle:"Cruza los comprobantes por fecha de pago. También puedes acotar a una reserva o a una cabaña.",
                 ejemplos:[
                     "Libro: compara pagos del mes actual con Proyecto H",

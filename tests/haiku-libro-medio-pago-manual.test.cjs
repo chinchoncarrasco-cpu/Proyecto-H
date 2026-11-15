@@ -121,7 +121,15 @@ test('incorporación sólo tras aprobación posterior; requiere capacidad de aud
     await assert.rejects(h.Q.confirmarIncorporacion(h.result,h.decisiones,h.aprobados,next,h.db),/Selecciona/);
     h.aprobados.add(h.item(next).id);const plan=await h.preparar();h.auditoriaDisponible=false;
     await assert.rejects(h.Q.confirmarIncorporacion(h.result,h.decisiones,h.aprobados,plan,h.db),/auditoría/);assert.equal(escrituras(h).length,0);
-    h.auditoriaDisponible=true;await h.Q.confirmarIncorporacion(h.result,h.decisiones,h.aprobados,plan,h.db);
+    h.auditoriaDisponible=true;
+    const from=h.db.from.bind(h.db);
+    let lecturasPagos=0;
+    h.db.from=tabla=>{
+        if(tabla==='pagos') lecturasPagos++;
+        return from(tabla);
+    };
+    await h.Q.confirmarIncorporacion(h.result,h.decisiones,h.aprobados,plan,h.db);
+    assert.equal(lecturasPagos,2,'Una comparación de base y una con el medio aprobado, sin repetir la preparación');
     const item=escrituras(h)[0].args.p_items[0];assert.equal(item.argumentos.p_medio_pago,'tarjeta_credito');assert.equal(item.aprobado_manualmente,true);
     assert.equal(item.datos_origen.medio_pago_manual_v1.medio,'tarjeta_credito');assert.ok(!JSON.stringify(item.datos_origen.medio_pago_manual_v1).includes('Ignacio'));
 });

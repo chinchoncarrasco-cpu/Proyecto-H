@@ -193,13 +193,7 @@
         return /^(?:(?:posible|posiblemente|aviso|nota|urgente)\s*[:.-]?\s+)?(?:late\s*check\s*out|mantencion|mantenimiento|no vender|bloquead[oa]|reparacion|reparar|fumigacion|pintura|trabajos?|fuera de servicio)\b/.test(t) ||
             /^(?:x|por|pendiente de|se debe|se requiere)\s+(?:coordinar|revisar|reparar|confirmar|habilitar)\b/.test(t);
     }
-    // Conserva el criterio previo de las evidencias de cancelación y bloqueo.
-    function titularContexto(texto) {
-        const partes = separarCampos(texto);
-        const etiqueta = /^(?:airbnb|booking|full\s*day|promo|voucher|lista arcoiris|libre|cliente frecuente|huesped frecuente|late check out|x hacer|por hacer|pendiente|sin titular)\b/;
-        return partes.find(x => !etiqueta.test(normalizar(x)) && !notaOperativa(x) && /^[\p{L}][\p{L}\p{M}\s.'’()-]+$/u.test(x) && x.split(/\s+/).length >= 2) || null;
-    }
-    // Señales de lenguaje, sólo para titular: no altera bloqueos ni cancelaciones.
+    // Señales de lenguaje para distinguir al titular de una nota.
     function notaDeTitular(texto, posteriorADatos = false) {
         // Una aclaración entre paréntesis no convierte el nombre precedente en nota.
         const t = normalizar(texto).replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1140,7 +1134,7 @@
         const at = (r, c) => map.get(`${r}:${c}`);
         const origen = c => ({ hoja, celda: direccion(c.r, c.c), fila: c.r + 1, columna: c.c + 1,
             merge: porAncla.get(`${c.r}:${c.c}`) || null });
-        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], bloqueos: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
+        const res = { hoja, evidencias_bove:evidenciasBove(data,hoja), cancelaciones: [], cancelaciones_por_identificar: [], bloqueos: [], reservas: [], pagos: [], aseos: [], espacios: [], anotaciones: [], advertencias: [], cobertura: { geometria: false, pagos: false }, fechas: [] };
         const cabCells = cells.filter(c => /^caba(?:n|ñ)a\s*\d+$/i.test(normalizar(c.valor)));
         const marker = cells.filter(c => /pagos de arriendos de hoy/.test(normalizar(c.valor)));
         const columnaCab=Math.min(...cabCells.map(c=>c.c)),columnaCabs=cabCells.filter(c=>c.c===columnaCab).sort((a,b)=>a.r-b.r),primerGrupo=[];
@@ -1170,26 +1164,61 @@
         res.lectura = {version:2,encabezados:headers.map(h=>({celda:direccion(h.r,h.c),fecha:h.fechaISO,fuente:h.fuente_fecha,verificada:!h.duda_fecha})),
             secciones:{reservas:{primera_fila:firstCab+1,ultima_fila:Math.max(...cabRows.map(c=>c.r))+1},pagos:{primera_fila:financialRow+1}},
             fidelidad:data.fidelidad||null};
-        // Evidencia administrativa independiente: sólo dentro del bloque rotulado.
         const columnaPrimaria = Math.min(...cabRows.map(c => c.c));
-        for (const label of cells.filter(c => c.c === columnaPrimaria && normalizar(c.valor) === 'cancelaciones' && c.r > Math.max(...cabRows.map(c => c.r)) && c.r < financialRow)) {
-            const siguiente = cells.filter(c => c.r > label.r && ((c.c === columnaPrimaria && c.valor?.trim()) || /pagos de arriendos de hoy/.test(normalizar(c.valor)))).sort((a,b)=>a.r-b.r)[0];
-            if (!siguiente) continue;
-            for (const cell of cells.filter(c => c.r >= label.r && c.r < siguiente.r && c.c > columnaPrimaria && /\//.test(c.valor || ''))) {
-                const contenido = separarCampos(cell.valor).filter(t => !/^(?:cancelad[ao]s?\b|cancelacion\b)/.test(normalizar(t))).join(' // ');
-                const nombre = titularContexto(contenido);
-                const hs = headers.filter((h,i) => cell.c >= h.c && cell.c < (headers[i+1]?.c ?? h.c+4));
-                if (!nombre || hs.length !== 1) continue;
-                if (hs[0].duda_fecha) {
-                    res.anotaciones.push({tipo:'cancelacion_fecha_dudosa',texto_original:cell.valor,origen:origen(cell),motivo_identificacion:hs[0].duda_fecha});
-                    continue;
+        const ultimaFilaCabana = cabRows.at(-1).r;
+        const etiquetasPrimarias=cells.filter(c=>c.c===columnaPrimaria&&c.valor?.trim()).sort((a,b)=>a.r-b.r);
+        const avisoCancelacion = /^(?:(?:reserva|estadia)\s+)?(?:cancelad[ao]s?|anulad[ao]s?|cancelacion)\b/;
+        const diaCancelacion = c => headers.find((h,j) => c >= h.c && c < (headers[j+1]?.c ?? h.c+4));
+        const vistos = new Set();
+        for (const [i,label] of etiquetasPrimarias.entries()) {
+            if (normalizar(label.valor) !== 'cancelaciones' || label.r <= ultimaFilaCabana || label.r >= financialRow) continue;
+            const fin = Math.min(etiquetasPrimarias[i+1]?.r ?? financialRow, financialRow);
+            // La fila administrativa inmediatamente anterior también se usa para anotar bajas.
+            const previa = label.r-1 > ultimaFilaCabana && !at(label.r-1,columnaPrimaria)?.valor?.trim() ? label.r-1 : label.r;
+            for (let fila = previa; fila < fin; fila++) for (const cell of porFila.get(fila) || []) {
+                if (cell.c <= columnaPrimaria || !cell.valor?.trim() || vistos.has(cell)) continue;
+                const campos = separarCampos(cell.valor);
+                const esAviso = campo => avisoCancelacion.test(normalizar(campo));
+                const explicita = campos.some(esAviso);
+                if (fila === previa && previa < label.r && !explicita) continue;
+                const sinMotivo = campos.flatMap(campo => {
+                    if (!esAviso(campo)) return [campo];
+                    const titularMarcado = campo.match(/^(?:(?:reserva|estad[ií]a)\s+)?(?:cancelad[ao]s?|anulad[ao]s?|cancelaci[oó]n)\s*:\s*(.+)$/i);
+                    return titularMarcado ? [titularMarcado[1]] : [];
+                });
+                const contenido = sinMotivo.join(' // ');
+                const candidatos = candidatosTitular(contenido);
+                const nombre = candidatos.length === 1 ? candidatos[0].texto : null;
+                if (!explicita && !nombre && campos.length < 2) continue;
+                vistos.add(cell);
+                const dia = diaCancelacion(cell.c);
+                const vecina = at(fila,cell.c+1);
+                if (fila >= label.r && campos.length === 1 && (!explicita || !nombre) && dia && diaCancelacion(cell.c+1) === dia &&
+                    vecina?.valor?.includes('/')) {
+                    const datosVecina = separarCampos(vecina.valor);
+                    if (datosVecina.some(esAviso) || titular(datosVecina.join(' // '))) continue;
                 }
-                const noches = normalizar(contenido).match(/\b(\d+)\s*noches?\b/);
-                res.cancelaciones.push({titular:nombre,fecha_checkin:hs[0].fechaISO,noches:noches?Number(noches[1]):null,
+                const noches = [...new Set(declaracionesNochesReserva(contenido))];
+                const cabanas = [...new Set(sinMotivo.map(campo => normalizar(campo).match(/^cab(?:ana)?\s*(\d+)$/)?.[1]).filter(Boolean))];
+                const avisos = [];
+                if (!nombre) avisos.push(candidatos.length > 1
+                    ? 'La anotación contiene más de un posible titular.'
+                    : 'Falta un titular inequívoco en la anotación.');
+                if (!dia || dia.duda_fecha) {
+                    avisos.push('No pude comprobar la fecha de ingreso en el Libro.');
+                    res.anotaciones.push({tipo:'cancelacion_fecha_dudosa',texto_original:cell.valor,origen:origen(cell),motivo_identificacion:dia?.duda_fecha || avisos.at(-1)});
+                }
+                if (noches.length > 1 || cabanas.length > 1) avisos.push('La anotación indica valores distintos para la cabaña o la cantidad de noches.');
+                const destino = avisos.length ? res.cancelaciones_por_identificar : res.cancelaciones;
+                destino.push({titular:nombre,fecha_checkin:dia && !dia.duda_fecha ? dia.fechaISO : null,
+                    noches:noches.length === 1 ? noches[0] : null,
+                    ...(cabanas.length === 1 ? {cabana:Number(cabanas[0])} : {}),
                     rut_documento:documentoDelLibro(contenido),
                     correo:contenido.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null,
                     telefono:contenido.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null,
-                    texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label)});
+                    texto_original:cell.valor,origen:origen(cell),bloque:'CANCELACIONES',origen_bloque:origen(label),
+                    ...(explicita && campos.length === 1 && !nombre ? {motivo_libro:campos[0]} : {}),
+                    ...(avisos.length ? {advertencias:avisos} : {})});
             }
         }
         const paymentCabs = cabCells.filter(c => c.r > financialRow && c.c===columnaPrimaria).sort((a, b) => a.r - b.r);
@@ -1199,7 +1228,7 @@
             const cs=paymentCabs.filter(c=>merges.some(m=>m.s.r===c.r&&m.s.c===c.c&&fila>=m.s.r&&fila<=m.e.r));
             if(hs.length===1&&!hs[0].duda_fecha&&cs.length===1){e.fecha_bloque=hs[0].fechaISO;e.cabana_contexto=Number(cs[0].valor.match(/\d+/)[0]);}
         }
-        const etiquetasPrimarias=cells.filter(c=>c.c===columnaPrimaria&&c.valor?.trim()).sort((a,b)=>a.r-b.r),finalesPago=new Map();
+        const finalesPago=new Map();
         const finBloquePago = cab => {
             if(finalesPago.has(cab))return finalesPago.get(cab);
             const merge=porAncla.get(`${cab.r}:${cab.c}`);
