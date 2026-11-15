@@ -81,10 +81,20 @@ async function contextoConservado(page) {
 async function geometria(page) {
     const medidas = await page.locator('.haiku-cancelacion-pantalla').evaluate(panel => {
         const r = panel.getBoundingClientRect();
-        return { overflow:panel.scrollWidth - panel.clientWidth, pagina:document.documentElement.scrollWidth - innerWidth,
-            controles:[...panel.querySelectorAll('button')].map(b => { const x = b.getBoundingClientRect(); return x.width > 0 && x.left >= r.left && x.right <= r.right + 1; }) };
+        return {
+            alto:Math.round(r.height), overflow:panel.scrollWidth - panel.clientWidth, pagina:document.documentElement.scrollWidth - innerWidth,
+            titulo:getComputedStyle(panel.querySelector('h3')).fontSize,
+            fechas:getComputedStyle(panel.querySelector('.haiku-cancelacion-pantalla__fechas')).fontSize,
+            controles:[...panel.querySelectorAll('button')].map(b => {
+                const x = b.getBoundingClientRect();
+                return x.width > 0 && x.width < r.width && x.left >= r.left && x.right <= r.right + 1;
+            })
+        };
     });
     assert.ok(medidas.overflow <= 1); assert.ok(medidas.pagina <= 1); assert.ok(medidas.controles.every(Boolean));
+    assert.equal(medidas.titulo, '14px');
+    assert.equal(medidas.fechas, '12px');
+    return medidas.alto;
 }
 
 (async () => {
@@ -92,20 +102,27 @@ async function geometria(page) {
     try {
         browser = await chromium.launch({ executablePath:process.env.HAIKU_BROWSER_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless:true });
         const origin = 'http://127.0.0.1:' + server.address().port;
-        for (const width of [320, 390, 1100]) for (const escenario of ['exito', 'rechazo', 'error', 'permiso', 'conflicto', 'invalida', 'ya-cancelada', 'pendiente']) {
-            const context = await browser.newContext({ viewport:{ width, height:850 }, deviceScaleFactor:2 }), externos = [], errores = [];
+        const escenarios = ['exito', 'rechazo', 'error', 'permiso', 'conflicto', 'invalida', 'ya-cancelada', 'pendiente'];
+        for (const width of [320, 390, 1100]) for (const tema of ['claro', 'oscuro']) for (const escenario of escenarios) {
+            const context = await browser.newContext({ viewport:{ width, height:850 }, hasTouch:width < 600, deviceScaleFactor:2 }), externos = [], errores = [];
             await context.route('**/*', route => { if (new URL(route.request().url()).origin === origin) return route.continue(); externos.push(route.request().url()); return route.abort(); });
             const page = await context.newPage();
-        await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin); await iniciar(page, escenario);
+            await require('./fixtures/dialogos.cjs').prepararNavegador(page); page.on('pageerror', e => errores.push(e.message)); await page.goto(origin);
+            await page.evaluate(tema => { document.documentElement.dataset.haikuTema = tema; }, tema);
+            await iniciar(page, escenario);
             const preparar = () => page.getByRole('button', { name:/^Preparar cancelación/ }).click();
             await preparar(); await page.getByRole('heading', { name:'Revisar cancelación', exact:true }).waitFor();
             const panel = page.locator('.haiku-cancelacion-pantalla');
-            assert.match(await panel.innerText(), /SEPTIEMBRE 2026/); assert.match(await panel.innerText(), /2 noches/); assert.match(await panel.innerText(), /CANCELACIONES · Sep26 · D16/);
-            assert.equal(await page.evaluate(() => window.__fixture.rpc), 0); await geometria(page);
-            assert.match(await panel.innerText(), /Pendiente de confirmar/);
+            assert.match(await panel.innerText(), /1 sep → 3 sep 2026 · 2 noches/);
+            assert.match(await panel.innerText(), /Libro · Sep26 · D16/);
+            assert.match(await panel.innerText(), /Activa\s*→\s*Cancelada/);
+            assert.equal(await page.evaluate(() => window.__fixture.rpc), 0);
+            const altoRevision = await geometria(page);
+            assert.ok(altoRevision <= (width === 320 ? 230 : 205), `Revisión demasiado alta: ${altoRevision}px`);
+            let altoCompletada;
             if (process.env.HAKU_CANCELACION_CAPTURAS && escenario === 'exito') {
                 fs.mkdirSync(process.env.HAKU_CANCELACION_CAPTURAS, { recursive:true });
-                await panel.screenshot({ path:path.join(process.env.HAKU_CANCELACION_CAPTURAS, `revision-${width}.png`), scale:'css' });
+                await panel.screenshot({ path:path.join(process.env.HAKU_CANCELACION_CAPTURAS, `revision-${tema}-${width}.png`), scale:'css' });
             }
             if (escenario === 'exito') {
                 await page.getByRole('button', { name:'Volver', exact:true }).click(); await contextoConservado(page);
@@ -133,20 +150,29 @@ async function geometria(page) {
                 assert.equal(await page.evaluate(() => window.__fixture.rpc), 1); await page.evaluate(() => window.__fixture.liberar());
             }
             if (['exito', 'pendiente'].includes(escenario)) {
-                await page.getByRole('heading', { name:'Cancelación completada', exact:true }).waitFor(); await geometria(page);
-                assert.match(await panel.innerText(), /Cambio confirmado/); assert.match(await panel.innerText(), /ESTADO ACTUAL EN HAKU/);
+                await page.getByRole('heading', { name:'Cancelación completada', exact:true }).waitFor();
+                altoCompletada = await geometria(page);
+                assert.ok(altoCompletada <= (width < 600 ? 200 : 180), `Resultado demasiado alto: ${altoCompletada}px`);
+                assert.match(await panel.innerText(), /Proyecto H\s*Cancelada/);
+                assert.equal(await panel.getByText('Huésped de prueba sintética', { exact:true }).count(), 1);
+                assert.equal(await panel.locator('.haiku-cancelacion-pantalla__aviso').count(), 0);
+                assert.equal(await panel.getByRole('button', { name:'Confirmar cancelación', exact:true }).count(), 0);
                 await page.getByRole('button', { name:'Ver reserva', exact:true }).click();
                 assert.equal(await page.evaluate(() => window.__fixture.row.estado_reserva), 'cancelada');
                 assert.deepEqual(await page.evaluate(() => window.__fixture.ultimoRpc), { nombre:'haiku_cancelar_reserva', argumentos:{ p_reserva_id:'11111111-1111-4111-8111-111111111111' } });
                 if (process.env.HAKU_CANCELACION_CAPTURAS) {
                     fs.mkdirSync(process.env.HAKU_CANCELACION_CAPTURAS, { recursive:true });
-                    await panel.screenshot({ path:path.join(process.env.HAKU_CANCELACION_CAPTURAS, `completada-${width}.png`), scale:'css' });
+                    await panel.screenshot({ path:path.join(process.env.HAKU_CANCELACION_CAPTURAS, `completada-${tema}-${width}.png`), scale:'css' });
                 }
                 await page.getByRole('button', { name:'Volver a la revisión', exact:true }).click();
                 assert.equal(await page.getByRole('button', { name:/^Preparar cancelación/ }).count(), 0);
             } else {
                 assert.equal(await page.getByRole('heading', { name:'Cancelación completada', exact:true }).count(), 0);
-                assert.match(await panel.innerText(), { rechazo:/Cancelación no confirmada/, error:/Error sintético al guardar/, permiso:/No tienes permiso/, conflicto:/conflictos/, invalida:/El Libro cambió/, 'ya-cancelada':/Ya coincide/ }[escenario]);
+                assert.match(await panel.innerText(), {
+                    rechazo:/Cancelación no confirmada/, error:/Error sintético al guardar/, permiso:/No tienes permiso/,
+                    conflicto:/Hay más de una anotación o la evidencia cambió en el Libro/, invalida:/El Libro cambió/,
+                    'ya-cancelada':/Ya estaba cancelada/
+                }[escenario]);
                 await page.getByRole('button', { name:escenario === 'ya-cancelada' ? 'Volver a la revisión' : 'Volver', exact:true }).click();
             }
             await contextoConservado(page);
@@ -154,7 +180,7 @@ async function geometria(page) {
             assert.equal(resultado.rpc, ['exito', 'error', 'pendiente'].includes(escenario) ? 1 : 0);
             if (escenario === 'exito') assert.deepEqual(resultado.abiertas, ['11111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111']);
             assert.deepEqual(externos, []); assert.deepEqual(errores, []);
-            console.log(JSON.stringify({ width, escenario, resultado:'PASS', rpc:resultado.rpc, externos:0 })); await context.close();
+            console.log(JSON.stringify({ width, tema, escenario, altoRevision, altoCompletada, resultado:'PASS', rpc:resultado.rpc, externos:0 })); await context.close();
         }
         if (process.env.HAKU_CANCELACION_CAPTURAS) {
             const context = await browser.newContext({ viewport:{ width:1100, height:940 }, deviceScaleFactor:2 });

@@ -221,12 +221,6 @@
  function estadoVisual(estado){
   return {confirmada:'Activa',pendiente:'Pendiente',hospedada:'Hospedada',cancelada:'Cancelada'}[estado]||estado||'Sin verificar';
  }
- function periodoVisual(caso){
-  const hoja=caso.evidencia?.origen?.hoja,meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const m=String(hoja||'').match(/^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)(\d{2}|\d{4})$/i);
-  if(m)return `${meses[['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase())]} ${m[2].length===2?'20':''}${m[2]}`;
-  return hoja||'Período sin identificar';
- }
  function botonPantalla(texto,variante,accion){
   const boton=elemento('button',`haiku-cancelacion-pantalla__boton haiku-cancelacion-pantalla__boton--${variante}`,texto);
   boton.type='button';boton.addEventListener('click',accion);return boton;
@@ -234,8 +228,8 @@
  function avisoPantalla(titulo,texto,tipo='pendiente'){
   const aviso=elemento('div',`haiku-cancelacion-pantalla__aviso haiku-cancelacion-pantalla__aviso--${tipo}`);
   aviso.setAttribute('role',tipo==='error'?'alert':'status');
-  const icono=elemento('span','haiku-cancelacion-pantalla__icono',tipo==='confirmado'?'✓':tipo==='pendiente'?'i':'!');icono.setAttribute('aria-hidden','true');
-  const contenido=elemento('div','');contenido.append(elemento('strong','',titulo),elemento('p','',texto));aviso.append(icono,contenido);return aviso;
+  aviso.append(elemento('strong','',titulo),elemento('p','',texto));
+  return aviso;
  }
  function periodoEstadia(vista){
   const noches=(Date.parse(vista.fecha_checkout)-Date.parse(vista.fecha_checkin))/86400000;
@@ -264,50 +258,65 @@
  }
  // Estas dos vistas sólo presentan el resultado del puente existente preparar/confirmar.
  function pantallaCancelacion(caso,vista,{volver,guardar,completada=false,coincide=false,error=''}){
-  const panel=elemento('section','haiku-cancelacion-pantalla');panel.setAttribute('aria-label',completada?'Cancelación completada':'Revisar cancelación');
-  const header=elemento('header','haiku-cancelacion-pantalla__cabecera'),marca=elemento('span','haiku-cancelacion-pantalla__marca','H');marca.setAttribute('aria-hidden','true');
-  const identidad=elemento('div','haiku-cancelacion-pantalla__identidad');identidad.append(elemento('strong','','Haku'),elemento('span','','Asistente operativo'));
-  const cerrar=botonPantalla('×','cerrar',volver);cerrar.setAttribute('aria-label','Cerrar revisión de cancelación');header.append(marca,identidad,cerrar);
-  const cuerpo=elemento('div','haiku-cancelacion-pantalla__cuerpo'),titulo=elemento('h3','haiku-cancelacion-pantalla__titulo',completada?'Cancelación completada':'Revisar cancelación');titulo.tabIndex=-1;
-  cuerpo.append(elemento('p','haiku-cancelacion-pantalla__etiqueta',`REVISIÓN DEL LIBRO · ${periodoVisual(caso).toLocaleUpperCase('es')}`),titulo,
-   elemento('p','haiku-cancelacion-pantalla__descripcion',completada?'La reserva ya está actualizada en Haku.':'Confirma el cambio de estado de esta reserva.'));
-  if(completada)cuerpo.append(avisoPantalla('Cambio confirmado',`${vista.titular} · CAB ${vista.cabana??'—'}`,'confirmado'));
-  const reserva=elemento('section','haiku-cancelacion-pantalla__reserva'),nombre=elemento('div','haiku-cancelacion-pantalla__reserva-cabecera'),datos=elemento('div','haiku-cancelacion-pantalla__datos');
-  datos.append(elemento('h4','',vista.titular||'Huésped sin identificar'));
-  datos.append(elemento('p','haiku-cancelacion-pantalla__fechas',periodoEstadia(vista)));
-  nombre.append(datos,elemento('span','haiku-cancelacion-pantalla__cabana',`CAB ${vista.cabana??'—'}`));reserva.append(nombre);
-  const libro=elemento('div','haiku-cancelacion-pantalla__libro');
-  libro.append(elemento('span','','EN EL LIBRO'),elemento('strong','haiku-cancelacion-pantalla__badge haiku-cancelacion-pantalla__badge--libro','Cancelación confirmada'));
-  reserva.append(libro);
+  const resuelta=completada||coincide;
+  const textoTitulo=completada?'Cancelación completada':coincide?'Ya estaba cancelada':'Revisar cancelación';
+  const panel=elemento('section','haiku-cancelacion-pantalla');
+  panel.setAttribute('aria-label',textoTitulo);
+  const header=elemento('header','haiku-cancelacion-pantalla__cabecera');
+  const titulo=elemento('h3','haiku-cancelacion-pantalla__titulo'+(resuelta?' haiku-cancelacion-pantalla__titulo--resuelta':''),textoTitulo);
+  titulo.tabIndex=-1;
+  const cerrar=botonPantalla('×','cerrar',volver);
+  cerrar.setAttribute('aria-label','Cerrar revisión de cancelación');
+  header.append(titulo,cerrar);
+
+  const cuerpo=elemento('div','haiku-cancelacion-pantalla__cuerpo');
+  const reserva=elemento('div','haiku-cancelacion-pantalla__reserva');
+  const nombre=elemento('h4','',vista.titular||'Huésped sin identificar');
+  const cabana=elemento('span','haiku-cancelacion-pantalla__cabana',`CAB ${vista.cabana??'—'}`);
+  reserva.append(nombre,cabana,elemento('p','haiku-cancelacion-pantalla__fechas',periodoEstadia(vista)));
+  cuerpo.append(reserva);
+
   const origen=vista.origen_libro||caso.evidencia?.origen;
-  if(origen&&(origen.hoja||origen.celda))reserva.append(elemento('p','haiku-cancelacion-pantalla__origen',['CANCELACIONES',origen.hoja,origen.celda].filter(Boolean).join(' · ')));
+  const libro=elemento('div','haiku-cancelacion-pantalla__libro');
+  libro.append(elemento('span','haiku-cancelacion-pantalla__origen',['Libro',origen?.hoja,origen?.celda].filter(Boolean).join(' · ')));
+  if(!resuelta)libro.append(elemento('strong','haiku-cancelacion-pantalla__badge haiku-cancelacion-pantalla__badge--libro','Cancelada'));
   const cambio=elemento('div','haiku-cancelacion-pantalla__cambio');
-  cambio.append(elemento('p','haiku-cancelacion-pantalla__etiqueta',completada||coincide?'ESTADO ACTUAL EN HAKU':'CAMBIO EN HAKU'));
+  cambio.append(elemento('span','haiku-cancelacion-pantalla__origen','Proyecto H'));
   const estados=elemento('div','haiku-cancelacion-pantalla__estados');
-  function estado(etiqueta,valor){
-   const bloque=elemento('div','haiku-cancelacion-pantalla__estado');
-   if(etiqueta)bloque.append(elemento('span','',etiqueta));
+  estados.setAttribute('role','group');
+  estados.setAttribute('aria-label',resuelta?'Estado actual':'Estado actual y estado después de confirmar');
+  function estado(valor){
    const badge=elemento('strong',`haiku-cancelacion-pantalla__badge haiku-cancelacion-pantalla__badge--${valor||'desconocida'}`,estadoVisual(valor));
-   badge.setAttribute('data-estado',valor||'');if(valor==='confirmada')badge.title='Estado de la reserva: Confirmada';bloque.append(badge);return bloque;
+   badge.setAttribute('data-estado',valor||'');
+   if(valor==='confirmada')badge.title='Estado de la reserva: Confirmada';
+   return badge;
   }
-  if(completada||coincide){
-   estados.append(estado('', 'cancelada'));
-   cambio.append(estados,elemento('p','haiku-cancelacion-pantalla__resultado',completada?'Cancelación completada.':'Ya estaba cancelada. No se aplicaron cambios.'));
-  }else{
-   const flecha=elemento('span','haiku-cancelacion-pantalla__flecha','→');flecha.setAttribute('aria-hidden','true');
-   estados.append(estado('Actual',vista.estado_actual),flecha,estado('Después de confirmar','cancelada'));cambio.append(estados);
+  if(!resuelta){
+   const flecha=elemento('span','haiku-cancelacion-pantalla__flecha','→');
+   flecha.setAttribute('aria-hidden','true');
+   estados.append(estado(vista.estado_actual),flecha);
   }
-  const {ver,errorReserva}=inspeccionReserva(vista);
-  reserva.append(cambio,ver,errorReserva);cuerpo.append(reserva);
-  if(completada)cuerpo.append(elemento('p','haiku-cancelacion-pantalla__continuidad','Puedes continuar con la revisión del libro.'));
-  const mensajes=elemento('div','haiku-cancelacion-pantalla__mensajes');mensajes.setAttribute('aria-live','polite');
+  estados.append(estado('cancelada'));
+  cambio.append(estados);
+  const detalle=elemento('div','haiku-cancelacion-pantalla__detalle');
+  detalle.append(libro,cambio);
+  cuerpo.append(detalle);
+
+  const mensajes=elemento('div','haiku-cancelacion-pantalla__mensajes');
+  mensajes.setAttribute('aria-live','polite');
   if(error)mensajes.append(avisoPantalla('Revisión necesaria',error,'error'));
-  else if(coincide)mensajes.append(avisoPantalla('Ya coincide','La reserva ya estaba cancelada. No se realizó una nueva cancelación.','confirmado'));
-  else if(!completada)mensajes.append(avisoPantalla('Pendiente de confirmar','La cancelación se aplicará al confirmar'));
-  cuerpo.append(mensajes);
-  const pie=elemento('footer','haiku-cancelacion-pantalla__pie'),atras=botonPantalla(completada||coincide?'Volver a la revisión':'Volver',completada||coincide?'volver-revision':'volver',volver);
-  pie.append(atras);let confirmarBoton=null;
-  if(!completada&&!coincide){confirmarBoton=botonPantalla('Confirmar cancelación','confirmar',guardar);confirmarBoton.disabled=Boolean(error);pie.append(confirmarBoton);}
+  const {ver,errorReserva}=inspeccionReserva(vista);
+  cuerpo.append(mensajes,errorReserva);
+
+  const pie=elemento('footer','haiku-cancelacion-pantalla__pie');
+  const atras=botonPantalla(resuelta?'Volver a la revisión':'Volver',resuelta?'volver-revision':'volver',volver);
+  pie.append(ver,atras);
+  let confirmarBoton=null;
+  if(!resuelta){
+   confirmarBoton=botonPantalla('Confirmar cancelación','confirmar',guardar);
+   confirmarBoton.disabled=Boolean(error);
+   pie.append(confirmarBoton);
+  }
   panel.append(header,cuerpo,pie);
   return {panel,titulo,mensajes,confirmar:confirmarBoton,cerrar,atras,ver};
  }
