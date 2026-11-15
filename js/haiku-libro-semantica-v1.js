@@ -193,6 +193,18 @@
         return /^(?:(?:posible|posiblemente|aviso|nota|urgente)\s*[:.-]?\s+)?(?:late\s*check\s*out|mantencion|mantenimiento|no vender|bloquead[oa]|reparacion|reparar|fumigacion|pintura|trabajos?|fuera de servicio)\b/.test(t) ||
             /^(?:x|por|pendiente de|se debe|se requiere)\s+(?:coordinar|revisar|reparar|confirmar|habilitar)\b/.test(t);
     }
+    function notaContextualReserva(textoNormalizado) {
+        const nota = textoNormalizado.replace(/^(?:(?:hoy|manana|ayer)(?:\s+(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo))?|(?:el\s+)?(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo))\b[\s,:]+/, '');
+        const etiqueta = /^(?:notas?|observaci(?:on|ones)|avisos?|comentarios?)(?:\s+de\s+(?:la\s+)?reserva)?\s*[:–—-]\s*\S/;
+        const alerta = /^(?:ojo\s+(?:al|con|a\s+la)|(?:la\s+)?cabanas?\s+(?:con|sin|requieren?))\b/;
+        const boda = /^(?:se\s+(?:casa(?:n|ron|ra|ran)?|caso)|recien\s+casad[oa]s?|son\s+los\s+novios|luna\s+de\s+miel)\b/;
+        const celebracion = /^(?:(?:celebr(?:a|an|ar)|festej(?:a|an|ar))\s+(?:(?:su|sus|el|la|un|una)\s+)?(?:bodas?|matrimonio|cumpleanos|aniversarios?)\b|(?:bodas?|matrimonio|cumpleanos|aniversarios?)\s+(?:de\s+\S|cortesias?\b))/;
+        const motivoCortesia = /^(?:(?:cortesias?|regalos?|obsequios?|decoracion|tortas?|flores|celebracion)\s+(?:de|por|para)\s+(?:(?:su|el|la|un|una)\s+)?(?:bodas?|matrimonio|cumpleanos|aniversarios?)|reserva\s+de\s+(?:regalo|cortesia))\b/;
+        const entrega = /^se\s+(?:les?\s+)?(?:entr{1,2}eg(?:a(?:n|ron)?|o)|dej(?:a(?:n|ron)?|o)|dio)\b/;
+        const tareaCortesia = /^(?:quieren?|llevar|dar|preparar|entregad[oa]s?|entrega(?:ron)?)\s+(?:de\s+)?(?:(?:las?|un(?:as?)?|sus?)\s+)?cortesias?\b/;
+        return etiqueta.test(nota) || alerta.test(nota) || boda.test(nota) || celebracion.test(nota) ||
+            motivoCortesia.test(nota) || entrega.test(nota) || tareaCortesia.test(nota);
+    }
     // Señales de lenguaje para distinguir al titular de una nota.
     function notaDeTitular(texto, posteriorADatos = false) {
         // Una aclaración entre paréntesis no convierte el nombre precedente en nota.
@@ -209,13 +221,12 @@
         const insumosAdicionales = /^(?:implementos\s+(?:de\s+|para\s+)?asado|minipimer\b|mortero\b|tabla\s+de\s+picar\b)/.test(t);
         const noShow = /^(?:reserva\s+)?no\s*show$/.test(t);
         const acompanamientoMascota = /^(?:(?:viene|vienen|vendra|vendran|trae|traen|lleva|llevan|llega|llegan)\s+(?:con\s+)?|con\s+)(?:\d+\s+)?mascotas?\b/u;
-        const avisoDeBoda = /^(?:(?:hoy|manana|ayer)\s+)?se\s+(?:casa(?:n|ron|ra|ran)?|caso)\b/.test(t);
         // Tras datos de la estadía, las frases preposicionales son contexto operativo.
         // Un segundo nombre humano sigue compitiendo, incluso después del teléfono.
         const contextoPosterior = posteriorADatos && /^(?:para|con|por|sobre|respecto a)\s+/.test(t);
         return notaOperativa(texto) || accion.test(t) || estado.test(t) || contexto.test(t) || condicion.test(t) || objetos.test(t) ||
             entregaInsumos.test(t) || tareaRecepcion || insumosAdicionales || noShow || acompanamientoMascota.test(t) ||
-            avisoDeBoda || contextoPosterior;
+            notaContextualReserva(t) || contextoPosterior;
     }
     // El papel explícito de una persona prevalece sobre su apariencia de nombre.
     // Estas señales sólo clasifican texto del bloque de reserva: no crean servicios,
@@ -282,9 +293,16 @@
             const nombreConCanal=(texto.match(/^full\s*day\s+(.+)$/i) ||
                 texto.match(/^(?:booking|airbnb|walk[\s-]*in)\s*[:–—-]\s*(.+)$/i) ||
                 texto.match(/^promo\s+h(?:aiku|aku)\s+(?:[:–—-]\s*)?(.+)$/i))?.[1].trim();
-            const nombre=nombreEtiquetado || nombreConCanal;
-            const nombreSimple=nombreEtiquetado && /^[\p{L}\p{M}]{3,}$/u.test(nombreEtiquetado) &&
-                clasificar(nombreEtiquetado.toLowerCase())==='otro';
+            const nombreIndicado=nombreEtiquetado || nombreConCanal;
+            const campoConNombre=nombreIndicado || texto;
+            // Una nota explícita también puede estar junto al nombre en un solo campo.
+            const juntoANota=campoConNombre.match(/^(.+?)(?:\s+[–—-]\s+|[:;]\s*)(\S.*)$/u) ||
+                campoConNombre.match(/^(.+?)\s+\(([^()]+)\)$/u);
+            const notaAdjunta=juntoANota && notaContextualReserva(normalizar(juntoANota[2])) &&
+                !notaContextualReserva(normalizar(campoConNombre));
+            const nombre=notaAdjunta ? juntoANota[1].trim() : nombreIndicado;
+            const nombreSimple=nombreEtiquetado && /^[\p{L}\p{M}]{3,}$/u.test(nombre) &&
+                clasificar(nombre.toLowerCase())==='otro';
             if (!rol && nombre && (nombreSimple || clasificar(nombre)==='posible_titular')) {
                 texto=nombre;
                 tipo='posible_titular';
@@ -292,7 +310,7 @@
             const t=normalizar(texto);
             if (tipo==='posible_titular') humanoPrevio=true;
             if (humanoPrevio && (tipo==='dato_estructurado' || /^(?:confirmad[oa]|pagad[oa]|reservad[oa])\b/.test(t))) datosPosteriores=true;
-            return {texto,tipo,...(rol ? {rol} : {}),...(nombreEtiquetado && texto===nombreEtiquetado ? {titular_explicito:true} : {})};
+            return {texto,tipo,...(rol ? {rol} : {}),...(nombreEtiquetado && texto===nombre ? {titular_explicito:true} : {})};
         });
     }
     function candidatosTitular(texto, reservaConFormato = false) {

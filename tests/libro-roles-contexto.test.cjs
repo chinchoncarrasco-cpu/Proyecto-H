@@ -128,6 +128,42 @@ test('un aviso de boda conserva la nota de la reserva y deja visibles los nombre
  assert.deepEqual(ambigua.anotaciones[0].titulares_posibles,[titular,'ROCÍO CASÁN MORA']);
 });
 
+test('las notas de celebraciones y entregas se reconocen antes y después del titular', () => {
+ for (const nota of ['Hoy, celebran su aniversario', 'ANIVERSARIO DE MATRIMONIO', 'Recién casados',
+  'Luna de miel', 'Celebración de aniversario', 'Torta de cumpleaños', 'Cumpleaños cortesías',
+  'Reserva de regalo', 'Se les entregaron las cortesías', 'El viernes quieren las cortesías',
+  'Nota de reserva: Son los novios', 'OJO AL CHECK OUT: Se les entregó una bandeja',
+  'CABAÑA CON MAL OLOR; se dejó abierta la ventana']) {
+  for (const texto of [`${nota} // Ana Pérez // 2 ADL // 2 noches`, `Ana Pérez // 2 ADL // 2 noches\n${nota}`]) {
+   const d=leer(texto);
+   assert.equal(d.reservas[0]?.titular,'Ana Pérez',texto);
+   assert.equal(d.reservas[0].texto_original,texto);
+   assert.equal(d.anotaciones.filter(a=>a.tipo==='reserva_por_identificar').length,0);
+  }
+  assert.equal(leer(nota).reservas.length,0,nota);
+ }
+});
+
+test('una nota adjunta al nombre se conserva sin prestar sus contactos al titular', () => {
+ for (const [campo,titular] of [
+  ['Ana Pérez — SE CASAN HOY CORTESÍAS DE BODAS','Ana Pérez'],
+  ['Titular: Ana Pérez - Cortesías de boda','Ana Pérez'],
+  ['Booking - ANA PÉREZ: celebran su aniversario','ANA PÉREZ'],
+  ['María-José del Río (recién casados)','María-José del Río'],
+  ['Pérez, Ana; Observación: contacto del evento evento@example.test +56912345678','Pérez, Ana']
+ ]) {
+  const texto=`${campo} // ana@example.test // 2 ADL // 2 noches`;
+  const [r]=leer(texto).reservas;
+  assert.equal(r?.titular,titular,texto);
+  assert.equal(r.texto_original,texto);
+  assert.equal(r.correo,'ana@example.test');
+  assert.equal(r.telefono,null);
+ }
+ const d=leer('Ana Pérez - CORTESÍAS DE BODAS // LUNA DEL RÍO // 2 ADL');
+ assert.equal(d.reservas.length,0);
+ assert.deepEqual(d.anotaciones[0].titulares_posibles,['Ana Pérez','LUNA DEL RÍO']);
+});
+
 test('el canal con separador conserva el nombre; NO SHOW describe la reserva, no al titular', () => {
  for(const canal of ['BOOKING-','Booking:','AIRBNB —','WALK IN -']) {
   const texto=`${canal} Ana Pérez // 2 ADL // 2 noches // NO SHOW`;
