@@ -77,6 +77,7 @@
                         <button type="button" data-haiku-accion-rapida="libro-siguiente">Comparar Libro mes siguiente con Proyecto H</button>
                         <button type="button" data-haiku-accion-rapida="titulares">Titulares y cabañas del mes</button>
                         <button type="button" data-haiku-accion-rapida="pagos">Comparar pagos del mes actual</button>
+                        <button type="button" data-haiku-accion-rapida="cancelaciones">Comparar cancelaciones del mes actual</button>
                         <button type="button" data-haiku-accion-rapida="servicios">Comparar servicios mes actual con Proyecto H</button>
                         <button type="button" data-haiku-accion-rapida="servicios-siguiente">Comparar servicios mes siguiente con Proyecto H</button>
                     </div>
@@ -302,7 +303,7 @@
         if (accion === "tareas-hoy") return "Haku, resumen del día";
         if (accion === "actualizacion") return "Haku, informe de actualización";
         if (accion === "titulares") return "Libro: titulares y cabañas del mes actual";
-        const asunto = { libro: "las reservas", servicios: "servicios", pagos: "pagos" }[accion.replace(/-siguiente$/, "")];
+        const asunto = { libro: "las reservas", servicios: "servicios", pagos: "pagos", cancelaciones: "cancelaciones" }[accion.replace(/-siguiente$/, "")];
         if (typeof asunto !== "string") return "";
         const periodo = periodoCalendarioChile(accion.endsWith("-siguiente") ? 1 : 0);
         const fechaVisible = iso => iso.split("-").reverse().join("-");

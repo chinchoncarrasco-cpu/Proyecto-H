@@ -137,12 +137,15 @@
         return {texto, desde, hasta, cabana, hojas:seleccion, hojaPrevia, titulares:true, comparar, proyecto, movimiento};
     }
 
+    const intencionCancelaciones = t => /^(?:haku[, :]*\s*)?(?:libro\s*:\s*)?(?:compara(?:r)?|revisa(?:r)?)\s+(?:(?:solo|las)\s+)*cancelaciones\b/.test(t);
+
     function interpretar(texto, hojas) {
         const titulares = intencionTitulares(texto);
         if (titulares) return interpretarTitulares(texto, titulares, hojas);
         const t = S.normalizar(texto), warnings = [];
         const soloPagos = /\b(?:proyecto h|sistema|supabase)\b/.test(t) &&
             /^(?:(?:haku[, :]*)?\s*libro\s*:\s*)?(?:(?:compara|revisa)\s+(?:(?:solo|solamente|exclusivamente|los)\s+)*pagos?\b|pagos?\b.*\b(?:vs|contra|con)\b)/.test(t);
+        const soloCancelaciones = intencionCancelaciones(t);
         const fechas = [...t.matchAll(/\b\d{1,2}[-/.]\d{1,2}[-/.](?:\d{4}|\d{2})\b/g)].map(m => S.fechaTexto(m[0]));
         const isoDates = [...t.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)].map(m => m[0]);
         if (isoDates.length) fechas.push(...isoDates);
@@ -158,7 +161,7 @@
             desde = S.iso(year, month + 1, days?.[1] || 1);
             hasta = days ? S.iso(year, month + 1, days[2] || days[1]) : new Date(Date.UTC(Number(year), month + 1, 0)).toISOString().slice(0, 10);
         }
-        if (!desde && soloPagos && /\b(?:mes actual|este mes)\b/.test(t)) {
+        if (!desde && (soloPagos || soloCancelaciones) && /\b(?:mes actual|este mes)\b/.test(t)) {
             const [year, month] = fechaCalendarioChile(new Date()).split('-').map(Number);
             desde = S.iso(year,month,1);
             hasta = new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
@@ -212,11 +215,12 @@
         return {
             texto, desde, hasta, hojas: seleccion, nombre,
             solo_pagos: soloPagos,
+            solo_cancelaciones: soloCancelaciones,
             por_fecha_pago: soloPagos && Boolean(desde && hasta),
             cabana: Number(t.match(/\b(?:cab|cabana)\s*(\d{1,2})\b/)?.[1]) || null,
             listar,
             versiones: /cambio|cambios|version|anterior/.test(t),
-            comparar: /compara|sistema|supabase|proyecto h|calendario|incorpor|agreg|registr/.test(t),
+            comparar: soloCancelaciones || /compara|sistema|supabase|proyecto h|calendario|incorpor|agreg|registr/.test(t),
             escribir: /\b(agrega|agregar|crea|crear|registra|registrar|incorpora|incorporar|modifica|modificar|borra|borrar|elimina|eliminar)\b/.test(t),
             aseo: /aseo|reviso|revision|camarero/.test(t),
             libres: /vender|libres|disponib/.test(t),
@@ -2073,11 +2077,13 @@
             .eq('reserva_id',reservaId).eq('tipo_cargo','alojamiento').eq('estado','activo'), 'cargo_id');
     }
 
-    async function leerEstadiasSistema(cliente, {desde, hasta, focal} = {}) {
-        if (!cliente?.auth?.getSession) throw new Error("Inicia sesión en Proyecto H para comparar.");
-        const { data: sesion, error } = await cliente.auth.getSession();
-        if (error || !sesion?.session) throw new Error("Inicia sesión en Proyecto H para comparar.");
+    async function sesionComparacion(cliente) {
+        const sesion = await cliente?.auth?.getSession?.();
+        if (sesion?.error || !sesion?.data?.session) throw new Error("Inicia sesión en Proyecto H para comparar.");
+        return sesion.data.session;
+    }
 
+    async function leerEstadiasSistema(cliente, {desde, hasta, focal} = {}) {
         const consultaEstadias = () => {
             let consulta=cliente.from("reserva_estadias")
                 .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)");
@@ -2090,7 +2096,7 @@
         };
         const raw = await paginas(consultaEstadias);
 
-        const estadias = raw.map(e => ({
+        return raw.map(e => ({
             id: e.id,
             reserva_id: e.reserva_id,
             grupo_reserva_id: e.reservas?.grupo_reserva_id,
@@ -2107,7 +2113,6 @@
             adultos: e.adultos, ninos: e.ninos, mascotas: e.mascotas, observaciones: e.reservas?.observaciones,
             tipo_documento: e.reservas?.titular_tipo_documento
         }));
-        return {estadias, usuario:sesion.session.user.id};
     }
 
     function asociarEstadiasComparacion(validas, system) {
@@ -2163,17 +2168,19 @@
         const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
         const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
+        const sesion = await sesionComparacion(cliente);
         const reservaInforme = q.incluirFinanzas !== false && q.reservaPagoCloudbeds;
         const leerCargosInforme = reservaInforme && D && validas.some(r =>
             [...r.pagos, ...r.pagos_sin_asociacion].some(p => D.aplicacionesLibro(p).length));
-        // La reserva destino se conoce desde la fila. Leer sus cargos en paralelo
-        // con las estadías y la comprobación global de duplicados del Libro.
-        const [{estadias:systemAll,usuario}, pagosInforme, finanzasInforme, cargosAlojamiento] = await Promise.all([
+        // La verificación global de duplicados y las estadías son lecturas
+        // independientes. Los informes focalizados también conocen sus cargos.
+        const [systemAll, pagos, finanzasInforme, cargosAlojamiento] = await Promise.all([
             leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal}),
-            reservaInforme ? leerPagosSistema(cliente) : null,
+            q.incluirFinanzas !== false && (validas.length || q.por_fecha_pago || reservaInforme) ? leerPagosSistema(cliente) : [],
             leerCargosInforme ? leerFinanzasServicios(cliente, [reservaInforme]) : null,
             reservaInforme && q.pagoAlojamientoCloudbeds ? leerCargosAlojamiento(cliente, reservaInforme) : null
         ]);
+        const usuario = sesion.user.id;
         const system = systemAll.filter(candidatoElegible);
 
         validas = validas.map(reserva => resolverGeometriaConProyectoH(reserva, system));
@@ -2185,7 +2192,7 @@
         const reservasSistema = new Set(visiblesRango.map(s => s.reserva_id).filter(Boolean));
 
         if (!validas.length) {
-            const pagos = q.por_fecha_pago && q.incluirFinanzas !== false ? pagosInforme || await leerPagosSistema(cliente) : [];
+            const pagosPeriodo = q.por_fecha_pago ? pagos : [];
             const vacio = [];
             vacio.meta = {
                 libro: 0,
@@ -2202,15 +2209,13 @@
             vacio.grupos = [];
             vacio.pagosDetalle = [];
             vacio.serviciosDetalle = [];
-            vacio.snapshot = { estadias: system, estadias_todas: systemAll, pagos: pagos.filter(pagoSistemaVigente), pagos_todos: pagos, finanzas: null,
+            vacio.snapshot = { estadias: system, estadias_todas: systemAll, pagos: pagosPeriodo.filter(pagoSistemaVigente), pagos_todos: pagosPeriodo, finanzas: null,
                 efectivo_aplicado: null };
             return vacio;
         }
 
         const resultados = asociarEstadiasComparacion(validas, system);
         const ids = [...new Set(resultados.filter(r => r.estado === "asociada").map(r => r.sistema.reserva_id))];
-        // Global identifier check: a payment on another reservation is a conflict, never new.
-        const pagos = q.incluirFinanzas===false ? [] : pagosInforme || await leerPagosSistema(cliente);
         const pagosVigentes = pagos.filter(pagoSistemaVigente);
         let capacidadTransferencias = false, capacidadGlosaSinNombre = false;
         if (resultados.some(r => [...(r.libro.pagos || []),...(r.libro.pagos_sin_asociacion || [])].some(p => S.evidenciaTransferencia?.(p)?.valida))) {
@@ -2221,16 +2226,20 @@
             } catch (_) { /* Contrato ausente: mantener revisión, sin escritura. */ }
         }
         const resolucionesPago = resolverPagosExistentes(resultados, pagos, capacidadTransferencias, capacidadGlosaSinNombre);
-        if (q.incluirFinanzas !== false) await verificarPagosDeBloque(resultados,reservas || [],systemAll,pagos,resolucionesPago,cliente);
-        const servicios = [];
-        const serviciosLeidos = finanzasInforme?.disponible && ids.length === 1 && ids[0] === reservaInforme;
-        if (q.incluirServicios !== false && serviciosLeidos) servicios.push(...finanzasInforme.servicios);
-        else if(q.incluirServicios!==false)for (let i = 0; i < ids.length; i += 50) {
-            const grupo = ids.slice(i, i + 50);
-            servicios.push(...await paginas(() => cliente.from("servicios")
-                .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
-                .in("reserva_id", grupo)));
-        }
+        const leerServicios = async () => {
+            if (q.incluirServicios === false) return [];
+            if (finanzasInforme?.disponible && ids.length === 1 && ids[0] === reservaInforme) return finanzasInforme.servicios;
+            const servicios = [];
+            for (let i = 0; i < ids.length; i += 50) {
+                const grupo = ids.slice(i, i + 50);
+                servicios.push(...await paginas(() => cliente.from("servicios")
+                    .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,total,estado_servicio,catalogo_servicios(codigo,nombre,categoria)")
+                    .in("reserva_id", grupo)));
+            }
+            return servicios;
+        };
+        const [servicios] = await Promise.all([leerServicios(),q.incluirFinanzas !== false
+            ? verificarPagosDeBloque(resultados,reservas || [],systemAll,pagos,resolucionesPago,cliente) : null]);
 
         const motorServicios = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
         const operativa = q.incluirServicios !== false &&
@@ -2274,9 +2283,11 @@
             }
 
             if (result.estado !== "asociada") {
-                const estadoPago = "revisar";
-                result.pagosComparacion.push(...r.pagos.map(p => ({ estado: estadoPago, pago: p, reserva: r })));
-                result.pagosComparacion.push(...r.pagos_sin_asociacion.map(p => ({ estado: "revisar", pago: p, reserva: r })));
+                const motivos = [result.pregunta || (result.estado === 'sin_coincidencia'
+                    ? 'No hay una reserva asociada en Proyecto H para este pago.'
+                    : 'Comprueba qué reserva de Proyecto H corresponde a este pago.')];
+                result.pagosComparacion.push(...[...r.pagos, ...r.pagos_sin_asociacion]
+                    .map(pago => ({ estado:'revisar', pago, reserva:r, motivos })));
                 if (!operativa) result.serviciosComparacion.push(...r.servicios.map(s => ({ estado: result.estado === "sin_coincidencia" ? "con_reserva_faltante" : "revisar", servicio: s, reserva: r })));
                 continue;
             }
@@ -2365,11 +2376,16 @@
 
         const grupos = agruparComparacion(resultados);
         const movimientos = resultados.flatMap(r => r.pagosComparacion);
-        for (const x of movimientos) {
-            const conflicto = movimientos.some(y => y !== x &&
+        for (const x of movimientos.filter(x => ['nuevo_seguro','revisar'].includes(x.estado) && pagoTieneIdentificadorFuerte(x.pago))) {
+            const conflictos = movimientos.filter(y => y !== x &&
                 pagoCoincide(x.pago, { ...y.pago, datos_origen: { bovtar: y.pago.bovtar } }) &&
                 (Number(x.pago.monto) !== Number(y.pago.monto) || x.pago.moneda !== y.pago.moneda || claveReserva(x.reserva) !== claveReserva(y.reserva)));
-            if (x.estado === "nuevo_seguro" && conflicto) x.estado = "revisar";
+            if (!conflictos.length) continue;
+            x.estado = 'revisar';
+            const cabanas = [...new Set([x,...conflictos].map(m => Number(m.reserva.cabana)).filter(Boolean))].sort((a,b)=>a-b);
+            const ubicacion = cabanas.length > 1 ? ' en ' + cabanas.map(n => 'CAB '+n).join(', ') : '';
+            x.motivos = [`El Libro repite el identificador del comprobante${ubicacion}. Comprueba el total y la distribución original.`,
+                ...(x.motivos || []).filter(m => m !== 'No existe una correspondencia financiera única y confirmada.')];
         }
         const pagosUnicos = new Map();
         for (const x of resultados.flatMap(r => r.pagosComparacion)) {
@@ -3881,8 +3897,8 @@
             {tipo:accion.tipo,distribucionConfirmada:accion.tipo === 'distribucion_comprobante'},true);
     }
 
-    function motivosRevisionComprobante({pago:p, reserva:r}, resolucion, pagoExtraJacuzzi) {
-        const motivos = [];
+    function motivosRevisionComprobante({pago:p, reserva:r, motivos:motivosComparacion}, resolucion, pagoExtraJacuzzi) {
+        const motivos = (motivosComparacion || []).filter(m => !resolucion?.motivos?.includes(m));
         if (!r.pagos.includes(p) && resolucion?.evidencia !== PAGO_BLOQUE_REVISION) {
             if (!String(p.titular || '').trim()) motivos.push('Falta identificar al titular en el detalle del comprobante. Verifica a qué reserva corresponde.');
             else if (!S.mismaPersona(r.titular,p.titular)) motivos.push(S.varianteTitular(r.titular,p.titular)
@@ -3912,7 +3928,7 @@
             'Comprueba en el Libro si los datos de esta fila acreditan un ingreso recibido.');
         if (pagosEfectivosMedio.has(p)) motivos.push('El medio de pago se indicó manualmente. Comprueba el comprobante y su destino.');
         if (pagoExtraJacuzzi) motivos.push('El comprobante es por personas adicionales de la Jacuzzi. Verifica el cargo al que se aplicará.');
-        return motivos;
+        return [...new Set(motivos)];
     }
 
     function limitarPlanAbonosAviso(plan, origenes) {
@@ -5221,15 +5237,6 @@
             plan.solicitudPendiente?.items.some(x => x.item_id === i.id) ||
             plan.solicitudPendiente?.servicios.some(x => x.item.item_id === i.id)));
         if (mediosElegidos.length) {
-            // También se revalida un retry: una solicitud previa no puede dar
-            // autoridad a una decisión de medio modificada o invalidada.
-            const actual = await prepararIncorporacion(result,decisiones,aprobados,cliente);
-            if (mediosElegidos.some(i => registroMedios(decisiones).get(i.id) !== i.medioPagoManual ||
-                JSON.stringify(actual.items.find(x => x.id === i.id)?.payload?.datos_origen?.medio_pago_manual_v1) !==
-                JSON.stringify(i.payload?.datos_origen?.medio_pago_manual_v1))) {
-                delete plan.solicitudPendiente;
-                throw Error('La decisión del medio o Proyecto H cambió; vuelve a revisar antes de incorporar.');
-            }
             const {data,error} = await cliente.rpc('haiku_libro_medio_pago_manual_capacidad_v1',{});
             if (error || data?.version !== 1 || data?.auditoria !== true)
                 throw Error('Falta el soporte de auditoría del medio de pago manual en Proyecto H. No se incorporó el pago.');
@@ -5287,13 +5294,24 @@
         }
         let solicitud = plan.solicitudPendiente;
         let omitidosAlRevalidar = 0;
+        const seleccionados = new Set(plan.items.filter(i => i.seleccionado).map(i => i.id));
+        if (!solicitud && !seleccionados.size) throw new Error('Selecciona al menos una reserva, estadía o pago.');
+        // La misma preparación vigente sirve para validar el medio elegido y
+        // serializar el lote. Los reintentos con medio manual también se verifican.
+        const actualizado = !solicitud || mediosElegidos.length
+            ? await prepararIncorporacion(result, decisiones, aprobados, cliente) : null;
+        const actuales = new Map((actualizado?.items || []).map(i => [i.id,i]));
+        if (mediosElegidos.some(i => registroMedios(decisiones).get(i.id) !== i.medioPagoManual ||
+            JSON.stringify(actuales.get(i.id)?.payload?.datos_origen?.medio_pago_manual_v1) !==
+            JSON.stringify(i.payload?.datos_origen?.medio_pago_manual_v1))) {
+            delete plan.solicitudPendiente;
+            throw Error('La decisión del medio o Proyecto H cambió; vuelve a revisar antes de incorporar.');
+        }
         if (!solicitud) {
-            const seleccionados = new Set(plan.items.filter(i => i.seleccionado).map(i => i.id));
-            if (!seleccionados.size) throw new Error('Selecciona al menos una reserva, estadía o pago.');
-            const actualizado = await prepararIncorporacion(result, decisiones, aprobados, cliente);
+            const anteriores = new Map(plan.items.map(i => [i.id,i]));
             const refs = item => JSON.stringify((item?.payload?.estadias || [item?.payload]).map(e => e?.resolucion_manual || null));
             for (const item of plan.items.filter(i => i.seleccionado)) {
-                const nuevo = actualizado.items.find(i => i.id === item.id);
+                const nuevo = actuales.get(item.id);
                 if (nuevo?.conflictoIdentidad || nuevo?.etapaSiguiente && item.pagoLibro) throw Object.assign(
                     Error('La selección incluye una actualización en revisión o un pago con cambios aún sin confirmar. Revisa la selección antes de continuar.'),
                     {code:'HLC01',haikuConflictoDatos:true});
@@ -5317,7 +5335,7 @@
                         {code:'HLC01',haikuConflictoDatos:true,planActual:actualizado});
             }
             for (const item of actualizado.items) {
-                const previo = plan.items.find(i => i.id === item.id);
+                const previo = anteriores.get(item.id);
                 if (seleccionados.has(item.id) && item.categoria === 'actualizaciones' && JSON.stringify(item.payload) !== JSON.stringify(previo?.payload)) {
                     throw Object.assign(new Error('Proyecto H cambió desde la vista previa. Vuelve a preparar para revisar los valores nuevos antes de confirmar.'),
                         {code:'HLC01',haikuConflictoDatos:true});
@@ -5335,7 +5353,7 @@
                 item.datos_origen?.evidencia_transferencia?.version === 2 ? {...item,confirmacion_final:true} : item);
             const detalleContexto = contextoDetalleIncorporacion(serializados,actualizado,
                 [...seleccionados].filter(id => !vigentes.has(id)).map(id => ({
-                    previo:plan.items.find(i => i.id === id), nuevo:actualizado.items.find(i => i.id === id)
+                    previo:anteriores.get(id), nuevo:actuales.get(id)
                 })));
             solicitud = { operacionId: crearIdOperacion(), items, servicios, omitidosAlRevalidar, detalleContexto,
                 seleccionIds:seleccionIds() };
@@ -5536,7 +5554,8 @@
         if (q.proyecto || q.comparar) {
             if (typeof root.haikuTienePermiso === "function" && !root.haikuTienePermiso("reservas.ver"))
                 throw new Error("Tu cuenta necesita acceso a Reservas para consultar Proyecto H.");
-            const {estadias} = await leerEstadiasSistema(cliente, {...q, focal:true});
+            await sesionComparacion(cliente);
+            const estadias = await leerEstadiasSistema(cliente, {...q, focal:true});
             sistema = estadias.filter(s => candidatoElegible(s) && estadiaTitularesEnPeriodo(s,q));
         }
         if (libro && libro.estado().generacion !== estado.generacion)
@@ -5594,11 +5613,13 @@
             q.hojas = q.hojas.filter(h => matches.hojas.includes(h));
         }
 
-        const versionesAnterior = [], versionesActual = [];
+        const versionesAnterior = [], versionesActual = [], hojasCancelaciones = [];
         const pagosLeidos = new Map(), reembolsosLeidos = new Map();
         resultado.bloqueos_lectura_segura = q.hojas.length > 0;
         for (const h of q.hojas) {
             const data = await libro.consultarHoja(h);
+            if (q.comparar && !q.solo_pagos) hojasCancelaciones.push(data);
+            if (q.solo_cancelaciones && q.comparar) continue;
             if (q.por_fecha_pago && q.comparar) registrarFilasPeriodo(data,q,pagosLeidos,reembolsosLeidos);
             resultado.bloqueos_lectura_segura &&= data.cobertura?.geometria===true;
             // Una advertencia localizada no invalida la lectura inversa de otras cabañas.
@@ -5633,23 +5654,6 @@
                 if (seleccionadas.length) resultado.advertencias.push("Se usó el rango Check-In/Check-Out como respaldo porque la lista de fechas ocupadas no estaba disponible en todas las filas.");
             }
             resultado.reservas.push(...seleccionadas);
-            if (q.comparar && data.cancelaciones?.length) {
-                try {
-                    if (!root.HAIKU_LIBRO_CANCELACIONES_V1?.detectarActual) throw new Error('Motor de cancelaciones no disponible');
-                    const cancelaciones = await root.HAIKU_LIBRO_CANCELACIONES_V1.detectarActual(data, cliente);
-                    for (const key of ['cancelaciones_confirmadas', 'cancelaciones_ya_coinciden']) {
-                        const casos = cancelaciones[key].filter(c => (!q.nombre || S.normalizar(c.actual.titular).includes(q.nombre)) &&
-                            (!q.cabana || Number(c.actual.cabana) === Number(q.cabana)) &&
-                            (!q.desde || c.actual.fecha_checkin >= q.desde && c.actual.fecha_checkin <= q.hasta));
-                        if (casos.length) (resultado[key] ||= []).push(...casos);
-                    }
-                    if (cancelaciones.cancelaciones_revision.length) (resultado.cancelaciones_revision ||= []).push(...cancelaciones.cancelaciones_revision);
-                } catch (error) {
-                    const aviso = `${h}: no se pudieron verificar las cancelaciones; requieren revisión manual. ${error.message}`;
-                    resultado.advertencias.push(aviso);
-                    (resultado.cancelaciones_revision ||= []).push(aviso);
-                }
-            }
             resultado.aseos.push(...(data.aseos || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
             resultado.espacios.push(...(data.espacios || []).filter(a => (!q.cabana || a.cabana === q.cabana) && (!q.desde || a.fecha >= q.desde && a.fecha <= q.hasta)));
             if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
@@ -5657,6 +5661,27 @@
                 const old = await libro.consultarHoja(h, "anterior");
                 versionesAnterior.push(old); versionesActual.push(data);
             }
+        }
+
+        if (hojasCancelaciones.some(data => data.cancelaciones?.length || data.cancelaciones_por_identificar?.length)) {
+            try {
+                if (!root.HAIKU_LIBRO_CANCELACIONES_V1?.detectarActual)
+                    throw new Error('No se pudieron verificar las cancelaciones; requieren revisión manual. Recarga Proyecto H.');
+                Object.assign(resultado, await root.HAIKU_LIBRO_CANCELACIONES_V1.detectarActual(hojasCancelaciones, cliente, q));
+            } catch (error) {
+                resultado.cancelaciones_aviso = error.message;
+                resultado.advertencias.push(error.message);
+                if (!q.solo_cancelaciones) resultado.cancelaciones_revision = [error.message];
+            }
+        }
+        if (q.solo_cancelaciones && q.comparar) {
+            const incompletas = hojasCancelaciones.filter(data => data.cobertura?.geometria !== true).map(data => data.hoja);
+            if (incompletas.length) {
+                resultado.cancelaciones_aviso = [resultado.cancelaciones_aviso,
+                    `Lectura incompleta de ${incompletas.join(', ')}. Puede haber más cancelaciones en el Libro.`].filter(Boolean).join(' ');
+            }
+            if (libro.estado().generacion !== estado.generacion) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
+            return resultado;
         }
 
         if (busquedaTitularSoloLectura(q) && resultado.reservas.length) {
@@ -5768,6 +5793,16 @@
     }
 
     function respuestaComparacion(result) {
+        if (result.q.solo_cancelaciones) {
+            const primera = c => [c.actual.titular, `CAB ${c.actual.cabana}`, c.actual.fecha_checkin, source(c.evidencia.origen)].join(' · ');
+            return ['Cancelaciones del Libro ↔ Proyecto H', periodoCancelaciones(result.q),
+                result.cancelaciones_aviso,
+                ...(result.cancelaciones_confirmadas || []).map(c => `Para preparar · ${primera(c)}`),
+                ...(result.cancelaciones_ya_coinciden || []).map(c => `Ya cancelada · ${primera(c)}`),
+                ...(result.cancelaciones_revision || []).map(c => `Por verificar · ${c}`),
+                sinCancelaciones(result) ? 'No encontré anotaciones de cancelación para este período.' : null
+            ].filter(Boolean).join('\n');
+        }
         if (result.q.solo_pagos) {
             const pagos = gruposVistaPagos(result.comparacion);
             return ['LIBRO · PAGOS', 'Pagos del Libro ↔ Proyecto H', `${result.q.desde} al ${result.q.hasta}`,
@@ -6269,7 +6304,7 @@
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
-    const esLibro = texto => /\blibro\b/i.test(texto) || Boolean(intencionTitulares(texto));
+    const esLibro = texto => /\blibro\b/i.test(texto) || Boolean(intencionTitulares(texto)) || intencionCancelaciones(S.normalizar(texto));
 
     function mensaje(tipo, texto) {
         const el = document.createElement("div");
@@ -6807,7 +6842,52 @@
         out.append(elemento('p', 'haku-pagos-nota haku-pagos-nota--final', 'Preparar incorporación abre el flujo seguro existente. Allí se muestran también las dependencias de reservas necesarias para los pagos.'));
     }
 
+    function periodoCancelaciones({desde,hasta}) {
+        return `Ingresos del ${fechaBreve(desde,true)} al ${fechaBreve(hasta,true)}`;
+    }
+
+    function sinCancelaciones(result) {
+        return !result.cancelaciones_aviso && !result.cancelaciones_confirmadas?.length &&
+            !result.cancelaciones_ya_coinciden?.length && !result.cancelaciones_revision?.length;
+    }
+
+    function renderizarCancelaciones(out, result) {
+        out.className = 'haiku-asistente-preview haku-comparacion-compacta haku-comparacion-sites';
+        out.replaceChildren();
+        const cabecera = elemento('header', 'haku-comparacion-sites-cabecera');
+        const titulo = elemento('div');
+        titulo.append(elemento('strong', 'haku-comparacion-sites-titulo', 'Cancelaciones del Libro ↔ Proyecto H'),
+            elemento('span', 'haku-comparacion-sites-periodo', periodoCancelaciones(result.q)));
+        cabecera.append(titulo);
+        const seccion = elemento('section', 'haku-comparacion-sites-seccion');
+        const api = root.HAIKU_LIBRO_CANCELACIONES_V1;
+        if (result.cancelaciones_aviso) seccion.append(elemento('p','haiku-versiones-aviso',result.cancelaciones_aviso));
+        if (sinCancelaciones(result)) seccion.append(elemento('p','haiku-versiones-meta','No encontré anotaciones de cancelación para este período.'));
+        api?.adjuntar(seccion,result,result.generacion);
+        api?.adjuntarResueltas(seccion,result);
+        api?.adjuntarRevision(seccion,result);
+        const pie = elemento('footer','haku-comparacion-sites-pie');
+        const estado = elemento('span');
+        estado.setAttribute('role','status');
+        const revalidar = elemento('button','libro-reserva-boton secundario','Revalidar cancelaciones');
+        revalidar.type = 'button';
+        revalidar.addEventListener('click', async () => {
+            if (revalidar.disabled) return;
+            revalidar.disabled = true;
+            estado.textContent = 'Comprobando cancelaciones…';
+            try { renderizarCancelaciones(out,await consultar(result.q.texto)); }
+            catch (error) { estado.textContent = error.message; }
+            finally { revalidar.disabled = false; }
+        });
+        pie.append(estado,revalidar);
+        out.append(cabecera,seccion,pie);
+    }
+
     function renderizarComparacion(out, result, ui = {}) {
+        if (result.q.solo_cancelaciones) {
+            renderizarCancelaciones(out,result);
+            return;
+        }
         const comp = result.comparacion;
         const meta = comp.meta || {};
         const grupos = comp.grupos || [];
@@ -6894,7 +6974,8 @@
         agregarDetalles(revision, "Reservas con diferencias",
             diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
         agregarDetalles(revision, "Pagos que requieren revisión",
-            pagosRevisar.map(x => `${x.reserva.titular} · ${x.pago.tipo_movimiento} · ${money(x.pago.monto)}`), "revision", "pago");
+            pagosRevisar.map(x => [x.reserva.titular, x.pago.tipo_movimiento, money(x.pago.monto),
+                x.motivos?.[0] || x.diferencias?.[0]].filter(Boolean).join(' · ')), "revision", "pago");
         if (pagosActualizar.length) agregarDetalles(revision, "Pagos existentes por actualizar",
             pagosActualizar.map(x => `${x.reserva.titular} · ${money(x.pago.monto)} · Ya registrado; no es un pago nuevo. ` +
                 (x.actualizacionExistente.cambios.map(c => typeof c === 'string' ? c : `${c.campo}: Proyecto H ${c.anterior ?? 'sin dato'} / Libro ${c.libro ?? 'sin dato'}`).join('; ') || 'Revisar datos del comprobante.') +
@@ -7218,7 +7299,7 @@
             throw new Error("El informe anterior ya no está disponible. Genera el informe nuevamente.");
         }
         const result = await consultar(texto);
-        if (!result.q.comparar || result.q.solo_pagos) {
+        if (!result.q.comparar || result.q.solo_pagos || result.q.solo_cancelaciones) {
             throw new Error("La consulta anterior ya no corresponde a esta comparación. Genera el informe nuevamente.");
         }
         renderizarComparacion(out, result);
@@ -8762,6 +8843,7 @@
             aviso.textContent = etapaIdentidad ? "Guardando titular y RUT antes de volver a comprobar los pagos…" : "Comprobando cambios recientes y ejecutando la incorporación completa…";
             try {
                 const ejecucion = await incorporar(plan);
+                if (!ejecucion.siguientePlan) renderizarResultadoIncorporacion(out, ejecucion, volver);
                 await Promise.allSettled([
                     Promise.resolve().then(() => root.haikuSincronizarReservasSupabase?.()),
                     Promise.resolve().then(() => root.haikuCargarAbonosSupabase?.()),
@@ -8776,7 +8858,6 @@
                         }) : undefined)
                 ]);
                 if (ejecucion.siguientePlan) renderizarIncorporacion(out, ejecucion.siguientePlan, volver, aprobar, incorporar);
-                else renderizarResultadoIncorporacion(out, ejecucion, volver);
             } catch (error) {
                 guardando = false; atras.disabled = confirmacionPendiente();
                 if (cerrarVista) cerrarVista.disabled = confirmacionPendiente();

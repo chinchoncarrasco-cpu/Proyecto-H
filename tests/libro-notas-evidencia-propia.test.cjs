@@ -59,7 +59,8 @@ for(const texto of [
  'factura info en correo','FACTURA: datos enviados por correo',
  'Revisar correo para factura','BOVE en correo','PEND BOVE Y MANAGER',
  'Información de pagos en correo','correo con detalle de pagos Webpay',
- 'Enviar boleta y comprobante por correo','factura 12345 en correo'
+ 'Enviar boleta y comprobante por correo','factura 12345 en correo',
+ 'BOVE: 12345 POR $162.000','BOVE: 12345 POR $162.000 NC 104 // BOVE: 54321'
 ]) test('nota sin evidencia propia: '+texto,()=>{
  const {resultado:r}=leer([texto]);
  assert.equal(r.pagos.length,1);

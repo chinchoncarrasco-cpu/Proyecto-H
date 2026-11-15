@@ -3,7 +3,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
 const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'..'),solicitudes=[];
-const modulos=new Set(['supabase-client','supabase-auth-menu-v1','supabase-asistente-v1','supabase-reserva-estados-v1','haiku-dialogos-v1',
+const modulos=new Set(['supabase-client','supabase-auth-menu-v1','supabase-asistente-v1','supabase-reserva-estados-v1','haiku-dialogos-v1','haiku-ayuda-v1',
     'haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1',
     'haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1','haiku-libro-cancelaciones-v1','haiku-libro-reconciliacion-ux-v1',
     'haiku-panel-coordinacion-v1','sites-resumen-drawer-v1','sites-resumen-reserva-v1','supabase-ficha-v2']);
@@ -61,11 +61,14 @@ const server=http.createServer((req,res)=>{
     try{
         browser=await chromium.launch({executablePath:process.env.HAIKU_BROWSER_EXECUTABLE||'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
         const origin='http://127.0.0.1:'+server.address().port;
-        for(const width of [320,390,1100]){
+        for(const width of [320,390,1100]) for(const tema of ['claro','oscuro']){
             const context=await browser.newContext({viewport:{width,height:900},timezoneId:'America/Santiago'}),externos=[],errores=[];
             await context.route('**/*',route=>{if(new URL(route.request().url()).origin===origin)return route.continue();externos.push(route.request().url());return route.abort();});
-            const page=await context.newPage();page.on('pageerror',e=>errores.push(e.message));await page.goto(origin+'/panel.html');
+            const page=await context.newPage();page.on('pageerror',e=>errores.push(e.message));
+            await page.clock.setFixedTime(new Date('2026-10-15T15:00:00Z'));
+            await page.goto(origin+'/panel.html');
             await page.waitForFunction(()=>window.HAIKU_ASISTENTE&&window.HAIKU_LIBRO_CANCELACIONES_V1&&window.HAIKU_INSPECTOR_V1);
+            await page.evaluate(tema=>{document.documentElement.dataset.haikuTema=tema;},tema);
             await page.locator('#haiku-asistente-boton').click();
             await page.locator('#haiku-asistente-texto').fill('Libro: compara octubre 2026 con Proyecto H');await page.locator('#haiku-asistente-enviar').click();
             const preparar=page.getByRole('button',{name:/^Preparar cancelación/});await preparar.waitFor();
@@ -83,10 +86,37 @@ const server=http.createServer((req,res)=>{
             await page.locator('.hk-dialogo[open]').getByRole('button',{name:'Cancelar reserva',exact:true}).click();
             await page.getByRole('heading',{name:'Cancelación completada',exact:true}).waitFor();
             await panel.getByRole('button',{name:'Volver a la revisión',exact:true}).click();assert.match(await comparacion.innerText(),/Proyecto H: Cancelada/);
+            await page.evaluate(()=>{
+                __cancelacionIntegracion.lecturas.length=0;
+                __cancelacionIntegracion.hoja.cancelaciones_por_identificar=[{
+                    bloque:'CANCELACIONES',fecha_checkin:'2026-10-01',origen:{hoja:'Oct26',celda:'C14'},
+                    advertencias:['Falta un titular inequívoco.']
+                }];
+            });
+            const rapidas=page.locator('#haiku-asistente-rapidas summary');
+            const atajo='Comparar cancelaciones del mes actual';
+            const informe=page.locator('.haku-comparacion-sites').filter({hasText:'Cancelaciones del Libro ↔ Proyecto H'});
+            await rapidas.click();
+            await page.getByRole('button',{name:atajo,exact:true}).click();
+            await informe.waitFor();
+            assert.match(await informe.innerText(),/01\/10\/2026 al 31\/10\/2026/);
+            await informe.getByText('Cancelaciones por verificar (1)',{exact:true}).click();
+            await informe.getByText('Falta un titular inequívoco.',{exact:true}).waitFor();
+            await informe.getByText('Cancelaciones · Ya coincide (1)',{exact:true}).click();
+            await informe.getByText('Proyecto H: Cancelada',{exact:true}).waitFor();
+            await rapidas.click();
+            await page.getByRole('button',{name:'Ayuda',exact:true}).click();
+            const ayuda=page.getByRole('region',{name:'Ayuda de Haku'});
+            await ayuda.getByRole('searchbox').fill('Comparar cancelaciones');
+            await ayuda.getByRole('button',{name:atajo,exact:true}).click();
+            await informe.nth(1).waitFor();
+            assert.deepEqual(await page.evaluate(()=>__cancelacionIntegracion.lecturas),
+                ['reserva_estadias','reservas','reserva_estadias','reservas']);
+            assert.equal(await informe.last().evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
             assert.equal(await page.evaluate(()=>__cancelacionIntegracion.rpc.filter(x=>x.nombre==='haiku_cancelar_reserva').length),1);
             assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
             assert.deepEqual(externos,[]);assert.deepEqual(errores,[]);
-            console.log(JSON.stringify({width,entrada:'panel.html',consulta:'interceptor y renderer de producción',backend:'fixture aislado',resultado:'PASS'}));await context.close();
+            console.log(JSON.stringify({width,tema,entrada:'panel.html',consulta:'comparación y acciones rápidas de producción',backend:'fixture aislado',resultado:'PASS'}));await context.close();
         }
     }finally{await browser?.close();await new Promise(ok=>server.close(ok));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
