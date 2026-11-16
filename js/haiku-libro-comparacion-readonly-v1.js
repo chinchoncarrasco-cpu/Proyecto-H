@@ -188,6 +188,7 @@
             advertencias: textos(result.advertencias), cobertura,
             contexto: { cadenaCanonica: [...cadenaCanonica], advertenciasInformativas: textos(modelo.advertenciasInformativas),
                 reservasPorIdentificar: modelo.reservasPorIdentificar.map(a => ({...campos(a, ['cabana','fecha','motivo_identificacion']),
+                    motivosIdentificacion: textos(a.analisis_titular?.motivos),
                     titularesPosibles: textos(a.titulares_posibles), fechasOcupadas: textos(a.fechas_ocupadas), origen: origen(a.origen)})),
                 bloqueos: { items: lista(b).map(x => ({ ...bloqueo(x.bloqueo), ...campos(x, ["estado", "mensaje"]) })),
                     soloProyectoH: lista(b?.solo_proyecto_h).map(bloqueo), revisionInversa: lista(b?.revision_inversa).map(bloqueo), errorInversa: escalar(b?.error_inversa) },

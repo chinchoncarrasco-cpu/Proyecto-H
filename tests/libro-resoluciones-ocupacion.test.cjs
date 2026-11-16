@@ -35,7 +35,7 @@ function entorno(data=[],generacionInicial=1){
   texto:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' ')};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-async function preparar(h,reservas){return h.Q.prepararIncorporacion({reservas,generacion:1,q:{desde:'2026-10-02',hasta:'2026-10-03'}},new Map(),new Set(),h.cliente);}
+async function preparar(h,reservas,decisiones=new Map()){return h.Q.prepararIncorporacion({reservas,generacion:1,q:{desde:'2026-10-02',hasta:'2026-10-03'}},decisiones,new Set(),h.cliente);}
 
 test('sin ocupación: revisión inline visible y no incorporable',async()=>{
  const h=entorno();await h.Q.abrirComparacionEstructurada(h.out,{reservas:[r()],generacion:1});await tick();
@@ -220,7 +220,10 @@ test('hermanas multicabaña requieren resoluciones propias y conservan sus origi
  await h.R.confirmar(a,{adultos:2,ninos:0,mascotas:0},1);let copies=await h.R.efectivos([a,b],1);
  assert.equal(copies[1].adultos,null);assert.equal(h.Q.serializarIncorporacion(await preparar(h,[a,b])).length,0);
  await h.R.confirmar(b,{adultos:4,ninos:1,mascotas:0},1);copies=await h.R.efectivos([a,b],1);
- const items=h.Q.serializarIncorporacion(await preparar(h,[a,b]));assert.equal(items[0].estadias.length,2);
+ assert.equal(h.Q.serializarIncorporacion(await preparar(h,[a,b])).length,0,'resolver ocupación no confirma que las CAB pertenezcan a una sola reserva');
+ const comp=await h.Q.compararSistema(copies,h.cliente,{desde:a.fecha_checkin,hasta:a.fecha_checkout});
+ const decisiones=new Map([[comp.grupos[0].clave,{valor:'nueva'}]]);
+ const items=h.Q.serializarIncorporacion(await preparar(h,[a,b],decisiones));assert.equal(items[0].estadias.length,2);
  assert.deepEqual(copies.map(x=>x.adultos),[2,4]);assert.notEqual(items[0].estadias[0].resolucion_manual.id,items[0].estadias[1].resolucion_manual.id);
  assert.equal(JSON.stringify([a,b]),before);
 });

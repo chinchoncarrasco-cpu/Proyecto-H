@@ -367,8 +367,9 @@ test('partial group proposes missing stay, never a new reservation',async()=>{
  const c=await compare([book(),book({id:'b2',cabana:2})],[stay()]);
  assert.equal(c.grupos[0].categoria,'estadia_faltante');assert.equal(c.grupos[0].estado,'ambigua');assert.equal(c.meta.faltantes,0);assert.ok(c.grupos[0].pregunta);
 });
-test('new multicabin group is one missing reservation',async()=>{
- const c=await compare([book(),book({id:'b2',cabana:2})]);assert.equal(c.meta.faltantes,1);
+test('new multicabin proposal needs a decision before combining stays',async()=>{
+ const c=await compare([book(),book({id:'b2',cabana:2})]);assert.equal(c.meta.faltantes,0);
+ assert.equal(c.meta.ambiguas,1);assert.equal(c.grupos[0].items.length,2);assert.match(c.grupos[0].pregunta,/independientes/);
 });
 test('cabin change, dates and holder require a decision',async()=>{
  for(const [r,category] of [[book({cabana:3}),'posible_cambio_cabana'],[book({fecha_checkin:'2026-09-18'}),'modificacion_fechas_o_independiente'],[book({titular:'Otra Persona',rut_documento:"85977694-0"}),'modificacion_titular']]){
@@ -682,7 +683,7 @@ test('equal notes from different reservation cells retain both source facts',asy
  const base={titular:"Neviy Bitaporax Runiy",fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',notas_importantes:['CAMA ADICIONAL']};
  const a=readyBook({...base,cabana:1,coordenadas_origen:{hoja:'Sep26',celda:'BO3'}});
  const b=readyBook({...base,id:"neviy-cab2",cabana:2,coordenadas_origen:{hoja:'Sep26',celda:'BO4'}});
- const comp=await compare([a,b],[]),plan=Q.crearPlanIncorporacion([a,b],comp);
+ const comp=await compare([a,b],[]),dec=new Map([[comp.grupos[0].clave,{valor:'nueva'}]]),plan=Q.crearPlanIncorporacion([a,b],comp,dec);
  const item=plan.items.find(x=>x.categoria==='nuevas');
  assert.equal(item.payload.estadias.length,2);
  assert.equal(item.payload.estadias.filter(x=>x.notas.includes('CAMA ADICIONAL')).length,2);
@@ -1280,7 +1281,8 @@ const prepare=async(rs,rows=[],ps=[],dec=new Map(),approved=new Set())=>{
 };
 test('preparation is idempotent, read only, preserves known data and groups multiple cabins',async()=>{
  const rs=[readyBook({correo:'guest@example.test'}),readyBook({id:'b2',cabana:2})];
- const a=await prepare(rs),b=await prepare(rs);assert.deepEqual(a,b);assert.equal(a.escrituraHabilitada,true);
+ const comp=await compare(rs),dec=new Map([[comp.grupos[0].clave,{valor:'nueva'}]]);
+ const a=await prepare(rs,[],[],dec),b=await prepare(rs,[],[],dec);assert.deepEqual(a,b);assert.equal(a.escrituraHabilitada,true);
  assert.equal(a.items.length,1);assert.equal(a.items[0].payload.estadias.length,2);
  assert.equal(a.items[0].payload.reserva.correo_contacto,'guest@example.test');assert.equal(a.items[0].payload.reserva.telefono_contacto,null);
  assert.deepEqual(a.permisos,['reservas.crear']);

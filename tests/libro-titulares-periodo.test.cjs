@@ -108,7 +108,7 @@ test("audita en los dos sentidos y expone las dos fechas sin leer pagos ni servi
     assert.equal(c.coincidencias.length,2);
     assert.equal(c.cantidad_proyecto,5);
     assert.deepEqual(c.incidencias.map(i => i.estado),[
-        "Solo en el Libro","Salida distinta","Variante de nombre con identidad verificada","Solo en Proyecto H"
+        "Solo en el Libro","Salida distinta","Variante de nombre por confirmar","Solo en Proyecto H"
     ]);
     const cambio = c.incidencias.find(i => i.estado === "Salida distinta");
     assert.deepEqual([cambio.libro.salida,cambio.libro.salida_escrita,cambio.proyecto.salida],
