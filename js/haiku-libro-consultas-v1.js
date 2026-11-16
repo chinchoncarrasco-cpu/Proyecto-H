@@ -4750,7 +4750,10 @@
             const bloqueEnRevision = recalculada?.evidencia === 'evidencia_insuficiente' && x.resolucionPago?.evidencia === PAGO_BLOQUE_REVISION;
             const resolucionPago = bloqueVerificado || bloqueEnRevision || x.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO ?
                 x.resolucionPago : recalculada || x.resolucionPago;
-            if (p.tipo_movimiento!=='penalidad'&&resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO && resolucionPago.pagoSistema?.id) {
+            // El componente persistido acredita el comprobante distribuido completo.
+            // La penalidad suelta conserva su conciliación independiente de ajuste y pago.
+            if ((p.tipo_movimiento!=='penalidad'||resolucionPago?.evidencia==='distribucion_persistida')&&
+                resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO && resolucionPago.pagoSistema?.id) {
                 const item = add('omitidos', id, texto + (medioLibro(p) === 'transferencia' ?
                     ' · La transferencia ya existe en la reserva elegida de Proyecto H y no se incorporará nuevamente.' :
                     resolucionPago.evidencia === 'distribucion_persistida' ?
