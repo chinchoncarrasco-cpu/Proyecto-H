@@ -203,6 +203,7 @@ const server=http.createServer((req,res)=>{
     return {sinCambios,limpieza:Q.serializarIncorporacion(limpieza).map(op=>Object.keys(op.reserva.despues))};
    });
    assert.deepEqual(operaciones,{sinCambios:[],limpieza:[['observaciones']]});
+   await page.locator('.haiku-incorporacion-seccion--actualizaciones > summary').click();
    const ajuste=page.locator('.haiku-incorporacion-notas-comparacion');
    await ajuste.getByText('Comentarios de reserva · Ajuste del bloque importado',{exact:true}).click();
    assert.match(await ajuste.innerText(),/Se elimina 1 repetición del bloque importado/);
