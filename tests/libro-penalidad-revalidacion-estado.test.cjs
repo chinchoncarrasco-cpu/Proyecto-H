@@ -54,7 +54,7 @@ test('consulta el RPC existente sólo con penalidades y agrupa por reserva',asyn
  const cliente={async rpc(nombre,args){
   llamadas++;assert.equal(nombre,'haiku_resumen_ajustes_unidad');
   assert.equal(args.p_reserva_id,reservaId);return {data:resumen};
- }};
+ },from(tabla){const q={select(){return q},async eq(){return{data:tabla==='cargo_ajustes'?resumen.ajustes:[]}}};return q;}};
  await f.conciliarPenalidadesEnPlan({items:[{categoria:'pagos'}]},cliente);assert.equal(llamadas,0);
  const primero=item(),segundo=item();
  await f.conciliarPenalidadesEnPlan({items:[primero,segundo]},cliente);

@@ -40,7 +40,7 @@ test('parser del Libro: penalidad y BOVE/Manager no equivalen a pago recibido',(
 test('penalidad se muestra como cargo para revisión, no nuevo abono',()=>{
  const item=propuesta(p,r,destino,comp);
  assert.equal(item.categoria,'dudosos');assert.equal(item.payload,null);assert.equal(item.aprobable,false);
- assert.deepEqual(item.penalidadManual,{reservaId:destino.reserva_id,cabana:1,fechaIngreso:r.fecha_checkin,montoLibro:16000});
+ assert.deepEqual(item.penalidadManual,{reservaId:destino.reserva_id,cabana:1,fechaIngreso:r.fecha_checkin,montoLibro:16000,porcentajeLibro:10,motivoLibro:null,tipoLibro:null});
  assert.match(item.aviso,/BOVE y Manager pendientes son trámites administrativos/);
  assert.doesNotMatch(item.motivos.join(' '),/destino financiero del pago de servicio|aprobación manual de la asociación y el pago/i);
 });

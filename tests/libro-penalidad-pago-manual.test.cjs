@@ -109,22 +109,41 @@ test('monto o fecha distintos no habilitan transferencia',()=>{
   assert.equal(i.aprobable,false);
  }
 });
+test('comparación de ajuste explica monto, porcentaje, motivo, reserva y vínculo con cargo',()=>{
+ const cargoId='cargo-alojamiento-ficticio',ajuste={...adj.ajustes[0],reserva_id:id,cargo_id:cargoId,observaciones:'Motivo explícito ficticio'};
+ for(const [cambio,campo] of [[{monto:14400},'monto'],[{porcentaje:15},'porcentaje'],
+  [{observaciones:'Otro motivo'},'motivo'],[{reserva_id:'otra'},'reserva'],[{cargo_id:'servicio-ajeno'},'vínculo con cargo activo']]){
+  const i=nueva(),ctx=contexto();i.penalidadManual.motivoLibro=ajuste.observaciones;
+  ctx.cargos=cargos.map(c=>({...c,cargo_id:c.tipo_cargo==='alojamiento'?cargoId:'otro'}));ctx.ajustes=[{...ajuste,...cambio}];
+  f.conciliarPenalidadActiva(i,adj,ctx);assert.equal(i.categoria,'dudosos');assert.equal(i.aprobable,false);
+  assert.ok(i.penalidadComparacion.diferencias.some(d=>d.campo===campo),campo);assert.equal(i.payload,null);
+ }
+ const i=nueva(),ctx=contexto();i.penalidadManual.motivoLibro=ajuste.observaciones;
+ ctx.ajustes=[ajuste];ctx.cargos=cargos.map(c=>({...c,cargo_id:c.tipo_cargo==='alojamiento'?cargoId:'otro'}));
+ f.conciliarPenalidadActiva(i,adj,ctx);assert.equal(i.penalidadComparacion.estado,'registrado');
+});
+test('resumen activo con detalle vacío no ofrece crear un segundo ajuste',()=>{
+ const i=nueva(),ctx=contexto();ctx.ajustes=[];f.conciliarPenalidadActiva(i,adj,ctx);
+ assert.equal(i.penalidadManual,null);assert.equal(i.aprobable,false);assert.equal(i.payload,null);
+ assert.match(i.motivos.join(' '),/detalle no está disponible o cambió/);
+});
 test('relee sólo los cargos de la reserva y guarda no escribe',async()=>{
  const i=nueva(),calls=[];
  const cliente={async rpc(nombre,args){calls.push(nombre);
   return{data:adj}},from(tabla){calls.push(tabla);
-  const b={select(){return b},async eq(){return{data:cargos}}};return b;}};
+  const b={select(){return b},async eq(){return{data:tabla==='cargo_ajustes'?adj.ajustes:cargos}}};return b;}};
  const comp={snapshot:{pagos_todos:original},pagosDetalle:[{id:i.id,reserva:{fecha_checkin:'2026-10-16'}}]};
  await f.conciliarPenalidadesEnPlan({items:[i]},cliente,comp,new Set());
  assert.equal(i.aprobable,true);
- assert.deepEqual(calls,['haiku_resumen_ajustes_unidad','vista_estado_cargos']);
+ assert.deepEqual(calls,['haiku_resumen_ajustes_unidad','vista_estado_cargos','cargo_ajustes']);
 });
 test('consulta sin acceso a saldo no inventa pago autorizado',async()=>{
  const i=nueva();
  await f.conciliarPenalidadesEnPlan({items:[i]},{
   async rpc(){return{data:adj}},from(){throw Error('sin red')}
  },{snapshot:{pagos_todos:original}},new Set());
- assert.equal(i.categoria,'omitidos');assert.equal(i.aprobable,false);
+ assert.equal(i.categoria,'dudosos');assert.equal(i.aprobable,false);
+ assert.match(i.motivos.join(' '),/vínculo con cargo activo/);
 });
 test('pantalla mantiene confirmación separada y serializer de pagos existente',()=>{
  assert.match(source,/Aprobar este pago/);

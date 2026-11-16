@@ -2427,7 +2427,8 @@
                 .map(resultado => [claveReserva(resultado.libro), resultado.sistema.id]));
             const candidatosDestino = [...pagosUnicos.values()].filter(item =>
                 item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
-            const idsDestino = [...new Set(candidatosDestino
+            const candidatosAlojamiento=[...pagosUnicos.values()].filter(item=>item.estado!=='en_sistema'&&item.pago.concepto_alojamiento==='diferencia_tarifa');
+            const idsDestino = [...new Set([...candidatosDestino,...candidatosAlojamiento]
                 .map(item => reservaSistemaPorLibro.get(claveReserva(item.reserva))).filter(Boolean))];
             snapshotFinanciero = finanzasInforme && idsDestino.length === 1 && idsDestino[0] === reservaInforme
                 ? finanzasInforme : await leerFinanzasServicios(cliente, idsDestino);
@@ -2437,7 +2438,8 @@
                 const coincidencia = candidatoServicioAplicado(item.pago, item.reserva_sistema_id, pagos);
                 if (coincidencia.sospechoso) item.estado = "revisar";
                 item.destinoFinanciero = D.resolverTransaccion(item.pago, item.reserva_sistema_id,
-                    snapshotFinanciero, item.sistema || coincidencia.candidato || null);
+                    snapshotFinanciero, item.sistema || coincidencia.candidato || null,
+                    {estadiaId:estadiaSistemaPorLibro.get(claveReserva(item.reserva))});
                 if (q.por_fecha_pago && item.estado === 'nuevo_seguro' && item.destinoFinanciero?.estado === 'revision') {
                     item.estado = 'revisar';
                     item.motivos = item.destinoFinanciero.aplicaciones
@@ -3506,7 +3508,10 @@
                 conceptos_adicionales: Array.isArray(data.conceptos_adicionales) ? data.conceptos_adicionales : [],
                 servicio_faltante_manual_v1:data.servicio_faltante_manual_v1 === true,
                 transferencia_late_checkout_sin_identificador_v1:data.transferencia_late_checkout_sin_identificador_v1 === true,
-                revision_pago_admin_v1:data.revision_pago_admin_v1 === true };
+                revision_pago_admin_v1:data.revision_pago_admin_v1 === true,
+                excedente_servicio_libro_v1:data.excedente_servicio_libro_v1===true,
+                precio_cargo_libro_v1:data.precio_cargo_libro_v1===true,
+                destino_alojamiento_libro_v1:data.destino_alojamiento_libro_v1===true };
         } catch (_) {
             return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
         }
@@ -3537,7 +3542,7 @@
         return [...(detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.']),...motivosCapacidad];
     }
 
-    function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente, itemId = null, decision = null) {
+    function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente, itemId = null, decision = null, excedenteHabilitado=false) {
         if (!destino?.reserva_id || resolucion?.estado !== 'destino_unico') return null;
         const pagos = new Map((snapshotFinanciero?.pagos || []).map(item => [item.id, item]));
         const aplicaciones = (resolucion.aplicaciones || []).map(aplicacion => {
@@ -3575,7 +3580,10 @@
             resolucion.aplicaciones?.length === 1 && resolucion.aplicaciones[0].concepto_canon === 'late_checkout' &&
             pago.pago_recibido === true && pago.estado_pago === 'registrado_en_libro' &&
             pago.origen?.hoja && pago.origen?.celda;
-        if (!validas || total !== Number(pago.monto) || pago.moneda !== 'CLP' ||
+        const excedente=Number(pago.monto)-total;
+        const excedenteConfirmado=excedenteHabilitado&&aprobadoManualmente===true&&idFuerte&&!pago.transaccion_distribuida&&
+            aplicaciones.length===1&&excedente>0&&excedente===resolucion.monto_sin_aplicar&&aplicaciones[0].monto===aplicaciones[0].saldo_esperado;
+        if (!validas || total !== Number(pago.monto)&&!excedenteConfirmado || pago.moneda !== 'CLP' ||
             (!idFuerte && !transferenciaManual && !(decision?.tipo === REVISION_ADMIN_PAGO &&
                 decision.auditoria?.tipo === 'efectivo_servicio' && aprobadoManualmente === true)) || !medioLibro(pago) || !pago.fecha_comprobante) return null;
         return {
@@ -3606,11 +3614,13 @@
                 } : {}),
                 ...(decision?.tipo === REVISION_ADMIN_PAGO ? {revision_pago_admin_v1:structuredClone(decision.auditoria),item_id:itemId} : {}),
                 evidencia_libro: structuredClone(pago),
+                ...(excedenteConfirmado?{excedente_servicio_libro_v1:{version:1,confirmado:true,monto_sin_aplicar:excedente}}:{}),
                 aplicaciones_servicio_v1: {
                     version: CAPACIDAD_PAGOS_SERVICIO_4C.version,
                     reserva_id: destino.reserva_id,
                     monto_total: Number(pago.monto),
                     moneda: pago.moneda,
+                    ...(excedenteConfirmado?{monto_sin_aplicar:excedente}:{}),
                     aplicaciones
                 }
             }),
@@ -4099,8 +4109,43 @@
             .select('id,codigo,nombre,categoria,activo,unidad,precio_base,requiere_horario,capacidad_incluida,capacidad_maxima,precio_persona_adicional')
             .eq('activo',true), 'codigo');
     }
+    const operacionesPrecioLibro=new WeakMap();
+    async function resolverPrecioCargoLibro(result,decisiones,aprobados,plan,item,accion,cliente){
+        const p=item?.precioServicioManual;
+        if(!p||!contextoVisualPlanes.has(plan)||accion.confirmado!==true||
+            String(accion.motivo||'').trim().length<8||String(accion.autorizacion||'').trim().length<8)
+            throw Error('Confirma el precio final y su autorización independiente, con un motivo. El comprobante no basta.');
+        const vigente=async()=>{await verificarFuenteManual(result,plan,item);
+            if(accion.vigente?.()===false||root.haikuTienePermiso?.('pagos.registrar')!==true)throw Error('La revisión o el permiso cambió.');};
+        await vigente();
+        const sesion=await cliente.auth.getSession(),usuario=sesion.data?.session?.user?.id;
+        if(sesion.error||!usuario)throw Error('Debe iniciar sesión.');
+        const propuesta={...p,motivo:accion.motivo.trim(),autorizacion:accion.autorizacion.trim(),confirmado:true,
+            version_libro:estadoFuente(result).version,origen:item.pagoLibro.origen,
+            comprobante:[item.pagoLibro.folio,item.pagoLibro.bovtar].filter(Boolean).join(':')};
+        let ops=operacionesPrecioLibro.get(plan);if(!ops)operacionesPrecioLibro.set(plan,ops=new Map());
+        const firma=JSON.stringify([usuario,propuesta]);let op=ops.get(firma);
+        const reintento=Boolean(op);
+        const actual=await prepararIncorporacion(result,decisiones,aprobados,cliente);
+        await vigente();
+        const nuevo=actual.items.find(i=>i.id===item.id);
+        if(!actual.capacidadServicios?.precio_cargo_libro_v1||!reintento&&JSON.stringify(nuevo?.precioServicioManual)!==JSON.stringify(p))
+            throw Error('El cargo o el Libro cambió; revisa nuevamente el precio.');
+        // Tras una respuesta perdida, el mismo UUID consulta el resultado confirmado.
+        // Si no se confirmó, el servidor vuelve a exigir el snapshot original.
+        if(!op){op=crearIdOperacion();ops.set(firma,op);}
+        const sesionActual=await cliente.auth.getSession();await vigente();
+        if(sesionActual.error||sesionActual.data?.session?.user?.id!==usuario)throw Error('La sesión cambió.');
+        const {data,error}=await cliente.rpc('haiku_libro_ajustar_precio_cargo_v1',{p_operacion_id:op,p_propuesta:propuesta});
+        if(error||data?.ok!==true)throw error||Error('El ajuste no fue confirmado. Reintenta esta misma operación.');
+        aprobados.delete(item.id);
+        const siguiente=await prepararIncorporacion(result,decisiones,aprobados,cliente);
+        siguiente.resultadoPrecioCargo=data;
+        return siguiente;
+    }
     async function resolverAprobacionManualPago(result, decisiones, aprobados, plan, itemId, accion, cliente = root.haikuSupabase) {
         const item = plan.items.find(i => i.id === itemId), propuesta = item?.manualPago;
+        if(accion.tipo==='precio_cargo_libro_v1')return resolverPrecioCargoLibro(result,decisiones,aprobados,plan,item,accion,cliente);
         if (item && accion.tipo === DEFINIR_MEDIO_PAGO && contextoVisualPlanes.has(plan))
             return resolverMedioPago(result,decisiones,aprobados,plan,item,accion,cliente);
         if (!propuesta || !contextoVisualPlanes.has(plan)) throw Error('Este pago no tiene una resolución manual segura.');
@@ -4610,13 +4655,21 @@
             const bloqueEnRevision = recalculada?.evidencia === 'evidencia_insuficiente' && x.resolucionPago?.evidencia === PAGO_BLOQUE_REVISION;
             const resolucionPago = bloqueVerificado || bloqueEnRevision || x.resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO ?
                 x.resolucionPago : recalculada || x.resolucionPago;
-            if (resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO && resolucionPago.pagoSistema?.id) {
+            if (p.tipo_movimiento!=='penalidad'&&resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO && resolucionPago.pagoSistema?.id) {
                 const item = add('omitidos', id, texto + (medioLibro(p) === 'transferencia' ?
                     ' · La transferencia ya existe en la reserva elegida de Proyecto H y no se incorporará nuevamente.' :
                     resolucionPago.evidencia === 'distribucion_persistida' ?
                         ' · El componente ya está representado por un comprobante distribuido confirmado de Proyecto H.' :
                         ' · El pago ya existe en Proyecto H para la reserva elegida y no se incorporará nuevamente.'));
-                item.pagoYaRegistrado = resolucionPago.evidencia === 'recibo_webpay_historico';
+                item.pagoYaRegistrado = true;
+                item.pagoLibro=p; item.pagoSistema=resolucionPago.pagoSistema;
+                const pagoSistema=resolucionPago.pagoSistema, apps=snapshot.finanzas?.aplicaciones;
+                const aplicado=Array.isArray(apps)?apps.filter(a=>a.pago_id===pagoSistema.id).reduce((n,a)=>n+Number(a.monto_aplicado||0),0):null;
+                const origen=pagoSistema.datos_origen||{}, anterior=origen.origen_libro||origen.origen;
+                item.aviso=(aplicado===null?'Pago registrado. Falta comprobar sus aplicaciones.':
+                    `Pago registrado · aplicado ${money(aplicado)} · sin aplicar ${money(Math.max(Number(pagoSistema.monto)-aplicado,0))}.`)+
+                    (anterior?.hoja&&anterior?.celda?` Origen guardado: ${anterior.hoja}!${anterior.celda}${origen.fecha_bloque?' · estadía de origen '+origen.fecha_bloque:''}.`:'')+
+                    ' Revisa las aplicaciones en la ficha; no se duplicará ni reasignará automáticamente.';
                 continue;
             }
             if (resolucionPago?.evidencia === 'transferencia_repartida') {
@@ -4731,7 +4784,8 @@
                 item.aprobable = false;
                 item.penalidadManual = importeValido && asociacionValida ? {
                     reservaId:destino.reserva_id, cabana:Number(r.cabana),
-                    fechaIngreso:r.fecha_checkin, montoLibro:p.monto
+                    fechaIngreso:r.fecha_checkin, montoLibro:p.monto,
+                    porcentajeLibro:p.penalidad_porcentaje||10,motivoLibro:p.penalidad_motivo||null,tipoLibro:p.penalidad_tipo_ajuste||null
                 } : null;
                 item.aviso = 'Penalidad indicada en el Libro: revisar el cargo de ajuste del 10%. No se registrará una transferencia nueva.' +
                     (p.bove_pendiente || p.manager_pendiente ? ' BOVE y Manager pendientes son trámites administrativos por verificar.' : '');
@@ -4851,8 +4905,9 @@
             const esPagoExtraJacuzzi = p.tipo_movimiento === 'servicio' &&
                 /\b(?:tinaja|jacuzzi)\b/i.test(String(p.concepto || '')) &&
                 /\b[12]\s*(?:adl|adultos?|personas?)\s*(?:extra|adicional(?:es)?)\b/i.test(String(p.concepto || ''));
+            const excedenteServicio=Number(x.destinoFinanciero?.monto_sin_aplicar||0);
             const nuevoSeguroCanonico = resolucionPago?.estado === ESTADOS_RESOLUCION_PAGO.NUEVO_SEGURO &&
-                !pagosEfectivosMedio.has(p) && !esPagoExtraJacuzzi;
+                !pagosEfectivosMedio.has(p) && !esPagoExtraJacuzzi&&!excedenteServicio;
             const seguro = asociadoLibro && (pagoTieneIdentificadorFuerte(p) || transferenciaContextualNueva) &&
                 (nuevoSeguroCanonico || transferenciaContextualNueva || Boolean(destino?.reserva_ref));
             const confirmacionAirbnb = x.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB &&
@@ -4860,6 +4915,7 @@
                 ? x.decisionPagoManual : null;
             const manual = aprobados.has(id) && (!webpayPendiente || webpayAprobable) &&
                 (medio !== 'airbnb_prepaid_card' || p.fecha_comprobante || !!confirmacionAirbnb);
+            if(p.concepto_alojamiento==='diferencia_tarifa'&&!manual)motivos.push(APROBACION_MANUAL_PAGO);
             if (pagosEfectivosMedio.has(p) && medio !== 'airbnb_prepaid_card' && !pagoTieneIdentificadorFuerte(p) && !transferenciaContextualNueva)
                 motivos.push('Falta un identificador fuerte del comprobante; definir el medio no resuelve su identidad.');
             if (servicio4C && !manual && !nuevoSeguroCanonico) motivos.push(APROBACION_MANUAL_PAGO);
@@ -4890,8 +4946,9 @@
                 // NUEVO_SEGURO la confirmación final del plan satisface esa
                 // guardia sin agregar un segundo botón de aprobación.
                 payloadPagoServicio4C(p, destino, x.destinoFinanciero, comp.snapshot?.finanzas,
-                    manual || nuevoSeguroCanonico, id, transferenciaSinId || x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? x.decisionPagoManual : null) : null;
-            if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual) &&
+                    manual || nuevoSeguroCanonico, id, transferenciaSinId || x.decisionPagoManual?.tipo === REVISION_ADMIN_PAGO ? x.decisionPagoManual : null,
+                    capacidadServicios?.excedente_servicio_libro_v1===true) : null;
+            if (servicio4C && !payloadServicio && !(transferenciaSinId && !manual) && !(excedenteServicio>0&&!manual) &&
                 motivos.every(motivo => motivo === APROBACION_MANUAL_PAGO)) {
                 motivos.push('Hace falta un comprobante que permita aplicar el pago al cargo de servicio.');
             }
@@ -4929,7 +4986,40 @@
                 item.aviso = `Asociado por CAB ${r.cabana} y fecha de ingreso. Alojamiento ${money(verificacion.total)} · saldo antes del pago ${money(verificacion.saldo)}.`;
             }
             item.destinoFinanciero = x.destinoFinanciero || null;
+            if(p.concepto_alojamiento==='diferencia_tarifa'){
+                const cargos=(snapshot.finanzas?.cargos||[]).filter(c=>c.reserva_id===destinoActual&&c.tipo_cargo==='alojamiento'&&c.estado==='activo');
+                const bancaria=S.evidenciaTransferencia(p);
+                item.aviso='Diferencia de tarifa: recepción para alojamiento, separada de cualquier ajuste que genera un cargo. '+
+                    (cargos.length===1?`Cargo asociado ${cargos[0].cargo_id} · ${cargos[0].concepto||'alojamiento'} · saldo ${money(cargos[0].saldo_cargo)}. `:'Resuelve el cargo de alojamiento antes de aplicar. ')+
+                    (!bancaria?.operacion_bancaria?'La glosa identifica al remitente, pero no acredita un número de operación bancaria. Revisa el comprobante y su aplicación en la ficha.':'Revisa la referencia bancaria y la aplicación al alojamiento.');
+                item.etiquetaAprobacion='Aprobar transferencia para alojamiento · '+money(p.monto);
+                const estadia=Array.from(comp).find(i=>i.libro===r&&i.estado==='asociada')?.sistema;
+                if(cargos.length!==1||cargos[0].estadia_id!==estadia?.id||Number(cargos[0].saldo_cargo)<p.monto||
+                    capacidadServicios?.destino_alojamiento_libro_v1!==true){
+                    item.motivos.push(capacidadServicios?.destino_alojamiento_libro_v1!==true?
+                        'Falta habilitar la validación protegida del cargo de alojamiento.':
+                        'Revisa el cargo de alojamiento: debe ser único, de esta estadía y con saldo suficiente.');
+                    item.categoria='dudosos';item.aprobable=false;item.seleccionado=false;item.payload=null;
+                }else if(item.payload){
+                    item.payload.contrato=CAPACIDAD_PAGOS_SERVICIO_4C.contrato;
+                    item.payload.datos_origen.destino_alojamiento_libro_v1={version:1,cargo_id:cargos[0].cargo_id,
+                        estadia_id:estadia.id,saldo_esperado:Number(cargos[0].saldo_cargo),monto_ajustado:Number(cargos[0].monto_ajustado),
+                        aplicado_esperado:Number(cargos[0].aplicado_neto||0)};
+                }
+            }
             item.aprobableFinancieramente = x.destinoFinanciero?.estado === 'destino_unico';
+            const appExcedente=x.destinoFinanciero?.aplicaciones?.find(a=>a.excedente>0);
+            if(appExcedente){
+                item.aviso=`Libro: ${p.concepto} · cargo: ${appExcedente.cargo.concepto} (${appExcedente.cargo_id}). Recibido ${money(p.monto)} · aplicar ${money(appExcedente.monto)} · diferencia ${money(excedenteServicio)} sin aplicar. No acredita por sí sola un precio final autorizado.`;
+                item.etiquetaAprobacion=`Registrar ${money(p.monto)} · aplicar ${money(appExcedente.monto)} · dejar ${money(excedenteServicio)} sin aplicar`;
+                const c=appExcedente.cargo,s=c.servicio;
+                if(capacidadServicios?.precio_cargo_libro_v1===true&&Number(c.aplicado_neto)===0&&
+                    c.estadia_id&&s?.estadia_id===c.estadia_id&&p.monto>c.monto_ajustado)
+                    item.precioServicioManual={reserva_id:destinoActual,estadia_id:c.estadia_id,servicio_id:s.id,cargo_id:c.cargo_id,
+                        cabana:Number(r.cabana),fecha_servicio:s.fecha_servicio,hora_inicio:s.hora_inicio||null,
+                        ingreso:r.fecha_checkin,salida:r.fecha_checkout,monto_ajustado:c.monto_ajustado,saldo_esperado:c.saldo_cargo,
+                        precio_final:Number(p.monto)};
+            }
             item.backendServiciosDisponible = capacidadServicios?.disponible === true;
             vistos.push({ pago:p, item, destino: destinoActual, manual });
         }
@@ -4941,7 +5031,7 @@
             const item = plan.items.find(i => i.id === id);
             if (!item || item.transferenciaRepartida) continue;
             item.pagoLibro = x.pago;
-            item.pagoSistema = x.sistema || null;
+            item.pagoSistema ||= x.sistema || null;
             // Una aprobación previa del pago no puede deshacer «Dejar pendiente».
             if (item.reservaPendiente || x.pago.airbnb_liquidacion_pendiente) continue;
             item.decisionPagoManual = x.decisionPagoManual || null;
@@ -5062,105 +5152,131 @@
     function conciliarPenalidadActiva(item, resumen, contexto = {}) {
         if (!item?.penalidadManual || !Array.isArray(resumen?.ajustes) ||
             String(resumen.reserva_id || '') !== String(item.penalidadManual.reservaId)) return false;
-        const activos = resumen.ajustes.filter(a => a?.estado === 'activo' &&
-            ['cargo_modificacion','cargo_cancelacion'].includes(a.tipo_ajuste) && Number(a.signo) === 1);
-        if (!activos.length) return false;
-        const exactos=activos.filter(a => Number(a.monto)===Number(item.penalidadManual.montoLibro) &&
-            Number(a.porcentaje)===10);
-        if (activos.length===1 && exactos.length===1) {
-            const destino=item.penalidadManual.reservaId, p=item.pagoLibro;
-            item.penalidadRegistrada={monto:Number(exactos[0].monto),tipo:exactos[0].tipo_ajuste,operacionId:exactos[0].operacion_id};
-            item.categoria='omitidos'; item.seleccionado=false; item.aprobable=false;
-            item.motivos=[]; item.payload=null;
-            item.aviso='✓ Penalidad del 10% registrada en Proyecto H por '+money(item.penalidadRegistrada.monto)+
-                '. El cargo ya existe; no se añadirá otra vez ni se marcará como pago recibido.';
-            item.penalidadManual=null;
-            // La penalidad ya es cargo. El pago sólo puede pasar a revisión
-            // si el alojamiento conserva exactamente ese saldo y tiene
-            // respaldo de transferencia en el Libro.
-            if (!p || !Array.isArray(contexto.cargos) || !Array.isArray(contexto.pagos)) return true;
-            const monto=item.penalidadRegistrada.monto;
-            const existentes=contexto.pagos.filter(x=>x.reserva_id===destino &&
-                x.estado!=='anulado' && x.tipo_movimiento==='pago');
-            const mismo=existentes.filter(x=>x.datos_origen?.item_id===item.id);
-            if (mismo.length===1 && mismo[0].estado==='confirmado' && Number(mismo[0].monto)===monto) {
-                item.aviso='✓ Cargo y pago de penalidad '+money(monto)+' ya registrados. No se duplicarán.';
-                return true;
+        const objetivo=item.penalidadManual,destino=objetivo.reservaId,p=item.pagoLibro;
+        const canon=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+        const activos=(Array.isArray(contexto.ajustes)?contexto.ajustes:resumen.ajustes).filter(a=>a?.estado==='activo'&&
+            ['cargo_modificacion','cargo_cancelacion'].includes(a.tipo_ajuste)&&Number(a.signo)===1&&
+            !(a.cargo_id&&(contexto.cargos||[]).some(c=>c.cargo_id===a.cargo_id&&c.tipo_cargo==='servicio')));
+        if(!activos.length){
+            if(Array.isArray(contexto.ajustes)&&!contexto.ajustes.length&&resumen.ajustes.some(a=>a.estado==='activo'&&
+                ['cargo_modificacion','cargo_cancelacion'].includes(a.tipo_ajuste)&&Number(a.signo)===1)){
+                item.penalidadManual=null;item.categoria='dudosos';item.aprobable=false;item.seleccionado=false;item.payload=null;
+                item.motivos=['El resumen indica un ajuste activo, pero su detalle no está disponible o cambió durante la lectura. Revalida antes de añadir otro cargo.'];
             }
-            const alojamiento=contexto.cargos.filter(x=>x.reserva_id===destino &&
-                x.tipo_cargo==='alojamiento' && x.estado==='activo');
-            const fecha=String(p.fecha_comprobante||'');
-            const fechaOk=/^\d{4}-\d{2}-\d{2}$/.test(fecha) &&
-                !Number.isNaN(Date.parse(fecha)) && new Date(fecha).toISOString().slice(0,10)===fecha;
-            const prueba=Number(p.monto)===monto && p.moneda==='CLP' &&
-                p.tipo_movimiento==='penalidad' && p.estado_pago==='registrado_en_libro' &&
-                medioLibro(p)==='transferencia' && fechaOk &&
-                p.fecha_bloque===contexto.fechaIngreso && !!p.origen?.hoja && !!p.origen?.celda &&
-                !pagoTieneIdentificadorFuerte(p);
-            const saldoOk=alojamiento.length===1 && Number(alojamiento[0].saldo_cargo)===monto &&
-                Number(alojamiento[0].monto_ajustado)>=monto;
-            const parecido=existentes.some(x=>Number(x.monto)===monto &&
-                medioSistema(x)==='transferencia' && String(x.fecha_pago||'').slice(0,10)===fecha);
-            if (!prueba || !saldoOk || parecido || mismo.length) {
-                item.categoria='dudosos';item.aprobable=false;
-                item.motivos=[parecido||mismo.length
-                    ? 'Ya existe un pago posiblemente correspondiente a esta penalidad. Revisa antes de duplicarlo.'
-                    : !saldoOk && alojamiento.length === 1 && Number.isSafeInteger(Number(alojamiento[0].saldo_cargo))
-                        ? `El saldo de alojamiento es ${money(alojamiento[0].saldo_cargo)}. Revisa cómo se aplicaron los abonos antes de registrar la penalidad de ${money(monto)}.`
-                    : !saldoOk ? 'Verifica el saldo de alojamiento y sus abonos antes de registrar el pago de la penalidad.'
-                    : 'Faltan datos verificables de la transferencia de penalidad.'];
-                item.aviso='Cargo de penalidad registrado; pago todavía por comprobar.';
-                return true;
-            }
-            const aprobado=contexto.aprobados?.has(item.id)===true;
-            item.penalidadPagoPendiente=true;
-            item.categoria=aprobado?'pagos':'dudosos';
-            item.motivos=aprobado?[]:['Requiere aprobación manual del pago de penalidad registrado en el Libro.'];
-            item.aprobable=!aprobado;item.seleccionado=aprobado;
-            item.aviso=aprobado
-                ? '✓ Pago de penalidad '+money(monto)+' aprobado para incorporar. Confirma la incorporación para registrarlo.'
-                : '✓ Cargo registrado. El Libro indica transferencia de '+money(monto)+' del '+fecha+
-                    '. Aprueba este pago y confirma la incorporación; la tinaja no se modifica.';
-            item.payload=aprobado?{
-                contrato:'haiku_incorporar_libro_v1',reserva_ref:null,
-                argumentos:{p_reserva_id:destino,p_monto:monto,p_medio_pago:'transferencia',
-                    p_etapa_operativa:'abono',p_fecha_pago:fecha,p_folio:null,
-                    p_codigo_autorizacion:null,p_bove:null,
-                    p_referencia_externa:p.texto_original||null,
-                    p_observaciones:'Pago penalidad 10% según Libro · '+(p.texto_original||''),
-                    p_aplicaciones:[],p_modo_aplicacion:'alojamiento'},
-                datos_origen:datosOrigenPago(p,{reserva_id:destino,cabana:Number(p.cabana)},
-                    {item_id:item.id,penalidad_ajuste_operacion_id:item.penalidadRegistrada.operacionId}),
-                aprobado_manualmente:true
-            }:null;
-            return true;
+            return false;
         }
-        item.penalidadManual=null; item.aprobable=false;
-        item.motivos=['Ya existe otro ajuste de penalidad activo en esta reserva: revisa el importe y el motivo antes de continuar.'];
-        item.aviso='Existe un ajuste del 10% que no coincide inequívocamente con el Libro. No se duplicará.';
-        return false;
+        const ajuste=activos.length===1?activos[0]:null,diferencias=[];
+        if(!ajuste)diferencias.push({campo:'cantidad de ajustes activos',libro:1,proyecto:activos.length});
+        if(ajuste){
+            if(Number(ajuste.monto)!==Number(objetivo.montoLibro))diferencias.push({campo:'monto',libro:Number(objetivo.montoLibro),proyecto:Number(ajuste.monto)});
+            if(Number(ajuste.porcentaje)!==Number(objetivo.porcentajeLibro||10))diferencias.push({campo:'porcentaje',libro:Number(objetivo.porcentajeLibro||10),proyecto:Number(ajuste.porcentaje)});
+            if(ajuste.reserva_id&&ajuste.reserva_id!==destino)diferencias.push({campo:'reserva',libro:destino,proyecto:ajuste.reserva_id});
+            if(objetivo.tipoLibro&&objetivo.tipoLibro!==ajuste.tipo_ajuste)diferencias.push({campo:'tipo de ajuste',libro:objetivo.tipoLibro,proyecto:ajuste.tipo_ajuste});
+            if(objetivo.motivoLibro&&canon(objetivo.motivoLibro)!==canon(ajuste.observaciones))diferencias.push({campo:'motivo',libro:objetivo.motivoLibro,proyecto:ajuste.observaciones});
+            if(contexto.verificacionAjusteIncompleta||ajuste.cargo_id&&!(contexto.cargos||[]).some(c=>
+                c.cargo_id===ajuste.cargo_id&&c.reserva_id===destino&&c.tipo_cargo==='alojamiento'&&c.estado==='activo'))
+                diferencias.push({campo:'vínculo con cargo activo',libro:'alojamiento de esta reserva',proyecto:ajuste.cargo_id||'sin verificar'});
+        }
+        const coincide=Boolean(ajuste&&!diferencias.length);
+        item.penalidadComparacion={estado:coincide?'registrado':'revision',diferencias,
+            ajuste:ajuste?{monto:Number(ajuste.monto),porcentaje:Number(ajuste.porcentaje),tipo:ajuste.tipo_ajuste,
+                motivo:ajuste.observaciones||ajuste.concepto,cargoId:ajuste.cargo_id,reservaId:ajuste.reserva_id||destino}:null};
+        item.penalidadManual=null;item.aprobable=false;item.seleccionado=false;item.payload=null;
+        if(coincide){
+            item.penalidadRegistrada={monto:Number(ajuste.monto),tipo:ajuste.tipo_ajuste,operacionId:ajuste.operacion_id};
+            item.categoria='omitidos';item.motivos=[];
+            item.aviso='✓ Penalidad del 10% registrada en Proyecto H por '+money(ajuste.monto)+'. El cargo ya existe; no se añadirá otra vez ni se marcará como pago recibido.';
+        }else{
+            item.categoria='dudosos';
+            item.motivos=['Ya existe otro ajuste de penalidad activo. '+diferencias.map(d=>
+                `${d.campo}: Libro ${d.campo==='monto'?money(d.libro):d.libro} / Proyecto H ${d.campo==='monto'?money(d.proyecto):d.proyecto}`).join(' · ')+'. Revisa el importe y el motivo.'];
+            item.aviso='El ajuste activo no coincide inequívocamente con el Libro. No se duplicará ni se corregirá automáticamente.'+
+                (ajuste?` Registrado: ${ajuste.tipo_ajuste} · ${ajuste.porcentaje}% · motivo: ${ajuste.observaciones||ajuste.concepto||'sin motivo verificable'} · cargo ${ajuste.cargo_id||'sin verificar'}.`:'');
+        }
+        if(!p||!Array.isArray(contexto.cargos)||!Array.isArray(contexto.pagos))return coincide;
+        const monto=Number(p.monto),medio=medioLibro(p),fecha=String(p.fecha_comprobante||'');
+        const tarjeta=['tarjeta_credito','tarjeta_debito','credito','debito','webpay_credito','webpay_debito'].includes(medio)&&
+            Boolean(p.folio&&p.bovtar)&&p.pago_recibido===true&&p.clasificacion_financiera!=='dudoso';
+        if(!coincide&&!tarjeta)return false;
+        const padre=item;
+        if(!coincide){
+            item={id:padre.id+':comprobante',texto:padre.texto+' · Comprobante recibido, independiente del ajuste',
+                categoria:'dudosos',seleccionado:false,aprobable:false,payload:null,motivos:[],dependeDe:[...(padre.dependeDe||[])],permisos:['pagos.registrar'],pagoLibro:p};
+            padre.comprobantePenalidad=item;
+        }
+        const fechaOk=/^\d{4}-\d{2}-\d{2}$/.test(fecha)&&Number.isFinite(Date.parse(fecha))&&new Date(fecha).toISOString().slice(0,10)===fecha;
+        const prueba=Number.isSafeInteger(monto)&&monto>0&&p.moneda==='CLP'&&p.tipo_movimiento==='penalidad'&&
+            p.estado_pago==='registrado_en_libro'&&fechaOk&&p.fecha_bloque===contexto.fechaIngreso&&p.origen?.hoja&&p.origen?.celda&&
+            (tarjeta||medio==='transferencia'&&!pagoTieneIdentificadorFuerte(p));
+        const alojamiento=contexto.cargos.filter(c=>c.reserva_id===destino&&c.tipo_cargo==='alojamiento'&&c.estado==='activo');
+        const saldoOk=alojamiento.length===1&&(tarjeta?Number(alojamiento[0].saldo_cargo)>=monto:Number(alojamiento[0].saldo_cargo)===monto)&&
+            Number(alojamiento[0].monto_ajustado)>=monto;
+        const token=v=>String(v||'').replace(/[^a-z0-9]/gi,'').toUpperCase();
+        const relacionados=contexto.pagos.filter(x=>x.estado!=='anulado'&&x.tipo_movimiento==='pago');
+        const mismo=relacionados.filter(x=>x.datos_origen?.item_id===item.id||x.datos_origen?.item_id===padre.id||
+            tarjeta&&token(p.folio)===token(x.folio)&&token(p.bovtar)===token(x.datos_origen?.bovtar||x.bove));
+        if(mismo.length===1&&mismo[0].estado==='confirmado'&&mismo[0].reserva_id===destino&&Number(mismo[0].monto)===monto){
+            const aplicaciones=Array.isArray(contexto.aplicaciones)?contexto.aplicaciones:null;
+            const aplicado=aplicaciones?.filter(a=>a.pago_id===mismo[0].id).reduce((n,a)=>n+Number(a.monto_aplicado||0),0);
+            item.categoria='omitidos';item.aprobable=false;item.pagoSistema=mismo[0];item.penalidadComprobanteRegistrado=true;
+            item.aviso=(coincide?'✓ Cargo y pago de penalidad ':'✓ Pago de penalidad ')+money(monto)+' ya registrados. No se duplicarán. '+
+                (aplicado===undefined?'Falta comprobar sus aplicaciones.':`Aplicado ${money(aplicado)} · sin aplicar ${money(Math.max(monto-aplicado,0))}.`);
+            return coincide;
+        }
+        const parecido=relacionados.some(x=>x.reserva_id===destino&&Number(x.monto)===monto&&medioSistema(x)===medio&&String(x.fecha_pago||'').slice(0,10)===fecha);
+        if(!prueba||!saldoOk||parecido||mismo.length){
+            item.categoria='dudosos';item.aprobable=false;
+            item.motivos=[parecido||mismo.length?'Ya existe un pago posiblemente correspondiente a esta penalidad. Revisa antes de duplicarlo.':
+                !saldoOk?'Verifica el saldo de alojamiento y sus abonos antes de registrar el pago de la penalidad.':
+                'Faltan datos verificables del comprobante de penalidad.'];
+            item.aviso=coincide?'Cargo de penalidad registrado; pago todavía por comprobar.':'El comprobante se revisa separado del ajuste que no coincide.';
+            return coincide;
+        }
+        const aprobado=contexto.aprobados?.has(item.id)===true;
+        if(tarjeta&&contexto.capacidad?.destino_alojamiento_libro_v1!==true){
+            item.categoria='dudosos';item.aprobable=false;item.motivos=['El comprobante acredita recepción. Falta habilitar la validación protegida del cargo de alojamiento antes de aprobar su aplicación.'];return coincide;
+        }
+        item.penalidadPagoPendiente=true;item.categoria=aprobado?'pagos':'dudosos';item.aprobable=!aprobado;item.seleccionado=aprobado;
+        item.motivos=aprobado?[]:['Requiere aprobación manual del pago de penalidad registrado en el Libro.'];
+        item.etiquetaAprobacion=tarjeta?'Aprobar comprobante de tarjeta · '+money(monto):'Aprobar este pago';
+        item.aviso=(coincide?'✓ Cargo registrado. ':'Ajuste por revisar; el comprobante acredita una recepción independiente. ')+
+            `Pago ${money(monto)} · ${medio} · ${fecha}. Se aplicará al cargo de alojamiento verificado; no se cambia el ajuste ni la tinaja.`;
+        item.payload=aprobado?{contrato:tarjeta?'aplicaciones_servicio_v1':'haiku_incorporar_libro_v1',reserva_id:destino,item_id:item.id,reserva_ref:null,
+            argumentos:{p_reserva_id:destino,p_monto:monto,p_medio_pago:medio,p_etapa_operativa:'abono',p_fecha_pago:fecha,
+                p_folio:p.folio||null,p_codigo_autorizacion:p.codigo_autorizacion||null,p_bove:p.bovtar||null,
+                p_referencia_externa:p.texto_original||null,p_observaciones:'Pago penalidad según Libro · '+(p.texto_original||''),p_aplicaciones:[],p_modo_aplicacion:'alojamiento'},
+            datos_origen:datosOrigenPago(p,{reserva_id:destino,cabana:Number(p.cabana)},
+                {item_id:item.id,penalidad_ajuste_operacion_id:coincide?ajuste.operacion_id:null,
+                    ...(tarjeta?{destino_alojamiento_libro_v1:{version:1,cargo_id:alojamiento[0].cargo_id,estadia_id:alojamiento[0].estadia_id,saldo_esperado:Number(alojamiento[0].saldo_cargo),
+                        monto_ajustado:Number(alojamiento[0].monto_ajustado),aplicado_esperado:Number(alojamiento[0].aplicado_neto||0)}}:{})}),aprobado_manualmente:true}:null;
+        return coincide;
     }
 
-    async function conciliarPenalidadesEnPlan(plan,cliente,comparacion=null,aprobados=new Set()) {
+
+    async function conciliarPenalidadesEnPlan(plan,cliente,comparacion=null,aprobados=new Set(),capacidad=null) {
         const items=plan.items.filter(i=>i.penalidadManual?.reservaId);
         if (!items.length || typeof cliente?.rpc!=='function') return;
         const ids=[...new Set(items.map(i=>i.penalidadManual.reservaId))];
         const leidos=await Promise.all(ids.map(async id=>{
-            let resumen=null,cargos=null;
+            let resumen=null,cargos=null,ajustes=null;
             try {
                 const {data,error}=await cliente.rpc('haiku_resumen_ajustes_unidad',{p_reserva_id:id});
                 if(!error)resumen=data;
             }catch(_){}
             if(resumen?.ajustes?.some(a=>a.estado==='activo' &&
                 ['cargo_cancelacion','cargo_modificacion'].includes(a.tipo_ajuste))) {
-                try {
+                const finanzas=comparacion?.snapshot?.finanzas;
+                if(finanzas?.disponible===true)cargos=finanzas.cargos.filter(c=>c.reserva_id===id);
+                else try {
                     const {data,error}=await cliente.from('vista_estado_cargos')
-                        .select('cargo_id,reserva_id,tipo_cargo,estado,saldo_cargo,monto_ajustado')
+                        .select('cargo_id,reserva_id,estadia_id,tipo_cargo,estado,saldo_cargo,monto_ajustado,aplicado_neto')
                         .eq('reserva_id',id);
                     if(!error && Array.isArray(data))cargos=data;
                 }catch(_){}
+                try{const r=await cliente.from('cargo_ajustes').select('id,operacion_id,reserva_id,cargo_id,tipo_ajuste,signo,porcentaje,monto,concepto,observaciones,estado').eq('reserva_id',id);
+                    if(!r.error&&Array.isArray(r.data))ajustes=r.data;}catch(_){}
             }
-            return [id,{resumen,cargos}];
+            return [id,{resumen,cargos,ajustes}];
         }));
         const porReserva=new Map(leidos);
         const pagos=Array.isArray(comparacion?.snapshot?.pagos_todos)
@@ -5170,8 +5286,11 @@
             const fuente=(comparacion?.pagosDetalle||[])
                 .find(x=>idMovimientoIncorporacion(x)===item.id);
             conciliarPenalidadActiva(item,datos?.resumen,{
-                cargos:datos?.cargos,pagos,aprobados,fechaIngreso:fuente?.reserva?.fecha_checkin
+                cargos:datos?.cargos,ajustes:datos?.ajustes,pagos,aprobados,capacidad,fechaIngreso:fuente?.reserva?.fecha_checkin,
+                aplicaciones:comparacion?.snapshot?.finanzas?.aplicaciones,
+                verificacionAjusteIncompleta:datos?.ajustes===null
             });
+            if(item.comprobantePenalidad)plan.items.push(item.comprobantePenalidad);
         }
     }
     // La generación identifica una descarga, no un conflicto. Cada consulta conserva
@@ -5302,6 +5421,26 @@
         };
 
     }
+    const firmasExcedentes=new WeakMap();
+    function prepararExcedentes(comparacion,capacidad,aprobados){
+        if(!D||capacidad?.excedente_servicio_libro_v1!==true)return;
+        if(!firmasExcedentes.has(aprobados))firmasExcedentes.set(aprobados,new Map());
+        const firmas=firmasExcedentes.get(aprobados);
+        for(const x of comparacion.pagosDetalle||[]){
+            const p=x.pago;
+            if(p.transaccion_distribuida||p.pago_recibido!==true||p.clasificacion_financiera!=='pago_real'||!pagoTieneIdentificadorFuerte(p))continue;
+            const fila=Array.from(comparacion).find(r=>r.libro===x.reserva&&r.estado==='asociada');if(!fila)continue;
+            const resolucion=D.resolverTransaccion(p,fila.sistema.reserva_id,comparacion.snapshot?.finanzas,x.sistema,
+                {estadiaId:fila.sistema.id,excedenteAprobable:true});
+            if(!(resolucion?.monto_sin_aplicar>0))continue;
+            x.destinoFinanciero=resolucion;
+            const id=idMovimientoIncorporacion(x),firma=firmaManualPago(comparacion,x);
+            if(aprobados.has(id)&&firmas.get(id)!==firma){
+                aprobados.delete(id);x.decisionManualInvalidada=true;x.motivoDecisionManualInvalidada='Cambió el cargo, su saldo o el comprobante. Revisa y aprueba nuevamente el excedente.';
+            }
+            if(!aprobados.has(id))firmas.set(id,firma);
+        }
+    }
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase, intento = 0) {
         if(result.traslado&&root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion!==result.generacion)
             throw Error('El Libro cambió. Vuelve a comparar para comprobar tanto el origen como el destino del traslado.');
@@ -5372,8 +5511,12 @@
         const requiereBackendServicios = (comparacion.pagosDetalle || []).some(item =>
             item.estado !== 'en_sistema' && item.resolucionPago?.estado !== ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO &&
             (esAdminPagos() && casoRevisionAdminPago(comparacion,item) || item.destinoFinanciero?.estado === 'destino_unico' ||
+                item.pago.tipo_movimiento==='penalidad'&&item.pago.folio&&item.pago.bovtar ||
+                item.pago.concepto_alojamiento==='diferencia_tarifa' ||
+                item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0) ||
                 item.destinoFinanciero?.aplicaciones?.some(a => a.estado === 'sin_destino')));
         const capacidadServicios = requiereBackendServicios ? capacidadInforme || await consultarCapacidadPagosServicio(cliente) : null;
+        prepararExcedentes(comparacion,capacidadServicios,aprobados);
         for (const x of comparacion.pagosDetalle || []) {
             if (x.decisionPagoManual && x.decisionPagoManual.tipo !== CONFIRMACION_AIRBNB && (!capacidadManualPago(capacidadServicios,x.destinoFinanciero?.aplicaciones) ||
                     x.decisionPagoManual.tipo === REVISION_ADMIN_PAGO && capacidadServicios.revision_pago_admin_v1 !== true)) {
@@ -5407,7 +5550,7 @@
             item.motivos = [conflicto.motivo];
             item.conflictoIdentidad = true;
         }
-        await conciliarPenalidadesEnPlan(plan,cliente,comparacion,aprobados);
+        await conciliarPenalidadesEnPlan(plan,cliente,comparacion,aprobados,capacidadServicios);
         if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== revision) {
             if (intento >= 2) throw Error('El Libro sigue actualizándose. Tu consulta se conserva; reintenta la incorporación.');
             return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1);
@@ -7045,6 +7188,14 @@
     }
 
     function franjaDiferenciaPago(x, comp) {
+        const excedente=x?.destinoFinanciero?.aplicaciones?.find(a=>a.excedente>0&&a.cargo);
+        if(excedente){
+            const franja=elemento('div','haiku-pago-diferencia-compacta');
+            franja.append(elemento('span','',`${x.pago.concepto} → ${excedente.cargo.concepto} · cargo ${excedente.cargo_id}`),
+                elemento('small','',`Recibido ${money(x.pago.monto)} · saldo del cargo ${money(excedente.cargo.saldo_cargo)} · diferencia ${money(excedente.excedente)}.`),
+                elemento('small','','Revisa y aprueba el importe íntegro con excedente sin aplicar. El comprobante no confirma por sí solo un precio final distinto.'));
+            return franja;
+        }
         if (!x || !['revisar','diferente'].includes(x.estado) || medioLibro(x.pago)!=='transferencia') return null;
         const p=x.pago, fila=comp?.find(r=>r.libro===x.reserva && r.estado==='asociada');
         if (!fila?.sistema?.reserva_id) return null;
@@ -8026,7 +8177,7 @@
             fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10),!!pago?.ajuste_fecha_comprobante) };
     }
 
-    function movimientosLibroIncorporacion(movimientos) {
+    function movimientosLibroIncorporacion(movimientos,plan) {
         const estados = {
             en_sistema: 'Ya existe en Proyecto H',
             nuevo_seguro: 'Pago nuevo seguro',
@@ -8038,12 +8189,14 @@
         const lista = elemento('div', 'haiku-incorporacion-movimientos-lista');
         for (const movimiento of movimientos || []) {
             const pago = movimiento.pago || {};
+            const item=plan?.items.find(i=>i.pagoLibro===pago&&!i.id.endsWith(':comprobante'));
+            const estado=item?.categoria==='dudosos'?'revisar':movimiento.estado;
             const datos = datosPagoIncorporacion(pago);
-            const tarjeta = elemento('div', `haiku-incorporacion-movimiento haiku-incorporacion-movimiento--${movimiento.estado || 'revisar'}`);
+            const tarjeta = elemento('div', `haiku-incorporacion-movimiento haiku-incorporacion-movimiento--${estado || 'revisar'}`);
             const cabecera = elemento('div', 'haiku-incorporacion-movimiento-cabecera');
             cabecera.append(
                 elemento('strong', 'haiku-incorporacion-movimiento-monto', money(pago.monto)),
-                elemento('span', 'haiku-incorporacion-movimiento-estado', estados[movimiento.estado] || 'Requiere revisión')
+                elemento('span', 'haiku-incorporacion-movimiento-estado', estados[estado] || 'Requiere revisión')
             );
             const meta = elemento('div', 'haiku-incorporacion-meta-item haiku-incorporacion-meta-item--movimiento-libro');
             meta.append(
@@ -8052,6 +8205,7 @@
                 datoIncorporacion('Fecha pago', datos.fecha)
             );
             tarjeta.append(cabecera, meta);
+            if(item?.pagoYaRegistrado&&item.aviso)tarjeta.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
             if (pago.concepto && datos.segundo[0] !== 'Concepto') {
                 tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-concepto', 'Concepto: ' + pago.concepto));
             }
@@ -8211,17 +8365,20 @@
         } else if (item.ampliacionJacuzzi) {
             estado = 'Ampliar Jacuzzi';
             detalle = 'Primero actualiza la misma Jacuzzi para reflejar las personas extra y generar el saldo correcto. Después revisa el segundo pago; el primero se conserva.';
+        } else if(item.penalidadComprobanteRegistrado){
+            estado='Comprobante registrado';detalle='El pago ya existe. Revisa sus aplicaciones; no se volverá a registrar ni se cambiará el ajuste.';
         } else if (item.penalidadPagoPendiente) {
             estado = item.categoria==='pagos' ? 'Pago de penalidad preparado' : 'Aprobar pago de penalidad';
             detalle = item.categoria==='pagos'
-                ? 'Transferencia aprobada. Confirma la incorporación para registrar el abono en Proyecto H.'
-                : 'El cargo ya existe y el Libro muestra una transferencia. Aprueba el pago y confirma su incorporación.';
+                ? 'Comprobante aprobado. Confirma la incorporación para registrar el abono en Proyecto H.'
+                : 'El Libro acredita un comprobante recibido. Revisa el cargo destino y aprueba el pago por separado del ajuste.';
         } else if (item.penalidadRegistrada) {
             estado = 'Penalidad registrada';
             detalle = 'El cargo del 10% ya está guardado en Proyecto H. Su abono sigue pendiente de comprobar; no se genera un pago nuevo.';
         } else if (item.pagoLibro?.tipo_movimiento === 'penalidad') {
             estado = 'Revisar penalidad';
-            detalle = 'Es un cargo por confirmar, no un pago. Elige Modificación o Cancelación y revisa el importe antes de aplicar el ajuste.';
+            detalle = item.penalidadComparacion?.estado==='revision'?'Revisa las diferencias del ajuste ya registrado. El comprobante de pago se evalúa por separado.':
+                'Es un cargo por confirmar, no un pago. Elige Modificación o Cancelación y revisa el importe antes de aplicar el ajuste.';
         }
         if (item.etapaSiguiente) detalle = 'Primero se guardarán el titular y RUT del Libro. Haku revalidará Proyecto H y habilitará este pago en el paso siguiente.';
         return { titular, cabana, monto, concepto, periodo, tipo, estado, detalle, estadias, reserva };
@@ -8835,14 +8992,14 @@
         if (!actualizacionReserva || item.etapaSiguiente) cabecera.append(
             elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
         fila.append(cabecera);
-        if (item.aviso) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
+        if (item.aviso&&!item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0)) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
         if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, null, actualizacionReserva));
 
         if (esPagoLibro) {
             const datos = datosPagoIncorporacion(item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB
                 ? {...item.pagoLibro,fecha_comprobante:item.decisionPagoManual.fechaPago} : item.pagoLibro);
             const meta = elemento("div", "haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle");
-            if (item.pagoLibro.tipo_movimiento === 'penalidad') {
+            if (item.pagoLibro.tipo_movimiento === 'penalidad'&&!item.penalidadPagoPendiente&&!item.penalidadComprobanteRegistrado&&!item.id.endsWith(':comprobante')) {
                 meta.append(datoIncorporacion('Cargo indicado',money(item.pagoLibro.monto)),
                     datoIncorporacion(datos.segundo[0], datos.segundo[1]),
                     datoIncorporacion('Fecha en Libro',datos.fecha));
@@ -8914,7 +9071,7 @@
         }
 
         if (item.categoria === 'asociadas' && Array.isArray(item.movimientosLibro)) {
-            fila.append(movimientosLibroIncorporacion(item.movimientosLibro));
+            fila.append(movimientosLibroIncorporacion(item.movimientosLibro,plan));
         }
 
         const motivosRevisionPago = item.categoria === 'dudosos' && item.motivos.includes(APROBACION_MANUAL_PAGO)
@@ -8945,6 +9102,21 @@
             const notas = elemento("details", "haiku-incorporacion-notas");
             notas.append(elemento("summary", "", "Ver notas y solicitudes"), elemento("p", "", vista.reserva.observaciones));
             fila.append(notas);
+        }
+        if(item.precioServicioManual&&aprobar?.manualPago){
+            const p=item.precioServicioManual, detalles=elemento('details','haiku-incorporacion-notas haku-precio-cargo');
+            detalles.append(elemento('summary','','Revisar precio final autorizado de este cargo'),
+                elemento('p','',`Cargo ${p.cargo_id} · ${money(p.monto_ajustado)} → ${money(p.precio_final)}. Ajuste ${money(p.precio_final-p.monto_ajustado)}. El catálogo y el comprobante se conservan.`));
+            const motivo=elemento('input'),autorizacion=elemento('input'),check=elemento('input');
+            motivo.type=autorizacion.type='text';check.type='checkbox';motivo.maxLength=autorizacion.maxLength=500;
+            motivo.setAttribute('aria-label','Motivo del ajuste de precio');motivo.placeholder='Motivo del ajuste';
+            autorizacion.setAttribute('aria-label','Evidencia independiente de autorización del precio');autorizacion.placeholder='Quién autorizó el precio final, cuándo y dónde consta';
+            const label=elemento('label','','Confirmo el precio final autorizado; el recibo por sí solo no acredita ese precio.');label.prepend(check);
+            const guardar=elemento('button','haiku-incorporacion-aprobar','Confirmar ajuste de este cargo');guardar.type='button';
+            guardar.addEventListener('click',()=>ejecutarAprobacionVisual(guardar,()=>aprobar.manualPago(plan,item.id,
+                {tipo:'precio_cargo_libro_v1',motivo:motivo.value,autorizacion:autorizacion.value,confirmado:check.checked}),fila,'Confirmando ajuste…'));
+            const campos=elemento('div','haku-precio-cargo-campos');campos.append(motivo,autorizacion,label,guardar);
+            detalles.append(campos);fila.append(detalles);
         }
         if (item.ampliacionJacuzzi && aprobar?.ampliarJacuzzi) {
             const ajuste=item.ampliacionJacuzzi;
@@ -9305,6 +9477,8 @@
             plan.focoPagos ? "El titular y RUT ya coinciden. Si Bofore continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :
             "El Libro de Reservas tiene prioridad. Revisa el antes y el después: se conservan los comentarios manuales y los datos no determinados; los retiros verificados del bloque importado se detallan en la vista previa. Sólo se guardará tu selección en una sola operación segura.");
         preparacion.append(aviso);
+        if(plan.resultadoPrecioCargo?.ok===true)preparacion.append(elemento('p','haiku-incorporacion-propuesta',
+            `Ajuste confirmado en el cargo ${plan.resultadoPrecioCargo.cargo_id}: ${money(plan.resultadoPrecioCargo.ajuste)}. Precio final ${money(plan.resultadoPrecioCargo.precio_final)}. El pago requiere su confirmación independiente.`));
         for (const item of plan.items.filter(i=>i.cambioFuente)) {
             const c=item.cambioFuente, card=elemento('section','haiku-incorporacion-item');
             card.append(elemento('strong','',`CAB ${c.anterior.cabana} · ${c.anterior.titular}`),

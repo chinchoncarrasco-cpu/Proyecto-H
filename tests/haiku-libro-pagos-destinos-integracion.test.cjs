@@ -19,9 +19,9 @@ const estadia = r => ({ id: 'e1', reserva_id: 'r1', fecha_ingreso: r.fecha_check
     estado_estadia: 'confirmada', tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0,
     cabanas: { numero: r.cabana }, reservas: { id: 'r1', titular_nombre: r.titular,
         titular_numero_documento: r.rut_documento, estado_reserva: 'confirmada' } });
-const servicio = { id: 's1', reserva_id: 'r1', fecha_servicio: '2026-09-12', total: 30000,
+const servicio = { id: 's1', reserva_id: 'r1', estadia_id:'e1', fecha_servicio: '2026-09-12', total: 30000,
     tipo_cobro: 'normal', estado_servicio: 'programado', catalogo_servicios: { codigo: 'TIN-TONEL', nombre: 'Tinaja Tonel', categoria: 'servicio' } };
-const cargo = { cargo_id: 'c1', reserva_id: 'r1', servicio_id: 's1', tipo_cargo: 'servicio', concepto: 'Tinaja Tonel',
+const cargo = { cargo_id: 'c1', reserva_id: 'r1', estadia_id:'e1', servicio_id: 's1', tipo_cargo: 'servicio', concepto: 'Tinaja Tonel',
     monto: 30000, monto_ajustado: 30000, aplicado_neto: 0, saldo_cargo: 30000, estado: 'activo', estado_pago: 'pendiente' };
 
 function cliente(tablas, fallarFinanzas = false) {

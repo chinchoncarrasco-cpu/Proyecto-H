@@ -955,6 +955,17 @@
     line-height: 1.35;
     white-space: pre-wrap;
 }
+.haiku-incorporacion .haku-precio-cargo-campos { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 6px; padding: 6px; }
+.haiku-incorporacion .haku-precio-cargo-campos > :is(label,button) { grid-column: 1 / -1; }
+.haiku-incorporacion .haku-precio-cargo-campos > input { min-width: 0; width: 100%; padding: 7px; color: inherit; background: transparent; border: 1px solid #82968a; border-radius: 5px; }
+.haiku-incorporacion .haku-precio-cargo label { display: flex; align-items: start; gap: 6px; font-size: .75rem; }
+.haiku-incorporacion .haku-precio-cargo input[type="checkbox"] { width: auto; flex: none; margin-top: 2px; }
+.haiku-incorporacion .haiku-incorporacion-propuesta { overflow-wrap: anywhere; }
+#ficha-pago-aplicaciones-detalle { display: block; max-width: 100%; margin-top: 4px; font-size: .7rem; line-height: 1.35; overflow-wrap: anywhere; }
+#ficha-pago-aplicaciones-detalle[hidden] { display: none; }
+@media (max-width: 600px) {
+    .haiku-incorporacion .haku-precio-cargo-campos { grid-template-columns: minmax(0,1fr); gap: 4px; }
+}
 
 .haiku-incorporacion-aprobar {
     min-height: 29px;

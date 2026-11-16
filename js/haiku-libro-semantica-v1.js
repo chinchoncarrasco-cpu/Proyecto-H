@@ -1574,7 +1574,7 @@
                         ...(ventaSinReserva ? { venta_sin_reserva:true } : {}),
                         codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
-                        bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manager/.test(t),
+                        bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manage{1,2}r/.test(t),
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
                         monto_penalidad: /penalidad/.test(t) ? monto(t.match(/([\d.,]+)\s+de penalidad/)?.[1]) : null,
                         saldo_por_pagar: monto(t.match(/por pagar\s*\$\s*([\d.,]+)/)?.[1]),

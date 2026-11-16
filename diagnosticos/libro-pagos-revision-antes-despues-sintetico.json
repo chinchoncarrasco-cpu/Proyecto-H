@@ -1,0 +1,363 @@
+{
+  "datos": "Exclusivamente sintéticos. No contiene extractos de huéspedes.",
+  "base": "8431b62636a0fc224e5d2e6a982c81d2bd663e05",
+  "antes": {
+    "filas": [
+      {
+        "celda": "AZ31:BC31",
+        "concepto": "cab3//1noche",
+        "monto": 144000,
+        "comprobanteSeparado": false,
+        "categoria": "omitidos",
+        "aprobable": false,
+        "motivos": [],
+        "aviso": null,
+        "accion": null,
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ32:BC32",
+        "concepto": "DIFERENCIA TARIFA",
+        "monto": 14400,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "No fue posible comprobar el destino financiero del pago de servicio.",
+          "Requiere aprobación manual de la asociación y el pago."
+        ],
+        "aviso": null,
+        "accion": null,
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ33:BC33",
+        "concepto": "penalidad",
+        "monto": 16000,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "Ya existe otro ajuste de penalidad activo en esta reserva: revisa el importe y el motivo antes de continuar."
+        ],
+        "aviso": "Existe un ajuste del 10% que no coincide inequívocamente con el Libro. No se duplicará.",
+        "accion": null,
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ34:BC34",
+        "concepto": "tinaja",
+        "monto": 32500,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "El monto de la aplicación supera el saldo pendiente del cargo."
+        ],
+        "aviso": null,
+        "accion": null,
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ35:BC35",
+        "concepto": "masaje",
+        "monto": 65000,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "Falta un cargo compatible de «masaje» en Proyecto H."
+        ],
+        "aviso": null,
+        "accion": "crear_servicio_faltante",
+        "comparacionAjuste": null
+      }
+    ],
+    "propuestaConAprobacionFicticia": [],
+    "ficha": {
+      "total": 188400,
+      "abono": 144000,
+      "saldo": 188400,
+      "servicios": 30000
+    },
+    "mutaciones": []
+  },
+  "despues": {
+    "filas": [
+      {
+        "celda": "AZ31:BC31",
+        "concepto": "cab3//1noche",
+        "monto": 144000,
+        "comprobanteSeparado": false,
+        "categoria": "omitidos",
+        "aprobable": false,
+        "motivos": [],
+        "aviso": "Pago registrado · aplicado $0 CLP · sin aplicar $144.000 CLP. Origen guardado: Oct26!CI36:CL36 · estadía de origen 2026-10-22. Revisa las aplicaciones en la ficha; no se duplicará ni reasignará automáticamente.",
+        "accion": null,
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ32:BC32",
+        "concepto": "DIFERENCIA TARIFA",
+        "monto": 14400,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": true,
+        "motivos": [
+          "Requiere aprobación manual de la asociación y el pago."
+        ],
+        "aviso": "Diferencia de tarifa: recepción para alojamiento, separada de cualquier ajuste que genera un cargo. Cargo asociado 33333333-3333-4333-8333-333333333333 · Alojamiento ficticio · saldo $158.400 CLP. La glosa identifica al remitente, pero no acredita un número de operación bancaria. Revisa el comprobante y su aplicación en la ficha.",
+        "accion": "Aprobar transferencia para alojamiento · $14.400 CLP",
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ33:BC33",
+        "concepto": "penalidad",
+        "monto": 16000,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "Ya existe otro ajuste de penalidad activo. monto: Libro $16.000 CLP / Proyecto H $14.400 CLP. Revisa el importe y el motivo."
+        ],
+        "aviso": "El ajuste activo no coincide inequívocamente con el Libro. No se duplicará ni se corregirá automáticamente. Registrado: cargo_modificacion · 10% · motivo: Modificación de tarifa confirmada por operador ficticio · cargo 33333333-3333-4333-8333-333333333333.",
+        "accion": null,
+        "comparacionAjuste": {
+          "estado": "revision",
+          "diferencias": [
+            {
+              "campo": "monto",
+              "libro": 16000,
+              "proyecto": 14400
+            }
+          ],
+          "ajuste": {
+            "monto": 14400,
+            "porcentaje": 10,
+            "tipo": "cargo_modificacion",
+            "motivo": "Modificación de tarifa confirmada por operador ficticio",
+            "cargoId": "33333333-3333-4333-8333-333333333333",
+            "reservaId": "11111111-1111-4111-8111-111111111111"
+          }
+        }
+      },
+      {
+        "celda": "AZ34:BC34",
+        "concepto": "tinaja",
+        "monto": 32500,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": true,
+        "motivos": [
+          "Requiere aprobación manual de la asociación y el pago."
+        ],
+        "aviso": "Libro: tinaja · cargo: Tinaja Jacuzzi (44444444-4444-4444-8444-444444444444). Recibido $32.500 CLP · aplicar $30.000 CLP · diferencia $2.500 CLP sin aplicar. No acredita por sí sola un precio final autorizado.",
+        "accion": "Registrar $32.500 CLP · aplicar $30.000 CLP · dejar $2.500 CLP sin aplicar",
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ35:BC35",
+        "concepto": "masaje",
+        "monto": 65000,
+        "comprobanteSeparado": false,
+        "categoria": "dudosos",
+        "aprobable": false,
+        "motivos": [
+          "Falta un cargo compatible de «masaje» en Proyecto H."
+        ],
+        "aviso": null,
+        "accion": "crear_servicio_faltante",
+        "comparacionAjuste": null
+      },
+      {
+        "celda": "AZ33:BC33",
+        "concepto": "penalidad",
+        "monto": 16000,
+        "comprobanteSeparado": true,
+        "categoria": "dudosos",
+        "aprobable": true,
+        "motivos": [
+          "Requiere aprobación manual del pago de penalidad registrado en el Libro."
+        ],
+        "aviso": "Ajuste por revisar; el comprobante acredita una recepción independiente. Pago $16.000 CLP · tarjeta_credito · 2026-10-22. Se aplicará al cargo de alojamiento verificado; no se cambia el ajuste ni la tinaja.",
+        "accion": "Aprobar comprobante de tarjeta · $16.000 CLP",
+        "comparacionAjuste": null
+      }
+    ],
+    "propuestaConAprobacionFicticia": [
+      {
+        "tipo": "pago_servicios_4c",
+        "item_id": "pago:persona ficticia||2026-11-13|2026-11-14|alojamiento|cab2:Nov26!AZ34:BC34:{\"monto\":32500,\"moneda\":\"CLP\",\"medio_pago\":\"debito\",\"tipo_movimiento\":\"servicio\",\"estado_pago\":\"registrado_en_libro\",\"pago_recibido\":true,\"codigo_autorizacion\":null,\"folio\":\"880034\",\"bovtar\":\"990034\",\"fecha_comprobante\":\"2026-11-14\",\"fecha_bloque\":\"2026-11-13\",\"cabana\":2,\"titular\":\"Persona Ficticia\",\"texto_original\":\"Bovtar:990034-Folio:880034// debito\",\"origen\":{\"hoja\":\"Nov26\",\"celda\":\"AZ34:BC34\"},\"evidencia_financiera\":{\"sector\":\"pagos\",\"columnas_ocupadas\":{\"fecha\":true,\"detalle\":true,\"concepto\":true,\"monto\":true}},\"concepto\":\"tinaja\",\"webpay_por_confirmar\":false,\"clasificacion_financiera\":\"pago_real\"}",
+        "reserva_id": "11111111-1111-4111-8111-111111111111",
+        "reserva_ref": null,
+        "argumentos": {
+          "p_reserva_id": "11111111-1111-4111-8111-111111111111",
+          "p_monto": 32500,
+          "p_medio_pago": "tarjeta_debito",
+          "p_etapa_operativa": "abono",
+          "p_fecha_pago": "2026-11-14",
+          "p_folio": "880034",
+          "p_codigo_autorizacion": null,
+          "p_bove": "990034",
+          "p_referencia_externa": "Bovtar:990034-Folio:880034// debito",
+          "p_observaciones": "Bovtar:990034-Folio:880034// debito",
+          "p_aplicaciones": [],
+          "p_modo_aplicacion": "ninguno"
+        },
+        "datos_origen": {
+          "evidencia_libro": {
+            "monto": 32500,
+            "moneda": "CLP",
+            "medio_pago": "debito",
+            "tipo_movimiento": "servicio",
+            "estado_pago": "registrado_en_libro",
+            "pago_recibido": true,
+            "codigo_autorizacion": null,
+            "folio": "880034",
+            "bovtar": "990034",
+            "fecha_comprobante": "2026-11-14",
+            "fecha_bloque": "2026-11-13",
+            "cabana": 2,
+            "titular": "Persona Ficticia",
+            "texto_original": "Bovtar:990034-Folio:880034// debito",
+            "origen": {
+              "hoja": "Nov26",
+              "celda": "AZ34:BC34"
+            },
+            "evidencia_financiera": {
+              "sector": "pagos",
+              "columnas_ocupadas": {
+                "fecha": true,
+                "detalle": true,
+                "concepto": true,
+                "monto": true
+              }
+            },
+            "concepto": "tinaja",
+            "webpay_por_confirmar": false,
+            "clasificacion_financiera": "pago_real"
+          },
+          "excedente_servicio_libro_v1": {
+            "version": 1,
+            "confirmado": true,
+            "monto_sin_aplicar": 2500
+          },
+          "aplicaciones_servicio_v1": {
+            "version": 1,
+            "reserva_id": "11111111-1111-4111-8111-111111111111",
+            "monto_total": 32500,
+            "moneda": "CLP",
+            "monto_sin_aplicar": 2500,
+            "aplicaciones": [
+              {
+                "cargo_id": "44444444-4444-4444-8444-444444444444",
+                "servicio_id": "55555555-5555-4555-8555-555555555555",
+                "concepto_canon": "tinaja",
+                "monto": 30000,
+                "saldo_esperado": 30000,
+                "aplicado_esperado": 0,
+                "cantidad_aplicaciones_esperada": 0,
+                "fecha_contexto": "2026-11-13",
+                "fecha_servicio_esperada": "2026-11-13"
+              }
+            ]
+          },
+          "source_fingerprint": "haku-pago-v1|servicio|2|2026-11-14|32500|CLP|tarjeta_debito|880034||990034|",
+          "source_kind": "libro_reserva",
+          "cabana": 2,
+          "reserva_id": "11111111-1111-4111-8111-111111111111",
+          "grupo_reserva_id": null,
+          "fecha": "2026-11-14",
+          "monto": 32500,
+          "moneda": "CLP",
+          "medio": "tarjeta_debito",
+          "folio_normalizado": "880034",
+          "autorizacion_normalizada": null,
+          "bovtar_normalizado": "990034",
+          "referencia_normalizada": "bovtar 990034 folio 880034 debito",
+          "tipo_movimiento": "servicio",
+          "bovtar": "990034",
+          "fecha_bloque": "2026-11-13",
+          "origen": {
+            "hoja": "Nov26",
+            "celda": "AZ34:BC34"
+          },
+          "origen_libro": {
+            "hoja": "Nov26",
+            "celda": "AZ34:BC34"
+          }
+        },
+        "aprobado_manualmente": true
+      },
+      {
+        "tipo": "pago_servicios_4c",
+        "item_id": "pago:persona ficticia||2026-11-13|2026-11-14|alojamiento|cab2:Nov26!AZ33:BC33:{\"monto\":16000,\"moneda\":\"CLP\",\"medio_pago\":\"credito\",\"tipo_movimiento\":\"penalidad\",\"estado_pago\":\"registrado_en_libro\",\"pago_recibido\":true,\"codigo_autorizacion\":null,\"folio\":\"880033\",\"bovtar\":\"990033\",\"fecha_comprobante\":\"2026-10-22\",\"fecha_bloque\":\"2026-11-13\",\"cabana\":2,\"titular\":\"Persona Ficticia\",\"texto_original\":\"Bovtar:990033-Folio:880033// credito// PEND BOVE Y MANAGEER\",\"origen\":{\"hoja\":\"Nov26\",\"celda\":\"AZ33:BC33\"},\"evidencia_financiera\":{\"sector\":\"pagos\",\"columnas_ocupadas\":{\"fecha\":true,\"detalle\":true,\"concepto\":true,\"monto\":true}},\"concepto\":\"penalidad\",\"webpay_por_confirmar\":false,\"clasificacion_financiera\":\"pago_real\"}:comprobante",
+        "reserva_id": "11111111-1111-4111-8111-111111111111",
+        "reserva_ref": null,
+        "argumentos": {
+          "p_reserva_id": "11111111-1111-4111-8111-111111111111",
+          "p_monto": 16000,
+          "p_medio_pago": "tarjeta_credito",
+          "p_etapa_operativa": "abono",
+          "p_fecha_pago": "2026-10-22",
+          "p_folio": "880033",
+          "p_codigo_autorizacion": null,
+          "p_bove": "990033",
+          "p_referencia_externa": "Bovtar:990033-Folio:880033// credito// PEND BOVE Y MANAGEER",
+          "p_observaciones": "Pago penalidad según Libro · Bovtar:990033-Folio:880033// credito// PEND BOVE Y MANAGEER",
+          "p_aplicaciones": [],
+          "p_modo_aplicacion": "alojamiento"
+        },
+        "datos_origen": {
+          "item_id": "pago:persona ficticia||2026-11-13|2026-11-14|alojamiento|cab2:Nov26!AZ33:BC33:{\"monto\":16000,\"moneda\":\"CLP\",\"medio_pago\":\"credito\",\"tipo_movimiento\":\"penalidad\",\"estado_pago\":\"registrado_en_libro\",\"pago_recibido\":true,\"codigo_autorizacion\":null,\"folio\":\"880033\",\"bovtar\":\"990033\",\"fecha_comprobante\":\"2026-10-22\",\"fecha_bloque\":\"2026-11-13\",\"cabana\":2,\"titular\":\"Persona Ficticia\",\"texto_original\":\"Bovtar:990033-Folio:880033// credito// PEND BOVE Y MANAGEER\",\"origen\":{\"hoja\":\"Nov26\",\"celda\":\"AZ33:BC33\"},\"evidencia_financiera\":{\"sector\":\"pagos\",\"columnas_ocupadas\":{\"fecha\":true,\"detalle\":true,\"concepto\":true,\"monto\":true}},\"concepto\":\"penalidad\",\"webpay_por_confirmar\":false,\"clasificacion_financiera\":\"pago_real\"}:comprobante",
+          "penalidad_ajuste_operacion_id": null,
+          "destino_alojamiento_libro_v1": {
+            "version": 1,
+            "cargo_id": "33333333-3333-4333-8333-333333333333",
+            "estadia_id": "22222222-2222-4222-8222-222222222222",
+            "saldo_esperado": 158400,
+            "monto_ajustado": 158400,
+            "aplicado_esperado": 0
+          },
+          "source_fingerprint": "haku-pago-v1|penalidad|2|2026-10-22|16000|CLP|tarjeta_credito|880033||990033|",
+          "source_kind": "libro_reserva",
+          "cabana": 2,
+          "reserva_id": "11111111-1111-4111-8111-111111111111",
+          "grupo_reserva_id": null,
+          "fecha": "2026-10-22",
+          "monto": 16000,
+          "moneda": "CLP",
+          "medio": "tarjeta_credito",
+          "folio_normalizado": "880033",
+          "autorizacion_normalizada": null,
+          "bovtar_normalizado": "990033",
+          "referencia_normalizada": "bovtar 990033 folio 880033 credito pend bove y manageer",
+          "tipo_movimiento": "penalidad",
+          "bovtar": "990033",
+          "fecha_bloque": "2026-11-13",
+          "origen": {
+            "hoja": "Nov26",
+            "celda": "AZ33:BC33"
+          },
+          "origen_libro": {
+            "hoja": "Nov26",
+            "celda": "AZ33:BC33"
+          }
+        },
+        "aprobado_manualmente": true
+      }
+    ],
+    "ficha": {
+      "total": 188400,
+      "abono": 144000,
+      "saldo": 188400,
+      "servicios": 30000,
+      "saldoCargos": 188400,
+      "saldoNeto": 44400,
+      "saldoFavor": 0,
+      "sinAplicar": 144000,
+      "aplicado": 0
+    },
+    "mutaciones": []
+  }
+}
