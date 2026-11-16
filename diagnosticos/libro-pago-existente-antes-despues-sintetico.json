@@ -1,0 +1,468 @@
+{
+  "datos": "Exclusivamente ficticios, escritos sólo en PostgreSQL local desechable.",
+  "base": "c3e0c68528d83f1d5ba70bf03b9b8de1b559f21b",
+  "hashes": {
+    "js/haiku-libro-consultas-v1.js": "5f449f651a6589fd24c90e19e8f02815ce2639badf00b3c7e29d5ee393c506ea",
+    "css/haiku-libro-pagos-ui-v1.css": "b26b720147836b76ab478ff19adbcc1f0d046a1b569361d92d24d6001049a867",
+    "supabase/migrations/20261116191114_libro_aplicar_pago_existente.sql": "d80228653931469f908a786780c9843184a01070d14cf67b3c3da3500732463e"
+  },
+  "validacion": {
+    "pruebas": 323,
+    "pass": 323,
+    "fail": 0,
+    "navegador": [
+      {
+        "flujo": "abono",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "penalidad",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "tinaja",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "abono",
+        "mobile": false,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "penalidad",
+        "mobile": false,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "tinaja",
+        "mobile": false,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "abono",
+        "mobile": true,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "penalidad",
+        "mobile": true,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "tinaja",
+        "mobile": true,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "abono",
+        "mobile": true,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "penalidad",
+        "mobile": true,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "tinaja",
+        "mobile": true,
+        "tema": "oscuro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "parcial",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "ambiguo",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      },
+      {
+        "flujo": "saldo-cambiado",
+        "mobile": false,
+        "tema": "claro",
+        "resultado": "PASS"
+      }
+    ]
+  },
+  "abono": {
+    "pagoOriginal": "66666666-6666-4666-8666-666666666666",
+    "vistaPrevia": "Aplicar pago existente\n\nSe conserva el pago original 66666666-6666-4666-8666-666666666666. Su origen y comprobante no cambian.\n\nCargo de alojamiento de destino\nAlojamiento CAB 2 actual · $158.400 CLP pendientes · 33333333-3333-4333-8333-333333333333\n\nCAB 2 · 13/11/2026 al 14/11/2026\n\nSALDO DEL ALOJAMIENTO\n$158.400 CLP\nPAGO DISPONIBLE\n$144.000 CLP\nSE APLICARÁ\n$144.000 CLP\nQUEDARÁ SIN APLICAR\n$0 CLP\nConfirmar aplicación",
+    "antes": {
+      "pagos": [
+        {
+          "id": "66666666-6666-4666-8666-666666666666",
+          "bove": null,
+          "folio": null,
+          "monto": 144000,
+          "estado": "confirmado",
+          "moneda": "CLP",
+          "creado_en": "2026-11-16T15:31:51.062-04:00",
+          "creado_por": null,
+          "fecha_pago": "2026-10-16T00:00:00-04:00",
+          "medio_pago": "webpay_debito",
+          "reserva_id": "11111111-1111-4111-8111-111111111111",
+          "datos_origen": {
+            "cabana": 3,
+            "fecha_bloque": "2026-10-22",
+            "origen_libro": {
+              "hoja": "Oct26",
+              "celda": "CI36:CL36"
+            }
+          },
+          "observaciones": null,
+          "pagador_nombre": null,
+          "pago_origen_id": null,
+          "etapa_operativa": "abono",
+          "tipo_movimiento": "pago",
+          "referencia_externa": null,
+          "codigo_autorizacion": "770031"
+        }
+      ],
+      "aplicaciones": [],
+      "resumen": {
+        "total": 188400,
+        "abono": 144000,
+        "saldo": 188400,
+        "servicios": 30000,
+        "saldoCargos": 188400,
+        "saldoNeto": 44400,
+        "saldoFavor": 0,
+        "sinAplicar": 144000,
+        "aplicado": 0
+      }
+    },
+    "persistido": {
+      "pagos": [
+        {
+          "id": "66666666-6666-4666-8666-666666666666",
+          "bove": null,
+          "folio": null,
+          "monto": 144000,
+          "estado": "confirmado",
+          "moneda": "CLP",
+          "creado_en": "2026-11-16T15:31:51.062-04:00",
+          "creado_por": null,
+          "fecha_pago": "2026-10-16T00:00:00-04:00",
+          "medio_pago": "webpay_debito",
+          "reserva_id": "11111111-1111-4111-8111-111111111111",
+          "datos_origen": {
+            "cabana": 3,
+            "fecha_bloque": "2026-10-22",
+            "origen_libro": {
+              "hoja": "Oct26",
+              "celda": "CI36:CL36"
+            }
+          },
+          "observaciones": null,
+          "pagador_nombre": null,
+          "pago_origen_id": null,
+          "etapa_operativa": "abono",
+          "tipo_movimiento": "pago",
+          "referencia_externa": null,
+          "codigo_autorizacion": "770031"
+        }
+      ],
+      "aplicaciones": [
+        {
+          "id": "55fcc523-34a0-4243-87fb-97fdd7fbe094",
+          "pago_id": "66666666-6666-4666-8666-666666666666",
+          "cargo_id": "33333333-3333-4333-8333-333333333333",
+          "monto_aplicado": 144000
+        }
+      ],
+      "resumen": {
+        "total": 188400,
+        "abono": 144000,
+        "saldo": 44400,
+        "servicios": 30000,
+        "saldoCargos": 44400,
+        "saldoNeto": 44400,
+        "saldoFavor": 0,
+        "sinAplicar": 0,
+        "aplicado": 144000
+      }
+    },
+    "releido": {
+      "pagos": [
+        {
+          "id": "66666666-6666-4666-8666-666666666666",
+          "bove": null,
+          "folio": null,
+          "monto": 144000,
+          "estado": "confirmado",
+          "moneda": "CLP",
+          "creado_en": "2026-11-16T15:31:51.062-04:00",
+          "creado_por": null,
+          "fecha_pago": "2026-10-16T00:00:00-04:00",
+          "medio_pago": "webpay_debito",
+          "reserva_id": "11111111-1111-4111-8111-111111111111",
+          "datos_origen": {
+            "cabana": 3,
+            "fecha_bloque": "2026-10-22",
+            "origen_libro": {
+              "hoja": "Oct26",
+              "celda": "CI36:CL36"
+            }
+          },
+          "observaciones": null,
+          "pagador_nombre": null,
+          "pago_origen_id": null,
+          "etapa_operativa": "abono",
+          "tipo_movimiento": "pago",
+          "referencia_externa": null,
+          "codigo_autorizacion": "770031"
+        }
+      ],
+      "aplicaciones": [
+        {
+          "id": "55fcc523-34a0-4243-87fb-97fdd7fbe094",
+          "pago_id": "66666666-6666-4666-8666-666666666666",
+          "cargo_id": "33333333-3333-4333-8333-333333333333",
+          "monto_aplicado": 144000
+        }
+      ],
+      "resumen": {
+        "total": 188400,
+        "abono": 144000,
+        "saldo": 44400,
+        "servicios": 30000,
+        "saldoCargos": 44400,
+        "saldoNeto": 44400,
+        "saldoFavor": 0,
+        "sinAplicar": 0,
+        "aplicado": 144000
+      }
+    },
+    "reintentoMismoId": {
+      "ok": true,
+      "pago_id": "66666666-6666-4666-8666-666666666666",
+      "cargo_id": "33333333-3333-4333-8333-333333333333",
+      "reintento": true,
+      "estadia_id": "22222222-2222-4222-8222-222222222222",
+      "reserva_id": "11111111-1111-4111-8111-111111111111",
+      "saldo_cargo": 14400,
+      "sin_aplicar": 0,
+      "ya_aplicado": false,
+      "operacion_id": "11587182-c42b-448f-a152-d6d8c93c0198",
+      "origen_libro": {
+        "hoja": "Nov26",
+        "celda": "AZ31:BC31"
+      },
+      "version_libro": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "monto_aplicado": 144000,
+      "aplicado_total_cargo": 144000
+    },
+    "reintentoNuevoId": {
+      "ok": true,
+      "pago_id": "66666666-6666-4666-8666-666666666666",
+      "cargo_id": "33333333-3333-4333-8333-333333333333",
+      "estadia_id": "22222222-2222-4222-8222-222222222222",
+      "reserva_id": "11111111-1111-4111-8111-111111111111",
+      "saldo_cargo": 14400,
+      "sin_aplicar": 0,
+      "ya_aplicado": true,
+      "operacion_id": "6a9323df-c5f1-4f1d-8c3e-2c696f7fb6ae",
+      "origen_libro": {
+        "hoja": "Nov26",
+        "celda": "AZ31:BC31"
+      },
+      "version_libro": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "monto_aplicado": 0,
+      "aplicado_total_cargo": 144000
+    }
+  },
+  "otros": [
+    {
+      "flujo": "parcial",
+      "resultado": "PASS",
+      "persistido": {
+        "pagos": [
+          {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "bove": null,
+            "folio": null,
+            "monto": 144000,
+            "estado": "confirmado",
+            "moneda": "CLP",
+            "creado_en": "2026-11-16T15:32:26.589-04:00",
+            "creado_por": null,
+            "fecha_pago": "2026-10-16T00:00:00-04:00",
+            "medio_pago": "webpay_debito",
+            "reserva_id": "11111111-1111-4111-8111-111111111111",
+            "datos_origen": {
+              "cabana": 3,
+              "fecha_bloque": "2026-10-22",
+              "origen_libro": {
+                "hoja": "Oct26",
+                "celda": "CI36:CL36"
+              }
+            },
+            "observaciones": null,
+            "pagador_nombre": null,
+            "pago_origen_id": null,
+            "etapa_operativa": "abono",
+            "tipo_movimiento": "pago",
+            "referencia_externa": null,
+            "codigo_autorizacion": "770031"
+          }
+        ],
+        "aplicaciones": [
+          {
+            "id": "70722944-3dcb-4d66-bb42-5698e02a7296",
+            "pago_id": "66666666-6666-4666-8666-666666666666",
+            "cargo_id": "33333333-3333-4333-8333-333333333333",
+            "monto_aplicado": 100000
+          }
+        ],
+        "resumen": {
+          "total": 130000,
+          "abono": 144000,
+          "saldo": 30000,
+          "servicios": 30000,
+          "saldoCargos": 30000,
+          "saldoNeto": 0,
+          "saldoFavor": 14000,
+          "sinAplicar": 44000,
+          "aplicado": 100000
+        }
+      }
+    },
+    {
+      "flujo": "ambiguo",
+      "resultado": "PASS",
+      "persistido": {
+        "pagos": [
+          {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "bove": null,
+            "folio": null,
+            "monto": 144000,
+            "estado": "confirmado",
+            "moneda": "CLP",
+            "creado_en": "2026-11-16T15:32:29.332-04:00",
+            "creado_por": null,
+            "fecha_pago": "2026-10-16T00:00:00-04:00",
+            "medio_pago": "webpay_debito",
+            "reserva_id": "11111111-1111-4111-8111-111111111111",
+            "datos_origen": {
+              "cabana": 3,
+              "fecha_bloque": "2026-10-22",
+              "origen_libro": {
+                "hoja": "Oct26",
+                "celda": "CI36:CL36"
+              }
+            },
+            "observaciones": null,
+            "pagador_nombre": null,
+            "pago_origen_id": null,
+            "etapa_operativa": "abono",
+            "tipo_movimiento": "pago",
+            "referencia_externa": null,
+            "codigo_autorizacion": "770031"
+          }
+        ],
+        "aplicaciones": [
+          {
+            "id": "5f6a528e-1064-419f-995b-87e26eaf9097",
+            "pago_id": "66666666-6666-4666-8666-666666666666",
+            "cargo_id": "77777777-7777-4777-8777-777777777777",
+            "monto_aplicado": 50000
+          }
+        ],
+        "resumen": {
+          "total": 238400,
+          "abono": 144000,
+          "saldo": 188400,
+          "servicios": 30000,
+          "saldoCargos": 188400,
+          "saldoNeto": 94400,
+          "saldoFavor": 0,
+          "sinAplicar": 94000,
+          "aplicado": 50000
+        }
+      }
+    },
+    {
+      "flujo": "saldo-cambiado",
+      "resultado": "PASS",
+      "persistido": {
+        "pagos": [
+          {
+            "id": "66666666-6666-4666-8666-666666666666",
+            "bove": null,
+            "folio": null,
+            "monto": 144000,
+            "estado": "confirmado",
+            "moneda": "CLP",
+            "creado_en": "2026-11-16T15:32:31.841-04:00",
+            "creado_por": null,
+            "fecha_pago": "2026-10-16T00:00:00-04:00",
+            "medio_pago": "webpay_debito",
+            "reserva_id": "11111111-1111-4111-8111-111111111111",
+            "datos_origen": {
+              "cabana": 3,
+              "fecha_bloque": "2026-10-22",
+              "origen_libro": {
+                "hoja": "Oct26",
+                "celda": "CI36:CL36"
+              }
+            },
+            "observaciones": null,
+            "pagador_nombre": null,
+            "pago_origen_id": null,
+            "etapa_operativa": "abono",
+            "tipo_movimiento": "pago",
+            "referencia_externa": null,
+            "codigo_autorizacion": "770031"
+          }
+        ],
+        "aplicaciones": [
+          {
+            "id": "b2aedbe9-9962-4300-9a48-63ea88b02c80",
+            "pago_id": "66666666-6666-4666-8666-666666666666",
+            "cargo_id": "44444444-4444-4444-8444-444444444444",
+            "monto_aplicado": 1000
+          }
+        ],
+        "resumen": {
+          "total": 188400,
+          "abono": 144000,
+          "saldo": 187400,
+          "servicios": 29000,
+          "saldoCargos": 187400,
+          "saldoNeto": 44400,
+          "saldoFavor": 0,
+          "sinAplicar": 143000,
+          "aplicado": 1000
+        }
+      }
+    }
+  ],
+  "seguridad": {
+    "escriturasReales": 0,
+    "push": false,
+    "merge": false,
+    "despliegue": false,
+    "migracionProductiva": false
+  },
+  "evidenciaLocal": "%LOCALAPPDATA%\\ProyectoH\\diagnosticos\\libro-pago-existente-sintetico"
+}

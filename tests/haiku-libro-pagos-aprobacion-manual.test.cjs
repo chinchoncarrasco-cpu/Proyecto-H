@@ -594,7 +594,7 @@ test('contratos del flujo manual: sólo RPC protegidos de servicio y precio, sin
         assert.doesNotMatch(codigo,/\.insert\(|\.update\(|setTimeout|setInterval|\.click\(|fechaSeleccionada|HAIKU_RESUMEN_REFRESH_V1|full_day/i);
         assert.doesNotMatch(codigo,/\.from\(['"](?:servicios|cargos|pagos|reservas|reserva_estadias)['"]\)/);
     }
-    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_libro_ajustar_precio_cargo_v1','haiku_registrar_servicio']);
+    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_libro_aplicar_pago_existente_v1','haiku_libro_ajustar_precio_cargo_v1','haiku_registrar_servicio']);
 });
 
 async function revisionVisualUi(opciones={}) {

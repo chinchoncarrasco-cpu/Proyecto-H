@@ -1046,7 +1046,8 @@
                 diferencias
             });
         }
-        return { disponible: true, cargos: cargosFinancieros, aplicaciones };
+        return { disponible: true, cargos: cargosFinancieros, aplicaciones,
+            reserva_ids:reservaIds,pago_ids:pagoIds,aplicaciones_por_pago:aplicacionesPago };
     }
 
     function rolComponenteDistribuido(pago) {
@@ -2072,7 +2073,7 @@
     }
 
     const leerPagosSistema = cliente => paginas(() => cliente.from("pagos")
-        .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa"));
+        .select("id,reserva_id,monto,moneda,estado,folio,codigo_autorizacion,bove,datos_origen,medio_pago,fecha_pago,verificado_por,verificado_en,referencia_externa,observaciones,tipo_movimiento,etapa_operativa,pago_origen_id"));
 
     async function leerFinanzasServicios(cliente, ids) {
         try {
@@ -2428,10 +2429,28 @@
             const candidatosDestino = [...pagosUnicos.values()].filter(item =>
                 item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
             const candidatosAlojamiento=[...pagosUnicos.values()].filter(item=>item.estado!=='en_sistema'&&item.pago.concepto_alojamiento==='diferencia_tarifa');
-            const idsDestino = [...new Set([...candidatosDestino,...candidatosAlojamiento]
+            const existentesAlojamiento=[...pagosUnicos.values()].filter(item=>item.estado==='en_sistema'&&
+                item.pago.tipo_movimiento==='alojamiento'&&item.sistema?.id);
+            const idsDestino = [...new Set([...candidatosDestino,...candidatosAlojamiento,...existentesAlojamiento]
                 .map(item => reservaSistemaPorLibro.get(claveReserva(item.reserva))).filter(Boolean))];
+            const reutilizarEfectivo=snapshotEfectivoAplicado?.disponible&&idsDestino.length&&q.incluirServicios!==false&&
+                idsDestino.every(id=>snapshotEfectivoAplicado.reserva_ids.includes(id));
             snapshotFinanciero = finanzasInforme && idsDestino.length === 1 && idsDestino[0] === reservaInforme
-                ? finanzasInforme : await leerFinanzasServicios(cliente, idsDestino);
+                ? finanzasInforme : reutilizarEfectivo ? {...snapshotEfectivoAplicado,servicios,pagos}
+                    : await leerFinanzasServicios(cliente, idsDestino);
+            if(snapshotFinanciero?.disponible&&existentesAlojamiento.length){
+                const ids=[...new Set(existentesAlojamiento.map(x=>x.sistema.id))];
+                const relacionados=[...ids,...pagos.filter(p=>ids.includes(p.pago_origen_id)&&p.estado==='confirmado'&&p.tipo_movimiento==='devolucion').map(p=>p.id)];
+                try{
+                    // La conciliación histórica ya leyó todos estos pagos; conserva su cobertura.
+                    snapshotFinanciero.aplicaciones_pagos_existentes=snapshotEfectivoAplicado?.disponible&&
+                        relacionados.every(id=>snapshotEfectivoAplicado.pago_ids.includes(id))
+                        ? snapshotEfectivoAplicado.aplicaciones_por_pago
+                        : await paginas(()=>cliente.from('pago_aplicaciones')
+                            .select('id,pago_id,cargo_id,monto_aplicado').in('pago_id',relacionados).order('id'));
+                    snapshotFinanciero.cobertura_pagos_existentes=ids;
+                }catch(_){snapshotFinanciero.cobertura_pagos_existentes=[];}
+            }
             const serviciosAplicados = [];
             for (const item of candidatosDestino) {
                 item.reserva_sistema_id = reservaSistemaPorLibro.get(claveReserva(item.reserva)) || null;
@@ -3511,6 +3530,7 @@
                 revision_pago_admin_v1:data.revision_pago_admin_v1 === true,
                 excedente_servicio_libro_v1:data.excedente_servicio_libro_v1===true,
                 precio_cargo_libro_v1:data.precio_cargo_libro_v1===true,
+                aplicar_pago_existente_v1:data.aplicar_pago_existente_v1===true,
                 destino_alojamiento_libro_v1:data.destino_alojamiento_libro_v1===true };
         } catch (_) {
             return { disponible: false, motivo: 'La escritura protegida de pagos de servicios todavía no está disponible.' };
@@ -4109,6 +4129,80 @@
             .select('id,codigo,nombre,categoria,activo,unidad,precio_base,requiere_horario,capacidad_incluida,capacidad_maxima,precio_persona_adicional')
             .eq('activo',true), 'codigo');
     }
+    function identidadPagoExistente(pago){
+        return Object.fromEntries(['id','reserva_id','monto','moneda','estado','tipo_movimiento','medio_pago',
+            'folio','codigo_autorizacion','bove','datos_origen'].map(k=>[k,pago[k]??null]));
+    }
+    function estadoPagoExistente(pago,comp){
+        const fin=comp?.snapshot?.finanzas;
+        if(!fin?.disponible||!fin.cobertura_pagos_existentes?.includes(pago.id))return null;
+        const devoluciones=(comp.snapshot.pagos_todos||[]).filter(p=>p.pago_origen_id===pago.id&&p.estado==='confirmado'&&p.tipo_movimiento==='devolucion');
+        const ids=new Set(devoluciones.map(p=>p.id)),apps=fin.aplicaciones_pagos_existentes||[];
+        const devuelto=devoluciones.reduce((n,p)=>n+Number(p.monto),0);
+        const aplicado=apps.reduce((n,a)=>n+(a.pago_id===pago.id?Number(a.monto_aplicado):ids.has(a.pago_id)?-Number(a.monto_aplicado):0),0);
+        return {aplicado,devuelto,disponible:Math.max(0,Number(pago.monto)-devuelto-aplicado),apps};
+    }
+    function proponerAplicacionExistente(item,comp,reserva,capacidad){
+        const pago=item.pagoSistema,estado=pago&&estadoPagoExistente(pago,comp);
+        if(item.pagoLibro?.tipo_movimiento!=='alojamiento'||item.pagoLibro.transaccion_distribuida||
+            capacidad?.aplicar_pago_existente_v1!==true||root.haikuTienePermiso?.('pagos.registrar')!==true||
+            pago?.estado!=='confirmado'||pago.tipo_movimiento!=='pago'||pago.moneda!=='CLP'||!estado?.disponible)return null;
+        const fila=Array.from(comp).find(r=>r.libro===reserva&&r.estado==='asociada'),e=fila?.sistema;
+        if(!e||e.reserva_id!==pago.reserva_id)return null;
+        const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const cargos=comp.snapshot.finanzas.cargos.filter(c=>c.reserva_id===pago.reserva_id&&c.estadia_id===e.id&&
+            c.tipo_cargo==='alojamiento'&&c.estado==='activo'&&Number(c.saldo_cargo)>0&&uuid.test(c.cargo_id))
+            .sort((a,b)=>a.cargo_id.localeCompare(b.cargo_id));
+        if(![pago.id,pago.reserva_id,e.id].every(v=>uuid.test(v))||!cargos.length)return null;
+        return {reserva_id:pago.reserva_id,estadia_id:e.id,cabana:Number(reserva.cabana),ingreso:reserva.fecha_checkin,salida:reserva.fecha_checkout,
+            pago_id:pago.id,pago_esperado:identidadPagoExistente(pago),fecha_pago_esperada:pago.fecha_pago||null,
+            disponible_esperado:estado.disponible,aplicado_pago_esperado:estado.aplicado,devuelto_esperado:estado.devuelto,
+            cargos:cargos.map(c=>({cargo_id:c.cargo_id,concepto:c.concepto||'Alojamiento',saldo_cargo_esperado:Number(c.saldo_cargo),
+                monto_ajustado_esperado:Number(c.monto_ajustado),aplicado_cargo_esperado:Number(c.aplicado_neto||0),
+                aplicacion_previa_esperada:estado.apps.filter(a=>a.pago_id===pago.id&&a.cargo_id===c.cargo_id).reduce((n,a)=>n+Number(a.monto_aplicado),0)}))};
+    }
+    function propuestaAplicacionExistente(p,cargoId,item,version){
+        const cargo=p.cargos.find(c=>c.cargo_id===cargoId);if(!cargo)throw Error('Elige un cargo de alojamiento de esta estadía.');
+        const {cargos,...base}=p;
+        return {...base,...cargo,candidatos_esperados:cargos.map(c=>c.cargo_id),monto_aplicar:Math.min(p.disponible_esperado,cargo.saldo_cargo_esperado),
+            origen_libro:item.pagoLibro.origen,version_libro:version,confirmado:true};
+    }
+    const operacionesAplicacionExistente=new WeakMap();
+    async function resolverAplicacionExistente(result,decisiones,aprobados,plan,item,accion,cliente){
+        const p=item?.aplicacionExistente;
+        if(!p||!contextoVisualPlanes.has(plan)||accion.confirmado!==true)throw Error('Revisa y confirma la aplicación del pago existente.');
+        const vigente=async()=>{await verificarFuenteManual(result,plan,item);
+            if(accion.vigente?.()===false||root.haikuTienePermiso?.('pagos.registrar')!==true)throw Error('La revisión o el permiso cambió.');};
+        await vigente();
+        const sesion=await cliente.auth.getSession(),usuario=sesion.data?.session?.user?.id;
+        if(sesion.error||!usuario)throw Error('Debe iniciar sesión.');
+        const propuesta=propuestaAplicacionExistente(p,accion.cargoId,item,estadoFuente(result).version);
+        let ops=operacionesAplicacionExistente.get(plan);if(!ops)operacionesAplicacionExistente.set(plan,ops=new Map());
+        const firma=JSON.stringify([usuario,propuesta]),previa=ops.get(firma);
+        const actual=await prepararIncorporacion(result,decisiones,aprobados,cliente);await vigente();
+        if(!actual.capacidadServicios?.aplicar_pago_existente_v1||!previa&&
+            JSON.stringify(actual.items.find(i=>i.id===item.id)?.aplicacionExistente)!==JSON.stringify(p))
+            throw Error('El pago disponible, el destino o su saldo cambió. Vuelve a revisar la vista previa.');
+        const op=previa||crearIdOperacion();ops.set(firma,op);
+        const actualSesion=await cliente.auth.getSession();await vigente();
+        if(actualSesion.error||actualSesion.data?.session?.user?.id!==usuario)throw Error('La sesión cambió.');
+        const {data,error}=await cliente.rpc('haiku_libro_aplicar_pago_existente_v1',{p_operacion_id:op,p_propuesta:propuesta});
+        if(error||data?.ok!==true||data.pago_id!==p.pago_id||data.cargo_id!==accion.cargoId)
+            throw error||Error('La aplicación no fue confirmada. Reintenta la misma operación.');
+        await Promise.allSettled([
+            ()=>root.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada?.('aplicar pago existente'),
+            ()=>root.haikuRefrescarFichaSupabaseV2?.(p.reserva_id),
+            ()=>root.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.()
+        ].map(fn=>Promise.resolve().then(fn)));
+        try{const siguiente=await prepararIncorporacion(result,decisiones,aprobados,cliente);
+            siguiente.resultadoAplicacionExistente=data;return siguiente;
+        }catch(_){
+            plan.resultadoAplicacionExistente={...data,lecturaPendiente:true};plan.escrituraHabilitada=false;
+            plan.items.forEach(i=>{i.seleccionado=false;i.aplicacionExistente=null;});
+            item.aviso='Aplicación confirmada en el servidor. Falta releer el estado actual de este pago; vuelve a comparar.';
+            return plan;
+        }
+    }
     const operacionesPrecioLibro=new WeakMap();
     async function resolverPrecioCargoLibro(result,decisiones,aprobados,plan,item,accion,cliente){
         const p=item?.precioServicioManual;
@@ -4145,6 +4239,7 @@
     }
     async function resolverAprobacionManualPago(result, decisiones, aprobados, plan, itemId, accion, cliente = root.haikuSupabase) {
         const item = plan.items.find(i => i.id === itemId), propuesta = item?.manualPago;
+        if(accion.tipo==='aplicar_pago_existente_v1')return resolverAplicacionExistente(result,decisiones,aprobados,plan,item,accion,cliente);
         if(accion.tipo==='precio_cargo_libro_v1')return resolverPrecioCargoLibro(result,decisiones,aprobados,plan,item,accion,cliente);
         if (item && accion.tipo === DEFINIR_MEDIO_PAGO && contextoVisualPlanes.has(plan))
             return resolverMedioPago(result,decisiones,aprobados,plan,item,accion,cliente);
@@ -4664,12 +4759,14 @@
                 item.pagoYaRegistrado = true;
                 item.pagoLibro=p; item.pagoSistema=resolucionPago.pagoSistema;
                 const pagoSistema=resolucionPago.pagoSistema, apps=snapshot.finanzas?.aplicaciones;
-                const aplicado=Array.isArray(apps)?apps.filter(a=>a.pago_id===pagoSistema.id).reduce((n,a)=>n+Number(a.monto_aplicado||0),0):null;
+                const estadoExistente=estadoPagoExistente(pagoSistema,comp);
+                const aplicado=estadoExistente?.aplicado??(Array.isArray(apps)?apps.filter(a=>a.pago_id===pagoSistema.id).reduce((n,a)=>n+Number(a.monto_aplicado||0),0):null);
                 const origen=pagoSistema.datos_origen||{}, anterior=origen.origen_libro||origen.origen;
                 item.aviso=(aplicado===null?'Pago registrado. Falta comprobar sus aplicaciones.':
-                    `Pago registrado · aplicado ${money(aplicado)} · sin aplicar ${money(Math.max(Number(pagoSistema.monto)-aplicado,0))}.`)+
+                    `Pago registrado · aplicado ${money(aplicado)} · sin aplicar ${money(estadoExistente?.disponible??Math.max(Number(pagoSistema.monto)-aplicado,0))}.`)+
                     (anterior?.hoja&&anterior?.celda?` Origen guardado: ${anterior.hoja}!${anterior.celda}${origen.fecha_bloque?' · estadía de origen '+origen.fecha_bloque:''}.`:'')+
                     ' Revisa las aplicaciones en la ficha; no se duplicará ni reasignará automáticamente.';
+                item.aplicacionExistente=proponerAplicacionExistente(item,comp,r,capacidadServicios);
                 continue;
             }
             if (resolucionPago?.evidencia === 'transferencia_repartida') {
@@ -5508,7 +5605,9 @@
                 invalidarPagoManual(decisiones,aprobados,id,generacion); x.decisionManualInvalidada = true;
             } else x.decisionPagoManual = decision;
         }
-        const requiereBackendServicios = (comparacion.pagosDetalle || []).some(item =>
+        const requiereAplicacionExistente=root.haikuTienePermiso?.('pagos.registrar')===true&&(comparacion.pagosDetalle||[]).some(x=>
+            x.estado==='en_sistema'&&x.pago.tipo_movimiento==='alojamiento');
+        const requiereBackendServicios = requiereAplicacionExistente||(comparacion.pagosDetalle || []).some(item =>
             item.estado !== 'en_sistema' && item.resolucionPago?.estado !== ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO &&
             (esAdminPagos() && casoRevisionAdminPago(comparacion,item) || item.destinoFinanciero?.estado === 'destino_unico' ||
                 item.pago.tipo_movimiento==='penalidad'&&item.pago.folio&&item.pago.bovtar ||
@@ -8177,7 +8276,39 @@
             fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10),!!pago?.ajuste_fecha_comprobante) };
     }
 
-    function movimientosLibroIncorporacion(movimientos,plan) {
+    function panelAplicacionExistente(item,plan,aprobar) {
+        const p=item.aplicacionExistente;
+        const panel=elemento('details','haiku-incorporacion-aplicar-existente');
+        panel.append(elemento('summary','','Aplicar pago existente'));
+        panel.append(elemento('p','','Se conserva el pago original '+p.pago_id+'. Su origen y comprobante no cambian.'));
+        const etiqueta=elemento('label','','Cargo de alojamiento de destino');
+        const selector=elemento('select');selector.setAttribute('aria-label','Cargo de alojamiento de destino');
+        if(p.cargos.length>1){const vacio=elemento('option','','Elige el cargo de alojamiento');vacio.value='';selector.append(vacio);}
+        for(const cargo of p.cargos){const op=elemento('option','',cargo.concepto+' · '+money(cargo.saldo_cargo_esperado)+' pendientes · '+cargo.cargo_id);op.value=cargo.cargo_id;selector.append(op);}
+        etiqueta.append(selector);panel.append(etiqueta);
+        panel.append(elemento('p','',`CAB ${p.cabana} · ${fechaBreve(p.ingreso,true)} al ${fechaBreve(p.salida,true)}`));
+        const datos=elemento('div','haiku-incorporacion-aplicar-existente-datos');panel.append(datos);
+        const confirmar=elemento('button','haiku-incorporacion-aprobar','Confirmar aplicación');confirmar.type='button';
+        const actualizar=()=>{datos.replaceChildren();const c=p.cargos.find(c=>c.cargo_id===selector.value);confirmar.disabled=!c;
+            if(!c){datos.append(elemento('p','','Hay varios destinos posibles. Elige el cargo antes de aplicar el dinero.'));return;}
+            const monto=Math.min(p.disponible_esperado,c.saldo_cargo_esperado);
+            datos.append(datoIncorporacion('Saldo del alojamiento',money(c.saldo_cargo_esperado)),
+                datoIncorporacion('Pago disponible',money(p.disponible_esperado)),datoIncorporacion('Se aplicará',money(monto)),
+                datoIncorporacion('Quedará sin aplicar',money(p.disponible_esperado-monto)));
+        };
+        selector.addEventListener('change',actualizar);actualizar();
+        confirmar.addEventListener('click',()=>ejecutarAprobacionVisual(confirmar,async()=>{
+            const c=p.cargos.find(c=>c.cargo_id===selector.value);if(!c)throw Error('Elige el cargo de alojamiento.');
+            const cargoId=c.cargo_id,monto=Math.min(p.disponible_esperado,c.saldo_cargo_esperado);
+            if(!(await root.HAIKU_DIALOGOS.confirmar(`Aplicar ${money(monto)} del pago original ${p.pago_id} a ${c.concepto} (${cargoId}), CAB ${p.cabana}, saldo ${money(c.saldo_cargo_esperado)}. Quedará ${money(p.disponible_esperado-monto)} sin aplicar.`,
+                {accion:'Aplicar pago existente',contexto:'Haku · Libro',peligro:false})))return;
+            await aprobar.manualPago(plan,item.id,{tipo:'aplicar_pago_existente_v1',cargoId,confirmado:true,
+                vigente:()=>panel.isConnected!==false,vistaVigente:()=>panel.isConnected!==false});
+        },panel));
+        panel.append(confirmar);return panel;
+    }
+
+    function movimientosLibroIncorporacion(movimientos,plan,aprobar) {
         const estados = {
             en_sistema: 'Ya existe en Proyecto H',
             nuevo_seguro: 'Pago nuevo seguro',
@@ -8206,6 +8337,7 @@
             );
             tarjeta.append(cabecera, meta);
             if(item?.pagoYaRegistrado&&item.aviso)tarjeta.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
+            if(item?.aplicacionExistente&&aprobar?.manualPago)tarjeta.append(panelAplicacionExistente(item,plan,aprobar));
             if (pago.concepto && datos.segundo[0] !== 'Concepto') {
                 tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-concepto', 'Concepto: ' + pago.concepto));
             }
@@ -9071,7 +9203,7 @@
         }
 
         if (item.categoria === 'asociadas' && Array.isArray(item.movimientosLibro)) {
-            fila.append(movimientosLibroIncorporacion(item.movimientosLibro,plan));
+            fila.append(movimientosLibroIncorporacion(item.movimientosLibro,plan,aprobar));
         }
 
         const motivosRevisionPago = item.categoria === 'dudosos' && item.motivos.includes(APROBACION_MANUAL_PAGO)
@@ -9479,6 +9611,12 @@
         preparacion.append(aviso);
         if(plan.resultadoPrecioCargo?.ok===true)preparacion.append(elemento('p','haiku-incorporacion-propuesta',
             `Ajuste confirmado en el cargo ${plan.resultadoPrecioCargo.cargo_id}: ${money(plan.resultadoPrecioCargo.ajuste)}. Precio final ${money(plan.resultadoPrecioCargo.precio_final)}. El pago requiere su confirmación independiente.`));
+        if(plan.resultadoAplicacionExistente?.ok===true){
+            const r=plan.resultadoAplicacionExistente;
+            const aviso=elemento('p','haiku-incorporacion-propuesta',`Aplicación confirmada · Pago original ${r.pago_id}: ${money(r.aplicado_total_cargo)} aplicados al cargo ${r.cargo_id}. Sin aplicar: ${money(r.sin_aplicar)}. Saldo del alojamiento: ${money(r.saldo_cargo)}.`+
+                (r.lecturaPendiente?' Falta releer el estado actual; vuelve a comparar.':''));
+            aviso.setAttribute('role','status');preparacion.append(aviso);
+        }
         for (const item of plan.items.filter(i=>i.cambioFuente)) {
             const c=item.cambioFuente, card=elemento('section','haiku-incorporacion-item');
             card.append(elemento('strong','',`CAB ${c.anterior.cabana} · ${c.anterior.titular}`),
