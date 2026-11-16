@@ -2719,7 +2719,15 @@
         const agregadas=next.filter(x=>!a.has(claveFragmentoObservacion(x))&&!cubiertos.has(claveFragmentoObservacion(x)));
         return retiradas.length||agregadas.length?[...cambios,{campo:'observaciones_libro',antes:[...new Set(retiradas)],ahora:[...new Set(agregadas)]}]:cambios;
     }
-    async function retirosReservasComparacion(resultado,libro){
+    function periodoContinuidadComparacion({desde,hasta}){
+        if(!desde||!hasta)return undefined;
+        const mes=(fecha,desplazamiento)=>{
+            const [anio,numero]=fecha.split('-').map(Number);
+            return new Date(Date.UTC(anio,numero-1+desplazamiento,1)).toISOString().slice(0,7);
+        };
+        return {desde:mes(desde,-1),hasta:mes(hasta,1)};
+    }
+    async function retirosReservasComparacion(resultado,libro,periodo){
         const comp=resultado.comparacion,usadas=new Set(Array.from(comp).filter(x=>x.sistema).map(x=>x.sistema.id));
         const pendientes=(comp.snapshot?.estadias||[]).filter(s=>!usadas.has(s.id)&&
             s.fecha_checkin<=resultado.q.hasta&&s.fecha_checkout>=resultado.q.desde&&
@@ -2732,7 +2740,7 @@
             return {id:'reserva:'+s.id,tipo:'retiro',anterior:{...s,hoja,coordenadas_origen:{hoja}},actual:null};
         });
         const contexto=root.HAIKU_LIBRO_CONTEXTO_V1;
-        const comprobadas=contexto?.actualizarDesdeLibro?await contexto.actualizarDesdeLibro(registros,{crearLectura:async()=>libro}):registros;
+        const comprobadas=contexto?.actualizarDesdeLibro?await contexto.actualizarDesdeLibro(registros,{crearLectura:async()=>libro},{periodo}):registros;
         return comprobadas.map((x,i)=>{
             const s=pendientes[i],fuente=x.fuente_vigente;
             const movida=fuente?.estado==='verificada';
@@ -2744,7 +2752,7 @@
                     fuente?.motivo||'No aparece en las hojas consultadas. Falta comprobar continuidad y cobertura; no se propone una baja.'};
         });
     }
-    async function cambiosHistoricosComparacion(resultado,libro,origenLibro){
+    async function cambiosHistoricosComparacion(resultado,libro,origenLibro,periodo){
         const motor=root.HAIKU_LIBRO_DIFERENCIAS_V1;
         if(!motor)return [];
         let registros=[];
@@ -2753,7 +2761,7 @@
             catch(_){resultado.advertencias.push('No pude leer los pendientes anteriores. Se conserva la revisión histórica.');}
         }
         if(libro.consultarIndice&&libro.consultarHuellas){
-            const d=await motor.compararUltimasVersiones({libro,fechaReferencia:resultado.q.desde});
+            const d=await motor.compararUltimasVersiones({libro,fechaReferencia:resultado.q.desde,periodo});
             registros.push(...d.modificadas.map(x=>({...x,tipo:'modificacion'})),...d.ya_no_aparecen.map(x=>({...x,tipo:'retiro'})),
                 ...d.nuevas.map(x=>({...x,tipo:'nueva'})));
             if(d.estado==='sin_linea_base')resultado.advertencias.push('No hay copia anterior disponible. Los retiros sólo se atribuyen con evidencia importada en Proyecto H.');
@@ -2765,7 +2773,7 @@
             (!resultado.q.nombre||S.normalizar(r.titular).includes(resultado.q.nombre))&&
             [x.actual,x.anterior].some(v=>v?.fecha_checkin<=resultado.q.hasta&&v?.fecha_checkout>=resultado.q.desde);});
         if(!registros.length)return [];
-        if(root.HAIKU_LIBRO_CONTEXTO_V1)registros=await root.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro(registros,{crearLectura:async()=>libro});
+        if(root.HAIKU_LIBRO_CONTEXTO_V1)registros=await root.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro(registros,{crearLectura:async()=>libro},{periodo});
         const casos=[],estadia=r=>r?{cabana:r.cabana,entrada:r.fecha_checkin,salida:r.fecha_checkout,tipo:r.tipo_estadia}:null;
         for(const x of registros){
             const r=x.actual||x.anterior,comp=resultado.comparacion;
@@ -6090,9 +6098,10 @@
             resultado.comparacion = await compararSistema(resultado.reservas, cliente, q);
             await acreditarNotasAbiertas(resultado.comparacion,libro);
             if(!q.solo_pagos&&!q.por_fecha_pago){
+                const periodo=periodoContinuidadComparacion(q);
                 resultado.comparacion.cambiosLibro||=[];
-                resultado.comparacion.cambiosLibro.push(...await retirosReservasComparacion(resultado,libro));
-                const historicos=await cambiosHistoricosComparacion(resultado,libro,origenLibro);
+                resultado.comparacion.cambiosLibro.push(...await retirosReservasComparacion(resultado,libro,periodo));
+                const historicos=await cambiosHistoricosComparacion(resultado,libro,origenLibro,periodo);
                 const clave=x=>x.campo==='servicios'?x.id:[x.campo,x.sistema?.reserva_id||x.reserva?.id].join('|');
                 const ids=new Set(resultado.comparacion.cambiosLibro.map(clave));
                 for(const x of historicos)if(!ids.has(clave(x))){ids.add(clave(x));resultado.comparacion.cambiosLibro.push(x);}

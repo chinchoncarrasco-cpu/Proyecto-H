@@ -354,16 +354,20 @@
         return d;
     }
     const HOJAS_ESPECIALES_VIGILADAS = Object.freeze(['REAGENDAR','REEMBOLSOS']);
-    function seleccionarHojas(anterior, actual, fechaReferencia) {
+    function seleccionarHojas(anterior, actual, fechaReferencia, periodo) {
         const nombres = [...new Set([...anterior.nombres,...actual.nombres])].sort();
         const vacio = {version_huella:1,nombres:[],huellas:{}};
         const desde = planificarHojas(vacio,vacio,fechaReferencia).rango_operacional_desde;
         const historicas = nombres.filter(h => mesHoja(h) && mesHoja(h) < desde);
-        const seleccionadas = nombres.filter(h => mesHoja(h) ? mesHoja(h) >= desde : HOJAS_ESPECIALES_VIGILADAS.some(s => texto(s) === texto(h)));
+        const seleccionadas = nombres.filter(h => {
+            const mes = mesHoja(h);
+            return periodo ? mes && mes >= periodo.desde && mes <= periodo.hasta :
+                mes ? mes >= desde : HOJAS_ESPECIALES_VIGILADAS.some(s => texto(s) === texto(h));
+        });
         return {seleccionadas, hojas_totales_libro:nombres.length, hojas_revisadas_actualizacion:seleccionadas.length,
             hojas_historicas_omitidas:historicas.length, hojas_desconocidas_omitidas:nombres.filter(h => !mesHoja(h) && !seleccionadas.includes(h))};
     }
-    async function compararUltimasVersiones({libro = root.HAIKU_LIBRO_RESERVA_V1,
+    async function compararUltimasVersiones({libro = root.HAIKU_LIBRO_RESERVA_V1, periodo,
         fechaReferencia = new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())} = {}) {
         const generado_en = new Date().toISOString();
         const error = motivo => ({...salida('no_comparable'), generado_en, advertencias: [{motivo}]});
@@ -377,7 +381,7 @@
             const indiceAnterior = await libro.consultarIndice('anterior'); comprobar();
             const libro_actual={generacion};
             if (!indiceAnterior) return {...salida('sin_linea_base'), generado_en,libro_actual};
-            const alcance = seleccionarHojas(indiceAnterior,indiceActual,fechaReferencia);
+            const alcance = seleccionarHojas(indiceAnterior,indiceActual,fechaReferencia,periodo);
             const huellas = async (indice, version) => {
                 const nombres = alcance.seleccionadas.filter(h => indice.nombres.includes(h));
                 const resultado = nombres.length ? await libro.consultarHuellas(version,nombres) : {version_huella:1,nombres:[],huellas:{}};
