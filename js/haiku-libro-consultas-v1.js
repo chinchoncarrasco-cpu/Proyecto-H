@@ -2658,6 +2658,12 @@
             if(fila.estado!=='asociada'||!fila.sistema)continue;
             const {libro:r,sistema:s}=fila,partes=separarObservacionesLibro(s.observaciones);
             const compartido=notasCompartidasComparacion(r,s,comparacion),patch=actualizacionReservaLibro(compartido,s);
+            for(const campo of ['adultos','ninos','mascotas','tipo_estadia','estado_estadia']){
+                if(!Object.hasOwn(patch.estadia.despues,campo))continue;
+                cambios.push({...detallarCambioLibro({campo,antes:patch.estadia.antes[campo],ahora:patch.estadia.despues[campo]}),
+                    id:campo+':'+s.id,reserva:r,sistema:s,accion:'revisar_notas',
+                    motivo:'El Libro vigente y Proyecto H tienen valores distintos. Revisa la actualización antes de confirmar.'});
+            }
             const vigentes=new Set([compartido.texto_original,...compartido.notas_importantes,...compartido.pagos_pendientes,
                 ...compartido.servicios.map(x=>x.texto_original)].flatMap(fragmentosObservaciones).map(claveFragmentoObservacion));
             const posiblesRetiros=compartido._alcanceNotasParcial&&partes.bloques.flatMap(fragmentosObservaciones)
@@ -2719,7 +2725,15 @@
         const agregadas=next.filter(x=>!a.has(claveFragmentoObservacion(x))&&!cubiertos.has(claveFragmentoObservacion(x)));
         return retiradas.length||agregadas.length?[...cambios,{campo:'observaciones_libro',antes:[...new Set(retiradas)],ahora:[...new Set(agregadas)]}]:cambios;
     }
-    async function retirosReservasComparacion(resultado,libro){
+    function periodoContinuidadComparacion({desde,hasta}){
+        if(!desde||!hasta)return undefined;
+        const mes=(fecha,desplazamiento)=>{
+            const [anio,numero]=fecha.split('-').map(Number);
+            return new Date(Date.UTC(anio,numero-1+desplazamiento,1)).toISOString().slice(0,7);
+        };
+        return {desde:mes(desde,-1),hasta:mes(hasta,1)};
+    }
+    async function retirosReservasComparacion(resultado,libro,periodo){
         const comp=resultado.comparacion,usadas=new Set(Array.from(comp).filter(x=>x.sistema).map(x=>x.sistema.id));
         const pendientes=(comp.snapshot?.estadias||[]).filter(s=>!usadas.has(s.id)&&
             s.fecha_checkin<=resultado.q.hasta&&s.fecha_checkout>=resultado.q.desde&&
@@ -2732,19 +2746,22 @@
             return {id:'reserva:'+s.id,tipo:'retiro',anterior:{...s,hoja,coordenadas_origen:{hoja}},actual:null};
         });
         const contexto=root.HAIKU_LIBRO_CONTEXTO_V1;
-        const comprobadas=contexto?.actualizarDesdeLibro?await contexto.actualizarDesdeLibro(registros,{crearLectura:async()=>libro}):registros;
+        const comprobadas=contexto?.actualizarDesdeLibro?await contexto.actualizarDesdeLibro(registros,{crearLectura:async()=>libro},{periodo}):registros;
         return comprobadas.map((x,i)=>{
             const s=pendientes[i],fuente=x.fuente_vigente;
             const movida=fuente?.estado==='verificada';
-            return {id:x.id,campo:'reserva',tipo:fuente?.estado==='ausencia_verificada'?'retirado':'revision',
-                reserva:x.actual||x.anterior,sistema:s,antes:{cabana:s.cabana,entrada:s.fecha_checkin,salida:s.fecha_checkout},
-                despues:movida?{cabana:x.actual.cabana,entrada:x.actual.fecha_checkin,salida:x.actual.fecha_checkout}:null,accion:'ver_reserva',
-                motivo:movida?'La reserva continúa en otra ubicación del Libro. Revisa CAB y fechas; no es una baja.':
+            const destino=movida?x.actual:x.destino_posible;
+            return {id:x.id,campo:'reserva',tipo:movida?'modificado':fuente?.estado==='ausencia_verificada'?'retirado':'revision',
+                reserva:destino||x.anterior,sistema:s,antes:{cabana:s.cabana,entrada:s.fecha_checkin,salida:s.fecha_checkout},
+                despues:destino?{cabana:destino.cabana,entrada:destino.fecha_checkin,salida:destino.fecha_checkout}:null,
+                accion:destino?'revisar_traslado':'ver_reserva',
+                motivo:movida?'La reserva continúa en otra ubicación del Libro. Revisa el traslado antes de confirmar.':
+                    destino?'Encontré una estadía compatible en otra ubicación del Libro. Confirma si es la misma reserva antes de incorporarla.':
                     fuente?.estado==='cancelada'?'Existe una cancelación explícita del Libro. Revísala por su flujo propio; se conserva como evidencia independiente.':
                     fuente?.motivo||'No aparece en las hojas consultadas. Falta comprobar continuidad y cobertura; no se propone una baja.'};
         });
     }
-    async function cambiosHistoricosComparacion(resultado,libro,origenLibro){
+    async function cambiosHistoricosComparacion(resultado,libro,origenLibro,periodo){
         const motor=root.HAIKU_LIBRO_DIFERENCIAS_V1;
         if(!motor)return [];
         let registros=[];
@@ -2753,7 +2770,7 @@
             catch(_){resultado.advertencias.push('No pude leer los pendientes anteriores. Se conserva la revisión histórica.');}
         }
         if(libro.consultarIndice&&libro.consultarHuellas){
-            const d=await motor.compararUltimasVersiones({libro,fechaReferencia:resultado.q.desde});
+            const d=await motor.compararUltimasVersiones({libro,fechaReferencia:resultado.q.desde,periodo});
             registros.push(...d.modificadas.map(x=>({...x,tipo:'modificacion'})),...d.ya_no_aparecen.map(x=>({...x,tipo:'retiro'})),
                 ...d.nuevas.map(x=>({...x,tipo:'nueva'})));
             if(d.estado==='sin_linea_base')resultado.advertencias.push('No hay copia anterior disponible. Los retiros sólo se atribuyen con evidencia importada en Proyecto H.');
@@ -2765,7 +2782,7 @@
             (!resultado.q.nombre||S.normalizar(r.titular).includes(resultado.q.nombre))&&
             [x.actual,x.anterior].some(v=>v?.fecha_checkin<=resultado.q.hasta&&v?.fecha_checkout>=resultado.q.desde);});
         if(!registros.length)return [];
-        if(root.HAIKU_LIBRO_CONTEXTO_V1)registros=await root.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro(registros,{crearLectura:async()=>libro});
+        if(root.HAIKU_LIBRO_CONTEXTO_V1)registros=await root.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro(registros,{crearLectura:async()=>libro},{periodo});
         const casos=[],estadia=r=>r?{cabana:r.cabana,entrada:r.fecha_checkin,salida:r.fecha_checkout,tipo:r.tipo_estadia}:null;
         for(const x of registros){
             const r=x.actual||x.anterior,comp=resultado.comparacion;
@@ -5268,6 +5285,8 @@
 
     }
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase, intento = 0) {
+        if(result.traslado&&root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion!==result.generacion)
+            throw Error('El Libro cambió. Vuelve a comparar para comprobar tanto el origen como el destino del traslado.');
         const contexto = await verificarFuenteConsulta(result), generacion = result.generacion;
         const seleccion = reservasVigentes(result,contexto);
         const revision = contexto.verificada;
@@ -5346,6 +5365,16 @@
         }
 
         fuentesComparacion.set(comparacion,estadoFuente(result));
+        if(result.traslado){
+            const [grupo]=comparacion.grupos||[],destino=result.traslado;
+            const valor='actualizar:'+destino.id;
+            const opcion=grupo&&preguntaPresentacion(grupo).opciones.find(o=>o.valor===valor);
+            const vigente=comparacion.snapshot?.estadias.find(s=>s.id===destino.id&&s.reserva_id===destino.reserva_id&&
+                mismasFechas(s,destino)&&Number(s.cabana)===Number(destino.cabana)&&s.estado_operativo===destino.estado_operativo);
+            if(comparacion.grupos?.length!==1||grupo.items.length!==1||!opcion||!vigente)
+                throw Error('La estadía de origen o el destino del Libro cambió. Vuelve a comparar antes de preparar el traslado.');
+            decisiones.set(grupo.clave,opcion);
+        }
         const plan = crearPlanIncorporacion(reservas, comparacion, decisiones, aprobados, result.comparacion, capacidadServicios, result.q?.abonosAviso);
         plan.contextoSeleccion = { generacion, usuario:usuariosComparacion.get(comparacion) };
         const conflictos = conflictosIdentidad.get(decisiones);
@@ -6090,10 +6119,11 @@
             resultado.comparacion = await compararSistema(resultado.reservas, cliente, q);
             await acreditarNotasAbiertas(resultado.comparacion,libro);
             if(!q.solo_pagos&&!q.por_fecha_pago){
+                const periodo=periodoContinuidadComparacion(q);
                 resultado.comparacion.cambiosLibro||=[];
-                resultado.comparacion.cambiosLibro.push(...await retirosReservasComparacion(resultado,libro));
-                const historicos=await cambiosHistoricosComparacion(resultado,libro,origenLibro);
-                const clave=x=>x.campo==='servicios'?x.id:[x.campo,x.sistema?.reserva_id||x.reserva?.id].join('|');
+                resultado.comparacion.cambiosLibro.push(...await retirosReservasComparacion(resultado,libro,periodo));
+                const historicos=await cambiosHistoricosComparacion(resultado,libro,origenLibro,periodo);
+                const clave=x=>x.campo==='servicios'?x.id:[x.campo,x.sistema?.id||x.reserva?.id].join('|');
                 const ids=new Set(resultado.comparacion.cambiosLibro.map(clave));
                 for(const x of historicos)if(!ids.has(clave(x))){ids.add(clave(x));resultado.comparacion.cambiosLibro.push(x);}
             }
@@ -6553,12 +6583,13 @@
         return {destinos, medio:datosPagoIncorporacion(item.pagoLibro).medio, confirmar};
     }
 
-    async function abrirPreparacionComparacion(out,{reservas,generacion,comparacion,q}){
+    async function abrirPreparacionComparacion(out,entrada){
+        const {reservas,generacion,comparacion,q,traslado}=entrada;
         if(!root.document)throw new Error('La vista de preparación sólo está disponible en el panel.');
 
         if(!Array.isArray(reservas)||!reservas.length||!Array.isArray(comparacion))throw new Error('No hay diferencias accionables para preparar.');
-        const result={ [ENTRADA_ESTRUCTURADA]:true,reservas:structuredClone(reservas),generacion,
-            q:{desde:q?.desde,hasta:q?.hasta},comparacion };
+        const result={ [ENTRADA_ESTRUCTURADA]:true,[PROYECCION_FUENTE]:entrada[PROYECCION_FUENTE],
+            reservas:structuredClone(reservas),generacion,q:{...q},comparacion,traslado };
         const decisiones=new Map(),aprobados=new Set();
         // El historial indica qué campos conviene preparar, pero Proyecto H es
         // la fuente vigente. Revalidar nuevamente al pulsar el botón evita abrir
@@ -7342,48 +7373,82 @@
             q:{...result.q,desde:fechas[0],hasta:fechas.at(-1),incluirFinanzas:false,incluirServicios:false},
             comparacion:comparacionPreparacionHistorial(filas,result.comparacion)});
     }
-    function renderizarCambiosLibro(out,cambios=[],{soloLectura=false,revisarNotas,documento=root.document,compacto=false}={}){
+    function abrirRevisionTraslado(out,caso,result){
+        const proyectar=r=>({...r,pagos:[],pagos_sin_asociacion:[]});
+        const fechas=[caso.sistema.fecha_checkin,caso.sistema.fecha_checkout,caso.reserva.fecha_checkin,caso.reserva.fecha_checkout].sort();
+        return abrirPreparacionComparacion(out,{reservas:[proyectar(caso.reserva)],generacion:result.generacion,
+            comparacion:[],[PROYECCION_FUENTE]:proyectar,traslado:caso.sistema,
+            q:{desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,incluirServicios:false}});
+    }
+    function renderizarCambiosLibro(out,cambios=[],{soloLectura=false,revisarNotas,revisarTraslado,documento=root.document,compacto=false}={}){
         if(!cambios.length)return;
         const elemento=(tag,clase,texto)=>{const e=documento.createElement(tag);if(clase)e.className=clase;if(texto!==undefined)e.textContent=String(texto);return e;};
-        const seccion=elemento('section','haku-retiros-libro');
-        seccion.append(elemento(compacto?'h4':'h3','',compacto?'Cambios del Libro':'Información agregada, modificada o retirada del Libro'));
+        const seccion=elemento(compacto?'section':'details','haku-retiros-libro'+
+            (compacto?'':' haiku-comparacion-acordeon haku-franja--normal haku-icono--intercambio'));
+        if(!compacto){
+            const summary=elemento('summary');
+            const total=elemento('span','haku-comparacion-fila-cantidad',cambios.length);
+            total.setAttribute('aria-label',`${cambios.length} cambios`);
+            summary.append(elemento('span','haku-comparacion-fila-titulo','Cambios detectados'),total);
+            seccion.append(summary);
+        }
         const lista=elemento('div','haku-retiros-libro__lista');seccion.append(lista);
-        const estados={full_day:'Full Day',sin_checkin:'Sin check-in',checked_out:'Check-out realizado',hospedada:'Hospedada',
+        const estados={full_day:'Full Day',fullday:'Full Day',alojamiento:'Alojamiento',sin_checkin:'Sin check-in',
+            checked_out:'Check-out realizado',hospedada:'Hospedada',confirmada:'Confirmada',pendiente:'Pendiente',
             confirmada_por_color:'Confirmada',pendiente_por_color:'Pendiente',no_determinado:'Por determinar'};
+        const fecha=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')?fechaBreve(v,true):v;
         const valor=v=>v==null?'Sin información':Array.isArray(v)?v.map(valor).join('\n'):
-            typeof v==='object'?Object.entries(v).filter(([,x])=>x!=null).map(([k,x])=>k+': '+valor(x)).join(' · '):estados[v]||String(v);
+            typeof v==='object'?[
+                v.cabana!=null?`CAB ${v.cabana}`:null,v.entrada&&v.salida?`${fecha(v.entrada)} → ${fecha(v.salida)}`:null,
+                [fecha(v.fecha),v.hora].filter(Boolean).join(' · '),v.concepto,v.texto,v.tipo&&estados[v.tipo]
+            ].filter(Boolean).join('\n')||'Sin información':estados[v]||String(fecha(v));
         const grupos=new Map();
         for(const c of cambios){const r=c.reserva||{},clave=JSON.stringify([r.id||r.origen?.celda||r.coordenadas_origen?.celda,
             r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]);if(!grupos.has(clave))grupos.set(clave,[]);grupos.get(clave).push(c);}
         for(const grupo of grupos.values()){
             const r=grupo[0].reserva||{},card=elemento(compacto?'div':'details','haku-retiros-libro__caso');
             if(!compacto){
-                card.append(elemento('summary','',`CAB ${r.cabana??'—'} · ${r.titular||'Reserva'} · ${grupo.length} cambio${grupo.length===1?'':'s'}`));
-                const identidad=elemento('div','haku-retiros-libro__detalle');card.append(identidad);
-                identidad.append(elemento('p','',`${r.fecha_checkin||'Sin fecha'} → ${r.fecha_checkout||'Sin fecha'}`));
+                const summary=elemento('summary');
+                const identidad=elemento('span','haku-retiros-libro__identidad');
+                identidad.append(elemento('strong','',r.titular||'Reserva'),
+                    elemento('small','',[`CAB ${r.cabana??'—'}`,r.fecha_checkin&&r.fecha_checkout?
+                        `${fecha(r.fecha_checkin)} → ${fecha(r.fecha_checkout)}`:null].filter(Boolean).join(' · ')));
+                const total=elemento('span','haku-comparacion-fila-cantidad',grupo.length);
+                total.setAttribute('aria-label',`${grupo.length} cambios`);
+                summary.append(identidad,total); card.append(summary);
             }
             for(const c of grupo){
             const tipo=({retirado:'Retirado',agregado:'Agregado',modificado:'Modificado',revision:'Requiere revisión'})[c.tipo]||'Requiere revisión';
             const detalle=elemento(compacto?'details':'div','haku-retiros-libro__detalle');card.append(detalle);
-            const campo=({notas_importantes:'Notas del Libro',observaciones_libro:'Detalles del Libro',pagos_pendientes:'Notas de cobro',servicios:'Servicios',reserva:'Reserva'})[c.campo]||'Datos de la reserva';
-            detalle.append(elemento(compacto?'summary':'strong','',`${campo} · ${tipo}`));
+            const campo=({notas_importantes:'Notas del Libro',observaciones_libro:'Detalles del Libro',pagos_pendientes:'Notas de cobro',
+                servicios:'Servicios',reserva:'Reserva',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',
+                tipo_estadia:'Tipo de estadía',estado_estadia:'Estado de la estadía'})[c.campo]||'Datos de la reserva';
+            const encabezado=elemento(compacto?'summary':'div','haku-retiros-libro__encabezado');
+            encabezado.append(elemento('strong','',campo),elemento('span','haku-retiros-libro__estado',tipo));
+            encabezado.dataset.tipo=c.tipo||'revision';
+            detalle.append(encabezado);
             const par=elemento('div','haku-retiros-libro__par');
             for(const [label,v]of [['Antes',c.antes],['Después',c.despues]]){
-                const lado=elemento('div');lado.append(elemento('strong','',label),elemento('p','',valor(v)));par.append(lado);
+                const lado=elemento('div');lado.append(elemento('strong','',label),
+                    elemento('p','',v==null&&label==='Después'&&c.tipo==='retirado'?'Retirado del Libro':valor(v)));par.append(lado);
             }
             detalle.append(par,elemento('p','',c.motivo||'Revisa el cambio antes de guardar.'));
             if(soloLectura){const a=elemento('a','','Abrir panel para revisar');a.href='panel.html';detalle.append(a);}
             else{
-                if(c.sistema?.reserva_id){const b=elemento('button','','Ver reserva');b.type='button';
-                    b.addEventListener('click',()=>root.HAIKU_INSPECTOR_V1?.abrirReserva(c.sistema.reserva_id,null,{estadiaId:c.sistema.estadia_id||c.sistema.id,numeroCabana:String(r.cabana)}));detalle.append(b);}
+                const acciones=elemento('div','haku-retiros-libro__acciones');
+                detalle.append(acciones);
+                if(c.sistema?.reserva_id){const b=elemento('button','libro-reserva-boton secundario','Ver reserva');b.type='button';
+                    b.addEventListener('click',()=>root.HAIKU_INSPECTOR_V1?.abrirReserva(c.sistema.reserva_id,null,{estadiaId:c.sistema.estadia_id||c.sistema.id,numeroCabana:String(c.antes?.cabana??r.cabana)}));acciones.append(b);}
                 const servicio=['revisar_cancelacion_servicio','reprogramar_servicio'].includes(c.accion);
-                if(servicio||c.accion==='revisar_notas'&&revisarNotas){
-                    const b=elemento('button','',servicio?(c.accion==='reprogramar_servicio'?'Revisar horario':'Revisar cancelación del servicio'):'Revisar cambios');b.type='button';
+                const traslado=c.accion==='revisar_traslado'&&revisarTraslado;
+                if(servicio||traslado||c.accion==='revisar_notas'&&revisarNotas){
+                    const b=elemento('button','libro-reserva-boton',servicio?(c.accion==='reprogramar_servicio'?'Revisar horario':'Revisar cancelación del servicio'):
+                        traslado?'Revisar traslado':'Revisar cambios');b.type='button';
                     b.dataset.hakuCambioRevisar='1';
-                    const vista=elemento('div');detalle.append(b,vista);
+                    const vista=elemento('div');acciones.append(b);detalle.append(vista);
                     b.addEventListener('click',async()=>{
                         if(b.disabled)return;b.disabled=true;
-                        try{if(servicio)await abrirCambioServicioLibro(vista,c);else await revisarNotas(vista,c);}
+                        try{if(servicio)await abrirCambioServicioLibro(vista,c);else if(traslado)await revisarTraslado(vista,c);else await revisarNotas(vista,c);}
                         catch(error){vista.replaceChildren(elemento('p','haiku-incorporacion-error',error.message));}
                         finally{b.disabled=false;}
                     });
@@ -7440,7 +7505,6 @@
         agregarDato(grid, "Faltan", `${meta.faltantes ?? 0} reservas`);
         resumen.append(grid);
         out.append(resumen);
-        renderizarCambiosLibro(out,comp.cambiosLibro,{revisarNotas:(vista,caso)=>abrirRevisionDatosReserva(vista,caso,result)});
         mostrarReservasPorIdentificar(out, modelo.reservasPorIdentificar);
         out.append(elemento("p", "haku-comparacion-sites-alcance", "La comparación considera los registros accesibles con tu sesión."));
         if (ui.revalidado) {
@@ -7475,6 +7539,9 @@
         const revisionTitulo = elemento("div", "haku-comparacion-sites-seccion-cabecera");
         revisionTitulo.append(elemento("strong", "", "Requieren revisión"), elemento("small", "", "Abre una categoría para ver su detalle"));
         revision.append(revisionTitulo);
+        renderizarCambiosLibro(revision,comp.cambiosLibro,{
+            revisarNotas:(vista,caso)=>abrirRevisionDatosReserva(vista,caso,result),
+            revisarTraslado:(vista,caso)=>abrirRevisionTraslado(vista,caso,result)});
         root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(revision, result.reservas, result.generacion, async () => {
             const contexto=await verificarFuenteConsulta(result);
             const reservas = await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(reservasVigentes(result,contexto), result.generacion,undefined,()=>estadoFuente(result));

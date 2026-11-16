@@ -250,6 +250,51 @@ test('desaparecida antes del alta se muestra también en la comparación mensual
  assert.equal(e.Q.serializarIncorporacion(e.Q.crearPlanIncorporacion(resultado.reservas,resultado.comparacion)).length,0);
 });
 
+for(const caso of ['retiro','traslado','lectura incompleta'])test('comparación mensual con un Libro grande: '+caso,async()=>{
+ const e=entorno({reservas:false});
+ if(caso==='traslado'){
+  Object.assign(e.r,{rut_documento:'FICTICIO-PASAPORTE',tipo_documento:'pasaporte',
+    fecha_checkin:'2026-10-03',fecha_checkout:'2026-10-04',noches:1});
+  const estadia=e.cliente.db.reserva_estadias[0];
+  Object.assign(estadia,{fecha_ingreso:e.r.fecha_checkin,fecha_salida:e.r.fecha_checkout});
+  Object.assign(estadia.reservas,{titular_numero_documento:e.r.rut_documento,titular_tipo_documento:e.r.tipo_documento});
+ }
+ const anterior={...e.data,reservas:[e.r]};
+ const nombres=['Sep26','Oct26','Nov26',...Array.from({length:36},(_,i)=>
+    ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][i%12]+(27+Math.floor(i/12)))];
+ const operativas=['Sep26','Oct26','Nov26'],lecturas=[],lotes=[],huellas=[];
+ const destinos=new Map(operativas.map(hoja=>[hoja,{...F.copy(e.data),hoja,reservas:[],fechas:[],espacios:[]}]));
+ destinos.set('Oct26',e.data);
+ if(caso==='traslado')destinos.get('Nov26').reservas=[{...e.r,id:'Nov26!D4',hoja:'Nov26',cabana:2,
+   fecha_checkin:'2026-11-05',fecha_checkout:'2026-11-06',noches:1,coordenadas_origen:{hoja:'Nov26',celda:'D4'}}];
+ if(caso==='lectura incompleta')destinos.get('Nov26').cobertura.geometria=false;
+ const obtener=(h,version)=>F.copy(version==='anterior'&&h==='Oct26'?anterior:destinos.get(h));
+ const libro={listo:async()=>{},estado:e.libro.estado,listarHojas:()=>nombres,
+   consultarIndice:async()=>({nombres}),
+   consultarHoja:async(h,version)=>{lecturas.push(h);return obtener(h,version);},
+   consultarHojas:async(hs,version)=>{lotes.push(...hs);return hs.map(h=>obtener(h,version));},
+   consultarHuellas:async(version,hs)=>{
+     huellas.push(...hs);
+     return {version_huella:2,nombres:hs,huellas:Object.fromEntries(hs.map(h=>[h,{sha256:h==='Oct26'?version:h}]))};
+   }};
+ const resultado=await e.Q.consultar(F.consulta,libro,e.cliente);
+ assert.deepEqual([...new Set([...lecturas,...lotes,...huellas])].sort(),[...operativas].sort());
+ assert.ok(lotes.includes('Nov26'),'la continuidad usa el lector por lotes');
+ const cambio=resultado.comparacion.cambiosLibro.find(x=>x.campo==='reserva');
+ assert.equal(cambio.tipo,caso==='retiro'?'retirado':'revision');
+ if(caso==='traslado'){
+  assert.equal(cambio.despues.entrada,'2026-11-05');assert.equal(cambio.accion,'revisar_traslado');
+  libro.crearLectura=async()=>libro;e.c.HAIKU_LIBRO_RESERVA_V1=libro;
+  const plan=await e.Q.prepararIncorporacion({reservas:[cambio.reserva],comparacion:[],generacion:1,traslado:cambio.sistema,
+    q:{desde:'2026-10-03',hasta:'2026-11-06',focal:true,incluirFinanzas:false,incluirServicios:false}},new Map(),new Set(),e.cliente);
+  const ops=e.Q.serializarIncorporacion(plan);
+  assert.equal(ops.length,1);assert.equal(ops[0].tipo,'reserva_actualizar');assert.equal(ops[0].estadia_id,'estadia-ficticia-1');
+  assert.equal(ops[0].estadia.despues.fecha_ingreso,'2026-11-05');
+ }
+ if(caso==='lectura incompleta')assert.match(cambio.motivo,/lectura segura/);
+ assert.equal(e.cliente.mutaciones.length,0);
+});
+
 test('cancelar el servicio no cierra su texto antiguo mientras siga en el bloque importado',async()=>{
  const viejo=servicio(),e=entorno({notas:'Comentario manual.\n'+bloque(viejo.texto_original),servicios:[guardado({estado_servicio:'cancelado'})]});
  const reg=registro(e,[viejo],[],'servicios');

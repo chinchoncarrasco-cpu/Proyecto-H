@@ -36,7 +36,7 @@
         const nombre=S?.mismaPersona?.(a.titular,b.titular) ?? Boolean(texto(a.titular)&&texto(a.titular)===texto(b.titular));
         return Boolean(da&&da===db||nombre);
     }
-    async function actualizarDesdeLibro(registros,libro=root.HAIKU_LIBRO_RESERVA_V1){
+    async function actualizarDesdeLibro(registros,libro=root.HAIKU_LIBRO_RESERVA_V1,{periodo}={}){
         if(!registros.length)return [];
         const sinFuente=x=>({...x,fuente_vigente:{estado:'no_disponible',motivo:
             `No pude leer de forma completa la hoja ${hoja(x.actual||x.anterior)||'de esta reserva'}. Conserva el caso para revisión.`}});
@@ -45,21 +45,29 @@
         try{lectura=await libro.crearLectura();}catch(_){return registros.map(sinFuente);}
         const hojas=[...new Set(registros.filter(x=>x.tipo!=='cancelacion').map(x=>hoja(x.actual||x.anterior)).filter(Boolean))];
         const disponibles=new Set(lectura.listarHojas()),resultados=new Map(),cancelaciones=new Map(),datosHojas=new Map();
-        let lote;
-        if(typeof lectura.consultarHojas==='function'){
-            try{lote=new Map((await lectura.consultarHojas(hojas.filter(h=>disponibles.has(h)))).map(x=>[x.hoja,x]));}
-            catch(_){return registros.map(sinFuente);}
-        }
-        // El lector conserva sus bytes durante esta consulta; sólo se leen las
-        // hojas de los casos guardados, una vez por hoja, nunca el Libro completo.
-        for(const h of hojas){
-            if(!disponibles.has(h)){resultados.set(h,null);continue;}
-            try{const data=lote?lote.get(h):await lectura.consultarHoja(h,'actual','semantica');
-                resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
-                cancelaciones.set(h,lista(data?.cancelaciones));
-                datosHojas.set(h,data);
-            }catch(_){resultados.set(h,null);}
-        }
+        const guardarHoja=(h,data)=>{
+            resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
+            if(!data)return;
+            datosHojas.set(h,data);
+            cancelaciones.set(h,lista(data.cancelaciones));
+        };
+        const leerHojas=async nombres=>{
+            const seleccion=nombres.filter(h=>!resultados.has(h)&&disponibles.has(h));
+            for(let i=0;i<seleccion.length;i+=8){
+                const nombresLote=seleccion.slice(i,i+8);
+                if(typeof lectura.consultarHojas==='function'){
+                    try{
+                        for(const data of await lectura.consultarHojas(nombresLote))
+                            if(nombresLote.includes(data?.hoja))guardarHoja(data.hoja,data);
+                    }catch(_){ /* Aislar las hojas fallidas sin descartar el lote completo. */ }
+                }
+                for(const h of nombresLote.filter(h=>!resultados.has(h))){
+                    try{guardarHoja(h,await lectura.consultarHoja(h,'actual','semantica'));}
+                    catch(_){guardarHoja(h,null);}
+                }
+            }
+        };
+        await leerHojas(hojas);
         // Ante una ausencia, buscar continuidad en las demás hojas mensuales.
         // Se leen una vez por lote; una hoja fallida impide acreditar el retiro.
         const sinUbicacion=registros.some(registro=>{
@@ -69,12 +77,12 @@
                     (x.fecha_checkin===r.fecha_checkin||x.fecha_checkout===r.fecha_checkout)));
         });
         if(sinUbicacion){
-            const otras=[...disponibles].filter(h=>/^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s*\d{2,4}$/i.test(h)&&!datosHojas.has(h));
-            for(let i=0;i<otras.length;i+=8)for(const h of otras.slice(i,i+8)){
-                try{const data=await lectura.consultarHoja(h,'actual','semantica');datosHojas.set(h,data);
-                    resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
-                }catch(_){resultados.set(h,null);}
-            }
+            const otras=[...disponibles].filter(h=>{
+                if(!periodo)return /^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s*\d{2,4}$/i.test(h);
+                const mes=root.HAIKU_LIBRO_DIFERENCIAS_V1?.mesHoja(h);
+                return mes&&mes>=periodo.desde&&mes<=periodo.hasta;
+            });
+            await leerHojas(otras);
         }
         const actualizados=registros.map(registro=>{
             if(registro.tipo==='cancelacion')return registro;
@@ -112,7 +120,9 @@
                         (a.origen?.celda&&a.origen.celda===r.coordenadas_origen?.celda||
                             [a.fecha,...lista(a.fechas_ocupadas)].some(d=>d>=r.fecha_checkin&&d<=(r.fecha_checkout||r.fecha_checkin)))||
                         a.titulares_posibles?.some(t=>mismaPersona(r,{titular:t})))));
-                const otras=[...datosHojas.values()].flatMap(h=>lista(h.reservas)).filter(x=>mismaPersona(r,x));
+                const otras=[...datosHojas.values()].flatMap(h=>lista(h?.reservas)).filter(x=>mismaPersona(r,x));
+                const destino=periodo&&registro.tipo==='retiro'&&!parcial&&!candidatos.length&&otras.length===1&&
+                    !otras[0].advertencias?.length&&otras[0].coordenadas_origen?.hoja?otras[0]:null;
                 const fechas=new Set([...datosHojas.values()].flatMap(h=>lista(h.fechas))),dias=[];
                 const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
                 if(fechaValida(r.fecha_checkin)&&fechaValida(r.fecha_checkout)&&r.fecha_checkout>=r.fecha_checkin){
@@ -129,8 +139,10 @@
                         x.fecha_checkin<=d&&(x.tipo_estadia==='full_day'?x.fecha_checkin===d:x.fecha_checkout>d))));
                 const retiro=!candidatos.length&&!parcial&&!dudosa&&!otras.length&&coberturaTemporal&&regionLeida&&!r.advertencias?.length;
                 return {...registro,...(retiro?{tipo:'retiro',anterior:registro.anterior||r,actual:null}:{}),
+                    ...(destino?{destino_posible:structuredClone(destino)}:{}),
                     fuente_vigente:{estado:retiro?'ausencia_verificada':candidatos.length||otras.length?'ambigua':parcial||dudosa?'lectura_incompleta':'no_encontrada',generacion:lectura.estado().generacion,
-                        motivo:retiro?'Ya no aparece en el Libro. Se buscó continuidad en las hojas mensuales.':
+                        motivo:retiro?(periodo?'Ya no aparece en las hojas revisadas. Se buscó continuidad en el período consultado y los meses contiguos.':
+                            'Ya no aparece en el Libro. Se buscó continuidad en las hojas mensuales.'):
                             dudosa?'La celda no pudo interpretarse; no está confirmada como vacía.':
                             parcial?'Falta lectura segura de: '+[...resultados].filter(([,v])=>!v).map(([h])=>h).slice(0,5).join(', ')+'. Se conserva pendiente.':otras.length?
                                 'Hay posibles continuidades: '+otras.slice(0,5).map(x=>`${hoja(x)} · CAB ${x.cabana} · ${x.fecha_checkin} → ${x.fecha_checkout}`).join('; ')+

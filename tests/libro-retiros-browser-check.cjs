@@ -64,6 +64,8 @@ const server=http.createServer((req,res)=>{
        botonInforme:p=>boton(p,'','Ver informe'),cerrar(){},revisar(){},posicionar(){},abrir:boton(aviso,'','Abrir'),
        icono:(p,n)=>nodo(p,'span','',n==='volver'?'←':'⌄')});api.abrir();api.adaptar();
      }
+     globalThis.cambiosPlegados=Array.from(out.querySelectorAll('details.haku-retiros-libro'))
+      .map(d=>({abierto:d.open,titulo:d.querySelector('summary').textContent,enRevision:!!d.closest('.haku-comparacion-sites-seccion')}));
      for(const d of out.querySelectorAll('details'))d.open=true;
     };
     document.querySelectorAll('[data-vista]').forEach(b=>b.onclick=()=>abrirVista(Number(b.dataset.vista)));
@@ -72,6 +74,11 @@ const server=http.createServer((req,res)=>{
     mensual:dto.cambiosLibro.filter(x=>x.campo==='servicios').map(x=>[x.tipo,x.antes,x.despues])}));assert.deepEqual(paridad.rapida,paridad.mensual);
    for(let view=0;view<4;view++){
     await page.evaluate(i=>abrirVista(i),view);
+    if(view===0||view===1){
+     const [acordeon]=await page.evaluate(()=>cambiosPlegados);
+     assert.ok(acordeon);assert.equal(acordeon.abierto,false);assert.match(acordeon.titulo,/^Cambios detectados/);
+     if(view===1)assert.equal(acordeon.enRevision,true);
+    }
     if(view===3){await page.locator('.haku-libro-casos__fila').first().click();await page.evaluate(()=>{for(const d of document.querySelectorAll('details'))d.open=true;});}
     const text=await page.locator('#vista').innerText();assert.match(text,/Aurora Ficción/);assert.match(text,/18:00/);assert.match(text,/19:00/);assert.match(text,/retir|continúa activo/i);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`sin desborde ${view}/${width}/${tema}`);
@@ -165,7 +172,9 @@ const server=http.createServer((req,res)=>{
      const total=escena.caso==='reaparecida-alta'?1:0;assert.equal(datos.items.length,total);assert.equal(datos.propuestasRepetidas,total);
      assert.equal(datos.historial.length,total);if(total)assert.deepEqual(datos.historial[0].notas,['Dejar dos batas']);
     }else{
-     assert.match(texto,/Servicios · Requiere revisión/);assert.equal(datos.ficha.id,'servicio:servicio-sintetico-0');
+     const encabezado=page.locator('.haku-retiros-libro__encabezado').filter({hasText:'Servicios'});
+     assert.match(await encabezado.innerText(),/Servicios\s+Requiere revisión/);
+     assert.equal(datos.ficha.id,'servicio:servicio-sintetico-0');
      assert.equal(datos.ficha.servicioId,'servicio-sintetico-0');assert.equal(datos.ficha.accion,null);
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
