@@ -154,6 +154,7 @@
         if (!dto || !["ok", "incompleto"].includes(dto.status)) { contenedor.hidden = true; return; }
         const el = (tag, clase, texto) => { const x = document.createElement(tag); if (clase) x.className = clase; if (texto !== undefined) x.textContent = String(texto); return x; };
         const p = dto.presentacion || {}, items = lista(dto.comparacion?.items), grupos = lista(dto.comparacion?.grupos);
+        globalThis.HAIKU_LIBRO_CONSULTAS?.renderizarCambiosLibro?.(contenedor,dto.cambiosLibro,{soloLectura:true,documento:document});
         const resumen = el("div", "informe-resumen");
         const metricas = el("div", "informe-metricas");
         for (const [label, value] of [["Asociadas", `${conocido(p.estadiasAsociadas)} / ${conocido(p.estadiasValidas)}`], ["Faltantes", conocido(p.faltantes)], ["Ambiguas", conocido(p.ambiguas)]]) {

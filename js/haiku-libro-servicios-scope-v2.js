@@ -632,31 +632,7 @@
     }
 
     function mapearConcepto(servicio) {
-        const t = normalizar(servicio?.texto_original), concepto = servicio?.concepto;
-        // El concepto ya segmentado manda. Un texto antiguo podía mencionar Jacuzzi y
-        // Late Check-out juntos; inferir por el texto antes que por el concepto mezcló
-        // el código de la tinaja con la fecha/hora del checkout.
-        if (concepto === "lateout") return { codigo: "lateCheckout", nombre: "Late Check-out", requiereHorario: true, requierePersonas: false, permiteCortesia: false };
-        if (concepto === "jacuzzi") return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
-        if (concepto === "masaje") {
-            const tipoFuente = servicio?.tipo ?? servicio?.unidad_servicio?.tipo ?? null;
-            const tipoNormalizado = normalizar(tipoFuente);
-            const tipo = /^(?:relajant\w*|reljant\w*|holistic\w*)$/.test(tipoNormalizado) ? "terapeutico" : tipoFuente;
-            const minutos = servicio?.duracion_minutos ?? servicio?.unidad_servicio?.duracion_minutos ?? null;
-            const base = { requiereHorario: true, requierePersonas: false, permiteCortesia: false, tipo, duracion_minutos: minutos };
-            const motivos = [];
-            if (!tipo) motivos.push("Falta tipo de masaje.");
-            if (!Number.isInteger(minutos)) motivos.push("Falta duración del masaje.");
-            else if (![30, 60].includes(minutos)) motivos.push(`La duración de ${minutos} min no tiene una equivalencia definida en el catálogo actual.`);
-            if (motivos.length) return { ...base, motivos, motivo: motivos[0] };
-            if (tipo === "descontracturante") return { ...base, codigo: `masajeDescontracturante${minutos}`, nombre: `Masaje Descontracturante ${minutos} min` };
-            if (tipo === "terapeutico") return { ...base, codigo: `masajeTerapeutico${minutos}`, nombre: `Masaje Terapéutico ${minutos} min` };
-            return { ...base, motivos: ["El tipo de masaje no tiene una equivalencia definida en el catálogo actual."], motivo: "El tipo de masaje no tiene una equivalencia definida en el catálogo actual." };
-        }
-        return { motivo: "No hay una equivalencia segura con el catálogo de servicios de Proyecto H." };
+        return root.HAIKU_LIBRO_SEMANTICA.mapearConceptoServicio(servicio);
     }
 
 
@@ -1063,27 +1039,7 @@
     }
 
     function fuenteServicioIncorporado(servicio) {
-        let texto, itemId;
-        const revision = servicio.libro_revision_admin_v1;
-        if (revision) {
-            // Después de un cambio, la referencia anterior es la última evidencia
-            // confirmada, aunque las observaciones conserven la primera importación.
-            try {
-                const firma = JSON.parse(revision.firma);
-                if (revision.version !== 1 || revision.modo !== 'actualizar' ||
-                    firma[0] !== 1 || firma[1] !== revision.item_id ||
-                    !Object.entries(estadoRevisionAdmin(servicio)).every(([k,v]) => revision.estado?.[k] === v))
-                    return null;
-                texto = firma[2]?.texto; itemId = revision.item_id;
-            } catch (_) { return null; }
-        } else {
-            const origen = String(servicio.observaciones || '').match(
-                /^Importado desde Libro de Reserva\.\s*([\s\S]*?)\s*\[HAKU-LIBRO-SERVICIO:(srv:[^\]\r\n]+)\]/);
-            if (!origen) return null;
-            texto = origen[1]; itemId = origen[2];
-        }
-        if (!texto || !/^srv:/.test(itemId || '')) return null;
-        return { texto, item_id:itemId };
+        return root.HAIKU_LIBRO_SEMANTICA.fuenteServicioIncorporado(servicio);
     }
 
     function fuenteTinajaIncorporada(item, servicio) {
@@ -3266,6 +3222,7 @@
     }
 
     const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial,
+        fuenteServicioIncorporado,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V1 = api;

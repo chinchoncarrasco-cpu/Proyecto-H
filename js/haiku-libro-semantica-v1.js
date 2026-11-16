@@ -1404,7 +1404,7 @@
                 }
                 if (!cell?.valor.trim()) {
                     const ocupado = merges.some(m => m.s.r === cab.r && m.s.c < h.c && m.e.c >= h.c && at(m.s.r, m.s.c)?.valor.trim());
-                    if (!ocupado) res.espacios.push({ fecha: h.fechaISO, cabana, estado: "sin_dato", origen: { hoja, celda: direccion(cab.r, h.c) } });
+                    if (!ocupado) res.espacios.push({ fecha: h.fechaISO, cabana, estado: "sin_dato", lectura:'vacia_confirmada', origen: { hoja, celda: direccion(cab.r, h.c) } });
                     continue;
                 }
                 const mergeCelda=merges.find(m=>m.s.r===cell.r&&m.s.c===cell.c);
@@ -1430,7 +1430,7 @@
                     const sinTitular=indiciosEstadia(t);
                     const avisoTitular=ambigua?`${hoja} · ${direccion(cell.r,cell.c)}: varios posibles titulares; requiere revisión manual.`:null;
                     if(avisoTitular)res.advertencias.push(avisoTitular);
-                    res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,
+                    res.anotaciones.push({ texto_original: cell.valor, origen: origen(cell), fecha: h.fechaISO, cabana,lectura:'contenido_no_interpretado',
                         ...(ambigua||sinTitular?{tipo:'reserva_por_identificar',
                             titulares_posibles:candidatos.map(x=>x.texto),
                             analisis_titular:diagnosticoTitular,
@@ -1876,7 +1876,89 @@
         }
         return cambios;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
+    function mapearConceptoServicio(servicio) {
+        const t = normalizar(servicio?.texto_original), concepto = servicio?.concepto;
+        // El concepto ya segmentado manda. Un texto antiguo podía mencionar Jacuzzi y
+        // Late Check-out juntos; inferir por el texto antes que por el concepto mezcló
+        // el código de la tinaja con la fecha/hora del checkout.
+        if (concepto === "lateout") return { codigo: "lateCheckout", nombre: "Late Check-out", requiereHorario: true, requierePersonas: false, permiteCortesia: false };
+        if (concepto === "jacuzzi") return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (concepto === "tonel") return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (/\bjacuzzi\b/.test(t)) return { codigo: "tinajaJacuzzi", nombre: "Tinaja Jacuzzi", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (/\btonel\b|tinaja\s+de\s+madera/.test(t)) return { codigo: "tinajaTonel", nombre: "Tinaja Tonel de Madera", requiereHorario: true, requierePersonas: true, permiteCortesia: true };
+        if (concepto === "masaje") {
+            const tipoFuente = servicio?.tipo ?? servicio?.unidad_servicio?.tipo ?? null;
+            const tipoNormalizado = normalizar(tipoFuente);
+            const tipo = /^(?:relajant\w*|reljant\w*|holistic\w*)$/.test(tipoNormalizado) ? "terapeutico" : tipoFuente;
+            const minutos = servicio?.duracion_minutos ?? servicio?.unidad_servicio?.duracion_minutos ?? null;
+            const base = { requiereHorario: true, requierePersonas: false, permiteCortesia: false, tipo, duracion_minutos: minutos };
+            const motivos = [];
+            if (!tipo) motivos.push("Falta tipo de masaje.");
+            if (!Number.isInteger(minutos)) motivos.push("Falta duración del masaje.");
+            else if (![30, 60].includes(minutos)) motivos.push(`La duración de ${minutos} min no tiene una equivalencia definida en el catálogo actual.`);
+            if (motivos.length) return { ...base, motivos, motivo: motivos[0] };
+            if (tipo === "descontracturante") return { ...base, codigo: `masajeDescontracturante${minutos}`, nombre: `Masaje Descontracturante ${minutos} min` };
+            if (tipo === "terapeutico") return { ...base, codigo: `masajeTerapeutico${minutos}`, nombre: `Masaje Terapéutico ${minutos} min` };
+            return { ...base, motivos: ["El tipo de masaje no tiene una equivalencia definida en el catálogo actual."], motivo: "El tipo de masaje no tiene una equivalencia definida en el catálogo actual." };
+        }
+        return { motivo: "No hay una equivalencia segura con el catálogo de servicios de Proyecto H." };
+    }
+    function referenciaServicioLibro(servicio,reserva){
+        const mapa=mapearConceptoServicio(servicio),codigo=mapa.codigo;
+        const hora=codigo==='lateCheckout'?(servicio.hora_fin||servicio.hora):servicio.hora;
+        const propios=textoSinHorasParaFecha(servicio.texto_original);
+        const fuente=textoSinHorasParaFecha(servicio.texto_fuente_completo||'');
+        function fechas(texto){
+            const encontradas=[],y=Number(reserva.fecha_checkin?.slice(0,4));
+            let marcas=false;
+            const resto=texto.replace(/\b(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})\b/g,(_,d,m,a)=>{
+                marcas=true;encontradas.push(iso(a.length===2?2000+Number(a):Number(a),m,d));return ' ';});
+            for(const m of resto.matchAll(/\b(\d{1,2})[-/.](\d{1,2})(?![-/.]\d)\b/g)){
+                marcas=true;encontradas.push(iso(y,m[2],m[1]));
+            }
+            const sinMeses=resto.replace(/\b(\d{1,2})\s*(?:de\s+)?(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)(?:\s+(?:de\s+)?(20\d{2}))?\b/g,(_,d,m,a)=>{
+                marcas=true;encontradas.push(iso(a?Number(a):y,meses.indexOf(m.slice(0,3))+1,d));return ' ';});
+            const dias={domingo:0,dom:0,lunes:1,lun:1,martes:2,mar:2,miercoles:3,mie:3,jueves:4,jue:4,viernes:5,vie:5,sabado:6,sab:6};
+            for(const [dia,n]of Object.entries(dias))if(new RegExp('\\b'+dia+'\\b').test(sinMeses)){
+                marcas=true;
+                if(reserva.fecha_checkin&&reserva.fecha_checkout&&reserva.fecha_checkout>=reserva.fecha_checkin){
+                    for(let d=reserva.fecha_checkin,i=0;d<=reserva.fecha_checkout&&i<366;d=sumarDias(d,1),i++)
+                        if(new Date(d+'T12:00:00Z').getUTCDay()===n)encontradas.push(d);
+                }
+            }
+            return {marcas,fechas:[...new Set(encontradas)]};
+        }
+        const propia=fechas(propios),heredada=fechas(fuente);
+        // Una fecha de otra instrucción no acredita el día de esta prestación.
+        const contexto=propia.marcas?propia:heredada.marcas&&fuente!==propios?{marcas:true,fechas:[]}:heredada;
+        const explicita=servicio.fecha_servicio||servicio.fecha;
+        const inferible=Number.isInteger(reserva.noches)&&reserva.noches<=1;
+        const fecha=explicita?(/^\d{4}-\d{2}-\d{2}$/.test(explicita)&&iso(...explicita.split('-'))===explicita?explicita:null):
+            (contexto.marcas?(contexto.fechas.length===1?contexto.fechas[0]:null):
+            codigo==='lateCheckout'?reserva.fecha_checkout:inferible?reserva.fecha_checkin:null);
+        return {codigo,fecha,hora,servicio};
+    }
+    function fuenteServicioIncorporado(s){
+        const revision=s.libro_revision_admin_v1;
+        let texto,item_id;
+        if(revision){
+            try{
+                const firma=JSON.parse(revision.firma),hora=v=>String(v||'').match(/^(\d{1,2}):(\d{2})/)?.slice(1).map((x,i)=>i?x:x.padStart(2,'0')).join(':')||'';
+                const estado={id:s.id,reserva_id:s.reserva_id,estadia_id:s.estadia_id,catalogo_servicio_id:s.catalogo_servicio_id,
+                    recurso_id:s.recurso_id||null,fecha_servicio:s.fecha_servicio,hora_inicio:hora(s.hora_inicio),hora_fin:hora(s.hora_fin),
+                    cantidad:Number(s.cantidad),personas:Number(s.personas),total:Number(s.total),precio_unitario_aplicado:Number(s.precio_unitario_aplicado),
+                    monto_adicional:Number(s.monto_adicional),tipo_cobro:s.tipo_cobro,estado_servicio:s.estado_servicio};
+                if(revision.version!==1||revision.modo!=='actualizar'||firma[0]!==1||firma[1]!==revision.item_id||
+                    !Object.entries(estado).every(([k,v])=>revision.estado?.[k]===v))return null;
+                texto=firma[2]?.texto;item_id=revision.item_id;
+            }catch(_){return null;}
+        }else{
+            const m=String(s.observaciones||'').match(/^Importado desde Libro de Reserva\.\s*([\s\S]*?)\s*\[HAKU-LIBRO-SERVICIO:(srv:[^\]\r\n]+)\]/);
+            if(!m)return null;texto=m[1];item_id=m[2];
+        }
+        return texto&&/^srv:/.test(item_id||'')?{texto,item_id}:null;
+    }
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
         servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;

@@ -147,7 +147,8 @@
    propuestas.set(p,{consulta:q,servicioId:candidato.id,snapshot:JSON.stringify(p.p_estado_esperado),
     evidencia:JSON.stringify({candidato,lectura}),candidatoInicial:JSON.parse(JSON.stringify(candidato)),
     lecturaInicial:JSON.parse(JSON.stringify(lectura)),cliente,buscar,cargar,permiso,
-    operacionId:null,payload:null,resultado:null,enCurso:null,rpcRespondioExito:false,respuestaCargoId:null});
+    operacionId:null,payload:null,resultado:null,enCurso:null,rpcRespondioExito:false,respuestaCargoId:null,
+    antesDeConfirmar:opciones.antesDeConfirmar});
    return p;
   }catch(error){return {estado:'bloqueada',consulta:q,mensaje:`No pude completar la lectura de Proyecto H. ${error?.message||error}`};}
  }
@@ -245,6 +246,7 @@
   }
   if(!coincidePropuesta(o,actual))return await obsoleta(o);
   if(o.rpcRespondioExito)return {estado:'sincronizando',mensaje:'El RPC ya respondió correctamente. Sólo volveré a leer el resultado.',propuesta:p};
+  if(o.antesDeConfirmar)try{await o.antesDeConfirmar();}catch(error){return {estado:'libro_cambiado',mensaje:error.message||'El Libro cambió. Vuelve a revisar antes de cancelar.'};}
   if(!o.payload){
    const id=opciones.operacionId||root.crypto?.randomUUID?.();
    if(!id)return {estado:'bloqueada',mensaje:'No se pudo generar un identificador de operación.'};
@@ -342,7 +344,28 @@
   }
   root.addEventListener('click',interceptar,true);root.addEventListener('keydown',interceptar,true);
  }
- const api=Object.freeze({RPC_CANCELACION_PRODUCCION_HABILITADO,interpretar,buscarServicios,cargarEstado,estadoEsperado,evaluarElegibilidad,preparar,confirmar,verificarEstado,renderizar});
+ async function abrirDesdeLibro(el,consulta,{alConfirmar,...opciones}={}){
+  let p=await preparar(consulta,opciones);el.innerHTML=renderizar(p);
+  el.addEventListener('input',()=>{const b=el.querySelector('[data-servicio-cancelacion-confirmar]');if(b)b.disabled=!el.querySelector('textarea')?.value.trim();});
+  el.addEventListener('click',async e=>{
+   const b=e.target.closest('button');if(!b)return;
+   if(b.hasAttribute('data-servicio-cancelacion-cancelar')){el.replaceChildren();return;}
+   const confirmarAhora=b.hasAttribute('data-servicio-cancelacion-confirmar')&&p.estado==='propuesta';
+   const releer=b.hasAttribute('data-servicio-cancelacion-releer')&&['incierto','sincronizando'].includes(p.estado);
+   const reintentar=b.hasAttribute('data-servicio-cancelacion-reintentar')&&p.estado==='reintento_seguro';
+   if(b.disabled||!confirmarAhora&&!releer&&!reintentar)return;
+   const propuesta=confirmarAhora?p:p.propuesta,motivo=confirmarAhora?el.querySelector('textarea')?.value:propuestas.get(propuesta)?.payload?.p_motivo;
+   el.querySelectorAll('button,textarea').forEach(x=>x.disabled=true);
+   try{p=releer?await verificarEstado(propuesta):await confirmar(propuesta,motivo);}
+   catch(_){p={estado:'incierto',mensaje:'No pude acreditar el resultado. Comprueba el estado sin repetir la escritura.',propuesta};}
+   el.innerHTML=renderizar(p);
+   if(p.estado==='realizado')try{await alConfirmar?.(p);}catch(_){
+    const aviso=el.ownerDocument.createElement('p');aviso.textContent='El guardado está confirmado. Vuelve a comparar para comprobar el pendiente; no repitas la operación.';el.append(aviso);
+   }
+  });
+  return p;
+ }
+ const api=Object.freeze({RPC_CANCELACION_PRODUCCION_HABILITADO,interpretar,buscarServicios,cargarEstado,estadoEsperado,evaluarElegibilidad,preparar,confirmar,verificarEstado,renderizar,abrirDesdeLibro});
  root.HAIKU_ASISTENTE_SERVICIOS_CANCELACION_V1=api;
  if(typeof module!=='undefined')module.exports=api;
  if(root.document)instalar();

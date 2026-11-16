@@ -327,7 +327,7 @@
         const filas = await datos(actual().from("servicios").select(columnasServicio)
             .in("estadia_id", [...porId.keys()]).eq("fecha_servicio", q.fecha).eq("estado_servicio", "programado").order("hora_inicio"));
         const opciones = (filas || []).filter(s => s.reserva_id === porId.get(s.estadia_id)?.reserva_id &&
-            coincideServicio(s, q.servicio) && (!q.horaOriginal || s.hora_inicio?.slice(0, 5) === q.horaOriginal));
+            coincideServicio(s, q.servicio) && (!q.servicioId||s.id===q.servicioId) && (!q.horaOriginal || s.hora_inicio?.slice(0, 5) === q.horaOriginal));
         if (!opciones.length) textoError("No encontré un servicio programado con esos datos.");
         return elegir(opciones.map(s => ({ dato: s, etiqueta: [s.catalogo_servicios.nombre, s.hora_inicio?.slice(0, 5), identidad(porId.get(s.estadia_id))].filter(Boolean).join(" · ") })),
             s => propuestaServicio(q, s, porId.get(s.estadia_id)), "Elige el servicio que quieres mover.");

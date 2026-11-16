@@ -204,7 +204,8 @@
                     if (estado.cargado !== true || estado.version !== hash || estado.generacion !== generacion) throw error("LECTOR_NO_CONFIRMADO");
                     const sello = { revision: id, libro, generacion, hash, metadata: m1 };
                     const fachada = {};
-                    for (const metodo of ["estado", "listo", "listarHojas", "consultarHoja", "consultarHojaMensual"])
+                    for (const metodo of ["estado", "listo", "listarHojas", "consultarHoja", "consultarHojaMensual",
+                        "consultarIndice","consultarHuellas","leerCambiosDetectados"])
                         if (typeof libro[metodo] === "function") fachada[metodo] = (...args) => {
                             comprobarHandle(sello.handle);
                             const confirmar = valor => { comprobarHandle(sello.handle); return valor; };
