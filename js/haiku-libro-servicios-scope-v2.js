@@ -259,7 +259,7 @@
     function esNotaConocida(fragmento) {
         const t = normalizar(fragmento);
         return /lista\s+arcoiris|huesped\s+frecuente|trato\s+especial|iva\s+descontad|solicita?r?\s+factura|promo\s+(?:haiku|haku)|voucher\s+regalo|pedir.{0,30}(?:documento|pasaporte|dni|rut)|presentar.{0,30}(?:documento|pasaporte|dni|rut)|solicitar.{0,30}(?:documento|pasaporte|dni|rut)|\bno\s+mover\b|sacacorchos?|juegos?\s+de\s+mesa|articulos?\s+de\s+asado|cenicero|paraguas|trapero|prest(?:a|ado|ados|ada|adas)|batas\s+en\s+caba/.test(t) ||
-            /^(?:pedir|solicitar)\s+(?:(?:el|la)\s+)?(?:telefono|tlf|correo|e-?mail)\b|^cortesia\s+(?:de\s+)?(?:espumante|chocolates?|desayuno)\b|^aseo\s+express\s+realizado\b|\b(?:entreg(?:a|ado|ada)|carbon\s+entregado)\b[^/]*\bcarbon\b|^(\d+\s+)?carbon\s+entregado\b/.test(t);
+            /^(?:pedir|solicitar)\s+(?:(?:el|la)\s+)?(?:telefono|tlf|correo|e-?mail)\b|^cortesia\s+(?:de\s+)?(?:espumante|chocolates?|desayuno)\b|^aseo\s+express\s+realizado\b|\b(?:entreg(?:a|ado|ada)|carbon\s+entregado)\b[^/]*\bcarbon\b|^(\d+\s+)?carbon\s+entregado\b|^dejar\s+(?:(?:un|una|\d+)\s+)?carbon\b/.test(t);
     }
 
     function notaImportante(texto) {
@@ -3254,7 +3254,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial, prepararServicioEnLinea,
+    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial, prepararServicioEnLinea, extraerNotasReserva,
         fuenteServicioIncorporado,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;

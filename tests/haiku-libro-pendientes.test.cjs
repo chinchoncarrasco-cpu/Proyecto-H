@@ -81,9 +81,9 @@ test('nota parcial sustituye sólo el fragmento cambiado y conserva los demás',
     const texto=h.operaciones[0].reserva.despues.observaciones;
     assert.match(texto,/Llegada a las 20:00/);assert.doesNotMatch(texto,/Llegada a las 18:00/);
     assert.ok(texto.includes(masajeNota));assert.match(texto,/^Manual\n/);
-    const {notas}=h.out.items[0].vistaIncorporacion;
-    assert.deepEqual(Array.from(notas.retiradas),['Llegada a las 18:00']);
-    assert.deepEqual(Array.from(notas.añadidas),['Llegada a las 20:00']);
+    const {observaciones}=h.out.items[0].vistaIncorporacion;
+    assert.deepEqual(Array.from(observaciones.retiradas),['Llegada a las 18:00']);
+    assert.deepEqual(Array.from(observaciones.añadidas),['Llegada a las 20:00']);
 });
 test('pago pendiente parcial conserva comentarios ajenos y no escribe pagos',async()=>{
     const h=await prepararNotasParciales({campo:'pagos_pendientes',antes:[],ahora:['Pendiente factura'],
@@ -226,19 +226,51 @@ test('historial: un cambio de adultos no arrastra una confirmación por color aj
         {etiqueta:'Adultos',anterior:'2',propuesto:'3'}
     ]);
 });
-test('historial: el alta muestra los datos de la estadía que se creará y distingue una reserva nueva',async()=>{
-    const actual=libro({notas_importantes:['Preparar dos batas'],rut_documento:'12.345.678-9',correo:'persona@example.test'});
-    const registro={id:'alta-lista',tipo:'nueva',actual,
-        cambios:[{campo:'notas_importantes',antes:[],ahora:actual.notas_importantes}]};
-    const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({},[]),{generacion:3});
-    assert.equal(out.items[0].accionable,true);
-    const vista=JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion));
-    assert.ok(vista.campos.some(c=>c.etiqueta==='Entrada'&&c.propuesto==='19/09/2026'));
-    assert.ok(vista.campos.some(c=>c.etiqueta==='Noches'&&c.propuesto==='1'));
-    assert.ok(vista.campos.some(c=>c.etiqueta==='Estado de la estadía'&&c.propuesto==='Confirmada'));
+test('historial: una celda de alta conserva contacto, comentarios y lectura de servicio en sus destinos',async()=>{
+    const Q=context.HAIKU_LIBRO_CONSULTAS;
+    const encabezado={r:1,c:2,valor:'19 sep',fechaISO:'2026-09-19'};
+    const glosa='Persona Ejemplo // persona@example.test // Tel Cel: 900000000 // 12.345.678-5 // 2 ADL // 1 NOCHE // FC // 15.09.26';
+    const celda={r:2,c:2,valor:glosa+' // Jacuzzi a las 19:00',estiloId:1};
+    const hoja={celdas:[encabezado,{r:1,c:6,valor:'20 sep',fechaISO:'2026-09-20'},
+        {r:2,c:0,valor:'cabaña 10'},celda,{r:24,c:2,valor:'Pagos de arriendos de hoy'}],
+        combinaciones:[{s:{r:2,c:2},e:{r:2,c:4}}],estilos:{1:{fill:{patternType:'solid',fgColor:{rgb:'FFB4A7D6'}}}}};
+    const preparar=async()=>{
+        const [actual]=S.normalizarHoja(hoja,'Sep26').reservas;
+        const db=clienteFocal({},[]);
+        const out=await Q.revalidarCambiosDetectados([{id:'alta-lista',tipo:'nueva',actual,cambios:[]}],db,{generacion:3});
+        assert.equal(out.items[0].accionable,true);
+        return {actual,db,out,vista:JSON.parse(JSON.stringify(out.items[0].vistaIncorporacion))};
+    };
+    const {actual,db,out,vista}=await preparar();
+    assert.deepEqual(actual.servicios.map(s=>[s.concepto,s.hora]),[['jacuzzi','19:00']]);
+    const campos=Object.fromEntries(vista.campos.map(c=>[c.etiqueta,c.propuesto]));
+    assert.equal(campos.Entrada,'19/09/2026');
+    assert.equal(campos.Noches,'1');
+    assert.equal(campos['Estado de la estadía'],'Confirmada');
+    for(const etiqueta of ['RUT/pasaporte','Correo','Teléfono'])assert.equal(campos[etiqueta],'Detectado en el Libro');
     assert.ok(vista.campos.every(c=>!Object.hasOwn(c,'anterior')));
-    assert.deepEqual(vista.notas.añadidas,['Preparar dos batas']);
-    assert.doesNotMatch(JSON.stringify(vista),/example\.test|12\.345\.678/);
+    assert.doesNotMatch(JSON.stringify(vista.campos),/example\.test|12\.345\.678|900000000/);
+    assert.ok(vista.observaciones.añadidas.includes('FC'));
+    assert.equal(vista.notas,undefined);
+
+    const entrada={reservas:out.reservas,q:out.q},enviados=[];
+    db.rpc=async(nombre,args)=>{enviados.push({nombre,args});return {data:{ok:true,reservas_creadas:1}}};
+    const plan=await Q.prepararIncorporacion(entrada,new Map(),new Set(),db);
+    await Q.confirmarIncorporacion(entrada,new Map(),new Set(),plan,db);
+    const [{nombre,args}]=enviados;
+    assert.equal(nombre,'haiku_incorporar_libro_v1');
+    const [op]=args.p_items;
+    assert.equal(args.p_items.length,1);
+    assert.equal(op.tipo,'reserva_nueva');
+    assert.equal(op.reserva.titular_numero_documento,'12345678-5');
+    assert.equal(op.reserva.correo_contacto,'persona@example.test');
+    assert.equal(op.reserva.telefono_contacto,'900000000');
+    for(const fragmento of ['Persona Ejemplo','2 ADL','1 NOCHE','FC','15.09.26'])assert.ok(op.reserva.observaciones.includes(fragmento));
+
+    celda.valor='Persona Ejemplo // 2 ADL // 1 NOCHE // FC // 15.09.26';
+    const sinContacto=await preparar();
+    for(const etiqueta of ['RUT/pasaporte','Correo','Teléfono'])
+        assert.equal(sinContacto.vista.campos.find(c=>c.etiqueta===etiqueta).propuesto,'No detectado');
 });
 test('historial: el contador seguro exige una propuesta seleccionable del plan de incorporación',async()=>{
     const actual=libro({adultos:0}),registro={id:'adultos-no-validos',tipo:'modificacion',anterior:libro(),actual,

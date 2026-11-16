@@ -59,7 +59,7 @@ test('antes y después ya guardados: la nota antigua sigue pendiente y es retira
  const e=entorno({notas:bloque('Ingreso 18:00\nIngreso 19:00\nOtra indicación vigente')});e.r.notas_importantes=['Ingreso 19:00'];
  const estado=await e.Q.revalidarCambiosDetectados([registro(e,['Ingreso 18:00'],['Ingreso 19:00'])],e.cliente,{generacion:1});
  assert.equal(estado.items.length,1);assert.equal(estado.items[0].accionable,true);
- const texto=estado.items[0].vistaIncorporacion.notas;assert.ok(texto.retiradas.includes('Ingreso 18:00'));
+ const texto=estado.items[0].vistaIncorporacion.observaciones;assert.ok(texto.retiradas.includes('Ingreso 18:00'));
  const plan=e.Q.crearPlanIncorporacion(estado.reservas,estado.comparacion);
  const guardado=plan.items.find(i=>i.payload?.tipo==='reserva_actualizar').payload.reserva.despues.observaciones;
  assert.doesNotMatch(guardado,/18:00/);assert.match(guardado,/Otra indicación vigente/);
@@ -374,7 +374,7 @@ test('un marcador abierto usa el Libro anterior para retirar jacuzzi 18:30, cons
  e.r.notas_importantes=[nuevo,late];
  const reg=registro(e,[viejo,late],[nuevo,late]);
  const p=await e.Q.revalidarCambiosDetectados([reg],e.cliente,{generacion:1});
- assert.equal(p.items[0].accionable,true);assert.ok(p.items[0].vistaIncorporacion.notas.retiradas.includes(viejo));
+ assert.equal(p.items[0].accionable,true);assert.ok(p.items[0].vistaIncorporacion.observaciones.retiradas.includes(viejo));
  const notas=e.Q.crearPlanIncorporacion(p.reservas,p.comparacion).items.find(x=>x.payload?.reserva?.despues?.observaciones).payload.reserva.despues.observaciones;
  assert.doesNotMatch(notas,/18:30/);assert.equal((notas.match(/15:30/g)||[]).length,1);
  assert.equal((notas.match(/Late check-out 14:00/g)||[]).length,1);assert.match(notas,/Comentario manual intacto\./);
@@ -473,7 +473,7 @@ test('Revisar cambios conserva Dejar dos batas una vez en la vista previa y en l
  const informe={estado:'sin_cambios',libro_actual:{generacion:1},nuevas:[],modificadas:[],ya_no_aparecen:[]};
  const p=await cache.obtener(informe,{revalidar:true});
  assert.equal(p.items.length,1);assert.equal(p.items[0].tipo,'nueva');
- assert.equal(p.items[0].vistaIncorporacion.notas.añadidas.filter(x=>x==='Dejar dos batas').length,1);
+ assert.equal(p.items[0].vistaIncorporacion.observaciones.añadidas.filter(x=>x==='Dejar dos batas').length,1);
  const plan=await e.Q.prepararIncorporacion(p.preparacion,new Map(),new Set(),e.cliente);
  const operaciones=e.Q.serializarIncorporacion(plan),altas=operaciones.filter(x=>x.tipo==='reserva_nueva');
  assert.equal(altas.length,1);assert.equal((altas[0].reserva.observaciones.match(/Dejar dos batas/g)||[]).length,1);

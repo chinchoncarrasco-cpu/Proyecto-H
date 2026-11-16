@@ -3233,7 +3233,7 @@
                 estado_estadia:detectados.some(c=>c.campo==='estado_confirmacion')?'Confirmación':'Estado de la estadía',
                 noches:'Noches'})[campo]||etiquetasActualizacion[campo]||campo;
             const mostrar=v=>privado&&v!=null&&v!==''?'Dato registrado':valorCambioIncorporacion(etiquetasActualizacion[campo],v,true);
-            campos.push({etiqueta,propuesto:privado?'Dato del Libro':mostrar(libro),
+            campos.push({etiqueta,propuesto:privado?(libro?'Detectado en el Libro':'No detectado'):mostrar(libro),
                 ...(anterior===undefined?{}:{anterior:mostrar(anterior)})});
         };
         if(alta){
@@ -3241,7 +3241,12 @@
                 if(alta.datos[campo]!=null)agregar(campo,alta.datos[campo]);
             }
             if(alta.noches>0)agregar('noches',alta.noches);
-            return {campos, notas:diferenciasObservaciones(null,propuesta.reserva?.observaciones)};
+            if(propuesta.reserva){
+                for(const campo of ['titular_numero_documento','correo_contacto','telefono_contacto']){
+                    agregar(campo,propuesta.reserva[campo]);
+                }
+            }
+            return {campos,observaciones:diferenciasObservaciones(null,propuesta.reserva?.observaciones)};
         }
         const {reserva,estadia}=propuesta;
         for(const parche of [reserva,estadia]){
@@ -3256,9 +3261,9 @@
                 tipo_estadia:cambios.tipo_estadia??sistema.tipo_estadia});
             if(Number.isInteger(despues)&&despues>=0&&antes!==despues)agregar('noches',despues,Number.isInteger(antes)?antes:null);
         }
-        const notas=Object.hasOwn(reserva?.despues||{},'observaciones')
+        const observaciones=Object.hasOwn(reserva?.despues||{},'observaciones')
             ?diferenciasObservaciones(reserva.antes.observaciones,reserva.despues.observaciones):null;
-        return {campos,notas};
+        return {campos,observaciones};
     }
 
     function unirObservacionesLibro(antes, propuestas, {conservarAnteriores=false,retirar=[],evidenciaAnterior=[]}={}) {

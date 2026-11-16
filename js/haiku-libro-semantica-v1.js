@@ -1487,7 +1487,8 @@
                 const camposIdentidad=clasificarFragmentos(cell.valor).filter(f=>!f.rol&&(['posible_titular','dato_estructurado'].includes(f.tipo)||
                     /^(?:pedir|solicitar)\s+(?:(?:rut|dni|documento|pasaporte|telefono|correo|email)\b\s*:?\s*\S|[\d+])/.test(normalizar(f.texto)))).map(f=>f.texto).join(' // ');
                 const correo = camposIdentidad.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0] || null;
-                const telefono = camposIdentidad.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() || null;
+                const telefono = camposIdentidad.match(/\+\d[\d ()-]{7,}\d/)?.[0]?.trim() ||
+                    camposIdentidad.match(/\b(?:tel(?:[ée]fono)?\.?\s*cel\.?|tel(?:[ée]fono)?\.?|cel(?:ular)?\.?)\s*:?\s*(9(?:[ -]?\d){8})(?![ -]?[\dk])/i)?.[1] || null;
                 const documento = documentoDelLibro(camposIdentidad);
                 const cantidad = re => { const m = t.match(re); return m ? Number(m[1]) : null; };
                 const pendientesTexto = partes.filter(x => /\bx pagar\b|por pagar/i.test(x));

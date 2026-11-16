@@ -605,7 +605,7 @@
                     if(anterior!==undefined)dato('haku-libro-auto__antes','Antes',anterior);
                     dato('haku-libro-auto__propuesto',anterior!==undefined?'Se guardará':'',propuesto);
                 };
-                const notas=(padre,etiqueta,textos,clase)=>{
+                const mostrarTextos=(padre,etiqueta,textos,clase)=>{
                     if(!textos.length)return;
                     const fila=nodo(padre,'div','haku-libro-auto__detalle-notas '+clase);
                     nodo(fila,'strong','',etiqueta);
@@ -630,9 +630,11 @@
                         const cambios=nodo(seccion,'dl','haku-libro-auto__detalle-campos');
                         for(const c of campos)linea(cambios,c.etiqueta,notaBreve(c.propuesto,110),compara?notaBreve(c.anterior??'—',110):undefined);
                     }
-                    const retiradas=lista(vista.notasReserva?.retiradas), añadidas=lista(vista.notasReserva?.añadidas);
-                    notas(seccion,'Notas que se retirarán',retiradas,'haku-libro-auto__antes');
-                    notas(seccion,'Notas que se añadirán',[...añadidas,...lista(vista.notas)],'haku-libro-auto__propuesto');
+                    const retiradas=lista(vista.observaciones?.retiradas), añadidas=lista(vista.observaciones?.añadidas);
+                    mostrarTextos(seccion,'Comentarios que se retirarán',retiradas,'haku-libro-auto__antes');
+                    mostrarTextos(seccion,vista.alta?'Comentarios de reserva':'Comentarios que se añadirán',
+                        añadidas,'haku-libro-auto__propuesto');
+                    mostrarTextos(seccion,'Notas que se añadirán',lista(vista.notas),'haku-libro-auto__propuesto');
                     const servicios=lista(vista.servicios);
                     if(servicios.length){
                         nodo(seccion,'strong','','Servicios que se añadirán');
@@ -643,7 +645,7 @@
                             nodo(items,'li','',notaBreve([cantidad+servicio.nombre,...cuando].join(' · '),110));
                         }
                     }
-                    if(vista.revisarServiciosAlta)nodo(seccion,'p','haku-libro-auto__aviso','Los servicios y notas asociados se comprobarán al incorporar.');
+                    if(vista.revisarOperacionesAlta)nodo(seccion,'p','haku-libro-auto__aviso','Los servicios y notas asociados se comprobarán al incorporar.');
                     if(!campos.length&&!añadidas.length&&!retiradas.length&&!lista(vista.notas).length&&!servicios.length)
                         nodo(seccion,'p','haku-libro-auto__aviso','Abre «Ver informe» para revisar el detalle.');
                 }

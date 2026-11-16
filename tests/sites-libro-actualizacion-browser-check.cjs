@@ -227,7 +227,7 @@ async function comprobarCasosDelAviso(browser, url) {
             const listaCompleta={tipo:'modificacion',actual:{...reserva(8,'Reserva completa',2),adultos:3},accionable:true,
                 cambios:[{campo:'adultos',antes:5,ahora:3,proyecto:2,accionable:true}],
                 vistaIncorporacion:{campos:[{etiqueta:'Adultos',anterior:'2',propuesto:'3'}],
-                    notas:{retiradas:['Llegada a las 18:00'],añadidas:['Llegada a las 20:00 · contacto@example.test · DNI AB123456']}}};
+                    observaciones:{retiradas:['Llegada a las 18:00'],añadidas:['Llegada a las 20:00 · contacto@example.test · DNI AB123456']}}};
             let generacion=0,informe,registro={version:1,cambios:[]},guardada=false;
             const panel=document.querySelector('.haiku-asistente-panel');
             panel.hidden=true;
@@ -277,8 +277,8 @@ async function comprobarCasosDelAviso(browser, url) {
         await ficha.hover();
         await vista.waitFor();
         assert.match(await vista.innerText(),/Antes.*Se guardará.*Adultos.*2.*3/s);
-        assert.match(await vista.innerText(),/Notas que se retirarán.*18:00.*Notas que se añadirán.*20:00/s);
-        assert.doesNotMatch(await vista.innerText(),/contacto@example\.test|AB123456/);
+        assert.match(await vista.innerText(),/Comentarios que se retirarán.*18:00.*Comentarios que se añadirán.*20:00/s);
+        assert.doesNotMatch(await vista.innerText(),/Notas que se|contacto@example\.test|AB123456/);
         const posicion=await contenido.evaluate(el=>{
             const caja=el.getBoundingClientRect(),aviso=el.closest('.haku-libro-auto').getBoundingClientRect();
             return {flotante:getComputedStyle(el.parentElement).position==='fixed',alCostado:caja.right<=aviso.left,
@@ -1006,7 +1006,7 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         const fichaMixta=burbuja.getByRole('button',{name:/Ver cambios de Cristian Sintético/});
         await fichaMixta.click();
         const vistaMixta=burbuja.locator('.haku-libro-auto__detalle-listo');
-        assert.match(await vistaMixta.innerText(),/Añadir a la reserva.*Dejar batas.*Jacuzzi.*19:15/s);
+        assert.match(await vistaMixta.innerText(),/Añadir a la reserva.*Notas que se añadirán.*Dejar batas.*Servicios que se añadirán.*Jacuzzi.*19:15/s);
         assert.doesNotMatch(await burbuja.innerText(),/Masaje|coordinación pendiente/);
         await burbuja.getByRole('button',{name:'Incorporar',exact:true}).click();
         await page.waitForFunction(()=>typeof __resolverGuardado==='function');
