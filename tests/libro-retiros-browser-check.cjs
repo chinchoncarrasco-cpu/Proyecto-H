@@ -86,23 +86,27 @@ const server=http.createServer((req,res)=>{
     resultados.push({view:['Mensual','Acción rápida','Haku Chat','Haku Burbuja'][view],width,tema,result:'PASS'});
    }
    assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);assert.deepEqual(externos,[]);assert.deepEqual(errors,[]);
+   await page.evaluate(()=>abrirVista(1));
+   const notas=page.locator('[data-haku-cambio-incorporar="revisar_notas"]').first().locator('xpath=../..');
+   await notas.getByRole('button',{name:'Incorporar',exact:true}).click();
+   await notas.getByRole('button',{name:'Confirmar incorporación',exact:true}).waitFor();
+   assert.equal(await notas.locator('.haku-incorporacion-sites-preparacion').count(),0,'la confirmación queda en la fila');
+   assert.match(await notas.innerText(),/Actualiza las notas|Adultos|Estado/);
+   assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);
+   await notas.getByRole('button',{name:'Volver',exact:true}).click();
    if(width===1440&&tema==='claro'){
-    await page.evaluate(()=>abrirVista(1));
-    await page.getByRole('button',{name:'Revisar cancelación del servicio',exact:true}).click();
-    await page.locator('[data-servicio-cancelacion-motivo]').waitFor();
-    assert.equal(await page.locator('[data-servicio-cancelacion-confirmar]').isDisabled(),true,'cancelación requiere motivo y confirmación');
+    const cancelar=page.locator('[data-haku-cambio-incorporar="revisar_cancelacion_servicio"]').locator('xpath=../..');
+    await cancelar.getByRole('button',{name:'Incorporar',exact:true}).click();
+    await cancelar.getByRole('textbox',{name:'Motivo de la cancelación'}).waitFor();
+    assert.equal(await cancelar.getByRole('button',{name:'Confirmar incorporación',exact:true}).isDisabled(),true,'cancelación requiere motivo y confirmación');
     await page.screenshot({path:path.join(evidencia,'vista-previa-cancelacion-sintetica.png'),fullPage:true});
-    await page.getByRole('button',{name:'Revisar horario',exact:true}).click();
-    await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Confirmar horario')||document.querySelector('.haiku-incorporacion-error'));
-    assert.equal(await page.getByRole('button',{name:'Confirmar horario',exact:true}).count(),1,
-        await page.locator('.haiku-incorporacion-error').allTextContents());
+    const horario=page.locator('[data-haku-cambio-incorporar="reprogramar_servicio"]').locator('xpath=../..');
+    await horario.getByRole('button',{name:'Incorporar',exact:true}).click();
+    await horario.getByRole('button',{name:'Confirmar incorporación',exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);
     await page.screenshot({path:path.join(evidencia,'vista-previa-horario-sintetica.png'),fullPage:true});
-    await page.getByRole('button',{name:'Revisar cambios',exact:true}).first().click();
-    await page.locator('.haku-incorporacion-sites-preparacion').waitFor();
-    await page.evaluate(()=>{const p=document.querySelector('.haku-incorporacion-sites-preparacion').parentElement;for(const d of p.querySelectorAll('details'))d.open=true;});
-    const preparacion=await page.locator('.haku-incorporacion-sites-preparacion').locator('..').innerText();
-    assert.match(preparacion,/Aurora Ficción/);assert.doesNotMatch(preparacion,/Bastián Inventado/);
+    await notas.getByRole('button',{name:'Incorporar',exact:true}).click();
+    await notas.getByRole('button',{name:'Confirmar incorporación',exact:true}).waitFor();
     assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);
     await page.screenshot({path:path.join(evidencia,'vista-previa-notas-focal-sintetica.png'),fullPage:true});
     const datos=await page.evaluate(()=>({antes:f.antes,despues:HAIKU_LIBRO_CONSULTAS.actualizacionReservaLibro(f.data.reservas[0],resultado.comparacion[0].sistema).reserva.despues.observaciones,
@@ -174,6 +178,7 @@ const server=http.createServer((req,res)=>{
     }else{
      const encabezado=page.locator('.haku-retiros-libro__encabezado').filter({hasText:'Servicios'});
      assert.match(await encabezado.innerText(),/Servicios\s+Requiere revisión/);
+     assert.match(texto,/Sin coincidencia verificada en el Libro/);assert.doesNotMatch(texto,/Sin información/);
      assert.equal(datos.ficha.id,'servicio:servicio-sintetico-0');
      assert.equal(datos.ficha.servicioId,'servicio-sintetico-0');assert.equal(datos.ficha.accion,null);
     }

@@ -185,7 +185,7 @@
             periodo: campos(periodo, ["desde", "hasta", "etiqueta", "timezone"]), fuente: campos(fuente, ["tipo", "nombre", "version", "modifiedTime", "verifiedAt", "generacion"]),
             alcance: { tipo: "registros_accesibles_sesion", hojas: textos(result.q.hojas), comparacion: "reservas_pagos_servicios" },
             comparacion: { items, grupos, meta: campos(comp.meta, metaKeys) }, pagosDetalle, serviciosDetalle,
-            cambiosLibro:lista(comp.cambiosLibro).map(c=>({...campos(c,['campo','tipo','motivo','accion']),
+            cambiosLibro:lista(comp.cambiosLibro).map(c=>({...campos(c,['campo','tipo','motivo','accion','libroAnterior']),
                 antes:structuredClone(c.antes??null),despues:structuredClone(c.despues??null),
                 agregados:structuredClone(c.agregados||[]),retirados:structuredClone(c.retirados||[]),reserva:reserva(c.reserva)})),
             advertencias: textos(result.advertencias), cobertura,
