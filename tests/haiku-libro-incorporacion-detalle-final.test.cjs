@@ -87,10 +87,11 @@ test('sólo pagos: detalle confirmado, monto/fecha/concepto y apertura por UUID 
 });
 
 test('reservas + pagos: sólo los seleccionados confirmados, sin pendientes ni otra ejecución',async()=>{
-    const h=harness(),r=book({pagos:[pay()]}),pendiente=book({id:'pendiente',titular:'Pendiente ajeno',cabana:4,
+    const h=harness(),r=book({pagos:[pay()]}),pendiente=book({id:'pendiente',titular:'Pendiente ajeno',rut_documento:'98765432-1',cabana:4,
         coordenadas_origen:{hoja:'Oct26',celda:'E6'}});
     const db=client({},(_n,args)=>({data:respuestaLote(args.p_items)})),result={reservas:[r,pendiente],q};
     const plan=await h.Q.prepararIncorporacion(result,new Map(),new Set(),db);
+    assert.equal(plan.items.filter(i=>i.categoria==='nuevas').length,2,'son personas independientes, con documentos diferentes');
     plan.items.filter(i=>i.texto.includes('Pendiente ajeno')).forEach(i=>{i.seleccionado=false;});
     const ejecucion=await h.Q.confirmarIncorporacion(result,new Map(),new Set(),plan,db);
     assert.equal(ejecucion.detalle.reservas.length,1);assert.equal(ejecucion.detalle.pagos.length,1);
