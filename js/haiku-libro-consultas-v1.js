@@ -2296,6 +2296,7 @@
                         servicio:item.servicio, texto:item.texto, sistema:item.servicio_existente,
                         lectura:{nombre:item.mapa?.nombre,fecha:item.fecha,hora:item.hora,
                             cantidad:item.payload?.cantidad,cortesia:item.payload?.tipo_cobro==='cortesia',
+                            tipoCobro:item.payload?.tipo_cobro,fullDayIncluido:Boolean(item.reglaFullDay),
                             razones:item.razones || []},
                         finanzas:item.finanzas_existente,
                         razon: !identidadSegura ? 'La asociación de la reserva requiere revisión antes de incorporar.' :
@@ -2695,11 +2696,13 @@
             const retiros=serviciosRetiradosLibro(r,s,comparacion.snapshot?.servicios||[]).filter(x=>!coincidencias.has(x.sistema.id));
             cambios.push(...retiros);
             for(const servicio of comparados.filter(x=>x.canonico&&x.estado==='faltante'&&x.item_id)){
-                const {nombre,fecha,hora,cantidad}=servicio.lectura;
+                const {nombre,fecha,hora,cantidad,tipoCobro,fullDayIncluido}=servicio.lectura;
                 if(retiros.some(x=>x.despues?.fecha===fecha&&x.despues?.hora===hora&&
                     S.referenciaServicioLibro(servicio.servicio,r).codigo===x.sistema.catalogo_servicios?.codigo))continue;
                 cambios.push({id:servicio.item_id,campo:'servicios',tipo:'agregado',reserva:r,sistema:s,
-                    antes:null,despues:{concepto:nombre||servicio.servicio.concepto,fecha,hora,cantidad},accion:'incorporar_servicio'});
+                    antes:null,despues:{concepto:nombre||servicio.servicio.concepto,fecha,hora,cantidad,
+                        cobro:tipoCobro==='cortesia'?(fullDayIncluido?'Cortesía Full Day · $0':'Cortesía · $0'):
+                            tipoCobro==='normal'?'Cobrable':null},accion:'incorporar_servicio'});
             }
         }
         return [...new Map(cambios.map(x=>[x.id,x])).values()];
@@ -7504,7 +7507,7 @@
         const valor=v=>v==null?'':Array.isArray(v)?v.map(valor).filter(Boolean).join('\n'):
             typeof v==='object'?[
                 v.cabana!=null?`CAB ${v.cabana}`:null,v.entrada&&v.salida?`${fecha(v.entrada)} → ${fecha(v.salida)}`:null,
-                [fecha(v.fecha_servicio||v.fecha),v.hora].filter(Boolean).join(' · '),v.concepto,v.cantidad>1?`Cantidad: ${v.cantidad}`:null,v.texto||v.texto_original,v.tipo&&estados[v.tipo]
+                [fecha(v.fecha_servicio||v.fecha),v.hora].filter(Boolean).join(' · '),v.concepto,v.cobro,v.cantidad>1?`Cantidad: ${v.cantidad}`:null,v.texto||v.texto_original,v.tipo&&estados[v.tipo]
             ].filter(Boolean).join('\n'):estados[v]||String(fecha(v));
         const grupos=new Map();
         for(const c of cambios){const r=c.reserva||{},clave=JSON.stringify([r.id||r.origen?.celda||r.coordenadas_origen?.celda,
