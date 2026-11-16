@@ -25,20 +25,29 @@ html[data-haiku-tema="oscuro"] {
 :root { --haku-compacto-aviso-fondo: #fff5e5; }
 html[data-haiku-tema="oscuro"] { --haku-compacto-aviso-fondo: #392b1c; }
 
-.haku-retiros-libro { width:100%; min-width:0; margin:12px 0; }
-.haku-retiros-libro h3 { font-size:15px; margin:0 0 8px; }
-.haku-retiros-libro__lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:8px; align-items:start; }
-.haku-retiros-libro__caso { min-width:0; border:1px solid var(--haku-compacto-borde,#b9c5bc); border-radius:8px; }
-.haku-retiros-libro__caso>summary { padding:9px 11px; cursor:pointer; font-weight:600; overflow-wrap:anywhere; }
-.haku-retiros-libro__detalle { padding:0 11px 10px; }
-.haku-retiros-libro__detalle>summary { padding:8px 0; cursor:pointer; font-weight:600; }
-.haku-retiros-libro__detalle+.haku-retiros-libro__detalle { border-top:1px solid var(--haku-compacto-borde,#b9c5bc); }
-.haku-retiros-libro__detalle p { margin:6px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-.haku-retiros-libro__par { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:8px 0; }
-.haku-retiros-libro button { margin:4px 6px 0 0; min-height:34px; }
+.haku-retiros-libro { width:100%; min-width:0; color:var(--haku-compacto-texto); }
+.haku-retiros-libro__lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:6px 12px; padding:0 8px 8px; align-items:start; }
+.haku-retiros-libro__caso { min-width:0; border-bottom:1px solid var(--haku-compacto-borde); }
+.haku-retiros-libro__caso>summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 10px; cursor:pointer; list-style:none; }
+.haku-retiros-libro__caso>summary::-webkit-details-marker { display:none; }
+.haku-retiros-libro__caso>summary::after { content:''; width:6px; height:6px; flex:none; border:solid var(--haku-compacto-secundario); border-width:0 1px 1px 0; transform:rotate(45deg); }
+.haku-retiros-libro__caso[open]>summary::after { transform:rotate(225deg); }
+.haku-retiros-libro__identidad { display:grid; gap:2px; flex:1; min-width:0; font-size:13px; overflow-wrap:anywhere; }
+.haku-retiros-libro__identidad small { color:var(--haku-compacto-secundario); font-size:11px; }
+.haku-retiros-libro__detalle { padding:6px 10px 9px; font-size:12px; }
+.haku-retiros-libro__detalle+.haku-retiros-libro__detalle { border-top:1px solid var(--haku-compacto-borde); }
+.haku-retiros-libro__encabezado { display:flex; align-items:center; flex-wrap:wrap; gap:6px 8px; }
+summary.haku-retiros-libro__encabezado { cursor:pointer; }
+.haku-retiros-libro__estado { border-radius:999px; padding:2px 7px; font-size:11px; font-weight:600; color:var(--haku-compacto-acento); background:var(--haku-compacto-suave); }
+[data-tipo="revision"]>.haku-retiros-libro__estado { color:var(--haku-compacto-aviso); background:var(--haku-compacto-aviso-fondo); }
+.haku-retiros-libro__detalle p { margin:4px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.haku-retiros-libro__par { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0; }
+.haku-retiros-libro__par>div { background:var(--haku-compacto-suave); border-radius:6px; padding:6px 8px; }
+.haku-retiros-libro__par strong { font-size:11px; color:var(--haku-compacto-secundario); }
+.haku-retiros-libro__acciones { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.haku-retiros-libro__acciones button { min-height:34px; margin:0; }
 @media(max-width:719px) {
-  .haku-retiros-libro { margin:8px 0; }
-  .haku-retiros-libro__lista,.haku-retiros-libro__par { grid-template-columns:1fr; gap:6px; }
-  .haku-retiros-libro__caso>summary { padding:8px; font-size:13px; }
-  .haku-retiros-libro__detalle { padding:0 8px 8px; }
+  .haku-retiros-libro__lista,.haku-retiros-libro__par { grid-template-columns:minmax(0,1fr); }
+  .haku-retiros-libro__lista { padding:0 4px 6px; }
+  .haku-retiros-libro__detalle { padding:5px 8px 7px; }
 }

@@ -120,7 +120,9 @@
                         (a.origen?.celda&&a.origen.celda===r.coordenadas_origen?.celda||
                             [a.fecha,...lista(a.fechas_ocupadas)].some(d=>d>=r.fecha_checkin&&d<=(r.fecha_checkout||r.fecha_checkin)))||
                         a.titulares_posibles?.some(t=>mismaPersona(r,{titular:t})))));
-                const otras=[...datosHojas.values()].flatMap(h=>lista(h.reservas)).filter(x=>mismaPersona(r,x));
+                const otras=[...datosHojas.values()].flatMap(h=>lista(h?.reservas)).filter(x=>mismaPersona(r,x));
+                const destino=periodo&&registro.tipo==='retiro'&&!parcial&&!candidatos.length&&otras.length===1&&
+                    !otras[0].advertencias?.length&&otras[0].coordenadas_origen?.hoja?otras[0]:null;
                 const fechas=new Set([...datosHojas.values()].flatMap(h=>lista(h.fechas))),dias=[];
                 const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
                 if(fechaValida(r.fecha_checkin)&&fechaValida(r.fecha_checkout)&&r.fecha_checkout>=r.fecha_checkin){
@@ -137,6 +139,7 @@
                         x.fecha_checkin<=d&&(x.tipo_estadia==='full_day'?x.fecha_checkin===d:x.fecha_checkout>d))));
                 const retiro=!candidatos.length&&!parcial&&!dudosa&&!otras.length&&coberturaTemporal&&regionLeida&&!r.advertencias?.length;
                 return {...registro,...(retiro?{tipo:'retiro',anterior:registro.anterior||r,actual:null}:{}),
+                    ...(destino?{destino_posible:structuredClone(destino)}:{}),
                     fuente_vigente:{estado:retiro?'ausencia_verificada':candidatos.length||otras.length?'ambigua':parcial||dudosa?'lectura_incompleta':'no_encontrada',generacion:lectura.estado().generacion,
                         motivo:retiro?(periodo?'Ya no aparece en las hojas revisadas. Se buscó continuidad en el período consultado y los meses contiguos.':
                             'Ya no aparece en el Libro. Se buscó continuidad en las hojas mensuales.'):
