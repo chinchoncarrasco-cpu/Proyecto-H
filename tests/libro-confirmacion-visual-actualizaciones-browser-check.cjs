@@ -65,13 +65,13 @@ async function verificarNotas(browser, origin, width, tema) {
         await omitidos.locator('summary').click();
         assert.equal(await notas.evaluate(e=>e.open),false);
         await verificarCampo(recibo,'Estado de estadía','Confirmación Pendiente','Confirmada');
-        await notas.getByText('Notas del Libro · 1 añadida · 1 retirada',{exact:true}).click();
+        await notas.getByText('Comentarios de reserva · 1 añadida · 1 retirada',{exact:true}).click();
         const resumen = notas.locator('.haku-comprobante-notas-pares').first();
         assert.match(await resumen.innerText(),/Antes · retirada.*Tonel.*Guardado · añadida.*Jacuzzi/s);
         assert.doesNotMatch(await resumen.innerText(),/Texto ficticio largo|Indicaciones de llegada|DATOS DEL LIBRO/);
         const completas = notas.locator('.haku-comprobante-notas');
         assert.equal(await completas.evaluate(e=>e.open),false);
-        await completas.getByText('Ver notas completas',{exact:true}).click();
+        await completas.getByText('Ver comentarios completos',{exact:true}).click();
         assert.match(await completas.innerText(),/Indicaciones de llegada.*Texto ficticio largo/s);
         assert.doesNotMatch(await completas.innerText(),/DATOS DEL LIBRO/);
         const medidas = await campos.first().evaluate(e => {
@@ -88,7 +88,7 @@ async function verificarNotas(browser, origin, width, tema) {
         assert.ok(medidas.titulo <= 12 && medidas.valor <= 10.1 && medidas.overflow <= 1,JSON.stringify(medidas));
         assert.equal(medidas.columnas,width < 600 ? 'none' : 'grid');
         assert.equal(medidas.fila < 1,width >= 600);
-        await completas.getByText('Ver notas completas',{exact:true}).click();
+        await completas.getByText('Ver comentarios completos',{exact:true}).click();
         if (process.env.HAKU_CONFIRMACION_CAPTURAS) await recibo.screenshot({
             path:path.join(process.env.HAKU_CONFIRMACION_CAPTURAS,`comprobante-${width}-${tema}.png`)
         });
