@@ -5898,7 +5898,7 @@
         return resumen;
     }
 
-    async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
+    async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase, esperar = promesa=>promesa) {
         if (!cliente?.rpc) throw new Error('No está disponible la conexión segura con Proyecto H.');
         const generacionConsulta = result.generacion;
         const seleccionIds = () => plan.items.filter(i => i.seleccionado).map(i => i.id).sort();
@@ -5906,7 +5906,7 @@
             JSON.stringify(plan.solicitudPendiente.seleccionIds) !== JSON.stringify(seleccionIds())) {
             throw new Error('La confirmación anterior tiene un resultado pendiente. Reintenta la misma operación antes de cambiar la selección.');
         }
-        if (!plan.solicitudPendiente) await verificarFuenteConsulta(result);
+        if (!plan.solicitudPendiente) await esperar(verificarFuenteConsulta(result),'Verificando la versión del Libro…');
         const mediosElegidos = plan.items.filter(i => i.medioPagoManual && (i.seleccionado ||
             plan.solicitudPendiente?.items.some(x => x.item_id === i.id) ||
             plan.solicitudPendiente?.servicios.some(x => x.item.item_id === i.id)));
@@ -5973,7 +5973,7 @@
         // La misma preparación vigente sirve para validar el medio elegido y
         // serializar el lote. Los reintentos con medio manual también se verifican.
         const actualizado = !solicitud || mediosElegidos.length
-            ? await prepararIncorporacion(result, decisiones, aprobados, cliente) : null;
+            ? await esperar(prepararIncorporacion(result, decisiones, aprobados, cliente),'Revalidando los cambios…') : null;
         const actuales = new Map((actualizado?.items || []).map(i => [i.id,i]));
         if (mediosElegidos.some(i => registroMedios(decisiones).get(i.id) !== i.medioPagoManual ||
             JSON.stringify(actuales.get(i.id)?.payload?.datos_origen?.medio_pago_manual_v1) !==
@@ -6104,10 +6104,10 @@
             let data = { ok: true, reservas_creadas: 0, estadias_agregadas: 0, pagos_creados: 0, actualizaciones: 0, omitidos: 0 };
             if (solicitud.items.length) {
                 vigente();
-                const respuesta = await cliente.rpc('haiku_incorporar_libro_v1', {
+                const respuesta = await esperar(cliente.rpc('haiku_incorporar_libro_v1', {
                     p_operacion_id: solicitud.operacionId,
                     p_items: solicitud.items
-                });
+                }),'Guardando los cambios en Proyecto H…',{enviada:true});
                 if (respuesta.error) conflictoDatos(respuesta.error);
                 vigente();
                 data = respuesta.data;

@@ -1084,8 +1084,16 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             __pendientesActual={items:[{...detectado,accionable:true}],reservas:[actual],comparacion:[],q:{}};
             HAIKU_LIBRO_CONSULTAS.prepararIncorporacion=async()=>({items:[{id:'alta',categoria:'nuevas',payload:{reserva:actual},seleccionado:true}]});
             window.__intentosAviso=0;
-            HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(_r,_d,_a,plan)=>{
-                if(++__intentosAviso===1){plan.solicitudPendiente={operacionId:'op-sintetica'};throw Error('Respuesta perdida. Reintenta para comprobar el guardado.');}
+            window.__relojAviso=window.setTimeout;
+            window.setTimeout=(fn,ms,...args)=>{
+                if(ms===30000&&__intentosAviso===1)window.__vencerAviso=fn;
+                return __relojAviso(fn,ms,...args);
+            };
+            HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(_r,_d,_a,plan,_cliente,esperar)=>{
+                if(++__intentosAviso===1){
+                    plan.solicitudPendiente={operacionId:'op-sintetica'};
+                    return esperar(new Promise(()=>{}),'Guardando los cambios en Proyecto H…',{enviada:true});
+                }
                 if(plan.solicitudPendiente?.operacionId!=='op-sintetica')throw Error('Operación duplicada');
                 __pendientesActual={items:[],resueltos:[detectado.id],reservas:[],comparacion:[]};
                 return {resultado:{ok:true,reservas_creadas:1}};
@@ -1093,7 +1101,12 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{carga_manual:true,tenia_anterior:true,generacion:8}}));
         });
         await burbuja.getByRole('button',{name:'Incorporar',exact:true}).click();
-        await burbuja.getByRole('button',{name:'Reintentar',exact:true}).click();
+        await burbuja.getByText('Guardando los cambios en Proyecto H…',{exact:true}).waitFor();
+        await page.evaluate(()=>{__vencerAviso();window.setTimeout=__relojAviso;});
+        await burbuja.getByText(/aún no confirma el guardado/).waitFor();
+        const reintentar=burbuja.getByRole('button',{name:'Reintentar',exact:true});
+        assert.equal(await reintentar.getAttribute('aria-busy'),null);
+        await reintentar.click();
         await burbuja.locator('.haku-libro-auto__recibo > summary').getByText('1 reserva',{exact:true}).waitFor();
         assert.equal(await page.evaluate(()=>__intentosAviso),2);
         assert.equal(await page.evaluate(()=>__opened),abiertosAntes);
