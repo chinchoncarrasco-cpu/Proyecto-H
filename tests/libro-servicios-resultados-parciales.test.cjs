@@ -28,10 +28,10 @@ async function escenario(respuestas, { dosServicios = false, lote = conflicto } 
         tipo_estadia: 'alojamiento', adultos: 2, ninos: 0, mascotas: 0, cabanas: { numero: 1 },
         reservas: { id: 'reserva-ficticia', titular_nombre: reserva.titular,
             titular_numero_documento: reserva.rut_documento, estado_reserva: 'confirmada' } }], pagos: [], pago_aplicaciones: [],
-        servicios: pagos.map((p, n) => ({ id: 'servicio-' + n, reserva_id: 'reserva-ficticia', fecha_servicio: '2026-10-13',
+        servicios: pagos.map((p, n) => ({ id: 'servicio-' + n, reserva_id: 'reserva-ficticia', estadia_id: 'estadia-ficticia', fecha_servicio: '2026-10-13',
             total: 10000, tipo_cobro: 'normal', estado_servicio: 'programado',
             catalogo_servicios: { codigo: p.concepto, nombre: n ? 'Late Checkout' : 'Tinaja Tonel', categoria: 'servicio' } })),
-        vista_estado_cargos: pagos.map((p, n) => ({ cargo_id: 'cargo-' + n, reserva_id: 'reserva-ficticia', servicio_id: 'servicio-' + n,
+        vista_estado_cargos: pagos.map((p, n) => ({ cargo_id: 'cargo-' + n, reserva_id: 'reserva-ficticia', estadia_id: 'estadia-ficticia', servicio_id: 'servicio-' + n,
             tipo_cargo: 'servicio', concepto: n ? 'Late Checkout' : 'Tinaja Tonel', monto: 10000, monto_ajustado: 10000,
             aplicado_neto: 0, saldo_cargo: 10000, estado: 'activo', estado_pago: 'pendiente' })) };
     const calls = [], db = { calls, auth: { getSession: async () => ({ data: { session: { user: { id: 'usuario-ficticio' } } } }) },
