@@ -46,6 +46,16 @@
         return {etiqueta:'Servicios',texto:partes.join(' · ')||'Cambió la información del servicio.'};
     }
     function detalleCambio(c) {
+        if(['notas_importantes','observaciones_libro','pagos_pendientes','servicios'].includes(c.campo)){
+            const d=root.HAIKU_LIBRO_DIFERENCIAS_V1?.detallarCambio?.(c);
+            if(d){
+                const valor=x=>typeof x==='string'?notaBreve(x):[x.concepto,x.fecha_servicio||x.fecha,x.hora].filter(Boolean).join(' · ');
+                return {etiqueta:c.campo==='servicios'?'Servicios':'Notas',texto:[
+                    d.retirados.length?'Retirado: '+d.retirados.map(valor).join('; '):'',
+                    d.agregados.length?'Agregado: '+d.agregados.map(valor).join('; '):''
+                ].filter(Boolean).join(' · ')||'Revisa el antes y el después.'};
+            }
+        }
         const numeros={cabana:'Cabaña',noches:'Noches',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas'};
         if (c.campo==='fecha_checkin'||c.campo==='fecha_checkout') return {etiqueta:'Fecha',texto:`${c.campo==='fecha_checkin'?'Entrada':'Salida'}: ${cambioFecha(c.antes,c.ahora)}`};
         if (numeros[c.campo]) {const numero=v=>/^\d+$/.test(String(v))?String(v):'Sin dato';return {etiqueta:numeros[c.campo],texto:`${numero(c.antes)} → ${numero(c.ahora)}`};}
@@ -95,7 +105,8 @@
             casos.push(caso); porOrigen.set(abono,caso);
         }
         for(const x of lista(r.cancelaciones_confirmadas)) agregar(x,'Cancelada en el Libro',x.anterior,[{etiqueta:'Estado',texto:'Figura en CANCELACIONES. Falta confirmarla en Proyecto H.'}]);
-        for(const x of lista(r.ya_no_aparecen)) agregar(x,'Una reserva ya no aparece',x.anterior,[{etiqueta:'Libro',texto:'No aparece en la versión actual.'}]);
+        for(const x of lista(r.ya_no_aparecen)) agregar(x,x.fuente_vigente&&x.fuente_vigente.estado!=='ausencia_verificada'?'Posible retiro por revisar':'Una reserva ya no aparece',x.anterior,
+            [{etiqueta:'Libro',texto:x.fuente_vigente?.motivo||'No aparece en la copia leída; revisa continuidad y cobertura antes de resolver.'}]);
         const avisos=[];
         if(r.pendientesSinVerificar)avisos.push('Conservé los pendientes. Falta comprobarlos en Proyecto H.');
         if(['parcial','no_comparable'].includes(r.estado))avisos.push('No pude revisar todo el Libro.');
@@ -386,6 +397,7 @@
                 return;
             }
             const c=filas[i].caso;
+            const cambiosLibro=pendientes[i].cambiosLibro;
             const simple=c.bloques.length===1&&c.bloques[0].titulo===c.bloques[0].nombre;
             detalle.className='haku-libro-casos__detalle'+(simple?' haku-libro-casos__detalle--simple':'');
             const contenido=root.document.createDocumentFragment();
@@ -403,7 +415,7 @@
                 hora.setAttribute('datetime',deteccion.iso);hora.title=deteccion.descripcion;
                 hora.setAttribute('aria-label',deteccion.descripcion);
             }
-            for(const bloque of c.bloques){
+            for(const bloque of cambiosLibro?.length?[]:c.bloques){
                 const grupo=nodo(contenido,'div','haku-libro-casos__grupo');
                 nodo(grupo,'h4','haku-libro-casos__servicio',bloque.titulo);
                 if(bloque.datos.length){
@@ -416,12 +428,13 @@
                 for(const motivo of bloque.otros)nodo(grupo,'p','haku-libro-casos__motivo',motivo);
             }
             const fuentes=[...new Set(c.bloques.map(b=>b.texto).filter(Boolean))];
-            if(fuentes.length||c.origen){
+            if(!cambiosLibro?.length&&(fuentes.length||c.origen)){
                 const fuente=nodo(contenido,'div','haku-libro-casos__fuente');
                 nodo(fuente,'span','haku-libro-casos__meta',`En el Libro${c.origen?' · '+c.origen:''}`);
                 for(const texto of fuentes)nodo(fuente,'p','',`«${texto}»`);
             }
             detalle.replaceChildren(contenido);
+            root.HAIKU_LIBRO_CONSULTAS?.renderizarCambiosLibro?.(detalle,cambiosLibro,{compacto:true});
             detalle.hidden=false;
             detalle.scrollTop=0;
         }

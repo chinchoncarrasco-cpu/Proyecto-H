@@ -15,7 +15,8 @@
     const numeros = new Set(['cabana', 'noches', 'adultos', 'ninos', 'mascotas']);
     function canon(campo, valor, tipoDocumento) {
         if (campo === 'servicios') return valor.map(s => JSON.stringify([
-            texto(s.concepto), s.pendiente ?? null, s.cortesia ?? null, s.hora ?? null, s.monto ?? null
+            texto(s.concepto), s.pendiente ?? null, s.cortesia ?? null, s.fecha_servicio ?? s.fecha ?? null,
+            s.hora ?? null, s.hora_fin ?? null, s.cantidad ?? null, s.monto ?? null
         ])).sort(); // Texto libre y coordenadas son evidencia, no identidad del servicio.
         if (listas.has(campo)) return [...new Set(valor.map(texto))].sort();
         if (numeros.has(campo)) return Number(valor);
@@ -133,6 +134,15 @@
             if (campo==='titular' && semantica.mismaPersona(av,bv)) continue;
             if (JSON.stringify(canon(campo, av, a.tipo_documento)) !== JSON.stringify(canon(campo, bv, b.tipo_documento))) cambios.push({campo, antes: copia(av), ahora: copia(bv)});
         }
+        // Un comentario puede cambiar sin pertenecer a las notas rojas ni a un
+        // servicio. No perder ese cambio de texto en el historial del Libro.
+        // Si hay campos tipados, su revisión incorpora también la glosa.
+        if(!cambios.length&&typeof a.texto_original==='string'&&typeof b.texto_original==='string'){
+            const fragmentos=r=>semantica.separarCampos(r.texto_original);
+            const antes=fragmentos(a),ahora=fragmentos(b),canon=xs=>[...new Set(xs.map(nombre))].sort();
+            if(JSON.stringify(canon(antes))!==JSON.stringify(canon(ahora)))
+                cambios.push({campo:'observaciones_libro',antes,ahora});
+        }
         return cambios;
     }
     const claveOrigenPago = p => JSON.stringify([p.origen?.hoja, p.origen?.celda]);
@@ -243,6 +253,8 @@
             });
         });
         const prev = extraer(anterior, 'anterior'), next = extraer(actual, 'actual');
+        for(const h of anterior)if(h?.hoja&&!actual.some(x=>x?.hoja===h.hoja))
+            out.no_comparables.push({hoja:h.hoja,motivo:'Falta la hoja en la copia actual; no se acredita una celda vacía.'});
         out.continuidades = [...detectarContinuidades(prev,'anterior'),...detectarContinuidades(next,'actual')];
         // La cobertura temporal puede cambiar al quitar hojas o columnas: no afirmar ausencias.
         const cobertura = hojas => [...new Set(hojas.filter(h => h?.cobertura?.geometria).flatMap(h => h.fechas || []))].sort();
@@ -282,9 +294,13 @@
             const relacionados = a.some(i => relaciones[i].length) || b.some(i => inversasRelacion[i].length);
             const dudoso = r => r.advertencias?.length || r.advertencias_validacion?.length || !conocido(r.titular) || !conocido(r.cabana) || !conocido(r.fecha_checkin) || !conocido(r.fecha_checkout);
             const dudosos = a.some(i => dudoso(prev[i])) || b.some(i => dudoso(next[i]));
-            if (relacionados || dudosos || out.no_comparables.length) {
+            const sinInterpretar=a.some(i=>actual.some(h=>h.hoja===(prev[i].hoja||prev[i].coordenadas_origen?.hoja)&&
+                (h.anotaciones||[]).some(x=>(x.tipo==='reserva_por_identificar'||x.lectura==='contenido_no_interpretado'||!x.tipo)&&Number(x.cabana)===Number(prev[i].cabana)&&
+                    (x.origen?.celda&&x.origen.celda===prev[i].coordenadas_origen?.celda||[x.fecha,...(x.fechas_ocupadas||[])].includes(prev[i].fecha_checkin)))));
+            if (relacionados || dudosos || sinInterpretar || out.no_comparables.length) {
                 out.ambiguas.push({anteriores: a.map(i => copia(prev[i])), actuales: b.map(i => copia(next[i])),
-                    motivo: out.no_comparables.length ? 'Cobertura incompleta: no se concluye alta o desaparición.' : 'Identidad no concluyente o múltiples candidatos.'});
+                    motivo: out.no_comparables.length ? 'Cobertura incompleta: no se concluye alta o desaparición.' :
+                        sinInterpretar?'La celda contiene información que el lector no pudo interpretar; no está confirmada como vacía.':'Identidad no concluyente o múltiples candidatos.'});
             } else {
                 out.ya_no_aparecen.push(...a.map(i => ({tipo: 'ya_no_aparece', anterior: copia(prev[i])})));
                 out.nuevas.push(...b.map(i => ({actual: copia(next[i])})));
@@ -408,7 +424,20 @@
             return {...resultado, generado_en, diagnostico,libro_actual};
         } catch (e) { return error(String(e.message || e)); }
     }
-    const api = Object.freeze({comparar, compararUltimasVersiones, validarSegmento, planificarHojas, seleccionarHojas, mesHoja, HOJAS_ESPECIALES_VIGILADAS, evidenciaCancelacion});
+    // Un mismo detalle serializable para comparación mensual, accesos rápidos,
+    // informe de chat y burbuja. Las listas vacías son valores, no errores de lectura.
+    function detallarCambio(cambio){
+        const antes=cambio.antes??null,despues=cambio.ahora??null;
+        const lista=Array.isArray(antes)&&Array.isArray(despues);
+        const clave=v=>typeof v==='string'?nombre(v):JSON.stringify(v&&typeof v==='object'?
+            [texto(v.concepto),v.fecha_servicio||v.fecha||null,v.hora||null,v.hora_fin||null,v.cantidad??null,v.monto??null,v.cortesia??null,v.pendiente??null]:v);
+        const prev=lista?new Map(antes.map(x=>[clave(x),x])):null,next=lista?new Map(despues.map(x=>[clave(x),x])):null;
+        const agregados=lista?[...next].filter(([k])=>!prev.has(k)).map(([,v])=>copia(v)):[];
+        const retirados=lista?[...prev].filter(([k])=>!next.has(k)).map(([,v])=>copia(v)):[];
+        return {campo:cambio.campo,antes:copia(antes),despues:copia(despues),agregados,retirados,
+            tipo:lista&&!agregados.length&&retirados.length?'retirado':lista&&agregados.length&&!retirados.length?'agregado':'modificado'};
+    }
+    const api = Object.freeze({comparar, compararUltimasVersiones, detallarCambio, validarSegmento, planificarHojas, seleccionarHojas, mesHoja, HOJAS_ESPECIALES_VIGILADAS, evidenciaCancelacion});
     root.HAIKU_LIBRO_DIFERENCIAS_V1 = api;
     if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

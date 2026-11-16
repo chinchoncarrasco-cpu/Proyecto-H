@@ -24,3 +24,21 @@ html[data-haiku-tema="oscuro"] {
 }
 :root { --haku-compacto-aviso-fondo: #fff5e5; }
 html[data-haiku-tema="oscuro"] { --haku-compacto-aviso-fondo: #392b1c; }
+
+.haku-retiros-libro { width:100%; min-width:0; margin:12px 0; }
+.haku-retiros-libro h3 { font-size:15px; margin:0 0 8px; }
+.haku-retiros-libro__lista { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:8px; align-items:start; }
+.haku-retiros-libro__caso { min-width:0; border:1px solid var(--haku-compacto-borde,#b9c5bc); border-radius:8px; }
+.haku-retiros-libro__caso>summary { padding:9px 11px; cursor:pointer; font-weight:600; overflow-wrap:anywhere; }
+.haku-retiros-libro__detalle { padding:0 11px 10px; }
+.haku-retiros-libro__detalle>summary { padding:8px 0; cursor:pointer; font-weight:600; }
+.haku-retiros-libro__detalle+.haku-retiros-libro__detalle { border-top:1px solid var(--haku-compacto-borde,#b9c5bc); }
+.haku-retiros-libro__detalle p { margin:6px 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+.haku-retiros-libro__par { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:8px 0; }
+.haku-retiros-libro button { margin:4px 6px 0 0; min-height:34px; }
+@media(max-width:719px) {
+  .haku-retiros-libro { margin:8px 0; }
+  .haku-retiros-libro__lista,.haku-retiros-libro__par { grid-template-columns:1fr; gap:6px; }
+  .haku-retiros-libro__caso>summary { padding:8px; font-size:13px; }
+  .haku-retiros-libro__detalle { padding:0 8px 8px; }
+}

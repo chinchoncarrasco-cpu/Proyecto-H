@@ -77,6 +77,20 @@ test('vista real exige motivo; un solo RPC y payload exacto; acredita servicio, 
  }finally{if(anteriorDoc===undefined)delete globalThis.document;else globalThis.document=anteriorDoc;
   if(anteriorEvento===undefined)delete globalThis.CustomEvent;else globalThis.CustomEvent=anteriorEvento;}
 });
+
+test('retiro del Libro: la revalidación privada se ejecuta antes del RPC y bloquea una fuente cambiada',async()=>{
+ const h=arnes();let comprobaciones=0;
+ const p=await C.preparar(ORDEN,{cliente:h.cliente,permiso:()=>true,buscar:h.buscar,cargarFinanzas:h.cargarFinanzas,
+  antesDeConfirmar:async()=>{comprobaciones++;throw Error('El Libro cambió; vuelve a revisar.');}});
+ const r=await h.confirmar(p);assert.equal(r.estado,'libro_cambiado');assert.equal(comprobaciones,1);assert.equal(h.llamadas.length,0);
+});
+test('retiro confirmado conserva el RPC autorizado, su auditoría y el reintento sin segunda escritura',async()=>{
+ const h=arnes();let comprobaciones=0;
+ const p=await C.preparar(ORDEN,{cliente:h.cliente,permiso:()=>true,buscar:h.buscar,cargarFinanzas:h.cargarFinanzas,
+  antesDeConfirmar:async()=>{comprobaciones++;}});
+ assert.equal((await h.confirmar(p)).estado,'realizado');assert.equal((await h.confirmar(p)).estado,'realizado');
+ assert.equal(comprobaciones,1);assert.equal(h.llamadas.length,1);assert.equal(h.eventos.length,1);
+});
 test('doble clic comparte promesa y operation_id; una sola escritura',async()=>{
  const h=arnes(),p=await h.preparar();let liberar;
  const espera=new Promise(resolve=>{liberar=resolve;});

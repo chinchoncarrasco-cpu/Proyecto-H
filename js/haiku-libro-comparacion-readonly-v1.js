@@ -185,6 +185,9 @@
             periodo: campos(periodo, ["desde", "hasta", "etiqueta", "timezone"]), fuente: campos(fuente, ["tipo", "nombre", "version", "modifiedTime", "verifiedAt", "generacion"]),
             alcance: { tipo: "registros_accesibles_sesion", hojas: textos(result.q.hojas), comparacion: "reservas_pagos_servicios" },
             comparacion: { items, grupos, meta: campos(comp.meta, metaKeys) }, pagosDetalle, serviciosDetalle,
+            cambiosLibro:lista(comp.cambiosLibro).map(c=>({...campos(c,['campo','tipo','motivo','accion']),
+                antes:structuredClone(c.antes??null),despues:structuredClone(c.despues??null),
+                agregados:structuredClone(c.agregados||[]),retirados:structuredClone(c.retirados||[]),reserva:reserva(c.reserva)})),
             advertencias: textos(result.advertencias), cobertura,
             contexto: { cadenaCanonica: [...cadenaCanonica], advertenciasInformativas: textos(modelo.advertenciasInformativas),
                 reservasPorIdentificar: modelo.reservasPorIdentificar.map(a => ({...campos(a, ['cabana','fecha','motivo_identificacion']),
@@ -254,9 +257,13 @@
                 const hojaEsperada = deps.semantica.meses[Number(periodo.desde.slice(5, 7)) - 1] + periodo.desde.slice(2, 4);
                 if (!Array.isArray(hojas) || !hojas.some(h => deps.semantica.normalizar(h).replace(/\s/g, "") === hojaEsperada))
                     throw fallo("HOJA_AUSENTE", `No se encuentra la hoja mensual ${hojaEsperada}.`);
-                const libro = Object.freeze({ listo: async () => {}, estado, listarHojas: () => [...hojas], consultarHoja: async h => {
+                const cacheHojas=new Map();
+                const libro = Object.freeze({ listo: async () => {}, estado, listarHojas: () => [...hojas],
+                    ...(wrapped?Object.fromEntries(['consultarIndice','consultarHuellas','leerCambiosDetectados'].filter(k=>typeof wrapped[k]==='function').map(k=>[k,(...args)=>wrapped[k](...args)])):{}),
+                    consultarHoja: async (h,version='actual') => {
+                    const clave=version+':'+h;if(cacheHojas.has(clave))return structuredClone(cacheHojas.get(clave));
                     let data;
-                    try { data = await leer(h); } catch (_) { throw fallo("ERROR_LECTURA", `No se pudo leer la hoja ${h}.`); }
+                    try { data = version==='anterior'&&wrapped?await wrapped.consultarHoja(h,'anterior','semantica'):await leer(h); } catch (_) { throw fallo("ERROR_LECTURA", `No se pudo leer la hoja ${h}.`); }
                     if (!data || typeof data !== "object") throw fallo("LIBRO_INVALIDO", `La hoja ${h} no es válida.`);
                     if (!wrapped && Array.isArray(data.celdas)) {
                         if (!data.celdas.length) throw fallo("LIBRO_INVALIDO", `La hoja ${h} no contiene celdas interpretables.`);
@@ -264,7 +271,8 @@
                     }
                     if (!Array.isArray(data.reservas)) throw fallo("LIBRO_INVALIDO", `La hoja ${h} no contiene una entrada semántica válida.`);
                     if (!wrapped) data = deps.corregirLenguaje(deps.canon.corregirResultado(data));
-                    consultasHojas.push({ hoja: h, geometria: escalar(data.cobertura?.geometria), pagos: escalar(data.cobertura?.pagos) });
+                    if(version==='actual')consultasHojas.push({ hoja: h, geometria: escalar(data.cobertura?.geometria), pagos: escalar(data.cobertura?.pagos) });
+                    cacheHojas.set(clave,structuredClone(data));
                     return data;
                 } });
                 const lectura = clienteLectura(cliente);

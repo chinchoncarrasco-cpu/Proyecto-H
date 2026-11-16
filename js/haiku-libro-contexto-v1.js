@@ -38,7 +38,8 @@
     }
     async function actualizarDesdeLibro(registros,libro=root.HAIKU_LIBRO_RESERVA_V1){
         if(!registros.length)return [];
-        const sinFuente=x=>({...x,fuente_vigente:{estado:'no_disponible'}});
+        const sinFuente=x=>({...x,fuente_vigente:{estado:'no_disponible',motivo:
+            `No pude leer de forma completa la hoja ${hoja(x.actual||x.anterior)||'de esta reserva'}. Conserva el caso para revisión.`}});
         if(!libro?.crearLectura)return registros.map(sinFuente);
         let lectura;
         try{lectura=await libro.crearLectura();}catch(_){return registros.map(sinFuente);}
@@ -59,22 +60,91 @@
                 datosHojas.set(h,data);
             }catch(_){resultados.set(h,null);}
         }
+        // Ante una ausencia, buscar continuidad en las demás hojas mensuales.
+        // Se leen una vez por lote; una hoja fallida impide acreditar el retiro.
+        const sinUbicacion=registros.some(registro=>{
+            const r=registro.actual||registro.anterior,rows=resultados.get(hoja(r));
+            return registro.tipo!=='cancelacion'&&rows&&!rows.some(x=>mismaPersona(r,x)&&
+                (x.id===r.id||Number(x.cabana)===Number(r.cabana)&&
+                    (x.fecha_checkin===r.fecha_checkin||x.fecha_checkout===r.fecha_checkout)));
+        });
+        if(sinUbicacion){
+            const otras=[...disponibles].filter(h=>/^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s*\d{2,4}$/i.test(h)&&!datosHojas.has(h));
+            for(let i=0;i<otras.length;i+=8)for(const h of otras.slice(i,i+8)){
+                try{const data=await lectura.consultarHoja(h,'actual','semantica');datosHojas.set(h,data);
+                    resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
+                }catch(_){resultados.set(h,null);}
+            }
+        }
         const actualizados=registros.map(registro=>{
             if(registro.tipo==='cancelacion')return registro;
             const r=registro.actual||registro.anterior,rows=resultados.get(hoja(r));
             if(!rows)return sinFuente(registro);
-            const candidatos=rows.filter(x=>mismaPersona(r,x)&&
+            let candidatos=rows.filter(x=>mismaPersona(r,x)&&
                 (x.id===r.id||Number(x.cabana)===Number(r.cabana)&&
                     (x.fecha_checkin===r.fecha_checkin||x.fecha_checkout===r.fecha_checkout)));
+            if(!candidatos.length){
+                candidatos=[...datosHojas.values()].flatMap(h=>lista(h.reservas)).filter(x=>mismaPersona(r,x)&&
+                    Number(x.cabana)===Number(r.cabana)&&x.fecha_checkin===r.fecha_checkin&&x.fecha_checkout===r.fecha_checkout);
+            }
+            if(!candidatos.length){
+                const D=root.HAIKU_LIBRO_DIFERENCIAS_V1;
+                if(D?.comparar){
+                    const hojas=[...datosHojas.values()],anterior={hoja:hoja(r),reservas:[r],fechas:datosHojas.get(hoja(r))?.fechas||[r.fecha_checkin],cobertura:{geometria:true}};
+                    // La ausencia se decide abajo con cobertura completa. Aquí
+                    // sólo reutilizamos el matcher de continuidad, sin declarar bajas.
+                    const diferencias=D.comparar([anterior],hojas);
+                    // El matcher de dos copias dispone de todos los segmentos.
+                    // Aquí partimos de una sola ficha: compartir persona/documento
+                    // no permite tomar otra visita histórica como continuidad.
+                    candidatos=diferencias.modificadas.filter(x=>x.anterior.id===r.id&&
+                        (x.actual.fecha_checkin===r.fecha_checkin||x.actual.fecha_checkout===r.fecha_checkout)).map(x=>x.actual);
+                }
+            }
             const canceladas=lista(cancelaciones.get(hoja(r))).filter(c=>root.HAIKU_LIBRO_DIFERENCIAS_V1?.evidenciaCancelacion(r,c)===true);
             if(!candidatos.length&&canceladas.length===1)return {...registro,fuente_vigente:{estado:'cancelada',generacion:lectura.estado().generacion},
                 evidencia_cancelacion:canceladas[0]};
-            if(candidatos.length!==1)return {...registro,fuente_vigente:{estado:candidatos.length?'ambigua':'no_encontrada'}};
+            if(candidatos.length!==1){
+                const parcial=[...resultados.values()].some(x=>!x);
+                const dudosa=[...datosHojas.values()].some(h=>lista(h.anotaciones).some(a=>
+                    (a.tipo==='reserva_por_identificar'||a.lectura==='contenido_no_interpretado'||!a.tipo)&&
+                    (h.hoja===hoja(r)&&Number(a.cabana)===Number(r.cabana)&&
+                        (a.origen?.celda&&a.origen.celda===r.coordenadas_origen?.celda||
+                            [a.fecha,...lista(a.fechas_ocupadas)].some(d=>d>=r.fecha_checkin&&d<=(r.fecha_checkout||r.fecha_checkin)))||
+                        a.titulares_posibles?.some(t=>mismaPersona(r,{titular:t})))));
+                const otras=[...datosHojas.values()].flatMap(h=>lista(h.reservas)).filter(x=>mismaPersona(r,x));
+                const fechas=new Set([...datosHojas.values()].flatMap(h=>lista(h.fechas))),dias=[];
+                const fechaValida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')&&Number.isFinite(Date.parse(f))&&new Date(f).toISOString().slice(0,10)===f;
+                if(fechaValida(r.fecha_checkin)&&fechaValida(r.fecha_checkout)&&r.fecha_checkout>=r.fecha_checkin){
+                    if(r.tipo_estadia==='full_day'&&r.fecha_checkout===r.fecha_checkin)dias.push(r.fecha_checkin);
+                    else for(let d=r.fecha_checkin,i=0;d<r.fecha_checkout&&i<366;d=new Date(Date.parse(d+'T12:00:00Z')+86400000).toISOString().slice(0,10),i++)dias.push(d);
+                }
+                const finCubierto=dias.length>0&&(r.tipo_estadia==='full_day'?r.fecha_checkout===r.fecha_checkin:
+                    new Date(Date.parse(dias.at(-1)+'T12:00:00Z')+86400000).toISOString().slice(0,10)===r.fecha_checkout);
+                const coberturaTemporal=finCubierto&&dias.every(d=>fechas.has(d));
+                const regionLeida=dias.length>0&&dias.every(d=>[...datosHojas.values()].some(h=>
+                    lista(h.espacios).some(e=>Number(e.cabana)===Number(r.cabana)&&e.fecha===d&&
+                        (e.lectura==='vacia_confirmada'||e.estado==='libre_explicito'))||
+                    lista(h.reservas).some(x=>Number(x.cabana)===Number(r.cabana)&&!x.advertencias?.length&&
+                        x.fecha_checkin<=d&&(x.tipo_estadia==='full_day'?x.fecha_checkin===d:x.fecha_checkout>d))));
+                const retiro=!candidatos.length&&!parcial&&!dudosa&&!otras.length&&coberturaTemporal&&regionLeida&&!r.advertencias?.length;
+                return {...registro,...(retiro?{tipo:'retiro',anterior:registro.anterior||r,actual:null}:{}),
+                    fuente_vigente:{estado:retiro?'ausencia_verificada':candidatos.length||otras.length?'ambigua':parcial||dudosa?'lectura_incompleta':'no_encontrada',generacion:lectura.estado().generacion,
+                        motivo:retiro?'Ya no aparece en el Libro. Se buscó continuidad en las hojas mensuales.':
+                            dudosa?'La celda no pudo interpretarse; no está confirmada como vacía.':
+                            parcial?'Falta lectura segura de: '+[...resultados].filter(([,v])=>!v).map(([h])=>h).slice(0,5).join(', ')+'. Se conserva pendiente.':otras.length?
+                                'Hay posibles continuidades: '+otras.slice(0,5).map(x=>`${hoja(x)} · CAB ${x.cabana} · ${x.fecha_checkin} → ${x.fecha_checkout}`).join('; ')+
+                                '. Compartir titular o documento no acredita la misma estadía. Requiere revisión.':
+                                'La cobertura de la cabaña y sus fechas no acredita la ausencia. Requiere revisión.'}};
+            }
             const actual=structuredClone(candidatos[0]);
             return {...registro,actual,fuente_vigente:{estado:'verificada',generacion:lectura.estado().generacion,
+                motivo:hoja(actual)!==hoja(r)||actual.cabana!==r.cabana||actual.fecha_checkin!==r.fecha_checkin||actual.fecha_checkout!==r.fecha_checkout?
+                    'Encontré continuidad en otra ubicación del Libro. Revisa el cambio; no es una baja.':undefined,
                 actualizada:JSON.stringify(actual)!==JSON.stringify(registro.actual),
-                calendario:evidenciaCalendario(actual,datosHojas.get(hoja(r)))},
-                cambios:lista(registro.cambios).map(c=>({...c,ahora:structuredClone(actual[c.campo])}))};
+                calendario:evidenciaCalendario(actual,datosHojas.get(hoja(actual)))},
+                cambios:lista(registro.cambios).map(c=>({...c,ahora:structuredClone(c.campo==='observaciones_libro'?
+                    root.HAIKU_LIBRO_SEMANTICA.separarCampos(actual.texto_original||''):actual[c.campo])}))};
         });
         // Dos avisos de la misma ficha y la misma versión son un caso. Se
         // conservan todos sus campos e IDs para retirar sólo los avisos resueltos.
