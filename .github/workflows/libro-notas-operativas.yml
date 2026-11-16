@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "js/haiku-libro-semantica-v1.js"
+      - "js/haiku-libro-consultas-v1.js"
+      - "js/haiku-libro-contexto-v1.js"
+      - "js/haiku-libro-diferencias-v1.js"
       - "js/haiku-libro-servicios-scope-v2.js"
       - "tests/libro-notas-insumos-tinaja.test.cjs"
       - "tests/libro-tinaja-reemplazo.test.cjs"
@@ -17,6 +20,7 @@ on:
       - "tests/libro-resoluciones-ocupacion.test.cjs"
       - "tests/libro-servicio-manual-postgres.test.cjs"
       - "tests/libro-auditoria-servicios-notas.test.cjs"
+      - "tests/libro-retiros-*.cjs"
       - "tests/libro-masaje-registro-cuna-acciones.test.cjs"
       - "tests/libro-historial-manual-browser-check.cjs"
       - "css/sites-asistente-v1.css"
