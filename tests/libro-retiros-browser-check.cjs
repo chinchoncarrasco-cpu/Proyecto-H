@@ -1,6 +1,7 @@
 // Cuatro renderers reales, datos sintéticos, Chromium y red exclusivamente local.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),assert=require('node:assert/strict');
 const {chromium}=require('playwright'),F=require('./fixtures/libro-comparacion-readonly.cjs'),R=require('./fixtures/libro-retiros-sinteticos.cjs');
+const {setup:setupServicios}=require('./fixtures/libro-servicio-manual.cjs');
 const root=path.resolve(__dirname,'..'),fixture=R.crear();
 const evidencia=process.env.HAIKU_RETIROS_EVIDENCIA||path.join(os.tmpdir(),'haku-libro-retiros-20261115');fs.mkdirSync(evidencia,{recursive:true});
 const css=['styles','haiku-paleta-v1','supabase-asistente-v1','sites-asistente-v1','supabase-haku-reconciliacion-v1','sites-libro-comparacion-readonly-v1','haiku-tema-oscuro-v1'];
@@ -186,6 +187,34 @@ const server=http.createServer((req,res)=>{
     await page.screenshot({path:path.join(evidencia,`regresion-${escena.caso}-${width}-${tema}.png`),fullPage:true});
     regresiones.push({...datos,width,tema,result:'PASS'});
    }
+   await page.addScriptTag({url:origin+'/js/haiku-libro-servicios-scope-v2.js'});
+   await page.evaluate(setup=>{
+    (0,eval)('('+setup+')')();
+    const r=fixtureServicios.reservas[0],e=fixtureServicios.db.reserva_estadias[0];
+    r.titular=fixtureServicios.db.reservas[0].titular_nombre='Huésped Full Day de prueba';
+    r.tipo_estadia='full_day';r.fecha_checkout=r.fecha_checkin;r.noches=0;
+    r.texto_original='Jacuzzi 19hrs';
+    r.servicios=HAIKU_LIBRO_SEMANTICA.servicios(r.texto_original,{origen_campo:'notas_reserva'});
+    e.tipo_estadia='fullday';e.fecha_salida=e.fecha_ingreso;
+   },setupServicios.toString());
+   await page.evaluate(async()=>{
+    const Q=HAIKU_LIBRO_CONSULTAS,out=document.querySelector('#vista');
+    const r=fixtureServicios.reservas[0],scope={reservas:[r],generacion:1};
+    const api=HAIKU_LIBRO_SERVICIOS_SCOPE_V2,plan=await api.prepararHistorial(scope),item=plan.items.find(x=>x.kind==='servicio');
+    if(item?.reglaFullDay?.pagosRevisados!==true)throw Error(JSON.stringify(item?.razones));
+    out.replaceChildren();
+    Q.renderizarCambiosLibro(out,[{id:item.item_id,tipo:'agregado',campo:'servicios',reserva:r,sistema:item.asociacion.sistema,
+     accion:'incorporar_servicio',despues:{concepto:item.mapa.nombre,fecha:item.fecha,hora:item.hora,cobro:'Cortesía Full Day · $0'}}],
+     {preparar:c=>api.prepararServicioEnLinea(scope,c.id,c.sistema.id)});
+    for(const d of out.querySelectorAll('details'))d.open=true;
+   });
+   const cortesia=page.locator('#vista');
+   assert.match(await cortesia.innerText(),/Cortesía Full Day · \$0/);
+   await cortesia.getByRole('button',{name:'Incorporar',exact:true}).click();
+   await cortesia.getByRole('button',{name:'Confirmar incorporación',exact:true}).waitFor();
+   assert.match(await cortesia.innerText(),/19:00 · Cortesía Full Day · \$0/);
+   assert.deepEqual(await page.evaluate(()=>fixtureServicios.escrituras),[]);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    assert.deepEqual(externos,[]);assert.deepEqual(errors,[]);await context.close();
   }
   fs.writeFileSync(path.join(evidencia,'regresiones-sinteticas.json'),JSON.stringify(regresiones,null,2));

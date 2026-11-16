@@ -314,6 +314,36 @@ test('Full Day: Tonel o Jacuzzi único de 1 hora sin pago se clasifica cortesía
     }
 });
 
+test('Incorporar en la fila informa el cobro de la tinaja y confirma el mismo tipo',async()=>{
+    for(const [texto,rotulo,tipo] of [
+        ['jacuzzi 19hrs','Cortesía Full Day · $0','cortesia'],
+        ['TINAJA TONEL A LAS 19:00','Cortesía Full Day · $0','cortesia'],
+        ['TINAJA TONEL X PAGAR CLP$30.000 A LAS 19:00','Cobrable','normal']
+    ]){
+        const e=casoFullDayTinaja(texto);
+        e.c.haikuTienePermiso=permiso=>['servicios.crear','pagos.ver'].includes(permiso);
+        const item=primeraTinaja(await e.construir());
+        const scope={reservas:[e.state.reservas[0]],generacion:e.state.generacion};
+        const previa=await e.api.prepararServicioEnLinea(scope,item.item_id,e.state.db.reserva_estadias[0].id);
+        assert.ok(previa.texto.includes(`19:00 · ${rotulo}`),previa.texto);
+        assert.equal(e.state.escrituras.length,0);
+        await previa.guardar();
+        assert.equal(e.state.escrituras.length,1);
+        assert.equal(e.state.escrituras[0].p_servicios[0].tipo_cobro,tipo);
+    }
+});
+
+test('Confirmar la fila invalida la cortesía cuando aparece un pago específico',async()=>{
+    const e=casoFullDayTinaja('jacuzzi 19hrs');
+    e.c.haikuTienePermiso=permiso=>['servicios.crear','pagos.ver'].includes(permiso);
+    const item=primeraTinaja(await e.construir()),estadia=e.state.db.reserva_estadias[0];
+    const previa=await e.api.prepararServicioEnLinea({reservas:[e.state.reservas[0]],generacion:1},item.item_id,estadia.id);
+    e.state.db.pagos.push({id:'pago-tinaja',reserva_id:estadia.reserva_id,tipo_movimiento:'pago',
+        estado:'confirmado',monto:30000,observaciones:'Pago Jacuzzi'});
+    await assert.rejects(previa.guardar(),/El servicio cambió/);
+    assert.equal(e.state.escrituras.length,0);
+});
+
 test('Full Day: una tinaja sin tipo mantiene selección de Tonel/Jacuzzi, sin pedir tipo de cobro',async()=>{
     const e=casoFullDayTinaja('1 HORA DE TINAJA CALIENTE 18:00 A 19:00');
     const res=await e.construir(),item=primeraTinaja(res);

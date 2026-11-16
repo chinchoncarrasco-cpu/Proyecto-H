@@ -378,8 +378,10 @@
         if(!listo(inicial))throw Error('El servicio ya existe o sus datos requieren revisión.');
         const firma=firmaConfirmacionServicio(inicial),operacion=uuid();
         let enviada=false;
-        const total=inicial.precio?.total;
-        return {texto:[inicial.mapa?.nombre,inicial.hora,total!=null?`$${Number(total).toLocaleString('es-CL')}`:null].filter(Boolean).join(' · '),guardar:async()=>{
+        const cortesia=inicial.payload.tipo_cobro==='cortesia';
+        const total=cortesia?0:inicial.precio?.total;
+        const cobro=cortesia?(inicial.reglaFullDay?'Cortesía Full Day':'Cortesía'):'Cobrable';
+        return {texto:[inicial.mapa?.nombre,inicial.hora,cobro,total!=null?`$${Number(total).toLocaleString('es-CL')}`:null].filter(Boolean).join(' · '),guardar:async()=>{
             if(!enviada){
                 const actual=await leer();
                 if(!listo(actual)||firmaConfirmacionServicio(actual)!==firma)throw Error('El servicio cambió. Vuelve a comparar.');
