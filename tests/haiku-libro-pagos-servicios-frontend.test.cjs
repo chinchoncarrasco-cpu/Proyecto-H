@@ -17,9 +17,9 @@ const reserva=p=>({id:'libro-1',titular:'Carlos Marquez',rut_documento:'11111111
 const estadia=(r,id='e1')=>({id,reserva_id:'r1',fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,
  estado_estadia:'confirmada',tipo_estadia:'alojamiento',adultos:2,ninos:0,mascotas:0,cabanas:{numero:r.cabana},
  reservas:{id:'r1',titular_nombre:r.titular,titular_numero_documento:r.rut_documento,estado_reserva:'confirmada'}});
-const servicio=(id='s1',nombre='Tinaja Tonel',fecha='2026-09-12',total=30000)=>({id,reserva_id:'r1',fecha_servicio:fecha,total,
+const servicio=(id='s1',nombre='Tinaja Tonel',fecha='2026-09-12',total=30000)=>({id,reserva_id:'r1',estadia_id:'e1',fecha_servicio:fecha,total,
  tipo_cobro:'normal',estado_servicio:'programado',catalogo_servicios:{codigo:nombre,nombre,categoria:'servicio'}});
-const cargo=(id='c1',servicioId='s1',concepto='Tinaja Tonel',saldo=30000,extra={})=>({cargo_id:id,reserva_id:'r1',servicio_id:servicioId,
+const cargo=(id='c1',servicioId='s1',concepto='Tinaja Tonel',saldo=30000,extra={})=>({cargo_id:id,reserva_id:'r1',estadia_id:'e1',servicio_id:servicioId,
  tipo_cargo:'servicio',concepto,monto:saldo,monto_ajustado:saldo,aplicado_neto:0,saldo_cargo:saldo,estado:'activo',estado_pago:'pendiente',...extra});
 
 function cliente(tablas,opciones={}){

@@ -74,7 +74,7 @@
         const [cargos, servicios] = await Promise.all([
             paginas(() => cliente.from("vista_estado_cargos")
                 .select("cargo_id,reserva_id,estadia_id,servicio_id,tipo_cargo,concepto,monto,monto_ajustado,aplicado_neto,saldo_cargo,estado,estado_pago")
-                .in("reserva_id", ids).eq("tipo_cargo", "servicio").order("cargo_id")),
+                .in("reserva_id", ids).order("cargo_id")),
             paginas(() => cliente.from("servicios")
                 .select("id,reserva_id,estadia_id,fecha_servicio,hora_inicio,cantidad,personas,precio_unitario_aplicado,monto_adicional,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
                 .in("reserva_id", ids).order("id"))
@@ -133,13 +133,19 @@
         return { estado: conjuntos.length === 1 ? "unico" : conjuntos.length > 1 ? "ambiguo" : "sin_suma", conjuntos };
     }
 
-    function resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema = null) {
+    function resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema = null, opciones = {}) {
         if (!aplicacion.concepto_canon || !Number.isSafeInteger(aplicacion.monto) || aplicacion.monto <= 0) {
             return { ...aplicacion, estado: "revision", motivo: "La aplicación no tiene concepto o monto financiero válido." };
         }
         const conceptoCompatible = cargo => cargo.concepto_canon === aplicacion.concepto_canon ||
             (aplicacion.concepto_canon === "tinaja" && ["tinaja_tonel", "tinaja_jacuzzi"].includes(cargo.concepto_canon));
         let compatibles = cargos.filter(cargo => cargoAplicable(cargo) && conceptoCompatible(cargo));
+        if(opciones.estadiaId){
+            const otras=compatibles.filter(c=>c.estadia_id!==opciones.estadiaId);
+            compatibles=compatibles.filter(c=>c.estadia_id===opciones.estadiaId);
+            if(!compatibles.length&&otras.length)return {...aplicacion,estado:'revision',candidatos:otras,
+                motivo:'El cargo compatible pertenece a otra estadía. Revisa su asociación; no se aplicará este comprobante allí.'};
+        }
         if (!compatibles.length) {
             return { ...aplicacion, estado: "sin_destino", motivo: "No existe un servicio pendiente compatible en Proyecto H.", candidatos: [] };
         }
@@ -185,7 +191,11 @@
 
         const cargo = pendientes[0];
         if (aplicacion.monto > cargo.saldo_cargo) {
+            if(opciones.excedenteAprobable===true)return {...aplicacion,estado:'destino_unico',cargo_id:cargo.cargo_id,cargo,
+                monto:cargo.saldo_cargo,monto_recibido:aplicacion.monto,excedente:aplicacion.monto-cargo.saldo_cargo,
+                motivo:'Comprobante íntegro; aplicar sólo el saldo del cargo y conservar el excedente sin aplicar requiere aprobación explícita.'};
             return { ...aplicacion, estado: "saldo_insuficiente", cargo_id: cargo.cargo_id, cargo,
+                monto_recibido:aplicacion.monto,monto_aplicable:cargo.saldo_cargo,excedente:aplicacion.monto-cargo.saldo_cargo,
                 motivo: "El monto de la aplicación supera el saldo pendiente del cargo." };
         }
         return { ...aplicacion, estado: "destino_unico", cargo_id: cargo.cargo_id, cargo,
@@ -196,7 +206,7 @@
                 : "Destino financiero único y saldo exacto." };
     }
 
-    function resolverTransaccion(pago, reservaId, snapshot, pagoSistema = null) {
+    function resolverTransaccion(pago, reservaId, snapshot, pagoSistema = null, opciones = {}) {
         if (!snapshot?.disponible) return { estado: "revision", resoluble: false, aplicaciones: [], motivo: snapshot?.error || "No fue posible leer el snapshot financiero." };
         if (!reservaId) return { estado: "revision", resoluble: false, aplicaciones: [], motivo: "La reserva destino no es inequívoca." };
         const aplicaciones = aplicacionesLibro(pago);
@@ -206,7 +216,7 @@
             return { estado: "revision", resoluble: false, aplicaciones, motivo: "La suma de aplicaciones no coincide con el comprobante padre." };
         }
         const cargos = enriquecerCargos(snapshot, reservaId);
-        const resueltasBase = aplicaciones.map(aplicacion => resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema));
+        const resueltasBase = aplicaciones.map(aplicacion => resolverAplicacion(aplicacion, cargos, snapshot, pagoSistema,opciones));
         const resueltas = resueltasBase.flatMap(aplicacion => aplicacion.aplicaciones_distribuidas || [aplicacion]);
         const usados = new Map();
         for (const aplicacion of resueltas.filter(item => item.cargo_id && item.estado === "destino_unico")) {
@@ -226,6 +236,7 @@
             aplicaciones: resueltas,
             aplicaciones_payload: resoluble ? resueltas.map(item => ({ cargo_id: item.cargo_id, monto: item.monto })) : [],
             monto_total: Number(pago.monto),
+            monto_sin_aplicar:resueltas.reduce((n,a)=>n+(a.estado==='destino_unico'?Number(a.excedente||0):0),0),
             motivo: resoluble ? "Todas las aplicaciones tienen un destino financiero único." :
                 todasAplicadas ? "Todas las aplicaciones ya están cubiertas en Proyecto H." : "Una o más aplicaciones requieren revisión."
         };

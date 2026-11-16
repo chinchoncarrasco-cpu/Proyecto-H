@@ -2747,9 +2747,9 @@ test("Kevefaf same-amount transfer stays an approvable additional payment and ne
 
  const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
  const textoTarjeta=tarjeta=>tarjeta.querySelectorAll('*').map(e=>e.textContent).join(' ');
- const tarjetaOmitida=h.out.querySelectorAll('.haiku-incorporacion-item--omitidos').find(t=>textoTarjeta(t).includes("Kevefaf Vivifa"));
+ const tarjetaOmitida=h.out.querySelectorAll('.haiku-incorporacion-movimiento').find(t=>textoTarjeta(t).includes('381310'));
  const tarjetaRevision=h.out.querySelectorAll('.haiku-incorporacion-item--dudosos').find(t=>textoTarjeta(t).includes("Kevefaf Vivifa"));
- assert.equal(tarjetaOmitida.dataset.haikuPagoUiV1,'1');assert.match(textoTarjeta(tarjetaOmitida),/WebPay Crédito/);
+ assert.ok(tarjetaOmitida.className.includes('haiku-incorporacion-movimiento--en_sistema'));assert.match(textoTarjeta(tarjetaOmitida),/WebPay Crédito/);
  assert.match(textoTarjeta(tarjetaOmitida),/CodAut/);assert.match(textoTarjeta(tarjetaOmitida),/381310/);
  assert.equal(tarjetaRevision.dataset.haikuPagoUiV1,'1');assert.match(textoTarjeta(tarjetaRevision),/Transferencia/);
  assert.match(textoTarjeta(tarjetaRevision),/Glosa/);assert.match(textoTarjeta(tarjetaRevision),/Transf\. Kevefaf Erasmo/);

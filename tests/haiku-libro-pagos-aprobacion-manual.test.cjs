@@ -586,7 +586,7 @@ test('UI confirma distribución o asociación en la misma tarjeta y excluye esas
     }
 });
 
-test('contratos del flujo manual: sólo RPC de servicio, sin inserts, timers, fake clicks ni refresh propio',()=>{
+test('contratos del flujo manual: sólo RPC protegidos de servicio y precio, sin inserts ni refresh propio',()=>{
     const src=fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8');
     const motor=src.slice(src.indexOf('const claveDecisionPago ='),src.indexOf('function crearPlanIncorporacion('));
     const ui=src.slice(src.indexOf('function panelAprobacionManualPago('),src.indexOf('function renderizarItemIncorporacion('));
@@ -594,7 +594,7 @@ test('contratos del flujo manual: sólo RPC de servicio, sin inserts, timers, fa
         assert.doesNotMatch(codigo,/\.insert\(|\.update\(|setTimeout|setInterval|\.click\(|fechaSeleccionada|HAIKU_RESUMEN_REFRESH_V1|full_day/i);
         assert.doesNotMatch(codigo,/\.from\(['"](?:servicios|cargos|pagos|reservas|reserva_estadias)['"]\)/);
     }
-    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_registrar_servicio']);
+    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_libro_aplicar_pago_existente_v1','haiku_libro_ajustar_precio_cargo_v1','haiku_registrar_servicio']);
 });
 
 async function revisionVisualUi(opciones={}) {

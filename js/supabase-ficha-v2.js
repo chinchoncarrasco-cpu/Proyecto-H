@@ -294,19 +294,29 @@
     }
 
     function pintarPagos(ficha) {
-        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1.calcular(
+        const resumen = (window.HAIKU_FINANZAS_RESUMEN_V1.detalle||window.HAIKU_FINANZAS_RESUMEN_V1.calcular)(
             ficha.cargos || [], ficha.pagos || []
         );
         const valores = {
             "ficha-pago-total": resumen.total,
             "ficha-pago-abono": resumen.abono,
-            "ficha-pago-saldo": resumen.saldo,
+            "ficha-pago-saldo": resumen.saldoNeto??resumen.saldo,
             "ficha-pago-servicios": resumen.servicios
         };
         Object.entries(valores).forEach(([id,valor]) => {
             const el = document.getElementById(id);
             if (el) el.textContent = dinero(valor);
         });
+        const saldo=document.getElementById('ficha-pago-saldo');
+        const etiquetaSaldo=saldo?.parentElement?.querySelector?.('span');
+        if(etiquetaSaldo&&resumen.saldoNeto!==undefined)etiquetaSaldo.textContent='Saldo neto';
+        let nota=document.getElementById('ficha-pago-aplicaciones-detalle');
+        if(saldo&&resumen.sinAplicar>0){
+            if(!nota){nota=document.createElement('small');nota.id='ficha-pago-aplicaciones-detalle';saldo.parentElement.append(nota);}
+            nota.textContent=`Saldo de cargos ${dinero(resumen.saldoCargos)} · pagos sin aplicar ${dinero(resumen.sinAplicar)}.`+
+                (resumen.saldoFavor>0?` Saldo a favor ${dinero(resumen.saldoFavor)}.`:' Revisa las aplicaciones antes de volver a cobrar.');
+            nota.hidden=false;
+        }else if(nota)nota.hidden=true;
     }
 
     function crearItemServicio(servicio) {

@@ -179,6 +179,14 @@
     // - una fila del bloque de pagos con monto representa un pago recibido;
     // - "Webpay por confirmar" es un pendiente administrativo, no una deuda del huésped;
     // - si la glosa dice débito/crédito, ese dato específico tiene prioridad sobre "Webpay".
+    function comprobanteTarjetaPenalidad(pago){
+        const t=normalizarBase(pago?.texto_original||''),fila=pago?.evidencia_financiera?.columnas_ocupadas;
+        return pago?.tipo_movimiento==='penalidad'&&pago.evidencia_financiera?.sector==='pagos'&&
+            fila?.fecha&&fila.detalle&&fila.concepto&&fila.monto&&pago.folio&&pago.bovtar&&
+            ['credito','debito','tarjeta_credito','tarjeta_debito','webpay_credito','webpay_debito'].includes(pago.medio_pago)&&
+            Number.isSafeInteger(pago.monto)&&pago.monto>0&&/^\d{4}-\d{2}-\d{2}$/.test(pago.fecha_comprobante||'')&&
+            !/\b(?:por|x)\s+pagar\b|saldo\s+pendiente|reembolso|devolucion|nota\s+de\s+credito/.test(t);
+    }
     function ajustarPagoLibro(pago) {
         if (!pago || typeof pago !== "object") return pago;
         const texto = normalizarBase(pago.texto_original || "");
@@ -206,12 +214,15 @@
             copia.airbnb_liquidacion_pendiente = true;
             copia.estado_pago = "por_confirmar";
             copia.pago_recibido = null;
-        } else if (copia.tipo_movimiento !== "penalidad" && montoValido && !pendienteCliente) {
+        } else if ((copia.tipo_movimiento !== "penalidad"||comprobanteTarjetaPenalidad(copia)) && montoValido && !pendienteCliente) {
             copia.estado_pago = "registrado_en_libro";
             copia.pago_recibido = true;
         } else if (pendienteCliente) {
             copia.estado_pago = "pendiente";
             copia.pago_recibido = null;
+        }
+        if(/^diferencia(?:\s+de)?\s+tarifa$/.test(normalizarBase(copia.concepto||''))){
+            copia.tipo_movimiento='alojamiento';copia.concepto_alojamiento='diferencia_tarifa';
         }
         return copia;
     }
@@ -261,7 +272,7 @@
         // nota cuando carece de todas las señales estructuradas de un comprobante.
         // El color por sí solo nunca degrada un pago con identidad financiera.
         if (notaAdministrativa) return dudoso("El detalle incluye una nota administrativa. Comprueba que la fila corresponda a un ingreso recibido.");
-        if (reembolso || obligacion || notaDestacadaSinComprobante) {
+        if (reembolso || obligacion&&!comprobanteTarjetaPenalidad(pago) || notaDestacadaSinComprobante) {
             if (!evidenciaIngresoCompleta) return {clase:"nota_financiera"};
             return dudoso(reembolso ? "El detalle menciona un reembolso. Comprueba si la fila corresponde a un ingreso." :
                 "El detalle menciona un importe por pagar o gestionar. Comprueba si se recibió el pago.");
