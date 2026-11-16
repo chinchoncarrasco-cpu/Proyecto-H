@@ -980,12 +980,16 @@
                         estadoGuardado.tabIndex=-1;
                         cuerpoAviso.insertBefore(estadoGuardado,bloquePendientes);
                     }
-                    estadoGuardado.textContent='Guardando estos cambios en Proyecto H…';
+                    estadoGuardado.textContent='Comprobando cambios del Libro…';
                     for(const b of acciones){b.disabled=true;b.incorporacionBloqueada=true;}
                     cerrar.disabled=true;
                     for(const b of botonesIncorporar){b.textContent='Incorporando…';b.setAttribute('aria-busy','true');}
                     try{
-                        const fin=await api.incorporarDesdeAviso(resultado),resumen=resumenGuardado(fin);
+                        const fin=await api.incorporarDesdeAviso(resultado,{informar:(etapa,confirmado)=>{
+                            const resumen=resumenGuardado(confirmado);
+                            estadoGuardado.textContent=resumen?`Guardado: ${resumen}. ${etapa}`:etapa;
+                        }});
+                        const resumen=resumenGuardado(fin);
                         const pendientes=lista(fin?.pendientes);finalizado=true;
                         vistaCambios.hidden=true;
                         if(vistaFechas)vistaFechas.hidden=true;

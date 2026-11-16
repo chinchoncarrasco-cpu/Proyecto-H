@@ -28,6 +28,22 @@ test('un clic incorpora reservas, excluye pagos y comparte un solo intento concu
  await h.api.incorporarDesdeAviso(h.informe);assert.equal(h.estado.escrituras,1);
  assert.ok(h.estado.consultas.every(rows=>rows.length===1&&rows[0].actual.id===fila.id));
 });
+for(const cambiaLibro of [false,true])test(`al comprobar el recibo ${cambiaLibro?'relee el Libro actualizado':'reutiliza la lectura del Libro'}`,async()=>{
+ const h=coordinador(),confirmar=h.c.HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion;
+ let lecturas=0;
+ h.c.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro=async rows=>{lecturas++;return rows;};
+ h.c.HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(...args)=>{
+  const fin=await confirmar(...args);
+  if(cambiaLibro)h.estado.gen++;
+  return fin;
+ };
+ const avances=[];
+ const fin=await h.api.incorporarDesdeAviso(h.informe,{informar:(etapa,totales)=>avances.push([etapa,totales.reservas_creadas||0])});
+ assert.equal(fin.reservas_creadas,1);
+ assert.equal(lecturas,cambiaLibro?2:1);
+ assert.equal(h.estado.consultas.length,2,'Proyecto H se vuelve a consultar');
+ assert.ok(avances.some(([etapa,guardadas])=>etapa==='Comprobando qué queda pendiente…'&&guardadas===1));
+});
 test('respuesta perdida conserva el mismo plan y solicitud al reintentar',async()=>{
  const h=coordinador();let primero;
  h.c.HAIKU_LIBRO_CONSULTAS.confirmarIncorporacion=async(_r,_d,_a,plan)=>{
@@ -78,6 +94,37 @@ test('si falla la lectura final no pierde el recibo ni vuelve a guardar',async()
  h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async rows=>{if(++n===2)throw Error('Lectura final');return original(rows);};
  await assert.rejects(h.api.incorporarDesdeAviso(h.informe),e=>e.incorporado.reservas_creadas===1);
  const fin=await h.api.incorporarDesdeAviso(h.informe);assert.equal(fin.reservas_creadas,1);assert.equal(h.estado.escrituras,1);
+});
+function relojDeAviso(h,etapa) {
+ let disparar,etapaActual;
+ h.c.setTimeout=fn=>{if(etapaActual===etapa)disparar=fn;return fn;};
+ h.c.clearTimeout=fn=>{if(disparar===fn)disparar=null;};
+ return {
+  informar:texto=>{etapaActual=texto;},
+  vencer:()=>{assert.equal(typeof disparar,'function');disparar();}
+ };
+}
+for(const posterior of [false,true])test(`lectura colgada ${posterior?'después':'antes'} del guardado permite reintentar sin repetirlo`,async()=>{
+ const h=coordinador(),original=h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados;
+ const reloj=relojDeAviso(h,posterior?'Comprobando qué queda pendiente…':'Comprobando cambios del Libro…');
+ let entra,continuar,primera=true;
+ const entrada=new Promise(resolver=>{entra=resolver;});
+ h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async rows=>{
+  if(primera&&h.estado.resuelto===posterior){
+   primera=false;entra();
+   await new Promise(resolver=>{continuar=resolver;});
+  }
+  return original(rows);
+ };
+ const operacion=h.api.incorporarDesdeAviso(h.informe,reloj);
+ await entrada;
+ reloj.vencer();
+ await assert.rejects(operacion,e=>e.haikuEsperaAviso&&Boolean(e.incorporado.reservas_creadas)===posterior);
+ assert.equal(h.estado.escrituras,posterior?1:0);
+ const fin=await h.api.incorporarDesdeAviso(h.informe);
+ assert.equal(fin.reservas_creadas,1);
+ continuar();
+ assert.equal(h.estado.escrituras,1);
 });
 async function servicios(){
  const e=entorno();e.guard();
@@ -134,8 +181,11 @@ for(const escenario of ['sin permiso','sin fecha','estadía duplicada','respuest
  if(escenario==='sin fecha')assert.ok(e.state.escrituras.every(p=>p.p_servicios.length===0),'una nota completa no habilita el servicio sin fecha');
  else assert.equal(e.state.escrituras.length,0);
 });
-test('reserva real: motor canónico envía el RPC desde el aviso y revalida el resultado',async()=>{
+test('reserva real: el RPC colgado se reintenta con la misma solicitud y revalida el resultado',async()=>{
  const h=coordinador(),rows=[],calls=[];
+ const reloj=relojDeAviso(h,'Guardando los cambios en Proyecto H…');
+ let recibida,responder;
+ const enviada=new Promise(resolver=>{recibida=resolver;});
  const r={...fila,titular:'Persona Sintética',rut_documento:'11111111-1',tipo_estadia:'alojamiento',noches:1,ninos:0,mascotas:0,
   pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],notas_importantes:[],coordenadas_origen:{hoja:'Nov26',celda:'AB10'}};
  h.informe.nuevas=[{actual:r}];h.c.HAIKU_LIBRO_SEMANTICA=require('../js/haiku-libro-semantica-v1.js');
@@ -145,15 +195,20 @@ test('reserva real: motor canónico envía el RPC desde el aviso y revalida el r
    range:async(a,z)=>({data:(table==='reserva_estadias'?rows:[]).slice(a,z+1)})};return b;},
   rpc:async(name,args)=>{
    calls.push({name,args});assert.equal(name,'haiku_incorporar_libro_v1');assert.equal(args.p_items[0].tipo,'reserva_nueva');
+   if(calls.length>1){assert.deepEqual(args,calls[0].args);return responder;}
    rows.push({id:'00000000-0000-4000-8000-000000000001',reserva_id:'00000000-0000-4000-8000-000000000002',cabana_id:'c8',cabanas:{numero:8},fecha_ingreso:r.fecha_checkin,
     fecha_salida:r.fecha_checkout,tipo_estadia:'alojamiento',estado_estadia:'confirmada',adultos:2,ninos:0,mascotas:0,
     reservas:{id:'00000000-0000-4000-8000-000000000002',titular_nombre:r.titular,titular_tipo_documento:'rut',titular_numero_documento:r.rut_documento,estado_reserva:'confirmada'}});
-   return {data:{ok:true,reservas_creadas:1,estadias_agregadas:0,pagos_creados:0,actualizaciones:0,omitidos:0,
+   responder={data:{ok:true,reservas_creadas:1,estadias_agregadas:0,pagos_creados:0,actualizaciones:0,omitidos:0,
     resultados:[{tipo:'reserva_nueva',item_id:args.p_items[0].item_id,reserva_id:rows[0].reserva_id}]}};
+   recibida();return new Promise(()=>{});
   }};
  vm.runInNewContext(read('haiku-libro-consultas-v1'),h.c);
+ const intento=h.api.incorporarDesdeAviso(h.informe,reloj);
+ await enviada;reloj.vencer();
+ await assert.rejects(intento,/aún no confirma el guardado/);
  const fin=await h.api.incorporarDesdeAviso(h.informe);
- assert.equal(calls.length,1);assert.equal(fin.reservas_creadas,1);assert.equal(fin.pendientes.length,0,JSON.stringify(fin.pendientes));
+ assert.equal(calls.length,2);assert.equal(rows.length,1);assert.equal(fin.reservas_creadas,1);assert.equal(fin.pendientes.length,0,JSON.stringify(fin.pendientes));
  assert.equal(fin.confirmados[0].titular,r.titular);
  assert.equal(fin.confirmados[0].cabana,'CAB 8');
  assert.equal(fin.confirmados[0].reservaId,rows[0].reserva_id);

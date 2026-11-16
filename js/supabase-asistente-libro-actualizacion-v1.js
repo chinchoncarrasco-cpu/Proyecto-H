@@ -460,7 +460,7 @@
         };
     }
     function crearCachePendientes(dependencias = {}) {
-        let cache, pendiente, revision = 0;
+        let cache, pendiente, fuenteAviso, revision = 0;
         const soloAviso=dependencias.soloAviso===true;
         const generacionActual = dependencias.generacion || (()=>root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion);
         const leer = dependencias.leer || (()=>root.HAIKU_LIBRO_RESERVA_V1?.leerCambiosDetectados?.());
@@ -472,8 +472,8 @@
             if (generacionActual?.() !== g) throw Object.assign(new Error('Llegaron datos nuevos mientras comprobaba los pendientes. El informe se conserva.'),{lecturaCambiada:true});
         };
         return {
-            invalidar() { revision++; cache = undefined; },
-            async obtener(resultado,{revalidar=false,reintento=false}={}) {
+            invalidar() { revision++; cache = undefined; fuenteAviso = undefined; },
+            async obtener(resultado,{revalidar=false,reintento=false,reutilizarFuente=false}={}) {
                 const origen=generacionInforme(resultado);
                 if(origen==null)throw new Error('No puedo comprobar la versión de origen de este informe. Pide uno nuevo.');
                 await root.HAIKU_LIBRO_RESERVA_V1?.listo?.();
@@ -483,7 +483,7 @@
                 if (!revalidar && cache?.generacion===g && cache.informe===resultado) return cache.resultado;
                 if (pendiente) {
                     try { await pendiente; } catch (_) {}
-                    return this.obtener(resultado,{revalidar,reintento});
+                    return this.obtener(resultado,{revalidar,reintento,reutilizarFuente});
                 }
                 const tarea=(async()=>{
                     const previo=soloAviso?{version:1,cambios:[]}:await leer()||{version:1,cambios:[]};
@@ -494,8 +494,18 @@
                     registro.cambios=sinAvisosCerrados(registro.cambios,cierres);
                     if(!soloAviso&&JSON.stringify(registro.cambios)!==JSON.stringify(lista(previo.cambios)))await guardar(registro);
                     validar(g);
-                    const vigentes=contexto?await contexto.actualizarDesdeLibro(registro.cambios):registro.cambios;
+                    const version=root.HAIKU_LIBRO_RESERVA_V1?.estado?.()?.version;
+                    // Después de guardar, refrescar Proyecto H sin volver a abrir las
+                    // mismas hojas del Libro si seguimos en su misma versión.
+                    const firmaCierres=JSON.stringify([...cierres].sort());
+                    const reutilizar=soloAviso&&reutilizarFuente&&fuenteAviso?.generacion===g&&
+                        fuenteAviso.version===version&&fuenteAviso.informe===resultado&&
+                        firmaCierres===fuenteAviso.cierres;
+                    const vigentes=reutilizar?structuredClone(fuenteAviso.vigentes):
+                        contexto?await contexto.actualizarDesdeLibro(registro.cambios):registro.cambios;
                     validar(g);
+                    if(soloAviso&&!reutilizar&&rev===revision)fuenteAviso={generacion:g,version,informe:resultado,
+                        cierres:firmaCierres,vigentes:structuredClone(vigentes)};
                     const resultadoPendientes=await revalidarCambios(vigentes,{generacion:g});
                     if(!resultadoPendientes)throw new Error('No pude revalidar los cambios detectados contra Proyecto H.');
                     if(contexto){
@@ -533,7 +543,7 @@
                 try{return await tarea;}catch(error){
                     if(error.lecturaCambiada&&!reintento){
                         if(pendiente===tarea)pendiente=undefined;
-                        return this.obtener(resultado,{revalidar:true,reintento:true});
+                        return this.obtener(resultado,{revalidar:true,reintento:true,reutilizarFuente});
                     }
                     throw error;
                 }finally{if(pendiente===tarea)pendiente=undefined;}
@@ -687,16 +697,29 @@
         return {...fin.resultado,confirmados};
     }
     const operacionesAviso=new WeakMap();
-    function incorporarDesdeAviso(resultado){
+    function incorporarDesdeAviso(resultado,{informar}={}){
         if(!puedeRevisarDesdeAviso(resultado))return Promise.reject(new Error('Necesitas una sesión de administrador para incorporar estos cambios.'));
         if(!puedeIncorporar(resultado))return Promise.reject(new Error('Este aviso no contiene cambios completos para incorporar. Revisa los pendientes.'));
         let estado=operacionesAviso.get(resultado);
         if(!estado){estado={cache:crearCachePendientes({soloAviso:true}),decisiones:new Map(),aprobados:new Set(),recibos:[]};operacionesAviso.set(resultado,estado);}
         if(estado.terminado)return Promise.resolve(estado.terminado);
         if(estado.promesa)return estado.promesa;
+        const esperar=async(promesa,etapa,{enviada=false}={})=>{
+            informar?.(etapa,totales());
+            if(!root.setTimeout)return promesa;
+            let reloj;
+            try{
+                return await Promise.race([promesa,new Promise((_,rechazar)=>{
+                    reloj=root.setTimeout(()=>rechazar(Object.assign(new Error(enviada
+                        ? 'Proyecto H aún no confirma el guardado. Pulsa Reintentar para comprobar la misma operación.'
+                        : 'La comprobación tardó demasiado. Pulsa Reintentar para continuar.'),{haikuEsperaAviso:true})),30000);
+                })]);
+            }finally{root.clearTimeout(reloj);}
+        };
+        const releer=(etapa,reutilizarFuente=false)=>esperar(estado.cache.obtener(resultado,{revalidar:true,reutilizarFuente}),etapa);
         const validarSesion=async()=>{
             if(!puedeIncorporar(resultado))throw Error('Necesitas una sesión de administrador para incorporar estos cambios.');
-            const auth=await root.haikuSupabase?.auth?.getUser?.(),id=auth?.data?.user?.id;
+            const auth=await esperar(root.haikuSupabase?.auth?.getUser?.(),'Comprobando sesión…'),id=auth?.data?.user?.id;
             if(auth?.error||!id||estado.usuario&&estado.usuario!==id)throw Error('La sesión cambió. Revisa el aviso con tu sesión actual.');
             estado.usuario=id;
         };
@@ -711,7 +734,7 @@
             try{
                 await validarSesion();
                 const api=root.HAIKU_LIBRO_CONSULTAS;
-                if(!estado.inicial)estado.inicial=await estado.cache.obtener(resultado,{revalidar:true});
+                if(!estado.inicial)estado.inicial=await releer('Comprobando cambios del Libro…');
                 const idsAutorizados=new Set(resultado.incorporacion.reservasListas);
                 const idsOperaciones=new Set(lista(resultado.incorporacion?.operacionesListas).map(x=>x.reserva));
                 const limitarPreparacion=(preparacion,cierre=false)=>{
@@ -723,7 +746,7 @@
                     const entrada=limitarPreparacion(estado.inicial.preparacion);
                     if(!estado.plan&&entrada?.reservas.length){
                         estado.entrada=entrada;
-                        estado.plan=await api.prepararIncorporacion(estado.entrada,estado.decisiones,estado.aprobados);
+                        estado.plan=await esperar(api.prepararIncorporacion(estado.entrada,estado.decisiones,estado.aprobados),'Preparando los cambios…');
                         // Los avisos de «pagos pendientes» son notas. Este acceso
                         // no confirma cobros ni decisiones manuales de pagos.
                         for(const item of estado.plan.items)item.seleccionado=Boolean(item.seleccionado&&
@@ -731,7 +754,7 @@
                     }
                     if(estado.plan?.items.some(x=>x.seleccionado)){
                         await validarSesion();
-                        const fin=await api.confirmarIncorporacion(estado.entrada,estado.decisiones,estado.aprobados,estado.plan);
+                        const fin=await api.confirmarIncorporacion(estado.entrada,estado.decisiones,estado.aprobados,estado.plan,root.haikuSupabase,esperar);
                         if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
                         estado.recibos.push(reciboReservas(fin));
                     }
@@ -747,41 +770,43 @@
                         .map(r=>[JSON.stringify([r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]),r])).values()],
                         seleccionAviso:{ids:operaciones.map(x=>x.id),nuevas}};
                     if(scope.reservas.length){
+                        estado.revisarNotasTrasServicios=true;
                         if(!estado.guardarServicios){
                             const guard=root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
                             if(!guard?.crearIncorporacionAviso)throw Error('La incorporación de servicios todavía no está disponible.');
                             estado.guardarServicios=guard.crearIncorporacionAviso(scope);
                         }
                         await validarSesion();
-                        estado.recibos.push(await estado.guardarServicios());
+                        estado.recibos.push(await estado.guardarServicios(esperar));
                     }
                     estado.serviciosTerminados=true;
                 }
-                let pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                let pendientes=await releer('Comprobando qué queda pendiente…',true);
                 // Al guardar un servicio pueden quedar sus notas listas para el
                 // writer de la reserva. Completar esa etapa en el mismo clic.
                 const entradaFinal=limitarPreparacion(pendientes.preparacion,true);
-                if(!estado.cierreTerminado&&(estado.planFinal?.solicitudPendiente||entradaFinal?.reservas.length)){
+                if(estado.revisarNotasTrasServicios&&!estado.cierreTerminado&&(estado.planFinal?.solicitudPendiente||entradaFinal?.reservas.length)){
                     if(!estado.planFinal){
                         estado.entradaFinal=entradaFinal;
-                        estado.planFinal=await api.prepararIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados);
+                        estado.planFinal=await esperar(api.prepararIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados),'Preparando los cambios…');
                         for(const item of estado.planFinal.items)item.seleccionado=Boolean(item.seleccionado&&
                             (['nuevas','estadias'].includes(item.categoria)||item.payload?.tipo==='reserva_actualizar'));
                     }
                     if(estado.planFinal.items.some(x=>x.seleccionado)){
                         await validarSesion();
-                        const fin=await api.confirmarIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados,estado.planFinal);
+                        const fin=await api.confirmarIncorporacion(estado.entradaFinal,estado.decisiones,estado.aprobados,estado.planFinal,root.haikuSupabase,esperar);
                         if(fin?.resultado?.ok!==true)throw Error('Proyecto H no confirmó la incorporación.');
                         estado.recibos.push(reciboReservas(fin));
                     }
                     estado.cierreTerminado=true;
-                    pendientes=await estado.cache.obtener(resultado,{revalidar:true});
+                    pendientes=await releer('Actualizando el aviso…',true);
                 }
                 estado.terminado={...totales(),pendientes:lista(pendientes.items).map(pendienteParaAviso)};
                 return estado.terminado;
             }catch(error){
                 // Un rechazo anterior al envío permite preparar datos vigentes.
                 // Una solicitud enviada conserva su identidad para el reintento.
+                if(error?.haikuEsperaAviso)estado.cache=crearCachePendientes({soloAviso:true});
                 if(!estado.reservasTerminadas&&!estado.plan?.solicitudPendiente){estado.plan=null;estado.inicial=null;}
                 if(!estado.cierreTerminado&&!estado.planFinal?.solicitudPendiente)estado.planFinal=null;
                 throw Object.assign(error instanceof Error?error:new Error(error?.message||'No pude confirmar la incorporación.'),{incorporado:totales()});

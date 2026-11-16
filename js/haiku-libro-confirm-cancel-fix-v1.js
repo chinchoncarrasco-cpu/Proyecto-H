@@ -382,22 +382,22 @@
             if(solicitud?.p_servicios.length&&root.haikuTienePermiso?.('servicios.crear')!==true)throw Error('Falta permiso para agregar servicios.');
             if(solicitud?.p_notas.length&&root.haikuTienePermiso?.('notas.gestionar')!==true)throw Error('Falta permiso para guardar notas.');
         };
-        const ejecutar=async()=>{
+        const ejecutar=async(esperar)=>{
             permiso();
-            const auth=await root.haikuSupabase.auth.getUser();
+            const auth=await esperar(root.haikuSupabase.auth.getUser(),'Comprobando sesión…');
             const id=auth.data?.user?.id;
             if(auth.error||!id||usuario&&usuario!==id)throw Error('La sesión cambió. Revisa el aviso con tu sesión actual.');
             usuario=id;
             if(resultado)return resultado;
             if(!solicitud){
-                const actual=await root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial(scope);
+                const actual=await esperar(root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararHistorial(scope),'Comprobando servicios y notas…');
                 elegidos=actual.items.filter(x=>x.estado==='listo'&&x.payload&&!x.resolucionManual&&
                     (!seleccion||idsSeleccionados.has(x.item_id)||fichasNuevas.has(claveEstadia(x.reserva)))&&
                     (firmaNota ? x.kind==='nota'&&JSON.stringify(x.payload)===firmaNota :
                         x.kind==='nota'||x.kind==='servicio'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'));
                 if(firmaNota&&elegidos.length!==1)throw Error('La nota cambió o ya está guardada. Vuelve a revisar el informe.');
                 if(!elegidos.length)return {ok:true,servicios_creados:0,notas_creadas:0,servicios_omitidos:0,notas_omitidas:0};
-                const cache=new Map(),corregidos=await Promise.all(elegidos.map(x=>resolverEstadia(x,cache)));
+                const cache=new Map(),corregidos=await esperar(Promise.all(elegidos.map(x=>resolverEstadia(x,cache))),'Comprobando la estadía de los servicios…');
                 if(actual.generacion!==root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion)
                     throw Error('El Libro cambió durante la comprobación. Pulsa Reintentar para usar sus datos actuales.');
                 solicitud={p_operacion_id:uuid(),p_servicios:[],p_notas:[]};
@@ -405,11 +405,11 @@
                 for(const x of elegidos)solicitud[x.kind==='nota'?'p_notas':'p_servicios'].push(x.payload);
             }
             permiso();
-            const sesion=await root.haikuSupabase.auth.getUser();
+            const sesion=await esperar(root.haikuSupabase.auth.getUser(),'Comprobando sesión…');
             if(sesion.error||sesion.data?.user?.id!==usuario)throw Error('La sesión cambió antes de guardar.');
             // Conservar ID y payload si se pierde la respuesta. Nunca reconstruir
             // otra operación para un lote cuyo resultado aún no conocemos.
-            const {data,error}=await root.haikuSupabase.rpc('haiku_importar_libro_operaciones_v2',solicitud);
+            const {data,error}=await esperar(root.haikuSupabase.rpc('haiku_importar_libro_operaciones_v2',solicitud),'Guardando servicios y notas…',{enviada:true});
             if(error)throw error;
             if(data?.ok!==true||!['servicios_creados','notas_creadas','servicios_omitidos','notas_omitidas']
                 .every(k=>Number.isSafeInteger(data[k])&&data[k]>=0))throw Error('Proyecto H no confirmó el resultado. Reintenta para comprobarlo sin duplicar.');
@@ -423,8 +423,8 @@
             })));
             resultado={...data,confirmados};return resultado;
         };
-        return ()=>{
-            if(!pendiente)pendiente=ejecutar().finally(()=>{pendiente=null;});
+        return (esperar=promesa=>promesa)=>{
+            if(!pendiente)pendiente=ejecutar(esperar).finally(()=>{pendiente=null;});
             return pendiente;
         };
     }
