@@ -172,7 +172,9 @@ const server=http.createServer((req,res)=>{
      const total=escena.caso==='reaparecida-alta'?1:0;assert.equal(datos.items.length,total);assert.equal(datos.propuestasRepetidas,total);
      assert.equal(datos.historial.length,total);if(total)assert.deepEqual(datos.historial[0].notas,['Dejar dos batas']);
     }else{
-     assert.match(texto,/Servicios · Requiere revisión/);assert.equal(datos.ficha.id,'servicio:servicio-sintetico-0');
+     const encabezado=page.locator('.haku-retiros-libro__encabezado').filter({hasText:'Servicios'});
+     assert.match(await encabezado.innerText(),/Servicios\s+Requiere revisión/);
+     assert.equal(datos.ficha.id,'servicio:servicio-sintetico-0');
      assert.equal(datos.ficha.servicioId,'servicio-sintetico-0');assert.equal(datos.ficha.accion,null);
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
