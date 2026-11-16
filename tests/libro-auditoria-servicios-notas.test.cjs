@@ -53,6 +53,22 @@ test('reconoce Jacuzzi con la variante escrita en recepción y conserva la entre
     assert.equal(items.find(i => i.kind === 'nota').texto,'Batas entregadas');
 });
 
+test('incorporar desde la fila registra únicamente el servicio elegido tras confirmar',async()=>{
+    const e=escenario('TINAJA CORTESÍA TONEL 07-11 // 19:15 a 20:15 // batas entregadas');
+    e.c.haikuTienePermiso=permiso=>permiso==='servicios.crear';
+    const item=(await e.comparar()).items.find(i=>i.kind==='servicio');
+    const llamadas=[];
+    e.c.haikuSupabase.rpc=async(nombre,args)=>{llamadas.push({nombre,args});return {data:{ok:true,servicios_creados:1}};};
+    const propuesta=await e.api.prepararServicioEnLinea({reservas:[e.r],generacion:1},item.item_id,item.payload.estadia_id);
+    assert.equal(llamadas.length,0);
+    assert.equal(await propuesta.guardar(),'Servicio incorporado en Proyecto H.');
+    assert.equal(llamadas.length,1);
+    assert.equal(llamadas[0].nombre,'haiku_importar_libro_operaciones_v2');
+    assert.equal(llamadas[0].args.p_servicios.length,1);
+    assert.equal(llamadas[0].args.p_servicios[0].codigo_servicio,'tinajaTonel');
+    assert.equal(llamadas[0].args.p_notas.length,0);
+});
+
 test('la fecha del registro tras el operador y una nota de cama no contradice el masaje de salida', async () => {
     const masaje = 'MASAJE RELAJANTE 1 HORA 10:00AM 08-11-26 X PAGAR';
     const e = escenario('2 ADL // CAMA ADICIONAL // DA // 06-11-2026 // '+masaje,'2026-11-07','2026-11-08');

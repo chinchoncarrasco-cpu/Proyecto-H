@@ -38,6 +38,23 @@ test('retiro puro genera parche vacío y conserva la nota manual',async()=>{
  const vacio=e.Q.actualizacionReservaLibro(e.r,{...comp[0].sistema,observaciones:bloque('Nota anterior')});
  assert.equal(vacio.reserva.despues.observaciones,bloque(''));
 });
+
+test('Incorporar una nota desde la fila sólo envía sus observaciones y exige confirmar',async()=>{
+ const e=entorno({notas:'Comentario manual.\n'+bloque('Nota anterior')});
+ e.r.notas_importantes=['Dejar dos batas'];e.r.adultos+=1;
+ const resultado=await e.Q.consultar(F.consulta,e.libro,e.cliente);
+ const cambio=resultado.comparacion.cambiosLibro.find(x=>x.campo==='notas_importantes');
+ const llamadas=[];
+ e.cliente.rpc=async(nombre,args)=>{llamadas.push({nombre,args});return {data:{ok:true,actualizaciones:1}};};
+ const confirmacion=await e.Q.prepararCambioDatosEnLinea(cambio,resultado,e.cliente);
+ assert.equal(llamadas.length,0);
+ assert.equal(await confirmacion.guardar(),'Incorporado en Proyecto H.');
+ assert.equal(llamadas.length,1);assert.equal(llamadas[0].nombre,'haiku_incorporar_libro_v1');
+ const [op]=llamadas[0].args.p_items;
+ assert.equal(llamadas[0].args.p_items.length,1);assert.equal(op.tipo,'reserva_actualizar');
+ assert.deepEqual(Object.keys(op.reserva.despues),['observaciones']);assert.deepEqual(Object.keys(op.estadia.despues),[]);
+ assert.match(op.reserva.despues.observaciones,/Comentario manual[\s\S]*Dejar dos batas/);
+});
 test('antes y después ya guardados: la nota antigua sigue pendiente y es retirable',async()=>{
  const e=entorno({notas:bloque('Ingreso 18:00\nIngreso 19:00\nOtra indicación vigente')});e.r.notas_importantes=['Ingreso 19:00'];
  const estado=await e.Q.revalidarCambiosDetectados([registro(e,['Ingreso 18:00'],['Ingreso 19:00'])],e.cliente,{generacion:1});

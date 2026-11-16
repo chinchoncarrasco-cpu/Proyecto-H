@@ -361,6 +361,39 @@
     async function prepararHistorial(scope){
         return construir(fuenteHistorial(scope));
     }
+    async function prepararServicioEnLinea(scope,id,estadiaId){
+        const fuente=fuenteHistorial(scope),cliente=root.haikuSupabase;
+        const permiso=()=>root.haikuTienePermiso?.('servicios.crear')===true;
+        const vigente=()=>root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion===scope.generacion;
+        const leer=async()=>{
+            if(!permiso())throw Error('No tienes permiso para incorporar servicios.');
+            if(!vigente())throw Error('El Libro cambió. Vuelve a comparar.');
+            const plan=await construir(fuente);
+            const item=plan.items.find(x=>x.item_id===id&&x.payload?.estadia_id===estadiaId);
+            if(!vigente())throw Error('El Libro cambió. Vuelve a comparar.');
+            return item;
+        };
+        const listo=x=>x?.kind==='servicio'&&x.estado==='listo'&&x.semantica==='SERVICIO_REAL'&&x.completitud==='COMPLETO'&&x.payload;
+        const inicial=await leer();
+        if(!listo(inicial))throw Error('El servicio ya existe o sus datos requieren revisión.');
+        const firma=firmaConfirmacionServicio(inicial),operacion=uuid();
+        let enviada=false;
+        const total=inicial.precio?.total;
+        return {texto:[inicial.mapa?.nombre,inicial.hora,total!=null?`$${Number(total).toLocaleString('es-CL')}`:null].filter(Boolean).join(' · '),guardar:async()=>{
+            if(!enviada){
+                const actual=await leer();
+                if(!listo(actual)||firmaConfirmacionServicio(actual)!==firma)throw Error('El servicio cambió. Vuelve a comparar.');
+            }
+            if(!permiso())throw Error('No tienes permiso para incorporar servicios.');
+            if(!vigente())throw Error('El Libro cambió. Vuelve a comparar.');
+            enviada=true;
+            const {data,error}=await cliente.rpc('haiku_importar_libro_operaciones_v2',{
+                p_operacion_id:operacion,p_servicios:[inicial.payload],p_notas:[]});
+            if(error)throw Error(mensajeErrorIncorporacion(error));
+            if(!data?.ok)throw Error('Proyecto H no confirmó la incorporación del servicio.');
+            return data.servicios_creados===1?'Servicio incorporado en Proyecto H.':'Servicio ya registrado en Proyecto H.';
+        }};
+    }
     async function abrirRevisionHistorial(out,scope={}){
         if(!out)throw Error('No hay una vista para revisar servicios.');
         const fuente=fuenteHistorial(scope);
@@ -3221,7 +3254,7 @@
         procesar(texto);
     }
 
-    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial,
+    const api = Object.freeze({ version: "2.0.0", procesando:()=>ocupado, esConsultaServicios, rangoDesdeTexto, construir, compararReservas, abrirRevisionHistorial, prepararHistorial, prepararServicioEnLinea,
         fuenteServicioIncorporado,
         consultaVista:card=>fuentesPorVista.get(card)||null,revalidarVista, firmaConfirmacionServicio, procesar, renderizarResultadoServicios });
     root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2 = api;

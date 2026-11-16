@@ -2625,23 +2625,30 @@
             const previos=anteriores||(texto?S.servicios(texto,{origen_campo:'notas_reserva'}):[]);
             const previosDescritos=previos.map(x=>describirServicioRetiro(reserva,x,sistema));
             if(!texto&&!previosDescritos.some(a=>iguales(a,s)))return [];
-            if(texto&&!previosDescritos.some(a=>a.codigo===s.catalogo_servicios?.codigo))return [{id:'servicio:'+s.id,campo:'servicios',tipo:'revision',accion:null,
-                antes:{fecha:s.fecha_servicio,hora:horaSistema(s),concepto:s.catalogo_servicios?.nombre,texto},despues:null,
-                servicio:previos[0]||{},sistema:s,reserva,motivo:'La fuente importada del servicio no pudo interpretarse. Requiere revisión.'}];
             const nuevos=actuales.filter(a=>a.codigo===s.catalogo_servicios?.codigo&&a.fecha&&a.hora&&
                 !activos.some(b=>iguales(a,b)));
             const otros=candidatas.filter(b=>b.catalogo_servicios?.codigo===s.catalogo_servicios?.codigo);
+            const propuesta=nuevos.length===1&&otros.length===1?
+                {fecha:nuevos[0].fecha,hora:nuevos[0].hora,concepto:s.catalogo_servicios?.nombre}:null;
+            if(texto&&!previosDescritos.some(a=>a.codigo===s.catalogo_servicios?.codigo))return [{id:'servicio:'+s.id,campo:'servicios',tipo:'revision',accion:null,
+                antes:{fecha:s.fecha_servicio,hora:horaSistema(s),concepto:s.catalogo_servicios?.nombre,texto},despues:propuesta,
+                servicio:previos[0]||{},sistema:s,reserva,motivo:'La fuente importada del servicio no pudo interpretarse. Requiere revisión.'}];
             const indeterminados=reserva._serviciosNoLeidos||!Array.isArray(reserva.servicios)||actuales.some(a=>!a.codigo||!a.fecha||!a.hora);
             const inequívoco=Boolean(texto&&!indeterminados&&s.estado_servicio==='programado'&&!s.libro_resolucion_manual_v1&&otros.length===1&&nuevos.length<=1);
             const reprogramado=inequívoco&&nuevos.length===1,horarioManual=reprogramado&&s.catalogo_servicios?.codigo==='lateCheckout';
+            const motivoRevision=!texto?'El servicio de Proyecto H carece de origen confirmado en el Libro.':
+                indeterminados?'El Libro tiene menciones de servicios que no se pudieron asociar con certeza.':
+                otros.length>1||nuevos.length>1?'Hay más de un servicio compatible. Confirma cuál corresponde.':
+                s.libro_resolucion_manual_v1?'El servicio tiene una resolución manual guardada.':
+                s.estado_servicio!=='programado'?`El servicio figura como ${s.estado_servicio||'estado sin determinar'} en Proyecto H.`:
+                'Falta comprobar una correspondencia única con el Libro.';
             return [{id:'servicio:'+s.id,tipo:inequívoco?(reprogramado?'modificado':'retirado'):'revision',
                 campo:'servicios',antes:{fecha:s.fecha_servicio,hora:horaSistema(s),concepto:s.catalogo_servicios?.nombre},
-                despues:reprogramado?{fecha:nuevos[0].fecha,hora:nuevos[0].hora,concepto:s.catalogo_servicios?.nombre}:null,
+                despues:propuesta,
                 accion:inequívoco&&!horarioManual?(reprogramado?'reprogramar_servicio':'revisar_cancelacion_servicio'):null,
                 servicio:previos[0]||{},nuevo:reprogramado?nuevos[0].servicio:null,sistema:s,reserva,
                 motivo:horarioManual?'Cambió la hora de salida tardía. Revisa la modificación del mismo servicio en la reserva; no se creará otra prestación.':
-                    !texto?'El servicio anterior no acredita origen Libro; requiere revisión manual.':
-                    !inequívoco?'Servicio pagado, realizado, manual o con candidatos ambiguos: requiere revisión antes de actuar.':
+                    !inequívoco?motivoRevision:
                     reprogramado?'Cambió el horario. Revisa la actualización del mismo servicio; no se creará otro.':
                     'El servicio fue retirado del Libro, pero continúa activo en Proyecto H. Revisa sus finanzas y confirma la cancelación autorizada.'}];
         });
@@ -2677,12 +2684,23 @@
                 if(detalle.agregados.length||detalle.retirados.length||partes.malformado||posiblesRetiros||patch.revisionNotas)cambios.push({...detalle,
                     ...(posiblesRetiros?{tipo:'revision',despues:'Lectura parcial: se conservan los fragmentos de las otras estadías.'}:{}),
                     ...(patch.revisionNotas?{tipo:'revision',antes:partes.incompletos.flatMap(fragmentosObservaciones),despues:fragmentosReservaLibro(compartido)}:{}),
-                    id:'notas:'+s.reserva_id+':'+s.id,reserva:r,sistema:s,accion:'revisar_notas',
+                    id:'notas:'+s.reserva_id+':'+s.id,reserva:r,sistema:s,
+                    accion:!patch.revisionNotas&&!posiblesRetiros&&Object.hasOwn(patch.reserva.despues,'observaciones')?'revisar_notas':null,
                     motivo:patch.revisionNotas|| (compartido._alcanceNotasParcial?'Faltan otras estadías de esta reserva. Se conservan sus fragmentos importados; requiere revisión.':
                         partes.malformado?'El bloque importado está incompleto. Revisa el origen; los comentarios manuales se conservan.':
                         'Revisa las altas y los retiros del bloque importado antes de confirmar.')});
             }
-            cambios.push(...serviciosRetiradosLibro(r,s,comparacion.snapshot?.servicios||[]));
+            const comparados=fila.serviciosComparacion||[];
+            const coincidencias=new Set(comparados.filter(x=>x.canonico&&x.estado==='en_sistema').map(x=>x.sistema?.id).filter(Boolean));
+            const retiros=serviciosRetiradosLibro(r,s,comparacion.snapshot?.servicios||[]).filter(x=>!coincidencias.has(x.sistema.id));
+            cambios.push(...retiros);
+            for(const servicio of comparados.filter(x=>x.canonico&&x.estado==='faltante'&&x.item_id)){
+                const {nombre,fecha,hora,cantidad}=servicio.lectura;
+                if(retiros.some(x=>x.despues?.fecha===fecha&&x.despues?.hora===hora&&
+                    S.referenciaServicioLibro(servicio.servicio,r).codigo===x.sistema.catalogo_servicios?.codigo))continue;
+                cambios.push({id:servicio.item_id,campo:'servicios',tipo:'agregado',reserva:r,sistema:s,
+                    antes:null,despues:{concepto:nombre||servicio.servicio.concepto,fecha,hora,cantidad},accion:'incorporar_servicio'});
+            }
         }
         return [...new Map(cambios.map(x=>[x.id,x])).values()];
     }
@@ -2803,7 +2821,7 @@
                 const detalle=s&&verificada?detalleCambioHistorico(c,r,s,comp,x.cambios,x.anterior):null;
                 if(detalle&&!detalle.pendiente)continue;
                 if(detalle?.serviciosRetirados?.length){casos.push(...detalle.serviciosRetirados);continue;}
-                casos.push({...motor.detallarCambio(c),id:'historial:'+r.id+':'+c.campo,reserva:r,sistema:s,
+                casos.push({...motor.detallarCambio(c),id:'historial:'+r.id+':'+c.campo,reserva:r,sistema:s,libroAnterior:true,
                     tipo:verificada?motor.detallarCambio(c).tipo:'revision',accion:s?'ver_reserva':null,
                     motivo:detalle?.proyecto||x.fuente_vigente?.motivo||'Revisa la identidad y el origen antes de incorporar este cambio.'});
             }else if(x.tipo==='revision')casos.push({campo:'reserva',tipo:'revision',reserva:r,antes:estadia(x.anterior),despues:estadia(x.actual),motivo:x.motivo});
@@ -5395,6 +5413,7 @@
             return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1);
         }
         adjuntarConflictosFuente(plan,result,contexto,decisiones,aprobados,cliente);
+        if(result.cambioEnLinea)limitarCambioEnLinea(plan,result.cambioEnLinea);
         if (result.pagoInformeCloudbeds) limitarPagoInformeCloudbeds(plan, comparacion, result.pagoInformeCloudbeds);
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
@@ -5403,6 +5422,26 @@
             plan.generacion = result.generacion;
         }
         return plan;
+    }
+
+    function limitarCambioEnLinea(plan,{sistema,campo}){
+        const item=plan.items.find(i=>i.categoria==='actualizaciones'&&i.payload?.reserva_id===sistema.reserva_id&&
+            i.payload.estadia_id===sistema.id&&i.seleccionado&&!i.motivos.length);
+        if(!item){plan.items=[];return;}
+        const esNota=['notas_importantes','observaciones_libro','pagos_pendientes'].includes(campo);
+        const camposReserva=esNota?['observaciones']:[];
+        const camposEstadia=esNota?[]:campo==='reserva'?['cabana_numero','fecha_ingreso','fecha_salida']:[campo];
+        const seleccionar=(parche,campos)=>{
+            const filtrar=obj=>Object.fromEntries(Object.entries(obj).filter(([k])=>campos.includes(k)));
+            return {antes:filtrar(parche.antes),despues:filtrar(parche.despues),
+                cambios:parche.cambios.filter(c=>campos.some(k=>etiquetasActualizacion[k]===c.campo))};
+        };
+        const reserva=seleccionar(item.payload.reserva,camposReserva),estadia=seleccionar(item.payload.estadia,camposEstadia);
+        const cambios=[...reserva.cambios,...estadia.cambios];
+        if(!cambios.length){plan.items=[];return;}
+        item.payload={...item.payload,reserva,estadia,cambios};
+        item.cambios=cambios;
+        plan.items=[item];
     }
 
     function crearIdOperacion() {
@@ -6126,6 +6165,13 @@
                 const clave=x=>x.campo==='servicios'?x.id:[x.campo,x.sistema?.id||x.reserva?.id].join('|');
                 const ids=new Set(resultado.comparacion.cambiosLibro.map(clave));
                 for(const x of historicos)if(!ids.has(clave(x))){ids.add(clave(x));resultado.comparacion.cambiosLibro.push(x);}
+                for(const c of resultado.cancelaciones_confirmadas||[]){
+                    const r=c.actual||c.anterior;
+                    if(!r||!c.reserva_id)continue;
+                    resultado.comparacion.cambiosLibro.push({id:'cancelacion:'+c.reserva_id,campo:'reserva',tipo:'cancelacion',
+                        reserva:r,sistema:{reserva_id:c.reserva_id},antes:c.estado_proyecto,despues:'Cancelación registrada en el Libro',
+                        accion:'incorporar_cancelacion',cancelacion:c});
+                }
             }
             if (q.por_fecha_pago)
                 resultado.pagosPeriodo = await resumenPeriodoPagos(resultado.comparacion,q,pagosLeidos,reembolsosLeidos,cliente);
@@ -6704,7 +6750,7 @@
         abrirComparacionEstructurada, abrirPreparacionComparacion, compararAbonosAviso, prepararPagoInformeCloudbeds, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago, verificadorFuenteConsulta,
         separarObservacionesLibro,unirObservacionesLibro,actualizacionReservaLibro,serviciosRetiradosLibro,
-        detallarCambioLibro,renderizarCambiosLibro,comprobarCambioServicioLibro});
+        detallarCambioLibro,renderizarCambiosLibro,comprobarCambioServicioLibro,prepararCambioDatosEnLinea});
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_CONSULTAS;
     if (!root.document || root.document.documentElement?.dataset?.libroInformeReadonly === "1") return;
 
@@ -7316,71 +7362,129 @@
             throw Error('Llegó otra versión del Libro. Vuelve a revisar antes de guardar.');
         return {caso:actual,estadia:comp[0].sistema,generacion:estado.generacion};
     }
-    async function abrirCambioServicioLibro(out,caso){
-        out.replaceChildren(elemento('p','','Revalidando Libro y Proyecto H…'));
-        let generacionValidada;
-        const comprobar=async()=>{const v=await comprobarCambioServicioLibro(caso);generacionValidada=v.generacion;return v;};
-        const confirmado=async()=>{
-            const comp=await compararSistema([caso.reserva],root.haikuSupabase,{desde:caso.reserva.fecha_checkin,hasta:caso.reserva.fecha_checkout,incluirFinanzas:false});
-            const cambioLibro=root.HAIKU_LIBRO_RESERVA_V1.estado().generacion!==generacionValidada;
-            const pendiente=comp.cambiosLibro?.some(x=>x.id===caso.id);
-            out.append(elemento('p','',cambioLibro?'Guardado confirmado. Llegó otra versión del Libro; vuelve a comparar para comprobar el pendiente.':
-                pendiente?'El cambio está confirmado; el caso aún requiere revisión.':'Resultado confirmado en Proyecto H. Este servicio ya no está pendiente.'));
-            if(!cambioLibro&&!pendiente){
-                const detalle=out.closest?.('.haku-retiros-libro__detalle');
-                const accion=detalle?.querySelector('[data-haku-cambio-revisar]');if(accion){accion.disabled=true;accion.textContent='Resuelto';}
-            }
-            root.dispatchEvent?.(new root.CustomEvent('haiku:libro-incorporado',{detail:{reservaId:caso.sistema.reserva_id}}));
-        };
-        try{
-            const verificado=await comprobar(),s=caso.sistema,r=caso.reserva;
-            if(caso.accion==='revisar_cancelacion_servicio'){
-                const api=root.HAIKU_ASISTENTE_SERVICIOS_CANCELACION_V1;
-                if(!api?.abrirDesdeLibro)throw Error('Abre el panel para usar la cancelación autorizada de servicios.');
-                await api.abrirDesdeLibro(out,{accion:'CANCELAR_SERVICIO_EXISTENTE',intencion:'CANCELAR_SERVICIO_EXISTENTE',cabana:Number(r.cabana),fecha:s.fecha_servicio,hora:String(s.hora_inicio||'').slice(0,5),
-                    codigos_servicio:[s.catalogo_servicios.codigo],errores:[]},{
-                    buscar:async(q,o)=>(await api.buscarServicios(q,o)).filter(x=>x.id===s.id),
-                    antesDeConfirmar:comprobar,alConfirmar:confirmado});
-            }else{
-                const api=root.HAIKU_ASISTENTE_OPERACIONES_SUPABASE_V1;
-                if(!api)throw Error('Abre el panel para revisar la reprogramación del mismo servicio.');
-                const e=verificado.estadia;
-                const propuesta=await api.preparar({accion:'reprogramar',servicioId:s.id,servicio:S.normalizar(s.catalogo_servicios.nombre||s.catalogo_servicios.codigo),
-                    cabana:r.cabana,fecha:s.fecha_servicio,horaOriginal:String(s.hora_inicio||'').slice(0,5),
-                    nuevo:{fecha:caso.despues.fecha,hora:caso.despues.hora}},async()=>[
-                    {id:e.id,reserva_id:e.reserva_id,cabanas:{numero:e.cabana},reservas:{titular_nombre:e.titular,estado_reserva:e.estado_reserva},
-                        fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout}]);
-                if(!propuesta.guardar)throw Error('El servicio requiere la revisión manual de Servicios.');
-                out.replaceChildren(elemento('p','',caso.motivo),elemento('p','',propuesta.detalle));
-                const b=elemento('button','','Confirmar horario');b.type='button';out.append(b);
-                b.addEventListener('click',async()=>{
-                    if(b.disabled)return;b.disabled=true;
-                    try{await comprobar();const mensaje=await propuesta.guardar();out.replaceChildren(elemento('p','',mensaje));await confirmado();}
-                    catch(error){out.append(elemento('p','haiku-incorporacion-error',error.message));}
-                });
-            }
-        }catch(error){out.replaceChildren(elemento('p','haiku-incorporacion-error',error.message));}
+    async function prepararCambioServicioLibro(caso){
+        const comprobar=()=>comprobarCambioServicioLibro(caso);
+        const {estadia:e}=await comprobar(),s=caso.sistema,r=caso.reserva;
+        if(caso.accion==='revisar_cancelacion_servicio'){
+            const api=root.HAIKU_ASISTENTE_SERVICIOS_CANCELACION_V1;
+            if(!api?.preparar)throw Error('La cancelación de servicios no está disponible.');
+            const propuesta=await api.preparar({accion:'CANCELAR_SERVICIO_EXISTENTE',intencion:'CANCELAR_SERVICIO_EXISTENTE',
+                cabana:Number(r.cabana),fecha:s.fecha_servicio,hora:String(s.hora_inicio||'').slice(0,5),
+                codigos_servicio:[s.catalogo_servicios.codigo],errores:[]},{
+                buscar:async(q,o)=>(await api.buscarServicios(q,o)).filter(x=>x.id===s.id),antesDeConfirmar:comprobar});
+            if(propuesta.estado!=='propuesta')throw Error(propuesta.elegibilidad?.razones?.join(' · ')||propuesta.mensaje);
+            let releer=false;
+            return {texto:'Cancela el servicio registrado en Proyecto H.',requiereMotivo:true,guardar:async motivo=>{
+                const r=releer?await api.verificarEstado(propuesta):await api.confirmar(propuesta,motivo);
+                releer=['incierto','sincronizando'].includes(r.estado);
+                if(r.estado!=='realizado')throw Error(r.mensaje||'La cancelación sigue pendiente.');
+                return r.mensaje;
+            }};
+        }
+        const api=root.HAIKU_ASISTENTE_OPERACIONES_SUPABASE_V1;
+        if(!api)throw Error('La reprogramación de servicios no está disponible.');
+        const propuesta=await api.preparar({accion:'reprogramar',servicioId:s.id,
+            servicio:S.normalizar(s.catalogo_servicios.nombre||s.catalogo_servicios.codigo),
+            cabana:r.cabana,fecha:s.fecha_servicio,horaOriginal:String(s.hora_inicio||'').slice(0,5),
+            nuevo:{fecha:caso.despues.fecha,hora:caso.despues.hora}},async()=>[
+            {id:e.id,reserva_id:e.reserva_id,cabanas:{numero:e.cabana},reservas:{titular_nombre:e.titular,estado_reserva:e.estado_reserva},
+                fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout}]);
+        if(!propuesta.guardar)throw Error('Este horario requiere revisión en Servicios.');
+        return {texto:propuesta.detalle,guardar:async()=>{await comprobar();return propuesta.guardar();}};
     }
-    async function abrirRevisionDatosReserva(out,caso,result){
-        // La acción de una ficha no selecciona pagos ni otras reservas del mes.
+
+    async function prepararCambioDatosEnLinea(caso,result,cliente=root.haikuSupabase){
+        const traslado=caso.accion==='revisar_traslado'?caso.sistema:null;
         const filas=Array.from(result.comparacion).filter(x=>x.estado==='asociada'&&x.sistema?.reserva_id===caso.sistema?.reserva_id);
         const ids=new Set(filas.map(x=>x.libro.id));
         const proyectar=r=>({...r,pagos:[],pagos_sin_asociacion:[]});
-        const reservas=result.reservas.filter(r=>ids.has(r.id)).map(proyectar);
-        const fechas=reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout]).filter(Boolean).sort();
-        if(!reservas.length)throw Error('No pude localizar esta reserva en la consulta. Vuelve a comparar.');
-        return abrirPreparacionComparacion(out,{...result,reservas,[PROYECCION_FUENTE]:proyectar,
-            q:{...result.q,desde:fechas[0],hasta:fechas.at(-1),incluirFinanzas:false,incluirServicios:false},
-            comparacion:comparacionPreparacionHistorial(filas,result.comparacion)});
+        const reservas=(traslado?[caso.reserva]:result.reservas.filter(r=>ids.has(r.id))).map(proyectar);
+        if(!reservas.length)throw Error('No pude localizar esta reserva. Vuelve a comparar.');
+        const fechas=[caso.sistema.fecha_checkin,caso.sistema.fecha_checkout,
+            ...reservas.flatMap(r=>[r.fecha_checkin,r.fecha_checkout])].filter(Boolean).sort();
+        const entrada={...result,reservas,[PROYECCION_FUENTE]:proyectar,traslado,cambioEnLinea:caso,
+            q:{desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,incluirServicios:false}};
+        const decisiones=new Map(),aprobados=new Set();
+        const plan=await prepararIncorporacion(entrada,decisiones,aprobados,cliente);
+        const [item]=plan.items;
+        if(!item?.seleccionado)throw Error('El cambio ya coincide o necesita revisión. Vuelve a comparar.');
+        const [observaciones]=item.cambios.filter(x=>x.campo===etiquetasActualizacion.observaciones);
+        const texto=observaciones?'Actualiza las notas importadas de esta reserva.':traslado?item.aviso:
+            item.cambios.map(x=>x.campo+': '+(x.anterior??'sin dato')+' → '+(x.libro??'sin dato')).join(' · ');
+        return {texto,guardar:async()=>{
+            const r=await confirmarIncorporacion(entrada,decisiones,aprobados,plan,cliente);
+            if(Number(r.resultado.actualizaciones)!==1)throw Error('Proyecto H no confirmó este cambio. Vuelve a comparar.');
+            return 'Incorporado en Proyecto H.';
+        }};
     }
-    function abrirRevisionTraslado(out,caso,result){
-        const proyectar=r=>({...r,pagos:[],pagos_sin_asociacion:[]});
-        const fechas=[caso.sistema.fecha_checkin,caso.sistema.fecha_checkout,caso.reserva.fecha_checkin,caso.reserva.fecha_checkout].sort();
-        return abrirPreparacionComparacion(out,{reservas:[proyectar(caso.reserva)],generacion:result.generacion,
-            comparacion:[],[PROYECCION_FUENTE]:proyectar,traslado:caso.sistema,
-            q:{desde:fechas[0],hasta:fechas.at(-1),focal:true,incluirFinanzas:false,incluirServicios:false}});
+
+    async function prepararAccionCambioLibro(caso,result){
+        if(['revisar_cancelacion_servicio','reprogramar_servicio'].includes(caso.accion))return prepararCambioServicioLibro(caso);
+        if(caso.accion==='incorporar_servicio'){
+            return root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2.prepararServicioEnLinea(
+                {reservas:[caso.reserva],generacion:result.generacion},caso.id,caso.sistema.id);
+        }
+        if(caso.accion==='incorporar_cancelacion'){
+            const api=root.HAIKU_LIBRO_CANCELACIONES_V1,propuesta=await api.preparar(caso.cancelacion,result.generacion);
+            return {confirmacionPropia:true,guardar:async()=>{
+                const r=await api.confirmar(propuesta);
+                return ['cancelada','ya_coincide','sin_cambios'].includes(r?.estado)?'Cancelación confirmada en Proyecto H.':null;
+            }};
+        }
+        return prepararCambioDatosEnLinea(caso,result);
     }
-    function renderizarCambiosLibro(out,cambios=[],{soloLectura=false,revisarNotas,revisarTraslado,documento=root.document,compacto=false}={}){
+
+    function incorporarCambioEnLinea({boton,acciones,vista,preparar,elemento,caso}){
+        async function ejecutar(propuesta,motivo,confirmar){
+            boton.disabled=true;
+            if(confirmar)confirmar.disabled=true;
+            try{
+                const mensaje=await propuesta.guardar(motivo);
+                if(!mensaje){boton.disabled=false;return;}
+                const ok=elemento('p','haku-retiros-libro__confirmado',mensaje);ok.setAttribute('role','status');
+                vista.replaceChildren(ok);boton.textContent='Incorporado';
+                root.dispatchEvent?.(new root.CustomEvent('haiku:libro-incorporado',{detail:{reservaId:caso.sistema?.reserva_id}}));
+            }catch(error){
+                aviso(error);
+                if(confirmar)confirmar.disabled=false;else boton.disabled=false;
+            }
+        }
+        function aviso(error){
+            vista.querySelector('[role="alert"]')?.remove();
+            const mensaje=elemento('p','haiku-incorporacion-error',error.message);mensaje.setAttribute('role','alert');vista.append(mensaje);
+        }
+        boton.addEventListener('click',async()=>{
+            if(boton.disabled)return;
+            boton.disabled=true;vista.replaceChildren(elemento('p','','Comprobando este cambio…'));
+            try{
+                const propuesta=await preparar(caso);
+                vista.replaceChildren();
+                if(propuesta.confirmacionPropia){await ejecutar(propuesta);return;}
+                if(propuesta.texto)vista.append(elemento('p','',propuesta.texto));
+                const controles=elemento('div',acciones.className);
+                const confirmar=elemento('button','haku-retiros-boton haku-retiros-boton--primario','Confirmar incorporación');
+                const volver=elemento('button','haku-retiros-boton','Volver');
+                confirmar.type=volver.type='button';
+                let motivo;
+                if(propuesta.requiereMotivo){
+                    const label=elemento('label','haku-retiros-libro__motivo','Motivo de la cancelación');
+                    motivo=elemento('input');motivo.type='text';label.append(motivo);vista.append(label);
+                    confirmar.disabled=true;
+                    motivo.addEventListener('input',()=>{confirmar.disabled=!motivo.value.trim();});
+                }
+                volver.addEventListener('click',()=>{vista.replaceChildren();boton.disabled=false;boton.focus?.();});
+                confirmar.addEventListener('click',async()=>{
+                    if(confirmar.disabled)return;
+                    volver.disabled=true;if(motivo)motivo.disabled=true;
+                    await ejecutar(propuesta,motivo?.value.trim(),confirmar);
+                    volver.disabled=false;if(motivo)motivo.disabled=false;
+                });
+                controles.append(confirmar,volver);vista.append(controles);
+            }catch(error){vista.replaceChildren();aviso(error);boton.disabled=false;}
+        });
+    }
+
+    function renderizarCambiosLibro(out,cambios=[],{soloLectura=false,preparar,documento=root.document,compacto=false}={}){
         if(!cambios.length)return;
         const elemento=(tag,clase,texto)=>{const e=documento.createElement(tag);if(clase)e.className=clase;if(texto!==undefined)e.textContent=String(texto);return e;};
         const seccion=elemento(compacto?'section':'details','haku-retiros-libro'+
@@ -7394,14 +7498,14 @@
         }
         const lista=elemento('div','haku-retiros-libro__lista');seccion.append(lista);
         const estados={full_day:'Full Day',fullday:'Full Day',alojamiento:'Alojamiento',sin_checkin:'Sin check-in',
-            checked_out:'Check-out realizado',hospedada:'Hospedada',confirmada:'Confirmada',pendiente:'Pendiente',
+            checked_out:'Check-out realizado',cancelada:'Cancelada',hospedada:'Hospedada',confirmada:'Confirmada',pendiente:'Pendiente',
             confirmada_por_color:'Confirmada',pendiente_por_color:'Pendiente',no_determinado:'Por determinar'};
         const fecha=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||'')?fechaBreve(v,true):v;
-        const valor=v=>v==null?'Sin información':Array.isArray(v)?v.map(valor).join('\n'):
+        const valor=v=>v==null?'':Array.isArray(v)?v.map(valor).filter(Boolean).join('\n'):
             typeof v==='object'?[
                 v.cabana!=null?`CAB ${v.cabana}`:null,v.entrada&&v.salida?`${fecha(v.entrada)} → ${fecha(v.salida)}`:null,
-                [fecha(v.fecha),v.hora].filter(Boolean).join(' · '),v.concepto,v.texto,v.tipo&&estados[v.tipo]
-            ].filter(Boolean).join('\n')||'Sin información':estados[v]||String(fecha(v));
+                [fecha(v.fecha_servicio||v.fecha),v.hora].filter(Boolean).join(' · '),v.concepto,v.cantidad>1?`Cantidad: ${v.cantidad}`:null,v.texto||v.texto_original,v.tipo&&estados[v.tipo]
+            ].filter(Boolean).join('\n'):estados[v]||String(fecha(v));
         const grupos=new Map();
         for(const c of cambios){const r=c.reserva||{},clave=JSON.stringify([r.id||r.origen?.celda||r.coordenadas_origen?.celda,
             r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]);if(!grupos.has(clave))grupos.set(clave,[]);grupos.get(clave).push(c);}
@@ -7418,7 +7522,7 @@
                 summary.append(identidad,total); card.append(summary);
             }
             for(const c of grupo){
-            const tipo=({retirado:'Retirado',agregado:'Agregado',modificado:'Modificado',revision:'Requiere revisión'})[c.tipo]||'Requiere revisión';
+            const tipo=({retirado:'Retirado',agregado:'Agregado',modificado:'Modificado',cancelacion:'Cancelación',revision:'Requiere revisión'})[c.tipo]||'Requiere revisión';
             const detalle=elemento(compacto?'details':'div','haku-retiros-libro__detalle');card.append(detalle);
             const campo=({notas_importantes:'Notas del Libro',observaciones_libro:'Detalles del Libro',pagos_pendientes:'Notas de cobro',
                 servicios:'Servicios',reserva:'Reserva',adultos:'Adultos',ninos:'Niños',mascotas:'Mascotas',
@@ -7427,31 +7531,41 @@
             encabezado.append(elemento('strong','',campo),elemento('span','haku-retiros-libro__estado',tipo));
             encabezado.dataset.tipo=c.tipo||'revision';
             detalle.append(encabezado);
-            const par=elemento('div','haku-retiros-libro__par');
-            for(const [label,v]of [['Antes',c.antes],['Después',c.despues]]){
-                const lado=elemento('div');lado.append(elemento('strong','',label),
-                    elemento('p','',v==null&&label==='Después'&&c.tipo==='retirado'?'Retirado del Libro':valor(v)));par.append(lado);
+            const notas=['notas_importantes','observaciones_libro','pagos_pendientes'].includes(c.campo);
+            const cambiosNota=notas&&c.tipo!=='revision'&&(c.agregados?.length||c.retirados?.length);
+            const origen=c.libroAnterior?'Libro anterior':'Proyecto H';
+            const historia=cambiosNota?[['Se retira del bloque importado',c.retirados],['Se agrega desde el Libro',c.agregados]]:
+                [[c.tipo==='retirado'?'Retirado del Libro':origen,c.antes],
+                    [c.tipo==='revision'?'Posible dato del Libro':'Libro vigente',c.despues]];
+            const bloques=historia.map(([titulo,dato])=>[titulo,valor(dato)]).filter(([,texto])=>texto);
+            if(bloques.length){
+                const par=elemento('div','haku-retiros-libro__par');
+                for(const [titulo,texto]of bloques){
+                    const lado=elemento('div');lado.append(elemento('strong','',titulo),elemento('p','',texto));par.append(lado);
+                }
+                detalle.append(par);
             }
-            detalle.append(par,elemento('p','',c.motivo||'Revisa el cambio antes de guardar.'));
-            if(soloLectura){const a=elemento('a','','Abrir panel para revisar');a.href='panel.html';detalle.append(a);}
+            if(c.tipo==='revision'&&!valor(c.despues))
+                detalle.append(elemento('p','haku-retiros-libro__pendiente','Sin coincidencia verificada en el Libro.'));
+            if(c.motivo)detalle.append(elemento('p','',c.motivo));
+            if(soloLectura){const a=elemento('a','','Abrir panel para incorporar');a.href='panel.html';detalle.append(a);}
             else{
                 const acciones=elemento('div','haku-retiros-libro__acciones');
                 detalle.append(acciones);
-                if(c.sistema?.reserva_id){const b=elemento('button','libro-reserva-boton secundario','Ver reserva');b.type='button';
-                    b.addEventListener('click',()=>root.HAIKU_INSPECTOR_V1?.abrirReserva(c.sistema.reserva_id,null,{estadiaId:c.sistema.estadia_id||c.sistema.id,numeroCabana:String(c.antes?.cabana??r.cabana)}));acciones.append(b);}
+                if(c.sistema?.reserva_id){
+                    const b=elemento('button','haku-retiros-boton','Ver reserva');b.type='button';
+                    b.addEventListener('click',()=>root.HAIKU_INSPECTOR_V1?.abrirReserva(c.sistema.reserva_id,null,
+                        {estadiaId:c.sistema.estadia_id||c.sistema.id,numeroCabana:String(c.antes?.cabana??r.cabana)}));
+                    acciones.append(b);
+                }
                 const servicio=['revisar_cancelacion_servicio','reprogramar_servicio'].includes(c.accion);
-                const traslado=c.accion==='revisar_traslado'&&revisarTraslado;
-                if(servicio||traslado||c.accion==='revisar_notas'&&revisarNotas){
-                    const b=elemento('button','libro-reserva-boton',servicio?(c.accion==='reprogramar_servicio'?'Revisar horario':'Revisar cancelación del servicio'):
-                        traslado?'Revisar traslado':'Revisar cambios');b.type='button';
-                    b.dataset.hakuCambioRevisar='1';
-                    const vista=elemento('div');acciones.append(b);detalle.append(vista);
-                    b.addEventListener('click',async()=>{
-                        if(b.disabled)return;b.disabled=true;
-                        try{if(servicio)await abrirCambioServicioLibro(vista,c);else if(traslado)await revisarTraslado(vista,c);else await revisarNotas(vista,c);}
-                        catch(error){vista.replaceChildren(elemento('p','haiku-incorporacion-error',error.message));}
-                        finally{b.disabled=false;}
-                    });
+                const accion=preparar&&['revisar_notas','revisar_traslado','incorporar_servicio','incorporar_cancelacion'].includes(c.accion)?preparar:
+                    servicio?prepararCambioServicioLibro:null;
+                if(accion){
+                    const boton=elemento('button','haku-retiros-boton haku-retiros-boton--primario','Incorporar');
+                    boton.type='button';boton.dataset.hakuCambioIncorporar=c.accion;
+                    const vista=elemento('div','haku-retiros-libro__confirmacion');acciones.append(boton);detalle.append(vista);
+                    incorporarCambioEnLinea({boton,acciones,vista,preparar:accion,elemento,caso:c});
                 }
             }
             }
@@ -7539,9 +7653,11 @@
         const revisionTitulo = elemento("div", "haku-comparacion-sites-seccion-cabecera");
         revisionTitulo.append(elemento("strong", "", "Requieren revisión"), elemento("small", "", "Abre una categoría para ver su detalle"));
         revision.append(revisionTitulo);
-        renderizarCambiosLibro(revision,comp.cambiosLibro,{
-            revisarNotas:(vista,caso)=>abrirRevisionDatosReserva(vista,caso,result),
-            revisarTraslado:(vista,caso)=>abrirRevisionTraslado(vista,caso,result)});
+        if(comp.cambiosLibro?.length){
+            const cambios=elemento('section','haku-comparacion-sites-seccion haku-retiros-libro-seccion');
+            renderizarCambiosLibro(cambios,comp.cambiosLibro,{preparar:caso=>prepararAccionCambioLibro(caso,result)});
+            out.append(cambios);
+        }
         root.HAIKU_LIBRO_RESOLUCIONES_V1?.adjuntar(revision, result.reservas, result.generacion, async () => {
             const contexto=await verificarFuenteConsulta(result);
             const reservas = await root.HAIKU_LIBRO_RESOLUCIONES_V1.efectivos(reservasVigentes(result,contexto), result.generacion,undefined,()=>estadoFuente(result));
