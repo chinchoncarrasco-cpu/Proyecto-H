@@ -118,7 +118,18 @@ html .haku-incorporacion-resultado--servicios.haku-libro-resultado-sites [hidden
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-registrados p {
   margin: 0; font-size: 13px; color: var(--haku-compacto-secundario);
 }
-#haiku-ficha-detalle-popup .haiku-ficha-detalle-ir-registrados { min-height: 34px; }
+#haiku-ficha-detalle-popup .haiku-ficha-detalle-ir-registrados {
+  display: inline-flex; align-items: center; justify-content: space-between;
+  gap: 12px; min-height: 34px; padding: 6px 10px; max-width: 100%;
+  color: var(--haku-compacto-acento); background: var(--haku-compacto-seleccion);
+  border-color: var(--haku-compacto-borde); border-radius: 6px; text-align: left;
+}
+#haiku-ficha-detalle-popup .haiku-ficha-detalle-ir-registrados:hover {
+  border-color: var(--haku-compacto-acento);
+}
+#haiku-ficha-detalle-popup .haiku-ficha-detalle-ir-flecha {
+  font-size: 16px; line-height: 1; flex: none;
+}
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-lectura { padding-top: 12px; border-top: 1px solid var(--haku-compacto-borde); font-size: 11px; line-height: 16px; text-align: left; color: var(--haku-compacto-secundario); }
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-importe,
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-vacio,

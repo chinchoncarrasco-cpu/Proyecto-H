@@ -137,8 +137,9 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
   }
   await photo(page,escenario+'-resultado');results.flujos.push({flujo:escenario,resultado:'PASS',persistido:await snapshot()});await page.close();console.log(escenario+' PASS');
  }
- await reset();const acceso=await browser.newPage({viewport:{width:390,height:850}});
- await start(acceso,'oscuro');
+ for (const ancho of [1440,390]) for (const tema of ['claro','oscuro']) {
+ await reset();const acceso=await browser.newPage({viewport:{width:ancho,height:850}});
+ await start(acceso,tema);
  await acceso.evaluate(reservaId=>{
   const mensajes=document.createElement('div');mensajes.id='haiku-asistente-mensajes';document.body.append(mensajes);
   return HAIKU_LIBRO_CONSULTAS.abrirPagosRegistrados({reservaId,fecha:__fixture.reservas[0].fecha_checkin,cabana:'2'});
@@ -147,12 +148,24 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
  assert.match(await destino.innerText(),/Pagos ya registrados[\s\S]*WebPay Débito/);
  assert.equal(await destino.locator('input[type=checkbox]').count(),0);
  assert.equal((await snapshot()).aplicaciones.length,0);
- await destino.locator('.haiku-incorporacion-aplicar-existente > summary').click();
+ const desplegable=destino.locator('.haiku-incorporacion-aplicar-existente');
+ assert.equal(await desplegable.getAttribute('open'),null);
+ await desplegable.locator('summary').click();
+ const revision=destino.locator('.haku-pagos-registrados');
+ const desbordes=await revision.evaluate(el=>[el,...el.querySelectorAll('*')].filter(n=>{
+   if(!n.getClientRects().length||n.closest('details:not([open])')&&!n.closest('summary'))return false;
+   return n.scrollWidth>n.clientWidth+2&&getComputedStyle(n).display!=='contents';
+ }).map(n=>n.className));
+ assert.deepEqual(desbordes,[]);
+ assert.equal(await destino.locator('.haku-registrados-origen').getAttribute('open'),null);
+ await revision.screenshot({path:path.join(evidence,'revision-'+ancho+'-'+tema+'.png')});
+ assert.ok(await destino.getByRole('button',{name:'Confirmar aplicación',exact:true}).evaluate(el=>el.getBoundingClientRect().height<=42));
  await destino.getByRole('button',{name:'Confirmar aplicación',exact:true}).click();
  await acceso.getByRole('dialog').getByRole('button',{name:'Aplicar pago existente',exact:true}).click();
  await destino.getByRole('status').filter({hasText:'Aplicación confirmada'}).waitFor();
  assert.equal((await snapshot()).pagos.length,1);
  assert.equal((await snapshot()).aplicaciones[0].monto_aplicado,144000);
- results.flujos.push({flujo:'acceso-ficha',resultado:'PASS'});await acceso.close();console.log('acceso-ficha PASS');
+ results.flujos.push({flujo:'acceso-ficha',ancho,tema,resultado:'PASS'});await acceso.close();console.log('acceso-ficha '+ancho+' '+tema+' PASS');
+ }
  fs.writeFileSync(path.join(evidence,'resultados.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({pass:true,casos:results.flujos.length,evidencia:evidence}));
 }finally{await browser?.close();server?.close();await h?.db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

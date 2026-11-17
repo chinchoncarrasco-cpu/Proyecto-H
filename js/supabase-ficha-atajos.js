@@ -282,6 +282,9 @@
                 typeof window.HAIKU_LIBRO_CONSULTAS?.abrirPagosRegistrados === "function") {
                 const ir = crear("button", "haiku-ficha-detalle-ir-registrados", "Revisar pagos ya registrados");
                 ir.type = "button";
+                ir.setAttribute("aria-label", "Revisar pagos ya registrados en Haku");
+                ir.append(crear("span", "haiku-ficha-detalle-ir-flecha", "↗︎"));
+                ir.lastElementChild.setAttribute("aria-hidden", "true");
                 ir.addEventListener("click", accesoRegistrados);
                 aviso.append(ir);
             }

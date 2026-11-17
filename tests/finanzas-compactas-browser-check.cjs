@@ -172,6 +172,7 @@ async function financieroFichaSites(p, width, tema) {
   await p.keyboard.press('Enter');
   const enlace = popup.getByRole('button', {name:'Revisar pagos ya registrados'});
   await enlace.waitFor();
+  await verificar(p, '#haiku-ficha-detalle-popup', 'acceso-pagos-registrados', width, tema);
   assert.match(await popup.innerText(), /Saldo de cargos[\s\S]*Pagos sin aplicar \$144\.000 · Saldo neto \$47\.600/);
   await p.keyboard.press('Tab');
   assert.equal(await enlace.evaluate(el => el === document.activeElement), true);

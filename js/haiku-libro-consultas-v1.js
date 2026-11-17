@@ -8398,16 +8398,19 @@
         try {
             const result = await consultar(`Libro: compara con Proyecto H CAB ${cabana} el ${fecha}`);
             const decisiones = new Map(), aprobados = new Set();
-            const contenido = elemento("section", "haiku-asistente-preview haku-incorporacion-sites");
+            const contenido = elemento("section", "haiku-asistente-preview haku-incorporacion-sites haku-pagos-registrados");
             const aprobar = { manualPago: async (plan, id, accion) =>
                 pintar(await resolverAprobacionManualPago(result, decisiones, aprobados, plan, id, accion)) };
             const pintar = plan => {
                 const items = plan.items.filter(item => item.pagoYaRegistrado &&
                     item.pagoSistema?.reserva_id === reservaId);
-                contenido.replaceChildren(elemento("strong", "", "Pagos ya registrados"));
+                const cabecera = elemento("header", "haku-registrados-cabecera");
+                cabecera.append(elemento("strong", "", "Pagos ya registrados"),
+                    elemento("span", "", `CAB ${cabana} · ${fechaBreve(fecha, true)}`));
+                contenido.replaceChildren(cabecera);
                 if (plan.resultadoAplicacionExistente?.ok) {
                     const r = plan.resultadoAplicacionExistente;
-                    const comprobante = elemento("p", "", `Aplicación confirmada · ${money(r.aplicado_total_cargo)} aplicados · ${money(r.sin_aplicar)} sin aplicar.` +
+                    const comprobante = elemento("p", "haku-registrados-confirmacion", `Aplicación confirmada · ${money(r.aplicado_total_cargo)} aplicados · ${money(r.sin_aplicar)} sin aplicar.` +
                         (r.lecturaPendiente ? " Actualiza la ficha para ver el saldo vigente." : ""));
                     comprobante.setAttribute("role", "status");
                     contenido.append(comprobante);
@@ -8415,9 +8418,25 @@
                 for (const item of items) {
                     const pago = item.pagoSistema;
                     const datos = datosPagoIncorporacion(pago);
-                    contenido.append(elemento("p", "", `${datos.medio} · ${money(pago.monto)} · ${fechaBreve(fechaCalendarioChile(pago.fecha_pago), true)}`));
-                    contenido.append(elemento("p", "", item.aviso));
-                    if (item.aplicacionExistente) contenido.append(panelAplicacionExistente(item, plan, aprobar));
+                    const fila = elemento("article", "haku-registrados-pago");
+                    const resumen = elemento("div", "haku-registrados-resumen");
+                    const identidad = elemento("div");
+                    identidad.append(elemento("strong", "", datos.medio),
+                        elemento("span", "", fechaBreve(fechaCalendarioChile(pago.fecha_pago), true)));
+                    resumen.append(identidad, elemento("strong", "haku-registrados-monto", money(pago.monto)));
+                    fila.append(resumen);
+                    const estado = estadoPagoExistente(pago, contextoVisualPlanes.get(plan));
+                    fila.append(elemento("p", "haku-registrados-estado", estado
+                        ? `Aplicado ${money(estado.aplicado)} · Disponible ${money(estado.disponible)}`
+                        : "Aplicaciones pendientes de comprobar"));
+                    const origen = elemento("details", "haku-registrados-origen");
+                    origen.append(elemento("summary", "", "Comprobante y origen"),
+                        elemento("p", "", item.aviso));
+                    if (datos.segundo[1] && datos.segundo[1] !== "Sin dato")
+                        origen.append(datoIncorporacion(datos.segundo[0], datos.segundo[1]));
+                    if (item.aplicacionExistente) fila.append(panelAplicacionExistente(item, plan, aprobar));
+                    fila.append(origen);
+                    contenido.append(fila);
                 }
                 if (!items.length) contenido.append(elemento("p", "", "El Libro vigente no permitió cotejar un pago registrado de esta reserva."));
             };
@@ -8428,7 +8447,9 @@
         } catch (error) {
             mensajePago.textContent = error.message || "No se pudieron comprobar los pagos registrados.";
         } finally {
-            mensajePago.scrollIntoView?.({block:"nearest"});
+            mensajePago.scrollIntoView?.({block:"start"});
+            mensajePago.tabIndex = -1;
+            mensajePago.focus({preventScroll:true});
         }
         return true;
     }
@@ -8462,14 +8483,14 @@
         const p=item.aplicacionExistente;
         const panel=elemento('details','haiku-incorporacion-aplicar-existente');
         panel.append(elemento('summary','','Aplicar pago existente'));
-        panel.append(elemento('p','','Vincula el pago registrado al cargo de alojamiento.'));
+        const contenido=elemento('div','haku-aplicacion-contenido');
         const etiqueta=elemento('label','','Cargo de alojamiento de destino');
         const selector=elemento('select');selector.setAttribute('aria-label','Cargo de alojamiento de destino');
         if(p.cargos.length>1){const vacio=elemento('option','','Elige el cargo de alojamiento');vacio.value='';selector.append(vacio);}
-        for(const cargo of p.cargos){const op=elemento('option','',cargo.concepto+' · '+money(cargo.saldo_cargo_esperado)+' pendientes · '+cargo.cargo_id);op.value=cargo.cargo_id;selector.append(op);}
-        etiqueta.append(selector);panel.append(etiqueta);
-        panel.append(elemento('p','',`CAB ${p.cabana} · ${fechaBreve(p.ingreso,true)} al ${fechaBreve(p.salida,true)}`));
-        const datos=elemento('div','haiku-incorporacion-aplicar-existente-datos');panel.append(datos);
+        for(const cargo of p.cargos){const op=elemento('option','',cargo.concepto+' · '+money(cargo.saldo_cargo_esperado)+' pendientes');op.value=cargo.cargo_id;selector.append(op);}
+        etiqueta.append(selector);contenido.append(etiqueta);
+        contenido.append(elemento('p','haku-aplicacion-periodo',`CAB ${p.cabana} · ${fechaBreve(p.ingreso,true)} al ${fechaBreve(p.salida,true)}`));
+        const datos=elemento('div','haiku-incorporacion-aplicar-existente-datos');contenido.append(datos);
         const confirmar=elemento('button','haiku-incorporacion-aprobar','Confirmar aplicación');confirmar.type='button';
         const actualizar=()=>{datos.replaceChildren();const c=p.cargos.find(c=>c.cargo_id===selector.value);confirmar.disabled=!c;
             if(!c){datos.append(elemento('p','','Hay varios destinos posibles. Elige el cargo antes de aplicar el dinero.'));return;}
@@ -8487,7 +8508,7 @@
             await aprobar.manualPago(plan,item.id,{tipo:'aplicar_pago_existente_v1',cargoId,confirmado:true,
                 vigente:()=>panel.isConnected!==false,vistaVigente:()=>panel.isConnected!==false});
         },panel));
-        panel.append(confirmar);return panel;
+        const pie=elemento('footer','haku-aplicacion-pie');pie.append(confirmar);contenido.append(pie);panel.append(contenido);return panel;
     }
 
     function movimientosLibroIncorporacion(movimientos,plan) {
