@@ -20,6 +20,7 @@
     const operativo = servicio => String(servicio?.estadoServicioDb || servicio?.estadoServicio || "");
     const cancelado = servicio => ["cancelado", "cancelada", "no_show"].includes(operativo(servicio));
     const realizado = servicio => ["realizado", "realizada", "completado"].includes(operativo(servicio));
+    const revision = servicio => window.HAIKU_SERVICIOS_IDENTIDAD_V1?.revisionReprogramacion(servicio) === true;
     const cortesia = servicio => servicio?.tipoCobro === "cortesia";
     const programable = servicio => ["tinaja", "masaje"].includes(String(servicio?.categoria || ""));
     const saldo = servicio => servicio?.saldoPendienteVerificado === null ||
@@ -51,7 +52,7 @@
         const finanzasCompletas = cobrables.every(s => saldo(s) !== null &&
             Number.isFinite(saldo(s)) && saldo(s) >= 0);
         const dePago = finanzasCompletas ? cobrables.filter(s => saldo(s) > 0) : [];
-        const proximo = pendientes.find(s => s.hora &&
+        const proximo = pendientes.find(s => !revision(s) && s.hora &&
             (fecha > reloj.fecha || (fecha === reloj.fecha && s.hora >= reloj.hora))) || null;
         return {
             dia, vigentes, pendientes, proximo,
@@ -132,6 +133,7 @@
     }
 
     function estadoVisual(servicio) {
+        if(revision(servicio))return {clave:'pendiente',texto:'Requiere revisión · reprogramación'};
         if (operativo(servicio) === "no_show") return { clave: "cancelado", texto: "No se presentó" };
         if (cancelado(servicio)) return { clave: "cancelado", texto: "Cancelado" };
         if (realizado(servicio)) return { clave: "realizado", texto: "Realizado" };
@@ -154,6 +156,7 @@
     }
 
     function acciones(servicio) {
+        if(revision(servicio))return '<span class="sv-agenda-hint">Revisar fecha y asociación en Servicios</span>';
         if (!window.haikuSesion) return "";
         const id = esc(servicio.id);
         const opciones = [];

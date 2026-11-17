@@ -201,7 +201,7 @@
             return;
         }
         const usuario=api.usuario();
-        let ejecutando=false;
+        let ejecutando=false,propuestaActual=null;
         const mismaSesion=()=>Boolean(usuario && usuario===api.usuario() && articulo.isConnected);
         const seguir=async (accion, textoEspera) => {
             if (ejecutando) return;
@@ -212,10 +212,11 @@
             estado.textContent=textoEspera;
             try {await accion();}
             catch (error) {estado.textContent=error?.message || "No se pudo completar la acción. Revisa Proyecto H.";}
-            finally {ejecutando=false;botones.forEach(b=>{b.disabled=false;});}
+            finally {ejecutando=false;botones.forEach(b=>{b.disabled=b.dataset.reprogramacionConfirmar==='1'&&propuestaActual?.puedeGuardar?.()===false;});}
         };
         function mostrar(p) {
             if (!mismaSesion()) return;
+            propuestaActual=p;
             cuerpo.replaceChildren();
             estado.textContent="";
             if (p.identidad) cuerpo.append(elemento("strong",p.identidad));
@@ -230,6 +231,7 @@
             }
             if (p.texto) cuerpo.append(elemento("blockquote",p.texto,"haku-orden__texto"));
             if (p.detalle) cuerpo.append(elemento("p",p.detalle));
+            if (p.renderizar) p.renderizar(cuerpo);
             const acciones=elemento("div","","haku-orden__acciones");
             acciones.dataset.hakuOperacionAcciones="1";
             const boton=(etiqueta,ejecutar,principal=false)=>{
@@ -237,17 +239,23 @@
                 b.type="button";
                 b.addEventListener("click",ejecutar);
                 acciones.append(b);
+                return b;
             };
             for (const o of p.opciones || []) {
                 boton(o.etiqueta,()=>void seguir(async()=>mostrar(await o.cargar()),"Comprobando selección…"));
             }
             if (p.guardar) {
-                boton(p.etiqueta,()=>void seguir(async()=>{
-                    const resultado=await p.guardar();
+                const guardar=boton(p.etiqueta,()=>void seguir(async()=>{
+                    let resultado;
+                    try{resultado=await p.guardar();}catch(e){
+                        if(e.reprogramacionActual&&p.revisar){mostrar(await p.revisar());estado.textContent=e.message;return;}
+                        throw e;
+                    }
                     acciones.remove();
                     estado.textContent=resultado;
                     estado.dataset.guardado="1";
                 },"Guardando…"),true);
+                if(p.puedeGuardar){guardar.dataset.reprogramacionConfirmar='1';p.alCambiar?.(valido=>{guardar.disabled=ejecutando||!valido;});}
                 boton("Descartar",()=>{
                     if (ejecutando) return;
                     acciones.remove();

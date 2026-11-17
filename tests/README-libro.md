@@ -63,7 +63,7 @@ Esta sección reemplaza el comportamiento anterior de “Es la misma reserva” 
 4. Revisar **Actualizar Proyecto H con el Libro**: el pasaporte debe conservar todas sus letras y números; comprobar los cambios de correo y demás campos. Los cambios largos de notas comienzan plegados.
 5. Confirmar únicamente la selección revisada. Comprobar el documento y los detalles en la ficha, y volver a comparar septiembre: los datos ya corregidos no deben volver a prepararse como actualización.
 6. Con datos de prueba, un pago existente con identificador fuerte y monto distinto debe actualizar el mismo pago, sin crear uno nuevo. La reducción de monto ajusta su distribución entre cargos y deja historial. No permite reducir por debajo de devoluciones confirmadas.
-7. Si se corrigen fechas, la vista explica que las noches nuevas usan tarifa de catálogo y que los pagos aplicados a noches retiradas quedan como saldo disponible. Se conservan los registros de pago y se guarda el historial de las aplicaciones ajustadas.
+7. Si se reprograman fechas o cabaña, revisar la vista conjunta de estadía, servicios y notas. El traslado de igual duración conserva tarifas acordadas, IDs, cargos, pagos y aplicaciones. Para ampliar o reducir una estadía futura de alojamiento, aprobar cada noche y cargo adicional o retirado. Una noche retirada con aplicaciones o ajustes activos requiere revisión financiera. Si ya hay ingreso/salida registrados, abrir la ficha o el historial desde el aviso; una corrección de estado utiliza su confirmación propia. [Verificación local de noches y estados](../diagnosticos/libro-reprogramacion-noches-20261116-resumen.md); publicación pendiente.
 
 ### Verificación realizada
 

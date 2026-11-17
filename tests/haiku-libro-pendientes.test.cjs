@@ -297,7 +297,7 @@ test('checkout y noches coherentes abren una preparación individual sin arrastr
         {etiqueta:'Salida',anterior:'14/09/2026',propuesto:'13/09/2026'},
         {etiqueta:'Noches',anterior:'2',propuesto:'1'}
     ]);
-    assert.match(update.aviso,/cargos de alojamiento/);assert.ok(update.permisos.includes('pagos.verificar'));
+    assert.match(update.aviso,/revisión conjunta de servicios y notas/);assert.ok(update.permisos.includes('pagos.verificar'));
     actual.noches=3;
     const incoherente=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
     assert.equal(incoherente.items[0].accionable,false);assert.equal(incoherente.items[0].preparacion,undefined);

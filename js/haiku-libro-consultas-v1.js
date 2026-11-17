@@ -4631,7 +4631,7 @@
                             diferenciasObservaciones(s.observaciones,payload.reserva.despues.observaciones).retiradas;
                         if (avisosInformativos.length) item.aviso = `Advertencia informativa: ${avisosInformativos.join(' ')}`;
                         if (['fecha_ingreso','fecha_salida','tipo_estadia'].some(k => k in payload.estadia.despues)) {
-                            item.aviso = [item.aviso, 'Se corregirán las noches y cargos de alojamiento. Las noches nuevas usarán la tarifa del catálogo; los pagos de noches retiradas quedarán como saldo disponible. Los importes de los pagos se conservan.'].filter(Boolean).join(' ');
+                            item.aviso = [item.aviso, 'La reprogramación requiere la revisión conjunta de servicios y notas.'].filter(Boolean).join(' ');
                             item.permisos.push('pagos.verificar');
                         }
                     }
@@ -5541,6 +5541,32 @@
             if(!aprobados.has(id))firmas.set(id,firma);
         }
     }
+    const revisionesReprogramacionLibro=new WeakMap();
+    const MOTIVO_REPROGRAMACION='Reprogramación: resuelve los servicios y notas pendientes antes de confirmar.';
+    async function prepararReprogramacionesLibro(plan,cliente,decisiones,version){
+        let cache=revisionesReprogramacionLibro.get(decisiones);
+        if(!cache)revisionesReprogramacionLibro.set(decisiones,cache=new Map());
+        for(const item of plan.items){
+            const p=item.payload;if(p?.tipo!=='reserva_actualizar')continue;
+            const antes=p.estadia?.antes||{},despues=p.estadia?.despues||{};
+            if(!['fecha_ingreso','fecha_salida','cabana_numero'].some(k=>Object.hasOwn(despues,k)&&despues[k]!==antes[k]))continue;
+            try{
+                const api=root.HAIKU_REPROGRAMACION_V1;if(!api)throw Error('Recarga el panel para revisar servicios y notas de la reprogramación.');
+                const s=contextoVisualPlanes.get(plan)?.snapshot?.estadias?.find(e=>e.id===p.estadia_id);
+                const destino={cabana_numero:despues.cabana_numero??antes.cabana_numero??s?.cabana,
+                    fecha_ingreso:despues.fecha_ingreso??antes.fecha_ingreso??s?.fecha_checkin,
+                    fecha_salida:despues.fecha_salida??antes.fecha_salida??s?.fecha_checkout};
+                const propuesta=await api.leer(cliente,p.reserva_id,p.estadia_id,destino);
+                let record=cache.get(item.id);
+                if(!record||record.firma!==propuesta.firma||record.version!==version||JSON.stringify(record.destino)!==JSON.stringify(destino)){
+                    record={firma:propuesta.firma,version,destino,operacion_id:api.nuevoId(),decisiones:api.defaults(propuesta)};cache.set(item.id,record);
+                }
+                item.reprogramacion={propuesta,decisiones:record.decisiones};
+                p.reprogramacion_v1={operacion_id:record.operacion_id,version_libro:version||'lectura-local-verificada',propuesta,decisiones:record.decisiones};
+                if(!api.valida(propuesta,record.decisiones)){item.motivos.push(MOTIVO_REPROGRAMACION);item.seleccionado=false;}
+            }catch(e){item.motivos.push('Reprogramación: '+e.message);item.seleccionado=false;}
+        }
+    }
     async function prepararIncorporacion(result, decisiones = new Map(), aprobados = new Set(), cliente = root.haikuSupabase, intento = 0) {
         if(result.traslado&&root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion!==result.generacion)
             throw Error('El Libro cambió. Vuelve a comparar para comprobar tanto el origen como el destino del traslado.');
@@ -5659,6 +5685,11 @@
         }
         adjuntarConflictosFuente(plan,result,contexto,decisiones,aprobados,cliente);
         if(result.cambioEnLinea)limitarCambioEnLinea(plan,result.cambioEnLinea);
+        await prepararReprogramacionesLibro(plan,cliente,decisiones,estadoFuente(result).version);
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== revision) {
+            if (intento >= 2) throw Error('El Libro cambió al comprobar la reprogramación. Vuelve a revisar la fuente vigente.');
+            return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1);
+        }
         if (result.pagoInformeCloudbeds) limitarPagoInformeCloudbeds(plan, comparacion, result.pagoInformeCloudbeds);
         plan.capacidadServicios = capacidadServicios;
         // Las cancelaciones conservan su preview y cancelador propios, fuera del lote genérico.
@@ -9129,6 +9160,14 @@
         fila.append(cabecera);
         if (item.aviso&&!item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0)) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
         if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, null, actualizacionReserva));
+        if(item.reprogramacion){
+            const api=root.HAIKU_REPROGRAMACION_V1,r=item.reprogramacion;
+            fila.append(api.renderizar(r.propuesta,r.decisiones,nuevo=>{
+                Object.assign(r.decisiones,nuevo);item.motivos=item.motivos.filter(m=>m!==MOTIVO_REPROGRAMACION);
+                if(!api.valida(r.propuesta,r.decisiones)){item.motivos.push(MOTIVO_REPROGRAMACION);item.seleccionado=false;}
+                actualizar();
+            }));
+        }
 
         if (esPagoLibro) {
             const datos = datosPagoIncorporacion(item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB
@@ -9221,6 +9260,7 @@
         const franja=franjaDiferenciaPago(movimiento,comparacion);
         if (franja) fila.append(franja);
         const motivosVisibles = new Set([...motivosRevisionPago, ...item.motivos.filter(motivo =>
+            !(item.reprogramacion&&motivo===MOTIVO_REPROGRAMACION)&&
             !((motivosRevisionPago.length || esPagoLibro && item.motivos.length > 1) && motivo === APROBACION_MANUAL_PAGO) &&
             !(franja && motivo === 'Hay otro pago con la misma reserva y monto, pero sin identificador fuerte; revisa ambos antes de aprobar.'))]);
         const fechaComprobante = item.pagoLibro?.fecha_comprobante, ingreso = item.pagoLibro?.fecha_bloque;

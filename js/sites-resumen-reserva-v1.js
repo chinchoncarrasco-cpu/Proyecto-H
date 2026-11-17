@@ -549,7 +549,8 @@
             const hora = String(servicio.hora_inicio || "").slice(0, 5);
             itemLista(listaServicios, nombreServicio,
                 [fechaVisible(servicio.fecha_servicio), hora].filter(x => x && x !== "—").join(" · "),
-                servicio.estado_servicio === "realizado" ? "Realizado" : "Programado");
+                window.HAIKU_REPROGRAMACION_V1?.revisionServicio(servicio) ? "Requiere revisión por reprogramación" :
+                    servicio.estado_servicio === "realizado" ? "Realizado" : "Programado");
         }
         if (!servicios.length) listaVacia(listaServicios, "Sin servicios asociados");
 

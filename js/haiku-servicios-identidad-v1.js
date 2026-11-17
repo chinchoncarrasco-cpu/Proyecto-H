@@ -47,7 +47,7 @@
             fecha: texto(servicio?.fecha_servicio || servicio?.fechaServicio || servicio?.fecha).slice(0, 10),
             hora: hora(servicio?.hora_inicio || servicio?.hora),
             total: numero(servicio?.total ?? servicio?.precio_manual ?? servicio?.precioManual),
-            estado: texto(servicio?.estado_servicio || servicio?.estadoServicio),
+            estado: texto(servicio?.estado_servicio || servicio?.estadoServicioDb || servicio?.estadoServicio),
             observaciones: texto(servicio?.observaciones),
             itemId: texto(servicio?.item_id || servicio?.itemId),
             legacyId: texto(servicio?.legacy_id || servicio?.idLegacy || servicio?.legacyId)
@@ -56,6 +56,10 @@
 
     function activo(servicio) {
         return !CANCELADO_RE.test(normalizar(servicio).estado);
+    }
+    function revisionReprogramacion(s){
+        const r=s?.reprogramacion_revision_v1,n=normalizar(s);
+        return !!r&&r.version===1&&['programado','pendiente'].includes(n.estado)&&n.fecha===r.fecha&&n.hora===hora(r.inicio);
     }
 
     function marcadores(servicio) {
@@ -83,6 +87,10 @@
         const activos = existentes.filter(activo).map(original => ({ original, normal: normalizar(original) }))
             .filter(x => mismaReservaYEstadia(nuevo, x.normal));
         const marcas = marcadores(nuevo);
+        const pendientesReprogramacion=activos.filter(x=>x.normal.codigo===nuevo.codigo&&revisionReprogramacion(x.original)&&
+            (x.normal.fecha===nuevo.fecha||['lateCheckout','earlyCheckin'].includes(nuevo.codigo)||marcas.some(m=>x.normal.observaciones.includes(m))));
+        if(pendientesReprogramacion.length)return resultado('revisar',pendientesReprogramacion.map(x=>x.original),
+            'Servicio pendiente de revisión tras reprogramar la estadía; no se confirma para el nuevo destino.');
         if (marcas.length) {
             const porOrigen = activos.filter(x => marcas.some(m => x.normal.observaciones.includes(m)));
             if (porOrigen.length === 1) return resultado("existente", [porOrigen[0].original], "Mismo origen estable.");
@@ -137,5 +145,5 @@
         };
     }
 
-    return Object.freeze({ version: "1.0.0", normalizar, activo, resolverServicio, huellaServicio, auditarDuplicados });
+    return Object.freeze({ version: "1.0.0", normalizar, activo, revisionReprogramacion, resolverServicio, huellaServicio, auditarDuplicados });
 });

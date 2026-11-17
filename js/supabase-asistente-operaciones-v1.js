@@ -29,7 +29,6 @@
     const minutos = h => Number(h?.slice(0, 2)) * 60 + Number(h?.slice(3, 5));
     const hora = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
     const rango = (inicio, fin) => fecha(inicio) + " → " + fecha(fin);
-    const agregarDia = (d, n) => new Date(Date.parse(d) + n * 86400000).toISOString().slice(0, 10);
     const diferenciaDias = (d, h) => (Date.parse(h) - Date.parse(d)) / 86400000;
     const normal = L.normalizar;
     const etiquetaEstado = {
@@ -110,7 +109,8 @@
         if (!permisos("reservas.editar")) textoError("Tu cuenta necesita permiso para editar reservas.");
         const { ficha, e } = await leerFicha(f);
         const r = ficha.reserva;
-        if (ficha.estadias.filter(s => !["cancelada", "no_show"].includes(s.estado_estadia)).length !== 1 ||
+        const reprogramar = ["ingreso", "salida", "fechas", "cabana"].includes(q.campo);
+        if ((!reprogramar && ficha.estadias.filter(s => !["cancelada", "no_show"].includes(s.estado_estadia)).length !== 1) ||
             ["cancelada", "no_show"].includes(e.estado_estadia) || ["cancelada", "no_show"].includes(r.estado_reserva)) {
             textoError("La edición directa requiere una sola estadía activa. Abre la ficha para revisar esta reserva.");
         }
@@ -135,7 +135,8 @@
             return propuestaEdicion(f, ficha, filas, { campo: "ocupacion", ...nuevo });
         }
         const full = e.tipo_estadia === "fullday";
-        const tarifas = Object.fromEntries((ficha.noches || []).filter(n => n.estadia_id === e.id).map(n => [n.fecha, Number(n.tarifa)]));
+        const tarifas = Object.fromEntries((ficha.noches || []).filter(n => n.estadia_id === e.id &&
+            n.fecha >= e.fecha_ingreso && n.fecha < e.fecha_salida).map(n => [n.fecha, Number(n.tarifa)]));
         const nochesOriginales = diferenciaDias(e.fecha_ingreso, e.fecha_salida);
         const totalFull = full ? (ficha.cargos || []).filter(c => c.tipo_cargo === "alojamiento" && c.estado === "activo")
             .reduce((s, c) => s + Number(c.monto), 0) : null;
@@ -170,21 +171,12 @@
         const cambioFechas = nuevo.fecha_ingreso !== original.fecha_ingreso || nuevo.fecha_salida !== original.fecha_salida;
         const cambioCabana = nuevo.cabana_numero !== original.cabana_numero;
         const estructura = cambioFechas || cambioCabana;
-        let base;
         if (estructura) {
-            base = await cabanaActiva(nuevo.cabana_numero);
-            if (!full) {
-                nuevo.tarifas = {};
-                for (let i = 0; i < noches; i++) {
-                    const dia = agregarDia(nuevo.fecha_ingreso, i);
-                    nuevo.tarifas[dia] = tarifas[dia] || Number(base.precio_base);
-                    if (!Number.isSafeInteger(nuevo.tarifas[dia]) || nuevo.tarifas[dia] <= 0) {
-                        textoError("Falta la tarifa base de una de las noches nuevas.");
-                    }
-                }
-            }
+            if(!root.HAIKU_REPROGRAMACION_V1)textoError('Recarga Proyecto H para revisar la reprogramación junto con servicios y notas.');
+            return root.HAIKU_REPROGRAMACION_V1.preparar({cliente:actual(),reservaId:f.reserva_id,estadiaId:f.id,
+                destino:{cabana_numero:nuevo.cabana_numero,fecha_ingreso:nuevo.fecha_ingreso,fecha_salida:nuevo.fecha_salida},
+                identidad:identidad(f),onGuardado:()=>aviso(f.reserva_id,'reprogramación conjunta desde Haku','reservas')});
         }
-
         const filas = [];
         const escalar = (k, etiqueta, mostrar = String) => {
             if (original[k] !== nuevo[k]) filas.push(comparacion(etiqueta, original[k] ? mostrar(original[k]) : "—", mostrar(nuevo[k])));
@@ -201,10 +193,7 @@
         if (totalNuevo !== totalAnterior || estructura || q.campo === "tarifa") {
             filas.push(comparacion("Total alojamiento", moneda(totalAnterior), moneda(totalNuevo)));
         }
-        const advertenciaEstado = estructura && (e.checkin_realizado_en || e.checkout_realizado_en ||
-            ["hospedada", "checked_out"].includes(e.estado_estadia));
-        return propuestaEdicion(f, ficha, filas, nuevo,
-            advertenciaEstado ? "Proyecto H volverá a Confirmada y reiniciará el ingreso o la salida registrada." : "", base);
+        return propuestaEdicion(f, ficha, filas, nuevo);
     }
 
     async function estadoReserva(q, f) {

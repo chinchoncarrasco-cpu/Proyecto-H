@@ -1,0 +1,22 @@
+.haku-reprogramacion{width:100%;min-width:0;color:inherit;font-size:.85rem;line-height:1.4;container-type:inline-size}
+.haku-reprogramacion h3{margin:.4rem 0;font-size:1rem}
+.haku-reprogramacion-recorrido{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;border:1px solid #8fa89b;border-radius:.5rem;padding:.6rem}
+.haku-reprogramacion p{margin:.25rem 0}
+.haku-reprogramacion-finanzas{padding:.4rem 0;font-size:.8rem}
+.haku-reprogramacion-seccion{margin:.5rem 0;border-top:1px solid #8fa89b}
+.haku-reprogramacion summary{cursor:pointer;font-weight:700;padding:.4rem 0}
+.haku-reprogramacion-fila{display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(125px,.8fr) minmax(125px,.8fr) minmax(180px,1fr);gap:.3rem .65rem;padding:.5rem 0;border-top:1px solid #8fa89b55;align-items:start}
+.haku-reprogramacion-identidad{min-width:0;overflow-wrap:anywhere}
+.haku-reprogramacion-identidad small{display:block;opacity:.85}
+.haku-reprogramacion-fecha span,.haku-reprogramacion-decision{font-size:.75rem}
+.haku-reprogramacion-motivo{grid-column:1/-1;font-size:.78rem;opacity:.9}
+.haku-reprogramacion-decision{display:grid;gap:.2rem;min-width:0}
+.haku-reprogramacion select{box-sizing:border-box;max-width:100%;width:100%;border:1px solid #8fa89b;border-radius:.35rem;padding:.35rem;background:transparent;color:inherit;font:inherit}
+.haku-reprogramacion-bloqueo,.haku-reprogramacion-pendientes{padding:.35rem .5rem;border-left:3px solid #a87519}
+.haku-reprogramacion-accesos{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0}
+.haku-reprogramacion-accesos button{font:inherit;color:inherit;background:transparent;border:1px solid #8fa89b;border-radius:.35rem;padding:.45rem .65rem;cursor:pointer}
+html[data-haiku-tema="oscuro"] .haku-reprogramacion option{background:#1b2420;color:#e8efea}
+.haku-reprogramacion-revision{font-weight:700;color:#9d6610}
+html[data-haiku-tema="oscuro"] .haku-reprogramacion-revision{color:#e7bd71}
+@media(max-width:700px){.haku-reprogramacion{font-size:.82rem}.haku-reprogramacion-recorrido{grid-template-columns:1fr;gap:.3rem;padding:.45rem}.haku-reprogramacion-fila{grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem .45rem;padding:.4rem 0}.haku-reprogramacion-identidad,.haku-reprogramacion-decision{grid-column:1/-1}.haku-reprogramacion-seccion{margin:.3rem 0}}
+@container(max-width:700px){.haku-reprogramacion-fila{grid-template-columns:repeat(2,minmax(0,1fr));gap:.25rem .45rem}.haku-reprogramacion-identidad,.haku-reprogramacion-decision{grid-column:1/-1}}

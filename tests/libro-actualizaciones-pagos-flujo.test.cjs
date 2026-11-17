@@ -202,7 +202,7 @@ test('un documento conflictivo sin item_id en un lote mixto no acusa otra actual
     const siguiente = await Q.prepararIncorporacion(h.result, h.decisiones, h.aprobados, h.db);
     assert.equal(siguiente.items.filter(i => i.conflictoIdentidad).length, 0);
 });
-test('una corrección necesaria de estadía precede al pago aunque titular y documento ya coincidan', async () => {
+test('una corrección de fechas sin revisión conjunta bloquea también su pago dependiente', async () => {
     const f = F.crear(); f.reservas = f.reservas.slice(0, 1); f.estadias = f.estadias.slice(0, 1);
     const r = f.reservas[0], s = f.estadias[0];
     Object.assign(s.reservas, { titular_nombre: r.titular, titular_numero_documento: r.rut_documento, titular_tipo_documento: 'pasaporte' });
@@ -212,8 +212,7 @@ test('una corrección necesaria de estadía precede al pago aunque titular y doc
     const result = { reservas: f.reservas, q: f.q, comparacion }, plan = await Q.prepararIncorporacion(result, decisiones, aprobados, db);
     const pago = plan.items.find(i => i.pagoLibro);
     assert.equal(plan.etapa, undefined); assert.equal(pago.etapaSiguiente, true); assert.equal(pago.aprobable, false);
-    assert.ok(pago.dependeDe.length); assert.deepEqual(Q.serializarIncorporacion(plan).map(i => i.tipo), ['reserva_actualizar']);
-    assert.equal((await Q.confirmarIncorporacion(result, decisiones, aprobados, plan, db)).resultado.pagos_creados, 0);
-    const actualizado = await Q.prepararIncorporacion(result, decisiones, aprobados, db);
-    assert.equal(actualizado.items.find(i => i.pagoLibro).categoria, 'pagos');
+    assert.ok(pago.dependeDe.length); assert.deepEqual(Q.serializarIncorporacion(plan), []);
+    assert.ok(plan.items.find(i => i.payload?.tipo === 'reserva_actualizar').motivos.some(m => /reprogramación/i.test(m)));
+    assert.equal(db.calls.length, 0);
 });
