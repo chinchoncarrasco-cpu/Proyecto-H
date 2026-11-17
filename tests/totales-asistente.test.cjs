@@ -183,3 +183,27 @@ test('error del detalle mantiene identidad, bloqueo y cero RPC',async()=>{
  const e=entorno();ajuste(e);const from=e.cliente.from;e.cliente.from=t=>{if(t==='vista_estado_cargos')throw Error('lectura no disponible');return from(t);};
  const p=await e.preparar(),h=api.renderizar(p);assert.equal(p.estado,'bloqueada');assert.match(h,/Bruno Borge/);assert.match(h,/No disponible/);assert.match(h,/lectura no disponible/);assert.doesNotMatch(h,/data-total-confirmar/);assert.equal(e.calls.length,0);
 });
+
+test('la propuesta de aumento distingue el alojamiento y el Jacuzzi de una reserva reprogramada',async()=>{
+ const reserva=r('r1','Ana Vega Rojas',2);
+ const estadia=reserva.estadias[0];
+ estadia.fecha_salida='2026-09-05';
+ estadia.noches=[{id:'hist',fecha:'2026-08-22',tarifa:160000},{id:'actual',fecha:'2026-09-04',tarifa:144000}];
+ const e=entorno([reserva]);
+ e.tablas.vista_saldos_alojamiento_reserva[0].total_alojamiento=144000;
+ const antiguo={cargo_id:'anulado',reserva_id:'r1',estadia_id:estadia.id,estadia_noche_id:'hist',tipo_cargo:'alojamiento',estado:'anulado'};
+ e.tablas.vista_estado_cargos.push(antiguo,
+  {cargo_id:'jacuzzi',reserva_id:'r1',tipo_cargo:'servicio',estado:'activo',servicio_id:'s1',monto_ajustado:30000});
+ const texto='Haku cambia el total de reserva Ana Vega Rojas cab 2 4 de septiembre 2026 a CLP$160.000';
+ const propuesta=await e.preparar(texto);
+ assert.equal(propuesta.estado,'propuesta',propuesta.mensaje);
+ const html=api.renderizar(propuesta);
+ for(const detalle of ['Alojamiento actual','Alojamiento propuesto','Servicios sin cambios','Total con servicios propuesto','190.000']){
+  assert.ok(html.includes(detalle),detalle);
+ }
+ assert.equal(e.calls.length,0);
+ antiguo.estado='activo';
+ assert.equal((await e.preparar(texto)).estado,'bloqueada');
+ assert.equal((await api.confirmar(propuesta)).estado,'bloqueada');
+ assert.equal(e.calls.length,0);
+});
