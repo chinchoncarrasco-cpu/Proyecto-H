@@ -204,7 +204,7 @@
             }
             .haiku-ajuste-historial > summary {
                 display:flex; justify-content:space-between; align-items:center; gap:10px;
-                min-height:38px; margin:0;
+                min-height:38px; margin:0; padding-inline-end:3px;
             }
             .haiku-ajuste-historial summary::after {
                 content:''; flex:none; width:6px; height:6px;
@@ -213,7 +213,7 @@
             .haiku-ajuste-historial details[open] > summary::after,
             .haiku-ajuste-historial[open] > summary::after { transform:rotate(225deg); }
             .haiku-ajuste-historial-fila {
-                display:grid; gap:7px; padding:9px 0 12px;
+                display:grid; grid-template-columns:minmax(0,1fr); gap:7px; padding:9px 0 12px;
                 border-top:1px solid var(--haku-compacto-borde, #dbe3de); overflow-wrap:anywhere;
             }
             .haiku-ajuste-historial-fila header {
@@ -239,7 +239,8 @@
                 display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:8px;
                 margin-top:9px;
             }
-            .haiku-ajuste-historial-campos input { margin-top:4px; }
+            .haiku-ajuste-historial-campos label { min-width:0; }
+            .haiku-ajuste-historial-campos input { display:block; min-width:0; max-width:100%; margin-top:4px; }
             .haiku-ajuste-historial-campos > button { grid-column:1 / -1; justify-self:start; }
             @media (max-width:480px) {
                 .haiku-ajuste-historial-campos { grid-template-columns:1fr; }

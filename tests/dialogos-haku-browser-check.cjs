@@ -148,7 +148,13 @@ const server = http.createServer((req, res) => {
             await historial.getByText('Corregir monto',{exact:true}).click();
             await historial.getByLabel('Nuevo monto en pesos').fill('16000');
             await historial.getByLabel('Motivo',{exact:true}).fill('Importe original confirmado');
-            assert.equal(await historial.evaluate(el => el.scrollWidth <= el.clientWidth),true);
+            const anchoHistorial = await historial.evaluate(el => {
+                const limite = el.getBoundingClientRect().right;
+                return {ancho:el.clientWidth, desplazamiento:el.scrollWidth,
+                    fuera:[...el.querySelectorAll('*')].map(n => [n.className,n.getBoundingClientRect().right - limite])
+                        .filter(([,exceso]) => exceso > 0.5)};
+            });
+            assert.ok(anchoHistorial.desplazamiento <= anchoHistorial.ancho, JSON.stringify({tema,width,...anchoHistorial}));
             await page.screenshot({path:path.join(out,`gestionar-ajustes-edicion-${tema}-${width}.png`)});
             await historial.getByRole('button',{name:'Revisar corrección',exact:true}).click();
             await page.locator('.hk-dialogo').getByRole('button',{name:'Corregir penalidad',exact:true}).click();
