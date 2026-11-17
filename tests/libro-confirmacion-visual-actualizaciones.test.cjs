@@ -66,6 +66,29 @@ test('guardado confirmado muestra cuatro reservas y sólo los campos enviados, e
     assert.equal(h.db.calls.length, 1); assert.equal(h.db.pagos.length, 0);
     assert.equal(h.v.out.querySelectorAll('input').filter(i => i.type === 'checkbox' && i.checked).length, 0);
 });
+test('los cambios detectados quedan plegados junto a las actualizaciones en el comprobante superior', async () => {
+    const h = await escenario();
+    await h.confirmar(h.plan);
+    h.plan.reciboCambiosDetectados = [
+        {titular:'Persona ficticia', cabana:'CAB 2', descripcion:'Incorporar servicio · Tinaja · 19:15', estado:'Incorporado'}
+    ];
+    const actual = await h.continuar();
+    const recibo = h.v.receipt();
+    const detalle = recibo.querySelector('.haku-incorporacion-final-detalle');
+    const grupos = detalle.children.filter(el => el.tag === 'details');
+    assert.deepEqual(grupos.map(el => el.dataset.categoria), ['actualizaciones','cambios']);
+    assert.equal(grupos[1].open, false);
+    const fila = grupos[1].querySelector('.haku-incorporacion-final-item');
+    assert.equal(fila.querySelector('p').textContent, 'CAB 2 · Incorporar servicio · Tinaja · 19:15');
+    assert.equal(fila.querySelector('.haku-incorporacion-final-estado').textContent, 'Incorporado');
+    assert.ok(h.v.out.children.indexOf(recibo) < h.v.out.children.indexOf(h.v.out.querySelector('.haku-incorporacion-sites-cabecera')));
+    await h.continuar(actual);
+    assert.equal(h.v.out.querySelectorAll('details').filter(el => el.dataset.categoria === 'cambios').length, 1);
+    h.v.Q.renderizarResultadoIncorporacion(h.v.out, {resultado:{ok:true}, cambiosDetectados:h.plan.reciboCambiosDetectados}, () => {});
+    assert.equal(h.v.out.querySelectorAll('.haku-incorporacion-final-detalle').length, 1);
+    assert.equal(h.v.out.querySelectorAll('details').find(el => el.dataset.categoria === 'cambios').open, false);
+});
+
 test('detalle usa antes/después exactos del envío, nunca una etiqueta o comparación posterior', async () => {
     const h = await escenario(), guardado = await h.confirmar(h.plan);
     h.f.reservas[0].titular = 'Persona Ficticia Otra Comparación'; h.plan.items.forEach(i => { i.texto = 'Etiqueta posterior ficticia'; });
