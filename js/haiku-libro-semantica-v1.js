@@ -526,6 +526,63 @@
         if (/^\d{1,3}([.,]\d{3})+$/.test(t)) t = t.replace(/[.,]/g, "");
         return /^\d+$/.test(t) ? Number(t) : null;
     }
+    function segmentosConceptoPago(texto) {
+        return separarCampos(texto).flatMap(parte => parte.split(/\s*(?:[+;&]|\s[-–—]\s)\s*/))
+            .map(parte => parte.trim()).filter(Boolean);
+    }
+    function importeConceptoPago(parte) {
+        const match = parte.match(/^(.+?)\s*[:=]?\s*\$\s*(\d+(?:[.,]\d{3})*)$/);
+        return match ? { concepto: match[1].trim(), monto: monto(match[2]) } : null;
+    }
+    function interpretarConceptoPago(valor, detalle) {
+        const concepto = normalizar(valor);
+        if (!concepto || /\b(?:penalidad|reembolso|devolucion|nota de credito)\b/.test(concepto)) return null;
+        const partes = segmentosConceptoPago(valor);
+        const esCabana = texto => /^cab(?:ana)?[.\s]*[1-9]\d*$/.test(texto);
+        const esOcupacion = texto => /^[1-9]\d*\s*(?:adl|adlt|adult[oa]s?|pax|personas?|nin[oa]s?|chld|mascotas?)$/.test(texto);
+        const esNoche = texto => /^[1-9]\d*\s*noches?$/.test(texto);
+        const esAlojamiento = texto => /^(?:alojamiento|arriendo|(?:abono|anticipo)\s+(?:(?:de|para)(?:\s+(?:la|el))?\s+)?(?:reserva|alojamiento))$/.test(texto);
+        const esFullDay = texto => /^full\s*day$/.test(texto);
+        const esPromo = texto => /^promo\s+(?:haiku|haku)$/.test(texto);
+        const etiquetas = partes.map(parte => normalizar(importeConceptoPago(parte)?.concepto || parte));
+        const cantidadesNoches = new Set(etiquetas.filter(esNoche).map(etiqueta => Number.parseInt(etiqueta, 10)));
+        if (cantidadesNoches.size > 1)
+            return { tipo: 'otro', motivo: 'El concepto indica cantidades de noches contradictorias. Verifica a qué corresponde el comprobante.' };
+        const alojamiento = etiquetas.some(etiqueta => esNoche(etiqueta) || esAlojamiento(etiqueta));
+        const fullDay = etiquetas.some(esFullDay);
+        const promo = /\bpromo(?:cion)?\b/.test(concepto);
+        const esServicio = texto => conceptosDeServicio(texto).length || /\b(?:lena|carbon|desayunos?|queque|pan|huevos?)\b|\bearly[\s-]*(?:check[\s-]*)?in\b/.test(texto);
+        const servicio = etiquetas.some(esServicio);
+        const tieneEstadia = alojamiento || fullDay || /\b(?:alojamiento|arriendo|[1-9]\d*\s*noches?|full\s*day)\b/.test(concepto);
+        if (servicio && (tieneEstadia || promo)) {
+            const leerImportes = (fragmentos, origen) => fragmentos.flatMap(fragmento => {
+                const importe = importeConceptoPago(fragmento);
+                const etiqueta = normalizar(importe?.concepto);
+                const tipo = esNoche(etiqueta) || esAlojamiento(etiqueta) ? 'alojamiento' : esServicio(etiqueta) ? 'servicio' : null;
+                return importe && tipo && Number.isSafeInteger(importe.monto) && importe.monto > 0 ?
+                    [{ ...importe, tipo_movimiento: tipo, evidencia_importe: origen }] : [];
+            });
+            const importesConcepto = leerImportes(partes, 'concepto');
+            const importesDetalle = leerImportes(segmentosConceptoPago(detalle), 'detalle');
+            const firma = importes => importes.map(parte => [parte.tipo_movimiento === 'alojamiento' ? 'alojamiento' : normalizar(parte.concepto),
+                parte.monto].join(':')).sort().join('|');
+            const conflicto = importesConcepto.length && importesDetalle.length && firma(importesConcepto) !== firma(importesDetalle);
+            return { tipo: 'mixto', aplicaciones: importesConcepto.length ? importesConcepto :
+                importesDetalle, servicios: etiquetas.filter(esServicio), conflicto_desglose: Boolean(conflicto),
+                desglose_comprobable: alojamiento && !fullDay && !promo && etiquetas.every(etiqueta =>
+                    esCabana(etiqueta) || esOcupacion(etiqueta) || esNoche(etiqueta) || esAlojamiento(etiqueta) || esServicio(etiqueta)) };
+        }
+        if (promo && (!alojamiento || fullDay || !etiquetas.every(etiqueta =>
+            esPromo(etiqueta) || esCabana(etiqueta) || esOcupacion(etiqueta) || esNoche(etiqueta) || esAlojamiento(etiqueta)))) {
+            return { tipo: 'otro', motivo: 'La mención de una promoción no identifica el cargo. Comprueba el concepto y el destino del comprobante.' };
+        }
+        if (alojamiento && (promo || !etiquetas.some(esCabana) && !/^(?:alojamiento|arriendo)\b/.test(concepto)) && etiquetas.every(etiqueta =>
+            esPromo(etiqueta) || esOcupacion(etiqueta) || esNoche(etiqueta) || esAlojamiento(etiqueta) || esCabana(etiqueta))) {
+            return { tipo: 'alojamiento', requiere_verificacion: true, promo };
+        }
+        if (!tieneEstadia && servicio && etiquetas.some(esCabana)) return { tipo: 'servicio' };
+        return null;
+    }
     function evidenciaCobroServicio(t) {
         return /\b(?:x|por)\s+(?:cobrar|pagar)\b|\bpendiente\s+(?:(?:de|por)\s+)?(?:pago|pagar|cobro|cobrar)\b|\b(?:pago|cobro)\s+pendiente\b|\bpagad[oa]s?\b|\bcobrarle\b/.test(t);
     }
@@ -1549,7 +1606,9 @@
                         continue;
                     }
                     const ref = re => text.match(re)?.[1]?.trim() || null;
-                    const kind = /penalidad/.test(t) ? "penalidad" : (/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro";
+                    const conceptoPago = interpretarConceptoPago(concept?.valor, detail?.valor);
+                    const kind = /penalidad/.test(t) ? "penalidad" : conceptoPago?.tipo ||
+                        ((/^(cab\s*\d|alojamiento|arriendo)/.test(c) || /^full\s*day$/.test(c)) ? "alojamiento" : servicios(concept?.valor, { origen_campo: "servicios" }).length || /masaj|lena|carbon|desayuno|\b(?:queque|pan|huevos)\b/.test(c) ? "servicio" : "otro");
                     const pending = /web\s*pay.{0,25}(?:por|x)\s*confirmar/.test(t) ? "por_confirmar" : /(?:por|x) pagar|saldo pendiente/.test(t) ? "pendiente" : "registrado_en_libro";
                     const valorOriginal = amount?.valorNumero ?? amount?.valor;
                     const money = monto(valorOriginal);
@@ -1564,6 +1623,8 @@
                         advertencias.push(`La celda ${direccion(dato.r,dato.c)} del Libro contiene ${dato.errorExcel}. Corrige ese dato antes de incorporar el pago.`);
                     if (!mark) advertencias.push('El bloque del Check-In conserva su estructura, pero falta el encabezado de pagos; requiere revisión.');
                     if (!mark && cabanaConcepto && cabanaConcepto !== cabana) advertencias.push(`El concepto del Libro indica CAB ${cabanaConcepto}, mientras la estadía y el bloque corresponden a CAB ${cabana}.`);
+                    if (mark && conceptoPago && [...c.matchAll(/\bcab(?:ana)?[.\s]*(\d+)\b/g)].some(match => Number(match[1]) !== cabana))
+                        advertencias.push(`La cabaña indicada en el concepto no coincide con CAB ${cabana}. Verifica el comprobante.`);
                     const fechaComprobante = fechaComprobanteDeFila(fechaCelda,
                         advertencias.length || (cabanaConcepto && cabanaConcepto !== cabana) ? null : reservaDelBloque);
                     if (fechaComprobante.fecha_comprobante_variable)
@@ -1572,13 +1633,17 @@
                         monto: money, moneda: "CLP", medio_pago: /\bairbnb\s+prepaid\s+card\b/.test(t) ? "airbnb_prepaid_card" : /web\s*pay/.test(t) ? "webpay" : /transf/.test(t) ? "transferencia" : /debito/.test(t) ? "debito" : /\b(?:credito|tdc)\b/.test(t) ? "credito" : /efectivo/.test(t) ? "efectivo" : null,
                         ...(reembolso ? { monto_referencial:-Number(reembolso[1].replace(/[.,]/g,'')) } : {}),
                         ...(ventaSinReserva ? { venta_sin_reserva:true } : {}),
-                        codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) || ref(/(?:cod\.?\s*aut\.?|aut)\s*:?\s*([\w]+)/i), folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
+                        codigo_autorizacion: ref(/\bcod\.?\s*aout\.?\s*:?\s*(\d+)\b/i) ||
+                            ref(/\b(?:c[oó]d(?:igo)?\.?\s*(?:de\s+)?autorizaci[oó]n|autorizaci[oó]n|cod\.?\s*aut\.?|aut\.?)\s*:?\s*([\w]*\d[\w]*)\b/i) ||
+                            ref(/\bcod\.?\s*aut\.?(?:\s*:\s*|\s+)([a-z_]+)\b/i),
+                        folio: ref(/folio\s*:?\s*(\d+)/i), bovtar: ref(/bovtar\s*:?\s*(\d+)/i),
                         bove: ref(/\bbove\b\s*:?\s*([\d.,]+)/i)?.replace(/[.,]/g, "") || null,
                         bove_pendiente: /pend[^/]{0,35}bove/.test(t), manager_pendiente: /pend[^/]{0,45}manage{1,2}r/.test(t),
                         penalidad_porcentaje: /penalidad/.test(t) ? Number(t.match(/(\d+)\s*%/)?.[1]) || null : null,
                         monto_penalidad: /penalidad/.test(t) ? monto(t.match(/([\d.,]+)\s+de penalidad/)?.[1]) : null,
                         saldo_por_pagar: monto(t.match(/por pagar\s*\$\s*([\d.,]+)/)?.[1]),
-                        concepto: concept?.valor || null, tipo_movimiento: /early\s*(check\s*)?in/.test(c) ? 'servicio' : kind, estado_pago: pending,
+                        concepto: concept?.valor || null, tipo_movimiento: conceptoPago ? kind : /early\s*(check\s*)?in/.test(c) ? 'servicio' : kind, estado_pago: pending,
+                        ...(conceptoPago && kind !== 'penalidad' ? { concepto_pago: conceptoPago } : {}),
                         ...(advertencias.length ? { advertencias } : {}),
                         pago_recibido: money !== null && pending === "registrado_en_libro" && kind !== "penalidad" ? true : null,
                         evidencia_financiera: {
@@ -1959,7 +2024,7 @@
         return texto&&/^srv:/.test(item_id||'')?{texto,item_id}:null;
     }
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
-        servicios, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        servicios, interpretarConceptoPago, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);

@@ -254,6 +254,7 @@
         }
         const evidenciaMovimiento = importePropio || importeTextual || identificadorFuerte || ingresoExplicito || medioValido && !textoDocumental;
         if (!evidenciaMovimiento) return {clase:"nota_financiera"};
+        if (pago.concepto_pago?.motivo) return dudoso(pago.concepto_pago.motivo);
         const estructuraCoherente = pago.evidencia_financiera?.sector === "pagos" && !!fila?.detalle && !!fila?.concepto;
         const reembolso = /\b(?:reembolso|reembolsar|devolucion|nota\s+de\s+credito)\b|\bnc\s*\d+\b/.test(texto);
         const obligacion = /\bpenalidad\b|\b(?:por|x)\s+pagar\b|\bsaldo\s+(?:restante|pendiente)\b|\bpor\s+gestionar\b/.test(texto);

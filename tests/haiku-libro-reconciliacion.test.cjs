@@ -2503,10 +2503,11 @@ test('la aprobación mensual explica la asociación pendiente y muestra el año 
  assert.equal(operacion.reserva_id,'r1');
 });
 
-function escenarioPagoDeBloque({monto=72000, fecha='2026-10-30', fechaVisible, titularComprobante='', otraLinea='', saldo=72000, extras=[], pagos=[]}={}) {
+function escenarioPagoDeBloque({concepto='CAB 10/1 noche', monto=72000, fecha='2026-10-30', fechaVisible,
+ titularComprobante='', otraLinea='', saldo=72000, extras=[], pagos=[]}={}) {
  const F=require('./fixtures/libro-transferencias-bancarias.cjs');
  const {reservas:[r]}=F.leer([{titular:'Marina Ejemplo',rut:'11111111-1',pagos:[{
-  glosa:`${titularComprobante}Débito // Folio: 001211 // BOVTAR: 003222${otraLinea}`,concepto:'CAB 10/1 noche',monto,fecha,fechaVisible
+  glosa:`${titularComprobante}Débito // Folio: 001211 // BOVTAR: 003222${otraLinea}`,concepto,monto,fecha,fechaVisible
  }]}]);
  const s=stay(r);
  const cargos=[{cargo_id:'cargo-ficticio',reserva_id:s.reserva_id,estadia_id:s.id,tipo_cargo:'alojamiento',
@@ -2517,8 +2518,10 @@ function escenarioPagoDeBloque({monto=72000, fecha='2026-10-30', fechaVisible, t
  return {r,s,cargos,db,q,comparar};
 }
 
-for (const monto of [72000,36000]) test(`un débito sin titular se prepara por CAB/fecha con saldo ajustado, importe ${monto}`,async()=>{
- const h=escenarioPagoDeBloque({monto}),comparacion=await h.comparar();
+for (const [concepto,monto] of [
+ ['CAB 10/1 noche',72000],['CAB 10/1 noche',36000],['CAB10/2noches',36000],['Alojamiento',36000],['Arriendo',36000]
+]) test(`un débito sin titular se prepara por CAB/fecha con saldo ajustado: «${concepto}», importe ${monto}`,async()=>{
+ const h=escenarioPagoDeBloque({concepto,monto}),comparacion=await h.comparar();
  assert.equal(h.r.pagos.length,0);
  assert.equal(h.r.pagos_sin_asociacion.length,1);
  assert.equal(h.r.pagos_sin_asociacion[0].titular,null);
@@ -2558,6 +2561,208 @@ test('un nombre parecido conserva la revisión si el voucher identifica otra res
  const sinSaldo=await excede.comparar();
  assert.equal(sinSaldo.pagosDetalle[0].estado,'revisar');
  assert.match(sinSaldo.pagosDetalle[0].resolucionPago.motivos.join(' '),/superan el saldo/);
+});
+
+function escenarioConceptoComprobante({concepto='2adl/1noche', titular='Marina', detalle='', autorizacion='Autorización: 746301', medio='Débito',
+    monto=144000, saldo=160000, saldoServicio=30000, otroTitular, otraTinaja=false, registrado=false, duplicado=false,
+    clase='alojamiento', cargarDestinos=true}={}) {
+    const F = require('./fixtures/libro-transferencias-bancarias.cjs');
+    const glosa = `${titular ? `${titular} // ` : ''}${medio} // Folio: 006021${autorizacion ? ` // ${autorizacion}` : ''}${detalle ? ` // ${detalle}` : ''}`;
+    const pago = { concepto, glosa, monto, fecha:'2026-10-30' };
+    const {reservas:[reserva]} = F.leer([{titular:'Marina Ejemplo',rut:'11111111-1',pagos:duplicado ? [pago,pago] : [pago]}]);
+    reserva.tipo_estadia = clase;
+    const estadia = stay(reserva), reservas = [reserva], estadias = [estadia];
+    if (otroTitular) {
+        const otra = {...reserva, id:'otra', cabana:11, titular:otroTitular, rut_documento:'22222222-2', pagos:[], pagos_sin_asociacion:[]};
+        reservas.push(otra);
+        estadias.push(stay(otra,{reserva_id:'otra'}));
+    }
+    const base = {reserva_id:estadia.reserva_id,estadia_id:estadia.id,estado:'activo'};
+    const servicio = {id:'tinaja-1',reserva_id:estadia.reserva_id,estadia_id:estadia.id,fecha_servicio:reserva.fecha_checkin,
+        total:30000,tipo_cobro:'normal',estado_servicio:'confirmado',catalogo_servicios:{codigo:'tinajaJacuzzi',nombre:'Tinaja Jacuzzi'}};
+    const cargoTinaja = {...base,cargo_id:'cargo-tinaja-1',servicio_id:servicio.id,tipo_cargo:'servicio',concepto:'Tinaja Jacuzzi',
+        monto:30000,monto_ajustado:30000,saldo_cargo:saldoServicio};
+    const cargos = [{...base,cargo_id:'cargo-alojamiento',tipo_cargo:'alojamiento',monto:160000,monto_ajustado:160000,saldo_cargo:saldo},cargoTinaja];
+    const servicios = [servicio];
+    if (otraTinaja) {
+        servicios.push({...servicio,id:'tinaja-2'});
+        cargos.push({...cargoTinaja,cargo_id:'cargo-tinaja-2',servicio_id:'tinaja-2',saldo_cargo:29000});
+    }
+    const pagos = registrado ? [{id:'recibo-registrado',reserva_id:estadia.reserva_id,estado:'confirmado',moneda:'CLP',monto,
+        medio_pago:'tarjeta_debito',fecha_pago:pago.fecha,folio:'006021',codigo_autorizacion:'746301',tipo_movimiento:'pago',
+        ...(registrado === true ? {} : registrado)}] : [];
+    const db = client(estadias,pagos,{vista_estado_cargos:cargos,servicios});
+    db.rpc = async nombre => {
+        assert.match(nombre,/capacidad/,`La prueba no autoriza escrituras: ${nombre}`);
+        return {data:null};
+    };
+    const consulta = {desde:'2026-10-01',hasta:'2026-10-31'};
+    const {Q:motor} = renderHarness(null,db,{pagosDestinos:cargarDestinos ? require('../js/haiku-libro-pagos-destinos-v1.js') : null});
+    return {reserva,cargos,async preparar(comparacionAnterior, aprobados = new Set()) {
+        const comparacion = comparacionAnterior || await motor.compararSistema(reservas,db,consulta);
+        const plan = await motor.prepararIncorporacion({reservas,q:consulta,comparacion},new Map(),aprobados,db);
+        return {comparacion,plan,operaciones:motor.serializarIncorporacion(plan)};
+    }};
+}
+
+const formatosAlojamientoConVerificacion = [
+    '2adl/1noche','2 ADL / 1 noche','2 pax - 1 noche','Abono de reserva','Anticipo alojamiento','Promo Haiku / 2 ADL / 1 noche'
+];
+for (const concepto of formatosAlojamientoConVerificacion) {
+    test(`Concepto «${concepto}» prepara el débito como abono, con su comprobante y saldo`, async () => {
+        const h = escenarioConceptoComprobante({concepto}), {comparacion,operaciones} = await h.preparar();
+        const [pago] = h.reserva.pagos_sin_asociacion;
+        assert.equal(pago.concepto,concepto);
+        assert.equal(pago.tipo_movimiento,'alojamiento');
+        assert.equal(pago.titular,'Marina');
+        assert.equal(pago.codigo_autorizacion,'746301');
+        assert.equal(pago.bovtar,null);
+        assert.equal(Boolean(h.reserva.promocion),false);
+        assert.equal(comparacion.pagosDetalle[0].resolucionPago.verificacionBloque.saldo,160000);
+        const pagos = operaciones.filter(item => item.tipo === 'pago');
+        assert.equal(pagos.length,1);
+        assert.ok(operaciones.every(item => ['pago','reserva_actualizar'].includes(item.tipo)));
+        const [operacion] = pagos;
+        assert.equal(operacion.reserva_id,'r1');
+        assert.equal(operacion.argumentos.p_etapa_operativa,'abono');
+        assert.equal(operacion.argumentos.p_modo_aplicacion,'alojamiento');
+        assert.equal(operacion.argumentos.p_monto,144000);
+        assert.equal(operacion.argumentos.p_codigo_autorizacion,'746301');
+    });
+}
+
+for (const concepto of formatosAlojamientoConVerificacion) {
+    test(`un débito sin titular con Folio y BOVTAR se prepara al verificar CAB y fecha: «${concepto}»`,async()=>{
+        const h = escenarioPagoDeBloque({concepto}), comparacion = await h.comparar();
+        const [pago] = h.r.pagos_sin_asociacion;
+        assert.equal(pago.titular,null);
+        assert.equal(pago.folio,'001211');
+        assert.equal(pago.bovtar,'003222');
+        assert.equal(comparacion.pagosDetalle[0].estado,'nuevo_seguro');
+        assert.equal(comparacion.pagosDetalle[0].resolucionPago.evidencia,'bloque_alojamiento_verificado');
+        const plan = await Q.prepararIncorporacion({reservas:[h.r],q:h.q,comparacion},new Map(),new Set(),h.db);
+        const item = plan.items.find(i=>i.pagoLibro);
+        assert.equal(item.categoria,'pagos');
+        assert.ok(item.seleccionado);
+        assert.equal(Q.serializarIncorporacion(plan).find(i=>i.tipo==='pago')?.reserva_id,h.s.reserva_id);
+        assert.ok(!h.db.calls.includes('haiku_incorporar_libro_v1'));
+    });
+}
+
+for (const [caso,opciones,motivo] of [
+    ['otra reserva compatible',{otroTitular:'Marina Alternativa'},/coincide con otra reserva/],
+    ['saldo insuficiente aun con titular exacto',{saldo:143999,titular:'Marina Ejemplo'},/superan el saldo/],
+    ['comprobante sin autorización',{autorizacion:''},/identificador/],
+    ['el importe coincide con el saldo pero falta el identificador',{titular:'',autorizacion:'',monto:160000},/identificador/],
+    ['noches en una reserva Full Day',{clase:'full_day'},/Full Day/],
+    ['dos cantidades distintas de noches',{concepto:'1 noche / 2 noches'},/noches contradictorias/],
+    ['una promo sin concepto de alojamiento',{concepto:'CAB10/promo'},/promoción no identifica el cargo/]
+]) test(`El comprobante conserva la revisión: ${caso}`,async()=>{
+    const h = escenarioConceptoComprobante(opciones), {plan,operaciones} = await h.preparar();
+    const item = plan.items.find(item => item.pagoLibro);
+    assert.equal(item.categoria,'dudosos');
+    assert.equal(item.aprobable,false);
+    assert.equal(item.payload,null);
+    assert.match(item.motivos.join(' '),motivo);
+    assert.ok(!operaciones.some(item => item.tipo === 'pago'));
+});
+
+test('WebPay sin titular usa CAB y fecha o reconoce el abono ya confirmado en Proyecto H', async () => {
+    const base = {titular:'', medio:'WebPay débito', autorizacion:'CodAut: 746301'};
+    const {plan, operaciones} = await escenarioConceptoComprobante(base).preparar();
+    assert.equal(plan.items.find(i=>i.pagoLibro)?.categoria,'pagos');
+    assert.equal(operaciones.find(i=>i.tipo==='pago')?.argumentos.p_medio_pago,'webpay_debito');
+    const confirmado = await escenarioConceptoComprobante({...base, medio:'WebPay débito por confirmar',
+        registrado:{medio_pago:'webpay_debito',folio:null}}).preparar();
+    assert.equal(confirmado.comparacion.pagosDetalle[0].estado,'en_sistema');
+    assert.equal(confirmado.plan.items.find(i=>i.pagoLibro)?.categoria,'omitidos');
+    assert.ok(!confirmado.operaciones.some(i=>i.tipo==='pago'));
+    const pendiente = await escenarioConceptoComprobante({...base, medio:'WebPay débito por confirmar'}).preparar();
+    assert.ok(!pendiente.operaciones.some(i=>i.tipo==='pago'));
+    assert.equal(pendiente.plan.items.find(i=>i.pagoLibro)?.categoria,'dudosos');
+});
+
+test('El mismo comprobante en el Libro o ya guardado no genera un segundo abono',async()=>{
+    for (const opciones of [{duplicado:true},{registrado:true}]) {
+        const {plan,operaciones} = await escenarioConceptoComprobante(opciones).preparar();
+        assert.ok(plan.items.some(item => item.pagoLibro));
+        assert.ok(!operaciones.some(item => item.tipo === 'pago'));
+    }
+});
+
+test('Un comprobante físico ya registrado con identificadores históricos queda en revisión', async () => {
+    for (const [origen, registrado] of [
+        ['bove', {codigo_autorizacion:null, bove:'746301'}],
+        ['autorización en datos de origen', {codigo_autorizacion:null, datos_origen:{autorizacion:'746301'}}],
+        ['BOVTAR con el mismo folio, fecha e importe', {codigo_autorizacion:null, bove:'003222'}]
+    ]) {
+        const {plan, operaciones} = await escenarioConceptoComprobante({registrado}).preparar();
+        const item = plan.items.find(item => item.pagoLibro);
+        assert.equal(item.categoria, 'dudosos', origen);
+        assert.match(item.motivos.join(' '), /otro comprobante o pago compatible/, origen);
+        assert.equal(operaciones.some(item => item.tipo === 'pago'), false, origen);
+    }
+    const otroPago = {folio:'009999', codigo_autorizacion:null, bove:'003222'};
+    const {operaciones} = await escenarioConceptoComprobante({registrado:otroPago}).preparar();
+    assert.equal(operaciones.filter(item => item.tipo === 'pago').length, 1);
+});
+
+test('Noches con niños, mascotas o ADLT preparan alojamiento con comprobante y saldo', async () => {
+    for (const concepto of ['2 adultos // 1 niño // 2 noches', '2 ADL / 1 mascota / 1 noche', '2 adlt / 1 noche']) {
+        const {operaciones} = await escenarioConceptoComprobante({concepto}).preparar();
+        assert.equal(operaciones.find(item => item.tipo === 'pago')?.argumentos.p_modo_aplicacion, 'alojamiento', concepto);
+    }
+});
+
+test('El lector conserva un CodAut explícito compuesto sólo por letras', () => {
+    const {leer} = require('./fixtures/libro-transferencias-bancarias.cjs');
+    const resultado = leer([{titular:'Marina Ejemplo',pagos:[{concepto:'CAB10/1noche', monto:40000,
+        glosa:'Marina Ejemplo // WebPay Débito // CodAut: ABCDEF'}]}]);
+    assert.equal(resultado.pagos[0]?.codigo_autorizacion, 'ABCDEF');
+});
+
+test('Un concepto indeterminado queda en revisión con un mensaje sobre su destino', async () => {
+    const {plan, operaciones} = await escenarioConceptoComprobante({concepto:'2adl'}).preparar();
+    const item = plan.items.find(item => item.pagoLibro);
+    assert.equal(item.categoria, 'dudosos');
+    assert.match(item.motivos.join(' '), /no identifica a qué cargo/);
+    assert.doesNotMatch(item.motivos.join(' '), /pago de servicio/);
+    assert.equal(operaciones.some(item => item.tipo === 'pago'), false);
+});
+
+test('La preparación revalida el saldo de alojamiento antes de producir el abono',async()=>{
+    const h = escenarioConceptoComprobante(), {comparacion} = await h.preparar();
+    h.cargos[0].saldo_cargo = 143999;
+    const {operaciones} = await h.preparar(comparacion);
+    assert.ok(!operaciones.some(item => item.tipo === 'pago'));
+});
+
+for (const [caso,opciones,motivo] of [
+    ['sin reparto',{concepto:'CAB 10 / 1 noche / tinaja'},/Falta el desglose/],
+    ['con reparto',{concepto:'CAB 10 / 1 noche / tinaja',detalle:'Alojamiento: $120.000 + Tinaja: $24.000'},/Desglose y saldos comprobados/],
+    ['desgloses contradictorios',{concepto:'CAB 10 / 1 noche $120.000 / Tinaja $24.000',detalle:'Alojamiento: $125.000 + Tinaja: $19.000'},/se contradicen/],
+    ['importes que no suman el total',{concepto:'CAB 10 / 1 noche $120.000 / Tinaja $20.000'},/no coinciden con el total/],
+    ['importe superior al saldo del servicio',{concepto:'CAB 10 / 1 noche $120.000 / Tinaja $24.000',saldoServicio:23000},/excede el saldo/],
+    ['dos servicios compatibles aunque sólo uno iguale el importe',{concepto:'CAB 10 / 1 noche $114.000 / Tinaja $30.000',otraTinaja:true},/más de un cargo compatible/],
+    ['desglose menciona un servicio distinto',{concepto:'CAB 10 / 1 noche / tinaja',detalle:'Alojamiento: $120.000 + Masaje: $24.000'},/cada servicio mencionado/]
+]) test(`Un comprobante mixto queda en revisión: ${caso}`,async()=>{
+    const h = escenarioConceptoComprobante({titular:'Marina Ejemplo',...opciones}), {plan,operaciones} = await h.preparar();
+    const item = plan.items.find(item => item.pagoLibro);
+    assert.equal(item.pagoLibro.tipo_movimiento,'mixto');
+    assert.equal(item.aprobable,false);
+    assert.match(item.motivos.join(' '),motivo);
+    assert.ok(!operaciones.some(item => item.tipo === 'pago'));
+    if (caso === 'con reparto') assert.deepEqual(Array.from(item.destinoFinanciero.aplicaciones,parte => [parte.cargo_id,parte.monto]),
+        [['cargo-alojamiento',120000],['cargo-tinaja-1',24000]]);
+});
+
+test('Un mixto queda en revisión si no está disponible el verificador de destinos',async()=>{
+    const h = escenarioConceptoComprobante({titular:'Marina Ejemplo',concepto:'CAB 10 / 1 noche / tinaja',cargarDestinos:false});
+    const {plan,operaciones} = await h.preparar();
+    const item = plan.items.find(item => item.pagoLibro);
+    assert.equal(item.aprobable,false);
+    assert.match(item.motivos.join(' '),/comprobar el desglose/);
+    assert.ok(!operaciones.some(item => item.tipo === 'pago'));
 });
 
 test('el nombre invertido o junto conserva un solo comprobante de masajes y tinaja',async()=>{
@@ -2683,8 +2888,8 @@ for (const caso of [
  assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));
 });
 
-test('el bloque requiere una reserva única y comprueba juntos los pagos recibidos',async()=>{
- const h=escenarioPagoDeBloque({monto:40000});
+for (const concepto of ['CAB 10/1 noche','2adl/1noche']) test(`el bloque requiere una reserva única y comprueba juntos los pagos recibidos: «${concepto}»`,async()=>{
+ const h=escenarioPagoDeBloque({concepto,monto:40000});
  const otra={...h.r,id:'segunda',titular:'Alba Ejemplo',rut_documento:'22222222-2',pagos_sin_asociacion:[]};
  const ambiguo=await Q.compararSistema([h.r,otra],h.db,h.q);
  assert.equal(ambiguo.pagosDetalle[0].estado,'revisar');

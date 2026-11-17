@@ -27,6 +27,12 @@
         return null;
     }
 
+    function esPagoMixto(pago) {
+        return pago?.tipo_movimiento === 'mixto' || pago?.concepto_pago?.tipo === 'mixto' || pago?.transaccion_distribuida === true &&
+            pago.aplicaciones_libro?.some(aplicacion => ['alojamiento','mixto'].includes(aplicacion.tipo_movimiento)) &&
+            pago.aplicaciones_libro?.some(aplicacion => aplicacion.tipo_movimiento !== 'alojamiento');
+    }
+
     function aplicacionesLibro(pago) {
         if (!pago || typeof pago !== "object") return [];
         if (pago.clasificacion_financiera === "nota_financiera" || pago.conflicto_distribucion) return [];
@@ -206,7 +212,62 @@
                 : "Destino financiero único y saldo exacto." };
     }
 
+    function conceptoServicioMixto(valor) {
+        const texto = normalizar(valor).replace(/^1 /,'');
+        if (!/^(?:tinajas?(?: (?:jacuzzi|tonel))?|jacuzzi|tonel|masajes?|lena|cama adicional|cuna|queque|pan|huevos?|late(?: (?:check )?out|out)|early(?: (?:check )?in|in))$/.test(texto)) return null;
+        return conceptoCanon(texto);
+    }
+
+    function resolverPagoMixto(pago, reservaId, snapshot, estadiaId, asociado) {
+        const revision = (motivo, aplicaciones = []) => ({ estado: 'revision', mixto: true, resoluble: false,
+            aplicaciones, aplicaciones_payload: [], motivo });
+        if (pago.conflicto_distribucion) return revision(pago.conflicto_distribucion);
+        const concepto = pago.concepto_pago;
+        if (concepto?.conflicto_desglose) return revision('Los importes por concepto del Detalle y del Concepto se contradicen. Verifica el comprobante original.');
+        const componentes = pago.transaccion_distribuida ? aplicacionesLibro(pago) : concepto?.aplicaciones || [];
+        if (!componentes.some(parte => parte.tipo_movimiento === 'alojamiento') ||
+            !componentes.some(parte => parte.tipo_movimiento === 'servicio') ||
+            (pago.transaccion_distribuida ? !pago.total_declarado : !concepto?.desglose_comprobable)) {
+            return revision('Falta el desglose del comprobante: indica qué importe corresponde a alojamiento y a cada servicio.');
+        }
+        if (!componentes.every(parte => ['alojamiento','servicio'].includes(parte.tipo_movimiento) &&
+            Number.isSafeInteger(parte.monto) && parte.monto > 0) || componentes.reduce((suma, parte) => suma + parte.monto, 0) !== pago.monto) {
+            return revision('Los importes del desglose no coinciden con el total del comprobante.');
+        }
+        const servicios = componentes.filter(parte => parte.tipo_movimiento === 'servicio').map(parte => conceptoServicioMixto(parte.concepto));
+        if (servicios.includes(null) || (!pago.transaccion_distribuida &&
+            [...servicios].sort().join('|') !== concepto.servicios.map(conceptoServicioMixto).sort().join('|'))) {
+            return revision('Falta identificar en el desglose cada servicio mencionado en Concepto y su importe.');
+        }
+        if (!asociado || !reservaId || !estadiaId || pago.advertencias?.length) return revision('Falta comprobar la reserva y la estadía de este comprobante mixto.');
+        if (pago.clasificacion_financiera !== 'pago_real' || pago.pago_recibido !== true || pago.webpay_por_confirmar ||
+            !(pago.codigo_autorizacion || pago.folio && pago.bovtar)) return revision('Falta confirmar la recepción y el identificador del comprobante mixto.');
+        if (!snapshot?.disponible) return revision('Falta consultar los cargos y saldos de la estadía.');
+        const alojamiento = (snapshot.cargos || []).filter(cargo => cargo.reserva_id === reservaId && cargo.estadia_id === estadiaId &&
+            cargo.tipo_cargo === 'alojamiento' && cargo.estado === 'activo');
+        const cargosServicio = enriquecerCargos(snapshot, reservaId).filter(cargo => cargo.estadia_id === estadiaId && cargoAplicable(cargo));
+        const aplicaciones = componentes.map((parte, indice) => {
+            const canon = parte.tipo_movimiento === 'alojamiento' ? 'alojamiento' : conceptoServicioMixto(parte.concepto);
+            const candidatos = canon === 'alojamiento' ? alojamiento : cargosServicio.filter(cargo => cargo.concepto_canon === canon ||
+                (canon === 'tinaja' && ['tinaja_tonel','tinaja_jacuzzi'].includes(cargo.concepto_canon)));
+            const base = { ...parte, indice, concepto_canon: canon };
+            if (candidatos.length !== 1 || !candidatos[0].cargo_id) return { ...base, estado: 'revision', motivo: candidatos.length > 1 ?
+                'Hay más de un cargo compatible. Identifica el cargo en el comprobante; el importe no permite elegirlo.' :
+                'Falta un cargo de esta estadía compatible con el componente.' };
+            const cargo = candidatos[0], saldo = Number(cargo.saldo_cargo), total = Number(cargo.monto_ajustado ?? cargo.monto);
+            return Number.isSafeInteger(saldo) && Number.isSafeInteger(total) && saldo <= total && saldo >= parte.monto ?
+                { ...base, cargo, cargo_id: cargo.cargo_id, estado: 'destino_unico' } :
+                { ...base, cargo, estado: 'revision', motivo: 'El importe del componente excede el saldo comprobado de su cargo.' };
+        });
+        const cargosUsados = aplicaciones.map(parte => parte.cargo_id).filter(Boolean);
+        if (new Set(cargosUsados).size !== cargosUsados.length) return revision('Más de un componente señala el mismo cargo; comprueba el reparto.', aplicaciones);
+        return revision(aplicaciones.every(parte => parte.estado === 'destino_unico') ?
+            'Desglose y saldos comprobados. La incorporación protegida no admite todavía alojamiento y servicios en un mismo pago.' :
+            'Falta comprobar el cargo o el saldo de uno o más componentes.', aplicaciones);
+    }
+
     function resolverTransaccion(pago, reservaId, snapshot, pagoSistema = null, opciones = {}) {
+        if (esPagoMixto(pago)) return resolverPagoMixto(pago, reservaId, snapshot, opciones.estadiaId, opciones.asociado);
         if (!snapshot?.disponible) return { estado: "revision", resoluble: false, aplicaciones: [], motivo: snapshot?.error || "No fue posible leer el snapshot financiero." };
         if (!reservaId) return { estado: "revision", resoluble: false, aplicaciones: [], motivo: "La reserva destino no es inequívoca." };
         const aplicaciones = aplicacionesLibro(pago);
@@ -311,7 +372,7 @@
         };
     }
 
-    const api = Object.freeze({ conceptoCanon, aplicacionesLibro, leerSnapshot, resolverAplicacion, resolverTransaccion, proponerAmpliacionJacuzzi });
+    const api = Object.freeze({ conceptoCanon, esPagoMixto, aplicacionesLibro, leerSnapshot, resolverAplicacion, resolverTransaccion, proponerAmpliacionJacuzzi });
     root.HAIKU_LIBRO_PAGOS_DESTINOS_V1 = api;
     if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

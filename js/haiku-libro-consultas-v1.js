@@ -11,6 +11,7 @@
     }
     const S = root.HAIKU_LIBRO_SEMANTICA;
     const D = root.HAIKU_LIBRO_PAGOS_DESTINOS_V1;
+    const esPagoMixto = pago => pago?.tipo_movimiento === 'mixto' || pago?.concepto_pago?.tipo === 'mixto' || D?.esPagoMixto?.(pago);
     const tarifaFullDay = root.HAIKU_FULLDAY_TARIFA_V1 ||
         (typeof module !== "undefined" && module.exports ? require('./haiku-fullday-tarifa-v1.js') : null);
     if (!S) {
@@ -1940,6 +1941,8 @@
                 resolver(item,estados.AMBIGUO,null,'airbnb_liquidacion_pendiente',[AIRBNB_LIQUIDACION_PENDIENTE]);
             } else if (item.p.webpay_por_confirmar && medioLibro(item.p)?.startsWith('webpay_')) {
                 resolver(item,estados.AMBIGUO,null,'webpay_por_confirmar',[WEBPAY_PENDIENTE]);
+            } else if (item.p.concepto_pago?.requiere_verificacion) {
+                resolver(item,estados.AMBIGUO,null,'evidencia_insuficiente',['Falta comprobar el comprobante y el saldo de alojamiento de esta estadía.']);
             } else if (item.asociado && pagoTieneIdentificadorFuerte(item.p) && medioLibro(item.p) &&
                 item.p.clasificacion_financiera !== 'dudoso' && item.p.tipo_movimiento !== 'penalidad' &&
                 item.p.pago_recibido !== false && !/pendiente|por.confirmar|rechazad|anulad/.test(S.normalizar(item.p.estado_pago)) &&
@@ -1978,9 +1981,11 @@
                 !mismoBloque(r,s) || !mismasFechas(r,s) || r.tipo_estadia !== s.tipo_estadia ||
                 reservas.filter(x => mismoBloque(r,x)).length !== 1 ||
                 estadias.filter(x => mismoBloque(r,x) && candidatoElegible(x)).length !== 1) continue;
-            for (const p of r.pagos_sin_asociacion) {
+            for (const p of [...r.pagos_sin_asociacion, ...r.pagos.filter(pago => pago.concepto_pago?.requiere_verificacion)]) {
                 const resolucion = resoluciones.get(p), medio = medioLibro(p);
-                const reciboCompleto = medio?.startsWith('tarjeta_') ? normalizarId(p.folio) && normalizarId(p.bovtar) :
+                const conceptoNuevo = p.concepto_pago?.requiere_verificacion;
+                const reciboCompleto = medio?.startsWith('tarjeta_') ? normalizarId(p.folio) &&
+                    (normalizarId(p.bovtar) || (conceptoNuevo && normalizarId(p.codigo_autorizacion))) :
                     medio?.startsWith('webpay_') && normalizarId(p.codigo_autorizacion);
                 const fila = p.evidencia_financiera;
                 if (resolucion?.evidencia !== 'evidencia_insuficiente' || !reciboCompleto ||
@@ -1992,12 +1997,17 @@
                     !p.origen?.hoja || !p.origen.celda || p.origen.hoja !== r.coordenadas_origen?.hoja ||
                     fila?.sector !== 'pagos' || fila.estructura_fila !== 'fecha_detalle_concepto_monto' ||
                     !['fecha','detalle','concepto','monto'].every(k => fila.columnas_ocupadas?.[k] === true)) continue;
+                if (conceptoNuevo && s.tipo_estadia !== 'alojamiento') {
+                    revisar(p,'El concepto de noches o abono de alojamiento no identifica un cargo de Full Day.');
+                    continue;
+                }
                 const variante=S.varianteTitular(r.titular,p.titular);
                 if (p.titular && (!variante || !S.varianteTitular(s.titular,p.titular))) continue;
-                const otroTitular = variante && variante!=='equivalente' && (
-                    reservas.some(x=>x!==r && x.fecha_checkin===r.fecha_checkin && S.mismaPersona(x.titular,p.titular)) ||
-                    estadias.some(x=>x.reserva_id!==s.reserva_id && x.fecha_checkin===r.fecha_checkin &&
-                        candidatoElegible(x) && S.mismaPersona(x.titular,p.titular)));
+                const titularCompatible = titular => conceptoNuevo ? S.varianteTitular(titular,p.titular) : S.mismaPersona(titular,p.titular);
+                const otroTitular = variante && (conceptoNuevo || variante!=='equivalente') && (
+                    reservas.some(x=>claveReserva(x)!==claveReserva(r) && x.fecha_checkin===r.fecha_checkin && titularCompatible(x.titular)) ||
+                    estadias.some(x=>(conceptoNuevo ? x.id!==s.id : x.reserva_id!==s.reserva_id) && x.fecha_checkin===r.fecha_checkin &&
+                        candidatoElegible(x) && titularCompatible(x.titular)));
                 if (otroTitular) {
                     revisar(p,'El nombre del comprobante coincide con otra reserva de esa fecha. Verifica el voucher y la cabaña.');
                     continue;
@@ -2022,11 +2032,22 @@
                     revisar(p,'Verifica la fecha del comprobante con el voucher y las fechas de la reserva.');
                     continue;
                 }
-                const repetido = todos.some(otro => otro !== p && pagoCoincide(p,otro));
+                const tarjetaFisica = medio?.startsWith('tarjeta_');
+                const autorizacion = normalizarId(p.codigo_autorizacion);
+                const folio = normalizarId(p.folio);
+                const mismoFolio = otro => folio && folio === normalizarId(otro.folio);
+                // Las ubicaciones históricas del voucher sólo alertan de una posible repetición.
+                const autorizacionFisicaCoincide = otro => conceptoNuevo && tarjetaFisica &&
+                    medioSistema(otro) === medio && autorizacion &&
+                    (autorizacion === normalizarId(otro.codigo_autorizacion) ||
+                        (mismoFolio(otro) && autorizacion === normalizarId(bovtarSistema(otro))));
+                const repetido = todos.some(otro => otro !== p && (pagoCoincide(p,otro) || autorizacionFisicaCoincide(otro))) ||
+                    (conceptoNuevo && pagos.some(otro => pagoSistemaVigente(otro) && (pagoCoincide(p,otro) || autorizacionFisicaCoincide(otro))));
                 const parecido = pagos.some(registrado => registrado.reserva_id === s.reserva_id && pagoSistemaVigente(registrado) &&
                     medioSistema(registrado) === medio && Number(registrado.monto) === p.monto &&
                     (!registrado.fecha_pago || mismaFechaCalendario(registrado.fecha_pago,p.fecha_comprobante)) &&
-                    !(medioTarjetaFisica(registrado) ? bovtarSistema(registrado) : codAutSistema(registrado)));
+                    (!(tarjetaFisica ? bovtarSistema(registrado) : codAutSistema(registrado)) ||
+                        (conceptoNuevo && tarjetaFisica && mismoFolio(registrado) && !normalizarId(registrado.codigo_autorizacion))));
                 if (repetido || parecido) {
                     revisar(p,'Hay otro comprobante o pago compatible. Verifica si corresponde al mismo movimiento.');
                     continue;
@@ -2061,7 +2082,7 @@
             }
             const total = deEstadia.reduce((n,c) => n+Number(c.monto_ajustado),0);
             const saldo = deEstadia.reduce((n,c) => n+Number(c.saldo_cargo),0);
-            const otros = r.pagos.filter(p => p.tipo_movimiento === 'alojamiento' && p.pago_recibido === true &&
+            const otros = r.pagos.filter(p => !grupo.includes(p) && p.tipo_movimiento === 'alojamiento' && p.pago_recibido === true &&
                 p.estado_pago === 'registrado_en_libro' && Number.isSafeInteger(p.monto) && p.monto > 0 &&
                 resoluciones.get(p)?.estado !== ESTADOS_RESOLUCION_PAGO.EXISTENTE_SEGURO);
             const pendientes = [...otros,...grupo].reduce((n,p) => n+p.monto,0);
@@ -2431,7 +2452,7 @@
                 .filter(resultado => resultado.estado === "asociada" && resultado.sistema?.id)
                 .map(resultado => [claveReserva(resultado.libro), resultado.sistema.id]));
             const candidatosDestino = [...pagosUnicos.values()].filter(item =>
-                item.estado !== "en_sistema" && D.aplicacionesLibro(item.pago).length > 0);
+                item.estado !== "en_sistema" && (esPagoMixto(item.pago) || D.aplicacionesLibro(item.pago).length > 0));
             const candidatosAlojamiento=[...pagosUnicos.values()].filter(item=>item.estado!=='en_sistema'&&item.pago.concepto_alojamiento==='diferencia_tarifa');
             const existentesAlojamiento=[...pagosUnicos.values()].filter(item=>item.estado==='en_sistema'&&
                 item.pago.tipo_movimiento==='alojamiento'&&item.sistema?.id);
@@ -2462,7 +2483,13 @@
                 if (coincidencia.sospechoso) item.estado = "revisar";
                 item.destinoFinanciero = D.resolverTransaccion(item.pago, item.reserva_sistema_id,
                     snapshotFinanciero, item.sistema || coincidencia.candidato || null,
-                    {estadiaId:estadiaSistemaPorLibro.get(claveReserva(item.reserva))});
+                    {estadiaId:estadiaSistemaPorLibro.get(claveReserva(item.reserva)),
+                        asociado:item.reserva.pagos.includes(item.pago) && item.resolucionPago?.evidencia === 'identificador_nuevo'});
+                if (esPagoMixto(item.pago)) {
+                    item.estado = 'revisar';
+                    item.motivos = motivosDestinoFinanciero(item.destinoFinanciero);
+                    continue;
+                }
                 if (q.por_fecha_pago && item.estado === 'nuevo_seguro' && item.destinoFinanciero?.estado === 'revision') {
                     item.estado = 'revisar';
                     item.motivos = item.destinoFinanciero.aplicaciones
@@ -3563,7 +3590,8 @@
             const nombres=new Intl.ListFormat('es-CL').format(sinCargo.map(c=>`«${c}»`));
             detalles.unshift(`${sinCargo.length===1?'Falta un cargo compatible':'Faltan cargos compatibles'} de ${nombres} en Proyecto H.`);
         }
-        return [...(detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.']),...motivosCapacidad];
+        return [...(resolucion.mixto && resolucion.motivo ? [resolucion.motivo, ...detalles] :
+            detalles.length ? detalles : [resolucion.motivo || 'El destino financiero requiere revisión.']),...motivosCapacidad];
     }
 
     function payloadPagoServicio4C(pago, destino, resolucion, snapshotFinanciero, aprobadoManualmente, itemId = null, decision = null, excedenteHabilitado=false) {
@@ -4809,6 +4837,18 @@
                 item.aprobable = false;
                 continue;
             }
+            const mixto = esPagoMixto(p);
+            if (mixto || p.concepto_pago?.motivo || (p.concepto_pago?.requiere_verificacion && !bloqueVerificado)) {
+                const motivos = mixto ? (x.destinoFinanciero ? motivosDestinoFinanciero(x.destinoFinanciero) :
+                    ['Falta comprobar el desglose, los cargos y los saldos del comprobante mixto.']) :
+                    p.conflicto_distribucion ? [p.conflicto_distribucion] : p.concepto_pago?.motivo ? [p.concepto_pago.motivo] : bloqueEnRevision ? resolucionPago.motivos :
+                    ['Falta comprobar el titular, la fecha y el identificador del comprobante, y el saldo de alojamiento de una única estadía.'];
+                const item = add('dudosos',id,texto,null,motivos);
+                item.pagoLibro = p;
+                item.destinoFinanciero = x.destinoFinanciero || null;
+                item.aprobable = false;
+                continue;
+            }
             if (fuerte && pagosDejadosPendientes.some(pendiente =>
                 pagoCoincide(p, { ...pendiente, datos_origen: { bovtar: pendiente.bovtar } }))) {
                 const item = add('pendientes', id, texto, null,
@@ -4986,6 +5026,8 @@
             if (p.fecha_bloque !== r.fecha_checkin) motivos.push('El pago no pertenece al bloque del Check-In.');
             const servicio4C = x.destinoFinanciero?.estado === 'destino_unico';
             if (p.tipo_movimiento === 'otro' && !p.concepto) motivos.push('Falta indicar a qué corresponde el pago en el Libro.');
+            else if (p.tipo_movimiento === 'otro' && !x.destinoFinanciero)
+                motivos.push('El concepto del Libro no identifica a qué cargo corresponde el pago.');
             else if (p.tipo_movimiento !== 'alojamiento') motivos.push(...motivosDestinoFinanciero(x.destinoFinanciero, capacidadServicios));
             const medio = medioLibro(p);
             const webpayPendiente = p.webpay_por_confirmar && (p.medio_pago === 'webpay' || medio?.startsWith('webpay_'));
@@ -5145,7 +5187,8 @@
             item.pagoLibro = x.pago;
             item.pagoSistema ||= x.sistema || null;
             // Una aprobación previa del pago no puede deshacer «Dejar pendiente».
-            if (item.reservaPendiente || x.pago.airbnb_liquidacion_pendiente) continue;
+            if (item.reservaPendiente || x.pago.airbnb_liquidacion_pendiente || esPagoMixto(x.pago) ||
+                x.pago.concepto_pago?.motivo || (x.pago.concepto_pago?.requiere_verificacion && !item.verificacionBloquePago)) continue;
             item.decisionPagoManual = x.decisionPagoManual || null;
             item.resolucionMedio = propuestaMedioPago(item,comp,estadoComparacion(comp)?.generacion);
             item.medioPagoManual = pagosEfectivosMedio.get(x.pago)?.decision || null;
