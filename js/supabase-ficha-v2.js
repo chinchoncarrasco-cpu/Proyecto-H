@@ -113,7 +113,7 @@
         const [serviciosR, cargosR, notasR, solicitudesR, pagosR, bovesR] = await Promise.all([
             cliente
                 .from("servicios")
-                .select("id,fecha_servicio,hora_inicio,cantidad,total,tipo_cobro,estado_servicio,observaciones,catalogo_servicios(codigo,nombre,categoria)")
+                .select("id,estadia_id,fecha_servicio,hora_inicio,hora_fin,cantidad,total,tipo_cobro,estado_servicio,observaciones,reprogramacion_revision_v1,catalogo_servicios(codigo,nombre,categoria)")
                 .eq("reserva_id", reservaId)
                 .order("fecha_servicio", { ascending: true }),
             cliente
@@ -329,6 +329,7 @@
         if (servicio.hora_inicio) partes.push(String(servicio.hora_inicio).slice(0,5));
         const nombre = catalogo.nombre || "Servicio";
         partes.push(Number(servicio.cantidad) > 1 ? `${servicio.cantidad} × ${nombre}` : nombre);
+        if(window.HAIKU_REPROGRAMACION_V1?.revisionServicio(servicio))partes.push('Requiere revisión por reprogramación');
         izquierda.textContent = partes.join(" · ");
         const derecha = document.createElement("span");
         derecha.textContent = servicio.tipo_cobro === "cortesia"
@@ -351,7 +352,8 @@
             !["cancelado", "cancelada", "anulado", "anulada", "no_show"]
                 .includes(String(servicio.estado_servicio || "").toLowerCase())
         );
-        const p = lista.filter(s => s.estado_servicio !== "realizado");
+        const revision = lista.filter(s=>window.HAIKU_REPROGRAMACION_V1?.revisionServicio(s));
+        const p = lista.filter(s => s.estado_servicio !== "realizado"&&!revision.includes(s));
         const r = lista.filter(s => s.estado_servicio === "realizado");
         const pp = lista.filter(s => {
             const c = cargosPorServicio.get(s.id);
@@ -362,6 +364,10 @@
         p.forEach(s => programados.appendChild(crearItemServicio(s)));
         r.forEach(s => realizados.appendChild(crearItemServicio(s)));
         pp.forEach(s => pendientes.appendChild(crearItemServicio(s)));
+        let bloqueRevision=document.getElementById('ficha-servicios-revision');
+        if(revision.length&&!bloqueRevision){bloqueRevision=document.createElement('section');bloqueRevision.id='ficha-servicios-revision';programados.parentElement.append(bloqueRevision);}
+        if(bloqueRevision){bloqueRevision.replaceChildren();bloqueRevision.hidden=!revision.length;
+            if(revision.length){const titulo=document.createElement('strong');titulo.textContent='Servicios · Requiere revisión';bloqueRevision.append(titulo,...revision.map(crearItemServicio));}}
 
         [["ficha-servicios-programados-contador",p.length],["ficha-servicios-realizados-contador",r.length],["ficha-servicios-pendientes-contador",pp.length]]
             .forEach(([id,n]) => { const el=document.getElementById(id); if(el) el.textContent=String(n); });

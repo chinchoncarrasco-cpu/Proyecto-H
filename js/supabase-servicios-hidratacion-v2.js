@@ -110,6 +110,7 @@
             cortesia: tipoCobro === "cortesia" || total === 0,
             estadoServicio: estadoLegacy(estadoDb),
             estadoServicioDb: estadoDb,
+            reprogramacion_revision_v1: fila.reprogramacion_revision_v1 || null,
             estadoPago:
                 estaCancelado || tipoCobro === "cortesia" || total === 0
                     ? "no-corresponde"
@@ -217,6 +218,7 @@
                 total,
                 tipo_cobro,
                 estado_servicio,
+                reprogramacion_revision_v1,
                 observaciones,
                 cancelado_en,
                 motivo_cancelacion,

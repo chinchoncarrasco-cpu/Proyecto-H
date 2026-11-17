@@ -1,0 +1,873 @@
+{
+  "fecha": "2026-11-16",
+  "base": "b8ea94ec34994f270d7dc9823fd173d3e9f03ae7",
+  "rama": "codex/libro-reprogramacion-20261116",
+  "datos": "Exclusivamente ficticios. Sin consultas ni escrituras de reservas reales.",
+  "publicacion": "Pendiente de autorización",
+  "migracion": "20261117005357_libro_reprogramacion_estadia_atomica.sql; probada en PostgreSQL local embebido, no aplicada en producción.",
+  "pruebas": {
+    "focales": {
+      "total": 428,
+      "aprobadas": 428,
+      "fallidas": 0
+    },
+    "navegador": [
+      {
+        "caso": "escritorio-claro-haku",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "escritorio-claro-libro",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "escritorio-oscuro-haku",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "escritorio-oscuro-libro",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "movil-claro-haku",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "movil-claro-libro",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "movil-oscuro-haku",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "movil-oscuro-libro",
+        "resultado": "PASS"
+      },
+      {
+        "caso": "conflicto nuevo tras vista previa",
+        "resultado": "PASS"
+      }
+    ],
+    "revalidacionFinal": {
+      "total": 63,
+      "aprobadas": 63,
+      "fallidas": 0
+    }
+  },
+  "casos": [
+    {
+      "flujo": "escritorio-claro-haku",
+      "reservaAntes": [
+        {
+          "id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "ninos": 0,
+          "adultos": 1,
+          "mascotas": 0,
+          "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+          "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+          "fecha_salida": "2026-11-16",
+          "tipo_estadia": "alojamiento",
+          "fecha_ingreso": "2026-11-15",
+          "actualizado_en": "2026-11-16T21:50:17.924-04:00",
+          "estado_estadia": "confirmada",
+          "checkin_realizado_en": null,
+          "checkin_realizado_por": null,
+          "checkout_realizado_en": null,
+          "checkout_realizado_por": null
+        }
+      ],
+      "reservaDespues": [
+        {
+          "id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "ninos": 0,
+          "adultos": 1,
+          "mascotas": 0,
+          "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+          "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+          "fecha_salida": "2026-12-29",
+          "tipo_estadia": "alojamiento",
+          "fecha_ingreso": "2026-12-28",
+          "actualizado_en": "2026-11-16T21:50:17.924-04:00",
+          "estado_estadia": "confirmada",
+          "checkin_realizado_en": null,
+          "checkin_realizado_por": null,
+          "checkout_realizado_en": null,
+          "checkout_realizado_por": null
+        }
+      ],
+      "servicios": [
+        {
+          "id": "24ae94f6-7361-416f-9629-e1971383a229",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-10-03",
+            "inicio": "20:00:00",
+            "fin": "21:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-10-03",
+            "inicio": "20:00:00",
+            "fin": "21:00:00",
+            "estado": "programado",
+            "revision": {
+              "fin": "21:00:00",
+              "fecha": "2026-10-03",
+              "inicio": "20:00:00",
+              "motivo": "El servicio está fuera de las fechas originales. No acredita un servicio confirmado para la nueva estadía.",
+              "destino": {
+                "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+                "fecha_salida": "2026-12-29",
+                "cabana_numero": 9,
+                "fecha_ingreso": "2026-12-28"
+              },
+              "usuario": "0edef1b5-6ed7-49a8-883d-c2c47325d66f",
+              "version": 1,
+              "decision": "revision",
+              "operacion_id": "07b559fe-d47f-48e9-b30d-3fe0f54b6131"
+            }
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-16",
+            "inicio": "12:00:00",
+            "fin": "14:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-29",
+            "inicio": "12:00:00",
+            "fin": "14:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "17:00:00",
+            "fin": "17:30:00",
+            "estado": "realizado"
+          },
+          "despues": {
+            "fecha": "2026-11-15",
+            "inicio": "17:00:00",
+            "fin": "17:30:00",
+            "estado": "realizado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+          "estadia_id": "a022f01b-3e9e-482b-9864-202b291f8b6b",
+          "antes": {
+            "fecha": "2026-10-03",
+            "inicio": "10:00:00",
+            "fin": "11:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-10-03",
+            "inicio": "10:00:00",
+            "fin": "11:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "10:00:00",
+            "fin": "12:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-28",
+            "inicio": "10:00:00",
+            "fin": "12:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "18:30:00",
+            "fin": "19:30:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-28",
+            "inicio": "18:30:00",
+            "fin": "19:30:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        }
+      ],
+      "notas": [
+        {
+          "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+          "antes": {
+            "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+            "tipo": "operativa_resumen",
+            "texto": "Llegada 19:00 · Dejar dos batas",
+            "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": "2026-11-15"
+          },
+          "despues": {
+            "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+            "tipo": "operativa_resumen",
+            "texto": "Llegada 19:00 · Dejar dos batas",
+            "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": "2026-12-28"
+          }
+        },
+        {
+          "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+          "antes": {
+            "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+            "tipo": "general",
+            "texto": "Comentario general intacto",
+            "cabana_id": null,
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": null,
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": null
+          },
+          "despues": {
+            "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+            "tipo": "general",
+            "texto": "Comentario general intacto",
+            "cabana_id": null,
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": null,
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": null
+          }
+        }
+      ],
+      "finanzas": [
+        {
+          "tabla": "cargos",
+          "cantidad": 7,
+          "sha256Antes": "7f31884b3673cedea077b0671686936b404392c96d35903865f1e5087fcff95c",
+          "sha256Despues": "7f31884b3673cedea077b0671686936b404392c96d35903865f1e5087fcff95c",
+          "intacta": true
+        },
+        {
+          "tabla": "pagos",
+          "cantidad": 1,
+          "sha256Antes": "b201a0ab02f449d20cca29f2b2d6f6146ebcfe261232e48d528a1b4a0e87be5d",
+          "sha256Despues": "b201a0ab02f449d20cca29f2b2d6f6146ebcfe261232e48d528a1b4a0e87be5d",
+          "intacta": true
+        },
+        {
+          "tabla": "pago_aplicaciones",
+          "cantidad": 1,
+          "sha256Antes": "5fad8d3fa755e37b7415a102d71874f952b5ac421ccd74f1d14acb99232d4ea9",
+          "sha256Despues": "5fad8d3fa755e37b7415a102d71874f952b5ac421ccd74f1d14acb99232d4ea9",
+          "intacta": true
+        },
+        {
+          "tabla": "cargo_ajustes",
+          "cantidad": 0,
+          "sha256Antes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "sha256Despues": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "intacta": true
+        }
+      ],
+      "diarioAntes": {
+        "2026-10-03": {
+          "servicios": [
+            {
+              "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+              "nombre": "Jacuzzi",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "24ae94f6-7361-416f-9629-e1971383a229",
+              "nombre": "Jacuzzi",
+              "hora": "20:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-15": {
+          "servicios": [
+            {
+              "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+              "nombre": "Early Check-in",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+              "nombre": "Masaje",
+              "hora": "17:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+              "nombre": "Jacuzzi",
+              "hora": "18:30",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": [
+            {
+              "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+              "cabana": "9",
+              "texto": "Llegada 19:00 · Dejar dos batas",
+              "reservaId": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+              "estadiaId": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+              "haikuFuente": "supabase"
+            }
+          ]
+        },
+        "2026-11-16": {
+          "servicios": [
+            {
+              "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+              "nombre": "Late Check-out",
+              "hora": "12:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-12-28": {
+          "servicios": [],
+          "notas": []
+        },
+        "2026-12-29": {
+          "servicios": [],
+          "notas": []
+        }
+      },
+      "diarioDespues": {
+        "2026-10-03": {
+          "servicios": [
+            {
+              "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+              "nombre": "Jacuzzi",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "24ae94f6-7361-416f-9629-e1971383a229",
+              "nombre": "Jacuzzi",
+              "hora": "20:00",
+              "cabana": "9",
+              "revision": true
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-15": {
+          "servicios": [
+            {
+              "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+              "nombre": "Masaje",
+              "hora": "17:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-16": {
+          "servicios": [],
+          "notas": []
+        },
+        "2026-12-28": {
+          "servicios": [
+            {
+              "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+              "nombre": "Early Check-in",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+              "nombre": "Jacuzzi",
+              "hora": "18:30",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": [
+            {
+              "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+              "cabana": "9",
+              "texto": "Llegada 19:00 · Dejar dos batas",
+              "reservaId": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+              "estadiaId": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+              "haikuFuente": "supabase"
+            }
+          ]
+        },
+        "2026-12-29": {
+          "servicios": [
+            {
+              "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+              "nombre": "Late Check-out",
+              "hora": "12:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        }
+      },
+      "resultado": "PASS"
+    },
+    {
+      "flujo": "escritorio-claro-libro",
+      "reservaAntes": [
+        {
+          "id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "ninos": 0,
+          "adultos": 1,
+          "mascotas": 0,
+          "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+          "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+          "fecha_salida": "2026-11-16",
+          "tipo_estadia": "alojamiento",
+          "fecha_ingreso": "2026-11-15",
+          "actualizado_en": "2026-11-16T21:50:17.924-04:00",
+          "estado_estadia": "confirmada",
+          "checkin_realizado_en": null,
+          "checkin_realizado_por": null,
+          "checkout_realizado_en": null,
+          "checkout_realizado_por": null
+        }
+      ],
+      "reservaDespues": [
+        {
+          "id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "ninos": 0,
+          "adultos": 1,
+          "mascotas": 0,
+          "cabana_id": "cff386ce-0160-4390-b986-2cd30ff8e424",
+          "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+          "fecha_salida": "2026-12-29",
+          "tipo_estadia": "alojamiento",
+          "fecha_ingreso": "2026-12-28",
+          "actualizado_en": "2026-11-16T21:50:17.924-04:00",
+          "estado_estadia": "confirmada",
+          "checkin_realizado_en": null,
+          "checkin_realizado_por": null,
+          "checkout_realizado_en": null,
+          "checkout_realizado_por": null
+        }
+      ],
+      "servicios": [
+        {
+          "id": "24ae94f6-7361-416f-9629-e1971383a229",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-10-03",
+            "inicio": "20:00:00",
+            "fin": "21:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-10-03",
+            "inicio": "20:00:00",
+            "fin": "21:00:00",
+            "estado": "programado",
+            "revision": {
+              "fin": "21:00:00",
+              "fecha": "2026-10-03",
+              "inicio": "20:00:00",
+              "motivo": "El servicio está fuera de las fechas originales. No acredita un servicio confirmado para la nueva estadía.",
+              "destino": {
+                "cabana_id": "cff386ce-0160-4390-b986-2cd30ff8e424",
+                "fecha_salida": "2026-12-29",
+                "cabana_numero": 4,
+                "fecha_ingreso": "2026-12-28"
+              },
+              "usuario": "0edef1b5-6ed7-49a8-883d-c2c47325d66f",
+              "version": 1,
+              "decision": "revision",
+              "operacion_id": "04657bd1-3748-44aa-86ff-c0dbba0a1451"
+            }
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-16",
+            "inicio": "12:00:00",
+            "fin": "14:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-29",
+            "inicio": "12:00:00",
+            "fin": "14:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "17:00:00",
+            "fin": "17:30:00",
+            "estado": "realizado"
+          },
+          "despues": {
+            "fecha": "2026-11-15",
+            "inicio": "17:00:00",
+            "fin": "17:30:00",
+            "estado": "realizado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+          "estadia_id": "a022f01b-3e9e-482b-9864-202b291f8b6b",
+          "antes": {
+            "fecha": "2026-10-03",
+            "inicio": "10:00:00",
+            "fin": "11:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-10-03",
+            "inicio": "10:00:00",
+            "fin": "11:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "10:00:00",
+            "fin": "12:00:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-28",
+            "inicio": "10:00:00",
+            "fin": "12:00:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        },
+        {
+          "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+          "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+          "antes": {
+            "fecha": "2026-11-15",
+            "inicio": "18:30:00",
+            "fin": "19:30:00",
+            "estado": "programado"
+          },
+          "despues": {
+            "fecha": "2026-12-28",
+            "inicio": "18:30:00",
+            "fin": "19:30:00",
+            "estado": "programado",
+            "revision": null
+          },
+          "comentarioConservado": true
+        }
+      ],
+      "notas": [
+        {
+          "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+          "antes": {
+            "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+            "tipo": "operativa_resumen",
+            "texto": "Llegada 19:00 · Dejar dos batas",
+            "cabana_id": "2937897f-f797-42ba-a7ea-2dd1b7158363",
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": "2026-11-15"
+          },
+          "despues": {
+            "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+            "tipo": "operativa_resumen",
+            "texto": "Llegada 19:00 · Dejar dos batas",
+            "cabana_id": "cff386ce-0160-4390-b986-2cd30ff8e424",
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": "2026-12-28"
+          }
+        },
+        {
+          "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+          "antes": {
+            "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+            "tipo": "general",
+            "texto": "Comentario general intacto",
+            "cabana_id": null,
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": null,
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": null
+          },
+          "despues": {
+            "id": "a603fe20-cd43-477e-87f9-648f6442830e",
+            "tipo": "general",
+            "texto": "Comentario general intacto",
+            "cabana_id": null,
+            "creado_en": "2026-11-16T21:50:18.108-04:00",
+            "estadia_id": null,
+            "reserva_id": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+            "actualizado_en": "2026-11-16T21:50:18.108-04:00",
+            "fecha_operacion": null
+          }
+        }
+      ],
+      "finanzas": [
+        {
+          "tabla": "cargos",
+          "cantidad": 7,
+          "sha256Antes": "7f31884b3673cedea077b0671686936b404392c96d35903865f1e5087fcff95c",
+          "sha256Despues": "7f31884b3673cedea077b0671686936b404392c96d35903865f1e5087fcff95c",
+          "intacta": true
+        },
+        {
+          "tabla": "pagos",
+          "cantidad": 1,
+          "sha256Antes": "b201a0ab02f449d20cca29f2b2d6f6146ebcfe261232e48d528a1b4a0e87be5d",
+          "sha256Despues": "b201a0ab02f449d20cca29f2b2d6f6146ebcfe261232e48d528a1b4a0e87be5d",
+          "intacta": true
+        },
+        {
+          "tabla": "pago_aplicaciones",
+          "cantidad": 1,
+          "sha256Antes": "5fad8d3fa755e37b7415a102d71874f952b5ac421ccd74f1d14acb99232d4ea9",
+          "sha256Despues": "5fad8d3fa755e37b7415a102d71874f952b5ac421ccd74f1d14acb99232d4ea9",
+          "intacta": true
+        },
+        {
+          "tabla": "cargo_ajustes",
+          "cantidad": 0,
+          "sha256Antes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "sha256Despues": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "intacta": true
+        }
+      ],
+      "diarioAntes": {
+        "2026-10-03": {
+          "servicios": [
+            {
+              "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+              "nombre": "Jacuzzi",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "24ae94f6-7361-416f-9629-e1971383a229",
+              "nombre": "Jacuzzi",
+              "hora": "20:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-15": {
+          "servicios": [
+            {
+              "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+              "nombre": "Early Check-in",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+              "nombre": "Masaje",
+              "hora": "17:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+              "nombre": "Jacuzzi",
+              "hora": "18:30",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": [
+            {
+              "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+              "cabana": "9",
+              "texto": "Llegada 19:00 · Dejar dos batas",
+              "reservaId": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+              "estadiaId": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+              "haikuFuente": "supabase"
+            }
+          ]
+        },
+        "2026-11-16": {
+          "servicios": [
+            {
+              "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+              "nombre": "Late Check-out",
+              "hora": "12:00",
+              "cabana": "9",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-12-28": {
+          "servicios": [],
+          "notas": []
+        },
+        "2026-12-29": {
+          "servicios": [],
+          "notas": []
+        }
+      },
+      "diarioDespues": {
+        "2026-10-03": {
+          "servicios": [
+            {
+              "id": "4f699ce1-92d6-4b9f-9b24-83d65d80e8c6",
+              "nombre": "Jacuzzi",
+              "hora": "10:00",
+              "cabana": "9",
+              "revision": false
+            },
+            {
+              "id": "24ae94f6-7361-416f-9629-e1971383a229",
+              "nombre": "Jacuzzi",
+              "hora": "20:00",
+              "cabana": "4",
+              "revision": true
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-15": {
+          "servicios": [
+            {
+              "id": "41c81c89-0573-4ad1-b549-2eef3662a1aa",
+              "nombre": "Masaje",
+              "hora": "17:00",
+              "cabana": "4",
+              "revision": false
+            }
+          ],
+          "notas": []
+        },
+        "2026-11-16": {
+          "servicios": [],
+          "notas": []
+        },
+        "2026-12-28": {
+          "servicios": [
+            {
+              "id": "dc46b07e-7da2-484e-ae01-6d13421a30a7",
+              "nombre": "Early Check-in",
+              "hora": "10:00",
+              "cabana": "4",
+              "revision": false
+            },
+            {
+              "id": "e3d32831-38e2-4a88-b411-92faa59b5152",
+              "nombre": "Jacuzzi",
+              "hora": "18:30",
+              "cabana": "4",
+              "revision": false
+            }
+          ],
+          "notas": [
+            {
+              "id": "33b4be0f-8ee3-4b27-a645-7920be328cf7",
+              "cabana": "4",
+              "texto": "Llegada 19:00 · Dejar dos batas",
+              "reservaId": "8917a0ce-34d9-4566-ba2b-1cfeef0c68e1",
+              "estadiaId": "6d697c7f-4b68-4868-8a5d-f421f03d6ffc",
+              "haikuFuente": "supabase"
+            }
+          ]
+        },
+        "2026-12-29": {
+          "servicios": [
+            {
+              "id": "2676e6b4-7e17-4d98-b832-f0ff021ae4d8",
+              "nombre": "Late Check-out",
+              "hora": "12:00",
+              "cabana": "4",
+              "revision": false
+            }
+          ],
+          "notas": []
+        }
+      },
+      "relectura": {
+        "traslados": 0
+      },
+      "resultado": "PASS"
+    }
+  ],
+  "limitaciones": [
+    "Traslado de igual duración y tipo; cambios de noches requieren revisar tarifas.",
+    "Ingreso/salida ya registrados, cancelaciones y no-show no se reinician.",
+    "Servicio sin recurso inequívoco o sin horario verificable requiere decisión y revisión, sin traslado automático.",
+    "PGlite ejecuta PostgreSQL con exclusiones btree_gist y cuerpos de guardas existentes; no representa prueba de carga ni concurrencia de dos conexiones productivas."
+  ]
+}

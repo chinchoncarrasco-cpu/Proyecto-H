@@ -1050,7 +1050,7 @@
     async function cargarExistentes(cliente, reservaIds) {
         if (!reservaIds.length) return { servicios: [], notas: [] };
         const [sr, nr] = await Promise.all([
-            cliente.from("servicios").select("id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,precio_unitario_aplicado,monto_adicional,tipo_cobro,estado_servicio,observaciones,actualizado_en,libro_revision_admin_v1,libro_resolucion_manual_v1,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
+            cliente.from("servicios").select("id,reserva_id,estadia_id,catalogo_servicio_id,recurso_id,fecha_servicio,hora_inicio,hora_fin,total,cantidad,personas,precio_unitario_aplicado,monto_adicional,tipo_cobro,estado_servicio,observaciones,actualizado_en,libro_revision_admin_v1,libro_resolucion_manual_v1,reprogramacion_revision_v1,catalogo_servicios(codigo,nombre)").in("reserva_id", reservaIds),
             cliente.from("notas").select("id,reserva_id,estadia_id,tipo,texto").in("reserva_id", reservaIds)
         ]);
         if (sr.error) throw sr.error;
@@ -1274,6 +1274,10 @@
         const estadiaId = item.payload?.estadia_id || item.asociacion?.sistema?.id || null;
         const activos = existentes.filter(x => x.reserva_id === reservaId && !/cancelad|no_show|anulad/i.test(String(x.estado_servicio || "")) &&
             (!estadiaId || !x.estadia_id || x.estadia_id === estadiaId));
+        const pendientesReprogramacion=activos.filter(s=>root.HAIKU_REPROGRAMACION_V1?.revisionServicio(s)&&
+            codigoExistente(s)===item.mapa?.codigo&&(['lateCheckout','earlyCheckin'].includes(codigoExistente(s))||s.fecha_servicio===item.fecha));
+        if(pendientesReprogramacion.length)return {estado:'revisar',candidatos:pendientesReprogramacion,
+            motivo:'El servicio requiere revisión después de reprogramar la estadía. No está confirmado para el nuevo destino.'};
         const revisados = activos.filter(s => revisionAdminValida(item,s));
         if (revisados.length === 1) return { estado:'existente',candidato:revisados[0],revision_admin:true,
             motivo:`Revisión del administrador: ${revisados[0].libro_revision_admin_v1.motivo}.` };

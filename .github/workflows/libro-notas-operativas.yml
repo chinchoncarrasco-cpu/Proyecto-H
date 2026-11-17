@@ -8,6 +8,18 @@ on:
       - "js/haiku-libro-contexto-v1.js"
       - "js/haiku-libro-diferencias-v1.js"
       - "js/haiku-libro-servicios-scope-v2.js"
+      - "js/haiku-reprogramacion-estadia-v1.js"
+      - "js/supabase-asistente-operaciones-v1.js"
+      - "js/haiku-asistente-acciones-v1.js"
+      - "js/haiku-servicios-identidad-v1.js"
+      - "js/supabase-servicios-hidratacion-v2.js"
+      - "js/supabase-ficha-v2.js"
+      - "js/sites-servicios-v1.js"
+      - "css/haiku-reprogramacion-estadia-v1.css"
+      - "tests/libro-reprogramacion*.cjs"
+      - "tests/fixtures/libro-reprogramacion-sql.cjs"
+      - "tests/fixtures/reprogramacion-guardas.sql"
+      - "supabase/migrations/*_libro_reprogramacion_estadia_atomica.sql"
       - "tests/libro-notas-insumos-tinaja.test.cjs"
       - "tests/libro-tinaja-reemplazo.test.cjs"
       - "tests/libro-tinaja-reemplazo-browser-check.cjs"
@@ -59,6 +71,15 @@ jobs:
         run: node --test tests/libro-aprobacion-admin-postgres.test.cjs tests/libro-servicio-manual-postgres.test.cjs tests/libro-retiros-notas-postgres.test.cjs
       - name: Chromium de prueba
         run: node "$RUNNER_TEMP/haku-libro-test/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Reprogramación conjunta, permisos, disponibilidad y conservación financiera
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+        run: node --test tests/libro-reprogramacion.test.cjs tests/libro-reprogramacion-postgres.test.cjs
+      - name: Reprogramación desde Haku y Libro en ambos tamaños y temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+          HAKU_REPROGRAMACION_EVIDENCIA: ${{ runner.temp }}/haku-reprogramacion-sintetica
+        run: node tests/libro-reprogramacion-browser-check.cjs
       - name: Cambio del Libro en escritorio y teléfono
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules

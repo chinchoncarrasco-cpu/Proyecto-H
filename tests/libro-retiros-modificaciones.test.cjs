@@ -305,8 +305,11 @@ for(const caso of ['retiro','traslado','lectura incompleta'])test('comparación 
   const plan=await e.Q.prepararIncorporacion({reservas:[cambio.reserva],comparacion:[],generacion:1,traslado:cambio.sistema,
     q:{desde:'2026-10-03',hasta:'2026-11-06',focal:true,incluirFinanzas:false,incluirServicios:false}},new Map(),new Set(),e.cliente);
   const ops=e.Q.serializarIncorporacion(plan);
-  assert.equal(ops.length,1);assert.equal(ops[0].tipo,'reserva_actualizar');assert.equal(ops[0].estadia_id,'estadia-ficticia-1');
-  assert.equal(ops[0].estadia.despues.fecha_ingreso,'2026-11-05');
+  assert.equal(ops.length,0,'sin el lector operativo conjunto no se envía una reprogramación parcial');
+  const propuesta=plan.items.find(i=>i.payload?.tipo==='reserva_actualizar');
+  assert.equal(propuesta.payload.estadia_id,'estadia-ficticia-1');
+  assert.equal(propuesta.payload.estadia.despues.fecha_ingreso,'2026-11-05');
+  assert.ok(propuesta.motivos.some(m=>/reprogramación/i.test(m)));
  }
  if(caso==='lectura incompleta')assert.match(cambio.motivo,/lectura segura/);
  assert.equal(e.cliente.mutaciones.length,0);
