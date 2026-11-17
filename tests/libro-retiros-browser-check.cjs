@@ -16,7 +16,7 @@ const server=http.createServer((req,res)=>{
  const u=new URL(req.url,'http://localhost');if(u.pathname==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(html);
  if(!/^\/(js|css)\/[a-z0-9-]+\.(js|css)$/.test(u.pathname))return res.writeHead(404).end();
  let source=fs.readFileSync(path.join(root,u.pathname),'utf8');
- if(u.pathname==='/js/haiku-libro-consultas-v1.js')source=source.replace('const apiConsultas = Object.freeze({ interpretar,','const apiConsultas = Object.freeze({ renderizarComparacion, interpretar,');
+ if(u.pathname==='/js/haiku-libro-consultas-v1.js')source=source.replace('const apiConsultas = Object.freeze({ interpretar,','const apiConsultas = Object.freeze({ renderizarComparacion, renderizarIncorporacion, interpretar,');
  if(u.pathname==='/js/supabase-asistente-libro-auto-v1.js')source=source.replace('Object.freeze({resumir,crearControlador})','Object.freeze({resumir,crearControlador,montarVistaPendientes})');
  if(u.pathname==='/js/supabase-asistente-libro-actualizacion-v1.js')source=source.replace('Object.freeze({esConsulta,','Object.freeze({clasificarIncorporacionAviso,esConsulta,');
  res.writeHead(200,{'Content-Type':u.pathname.endsWith('.js')?'application/javascript;charset=utf-8':'text/css;charset=utf-8'}).end(source);
@@ -94,6 +94,25 @@ const server=http.createServer((req,res)=>{
    assert.ok(await cambiosTotales.locator('input[type="checkbox"]:checked').count(),'las actualizaciones seguras se incluyen en la incorporación total');
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);
+   await page.evaluate(async()=>{
+    const Q=HAIKU_LIBRO_CONSULTAS,out=document.querySelector('#vista');
+    const panel=document.createElement('div');panel.className='haiku-asistente-panel';
+    Object.assign(panel.style,{position:'relative',inset:'auto',maxHeight:'none'});out.replaceChildren(panel);
+    const vista=document.createElement('div');panel.append(vista);
+    const plan=await Q.prepararIncorporacion(resultado);
+    plan.reciboCambiosDetectados=[{titular:'Persona ficticia',cabana:'CAB 2',descripcion:'Incorporar servicio · Tinaja · 19:15',estado:'Incorporado'}];
+    Q.renderizarIncorporacion(vista,plan,()=>{},()=>{},()=>{});
+   });
+   const recibo=page.locator('.haku-incorporacion-actualizacion-completada');
+   const cambios=recibo.locator('details[data-categoria="cambios"]');
+   const cabeceraItem=cambios.locator('.haku-incorporacion-final-item-cabecera');
+   assert.equal(await cambios.evaluate(el=>el.open),false);
+   assert.equal(await cabeceraItem.isVisible(),false);
+   await cambios.getByText('Cambios detectados incorporados (1)',{exact:true}).click();
+   assert.equal(await cabeceraItem.evaluate(el=>getComputedStyle(el).display),'flex');
+   assert.match(await cambios.innerText(),/CAB 2 · Incorporar servicio · Tinaja · 19:15/);
+   await cambios.locator('summary').click();
+   assert.equal(await cabeceraItem.isVisible(),false);
    await page.evaluate(()=>abrirVista(1));
    const notas=page.locator('[data-haku-cambio-incorporar="revisar_notas"]').first().locator('xpath=../..');
    await notas.getByRole('button',{name:'Incorporar',exact:true}).click();

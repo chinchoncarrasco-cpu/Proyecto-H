@@ -5234,6 +5234,7 @@
     function restaurarSeleccionIncorporacion(nuevo, anterior) {
         if (!anterior) return nuevo;
         const mismoContexto = JSON.stringify(nuevo.contextoSeleccion) === JSON.stringify(anterior.contextoSeleccion);
+        if (mismoContexto && anterior.reciboCambiosDetectados) nuevo.reciboCambiosDetectados = anterior.reciboCambiosDetectados;
         if (mismoContexto && comprobantesActualizaciones.has(anterior)) {
             comprobantesActualizaciones.set(nuevo, comprobantesActualizaciones.get(anterior));
             if ((anterior.etapaAnteriorCompletada || anterior.etapa === 'actualizar_identidad') &&
@@ -8236,7 +8237,8 @@
                             ['titular_nombre','titular_numero_documento','titular_tipo_documento'].some(c => c in (i.payload.reserva?.despues || {})));
                     if (identidadActualizada) siguientePlan.etapaAnteriorCompletada = true;
                     siguientePlan.actualizacionesConfirmadas = Number(ejecucion.resultado.actualizaciones || 0);
-                    siguientePlan.reciboCambiosDetectados = ejecucion.cambiosDetectados;
+                    if (ejecucion.cambiosDetectados?.length)
+                        siguientePlan.reciboCambiosDetectados = [...(siguientePlan.reciboCambiosDetectados || []), ...ejecucion.cambiosDetectados];
                     planEnVista = siguientePlan;
                     return { ...ejecucion, siguientePlan };
                 };
@@ -9544,7 +9546,7 @@
     function grupoResultadoIncorporacion(clave, etiqueta, cantidad, items = []) {
         const grupo = elemento('details','haiku-comparacion-acordeon haku-incorporacion-final-grupo');
         grupo.dataset.categoria = clave;
-        grupo.open = cantidad > 0 && clave !== 'omitidos';
+        grupo.open = cantidad > 0 && !['omitidos','cambios'].includes(clave);
         grupo.append(elemento('summary','',`${etiqueta} (${cantidad})`));
         const lista = elemento('ul','haku-incorporacion-final-lista');
         for (const item of items) {
@@ -9554,14 +9556,16 @@
                 elemento('span','haku-incorporacion-final-estado' + (clave === 'omitidos' ? ' haku-incorporacion-final-estado--omitido' : ''),item.estado));
             fila.append(cabeceraItem);
             const datos = [item.cabana,clave === 'actualizaciones' ? periodoActualizacion(item.periodo) : item.periodo];
+            if (clave === 'cambios') datos.push(item.descripcion);
             if (clave === 'pagos') {
                 if (item.monto != null) datos.push(money(item.monto));
                 if (item.fecha) datos.push(fechaBreve(String(item.fecha).slice(0,10)));
                 if (item.concepto) datos.push(item.concepto);
             }
             if (datos.some(Boolean)) fila.append(elemento('p','',datos.filter(Boolean).join(' · ')));
+            const descripcion = clave === 'cambios' ? item.motivo : item.descripcion || item.motivo;
             if (item.cambios?.length && clave === 'actualizaciones') fila.append(cambiosResultadoIncorporacion(item.cambios));
-            else if (item.descripcion || item.motivo) fila.append(elemento('p','',item.descripcion || item.motivo));
+            else if (descripcion) fila.append(elemento('p','',descripcion));
             else if (clave === 'actualizaciones') fila.append(elemento('p','','Datos actualizados con el Libro.'));
             if (item.identidad) fila.append(accionInspectorReserva(item.identidad));
             lista.append(fila);
@@ -9574,39 +9578,43 @@
     }
 
     function renderizarComprobanteActualizaciones(plan) {
-        const comprobantes = comprobantesActualizaciones.get(plan);
-        if (!comprobantes?.length) return null;
+        const comprobantes = comprobantesActualizaciones.get(plan) || [];
+        const cambios = plan.reciboCambiosDetectados || [];
+        if (!comprobantes.length && !cambios.length) return null;
         const cantidad = comprobantes.reduce((n,c) => n + c.cantidad,0);
         const omitidos = comprobantes.reduce((n,c) => n + c.omitidos,0);
         const bloque = elemento('section','haku-incorporacion-resultado haku-incorporacion-actualizacion-completada');
         const cabecera = elemento('div','haiku-incorporacion-cabecera haku-incorporacion-resultado-cabecera');
         const titulo = elemento('div');
-        titulo.append(elemento('span','','LIBRO ↔ PROYECTO H'),elemento('strong','','Actualización completada'));
-        cabecera.append(titulo,elemento('span','haiku-incorporacion-modo','Guardado'));
+        const porVerificar = cambios.some(i => i.estado === 'Por verificar');
+        titulo.append(elemento('span','','LIBRO ↔ PROYECTO H'),
+            elemento('strong','', porVerificar ? 'Resultado de la incorporación' :
+                comprobantes.length ? 'Actualización completada' : 'Incorporación completada'));
+        cabecera.append(titulo,elemento('span','haiku-incorporacion-modo',porVerificar ? 'Revisa el resultado' : 'Guardado'));
         const mensaje = elemento('p','haiku-incorporacion-aviso haku-incorporacion-resultado-mensaje',
-            `${cantidad} ${cantidad === 1 ? 'actualización confirmada' : 'actualizaciones confirmadas'} por Proyecto H. Este comprobante corresponde a los datos guardados; los pagos conservan su revisión y confirmación propias.`);
+            comprobantes.length ? `${cantidad} ${cantidad === 1 ? 'actualización confirmada' : 'actualizaciones confirmadas'} por Proyecto H. Este comprobante corresponde a los datos guardados; los pagos conservan su revisión y confirmación propias.` :
+                porVerificar ? 'Revisa el resultado de cada caso.' : 'Proyecto H confirmó la incorporación.');
         const resumen = elemento('div','haiku-incorporacion-resumen haku-incorporacion-resultado-resumen');
         for (const [numero,etiqueta] of [[cantidad,'Actualizaciones del Libro'],[omitidos,'Omitidos']]) {
             const tarjeta = elemento('div','haiku-incorporacion-indicador haku-incorporacion-resultado-indicador');
             tarjeta.append(elemento('strong','',String(numero)),elemento('span','',etiqueta)); resumen.append(tarjeta);
         }
         const detalle = elemento('section','haku-incorporacion-final-detalle');
-        detalle.append(elemento('h4','','Detalle de las actualizaciones'),
-            grupoResultadoIncorporacion('actualizaciones','Actualizaciones confirmadas',cantidad,comprobantes.flatMap(c => c.actualizaciones)));
+        detalle.append(elemento('h4','',comprobantes.length ? 'Detalle de las actualizaciones' : 'Detalle de esta incorporación'));
+        if (comprobantes.length) detalle.append(grupoResultadoIncorporacion('actualizaciones','Actualizaciones confirmadas',cantidad,comprobantes.flatMap(c => c.actualizaciones)));
+        agregarCambiosDetectados(detalle,cambios);
         if (omitidos) detalle.append(grupoResultadoIncorporacion('omitidos','Omitidos',omitidos,comprobantes.flatMap(c => c.omitidosDetalle)));
-        bloque.append(cabecera,mensaje,resumen,detalle);
+        bloque.append(cabecera,mensaje,...(comprobantes.length ? [resumen] : []),detalle);
         return bloque;
     }
 
-    function reciboCambiosDetectados(items) {
-        const bloque = elemento('section','haku-incorporacion-final-detalle');
+    function agregarCambiosDetectados(detalle, items = []) {
         const guardados = items.filter(i => i.estado === 'Incorporado');
         const omitidos = items.filter(i => i.estado === 'Ya coincide');
         const pendientes = items.filter(i => i.estado === 'Por verificar');
-        if (guardados.length) bloque.append(grupoResultadoIncorporacion('cambios','Cambios detectados incorporados',guardados.length,guardados));
-        if (omitidos.length) bloque.append(grupoResultadoIncorporacion('omitidos','Cambios que ya coinciden',omitidos.length,omitidos));
-        if (pendientes.length) bloque.append(grupoResultadoIncorporacion('pendientes','Cambios por verificar',pendientes.length,pendientes));
-        return bloque;
+        if (guardados.length) detalle.append(grupoResultadoIncorporacion('cambios','Cambios detectados incorporados',guardados.length,guardados));
+        if (omitidos.length) detalle.append(grupoResultadoIncorporacion('omitidos','Cambios que ya coinciden',omitidos.length,omitidos));
+        if (pendientes.length) detalle.append(grupoResultadoIncorporacion('pendientes','Cambios por verificar',pendientes.length,pendientes));
     }
 
     function renderizarResultadoIncorporacion(out, ejecucion, volver) {
@@ -9646,8 +9654,8 @@
         ]) {
             detalle.append(grupoResultadoIncorporacion(clave,etiqueta,cantidad,ejecucion.detalle?.[clave]));
         }
+        agregarCambiosDetectados(detalle,ejecucion.cambiosDetectados);
         out.append(detalle);
-        if (ejecucion.cambiosDetectados?.length) out.append(reciboCambiosDetectados(ejecucion.cambiosDetectados));
         const acciones = elemento("div", "haiku-incorporacion-acciones");
         const boton = elemento("button", "libro-reserva-boton secundario", "Volver a la comparación");
         boton.type = "button";
@@ -9808,7 +9816,6 @@
         const comprobante = renderizarComprobanteActualizaciones(plan);
         out.replaceChildren(...(comprobante ? [comprobante] : []),cabecera,preparacion,cifras,resumen);
 
-        if (plan.reciboCambiosDetectados?.length) out.append(reciboCambiosDetectados(plan.reciboCambiosDetectados));
         const resumenCambios = elemento("p", "haiku-incorporacion-continuar");
         if (plan.items.some(i => i.categoria === 'cambios_detectados')) preparacion.append(resumenCambios);
         const cancelaciones = elemento("section", "haku-incorporacion-sites-cancelaciones");
