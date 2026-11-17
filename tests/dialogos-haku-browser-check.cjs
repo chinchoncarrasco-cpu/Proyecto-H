@@ -129,6 +129,18 @@ const server = http.createServer((req, res) => {
             await page.getByRole('button',{name:'Gestionar ajustes',exact:true}).click();
             const historial = page.locator('#haiku-ajuste-historial');
             await historial.getByText('$14.400',{exact:true}).waitFor();
+            assert.equal(await historial.evaluate(el => {
+                const encabezado = getComputedStyle(el.querySelector('summary'));
+                const etiqueta = getComputedStyle(document.querySelector('label[for="haiku-ajuste-reserva"]'));
+                return encabezado.fontSize === etiqueta.fontSize && encabezado.color === etiqueta.color;
+            }),true);
+            assert.equal(await historial.evaluate(el => {
+                const correccion = el.querySelector('.haiku-ajuste-historial-correccion > summary');
+                const anular = el.querySelector('[data-gestionar-ajuste="anular"]');
+                const a = correccion.getBoundingClientRect(), b = anular.getBoundingClientRect();
+                return getComputedStyle(correccion).backgroundColor === getComputedStyle(anular).backgroundColor &&
+                    a.right <= b.left && Math.abs(a.height - b.height) <= 1;
+            }),true);
             await historial.getByRole('button',{name:'Anular ajuste',exact:true}).click();
             await page.locator('.hk-dialogo[open]').waitFor();
             await cancel();
@@ -136,6 +148,14 @@ const server = http.createServer((req, res) => {
             await historial.getByText('Corregir monto',{exact:true}).click();
             await historial.getByLabel('Nuevo monto en pesos').fill('16000');
             await historial.getByLabel('Motivo',{exact:true}).fill('Importe original confirmado');
+            const anchoHistorial = await historial.evaluate(el => {
+                const limite = el.getBoundingClientRect().right;
+                return {ancho:el.clientWidth, desplazamiento:el.scrollWidth,
+                    fuera:[...el.querySelectorAll('*')].map(n => [n.className,n.getBoundingClientRect().right - limite])
+                        .filter(([,exceso]) => exceso > 0.5)};
+            });
+            assert.ok(anchoHistorial.desplazamiento <= anchoHistorial.ancho, JSON.stringify({tema,width,...anchoHistorial}));
+            await page.screenshot({path:path.join(out,`gestionar-ajustes-edicion-${tema}-${width}.png`)});
             await historial.getByRole('button',{name:'Revisar corrección',exact:true}).click();
             await page.locator('.hk-dialogo').getByRole('button',{name:'Corregir penalidad',exact:true}).click();
             await historial.getByText('$16.000',{exact:true}).waitFor();

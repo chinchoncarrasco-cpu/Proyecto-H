@@ -193,16 +193,58 @@
             .haiku-ajuste-cargo-confirmar { border:1px solid #245f43; background:#2f7653; color:#fff; }
             .haiku-ajuste-cargo-confirmar:disabled { opacity:.48; cursor:not-allowed; }
             #ficha-gestionar-ajustes { margin-block-start:8px; }
-            .haiku-ajuste-historial { margin-block:10px; }
-            .haiku-ajuste-historial > summary { cursor:pointer; font-weight:600; }
+            .haiku-ajuste-historial {
+                border-block:1px solid var(--haku-compacto-borde, #dbe3de);
+                color:var(--haku-compacto-texto, #202723); font-size:13px;
+            }
+            .haiku-ajuste-historial summary { cursor:pointer; list-style:none; }
+            .haiku-ajuste-historial summary::-webkit-details-marker { display:none; }
+            .haiku-ajuste-historial summary:focus-visible {
+                outline:2px solid var(--haku-compacto-acento, #2f7653); outline-offset:2px;
+            }
+            .haiku-ajuste-historial > summary {
+                display:flex; justify-content:space-between; align-items:center; gap:10px;
+                min-height:38px; margin:0; padding-inline-end:3px;
+            }
+            .haiku-ajuste-historial summary::after {
+                content:''; flex:none; width:6px; height:6px;
+                border:solid currentColor; border-width:0 1px 1px 0; transform:rotate(45deg);
+            }
+            .haiku-ajuste-historial details[open] > summary::after,
+            .haiku-ajuste-historial[open] > summary::after { transform:rotate(225deg); }
             .haiku-ajuste-historial-fila {
-                display:grid; gap:6px; padding-block:8px; border-bottom:1px solid var(--haiku-border, #829288);
-                overflow-wrap:anywhere;
+                display:grid; grid-template-columns:minmax(0,1fr); gap:7px; padding:9px 0 12px;
+                border-top:1px solid var(--haku-compacto-borde, #dbe3de); overflow-wrap:anywhere;
             }
-            .haiku-ajuste-historial-fila header, .haiku-ajuste-historial-acciones {
-                display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px 12px;
+            .haiku-ajuste-historial-fila header {
+                display:flex; justify-content:space-between; align-items:baseline; gap:6px 12px;
             }
-            .haiku-ajuste-historial-correccion label { display:block; margin-block:6px; }
+            .haiku-ajuste-historial-fila header b { flex:none; font-variant-numeric:tabular-nums; }
+            .haiku-ajuste-historial-fila small, .haiku-ajuste-historial-vacio {
+                margin:0; color:var(--haku-compacto-secundario, #586c60); font-size:11px; line-height:1.5;
+            }
+            .haiku-ajuste-historial-vacio { padding-bottom:10px; }
+            .haiku-ajuste-historial-acciones {
+                display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:8px;
+            }
+            .haiku-ajuste-historial-correccion { grid-area:1 / 1 / 2 / 3; min-width:0; }
+            .haiku-ajuste-historial-correccion > summary {
+                display:inline-flex; align-items:center; gap:8px;
+            }
+            .haiku-ajuste-historial-acciones > button { grid-area:1 / 2; }
+            .haiku-ajuste-historial-acciones :is(summary,button) {
+                box-sizing:border-box; min-height:34px; padding:7px 11px; font-size:12px; line-height:18px;
+            }
+            .haiku-ajuste-historial-campos {
+                display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:8px;
+                margin-top:9px;
+            }
+            .haiku-ajuste-historial-campos label { min-width:0; }
+            .haiku-ajuste-historial-campos input { display:block; min-width:0; max-width:100%; margin-top:4px; }
+            .haiku-ajuste-historial-campos > button { grid-column:1 / -1; justify-self:start; }
+            @media (max-width:480px) {
+                .haiku-ajuste-historial-campos { grid-template-columns:1fr; }
+            }
 
             @media (max-width:720px) {
                 #seccion-pagos .haiku-ajuste-cargo-boton { padding:9px 11px; font-size:11px; }
@@ -298,8 +340,8 @@
 
                     <div id="haiku-ajuste-vinculo" class="haiku-ajuste-cargo-vinculo" hidden></div>
 
-                    <details class="haiku-ajuste-historial" id="haiku-ajuste-historial" hidden>
-                        <summary>Ajustes de la reserva</summary>
+                    <details class="haiku-ajuste-historial haiku-ajuste-cargo-grupo" id="haiku-ajuste-historial" hidden>
+                        <summary class="haiku-ajuste-cargo-label">Ajustes de la reserva</summary>
                         <div id="haiku-ajuste-historial-lista"></div>
                     </details>
 
@@ -701,7 +743,7 @@
             (Object.hasOwn(TIPOS,a.tipo_ajuste) && a.concepto === TIPOS[a.tipo_ajuste].titulo));
         lista.replaceChildren();
         panel.querySelector("summary").textContent = `Ajustes de la reserva (${ajustes.length})`;
-        if (!ajustes.length) lista.textContent = "Sin ajustes de alojamiento registrados.";
+        if (!ajustes.length) lista.innerHTML = '<p class="haiku-ajuste-historial-vacio">Sin ajustes de alojamiento registrados.</p>';
         for (const ajuste of ajustes) {
             const fila = document.createElement("article");
             fila.className = "haiku-ajuste-historial-fila";
@@ -712,13 +754,15 @@
             if (activo && !guardando && tienePermiso("pagos.anular")) {
                 const acciones = document.createElement("div");
                 acciones.className = "haiku-ajuste-historial-acciones";
-                acciones.innerHTML = '<button type="button" class="libro-reserva-boton secundario" data-gestionar-ajuste="anular">Anular ajuste</button>';
+                acciones.innerHTML = '<button type="button" class="haiku-ajuste-cargo-cancelar" data-gestionar-ajuste="anular">Anular ajuste</button>';
                 if (ajuste.tipo_ajuste !== "iva_exento" && tienePermiso("pagos.registrar")) {
                     acciones.insertAdjacentHTML("afterbegin", `<details class="haiku-ajuste-historial-correccion">
-                        <summary>Corregir monto</summary>
-                        <label>Nuevo monto en pesos <input class="haiku-ajuste-cargo-select" type="number" min="1" step="1" data-nuevo-monto></label>
-                        <label>Motivo <input class="haiku-ajuste-cargo-select" maxlength="200" data-motivo-ajuste></label>
-                        <button type="button" class="libro-reserva-boton secundario" data-gestionar-ajuste="corregir">Revisar corrección</button>
+                        <summary class="haiku-ajuste-cargo-cancelar">Corregir monto</summary>
+                        <div class="haiku-ajuste-historial-campos">
+                            <label class="haiku-ajuste-cargo-label">Nuevo monto en pesos <input class="haiku-ajuste-cargo-select" type="number" min="1" step="1" data-nuevo-monto></label>
+                            <label class="haiku-ajuste-cargo-label">Motivo <input class="haiku-ajuste-cargo-select" maxlength="200" data-motivo-ajuste></label>
+                            <button type="button" class="haiku-ajuste-cargo-confirmar" data-gestionar-ajuste="corregir">Revisar corrección</button>
+                        </div>
                     </details>`);
                 }
                 fila.append(acciones);
