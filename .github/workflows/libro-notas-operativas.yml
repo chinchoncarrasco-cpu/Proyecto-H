@@ -37,7 +37,9 @@ on:
       - "tests/libro-auditoria-servicios-notas.test.cjs"
       - "tests/libro-retiros-*.cjs"
       - "tests/libro-lote-cambios-seguros.test.cjs"
+      - "tests/gestion-ajustes-reserva-postgres.test.cjs"
       - "supabase/migrations/*_libro_cancelacion_segura_lote.sql"
+      - "supabase/migrations/*_gestion_ajustes_reserva.sql"
       - "tests/libro-masaje-registro-cuna-acciones.test.cjs"
       - "tests/libro-historial-manual-browser-check.cjs"
       - "css/sites-asistente-v1.css"
@@ -73,7 +75,7 @@ jobs:
       - name: PostgreSQL aislado, auditoría y conservación de pagos
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
-        run: node --test tests/libro-aprobacion-admin-postgres.test.cjs tests/libro-servicio-manual-postgres.test.cjs tests/libro-retiros-notas-postgres.test.cjs
+        run: node --test tests/libro-aprobacion-admin-postgres.test.cjs tests/libro-servicio-manual-postgres.test.cjs tests/libro-retiros-notas-postgres.test.cjs tests/gestion-ajustes-reserva-postgres.test.cjs
       - name: Chromium de prueba
         run: node "$RUNNER_TEMP/haku-libro-test/node_modules/playwright/cli.js" install chromium --with-deps
       - name: Reprogramación conjunta, permisos, disponibilidad y conservación financiera

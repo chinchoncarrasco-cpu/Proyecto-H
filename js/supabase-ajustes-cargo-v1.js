@@ -16,6 +16,8 @@
     let reservaSeleccionada = "";
     let tipoSeleccionado = "";
     let resumenActual = null;
+    let turnoResumen = 0;
+    const tienePermiso = permiso => window.haikuTienePermiso?.(permiso) === true;
 
     const TIPOS = Object.freeze({
         iva_exento: {
@@ -109,6 +111,7 @@
                 padding:20px; background:rgba(19,28,23,.38); backdrop-filter:blur(2px);
             }
             .haiku-ajuste-cargo-overlay[hidden] { display:none!important; }
+            .haiku-ajuste-cargo-overlay--ficha { z-index:10000; }
             .haiku-ajuste-cargo-modal {
                 width:min(620px,100%); max-height:min(780px,calc(100vh - 32px)); overflow-y:auto;
                 background:#fff; border:1px solid #dfe5e1; border-radius:16px;
@@ -189,6 +192,17 @@
             .haiku-ajuste-cargo-cancelar { border:1px solid #dbe2de; background:#fff; color:#4f5a54; }
             .haiku-ajuste-cargo-confirmar { border:1px solid #245f43; background:#2f7653; color:#fff; }
             .haiku-ajuste-cargo-confirmar:disabled { opacity:.48; cursor:not-allowed; }
+            #ficha-gestionar-ajustes { margin-block-start:8px; }
+            .haiku-ajuste-historial { margin-block:10px; }
+            .haiku-ajuste-historial > summary { cursor:pointer; font-weight:600; }
+            .haiku-ajuste-historial-fila {
+                display:grid; gap:6px; padding-block:8px; border-bottom:1px solid var(--haiku-border, #829288);
+                overflow-wrap:anywhere;
+            }
+            .haiku-ajuste-historial-fila header, .haiku-ajuste-historial-acciones {
+                display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:6px 12px;
+            }
+            .haiku-ajuste-historial-correccion label { display:block; margin-block:6px; }
 
             @media (max-width:720px) {
                 #seccion-pagos .haiku-ajuste-cargo-boton { padding:9px 11px; font-size:11px; }
@@ -284,7 +298,12 @@
 
                     <div id="haiku-ajuste-vinculo" class="haiku-ajuste-cargo-vinculo" hidden></div>
 
-                    <div class="haiku-ajuste-cargo-grupo">
+                    <details class="haiku-ajuste-historial" id="haiku-ajuste-historial" hidden>
+                        <summary>Ajustes de la reserva</summary>
+                        <div id="haiku-ajuste-historial-lista"></div>
+                    </details>
+
+                    <div class="haiku-ajuste-cargo-grupo" id="haiku-ajuste-tipos">
                         <span class="haiku-ajuste-cargo-label">Tipo de ajuste</span>
                         <div class="haiku-ajuste-cargo-opciones">
                             <button type="button" class="haiku-ajuste-cargo-opcion" data-haiku-ajuste-tipo="iva_exento">
@@ -352,6 +371,11 @@
 
         overlay.querySelector("#haiku-ajuste-confirmar")
             ?.addEventListener("click", aplicarAjuste);
+        overlay.querySelector("#haiku-ajuste-historial")
+            ?.addEventListener("click", evento => {
+                const boton = evento.target.closest("button[data-gestionar-ajuste]");
+                if (boton) void gestionarAjuste(boton);
+            });
     }
 
     function crearBoton() {
@@ -374,12 +398,15 @@
     }
 
     function resetModal() {
+        turnoResumen++;
         reservaSeleccionada = "";
         tipoSeleccionado = "";
         resumenActual = null;
         guardando = false;
         const overlay = document.getElementById('haiku-ajuste-cargo-overlay');
         if (overlay) delete overlay.dataset.haikuLibroMonto;
+        const historial = document.getElementById("haiku-ajuste-historial");
+        if (historial) { historial.hidden = true; historial.open = false; }
 
         document.querySelectorAll("[data-haiku-ajuste-tipo]")
             .forEach(item => item.classList.remove("activa"));
@@ -407,8 +434,10 @@
     function cerrarModal() {
         const overlay = document.getElementById("haiku-ajuste-cargo-overlay");
         if (!overlay || guardando) return;
+        turnoResumen++;
         overlay.hidden = true;
         overlay.classList.remove('haiku-ajuste-cargo-overlay--libro');
+        overlay.classList.remove('haiku-ajuste-cargo-overlay--ficha');
         overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal','true');
         document.body.style.overflow = "";
     }
@@ -521,7 +550,7 @@
         }
 
         if (typeof window.haikuTienePermiso === "function" &&
-            !window.haikuTienePermiso("pagos.registrar")) {
+            !window.haikuTienePermiso("pagos.registrar") && !(opciones.reservaId && window.haikuTienePermiso("pagos.anular"))) {
             window.HAIKU_DIALOGOS.aviso("Tu usuario no tiene permiso para ajustar cargos.");
             return;
         }
@@ -532,15 +561,30 @@
         resetModal();
         const desdeLibro = opciones?.desdeLibro === true;
         overlay.classList.toggle('haiku-ajuste-cargo-overlay--libro',desdeLibro);
+        overlay.classList.toggle('haiku-ajuste-cargo-overlay--ficha',Boolean(opciones.reservaId));
         overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal',
             desdeLibro && window.matchMedia?.('(min-width: 901px)')?.matches ? 'false' : 'true');
         const titulo = document.getElementById('haiku-ajuste-cargo-titulo');
-        if (titulo) titulo.textContent = desdeLibro ? 'Revisar penalidad 10%' : 'Ajustar cargo';
+        if (titulo) titulo.textContent = desdeLibro ? 'Revisar penalidad 10%' : opciones.reservaId ? 'Gestionar ajustes' : 'Ajustar cargo';
         const ceja = overlay.querySelector('.haiku-ajuste-cargo-cabecera small');
         if (ceja) ceja.textContent = desdeLibro ? 'LIBRO · PROYECTO H' : 'Control financiero';
         overlay.hidden = false;
         document.body.style.overflow = "hidden";
-        if (desdeLibro) {
+        const permiteAgregar = !opciones.reservaId || window.haikuTienePermiso?.("pagos.registrar") === true;
+        for (const id of ["haiku-ajuste-tipos","haiku-ajuste-confirmar"])
+            document.getElementById(id)?.toggleAttribute("hidden", !permiteAgregar);
+        document.getElementById("haiku-ajuste-observacion")?.closest(".haiku-ajuste-cargo-grupo")
+            ?.toggleAttribute("hidden", !permiteAgregar);
+        if (opciones.reservaId) {
+            const select = document.getElementById("haiku-ajuste-reserva");
+            reservaSeleccionada = opciones.reservaId;
+            select.replaceChildren(new Option("Reserva seleccionada", reservaSeleccionada));
+            select.disabled = true;
+            document.getElementById("haiku-ajuste-historial").open = true;
+            await cargarResumenSeleccionado();
+            if (resumenActual?.titular && reservaSeleccionada === opciones.reservaId)
+                select.options[0].textContent = resumenActual.titular;
+        } else if (desdeLibro) {
             // Ya conocemos la reserva, no esperar la carga de todas las del día.
             const select = document.getElementById('haiku-ajuste-reserva');
             if (select) {
@@ -603,6 +647,8 @@
     }
 
     async function cargarResumenSeleccionado() {
+        const turno = ++turnoResumen;
+        pintarHistorial();
         if (!reservaSeleccionada) {
             resumenActual = null;
             const vinculo = document.getElementById("haiku-ajuste-vinculo");
@@ -617,6 +663,7 @@
             "haiku_resumen_ajustes_unidad",
             { p_reserva_id: reservaSeleccionada }
         );
+        if (turno !== turnoResumen) return;
 
         if (error) {
             console.error("HAIKU · Error cargando resumen de ajuste:", error);
@@ -627,6 +674,7 @@
         }
 
         resumenActual = data || null;
+        pintarHistorial();
 
         const vinculo = document.getElementById("haiku-ajuste-vinculo");
         if (vinculo) {
@@ -642,6 +690,90 @@
 
         mostrarEstado("");
         pintarPrevia();
+    }
+
+    function pintarHistorial() {
+        const panel = document.getElementById("haiku-ajuste-historial");
+        const lista = document.getElementById("haiku-ajuste-historial-lista");
+        if (!panel || !lista) return;
+        panel.hidden = !resumenActual;
+        const ajustes = (resumenActual?.ajustes || []).filter(a => a.tipo_ajuste === "iva_exento" ||
+            (Object.hasOwn(TIPOS,a.tipo_ajuste) && a.concepto === TIPOS[a.tipo_ajuste].titulo));
+        lista.replaceChildren();
+        panel.querySelector("summary").textContent = `Ajustes de la reserva (${ajustes.length})`;
+        if (!ajustes.length) lista.textContent = "Sin ajustes de alojamiento registrados.";
+        for (const ajuste of ajustes) {
+            const fila = document.createElement("article");
+            fila.className = "haiku-ajuste-historial-fila";
+            fila.dataset.operacion = ajuste.operacion_id;
+            const activo = ajuste.estado === "activo";
+            fila.innerHTML = `<header><strong>${escapar(TIPOS[ajuste.tipo_ajuste].titulo)}</strong><b>${dinero(ajuste.monto)}</b></header>
+                <small>${activo ? "Activo" : "Anulado"}${ajuste.observaciones ? ' · ' + escapar(ajuste.observaciones) : ''}</small>`;
+            if (activo && !guardando && tienePermiso("pagos.anular")) {
+                const acciones = document.createElement("div");
+                acciones.className = "haiku-ajuste-historial-acciones";
+                acciones.innerHTML = '<button type="button" class="libro-reserva-boton secundario" data-gestionar-ajuste="anular">Anular ajuste</button>';
+                if (ajuste.tipo_ajuste !== "iva_exento" && tienePermiso("pagos.registrar")) {
+                    acciones.insertAdjacentHTML("afterbegin", `<details class="haiku-ajuste-historial-correccion">
+                        <summary>Corregir monto</summary>
+                        <label>Nuevo monto en pesos <input class="haiku-ajuste-cargo-select" type="number" min="1" step="1" data-nuevo-monto></label>
+                        <label>Motivo <input class="haiku-ajuste-cargo-select" maxlength="200" data-motivo-ajuste></label>
+                        <button type="button" class="libro-reserva-boton secundario" data-gestionar-ajuste="corregir">Revisar corrección</button>
+                    </details>`);
+                }
+                fila.append(acciones);
+            }
+            lista.append(fila);
+        }
+    }
+
+    async function gestionarAjuste(boton) {
+        if (guardando || !tienePermiso("pagos.anular")) return;
+        const fila = boton.closest("[data-operacion]");
+        const ajuste = resumenActual?.ajustes?.find(a => a.operacion_id === fila?.dataset.operacion && a.estado === "activo");
+        if (!ajuste) return;
+        const reservaId = reservaSeleccionada;
+        const corregir = boton.dataset.gestionarAjuste === "corregir";
+        if (corregir && !tienePermiso("pagos.registrar")) return;
+        const anterior = Number(ajuste.monto);
+        const monto = corregir ? Number(fila.querySelector("[data-nuevo-monto]")?.value) : null;
+        const motivo = corregir ? fila.querySelector("[data-motivo-ajuste]")?.value.trim() : null;
+        if (corregir && (!Number.isSafeInteger(monto) || monto <= 0 || monto === anterior || !motivo)) {
+            mostrarEstado("Ingresa un monto distinto y el motivo de la corrección.", "error");
+            return;
+        }
+        guardando = true;
+        const selector = document.getElementById("haiku-ajuste-reserva");
+        const selectorBloqueado = selector?.disabled;
+        if (selector) selector.disabled = true;
+        try {
+            const accion = corregir ? "Corregir penalidad" : "Anular ajuste";
+            const efecto = corregir ? `${dinero(anterior)} → ${dinero(monto)}` : dinero(anterior);
+            const confirmado = await window.HAIKU_DIALOGOS.confirmar(
+                `${accion} · ${TIPOS[ajuste.tipo_ajuste].titulo} · ${efecto}${resumenActual.es_grupo ? ' · Reserva conjunta' : ''}. El ajuste anterior quedará anulado en el historial.`,
+                {accion, contexto:"Pagos · Ajustes", peligro:true}
+            );
+            if (!confirmado || reservaId !== reservaSeleccionada) return;
+            const {data,error} = await cliente.rpc("haiku_gestionar_ajuste_reserva_v1", {
+                p_reserva_id:reservaId, p_operacion_id:ajuste.operacion_id, p_monto_esperado:anterior,
+                p_nuevo_monto:monto, p_motivo:motivo
+            });
+            if (error) throw error;
+            if (data?.operacion_id !== ajuste.operacion_id || !data.resumen ||
+                (corregir && !data.nuevo_ajuste)) throw Error("Vuelve a abrir los ajustes para comprobar el resultado.");
+            resumenActual = data.resumen;
+            pintarPrevia();
+            mostrarEstado(corregir ? "Monto corregido." : "Ajuste anulado.", "exito");
+            window.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada("ajustar cargo");
+            await Promise.allSettled([refrescarFinanzas(), window.haikuRefrescarFichaSupabaseV2?.(reservaId)]);
+        } catch (error) {
+            mostrarEstado(error.message || "No se pudo gestionar el ajuste.", "error");
+        } finally {
+            guardando = false;
+            if (selector) selector.disabled = selectorBloqueado;
+            if (reservaSeleccionada === reservaId && resumenActual?.ajustes?.find(a => a.operacion_id === ajuste.operacion_id)?.estado === "anulado")
+                pintarHistorial();
+        }
     }
 
     function pintarPrevia() {
@@ -815,6 +947,8 @@
     }
 
     function instalar() {
+        const botonFicha = document.getElementById("ficha-gestionar-ajustes");
+        if (botonFicha) botonFicha.hidden = !tienePermiso("pagos.anular") && !tienePermiso("pagos.registrar");
         if (instalado) {
             instalarRealtime();
             return;
@@ -823,6 +957,10 @@
         instalarEstilos();
         crearModal();
         crearBoton();
+        botonFicha?.addEventListener("click", () => {
+            const reservaId = document.getElementById("ficha-reserva-modal")?.dataset.reservaId;
+            if (reservaId && !guardando) void abrirModal({reservaId});
+        });
         instalarRealtime();
         instalado = true;
         console.info("HAIKU · Ajustes de cargo V2 preparados.");
