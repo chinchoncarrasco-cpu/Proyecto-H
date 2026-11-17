@@ -107,7 +107,13 @@ const server = http.createServer((req, res) => {
                 ficha.id = 'ficha-reserva-modal';
                 ficha.dataset.reservaId = 'reserva-ficticia';
                 ficha.innerHTML = '<button id="ficha-gestionar-ajustes" hidden>Gestionar ajustes</button>';
+                ficha.hidden = true;
                 document.body.append(ficha);
+                const pagos = document.createElement('section');
+                pagos.id = 'seccion-pagos';
+                pagos.innerHTML = '<header class="cabecera"></header>';
+                document.body.append(pagos);
+                window.fechaSeleccionada = '2026-11-13';
                 const previo = {operacion_id:'penalidad-ficticia',tipo_ajuste:'cargo_modificacion',concepto:'Cargo 10% · Modificación',monto:14400,estado:'activo'};
                 let ajustes = [previo];
                 window.haikuTienePermiso = () => true;
@@ -116,6 +122,7 @@ const server = http.createServer((req, res) => {
                     channel: () => ({on(){return this},subscribe(){}}),
                     async rpc(nombre, args) {
                         const resumen = () => ({titular:'Reserva ficticia',total_alojamiento_original:144000,ajustes});
+                        if (nombre === 'haiku_operacion_dia') return {data:[]};
                         if (nombre === 'haiku_resumen_ajustes_unidad') return {data:resumen()};
                         if (nombre !== 'haiku_gestionar_ajuste_reserva_v1') throw Error(nombre);
                         gestiones.push(args);
@@ -125,7 +132,30 @@ const server = http.createServer((req, res) => {
                     }
                 };
             });
+            await page.addStyleTag({url:origin + '/css/haiku-panel-coordinacion-v1.css'});
+            await page.evaluate(() => Object.assign(document.getElementById('haiku-asistente-panel').style,
+                {position:'fixed',top:'0',right:'0',width:'var(--haiku-panel-coordinado-ancho)',boxSizing:'border-box'}));
+            await page.addScriptTag({url:origin + '/js/haiku-panel-coordinacion-v1.js'});
             await page.addScriptTag({url:origin + '/js/supabase-ajustes-cargo-v1.js'});
+            await page.getByRole('button',{name:'Ajustar cargo',exact:true}).click();
+            const ajuste = page.locator('#haiku-ajuste-cargo-overlay');
+            await ajuste.waitFor();
+            const marco = await ajuste.boundingBox();
+            if (width > 900) {
+                const haku = await page.locator('#haiku-asistente-panel').boundingBox();
+                assert.ok(Math.abs(marco.x + marco.width - haku.x) <= 1,JSON.stringify({marco,haku}));
+                assert.equal(await ajuste.getByRole('dialog').getAttribute('aria-modal'),'false');
+                await ajuste.getByRole('button',{name:'Cerrar',exact:true}).click();
+            } else {
+                assert.equal(marco.width,width);
+                await ajuste.getByRole('button',{name:'Volver a Haku'}).click();
+            }
+            await ajuste.waitFor({state:'hidden'});
+            assert.equal(await page.locator('#haiku-asistente-panel').isVisible(),true);
+            await page.evaluate(() => {
+                document.getElementById('haiku-asistente-panel').hidden = true;
+                document.getElementById('ficha-reserva-modal').hidden = false;
+            });
             await page.getByRole('button',{name:'Gestionar ajustes',exact:true}).click();
             const historial = page.locator('#haiku-ajuste-historial');
             await historial.getByText('$14.400',{exact:true}).waitFor();
@@ -166,6 +196,11 @@ const server = http.createServer((req, res) => {
             await page.screenshot({path:path.join(out,`gestionar-ajustes-${tema}-${width}.png`)});
             await page.locator('#haiku-ajuste-cargo-overlay').getByRole('button',{name:'Cerrar',exact:true}).click();
             await page.locator('#ficha-reserva-modal').evaluate(el => el.remove());
+            await page.evaluate(() => {
+                const panel = document.getElementById('haiku-asistente-panel');
+                panel.removeAttribute('style');
+                panel.hidden = false;
+            });
             report.push({ tema, width, historial: 'cancelar/escape/aceptar', ocupacion: 'rango/capacidad', pagos: 'resumen', reapertura: 'motivo requerido', validacion: 'contextual' });
         }
         await page.setViewportSize({ width: 390, height: 420 });

@@ -111,7 +111,8 @@
                 padding:20px; background:rgba(19,28,23,.38); backdrop-filter:blur(2px);
             }
             .haiku-ajuste-cargo-overlay[hidden] { display:none!important; }
-            .haiku-ajuste-cargo-overlay--ficha { z-index:10000; }
+            .haiku-ajuste-cargo-overlay--ficha { z-index:90020; }
+            .haiku-ajuste-cargo-volver-haku { display:none; }
             .haiku-ajuste-cargo-modal {
                 width:min(620px,100%); max-height:min(780px,calc(100vh - 32px)); overflow-y:auto;
                 background:#fff; border:1px solid #dfe5e1; border-radius:16px;
@@ -257,7 +258,8 @@
             }
         `;
         style.textContent += `
-            /* Libro: panel a la izquierda de Haku, como «Ver reserva». */
+            /* Usa el ancho coordinado de Haku al acoplar el formulario. */
+            body.haiku-panel-abierto .haiku-ajuste-cargo-overlay,
             .haiku-ajuste-cargo-overlay.haiku-ajuste-cargo-overlay--libro {
                 position: fixed;
                 inset: 0 var(--haiku-panel-coordinado-ancho, clamp(320px, 34vw, 486px)) 0 auto;
@@ -273,6 +275,7 @@
                 -webkit-backdrop-filter: none;
                 box-shadow: -14px 0 42px #172f2229;
             }
+            body.haiku-panel-abierto .haiku-ajuste-cargo-overlay > .haiku-ajuste-cargo-modal,
             .haiku-ajuste-cargo-overlay--libro > .haiku-ajuste-cargo-modal {
                 display: flex;
                 flex-direction: column;
@@ -286,9 +289,11 @@
                 border-radius: 0;
                 box-shadow: none;
             }
+            body.haiku-panel-abierto .haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-cabecera,
             .haiku-ajuste-cargo-overlay--libro .haiku-ajuste-cargo-cabecera {
                 flex: 0 0 auto;
             }
+            body.haiku-panel-abierto .haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-cuerpo,
             .haiku-ajuste-cargo-overlay--libro .haiku-ajuste-cargo-cuerpo {
                 flex: 1 1 auto;
                 min-height: 0;
@@ -296,6 +301,7 @@
                 overscroll-behavior: contain;
             }
             @media (max-width: 900px) {
+                body.haiku-panel-abierto .haiku-ajuste-cargo-overlay,
                 .haiku-ajuste-cargo-overlay.haiku-ajuste-cargo-overlay--libro {
                     inset: 0;
                     width: 100vw;
@@ -303,11 +309,18 @@
                     z-index: 90020;
                     padding: 0;
                 }
+                body.haiku-panel-abierto .haiku-ajuste-cargo-overlay > .haiku-ajuste-cargo-modal,
                 .haiku-ajuste-cargo-overlay--libro > .haiku-ajuste-cargo-modal {
                     width: 100vw;
                     height: 100dvh;
                     max-height: 100dvh;
                     border-radius: 0;
+                }
+                body.haiku-panel-abierto .haiku-ajuste-cargo-overlay .haiku-ajuste-cargo-cabecera {
+                    flex-wrap:wrap;
+                }
+                body.haiku-panel-abierto .haiku-ajuste-cargo-volver-haku {
+                    display:inline-flex; align-items:center; justify-content:center; width:100%; order:3;
                 }
             }
 `;
@@ -329,6 +342,7 @@
                         <h3 id="haiku-ajuste-cargo-titulo">Ajustar cargo</h3>
                     </div>
                     <button type="button" class="haiku-ajuste-cargo-cerrar" data-haiku-ajuste-cerrar aria-label="Cerrar">×</button>
+                    <button type="button" class="haiku-ajuste-cargo-cancelar haiku-ajuste-cargo-volver-haku">← Volver a Haku</button>
                 </div>
                 <div class="haiku-ajuste-cargo-cuerpo">
                     <div class="haiku-ajuste-cargo-grupo">
@@ -395,6 +409,10 @@
 
         overlay.querySelectorAll("[data-haiku-ajuste-cerrar]")
             .forEach(boton => boton.addEventListener("click", cerrarModal));
+        overlay.querySelector(".haiku-ajuste-cargo-volver-haku")?.addEventListener("click", () => {
+            cerrarModal();
+            if (overlay.hidden) document.getElementById("haiku-asistente-texto")?.focus({preventScroll:true});
+        });
 
         overlay.querySelectorAll("[data-haiku-ajuste-tipo]")
             .forEach(boton => boton.addEventListener("click", () => {
@@ -482,6 +500,15 @@
         overlay.classList.remove('haiku-ajuste-cargo-overlay--ficha');
         overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal','true');
         document.body.style.overflow = "";
+    }
+
+    function sincronizarDialogoConHaku() {
+        const overlay = document.getElementById("haiku-ajuste-cargo-overlay");
+        if (!overlay || overlay.hidden) return;
+        const lateral = document.body.classList.contains("haiku-panel-abierto") ||
+            overlay.classList.contains("haiku-ajuste-cargo-overlay--libro");
+        overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal',
+            lateral && window.matchMedia('(min-width: 901px)').matches ? 'false' : 'true');
     }
 
     async function obtenerReservasDia() {
@@ -605,7 +632,8 @@
         overlay.classList.toggle('haiku-ajuste-cargo-overlay--libro',desdeLibro);
         overlay.classList.toggle('haiku-ajuste-cargo-overlay--ficha',Boolean(opciones.reservaId));
         overlay.querySelector('[role="dialog"]')?.setAttribute('aria-modal',
-            desdeLibro && window.matchMedia?.('(min-width: 901px)')?.matches ? 'false' : 'true');
+            (desdeLibro || document.body.classList?.contains("haiku-panel-abierto")) &&
+                window.matchMedia?.('(min-width: 901px)')?.matches ? 'false' : 'true');
         const titulo = document.getElementById('haiku-ajuste-cargo-titulo');
         if (titulo) titulo.textContent = desdeLibro ? 'Revisar penalidad 10%' : opciones.reservaId ? 'Gestionar ajustes' : 'Ajustar cargo';
         const ceja = overlay.querySelector('.haiku-ajuste-cargo-cabecera small');
@@ -1011,6 +1039,8 @@
     }
 
     window.addEventListener("haiku:auth-ready", () => setTimeout(instalar, 50));
+    window.addEventListener("haiku:paneles-estado", sincronizarDialogoConHaku);
+    window.addEventListener("resize", sincronizarDialogoConHaku);
     window.addEventListener("pageshow", () => setTimeout(instalar, 20));
     setTimeout(instalar, 120);
 
