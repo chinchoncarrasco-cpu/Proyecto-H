@@ -1442,9 +1442,21 @@ body:has(> .sites-shell-topbar):has(#seccion-resumen.activa) {
 #sites-resumen-reserva-drawer .rd-finance .rd-section-head { margin-bottom: 10px; }
 #sites-resumen-reserva-drawer .rd-finance .rd-section-head h4 { color: #32654a; }
 #sites-resumen-reserva-drawer .rd-finance-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+#sites-resumen-reserva-drawer [data-haiku-ficha-detalle] {
+    min-width: 0; margin: 0; padding: 0; border: 0;
+    background: transparent; font: inherit; text-align: left; cursor: pointer;
+}
+#sites-resumen-reserva-drawer .rd-pay-stat { min-height: 44px; }
+#sites-resumen-reserva-drawer [data-haiku-ficha-detalle]:focus-visible {
+    outline: 2px solid #4d9671; outline-offset: 2px; border-radius: 4px;
+}
+#sites-resumen-reserva-drawer [data-haiku-ficha-detalle][aria-expanded="true"] strong { text-decoration: underline; }
+@media (hover: hover) {
+  #sites-resumen-reserva-drawer [data-haiku-ficha-detalle]:hover strong { text-decoration: underline; }
+}
 #sites-resumen-reserva-drawer .rd-pay-stat strong { color: #2b4836; font-size: 14px; font-weight: 730; white-space: nowrap; }
 #sites-resumen-reserva-drawer .rd-pay-stat.balance strong { color: #926026; }
-#sites-resumen-reserva-drawer .rd-finance-note { margin-top: 9px; padding-top: 8px; border-top: 1px solid #dae8dc; color: #5c7561; font-size: 12px; line-height: 1.35; }
+#sites-resumen-reserva-drawer .rd-finance-note[data-haiku-ficha-detalle] { display: block; min-height: 38px; width: 100%; margin-top: 4px; padding-top: 3px; border-top: 1px solid #dae8dc; color: #5c7561; font-size: 12px; line-height: 1.35; }
 #sites-resumen-reserva-drawer .rd-finance-note strong { color: #416a4b; font-weight: 720; }
 #sites-resumen-reserva-drawer .rd-compact-empty { padding: 10px 0; border-top: 1px solid #e0e9e2; color: #718276; font-size: 12px; }
 #sites-resumen-reserva-drawer .rd-notes { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; border-top: 1px solid #e0e9e2; }
