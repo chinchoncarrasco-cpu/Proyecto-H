@@ -100,6 +100,52 @@ const server = http.createServer((req, res) => {
             await page.locator('#bove').fill('101'); assert.equal(await page.locator('.hk-validacion').count(), 0);
             assert.equal(await page.locator('#bove').getAttribute('aria-describedby'), 'ayuda');
             assert.equal(await page.locator('#bove').getAttribute('aria-invalid'), null);
+
+            await page.evaluate(() => {
+                const ficha = document.createElement('div');
+                ficha.className = 'ficha-reserva-modal';
+                ficha.id = 'ficha-reserva-modal';
+                ficha.dataset.reservaId = 'reserva-ficticia';
+                ficha.innerHTML = '<button id="ficha-gestionar-ajustes" hidden>Gestionar ajustes</button>';
+                document.body.append(ficha);
+                const previo = {operacion_id:'penalidad-ficticia',tipo_ajuste:'cargo_modificacion',concepto:'Cargo 10% · Modificación',monto:14400,estado:'activo'};
+                let ajustes = [previo];
+                window.haikuTienePermiso = () => true;
+                window.gestiones = [];
+                window.haikuSupabase = {
+                    channel: () => ({on(){return this},subscribe(){}}),
+                    async rpc(nombre, args) {
+                        const resumen = () => ({titular:'Reserva ficticia',total_alojamiento_original:144000,ajustes});
+                        if (nombre === 'haiku_resumen_ajustes_unidad') return {data:resumen()};
+                        if (nombre !== 'haiku_gestionar_ajuste_reserva_v1') throw Error(nombre);
+                        gestiones.push(args);
+                        ajustes = [{...previo,estado:'anulado'}];
+                        if (args.p_nuevo_monto) ajustes.unshift({...previo,operacion_id:'reemplazo',monto:args.p_nuevo_monto});
+                        return {data:{operacion_id:args.p_operacion_id,nuevo_ajuste:args.p_nuevo_monto ? 'reemplazo' : null,resumen:resumen()}};
+                    }
+                };
+            });
+            await page.addScriptTag({url:origin + '/js/supabase-ajustes-cargo-v1.js'});
+            await page.getByRole('button',{name:'Gestionar ajustes',exact:true}).click();
+            const historial = page.locator('#haiku-ajuste-historial');
+            await historial.getByText('$14.400',{exact:true}).waitFor();
+            await historial.getByRole('button',{name:'Anular ajuste',exact:true}).click();
+            await page.locator('.hk-dialogo[open]').waitFor();
+            await cancel();
+            assert.equal(await page.evaluate(() => gestiones.length),0);
+            await historial.getByText('Corregir monto',{exact:true}).click();
+            await historial.getByLabel('Nuevo monto en pesos').fill('16000');
+            await historial.getByLabel('Motivo',{exact:true}).fill('Importe original confirmado');
+            await historial.getByRole('button',{name:'Revisar corrección',exact:true}).click();
+            await page.locator('.hk-dialogo').getByRole('button',{name:'Corregir penalidad',exact:true}).click();
+            await historial.getByText('$16.000',{exact:true}).waitFor();
+            assert.equal(await page.evaluate(() => gestiones[0].p_monto_esperado),14400);
+            assert.equal(await page.evaluate(() => gestiones[0].p_reserva_id),'reserva-ficticia');
+            assert.equal(await historial.getByText('Anulado',{exact:true}).count(),1);
+            assert.equal(await page.locator('.haiku-ajuste-cargo-modal').evaluate(el => el.scrollWidth <= el.clientWidth),true);
+            await page.screenshot({path:path.join(out,`gestionar-ajustes-${tema}-${width}.png`)});
+            await page.locator('#haiku-ajuste-cargo-overlay').getByRole('button',{name:'Cerrar',exact:true}).click();
+            await page.locator('#ficha-reserva-modal').evaluate(el => el.remove());
             report.push({ tema, width, historial: 'cancelar/escape/aceptar', ocupacion: 'rango/capacidad', pagos: 'resumen', reapertura: 'motivo requerido', validacion: 'contextual' });
         }
         await page.setViewportSize({ width: 390, height: 420 });
