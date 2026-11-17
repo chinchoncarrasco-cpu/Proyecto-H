@@ -583,3 +583,45 @@ html .haiku-incorporacion-item--dudosos .haiku-incorporacion-meta-item--pago-det
 html[data-haiku-tema="oscuro"] .haiku-incorporacion-item--dudosos :is(.haku-pago-contexto,.haku-pago-contexto-tecnico,.haku-pago-revision-motivos) { color: #b1c2b7; border-color: #3e5145; }
 html[data-haiku-tema="oscuro"] .haiku-incorporacion-item--dudosos .haku-pago-contexto-titulo { color: #e8efea; }
 html[data-haiku-tema="oscuro"] .haiku-incorporacion-item--dudosos .haku-pago-contexto-datos .haiku-incorporacion-dato { background: transparent; }
+
+/* Cada pago en revisión tiene su propio encabezado plegable. */
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar { min-width: 0; margin: 0; }
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen {
+    display: flex; align-items: center; gap: 8px; min-height: 48px;
+    padding: 3px 0; list-style: none; cursor: pointer; border-radius: 5px;
+}
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen::-webkit-details-marker { display: none; }
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen > .haiku-incorporacion-item-cabecera {
+    flex: 1; min-width: 0; align-items: center; gap: 8px;
+}
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen .haiku-incorporacion-seleccion { align-items: center; }
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen .haiku-incorporacion-identidad strong {
+    font-size: 12px; line-height: 1.35; font-weight: 600;
+}
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen .haiku-incorporacion-identidad small {
+    font-size: 11px; line-height: 1.4; margin-top: 2px;
+}
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-flecha {
+    display: block; flex: 0 0 16px; font-size: 17px; line-height: 1;
+    text-align: center; color: #526958; transition: transform .15s ease;
+}
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar[open] > summary .haku-pago-revisar-flecha { transform: rotate(180deg); }
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-contenido { padding: 5px 0 4px; min-width: 0; }
+html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen:focus-visible { outline: 2px solid #4d9671; outline-offset: 2px; }
+html[data-haiku-tema="oscuro"] .haiku-incorporacion-item--dudosos .haku-pago-revisar-flecha { color: #b1c2b7; }
+@media (hover: hover) {
+    html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen:hover { background: rgb(92 143 111 / 8%); }
+}
+@media (max-width: 600px) {
+    html .haiku-incorporacion-item--dudosos .haku-pago-revisar-resumen .haiku-incorporacion-estado { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    html .haiku-incorporacion-item--dudosos .haku-pago-revisar-flecha { transition: none; }
+}
+html .haku-incorporacion-sites .haiku-incorporacion-item--dudosos:has(> .haku-pago-revisar) {
+    margin: 0; padding: 0 3px; border: 0; border-bottom: 1px solid #dce5e0;
+    border-radius: 0; background: transparent; box-shadow: none;
+}
+html[data-haiku-tema="oscuro"] .haku-incorporacion-sites .haiku-incorporacion-item--dudosos:has(> .haku-pago-revisar) {
+    border-color: #3e5145; background: transparent;
+}

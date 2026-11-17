@@ -91,6 +91,7 @@ const server = http.createServer((request,response) => {
             await page.evaluate(options=>window.__start(options), {pagoExtra: PAGO_AGUSTIN_RUNTIME});
             await noWrites();
             await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             const tarjeta=page.locator('.haiku-incorporacion-item--dudosos').filter({hasText:'Agustin Rampa Spinelli'});
             await tarjeta.scrollIntoViewIfNeeded();
             assert.match(await tarjeta.innerText(),/CAB 4[\s\S]*165\.598[\s\S]*Prepago Airbnb/);
@@ -169,6 +170,7 @@ const server = http.createServer((request,response) => {
         for (const medio of ['airbnb_prepaid_card','transferencia','efectivo','debito','webpay_credito']) {
             await page.evaluate(options=>window.__start(options),{pagoExtra:{medio_pago:medio,fecha_comprobante:'2026-10-12'}});
             await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             assert.equal(await page.getByRole('button',{name:'Aprobación manual',exact:true}).count(),0);
             assert.equal(await page.getByRole('button',{name:'Aprobar este pago',exact:true}).count(),1,'flujo normal con fecha');
             await noWrites();

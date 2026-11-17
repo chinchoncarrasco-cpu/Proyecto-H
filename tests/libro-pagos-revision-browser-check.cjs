@@ -36,7 +36,7 @@ const server=http.createServer((req,res)=>{const pathname=new URL(req.url,'http:
   };
   window.haikuSupabase=db;const result={reservas:[caso.r],generacion:1,q:{desde:caso.r.fecha_checkin,hasta:caso.r.fecha_checkout,incluirFinanzas:true}};
   const decisiones=new Map(),aprobados=new Set();window.__render=p=>{window.__plan=p;Q.renderizarIncorporacion(document.getElementById('out'),p,()=>{},aprobar,()=>{throw Error('No ejecutar pagos en esta validación');});
-   document.querySelectorAll('.haiku-incorporacion-seccion').forEach(e=>e.open=true);pintarPagos({cargos:db.db.vista_estado_cargos,pagos:db.db.pagos});};
+   document.querySelectorAll('.haiku-incorporacion-seccion,.haku-pago-revisar').forEach(e=>e.open=true);pintarPagos({cargos:db.db.vista_estado_cargos,pagos:db.db.pagos});};
   const aprobar=async id=>{aprobados.add(id);__render(await Q.prepararIncorporacion(result,decisiones,aprobados,db));};
   aprobar.manualPago=async(plan,id,accion)=>__render(await Q.resolverAprobacionManualPago(result,decisiones,aprobados,plan,id,accion,db));
   __render(await Q.prepararIncorporacion(result,decisiones,aprobados,db));

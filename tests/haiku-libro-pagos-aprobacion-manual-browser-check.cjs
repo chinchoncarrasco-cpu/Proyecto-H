@@ -91,6 +91,7 @@ const server = http.createServer((request, response) => {
         const start = async options => {
             await page.evaluate(options => window.__start(options), options);
             await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             await page.getByRole('button', { name: 'Aprobación manual', exact: true }).click();
             await panel.waitFor({ state: 'visible' });
         };
@@ -214,6 +215,7 @@ const server = http.createServer((request, response) => {
         });
         assert.equal(await page.locator('.haiku-incorporacion-item--pagos').count(), 0);
         await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
         assert.equal(await page.getByRole('button', { name: 'Aprobación manual', exact: true }).count(), 1);
 
         await page.setViewportSize({ width: 390, height: 844 });
