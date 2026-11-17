@@ -92,6 +92,15 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
     registro.releido=await snapshot();assert.deepEqual(registro.releido,registro.persistido);assert.equal(await page.locator('.haiku-incorporacion-aplicar-existente').count(),0);
     assert.match(await page.locator('#out').innerText(),/aplicado \$144.000.*sin aplicar \$0/);
    }else{
+    if(flujo==='penalidad'){
+     const tarifa=page.locator('article[data-haiku-pago-origen-celda="AZ32:BC32"]');
+     const contexto=tarifa.locator('.haku-pago-contexto');
+     assert.match(await contexto.innerText(),/Diferencia de tarifa[\s\S]*Destino[\s\S]*Alojamiento[\s\S]*Saldo del cargo/);
+     assert.doesNotMatch(await contexto.innerText(),/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+     assert.equal(await tarifa.locator('.haku-pago-contexto-tecnico[open]').count(),0);
+     assert.match(await tarifa.locator('.haku-pago-revision-motivos').innerText(),/Para continuar/);
+     await tarifa.screenshot({path:path.join(evidence,prefix+'-tarifa-contexto.png')});
+    }
     const n=flujo==='penalidad'?33:34,articulo=page.locator('article[data-haiku-pago-origen-celda="AZ'+n+':BC'+n+'"]');
     const objetivo=flujo==='penalidad'?articulo.filter({has:page.getByRole('button',{name:/Aprobar comprobante de tarjeta/})}):articulo;
     await objetivo.getByRole('button',{name:flujo==='penalidad'?/Aprobar comprobante de tarjeta/:/Registrar \$32.500/}).click();
@@ -107,6 +116,13 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
      assert.match(registro.textoRelectura,/monto: Libro \$16.000.*Proyecto H \$14.400/);assert.match(registro.textoRelectura,/Comprobante registrado/);
      const tarifa=page.locator('article[data-haiku-pago-origen-celda="AZ32:BC32"]');await tarifa.getByRole('button',{name:/Aprobar transferencia para alojamiento/}).click();await guardar(page);
      const s=await snapshot();assert.equal(s.pagos.filter(p=>p.monto===14400).length,1);assert.equal(s.ajustes.length,1);assert.equal(s.ajustes[0].monto,14400);
+     await page.evaluate(()=>__releer());
+     const tarifaRegistrada=page.locator('.haiku-incorporacion-seccion--registrados article[data-haiku-pago-origen-celda="AZ32:BC32"]');
+     assert.equal(await tarifaRegistrada.count(),1);
+     assert.equal(await page.locator('.haiku-incorporacion-seccion--dudosos article[data-haiku-pago-origen-celda="AZ32:BC32"]').count(),0);
+     assert.equal(await tarifaRegistrada.locator('input[type=checkbox]').count(),0);
+     assert.equal(await tarifaRegistrada.locator('.haiku-incorporacion-aplicar-existente').count(),0);
+     assert.deepEqual((await snapshot()).pagos,s.pagos);
     }else assert.match(registro.textoRelectura,/aplicado \$30.000.*sin aplicar \$2.500/);
    }
    registro.resultado='PASS';await photo(page,prefix+'-'+flujo+'-relectura');assert.deepEqual(errors,[]);assert.deepEqual(external,[]);

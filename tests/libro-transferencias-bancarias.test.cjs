@@ -424,3 +424,37 @@ test('dos partes históricas de igual monto en la misma reserva conservan su CAB
  const plan=await Q.prepararIncorporacion({reservas:libro.reservas,q,comparacion:c},new Map(),new Set(),db);
  assert.ok(!Q.serializarIncorporacion(plan).some(i=>i.tipo==='pago'));sinEscrituras({db});
 });
+
+function reciboAlojamientoActual() {
+ const g=reciboHistorico(F.leer());
+ g.datos_origen.contexto='haku_libro_pago_servicios_v1';
+ g.datos_origen.source_kind='libro_reserva';
+ g.datos_origen.destino_alojamiento_libro_v1={version:1,cargo_id:'cargo-sintetico',estadia_id:'estadia-sintetica-0'};
+ return g;
+}
+test('la transferencia aprobada por el writer de alojamiento se reconoce al releer sin volver a aprobar',async()=>{
+ const g=reciboAlojamientoActual(),h=await comparar([{}],[g]);
+ assert.equal(movimiento(h).estado,'en_sistema');
+ assert.equal(movimiento(h).sistema.id,g.id);
+ const plan=await Q.prepararIncorporacion(h.result,new Map(),new Set(),h.db);
+ const pago=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pago.categoria,'omitidos');assert.equal(pago.pagoYaRegistrado,true);
+ assert.ok(!pago.aprobable);
+ assert.deepEqual(Q.serializarIncorporacion(plan),[]);sinEscrituras(h);
+});
+for(const cambio of [
+ {aprobado_manualmente:false},{operacion_id:null},{destino_alojamiento_libro_v1:null},
+ {destino_alojamiento_libro_v1:{version:2}},{item_id:'pago:recibo-incompleto'}
+]) test('un recibo de alojamiento sin aprobación, operación o evidencia íntegra sigue en revisión '+JSON.stringify(cambio),async()=>{
+ const g=reciboAlojamientoActual();Object.assign(g.datos_origen,cambio);
+ const h=await comparar([{}],[g]);assert.equal(movimiento(h).estado,'revisar');sinEscrituras(h);
+});
+for(const cambio of [{monto:76000},{fecha:'2026-10-22'},{glosa:'Transf. 0111111111 OTRO REMITENTE'},{concepto:'cab11/1noche'}])
+ test('el recibo actual de alojamiento conserva las diferencias reales '+JSON.stringify(cambio),async()=>{
+  const h=await comparar([{pagos:[cambio]}],[reciboAlojamientoActual()]);
+  assert.notEqual(movimiento(h).estado,'en_sistema');sinEscrituras(h);
+ });
+test('dos filas indistinguibles no consumen dos veces el recibo actual de alojamiento',async()=>{
+ const h=await comparar([{pagos:[{},{}]}],[reciboAlojamientoActual()]);
+ assert.ok(h.c.pagosDetalle.every(x=>x.estado==='revisar'));sinEscrituras(h);
+});
