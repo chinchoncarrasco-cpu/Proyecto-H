@@ -2450,7 +2450,7 @@ test('update preview shows old and Libro values and remains behind explicit conf
  const r=readyBook({rut_documento:'PV8951597'}),s=stay(r,{reservas:{...stay(r).reservas,titular_numero_documento:'951597'}});
  const c=await compare([r],[s]),plan=await prepare([r],[s],[],new Map([[c.grupos[0].clave,{valor:'asociar:e1'}]]));
  const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{throw Error('Must not save without confirmation')});
- assert.match(h.texts(),/Actualizar Proyecto H con el Libro/);assert.match(h.texts(),/951597 → PV8951597/);
+ assert.match(h.texts(),/Cambios detectados/);assert.match(h.texts(),/951597 → PV8951597/);
  assert.match(h.texts(),/El Libro de Reservas tiene prioridad/);
  const fila=h.out.querySelector('.haku-actualizacion-libro');
  assert.ok(fila);
