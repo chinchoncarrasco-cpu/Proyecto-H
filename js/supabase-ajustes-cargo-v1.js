@@ -111,7 +111,7 @@
                 padding:20px; background:rgba(19,28,23,.38); backdrop-filter:blur(2px);
             }
             .haiku-ajuste-cargo-overlay[hidden] { display:none!important; }
-            .haiku-ajuste-cargo-overlay--ficha { z-index:10000; }
+            .haiku-ajuste-cargo-overlay--ficha { z-index:90020; }
             .haiku-ajuste-cargo-volver-haku { display:none; }
             .haiku-ajuste-cargo-modal {
                 width:min(620px,100%); max-height:min(780px,calc(100vh - 32px)); overflow-y:auto;
