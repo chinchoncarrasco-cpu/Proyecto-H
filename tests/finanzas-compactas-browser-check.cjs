@@ -76,6 +76,120 @@ async function financiero(p,width,tema){
   }
   await p.getByRole('button',{name:'Cerrar detalle financiero',exact:true}).click();assert.equal(await p.locator(popup).isVisible(),false);
 }
+async function financieroFichaSites(p, width, tema) {
+  const reservaId = '182c1e83-ea8a-4dfa-8779-463854267d29';
+  const otraReservaId = '82c10a25-40d4-405a-965f-0fe07722951f';
+  await fixtures['haku-inicio'](p);
+  if (width === 390) {
+    await p.addStyleTag({ path: path.join(root, 'css/haku-mobile-assistant-v1.css') });
+    await p.evaluate(() => {
+      document.documentElement.dataset.hakuMobileAssistant = '1';
+      document.documentElement.classList.add('haku-mobile-assistant-ready');
+    });
+  }
+  await p.evaluate(({ reservaId, otraReservaId }) => {
+    const cargos = [
+      { cargo_id: 'c1', reserva_id: reservaId, tipo_cargo: 'alojamiento', estado: 'activo',
+        monto_ajustado: 176000, aplicado_neto: 14400, saldo_cargo: 161600 },
+      { cargo_id: 'c2', reserva_id: reservaId, tipo_cargo: 'servicio', servicio_id: 's1', estado: 'activo',
+        monto_ajustado: 30000, aplicado_neto: 0, saldo_cargo: 30000 }
+    ];
+    const pagos = [{ id: 'p1', reserva_id: reservaId, monto: 158400, tipo_movimiento: 'pago',
+      estado: 'confirmado', medio_pago: 'tarjeta_debito', fecha_pago: '2026-11-13', folio: '126' }];
+    const servicios = [{ id: 's1', reserva_id: reservaId, fecha_servicio: '2026-11-13',
+      hora_inicio: '22:15:00', catalogo_servicios: { nombre: 'Tinaja Jacuzzi' } }];
+    const datos = { vista_estado_cargos: cargos, pagos, servicios,
+      pago_aplicaciones: [{ pago_id: 'p1', cargo_id: 'c1', monto_aplicado: 14400 }] };
+    window.detalleConsultas = [];
+    window.haikuSupabase = {
+      async rpc(nombre, { p_reserva_id }) {
+        if (nombre !== 'haiku_finanzas_grupo' || p_reserva_id !== reservaId) {
+          throw Error('RPC inesperado ' + nombre + '/' + p_reserva_id);
+        }
+        window.detalleConsultas.push(p_reserva_id);
+        if (window.detenerDetalle) await new Promise(resolve => { window.continuarDetalle = resolve; });
+        return { data: { es_grupo: false } };
+      },
+      from(tabla) {
+        if (!Object.hasOwn(datos, tabla)) throw Error('Tabla inesperada ' + tabla);
+        const q = { select() { return q; }, in() { return q; }, eq() { return q; }, order() { return q; },
+          then(resolve) { return Promise.resolve({ data: datos[tabla] }).then(resolve); } };
+        return q;
+      }
+    };
+    window.haikuLeerFichaSupabaseV2 = async id => {
+      const principal = id === reservaId;
+      if (!principal && id !== otraReservaId) throw Error('Reserva inesperada ' + id);
+      return {
+        reserva: { id, titular_nombre: principal ? 'Andrea Muñoz' : 'Martín Rojas',
+          estado_reserva: 'confirmada', observaciones: '' },
+        estadias: [{ id: '08484ba1-05c0-4caf-9160-75af42217761', cabana_numero: principal ? 2 : 5,
+          fecha_ingreso: '2026-11-13', fecha_salida: '2026-11-14' }],
+        cargos: principal ? cargos : [], pagos: principal ? pagos : [], servicios: principal ? servicios : []
+      };
+    };
+  }, { reservaId, otraReservaId });
+  for (const script of ['supabase-finanzas-resumen-v1', 'sites-resumen-drawer-v1',
+    'sites-resumen-reserva-v1', 'supabase-ficha-atajos']) await add(p, script);
+  assert.equal(await p.evaluate(id => HAIKU_PANELES_V1.abrirReserva(id), reservaId), true);
+  const drawer = p.locator('#sites-resumen-reserva-drawer');
+  const popup = p.locator('#haiku-ficha-detalle-popup');
+  const cerrar = popup.getByRole('button', { name: 'Cerrar detalle financiero' });
+  const boton = tipo => drawer.locator(`[data-haiku-ficha-detalle="${tipo}"]`);
+  const movil = width <= 620;
+  for (const [tipo, detalle] of Object.entries({
+    total: /Cargos · CAB 2/, abono: /Folio 126/, saldo: /Saldo por cabaña/, servicios: /Tinaja Jacuzzi/
+  })) {
+    const control = boton(tipo);
+    if (movil) await control.tap();
+    else await control.hover();
+    await popup.locator('.haiku-ficha-detalle-seccion').getByText(detalle).waitFor();
+    assert.equal(await control.getAttribute('aria-expanded'), 'true');
+    assert.deepEqual(await popup.locator('.haiku-ficha-detalle-ecuacion strong').allTextContents(),
+      ['$206.000', '$158.400', '$191.600']);
+    if (tipo === 'servicios') {
+      await verificar(p, '#haiku-ficha-detalle-popup', 'financiero-ficha-sites', width, tema);
+      assert.match(await popup.innerText(), /\$30\.000/);
+    }
+    if (movil) {
+      if (tipo === 'total') await control.tap();
+      else await cerrar.tap();
+    } else {
+      await cerrar.hover();
+      // El detalle sigue abierto mientras se usa su interior.
+      await p.mouse.move(2, 2);
+    }
+    await popup.waitFor({ state: 'hidden' });
+    assert.equal(await control.getAttribute('aria-expanded'), 'false');
+  }
+
+  await boton('abono').focus();
+  await p.keyboard.press('Enter');
+  await popup.waitFor();
+  assert.equal(await cerrar.evaluate(el => el === document.activeElement), true);
+  await p.keyboard.press('Escape');
+  await popup.waitFor({ state: 'hidden' });
+  assert.equal(await boton('abono').evaluate(el => el === document.activeElement), true);
+  assert.equal(await drawer.isVisible(), true);
+  await p.keyboard.press('Enter');
+  await popup.waitFor();
+  await p.keyboard.press('Tab');
+  await popup.waitFor({ state: 'hidden' });
+  assert.equal(await boton('saldo').evaluate(el => el === document.activeElement), true);
+
+  const consultasPrevias = await p.evaluate(() => {
+    window.detenerDetalle = true;
+    return window.detalleConsultas.length;
+  });
+  await boton('saldo').press('Space');
+  await p.waitForFunction(anteriores => typeof window.continuarDetalle === 'function' &&
+    window.detalleConsultas.length === anteriores + 1, consultasPrevias);
+  assert.equal(await p.evaluate(id => HAIKU_PANELES_V1.abrirReserva(id), otraReservaId), true);
+  await p.evaluate(() => window.continuarDetalle());
+  await popup.waitFor({ state: 'hidden' });
+  assert.equal(await drawer.locator('#sites-resumen-reserva-titulo').innerText(), 'Martín Rojas');
+  assert.equal(await boton('saldo').getAttribute('aria-expanded'), 'false');
+}
 async function recibo(p,width,tema){
   await fixtures['haku-inicio'](p);for(const n of ['haiku-libro-semantica-v1','haiku-servicios-identidad-v1'])await add(p,n);
   await p.evaluate(setup);await add(p,'haiku-libro-servicios-scope-v2');await add(p,'haiku-libro-confirm-cancel-fix-v1');
@@ -108,9 +222,9 @@ async function recibo(p,width,tema){
   assert.equal((html.match(/href="css\/haiku-tema-finanzas-compactas-v1.css/g)||[]).length,1);
   const server=http.createServer((req,res)=>{const u=new URL(req.url,'http://localhost').pathname;if(u==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(html);const f=path.resolve(root,'.'+u);if(!f.startsWith(root+path.sep))return res.writeHead(403).end();try{res.writeHead(200,{'Content-Type':f.endsWith('.css')?'text/css':f.endsWith('.js')?'application/javascript':f.endsWith('.svg')?'image/svg+xml':'application/octet-stream'}).end(fs.readFileSync(f))}catch{res.writeHead(404).end()}});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}/`;
-  const browser=await chromium.launch({headless:true});const resultados=[];
-  try{for(const width of [1600,390,320])for(const tema of ['claro','oscuro'])for(const [nombre,escena] of Object.entries({saldo,financiero,recibo})){
-    const p=await browser.newPage({viewport:{width,height:1000},timezoneId:'America/Santiago'});p.setDefaultTimeout(8000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
+  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH});const resultados=[];
+  try{for(const width of [1600,390,320])for(const tema of ['claro','oscuro'])for(const [nombre,escena] of Object.entries({saldo,financiero,financieroFichaSites,recibo})){
+    const p=await browser.newPage({viewport:{width,height:1000},hasTouch:width<=620,isMobile:width<=620,timezoneId:'America/Santiago'});p.setDefaultTimeout(8000);const errors=[];p.on('pageerror',e=>errors.push(e.message));
     await p.route('**/*',r=>new URL(r.request().url()).origin===new URL(url).origin?r.continue():r.abort());
     try{await p.goto(url);await p.addStyleTag({content:'*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}'});await p.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);await escena(p,width,tema);assert.deepEqual(errors,[]);resultados.push({nombre,width,tema,ok:true});console.log('OK',nombre,width,tema)}
     catch(e){resultados.push({nombre,width,tema,error:e.message});pendientes.push(e);console.error(nombre,width,tema,e);await p.screenshot({path:path.join(output,`error-${nombre}-${width}-${tema}.png`)})}

@@ -94,6 +94,9 @@ html .haku-incorporacion-resultado--servicios.haku-libro-resultado-sites [hidden
 #haiku-saldo-favor-overlay button:disabled { opacity: .55; cursor: default; }
 
 #haiku-ficha-detalle-popup { max-height: calc(100dvh - 24px); overflow: auto; }
+#haiku-ficha-detalle-popup.haiku-ficha-detalle-sites {
+  z-index: 90100; max-height: min(360px, 65dvh);
+}
 #haiku-ficha-detalle-popup .haiku-compacto-cerrar-icono { color: var(--haku-compacto-texto); }
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-contenido { display: flex; flex-direction: column; gap: 12px; padding: 0; max-height: none; overflow: visible; }
 #haiku-ficha-detalle-popup .haiku-ficha-detalle-ecuacion { gap: 8px; }

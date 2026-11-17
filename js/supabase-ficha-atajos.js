@@ -48,6 +48,10 @@
     let popup = null;
     let cuadroPopup = null;
     let contextoPopup = null;
+    const SELECTOR_DETALLE = "[data-haiku-ficha-detalle]";
+    let detalleFijado = false;
+    let cierreHover = null;
+    let observadorFicha = null;
 
     function dinero(valor) {
         return `$${Math.round(Number(valor || 0)).toLocaleString("es-CL")}`;
@@ -337,7 +341,8 @@
     function posicionarPopup(cuadro) {
         const panel = obtenerPopup();
         const rect = cuadro.getBoundingClientRect();
-        const ancho = Math.min(704, Math.max(280, window.innerWidth - 24));
+        const enSites = cuadro.matches?.(SELECTOR_DETALLE);
+        const ancho = Math.min(enSites ? 440 : 704, Math.max(280, window.innerWidth - 24));
         panel.style.width = `${ancho}px`;
         panel.style.right = "auto";
         panel.style.bottom = "auto";
@@ -364,44 +369,74 @@
 
     function cerrarDetalle() {
         turnoDetalle++;
-        cuadroPopup?.classList.remove("haiku-ficha-atajo-detalle-activo");
+        clearTimeout(cierreHover);
+        observadorFicha?.disconnect();
+        observadorFicha = null;
+        const cuadro = cuadroPopup;
+        const volverAlCuadro = cuadro?.matches?.(SELECTOR_DETALLE) && popup?.contains(document.activeElement);
+        cuadro?.classList.remove("haiku-ficha-atajo-detalle-activo");
+        if (cuadro?.matches?.(SELECTOR_DETALLE)) cuadro.setAttribute("aria-expanded", "false");
         cuadroPopup = null;
+        detalleFijado = false;
         if (popup) {
             popup.hidden = true;
             popup.removeAttribute("aria-busy");
         }
+        if (volverAlCuadro && cuadro.getClientRects().length) cuadro.focus();
     }
 
-    async function abrirDetalle(cuadro, id) {
-        const config = CONFIG[id];
-        const modal = document.getElementById("ficha-reserva-modal");
-        const reservaId = String(modal?.dataset?.reservaId || "");
-        const numeroCabana = String(modal?.dataset?.numeroCabana || "");
-        if (!config || !reservaId || modal?.hidden) return;
+    async function abrirDetalle(cuadro, id, fijado = false, enfocar = false) {
+        const fichaSites = cuadro.closest?.("#sites-resumen-reserva-drawer");
+        const modal = fichaSites || document.getElementById("ficha-reserva-modal");
+        const ficha = fichaSites ? cuadro.closest("[data-reserva-contenido]") : modal;
+        const campoId = fichaSites ? "haikuInspectorEntidadId" : "reservaId";
+        const reservaId = String(modal?.dataset?.[campoId] || "");
+        const numeroCabana = String(ficha?.dataset?.numeroCabana || "");
+        const tipo = fichaSites ? id : CONFIG[id]?.detalle;
+        const fichaVigente = () => cuadro.isConnected && !modal?.hidden && !ficha?.hidden &&
+            String(modal?.dataset?.[campoId] || "") === reservaId &&
+            String(ficha?.dataset?.numeroCabana || "") === numeroCabana;
+        if (!tipo || !reservaId || !ficha || !fichaVigente()) return;
 
         cerrarDetalle();
         cuadroPopup = cuadro;
+        detalleFijado = fijado;
         cuadro.classList.add("haiku-ficha-atajo-detalle-activo");
         const panel = obtenerPopup();
-        const titular = document.getElementById("ficha-reserva-titular")?.textContent?.trim();
+        panel.classList.toggle("haiku-ficha-detalle-sites", Boolean(fichaSites));
+        if (fichaSites) {
+            cuadro.setAttribute("aria-expanded", "true");
+            cuadro.setAttribute("aria-controls", panel.id);
+            observadorFicha = new MutationObserver(() => {
+                if (!fichaVigente()) cerrarDetalle();
+            });
+            observadorFicha.observe(modal, {
+                attributes: true, attributeFilter: ["hidden", "data-haiku-inspector-entidad-id"]
+            });
+            observadorFicha.observe(ficha, {
+                attributes: true, attributeFilter: ["hidden", "data-numero-cabana"]
+            });
+        }
+        const titular = document.getElementById(fichaSites ? "sites-resumen-reserva-titulo" : "ficha-reserva-titular")
+            ?.textContent?.trim();
         contextoPopup.textContent = [numeroCabana ? `CAB ${numeroCabana}` : "", titular || "Reserva"].filter(Boolean).join(" · ");
         const contenido = panel.querySelector("[data-haiku-ficha-detalle-contenido]");
         contenido.replaceChildren(crear("p", "haiku-ficha-detalle-cargando", "Consultando información actual…"));
         panel.hidden = false;
         panel.setAttribute("aria-busy", "true");
         posicionarPopup(cuadro);
+        if (enfocar) panel.querySelector(".haiku-ficha-detalle-cerrar")?.focus();
         const turno = ++turnoDetalle;
 
         try {
-            const datos = await leerDetalleFinanciero(reservaId, numeroCabana, config.detalle);
-            if (turno !== turnoDetalle || cuadroPopup !== cuadro || modal.hidden ||
-                String(modal.dataset.reservaId || "") !== reservaId) return;
-            pintarDetalle(contenido, config.detalle, datos);
+            const datos = await leerDetalleFinanciero(reservaId, numeroCabana, tipo);
+            if (turno !== turnoDetalle || !fichaVigente()) return;
+            pintarDetalle(contenido, tipo, datos);
             if (datos.esGrupo) contextoPopup.textContent = `Grupo · ${datos.miembros.map(item => `CAB ${item.cabana}`).join(" + ")}`;
             panel.removeAttribute("aria-busy");
             posicionarPopup(cuadro);
         } catch (error) {
-            if (turno !== turnoDetalle || cuadroPopup !== cuadro) return;
+            if (turno !== turnoDetalle || !fichaVigente()) return;
             console.error("HAIKU · detalle financiero en ficha:", error);
             contenido.replaceChildren(crear("p", "haiku-ficha-detalle-error",
                 error?.message || "No fue posible cargar el detalle financiero."));
@@ -664,7 +699,50 @@
         if (evento.target.closest?.("[data-haiku-ficha-atajo]")) evento.preventDefault();
     }, true);
 
+    document.addEventListener("pointerover", evento => {
+        if (evento.pointerType !== "mouse") return;
+        if (popup?.contains(evento.target)) {
+            clearTimeout(cierreHover);
+            return;
+        }
+        const cuadro = evento.target.closest?.(SELECTOR_DETALLE);
+        if (!cuadro || cuadro.contains(evento.relatedTarget)) return;
+        if (cuadro === cuadroPopup) clearTimeout(cierreHover);
+        else if (!detalleFijado) abrirDetalle(cuadro, cuadro.dataset.haikuFichaDetalle);
+    });
+
+    document.addEventListener("pointerout", evento => {
+        if (evento.pointerType !== "mouse" || detalleFijado || !cuadroPopup?.matches?.(SELECTOR_DETALLE)) return;
+        if (!cuadroPopup.contains(evento.target) && !popup.contains(evento.target)) return;
+        if (cuadroPopup.contains(evento.relatedTarget) || popup.contains(evento.relatedTarget)) return;
+        // Deja cruzar el espacio entre la cifra y el detalle para poder leerlo.
+        clearTimeout(cierreHover);
+        cierreHover = setTimeout(cerrarDetalle, 220);
+    });
+
+    window.addEventListener("keydown", evento => {
+        if (!cuadroPopup?.matches?.(SELECTOR_DETALLE)) return;
+        if (evento.key === "Tab" && popup.contains(document.activeElement)) {
+            cerrarDetalle();
+        } else if (evento.key === "Escape") {
+            evento.preventDefault();
+            evento.stopPropagation();
+            cerrarDetalle();
+        }
+    }, true);
+
     document.addEventListener("click", evento => {
+        const detalle = evento.target.closest?.(SELECTOR_DETALLE);
+        if (detalle) {
+            if (detalle !== cuadroPopup) abrirDetalle(detalle, detalle.dataset.haikuFichaDetalle, true, evento.detail === 0);
+            else if (detalleFijado) cerrarDetalle();
+            else {
+                clearTimeout(cierreHover);
+                detalleFijado = true;
+                if (evento.detail === 0) popup.querySelector(".haiku-ficha-detalle-cerrar")?.focus();
+            }
+            return;
+        }
         const cuadro = evento.target.closest?.("[data-haiku-ficha-atajo]");
         const id = cuadro?.dataset?.haikuFichaAtajo || "";
         if (!id) {
@@ -706,7 +784,7 @@
     if (modal) {
         new MutationObserver(() => {
             prepararAtajos();
-            if (modal.hidden) cerrarDetalle();
+            if (modal.hidden && !cuadroPopup?.matches?.(SELECTOR_DETALLE)) cerrarDetalle();
         }).observe(modal, {
             subtree: true,
             childList: true,

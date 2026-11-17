@@ -182,12 +182,20 @@
                             <small data-reserva-servicios-contador></small></div>
                             <ul class="rd-list" data-reserva-servicios></ul></section>
                         <section class="rd-section rd-finance"><div class="rd-section-head"><h4>Pagos</h4></div>
-                            <div class="rd-finance-grid"><div class="rd-pay-stat"><span>Total reserva</span>
-                                <strong data-reserva-total></strong></div><div class="rd-pay-stat"><span>Abonos</span>
-                                <strong data-reserva-abono></strong></div><div class="rd-pay-stat balance"><span>Saldo</span>
-                                <strong data-reserva-saldo></strong></div></div>
-                            <p class="rd-finance-note">Servicios pendientes · <strong
-                                data-reserva-servicios-pendientes></strong></p></section>
+                            <div class="rd-finance-grid">
+                                <button type="button" class="rd-pay-stat" data-haiku-ficha-detalle="total"
+                                    aria-haspopup="dialog" aria-expanded="false"><span>Total reserva</span>
+                                    <strong data-reserva-total></strong></button>
+                                <button type="button" class="rd-pay-stat" data-haiku-ficha-detalle="abono"
+                                    aria-haspopup="dialog" aria-expanded="false"><span>Abonos</span>
+                                    <strong data-reserva-abono></strong></button>
+                                <button type="button" class="rd-pay-stat balance" data-haiku-ficha-detalle="saldo"
+                                    aria-haspopup="dialog" aria-expanded="false"><span>Saldo</span>
+                                    <strong data-reserva-saldo></strong></button>
+                            </div>
+                            <button type="button" class="rd-finance-note" data-haiku-ficha-detalle="servicios"
+                                aria-haspopup="dialog" aria-expanded="false">Servicios pendientes · <strong
+                                data-reserva-servicios-pendientes></strong></button></section>
                         <section class="rd-section"><div class="rd-section-head"><h4>Solicitudes</h4></div>
                             <ul class="rd-list" data-reserva-solicitudes></ul></section>
                         <div class="rd-notes"><section class="rd-section"><div class="rd-section-head"><h4>Notas</h4></div>
@@ -579,7 +587,9 @@
         const boves = [reserva.bove_cierre || ficha.boves?.bove_cierre,
             reserva.bove_checkout || ficha.boves?.bove_checkout].filter(Boolean);
         colocar("[data-reserva-bove]", boves.length ? `BOVE · ${[...new Set(boves)].join(" · ")}` : "");
-        estado.drawer.querySelector("[data-reserva-contenido]").hidden = false;
+        const contenido = estado.drawer.querySelector("[data-reserva-contenido]");
+        contenido.dataset.numeroCabana = identidad.numeroCabana;
+        contenido.hidden = false;
         estado.drawer.querySelector("[data-reserva-historial]").disabled = false;
         estado.drawer.querySelector("[data-reserva-editar]").disabled =
             window.haikuTienePermiso?.("reservas.editar") !== true;
