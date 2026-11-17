@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const {abrirDetallesDePago} = require('./fixtures/libro-pagos-ui.cjs');
 const S = require('../js/haiku-libro-semantica-v1.js');
 const canonContext = {structuredClone,console:{info(){}},
     document:{readyState:'complete',getElementById:()=>null,createElement:()=>({}),head:{appendChild(){}}},
@@ -390,7 +391,9 @@ async function editorUnidadUi({indice=2,codigo='huevo',concepto='6 HUEVOS',preci
     vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),context);
     await context.HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(out,{reservas:[h.r],generacion:1});
     const boton=t=>out.querySelectorAll('button').find(e=>e.textContent===t);
-    await boton('Preparar incorporación').events.click();await boton('Aprobación manual').events.click();
+    await boton('Preparar incorporación').events.click();
+    abrirDetallesDePago(out);
+    await boton('Aprobación manual').events.click();
     await boton('Confirmar distribución').events.click();
     const panel=out.querySelector('.haiku-incorporacion-manual-pago-panel');
     // Esperar la apertura/carga real del catálogo, incluso si el paso anterior
@@ -504,7 +507,9 @@ test('UI Gaston progresiva: elección explícita de ambos QUEQUE, precio mostrad
         vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),context);
         await context.HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(out,{reservas:[h.r],generacion:1});
         const boton=t=>out.querySelectorAll('button').find(e=>e.textContent===t);
-        await boton('Preparar incorporación').events.click();await boton('Aprobación manual').events.click();
+        await boton('Preparar incorporación').events.click();
+        abrirDetallesDePago(out);
+        await boton('Aprobación manual').events.click();
         assert.ok(boton('Confirmar distribución'));assert.equal(boton('Guardar servicio y continuar'),undefined);
         await boton('Confirmar distribución').events.click();await boton('Aprobación manual').events.click();
         const panel=out.querySelector('.haiku-incorporacion-manual-pago-panel');
@@ -545,6 +550,7 @@ test('UI abre subpanel estructurado dentro de la tarjeta y mantiene Ver reserva 
     await api.abrirComparacionEstructurada(out,{reservas:[h.r],generacion:1});
     const boton=texto=>out.querySelectorAll('button').find(x=>x.textContent===texto);
     await boton('Preparar incorporación').events.click();
+    abrirDetallesDePago(out);
     assert.ok(boton('Aprobación manual'));assert.equal(boton('Aprobar este pago'),undefined);
     assert.ok(boton('Ver reserva'));await boton('Ver reserva').events.click();assert.equal(abiertas[0][0],id(1));
     const panel=out.querySelector('.haiku-incorporacion-manual-pago-panel');assert.equal(panel.hidden,true);
@@ -580,6 +586,7 @@ test('UI confirma distribución o asociación en la misma tarjeta y excluye esas
         await context.HAIKU_LIBRO_CONSULTAS.abrirComparacionEstructurada(out,{reservas:[h.r],generacion:1});
         const boton=t=>out.querySelectorAll('button').find(e=>e.textContent===t);
         await boton('Preparar incorporación').events.click();
+        abrirDetallesDePago(out);
         assert.ok(boton('Aprobación manual'));assert.equal(boton('Aprobar este pago'),undefined);
         assert.equal(out.querySelectorAll('.haiku-incorporacion-atajo--aprobar').length,0);
         await boton('Aprobación manual').events.click();
@@ -615,7 +622,10 @@ async function revisionVisualUi(opciones={}) {
         exportacion.replace(' })',', renderizarIncorporacion, continuarVistaManualPago })'));
     vm.runInNewContext(codigo,context);
     const api=context.HAIKU_LIBRO_CONSULTAS,aprobar=async()=>{};
-    const render=plan=>api.renderizarIncorporacion(out,plan,()=>{},aprobar,()=>assert.fail('Esta revisión no incorpora pagos'));
+    const render=plan=>{
+        api.renderizarIncorporacion(out,plan,()=>{},aprobar,()=>assert.fail('Esta revisión no incorpora pagos'));
+        abrirDetallesDePago(out);
+    };
     aprobar.manualPago=async(plan,id,accion)=>{
         const nuevo=await api.resolverAprobacionManualPago(h.result,h.decisiones,h.aprobados,plan,id,accion,h.db);
         api.continuarVistaManualPago(plan,nuevo,id,accion);render(nuevo);

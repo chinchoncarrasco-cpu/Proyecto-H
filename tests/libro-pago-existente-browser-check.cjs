@@ -18,7 +18,7 @@ async function rpc(name,a){try{let data;
  }else throw Error('RPC no autorizada: '+name);
  return{data,error:null};}catch(e){return{data:null,error:{message:e.message}};}}
 const exportsBase='Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })';
-const Qsrc=read('js/haiku-libro-consultas-v1.js').replace(exportsBase,exportsBase.replace(' })',', renderizarIncorporacion, resolverAprobacionManualPago, capturarVistaAprobaciones, restaurarVistaAprobaciones })'));
+const Qsrc=read('js/haiku-libro-consultas-v1.js').replace(exportsBase,exportsBase.replace(' })',', renderizarIncorporacion, renderizarItemIncorporacion, resolverAprobacionManualPago, capturarVistaAprobaciones, restaurarVistaAprobaciones })'));
 async function start(page,tema,pagosAbiertos=true){
  await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.evaluate(tema=>document.documentElement.dataset.haikuTema=tema,tema);
  await page.exposeFunction('__localSelect',select);await page.exposeFunction('__localRpc',rpc);
@@ -190,6 +190,7 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
   const detalles=grupo.locator('details.haku-pago-revisar');
   assert.ok(await detalles.count()>=4);
   assert.equal(await grupo.locator('details.haku-pago-revisar[open]').count(),0);
+  assert.equal(await grupo.locator('.haku-pago-revisar-contenido').count(),0);
   const primero=detalles.first(),segundo=detalles.nth(1),summary=primero.locator(':scope > summary');
   assert.match(await summary.innerText(),/Persona Ficticia[\s\S]*CAB 2[\s\S]*14.400[\s\S]*13\/11\/26/);
   const cerrado=await primero.boundingBox();assert.ok(cerrado.height<=90);
@@ -197,7 +198,8 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
   await summary.focus();await page.keyboard.press('Enter');
   assert.equal(await primero.getAttribute('open'),'');
   assert.equal(await segundo.getAttribute('open'),null);
-  assert.equal(await primero.locator('.haku-pago-revisar-contenido').isVisible(),true);
+  await primero.locator('.haku-pago-revisar-contenido').waitFor({state:'visible'});
+  assert.equal(await grupo.locator('.haku-pago-revisar-contenido').count(),1);
   await page.keyboard.press('Space');assert.equal(await primero.getAttribute('open'),null);
   await summary.click();await segundo.locator(':scope > summary').click();
   assert.equal(await grupo.locator('details.haku-pago-revisar[open]').count(),2);
@@ -209,8 +211,54 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
   await grupo.locator(':scope > summary').click();
   await grupo.locator(':scope > summary').click();
   assert.equal(await primero.getAttribute('open'),'');
+  assert.equal(await grupo.locator('.haku-pago-revisar-contenido').count(),2);
   assert.deepEqual((await snapshot()).pagos,antes);
-  results.flujos.push({flujo:'pagos-desplegables',width,tema,resultado:'PASS'});
+
+  // Maqueta los tipos de comprobante con el renderer de Haku, dentro de un área desplazable del ancho del panel.
+  await page.evaluate(()=>{
+   const medios=[
+    {medio_pago:'debito',folio:'000451',bovtar:'051259'},
+    {medio_pago:'credito',folio:'000452',codigo_autorizacion:'090441'},
+    {medio_pago:'webpay_debito',codigo_autorizacion:'007954'},
+    {medio_pago:'transferencia',texto_original:'22-10-2026 // Persona Ficticia // Transferencia diferencia de tarifa'},
+    {medio_pago:'efectivo',concepto:'Alojamiento'},
+    {medio_pago:'airbnb_prepaid_card',airbnb_liquidacion_pendiente:true,fecha_comprobante:null},
+    {medio_pago:'credito',tipo_movimiento:'penalidad',folio:'000446',bovtar:'696485'}
+   ];
+   const area=document.createElement('div');area.className='haiku-asistente-mensajes';
+   Object.assign(area.style,{display:'block',width:'min(100%, 520px)',height:'260px',overflowY:'auto'});
+   const lista=document.createElement('div');lista.className='haiku-incorporacion-lista';
+   medios.forEach((medio,i)=>lista.append(HAIKU_LIBRO_CONSULTAS.renderizarItemIncorporacion({
+    id:'ejemplo-'+i,categoria:'dudosos',texto:'Pago ficticio '+i+' · CAB 2 · $32.500 CLP',
+    pagoLibro:{monto:32500,fecha_bloque:'2026-11-13',fecha_comprobante:'2026-11-14',origen:{hoja:'Nov26',celda:'B'+i},...medio},
+    motivos:['Revisar comprobante.']
+   },new Map(),()=>{},null,null,{})));
+   area.append(lista);document.getElementById('out').replaceChildren(area);
+  });
+  const panel=page.locator('.haiku-asistente-mensajes');
+  const casos=panel.locator('.haku-pago-revisar');
+  const campos=[
+   ['Medio','Fecha pago','Folio','Autorización'],['Medio','Fecha pago','Folio','Autorización'],
+   ['Medio','Fecha pago','CodAut'],['Medio','Fecha pago','Glosa'],['Medio','Fecha pago','Concepto'],
+   ['Medio','Fecha pago','Concepto'],['Cargo indicado','Fecha en Libro','Folio','Autorización']
+  ];
+  for(const [i,esperados] of campos.entries()){
+   const caso=casos.nth(i),abre=caso.locator(':scope > summary'),box=caso.locator('.haku-pago-comprobante');
+   if(width<=600) await abre.tap();else await abre.click();
+   await box.waitFor({state:'visible'});
+   assert.deepEqual(await box.locator('.haiku-incorporacion-dato > span').allTextContents(),esperados);
+   const [medio,fecha,...resto]=await box.locator('.haku-pago-comprobante-campos > div').evaluateAll(els=>
+    els.map(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right};}));
+   assert.equal(fecha.y,medio.y);
+   assert.ok(fecha.x-medio.right<=17,'la fecha queda junto al medio');
+   if(resto.length===2) assert.equal(resto[0].y===medio.y,width===1440);
+   assert.ok(await box.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+   if(i===0||i===3) await caso.screenshot({path:path.join(evidence,'comprobante-'+i+'-'+width+'-'+tema+'.png')});
+   if(width<=600) await abre.tap();else await abre.click();
+  }
+  assert.ok(await panel.evaluate(el=>el.scrollTop>0));
+  assert.deepEqual((await snapshot()).pagos,antes);
+  results.flujos.push({flujo:'pagos-desplegables',width,tema,tipos:campos.length,resultado:'PASS'});
   await page.close();console.log('pagos-desplegables '+width+' '+tema+' PASS');
  }
  fs.writeFileSync(path.join(evidence,'resultados.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({pass:true,casos:results.flujos.length,evidencia:evidence}));

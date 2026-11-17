@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('./fixtures/dialogos.cjs').vm;
+const {abrirDetallesDePago} = require('./fixtures/libro-pagos-ui.cjs');
 const {ACCION} = require('./fixtures/libro-airbnb-confirmacion-manual.cjs');
 const {SOLICITUD_AGUSTIN, hojaAgustinFocalizado} = require('./fixtures/libro-airbnb-agustin-focalizado.cjs');
 const {PAGO_AGUSTIN_RUNTIME, resultadoAgustinRuntime} = require('./fixtures/libro-airbnb-agustin-runtime.cjs');
@@ -38,7 +39,11 @@ function entorno(options = {}) {
     approve.manualPago = () => assert.fail('No debe resolver al abrir');
     return {...h, context, approve,
         disponible: item => Q.resolucionManualDisponible(item),
-        render: (item, plan) => Q.renderizarItemIncorporacion(item, new Map(), () => {}, approve, Q.contextoVisualPlanes.get(plan), plan)};
+        render: (item, plan) => {
+            const fila = Q.renderizarItemIncorporacion(item, new Map(), () => {}, approve, Q.contextoVisualPlanes.get(plan), plan);
+            abrirDetallesDePago(fila);
+            return fila;
+        }};
 }
 async function prepararFocalizado(h, tipoDestino = 'alojamiento', capturado = null) {
     const ctx = h.context, raw = capturado || ctx.HAIKU_LIBRO_SEMANTICA.normalizarHoja(hojaAgustinFocalizado(), 'Oct26');
