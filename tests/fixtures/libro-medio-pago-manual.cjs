@@ -1,4 +1,5 @@
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+const {abrirDetallesDePago} = require('./libro-pagos-ui.cjs');
 const read = file => fs.readFileSync(path.join(__dirname,'../..',file),'utf8');
 const S = require('../../js/haiku-libro-semantica-v1.js');
 const D = require('../../js/haiku-libro-pagos-destinos-v1.js');
@@ -49,7 +50,9 @@ function entorno({alojamiento=true,distribuido=false,conServicios=false,signal='
     h.render=(plan,item=h.item(plan))=>{
         const aprobar=async id=>{h.aprobados.add(id);};
         aprobar.manualPago=async(p,id,a)=>{h.next=await h.Q.resolverAprobacionManualPago(h.result,h.decisiones,h.aprobados,p,id,a,h.db);};
-        return h.Q.renderizarItemIncorporacion(item,new Map(),()=>{},aprobar,h.Q.contextoVisualPlanes.get(plan),plan);
+        const fila=h.Q.renderizarItemIncorporacion(item,new Map(),()=>{},aprobar,h.Q.contextoVisualPlanes.get(plan),plan);
+        abrirDetallesDePago(fila);
+        return fila;
     };
     return h;
 }

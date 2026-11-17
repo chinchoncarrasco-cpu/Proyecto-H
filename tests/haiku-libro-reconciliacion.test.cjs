@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const {abrirDetallesDePago} = require('./fixtures/libro-pagos-ui.cjs');
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
 const Q = require('../js/haiku-libro-consultas-v1.js');
 const q = {desde:'2026-09-01',hasta:'2026-09-30'};
@@ -800,7 +801,12 @@ function renderHarness(reconsultar, db, {compactarPreguntas=false,ux=null,pagosD
   .replace('const nuevo = await consultar(result.q.texto);','const nuevo = await root.reconsultar(result.q.texto);');
  vm.runInNewContext(source,context);
  const out=new Element('div');
- return {context,out,Q:context.HAIKU_LIBRO_CONSULTAS,render:result=>context.HAIKU_LIBRO_CONSULTAS.renderizarComparacion(out,result),
+ const api=context.HAIKU_LIBRO_CONSULTAS;
+ const Q={...api,renderizarIncorporacion(contenedor,...args){
+  api.renderizarIncorporacion(contenedor,...args);
+  abrirDetallesDePago(contenedor);
+ }};
+ return {context,out,Q,render:result=>api.renderizarComparacion(out,result),
   texts:()=>out.querySelectorAll('*').map(e=>e.textContent).join(' '),button:t=>out.querySelectorAll('button').find(e=>e.textContent===t)};
 }
 

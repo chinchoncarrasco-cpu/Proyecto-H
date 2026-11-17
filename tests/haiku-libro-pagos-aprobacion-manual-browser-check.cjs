@@ -171,6 +171,13 @@ const server = http.createServer((request, response) => {
         assert.equal(await panel.locator('.haiku-manual-validacion').innerText(),'');
         await fill(0, 'tinajaTonel', 1, 30000, 2);
         assert.equal(await panel.getByLabel('Hora cuando corresponda', { exact: true }).isVisible(), false);
+        const resumenPago = page.locator('.haku-pago-revisar > summary');
+        await resumenPago.click();
+        await panel.waitFor({ state: 'hidden' });
+        await resumenPago.click();
+        await panel.waitFor({ state: 'visible' });
+        assert.equal(await panel.getByLabel('Fecha del servicio', { exact: true }).inputValue(), '2026-10-03');
+        assert.equal(await panel.getByLabel('Precio unitario CLP', { exact: true }).inputValue(), '30000');
         await geometry(false); await screenshot('paso1-escritorio');
         await page.evaluate(() => { window.__gate = true; });
         const guardar = panel.getByRole('button', { name: 'Guardar servicio y continuar', exact: true });

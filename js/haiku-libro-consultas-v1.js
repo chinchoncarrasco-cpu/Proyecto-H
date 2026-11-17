@@ -8487,8 +8487,35 @@
         else if (medio.startsWith('tarjeta_')) segundo = ['Folio / Autorización', [pago?.folio && `Folio ${pago.folio}`, pago?.bovtar && `Autorización ${pago.bovtar}`].filter(Boolean).join(' · ') || 'Sin dato'];
         else if (medio === 'efectivo') segundo = ['Concepto', pago?.concepto || 'Sin dato'];
         else if (pago?.airbnb_liquidacion_pendiente) segundo = ['Concepto', 'Alojamiento'];
-        return { medio:nombres[medio] || medio.replaceAll('_',' ') || 'Sin dato', segundo,
+        return { codigoMedio:medio, medio:nombres[medio] || medio.replaceAll('_',' ') || 'Sin dato', segundo,
             fecha:fechaBreve(String(pago?.fecha_comprobante || pago?.fecha_pago || '').slice(0,10),!!pago?.ajuste_fecha_comprobante) };
+    }
+
+    function comprobanteRevisionPago(pago, datos, esCargoPenalidad) {
+        const meta = elemento('div', 'haku-pago-comprobante');
+        const campos = elemento('div', 'haku-pago-comprobante-campos');
+        campos.append(
+            esCargoPenalidad ? datoIncorporacion('Cargo indicado', money(pago.monto)) : datoIncorporacion('Medio', datos.medio),
+            datoIncorporacion(esCargoPenalidad ? 'Fecha en Libro' : 'Fecha pago', datos.fecha)
+        );
+        meta.append(campos);
+        if (datos.codigoMedio.startsWith('tarjeta_')) {
+            const autorizacion = pago.bovtar || pago.codigo_autorizacion;
+            if (pago.folio) campos.append(datoIncorporacion('Folio', pago.folio));
+            if (autorizacion) campos.append(datoIncorporacion('Autorización', autorizacion));
+            if (!pago.folio && !autorizacion) campos.append(datoIncorporacion('Folio / Autorización', 'Sin dato'));
+        } else if (datos.codigoMedio.startsWith('webpay_')) {
+            campos.append(datoIncorporacion('CodAut', datos.segundo[1]));
+        } else {
+            const [etiqueta, valor] = datos.segundo;
+            const glosa = etiqueta === 'Glosa' ? S.evidenciaTransferencia(pago)?.glosa_original : null;
+            // El texto íntegro está disponible en el detalle de origen.
+            if (etiqueta !== 'Detalle' || valor !== pago.texto_original) {
+                const destino = etiqueta === 'Concepto' ? campos : meta;
+                destino.append(datoIncorporacion(etiqueta, glosa || valor));
+            }
+        }
+        return meta;
     }
 
     function panelAplicacionExistente(item,plan,aprobar) {
@@ -9316,9 +9343,11 @@
         return bloque;
     }
 
+    // También permite montar los detalles restaurados antes de recuperar el desplazamiento.
+    const contenidoPendientePorPago = new WeakMap();
+
     function renderizarItemIncorporacion(item, controles, actualizar, aprobar, comparacion, plan) {
         const vista = presentacionIncorporacion(item);
-        const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
         const esPagoLibro = Boolean(item.pagoLibro);
         const actualizacionReserva = item.categoria === 'actualizaciones' && item.payload?.tipo === 'reserva_actualizar';
         const fila = elemento("article", `haiku-incorporacion-item haiku-incorporacion-item--${item.categoria}`);
@@ -9348,7 +9377,42 @@
         cabecera.append(label);
         if (!actualizacionReserva || item.etapaSiguiente) cabecera.append(
             elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
-        fila.append(cabecera);
+        if (esPagoLibro && item.categoria === 'dudosos') {
+            fila.className += ' haku-pago-revisar-fila';
+            const desplegable = elemento('details', 'haku-pago-revisar');
+            desplegable.dataset.hakuPagoId = item.id;
+            const resumen = elemento('summary', 'haku-pago-revisar-resumen');
+            const flecha = elemento('span', 'haku-pago-revisar-flecha', '⌄');
+            flecha.setAttribute('aria-hidden', 'true');
+            resumen.append(cabecera, flecha);
+            desplegable.append(resumen);
+            fila.append(desplegable);
+
+            const montar = () => {
+                if (!desplegable.open || !contenidoPendientePorPago.has(desplegable)) return;
+                const contenido = elemento('div', 'haku-pago-revisar-contenido');
+                renderizarContenidoIncorporacion(contenido, item, vista, actualizar, aprobar, comparacion, plan, actualizacionReserva);
+                desplegable.append(contenido);
+                contenidoPendientePorPago.delete(desplegable);
+                desplegable.removeEventListener?.('toggle', montar);
+            };
+            contenidoPendientePorPago.set(desplegable, montar);
+            desplegable.addEventListener('toggle', montar);
+            const revision = revisionesVisualesManualPago.get(plan);
+            if (revision?.itemId === item.id && revision.activo === true) {
+                desplegable.open = true;
+                montar();
+            }
+        } else {
+            fila.append(cabecera);
+            renderizarContenidoIncorporacion(fila, item, vista, actualizar, aprobar, comparacion, plan, actualizacionReserva);
+        }
+        return fila;
+    }
+
+    function renderizarContenidoIncorporacion(fila, item, vista, actualizar, aprobar, comparacion, plan, actualizacionReserva) {
+        const esPagoLibro = Boolean(item.pagoLibro);
+        const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && esPagoLibro;
         if (item.aviso&&!item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0)) {
             fila.append(esPagoLibro && item.categoria === 'dudosos'
                 ? contextoRevisionPago(item) : elemento('p','haiku-incorporacion-propuesta',item.aviso));
@@ -9366,19 +9430,17 @@
         if (esPagoLibro) {
             const datos = datosPagoIncorporacion(item.decisionPagoManual?.tipo === CONFIRMACION_AIRBNB
                 ? {...item.pagoLibro,fecha_comprobante:item.decisionPagoManual.fechaPago} : item.pagoLibro);
-            const meta = elemento("div", "haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle");
-            if (item.pagoLibro.tipo_movimiento === 'penalidad'&&!item.penalidadPagoPendiente&&!item.penalidadComprobanteRegistrado&&!item.id.endsWith(':comprobante')) {
-                meta.append(datoIncorporacion('Cargo indicado',money(item.pagoLibro.monto)),
-                    datoIncorporacion(datos.segundo[0], datos.segundo[1]),
-                    datoIncorporacion('Fecha en Libro',datos.fecha));
+            const esCargoPenalidad = item.pagoLibro.tipo_movimiento === 'penalidad' && !item.penalidadPagoPendiente &&
+                !item.penalidadComprobanteRegistrado && !item.id.endsWith(':comprobante');
+            if (item.categoria === 'dudosos') {
+                fila.append(comprobanteRevisionPago(item.pagoLibro, datos, esCargoPenalidad));
             } else {
-                const glosa = item.categoria === 'dudosos' && datos.segundo[0] === 'Glosa'
-                    ? S.evidenciaTransferencia(item.pagoLibro)?.glosa_original : null;
-                meta.append(datoIncorporacion('Medio', datos.medio),
-                    datoIncorporacion(datos.segundo[0], glosa || datos.segundo[1]),
-                    datoIncorporacion('Fecha pago', datos.fecha));
+                const meta = elemento('div', 'haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle');
+                meta.append(esCargoPenalidad ? datoIncorporacion('Cargo indicado', money(item.pagoLibro.monto)) : datoIncorporacion('Medio', datos.medio),
+                    datoIncorporacion(datos.segundo[0], datos.segundo[1]),
+                    datoIncorporacion(esCargoPenalidad ? 'Fecha en Libro' : 'Fecha pago', datos.fecha));
+                fila.append(meta);
             }
-            fila.append(meta);
             if (item.categoria === 'dudosos' && item.pagoLibro.texto_original) {
                 const comprobante = elemento('details', 'haku-pago-contexto-tecnico');
                 comprobante.append(elemento('summary', '', 'Ver texto completo del Libro'),
@@ -9548,21 +9610,6 @@
         if (item.medioPagoManual && item.resolucionMedio && aprobar?.manualPago)
             fila.append(panelDefinirMedioPago(item,plan,aprobar,true));
         if (esPagoLibro) fila.append(accionInspectorReserva(identidadInspectorItem(item, comparacion)));
-        if (esPagoLibro && item.categoria === 'dudosos') {
-            const desplegable = elemento("details", "haku-pago-revisar");
-            desplegable.dataset.hakuPagoId = item.id;
-            const resumen = elemento("summary", "haku-pago-revisar-resumen");
-            const flecha = elemento("span", "haku-pago-revisar-flecha", "⌄");
-            flecha.setAttribute("aria-hidden", "true");
-            resumen.append(cabecera, flecha);
-            const contenido = elemento("div", "haku-pago-revisar-contenido");
-            contenido.append(...Array.from(fila.children).filter(nodo => nodo !== cabecera));
-            desplegable.append(resumen, contenido);
-            desplegable.open = revisionesVisualesManualPago.get(plan)?.itemId === item.id &&
-                revisionesVisualesManualPago.get(plan)?.activo === true;
-            fila.replaceChildren(desplegable);
-        }
-        return fila;
     }
 
     function extractosNotaCambiada(antes, guardado) {
@@ -9843,7 +9890,9 @@
         });
         const pagosAbiertos = new Set(vista.pagosAbiertos || []);
         out.querySelectorAll('details.haku-pago-revisar').forEach(pago => {
-            if (pagosAbiertos.has(pago.dataset.hakuPagoId)) pago.open = true;
+            if (!pagosAbiertos.has(pago.dataset.hakuPagoId)) return;
+            pago.open = true;
+            contenidoPendientePorPago.get(pago)?.();
         });
         const contenedor = vista.contenedor;
         if (!contenedor || contenedor.isConnected === false || !Number.isFinite(vista.scrollTop)) return;
