@@ -9330,7 +9330,7 @@
             fila.dataset.haikuPagoUiV1 = "1";
         }
         const cabecera = elemento("div", "haiku-incorporacion-item-cabecera");
-        const label = elemento(item.pagoYaRegistrado ? "div" : "label", "haiku-incorporacion-seleccion");
+        const label = elemento(item.pagoYaRegistrado || item.categoria === 'dudosos' ? "div" : "label", "haiku-incorporacion-seleccion");
         if (!item.pagoYaRegistrado) {
             const check = elemento("input");
             check.type = "checkbox";
@@ -9548,6 +9548,20 @@
         if (item.medioPagoManual && item.resolucionMedio && aprobar?.manualPago)
             fila.append(panelDefinirMedioPago(item,plan,aprobar,true));
         if (esPagoLibro) fila.append(accionInspectorReserva(identidadInspectorItem(item, comparacion)));
+        if (esPagoLibro && item.categoria === 'dudosos') {
+            const desplegable = elemento("details", "haku-pago-revisar");
+            desplegable.dataset.hakuPagoId = item.id;
+            const resumen = elemento("summary", "haku-pago-revisar-resumen");
+            const flecha = elemento("span", "haku-pago-revisar-flecha", "⌄");
+            flecha.setAttribute("aria-hidden", "true");
+            resumen.append(cabecera, flecha);
+            const contenido = elemento("div", "haku-pago-revisar-contenido");
+            contenido.append(...Array.from(fila.children).filter(nodo => nodo !== cabecera));
+            desplegable.append(resumen, contenido);
+            desplegable.open = revisionesVisualesManualPago.get(plan)?.itemId === item.id &&
+                revisionesVisualesManualPago.get(plan)?.activo === true;
+            fila.replaceChildren(desplegable);
+        }
         return fila;
     }
 
@@ -9813,6 +9827,8 @@
             ? out.querySelector('.haiku-incorporacion-seccion--' + categoriaAncla + ' > summary') : null;
         return {
             abiertas, contenedor, categoriaAncla,
+            pagosAbiertos:Array.from(out.querySelectorAll('details.haku-pago-revisar'))
+                .filter(pago => pago.open).map(pago => pago.dataset.hakuPagoId),
             scrollTop: contenedor?.scrollTop ?? null,
             anclaTop: ancla?.getBoundingClientRect?.().top ?? null
         };
@@ -9824,6 +9840,10 @@
         out.querySelectorAll('details.haiku-incorporacion-seccion').forEach(seccion => {
             const categoria = String(seccion.className || '').match(/\bhaiku-incorporacion-seccion--([a-z]+)\b/)?.[1];
             if (abiertas.has(categoria)) seccion.open = true;
+        });
+        const pagosAbiertos = new Set(vista.pagosAbiertos || []);
+        out.querySelectorAll('details.haku-pago-revisar').forEach(pago => {
+            if (pagosAbiertos.has(pago.dataset.hakuPagoId)) pago.open = true;
         });
         const contenedor = vista.contenedor;
         if (!contenedor || contenedor.isConnected === false || !Number.isFinite(vista.scrollTop)) return;

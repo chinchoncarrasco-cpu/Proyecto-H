@@ -18,8 +18,8 @@ async function rpc(name,a){try{let data;
  }else throw Error('RPC no autorizada: '+name);
  return{data,error:null};}catch(e){return{data:null,error:{message:e.message}};}}
 const exportsBase='Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion })';
-const Qsrc=read('js/haiku-libro-consultas-v1.js').replace(exportsBase,exportsBase.replace(' })',', renderizarIncorporacion, resolverAprobacionManualPago })'));
-async function start(page,tema){
+const Qsrc=read('js/haiku-libro-consultas-v1.js').replace(exportsBase,exportsBase.replace(' })',', renderizarIncorporacion, resolverAprobacionManualPago, capturarVistaAprobaciones, restaurarVistaAprobaciones })'));
+async function start(page,tema,pagosAbiertos=true){
  await page.goto(`http://127.0.0.1:${server.address().port}/`);await page.evaluate(tema=>document.documentElement.dataset.haikuTema=tema,tema);
  await page.exposeFunction('__localSelect',select);await page.exposeFunction('__localRpc',rpc);
  await page.evaluate(({data,user})=>{window.__fixture=data;window.haikuTienePermiso=()=>true;window.haikuSesion={usuario:{id:user,activo:true},roles:[{codigo:'administrador'}]};
@@ -32,7 +32,7 @@ async function start(page,tema){
  for(const f of ['haiku-dialogos-v1','haiku-libro-semantica-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1','haiku-libro-pagos-destinos-v1'])await page.addScriptTag({content:read('js/'+f+'.js')});
  await page.addScriptTag({content:Qsrc});await page.addScriptTag({content:read('js/supabase-finanzas-resumen-v1.js')});
  const ficha=read('js/supabase-ficha-v2.js');await page.addScriptTag({content:'const dinero=n=>"$"+Number(n).toLocaleString("es-CL");'+ficha.slice(ficha.indexOf('    function pintarPagos'),ficha.indexOf('    function crearItemServicio'))});
- await page.evaluate(async()=>{
+ await page.evaluate(async(pagosAbiertos)=>{
   const Q=HAIKU_LIBRO_CONSULTAS,decisiones=new Map(),aprobados=new Set(),r=__fixture.reservas[0];
   const result={reservas:[r],generacion:1,q:{desde:r.fecha_checkin,hasta:r.fecha_checkout,incluirFinanzas:true}};
   const pintar=async()=>pintarPagos({cargos:await __localSelect('vista_estado_cargos'),pagos:await __localSelect('pagos')});
@@ -40,9 +40,9 @@ async function start(page,tema){
   const aprobar=async id=>{aprobados.add(id);await render(await Q.prepararIncorporacion(result,decisiones,aprobados));};
   aprobar.manualPago=async(plan,id,accion)=>{const siguiente=await Q.resolverAprobacionManualPago(result,decisiones,aprobados,plan,id,accion);await render(siguiente);return siguiente;};
   const incorporar=async plan=>{window.__ultimaEjecucion=await Q.confirmarIncorporacion(result,decisiones,aprobados,plan);await pintar();return __ultimaEjecucion;};
-  const render=async p=>{window.__plan=p;Q.renderizarIncorporacion(document.getElementById('out'),p,volver,aprobar,incorporar);document.querySelectorAll('.haiku-incorporacion-seccion').forEach(e=>e.open=true);await pintar();};
+  const render=async p=>{window.__plan=p;const out=document.getElementById('out'),vista=Q.capturarVistaAprobaciones(out);Q.renderizarIncorporacion(out,p,volver,aprobar,incorporar);Q.restaurarVistaAprobaciones(out,vista);document.querySelectorAll('.haiku-incorporacion-seccion').forEach(e=>e.open=true);if(pagosAbiertos)document.querySelectorAll('.haku-pago-revisar').forEach(e=>e.open=true);await pintar();};
   window.__releer=volver;await volver();
- });
+ },pagosAbiertos);
 }
 async function guardar(page){
  await page.locator('.haku-incorporacion-sites-pie').getByRole('button',{name:/Continuar con/}).click();
@@ -182,6 +182,36 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
  assert.equal((await snapshot()).pagos.length,1);
  assert.equal((await snapshot()).aplicaciones[0].monto_aplicado,144000);
  results.flujos.push({flujo:'acceso-ficha',ancho,tema,resultado:'PASS'});await acceso.close();console.log('acceso-ficha '+ancho+' '+tema+' PASS');
+ }
+ for(const width of [1440,390,320])for(const tema of ['claro','oscuro']){
+  await reset();const page=await browser.newPage({viewport:{width,height:900},hasTouch:width<=600});
+  await start(page,tema,false);
+  const grupo=page.locator('.haiku-incorporacion-seccion--dudosos');
+  const detalles=grupo.locator('details.haku-pago-revisar');
+  assert.ok(await detalles.count()>=4);
+  assert.equal(await grupo.locator('details.haku-pago-revisar[open]').count(),0);
+  const primero=detalles.first(),segundo=detalles.nth(1),summary=primero.locator(':scope > summary');
+  assert.match(await summary.innerText(),/Persona Ficticia[\s\S]*CAB 2[\s\S]*14.400[\s\S]*13\/11\/26/);
+  const cerrado=await primero.boundingBox();assert.ok(cerrado.height<=90);
+  await grupo.screenshot({path:path.join(evidence,'lista-cerrada-'+width+'-'+tema+'.png')});
+  await summary.focus();await page.keyboard.press('Enter');
+  assert.equal(await primero.getAttribute('open'),'');
+  assert.equal(await segundo.getAttribute('open'),null);
+  assert.equal(await primero.locator('.haku-pago-revisar-contenido').isVisible(),true);
+  await page.keyboard.press('Space');assert.equal(await primero.getAttribute('open'),null);
+  await summary.click();await segundo.locator(':scope > summary').click();
+  assert.equal(await grupo.locator('details.haku-pago-revisar[open]').count(),2);
+  await page.evaluate(()=>__releer());
+  assert.equal(await grupo.locator('details.haku-pago-revisar[open]').count(),2);
+  await primero.screenshot({path:path.join(evidence,'pago-abierto-'+width+'-'+tema+'.png')});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  const antes=(await snapshot()).pagos;
+  await grupo.locator(':scope > summary').click();
+  await grupo.locator(':scope > summary').click();
+  assert.equal(await primero.getAttribute('open'),'');
+  assert.deepEqual((await snapshot()).pagos,antes);
+  results.flujos.push({flujo:'pagos-desplegables',width,tema,resultado:'PASS'});
+  await page.close();console.log('pagos-desplegables '+width+' '+tema+' PASS');
  }
  fs.writeFileSync(path.join(evidence,'resultados.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({pass:true,casos:results.flujos.length,evidencia:evidence}));
 }finally{await browser?.close();server?.close();await h?.db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

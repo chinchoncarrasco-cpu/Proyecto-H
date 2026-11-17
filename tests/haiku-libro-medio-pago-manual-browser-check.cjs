@@ -59,7 +59,7 @@ const server=http.createServer((req,res)=>{
                 };
             });
             await page.evaluate(()=>start(false));
-            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
             await assert.equal(await page.getByRole('heading',{name:'Definir medio de pago',exact:true}).count(),1);
             const selector=page.getByLabel('Medio de pago',{exact:true}),cta=page.getByRole('button',{name:'Confirmar medio y revalidar',exact:true});
@@ -89,24 +89,24 @@ const server=http.createServer((req,res)=>{
             await cta.dispatchEvent('click');assert.equal(await page.evaluate(()=>window.actions),1);
             await page.evaluate(()=>{window.gate=false;window.release();});
             await page.waitForFunction(()=>plan.items.find(i=>i.pagoLibro)?.medioPagoManual);
-            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             await page.getByRole('button',{name:'Aprobar este pago',exact:true}).waitFor();
             assert.equal(await page.getByRole('heading',{name:'Definir medio de pago',exact:true}).isVisible(),false);
             assert.deepEqual(await page.evaluate(()=>({aprobados:h.aprobados.size,selected:plan.items.filter(i=>i.pagoLibro).some(i=>i.seleccionado),original:JSON.stringify(h.r)===window.original,inc:window.inc})),{aprobados:0,selected:false,original:true,inc:0});
             await page.getByRole('button',{name:'Cambiar medio de pago',exact:true}).click();
             assert.equal(await selector.inputValue(),'');await page.getByRole('button',{name:'Cancelar revisión',exact:true}).click();
             assert.equal(await page.evaluate(()=>plan.items.find(i=>i.pagoLibro).pagoLibro.medio_pago),'webpay_credito');
-            await page.evaluate(()=>start(true));await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
+            await page.evaluate(()=>start(true));await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
             await page.getByLabel('Medio de pago',{exact:true}).selectOption('tarjeta_credito');await page.getByRole('button',{name:'Confirmar medio y revalidar',exact:true}).click();
             await page.waitForFunction(()=>plan.items.find(i=>i.pagoLibro)?.manualPago?.tipo==='crear_servicio_faltante');
-            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
+            await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();await page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true));
             await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
             assert.equal(await page.getByRole('heading',{name:'Asociar el servicio',exact:true}).count(),1);
             assert.equal(await page.evaluate(()=>h.llamadas.some(x=>x.nombre==='haiku_registrar_servicio')),false);
             // Flujo completo con dos evidencias: el servicio de B modifica el
             // snapshot mientras A ya está preparado. Sólo cliente en memoria.
             await page.evaluate(()=>startAcumulado());
-            const abrirRevision=()=>page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>e.open=true);
+            const abrirRevision=()=>page.locator('.haiku-incorporacion-seccion--dudosos').evaluate(e=>{e.open=true;e.querySelectorAll('.haku-pago-revisar').forEach(p=>p.open=true);});
             const a=page.locator('article[data-haiku-pago-origen-celda="C20:F20"]');
             const b=page.locator('article[data-haiku-pago-origen-celda="G40:J40"]');
             const comprobarA=async()=>assert.equal(await page.evaluate(()=>h.itemCaso(plan,'A').categoria),'pagos');
