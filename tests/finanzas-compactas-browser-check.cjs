@@ -163,6 +163,24 @@ async function financieroFichaSites(p, width, tema) {
     assert.equal(await control.getAttribute('aria-expanded'), 'false');
   }
 
+  await p.evaluate(() => {
+    window.HAIKU_LIBRO_CONSULTAS = {
+      abrirPagosRegistrados: contexto => { window.destinoPagosRegistrados = contexto; }
+    };
+  });
+  await boton('abono').focus();
+  await p.keyboard.press('Enter');
+  const enlace = popup.getByRole('button', {name:'Revisar pagos ya registrados'});
+  await enlace.waitFor();
+  assert.match(await popup.innerText(), /Saldo de cargos[\s\S]*Pagos sin aplicar \$144\.000 · Saldo neto \$47\.600/);
+  await p.keyboard.press('Tab');
+  assert.equal(await enlace.evaluate(el => el === document.activeElement), true);
+  await p.keyboard.press('Enter');
+  assert.deepEqual(await p.evaluate(() => window.destinoPagosRegistrados),
+    { reservaId, fecha:'2026-11-13', cabana:'2' });
+  await popup.waitFor({state:'hidden'});
+  await p.evaluate(() => { delete window.HAIKU_LIBRO_CONSULTAS; });
+
   await boton('abono').focus();
   await p.keyboard.press('Enter');
   await popup.waitFor();

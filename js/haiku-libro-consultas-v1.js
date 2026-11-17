@@ -4192,6 +4192,7 @@
         await Promise.allSettled([
             ()=>root.HAIKU_PAGOS_REFRESH_V1?.escrituraConfirmada?.('aplicar pago existente'),
             ()=>root.haikuRefrescarFichaSupabaseV2?.(p.reserva_id),
+            ()=>root.HAIKU_RESUMEN_RESERVA_SITES_V1?.refrescarFinanzas?.(p.reserva_id),
             ()=>root.HAIKU_OPERACION_RESUMEN_FIX_V1?.refrescar?.()
         ].map(fn=>Promise.resolve().then(fn)));
         try{const siguiente=await prepararIncorporacion(result,decisiones,aprobados,cliente);
@@ -4767,8 +4768,7 @@
                 const origen=pagoSistema.datos_origen||{}, anterior=origen.origen_libro||origen.origen;
                 item.aviso=(aplicado===null?'Pago registrado. Falta comprobar sus aplicaciones.':
                     `Pago registrado · aplicado ${money(aplicado)} · sin aplicar ${money(estadoExistente?.disponible??Math.max(Number(pagoSistema.monto)-aplicado,0))}.`)+
-                    (anterior?.hoja&&anterior?.celda?` Origen guardado: ${anterior.hoja}!${anterior.celda}${origen.fecha_bloque?' · estadía de origen '+origen.fecha_bloque:''}.`:'')+
-                    ' Revisa las aplicaciones en la ficha; no se duplicará ni reasignará automáticamente.';
+                    (anterior?.hoja&&anterior?.celda?` Origen guardado: ${anterior.hoja}!${anterior.celda}${origen.fecha_bloque?' · estadía de origen '+origen.fecha_bloque:''}.`:'');
                 item.aplicacionExistente=proponerAplicacionExistente(item,comp,r,capacidadServicios);
                 continue;
             }
@@ -7121,7 +7121,7 @@
     let ocupado = false;
     const apiConsultas = Object.freeze({ interpretar, consultar, compararSistema, respuesta, renderizarVersiones, crearPlanIncorporacion, prepararIncorporacion, serializarIncorporacion, confirmarIncorporacion });
     root.HAIKU_LIBRO_CONSULTAS = Object.freeze({...apiConsultas,procesando:()=>ocupado,crearMotorLectura,modeloPresentacionComparacion,revalidarCambiosDetectados,
-        abrirComparacionEstructurada, abrirPreparacionComparacion, compararAbonosAviso, prepararPagoInformeCloudbeds, reanudarComparacionHistorica,
+        abrirComparacionEstructurada, abrirPreparacionComparacion, abrirPagosRegistrados, compararAbonosAviso, prepararPagoInformeCloudbeds, reanudarComparacionHistorica,
         resolverAprobacionManualPago, catalogoManualPago, verificadorFuenteConsulta,
         separarObservacionesLibro,unirObservacionesLibro,actualizacionReservaLibro,serviciosRetiradosLibro,
         detallarCambioLibro,renderizarCambiosLibro,comprobarCambioServicioLibro,prepararCambioDatosEnLinea});
@@ -8389,6 +8389,50 @@
         out.querySelector(".haku-comparacion-sites-preparar").click();
     }
 
+    async function abrirPagosRegistrados({reservaId,fecha,cabana}) {
+        if (!reservaId || !/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^\d{1,2}$/.test(cabana) ||
+            ocupado || root.HAIKU_ASISTENTE?.procesando?.()) return false;
+        root.HAIKU_ASISTENTE?.abrir?.();
+        if (root.matchMedia?.("(max-width: 900px)").matches) root.HAIKU_PANELES_V1?.cerrarReserva?.();
+        const mensajePago = mensaje("asistente", "Buscando los pagos registrados de la reserva…");
+        try {
+            const result = await consultar(`Libro: compara con Proyecto H CAB ${cabana} el ${fecha}`);
+            const decisiones = new Map(), aprobados = new Set();
+            const contenido = elemento("section", "haiku-asistente-preview haku-incorporacion-sites");
+            const aprobar = { manualPago: async (plan, id, accion) =>
+                pintar(await resolverAprobacionManualPago(result, decisiones, aprobados, plan, id, accion)) };
+            const pintar = plan => {
+                const items = plan.items.filter(item => item.pagoYaRegistrado &&
+                    item.pagoSistema?.reserva_id === reservaId);
+                contenido.replaceChildren(elemento("strong", "", "Pagos ya registrados"));
+                if (plan.resultadoAplicacionExistente?.ok) {
+                    const r = plan.resultadoAplicacionExistente;
+                    const comprobante = elemento("p", "", `Aplicación confirmada · ${money(r.aplicado_total_cargo)} aplicados · ${money(r.sin_aplicar)} sin aplicar.` +
+                        (r.lecturaPendiente ? " Actualiza la ficha para ver el saldo vigente." : ""));
+                    comprobante.setAttribute("role", "status");
+                    contenido.append(comprobante);
+                }
+                for (const item of items) {
+                    const pago = item.pagoSistema;
+                    const datos = datosPagoIncorporacion(pago);
+                    contenido.append(elemento("p", "", `${datos.medio} · ${money(pago.monto)} · ${fechaBreve(fechaCalendarioChile(pago.fecha_pago), true)}`));
+                    contenido.append(elemento("p", "", item.aviso));
+                    if (item.aplicacionExistente) contenido.append(panelAplicacionExistente(item, plan, aprobar));
+                }
+                if (!items.length) contenido.append(elemento("p", "", "El Libro vigente no permitió cotejar un pago registrado de esta reserva."));
+            };
+            const plan = await prepararIncorporacion(result, decisiones, aprobados, undefined, 0, false);
+            if (mensajePago.isConnected === false) return false;
+            pintar(plan);
+            mensajePago.replaceChildren(contenido);
+        } catch (error) {
+            mensajePago.textContent = error.message || "No se pudieron comprobar los pagos registrados.";
+        } finally {
+            mensajePago.scrollIntoView?.({block:"nearest"});
+        }
+        return true;
+    }
+
     function fechaBreve(fecha, anioCompleto = false) {
         const m = String(fecha || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
         return m ? `${m[3]}/${m[2]}/${anioCompleto === true ? m[1] : m[1].slice(2)}` : (fecha || "sin dato");
@@ -8418,7 +8462,7 @@
         const p=item.aplicacionExistente;
         const panel=elemento('details','haiku-incorporacion-aplicar-existente');
         panel.append(elemento('summary','','Aplicar pago existente'));
-        panel.append(elemento('p','','Se conserva el pago original '+p.pago_id+'. Su origen y comprobante no cambian.'));
+        panel.append(elemento('p','','Vincula el pago registrado al cargo de alojamiento.'));
         const etiqueta=elemento('label','','Cargo de alojamiento de destino');
         const selector=elemento('select');selector.setAttribute('aria-label','Cargo de alojamiento de destino');
         if(p.cargos.length>1){const vacio=elemento('option','','Elige el cargo de alojamiento');vacio.value='';selector.append(vacio);}
@@ -8438,7 +8482,7 @@
         confirmar.addEventListener('click',()=>ejecutarAprobacionVisual(confirmar,async()=>{
             const c=p.cargos.find(c=>c.cargo_id===selector.value);if(!c)throw Error('Elige el cargo de alojamiento.');
             const cargoId=c.cargo_id,monto=Math.min(p.disponible_esperado,c.saldo_cargo_esperado);
-            if(!(await root.HAIKU_DIALOGOS.confirmar(`Aplicar ${money(monto)} del pago original ${p.pago_id} a ${c.concepto} (${cargoId}), CAB ${p.cabana}, saldo ${money(c.saldo_cargo_esperado)}. Quedará ${money(p.disponible_esperado-monto)} sin aplicar.`,
+            if(!(await root.HAIKU_DIALOGOS.confirmar(`Aplicar ${money(monto)} del pago registrado a ${c.concepto} · CAB ${p.cabana}. Saldo del cargo después de aplicar: ${money(c.saldo_cargo_esperado-monto)}. Importe sin aplicar: ${money(p.disponible_esperado-monto)}.`,
                 {accion:'Aplicar pago existente',contexto:'Haku · Libro',peligro:false})))return;
             await aprobar.manualPago(plan,item.id,{tipo:'aplicar_pago_existente_v1',cargoId,confirmado:true,
                 vigente:()=>panel.isConnected!==false,vistaVigente:()=>panel.isConnected!==false});
@@ -8446,7 +8490,7 @@
         panel.append(confirmar);return panel;
     }
 
-    function movimientosLibroIncorporacion(movimientos,plan,aprobar) {
+    function movimientosLibroIncorporacion(movimientos,plan) {
         const estados = {
             en_sistema: 'Ya existe en Proyecto H',
             nuevo_seguro: 'Pago nuevo seguro',
@@ -8475,7 +8519,6 @@
             );
             tarjeta.append(cabecera, meta);
             if(item?.pagoYaRegistrado&&item.aviso)tarjeta.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
-            if(item?.aplicacionExistente&&aprobar?.manualPago)tarjeta.append(panelAplicacionExistente(item,plan,aprobar));
             if (pago.concepto && datos.segundo[0] !== 'Concepto') {
                 tarjeta.append(elemento('p', 'haiku-incorporacion-movimiento-concepto', 'Concepto: ' + pago.concepto));
             }
@@ -9229,18 +9272,21 @@
             fila.dataset.haikuPagoUiV1 = "1";
         }
         const cabecera = elemento("div", "haiku-incorporacion-item-cabecera");
-        const label = elemento("label", "haiku-incorporacion-seleccion");
-        const check = elemento("input");
-        check.type = "checkbox";
-        check.checked = item.seleccionado;
-        check.setAttribute("aria-label", `Seleccionar ${vista.titular}`);
-        controles.set(item.id, check);
-        check.addEventListener("change", () => { item.seleccionado = check.checked; actualizar(); });
+        const label = elemento(item.pagoYaRegistrado ? "div" : "label", "haiku-incorporacion-seleccion");
+        if (!item.pagoYaRegistrado) {
+            const check = elemento("input");
+            check.type = "checkbox";
+            check.checked = item.seleccionado;
+            check.setAttribute("aria-label", `Seleccionar ${vista.titular}`);
+            controles.set(item.id, check);
+            check.addEventListener("change", () => { item.seleccionado = check.checked; actualizar(); });
+            label.append(check);
+        }
         const identidad = elemento("span", "haiku-incorporacion-identidad");
         const contexto = item.esCambioDetectado ? [vista.cabana, item.etiquetaCambio] : actualizacionReserva ? [vista.cabana, periodoActualizacion(vista.periodo), vista.tipo] :
             [vista.cabana, vista.monto, esPagoLibro && item.pagoLibro?.fecha_bloque ? `Check-in ${fechaBreve(item.pagoLibro.fecha_bloque)}` : null];
         identidad.append(elemento("strong", "", vista.titular), elemento("small", "", contexto.filter(Boolean).join(" · ")));
-        label.append(check, identidad);
+        label.append(identidad);
         cabecera.append(label);
         if (!actualizacionReserva || item.etapaSiguiente) cabecera.append(
             elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
@@ -9332,7 +9378,7 @@
         }
 
         if (item.categoria === 'asociadas' && Array.isArray(item.movimientosLibro)) {
-            fila.append(movimientosLibroIncorporacion(item.movimientosLibro,plan,aprobar));
+            fila.append(movimientosLibroIncorporacion(item.movimientosLibro,plan));
         }
 
         const motivosRevisionPago = item.categoria === 'dudosos' && item.motivos.includes(APROBACION_MANUAL_PAGO)
@@ -9342,7 +9388,9 @@
             motivosRevisionPago.length ?
             origenPago?.hoja && origenPago.celda ? `Libro · ${origenPago.hoja} ${origenPago.celda}` : '' :
             actualizacionReserva && !item.etapaSiguiente ? '' : vista.detalle;
-        if (detalle) fila.append(elemento("p", "haiku-incorporacion-propuesta", detalle));
+        if (item.pagoYaRegistrado) {
+            if (item.aplicacionExistente && aprobar?.manualPago) fila.append(panelAplicacionExistente(item, plan, aprobar));
+        } else if (detalle) fila.append(elemento("p", "haiku-incorporacion-propuesta", detalle));
         const movimiento=comparacion?.pagosDetalle?.find(x=>x.pago===item.pagoLibro);
         const franja=franjaDiferenciaPago(movimiento,comparacion);
         if (franja) fila.append(franja);
@@ -9685,7 +9733,7 @@
             .filter(Boolean);
         const contenedor = out.closest?.('.haiku-asistente-mensajes') || null;
         const categoriaAncla = abiertas.includes('dudosos') ? 'dudosos' :
-            abiertas.includes('pagos') ? 'pagos' : null;
+            abiertas.includes('pagos') ? 'pagos' : abiertas.includes('registrados') ? 'registrados' : null;
         const ancla = categoriaAncla
             ? out.querySelector('.haiku-incorporacion-seccion--' + categoriaAncla + ' > summary') : null;
         return {
@@ -9886,6 +9934,7 @@
             ]],
             ["trazabilidad", "Ya conciliados y trazabilidad", [
                 ["asociadas", "Reservas ya asociadas", "✓"],
+                ["registrados", "Pagos ya registrados", "▤"],
                 ["omitidos", "Ya existe / omitido", "⊘"]
             ]]
         ];
@@ -9898,8 +9947,11 @@
             cabeceraGrupo.append(elemento("strong", "", tituloGrupo), subtitulo);
             grupo.append(cabeceraGrupo);
             for (const [categoria, tituloSeccion, icono] of categorias) {
-                const items = plan.items.filter(i => (i.categoria === categoria || (categoria === 'actualizaciones' && i.categoria === 'cambios_detectados')) && !i.cambioFuente &&
-                    (categoria !== 'omitidos' || !i.pagoYaRegistrado));
+                const items = plan.items.filter(i => categoria === 'registrados'
+                    ? i.categoria === 'omitidos' && i.pagoYaRegistrado
+                    : !i.cambioFuente && (i.categoria === categoria || (categoria === 'actualizaciones' && i.categoria === 'cambios_detectados')) &&
+                        (categoria !== 'omitidos' || !i.pagoYaRegistrado));
+                if (categoria === 'registrados' && !items.length) continue;
                 const seccion = elemento("details", `haiku-incorporacion-seccion haiku-incorporacion-seccion--${categoria} haku-incorporacion-sites-fila`);
                 const revisionManual = revisionesVisualesManualPago.get(plan);
                 if (revisionManual?.activo && items.some(item => item.id === revisionManual.itemId)) seccion.open = true;

@@ -149,7 +149,7 @@
             .from("pagos")
             .select("id,reserva_id,monto,tipo_movimiento,estado,medio_pago,fecha_pago,folio,codigo_autorizacion,bove,referencia_externa,pago_grupo_id")
             .in("reserva_id", ids)
-            .eq("tipo_movimiento", "pago")
+            .in("tipo_movimiento", ["pago", "devolucion"])
             .eq("estado", "confirmado")
             .order("fecha_pago", { ascending:false })];
         if (tipo === "servicios") {
@@ -168,8 +168,10 @@
         const cargos = (cargosR.data || []).filter(item => item.estado === "activo");
         const alojamiento = cargos.filter(item => item.tipo_cargo === "alojamiento");
         const cargosServicio = cargos.filter(item => item.tipo_cargo === "servicio");
-        const pagos = pagosR.data || [];
-        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1.calcular(cargos, pagos);
+        const movimientos = pagosR.data || [];
+        const pagos = movimientos.filter(pago => pago.tipo_movimiento === "pago");
+        const { total, abono, saldo, servicios, sinAplicar, saldoNeto } =
+            window.HAIKU_FINANZAS_RESUMEN_V1.detalle(cargos, movimientos);
 
         const porCabana = miembros.map(miembro => {
             const propios = cargos.filter(cargo => String(cargo.reserva_id) === miembro.reservaId);
@@ -196,7 +198,8 @@
         const detalle = {
             esGrupo: Boolean(grupo?.es_grupo),
             miembros,
-            resumen,
+            resumen: {total, abono, saldo, servicios},
+            sinAplicar, saldoNeto,
             porCabana,
             pagos: tipo === "abono" ? agruparPagos(pagos, cabanaPorReserva, aplicaciones, cargoPorId) : [],
             servicios: []
@@ -247,7 +250,7 @@
         return partes.join(" · ");
     }
 
-    function pintarDetalle(contenido, tipo, datos) {
+    function pintarDetalle(contenido, tipo, datos, accesoRegistrados) {
         contenido.replaceChildren();
         const etiquetas = {
             total: datos.esGrupo ? "Total del grupo" : "Total de la reserva",
@@ -263,14 +266,27 @@
         if (tipo === "servicios") contenido.append(cabecera);
 
         const ecuacion = crear("div", "haiku-ficha-detalle-ecuacion");
-        [["Total",datos.resumen.total],["Pagado",datos.resumen.abono],["Saldo",datos.resumen.saldo]]
+        const saldoEtiqueta = accesoRegistrados && datos.sinAplicar > 0 ? "Saldo de cargos" : "Saldo";
+        [["Total",datos.resumen.total],["Pagado",datos.resumen.abono],[saldoEtiqueta,datos.resumen.saldo]]
             .forEach(([label,monto]) => {
                 const celda = crear("div");
-                celda.dataset.importe = label.toLowerCase();
+                celda.dataset.importe = label === saldoEtiqueta ? "saldo" : label.toLowerCase();
                 celda.append(crear("span", "", label), crear("strong", "", dinero(monto)));
                 ecuacion.append(celda);
             });
         contenido.append(ecuacion);
+        if (accesoRegistrados && datos.sinAplicar > 0) {
+            const aviso = crear("div", "haiku-ficha-detalle-registrados");
+            aviso.append(crear("p", "", `Pagos sin aplicar ${dinero(datos.sinAplicar)} · Saldo neto ${dinero(datos.saldoNeto)}`));
+            if (!datos.esGrupo && window.haikuTienePermiso?.("pagos.registrar") === true &&
+                typeof window.HAIKU_LIBRO_CONSULTAS?.abrirPagosRegistrados === "function") {
+                const ir = crear("button", "haiku-ficha-detalle-ir-registrados", "Revisar pagos ya registrados");
+                ir.type = "button";
+                ir.addEventListener("click", accesoRegistrados);
+                aviso.append(ir);
+            }
+            contenido.append(aviso);
+        }
 
         if (["total","saldo"].includes(tipo)) {
             const filas = datos.porCabana
@@ -393,9 +409,11 @@
         const reservaId = String(modal?.dataset?.[campoId] || "");
         const numeroCabana = String(ficha?.dataset?.numeroCabana || "");
         const tipo = fichaSites ? id : CONFIG[id]?.detalle;
+        const fechaIngreso = fichaSites ? ficha?.dataset?.fechaIngreso : null;
         const fichaVigente = () => cuadro.isConnected && !modal?.hidden && !ficha?.hidden &&
             String(modal?.dataset?.[campoId] || "") === reservaId &&
-            String(ficha?.dataset?.numeroCabana || "") === numeroCabana;
+            String(ficha?.dataset?.numeroCabana || "") === numeroCabana &&
+            (!fichaSites || ficha?.dataset?.fechaIngreso === fechaIngreso);
         if (!tipo || !reservaId || !ficha || !fichaVigente()) return;
 
         cerrarDetalle();
@@ -414,7 +432,7 @@
                 attributes: true, attributeFilter: ["hidden", "data-haiku-inspector-entidad-id"]
             });
             observadorFicha.observe(ficha, {
-                attributes: true, attributeFilter: ["hidden", "data-numero-cabana"]
+                attributes: true, attributeFilter: ["hidden", "data-numero-cabana", "data-fecha-ingreso"]
             });
         }
         const titular = document.getElementById(fichaSites ? "sites-resumen-reserva-titulo" : "ficha-reserva-titular")
@@ -431,7 +449,13 @@
         try {
             const datos = await leerDetalleFinanciero(reservaId, numeroCabana, tipo);
             if (turno !== turnoDetalle || !fichaVigente()) return;
-            pintarDetalle(contenido, tipo, datos);
+            const accesoRegistrados = fichaSites ? () => {
+                if (!fichaVigente() || window.HAIKU_ASISTENTE?.procesando?.()) return;
+                const contexto = {reservaId, fecha:fechaIngreso, cabana:numeroCabana};
+                cerrarDetalle();
+                void window.HAIKU_LIBRO_CONSULTAS?.abrirPagosRegistrados(contexto);
+            } : null;
+            pintarDetalle(contenido, tipo, datos, accesoRegistrados);
             if (datos.esGrupo) contextoPopup.textContent = `Grupo · ${datos.miembros.map(item => `CAB ${item.cabana}`).join(" + ")}`;
             panel.removeAttribute("aria-busy");
             posicionarPopup(cuadro);
@@ -723,7 +747,10 @@
     window.addEventListener("keydown", evento => {
         if (!cuadroPopup?.matches?.(SELECTOR_DETALLE)) return;
         if (evento.key === "Tab" && popup.contains(document.activeElement)) {
-            cerrarDetalle();
+            const botones = popup.querySelectorAll("button:not(:disabled)");
+            const limite = evento.shiftKey ? botones[0] : botones[botones.length - 1];
+            if (document.activeElement === limite) cerrarDetalle();
+            else evento.stopPropagation();
         } else if (evento.key === "Escape") {
             evento.preventDefault();
             evento.stopPropagation();

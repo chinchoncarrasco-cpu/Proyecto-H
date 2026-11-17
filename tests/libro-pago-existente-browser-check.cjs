@@ -55,7 +55,7 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
  ['styles','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1','haiku-tema-oscuro-v1','haiku-dialogos-v1'].map(x=>`<link rel="stylesheet" href="/css/${x}.css">`).join('')+
  '<body><main style="padding:8px"><p>Verificación local · datos sintéticos · PostgreSQL local</p><div class="ficha-pagos"><div><span>Total</span><strong id="ficha-pago-total"></strong></div><div><span>Abonos</span><strong id="ficha-pago-abono"></strong></div><div><span>Saldo neto</span><strong id="ficha-pago-saldo"></strong></div><div><span>Servicios</span><strong id="ficha-pago-servicios"></strong></div></div><div id="out"></div></main></body></html>');return;}
   const file=path.resolve(repo,'.'+p);if(!file.startsWith(repo+path.sep)){res.writeHead(403).end();return;}try{res.writeHead(200,{'Content-Type':p.endsWith('.css')?'text/css':'image/svg+xml'}).end(fs.readFileSync(file));}catch{res.writeHead(404).end();}});
- await new Promise(ok=>server.listen(0,'127.0.0.1',ok));browser=await chromium.launch({headless:true});
+ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH});
 
  for(const mobile of [false,true])for(const tema of ['claro','oscuro']){
   const prefix=(mobile?'movil':'escritorio')+'-'+tema;
@@ -64,7 +64,11 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
    page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():(external.push(route.request().url()),route.abort()));
    await start(page,tema);const antes=await snapshot(),registro={flujo,mobile,tema,antes};await photo(page,prefix+'-'+flujo+'-antes');
    if(flujo==='abono'){
-    const panel=page.locator('.haiku-incorporacion-aplicar-existente');assert.equal(await panel.count(),1);
+    const registrados=page.locator('.haiku-incorporacion-seccion--registrados');
+    assert.match(await registrados.locator('summary').first().innerText(), /Pagos ya registrados/);
+    assert.equal(await registrados.locator('input[type=checkbox]').count(), 0);
+    assert.equal(await page.locator('.haiku-incorporacion-seccion--dudosos').getByText('WebPay Débito', {exact:true}).count(), 0);
+    const panel=registrados.locator('.haiku-incorporacion-aplicar-existente');assert.equal(await panel.count(),1);
     await panel.getByText('Aplicar pago existente',{exact:true}).click();registro.vistaPrevia=await panel.innerText();
     assert.match(registro.vistaPrevia,/158.400.*144.000.*144.000.*\$0/s);assert.match(registro.vistaPrevia,/CAB 2/);
     assert.equal(await panel.locator('select').inputValue(),id.alojamiento);assert.deepEqual((await snapshot()).aplicaciones,[]);
@@ -133,5 +137,22 @@ async function photo(page,name){await page.screenshot({path:path.join(evidence,n
   }
   await photo(page,escenario+'-resultado');results.flujos.push({flujo:escenario,resultado:'PASS',persistido:await snapshot()});await page.close();console.log(escenario+' PASS');
  }
+ await reset();const acceso=await browser.newPage({viewport:{width:390,height:850}});
+ await start(acceso,'oscuro');
+ await acceso.evaluate(reservaId=>{
+  const mensajes=document.createElement('div');mensajes.id='haiku-asistente-mensajes';document.body.append(mensajes);
+  return HAIKU_LIBRO_CONSULTAS.abrirPagosRegistrados({reservaId,fecha:__fixture.reservas[0].fecha_checkin,cabana:'2'});
+ },id.reserva);
+ const destino=acceso.locator('#haiku-asistente-mensajes');
+ assert.match(await destino.innerText(),/Pagos ya registrados[\s\S]*WebPay Débito/);
+ assert.equal(await destino.locator('input[type=checkbox]').count(),0);
+ assert.equal((await snapshot()).aplicaciones.length,0);
+ await destino.locator('.haiku-incorporacion-aplicar-existente > summary').click();
+ await destino.getByRole('button',{name:'Confirmar aplicación',exact:true}).click();
+ await acceso.getByRole('dialog').getByRole('button',{name:'Aplicar pago existente',exact:true}).click();
+ await destino.getByRole('status').filter({hasText:'Aplicación confirmada'}).waitFor();
+ assert.equal((await snapshot()).pagos.length,1);
+ assert.equal((await snapshot()).aplicaciones[0].monto_aplicado,144000);
+ results.flujos.push({flujo:'acceso-ficha',resultado:'PASS'});await acceso.close();console.log('acceso-ficha PASS');
  fs.writeFileSync(path.join(evidence,'resultados.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({pass:true,casos:results.flujos.length,evidencia:evidence}));
 }finally{await browser?.close();server?.close();await h?.db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

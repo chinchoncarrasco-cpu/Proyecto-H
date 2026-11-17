@@ -500,6 +500,18 @@
             hospedada: "Hospedado", confirmada: "Confirmada", pendiente: "Confirmación pendiente" })[actual];
     }
 
+    function pintarFinanzas(ficha) {
+        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1?.calcular(ficha.cargos, ficha.pagos);
+        if (!resumen || ["total", "abono", "saldo", "servicios"].some(k => !Number.isFinite(resumen[k]))) {
+            throw new Error("No se pudo verificar el estado financiero de esta reserva.");
+        }
+        colocar("[data-reserva-total]", dinero(resumen.total));
+        colocar("[data-reserva-abono]", dinero(resumen.abono));
+        colocar("[data-reserva-saldo]", dinero(resumen.saldo));
+        colocar("[data-reserva-servicios-pendientes]",
+            resumen.servicios ? dinero(resumen.servicios) : "Sin cargos pendientes");
+    }
+
     function pintar(ficha, estadia, identidad) {
         cerrarCambioEstado();
         const reserva = ficha.reserva;
@@ -516,10 +528,7 @@
         const inicio = new Date(`${String(estadia.fecha_ingreso).slice(0, 10)}T12:00:00`);
         const fin = new Date(`${String(estadia.fecha_salida).slice(0, 10)}T12:00:00`);
         const noches = Math.max(0, Math.round((fin - inicio) / 86400000));
-        const resumen = window.HAIKU_FINANZAS_RESUMEN_V1?.calcular(ficha.cargos, ficha.pagos);
-        if (!resumen || ["total", "abono", "saldo", "servicios"].some(k => !Number.isFinite(resumen[k]))) {
-            throw new Error("No se pudo verificar el estado financiero de esta reserva.");
-        }
+        pintarFinanzas(ficha);
 
         colocar("#sites-resumen-reserva-titulo", nombre);
         colocar("[data-reserva-kicker]", `CABAÑA ${identidad.numeroCabana} · ${codigo}`);
@@ -540,11 +549,6 @@
         colocar("[data-reserva-acompanantes]", acompanantes.join(" · ") || "Sin acompañantes registrados");
         colocar("[data-reserva-telefono]", reserva.telefono_contacto || titularHuesped.telefono || "Sin teléfono");
         colocar("[data-reserva-rut]", reserva.titular_numero_documento || titularHuesped.numero_documento || "Sin RUT");
-        colocar("[data-reserva-total]", dinero(resumen.total));
-        colocar("[data-reserva-abono]", dinero(resumen.abono));
-        colocar("[data-reserva-saldo]", dinero(resumen.saldo));
-        colocar("[data-reserva-servicios-pendientes]",
-            resumen.servicios ? dinero(resumen.servicios) : "Sin cargos pendientes");
 
         const servicios = (ficha.servicios || []).filter(s =>
             !OMITIDOS.has(String(s.estado_servicio || "").toLowerCase()));
@@ -589,6 +593,7 @@
         colocar("[data-reserva-bove]", boves.length ? `BOVE · ${[...new Set(boves)].join(" · ")}` : "");
         const contenido = estado.drawer.querySelector("[data-reserva-contenido]");
         contenido.dataset.numeroCabana = identidad.numeroCabana;
+        contenido.dataset.fechaIngreso = estadia.fecha_ingreso;
         contenido.hidden = false;
         estado.drawer.querySelector("[data-reserva-historial]").disabled = false;
         estado.drawer.querySelector("[data-reserva-editar]").disabled =
@@ -853,8 +858,19 @@
         }
     }
 
+    async function refrescarFinanzas(reservaId) {
+        if (!estado.drawer || estado.drawer.hidden || estado.reservaId !== reservaId ||
+            !estado.estadia || window.haikuTienePermiso?.("reservas.ver") !== true) return;
+        const version = estado.version, estadiaId = estado.estadia.id;
+        const ficha = await window.haikuLeerFichaSupabaseV2(reservaId);
+        if (version !== estado.version || estado.estadia?.id !== estadiaId ||
+            ficha?.reserva?.id !== reservaId || window.haikuTienePermiso?.("reservas.ver") !== true) return;
+        pintarFinanzas(ficha);
+        estado.ficha = {...estado.ficha, cargos:ficha.cargos, pagos:ficha.pagos};
+    }
+
     window.HAIKU_RESUMEN_RESERVA_SITES_V1 = Object.freeze({
-        abrirDesdeBoton, abrirPorId, cerrar,
+        abrirDesdeBoton, abrirPorId, cerrar, refrescarFinanzas,
         // Funciones puras para comprobar identidad exacta y cabañas grupales.
         identidadOperacion, elegirEstadia
     });
