@@ -38,7 +38,7 @@ for (const [concepto, tipo] of [
     ['tinaja','servicio'],
     ['early check in','servicio'],
     ['PENALIDAD 10%','penalidad'],
-    ['FULLDAY + TINAJA','servicio'],
+    ['FULLDAY + TINAJA','mixto'],
     ['OTRO','otro']
 ]) {
     test('Libro: concepto ' + concepto + ' conserva su clasificación y datos', () => {
