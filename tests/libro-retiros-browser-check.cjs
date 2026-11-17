@@ -87,6 +87,14 @@ const server=http.createServer((req,res)=>{
    }
    assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);assert.deepEqual(externos,[]);assert.deepEqual(errors,[]);
    await page.evaluate(()=>abrirVista(1));
+   await page.getByRole('button',{name:'Preparar incorporación',exact:true}).click();
+   const cambiosTotales=page.locator('.haku-incorporacion-sites-grupo--listos .haiku-incorporacion-seccion--actualizaciones');
+   await cambiosTotales.locator('summary').filter({hasText:'Cambios detectados'}).click();
+   assert.equal(await cambiosTotales.evaluate(d=>d.open),true);
+   assert.ok(await cambiosTotales.locator('input[type="checkbox"]:checked').count(),'las actualizaciones seguras se incluyen en la incorporación total');
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   assert.deepEqual(await page.evaluate(()=>haikuSupabase.mutaciones),[]);
+   await page.evaluate(()=>abrirVista(1));
    const notas=page.locator('[data-haku-cambio-incorporar="revisar_notas"]').first().locator('xpath=../..');
    await notas.getByRole('button',{name:'Incorporar',exact:true}).click();
    await notas.getByRole('button',{name:'Confirmar incorporación',exact:true}).waitFor();

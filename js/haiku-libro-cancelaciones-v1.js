@@ -63,7 +63,7 @@
   const reservas=[];
   for(let i=0;i<ids.length;i+=50){
    const grupo=ids.slice(i,i+50);
-   reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
+   reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,cabana_id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
   }
   return {reservas,hayEstadias:ids.length>0};
  }
@@ -172,14 +172,37 @@
   permiso();vigente(p.g,p.libro);
   if(!root.HAIKU_RESERVA_ESTADOS_SUPABASE_V2?.cancelar)throw Error('El flujo de cancelación de ficha no está disponible.');
   return root.HAIKU_RESERVA_ESTADOS_SUPABASE_V2.cancelar(p.id,{antesDeCancelar:async()=>{
-   permiso();
-   const evidencia=await comprobarCaso(p.caso,p.g,p.libro);
-   if(JSON.stringify(evidencia)!==p.evidencia)throw Error('La evidencia del Libro cambió desde la vista previa. Vuelve a preparar.');
-   const actual=await resolver(p.caso,p.cliente,evidencia);vigente(p.g,p.libro);
-   if(actual.estado_reserva==='cancelada'){propuestas.delete(vista);return false;}
-   if(JSON.stringify(actual)!==p.firma)throw Error('Proyecto H cambió desde la vista previa. Vuelve a preparar.');
-   propuestas.delete(vista);return true;
+   const actual=await revalidar(p);
+   propuestas.delete(vista);
+   return actual.estado_reserva!=='cancelada';
   }});
+ }
+ async function revalidar(p){
+  permiso();
+  const evidencia=await comprobarCaso(p.caso,p.g,p.libro);
+  if(JSON.stringify(evidencia)!==p.evidencia)throw Error('La evidencia del Libro cambió desde la vista previa. Vuelve a preparar.');
+  const actual=await resolver(p.caso,p.cliente,evidencia);vigente(p.g,p.libro);
+  if(actual.estado_reserva!=='cancelada'&&JSON.stringify(actual)!==p.firma)
+   throw Error('Proyecto H cambió desde la vista previa. Vuelve a preparar.');
+  return actual;
+ }
+ async function prepararParaLote(caso,g,opciones){
+  const vista=await preparar(caso,g,opciones);
+  if(vista.estado==='ya_coincide')return null;
+  const p=propuestas.get(vista),reserva=JSON.parse(p.firma),e=reserva.estadias[0];
+  const ejecutar=async confirmar=>{
+   if(confirmar)await revalidar(p);
+   const {data,error}=await p.cliente.rpc('haiku_libro_cancelacion_segura_lote_v1',{
+    p_reserva_id:p.id,p_esperado:{estadia_id:e.id,titular:reserva.titular_nombre,estado_reserva:reserva.estado_reserva,
+     estado_estadia:e.estado_estadia,cabana_id:e.cabana_id,entrada:e.fecha_ingreso,salida:e.fecha_salida},p_confirmar:confirmar
+   });
+   if(error)throw Error(error.code==='PGRST202'?'Proyecto H aún no habilita cancelaciones en lote.':error.message);
+   if(data?.estado==='ya_coincide')return data.estado;
+   if(data?.estado!==(confirmar?'cancelada':'listo'))throw Error(data?.motivo||'Proyecto H no confirmó la cancelación.');
+   return data.estado;
+  };
+  if(await ejecutar(false)==='ya_coincide')return null;
+  return {firma:p.firma, guardar:()=>ejecutar(true)};
  }
  // Presentación compartida: no transforma los casos ni decide acciones.
  function elemento(tag,clase,texto){const el=root.document.createElement(tag);el.className=clase;if(texto!=null)el.textContent=texto;return el;}
@@ -493,5 +516,5 @@
    reserva_id:item.sistema?.reserva_id,estado_proyecto:item.sistema?.estado_reserva};
   return adjuntarCaso(out,caso,g,alVolver,alCerrarAviso);
  }
- const api=Object.freeze({preparar,confirmar,adjuntar,detectarActual,detectarActualConSnapshot,adjuntarResueltas,adjuntarRevision,abrirRevisionHistorial});root.HAIKU_LIBRO_CANCELACIONES_V1=api;if(typeof module!=='undefined')module.exports=api;
+ const api=Object.freeze({preparar,prepararParaLote,confirmar,adjuntar,detectarActual,detectarActualConSnapshot,adjuntarResueltas,adjuntarRevision,abrirRevisionHistorial});root.HAIKU_LIBRO_CANCELACIONES_V1=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window!=='undefined'?window:globalThis);

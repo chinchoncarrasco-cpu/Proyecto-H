@@ -361,7 +361,7 @@
     async function prepararHistorial(scope){
         return construir(fuenteHistorial(scope));
     }
-    async function prepararServicioEnLinea(scope,id,estadiaId){
+    async function prepararServicioEnLinea(scope,id,estadiaId,{paraLote=false}={}){
         const fuente=fuenteHistorial(scope),cliente=root.haikuSupabase;
         const permiso=()=>root.haikuTienePermiso?.('servicios.crear')===true;
         const vigente=()=>root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion===scope.generacion;
@@ -379,7 +379,7 @@
         const firma=firmaConfirmacionServicio(inicial),operacion=uuid();
         let enviada=false;
         const total=inicial.precio?.total;
-        return {texto:[inicial.mapa?.nombre,inicial.hora,total!=null?`$${Number(total).toLocaleString('es-CL')}`:null].filter(Boolean).join(' · '),guardar:async()=>{
+        return {firma,texto:[inicial.mapa?.nombre,inicial.hora,total!=null?`$${Number(total).toLocaleString('es-CL')}`:null].filter(Boolean).join(' · '),guardar:async()=>{
             if(!enviada){
                 const actual=await leer();
                 if(!listo(actual)||firmaConfirmacionServicio(actual)!==firma)throw Error('El servicio cambió. Vuelve a comparar.');
@@ -391,6 +391,10 @@
                 p_operacion_id:operacion,p_servicios:[inicial.payload],p_notas:[]});
             if(error)throw Error(mensajeErrorIncorporacion(error));
             if(!data?.ok)throw Error('Proyecto H no confirmó la incorporación del servicio.');
+            if (paraLote) {
+                if (![0,1].includes(data.servicios_creados)) throw Error('Proyecto H no confirmó el resultado del servicio.');
+                return data.servicios_creados===1 ? 'incorporado' : 'ya_coincide';
+            }
             return data.servicios_creados===1?'Servicio incorporado en Proyecto H.':'Servicio ya registrado en Proyecto H.';
         }};
     }
