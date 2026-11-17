@@ -4,8 +4,10 @@ const {PGlite}=require('@electric-sql/pglite'),{btree_gist}=require('@electric-s
 const fs=require('fs'),path=require('path'),{randomUUID}=require('crypto');
 const read=p=>fs.readFileSync(path.join(__dirname,'../..',p),'utf8').replace(/\r\n/g,'\n');
 const migration='supabase/migrations/20261117005357_libro_reprogramacion_estadia_atomica.sql';
-async function crear(){const h=await base({db:new PGlite({extensions:{btree_gist}})}),{db}=h;try{
+async function crear({revisionNoches=true}={}){const h=await base({db:new PGlite({extensions:{btree_gist}})}),{db}=h;try{
  await db.exec(`
+ -- Reloj fijo sólo en esta base efímera: diciembre sigue siendo futuro en CI.
+ create or replace function pg_catalog.now() returns timestamptz language sql stable as $$select '2026-11-16T15:00:00Z'::timestamptz$$;
  create function private.haiku_usuario_activo() returns boolean language sql as $$select auth.uid() is not null$$;
  create or replace function private.haiku_tiene_permiso(p text) returns boolean language sql as $$select current_setting('reprog.deny_permission',true) is distinct from p$$;
  alter table cargo_ajustes add column reserva_id uuid;
@@ -32,6 +34,7 @@ async function crear(){const h=await base({db:new PGlite({extensions:{btree_gist
  create trigger cargo_servicio after insert or update on servicios for each row execute function haiku_sincronizar_cargo_servicio();
  create function private.haiku_editar_reserva_asistente_impl_v1(uuid,uuid,jsonb,jsonb,bigint) returns jsonb language sql as $$select jsonb_build_object('reserva_id',$1)$$;`);
  await db.exec(read(migration));
+ if(revisionNoches)await db.exec(read('supabase/migrations/20261117020759_libro_reprogramacion_revision_noches.sql'));
  const id={...h.ids,late:randomUUID(),early:randomUUID(),jacuzzi:randomUUID(),antiguo:randomUUID(),anterior:randomUUID(),realizado:randomUUID(),
   nota:randomUUID(),notaManual:randomUUID(),estadiaAnterior:randomUUID(),cabanaDestino:randomUUID(),recurso:randomUUID(),catJacuzzi:randomUUID(),catLate:randomUUID(),catEarly:randomUUID(),catMasaje:randomUUID()};
  await db.query('update cabanas set numero=9,precio_base=144000 where id=$1',[id.cabana]);
@@ -52,9 +55,16 @@ async function crear(){const h=await base({db:new PGlite({extensions:{btree_gist
  await db.query('insert into pago_aplicaciones(pago_id,cargo_id,monto_aplicado) values($1,$2,100000)',[p,c]);
  const destino=(cabana=9)=>({cabana_numero:cabana,fecha_ingreso:'2026-12-28',fecha_salida:'2026-12-29'});
  const plan=async(d=destino())=>(await db.query('select public.haiku_reprogramacion_preparar_v1($1,$2,$3::jsonb) r',[id.reserva,id.estadia,JSON.stringify(d)])).rows[0].r;
- const decisiones=p=>Object.fromEntries(p.items.map(i=>[i.id,i.inicial||'revision']).map(([k,v])=>[k,p.items.find(i=>i.id===k).opciones.includes(v)?v:'conservar']));
+ const decisiones=p=>Object.fromEntries(p.items.map(i=>[i.id,i.inicial||'revision']).map(([k,v])=>{const i=p.items.find(i=>i.id===k);return[k,i.opciones.includes(v)?v:i.opciones.includes('conservar')?'conservar':i.opciones[0]];}));
  const aplicar=async(p,d=decisiones(p),op=randomUUID())=>(await db.query('select public.haiku_reprogramar_estadia_v1($1,$2::jsonb,$3::jsonb) r',[op,JSON.stringify(p),JSON.stringify(d)])).rows[0].r;
  const snapshot=async()=>{const out={};for(const t of ['reserva_estadias','estadia_noches','notas','servicios','cargos','pagos','pago_aplicaciones','cargo_ajustes'])out[t]=(await db.query(`select coalesce(jsonb_agg(to_jsonb(t) order by id),'[]') r from ${t} t`)).rows[0].r;return out;};
  return {...h,id,destino,plan,decisiones,aplicar,snapshot,read,migration};
  }catch(e){await db.close();throw e;}}
-module.exports={crear,read,migration};
+async function futuro(h,n=1){await h.aplicar(await h.plan());
+ if(n===2){await h.db.query("update reserva_estadias set fecha_salida='2026-12-30' where id=$1",[h.id.estadia]);
+  await h.db.query("insert into estadia_noches(estadia_id,fecha,tarifa,origen_tarifa) values($1,'2026-12-29',144000,'catalogo')",[h.id.estadia]);
+  await h.db.query("update servicios set fecha_servicio='2026-12-30' where id=$1",[h.id.late]);
+  await h.db.query("update servicios set fecha_servicio='2026-12-30' where id=$1",[h.id.jacuzzi]);
+  await h.db.query("insert into notas(reserva_id,estadia_id,cabana_id,tipo,fecha_operacion,texto) values($1,$2,$3,'operativa_resumen','2026-12-30','Coordinar retiro de equipaje')",[h.id.reserva,h.id.estadia,h.id.cabana]);
+ }}
+module.exports={crear,read,migration,futuro};

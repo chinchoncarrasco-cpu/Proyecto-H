@@ -424,6 +424,10 @@
     function categoriaEvento(evento) {
         const entidad = String(evento?.entidad_tipo || "");
         const tipo = String(evento?.tipo_evento || "");
+        if (entidad === "reserva_estadias") {
+            if (cambioTiene(evento, "checkout_realizado_en")) return "checkout";
+            if (cambioTiene(evento, "checkin_realizado_en")) return "checkin";
+        }
         if (["reservas", "reserva"].includes(entidad)) {
             const estado = cambioTiene(evento, "estado_reserva")?.nuevo;
             if (estado === "hospedada") return "checkin";
@@ -445,6 +449,9 @@
         const entidad = String(evento?.entidad_tipo || "");
         const tipo = String(evento?.tipo_evento || "");
 
+        // Los movimientos de ingreso/salida son actividad operativa de la estadía.
+        if (entidad === "reserva_estadias" &&
+            (cambioTiene(evento, "checkin_realizado_en") || cambioTiene(evento, "checkout_realizado_en"))) return false;
         if (["reserva_estadias", "estadia_noches", "turnos", "cierres_turno"].includes(entidad)) {
             return ["creacion", "actualizacion", "eliminacion"].includes(tipo);
         }
@@ -495,6 +502,10 @@
         }
 
         if (entidad === "reserva_estadias") {
+            for (const [campo, etiqueta] of [["checkout_realizado_en", "Check-out"], ["checkin_realizado_en", "Check-in"]]) {
+                const cambio = cambioTiene(evento, campo);
+                if (cambio) return `${etiqueta} ${cambio.nuevo ? "registrado" : "retirado"}`;
+            }
             if (cambioTiene(evento, "fecha_ingreso") || cambioTiene(evento, "fecha_salida")) {
                 return "Fechas de estadía actualizadas";
             }

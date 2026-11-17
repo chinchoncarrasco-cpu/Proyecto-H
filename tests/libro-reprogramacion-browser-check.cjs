@@ -5,7 +5,7 @@ const {crear,read}=require('./fixtures/libro-reprogramacion-sql.cjs');
 const F=require('./fixtures/libro-comparacion-readonly.cjs');
 const repo=path.resolve(__dirname,'..'),evidence=process.env.HAKU_REPROGRAMACION_EVIDENCIA||path.join(process.env.LOCALAPPDATA||require('os').tmpdir(),'ProyectoH/diagnosticos/libro-reprogramacion-20261116');
 fs.mkdirSync(evidence,{recursive:true});let h,browser,server;const results={datos:'Exclusivamente sintéticos',casos:[],rpc:[]};
-const tables=['reservas','reserva_estadias','estadia_noches','cabanas','servicios','catalogo_servicios','notas','pagos','pago_aplicaciones','cargos','cargo_ajustes','bloqueos_cabana','huespedes'];
+const tables=['reservas','reserva_estadias','estadia_noches','cabanas','servicios','catalogo_servicios','notas','pagos','pago_aplicaciones','cargos','cargo_ajustes','bloqueos_cabana','huespedes','eventos_auditoria'];
 async function select(t){
  if(t==='vista_estado_cargos')return[];
  if(!tables.includes(t))throw Error('Tabla fuera del fixture: '+t);
@@ -28,7 +28,7 @@ async function init(page,tema){
  await page.evaluate(({id,user,tema})=>{
   window.__id=id;window.serviciosRegistrados=[];document.documentElement.dataset.haikuTema=tema;window.haikuTienePermiso=()=>true;
   const get=(r,k)=>k.split('.').reduce((v,p)=>v?.[p],r);
-  const from=t=>{const filters=[];let range,single=false;const b={select(){return b},order(){return b},
+  const from=t=>{const filters=[];let range,single=false;const b={select(){return b},order(){return b},limit(n){range=[0,n-1];return b},single(){single=true;return b},
    eq(k,v){filters.push(r=>get(r,k)===v);return b},in(k,vs){filters.push(r=>vs.includes(get(r,k)));return b},
    lte(k,v){filters.push(r=>get(r,k)<=v);return b},gte(k,v){filters.push(r=>get(r,k)>=v);return b},range(a,z){range=[a,z];return b},maybeSingle(){single=true;return b},
    then(ok,no){return __select(t).then(rows=>{let data=rows.filter(r=>filters.every(f=>f(r)));if(range)data=data.slice(range[0],range[1]+1);return ok({data:single?data[0]||null:data,error:null});},no);}};return b;};
@@ -40,14 +40,14 @@ async function init(page,tema){
  },{id:h.id,user:h.usuario,tema});
  for(const f of ['haiku-dialogos-v1','haiku-asistente-lenguaje-v1','haiku-asistente-operaciones-v1','haiku-servicios-identidad-v1','haiku-reprogramacion-estadia-v1',
   'supabase-asistente-operaciones-v1','haiku-asistente-acciones-v1','haiku-libro-semantica-v1','haiku-libro-pagos-canon-v1','haiku-libro-pagos-destinos-v1',
-  'supabase-notas-resumen-v1','supabase-servicios-hidratacion-v2','supabase-servicios-tinajas-horarios-v1','sites-servicios-v1'])await page.addScriptTag({content:read('js/'+f+'.js')});
+  'supabase-notas-resumen-v1','supabase-servicios-hidratacion-v2','supabase-servicios-tinajas-horarios-v1','sites-servicios-v1'])await page.addScriptTag({content:process.env.HAKU_REPROGRAMACION_BASE==='1'&&f==='haiku-reprogramacion-estadia-v1'?require('child_process').execFileSync('git',['show','967e294:js/'+f+'.js'],{encoding:'utf8'}):read('js/'+f+'.js')});
  await page.addScriptTag({content:qsrc});await page.evaluate(()=>{window.haikuSesion=__sesion;});
 }
 async function capture(page,name){await page.screenshot({path:path.join(evidence,name+'.png'),fullPage:true});
  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2);assert.equal(overflow,false,name+' sin desborde horizontal');}
 async function views(page){return page.evaluate(async()=>{
  await HAIKU_SERVICIOS_HIDRATACION_V2.sincronizar('verificación sintética');
- const out={};for(const d of ['2026-10-03','2026-11-15','2026-11-16','2026-12-28','2026-12-29']){
+ const out={};for(const d of ['2026-10-03','2026-11-15','2026-11-16','2026-12-28','2026-12-29','2026-12-30']){
   const agenda=HAIKU_SITES_SERVICIOS_V1.proyectar(serviciosRegistrados,d,{fecha:'2026-11-01',hora:'00:00'});
   out[d]={servicios:agenda.dia.map(s=>({id:s.id,nombre:s.nombre,hora:s.hora,cabana:s.numeroCabana,revision:HAIKU_SERVICIOS_IDENTIDAD_V1.revisionReprogramacion(s)})),notas:await HAIKU_NOTAS_RESUMEN_SUPABASE_V1.consultar(d)};
  }return out;
@@ -76,7 +76,7 @@ async function libro(page,cabana){
  },source);
  await page.locator('[data-haku-reprogramacion]').waitFor();
 }
-(async()=>{h=await crear();try{
+async function iniciarEntorno(opciones){h=await crear(opciones);
  server=http.createServer((req,res)=>{const p=new URL(req.url,'http://localhost').pathname;if(p==='/'){
  const ids=['sites-servicios-selector','sites-servicios-cabanas','sites-servicios-selector-estado','sites-servicios-copia-estado','sites-servicios-fecha-label','sites-servicios-realizado','sites-servicios-realizado-contenido','sites-servicios-realizado-confirmar','sites-servicios-cancelar','sites-servicios-cancelar-contenido','sites-servicios-cancelar-confirmar'];
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end('<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
@@ -85,6 +85,9 @@ async function libro(page,cabana){
  '<body><main><p>Prueba local · Datos ficticios · PostgreSQL local</p><input id="haiku-asistente-texto" aria-label="Mensaje a Haku"><button id="haiku-asistente-enviar">Enviar</button><div id="haiku-asistente-mensajes"></div><div id="out"></div><section id="diario"></section><section id="seccion-servicios"><div id="sites-servicios-root"><input type="date" id="sites-servicios-fecha"><div id="sites-servicios-contenido"></div>'+ids.map(id=>`<div id="${id}" hidden></div>`).join('')+'</div></section></main>');return;}
  const file=path.resolve(repo,'.'+p);if(!file.startsWith(repo+path.sep)){res.writeHead(403).end();return;}try{res.writeHead(200,{'Content-Type':p.endsWith('.css')?'text/css':'text/javascript'}).end(fs.readFileSync(file));}catch{res.writeHead(404).end();}});
  await new Promise(ok=>server.listen(0,'127.0.0.1',ok));browser=await chromium.launch({headless:true});
+ return {h,browser,init,haku,chooseOld,capture,views,libro,rpc,results,evidence,cerrar:async()=>{await browser.close();await new Promise(ok=>server.close(ok));await h.db.close();}};
+}
+async function ejecutar(){const entorno=await iniciarEntorno();try{
  for(const mobile of [false,true])for(const tema of ['claro','oscuro'])for(const flujo of ['haku','libro']){
   await h.db.exec('begin');const name=(mobile?'movil':'escritorio')+'-'+tema+'-'+flujo;
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1440,height:1000}}),errors=[],externas=[];
@@ -130,4 +133,6 @@ async function libro(page,cabana){
   await capture(page,'conflicto-nuevo-sin-guardado');results.casos.push({name:'conflicto nuevo tras vista previa',resultado:'PASS',antes:before,despues:await h.snapshot()});console.log('conflicto nuevo PASS');
  }finally{await page.close();await h.db.exec('rollback');}
  fs.writeFileSync(path.join(evidence,'navegador-sintetico.json'),JSON.stringify(results,null,2));
-}finally{await browser?.close();if(server)await new Promise(ok=>server.close(ok));await h.db.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+}finally{await entorno.cerrar();}}
+module.exports={iniciarEntorno};
+if(require.main===module)ejecutar().catch(e=>{console.error(e);process.exitCode=1;});

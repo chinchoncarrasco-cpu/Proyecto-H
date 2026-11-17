@@ -13,6 +13,8 @@
 .haku-reprogramacion-decision{display:grid;gap:.2rem;min-width:0}
 .haku-reprogramacion select{box-sizing:border-box;max-width:100%;width:100%;border:1px solid #8fa89b;border-radius:.35rem;padding:.35rem;background:transparent;color:inherit;font:inherit}
 .haku-reprogramacion-bloqueo,.haku-reprogramacion-pendientes{padding:.35rem .5rem;border-left:3px solid #a87519}
+.haku-reprogramacion-accesos{display:flex;flex-wrap:wrap;gap:.4rem;margin:.4rem 0}
+.haku-reprogramacion-accesos button{font:inherit;color:inherit;background:transparent;border:1px solid #8fa89b;border-radius:.35rem;padding:.45rem .65rem;cursor:pointer}
 html[data-haiku-tema="oscuro"] .haku-reprogramacion option{background:#1b2420;color:#e8efea}
 .haku-reprogramacion-revision{font-weight:700;color:#9d6610}
 html[data-haiku-tema="oscuro"] .haku-reprogramacion-revision{color:#e7bd71}

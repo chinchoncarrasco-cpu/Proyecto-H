@@ -2,6 +2,8 @@
 
 Candidato local en `codex/libro-reprogramacion-20261116`, desde `main` `b8ea94e`. Sin push, merge, despliegue ni modificaciones de reservas reales. Todos los ejemplos y evidencias incorporados al repositorio son ficticios.
 
+Este documento describe el avance confirmado en `967e294`. La continuación de ampliación/reducción de noches y revisión de ingresos/salidas está en [la verificación de noches y estados](libro-reprogramacion-noches-20261116-resumen.md).
+
 La causa era que Haku y Libro actualizaban la estadía sin trasladar las fechas propias de servicios y notas operativas. El Resumen consulta `notas.fecha_operacion`; vincular una nota a la estadía no corrige esa fecha. Además, compartir el vínculo de reserva no demuestra que un servicio antiguo corresponda a la nueva estadía. El editor anterior podía reconstruir noches/cargos y deshacer aplicaciones de pagos al cambiar fechas.
 
 ## Resultado observado
@@ -50,6 +52,6 @@ Ejecución: usar `NODE_PATH` hacia las dependencias aisladas de prueba; ejecutar
 
 ## Límites y publicación pendiente
 
-Este traslado conserva la duración y el tipo. Cambios de número de noches requieren revisión de tarifas; estadías con ingreso/salida registrados, canceladas o no-show quedan bloqueadas para proteger su historial. Un servicio sin recurso u horario inequívoco requiere revisión. No se da por realizada una prestación antigua ni se la cancela automáticamente.
+En `967e294` este traslado conserva la duración y el tipo. La continuación local citada arriba añade revisión explícita de noches y tarifas para cambiar la duración de alojamientos futuros. Estadías con ingreso/salida registrados, canceladas o no-show quedan bloqueadas para proteger su historial. Un servicio sin recurso u horario inequívoco requiere revisión. No se da por realizada una prestación antigua ni se la cancela automáticamente.
 
 La migración sólo está probada localmente; no se aplicó en Supabase productivo. La futura publicación autorizada deberá instalar primero la migración y luego el frontend. Los campos nuevos no son compatibles con publicar sólo el frontend. Esta verificación no mide rendimiento productivo ni simula concurrencia de dos conexiones independientes; comprueba cambios entre preparación y confirmación, exclusiones y reversión en PostgreSQL local.

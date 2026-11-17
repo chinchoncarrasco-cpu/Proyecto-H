@@ -135,7 +135,8 @@
             return propuestaEdicion(f, ficha, filas, { campo: "ocupacion", ...nuevo });
         }
         const full = e.tipo_estadia === "fullday";
-        const tarifas = Object.fromEntries((ficha.noches || []).filter(n => n.estadia_id === e.id).map(n => [n.fecha, Number(n.tarifa)]));
+        const tarifas = Object.fromEntries((ficha.noches || []).filter(n => n.estadia_id === e.id &&
+            n.fecha >= e.fecha_ingreso && n.fecha < e.fecha_salida).map(n => [n.fecha, Number(n.tarifa)]));
         const nochesOriginales = diferenciaDias(e.fecha_ingreso, e.fecha_salida);
         const totalFull = full ? (ficha.cargos || []).filter(c => c.tipo_cargo === "alojamiento" && c.estado === "activo")
             .reduce((s, c) => s + Number(c.monto), 0) : null;
