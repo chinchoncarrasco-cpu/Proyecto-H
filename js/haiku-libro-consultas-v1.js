@@ -1534,7 +1534,11 @@
 
     function reciboLibroPersistido(datos) {
         const id = datos?.item_id;
-        if (datos?.contexto !== 'haku_libro_incorporacion' || !datos.operacion_id ||
+        const contextoValido = datos?.contexto === 'haku_libro_incorporacion' ||
+            datos?.contexto === 'haku_libro_pago_servicios_v1' &&
+                datos.aprobado_manualmente === true &&
+                datos.destino_alojamiento_libro_v1?.version === 1;
+        if (!contextoValido || !datos.operacion_id ||
             typeof id !== 'string' || !id.startsWith('pago:')) return null;
         const inicio = id.indexOf(':{');
         if (inicio < 0) return null;
@@ -5092,6 +5096,14 @@
                 item.aviso='Diferencia de tarifa: recepción para alojamiento, separada de cualquier ajuste que genera un cargo. '+
                     (cargos.length===1?`Cargo asociado ${cargos[0].cargo_id} · ${cargos[0].concepto||'alojamiento'} · saldo ${money(cargos[0].saldo_cargo)}. `:'Resuelve el cargo de alojamiento antes de aplicar. ')+
                     (!bancaria?.operacion_bancaria?'La glosa identifica al remitente, pero no acredita un número de operación bancaria. Revisa el comprobante y su aplicación en la ficha.':'Revisa la referencia bancaria y la aplicación al alojamiento.');
+                item.revisionPago = {
+                    concepto:'Diferencia de tarifa', destino:'Alojamiento',
+                    saldo:cargos.length === 1 ? money(cargos[0].saldo_cargo) : 'Por comprobar',
+                    cargoId:cargos.length === 1 ? cargos[0].cargo_id : null,
+                    comprobacion:bancaria?.operacion_bancaria
+                        ? 'Verifica la referencia bancaria y el destino del pago.'
+                        : 'La glosa identifica al remitente. Falta verificar la referencia de la operación bancaria.'
+                };
                 item.etiquetaAprobacion='Aprobar transferencia para alojamiento · '+money(p.monto);
                 const estadia=Array.from(comp).find(i=>i.libro===r&&i.estado==='asociada')?.sistema;
                 if(cargos.length!==1||cargos[0].estadia_id!==estadia?.id||Number(cargos[0].saldo_cargo)<p.monto||
@@ -9279,6 +9291,31 @@
             .every(campo => propuesta[campo] === item.manualPago[campo]));
     }
 
+    function contextoRevisionPago(item) {
+        const bloque = elemento("section", "haku-pago-contexto");
+        const revision = item.revisionPago;
+        if (revision) {
+            bloque.append(elemento("strong", "haku-pago-contexto-titulo", revision.concepto));
+            const datos = elemento("div", "haku-pago-contexto-datos");
+            datos.append(datoIncorporacion("Destino", revision.destino),
+                datoIncorporacion("Saldo del cargo", revision.saldo));
+            bloque.append(datos, elemento("p", "", revision.comprobacion));
+            if (revision.cargoId) {
+                const tecnico = elemento("details", "haku-pago-contexto-tecnico");
+                tecnico.append(elemento("summary", "", "Identificador del cargo"),
+                    elemento("p", "", revision.cargoId));
+                bloque.append(tecnico);
+            }
+        } else {
+            const frases = String(item.aviso || "").split(/(?<=\.)\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/u);
+            bloque.append(elemento("strong", "haku-pago-contexto-titulo", "Contexto del pago"));
+            const lista = elemento("ul", "haku-pago-contexto-lista");
+            for (const frase of frases.filter(Boolean)) lista.append(elemento("li", "", frase));
+            bloque.append(lista);
+        }
+        return bloque;
+    }
+
     function renderizarItemIncorporacion(item, controles, actualizar, aprobar, comparacion, plan) {
         const vista = presentacionIncorporacion(item);
         const esPagoActualizacion = item.payload?.tipo === 'pago_actualizar' && item.pagoLibro;
@@ -9312,7 +9349,10 @@
         if (!actualizacionReserva || item.etapaSiguiente) cabecera.append(
             elemento("span", `haiku-incorporacion-estado haiku-incorporacion-estado--${item.categoria}`, vista.estado));
         fila.append(cabecera);
-        if (item.aviso&&!item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0)) fila.append(elemento('p','haiku-incorporacion-propuesta',item.aviso));
+        if (item.aviso&&!item.destinoFinanciero?.aplicaciones?.some(a=>a.excedente>0)) {
+            fila.append(esPagoLibro && item.categoria === 'dudosos'
+                ? contextoRevisionPago(item) : elemento('p','haiku-incorporacion-propuesta',item.aviso));
+        }
         if (item.cambios?.length && !esPagoActualizacion) fila.append(listaCambiosIncorporacion(item, null, actualizacionReserva));
         if(item.reprogramacion){
             const api=root.HAIKU_REPROGRAMACION_V1,r=item.reprogramacion;
@@ -9332,9 +9372,19 @@
                     datoIncorporacion(datos.segundo[0], datos.segundo[1]),
                     datoIncorporacion('Fecha en Libro',datos.fecha));
             } else {
-                meta.append(datoIncorporacion('Medio', datos.medio), datoIncorporacion(datos.segundo[0], datos.segundo[1]), datoIncorporacion('Fecha pago', datos.fecha));
+                const glosa = item.categoria === 'dudosos' && datos.segundo[0] === 'Glosa'
+                    ? S.evidenciaTransferencia(item.pagoLibro)?.glosa_original : null;
+                meta.append(datoIncorporacion('Medio', datos.medio),
+                    datoIncorporacion(datos.segundo[0], glosa || datos.segundo[1]),
+                    datoIncorporacion('Fecha pago', datos.fecha));
             }
             fila.append(meta);
+            if (item.categoria === 'dudosos' && item.pagoLibro.texto_original) {
+                const comprobante = elemento('details', 'haku-pago-contexto-tecnico');
+                comprobante.append(elemento('summary', '', 'Ver texto completo del Libro'),
+                    elemento('p', '', item.pagoLibro.texto_original));
+                fila.append(comprobante);
+            }
             if (item.transferenciaRepartida) {
                 const reparto = elemento('div', 'haiku-incorporacion-meta-item haiku-incorporacion-meta-item--pago-detalle');
                 for (const parte of item.transferenciaRepartida.partes) {
@@ -9427,7 +9477,11 @@
         if (motivosVisibles.size) {
             const avisos = elemento("ul", "haiku-incorporacion-avisos");
             motivosVisibles.forEach(motivo => avisos.append(elemento("li", "", motivo)));
-            fila.append(avisos);
+            if (esPagoLibro && item.categoria === 'dudosos') {
+                const revision = elemento("section", "haku-pago-revision-motivos");
+                revision.append(elemento("strong", "haku-pago-contexto-titulo", "Para continuar"), avisos);
+                fila.append(revision);
+            } else fila.append(avisos);
         }
         if (!actualizacionReserva && vista.reserva?.observaciones) {
             const notas = elemento("details", "haiku-incorporacion-notas");
