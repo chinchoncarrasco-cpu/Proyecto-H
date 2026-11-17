@@ -1677,6 +1677,7 @@ html[data-haku-mobile-assistant="1"] .haku-respuesta-compacta summary { min-heig
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px 8px;
     margin: 6px 0 0; padding: 6px 8px; background: var(--respuesta-suave);
 }
+.haku-totales__montos--servicios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .haku-totales__montos dt { color: var(--respuesta-secundario); font-size: 11px; }
 .haku-totales__montos dd { margin: 1px 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
 .haku-totales__montos > :nth-child(2) dd { color: var(--respuesta-acento); }

@@ -11,6 +11,7 @@ const migrationV32 = fs.readFileSync('supabase/migrations/20260929194050_total_v
   const db = await init();
   await db.exec(migrationV31);
   await db.exec(migrationV32);
+  await db.exec(fs.readFileSync('supabase/migrations/20261117055000_haiku_total_noches_historicas.sql', 'utf8'));
   const q = (sql, params = []) => db.query(sql, params);
   const one = async (sql, params = []) => (await q(sql, params)).rows[0];
   let checks = 0;
@@ -113,6 +114,45 @@ const migrationV32 = fs.readFileSync('supabase/migrations/20260929194050_total_v
       assert.deepEqual((await one('select public.haiku_capacidad_totales_v1() capacidad')).capacidad, {
         version: 'total1_financiero_v32', writer_disponible: true, servicios_separados: true
       });
+    });
+
+    await test('reprogramada con una noche vigente, cargos anulados y abono intacto', async () => {
+      const { reservaId, estadiaId } = await crearAlojamiento(30, { tarifa: 144000 });
+      await q("update public.reserva_estadias set fecha_ingreso='2026-10-11',estado_estadia='checked_out' where id=$1", [estadiaId]);
+      await q(`update public.cargos set estado='anulado' where estadia_noche_id in
+        (select id from public.estadia_noches where estadia_id=$1 and fecha='2026-10-10')`, [estadiaId]);
+      await q(`insert into public.cargos(reserva_id,estadia_id,estadia_noche_id,tipo_cargo,monto,moneda,estado)
+        select $1,$2,id,'alojamiento',160000,'CLP','anulado' from public.estadia_noches
+        where estadia_id=$2 and fecha='2026-10-11'`, [reservaId, estadiaId]);
+      await agregarServicio(30);
+      await agregarPago(30, 1, 144000, []);
+      const antes = await snapshotCompleto(reservaId);
+      const respuesta = await call([await item(reservaId, 160000)]);
+      const despues = await snapshotCompleto(reservaId);
+      assert.deepEqual(respuesta.resultados[0], {
+        reserva_id: reservaId, total_anterior: 144000, total_nuevo: 160000, sin_cambios: false,
+        servicios_sin_cambios: 30000, servicios_pendientes: 30000, total_reserva_anterior: 174000,
+        total_reserva_esperado: 190000
+      });
+      assert.deepEqual(await noches(reservaId), [144000, 160000]);
+      for (const campo of ['pagos', 'aplicaciones', 'servicios', 'ajustes', 'reserva', 'estadias']) {
+        assert.deepEqual(despues[campo], antes[campo]);
+      }
+      assert.deepEqual(despues.cargos.filter(c => c.estado === 'anulado' || c.servicio_id),
+        antes.cargos.filter(c => c.estado === 'anulado' || c.servicio_id));
+      assert.equal(despues.auditoria.at(-1).datos_contexto.reconciliacion_aplicaciones.sin_aplicar_final, 144000);
+    });
+
+    await test('una noche fuera de rango con cargo activo sigue bloqueada', async () => {
+      const { reservaId, estadiaId } = await crearAlojamiento(31);
+      await q("update public.reserva_estadias set fecha_ingreso='2026-10-11' where id=$1", [estadiaId]);
+      await fallaSinCambios([await item(reservaId, 360000)], [reservaId], /fuera del rango/);
+    });
+
+    await test('una noche realmente faltante sigue bloqueada', async () => {
+      const { reservaId, estadiaId } = await crearAlojamiento(32);
+      await q("update public.reserva_estadias set fecha_salida='2026-10-13' where id=$1", [estadiaId]);
+      await fallaSinCambios([await item(reservaId, 480000)], [reservaId], /noches incompletas/);
     });
 
     await test('Daniel 320000 a 288000 conserva Tinaja 30000 y total global 318000', async () => {

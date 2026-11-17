@@ -34,8 +34,8 @@
   }return {entradas};
  }
  async function filas(build){const out=[];for(let i=0;i<10000;i+=500){const {data,error}=await build().range(i,i+499);if(error)throw error;out.push(...(data||[]));if((data||[]).length<500)return out;}throw Error('Demasiadas candidatas para garantizar una resolución completa.');}
- const campos='id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,cabana_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,cabanas(numero),noches:estadia_noches(fecha,tarifa))';
- function motivo(r,total,objetivo,ajustes,permitirResiduo=true){
+ const campos='id,titular_nombre,estado_reserva,grupo_reserva_id,estadias:reserva_estadias(id,cabana_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,cabanas(numero),noches:estadia_noches(id,fecha,tarifa))';
+ function motivo(r,total,objetivo,ajustes,cargos,permitirResiduo=true){
   if(['cancelada','no_show'].includes(r.estado_reserva))return 'Reserva cancelada o no-show.';
   if(r.grupo_reserva_id)return 'Reserva vinculada a un grupo: requiere revisión.';
   if(r.estadias?.length!==1)return 'Varias estadías o estructura desconocida: requiere revisión.';
@@ -44,8 +44,15 @@
   if(!Number.isSafeInteger(total)||total<0)return 'Total financiero no disponible.';
   if(e.tipo_estadia==='fullday')return e.fecha_ingreso===e.fecha_salida?null:'Full Day inconsistente.';
   if(e.tipo_estadia!=='alojamiento')return 'Tipo de estadía no admitido.';
-  const dias=(Date.parse(e.fecha_salida)-Date.parse(e.fecha_ingreso))/86400000,n=e.noches||[];
-  if(!Number.isInteger(dias)||dias<=0||n.length!==dias||new Set(n.map(x=>x.fecha)).size!==dias||n.some(x=>x.fecha<e.fecha_ingreso||x.fecha>=e.fecha_salida))return 'Noches incompletas: requiere revisión.';
+  const dias=(Date.parse(e.fecha_salida)-Date.parse(e.fecha_ingreso))/86400000;
+  const historicas=(e.noches||[]).filter(x=>x.fecha<e.fecha_ingreso||x.fecha>=e.fecha_salida);
+  const n=(e.noches||[]).filter(x=>x.fecha>=e.fecha_ingreso&&x.fecha<e.fecha_salida);
+  if(historicas.some(noche=>{
+   const vinculados=(cargos||[]).filter(c=>c.estadia_noche_id===noche.id);
+   return !vinculados.some(c=>c.estado==='anulado'&&c.tipo_cargo==='alojamiento'&&!c.servicio_id&&c.estadia_id===e.id)
+    ||vinculados.some(c=>c.estado!=='anulado');
+  }))return 'Hay noches fuera de las fechas actuales cuyos cargos requieren revisión.';
+  if(!Number.isInteger(dias)||dias<=0||n.length!==dias||new Set(n.map(x=>x.fecha)).size!==dias)return 'Faltan noches de alojamiento dentro de las fechas actuales: requiere revisión.';
   if(new Set(n.map(x=>Number(x.tarifa))).size!==1||n.some(x=>Number(x.tarifa)<=0)||n.reduce((a,x)=>a+Number(x.tarifa),0)!==total)return 'Tarifas variables o cargos inconsistentes: requiere revisión.';
   if(!permitirResiduo&&objetivo%dias!==0)return 'El total debe dividirse exactamente entre las noches; no se redondean tarifas.';
   return null;
@@ -56,7 +63,11 @@
   const saldos=await filas(()=>cliente.from('vista_saldos_alojamiento_reserva').select('reserva_id,total_alojamiento').eq('reserva_id',id).order('reserva_id'));
   if(saldos.length!==1||saldos[0].total_alojamiento==null)throw Error('No se pudo leer el total financiero de alojamiento.');
   const ajustes=await filas(()=>cliente.from('cargo_ajustes').select('id,operacion_id,reserva_id,cargo_id,tipo_ajuste,signo,monto,concepto,porcentaje,base_calculo,estado').eq('reserva_id',id).eq('estado','activo').order('id'));
-  return {reserva:rs[0],total:Number(saldos[0].total_alojamiento),ajustes};
+  const cargos=await filas(()=>cliente.from('vista_estado_cargos').select('cargo_id,reserva_id,estadia_id,estadia_noche_id,tipo_cargo,estado,servicio_id,monto_ajustado').eq('reserva_id',id).order('cargo_id')).catch(()=>null);
+  const servicios=(cargos||[]).filter(c=>c.estado==='activo'&&c.tipo_cargo!=='alojamiento'&&c.servicio_id);
+  const totalServicios=cargos&&servicios.every(c=>c.monto_ajustado!=null&&Number.isSafeInteger(Number(c.monto_ajustado)))
+   ?servicios.reduce((s,c)=>s+Number(c.monto_ajustado),0):null;
+  return {reserva:rs[0],total:Number(saldos[0].total_alojamiento),ajustes,cargos,totalServicios};
  }
  async function diagnosticarAjustes(cliente,v){
   try{
@@ -119,18 +130,18 @@
     const v=await leer(cliente,cs[0].id),r=v.reserva;
     if(!coincideReserva(r,entrada,admiteVariante))throw Error('La identificación cambió durante la preparación.');
     if(entrada.total_actual!=null&&Number(entrada.total_actual)!==v.total)throw Error('El total esperado por la fuente ya cambió.');
-    let error=motivo(r,v.total,entrada.total_objetivo,v.ajustes),plan_iva=null;
+    let error=motivo(r,v.total,entrada.total_objetivo,v.ajustes,v.cargos),plan_iva=null;
     if(soloIva(v.ajustes)){
-     try{plan_iva=await leerPlanIva(cliente,r.id,entrada.total_objetivo,v.total);error=motivo(r,Number(plan_iva.base_actual),Number(plan_iva.base_nueva),[],true);}
+     try{plan_iva=await leerPlanIva(cliente,r.id,entrada.total_objetivo,v.total);error=motivo(r,Number(plan_iva.base_actual),Number(plan_iva.base_nueva),[],v.cargos,true);}
      catch(e){error=e.message;}
     }
     if(error)errores.push(`${r.titular_nombre}: ${error}`);
     const diagnostico=v.ajustes.length?await diagnosticarAjustes(cliente,v):null;
-    items.push({reserva_id:r.id,titular:r.titular_nombre,cabana:entrada.cabana||r.estadias[0]?.cabanas?.numero,ingreso:r.estadias[0]?.fecha_ingreso,salida:r.estadias[0]?.fecha_salida,total_actual:v.total,total_objetivo:entrada.total_objetivo,origen:entrada.origen||'estructurado',snapshot:JSON.stringify(v),...(error?{error}:{}),...(diagnostico?{diagnostico}:{}),...(plan_iva?{plan_iva}:{})});
+    items.push({reserva_id:r.id,titular:r.titular_nombre,cabana:entrada.cabana||r.estadias[0]?.cabanas?.numero,ingreso:r.estadias[0]?.fecha_ingreso,salida:r.estadias[0]?.fecha_salida,total_actual:v.total,total_objetivo:entrada.total_objetivo,total_servicios:v.totalServicios,origen:entrada.origen||'estructurado',snapshot:JSON.stringify(v),...(error?{error}:{}),...(diagnostico?{diagnostico}:{}),...(plan_iva?{plan_iva}:{})});
    }
    if(new Set(items.map(e=>e.reserva_id)).size!==items.length)errores.push('La misma reserva aparece más de una vez.');
    if(errores.length)return {estado:'bloqueada',items,solicitados:entradas.length,mensaje:'No se aplicará ningún cambio hasta resolver todas las entradas. '+errores.join(' ')};
-   const cambios=items.filter(e=>e.total_actual!==e.total_objetivo).length,p={estado:cambios?'propuesta':'sin_cambios',items,cambios,mensaje:cambios?'Revisa los totales. Se confirmará todo el lote en una sola operación.':'Los totales ya coinciden. No hay cambios que realizar.'};
+   const cambios=items.filter(e=>e.total_actual!==e.total_objetivo).length,p={estado:cambios?'propuesta':'sin_cambios',items,cambios,mensaje:cambios?'El cambio corresponde al alojamiento. Los servicios conservan su precio.':'Los totales ya coinciden. No hay cambios que realizar.'};
    if(cambios&&(!await writerDisponible(cliente)||items.some(e=>e.plan_iva?.solo_lectura===true)))return {...p,estado:'previsualizacion',mensaje:'Sólo previsualización. Guardar totales permanece bloqueado; el writer no está disponible para esta sesión.'};
    if(cambios)previews.set(p,{items:copia(items),cliente,permiso,estado:'pendiente'});return p;
   }catch(e){return {estado:'bloqueada',mensaje:e.message};}
@@ -150,8 +161,8 @@
    if(!await writerDisponible(c.cliente))throw Error('El writer de totales ya no está disponible.');
    for(const item of c.items){const v=await leer(c.cliente,item.reserva_id);if(JSON.stringify(v)!==item.snapshot)throw Error('La reserva o su total cambió desde la vista previa. Prepara nuevamente el lote.');
     let error;
-    if(item.plan_iva){const plan=await leerPlanIva(c.cliente,item.reserva_id,item.total_objetivo,v.total);if(plan.solo_lectura===true||plan.firma!==item.plan_iva.firma)throw Error('El plan IVA cambió desde la vista previa o volvió a sólo lectura.');error=motivo(v.reserva,Number(plan.base_actual),Number(plan.base_nueva),[],true);}
-    else error=motivo(v.reserva,v.total,item.total_objetivo,v.ajustes);if(error)throw Error(error);
+    if(item.plan_iva){const plan=await leerPlanIva(c.cliente,item.reserva_id,item.total_objetivo,v.total);if(plan.solo_lectura===true||plan.firma!==item.plan_iva.firma)throw Error('El plan IVA cambió desde la vista previa o volvió a sólo lectura.');error=motivo(v.reserva,Number(plan.base_actual),Number(plan.base_nueva),[],v.cargos,true);}
+    else error=motivo(v.reserva,v.total,item.total_objetivo,v.ajustes,v.cargos);if(error)throw Error(error);
    }
    if(!c.permiso())throw Error('Ya no tienes permisos para editar totales.');
    c.estado='enviando';enviado=true;
@@ -159,7 +170,12 @@
    if(error)throw error;
    if(data?.ok!==true||!Array.isArray(data.resultados)||data.resultados.length!==c.items.length||c.items.some(e=>!data.resultados.some(r=>r.reserva_id===e.reserva_id&&Number(r.total_nuevo)===e.total_objetivo)))throw Error('Respuesta del guardado no verificable.');
    c.estado='completada';const aviso=await refrescar(c.items);
-   return {estado:'completada',items:c.items,mensaje:'Totales actualizados correctamente.'+(aviso?' Alguna vista no pudo refrescarse; vuelve a abrirla.':'')};
+   const items=c.items.map(e=>{
+    const resultado=data.resultados.find(r=>r.reserva_id===e.reserva_id);
+    const servicios=resultado.servicios_sin_cambios;
+    return servicios!=null&&Number.isSafeInteger(Number(servicios))?{...e,total_servicios:Number(servicios)}:e;
+   });
+   return {estado:'completada',items,mensaje:'Totales actualizados correctamente.'+(aviso?' Alguna vista no pudo refrescarse; vuelve a abrirla.':'')};
   }catch(e){c.estado='terminada';return {estado:'bloqueada',mensaje:(enviado?'No se pudo confirmar el resultado del lote. Revisa Proyecto H antes de reintentar. ':'No se envió ningún cambio. ')+e.message};}
  }
  function renderizarDiagnostico(d,objetivo){
@@ -182,12 +198,16 @@
    const diferencia=e.total_objetivo-e.total_actual;
    const detalle=e.plan_iva?renderizarPlanIva(e):e.diagnostico?renderizarDiagnostico(e.diagnostico,e.total_objetivo):
     `<dl class="haku-totales__montos">
-     <div><dt>Anterior</dt><dd>${dinero(e.total_actual)}</dd></div>
-     <div><dt>${p.estado==='completada'?'Guardado':'Propuesto'}</dt><dd>${dinero(e.total_objetivo)}</dd></div>
+     <div><dt>Alojamiento actual</dt><dd>${dinero(e.total_actual)}</dd></div>
+     <div><dt>${p.estado==='completada'?'Alojamiento guardado':'Alojamiento propuesto'}</dt><dd>${dinero(e.total_objetivo)}</dd></div>
      <div><dt>Diferencia</dt><dd>${diferencia>0?'+':diferencia<0?'−':''}${dinero(Math.abs(diferencia))}</dd></div>
     </dl>`;
+   const servicios=e.total_servicios>0?`<dl class="haku-totales__montos haku-totales__montos--servicios">
+    <div><dt>Servicios sin cambios</dt><dd>${dinero(e.total_servicios)}</dd></div>
+    <div><dt>Total con servicios ${p.estado==='completada'?'guardado':'propuesto'}</dt><dd>${dinero(e.total_objetivo+e.total_servicios)}</dd></div>
+   </dl>`:'';
    const alerta=p.estado==='bloqueada'?`<p class="haku-totales__aviso">${e.error?esc(e.error):'Sin bloqueo detectado en esta entrada. El lote sigue pendiente.'}</p>`:'';
-   return `<section>${estadia}${detalle}${alerta}</section>`;
+   return `<section>${estadia}${detalle}${servicios}${alerta}</section>`;
   }).join('');
   const acciones=p.estado==='propuesta'?`<footer class="haku-totales__acciones">
    <button type="button" data-total-cancelar>Cancelar</button>

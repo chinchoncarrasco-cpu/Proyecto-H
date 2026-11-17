@@ -77,6 +77,15 @@ function fuentes(tema) {
     const extraida = {titular_nombre:"Ana Pérez",fecha_llegada:"2026-11-13",fecha_salida:"2026-11-14",tipo_estadia:"alojamiento",
         cabana:4,adultos:2,ninos:0,noches:1,cloudbeds_id:"TEST0001",monto_total:170000};
     const pagoLeido = {monto:30000,medio:"efectivo",moneda:"CLP",fecha:"2026-11-12",detectado:true};
+    window.cargarTotalReprogramadoDePrueba=()=>{
+        cab10.noches.push({id:"noche-historica",fecha:"2026-10-22",tarifa:170000});
+        tablas.vista_estado_cargos.push(
+            {cargo_id:"anulado",reserva_id:dos.id,estadia_id:cab10.id,estadia_noche_id:"noche-historica",
+                tipo_cargo:"alojamiento",estado:"anulado",monto_ajustado:170000},
+            {cargo_id:"jacuzzi",reserva_id:dos.id,servicio_id:"servicio-jacuzzi",tipo_cargo:"servicio",
+                estado:"activo",monto_ajustado:30000}
+        );
+    };
     window.cargarRespuestasDePrueba=()=>{
         prueba.respuestas=true;
         tablas.aseos.push({id:"aseo",fecha:"2026-11-12",cabana_id:"cab3",estado:"completado",
@@ -575,8 +584,12 @@ async function respuestas(browser, ancho, tema, webview) {
         assert.match(await libro.innerText(),/Tónel 20:00[\s\S]*Nov26!M7/);
         await vista("Libro: CAB 3 el 18/11/2026",".haku-libro-lectura",/Sin reservas identificadas/);
 
-        const total=await vista("Haku, cambia el precio del CAB 10 de Inés Rojas de hoy a CLP 180.000",".haku-totales",/Propuesto[\s\S]*180\.000/);
+        await page.evaluate(()=>cargarTotalReprogramadoDePrueba());
+        const total=await vista("Haku, cambia el precio del CAB 10 de Inés Rojas de hoy a CLP 180.000",".haku-totales",/Alojamiento propuesto[\s\S]*180\.000/);
         await revisarCuadricula(total,".haku-totales__montos",3);
+        await revisarCuadricula(total,".haku-totales__montos--servicios",2);
+        assert.match(await total.innerText(),/Servicios sin cambios[\s\S]*30\.000[\s\S]*Total con servicios propuesto[\s\S]*210\.000/);
+        assert.equal(await total.locator("[data-total-confirmar]").isEnabled(),true);
         await total.locator("[data-total-cancelar]").click();
         assert.match(await total.innerText(),/Cambio de total cancelado/);
 
