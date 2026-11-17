@@ -37,7 +37,7 @@ const server = http.createServer((request, response) => {
 
 (async () => {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-    const browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true });
     try {
         const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
         const errors = [], external = [];
@@ -111,7 +111,11 @@ const server = http.createServer((request, response) => {
             await page.waitForFunction(() => [...document.querySelectorAll('.haiku-incorporacion-manual-pago-panel:not([hidden]) img')].every(i => i.complete && i.naturalWidth > 0));
             const result = await panel.evaluate(e => {
                 const r = e.getBoundingClientRect();
-                return { width: r.width, scroll: e.scrollWidth, client: e.clientWidth,
+                return { width: r.width, height:r.height, scroll: e.scrollWidth, client: e.clientWidth,
+                    available:e.closest('article').clientWidth,
+                    fieldColumns:getComputedStyle(e.querySelector('.haiku-manual-formulario--servicio > .haiku-manual-dos-columnas:not(.haiku-manual-eleccion)')).gridTemplateColumns.split(' ').length,
+                    footer:[...e.querySelectorAll('.haiku-manual-pie button')].map(b=>({width:b.offsetWidth,top:b.offsetTop})),
+                    evidenciaAbierta:e.querySelector('.haiku-manual-evidencia').open,
                     columns: getComputedStyle(e.querySelector('.haiku-manual-dos-columnas')).gridTemplateColumns.split(' ').length,
                     shell: document.querySelector('.haiku-asistente-panel').getBoundingClientRect().width,
                     overflow: getComputedStyle(document.getElementById('haiku-asistente-mensajes')).overflowY,
@@ -121,7 +125,13 @@ const server = http.createServer((request, response) => {
             assert.ok(result.scroll <= result.client + 1, 'panel sin overflow horizontal');
             assert.equal(result.shell, mobile ? 390 : 486, 'ancho global intacto');
             assert.equal(result.overflow, 'auto', 'scroll natural del panel existente');
-            assert.equal(result.columns, mobile ? 1 : 2);
+            assert.equal(result.columns, 2);
+            assert.equal(result.fieldColumns, mobile ? 2 : 3, 'fecha, cantidad y precio comparten el ancho disponible');
+            assert.ok(result.width >= result.available - 8, JSON.stringify(result));
+            assert.ok(result.height <= (mobile ? 535 : 455), JSON.stringify(result));
+            assert.equal(result.evidenciaAbierta, false);
+            assert.equal(result.footer[0].top, result.footer[1].top, 'acciones compactas en una fila');
+            assert.ok(result.footer.every(b=>b.width < result.width * .7), JSON.stringify(result.footer));
             assert.ok(result.images.every(i => i.loaded && i.width === i.original), 'SVG reales en sus dimensiones originales: ' + JSON.stringify(result.images));
         };
         const screenshot = async name => {
@@ -156,6 +166,8 @@ const server = http.createServer((request, response) => {
         assert.match(await panel.innerText(), /Paso 1 de 2[\s\S]*Asociar el servicio[\s\S]*Ignacio Herrera/);
         assert.equal(await panel.getByRole('button', { name: 'Guardar servicio y continuar' }).isDisabled(), true);
         assert.equal(await page.evaluate(() => window.__h.tablas.servicios.length), 0, 'sólo renderizar no crea servicios');
+        assert.equal(await panel.getByLabel('Personas', {exact:true}).isVisible(),false,'el catálogo determina si aplica');
+        assert.equal(await panel.locator('.haiku-manual-validacion').innerText(),'');
         await fill(0, 'tinajaTonel', 1, 30000, 2);
         assert.equal(await panel.getByLabel('Hora cuando corresponda', { exact: true }).isVisible(), false);
         await geometry(false); await screenshot('paso1-escritorio');

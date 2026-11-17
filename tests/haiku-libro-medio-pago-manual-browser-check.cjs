@@ -18,10 +18,11 @@ const server=http.createServer((req,res)=>{
     await new Promise(r=>server.listen(0,'127.0.0.1',r));
     let browser;
     try {
-        browser=await chromium.launch({executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
+        browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
         for(const viewport of [{width:1100,height:950},{width:390,height:844}]) {
             const page=await browser.newPage({viewport});page.on('pageerror',e=>errores.push(e.message));
             await page.route('**/*',r=>{if(new URL(r.request().url()).hostname==='127.0.0.1') return r.continue();externos.push(r.request().url());return r.abort();});
+            await require('./fixtures/dialogos.cjs').prepararNavegador(page);
             await page.goto('http://127.0.0.1:'+server.address().port);
             await page.evaluate(()=>window.HAIKU_LIBRO_RESERVA_V1={consultarHoja:async x=>x});
             for(const file of ['haiku-libro-semantica-v1','haiku-libro-pagos-destinos-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1']) await page.addScriptTag({content:read('js/'+file+'.js')});

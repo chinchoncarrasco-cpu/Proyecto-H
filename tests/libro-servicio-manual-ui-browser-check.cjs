@@ -40,7 +40,7 @@ const foto = async (locator, nombre) => {
     await new Promise(r => server.listen(0, '127.0.0.1', r));
     let browser;
     try {
-        browser = await chromium.launch({ executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true });
+        browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', headless: true });
         for (const width of [1100, 390, 320]) {
             const page = await browser.newPage({ viewport: { width, height: 950 } });
             page.on('pageerror', e => errors.push(e.message));

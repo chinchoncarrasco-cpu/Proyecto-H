@@ -418,8 +418,9 @@ test('UI por unidad: Huevo, Pan y ambos Queque omiten personas/hora y usan preci
         assert.equal(e.campo('Fecha del servicio').value,'2026-10-04');assert.equal(e.campo('Cantidad').value,String(cantidad));
         assert.equal(e.campo('Precio unitario CLP').value,String(precioBase));
         const detalle=e.panel.querySelector('.haiku-incorporacion-manual-precio').textContent;
-        assert.ok(detalle.includes(precioBase.toLocaleString('es-CL')));assert.ok(detalle.includes(`Cantidad: ${cantidad}`));
-        assert.ok(detalle.includes(monto.toLocaleString('es-CL')));assert.doesNotMatch(detalle,/difiere|confirma expresamente/i);
+        assert.ok(detalle.includes(precioBase.toLocaleString('es-CL')));
+        const totales=e.panel.querySelector('.haiku-manual-totales').querySelectorAll('strong');
+        assert.ok(totales.every(n=>n.textContent.includes(monto.toLocaleString('es-CL'))));assert.doesNotMatch(detalle,/difiere|confirma expresamente/i);
         assert.equal(e.campo('Confirmo el precio manual y el total exacto del Libro').parentElement.hidden,true);
         e.campo('Personas').value='99'; // Ni un valor residual reemplaza el cero del contrato.
         e.sinEscrituras();await e.boton('Guardar servicio y continuar').events.click();
@@ -446,7 +447,7 @@ test('UI comprobante posterior: no precarga fecha fuera de estadía y explica el
     const fecha=e.campo('Fecha del servicio'),guardar=e.boton('Guardar servicio y continuar');
     assert.equal(fecha.value,'','la fecha del comprobante no se usa como fecha del servicio');
     assert.equal(guardar.disabled,true);
-    assert.match(e.panel.querySelector('.haiku-incorporacion-aviso').textContent,
+    assert.match(e.panel.querySelector('.haiku-manual-validacion').textContent,
         /fecha real del servicio.*03 oct 2026.*04 oct 2026.*comprobante/i);
     e.cambiar('Fecha del servicio','2026-10-07');
     assert.equal(guardar.disabled,true,'no se permite fecha posterior a la estadía');
@@ -463,7 +464,7 @@ test('UI personas: capacidad incluida/máxima o precio por persona conservan la 
         assert.equal(e.campo('Personas').disabled,false);assert.equal(e.campo('Personas').required,true);
         e.campo('Confirmo el precio manual y el total exacto del Libro').checked=true;
         await e.boton('Guardar servicio y continuar').events.click();assert.equal(e.intentos.length,0);
-        assert.match(e.panel.querySelector('.haiku-incorporacion-aviso').textContent,/personas/i);
+        assert.match(e.panel.querySelector('.haiku-manual-validacion').textContent,/personas/i);
         e.cambiar('Personas','2');e.campo('Confirmo el precio manual y el total exacto del Libro').checked=true;
         await e.boton('Guardar servicio y continuar').events.click();assert.equal(e.intentos[0].p_personas,2);e.sinEscrituras();
     }
@@ -474,7 +475,7 @@ test('UI hora: sólo requiere_horario=true exige hora; la hora opcional se valid
         const e=await editorUnidadUi({catalogo:{requiere_horario}});
         assert.equal(e.campo('Hora cuando corresponda').required,requiere_horario);
         await e.boton('Guardar servicio y continuar').events.click();assert.equal(e.intentos.length,requiere_horario?0:1);
-        if(requiere_horario) assert.match(e.panel.querySelector('.haiku-incorporacion-aviso').textContent,/hora/i);
+        if(requiere_horario) assert.match(e.panel.querySelector('.haiku-manual-validacion').textContent,/hora/i);
         e.cambiar('Hora cuando corresponda','25:10');await e.boton('Guardar servicio y continuar').events.click();
         assert.equal(e.intentos.length,requiere_horario?0:1);
         e.cambiar('Hora cuando corresponda','11:30');await e.boton('Guardar servicio y continuar').events.click();
@@ -516,7 +517,9 @@ test('UI Gaston progresiva: elección explícita de ambos QUEQUE, precio mostrad
         await boton('Guardar servicio y continuar').events.click();assert.equal(h.tablas.servicios.length,0);
         catalogo.value=elegido;catalogo.events.change();
         assert.equal(confirma.checked,false);assert.equal(campo('Precio unitario CLP').value,'5000');
-        assert.match(panel.querySelector('.haiku-incorporacion-manual-precio').textContent,/5\.000.*5\.000.*difiere/);
+        assert.match(panel.querySelector('.haiku-incorporacion-manual-precio').textContent,/difiere/);
+        const totales=panel.querySelector('.haiku-manual-totales').querySelectorAll('strong');
+        assert.ok(totales.every(n=>/5\.000/.test(n.textContent)));
         assert.ok(panel.querySelector('.haiku-incorporacion-manual-precio').textContent.includes(elegido==='quequeEntero'?'8.000':'2.000'));
         await boton('Guardar servicio y continuar').events.click();assert.equal(h.tablas.servicios.length,0);
         confirma.checked=true;await boton('Cancelar revisión').events.click();assert.equal(panel.hidden,true);
@@ -554,7 +557,10 @@ test('UI abre subpanel estructurado dentro de la tarjeta y mantiene Ver reserva 
     for(const [n,v] of [['Aplicación a resolver','0'],['Servicio del catálogo','tinajaTonel'],['Fecha del servicio',FECHA],
         ['Cantidad','1'],['Personas','2'],['Precio unitario CLP','30000'],['Tipo de cobro','normal']]) campo(n).value=v;
     campo('Precio unitario CLP').events.input();
-    assert.match(panel.querySelector('.haiku-incorporacion-manual-precio').textContent,/35\.000.*30\.000.*30\.000.*difiere/);
+    assert.match(panel.querySelector('.haiku-incorporacion-manual-precio').textContent,/35\.000.*difiere/);
+    const totales=panel.querySelector('.haiku-manual-totales').querySelectorAll('strong');
+    assert.equal(totales.length,2);
+    assert.ok(totales.every(n=>/30\.000/.test(n.textContent)));
     assert.equal(campo('Confirmo el precio manual y el total exacto del Libro').checked,false);
     campo('Confirmo el precio manual y el total exacto del Libro').checked=true;
     await boton('Guardar servicio y continuar').events.click();
@@ -670,8 +676,8 @@ test('Paso 2 y éxito visibles usan el destino revalidado y la acción vigente, 
     await e.boton('Aprobación manual').events.click();
     await e.boton('Confirmar asociación y pago').events.click();
     assert.equal(e.panel().dataset.paso,'aprobado');assert.match(e.texto(),/Pago seguro.*Asociación y pago aprobados/);
-    assert.match(e.texto(),/Servicio vinculado a la reserva.*Asociación del pago confirmada.*Disponible en Pagos seguros/);
-    assert.match(e.texto(),/Continúa en la revisión para preparar los pagos seguros/);
+    assert.match(e.texto(),/Disponible en Pagos seguros.*Se registrará al confirmar la incorporación/);
+    assert.match(e.texto(),/Tinaja Tonel.*Pago aprobado/);
     const abrir=e.panel().querySelector('.haiku-pago-ver-reserva');assert.ok(abrir);await abrir.events.click();
     assert.equal(e.aperturas[0][0],id(1));assert.equal(e.aperturas[0][2].estadiaId,id(2));
     assert.equal(e.h.llamadas.filter(c=>c.nombre==='haiku_registrar_servicio').length,1);

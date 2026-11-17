@@ -2048,7 +2048,7 @@
         // La misma base visual de aprobaciones de Pagos, sin duplicar su CSS.
         if (!document.getElementById('haiku-libro-pagos-ui-v1-css')) {
             const link = document.createElement('link'); link.id = 'haiku-libro-pagos-ui-v1-css';
-            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=5'; document.head.appendChild(link);
+            link.rel = 'stylesheet'; link.href = 'css/haiku-libro-pagos-ui-v1.css?v=6'; document.head.appendChild(link);
         }
         if (document.getElementById("haku-libro-servicios-estilos-v2")) return;
         const style = document.createElement("style"); style.id = "haku-libro-servicios-estilos-v2";
