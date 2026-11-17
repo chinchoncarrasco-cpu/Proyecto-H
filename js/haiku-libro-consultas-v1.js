@@ -8716,7 +8716,7 @@
     function iconoRevisionManual(nombre) {
         const img = elemento('img','haiku-manual-icono');
         img.src = './assets/icons/haku-pagos-manual/' + nombre + '.svg';
-        const lado = {back:16,card:18,info:20,check:20,shield:34,'check-small':18}[nombre];
+        const lado = {card:18,info:20,check:20}[nombre];
         img.width = lado; img.height = lado;
         img.alt = ''; img.setAttribute('aria-hidden','true');
         return img;
@@ -8736,7 +8736,7 @@
     }
 
     function resumenRevisionManual(item, p, compacto = false) {
-        const tarjeta = elemento('section','haiku-manual-resumen');
+        const tarjeta = elemento('section','haiku-manual-resumen haiku-manual-resumen--pago' + (compacto ? ' haiku-manual-resumen--confirmado' : ''));
         const cabecera = elemento('div','haiku-manual-fila');
         cabecera.append(elemento('strong','',p.titular),elemento('span','haiku-manual-badge','CAB ' + p.cabana));
         const montos = elemento('div','haiku-manual-fila haiku-manual-monto-medio');
@@ -8756,8 +8756,10 @@
             const servicio = a.cargo?.servicio || comp?.snapshot?.finanzas?.servicios?.find(s => s.id === a.cargo?.servicio_id);
             const tarjeta = elemento('div',compacto ? 'haiku-manual-servicio-confirmado haiku-manual-divider' : 'haiku-manual-destino');
             const nombre = elemento('div','haiku-manual-fila');
-            nombre.append(elemento('strong','',servicio?.catalogo_servicios?.nombre || a.cargo?.concepto || a.concepto));
-            if (a.estado === 'destino_unico') nombre.append(iconoRevisionManual('check'));
+            const etiqueta = servicio?.catalogo_servicios?.nombre || a.cargo?.concepto || a.concepto;
+            nombre.append(elemento('strong','',etiqueta));
+            if (!compacto) nombre.append(elemento('strong','haiku-manual-destino-monto',money(a.monto)));
+            else if (a.estado === 'destino_unico') nombre.append(iconoRevisionManual('check'));
             tarjeta.append(nombre);
             if (servicio) {
                 const unidad = servicio.catalogo_servicios?.unidad;
@@ -8766,9 +8768,8 @@
                     servicio.cantidad != null ? String(servicio.cantidad) + (unidad ? ' ' + unidad : ' · cantidad') : ''
                 ].filter(Boolean).join(' · ')));
             }
-            if (!compacto) tarjeta.append(elemento('p','haiku-manual-caption','Reserva de ' + p.titular + ' · CAB ' + p.cabana),
-                filaRevisionManual('Aplicación del Libro',a.concepto,'haiku-manual-divider'),
-                filaRevisionManual('Monto a asociar',money(a.monto)));
+            if (!compacto && a.concepto && a.concepto !== etiqueta)
+                tarjeta.append(elemento('p','haiku-manual-caption','Libro · ' + a.concepto));
             contenedor.append(tarjeta);
         }
         return contenedor;
@@ -8835,7 +8836,6 @@
             revision.activo = true; panel.hidden = false; abrir.setAttribute('aria-expanded','true');
             revisionesVisualesManualPago.set(plan,revision);
         });
-        contenido.append(boton('Revisión de pagos','haiku-manual-volver',cerrar));
         const cabecera = elemento('header','haiku-manual-cabecera');
         cabecera.append(elemento('span','haiku-manual-badge' + (aprobado ? '' : ' haiku-manual-badge--revision'),aprobado ? 'Listo para incorporar' : 'Revisión manual'),
             elemento('h3','',aprobado ? 'Confirmación Airbnb completada' : 'Completar confirmación Airbnb'),
@@ -8849,9 +8849,8 @@
                 avisoRevisionManual('Confirmación recibida','Disponible en Pagos preparados. El pago aún no se ha registrado.'));
             pie.append(boton('Volver a revisión','haiku-manual-primario',cerrar));
         } else {
-            contenido.append(avisoRevisionManual('Falta la fecha real del pago','El aviso económico no reemplaza el correo de confirmación.','revision'),
-                evidenciaRevisionManual(item,'Ver detalle económico y origen del Libro'));
-            const formulario = elemento('div','haiku-manual-formulario');
+            contenido.append(evidenciaRevisionManual(item,'Ver detalle económico y origen del Libro'));
+            const formulario = elemento('div','haiku-manual-formulario haiku-manual-formulario--airbnb');
             const campo = (texto,tipo) => {
                 const label = elemento('label','haiku-incorporacion-manual-campo',texto), input = elemento('input');
                 input.type = tipo; label.append(input); formulario.append(label); return input;
@@ -8891,21 +8890,18 @@
         const panel = elemento('section','haiku-incorporacion-manual-pago-panel'); panel.hidden = true; panel.dataset.paso = 'medio';
         const contenido = elemento('div','haiku-manual-contenido'), pie = elemento('footer','haiku-manual-pie');
         const cabecera = elemento('header','haiku-manual-cabecera');
-        cabecera.append(elemento('span','haiku-manual-ceja','PASO INICIAL'),elemento('h3','','Definir medio de pago'),
+        cabecera.append(elemento('h3','','Definir medio de pago'),
             elemento('p','haiku-manual-caption',cambiar ? 'Selecciona el medio acreditado por el comprobante. El cambio requiere una nueva aprobación del pago.' :
-                'Falta precisar el medio de pago. Selecciona el medio acreditado por el comprobante.'));
-        contenido.append(cabecera,resumenRevisionManual(item,p),
-            filaRevisionManual('Contexto',fechaRevisionManual(p.ingreso) + ' → ' + fechaRevisionManual(p.salida)));
-        const evidencia = evidenciaRevisionManual({...item,pagoLibro:p.original},'Evidencia original del Libro'); evidencia.open = true;
-        contenido.append(evidencia);
+                'Selecciona el medio acreditado por el comprobante. Después podrás aprobar el pago.'));
+        contenido.append(cabecera,resumenRevisionManual(item,p));
+        const evidencia = evidenciaRevisionManual({...item,pagoLibro:p.original},'Evidencia original del Libro');
         const campo = elemento('label','haiku-incorporacion-manual-campo'); campo.append(elemento('span','','Medio de pago'));
         const selector = elemento('select'); selector.setAttribute('aria-label','Medio de pago'); selector.required = true;
         const vacio = elemento('option','','Selecciona un medio'); vacio.value = ''; selector.append(vacio);
         for (const [valor,etiqueta] of Object.entries(root.HAIKU_LIBRO_PAGOS_CANON_V1.mediosCanonicos)) {
             const opcion = elemento('option','',etiqueta); opcion.value = valor; selector.append(opcion);
         }
-        selector.value = ''; campo.append(selector); contenido.append(campo,
-            avisoRevisionManual('Revalidación necesaria','Confirmar el medio vuelve a revisar el pago y sus bloqueos. La aprobación del pago se realiza después.','revision'));
+        selector.value = ''; campo.append(selector); contenido.append(campo,evidencia);
         const aviso = elemento('p','haiku-manual-validacion'); aviso.setAttribute('role','status'); contenido.append(aviso);
         const confirmar = elemento('button','haiku-incorporacion-manual-accion haiku-manual-primario','Confirmar medio y revalidar');
         confirmar.type = 'button'; confirmar.disabled = true;
@@ -8948,7 +8944,7 @@
             evidenciaRevisionManual(item,'Ver evidencia original'));
         for (const a of p.aplicaciones) contenido.append(elemento('p','',
             (a.cargo?.concepto || a.concepto || 'Servicio') + ' · ' + money(a.monto)));
-        const aviso = elemento('p','haiku-incorporacion-aviso'); aviso.setAttribute('role','status');
+        const aviso = elemento('p','haiku-manual-validacion'); aviso.setAttribute('role','status');
         let motivo, check, guardar, ocupado = false, version = 0;
         const cerrar = () => { version++; revision.activo = false; panel.hidden = true; abrir.setAttribute('aria-expanded','false');
             if(check) check.checked = false; validar(); };
@@ -8969,7 +8965,7 @@
                 'Confirmo que se recibió esta transferencia y corresponde a cabaña ' + p.cabana + '.'));
             contenido.append(aceptar); guardar = elemento('button','haiku-incorporacion-manual-accion haiku-manual-primario','Confirmar revisión'); guardar.type = 'button';
             motivo.addEventListener('input',validar); check.addEventListener('change',validar);
-            aviso.textContent = p.bloqueo || 'Se conservará la evidencia original junto con tu aclaración.';
+            aviso.textContent = p.bloqueo || '';
             guardar.addEventListener('click',async () => {
                 if(guardar.disabled || !revision.activo || ocupado) return;
                 ocupado = true; validar(); const vigente = version;
@@ -9010,26 +9006,20 @@
             revision.activo = false; panel.hidden = true; abrir.setAttribute('aria-expanded','false');
             for (const input of panel.querySelectorAll('input')) if (input.type === 'checkbox') input.checked = false;
         };
-        const volver = boton('Revisión de pagos','haiku-manual-volver',cerrarPanel);
-        volver.textContent = ''; volver.append(iconoRevisionManual('back'),elemento('span','','Revisión de pagos'));
-        contenido.append(volver);
         const estado = elemento('div','haiku-manual-estado');
         estado.append(elemento('span','haiku-manual-badge' + (panel.dataset.paso === '1' ? ' haiku-manual-badge--revision' : ''),
             confirmado ? 'Pago seguro' : panel.dataset.paso === '1' ? 'Revisión manual' : 'Listo para confirmar'));
         if (!confirmado) estado.append(elemento('span','haiku-manual-caption','Paso ' + panel.dataset.paso + ' de 2'));
         const cabecera = elemento('header','haiku-manual-cabecera');
-        if (confirmado) {
-            const sello = elemento('div','haiku-manual-sello'); sello.append(iconoRevisionManual('shield')); cabecera.append(sello);
-        }
         cabecera.append(estado,elemento('h3','',confirmado ? 'Asociación y pago aprobados' : servicioFaltante ? 'Asociar el servicio' :
             distribucion ? 'Confirmar distribución' : 'Confirmar asociación y pago'),
-            elemento('p','',confirmado ? 'Este movimiento ya está listo para preparar su incorporación.' : servicioFaltante ?
-                'Indica a qué servicio corresponde este pago del Libro.' : distribucion ?
-                'Revisa las aplicaciones del comprobante antes de continuar.' : 'Revisa el destino y el monto antes de confirmar.'));
+            elemento('p','',confirmado ? 'Disponible en Pagos seguros. Se registrará al confirmar la incorporación.' : servicioFaltante ?
+                'Falta el servicio en Haku. Créalo y vincula este pago.' : distribucion ?
+                'Revisa las aplicaciones del comprobante.' : 'Confirma el destino y el monto para dejar el pago listo.'));
         contenido.append(cabecera);
         if (p.distribucionConfirmada || distribucion) contenido.append(elemento('p','haiku-manual-progreso',
             'Aplicaciones resueltas ' + p.aplicaciones.filter(a => a.estado === 'destino_unico').length + ' de ' + p.aplicaciones.length));
-        const aviso = elemento('p','haiku-incorporacion-aviso haiku-manual-validacion'); aviso.setAttribute('role','status');
+        const aviso = elemento('p','haiku-manual-validacion'); aviso.setAttribute('role','status');
         aviso.setAttribute('aria-live','polite');
         let selector, leer, actualizarPrecio, catalogoLeido = revision.catalogo || [];
         const cargarCatalogo = async () => {
@@ -9054,17 +9044,11 @@
             if (revision.activo) await cargarCatalogo();
         });
         if (confirmado) {
-            cabecera.className += ' haiku-manual-cabecera--aprobado';
             const resumen = resumenRevisionManual(item,p,true);
             resumen.append(destinosRevisionManual(item,p,plan,true),filaRevisionManual('Pago aprobado',money(item.pagoLibro.monto),'haiku-manual-divider'),
                 filaRevisionManual('Medio',datosPagoIncorporacion(item.pagoLibro).medio));
             if (item.pagoLibro.folio) resumen.append(filaRevisionManual('Folio',item.pagoLibro.folio));
             contenido.append(resumen);
-            const lista = elemento('ul','haiku-manual-checklist');
-            for (const texto of ['Servicio vinculado a la reserva','Asociación del pago confirmada','Disponible en Pagos seguros']) {
-                const li = elemento('li'); li.append(iconoRevisionManual('check-small'),elemento('span','',texto)); lista.append(li);
-            }
-            contenido.append(lista,avisoRevisionManual('Siguiente paso','Continúa en la revisión para preparar los pagos seguros.'));
             pie.append(boton('Volver a revisión','haiku-manual-primario',cerrarPanel));
             const identidad = identidadInspectorItem(item,contextoVisualPlanes.get(plan));
             if (identidad) pie.append(accionInspectorReserva(identidad));
@@ -9075,8 +9059,7 @@
             'Confirmar distribución' : 'Confirmar asociación y pago','haiku-manual-primario');
         const totalPie = filaRevisionManual(servicioFaltante ? 'Total a asociar' : 'Total a confirmar',money(item.pagoLibro.monto));
         if (servicioFaltante) {
-            contenido.append(avisoRevisionManual('Falta el servicio en Haku','Créalo y vincula este pago para continuar.','revision'));
-            const formulario = elemento('div','haiku-manual-formulario');
+            const formulario = elemento('div','haiku-manual-formulario haiku-manual-formulario--servicio');
             contenido.append(formulario);
             const campo = (nombre,tipo,valor='',destino=formulario) => {
                 const label = elemento('label','haiku-incorporacion-manual-campo',nombre);
@@ -9084,12 +9067,14 @@
                 if (tipo !== 'select') input.type = tipo;
                 input.value = valor; input.setAttribute('aria-label',nombre); label.append(input); destino.append(label); return input;
             };
-            const parte = campo('Aplicación a resolver','select');
+            const origenServicio = elemento('div','haiku-manual-dos-columnas haiku-manual-eleccion');
+            formulario.append(origenServicio);
+            const parte = campo('Aplicación a resolver','select','',origenServicio);
             const elegirParte = elemento('option','','Elige la aplicación'); elegirParte.value = ''; parte.append(elegirParte);
             p.aplicaciones.filter(a => a.estado === 'sin_destino').forEach(a => {
                 const o = elemento('option','',a.concepto + ' · ' + money(a.monto)); o.value = String(a.indice); parte.append(o);
             });
-            selector = campo('Servicio del catálogo','select');
+            selector = campo('Servicio del catálogo','select','',origenServicio);
             const elegir = elemento('option','','Elige un servicio'); elegir.value = ''; selector.append(elegir);
             const columnas = elemento('div','haiku-manual-dos-columnas'); formulario.append(columnas);
             const fecha = campo('Fecha del servicio','date','',columnas), cantidad = campo('Cantidad','number','',columnas);
@@ -9097,18 +9082,19 @@
             // el catálogo expresa el servicio en horas.
             cantidad.min = '1';
             cantidad.step = '1';
-            const precio = campo('Precio unitario CLP','number'), personas = campo('Personas','number');
-            const hora = campo('Hora cuando corresponda','time');
-            const notaPersonas = elemento('p','haiku-manual-caption','Personas: no aplica'); formulario.append(notaPersonas);
+            const precio = campo('Precio unitario CLP','number','',columnas), personas = campo('Personas','number','',columnas);
+            const hora = campo('Hora cuando corresponda','time','',columnas);
             const detallePrecio = elemento('p','haiku-incorporacion-manual-precio haiku-manual-caption'); formulario.append(detallePrecio);
             const confirmarPrecio = campo('Confirmo el precio manual y el total exacto del Libro','checkbox');
             confirmarPrecio.checked = false;
-            const cobro = campo('Tipo de cobro','select');
+            const cobro = campo('Tipo de cobro','select','',columnas);
             for (const [valor,texto] of [['','Elige tipo de cobro'],['normal','Normal']]) {
                 const o = elemento('option','',texto); o.value = valor; cobro.append(o);
             }
             const totalServicio = filaRevisionManual('Total del servicio','Completa precio y cantidad','haiku-manual-total');
-            formulario.append(totalServicio); contenido.append(evidenciaRevisionManual(item,'Ver comprobante y origen'));
+            const totales = elemento('div','haiku-manual-totales');
+            totales.append(totalServicio,totalPie); formulario.append(totales);
+            contenido.append(evidenciaRevisionManual(item,'Ver comprobante y origen'));
             const productoElegido = () => {
                 const productos = catalogoLeido.filter(c => c.codigo === selector.value);
                 return productos.length === 1 ? productos[0] : null;
@@ -9121,23 +9107,18 @@
             actualizarPrecio = () => {
                 const aplicacion = p.aplicaciones.find(a => String(a.indice) === parte.value);
                 const producto = productoElegido(), sinPersonas = personasNoAplicanPagoManual(producto);
-                mostrarCampo(personas,!sinPersonas); personas.required = Boolean(producto) && !sinPersonas;
+                mostrarCampo(personas,Boolean(producto) && !sinPersonas); personas.required = Boolean(producto) && !sinPersonas;
                 if (sinPersonas) personas.value = '';
-                notaPersonas.hidden = !sinPersonas; hora.required = producto?.requiere_horario === true;
+                hora.required = producto?.requiere_horario === true;
                 mostrarCampo(hora,hora.required);
                 const total = Number(precio.value)*Number(cantidad.value);
                 const exacto = precioCatalogoExactoPagoManual(producto,Number(cantidad.value),Number(precio.value),aplicacion?.monto);
-                mostrarCampo(confirmarPrecio,!exacto);
-                detallePrecio.textContent = 'Precio base del catálogo: ' + (producto ? money(Number(producto.precio_base)) : 'elige un producto') + '. ' +
-                    'Cantidad: ' + (cantidad.value || 'completa la cantidad') + '. ' +
-                    'Importe requerido por el Libro: ' + (aplicacion ? money(aplicacion.monto) : 'elige una aplicación') + '. ' +
-                    'Total propuesto: ' + (precio.value && cantidad.value ? money(total) : 'completa precio y cantidad') + '. ' +
-                    (exacto ? 'Precio del catálogo y total exacto del Libro, sin ajuste de precio.' :
-                    producto && precio.value && Number(precio.value) !== Number(producto.precio_base) ?
-                        'El precio manual difiere del catálogo; confirma expresamente el precio del comprobante.' :
-                        'Confirma expresamente el precio manual antes de crear el servicio.');
-                totalServicio.querySelector('strong').textContent = precio.value && cantidad.value ? money(total) : 'Completa precio y cantidad';
-                totalPie.querySelector('strong').textContent = aplicacion ? money(aplicacion.monto) : 'Elige la aplicación';
+                const totalExacto = Boolean(aplicacion && producto && Number.isSafeInteger(total) && total > 0 && total === aplicacion.monto);
+                mostrarCampo(confirmarPrecio,Boolean(producto && aplicacion && precio.value && !exacto));
+                detallePrecio.textContent = producto ? 'Precio de catálogo · ' + money(Number(producto.precio_base)) +
+                    (precio.value && Number(precio.value) !== Number(producto.precio_base) ? ' · El precio unitario difiere' : '') : '';
+                totalServicio.querySelector('strong').textContent = precio.value && cantidad.value ? money(total) : 'Por calcular';
+                totalPie.querySelector('strong').textContent = aplicacion ? money(aplicacion.monto) : 'Por definir';
                 // Sólo habilitación visual; el resolutor conserva la validación final.
                 const entero = v => Number.isSafeInteger(Number(v)) && Number(v) > 0;
                 const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha.value) && fecha.value >= p.ingreso && fecha.value <= p.salida;
@@ -9160,8 +9141,10 @@
                             ? 'el ' + fechaRevisionManual(p.ingreso)
                             : 'entre ' + fechaRevisionManual(p.ingreso) + ' y ' + fechaRevisionManual(p.salida)) +
                             '. La fecha del comprobante puede ser distinta.'
-                    : !personasValidas ? 'Completa Personas con un valor válido.' : !horaValida ? 'Completa una hora válida.' :
-                    guardar.disabled ? 'Completa los datos y confirma el precio cuando corresponda.' : '';
+                    : aplicacion && producto && precio.value && cantidad.value && !totalExacto
+                        ? 'El total del servicio debe coincidir con el importe del Libro.'
+                    : producto && !personasValidas ? 'Completa Personas con un valor válido.'
+                    : !horaValida ? 'Completa una hora válida.' : '';
             };
             for (const input of [parte,selector,cantidad,precio,personas,fecha,hora,cobro,confirmarPrecio]) {
                 const cambiar = () => {
@@ -9196,8 +9179,7 @@
             guardar.disabled = suma !== item.pagoLibro.monto;
             contenido.append(avisoRevisionManual(distribucion ? 'Un solo comprobante' : 'Los montos coinciden',
                 distribucion ? 'Confirma la distribución y resuelve cada servicio faltante.' : 'Comprobante y servicio: ' + money(suma) + '.',
-                distribucion ? 'revision' : 'seguro'),
-                elemento('p','haiku-manual-caption','Al confirmar, apruebas la asociación y el pago. Quedará listo para preparar su incorporación.'));
+                distribucion ? 'revision' : 'seguro'));
             leer = () => ({tipo:p.tipo});
         }
         let guardandoRevision = false;
@@ -9214,7 +9196,8 @@
             catch (e) { if (versionRevision === version && bloque.isConnected !== false) aviso.textContent = e.message; }
             finally { guardandoRevision = false; guardar.disabled = false; guardar.removeAttribute?.('aria-busy'); }
         });
-        pie.append(totalPie,guardar,boton(servicioFaltante || distribucion ? 'Cancelar revisión' : 'Volver a editar','haiku-manual-secundario',cerrarPanel));
+        if (!servicioFaltante && distribucion) pie.append(totalPie);
+        pie.append(guardar,boton(servicioFaltante || distribucion ? 'Cancelar revisión' : 'Volver a editar','haiku-manual-secundario',cerrarPanel));
         contenido.append(aviso); panel.append(contenido,pie); bloque.append(abrir,panel);
         if (revision.activo) cargarCatalogo();
         return bloque;

@@ -1790,7 +1790,7 @@ html[data-haku-mobile-assistant="1"] .haku-respuesta-compacta summary { min-heig
 }
 
 /* Servicios usa la base de haiku-libro-pagos-ui-v1.css para aprobación manual. */
-.haku-libro-servicio-manual { margin: 10px 12px; min-width: 0; }
+.haku-libro-servicio-manual { margin: 6px 0 0; min-width: 0; }
 .haku-libro-servicio-manual__motivos:empty { display: none; }
 .haku-libro-servicios__cuerpo { min-width: 0; }
 .haku-libro-servicios__diferencias {
@@ -1835,7 +1835,6 @@ html[data-haku-mobile-assistant="1"] .haku-respuesta-compacta summary { min-heig
     border-color: var(--sites-shell-green, var(--rec-verde, #22735c)); color: #fff;
 }
 .haku-libro-servicios__acciones-item > button:disabled { opacity: .55; cursor: default; }
-@media (max-width: 440px) { .haku-libro-servicio-manual { margin-inline: 10px; } }
 .haiku-asistente-root .haiku-asistente-panel .haiku-asistente-mensajes > .haku-titulares-periodo {
     width: 100%; padding: 0; border: 0; background: transparent;
 }

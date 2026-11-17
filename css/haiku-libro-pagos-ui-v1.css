@@ -126,16 +126,6 @@
     min-width: 0;
 }
 
-.haiku-incorporacion-manual-pago-panel:not([hidden]) {
-    display: grid;
-    gap: 8px;
-    margin-top: 10px;
-    padding: 10px;
-    border: 1px solid #dfe6e1;
-    border-radius: 8px;
-    background: #f6f8f7;
-}
-
 .haiku-incorporacion-manual-pago-panel pre {
     margin: 0;
     white-space: pre-wrap;
@@ -176,21 +166,22 @@
     --manual-texto: var(--sites-shell-ink, var(--rec-texto, #172522));
     --manual-muted: var(--sites-shell-muted, var(--rec-muted, #687873));
     --manual-borde: var(--sites-shell-line, var(--rec-borde, #dce5e0));
-    container-type: inline-size;
+    container: haku-aprobacion / inline-size;
+    box-sizing: border-box; min-width: 0; max-width: 100%;
     color: var(--manual-texto); font-size: 11px; line-height: 1.4;
     text-align: left; white-space: normal; overflow-wrap: anywhere;
 }
 .haiku-incorporacion-manual-pago-panel[hidden] { display: none !important; }
 .haiku-incorporacion-manual-pago-panel:not([hidden]) {
-    display: block; padding: 0; background: #fff; border-color: var(--manual-borde); border-radius: 8px;
+    display: block; margin-top: 6px; padding: 0; border: 1px solid var(--manual-borde); border-radius: 8px; background: #fff;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-contenido {
-    display: grid; gap: 9px; padding: 12px; min-width: 0;
+    display: grid; gap: 7px; padding: 9px 10px; min-width: 0;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-contenido > * { min-width: 0; margin: 0; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera { display: grid; gap: 5px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera { display: grid; gap: 3px 8px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera h3 {
-    margin: 0; font-size: 16px; font-weight: 600; line-height: 1.25; color: var(--manual-texto);
+    margin: 0; font-size: 14px; font-weight: 650; line-height: 1.3; color: var(--manual-texto);
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera p {
     margin: 0; font-size: 11px; line-height: 1.4; color: var(--manual-muted);
@@ -213,34 +204,34 @@
     margin: 0; color: var(--manual-muted); font-size: 10px; line-height: 1.4; font-weight: 400;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-resumen {
-    display: grid; gap: 5px; padding: 10px; border: 1px solid var(--manual-borde); border-radius: 8px;
+    display: grid; gap: 3px 10px; padding: 6px 8px; border: 1px solid var(--manual-borde); border-radius: 6px;
     background: var(--sites-shell-canvas, #f5f7f5);
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-monto-medio > .haiku-manual-monto {
-    font-size: 21px; line-height: 1.1; letter-spacing: -.02em;
+    font-size: 15px; line-height: 1.2; letter-spacing: -.01em; white-space: nowrap;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-medio { display: flex; align-items: center; gap: 5px; font-size: 10px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-icono { display: block; flex-shrink: 0; max-width: none; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 6px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-aviso { display: flex; align-items: flex-start; gap: 5px; padding: 5px 8px; border-radius: 5px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-aviso--seguro { background: var(--manual-suave); color: var(--manual-verde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-aviso--revision {
     background: var(--sites-shell-amber-soft, #fff2df); color: var(--sites-shell-amber, #a36522);
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-aviso strong { font-size: 11px; line-height: 1.35; font-weight: 500; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-aviso p { margin: 2px 0 0; font-size: 10px; line-height: 1.4; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-formulario { display: grid; gap: 8px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-formulario { display: grid; gap: 6px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas {
-    display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; min-width: 0;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; min-width: 0;
 }
-.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo { gap: 4px; color: var(--manual-texto); font-size: 11px; line-height: 1.4; }
+.haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo { gap: 3px; color: var(--manual-texto); font-size: 11px; line-height: 1.4; }
 .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input,select) {
-    height: 36px; min-height: 36px; padding: 7px 8px; border-color: var(--manual-borde); border-radius: 6px; font-size: 11px; line-height: 1.25;
+    height: 32px; min-height: 32px; padding: 5px 7px; border-color: var(--manual-borde); border-radius: 6px; font-size: 11px; line-height: 1.25;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo select {
-    appearance: none; padding-right: 36px; background: #fff url('../assets/icons/haku-pagos-manual/select.svg') right 12px center / 20px 20px no-repeat;
+    appearance: none; padding-right: 24px; text-overflow: ellipsis; background: #fff url('../assets/icons/haku-pagos-manual/select.svg') right 6px center / 15px 15px no-repeat;
 }
 .haiku-incorporacion-manual-pago-panel input[type="date"]::-webkit-calendar-picker-indicator {
-    width: 20px; height: 20px; margin: 0; background: url('../assets/icons/haku-pagos-manual/date.svg') center / 20px 20px no-repeat;
+    width: 16px; height: 16px; margin: 0; background: url('../assets/icons/haku-pagos-manual/date.svg') center / 16px 16px no-repeat;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo:has(input[type="checkbox"]) {
     display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 6px; font-size: 10px;
@@ -249,7 +240,7 @@
     width: 15px; height: 15px; min-height: 15px; padding: 0; flex: 0 0 15px;
 }
 .haiku-incorporacion-manual-pago-panel :is(input,select,button,summary):focus-visible { outline: 2px solid var(--manual-verde); outline-offset: 2px; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-total { padding: 7px 9px; background: var(--manual-suave); color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-total { color: var(--manual-verde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-total > span { color: inherit; font-size: 10px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-total > strong { font-size: 12px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia { margin: 0; border: 0; padding: 0; }
@@ -263,21 +254,17 @@
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia[open] > summary::after { transform: translateY(-50%) rotate(180deg); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-evidencia pre { padding-top: 6px; font-size: 10px; line-height: 1.4; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-pie { display: grid; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--manual-borde); }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px 8px; padding: 6px 10px; border-top: 1px solid var(--manual-borde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-incorporacion-manual-accion {
-    width: 100%; margin: 0; min-height: 35px; padding: 7px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 1.25;
+    width: auto; max-width: 100%; margin: 0; min-height: 32px; padding: 5px 9px; white-space: normal; border-radius: 6px; font-size: 11px; font-weight: 600; line-height: 1.25;
 }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-primario { background: var(--manual-verde); border-color: var(--manual-verde); color: #fff; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-secundario { border-color: transparent; background: #fff; color: var(--manual-verde); }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-volver {
-    display: flex; align-items: center; gap: 5px; width: fit-content; min-height: 18px; margin: 0; padding: 0;
-    border: 0; background: transparent; color: var(--manual-muted); font-size: 10px; font-weight: 500;
-}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-secundario { border-color: var(--manual-borde); background: transparent; color: var(--manual-verde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-progreso { font-size: 10px; color: var(--manual-verde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-ceja { margin: 0 0 6px; color: var(--manual-muted); font-size: 9px; line-height: 1.4; font-weight: 600; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-destinos { display: grid; gap: 6px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-destinos > .haiku-manual-ceja { margin: 0; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-destino { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--manual-borde); border-radius: 8px; background: #fff; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-destino { display: grid; gap: 3px; padding: 5px 8px; border: 1px solid var(--manual-borde); border-radius: 5px; background: #fff; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-divider { padding-top: 6px; border-top: 1px solid var(--manual-borde); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-servicio-confirmado { display: grid; gap: 4px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
@@ -288,18 +275,53 @@
 .haiku-incorporacion-manual-pago-panel .haiku-manual-identificador strong { font-weight: 500; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-validacion { margin: 0; padding: 0; border: 0; background: transparent; font-size: 10px; color: var(--manual-muted); }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-validacion:empty { display: none; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera--aprobado { justify-items: center; text-align: center; gap: 8px; padding-block: 8px; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-sello { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--manual-suave); }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-checklist { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.haiku-incorporacion-manual-pago-panel .haiku-manual-checklist li { display: flex; align-items: center; gap: 6px; font-size: 11px; }
 .haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-pago-ver-reserva {
-    width: 100%; min-height: 35px; padding: 7px 10px; border-radius: 6px; color: var(--manual-verde); background: #fff; border: 1px solid var(--manual-borde); font-size: 11px; line-height: 1.25;
+    width: auto; min-height: 32px; margin: 0; padding: 5px 9px; border-radius: 6px;
+    color: var(--manual-verde); background: #fff; border: 1px solid var(--manual-borde); font-size: 11px; line-height: 1.25;
 }
-@container (max-width: 350px) {
-    .haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas,
-    .haiku-incorporacion-manual-pago-panel .haiku-manual-comprobante { grid-template-columns: minmax(0, 1fr); }
-    .haiku-incorporacion-manual-pago-panel .haiku-manual-contenido { padding: 10px; }
-    .haiku-incorporacion-manual-pago-panel .haiku-manual-pie { padding-inline: 10px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-pie > .haiku-manual-fila { flex: 1 0 100%; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-totales {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 12px;
+    padding: 5px 8px; border-radius: 5px; background: var(--manual-suave);
+}
+.haiku-incorporacion-manual-pago-panel .haiku-manual-totales .haiku-manual-fila { gap: 3px 6px; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-destino-monto { color: var(--manual-verde); }
+.haiku-incorporacion-manual-pago-panel :is(.haiku-incorporacion-manual-precio,.haiku-manual-validacion):empty { display: none; }
+.haiku-incorporacion-manual-pago-panel .haiku-manual-formulario--servicio [hidden] { display: none; }
+
+@container haku-aprobacion (min-width: 278px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-resumen--pago:not(.haiku-manual-resumen--confirmado) {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-resumen--pago:not(.haiku-manual-resumen--confirmado) .haiku-manual-monto-medio {
+        display: grid; grid-area: 1 / 2 / 3; gap: 2px; justify-items: end; align-content: center;
+    }
+}
+@container haku-aprobacion (min-width: 345px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-formulario--servicio > .haiku-manual-dos-columnas:not(.haiku-manual-eleccion) {
+        grid-template-columns: minmax(112px, 1.2fr) minmax(0, .75fr) minmax(0, 1fr);
+    }
+}
+@container haku-aprobacion (min-width: 360px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera:has(> .haiku-manual-estado) {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera > .haiku-manual-estado { grid-area: 1 / 2; }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera > p { grid-column: 1 / -1; }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-formulario--airbnb {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    }
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-formulario--airbnb > :has(input[type="checkbox"]) { grid-column: 1 / -1; }
+}
+@container haku-aprobacion (max-width: 299px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-eleccion { grid-template-columns: minmax(0, 1fr); }
+}
+@container haku-aprobacion (max-width: 244px) {
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-dos-columnas { grid-template-columns: minmax(0, 1fr); }
+}
+@media (pointer: coarse) {
+    .haiku-incorporacion-manual-pago-panel .haiku-incorporacion-manual-campo :is(input:not([type="checkbox"]),select),
+    .haiku-incorporacion-manual-pago-panel .haiku-manual-pie button { min-height: 36px; }
 }
 
 @media (max-width: 700px) {
@@ -315,7 +337,7 @@
 
 /* El panel se carga después del tema general. Mantener aquí sus colores para
    cubrir también efectivo, transferencia, servicios y revisión confirmada.
-   Figma: LtDuKmtjTHE3hmtPo0wO58 / 32:31. Sólo color; el tema claro queda igual. */
+   Se usa la misma distribución y se ajustan superficies, texto y acciones. */
 @media screen {
     html[data-haiku-tema="oscuro"] .haiku-incorporacion-manual-pago-panel {
         --manual-verde: #9fd2b3;
@@ -360,7 +382,7 @@
 }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel [hidden] { display: none !important; }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-contenido {
-    gap: 8px; padding: 12px 12px 8px;
+    gap: 7px; padding: 9px 10px 7px;
 }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-cabecera { gap: 3px; }
 .haku-servicio-compacto .haku-servicio-compacto__titulo {
@@ -409,11 +431,10 @@
     width: 16px; height: 16px; opacity: 0;
 }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie {
-    grid-template-columns: minmax(64px, .8fr) minmax(0, 2.2fr); gap: 8px;
-    margin: 0 12px; padding: 8px 0 0;
+    gap: 6px; margin: 0 10px; padding: 6px 0 0;
 }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-incorporacion-manual-accion {
-    min-height: 34px; padding: 8px 10px; font-weight: 500; line-height: 16px; white-space: nowrap;
+    min-height: 34px; padding: 5px 9px; font-weight: 500; line-height: 16px;
 }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-secundario { background: transparent; }
 .haku-servicio-compacto.haiku-incorporacion-manual-pago-panel .haiku-manual-pie .haiku-manual-primario:disabled {

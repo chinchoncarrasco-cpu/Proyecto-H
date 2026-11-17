@@ -36,7 +36,7 @@ const server = http.createServer((request,response) => {
 
 (async()=>{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    const browser = await chromium.launch({executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
+    const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',headless:true});
     try {
         const page = await browser.newPage({viewport:{width:1000,height:900}});
         const errors = [],external = [];
@@ -45,6 +45,7 @@ const server = http.createServer((request,response) => {
             if (new URL(route.request().url()).hostname==='127.0.0.1') return route.continue();
             external.push(route.request().url());return route.abort();
         });
+        await require('./fixtures/dialogos.cjs').prepararNavegador(page);
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
         await page.evaluate(()=>{window.HAIKU_LIBRO_RESERVA_V1={consultarHoja:async data=>data};});
         for (const name of ['haiku-libro-semantica-v1','haiku-libro-pagos-destinos-v1','haiku-libro-pagos-canon-v1'])
@@ -91,7 +92,8 @@ const server = http.createServer((request,response) => {
             await noWrites();
             await page.locator('.haiku-incorporacion-seccion--dudosos > summary').click();
             const tarjeta=page.locator('.haiku-incorporacion-item--dudosos').filter({hasText:'Agustin Rampa Spinelli'});
-            assert.match(await tarjeta.innerText(),/CAB 4[\s\S]*165\.598[\s\S]*Airbnb Prepaid Card/);
+            await tarjeta.scrollIntoViewIfNeeded();
+            assert.match(await tarjeta.innerText(),/CAB 4[\s\S]*165\.598[\s\S]*Prepago Airbnb/);
             assert.match(await tarjeta.innerText(),/Falta la fecha del comprobante; no se usa la fecha del bloque como fecha de pago\./);
             const estadoPendiente=async()=>assert.deepEqual(await page.evaluate(()=>{
                 const item=window.__plan.items.find(i=>i.pagoLibro);
@@ -105,7 +107,7 @@ const server = http.createServer((request,response) => {
             await page.getByRole('button',{name:'Aprobación manual',exact:true}).click();
             await panel.waitFor({state:'visible'});
             await estadoPendiente();await noWrites();
-            assert.match(await panel.innerText(),/Completar confirmación Airbnb[\s\S]*Agustin Rampa Spinelli[\s\S]*CAB 4[\s\S]*165\.598[\s\S]*Airbnb Prepaid Card/);
+            assert.match(await panel.innerText(),/Completar confirmación Airbnb[\s\S]*Agustin Rampa Spinelli[\s\S]*CAB 4[\s\S]*165\.598[\s\S]*Prepago Airbnb/);
             const date=panel.getByLabel('Fecha real del pago *',{exact:true});
             const check=panel.getByLabel('He recibido la confirmación de pago de Airbnb',{exact:true});
             const ref=panel.getByLabel('Referencia Airbnb / externa (opcional, sólo si existe en el correo)',{exact:true});
@@ -128,7 +130,7 @@ const server = http.createServer((request,response) => {
             const geometry=await panel.evaluate(e=>({width:e.clientWidth,scroll:e.scrollWidth,
                 title:getComputedStyle(e.querySelector('h3')).fontSize,input:getComputedStyle(e.querySelector('input')).height}));
             assert.ok(geometry.scroll<=geometry.width+1,'sin overflow horizontal');
-            assert.equal(geometry.title,'16px');assert.equal(geometry.input,'36px');
+            assert.equal(geometry.title,'14px');assert.equal(geometry.input,'32px');
             if (process.env.HAKU_AIRBNB_SCREENSHOT_DIR) {
                 fs.mkdirSync(process.env.HAKU_AIRBNB_SCREENSHOT_DIR,{recursive:true});
                 await panel.screenshot({path:path.join(process.env.HAKU_AIRBNB_SCREENSHOT_DIR,`airbnb-${width}.png`)});
