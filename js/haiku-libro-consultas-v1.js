@@ -3557,6 +3557,7 @@
             return { disponible: true, ...CAPACIDAD_PAGOS_SERVICIO_4C, efectivo_sin_identificador: false,
                 conceptos_adicionales: Array.isArray(data.conceptos_adicionales) ? data.conceptos_adicionales : [],
                 servicio_faltante_manual_v1:data.servicio_faltante_manual_v1 === true,
+                doble_masaje_manual_v1:data.doble_masaje_manual_v1 === true,
                 transferencia_late_checkout_sin_identificador_v1:data.transferencia_late_checkout_sin_identificador_v1 === true,
                 revision_pago_admin_v1:data.revision_pago_admin_v1 === true,
                 excedente_servicio_libro_v1:data.excedente_servicio_libro_v1===true,
@@ -3923,7 +3924,8 @@
             throw e;
         }
     }
-    function firmaManualPago(comp, movimiento, servicioExcluido = null) {
+    function firmaManualPago(comp, movimiento, serviciosExcluidos = []) {
+        const excluir = new Set(Array.isArray(serviciosExcluidos) ? serviciosExcluidos : [serviciosExcluidos]);
         const ordenar = valor => Array.isArray(valor) ? valor.map(ordenar).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) :
             valor && typeof valor === 'object' ? Object.fromEntries(Object.keys(valor).sort().map(k => [k,ordenar(valor[k])])) : valor;
         // La firma pertenece a un movimiento, no a todos los pagos visibles.
@@ -3936,18 +3938,18 @@
         const conceptoCompatible = canon => aplicacionesLibro.some(a => !a.concepto_canon || a.concepto_canon === canon ||
             a.concepto_canon === 'tinaja' && ['tinaja_tonel','tinaja_jacuzzi'].includes(canon));
         const finanzas = snapshot.finanzas;
-        const servicios = (finanzas?.servicios || []).filter(s => s.reserva_id === destino && s.id !== servicioExcluido &&
+        const servicios = (finanzas?.servicios || []).filter(s => s.reserva_id === destino && !excluir.has(s.id) &&
             conceptoCompatible(D?.conceptoCanon([s.catalogo_servicios?.codigo,s.catalogo_servicios?.nombre,s.catalogo_servicios?.categoria].join(' '))));
         const serviciosPorId = new Map((finanzas?.servicios || []).map(s => [s.id,s]));
         const cargos = (finanzas?.cargos || []).filter(c => {
             const s = serviciosPorId.get(c.servicio_id), catalogo = s?.catalogo_servicios;
-            return c.reserva_id === destino && c.servicio_id !== servicioExcluido && conceptoCompatible(D?.conceptoCanon(
+            return c.reserva_id === destino && !excluir.has(c.servicio_id) && conceptoCompatible(D?.conceptoCanon(
                 [c.concepto,catalogo?.codigo,catalogo?.nombre,catalogo?.categoria].join(' ')));
         });
         const cargoIds = new Set(cargos.map(c => c.cargo_id));
         const aplicaciones = (finanzas?.aplicaciones || []).filter(a => cargoIds.has(a.cargo_id));
         const efectivo = snapshot.efectivo_aplicado;
-        const cargosEfectivo = (efectivo?.cargos || []).filter(c => c.reserva_id === destino && c.servicio_id !== servicioExcluido &&
+        const cargosEfectivo = (efectivo?.cargos || []).filter(c => c.reserva_id === destino && !excluir.has(c.servicio_id) &&
             (c.tipo_cargo === 'alojamiento' ? p.tipo_movimiento === 'alojamiento' : conceptoCompatible(D?.conceptoCanon(c.concepto))));
         const cargosEfectivoIds = new Set(cargosEfectivo.map(c => c.cargo_id));
         const aplicacionesEfectivo = (efectivo?.aplicaciones || []).filter(a => cargosEfectivoIds.has(a.cargo_id));
@@ -4146,6 +4148,7 @@
             apps.some(a => a.estado === 'sin_destino') ? 'crear_servicio_faltante' :
             p.transaccion_distribuida ? 'distribucion_comprobante' : 'asociacion_pago',
             distribucionConfirmada:item.decisionPagoManual?.distribucionConfirmada === true,
+            permiteDosMasajes:capacidad?.doble_masaje_manual_v1 === true && !pagosEfectivosMedio.has(p),
             usuario:item.decisionPagoManual?.usuario || null,
             reservaId:estadia.reserva_id, estadiaId:estadia.id, cabana:x.reserva.cabana,
             titular:x.reserva.titular, ingreso:x.reserva.fecha_checkin, salida:x.reserva.fecha_checkout,
@@ -4156,6 +4159,57 @@
     const precioCatalogoExactoPagoManual = (c,cantidad,precio,monto) => personasNoAplicanPagoManual(c) &&
         Number.isSafeInteger(cantidad) && cantidad > 0 && Number.isSafeInteger(precio) && precio > 0 &&
         precio === Number(c.precio_base) && precio*cantidad === monto;
+    const codigoMasajeManual = codigo => /^masaje(?:Terapeutico|Descontracturante)(?:30|60)$/.test(codigo);
+    const horaServicioManual = hora => /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(hora);
+
+    function origenServicioManualPago(pago, aplicacion) {
+        const identificador = normalizarId(pago.codigo_autorizacion) ||
+            normalizarId(pago.folio)+':'+normalizarId(pago.bovtar);
+        const origen = identificador === ':' ? 'transferencia:'+source(pago.origen).replace(/[^a-z0-9]/gi,'_')+
+            ':'+pago.fecha_comprobante+':'+pago.monto : identificador;
+        return origen+':'+aplicacion.concepto_canon+':'+aplicacion.indice;
+    }
+
+    function validarDosMasajesManual(accion, catalogo, aplicacion, propuesta) {
+        if (!propuesta.permiteDosMasajes || aplicacion?.concepto_canon !== 'masaje' ||
+            !Array.isArray(accion.masajes) || accion.masajes.length !== 2)
+            throw Error('Esta aplicación no permite separar dos masajes.');
+        const fecha = accion.fecha;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !Number.isFinite(Date.parse(fecha)) ||
+            new Date(fecha).toISOString().slice(0,10) !== fecha || fecha < propuesta.ingreso || fecha > propuesta.salida)
+            throw Error('Selecciona una fecha de servicio dentro de la estadía.');
+        const masajes = accion.masajes.map(fila => {
+            const opciones = catalogo.filter(c => c.activo === true && c.codigo === fila?.codigo);
+            const precio = Number(fila?.precio);
+            if (opciones.length !== 1 || !codigoMasajeManual(fila.codigo) || !Number.isSafeInteger(precio) ||
+                precio <= 0 || !horaServicioManual(fila.hora))
+                throw Error('Completa el tipo, la hora y el precio de ambos masajes.');
+            return {codigo:fila.codigo,hora:fila.hora,precio,base:Number(opciones[0].precio_base)};
+        });
+        if (masajes[0].codigo === masajes[1].codigo) throw Error('Elige dos servicios distintos del catálogo.');
+        if (masajes[0].precio + masajes[1].precio !== aplicacion.monto)
+            throw Error('La suma de ambos masajes debe coincidir con el Libro.');
+        if (masajes.some(m => m.precio !== m.base) && accion.precioManualConfirmado !== true)
+            throw Error('Confirma los precios cobrados y el total del Libro.');
+        return masajes.map(({base,...masaje}) => masaje);
+    }
+
+    function verificarDestinosDosMasajes(movimiento, aplicacion, origen, masajes, fecha) {
+        const aplicaciones = movimiento?.destinoFinanciero?.aplicaciones || [];
+        return masajes.map((masaje,i) => {
+            const marca = '[HAKU-LIBRO-SERVICIO:pago_manual:'+origen+':doble:'+(i+1)+']';
+            const destinos = aplicaciones.filter(a => {
+                const s = a.cargo?.servicio;
+                return a.indice === aplicacion.indice && a.estado === 'destino_unico' && a.monto === masaje.precio &&
+                    s?.observaciones?.startsWith(marca+'\n') && s.catalogo_servicios?.codigo === masaje.codigo &&
+                    s.fecha_servicio === fecha && s.tipo_cobro === 'normal' && Number(s.cantidad) === 1 &&
+                    Number(s.personas) === 1 && Number(s.total) === masaje.precio &&
+                    Number(s.precio_unitario_aplicado) === masaje.precio && Number(s.monto_adicional) === 0 &&
+                    String(s.hora_inicio || '').slice(0,5) === masaje.hora;
+            });
+            return destinos.length === 1 ? destinos[0].cargo.servicio.id : null;
+        });
+    }
     async function catalogoManualPago(cliente = root.haikuSupabase) {
         return paginas(() => cliente.from('catalogo_servicios')
             .select('id,codigo,nombre,categoria,activo,unidad,precio_base,requiere_horario,capacidad_incluida,capacidad_maxima,precio_persona_adicional')
@@ -4341,6 +4395,47 @@
             const app = accion.indice == null || accion.indice === '' ? null :
                 propuesta.aplicaciones.find(a => a.indice === Number(accion.indice) && a.estado === 'sin_destino');
             const catalogo = await catalogoManualPago(cliente); await vigente();
+            if (accion.masajes !== undefined) {
+                if (!actual.capacidadServicios.doble_masaje_manual_v1)
+                    throw Error('Proyecto H aún no tiene habilitado el guardado de dos masajes.');
+                const masajes = validarDosMasajesManual(accion,catalogo,app,propuesta);
+                const origen = origenServicioManualPago(item.pagoLibro,app);
+                const previos = verificarDestinosDosMasajes(movimiento,app,origen,masajes,accion.fecha);
+                const firmaActual = firmaManualPago(comp,movimiento);
+                if (firmaActual !== propuesta.firma && !(previos.every(Boolean) &&
+                    firmaManualPago(comp,movimiento,previos) === propuesta.firma))
+                    throw Error('Proyecto H cambió. Vuelve a revisar el comprobante.');
+                let confirmados = false;
+                try {
+                    await vigente();
+                    const {data,error} = await cliente.rpc('haiku_libro_registrar_dos_masajes_v1',{
+                        p_reserva_id:propuesta.reservaId,p_estadia_id:propuesta.estadiaId,p_fecha:accion.fecha,
+                        p_origen:origen,p_importe:app.monto,p_evidencia:item.pagoLibro.texto_original,
+                        p_precio_confirmado:accion.precioManualConfirmado === true,p_masajes:masajes
+                    });
+                    if (error) throw error;
+                    const ids = data?.servicio_ids;
+                    if (!Array.isArray(ids) || ids.length !== 2 || new Set(ids).size !== 2 || !ids.every(uuidPagoManual))
+                        throw Error('Proyecto H no confirmó ambos masajes. Revisa su estado antes de repetir.');
+                    confirmados = true;
+                    await vigente();
+                    const posterior = await prepararIncorporacion(result,decisiones,aprobados,cliente);
+                    await vigente();
+                    const comparacionPosterior = contextoVisualPlanes.get(posterior);
+                    const actualizado = comparacionPosterior.pagosDetalle.find(x => idMovimientoIncorporacion(x) === itemId);
+                    const destinos = verificarDestinosDosMasajes(actualizado,app,origen,masajes,accion.fecha);
+                    if (!ids.every((id,i) => id === destinos[i]) ||
+                        firmaManualPago(comparacionPosterior,actualizado,ids) !== propuesta.firma) {
+                        invalidarPagoManual(decisiones,aprobados,itemId,propuesta.generacion);
+                        return prepararIncorporacion(result,decisiones,aprobados,cliente);
+                    }
+                    return await guardarDecision(comparacionPosterior,actualizado,
+                        {tipo:accion.tipo,distribucionConfirmada},distribucionConfirmada);
+                } catch (error) {
+                    if (error.haikuRevisionCancelada && confirmados) return cancelar();
+                    throw error;
+                }
+            }
             const opciones = catalogo.filter(c => c.activo === true && c.codigo === accion.codigo);
             const c = opciones.length === 1 ? opciones[0] : null;
             const canon = c && D.conceptoCanon([c.codigo,c.nombre,c.categoria].join(' '));
@@ -4383,12 +4478,7 @@
             }
             let servicioId;
             try {
-                const identificador = normalizarId(item.pagoLibro.codigo_autorizacion) ||
-                    normalizarId(item.pagoLibro.folio)+':'+normalizarId(item.pagoLibro.bovtar);
-                const marcaOrigen = identificador === ':' ?
-                    'transferencia:'+source(item.pagoLibro.origen).replace(/[^a-z0-9]/gi,'_')+
-                    ':'+item.pagoLibro.fecha_comprobante+':'+item.pagoLibro.monto : identificador;
-                const marca = `[HAKU-LIBRO-SERVICIO:pago_manual:${marcaOrigen}:${app.concepto_canon}:${app.indice}]`;
+                const marca = '[HAKU-LIBRO-SERVICIO:pago_manual:'+origenServicioManualPago(item.pagoLibro,app)+']';
                 await vigente();
                 const {data,error} = await cliente.rpc('haiku_registrar_servicio',{
                     p_reserva_id:propuesta.reservaId, p_estadia_id:propuesta.estadiaId,
@@ -9249,9 +9339,100 @@
                 input.parentElement.hidden = !visible; input.parentElement.style.display = visible ? '' : 'none';
                 input.disabled = !visible;
             };
-            let precioSugerido = null;
+            let precioSugerido = null, dividirMasajes = false;
+            let alternarMasajes, desglose, fechaMasajes, filasMasajes, confirmarMasajes, totalMasajes, importeLibroMasajes;
+            if (p.permiteDosMasajes && p.aplicaciones.some(a => a.estado === 'sin_destino' && a.concepto_canon === 'masaje')) {
+                alternarMasajes = boton('Separar en dos masajes','haiku-manual-secundario',() => {
+                    dividirMasajes = !dividirMasajes;
+                    if (dividirMasajes && !fechaMasajes.value) fechaMasajes.value = fecha.value;
+                    actualizarPrecio();
+                    if (dividirMasajes) filasMasajes[0].codigo.focus?.();
+                });
+                alternarMasajes.setAttribute('aria-expanded','false'); alternarMasajes.hidden = true;
+                alternarMasajes.style.justifySelf = 'start';
+                formulario.insertBefore(alternarMasajes,columnas);
+                desglose = elemento('div','haiku-manual-formulario');
+                desglose.hidden = true;
+                formulario.insertBefore(desglose,totalServicio.parentElement);
+                fechaMasajes = campo('Fecha de ambos masajes','date','',desglose);
+                const columnasMasajes = elemento('div','haiku-manual-dos-columnas');
+                columnasMasajes.style.gridTemplateColumns = 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))';
+                desglose.append(columnasMasajes);
+                filasMasajes = [1,2].map(n => {
+                    const fila = elemento('div','haiku-manual-formulario');
+                    columnasMasajes.append(fila);
+                    const codigo = campo('Masaje '+n,'select','',fila);
+                    const elegirMasaje = elemento('option','','Elige un masaje'); elegirMasaje.value = ''; codigo.append(elegirMasaje);
+                    const datosMasaje = elemento('div','haiku-manual-dos-columnas');
+                    fila.append(datosMasaje);
+                    const importe = campo('Precio masaje '+n+' CLP','number','',datosMasaje);
+                    importe.min = '1'; importe.step = '1';
+                    const horario = campo('Hora masaje '+n,'time','',datosMasaje);
+                    codigo.addEventListener('change',() => {
+                        const producto = catalogoLeido.find(c => c.codigo === codigo.value);
+                        importe.value = producto?.precio_base > 0 ? String(producto.precio_base) : '';
+                        confirmarMasajes.checked = false;
+                        actualizarPrecio();
+                    });
+                    importe.addEventListener('input',() => {
+                        confirmarMasajes.checked = false;
+                        actualizarPrecio();
+                    });
+                    horario.addEventListener('input',() => actualizarPrecio());
+                    return {codigo,importe,horario};
+                });
+                fechaMasajes.min = p.ingreso; fechaMasajes.max = p.salida;
+                fechaMasajes.addEventListener('input',() => actualizarPrecio());
+                confirmarMasajes = campo('Confirmo los precios cobrados y el total del Libro','checkbox','',desglose);
+                confirmarMasajes.addEventListener('change',() => actualizarPrecio());
+                totalMasajes = filaRevisionManual('Suma de masajes','Por calcular','haiku-manual-total');
+                importeLibroMasajes = filaRevisionManual('Importe del Libro','Por definir');
+                const totalesMasajes = elemento('div','haiku-manual-totales');
+                totalesMasajes.append(totalMasajes,importeLibroMasajes);
+                desglose.append(totalesMasajes);
+            }
+            const leerMasajes = () => filasMasajes.map(({codigo,importe,horario}) =>
+                ({codigo:codigo.value,precio:Number(importe.value),hora:horario.value}));
             actualizarPrecio = () => {
                 const aplicacion = p.aplicaciones.find(a => String(a.indice) === parte.value);
+                if (p.permiteDosMasajes && alternarMasajes) {
+                    const visible = aplicacion?.concepto_canon === 'masaje';
+                    if (!visible) dividirMasajes = false;
+                    alternarMasajes.hidden = !visible;
+                    alternarMasajes.textContent = dividirMasajes ? 'Volver a un servicio' : 'Separar en dos masajes';
+                    alternarMasajes.setAttribute('aria-expanded',String(dividirMasajes));
+                    desglose.hidden = !dividirMasajes;
+                    columnas.hidden = detallePrecio.hidden = totales.hidden = dividirMasajes;
+                    origenServicio.style.gridTemplateColumns = dividirMasajes ? 'minmax(0, 1fr)' : '';
+                    mostrarCampo(selector,!dividirMasajes);
+                    guardar.textContent = dividirMasajes ? 'Guardar ambos masajes y continuar' : 'Guardar servicio y continuar';
+                }
+                if (p.permiteDosMasajes && dividirMasajes) {
+                    mostrarCampo(confirmarPrecio,false);
+                    for (const {codigo} of filasMasajes) if (codigo.children.length === 1) {
+                        for (const c of catalogoLeido.filter(c => codigoMasajeManual(c.codigo))) {
+                            const o = elemento('option','',c.nombre); o.value = c.codigo; codigo.append(o);
+                        }
+                    }
+                    const masajes = leerMasajes();
+                    const completos = masajes.every(m => m.codigo && Number.isSafeInteger(m.precio) && m.precio > 0 && horaServicioManual(m.hora));
+                    const distintos = masajes[0].codigo !== masajes[1].codigo;
+                    const suma = masajes.reduce((n,m) => n+m.precio,0), diferencia = aplicacion.monto-suma;
+                    const manual = masajes.some(m => m.codigo && m.precio > 0 &&
+                        m.precio !== Number(catalogoLeido.find(c => c.codigo === m.codigo)?.precio_base));
+                    const fechaValida = fechaMasajes.value >= p.ingreso && fechaMasajes.value <= p.salida;
+                    mostrarCampo(confirmarMasajes,manual);
+                    totalMasajes.querySelector('strong').textContent = suma > 0 ? money(suma) : 'Por calcular';
+                    importeLibroMasajes.querySelector('strong').textContent = money(aplicacion.monto);
+                    guardar.disabled = !(completos && distintos && fechaValida && diferencia === 0 && (!manual || confirmarMasajes.checked));
+                    aviso.textContent = !completos ? 'Completa el tipo, la hora y el precio de cada masaje.' :
+                        !distintos ? 'Elige dos servicios distintos del catálogo.' :
+                        !fechaValida ? 'Selecciona la fecha real de los masajes dentro de la estadía.' :
+                        diferencia > 0 ? 'Faltan '+money(diferencia)+' para completar el importe del Libro.' :
+                        diferencia < 0 ? 'La suma supera el importe del Libro en '+money(-diferencia)+'.' :
+                        manual && !confirmarMasajes.checked ? 'Confirma los precios cobrados.' : '';
+                    return;
+                }
                 const producto = productoElegido(), sinPersonas = personasNoAplicanPagoManual(producto);
                 mostrarCampo(personas,Boolean(producto) && !sinPersonas); personas.required = Boolean(producto) && !sinPersonas;
                 if (sinPersonas) personas.value = '';
@@ -9315,7 +9496,9 @@
                 input.addEventListener('input',cambiar); input.addEventListener('change',cambiar);
             }
             actualizarPrecio();
-            leer = () => ({tipo:p.tipo,indice:parte.value === '' ? null : Number(parte.value),codigo:selector.value,fecha:fecha.value,
+            leer = () => dividirMasajes ? {tipo:p.tipo,indice:Number(parte.value),fecha:fechaMasajes.value,
+                masajes:leerMasajes(),precioManualConfirmado:confirmarMasajes.checked} : ({
+                tipo:p.tipo,indice:parte.value === '' ? null : Number(parte.value),codigo:selector.value,fecha:fecha.value,
                 cantidad:cantidad.value,personas:personasNoAplicanPagoManual(productoElegido()) ? 0 : personas.value,
                 precio:precio.value,hora:hora.value,tipoCobro:cobro.value,
                 precioManualConfirmado:confirmarPrecio.checked});
@@ -9340,7 +9523,13 @@
                 vigente:() => revision.activo && versionRevision === version && bloque.isConnected !== false,
                 vistaVigente:() => bloque.isConnected !== false}); }
             catch (e) { if (versionRevision === version && bloque.isConnected !== false) aviso.textContent = e.message; }
-            finally { guardandoRevision = false; guardar.disabled = false; guardar.removeAttribute?.('aria-busy'); }
+            finally {
+                guardandoRevision = false;
+                const mensaje = aviso.textContent;
+                if (actualizarPrecio) actualizarPrecio(); else guardar.disabled = false;
+                if (mensaje !== 'Revalidando Proyecto H…') aviso.textContent = mensaje;
+                guardar.removeAttribute?.('aria-busy');
+            }
         });
         if (!servicioFaltante && distribucion) pie.append(totalPie);
         pie.append(guardar,boton(servicioFaltante || distribucion ? 'Cancelar revisión' : 'Volver a editar','haiku-manual-secundario',cerrarPanel));
