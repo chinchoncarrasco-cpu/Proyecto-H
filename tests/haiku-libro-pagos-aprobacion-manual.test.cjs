@@ -26,7 +26,7 @@ function gaston(montos=[5000,5000,3000]) {
         concepto:['QUEQUE','PAN','HUEVOS'][i],origen:{hoja:'Oct26',celda:`C${20+i}:F${20+i}`},
         texto_original:`Gaston // Folio 00013 // BOVTAR 003013 // TOTAL $13.000 // ${['QUEQUE','PAN','HUEVOS'][i]} $${monto}`}))));
 }
-function entorno({distribuido=true,conServicios=true,capacidad=CAP}={}) {
+function entorno({distribuido=true,conServicios=true,capacidad=CAP,dobleMasaje=false}={}) {
     let generacion=1;
     global.HAIKU_LIBRO_RESERVA_V1={estado:()=>({generacion})};
     global.haikuTienePermiso=()=>true;
@@ -43,6 +43,17 @@ function entorno({distribuido=true,conServicios=true,capacidad=CAP}={}) {
         .map(([codigo,nombre,precio_base],i)=>({id:id(10+i),codigo,nombre,precio_base,
             categoria:'servicio',activo:true,requiere_horario:false,capacidad_maxima:null,
             unidad:i===3?'hora':'unidad',capacidad_incluida:i===3?2:null,precio_persona_adicional:null}));
+    if (dobleMasaje) {
+        capacidad={...capacidad,doble_masaje_manual_v1:true};
+        const [padre]=r.pagos;
+        r.pagos=[{...padre,monto:125000,concepto:'MASAJES + TINAJA',texto_original:'Ejemplo // Débito // TOTAL $125.000',
+            aplicaciones_libro:[['MASAJES',95000],['TINAJA',30000]].map(([concepto,monto],i)=>
+                ({...padre.aplicaciones_libro[i],concepto,monto,tipo_movimiento:'servicio'}))}];
+        catalogo.push(...[['masajeTerapeutico60','Masaje Terapéutico 60 min',45000],
+            ['masajeDescontracturante60','Masaje Descontracturante 60 min',50000]].map(([codigo,nombre,precio_base],i)=>
+            ({id:id(20+i),codigo,nombre,precio_base,categoria:'masaje',activo:true,unidad:'unidad',requiere_horario:true,
+                capacidad_incluida:null,capacidad_maxima:null,precio_persona_adicional:null})));
+    }
     const tablas={reserva_estadias:[estancia],pagos:[],servicios:[],vista_estado_cargos:[],pago_aplicaciones:[],catalogo_servicios:catalogo};
     function agregar(i,monto,fecha=FECHA) {
         const c=catalogo[i],servicio={id:id(30+i),reserva_id:id(1),estadia_id:id(2),fecha_servicio:fecha,total:monto,
@@ -65,6 +76,20 @@ function entorno({distribuido=true,conServicios=true,capacidad=CAP}={}) {
     },async rpc(nombre,args){
         llamadas.push({nombre,args});
         if(nombre==='haiku_libro_aplicaciones_servicio_capacidad_v1') return {data:capacidad};
+        if(nombre==='haiku_libro_registrar_dos_masajes_v1') {
+            const ids=args.p_masajes.map((m,i)=>{
+                const observaciones='[HAKU-LIBRO-SERVICIO:pago_manual:'+args.p_origen+':doble:'+(i+1)+']\n'+args.p_evidencia;
+                const s=tablas.servicios.find(s=>s.observaciones===observaciones) ||
+                    agregar(catalogo.findIndex(c=>c.codigo===m.codigo),m.precio,args.p_fecha);
+                Object.assign(s,{personas:1,hora_inicio:m.hora,observaciones});
+                return s.id;
+            });
+            if(opciones.perderRespuestaDoble) {
+                opciones.perderRespuestaDoble=false;
+                return {error:Error('Respuesta interrumpida')};
+            }
+            return {data:{servicio_ids:ids}};
+        }
         if(nombre==='haiku_registrar_servicio') {
             if(opciones.errorServicio) return {error:Error('Servicio rechazado')};
             const indices=catalogo.map((c,i)=>c.codigo===args.p_codigo_servicio?i:null).filter(i=>i!==null);
@@ -95,6 +120,31 @@ function entorno({distribuido=true,conServicios=true,capacidad=CAP}={}) {
 }
 const itemPago=plan=>plan.items.find(x=>x.pagoLibro);
 const accionServicio={tipo:'crear_servicio_faltante',indice:0,codigo:'tinajaTonel',fecha:FECHA,cantidad:1,personas:2,precio:30000,tipoCobro:'normal',precioManualConfirmado:true};
+
+test('dos masajes conservan el comprobante padre, validan el reparto y recuperan una respuesta perdida',async()=>{
+    const h=entorno({dobleMasaje:true,conServicios:false});
+    let plan=await h.preparar();
+    plan=await h.resolver(plan,itemPago(plan),{tipo:'distribucion_comprobante'});
+    const item=itemPago(plan);
+    assert.equal(item.manualPago.permiteDosMasajes,true);
+    const accion={tipo:'crear_servicio_faltante',indice:0,fecha:FECHA,masajes:[
+        {codigo:'masajeTerapeutico60',precio:45000,hora:'11:00'},
+        {codigo:'masajeDescontracturante60',precio:50000,hora:'12:00'}]};
+    const llamadas=()=>h.llamadas.filter(x=>x.nombre==='haiku_libro_registrar_dos_masajes_v1');
+    await assert.rejects(h.resolver(plan,item,{...accion,masajes:[{...accion.masajes[0],precio:40000},accion.masajes[1]]}),/suma/i);
+    assert.equal(llamadas().length,0);
+    h.opciones.perderRespuestaDoble=true;
+    await assert.rejects(h.resolver(plan,item,accion),/Respuesta interrumpida/);
+    assert.equal(h.tablas.servicios.length,2);
+    plan=await h.resolver(plan,item,accion);
+    assert.equal(h.tablas.servicios.length,2);
+    assert.deepEqual(llamadas().map(x=>x.args.p_origen),['13:3013:masaje:0','13:3013:masaje:0']);
+    plan=await h.resolver(plan,itemPago(plan),{...accionServicio,indice:1});
+    const [pago]=Q.serializarIncorporacion(plan).filter(x=>x.tipo==='pago_servicios_4c');
+    assert.equal(pago.argumentos.p_monto,125000);
+    assert.deepEqual(pago.datos_origen.aplicaciones_servicio_v1.aplicaciones.map(x=>x.monto),[45000,50000,30000]);
+    assert.equal(h.tablas.pagos.length,0);
+});
 
 test('Gaston desde la geometría XLSX: parser y canon conservan tres importes explícitos en un comprobante',()=>{
     const celdas=[],combinaciones=[],cell=(r,c,valor,extra={})=>celdas.push({r,c,valor,...extra});
@@ -607,7 +657,7 @@ test('contratos del flujo manual: sólo RPC protegidos de servicio y precio, sin
         assert.doesNotMatch(codigo,/\.insert\(|\.update\(|setTimeout|setInterval|\.click\(|fechaSeleccionada|HAIKU_RESUMEN_REFRESH_V1|full_day/i);
         assert.doesNotMatch(codigo,/\.from\(['"](?:servicios|cargos|pagos|reservas|reserva_estadias)['"]\)/);
     }
-    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_libro_aplicar_pago_existente_v1','haiku_libro_ajustar_precio_cargo_v1','haiku_registrar_servicio']);
+    assert.deepEqual(Array.from(motor.matchAll(/cliente\.rpc\('([^']+)'/g),m=>m[1]),['haiku_libro_aplicar_pago_existente_v1','haiku_libro_ajustar_precio_cargo_v1','haiku_libro_registrar_dos_masajes_v1','haiku_registrar_servicio']);
 });
 
 async function revisionVisualUi(opciones={}) {

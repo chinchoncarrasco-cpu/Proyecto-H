@@ -251,8 +251,45 @@ const server = http.createServer((request, response) => {
             writes: window.__h.llamadas.filter(l => l.nombre === 'haiku_incorporar_pago_servicios_libro_v1').length }));
         assert.deepEqual(gaston, { servicios: 3, pagos: 0, padres: 1, personas: [0, 0, 0], writes: 0 });
         assert.match(await panel.innerText(), /13\.000 CLP/);
+        for (const width of [1000,390]) for (const tema of ['claro','oscuro']) {
+            await page.setViewportSize({width,height:900});
+            await page.evaluate(tema => { document.documentElement.dataset.haikuTema = tema; },tema);
+            await start({dobleMasaje:true,conServicios:false});
+            await panel.getByRole('button',{name:'Confirmar distribución',exact:true}).click();
+            await panel.getByLabel('Aplicación a resolver',{exact:true}).selectOption('0');
+            await panel.getByRole('button',{name:'Separar en dos masajes',exact:true}).click();
+            await panel.getByLabel('Fecha de ambos masajes',{exact:true}).fill('2026-10-03');
+            await panel.getByLabel('Masaje 1',{exact:true}).selectOption('masajeTerapeutico60');
+            await panel.getByLabel('Masaje 2',{exact:true}).selectOption('masajeDescontracturante60');
+            await panel.getByLabel('Hora masaje 1',{exact:true}).fill('11:00');
+            await panel.getByLabel('Hora masaje 2',{exact:true}).fill('12:00');
+            const guardar = panel.getByRole('button',{name:'Guardar ambos masajes y continuar',exact:true});
+            await panel.getByLabel('Precio masaje 1 CLP',{exact:true}).fill('40000');
+            assert.equal(await guardar.isEnabled(),false);
+            assert.match(await panel.locator('[role="status"]').innerText(),/Faltan.*5\.000/);
+            await panel.getByLabel('Precio masaje 2 CLP',{exact:true}).fill('55000');
+            assert.equal(await guardar.isEnabled(),false);
+            await panel.getByLabel('Confirmo los precios cobrados y el total del Libro',{exact:true}).check();
+            assert.equal(await guardar.isEnabled(),true);
+            await panel.getByLabel('Precio masaje 1 CLP',{exact:true}).fill('45000');
+            await panel.getByLabel('Precio masaje 2 CLP',{exact:true}).fill('50000');
+            assert.equal(await guardar.isEnabled(),true);
+            assert.equal(await panel.getByLabel('Servicio del catálogo',{exact:true}).isVisible(),false);
+            assert.equal(await panel.evaluate(e=>e.scrollWidth <= e.clientWidth + 1),true);
+            await guardar.click();
+            await panel.getByLabel('Aplicación a resolver',{exact:true}).locator('option[value="0"]').waitFor({state:'detached'});
+            assert.equal(await panel.getByRole('button',{name:'Separar en dos masajes',exact:true}).isVisible(),false);
+            await fill(1,'tinajaTonel',1,30000,2);
+            await panel.getByRole('button',{name:'Guardar servicio y continuar',exact:true}).click();
+            await panel.getByRole('button',{name:'Confirmar asociación y pago',exact:true}).click();
+            await panel.getByRole('heading',{name:'Asociación y pago aprobados',exact:true}).waitFor();
+            assert.deepEqual(await page.evaluate(() => ({
+                servicios:window.__h.tablas.servicios.map(s=>s.total),pagos:window.__h.tablas.pagos.length,
+                preparados:window.__plan.items.filter(i=>i.categoria==='pagos').map(i=>i.pagoLibro.monto)
+            })),{servicios:[45000,50000,30000],pagos:0,preparados:[125000]});
+        }
         assert.equal(await page.evaluate(() => window.__incorporar), 0, 'no se incorporan pagos en la prueba de UI');
         assert.deepEqual(errors, []); assert.deepEqual(external, []); assert.deepEqual(missing, []);
-        console.log('OK · snapshot inicial: CAB 7/$40.000 preparado y revisión recuperada tras cambio de saldo; pasos 1/2/éxito, Ignacio, Gastón 0/3→3/3, UUID Inspector, doble clic, escritorio/móvil, SVG y cero operaciones remotas.');
+        console.log('OK · revisión manual existente y dos masajes más tinaja en escritorio/móvil, claro/oscuro; un solo pago preparado y cero operaciones remotas.');
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

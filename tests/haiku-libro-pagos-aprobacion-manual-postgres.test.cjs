@@ -4,6 +4,49 @@ const {PGlite}=require(process.env.HAKU_PGLITE_MODULE||'@electric-sql/pglite');
 const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
 const ALIMENTOS='supabase/migrations/20261006174307_libro_pagos_conceptos_alimentos.sql';
 const GUARDIA='supabase/migrations/20261006174344_libro_servicio_faltante_guardia_manual.sql';
+const DOS_MASAJES='supabase/migrations/20261118001641_libro_doble_masaje_aprobacion_manual.sql';
+
+test('dos masajes se guardan juntos, se reintentan sin duplicar y conservan dos cargos',async()=>{
+ const db=new PGlite(),usuario=randomUUID(),reserva=randomUUID(),estadia=randomUUID();
+ try {
+  await db.exec(read('tests/fixtures/servicios-idempotencia-schema.sql'));
+  await db.exec(`alter table reservas add column estado_reserva text default 'confirmada';
+   alter table reserva_estadias add column fecha_ingreso date,add column fecha_salida date;`);
+  await db.exec(read(GUARDIA));
+  await db.exec(read(DOS_MASAJES));
+  assert.deepEqual((await db.query(`select
+   has_function_privilege('anon','public.haiku_libro_registrar_dos_masajes_v1(uuid,uuid,date,text,bigint,text,boolean,jsonb)','execute') anon,
+   has_function_privilege('authenticated','public.haiku_libro_registrar_dos_masajes_v1(uuid,uuid,date,text,bigint,text,boolean,jsonb)','execute') operador`)).rows,
+   [{anon:false,operador:true}]);
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[usuario]);
+  await db.query("insert into reservas(id) values($1)",[reserva]);
+  await db.query("insert into reserva_estadias(id,reserva_id,fecha_ingreso,fecha_salida) values($1,$2,'2026-11-07','2026-11-09')",[estadia,reserva]);
+  await db.exec(`insert into catalogo_servicios(codigo,nombre,categoria,unidad,precio_base,requiere_horario)
+   values('masajeTerapeutico60','Masaje Terapéutico','masaje','unidad',45000,true),
+         ('masajeDescontracturante60','Masaje Descontracturante','masaje','unidad',50000,true)`);
+  assert.equal((await db.query("select public.haiku_libro_aplicaciones_servicio_capacidad_v1() cap")).rows[0].cap.doble_masaje_manual_v1,true);
+  const masajes=[{codigo:'masajeTerapeutico60',precio:45000,hora:'11:00'},
+   {codigo:'masajeDescontracturante60',precio:50000,hora:'12:00'}];
+  const guardar=async({filas=masajes,importe=95000,fecha='2026-11-08',confirmado=false,origen='13:3013:masaje:0'}={})=>
+   (await db.query("select public.haiku_libro_registrar_dos_masajes_v1($1,$2,$3,$4,$5,'Comprobante de prueba',$6,$7::jsonb) r",
+    [reserva,estadia,fecha,origen,importe,confirmado,JSON.stringify(filas)])).rows[0].r;
+  const contar=async()=>Number((await db.query("select count(*) n from servicios")).rows[0].n);
+  await assert.rejects(guardar({importe:90000}),/suma/i);
+  await assert.rejects(guardar({fecha:'2026-11-10'}),/fecha/i);
+  await assert.rejects(guardar({filas:[{...masajes[0],precio:40000},{...masajes[1],precio:55000}]}),/confirma/i);
+  await db.exec("alter table servicios add constraint falla_segundo check (hora_inicio <> '12:00'::time)");
+  await assert.rejects(guardar(),/falla_segundo/);
+  assert.equal(await contar(),0);
+  assert.equal(Number((await db.query("select count(*) n from cargos")).rows[0].n),0);
+  await db.exec("alter table servicios drop constraint falla_segundo");
+  const primeros=await guardar();
+  assert.equal(new Set(primeros.servicio_ids).size,2);
+  assert.deepEqual(await guardar(),primeros);
+  await assert.rejects(guardar({origen:'otro:masaje:0'}),/masaje activo/i);
+  assert.equal(await contar(),2);
+  assert.deepEqual((await db.query("select monto::int monto from cargos order by monto")).rows,[{monto:45000},{monto:50000}]);
+ } finally {await db.close();}
+});
 
 test('la extensión financiera conserva todas las guardias del writer existente',()=>{
  const rpc=s=>s.replace(/\r\n/g,'\n').match(/create or replace function private\.haiku_libro_pago_servicios_v1\([\s\S]*?\$function\$;/)[0];
