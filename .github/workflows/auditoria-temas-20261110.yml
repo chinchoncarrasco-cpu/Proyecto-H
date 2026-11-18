@@ -1,0 +1,65 @@
+name: Auditoría visual de temas (sin cambios de producto)
+on:
+  pull_request:
+    paths:
+      - 'tests/auditoria-temas*'
+      - '.github/workflows/auditoria-temas-20261110.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [principal]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Preparar navegador de pruebas
+        run: |
+          npm install --prefix "$RUNNER_TEMP/audit" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12
+          node "$RUNNER_TEMP/audit/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Capturas y contraste con fixtures sintéticos
+        env:
+          NODE_PATH: ${{ runner.temp }}/audit/node_modules
+          GROUP: ${{ matrix.group }}
+        run: |
+          export CHROMIUM_PATH="$(node -p 'require("playwright").chromium.executablePath()')"
+          export HAIKU_BROWSER_PATH="$CHROMIUM_PATH" HAKU_CHROMIUM_PATH="$CHROMIUM_PATH" HAIKU_BROWSER_EXECUTABLE="$CHROMIUM_PATH"
+          mkdir -p "$RUNNER_TEMP/evidence/$GROUP"
+          if [ "$GROUP" = principal ]; then
+            TEMA_OUTPUT_DIR="$RUNNER_TEMP/evidence/principal" node tests/auditoria-temas-20261110.cjs
+            cp css/haiku-tema-oscuro-v1.css "$RUNNER_TEMP/tema-original.css"
+            node tests/auditoria-temas-20261110.cjs --generation
+            diff -u "$RUNNER_TEMP/tema-original.css" css/haiku-tema-oscuro-v1.css > "$RUNNER_TEMP/evidence/principal/generador.diff" || true
+            cp "$RUNNER_TEMP/tema-original.css" css/haiku-tema-oscuro-v1.css
+          else
+            if [ "$GROUP" = operacion ]; then
+              suites="checkout-recorrido cabanas-filters cabanas-repaso cabanas-seguimiento cabin-context solicitudes-tipos insumos-aseo-panel insumos-destinos aseo-derivado-panel reserva-estado-manual resumen-accesos-tema"
+            else
+              suites="haiku-manual-tema haku-guias-operativas sites-asistente-resumen-dia sites-libro-actualizacion libro-bloqueos-tema libro-cancelacion-diseno libro-historial-manual libro-promo-haku libro-tinaja-cambio-color libro-servicio-manual-ui"
+            fi
+            for suite in $suites; do
+              target="$RUNNER_TEMP/evidence/$GROUP/$suite"
+              mkdir -p "$target"
+              export AUDIT_OUTPUT_DIR="$target" HAKU_UI_SHOTS="$target/original" TEMA_OUTPUT_DIR="$target/original" HAIKU_INSUMOS_SCREENSHOTS="$target/original" HAIKU_ASEO_SCREENSHOTS="$target/original"
+              mkdir -p "$target/original"
+              set +e
+              timeout 65s node --require ./tests/auditoria-temas-hook-20261110.cjs "tests/$suite-browser-check.cjs" > "$target/test.log" 2>&1
+              code=$?
+              set -e
+              echo "$suite exit=$code" | tee -a "$RUNNER_TEMP/evidence/$GROUP/status.txt"
+            done
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: auditoria-temas-${{ matrix.group }}
+          path: ${{ runner.temp }}/evidence
+          retention-days: 3
