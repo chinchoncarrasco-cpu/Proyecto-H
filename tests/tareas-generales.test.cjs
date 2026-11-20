@@ -38,7 +38,8 @@ test('sólo confirma datos remotos y escapa nombres y notas al construir el DOM'
     assert.equal(e.api.contexto().datos.tareas.length, 1);
     assert.equal(e.document.querySelector('img'), null);
     assert.equal(e.document.querySelector('script'), null);
-    assert.match(e.document.querySelector('.tg-person').textContent, /<img/);
+    assert.match(e.document.querySelector('input[name="encargado"]').value, /<img/);
+    assert.match(e.document.querySelector('textarea').innerHTML, /&lt;script&gt;/);
     assert.equal(e.llamadas.some(c => c.nombre.includes('guardar')), false);
 });
 
@@ -124,17 +125,53 @@ test('sólo lectura bloquea el writer incluso si se invoca directamente', async 
 
 test('un refresco conserva el botón enfocado para no interrumpir la pulsación', async () => {
     const e = await entorno();
-    const boton = e.document.querySelector('[data-tg-open]');
+    const boton = e.document.querySelector('[data-tg-save-assignment]');
     e.document.activeElement = boton;
     await e.api.cargar('2026-01-19', { forzar: true });
-    assert.equal(e.document.querySelector('[data-tg-open]'), boton);
+    assert.equal(e.document.querySelector('[data-tg-save-assignment]'), boton);
 });
 
-test('el historial termina de mostrarse aunque su desplegable conserve el foco', async () => {
+test('el historial termina de mostrarse aunque su botón conserve el foco', async () => {
     const e = await entorno((n, a) => ({ data: n.includes('historial') ? [{ titulo: 'Jardines', accion: 'asignar', actor_nombre: 'Felipe', creado_en: '2026-01-19T12:00:00Z', detalle: { encargado: 'Camila' } }] : datos(a.p_fecha) }));
     e.document.querySelector('[data-tg-open]').dispatchEvent(new e.window.Event('click', { bubbles: true }));
-    e.document.activeElement = e.document.querySelector('[data-tg-history] summary');
+    e.document.activeElement = e.document.querySelector('[data-tg-open]');
     await e.api.historial('2026-01-19', 'jardines_terraza');
     assert.match(e.document.querySelector('.tg-history').textContent, /Asignación guardada/);
     assert.match(e.document.querySelector('.tg-history').textContent, /Camila/);
+});
+
+test('asignación, estado y nota se completan en la misma fila sin abrir un detalle', async () => {
+    let actual = tarea();
+    const e = await entorno((n, a) => {
+        if (!n.includes('guardar')) return { data: datos(a.p_fecha, { tareas: [actual] }) };
+        actual = { ...actual, ...(a.p_accion === 'asignar' ? a.p_datos : {}), revision: actual.revision + 1 };
+        return { data: { tarea: actual } };
+    });
+    const input = (nombre, valor) => {
+        const campo = e.document.querySelector(`[data-tg-field="${nombre}"]`);
+        campo.value = valor; campo.dispatchEvent(new e.window.Event('input', { bubbles: true }));
+    };
+    assert.equal(e.document.querySelector('.tg-detail'), null);
+    assert.ok(e.document.querySelector('.tg-row input[name="encargado"]'));
+    assert.ok(e.document.querySelector('.tg-row input[name="revisor"]'));
+    assert.ok(e.document.querySelector('.tg-row textarea'));
+    assert.equal(e.document.querySelector('[data-tg-save-assignment]').disabled, true);
+    input('nota', 'Revisar la terraza.'); input('encargado', 'Scarla'); input('revisor', 'Renata');
+    assert.equal(e.document.querySelector('[data-tg-save-assignment]').disabled, false);
+    assert.equal(e.document.querySelector('[data-tg-state]').disabled, true);
+    e.document.querySelector('[data-tg-assignment]').dispatchEvent(new e.window.Event('submit', { bubbles: true, cancelable: true }));
+    await esperar(); await esperar();
+    const escritura = e.llamadas.find(c => c.nombre.includes('guardar'));
+    assert.equal(escritura.args.p_accion, 'asignar');
+    assert.deepEqual(escritura.args.p_datos, { encargado: 'Scarla', revisor: 'Renata' });
+    assert.equal(e.document.querySelector('textarea').value, 'Revisar la terraza.');
+    assert.equal(e.document.querySelector('[data-tg-state]').disabled, false);
+});
+
+test('el selector de estado conserva el foco mientras llega una actualización remota', async () => {
+    const e = await entorno();
+    const selector = e.document.querySelector('[data-tg-state]');
+    e.document.activeElement = selector;
+    await e.api.cargar('2026-01-19', { forzar: true });
+    assert.equal(e.document.querySelector('[data-tg-state]'), selector);
 });
