@@ -226,7 +226,7 @@
             btn(x.rol==="borrador"&&edit?"Completar":"Ver perfil",()=>openProfile(x.id,v.reserva_id)),null,x));
         const draft=(p.borrador||v?.plaza===0)&&box("hu-bloque",
             el("p","hu-aviso",v.excedente?(p.cupo_revisado_en?"Cupo revisado. Se conserva el borrador.":"La ocupación cambió. Este borrador conserva lo registrado."):"Por completar"),
-            edit&&box("hu-chips",btn("Completar datos",editDraft,{primary:true}),btn("Vincular perfil existente",linkDraft),v.excedente&&!p.cupo_revisado_en&&btn("Marcar cupo revisado",()=>formDialog("Revisar cupo",[muted("Se conservará el borrador en el directorio.")],()=>save("revisar_cupo",{})))));
+            edit&&box("hu-chips",btn("Completar datos",editDraft,{primary:true}),btn("Vincular perfil existente",linkDraft),v.excedente&&!p.cupo_revisado_en&&btn("Marcar cupo revisado",()=>formDialog("Revisar cupo",[muted("Se conservará el borrador en el directorio.")],(_v,form,ctx)=>save("revisar_cupo",{},ctx,form)))));
         const tags=box("hu-chips",...profile.etiquetas.map(x=>el("span","hu-mini",x.nombre)));
         const base=el("dl","hu-base");
         for(const [k,val] of [["Nombre",p.nombre],["Apellidos",p.apellido],["Documento",[p.tipo_documento,p.numero_documento].filter(Boolean).join(" ")],
@@ -266,68 +266,89 @@
         if(type!=="file") input.value=value??"";
         return el("label","",label,input);
     }
+    function viewContext() {
+        return {...selected,revision:detailRequest,session:sessionKey};
+    }
+    function sameView(ctx) {
+        return ctx.revision===detailRequest&&ctx.session===sessionKey;
+    }
+    dialog.addEventListener("cancel",event=>{
+        if(dialog.firstElementChild?.getAttribute("aria-busy")==="true") event.preventDefault();
+    });
     function formDialog(title,fields,save,label="Guardar") {
+        const ctx=viewContext();
         const status=el("div","hu-resultado");
         status.setAttribute("role","status");
         const closer=btn("Cerrar",()=>dialog.close(),{glyph:"close",iconOnly:true});
+        const backButton=btn("Volver",()=>dialog.close());
         const confirm=el("button","hu-boton",label);
         confirm.dataset.primario="";
         confirm.type="submit";
         const form=el("form","hu-formulario",box("hu-linea",el("h3","",title),closer),...fields,status,
-            el("footer","",btn("Volver",()=>dialog.close()),save&&confirm));
+            el("footer","",backButton,save&&confirm));
         form.onsubmit=async event=>{
             event.preventDefault();
             if(!save||confirm.disabled) return;
-            closer.disabled=confirm.disabled=true;
+            form.setAttribute("aria-busy","true");
+            closer.disabled=backButton.disabled=confirm.disabled=true;
             status.textContent="Guardando…";
             const values=Object.fromEntries(new FormData(form));
             for(const input of form.querySelectorAll('[type="checkbox"]')) values[input.name]=input.checked;
-            try { await save(values,form); } catch(error) {status.textContent=errorText(error);}
-            finally {closer.disabled=confirm.disabled=false;}
+            try { await save(values,form,ctx); } catch(error) {status.textContent=errorText(error);}
+            finally {
+                form.removeAttribute("aria-busy");
+                closer.disabled=backButton.disabled=confirm.disabled=false;
+            }
         };
         dialog.replaceChildren(form);
         if(!dialog.open) dialog.showModal();
         return form;
     }
-    function write(action,payload,ctx=selected) {
+    function write(action,payload,ctx) {
+        if(ctx&&ctx.session!==sessionKey) throw new Error("La sesión cambió. Vuelve a abrir la ficha.");
         return api.rpc("guardar",{p_id:ctx?.id??null,p_reserva:ctx?.res??null,p_accion:action,p_datos:payload});
     }
-    async function refresh(id,res) {
-        dialog.close();
-        await openProfile(id,res,id===selected?.id);
+    async function refresh(ctx,form,id=ctx.id) {
+        if(dialog.open&&dialog.firstElementChild===form) dialog.close();
+        if(!sameView(ctx)) return;
+        const loading=openProfile(id,ctx.res,id===ctx.id);
+        const revision=detailRequest;
+        await loading;
+        if(revision!==detailRequest) return;
         const status=detail.querySelector("[data-save]");
         if(status&&!status.textContent) status.textContent="Guardado.";
         filtersState.p_desde=0;
         void list(true);
     }
-    async function save(action,payload) {
-        const {id,res}=selected;
-        const ack=await write(action,payload);
-        await refresh(["identificar","vincular"].includes(action)?ack.id:id,res);
+    async function save(action,payload,ctx,form) {
+        const ack=await write(action,payload,ctx);
+        await refresh(ctx,form,["identificar","vincular"].includes(action)?ack.id:ctx.id);
     }
     function editBase() {
         const p=profile.persona;
         formDialog("Datos del huésped",[field("País","nacionalidad",p.nacionalidad),field("Idioma","idioma",p.idioma),
             field("Teléfono","telefono",p.telefono,"tel"),field("Correo","correo",p.correo,"email"),
-            field("Descripción","descripcion",p.descripcion,"textarea")],v=>save("ficha",v));
+            field("Descripción","descripcion",p.descripcion,"textarea")],(v,form,ctx)=>save("ficha",v,ctx,form));
     }
     function editDraft() {
         const p=profile.persona;
         const form=formDialog(name(p),[field("Nombre","nombre",p.nombre),field("Apellidos","apellido",p.apellido),
             field("Tipo de documento","tipo_documento",p.tipo_documento,[["","Sin documento"],["rut","RUT"],["pasaporte","Pasaporte"],["otro","Otro"]]),
             field("Número de documento","numero_documento",p.numero_documento),field("Cómo reconocerlo hoy","descripcion",p.descripcion,"textarea"),
-            field("Información y gustos","texto","","textarea")],async(values,form)=>{
+            field("Información y gustos","texto","","textarea")],async(values,form,ctx)=>{
             if(!values.nombre.trim()&&values.numero_documento.trim()) throw new Error("Ingresa el nombre para completar la identificación.");
-            await write("ficha",{descripcion:values.descripcion});
-            if(values.texto.trim()) await write("registro",{id:form.dataset.note,categoria:"preferencia",texto:values.texto,fuente:"Observación"});
-            if(values.nombre.trim()) await save("identificar",values);
-            else await refresh(selected.id,selected.res);
+            await write("ficha",{descripcion:values.descripcion},ctx);
+            if(values.texto.trim()) await write("registro",{id:form.dataset.note,categoria:"preferencia",texto:values.texto,fuente:"Observación"},ctx);
+            if(values.nombre.trim()) await save("identificar",values,ctx,form);
+            else await refresh(ctx,form);
         },"Guardar");
         form.dataset.note=crypto.randomUUID();
     }
 
 
     function linkDraft() {
+        const ctx=viewContext();
+        const participants=new Set(profile.visita?.plaza>0 ? profile.integrantes.map(p=>p.id) : []);
         const search=field("Nombre o documento","buscar","");
         const listBox=box("hu-bloque",muted("Escribe el nombre o documento del perfil."));
         formDialog("Vincular a un perfil existente",[search,listBox]);
@@ -341,9 +362,9 @@
                 try{
                     const found=await api.rpc("directorio",{p_estado:"todos",p_busqueda:query});
                     if(call!==turn||!listBox.isConnected) return;
-                    const rows=found.filas.filter(p=>!p.borrador&&p.plaza==null).map(p=>row(name(p),p.documento,
+                    const rows=found.filas.filter(p=>!p.borrador&&p.plaza==null&&!participants.has(p.id)).map(p=>row(name(p),p.documento,
                         btn("Vincular",()=>formDialog("Vincular a "+name(p),[muted("Se conservará la información del borrador.")],
-                            ()=>save("vincular",{huesped_id:p.id}),"Vincular"))));
+                            (_v,form)=>save("vincular",{huesped_id:p.id},ctx,form),"Vincular"))));
                     listBox.replaceChildren(...(rows.length?rows:[muted("Sin coincidencias.")]));
                 }catch(error){if(call===turn) listBox.replaceChildren(muted(errorText(error)));}
             },230);
@@ -361,7 +382,7 @@
             });
             return el("fieldset","",el("legend","",group),box("hu-chips",...options));
         });
-        formDialog("Etiquetas del huésped",[...sections,btn("Nueva etiqueta",addTag)],()=>save("etiquetas",{ids:[...picked]}));
+        formDialog("Etiquetas del huésped",[...sections,btn("Nueva etiqueta",addTag)],(_v,form,ctx)=>save("etiquetas",{ids:[...picked]},ctx,form));
     }
     function addTag() {
         formDialog("Nueva etiqueta",[field("Grupo","grupo","Motivo",groups.map(g=>[g,g])),field("Nombre","nombre","","text",true)],async v=>{
@@ -383,8 +404,8 @@
         const sources=["Observación","Lo comentó","Confirmado por huésped"];
         const form=formDialog(record.id?"Editar información":"Registrar información",[
             cat,scope,upper,lower,words,field("Fuente","fuente",record.fuente||sources[0],sources.map(s=>[s,s]))
-        ],(values,f)=>save("registro",{...values,id:record.id||f.dataset.id,
-            ...(record.modificado_en?{version:record.modificado_en}:{})}));
+        ],(values,f,ctx)=>save("registro",{...values,id:record.id||f.dataset.id,
+            ...(record.modificado_en?{version:record.modificado_en}:{})},ctx,f));
         form.dataset.id=crypto.randomUUID();
         const type=cat.querySelector("select");
         function adjust(){
@@ -408,12 +429,12 @@
         }).catch(error=>media.prepend(muted(errorText(error))));
         if(item.id&&edit) media.append(btn(item.foto?"Cambiar foto":"Agregar foto",()=>editPhoto({kind,id:item.id,path:item.foto}),{glyph:"camera",cls:"hu-icono-boton"}));
         const form=formDialog(vehicle?"Vehículo de la estadía":"Perfil de la mascota",[media,...fields],edit
-            ? (v,f)=>save(kind,{...v,id:item.id||f.dataset.id}) : null);
+            ? (v,f,ctx)=>save(kind,{...v,id:item.id||f.dataset.id},ctx,f) : null);
         form.dataset.id=crypto.randomUUID();
         if(!edit) form.querySelectorAll("input,select,textarea").forEach(x=>{x.disabled=true;});
     }
     function editPhoto(target) {
-        const p=profile, ctx=selected;
+        const p=profile, ctx=viewContext();
         const picker=field("Elegir imagen","imagen",null,"file",true);
         const input=picker.querySelector("input");
         input.accept="image/*";
@@ -429,14 +450,14 @@
             });
         const actions=box("hu-chips",btn("Girar",()=>{angle=(angle+90)%360;draw();},{glyph:"rotate",cls:"hu-icono-boton"}),
             btn("Acercar",()=>{form.elements.zoom.stepUp(5);draw();},{glyph:"zoom",cls:"hu-icono-boton"}));
-        if(target.path) actions.append(btn("Eliminar foto",()=>formDialog("Eliminar foto",[muted("Confirma el retiro de la foto de esta ficha.")],async()=>{
-            await api.photo(p,target,null);await refresh(ctx.id,ctx.res);
+        if(target.path) actions.append(btn("Eliminar foto",()=>formDialog("Eliminar foto",[muted("Confirma el retiro de la foto de esta ficha.")],async(_v,form)=>{
+            await api.photo(p,target,null);await refresh(ctx,form);
         },"Eliminar")));
         const state=el("span","hu-muted");state.setAttribute("role","status");
-        const form=formDialog("Foto · Vista previa",[canvas,picker,state,...controls,actions],async()=>{
+        const form=formDialog("Foto · Vista previa",[canvas,picker,state,...controls,actions],async(_v,form)=>{
             if(!picture) throw new Error("Selecciona una imagen válida.");
             const image=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("No se pudo preparar la imagen.")),"image/jpeg",.85));
-            await api.photo(p,target,image);await refresh(ctx.id,ctx.res);
+            await api.photo(p,target,image);await refresh(ctx,form);
         },"Usar foto");
         input.onchange=()=>{
             picture=null;canvas.hidden=true;

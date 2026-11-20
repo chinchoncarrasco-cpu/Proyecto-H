@@ -541,6 +541,11 @@ begin
     else
       select h.id into destino from public.huespedes h where h.id=(p_datos->>'huesped_id')::uuid;
       if destino is null then raise exception 'El perfil seleccionado ya no existe.' using errcode='P0002'; end if;
+      if ficha.plaza>0 and exists (
+        select 1 from public.haiku_huesped_integrantes_v1 i where i.reserva_id=p_reserva and i.id=destino
+      ) then
+        raise exception 'El huésped ya participa en esta reserva.' using errcode='23514';
+      end if;
     end if;
     insert into public.haiku_huesped_fichas as f(id,huesped_id,descripcion,idioma,foto,pais_manual,telefono_manual,correo_manual,actualizado_por)
       values(destino,destino,ficha.descripcion,ficha.idioma,ficha.foto,ficha.pais_manual,ficha.telefono_manual,ficha.correo_manual,operador)

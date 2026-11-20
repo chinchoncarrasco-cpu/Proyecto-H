@@ -14,3 +14,5 @@ La migración [20261120205010_haku_huespedes_v1_1.sql](../supabase/migrations/20
 
 - [Fixture del esquema](../tests/fixtures/huespedes-schema.sql) y [recorrido PostgreSQL](../tests/huespedes-v1-postgres.test.sql) para una base temporal con datos ficticios. Cargar el esquema, aplicar la migración y ejecutar el recorrido.
 - [Recorrido de navegador](../tests/huespedes-browser-check.cjs) con Playwright y PGlite. `HAKU_GUEST_SHOTS` permite elegir la carpeta de capturas. Con `HAKU_GUEST_NATIVE_PREVIEW` apuntando a la salida de `tests/prepare-huespedes-browser.cjs` de Haku-Mobile, verifica el intercambio de datos entre web y los componentes Android renderizados en el navegador.
+- Vinculación concurrente con `node tests/huespedes-vinculacion-postgres.test.cjs` y `pg`. Usar `HAKU_GUEST_TEST_DATABASE` con la URL de una base PostgreSQL local vacía en la que solo se hayan cargado el esquema de prueba y la migración.
+- Para comprobar el guardado demorado y la exclusión de integrantes en ambos clientes, preparar la vista Android y ejecutar `node tests/huespedes-browser-check.cjs --correcciones`.

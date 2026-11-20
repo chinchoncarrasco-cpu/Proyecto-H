@@ -105,6 +105,122 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       },theme);
       return {page,errors};
     }
+    async function android(preview,colorScheme){
+      const mobile=await browser.newPage({viewport:{width:390,height:844},colorScheme,isMobile:true,hasTouch:true});
+      const mobileErrors=[];
+      mobile.on('pageerror',e=>mobileErrors.push(e.message));
+      await mobile.exposeFunction('__guestRpc',rpc);
+      await mobile.addInitScript(()=>{
+        window.haikuSupabase={rpc:(n,a)=>window.__guestRpc(n,a)};
+      });
+      await mobile.route('**/*',route=>{
+        const url=new URL(route.request().url());
+        if(url.hostname!=='haku-android-guest.test')return route.abort();
+        const name=decodeURIComponent(url.pathname.slice(1))||'index.html',file=path.join(preview,name);
+        if(name.includes('..')||!fs.existsSync(file)||!fs.statSync(file).isFile())return route.abort();
+        return route.fulfill({path:file,contentType:({'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf'})[path.extname(name)]});
+      });
+      await mobile.goto('https://haku-android-guest.test/');
+      return {mobile,mobileErrors};
+    }
+
+    if(process.argv.includes('--correcciones')){
+      const preview=process.env.HAKU_GUEST_NATIVE_PREVIEW;
+      assert.ok(preview,'Indica la vista Android en HAKU_GUEST_NATIVE_PREVIEW.');
+      const berta='a1000000-0000-4000-8000-000000000002';
+      const reservation='a2000000-0000-4000-8000-000000000001';
+      const draft=(await db.query(
+        "select id from public.haiku_huesped_integrantes_v1 where reserva_id=$1 and plaza>0",
+        [reservation],
+      )).rows[0].id;
+      const note='Preferencia de prueba con respuesta demorada';
+      for(const theme of ['light','dark']){
+        const {mobile,mobileErrors}=await android(preview,theme);
+        await mobile.getByRole('button',{name:'Ada Prueba',exact:true}).click();
+        await mobile.getByRole('button',{name:'Completar',exact:true}).click();
+        await mobile.getByRole('button',{name:'Vincular perfil existente',exact:true}).click();
+        const search=mobile.getByRole('textbox',{name:'Nombre o documento',exact:true});
+        await search.fill('Ada');
+        await mobile.getByText('Sin coincidencias.',{exact:true}).waitFor();
+        await search.fill('Berta');
+        await mobile.getByRole('button',{name:'Berta Prueba · ••••Y790',exact:true}).waitFor();
+        assert.equal(await mobile.getByRole('button',{name:/Berta Prueba ·/}).count(),1);
+        assert.deepEqual(mobileErrors,[]);
+        await mobile.close();
+      }
+      for(const [width,theme] of [[1440,'claro'],[390,'oscuro']]){
+        const {page,errors}=await web(width,theme);
+        const section=page.locator('#seccion-huespedes');
+        const modal=section.locator('dialog');
+        await section.locator('[data-person-id="'+ada+'"]').click();
+        await section.getByRole('button',{name:'Completar',exact:true}).click();
+
+        await section.getByRole('button',{name:'Vincular perfil existente',exact:true}).click();
+        await modal.getByLabel('Nombre o documento').fill('Ada');
+        await modal.getByText('Sin coincidencias.',{exact:true}).waitFor();
+        await modal.getByLabel('Nombre o documento').fill('Berta');
+        await modal.getByText('••••Y790',{exact:true}).waitFor();
+        assert.equal(await modal.getByRole('button',{name:'Vincular',exact:true}).count(),1);
+        await modal.getByRole('button',{name:'Volver',exact:true}).click();
+
+        await section.getByRole('button',{name:'Completar datos',exact:true}).click();
+        await modal.getByLabel('Información y gustos').fill(note+' '+theme);
+        const identify=width===390;
+        if(identify) await modal.getByLabel('Nombre',{exact:true}).fill('Acompañante ficticia');
+        await page.evaluate(()=>{
+          const client=window.haikuSupabase;
+          const rpc=client.rpc;
+          window.registroDeEscrituras=[];
+          const hold=new Promise(resolve=>{window.liberarFicha=resolve;});
+          client.rpc=async(name,args)=>{
+            if(name!=='haiku_huesped_guardar_v1') return rpc(name,args);
+            window.registroDeEscrituras.push([args.p_accion,args.p_id,args.p_reserva]);
+            const result=await rpc(name,args);
+            if(args.p_accion==='ficha') await hold;
+            if(args.p_accion==='identificar') window.perfilIdentificado=result.data.id;
+            return result;
+          };
+        });
+        const originalForm=await modal.locator('form').elementHandle();
+        await modal.getByRole('button',{name:'Guardar',exact:true}).click();
+        await page.waitForFunction(()=>window.registroDeEscrituras.length===1);
+        for(const name of ['Volver','Cerrar']){
+          const button=modal.getByRole('button',{name,exact:true});
+          assert.equal(await button.isDisabled(),true);
+          await button.evaluate(element=>element.click());
+        }
+        await page.keyboard.press('Escape');
+        assert.equal(await modal.isVisible(),true);
+
+        // Fuerza un cambio de perfil aun si la interfaz impide cerrar el formulario.
+        await modal.evaluate(element=>element.close());
+        await section.getByRole('button',{name:'Ver perfil',exact:true}).last().click();
+        await section.getByRole('heading',{name:'Berta Prueba',exact:true}).waitFor();
+        await section.getByRole('button',{name:'Registrar información',exact:true}).click();
+        await page.evaluate(()=>window.liberarFicha());
+        await page.waitForFunction(form=>!form.hasAttribute('aria-busy'),originalForm);
+        const actions=identify?['ficha','registro','identificar']:['ficha','registro'];
+        assert.deepEqual(await page.evaluate(()=>window.registroDeEscrituras),actions.map(action=>[action,draft,reservation]));
+        assert.equal(await modal.getByRole('heading',{name:'Registrar información',exact:true}).isVisible(),true);
+        await modal.getByRole('button',{name:'Volver',exact:true}).click();
+        assert.equal(await section.getByRole('heading',{name:'Berta Prueba',exact:true}).isVisible(),true);
+        const bertaProfile=await rpc('haiku_huesped_perfil_v1',{p_id:berta,p_reserva:reservation});
+        const originalId=identify?await page.evaluate(()=>window.perfilIdentificado):draft;
+        assert.ok(originalId);
+        const originalProfile=await rpc('haiku_huesped_perfil_v1',{p_id:originalId,p_reserva:reservation});
+        assert.ok(!bertaProfile.data.registros.some(row=>row.texto.startsWith(note)));
+        assert.ok(originalProfile.data.registros.some(row=>row.texto===note+' '+theme));
+        await section.getByRole('button',{name:'Registrar información',exact:true}).click();
+        await modal.getByLabel('Información o detalles').fill('Guardado normal de Berta '+theme);
+        await modal.getByRole('button',{name:'Guardar',exact:true}).click();
+        await section.getByText('Guardado normal de Berta '+theme,{exact:true}).waitFor();
+        assert.equal(await modal.isVisible(),false);
+        assert.deepEqual(errors,[]);
+        await page.close();
+      }
+      console.log('Guardado demorado web y exclusión de integrantes en los dos clientes aprobados.');
+      return;
+    }
     for(const width of [1440,390]) for(const theme of ['claro','oscuro']){
       const {page,errors}=await web(width,theme);
       const section=page.locator('#seccion-huespedes');
@@ -205,21 +321,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     if (process.env.HAKU_GUEST_NATIVE_PREVIEW) {
       const preview=process.env.HAKU_GUEST_NATIVE_PREVIEW;
       for(const colorScheme of ['light','dark']){
-        const mobile=await browser.newPage({viewport:{width:390,height:844},colorScheme,isMobile:true,hasTouch:true});
-        const mobileErrors=[];
-        mobile.on('pageerror',e=>mobileErrors.push(e.message));
-        await mobile.exposeFunction('__guestRpc',rpc);
-        await mobile.addInitScript(()=>{
-          window.haikuSupabase={rpc:(n,a)=>window.__guestRpc(n,a)};
-        });
-        await mobile.route('**/*',route=>{
-          const url=new URL(route.request().url());
-          if(url.hostname!=='haku-android-guest.test')return route.abort();
-          const name=decodeURIComponent(url.pathname.slice(1))||'index.html',file=path.join(preview,name);
-          if(name.includes('..')||!fs.existsSync(file)||!fs.statSync(file).isFile())return route.abort();
-          return route.fulfill({path:file,contentType:({'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf'})[path.extname(name)]});
-        });
-        await mobile.goto('https://haku-android-guest.test/');
+        const {mobile,mobileErrors}=await android(preview,colorScheme);
         await mobile.getByRole('button',{name:'Ada Prueba',exact:true}).waitFor();
         await mobile.evaluate(()=>document.fonts.ready);
         await mobile.screenshot({path:path.join(out,'android-vista-'+colorScheme+'-directorio.png')});
