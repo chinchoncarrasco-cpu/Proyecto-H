@@ -111,9 +111,11 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
    assert.equal((await ids()).length,11);
    if(width<700) {
     const scroll=await chips.evaluate(n=>({width:n.clientWidth,full:n.scrollWidth,height:n.clientHeight}));
-    assert.ok(scroll.full>scroll.width,'estados en una fila horizontal');assert.ok(scroll.height<=34);
-    await chips.hover();await page.mouse.wheel(300,0);
-    await page.waitForFunction(()=>document.querySelector('#cabinsFilters').scrollLeft>0);
+    assert.ok(scroll.full<=scroll.width+1,'Final también presenta todos los filtros sin desplazamiento lateral');
+    assert.ok(scroll.height>34 && scroll.height<=150,'Final conserva líneas compactas en móvil');
+    await chips.getByRole('button',{name:'No requiere · 1',exact:true}).click();
+    assert.deepEqual(await ids(),[3]);
+    await chips.getByRole('button',{name:'Todas · 11',exact:true}).click();
    }
    await page.getByRole('button',{name:/Listas para operar: 4/}).click();
    assert.equal(await page.locator('#cabinsFilterLabel').textContent(),'Filtrar: General');
@@ -132,7 +134,7 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
    assert.equal(await page.evaluate(()=>JSON.stringify(obtenerDatosDia(fechaSeleccionada).cabanas)===window.__filterOriginal),true,'filtrar no escribe ni cambia estados');
    const overflow=await page.locator('#seccion-cabanas').evaluate(n=>n.scrollWidth-n.clientWidth);assert.ok(overflow<=1);
    if(process.env.HAKU_UI_SHOTS){fs.mkdirSync(process.env.HAKU_UI_SHOTS,{recursive:true});await page.locator('#cabinsOperation').screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`filters-${width}-${theme}.png`)});await selector.locator('summary').click();await page.screenshot({path:path.join(process.env.HAKU_UI_SHOTS,`filters-menu-${width}-${theme}.png`)});}
-   assert.deepEqual(errors,[]);await page.close();console.log(`Web ${width} ${theme}: filtros, conteos, tipo activo, resumen, teclado y deslizamiento OK`);
+   assert.deepEqual(errors,[]);await page.close();console.log(`Web ${width} ${theme}: filtros completos, conteos, tipo activo, resumen y teclado OK`);
   }
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

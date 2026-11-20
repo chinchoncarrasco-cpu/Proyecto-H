@@ -66,6 +66,13 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/haku-ui" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 linkedom@0.18.12 @electric-sql/pglite@0.5.14
           node "$RUNNER_TEMP/haku-ui/node_modules/playwright/cli.js" install chromium --with-deps
+      - name: Tareas generales, historial y concurrencia PostgreSQL
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: |
+          node --test tests/tareas-generales-postgres.test.cjs tests/tareas-generales.test.cjs
+          node tests/tareas-generales-browser-check.cjs
+
       - name: Insumos y salidas con contexto de estadía
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
@@ -96,13 +103,6 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/cabanas-filters-browser-check.cjs
-
-      - name: Tareas generales, historial y concurrencia PostgreSQL
-        env:
-          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
-        run: |
-          node --test tests/tareas-generales-postgres.test.cjs tests/tareas-generales.test.cjs
-          node tests/tareas-generales-browser-check.cjs
 
       - name: Resumen con cambios de día y pagos publicados
         env:
