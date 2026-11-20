@@ -115,7 +115,12 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
           const [list,card]=Array.from(n.children).map(x=>x.getBoundingClientRect());return {directory:list.width,side:card.width,listRight:list.right,sideLeft:card.left};
         });
         assert.ok(geometry.directory>geometry.side&&geometry.listRight<geometry.sideLeft,'directorio y ficha lateral');
-      }else{assert.equal(await section.locator('.hu-ficha').isVisible(),false);}
+      }else{
+        assert.equal(await section.locator('.hu-ficha').isVisible(),false);
+        const search=await section.locator('.hu-busqueda').boundingBox();
+        const type=await section.getByLabel('Tipo de cabaña').boundingBox();
+        assert.ok(search.width>300&&search.y<type.y,'la búsqueda usa una línea completa en móvil');
+      }
       await page.screenshot({path:path.join(out,'web-'+width+'-'+theme+'-directorio.png'),fullPage:true});
       await section.locator('[data-person-id="'+ada+'"]').click();
       await section.getByRole('heading',{name:'Ada Prueba'}).waitFor();

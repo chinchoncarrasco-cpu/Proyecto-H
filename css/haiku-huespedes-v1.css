@@ -104,9 +104,11 @@ button.hu-fila[aria-current="true"] { background:var(--guest-selected); }
 @media(max-width:760px) {
     #seccion-huespedes { padding:12px; }
     .hu-layout { display:block; }
-    .hu-filtros { flex-wrap:nowrap; overflow-x:auto; }
-    .hu-filtros .hu-select { min-width:0; flex:1 1 auto; max-width:46%; }
-    .hu-busqueda { flex:auto; width:100%; }
+    .hu-toolbar {grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr); gap:6px;}
+    .hu-filtros {display:contents;}
+    .hu-busqueda {grid-column:1/-1; grid-row:1; width:100%;}
+    .hu-tabs {grid-column:1/-1; grid-row:2; padding-block:2px;}
+    .hu-filtros .hu-select {grid-row:3; min-width:0; width:100%; padding-inline:6px;}
     .hu-fila { display:flex; gap:8px; min-height:73px; padding:8px 11px; }
     .hu-lista .hu-lista-cabecera, .hu-fila > .hu-columna { display:none; }
     .hu-fila .hu-identidad { flex:1; }

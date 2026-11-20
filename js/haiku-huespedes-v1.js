@@ -31,6 +31,7 @@
     const muted = text=>el("span","hu-muted",text);
     const name = p=>[p.nombre,p.apellido].filter(Boolean).join(" ") || "Acompañante por identificar";
     const day = value=>value ? dateFormat.format(new Date(value.slice(0,10)+"T12:00:00Z")) : "";
+    const quantity = (count,single,plural)=>count+" "+(count===1?single:plural);
     const dates = v=>[day(v?.ingreso),day(v?.salida)].filter(Boolean).join(" – ");
     const cabin = v=>v?.numero ? "Cabaña "+v.numero+(v.tipo?" · "+v.tipo:"") : "Sin cabaña asignada";
     function icon(key) {
@@ -114,7 +115,7 @@
         }));
         for (const [key,label,values] of [["p_tipo","Tipo de cabaña",data.tipos.map(s=>[s,s])],
             ["p_etiqueta","Etiquetas",data.etiquetas.map(o=>[o.id,o.nombre])],["p_origen","Origen",data.origenes.map(s=>[s,s])]]) {
-            const input = select([["",label+": Todos"],...values],filtersState[key]);
+            const input = select([["",key==="p_tipo"?label+": Todos":label],...values],filtersState[key]);
             input.setAttribute("aria-label",label);
             input.dataset.huControl=key;
             input.addEventListener("change",()=>change(key,input.value||null));
@@ -123,14 +124,14 @@
         }
         if (focused) root.querySelector('[data-hu-control="'+focused+'"]')?.focus({preventScroll:true});
         const count = data.conteos[filtersState.p_estado];
-        totals.textContent = count+" personas · "+data.cabanas+" cabañas";
+        totals.textContent = quantity(count,"persona","personas")+" · "+quantity(data.cabanas,"cabaña","cabañas");
         const heading = box("hu-fila hu-lista-cabecera",el("span","","HUÉSPED"),el("span","","ESTADÍA Y CABAÑA"),el("span","","PERFIL E INFORMACIÓN"));
         const rows = data.filas.map(p=>{
             const tags = p.etiquetas.join(" · ") || (p.excedente ? "Ocupación modificada" : p.pendiente ? "Por completar" : "");
             const where = p.reserva_id ? cabin(p) : "Sin estadía vinculada";
             const row = el("button","hu-fila",box("hu-identidad",avatar(p),box("",el("strong","hu-nombre",name(p)),
                 muted([roles[p.rol],p.documento].filter(Boolean).join(" · ")),el("span","hu-destacado hu-mini-movil",where),el("span","hu-muted hu-mini-movil",tags))),
-                box("hu-columna",el("strong","",where),muted(dates(p))),box("hu-columna",el("span","hu-destacado",tags),muted(p.visitas+" estadías")),icon("chevron"));
+                box("hu-columna",el("strong","",where),muted(dates(p))),box("hu-columna",el("span","hu-destacado",tags),muted(quantity(p.visitas,"estadía","estadías"))),icon("chevron"));
             row.type="button";
             row.dataset.personId=p.id;
             row.setAttribute("aria-current",String(selected?.id===p.id));
@@ -213,12 +214,12 @@
     }
     function renderProfile() {
         const {persona:p,visita:v,integrantes,registros,puede_editar:edit}=profile;
-        const header=box("hu-linea",box("hu-identidad",avatar(p,true),box("",el("h3","",name(p)),muted(profile.visitas+" estadías"),el("span","hu-destacado",roles[v?.rol]||""))),
+        const header=box("hu-linea",box("hu-identidad",avatar(p,true),box("",el("h3","",name(p)),muted(quantity(profile.visitas,"estadía","estadías")),el("span","hu-destacado",roles[v?.rol]||""))),
             edit&&btn(p.foto?"Cambiar foto":"Agregar foto",()=>editPhoto({kind:"persona",path:p.foto}),{glyph:"camera",iconOnly:true}));
         const visits=v&&box("hu-contexto",box("hu-linea",muted(v.hospedada?"ESTADÍA ACTUAL":"ESTADÍA"),
             btn("Ver reserva",e=>window.HAIKU_RESUMEN_RESERVA_SITES_V1?.abrirPorId(v.reserva_id,e.currentTarget),{cls:"hu-plano hu-link"})),
             el("strong","",cabin(v)),
-            muted([dates(v),v.adultos!==null&&(v.adultos+v.ninos)+" personas",v.mascotas&&v.mascotas+" mascotas"].filter(Boolean).join(" · ")),
+            muted([dates(v),v.adultos!==null&&(v.adultos+v.ninos)+" personas",v.mascotas&&quantity(v.mascotas,"mascota","mascotas")].filter(Boolean).join(" · ")),
             muted(integrantes.filter(x=>x.rol!=="borrador").length+" identificados · "+integrantes.filter(x=>x.rol==="borrador"&&!x.excedente).length+" por identificar"),
             !v.numero&&profile.estadias.length>1&&muted("Asignación pendiente · "+profile.estadias.map(x=>x.numero&&"Cab. "+x.numero).filter(Boolean).join(", ")));
         const companions=integrantes.filter(x=>x.id!==p.id).map(x=>row(name(x),roles[x.rol]+(x.excedente?" · Fuera de la ocupación actual":""),
