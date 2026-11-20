@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const {entorno}=require('./fixtures/libro-servicio-manual.cjs');
 const read=p=>fs.readFileSync(require.resolve('../js/'+p+'.js'),'utf8');
 const fila={id:'ficticia',titular:'Persona de prueba',cabana:8,fecha_checkin:'2026-11-07',fecha_checkout:'2026-11-08',adultos:2};
-function coordinador(){
+function coordinador(filaActual=fila){
  const estado={gen:1,usuario:'u1',preparadas:0,escrituras:0,servicios:0,consultas:[],resuelto:false};
  const c={structuredClone,haikuSesion:{usuario:{activo:true},roles:['administrador']},
   haikuSupabase:{auth:{getUser:async()=>({data:{user:{id:estado.usuario}}})}},
@@ -10,16 +10,16 @@ function coordinador(){
   HAIKU_LIBRO_CONTEXTO_V1:{actualizarDesdeLibro:async r=>r,enriquecer:async r=>r},
   HAIKU_LIBRO_CONSULTAS:{
    revalidarCambiosDetectados:async rows=>{estado.consultas.push(rows);return estado.resuelto?
-    {items:[],reservas:[],comparacion:[]}:{items:[{tipo:'nueva',actual:fila,accionable:true}],reservas:[fila],comparacion:[],q:{}};},
+    {items:[],reservas:[],comparacion:[]}:{items:[{tipo:'nueva',actual:filaActual,accionable:true}],reservas:[filaActual],comparacion:[],q:{}};},
    prepararIncorporacion:async()=>{estado.preparadas++;return {items:[
-    {id:'reserva',categoria:'nuevas',seleccionado:true,payload:{reserva:fila}},
+    {id:'reserva',categoria:'nuevas',seleccionado:true,payload:{reserva:filaActual}},
     {id:'pago',categoria:'pagos',seleccionado:true,payload:{tipo:'pago'}}]};},
    confirmarIncorporacion:async(_r,_d,_a,plan)=>{estado.escrituras++;assert.equal(plan.items[1].seleccionado,false);
     estado.resuelto=true;return {resultado:{ok:true,reservas_creadas:1}};}
   }};
  vm.runInNewContext(read('supabase-asistente-libro-actualizacion-v1'),c);
  return {c,estado,api:c.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1,informe:{estado:'ok',libro_actual:{generacion:1},
-  nuevas:[{actual:fila}],incorporacion:{listos:[{}],reservasListas:[fila.id]}}};
+  nuevas:[{actual:filaActual}],incorporacion:{listos:[{}],reservasListas:[filaActual.id]}}};
 }
 test('un clic incorpora reservas, excluye pagos y comparte un solo intento concurrente',async()=>{
  const h=coordinador();const [a,b]=await Promise.all([h.api.incorporarDesdeAviso(h.informe),h.api.incorporarDesdeAviso(h.informe)]);
@@ -101,6 +101,27 @@ test('servicio real: un clic escribe la estadía única y sus notas sin diálogo
  assert.ok(p.p_notas.every(n=>n.reserva_id===p.p_servicios[0].reserva_id));
  assert.deepEqual(Array.from(a.confirmados,x=>x.detalles[0][0]),['Tinaja Jacuzzi','Nota de la reserva']);
  await guardar();assert.equal(e.state.escrituras.length,1);
+});
+test('alta con notas operativas y sin servicios pasa al writer de notas después de crear la ficha',async()=>{
+ const e=await servicios();
+ e.r.texto_original='Persona de prueba // persona@example.test // 2 ADL // 1 NOCHE // FC // Dejar dos batas // DEJAR UN CARBÓN EN CAB';
+ e.r.servicios=[];
+ e.r.menciones_servicio=[];
+ const h=coordinador(e.r);
+ h.c.HAIKU_LIBRO_SERVICIOS_SCOPE_V2=e.api;
+ h.c.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4={crearIncorporacionAviso:scope=>{
+  assert.equal(h.estado.escrituras,1);
+  assert.deepEqual(Array.from(scope.seleccionAviso.nuevas,x=>x.id),[e.r.id]);
+  return e.crear(scope);
+ }};
+ const fin=await h.api.incorporarDesdeAviso(h.informe);
+ assert.equal(fin.reservas_creadas,1);
+ assert.equal(fin.notas_creadas,2);
+ assert.equal(fin.servicios_creados,0);
+ assert.equal(e.state.escrituras.length,1);
+ const {p_notas,p_servicios}=e.state.escrituras[0];
+ assert.equal(p_servicios.length,0);
+ assert.deepEqual(Array.from(p_notas,x=>x.texto),['Dejar dos batas','DEJAR UN CARBÓN EN CAB']);
 });
 test('el aviso guarda sólo el ítem mostrado y un resultado omitido no aparece como incorporado',async()=>{
  const e=await servicios(),plan=await e.api.prepararHistorial(e.scope),nota=plan.items.find(x=>x.kind==='nota');

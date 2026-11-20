@@ -642,14 +642,14 @@
                 const accionReserva=alta?'Reserva nueva':'Actualizar reserva';
                 const resumen=[...(puedeGuardarReserva?[accionReserva]:[]),
                     ...(!alta?lista(reserva?.campos).map(c=>c.etiqueta):[]),
-                    ...(!alta&&(lista(reserva?.notas?.añadidas).length||lista(reserva?.notas?.retiradas).length)?['Notas']:[]),
+                    ...(!alta&&(lista(reserva?.observaciones?.añadidas).length||lista(reserva?.observaciones?.retiradas).length)?['Comentarios de reserva']:[]),
                     ...(servicios.length?[`${servicios.length} ${servicios.length===1?'servicio':'servicios'}`]:[]),
                     ...(notas.length?[`${notas.length} ${notas.length===1?'nota':'notas'}`]:[])];
                 listos.push({titular:r.titular,cabana:r.cabana,fechaIngreso:r.fecha_checkin,fechaSalida:r.fecha_checkout,
                     resumen:[...new Set(resumen)],
                     vista:{accion:alta?'Crear reserva':puedeGuardarReserva?accionReserva:'Añadir a la reserva',
-                        campos:lista(reserva?.campos),notasReserva:reserva?.notas,servicios,notas,
-                        revisarServiciosAlta:alta&&tieneServiciosAviso(r)}});
+                        campos:lista(reserva?.campos),observaciones:reserva?.observaciones,servicios,notas,alta,
+                        revisarOperacionesAlta:alta&&tieneOperacionesAlta(r)}});
                 for(const {detalle} of preparados)operacionesListas.push({id:detalle.item_id,reserva:r.id});
                 if(puedeGuardarReserva)reservasListas.push(r.id);
             }
@@ -672,7 +672,10 @@
         }
         return {listos,pendientes:porRevisar,operacionesListas,reservasListas};
     }
-    const tieneServiciosAviso=r=>lista(r?.servicios).length>0||lista(r?.menciones_servicio).length>0;
+    function tieneOperacionesAlta(r) {
+        return lista(r?.servicios).length>0||lista(r?.menciones_servicio).length>0||
+            lista(root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2?.extraerNotasReserva?.(r,[])).length>0;
+    }
     function reciboReservas(fin) {
         const confirmados=[['reservas','reservas_creadas','Reserva incorporada'],
             ['estadias','estadias_agregadas','Estadía añadida'],['actualizaciones','actualizaciones','Reserva actualizada']]
@@ -741,7 +744,7 @@
                     const operaciones=lista(resultado.incorporacion.operacionesListas);
                     const anteriores=lista(estado.inicial.revisionServicios?.reservas)
                         .filter(r=>idsOperaciones.has(r.id));
-                    const nuevas=lista(estado.inicial.items).filter(x=>x.tipo==='nueva'&&x.accionable&&tieneServiciosAviso(x.actual)&&
+                    const nuevas=lista(estado.inicial.items).filter(x=>x.tipo==='nueva'&&x.accionable&&tieneOperacionesAlta(x.actual)&&
                         idsAutorizados.has(x.actual.id)).map(x=>x.actual);
                     const scope={generacion:estado.inicial.generacion,reservas:[...new Map([...anteriores,...nuevas]
                         .map(r=>[JSON.stringify([r.titular,r.cabana,r.fecha_checkin,r.fecha_checkout]),r])).values()],
@@ -749,7 +752,7 @@
                     if(scope.reservas.length){
                         if(!estado.guardarServicios){
                             const guard=root.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4;
-                            if(!guard?.crearIncorporacionAviso)throw Error('La incorporación de servicios todavía no está disponible.');
+                            if(!guard?.crearIncorporacionAviso)throw Error('La incorporación de notas y servicios todavía no está disponible.');
                             estado.guardarServicios=guard.crearIncorporacionAviso(scope);
                         }
                         await validarSesion();

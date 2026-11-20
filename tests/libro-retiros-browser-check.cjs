@@ -150,7 +150,7 @@ const server=http.createServer((req,res)=>{
      if(f.caso==='notas-respaldo'){
       const vista=document.createElement('div');out.append(vista);const {plan}=await Q.abrirPreparacionComparacion(vista,p.preparacion);
       notas=plan.items.find(x=>x.payload?.reserva?.despues?.observaciones)?.payload.reserva.despues.observaciones;
-      retiros=p.items[0].vistaIncorporacion?.notas?.retiradas||[];
+      retiros=p.items[0].vistaIncorporacion?.observaciones?.retiradas||[];
      }
      let ficha;
      if(servicio){
