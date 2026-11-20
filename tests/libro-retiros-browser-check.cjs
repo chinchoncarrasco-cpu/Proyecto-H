@@ -36,7 +36,7 @@ const server=http.createServer((req,res)=>{
     globalThis.clienteLectura=db=>{const c=crearClientePrueba(db),from=c.from.bind(c),rpc=c.rpc;
      c.from=(...args)=>{const q=from(...args);q.limit=()=>q;return q;};
      c.rpc=(nombre,...args)=>nombre==='haiku_libro_aplicaciones_servicio_capacidad_v1'?Promise.resolve({data:null}):rpc(nombre,...args);return c;};
-    globalThis.f=fixture;globalThis.haikuSupabase=clienteLectura(fixture.db);
+    globalThis.f=fixture;globalThis.fixtureInicial=fixture;globalThis.haikuSupabase=clienteLectura(fixture.db);
     globalThis.HAIKU_LIBRO_RESERVA_V1=crearLibroPrueba(fixture.data,fixture.previa,fixture.registros);
     globalThis.haikuTienePermiso=()=>true;globalThis.haikuSesion={auth:{id:'usuario-sintetico'},usuario:{activo:true},roles:[{codigo:'administrador'}]};
    },{fixture,libro:R.libro.toString(),cliente:F.cliente.toString(),tema});
@@ -213,6 +213,29 @@ const server=http.createServer((req,res)=>{
     await page.screenshot({path:path.join(evidencia,`regresion-${escena.caso}-${width}-${tema}.png`),fullPage:true});
     regresiones.push({...datos,width,tema,result:'PASS'});
    }
+   const operaciones=await page.evaluate(async()=>{
+    const Q=HAIKU_LIBRO_CONSULTAS,out=document.querySelector('#vista'),prueba=structuredClone(fixtureInicial);
+    const [r]=prueba.data.reservas,[e]=prueba.db.reserva_estadias;
+    r.texto_original='Aurora Ficción // 1 noche // 2 ADL // FC';r.notas_importantes=[];
+    prueba.db.reserva_estadias=[e];prueba.db.servicios=[];
+    const bloque=(repetida)=>`Comentario manual\n\n[DATOS DEL LIBRO]\nAurora Ficción // FC // 2 ADL // 1 noche${repetida?' // FC':''}\n[/DATOS DEL LIBRO]`;
+    const plan=async repetida=>{
+     e.reservas.observaciones=bloque(repetida);
+     const comp=await Q.compararSistema([r],clienteLectura(prueba.db));
+     return Q.crearPlanIncorporacion([r],comp);
+    };
+    const sinCambios=Q.serializarIncorporacion(await plan(false));
+    const limpieza=await plan(true);
+    out.replaceChildren();Q.renderizarIncorporacion(out,limpieza,()=>{},()=>{},async()=>{});
+    return {sinCambios,limpieza:Q.serializarIncorporacion(limpieza).map(op=>Object.keys(op.reserva.despues))};
+   });
+   assert.deepEqual(operaciones,{sinCambios:[],limpieza:[['observaciones']]});
+   await page.locator('.haiku-incorporacion-seccion--actualizaciones > summary').click();
+   const ajuste=page.locator('.haiku-incorporacion-notas-comparacion');
+   await ajuste.getByText('Comentarios de reserva · Ajuste del bloque importado',{exact:true}).click();
+   assert.match(await ajuste.innerText(),/Se elimina 1 repetición del bloque importado/);
+   assert.equal(await ajuste.locator('.haiku-incorporacion-notas-fuente').count(),0);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    assert.deepEqual(externos,[]);assert.deepEqual(errors,[]);await context.close();
   }
   fs.writeFileSync(path.join(evidencia,'regresiones-sinteticas.json'),JSON.stringify(regresiones,null,2));

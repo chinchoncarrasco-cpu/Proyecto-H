@@ -2999,9 +2999,9 @@ test('notes update shows ordered current and new fragments without internal mark
  const texto=nodo=>nodo.querySelectorAll('*').map(elemento=>elemento.textContent).join(' ');
  assert.equal(fuentes.length,2);
  assert.match(texto(fuentes[0]),/Proyecto H actual.*2 alojamientos.*Neviy Bitaporax Runiy.*NO MOVER/);
- assert.match(texto(fuentes[1]),/Notas nuevas del Libro.*Bofore Kebi.*CAMA ADICIONAL/);
+ assert.match(texto(fuentes[1]),/Se añade desde el Libro.*Bofore Kebi.*CAMA ADICIONAL/);
  assert.doesNotMatch(texto(fuentes[1]),/Neviy Bitaporax Runiy/);
- assert.equal(detalle.querySelector('summary').textContent,'Notas del Libro · 2 añadidas · 1 retirada');
+ assert.equal(detalle.querySelector('summary').textContent,'Comentarios de reserva · 2 añadidas · 1 retirada');
  assert.equal(fuentes[0].querySelector('.haku-actualizacion-libro__nota-retirada').textContent.trim(),'Se retira');
  assert.notEqual(detalle.open,true);
  assert.doesNotMatch(texto(detalle),/\[\/?DATOS DEL LIBRO\]|\/\//);
@@ -3016,6 +3016,44 @@ test('existing Libro notes with different separators do not create a formatting-
  const plan=await prepare([r],[sistema]);
  assert.ok(!plan.items.some(item=>item.categoria==='actualizaciones'));
  assert.ok(plan.items.some(item=>item.categoria==='asociadas'));
+});
+
+test('incorporación normal omite cambios de separadores y orden dentro de un bloque del Libro',async()=>{
+ const r=readyBook({texto_original:'Recepción Prueba // 1noche // 2adl // GO // 07-10-2026'});
+ const observaciones='Comentario manual\n\n[DATOS DEL LIBRO]\nRecepción Prueba // GO // 2adl // 1noche // 07-10-2026\n[/DATOS DEL LIBRO]';
+ const row=stay(r,{reservas:{...stay(r).reservas,observaciones}});
+ const plan=await prepare([r],[row]);
+ assert.ok(plan.items.some(item=>item.categoria==='asociadas'));
+ assert.ok(!plan.items.some(item=>item.categoria==='actualizaciones'));
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+
+ row.adultos=3;
+ const planConAdultos=await prepare([r],[row]);
+ const [cambio]=Q.serializarIncorporacion(planConAdultos);
+ assert.equal(cambio.tipo,'reserva_actualizar');
+ assert.deepEqual(Object.keys(cambio.reserva.despues),[]);
+ assert.deepEqual(Object.keys(cambio.estadia.despues),['adultos']);
+});
+
+test('incorporación normal explica la limpieza de duplicados y conserva el comentario manual',async()=>{
+ const r=readyBook({texto_original:'Recepción Prueba // 1noche // 2adl // GO'});
+ const observaciones='Comentario manual\n\n[DATOS DEL LIBRO]\nRecepción Prueba // GO // 2adl // 1noche // GO\n[/DATOS DEL LIBRO]';
+ const row=stay(r,{reservas:{...stay(r).reservas,observaciones}});
+ const plan=await prepare([r],[row]);
+ const [cambio]=Q.serializarIncorporacion(plan);
+ assert.equal(cambio.tipo,'reserva_actualizar');
+ assert.deepEqual(Object.keys(cambio.reserva.despues),['observaciones']);
+ assert.match(cambio.reserva.despues.observaciones,/^Comentario manual\n/);
+ assert.equal((cambio.reserva.despues.observaciones.match(/\bGO\b/g)||[]).length,1);
+
+ const h=renderHarness();h.Q.renderizarIncorporacion(h.out,plan,()=>{},()=>{},async()=>{});
+ const detalle=h.out.querySelector('.haiku-incorporacion-notas-comparacion');
+ assert.match(detalle.querySelector('summary').textContent,/Ajuste del bloque importado/);
+ assert.match(detalle.querySelector('p').textContent,/Se elimina 1 repetición/);
+ assert.equal(detalle.querySelectorAll('.haiku-incorporacion-notas-fuente').length,0);
+
+ applyPreview([row],[],[cambio]);
+ assert.ok(!(await prepare([r],[row])).items.some(x=>x.categoria==='actualizaciones'));
 });
 
 test('lectura completa conserva el cambio Tonel a Jacuzzi sin reintroducir el texto anterior ni duplicar servicios',async()=>{

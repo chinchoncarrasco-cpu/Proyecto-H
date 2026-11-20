@@ -2604,7 +2604,8 @@
         for (const [k,v] of Object.entries(propuesto)) {
             if (v === undefined || v === null || v === '' || v === 'no_determinado') continue;
             if (k === 'titular_nombre' && S.mismaPersona(actual[k],v)) continue;
-            if (k === 'titular_numero_documento' ? documentoCanon(actual[k], actual.titular_tipo_documento) === documentoCanon(v, propuesto.titular_tipo_documento || actual.titular_tipo_documento) : S.normalizar(actual[k]) === S.normalizar(v)) continue;
+            if (k === 'observaciones' ? observacionesEquivalentes(actual[k],v) :
+                k === 'titular_numero_documento' ? documentoCanon(actual[k], actual.titular_tipo_documento) === documentoCanon(v, propuesto.titular_tipo_documento || actual.titular_tipo_documento) : S.normalizar(actual[k]) === S.normalizar(v)) continue;
             antes[k] = actual[k] ?? null; despues[k] = v;
             cambios.push({ campo: etiquetasActualizacion[k] || k, anterior: actual[k] ?? null, libro: v });
         }
@@ -3253,17 +3254,35 @@
         return fragmentoRut ? (fragmentoRut[1] || '') + S.normalizarDocumento(fragmentoRut[2]) : texto;
     }
 
-    function fragmentosObservaciones(valor) {
+    function fragmentosObservaciones(valor, {conservarRepeticiones=false}={}) {
         const texto = String(valor ?? '').replace(/\[\/?DATOS DEL LIBRO\]/gi, '\n');
-        const unicos = new Map();
         const fragmentos = typeof S.separarCampos === 'function'
             ? S.separarCampos(texto)
             : texto.split(/\r?\n|\s*\/+\s*/).map(x => x.trim()).filter(Boolean);
+        if (conservarRepeticiones) return fragmentos;
+        const unicos = new Map();
         for (const fragmento of fragmentos) {
             const clave = claveFragmentoObservacion(fragmento);
             if (clave && !unicos.has(clave)) unicos.set(clave, fragmento);
         }
         return [...unicos.values()];
+    }
+
+    function observacionesEquivalentes(antes, despues) {
+        if (antes === despues) return true;
+        const actual = separarObservacionesLibro(antes), propuesta = separarObservacionesLibro(despues);
+        // Los comentarios manuales y las reparaciones del bloque tienen su
+        // propia evidencia. Sólo ignorar formato en un bloque ya bien formado.
+        if (actual.base !== propuesta.base || actual.malformado || propuesta.malformado ||
+            actual.bloques.length !== propuesta.bloques.length || actual.bloques.length > 1) return false;
+        const claves = bloque => fragmentosObservaciones(bloque, {conservarRepeticiones:true})
+            .map(claveFragmentoObservacion).sort();
+        return JSON.stringify(claves(actual.bloques[0])) === JSON.stringify(claves(propuesta.bloques[0]));
+    }
+
+    function repeticionesRetiradasObservaciones(antes, despues) {
+        const cantidad = valor => fragmentosObservaciones(valor, {conservarRepeticiones:true}).length;
+        return Math.max(0, cantidad(antes) - cantidad(despues));
     }
 
     function diferenciasObservaciones(anterior,guardado) {
@@ -8766,31 +8785,29 @@
             return bloque;
         };
         for (const c of item.cambios) {
-            if (c.campo === 'Notas y detalles del Libro') {
+            if (c.campo === etiquetasActualizacion.observaciones) {
                 const actuales = fragmentosObservaciones(c.anterior);
-                const clavesActuales = new Set(actuales.map(claveFragmentoObservacion));
-                const propuestas = fragmentosObservaciones(c.libro);
-                const nuevas = propuestas.filter(x => !clavesActuales.has(claveFragmentoObservacion(x)));
+                const {añadidas:nuevas,retiradas:anteriores} = diferenciasObservaciones(c.anterior,c.libro);
+                const retiradas = new Set(anteriores);
                 const notas = elemento('details', 'haiku-incorporacion-notas-comparacion');
                 const contenido = elemento('div', 'haiku-incorporacion-notas-contenido');
-                const retiradas = new Set();
-                if (compacta) {
-                    const clavesPropuestas = new Set(propuestas.map(claveFragmentoObservacion));
-                    for (const nota of actuales) {
-                        if (!clavesPropuestas.has(claveFragmentoObservacion(nota))) retiradas.add(nota);
-                    }
-                }
                 const cuenta = [
                     nuevas.length ? `${nuevas.length} añadida${nuevas.length === 1 ? '' : 's'}` : '',
                     retiradas.size ? `${retiradas.size} retirada${retiradas.size === 1 ? '' : 's'}` : ''
                 ].filter(Boolean).join(' · ');
-                const resumen = compacta ? ['Notas del Libro', cuenta].filter(Boolean).join(' · ') : c.campo;
-                if (!compacta || actuales.length) contenido.append(
-                    bloqueNotas('Proyecto H actual', actuales, 'haiku-incorporacion-notas-fuente--actual', retiradas));
-                if (!compacta || nuevas.length) contenido.append(
-                    bloqueNotas(compacta && !actuales.length ? '' : 'Notas nuevas del Libro', nuevas, 'haiku-incorporacion-notas-fuente--libro'));
-                if (compacta && !nuevas.length && !retiradas.size) contenido.append(
-                    bloqueNotas('Libro propuesto', propuestas, 'haiku-incorporacion-notas-fuente--libro'));
+                const resumen = ['Comentarios de reserva', cuenta || 'Ajuste del bloque importado'].join(' · ');
+                if (!cuenta) {
+                    const repeticiones = repeticionesRetiradasObservaciones(c.anterior,c.libro);
+                    const detalle = repeticiones === 1 ? 'Se elimina 1 repetición del bloque importado.' :
+                        repeticiones > 1 ? `Se eliminan ${repeticiones} repeticiones del bloque importado.` :
+                        'Se consolida el texto en el bloque importado del Libro.';
+                    contenido.append(elemento('p', 'haiku-incorporacion-notas-vacio',detalle + ' Se conserva el contenido visible.'));
+                } else {
+                    if (!compacta || actuales.length) contenido.append(
+                        bloqueNotas('Proyecto H actual', actuales, 'haiku-incorporacion-notas-fuente--actual', retiradas));
+                    if (nuevas.length) contenido.append(
+                        bloqueNotas('Se añade desde el Libro', nuevas, 'haiku-incorporacion-notas-fuente--libro'));
+                }
                 notas.append(elemento('summary','',resumen),contenido);
                 if (compacta) detallesNotas.push(notas);
                 else {
@@ -9867,7 +9884,16 @@
             añadidas.length ? `${añadidas.length} añadida${añadidas.length === 1 ? '' : 's'}` : '',
             retiradas.length ? `${retiradas.length} retirada${retiradas.length === 1 ? '' : 's'}` : ''
         ].filter(Boolean);
-        notas.append(elemento('summary','',['Notas del Libro',...cuenta].join(' · ')));
+        const ajuste = tieneAnterior && !cuenta.length;
+        notas.append(elemento('summary','',['Comentarios de reserva', ...(ajuste ? ['Bloque importado ajustado'] : cuenta)].join(' · ')));
+        if (ajuste) {
+            const repeticiones = repeticionesRetiradasObservaciones(anterior,libro);
+            const detalle = repeticiones === 1 ? 'Se eliminó 1 repetición del bloque importado.' :
+                repeticiones > 1 ? `Se eliminaron ${repeticiones} repeticiones del bloque importado.` :
+                'Se consolidó el texto en el bloque importado del Libro.';
+            notas.append(elemento('p','',detalle + ' Se conservó el contenido visible.'));
+            return notas;
+        }
         const bloque = (etiqueta,clase) => {
             const contenedor = elemento('section',`haku-comprobante-nota haku-comprobante-${clase}`);
             contenedor.append(elemento('strong','',etiqueta));
@@ -9897,7 +9923,7 @@
             resumen.append(fuente);
         }
         const mas = elemento('details','haku-comprobante-notas');
-        mas.append(elemento('summary','','Ver notas completas'),completo);
+        mas.append(elemento('summary','','Ver comentarios completos'),completo);
         notas.append(resumen,mas);
         return notas;
     }
