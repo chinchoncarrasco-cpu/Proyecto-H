@@ -182,7 +182,7 @@
           ${abierto ? detalleHTML(t, permisos, ocupado) : ''}</article>`;
     }
     function renderizar(forzar = false) {
-        if (!forzar && raiz.contains(document.activeElement) && document.activeElement?.matches?.('input,textarea')) return;
+        if (!forzar && raiz.contains(document.activeElement) && document.activeElement?.matches?.('input,textarea,button,summary')) return;
         const dia = dias.get(fechaVista), datos = dia?.datos;
         const encabezado = '<div class="cb-section-head"><div><h2 id="cabinsGeneralTasksTitle">Tareas generales</h2><p>Limpieza de áreas comunes y lavandería</p></div><div class="tg-header-actions"><button type="button" class="cb-text-action" data-tg-refresh>Actualizar</button><button type="button" class="cb-outline" data-tg-global-history aria-expanded="' + historialAbierto + '">Historial</button></div></div>';
         if (!usuario || usuario !== usuarioActual() || !cliente()?.rpc) {
@@ -213,7 +213,7 @@
     raiz.addEventListener('click', evento => {
         const boton = evento.target.closest('button');
         if (!boton || !raiz.contains(boton)) return;
-        if (boton.hasAttribute('data-tg-refresh')) { void cargar(fechaVista, { forzar: true }); return; }
+        if (boton.hasAttribute('data-tg-refresh')) { void cargar(fechaVista, { forzar: true }).then(() => renderizar(true)); return; }
         if (boton.hasAttribute('data-tg-global-history')) {
             historialAbierto = !historialAbierto; renderizar(true);
             if (historialAbierto) void historial(fechaVista);
@@ -246,7 +246,6 @@
     raiz.addEventListener('focusout', () => setTimeout(() => { if (!raiz.contains(document.activeElement)) renderizar(); }, 0));
     window.addEventListener('haiku:auth-ready', () => { reiniciar(); void cargar(fechaActual(), { forzar: true }); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') void cargar(fechaActual(), { forzar: true }); });
-    window.addEventListener('focus', () => { void cargar(fechaActual(), { forzar: true }); });
     window.HAIKU_TAREAS_GENERALES_V1 = Object.freeze({ cargar, guardar, historial, hora,
         contexto: () => ({ fecha: fechaVista, usuario, datos: dias.get(fechaVista)?.datos || null, guardando: [...pendientes], error: dias.get(fechaVista)?.error || '' }) });
     void cargar();

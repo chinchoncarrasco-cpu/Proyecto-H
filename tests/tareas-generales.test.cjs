@@ -120,3 +120,11 @@ test('sólo lectura bloquea el writer incluso si se invoca directamente', async 
     await e.api.guardar('2026-01-19:jardines_terraza', 'verificar');
     assert.equal(e.llamadas.filter(c => c.nombre.includes('guardar')).length, 0);
 });
+
+test('un refresco conserva el botón enfocado para no interrumpir la pulsación', async () => {
+    const e = await entorno();
+    const boton = e.document.querySelector('[data-tg-open]');
+    e.document.activeElement = boton;
+    await e.api.cargar('2026-01-19', { forzar: true });
+    assert.equal(e.document.querySelector('[data-tg-open]'), boton);
+});
