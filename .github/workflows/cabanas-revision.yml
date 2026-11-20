@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - "js/sites-cabanas-v1.js"
+      - "js/haiku-tareas-generales-v1.js"
+      - "css/haiku-tareas-generales-v1.css"
+      - "supabase/migrations/*_tareas_generales_seguimiento_v1.sql"
+      - "tests/tareas-generales*.cjs"
       - "js/checkout-*.js"
       - "js/cabin-context*.js"
       - "tests/cabin-*.cjs"
@@ -92,6 +96,13 @@ jobs:
         env:
           NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
         run: node tests/cabanas-filters-browser-check.cjs
+
+      - name: Tareas generales, historial y concurrencia PostgreSQL
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-ui/node_modules
+        run: |
+          node --test tests/tareas-generales-postgres.test.cjs tests/tareas-generales.test.cjs
+          node tests/tareas-generales-browser-check.cjs
 
       - name: Resumen con cambios de día y pagos publicados
         env:

@@ -860,6 +860,7 @@
         pintarPersonal(fecha); resumen(fecha); pintarFiltros(fecha);
         $("#cabinsSummary").hidden = estado.tab === "supplies" || estado.tab === "checkout";
         espacios?.render(estado.tab, fecha);
+        window.HAIKU_TAREAS_GENERALES_V1?.cargar(fecha);
         pintarSolicitudes(fecha);
         pintarOperacion(fecha); pintarRevision(fecha);
         pintarInsumos(fecha);

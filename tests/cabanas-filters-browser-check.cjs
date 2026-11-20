@@ -48,8 +48,13 @@ const scripts = new Set(['js/historial.js','js/calendario.js','js/checklist.js',
    const ids=()=>page.locator('#cabinsOperation article:visible').evaluateAll(rows=>rows.map(r=>Number(r.dataset.cbCabin)));
    assert.equal(await page.locator('#cabinsFilterLabel').textContent(),'Filtrar: General');
    const general=await chips.evaluate(n=>({width:n.clientWidth,full:n.scrollWidth,height:n.clientHeight}));
-   assert.ok(general.height<=34,'General conserva una fila de filtros');
-   assert.equal(general.full>general.width,width<700,'General ocupa el ancho disponible');
+   if(width>700) assert.ok(general.height<=34,'Escritorio conserva una fila de filtros');
+   else {
+    assert.ok(general.height>60 && general.height<=150,'Móvil distribuye todos los estados en líneas compactas');
+    assert.ok(general.full<=general.width+1,'Los ocho filtros caben sin desplazamiento lateral');
+    const visibles=await chips.locator('button').evaluateAll(ns=>ns.every(n=>{const b=n.getBoundingClientRect(),p=n.parentElement.getBoundingClientRect();return b.left>=p.left-1&&b.right<=p.right+1}));
+    assert.ok(visibles,'En revisión, Con detalles y No requiere son visibles en móvil');
+   }
    for(const [nombre,cabanas] of [
     ['Pendientes · 2',[1,11]], ['Por revisar · 1',[10]], ['En revisión · 2',[5,9]],
     ['Con detalles · 1',[6]], ['Listas · 3',[2,7,8]], ['No requiere · 1',[3]]
