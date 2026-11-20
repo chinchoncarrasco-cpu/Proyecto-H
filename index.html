@@ -45,6 +45,7 @@
     <link rel="stylesheet" href="css/sites-servicios-v1.css">
     <link rel="stylesheet" href="css/sites-pagos-v1.css">
     <link rel="stylesheet" href="css/sites-reservas-v1.css">
+    <link rel="stylesheet" href="css/haiku-huespedes-v1.css">
     <link rel="stylesheet" href="css/sites-libro-reserva-v1.css">
     <link rel="stylesheet" href="css/sites-notificaciones-v1.css">
     <link rel="stylesheet" href="css/sites-asistente-v1.css">
@@ -164,6 +165,11 @@
         <span class="sites-shell-nav-label sites-shell-nav-label-gestion">GESTIÓN</span>
         <button type="button" class="menu-item" data-seccion="reservas">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM3 6v14"/></svg><span>Reservas</span>
+        </button>
+
+
+        <button type="button" class="menu-item" data-seccion="huespedes" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 4a3 3 0 0 1 0 6m3 10v-2a6 6 0 0 0-2-4"/></svg><span>Huéspedes</span>
         </button>
 
         <button type="button" class="menu-item" data-seccion="libro-reserva">
@@ -4098,6 +4104,29 @@
 <!-- ========================================
      SECCIÓN RESERVAS · SOLO LECTURA
 ======================================== -->
+
+
+<section id="seccion-huespedes" class="seccion-app" aria-labelledby="huespedes-titulo">
+    <header class="huespedes-titulo">
+        <h2 id="huespedes-titulo">Huéspedes</h2>
+        <button type="button" class="hu-boton hu-plano" data-hu-etiquetas>Etiquetas</button>
+    </header>
+    <div class="hu-toolbar">
+        <div class="hu-tabs" aria-label="Estado del huésped"></div>
+        <div class="hu-filtros">
+            <label class="hu-busqueda">
+                <input class="hu-campo" name="hu-buscar" type="search" aria-label="Buscar nombre, RUT o pasaporte" placeholder="Buscar nombre, RUT o pasaporte…">
+                <span data-hu-search-icon aria-hidden="true"></span>
+            </label>
+        </div>
+    </div>
+    <p class="hu-resumen" aria-live="polite"></p>
+    <div class="hu-layout">
+        <div class="hu-lista" aria-label="Directorio de huéspedes"></div>
+        <aside class="hu-ficha" aria-label="Perfil del huésped"></aside>
+    </div>
+    <dialog class="hu-dialogo" aria-label="Huéspedes"></dialog>
+</section>
 
 <section id="seccion-reservas" class="seccion-app sites-reservas">
     <div class="reservations-workspace sites-reservas-workspace">
