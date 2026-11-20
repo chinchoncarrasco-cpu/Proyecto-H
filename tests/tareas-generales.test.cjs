@@ -9,6 +9,17 @@ const esperar = () => new Promise(resolve => setImmediate(resolve));
 const diferida = () => { let resolver; return { promesa: new Promise(r => { resolver = r; }), resolver: v => resolver(v) }; };
 const tarea = (fecha = '2026-01-19', extra = {}) => ({ fecha_operativa: fecha, tipo: 'jardines_terraza', titulo: 'Jardines y terraza', descripcion: 'Sra. Naifi', encargado: 'Camila', revisor: 'Felipe', estado: 'pendiente', revision: 1, ...extra });
 const datos = (fecha, extra = {}) => ({ fecha, puede_editar: true, puede_verificar: true, tareas: [tarea(fecha)], anteriores: [], ...extra });
+const rellenar = (e, nombre, valor) => {
+    const campo = e.document.querySelector(`[data-tg-field="${nombre}"]`);
+    campo.value = valor; campo.dispatchEvent(new e.window.Event('input', { bubbles: true }));
+};
+const elegirEstado = (e, accion) => {
+    const selector = e.document.querySelector('[data-tg-state]');
+    // Linkedom sólo ofrece el getter de value; el navegador real tiene setter.
+    Object.defineProperty(selector, 'value', { value: accion, writable: true, configurable: true });
+    selector.dispatchEvent(new e.window.Event('change', { bubbles: true }));
+};
+const terminar = async () => { for (let i = 0; i < 6; i++) await esperar(); };
 
 async function entorno(handler) {
     const dom = parseHTML('<html><body><section id="cabinsGeneralTasks"></section></body></html>');
@@ -158,7 +169,7 @@ test('asignación, estado y nota se completan en la misma fila sin abrir un deta
     assert.equal(e.document.querySelector('[data-tg-save-assignment]').disabled, true);
     input('nota', 'Revisar la terraza.'); input('encargado', 'Scarla'); input('revisor', 'Renata');
     assert.equal(e.document.querySelector('[data-tg-save-assignment]').disabled, false);
-    assert.equal(e.document.querySelector('[data-tg-state]').disabled, true);
+    assert.equal(e.document.querySelector('[data-tg-state]').disabled, false);
     e.document.querySelector('[data-tg-assignment]').dispatchEvent(new e.window.Event('submit', { bubbles: true, cancelable: true }));
     await esperar(); await esperar();
     const escritura = e.llamadas.find(c => c.nombre.includes('guardar'));
@@ -174,4 +185,59 @@ test('el selector de estado conserva el foco mientras llega una actualización r
     e.document.activeElement = selector;
     await e.api.cargar('2026-01-19', { forzar: true });
     assert.equal(e.document.querySelector('[data-tg-state]'), selector);
+});
+
+test('después de guardar una nota permite pasar de En curso a Realizada con revisor pendiente', async () => {
+    let actual = tarea('2026-01-19', { estado: 'en_curso' });
+    const e = await entorno((n, a) => {
+        if (!n.includes('guardar')) return { data: datos(a.p_fecha, { tareas: [actual] }) };
+        actual = { ...actual, ...a.p_datos, revision: actual.revision + 1, ...(a.p_accion === 'realizar' ? { estado: 'realizada' } : {}) };
+        return { data: { tarea: actual } };
+    });
+    rellenar(e, 'revisor', 'FC'); rellenar(e, 'nota', 'Revisar el jardín.');
+    await e.api.guardar('2026-01-19:jardines_terraza', 'nota', { nota: 'Revisar el jardín.' });
+    assert.equal(e.document.querySelector('[data-tg-state]').disabled, false);
+    assert.match(e.document.querySelector('[data-tg-state-hint]').textContent, /primero la asignación/);
+    elegirEstado(e, 'realizar'); await terminar();
+    const escrituras = e.llamadas.filter(c => c.nombre.includes('guardar'));
+    assert.deepEqual(escrituras.map(c => c.args.p_accion), ['nota', 'asignar', 'realizar']);
+    assert.deepEqual(escrituras.map(c => c.args.p_revision), [1, 2, 3]);
+    assert.equal(actual.estado, 'realizada'); assert.equal(actual.revisor, 'FC');
+    assert.equal(actual.nota, 'Revisar el jardín.');
+});
+
+test('espera la confirmación de la asignación antes de marcar Realizada', async () => {
+    const escritura = diferida(); let actual = tarea('2026-01-19', { estado: 'en_curso' });
+    const e = await entorno((n, a) => {
+        if (!n.includes('guardar')) return { data: datos(a.p_fecha, { tareas: [actual] }) };
+        if (a.p_accion === 'asignar') return escritura.promesa;
+        actual = { ...actual, estado: 'realizada', revision: 3 }; return { data: { tarea: actual } };
+    });
+    rellenar(e, 'revisor', 'FC'); elegirEstado(e, 'realizar'); await esperar();
+    assert.deepEqual(e.llamadas.filter(c => c.nombre.includes('guardar')).map(c => c.args.p_accion), ['asignar']);
+    assert.equal(e.api.contexto().datos.tareas[0].estado, 'en_curso');
+    actual = { ...actual, revisor: 'FC', revision: 2 }; escritura.resolver({ data: { tarea: actual } }); await terminar();
+    assert.equal(actual.estado, 'realizada');
+});
+
+for (const transporte of [false, true]) test(`no completa la tarea si la asignación ${transporte ? 'queda sin confirmar' : 'es rechazada'}`, async () => {
+    const e = await entorno((n, a) => {
+        if (!n.includes('guardar')) return { data: datos(a.p_fecha, { tareas: [tarea(a.p_fecha, { estado: 'en_curso' })] }) };
+        if (transporte) throw new Error('Conexión interrumpida');
+        return { error: { code: '40001', message: 'La tarea cambió en otro dispositivo.' } };
+    });
+    rellenar(e, 'revisor', 'FC'); elegirEstado(e, 'realizar'); await terminar();
+    assert.deepEqual(e.llamadas.filter(c => c.nombre.includes('guardar')).map(c => c.args.p_accion), ['asignar']);
+    assert.equal(e.api.contexto().datos.tareas[0].estado, 'en_curso');
+    assert.match(e.document.querySelector('.tg-error').textContent, transporte ? /Conexión/ : /otro dispositivo/);
+});
+
+test('cambiar el día mientras guarda la asignación interrumpe la segunda acción', async () => {
+    const escritura = diferida();
+    const e = await entorno((n, a) => n.includes('guardar') ? escritura.promesa : { data: datos(a.p_fecha) });
+    rellenar(e, 'revisor', 'FC'); elegirEstado(e, 'realizar');
+    await e.api.cargar('2026-01-20');
+    escritura.resolver({ data: { tarea: tarea('2026-01-19', { revisor: 'FC', revision: 2 }) } }); await terminar();
+    assert.equal(e.api.contexto().fecha, '2026-01-20');
+    assert.deepEqual(e.llamadas.filter(c => c.nombre.includes('guardar')).map(c => c.args.p_accion), ['asignar']);
 });

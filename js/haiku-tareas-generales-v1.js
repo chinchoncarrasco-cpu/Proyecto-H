@@ -91,23 +91,23 @@
     }
     async function guardar(id, accion, datos = {}, reintentar = false) {
         const tarea = buscar(id), dia = estadoDia(fechaVista);
-        if (!tarea || pendientes.has(id) || !dia.datos?.puede_editar || dia.error || usuario !== usuarioActual()) return;
-        if (intentos.has(id) && !reintentar) return;
+        if (!tarea || pendientes.has(id) || !dia.datos?.puede_editar || dia.error || usuario !== usuarioActual()) return false;
+        if (intentos.has(id) && !reintentar) return false;
         const revisionVisible = Number(raiz.querySelector(`[data-tg-key="${id}"]`)?.dataset.tgRevision ?? tarea.revision);
         if (!reintentar && revisionVisible !== Number(tarea.revision)) {
             mensajes.set(id, { texto: 'La tarea cambió mientras la editabas. Revisa la información actualizada antes de guardar.', error: true });
-            renderizar(true); return;
+            renderizar(true); return false;
         }
         const sesion = generacion, identidad = usuario;
         const intento = reintentar ? intentos.get(id) : {
             p_fecha: tarea.fecha_operativa, p_tipo: tarea.tipo, p_revision: tarea.revision,
             p_accion: accion, p_datos: datos, p_operacion: window.crypto.randomUUID()
         };
-        if (!intento) return;
+        if (!intento) return false;
         intentos.set(id, intento); pendientes.add(id); mensajes.delete(id); renderizar(true);
         try {
             const { data, error } = await cliente().rpc('haiku_guardar_tarea_general_v1', intento);
-            if (sesion !== generacion || identidad !== usuarioActual()) return;
+            if (sesion !== generacion || identidad !== usuarioActual()) return false;
             if (error) throw error;
             if (!data?.tarea || data.tarea.fecha_operativa !== intento.p_fecha || data.tarea.tipo !== intento.p_tipo || !Number.isFinite(Number(data.tarea.revision))) throw new Error('No se pudo confirmar el cambio. Reintenta para comprobarlo.');
             intentos.delete(id);
@@ -122,13 +122,15 @@
             await cargar(fechaVista, { forzar: true });
             if (historialAbierto) await historial(fechaVista);
             await Promise.all(filas().filter(t => abiertos.has(clave(t))).map(t => historial(t.fecha_operativa, t.tipo)));
+            return true;
         } catch (error) {
-            if (sesion !== generacion || identidad !== usuarioActual()) return;
+            if (sesion !== generacion || identidad !== usuarioActual()) return false;
             // Un error SQL confirma el rechazo. Un fallo de transporte conserva el UUID
             // para comprobar el mismo intento sin duplicar movimientos.
             if (error?.code && !String(error.code).startsWith('PGRST')) intentos.delete(id);
             mensajes.set(id, { texto: error?.message || 'Resultado no confirmado. Reintenta el mismo cambio para comprobarlo.', error: true });
             await cargar(fechaVista, { forzar: true });
+            return false;
         } finally {
             if (sesion === generacion) { pendientes.delete(id); renderizar(true); }
         }
@@ -155,6 +157,18 @@
         const b = borradores.get(clave(t)) || {};
         return String(b.encargado ?? t.encargado ?? '').trim() !== (t.encargado || '') || String(b.revisor ?? t.revisor ?? '').trim() !== (t.revisor || '');
     };
+    const responsableVista = t => String(borradores.get(clave(t))?.encargado ?? t.encargado ?? '').trim();
+    const ayudaEstado = t => !responsableVista(t) ? 'Asigna un responsable para iniciar o completar.' : asignacionPendiente(t) ? 'Se guardará primero la asignación.' : '';
+    async function cambiarEstado(id, accion) {
+        const t = buscar(id), sesion = generacion, fecha = fechaVista;
+        if (!t || !responsableVista(t)) return;
+        if (asignacionPendiente(t)) {
+            const b = borradores.get(id) || {};
+            const confirmada = await guardar(id, 'asignar', { encargado: responsableVista(t), revisor: String(b.revisor ?? t.revisor ?? '').trim() });
+            if (!confirmada || sesion !== generacion || fecha !== fechaVista) return;
+        }
+        await guardar(id, accion);
+    }
     const bloqueada = (id, permisos) => pendientes.has(id) || !permisos.puede_editar || intentos.has(id) || Boolean(estadoDia(fechaVista).error);
     function actualizarControles(fila) {
         const id = fila?.dataset.tgKey, t = buscar(id), permisos = dias.get(fechaVista)?.datos;
@@ -164,8 +178,10 @@
         if (guardarAsignacion) guardarAsignacion.disabled = bloqueo || !cambios;
         const estado = fila.querySelector('[data-tg-state]');
         if (estado) {
-            estado.disabled = bloqueo || cambios || !t.encargado;
-            estado.title = cambios ? 'Guarda la asignación para cambiar el estado.' : !t.encargado ? 'Asigna un responsable para iniciar o completar la tarea.' : '';
+            estado.disabled = bloqueo || !responsableVista(t);
+            estado.title = ayudaEstado(t);
+            const ayuda = fila.querySelector('[data-tg-state-hint]');
+            if (ayuda) { ayuda.textContent = ayudaEstado(t); ayuda.hidden = !ayuda.textContent; }
         }
         fila.querySelectorAll('[data-tg-workflow]').forEach(boton => { boton.disabled = bloqueo || cambios; });
         const guardarNota = fila.querySelector('[data-tg-action="nota"]');
@@ -183,7 +199,7 @@
           <form class="tg-row" data-tg-assignment aria-label="${escapar(t.titulo)}">
           <div class="tg-title"><strong>${escapar(t.titulo)}</strong><small>${escapar(t.descripcion)}</small>${anterior ? `<span class="tg-previous-label">Pendiente del ${textoFecha(t.fecha_operativa)}</span>` : ''}</div>
           <div class="tg-person"><label><span class="tg-mobile-label">Responsable</span><input name="encargado" data-tg-field="encargado" aria-label="Responsable de ${escapar(t.titulo)}" maxlength="120" list="cabinsStaff" placeholder="Sin asignar" value="${escapar(b.encargado ?? t.encargado)}"${campos}></label>${!terminada && permisos.puede_editar ? `<button type="submit" class="cb-text-action" data-tg-save-assignment${bloqueo || !cambios ? ' disabled' : ''}>Guardar asignación</button>` : ''}</div>
-          <div class="tg-state"><span class="tg-mobile-label">Estado</span>${permisos.puede_editar && opciones ? `<select class="tg-badge tg-${escapar(t.estado)}" data-tg-state aria-label="Estado de ${escapar(t.titulo)}"${bloqueo || cambios || !t.encargado ? ' disabled' : ''} title="${!t.encargado ? 'Asigna un responsable para iniciar o completar la tarea.' : ''}"><option value="">${escapar(etiquetas[t.estado])}</option>${opciones}</select>` : `<span class="tg-badge tg-${escapar(t.estado)}">${escapar(etiquetas[t.estado] || t.estado)}</span>`}${t.iniciada_en ? `<small>Inició ${hora(t.iniciada_en)}</small>` : ''}${t.realizada_en ? `<small class="tg-mobile-time">Realizada ${hora(t.realizada_en)}</small>` : ''}</div>
+          <div class="tg-state"><span class="tg-mobile-label">Estado</span>${permisos.puede_editar && opciones ? `<select class="tg-badge tg-${escapar(t.estado)}" data-tg-state aria-label="Estado de ${escapar(t.titulo)}"${bloqueo || !responsableVista(t) ? ' disabled' : ''} title="${escapar(ayudaEstado(t))}"><option value="">${escapar(etiquetas[t.estado])}</option>${opciones}</select><small data-tg-state-hint${ayudaEstado(t) ? '' : ' hidden'}>${escapar(ayudaEstado(t))}</small>` : `<span class="tg-badge tg-${escapar(t.estado)}">${escapar(etiquetas[t.estado] || t.estado)}</span>`}${t.iniciada_en ? `<small>Inició ${hora(t.iniciada_en)}</small>` : ''}${t.realizada_en ? `<small class="tg-mobile-time">Realizada ${hora(t.realizada_en)}</small>` : ''}</div>
           <div class="tg-completed"><span class="tg-mobile-label">Realizada</span><time>${hora(t.realizada_en)}</time></div>
           <div class="tg-review"><label><span class="tg-mobile-label">Revisor</span><input name="revisor" data-tg-field="revisor" aria-label="Revisor de ${escapar(t.titulo)}" maxlength="120" list="cabinsStaff" placeholder="Revisor sin asignar" value="${escapar(b.revisor ?? t.revisor)}"${campos}></label><small>${escapar(revision)}</small>${permisos.puede_verificar && terminada ? `<div class="tg-actions">${t.estado === 'realizada' ? `<button type="button" class="cb-text-action" data-tg-action="verificar" data-tg-workflow${workflow}>Verificar tarea</button>` : ''}<button type="button" class="cb-text-action" data-tg-action="corregir" data-tg-workflow${workflow}>${t.estado === 'verificada' ? 'Reabrir con detalles' : 'Solicitar corrección'}</button></div>` : ''}</div>
           <div class="tg-notes"><label><span class="tg-mobile-label">Nota</span><textarea data-tg-field="nota" aria-label="Nota de ${escapar(t.titulo)}" maxlength="2000" rows="1" placeholder="Observación o motivo…"${bloqueo ? ' disabled' : ''}>${escapar(b.nota ?? t.nota ?? '')}</textarea></label><div class="tg-actions">${permisos.puede_editar ? `<button type="button" class="cb-text-action" data-tg-action="nota"${bloqueo || !String(b.nota || '').trim() || String(b.nota).trim() === (t.nota || '') ? ' disabled' : ''}>Guardar nota</button>` : ''}<button type="button" class="cb-text-action" data-tg-open="${escapar(id)}" aria-expanded="${abierto}" aria-label="Historial de ${escapar(t.titulo)}">${abierto ? 'Cerrar historial' : 'Historial'}</button></div></div>
@@ -223,7 +239,7 @@
         if (!evento.target.matches('[data-tg-state]')) return;
         const accion = evento.target.value, id = evento.target.closest('[data-tg-key]')?.dataset.tgKey;
         evento.target.value = '';
-        if (id && ['iniciar', 'realizar'].includes(accion)) void guardar(id, accion);
+        if (id && ['iniciar', 'realizar'].includes(accion)) void cambiarEstado(id, accion);
     });
     raiz.addEventListener('submit', evento => {
         if (!evento.target.matches('[data-tg-assignment]')) return;
