@@ -11,9 +11,10 @@ const tarea = (fecha = '2026-01-19', extra = {}) => ({ fecha_operativa: fecha, t
 const datos = (fecha, extra = {}) => ({ fecha, puede_editar: true, puede_verificar: true, tareas: [tarea(fecha)], anteriores: [], ...extra });
 
 async function entorno(handler) {
-    const { document } = parseHTML('<html><body><section id="cabinsGeneralTasks"></section></body></html>');
+    const dom = parseHTML('<html><body><section id="cabinsGeneralTasks"></section></body></html>');
+    const document = dom.document;
     const eventos = new EventTarget();
-    const window = { crypto: webcrypto, addEventListener: eventos.addEventListener.bind(eventos), dispatchEvent: eventos.dispatchEvent.bind(eventos) };
+    const window = { crypto: webcrypto, Event: dom.Event, addEventListener: eventos.addEventListener.bind(eventos), dispatchEvent: eventos.dispatchEvent.bind(eventos) };
     const llamadas = [], almacen = new Map();
     let canalEliminado = 0;
     window.haikuSesion = { auth: { id: 'usuario-a' } };
@@ -127,4 +128,13 @@ test('un refresco conserva el botón enfocado para no interrumpir la pulsación'
     e.document.activeElement = boton;
     await e.api.cargar('2026-01-19', { forzar: true });
     assert.equal(e.document.querySelector('[data-tg-open]'), boton);
+});
+
+test('el historial termina de mostrarse aunque su desplegable conserve el foco', async () => {
+    const e = await entorno((n, a) => ({ data: n.includes('historial') ? [{ titulo: 'Jardines', accion: 'asignar', actor_nombre: 'Felipe', creado_en: '2026-01-19T12:00:00Z', detalle: { encargado: 'Camila' } }] : datos(a.p_fecha) }));
+    e.document.querySelector('[data-tg-open]').dispatchEvent(new e.window.Event('click', { bubbles: true }));
+    e.document.activeElement = e.document.querySelector('[data-tg-history] summary');
+    await e.api.historial('2026-01-19', 'jardines_terraza');
+    assert.match(e.document.querySelector('.tg-history').textContent, /Asignación guardada/);
+    assert.match(e.document.querySelector('.tg-history').textContent, /Camila/);
 });

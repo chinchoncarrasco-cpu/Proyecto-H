@@ -182,7 +182,7 @@
           ${abierto ? detalleHTML(t, permisos, ocupado) : ''}</article>`;
     }
     function renderizar(forzar = false) {
-        if (!forzar && raiz.contains(document.activeElement) && document.activeElement?.matches?.('input,textarea,button,summary')) return;
+        if (!forzar && raiz.contains(document.activeElement) && document.activeElement?.matches?.('input,textarea,button')) return;
         const dia = dias.get(fechaVista), datos = dia?.datos;
         const encabezado = '<div class="cb-section-head"><div><h2 id="cabinsGeneralTasksTitle">Tareas generales</h2><p>Limpieza de áreas comunes y lavandería</p></div><div class="tg-header-actions"><button type="button" class="cb-text-action" data-tg-refresh>Actualizar</button><button type="button" class="cb-outline" data-tg-global-history aria-expanded="' + historialAbierto + '">Historial</button></div></div>';
         if (!usuario || usuario !== usuarioActual() || !cliente()?.rpc) {
