@@ -40,7 +40,7 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section { --tg-warning-bg:#3
 #seccion-cabanas .tg-person,#seccion-cabanas .tg-notes { display:grid; gap:3px; }
 #seccion-cabanas .tg-row .tg-actions { gap:0 10px; }
 #seccion-cabanas .tg-completed { display:grid; padding-top:9px; }
-#seccion-cabanas .tg-mobile-label { display:none; }
+#seccion-cabanas .tg-mobile-label,#seccion-cabanas .tg-mobile-time { display:none; }
 #seccion-cabanas .tg-task-history { padding:8px 16px 12px; border-top:1px solid var(--cb-border); background:var(--cb-canvas); }
 #seccion-cabanas .tg-row-feedback { margin:0 16px 10px; font-size:12px; }
 #seccion-cabanas .tg-retry { margin:0 16px 10px; }
@@ -67,12 +67,14 @@ html[data-haiku-tema="oscuro"] #seccion-cabanas .tg-section { --tg-warning-bg:#3
  #seccion-cabanas .tg-title small { font-size:12px; }
  #seccion-cabanas .tg-person { grid-column:1; grid-row:2; }
  #seccion-cabanas .tg-review { grid-column:2; grid-row:2/4; }
- #seccion-cabanas .tg-state { grid-column:1; grid-row:3; }
- #seccion-cabanas .tg-completed { grid-column:1/-1; display:flex; align-items:baseline; gap:6px; padding:0; font-size:12px; }
+ #seccion-cabanas .tg-state { grid-column:1; grid-row:3; display:flex; flex-wrap:wrap; align-items:center; gap:3px 6px; }
+ #seccion-cabanas .tg-state > .tg-mobile-label,#seccion-cabanas .tg-completed { display:none; }
+ #seccion-cabanas .tg-state > .tg-mobile-time { display:block; }
  #seccion-cabanas .tg-mobile-label { display:block; color:var(--cb-muted); font-size:11px; line-height:16px; }
- #seccion-cabanas .tg-notes { grid-column:1/-1; }
+ #seccion-cabanas .tg-row [data-tg-save-assignment]:disabled,#seccion-cabanas .tg-row [data-tg-action="nota"]:disabled { display:none; }
+ #seccion-cabanas .tg-notes { grid-column:1/-1; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
  #seccion-cabanas .tg-notes .tg-mobile-label { display:none; }
- #seccion-cabanas .tg-notes .tg-actions { justify-content:space-between; }
+ #seccion-cabanas .tg-notes .tg-actions { display:grid; gap:0; justify-items:end; }
  #seccion-cabanas .tg-task-history { padding:8px 12px; }
 }
 @media(max-width:700px) {
