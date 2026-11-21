@@ -649,7 +649,7 @@ test('exact multicabin stays are consumed before looser candidates are offered',
  const h=renderHarness();h.render({q,comparacion:c});
  const pregunta=h.out.querySelectorAll('label').find(x=>/Neviy Bitaporax Runiy/.test(x.textContent));
  assert.match(pregunta.textContent,/^Neviy Bitaporax Runiy · Libro: CAB 1 \+ 2 → Proyecto H: CAB 2 \+ 7/);
- assert.match(pregunta.textContent,/Cambio por resolver: CAB 1 → CAB 7/);
+ assert.match(pregunta.textContent,/Cambio por resolver: Proyecto H CAB 7 → Libro CAB 1/);
  const cabComparadas=h.out.querySelectorAll('table').flatMap(t=>t.querySelectorAll('tr'))
   .filter(f=>f.children[0]?.textContent==='CAB').map(f=>[f.children[1].textContent,f.children[2].textContent]);
  assert.deepEqual(cabComparadas,[['1','7']]);
