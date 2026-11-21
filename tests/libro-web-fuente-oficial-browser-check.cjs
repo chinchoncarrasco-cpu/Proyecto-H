@@ -143,8 +143,9 @@ const server = http.createServer((req, res) => {
             }, { bytes: [...bytes], sha, md5 });
             await page.locator('#haiku-libro-google-sincronizar').click();
             await page.waitForFunction(() => !HAIKU_LIBRO_GOOGLE_V1.estado().sincronizando);
-            if (width === 1100) await page.waitForFunction(() => __drive.autoComparisons === 1);
-            assert.equal(await page.evaluate(() => __drive.autoComparisons), width === 1100 ? 1 : 0);
+            // El panel conserva actual/anterior en ambos tamaños y avisa una sola vez.
+            await page.waitForFunction(() => __drive.autoComparisons === 1);
+            assert.equal(await page.evaluate(() => __drive.autoComparisons), 1);
             assert.equal(await page.evaluate(() => { try { HAIKU_LIBRO_GOOGLE_V1.fuenteVerificada(__handle); return 'success'; } catch (e) { return e.code; } }), 'FUENTE_CAMBIADA');
             await page.evaluate(async () => { window.__handle = await HAIKU_LIBRO_GOOGLE_V1.obtenerFuenteVerificada(); });
             await page.locator('#libro-reserva-quitar').click();
