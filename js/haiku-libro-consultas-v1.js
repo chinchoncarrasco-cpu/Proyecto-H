@@ -5389,7 +5389,10 @@
         } else comprobantesActualizaciones.delete(nuevo);
         for (const item of nuevo.items) {
             const previo = anterior.items.find(i => i.id === item.id);
-            item.seleccionado = mismoContexto && previo?.seleccionado === true && !item.motivos.length &&
+            const aplazada = anterior.actualizarEstadiasPrimero && !nuevo.actualizarEstadiasPrimero &&
+                anterior.altasAplazadas?.includes(item.id);
+            item.seleccionado = mismoContexto && (previo?.seleccionado === true || aplazada) &&
+                !item.etapaSiguiente && !item.motivos.length &&
                 CATEGORIAS_GUARDABLES.includes(item.categoria) &&
                 firmaSeleccionIncorporacion(item) === firmaSeleccionIncorporacion(previo);
         }
@@ -5851,7 +5854,48 @@
                 (i.payload.reserva?.despues?.estado_reserva || i.payload.estadia?.despues?.estado_estadia)))
                 plan.permiteLoteCambios = true;
         }
+        priorizarActualizacionesEstadia(plan);
         return plan;
+    }
+
+    // La RPC aplica las altas antes de los parches. Separar las etapas evita
+    // intentar ocupar una cabaña que una corrección del mismo lote debe liberar.
+    // La segunda etapa siempre se prepara de nuevo contra Proyecto H.
+    function priorizarActualizacionesEstadia(plan) {
+        const campos = ['cabana_numero','fecha_ingreso','fecha_salida','tipo_estadia'];
+        const cambios = plan.items.filter(i => i.payload?.tipo === 'reserva_actualizar' &&
+            campos.some(k => Object.hasOwn(i.payload.estadia?.despues || {}, k)));
+        const altas = plan.items.filter(i => ['nuevas','estadias'].includes(i.categoria));
+        if (!cambios.length || !altas.length) return;
+        const pendientes = new Set();
+        const disponibles = cambios.some(i => i.seleccionado && !i.motivos.length && !i.etapaSiguiente);
+        const anterior = i => {
+            const p = i.payload, o = i.reprogramacion?.propuesta?.origen || p.reprogramacion_v1?.propuesta?.origen;
+            const s = contextoVisualPlanes.get(plan)?.snapshot?.estadias?.find(e => e.id === p.estadia_id);
+            return {cabana:o?.cabana_numero ?? p.estadia?.antes?.cabana_numero ?? s?.cabana,
+                ingreso:o?.fecha_ingreso ?? p.estadia?.antes?.fecha_ingreso ?? s?.fecha_checkin,
+                salida:o?.fecha_salida ?? p.estadia?.antes?.fecha_salida ?? s?.fecha_checkout,
+                tipo:p.estadia?.antes?.tipo_estadia ?? i.reprogramacion?.propuesta?.snapshot?.estadia?.tipo_estadia ?? s?.tipo_estadia};
+        };
+        for (const alta of altas) {
+            if (!disponibles && !cambios.some(i => altaDependeDeCancelacion(alta,{ocupacionCancelacion:anterior(i)}))) continue;
+            pendientes.add(alta.id);
+            if (alta.seleccionado) (plan.altasAplazadas ||= []).push(alta.id);
+            alta.seleccionado = false;
+            alta.etapaSiguiente = true;
+            if (!disponibles) alta.motivos = [...alta.motivos,
+                'Resuelve primero la actualización de cabaña o fechas que libera esta estadía. Después vuelve a preparar.'];
+        }
+        for (let n = -1; n !== pendientes.size;) {
+            n = pendientes.size;
+            for (const i of plan.items) if (i.dependeDe?.some(id => pendientes.has(id))) {
+                pendientes.add(i.id); i.seleccionado = false; i.etapaSiguiente = true;
+            }
+        }
+        if (disponibles && pendientes.size) {
+            plan.actualizarEstadiasPrimero = true;
+            if (!plan.etapa) plan.etapa = 'actualizar_estadias';
+        }
     }
 
     async function prepararCambiosDetectados(plan, comparacion, result, cliente, generacion) {
@@ -5950,7 +5994,7 @@
     }
 
     function serializarIncorporacion(plan) {
-        const elegidos = new Set(plan.items.filter(i => i.seleccionado && !i.motivos.length && !i.esCambioDetectado).map(i => i.id));
+        const elegidos = new Set(plan.items.filter(i => i.seleccionado && !i.etapaSiguiente && !i.motivos.length && !i.esCambioDetectado).map(i => i.id));
         const distribuidos = new Set();
         return plan.items.filter(item => elegidos.has(item.id) && item.dependeDe.every(id => elegidos.has(id))).map(item => {
             if (item.distribucionManual) {
@@ -6336,7 +6380,7 @@
                     throw Object.assign(new Error('Proyecto H cambió desde la vista previa. Vuelve a preparar para revisar los valores nuevos antes de confirmar.'),
                         {code:'HLC01',haikuConflictoDatos:true});
                 }
-                item.seleccionado = seleccionados.has(item.id) && !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria);
+                item.seleccionado = seleccionados.has(item.id) && !item.etapaSiguiente && !item.motivos.length && CATEGORIAS_GUARDABLES.includes(item.categoria);
             }
             const vigentes = new Set(actualizado.items.filter(i => i.seleccionado).map(i => i.id));
             omitidosAlRevalidar = [...seleccionados].filter(id => !vigentes.has(id)).length;
@@ -6369,7 +6413,8 @@
                 codigo === 'HLI02' ? 'La identidad compartida o su asociación requiere revisión manual. No se guardó el lote' :
                 codigo === 'HLI03' ? 'El documento está incompleto o es inválido; requiere revisión manual. No se guardó el lote' :
                 String(error.message || error.details || error);
-            const disponibilidad = codigo === 'P0001' && /^(?:Tramo \d+: )?la CAB \d+ (?:ya )?no est[aá] disponible (?:para|entre) /i.test(mensaje);
+                const cabanaEnConflicto = mensaje.match(/^(?:Tramo \d+: )?la CAB (\d+) (?:ya )?no est[aá] disponible (?:para|entre) /i)?.[1];
+                const disponibilidad = codigo === 'P0001' && !!cabanaEnConflicto;
             if (disponibilidad || ['HLC01','HLC02','HLI01','HLI02','HLI03'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Este intento fue rechazado, pero una respuesta perdida anterior
                 // de la misma operación no demuestra ausencia de escrituras.
@@ -6395,7 +6440,12 @@
                 // snapshot ya no son vigentes. El siguiente paso vuelve a la
                 // comparación y conserva decisiones humanas compatibles.
                 plan.solicitudPendiente = null;
-                const conflicto = new Error(mensaje);
+                const afectados = disponibilidad ? solicitud.items.filter(i => (i.estadias || [])
+                    .some(e => Number(e.cabana_numero) === Number(cabanaEnConflicto))).map(i => {
+                        const item = itemsBase.find(x => x.id === i.item_id);
+                        return item?.texto || i.reserva?.titular_nombre;
+                    }).filter(Boolean) : [];
+                const conflicto = new Error(mensaje + (afectados.length ? ' · Elementos del intento: ' + [...new Set(afectados)].join('; ') : ''));
                 conflicto.code = codigo;
                 conflicto.haikuConflictoDatos = true;
                 throw conflicto;
@@ -10212,7 +10262,7 @@
         const escrituraActiva = plan.escrituraHabilitada === true &&
             !plan.permisos.some(permiso => root.haikuTienePermiso?.(permiso) === false);
         titulo.append(elemento("span", "haku-incorporacion-sites-ceja", "LIBRO · INCORPORACIÓN SEGURA"),
-            elemento("strong", "haku-incorporacion-sites-titulo", etapaIdentidad ? pagosHabilitados ? 'Revisar pagos · identidades pendientes' : "Paso 1 de 2 · Actualizar titular y RUT" :
+            elemento("strong", "haku-incorporacion-sites-titulo", plan.actualizarEstadiasPrimero ? 'Paso 1 · Corregir reservas primero' : etapaIdentidad ? pagosHabilitados ? 'Revisar pagos · identidades pendientes' : "Paso 1 de 2 · Actualizar titular y RUT" :
                 plan.etapaAnteriorCompletada ? "Paso 2 de 2 · Aprobar pagos" : plan.focoPagos ? "Aprobar comprobante de pago" : "Confirmar incorporación"));
         const controlesCabecera = elemento("div", "haku-incorporacion-sites-cabecera-controles");
         controlesCabecera.append(elemento("span", "haiku-incorporacion-modo haku-incorporacion-sites-modo" +
@@ -10230,7 +10280,8 @@
         const preparacion = elemento("section", "haku-incorporacion-sites-preparacion");
         preparacion.append(elemento("span", "haku-incorporacion-sites-ceja", "PREPARACIÓN"),
             elemento("strong", "", "Confirmar incorporación"));
-        const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", etapaIdentidad ?
+        const aviso = elemento("p", "haiku-incorporacion-aviso haiku-asistente-preview-resumen", plan.actualizarEstadiasPrimero ?
+            'Primero se corrigen las cabañas y fechas. Después se vuelve a comprobar la disponibilidad y se habilitan las nuevas reservas, sin repetir los cambios confirmados.' : etapaIdentidad ?
             "Confirma las actualizaciones válidas de cada reserva. Un documento de otro huésped queda pendiente de revisión humana. Cada pago relacionado permanece bloqueado hasta confirmar sus cambios y volver a comprobar su destino; los pagos y las reservas nuevas independientes pueden continuar." :
             plan.etapaAnteriorCompletada ? "Titular y RUT actualizados. Haku volvió a leer Proyecto H: los abonos que ya existen quedan omitidos y ahora puedes revisar únicamente los pagos pendientes." :
             plan.focoPagos ? "El titular y RUT ya coinciden. Si Bofore continúa en cambios del Libro es sólo por adultos, estado u otros datos opcionales; esos cambios no bloquean el comprobante ni se seleccionan automáticamente." :

@@ -17,6 +17,9 @@ on:
       - "js/sites-servicios-v1.js"
       - "css/haiku-reprogramacion-estadia-v1.css"
       - "tests/libro-reprogramacion*.cjs"
+      - "tests/libro-modificaciones-antes-altas.test.cjs"
+      - "tests/aseo-vinculos-traslado-postgres.test.cjs"
+      - "supabase/migrations/*_aseo_vinculos_estadia_traslado.sql"
       - "tests/fixtures/libro-reprogramacion-sql.cjs"
       - "tests/fixtures/reprogramacion-guardas.sql"
       - "supabase/migrations/*_libro_reprogramacion_estadia_atomica.sql"
@@ -83,7 +86,7 @@ jobs:
       - name: Reprogramación conjunta, permisos, disponibilidad y conservación financiera
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
-        run: node --test tests/libro-reprogramacion.test.cjs tests/libro-reprogramacion-postgres.test.cjs tests/libro-reprogramacion-noches-postgres.test.cjs tests/libro-lote-cambios-seguros.test.cjs tests/libro-cancelaciones-antes-altas.test.cjs
+        run: node --test tests/libro-reprogramacion.test.cjs tests/libro-reprogramacion-postgres.test.cjs tests/libro-reprogramacion-noches-postgres.test.cjs tests/libro-lote-cambios-seguros.test.cjs tests/libro-cancelaciones-antes-altas.test.cjs tests/libro-modificaciones-antes-altas.test.cjs tests/aseo-vinculos-traslado-postgres.test.cjs
       - name: Cancelaciones antes de altas y resultados parciales en ambos tamaños y temas
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules

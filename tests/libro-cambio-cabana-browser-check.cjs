@@ -19,7 +19,7 @@ const server=http.createServer((req,res)=>{
  if(!match||!(match[1]==='js'?scripts:css).includes(match[2]))return res.writeHead(404).end();
  let text=fs.readFileSync(path.join(root,p),'utf8');
  if(match[2]==='haiku-libro-consultas-v1')text=text.replace('const apiConsultas = Object.freeze({ interpretar,',
-  'const apiConsultas = Object.freeze({ renderizarComparacion, interpretar,');
+  'const apiConsultas = Object.freeze({ renderizarComparacion, renderizarIncorporacion, priorizarActualizacionesEstadia, interpretar,');
  res.writeHead(200,{'Content-Type':match[1]==='js'?'application/javascript':'text/css'}).end(text);
 });
 (async()=>{
@@ -52,6 +52,22 @@ const server=http.createServer((req,res)=>{
    assert.equal(await page.evaluate(()=>Array.from(document.querySelectorAll('#out select')).every(s=>
     s.getBoundingClientRect().width<=s.closest('.haiku-asistente-panel').clientWidth)),true);
    await page.screenshot({path:path.join(evidence,`libro-cambio-${width}-${tema}.png`)});
+   const etapa=await page.evaluate(async({db,consulta})=>{
+    const Q=HAIKU_LIBRO_CONSULTAS,cliente=clienteFixture({...db,reserva_estadias:[],reservas:[]});
+    const r=await Q.consultar(consulta,HAIKU_LIBRO_RESERVA_V1,cliente),plan=Q.crearPlanIncorporacion(r.reservas,r.comparacion);
+    const alta=plan.items.find(i=>i.categoria==='nuevas');if(!alta)throw Error('Falta el alta ficticia');
+    plan.items.unshift({id:'mover-anterior',categoria:'actualizaciones',seleccionado:true,motivos:[],dependeDe:[],permisos:['reservas.editar'],
+     texto:'Persona Anterior Ficticia · CAB 1 → CAB 2',cambios:[{campo:'Cabaña',anterior:1,libro:2}],
+     payload:{tipo:'reserva_actualizar',reserva_id:'reserva-anterior',estadia_id:'estadia-anterior',reserva:{antes:{},despues:{}},
+      estadia:{antes:{cabana_numero:1,fecha_ingreso:'2026-10-03',fecha_salida:'2026-10-05',tipo_estadia:'alojamiento'},despues:{cabana_numero:2}}}});
+    Q.priorizarActualizacionesEstadia(plan);window.haikuTienePermiso=()=>true;
+    Q.renderizarIncorporacion(document.getElementById('out'),plan,()=>{},null,async()=>{throw Error('No se permiten escrituras en esta captura');});
+    return {tipos:Q.serializarIncorporacion(plan).map(i=>i.tipo),altaAplazada:!alta.seleccionado&&alta.etapaSiguiente};
+   },{db:f.db,consulta:F.consulta});
+   assert.deepEqual(etapa.tipos,['reserva_actualizar']);assert.equal(etapa.altaAplazada,true);
+   await page.getByText('Paso 1 · Corregir reservas primero',{exact:true}).waitFor();
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   await page.screenshot({path:path.join(evidence,`libro-etapa-${width}-${tema}.png`)});
    assert.deepEqual(errors,[]);assert.deepEqual(externas,[]);
    console.log(`PASS ${width}px ${tema}: traslado visible, confirmación requerida, 0 escrituras y 0 red externa`);
    await context.close();
