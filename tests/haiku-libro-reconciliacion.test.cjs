@@ -4,7 +4,7 @@ const {abrirDetallesDePago} = require('./fixtures/libro-pagos-ui.cjs');
 global.HAIKU_LIBRO_SEMANTICA = require('../js/haiku-libro-semantica-v1.js');
 const Q = require('../js/haiku-libro-consultas-v1.js');
 const q = {desde:'2026-09-01',hasta:'2026-09-30'};
-const book = (extra={}) => ({id:'b1',titular:"Neviy Bitaporax",rut_documento:"85987799-1",cabana:1,
+const book = (extra={}) => ({id:'b1',titular:"Neviy Bitaporax",rut_documento:"85987799-0",cabana:1,
  fecha_checkin:'2026-09-17',fecha_checkout:'2026-09-20',tipo_estadia:'alojamiento',noches:3,
  pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],coordenadas_origen:{hoja:'Sep26',celda:'C3'},...extra});
 function stay(r=book(), extra={}) {return {id:'e'+r.cabana,reserva_id:'r1',cabanas:{numero:r.cabana},
@@ -41,6 +41,36 @@ for(const [explicit,wanted] of [['pasaporte','pasaporte'],[undefined,'rut']])tes
  const update=Q.serializarIncorporacion(plan).find(i=>i.tipo==='reserva_actualizar');
  assert.ok(update);assert.equal(update.reserva.despues.titular_tipo_documento,wanted);
  assert.equal(update.reserva.despues.titular_numero_documento,wanted === 'rut' ? '12345670-k' : '12345670K');
+});
+
+test('el RUT inválido del Libro queda pendiente con su pago y se confirma la reserva independiente', async () => {
+ const invalida=readyBook({id:'alta-invalida',titular:'Persona con RUT por verificar',rut_documento:'12.345.670-1',pagos:[readyPay()]});
+ const independiente=readyBook({id:'alta-valida',titular:'Persona de Otra Reserva',rut_documento:'12.345.670-K',cabana:2});
+ const reservas=[invalida,independiente], db=client(), decisiones=new Map(), aprobados=new Set();
+ const plan=await Q.prepararIncorporacion({reservas,q},decisiones,aprobados,db);
+ const caso=plan.items.find(i=>i.texto.includes(invalida.titular)&&!i.pagoLibro);
+ assert.equal(caso.categoria,'pendientes');
+ assert.match(caso.motivos.join(' '),/RUT del Libro es inválido/);
+ const pago=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pago.reservaPendiente,true);assert.equal(pago.manualPago,null);
+ assert.ok(!pago.seleccionado && !pago.aprobable);
+ const enviados=[];db.rpc=async(nombre,args)=>{enviados.push({nombre,items:args.p_items});return {data:{ok:true,reservas_creadas:1,resultados:[]}};};
+ await Q.confirmarIncorporacion({reservas,q},decisiones,aprobados,plan,db);
+ assert.deepEqual(enviados.map(llamada=>[llamada.nombre,llamada.items.map(i=>i.reserva.titular_nombre)]),
+  [['haiku_incorporar_libro_v1',[independiente.titular]]]);
+});
+
+test('actualización de RUT inválido no detiene otras reservas en la etapa de identidad', async () => {
+ const r=readyBook({id:'rut-invalido',titular:'Persona ya Registrada',rut_documento:'12345670-1',tipo_documento:'rut',pagos:[readyPay()]});
+ const independiente=readyBook({id:'independiente',titular:'Reserva Independiente',rut_documento:null,cabana:4});
+ const s=stay(r);s.reservas={...s.reservas,titular_tipo_documento:'rut',titular_numero_documento:'12345670-K'};
+ const db=client([s]), reservas=[r,independiente], comp=await Q.compararSistema(reservas,db,q);
+ const decisiones=new Map(comp.grupos.filter(g=>g.principal.id===r.id).map(g=>[g.clave,{valor:'asociar:'+s.id}]));
+ const plan=await Q.prepararIncorporacion({reservas,q,comparacion:comp},decisiones,new Set(),db);
+ const cambio=plan.items.find(i=>i.payload?.tipo==='reserva_actualizar');
+ assert.equal(cambio.categoria,'pendientes');assert.match(cambio.motivos.join(' '),/RUT del Libro es inválido/);
+ assert.notEqual(plan.etapa,'actualizar_identidad');
+ assert.deepEqual(Q.serializarIncorporacion(plan).map(i=>i.reserva.titular_nombre),[independiente.titular]);
 });
 
 test('identidad conflictiva: dos altas independientes seleccionables, pagos dependientes bloqueados y sin RPC financiero',async()=>{
@@ -1346,7 +1376,7 @@ test('pending, new, association and additional-stay decisions are honored',async
  for(const [valor,cat] of [['','pendientes'],['independiente','nuevas'],['estadia:e1','estadias']]) {
  const p=await prepare([r],[stay()],[],new Map([[key,{valor}]]));assert.equal(p.items[0].categoria,cat);
  }
- const mismatch=readyBook({rut_documento:"85977694-0"}),cc=await compare([mismatch],[stay()]);
+ const mismatch=readyBook({rut_documento:"85977694-9"}),cc=await compare([mismatch],[stay()]);
  const p=await prepare([mismatch],[stay()],[],new Map([[cc.grupos[0].clave,{valor:'asociar:e1'}]]));assert.equal(p.items[0].categoria,'actualizaciones');
 });
 test('partial multicabin adds only missing cabin',async()=>{

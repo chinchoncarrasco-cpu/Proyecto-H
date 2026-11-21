@@ -5316,7 +5316,8 @@
         }
         consolidarActualizacionesReserva(plan);
         if (origenesAbonosAviso) limitarPlanAbonosAviso(plan, origenesAbonosAviso);
-        const actualizacionesIdentidad = new Set(plan.items.filter(item => item.payload?.tipo === 'reserva_actualizar' &&
+        apartarRutsInvalidos(plan, snapshot);
+        const actualizacionesIdentidad = new Set(plan.items.filter(item => item.categoria === 'actualizaciones' && item.payload?.tipo === 'reserva_actualizar' &&
             ['titular_nombre','titular_numero_documento','titular_tipo_documento']
                 .some(campo => Object.prototype.hasOwnProperty.call(item.payload.reserva?.despues || {}, campo)))
             .map(item => item.id));
@@ -6243,6 +6244,58 @@
         return (p.estadias || [p.estadia || p]).some(e => mismaCabanaYFechasSuperpuestas(rangoEstadiaAlta(e), ocupacion));
     }
 
+    function dejarIncorporacionPendiente(item, motivos) {
+        item.categoria = 'pendientes';
+        item.seleccionado = false;
+        item.aprobable = false;
+        item.motivos = [...item.motivos, ...motivos];
+    }
+
+    function apartarDependientes(plan, bloqueados, motivo) {
+        for (let antes = -1; antes !== bloqueados.size;) {
+            antes = bloqueados.size;
+            for (const item of plan.items) if (!bloqueados.has(item.id) && item.dependeDe?.some(id => bloqueados.has(id))) {
+                dejarIncorporacionPendiente(item, [motivo]);
+                bloqueados.add(item.id);
+            }
+        }
+    }
+
+    // La vista previa usa la misma forma y dígito verificador que el writer.
+    // Nunca corrige, completa ni sustituye el documento del Libro.
+    function rutValidoParaIncorporacion(numero) {
+        if (!/^([0-9]{1,8}-?[0-9K]|[0-9]{1,3}(\.[0-9]{3}){1,2}-[0-9K])$/.test(numero)) return false;
+        const compacto = numero.replace(/[.-]/g, ''), cuerpo = compacto.slice(0, -1);
+        if (!/^[1-9]\d{0,7}$/.test(cuerpo)) return false;
+        let suma = 0;
+        for (let i = 0; i < cuerpo.length; i++) suma += Number(cuerpo.at(-1-i)) * (2 + i % 6);
+        const digito = 11 - suma % 11;
+        return compacto.at(-1) === (digito === 11 ? '0' : digito === 10 ? 'K' : String(digito));
+    }
+
+    function apartarRutsInvalidos(plan, snapshot) {
+        const bloqueados = new Set();
+        for (const item of plan.items) {
+            const payload = item.payload;
+            const nueva = item.categoria === 'nuevas';
+            const datos = nueva ? payload?.reserva : payload?.tipo === 'reserva_actualizar' ? payload.reserva?.despues : null;
+            if (!datos || !Object.hasOwn(datos, 'titular_numero_documento')) continue;
+            const numero = String(datos.titular_numero_documento ?? '').trim().toUpperCase();
+            if (!numero) continue;
+            const tipo = datos.titular_tipo_documento ?? (!nueva ?
+                (snapshot?.estadias_todas || snapshot?.estadias || []).find(e => e.id === payload.estadia_id)?.tipo_documento : null);
+            const rutInferido = nueva && !tipo && /^\d{1,2}(?:\.?\d{3}){2}-?[0-9K]$/.test(numero);
+            if ((tipo !== 'rut' && !rutInferido) || rutValidoParaIncorporacion(numero)) continue;
+            dejarIncorporacionPendiente(item, ['El RUT del Libro es inválido. Verifica el número y el dígito verificador antes de incorporar esta reserva.']);
+            bloqueados.add(item.id);
+        }
+        apartarDependientes(plan, bloqueados, 'Verifica primero el RUT de la reserva asociada.');
+        for (const item of plan.items) if (item.pagoLibro && bloqueados.has(item.id)) {
+            item.reservaPendiente = true;
+            item.manualPago = null;
+        }
+    }
+
     function bloquearAltasEnCabanasOcupadas(plan, snapshot) {
         const altas = plan.items.filter(i => ['nuevas','estadias'].includes(i.categoria) && !i.etapaSiguiente && !i.motivos.length);
         if (!altas.length) return;
@@ -6254,29 +6307,17 @@
             !['cancelada','no_show'].includes(e.estado_operativo) &&
             !(/full_?day/.test(e.tipo_estadia) && e.fullday_liberado_en) &&
             !cancelacionesPreparadas.has('cancelacion:' + e.reserva_id));
-        const bloquear = (item, motivos) => {
-            item.categoria = 'pendientes';
-            item.seleccionado = false;
-            item.aprobable = false;
-            item.motivos = [...item.motivos, ...motivos];
-        };
         const bloqueados = new Set();
         for (const alta of altas) {
             const cruces = ocupaciones.filter(e => alta.payload.estadias.some(s =>
                 mismaCabanaYFechasSuperpuestas(rangoEstadiaAlta(s), {cabana:e.cabana,
                     ingreso:e.fecha_checkin, salida:e.fecha_checkout, tipo:e.tipo_estadia})));
             if (!cruces.length) continue;
-            bloquear(alta, cruces.map(e => `CAB ${e.cabana} ocupada en Proyecto H por ${e.titular || 'una estadía existente'}` +
+            dejarIncorporacionPendiente(alta, cruces.map(e => `CAB ${e.cabana} ocupada en Proyecto H por ${e.titular || 'una estadía existente'}` +
                 ` · ${fechaBreve(e.fecha_checkin)} → ${fechaBreve(e.fecha_checkout)} (${e.estado_operativo}). Revisa la reserva antes de incorporar.`));
             bloqueados.add(alta.id);
         }
-        for (let antes = -1; antes !== bloqueados.size;) {
-            antes = bloqueados.size;
-            for (const item of plan.items) if (!bloqueados.has(item.id) && item.dependeDe?.some(id => bloqueados.has(id))) {
-                bloquear(item, ['La reserva de este elemento tiene un cruce de ocupación pendiente.']);
-                bloqueados.add(item.id);
-            }
-        }
+        apartarDependientes(plan, bloqueados, 'La reserva de este elemento tiene un cruce de ocupación pendiente.');
     }
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
