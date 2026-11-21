@@ -5891,6 +5891,7 @@
                         const api = root.HAIKU_LIBRO_CANCELACIONES_V1;
                         if (!api?.prepararParaLote) return null;
                         item.propuestaCambio = await api.prepararParaLote(caso, result.generacion, {cliente});
+                        item.ocupacionCancelacion = item.propuestaCambio?.ocupacion;
                     } else if (tipo === 'agregar_servicio') {
                         const api = root.HAIKU_LIBRO_SERVICIOS_SCOPE_V2;
                         if (!api?.prepararServicioEnLinea) return null;
@@ -5907,6 +5908,7 @@
                     item.seleccionado = true;
                     if (cancelacion) listos.add(caso);
                 } catch (error) {
+                    if (cancelacion) item.ocupacionCancelacion = error.ocupacionCancelacion;
                     item.categoria = 'pendientes';
                     item.motivos = [error.message];
                 }
@@ -6146,17 +6148,38 @@
         return resumen;
     }
 
+    function altaDependeDeCancelacion(item, cancelacion) {
+        const p = item.payload;
+        if (!p || !['nuevas','estadias'].includes(item.categoria) && !['reserva_nueva','estadia'].includes(p.tipo)) return false;
+        const ocupacion = cancelacion.ocupacionCancelacion;
+        // Sin rango confirmado no se acredita que el alta sea independiente.
+        if (!ocupacion || !Number.isInteger(Number(ocupacion.cabana)) || Number(ocupacion.cabana) < 1) return true;
+        return (p.estadias || [p.estadia || p]).some(e => {
+            if (!Number.isInteger(Number(e.cabana_numero)) || Number(e.cabana_numero) < 1) return true;
+            if (Number(e.cabana_numero) !== Number(ocupacion.cabana)) return false;
+            const d = e.datos || e, a = d.fecha_ingreso, b = d.fecha_salida;
+            const x = ocupacion.ingreso, y = ocupacion.salida;
+            if (![a,b,x,y].every(v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))) return true;
+            const nuevoFullDay = /full_?day/.test(d.tipo_estadia), anteriorFullDay = /full_?day/.test(ocupacion.tipo);
+            // Mismas fronteras que la disponibilidad: Full Day cruza checkout.
+            if (nuevoFullDay && anteriorFullDay) return a === x;
+            if (nuevoFullDay) return a >= x && a <= y;
+            if (anteriorFullDay) return x >= a && x <= b;
+            return a < y && x < b;
+        });
+    }
+
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
         const cambios = plan.items.filter(i => i.esCambioDetectado && i.seleccionado && !i.motivos.length);
-        if (!cambios.length) return confirmarIncorporacionBase(result, decisiones, aprobados, plan, cliente);
-        let ejecucion = {resultado: {ok: true}, detalle: {}};
-        if (plan.items.some(i => i.seleccionado && !i.esCambioDetectado))
-            ejecucion = await confirmarIncorporacionBase(result, decisiones, aprobados, plan, cliente);
-        else await verificarFuenteConsulta(result);
-        const detalle = [];
-        for (const item of cambios) {
+        const cancelaciones = plan.items.filter(i => i.tipoCambio === 'cancelar_reserva');
+        const detalle = () => plan.items.filter(i => i.resultadoCambio).map(i => i.resultadoCambio);
+        if (!cambios.length && !cancelaciones.length && !detalle().length)
+            return confirmarIncorporacionBase(result, decisiones, aprobados, plan, cliente);
+        const guardarCambio = async item => {
+            if (item.resultadoCambio && item.resultadoCambio.estado !== 'Por verificar') { item.seleccionado = false; return; }
             const vista = presentacionIncorporacion(item);
-            const fila = {titular: vista.titular, cabana: vista.cabana, descripcion: item.etiquetaCambio};
+            const fila = {titular: vista.titular, cabana: vista.cabana, descripcion: item.etiquetaCambio,
+                tipoCambio: item.tipoCambio};
             try {
                 const mensaje = await item.propuestaCambio.guardar();
                 fila.estado = mensaje === 'ya_coincide' ? 'Ya coincide' : 'Incorporado';
@@ -6164,10 +6187,34 @@
                 fila.estado = 'Por verificar';
                 fila.descripcion += '. ' + error.message;
             }
-            detalle.push(fila);
+            item.resultadoCambio = fila;
             item.seleccionado = false;
+        };
+        try {
+            if (cambios.length) await verificarFuenteConsulta(result);
+            // Las anulaciones aprobadas liberan ocupación antes de las altas.
+            for (const item of cambios.filter(i => i.tipoCambio === 'cancelar_reserva')) await guardarCambio(item);
+            const pendientes = cancelaciones.filter(i => !['Incorporado','Ya coincide'].includes(i.resultadoCambio?.estado));
+            const bloqueados = new Set(plan.items.filter(i => i.seleccionado && pendientes.some(c => altaDependeDeCancelacion(i,c))).map(i => i.id));
+            // Un pago o estadía dependiente nunca se envía sin su reserva.
+            for (let n = -1; n !== bloqueados.size;) {
+                n = bloqueados.size;
+                plan.items.filter(i => i.seleccionado && i.dependeDe?.some(id => bloqueados.has(id))).forEach(i => bloqueados.add(i.id));
+            }
+            for (const item of plan.items.filter(i => bloqueados.has(i.id))) {
+                const vista = presentacionIncorporacion(item);
+                const motivo = 'Confirma primero la cancelación que libera la cabaña. Este elemento y sus dependencias quedan pendientes.';
+                item.seleccionado = false; item.categoria = 'pendientes'; item.motivos = [...item.motivos,motivo];
+                item.resultadoCambio = {titular:vista.titular,cabana:vista.cabana,descripcion:motivo,estado:'Por verificar'};
+            }
+            let ejecucion = {resultado: {ok: true}, detalle: {}};
+            if (plan.items.some(i => i.seleccionado && !i.esCambioDetectado))
+                ejecucion = await confirmarIncorporacionBase(result, decisiones, aprobados, plan, cliente);
+            for (const item of cambios.filter(i => i.tipoCambio !== 'cancelar_reserva' && i.seleccionado)) await guardarCambio(item);
+            return {...ejecucion, cambiosDetectados: detalle()};
+        } catch (error) {
+            throw Object.assign(error, {haikuCambiosDetectados: detalle()});
         }
-        return {...ejecucion, cambiosDetectados: detalle};
     }
 
     async function confirmarIncorporacionBase(result, decisiones, aprobados, plan, cliente) {
@@ -6320,7 +6367,8 @@
                 codigo === 'HLI02' ? 'La identidad compartida o su asociación requiere revisión manual. No se guardó el lote' :
                 codigo === 'HLI03' ? 'El documento está incompleto o es inválido; requiere revisión manual. No se guardó el lote' :
                 String(error.message || error.details || error);
-            if (['HLC01','HLC02','HLI01','HLI02','HLI03'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
+            const disponibilidad = codigo === 'P0001' && /^(?:Tramo \d+: )?la CAB \d+ (?:ya )?no est[aá] disponible (?:para|entre) /i.test(mensaje);
+            if (disponibilidad || ['HLC01','HLC02','HLI01','HLI02','HLI03'].includes(codigo) || /Proyecto H cambi[oó]|vuelve a preparar|ya no (?:est[aá]|es|tiene)|no editable|no es inequ[ií]voco|se superpone|otra operación financiera en curso|saldo o las aplicaciones.+cambiaron|cargo o servicio cambió|destino dejó de ser único|identificador fuerte|múltiples pagos confirmados/i.test(mensaje)) {
                 // Este intento fue rechazado, pero una respuesta perdida anterior
                 // de la misma operación no demuestra ausencia de escrituras.
                 if (servicio) servicio.resultadoIncierto = inciertoPrevio;
@@ -10185,6 +10233,8 @@
                 (plan.items.some(i => i.categoria === 'cambios_detectados') ? "Se guardarán los elementos seleccionados después de verificar cada cambio." :
                     "Sólo se guardará tu selección en una sola operación segura."));
         preparacion.append(aviso);
+        const cambiosParciales = elemento('div','haku-incorporacion-resultado haku-incorporacion-cambios-parciales');
+        cambiosParciales.hidden = true; preparacion.append(cambiosParciales);
         if(plan.resultadoPrecioCargo?.ok===true)preparacion.append(elemento('p','haiku-incorporacion-propuesta',
             `Ajuste confirmado en el cargo ${plan.resultadoPrecioCargo.cargo_id}: ${money(plan.resultadoPrecioCargo.ajuste)}. Precio final ${money(plan.resultadoPrecioCargo.precio_final)}. El pago requiere su confirmación independiente.`));
         if(plan.resultadoAplicacionExistente?.ok===true){
@@ -10481,7 +10531,8 @@
                 guardando = false; atras.disabled = confirmacionPendiente();
                 if (cerrarVista) cerrarVista.disabled = confirmacionPendiente();
                 confirmar.removeAttribute?.("aria-busy");
-                if (error.planActual?.items.some(i=>i.cambioFuente)) {
+                const cambiosConfirmados = (error.haikuCambiosDetectados || []).filter(i => ['Incorporado','Ya coincide'].includes(i.estado));
+                if (error.planActual?.items.some(i=>i.cambioFuente) && !cambiosConfirmados.length) {
                     const nuevo=restaurarSeleccionIncorporacion(error.planActual,plan);
                     contextoVisualPlanes.set(plan,contextoVisualPlanes.get(nuevo));
                     Object.assign(plan,nuevo);
@@ -10494,6 +10545,14 @@
                 const serviciosParciales = error.haikuPagosConfirmados === undefined
                     ? resumenResultadosServicios4C(plan.solicitudPendiente?.servicios) : error;
                 const parciales = [];
+                if (cambiosConfirmados.length) {
+                    const n = cambiosConfirmados.length, soloCancelaciones = cambiosConfirmados.every(i => i.tipoCambio === 'cancelar_reserva');
+                    parciales.push(n === 1 ? soloCancelaciones ? '1 cancelación ya confirmada' : '1 cambio ya confirmado' :
+                        `${n} ${soloCancelaciones ? 'cancelaciones ya confirmadas' : 'cambios ya confirmados'}`);
+                }
+                cambiosParciales.replaceChildren();
+                agregarCambiosDetectados(cambiosParciales,error.haikuCambiosDetectados);
+                cambiosParciales.hidden = !cambiosParciales.children.length;
                 if (serviciosParciales.haikuPagosConfirmados) parciales.push(`${serviciosParciales.haikuPagosConfirmados} pago(s) de servicios creado(s) y confirmado(s)`);
                 if (serviciosParciales.haikuPagosOmitidos) parciales.push(`${serviciosParciales.haikuPagosOmitidos} pago(s) de servicios omitido(s) porque ya existían`);
                 if (serviciosParciales.haikuPagosInciertos) parciales.push(`${serviciosParciales.haikuPagosInciertos} operación(es) de servicios con resultado incierto; podrían haberse ejecutado`);

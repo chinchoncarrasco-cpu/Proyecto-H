@@ -63,7 +63,7 @@
   const reservas=[];
   for(let i=0;i<ids.length;i+=50){
    const grupo=ids.slice(i,i+50);
-   reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,cabana_id,fecha_ingreso,fecha_salida,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
+   reservas.push(...await filas(()=>cliente.from('reservas').select('id,titular_nombre,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,estadias:reserva_estadias(id,cabana_id,fecha_ingreso,fecha_salida,tipo_estadia,estado_estadia,cabanas(numero))').in('id',grupo).order('id')));
   }
   return {reservas,hayEstadias:ids.length>0};
  }
@@ -150,7 +150,7 @@
    if(!e?.reserva_id)continue;
    if(!grupos.has(e.reserva_id))grupos.set(e.reserva_id,{id:e.reserva_id,titular_nombre:e.titular,titular_numero_documento:e.rut_documento,
     correo_contacto:e.correo,telefono_contacto:e.telefono,estado_reserva:e.estado_reserva,estadias:[]});
-   grupos.get(e.reserva_id).estadias.push({id:e.id,fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout,estado_estadia:e.estado_operativo,cabanas:{numero:e.cabana}});
+   grupos.get(e.reserva_id).estadias.push({id:e.id,fecha_ingreso:e.fecha_checkin,fecha_salida:e.fecha_checkout,tipo_estadia:e.tipo_estadia,estado_estadia:e.estado_operativo,cabanas:{numero:e.cabana}});
   }
   return clasificarEnProyecto(revisarEvidencias((hojas||[]).filter(Boolean),{}),[...grupos.values()],{});
  }
@@ -190,6 +190,8 @@
   const vista=await preparar(caso,g,opciones);
   if(vista.estado==='ya_coincide')return null;
   const p=propuestas.get(vista),reserva=JSON.parse(p.firma),e=reserva.estadias[0];
+  const ocupacion={cabana:vista.cabana,ingreso:e.fecha_ingreso,salida:e.fecha_salida,
+   tipo:e.tipo_estadia||(e.fecha_ingreso===e.fecha_salida?'fullday':'alojamiento')};
   const ejecutar=async confirmar=>{
    if(confirmar)await revalidar(p);
    const {data,error}=await p.cliente.rpc('haiku_libro_cancelacion_segura_lote_v1',{
@@ -201,8 +203,9 @@
    if(data?.estado!==(confirmar?'cancelada':'listo'))throw Error(data?.motivo||'Proyecto H no confirmó la cancelación.');
    return data.estado;
   };
-  if(await ejecutar(false)==='ya_coincide')return null;
-  return {firma:p.firma, guardar:()=>ejecutar(true)};
+  try{if(await ejecutar(false)==='ya_coincide')return null;}
+  catch(error){error.ocupacionCancelacion=ocupacion;throw error;}
+  return {firma:p.firma,ocupacion,guardar:()=>ejecutar(true)};
  }
  // Presentación compartida: no transforma los casos ni decide acciones.
  function elemento(tag,clase,texto){const el=root.document.createElement(tag);el.className=clase;if(texto!=null)el.textContent=texto;return el;}

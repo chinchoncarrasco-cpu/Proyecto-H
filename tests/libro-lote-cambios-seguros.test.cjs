@@ -122,7 +122,7 @@ for (const cambioTrasPreparar of [false, true]) test(
         assert.match(textos(), /Cambios por verificar \(1\)/);
         assert.match(textos(), /Entró un pago después de preparar/);
     } else {
-        assert.deepEqual(escrituras, ['estado', 'cancelacion', 'servicio', 'nuevo servicio'], textos());
+        assert.deepEqual(escrituras, ['cancelacion', 'estado', 'servicio', 'nuevo servicio'], textos());
         assert.match(textos(), /Cambios detectados incorporados \(3\)/);
     }
 });
