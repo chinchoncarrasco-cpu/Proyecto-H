@@ -5,13 +5,16 @@ const root=path.resolve(__dirname,'..'),f=F.casos().find(x=>x.id==='cambio_caban
 const scripts=['haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1',
  'haiku-libro-lenguaje-natural-v1','haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1',
  'haiku-libro-cancelaciones-v1','haiku-libro-bloqueos-v1'];
-const css=['styles','haiku-paleta-v1','sites-asistente-v1','haiku-tema-oscuro-v1'];
+const css=['styles','haiku-paleta-v1','sites-asistente-v1','supabase-asistente-v1',
+ 'supabase-haku-reconciliacion-v1','haiku-libro-decision-cards-v1','haiku-tema-oscuro-v1'];
+const evidence=process.env.HAIKU_DIALOGOS_OUTPUT||path.join(require('node:os').tmpdir(),'haku-cambio-cabana');
 const server=http.createServer((req,res)=>{
  const p=new URL(req.url,'http://localhost').pathname;
  if(p==='/')return res.writeHead(200,{'Content-Type':'text/html;charset=utf-8'}).end(
   '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">'+
   css.map(x=>`<link rel="stylesheet" href="/css/${x}.css">`).join('')+
-  '</head><body style="margin:0;padding:16px"><main id="out"></main></body></html>');
+  '</head><body><div class="haiku-asistente-root"><section class="haiku-asistente-panel">'+
+  '<div class="haiku-asistente-mensajes"><div id="out"></div></div></section></div></body></html>');
  const match=p.match(/^\/(js|css)\/([a-z0-9-]+)\.(js|css)$/);
  if(!match||!(match[1]==='js'?scripts:css).includes(match[2]))return res.writeHead(404).end();
  let text=fs.readFileSync(path.join(root,p),'utf8');
@@ -21,6 +24,7 @@ const server=http.createServer((req,res)=>{
 });
 (async()=>{
  await new Promise(ok=>server.listen(0,'127.0.0.1',ok));let browser;
+ fs.mkdirSync(evidence,{recursive:true});
  try{
   browser=await chromium.launch({executablePath:process.env.HAIKU_BROWSER_EXECUTABLE||chromium.executablePath(),headless:true});
   const origin=`http://127.0.0.1:${server.address().port}`;
@@ -41,9 +45,13 @@ const server=http.createServer((req,res)=>{
      mutaciones:cliente.mutaciones,sinCambios:JSON.stringify(cliente.db)===original};
    },{db:f.db,consulta:F.consulta});
    assert.equal(proof.estado,'ambigua');assert.equal(proof.categoria,'posible_cambio_cabana');assert.equal(proof.sinCambios,true);
-   assert.deepEqual(proof.mutaciones,[]);await page.getByText('Cambios de cabaña por revisar',{exact:true}).waitFor();
+   assert.deepEqual(proof.mutaciones,[]);
+   const title=page.getByText('Cambios de cabaña por revisar',{exact:true});await title.waitFor();await title.scrollIntoViewIfNeeded();
    assert.match(await page.locator('#out').textContent(),/Proyecto H CAB 2 → Libro CAB 1/);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   assert.equal(await page.evaluate(()=>Array.from(document.querySelectorAll('#out select')).every(s=>
+    s.getBoundingClientRect().width<=s.closest('.haiku-asistente-panel').clientWidth)),true);
+   await page.screenshot({path:path.join(evidence,`libro-cambio-${width}-${tema}.png`)});
    assert.deepEqual(errors,[]);assert.deepEqual(externas,[]);
    console.log(`PASS ${width}px ${tema}: traslado visible, confirmación requerida, 0 escrituras y 0 red externa`);
    await context.close();
