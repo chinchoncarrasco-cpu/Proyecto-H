@@ -37,6 +37,8 @@ on:
       - "tests/libro-auditoria-servicios-notas.test.cjs"
       - "tests/libro-retiros-*.cjs"
       - "tests/libro-lote-cambios-seguros.test.cjs"
+      - "tests/libro-cancelaciones-antes-altas.test.cjs"
+      - "tests/libro-cancelaciones-antes-altas-browser-check.cjs"
       - "tests/gestion-ajustes-reserva-postgres.test.cjs"
       - "supabase/migrations/*_libro_cancelacion_segura_lote.sql"
       - "supabase/migrations/*_gestion_ajustes_reserva.sql"
@@ -81,7 +83,11 @@ jobs:
       - name: Reprogramación conjunta, permisos, disponibilidad y conservación financiera
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
-        run: node --test tests/libro-reprogramacion.test.cjs tests/libro-reprogramacion-postgres.test.cjs tests/libro-reprogramacion-noches-postgres.test.cjs tests/libro-lote-cambios-seguros.test.cjs
+        run: node --test tests/libro-reprogramacion.test.cjs tests/libro-reprogramacion-postgres.test.cjs tests/libro-reprogramacion-noches-postgres.test.cjs tests/libro-lote-cambios-seguros.test.cjs tests/libro-cancelaciones-antes-altas.test.cjs
+      - name: Cancelaciones antes de altas y resultados parciales en ambos tamaños y temas
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
+        run: node tests/libro-cancelaciones-antes-altas-browser-check.cjs
       - name: Reprogramación desde Haku y Libro en ambos tamaños y temas
         env:
           NODE_PATH: ${{ runner.temp }}/haku-libro-test/node_modules
