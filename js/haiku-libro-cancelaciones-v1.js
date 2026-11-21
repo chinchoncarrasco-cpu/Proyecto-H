@@ -95,7 +95,9 @@
    throw Error('Faltan datos verificables en la anotación del Libro.');
   if(mismos.length!==1||JSON.stringify(mismos[0])!==JSON.stringify(e))
    throw Error('Hay más de una anotación o la evidencia cambió en el Libro.');
-  if((hoja.reservas||[]).some(r=>normal(r.titular)===normal(e.titular)&&r.fecha_checkin===e.fecha_checkin))
+  const coincide=root.HAIKU_LIBRO_SEMANTICA?.reservaYCancelacionCoinciden||
+   ((r,c)=>normal(r.titular)===normal(c.titular)&&r.fecha_checkin===c.fecha_checkin);
+  if((hoja.reservas||[]).some(r=>coincide(r,e)))
    throw Error('El titular también aparece con una reserva activa para esa fecha en el Libro. Revisa ambas entradas.');
  }
  function avisoRevision(evidencia,motivo){

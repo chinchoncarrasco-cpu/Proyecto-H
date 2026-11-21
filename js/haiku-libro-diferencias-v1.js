@@ -313,7 +313,8 @@
         out.ya_no_aparecen = out.ya_no_aparecen.filter(x => {
             const candidatos = evidencias.filter(e=>evidenciaCancelacion(x.anterior,e));
             if (candidatos.length !== 1 || prev.filter(r=>evidenciaCancelacion(r,candidatos[0])).length !== 1 ||
-                next.some(r=>semantica.mismaPersona(r.titular,x.anterior.titular)&&r.fecha_checkin===x.anterior.fecha_checkin)) return true;
+                next.some(r=>semantica.reservaYCancelacionCoinciden(r,candidatos[0]) ||
+                    semantica.mismaPersona(r.titular,x.anterior.titular)&&r.fecha_checkin===x.anterior.fecha_checkin)) return true;
             confirmadas.push({tipo:'cancelacion_confirmada',anterior:x.anterior,evidencia:copia(candidatos[0])}); return false;
         });
         if (confirmadas.length) { out.cancelaciones_confirmadas=confirmadas; out.resumen.cancelaciones_confirmadas=confirmadas.length; }

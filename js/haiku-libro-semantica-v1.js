@@ -490,6 +490,14 @@
         const claves=new Set(clavesTitular(na));
         return clavesTitular(nb).some(k=>claves.has(k));
     }
+    function reservaYCancelacionCoinciden(reserva, cancelacion) {
+        if (cancelacion?.bloque !== 'CANCELACIONES' || !reserva.fecha_checkin ||
+            reserva.fecha_checkin !== cancelacion.fecha_checkin) return false;
+        const documentoReserva = documentoCanon(reserva.rut_documento, reserva.tipo_documento);
+        const documentoCancelacion = documentoCanon(cancelacion.rut_documento, cancelacion.tipo_documento);
+        if (documentoReserva && documentoCancelacion) return documentoReserva === documentoCancelacion;
+        return mismaPersona(reserva.titular, cancelacion.titular);
+    }
     function errataTitular(a,b) {
         if (Math.min(a.length,b.length)<4 || Math.abs(a.length-b.length)>1) return false;
         const [larga,corta]=a.length>=b.length?[a,b]:[b,a];
@@ -1689,6 +1697,10 @@
         }
         const lastCab = Math.max(...cabRows.map(c => c.r));
         res.anotaciones.push(...cells.filter(c => c.r > lastCab && c.r < financialRow && c.valor?.trim()).map(c => ({ texto_original: c.valor, origen: origen(c) })));
+        for (const reserva of res.reservas) {
+            const cancelaciones = res.cancelaciones.filter(c => reservaYCancelacionCoinciden(reserva, c));
+            if (cancelaciones.length) reserva.cancelaciones_contradictorias = cancelaciones.map(c => c.origen);
+        }
         return res;
     }
     function asociar(reserva, candidatas) {
@@ -2024,7 +2036,7 @@
         }
         return texto&&/^srv:/.test(item_id||'')?{texto,item_id}:null;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, clavesTitular, varianteTitular, fuente, monto,
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, reservaYCancelacionCoinciden, clavesTitular, varianteTitular, fuente, monto,
         servicios, interpretarConceptoPago, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;

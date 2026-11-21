@@ -2,6 +2,15 @@
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),assert=require('node:assert/strict');
 const {chromium}=require('playwright'),F=require('./fixtures/libro-comparacion-readonly.cjs');
 const root=path.resolve(__dirname,'..'),f=F.casos().find(x=>x.id==='cambio_cabana');
+const cruces=F.caso('cruces', (r, db, data) => {
+ const otraFecha=F.reserva({id:'otra-fecha',titular:'Persona Independiente',fecha_checkin:'2026-10-11',fecha_checkout:'2026-10-12',
+  fechas_ocupadas:['2026-10-11'],noches:1,coordenadas_origen:F.origen('AQ3')});
+ const contradictoria={...otraFecha,id:'contradictoria',titular:'Persona En Revisión',fecha_checkin:'2026-10-18',fecha_checkout:'2026-10-19',
+  fechas_ocupadas:['2026-10-18'],coordenadas_origen:F.origen('BQ3'),cancelaciones_contradictorias:[F.origen('BR17')]};
+ data.reservas.push(otraFecha,contradictoria);
+ db.reserva_estadias=[F.estadia(r,{fecha_ingreso:'2026-10-04',fecha_salida:'2026-10-07',estado_estadia:'pendiente',
+  reservas:{titular_nombre:'Persona ya registrada',estado_reserva:'pendiente'}})];
+});
 const scripts=['haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1',
  'haiku-libro-lenguaje-natural-v1','haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1',
  'haiku-libro-cancelaciones-v1','haiku-libro-bloqueos-v1'];
@@ -68,8 +77,23 @@ const server=http.createServer((req,res)=>{
    await page.getByText('Paso 1 · Corregir reservas primero',{exact:true}).waitFor();
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
    await page.screenshot({path:path.join(evidence,`libro-etapa-${width}-${tema}.png`)});
+   const revision=await page.evaluate(async({data,db,libro})=>{
+    const Q=HAIKU_LIBRO_CONSULTAS,cliente=clienteFixture(db);
+    window.HAIKU_LIBRO_RESERVA_V1=(0,eval)('('+libro+')')(data);
+    const plan=await Q.prepararIncorporacion({reservas:data.reservas,generacion:1},new Map(),new Set(),cliente);
+    Q.renderizarIncorporacion(document.getElementById('out'),plan,()=>{},null,async()=>{throw Error('No se permiten escrituras');});
+    return {enviables:Q.serializarIncorporacion(plan).map(i=>i.reserva.titular_nombre),mutaciones:cliente.mutaciones};
+   },{data:cruces.data,db:cruces.db,libro:F.libroBase.toString()});
+   assert.deepEqual(revision,{enviables:['Persona Independiente'],mutaciones:[]});
+   const pendientes=page.locator('.haiku-incorporacion-seccion--pendientes');
+   await pendientes.locator('summary').click();
+   await pendientes.getByText(/CAB 1 ocupada en Proyecto H por Persona ya registrada/).waitFor();
+   await pendientes.getByText(/activa en Oct26!BQ3.*Cancelaciones.*Oct26!BR17/).waitFor();
+   assert.equal(await pendientes.locator('input[type=checkbox]:disabled').count(),2);
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   await page.screenshot({path:path.join(evidence,`libro-cruces-${width}-${tema}.png`)});
    assert.deepEqual(errors,[]);assert.deepEqual(externas,[]);
-   console.log(`PASS ${width}px ${tema}: traslado visible, confirmación requerida, 0 escrituras y 0 red externa`);
+   console.log(`PASS ${width}px ${tema}: traslado, cruces y cancelación contradictoria visibles, 0 escrituras y 0 red externa`);
    await context.close();
   }
  }finally{if(browser)await browser.close();await new Promise(ok=>server.close(ok));}
