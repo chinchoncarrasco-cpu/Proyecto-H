@@ -17,7 +17,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
 (async () => {
   const db = new PGlite();
   const images = new Map();
-  let failUpload = false, browser;
+  let failUpload = false, failOutfit = false, browser;
   try {
     const migration = fs.readdirSync(path.join(root,'supabase/migrations')).find(f=>f.endsWith('_haku_huespedes_v1_1.sql'));
     await db.exec(sqlFile('tests/fixtures/huespedes-schema.sql'));
@@ -42,6 +42,10 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       assert.ok(kind, 'RPC de Huéspedes esperada');
       const args = config[kind].map(key=>values[key] ?? ({p_estado:'hospedados',p_historial:false,p_desde:0}[key]??null));
       if(kind==='guardar') args[3]=JSON.stringify(args[3]);
+      if(kind==='guardar'&&values.p_accion==='registro'&&values.p_datos.categoria==='vestimenta'&&failOutfit){
+        failOutfit=false;
+        return Promise.resolve({data:null,error:{message:'Guardado de vestimenta interrumpido',code:'P0001'}});
+      }
       const params=args.map((_,i)=>'$'+(i+1)).join(',');
       return query(async()=> (await db.query('select public.haiku_huesped_'+kind+'_v1('+params+') data',args)).rows[0].data);
     };
@@ -280,6 +284,19 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     await modal.getByLabel('Acercar',{exact:true}).fill('1.5');
     await modal.getByRole('button',{name:'Guardar cambios'}).click();
     await section.getByRole('button',{name:'Cambiar foto',exact:true}).waitFor();
+    // A photo may succeed before clothing fails. Choosing another photo in the
+    // same retained form must use the new expected path and preserve the outfit.
+    await section.getByRole('button',{name:'Cambiar foto',exact:true}).click();
+    await modal.locator('input[type=file]').setInputFiles(fixture);
+    await modal.locator('canvas').waitFor();
+    await modal.getByLabel('Prenda superior',{exact:true}).fill('Chaqueta azul de prueba');
+    failOutfit=true;
+    await modal.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+    await modal.getByText('Guardado de vestimenta interrumpido',{exact:true}).waitFor();
+    await modal.locator('input[type=file]').setInputFiles(fixture);
+    await modal.locator('canvas').waitFor();
+    await modal.getByRole('button',{name:'Guardar cambios',exact:true}).click();
+    await section.getByText('Chaqueta azul de prueba',{exact:true}).waitFor();
     const original=(await rpc('haiku_huesped_perfil_v1',{p_id:ada})).data.persona.foto;
     assert.ok(original);
     failUpload=true;

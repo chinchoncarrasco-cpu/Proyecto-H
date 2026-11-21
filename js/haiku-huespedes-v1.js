@@ -547,7 +547,8 @@
             if(!changed)return;
             if(!removed&&!picture)throw new Error("Selecciona una imagen válida.");
             const image=removed?null:await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("No se pudo preparar la imagen.")),"image/jpeg",.85));
-            await api.photo(p,target,image);
+            const ack=await api.photo(p,target,image);
+            target.path=ack.foto;
             changed=false;
         }};
     }
