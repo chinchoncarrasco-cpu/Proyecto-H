@@ -947,7 +947,10 @@
                 ['actualizaciones','actualización','actualizaciones'],['servicios_creados','servicio','servicios'],['notas_creadas','nota','notas']
             ];
             const resumenGuardado=fin=>tiposGuardados.filter(([k])=>fin?.[k]>0).map(([k,uno,varios])=>`${fin[k]} ${fin[k]===1?uno:varios}`).join(' · ');
-            function mostrarRecibo(fin,resumen) {
+            function mostrarRecibo(fin,resumen,titulo='Incorporado') {
+                const anterior=estadoGuardado.querySelector('details');
+                const abierto=anterior?.open===true;
+                const foco=anterior&&doc.activeElement===anterior.querySelector('summary');
                 estadoGuardado.textContent='';
                 const filas=lista(fin.confirmados);
                 const total=tiposGuardados.reduce((s,[k])=>s+(fin[k]||0),0);
@@ -955,7 +958,7 @@
                 const cabecera=nodo(recibo,'summary','haku-libro-auto__recibo-cabecera');
                 nodo(cabecera,'span','haku-libro-casos__icono haku-libro-casos__icono--confirmado').setAttribute('aria-hidden','true');
                 const rotulo=nodo(cabecera,'span','haku-libro-auto__recibo-rotulo');
-                nodo(rotulo,'strong','','Incorporado');
+                nodo(rotulo,'strong','',titulo);
                 nodo(rotulo,'span','haku-libro-auto__recibo-total',resumen);
                 nodo(cabecera,'span','haku-libro-casos__icono haku-libro-casos__icono--siguiente').setAttribute('aria-hidden','true');
                 const detalle=nodo(recibo,'div','haku-libro-auto__recibo-detalle');
@@ -965,6 +968,27 @@
                     if(filas.length<total)nodo(detalle,'p','haku-libro-auto__aviso',
                         filas.length?'Parte del detalle por reserva no está disponible.':'El detalle por reserva no está disponible.');
                 });
+                if(abierto)recibo.open=true;
+                if(foco)cabecera.focus?.({preventScroll:true});
+            }
+            const pasosIncorporacion={
+                comprobar:'Comprobando cambios del Libro…',
+                reservas:'Guardando reservas y cambios en Proyecto H…',
+                servicios:'Revisando servicios y notas…',
+                cierre:'Revisando los cambios restantes…',
+                pendientes:'Actualizando casos pendientes…'
+            };
+            function mostrarProgreso({fase,incorporado}){
+                const texto=pasosIncorporacion[fase];
+                const resumen=resumenGuardado(incorporado);
+                if(resumen){
+                    vistaCambios.hidden=true;bloquePendientes.hidden=true;
+                    if(vistaFechas)vistaFechas.hidden=true;
+                    mostrarRecibo(incorporado,resumen,fase==='pendientes'?'Incorporado':'Guardado hasta ahora');
+                    nodo(estadoGuardado,'p','haku-libro-auto__aviso',texto);
+                }else estadoGuardado.textContent=texto;
+                if(fase==='pendientes')for(const b of botonesIncorporar)b.textContent='Revisando…';
+                posicionarAviso();
             }
             function botonIncorporar(contenedor){
                 if(!api?.puedeIncorporar?.(resultado))return;
@@ -980,12 +1004,12 @@
                         estadoGuardado.tabIndex=-1;
                         cuerpoAviso.insertBefore(estadoGuardado,bloquePendientes);
                     }
-                    estadoGuardado.textContent='Guardando estos cambios en Proyecto H…';
+                    estadoGuardado.textContent=pasosIncorporacion.comprobar;
                     for(const b of acciones){b.disabled=true;b.incorporacionBloqueada=true;}
                     cerrar.disabled=true;
                     for(const b of botonesIncorporar){b.textContent='Incorporando…';b.setAttribute('aria-busy','true');}
                     try{
-                        const fin=await api.incorporarDesdeAviso(resultado),resumen=resumenGuardado(fin);
+                        const fin=await api.incorporarDesdeAviso(resultado,mostrarProgreso),resumen=resumenGuardado(fin);
                         const pendientes=lista(fin?.pendientes);finalizado=true;
                         vistaCambios.hidden=true;
                         if(vistaFechas)vistaFechas.hidden=true;

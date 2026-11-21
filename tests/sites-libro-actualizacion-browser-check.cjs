@@ -995,8 +995,9 @@ async function comprobarPendientesTrasConfirmar(browser,url){
                 ],
                 notasContexto:[{...campo,estado:'faltante',item_id:'nota:batas',texto:'Dejar batas'}]};
             window.haikuTienePermiso=()=>true;
-            window.__scopesAviso=[];window.__escriturasAviso=0;
+            window.__scopesAviso=[];window.__escriturasAviso=0;window.__esperaPendientesAviso=null;
             HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async cambios=>{
+                if(__esperaPendientesAviso)await __esperaPendientesAviso;
                 __scopesAviso.push(structuredClone(cambios));return structuredClone(__pendientesActual);
             };
             window.haikuSupabase={auth:{getUser:async()=>({data:{user:{id:'u-sintetico'}}})}};
@@ -1050,14 +1051,29 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             }));
         });
         assert.equal(await incorporando.count(),1,'otra versión no oculta el guardado');
-        await page.evaluate(()=>__resolverGuardado());
-        await incorporando.waitFor({state:'detached'});
         const reciboMixto=burbuja.locator('.haku-libro-auto__recibo');
         const encabezadoMixto=reciboMixto.locator('summary');
+        await page.evaluate(()=>{
+            __esperaPendientesAviso=new Promise(resolve=>{window.__reanudarPendientesAviso=resolve;});
+            __resolverGuardado();
+        });
+        await reciboMixto.getByText('Guardado hasta ahora',{exact:true}).waitFor();
+        assert.match(await encabezadoMixto.innerText(),/1 servicio · 1 nota/);
+        assert.equal(await burbuja.getByText('Revisando los cambios restantes…',{exact:true}).isVisible(),true);
+        assert.equal(await pendienteMixto.isVisible(),false,'el conteo anterior no se muestra durante el recálculo');
+        await encabezadoMixto.click();
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1100,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await burbuja.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true,`${tema} ${width}: comprobante parcial sin desbordes`);
+            }
+        }
+        await page.evaluate(()=>{__reanudarPendientesAviso();__esperaPendientesAviso=null;});
+        await incorporando.waitFor({state:'detached'});
         assert.match(await encabezadoMixto.innerText(),/Incorporado\s*1 servicio · 1 nota/,
             'recibo conservado al llegar otro aviso; errores: '+JSON.stringify(errors));
-        assert.equal(await reciboMixto.getAttribute('open'),null);
-        await encabezadoMixto.click();
+        assert.equal(await reciboMixto.getAttribute('open'),'','el detalle abierto se conserva al terminar');
         await reciboMixto.getByText('Cristian Sintético · CAB 8',{exact:true}).waitFor();
         assert.match(await reciboMixto.innerText(),/Cristian Sintético · CAB 8[\s\S]+Jacuzzi[\s\S]+Dejar batas/);
         assert.equal(await reciboMixto.getByText('Cristian Sintético · CAB 8',{exact:true}).count(),1);
