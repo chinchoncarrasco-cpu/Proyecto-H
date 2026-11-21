@@ -9,7 +9,7 @@ if(!out)throw new Error('HAKU_GUEST_SHOTS must name an evidence directory.');
 const native=process.env.HAKU_GUEST_NATIVE_PREVIEW;
 const allowed=new Set(['js/historial.js','js/calendario.js','js/checklist.js','js/app.js','js/cabanas.js','js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.woff':'font/woff','.png':'image/png'};
-async function settled(page){await page.evaluate(async()=>{await document.fonts.ready;await new Promise(requestAnimationFrame);await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));await new Promise(requestAnimationFrame);});}
+async function settled(page){await page.evaluate(async()=>{await document.fonts.ready;await new Promise(requestAnimationFrame);await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));await Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a=>a.finished.catch(()=>{})));await new Promise(requestAnimationFrame);});}
 (async()=>{
  fs.mkdirSync(out,{recursive:true});
  const browser=await chromium.launch({headless:true,executablePath:process.env.HAIKU_BROWSER_PATH||undefined});

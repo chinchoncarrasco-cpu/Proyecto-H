@@ -40,7 +40,8 @@ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-
  body:has(#seccion-huespedes.activa) .sites-shell-sidebar .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){order:9}
  body:has(#seccion-huespedes.activa) nav.menu:not(.hu-nav-extra-open) .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){display:none}
  body:has(#seccion-huespedes.activa) .sites-shell-topbar .busqueda-reservas-wrap{width:340px!important}
- body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{background:transparent;color:var(--sites-shell-ink);border:1px solid var(--sites-shell-line);font-size:12px;min-height:36px}
+ body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{background:transparent;color:#9fd2b3;border:1px solid #3e5145;font-size:12px;min-height:36px}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{color:#173d33;border-color:#d9e3de}
 }
 #seccion-huespedes{padding:24px!important;font-family:HakuGuests,Inter,system-ui,sans-serif;font-size:13px;line-height:19px}
 #seccion-huespedes *{box-sizing:border-box}
