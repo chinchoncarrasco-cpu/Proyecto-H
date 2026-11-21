@@ -50,7 +50,7 @@ Se normalizan espacios, mayúsculas, documento y teléfono. Los acentos se ignor
 
 ## Lectura, cobertura y compatibilidad
 
-Extensiones al cargador: `consultarIndice(version)` y `consultarHuellas(version, nombres)` reutilizan la consulta en cola y el worker existente. Leen IndexedDB con transacción `readonly`; no modifican guardado, rotación, borrado ni esquema. Versión anterior ausente devuelve NULL; un error de almacenamiento o guardado no confirmado se informa como no comparable. En celular se mantiene la política existente sin persistencia de dos versiones y se devuelve `sin_linea_base`.
+Extensiones al cargador: `consultarIndice(version)` y `consultarHuellas(version, nombres)` reutilizan la consulta en cola y el worker existente. Leen IndexedDB con transacción `readonly`; no modifican guardado, rotación, borrado ni esquema. Versión anterior ausente devuelve NULL; un error de almacenamiento o guardado no confirmado se informa como no comparable. El panel conserva dos versiones también en celular. Sin una versión anterior se devuelve `sin_linea_base`; no se inventa una comparación.
 
 La comparación empieza leyendo únicamente `xl/workbook.xml` para obtener los nombres de ambas versiones, sin SheetJS ni contenido de hojas. Selecciona las mensuales desde el mes anterior y las especiales vigiladas ANTES de solicitar huellas. El worker recibe una lista explícita y sólo abre los XML de esas hojas. Las históricas y desconocidas no vigiladas no reciben huellas ni semántica y no participan en el informe.
 

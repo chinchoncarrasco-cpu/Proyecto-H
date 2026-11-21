@@ -57,22 +57,27 @@ test('sin anterior: índice devuelve null, semántica mantiene su error compatib
     await assert.rejects(h.context.consultaTest('Sep26','anterior','semantica'),/Todavía no hay/);
     assert.equal(h.workers.length,0);
 });
-test('celular no abre IndexedDB al pedir índice anterior; índice actual funciona',async()=>{
-    const h=lector({pc:false,guardado:false});assert.equal(await h.context.consultaTest('','anterior','indice'),null);
-    await h.context.consultaTest('','actual','indice');assert.equal(h.transactions.length,0);
-    assert.equal(new Uint8Array(h.workers[0].message.buffer)[0],1);
+test('celular recupera el índice anterior con transacción readonly',async()=>{
+    const h=lector({pc:false});await h.context.consultaTest('','anterior','indice');
+    assert.equal(h.transactions.length,1);assert.equal(h.transactions[0].mode,'readonly');
+    assert.equal(new Uint8Array(h.workers[0].message.buffer)[0],2);
+    await h.context.consultaTest('','actual','indice');
+    assert.equal(new Uint8Array(h.workers[1].message.buffer)[0],1);
 });
-test('PC sin guardado confirmado no devuelve falsa línea base',async()=>{
-    const h=lector({guardado:false});await assert.rejects(h.context.consultaTest('','anterior','indice'),/no está guardado/);
-    assert.equal(h.transactions.length,0);
+test('PC y celular sin guardado confirmado no devuelven falsa línea base',async()=>{
+    for(const pc of [true,false]){
+        const h=lector({pc,guardado:false});await assert.rejects(h.context.consultaTest('','anterior','indice'),/no está guardado/);
+        assert.equal(h.transactions.length,0);
+    }
 });
 test('huellas mantiene sólo lectura, detección de primera carga y compatibilidad celular',async()=>{
     const h=lector();await h.context.consultaTest(['Sep26'],'anterior','huellas');
     assert.equal(h.transactions[0].mode,'readonly');assert.equal(h.workers[0].message.tipo,'huellas');
     assert.deepEqual(Array.from(h.workers[0].message.nombresHojas),['Sep26']);
     assert.equal(await lector({anterior:false}).context.consultaTest('','anterior','huellas'),null);
-    const mobile=lector({pc:false,guardado:false});assert.equal(await mobile.context.consultaTest('','anterior','huellas'),null);
-    assert.equal(mobile.transactions.length,0);
+    const mobile=lector({pc:false});await mobile.context.consultaTest(['Sep26'],'anterior','huellas');
+    assert.equal(mobile.transactions[0].mode,'readonly');assert.equal(new Uint8Array(mobile.workers[0].message.buffer)[0],2);
+    assert.equal(await lector({pc:false,anterior:false}).context.consultaTest('','anterior','huellas'),null);
 });
 test('índice de nombres nuevo conserva ausencia de línea base y readonly',async()=>{
     const h=lector();await h.context.consultaTest('','anterior','indice_nombres');

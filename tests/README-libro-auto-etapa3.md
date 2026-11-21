@@ -4,7 +4,7 @@
 
 El cargador emite `haiku:libro-version-cargada` tras una carga manual válida o una sincronización confirmada desde Google cuyo guardado local terminó y reemplazó bytes distintos con una versión previa disponible. La comparación binaria se realiza en la misma transacción existente: no depende del nombre ni modifica la rotación de actual/anterior. El evento identifica el origen como `manual` o `google` y el resultado del guardado sólo añade metadata de actualización.
 
-Google entrega el archivo mediante `cargarDesdeGoogle()` para conservar el origen de la actualización sin simular una selección manual. El despacho usa la siguiente tarea y verifica de nuevo generación, persistencia y Libro disponible. El listener no bloquea `cargarArchivo()`. Primera carga, archivo idéntico, restauración, lectura inválida, guardado fallido y quitar Libro no disparan el evento. En móvil, donde no se conserva la versión anterior, no hay aviso automático.
+Google entrega el archivo mediante `cargarDesdeGoogle()` para conservar el origen de la actualización sin simular una selección manual. El despacho usa la siguiente tarea y verifica de nuevo generación, persistencia y Libro disponible. El listener no bloquea `cargarArchivo()`. Primera carga, archivo idéntico, restauración, lectura inválida, guardado fallido y quitar Libro no disparan el evento. El panel móvil conserva actual y anterior con las mismas reglas. El informe readonly y la WebView independiente de la burbuja móvil siguen exclusivamente en memoria.
 
 ## Comparación y aviso
 

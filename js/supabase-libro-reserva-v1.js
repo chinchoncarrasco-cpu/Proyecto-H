@@ -52,10 +52,12 @@
         }
     })();
 
-    // Desktop-only, binary storage scoped to this site's browser profile.
+    // Copias locales del panel, tanto en computador como en móvil.
     // La página de informe usa el mismo lector, exclusivamente en memoria, a cualquier ancho.
     const informeReadonly = document.getElementById?.("seccion-libro-reserva")?.dataset?.libroModo === "informe-readonly";
-    const persistenciaPC = !informeReadonly && window.matchMedia("(min-width: 901px)").matches;
+    // La burbuja nativa usa otra WebView: no debe rotar las copias del visor.
+    const asistenteMovil = document.documentElement?.dataset?.hakuMobileAssistant === "1";
+    const persistenciaLocal = !informeReadonly && !asistenteMovil;
     const cierresCancelacionSesion = new Set();
     const CLAVE_CIERRES_CANCELACION = "avisos_cancelacion_cerrados";
     let operacionLibro = 0;
@@ -124,7 +126,7 @@
         const id = ++operacionLibro;
         limpiarMemoria();
         cierresCancelacionSesion.clear();
-        if (!persistenciaPC) {
+        if (!persistenciaLocal) {
             notificarVistaLibro("eliminado", false);
             return;
         }
@@ -254,7 +256,7 @@
         const detalle = $("sites-libro-memoria-detalle");
         if (!titulo || !detalle) return;
         const revision = ++revisionMemoriaVisual;
-        if (!persistenciaPC) {
+        if (!persistenciaLocal) {
             titulo.textContent = archivoBuffer ? "Libro en esta pestaña" : "Sin copia local";
             detalle.textContent = "En este dispositivo la copia no persiste al recargar";
             return;
@@ -383,7 +385,7 @@
         }
         actualizarDescarga();
         actualizarPieVisor();
-        if (!persistenciaPC) void actualizarMemoriaVisual();
+        if (!persistenciaLocal) void actualizarMemoriaVisual();
 
         const entrada = $("libro-reserva-archivo");
         const selector = $("libro-reserva-hoja");
@@ -395,12 +397,12 @@
         }
         if (quitar) quitar.disabled = true;
         actualizarPaginacion();
-        actualizarEstado("Sin archivo cargado", persistenciaPC ? "La copia se guarda sólo en este navegador; nunca en Supabase." : "Nada queda guardado en el navegador ni en Supabase.");
+        actualizarEstado("Sin archivo cargado", persistenciaLocal ? "La copia se guarda sólo en este navegador; nunca en Supabase." : "Nada queda guardado en el navegador ni en Supabase.");
         const meta = $("libro-reserva-meta");
         if (meta) meta.textContent = "Selecciona un XLSX para detectar sus hojas reales.";
         mostrarVacio(
             "El libro se abrirá aquí, sólo para lectura",
-            persistenciaPC ? "Carga un XLSX: seguirá disponible tras recargar hasta que pulses Quitar libro de memoria. Borrar los datos del sitio o usar navegación privada puede eliminar la copia." : "Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene únicamente en la memoria temporal de esta pestaña."
+            persistenciaLocal ? "La copia guardada se recupera al abrir. Con el Libro conectado, Haku busca la versión más reciente. También puedes cargar un XLSX. Quitar libro de memoria borra las copias locales." : "Descarga una copia XLSX del archivo oficial y selecciónala. El contenido se mantiene únicamente en la memoria temporal de esta pestaña."
         );
     }
 
@@ -857,7 +859,7 @@
             actualizarDescarga();
             let estadoLocal = "";
             let actualizacion = false;
-            if (persistenciaPC) {
+            if (persistenciaLocal) {
                 persistenciaConfirmada = restaurado;
                 estadoLocal = " · copia local restaurada";
                 if (!restaurado) {
@@ -909,7 +911,7 @@
             if (!informeReadonly) console.error("LIBRO RESERVA · Archivo no válido:", error);
             limpiarMemoria();
             mostrarVacio("No fue posible leer el archivo", "Verifica que sea la copia XLSX correcta e inténtalo otra vez.");
-            if (persistenciaPC) {
+            if (persistenciaLocal) {
                 actualizarEstado("No fue posible leer el archivo", "La copia guardada anteriormente no se reemplazó. Puedes quitarla con el botón.");
                 $("libro-reserva-quitar").disabled = false;
             }
@@ -956,7 +958,7 @@
         const estado = {nombre:archivoNombre,generacion:operacionLibro,version:archivoVersion,cargado:true};
         const persistido = persistenciaConfirmada;
         // Se encola antes de que una nueva carga pueda reemplazar el par persistido.
-        const anterior = persistenciaPC && persistido ? copiaLocal("leer_anterior") : Promise.resolve(null);
+        const anterior = persistenciaLocal && persistido ? copiaLocal("leer_anterior") : Promise.resolve(null);
         // Una consulta sólo del Libro actual no depende del almacenamiento anterior.
         const anteriorSeguro = anterior.then(registro => ({registro}), error => ({error}));
         let cola = Promise.resolve();
@@ -971,7 +973,7 @@
                 if (cache.has(key)) return structuredClone(cache.get(key));
                 let buffer = actual;
                 if (version === "anterior") {
-                    if (!persistenciaPC && ["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
+                    if (!persistenciaLocal && ["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
                     if (!persistido) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
                     const previo = await anteriorSeguro;
                     if (previo.error) throw previo.error;
@@ -1027,11 +1029,11 @@
             await cargaLista;
             const id = operacionLibro;
             if (!archivoBuffer || !libroIndice) throw new Error("Carga primero un XLSX en Libro de Reserva.");
-            if (version === "anterior" && ["indice", "indice_nombres", "huellas"].includes(tipo) && !persistenciaPC) return null;
+            if (version === "anterior" && ["indice", "indice_nombres", "huellas"].includes(tipo) && !persistenciaLocal) return null;
             if (version === "anterior" && !persistenciaConfirmada) throw new Error("El Libro actual no está guardado; no se puede comparar con la versión anterior.");
             const key = `${id}:${version}:${tipo}:${JSON.stringify(nombre)}`;
             if (cacheConsultas.has(key)) return structuredClone(cacheConsultas.get(key));
-            const registro = version === "anterior" && persistenciaPC ? await copiaLocal("leer_anterior") : null;
+            const registro = version === "anterior" && persistenciaLocal ? await copiaLocal("leer_anterior") : null;
             if (id !== operacionLibro) throw new Error("El Libro cambió durante la consulta. Vuelve a preguntar.");
             if (version === "anterior" && !registro?.buffer) {
                 if (["indice", "indice_nombres", "huellas"].includes(tipo)) return null;
@@ -1067,11 +1069,11 @@
             listarHojas: () => [...(libroIndice?.SheetNames || [])],
             consultarIndice: (version = "actual") => consultarHoja("", version, "indice_nombres"),
             consultarHuellas: (version = "actual", nombres = []) => consultarHoja([...nombres], version, "huellas"),
-            leerCambiosDetectados: async () => persistenciaPC ? await copiaLocal("leer_cambios") : null,
-            guardarCambiosDetectados: async registro => persistenciaPC ? await copiaLocal("guardar_cambios", structuredClone(registro)) : registro,
-            leerAvisosCancelacionCerrados: async () => persistenciaPC ? await copiaLocal("leer_cierres_cancelacion") : [...cierresCancelacionSesion],
+            leerCambiosDetectados: async () => persistenciaLocal ? await copiaLocal("leer_cambios") : null,
+            guardarCambiosDetectados: async registro => persistenciaLocal ? await copiaLocal("guardar_cambios", structuredClone(registro)) : registro,
+            leerAvisosCancelacionCerrados: async () => persistenciaLocal ? await copiaLocal("leer_cierres_cancelacion") : [...cierresCancelacionSesion],
             cerrarAvisoCancelacion: informeReadonly ? undefined : async firma => {
-                if (persistenciaPC) await copiaLocal("cerrar_aviso_cancelacion", firma);
+                if (persistenciaLocal) await copiaLocal("cerrar_aviso_cancelacion", firma);
                 else cierresCancelacionSesion.add(firma);
             },
             consultarHoja,
@@ -1096,7 +1098,7 @@
         entrada?.addEventListener("change", () => { cargaLista = cargarArchivo(entrada.files?.[0]); });
         selector?.addEventListener("change", () => renderizarHoja(selector.value));
         quitar?.addEventListener("click", quitarLibro);
-        if (persistenciaPC) cargaLista = restaurarLibro();
+        if (persistenciaLocal) cargaLista = restaurarLibro();
         anterior?.addEventListener("click", () => {
             if (paginaActual <= 0) return;
             paginaActual -= 1;

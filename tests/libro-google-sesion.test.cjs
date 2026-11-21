@@ -75,6 +75,7 @@ function browser(options = {}) {
         },
         now: () => now, advance: ms => { now += ms; }, oauth: () => oauth, revokes: () => revokes, oauthReply: () => pendingOAuth(),
         event: name => events.dispatchEvent(new Event(name)),
+        documentEvent: name => docEvents.dispatchEvent(new Event(name)),
         visibility(value) { root.document.visibilityState = value; docEvents.dispatchEvent(new Event('visibilitychange')); },
         auth(event, id) { callback(event, id ? { user: { id } } : null); },
         async idle() {
@@ -362,4 +363,36 @@ test('servidor: informe readonly no persiste permisos ni afecta al token guardad
     const b = browser({ server: true, readonly: true, session: first.session }); await b.idle();
     assert.equal(b.loads.length, 1); assert.equal(b.local.size, 0); assert.equal(b.session.get(key), previous);
     b.api.desconectar({ revocar: false }); assert.equal(b.session.get(key), previous); assert.equal(b.revokes(), 0);
+});
+
+test('servidor: un fallo inicial reintenta a los 15 s y carga sin OAuth', async () => {
+    let failing=true;
+    const b=browser({server:true,serverFetcher:async(init,meta,bytes)=>failing
+        ?serverError(504,'GOOGLE_TIMEOUT'):{data:init.body.accion==='metadata'?meta:new Blob([bytes]),error:null}});
+    await b.idle();assert.equal(b.loads.length,0);assert.equal(b.intervals.size,1);
+    const timer=[...b.intervals.values()][0];assert.equal(timer.ms,15000);
+    failing=false;timer.f();await b.idle();
+    assert.equal(b.api.estado().conectado,true);assert.equal(b.loads.length,1);assert.equal(b.oauth(),0);
+});
+
+test('servidor: el reintento inicial no consulta en segundo plano y respeta Pausar', async () => {
+    const b=browser({server:true,serverFetcher:async()=>serverError(504,'GOOGLE_TIMEOUT')});
+    await b.idle();const calls=b.serverRequests.length;const timer=[...b.intervals.values()][0];
+    b.visibility('hidden');timer.f();await b.idle();assert.equal(b.serverRequests.length,calls);
+    b.api.desconectar();assert.equal(b.intervals.size,0);
+    b.visibility('visible');b.event('haiku:auth-ready');await b.idle();assert.equal(b.serverRequests.length,calls);
+});
+
+test('servidor: cerrar sesión detiene también los reintentos de una conexión fallida', async () => {
+    const b=browser({server:true,serverFetcher:async()=>serverError(504,'GOOGLE_TIMEOUT')});
+    await b.idle();const calls=b.serverRequests.length;
+    b.root.haikuSesion=null;b.auth('SIGNED_OUT');b.event('focus');await b.idle();
+    assert.equal(b.intervals.size,0);assert.equal(b.serverRequests.length,calls);assert.equal(b.oauth(),0);
+});
+
+test('servidor: supabase-ready después de validar la identidad inicia la carga', async () => {
+    const b=browser({server:true,user:null});await b.idle();assert.equal(b.serverRequests.length,0);
+    b.root.haikuSesion={auth:{id:'usuario-a'},usuario:{activo:true}};
+    b.documentEvent('haiku:supabase-ready');await b.idle();
+    assert.equal(b.api.estado().conectado,true);assert.equal(b.loads.length,1);assert.equal(b.oauth(),0);
 });

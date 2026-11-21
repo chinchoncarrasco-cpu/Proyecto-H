@@ -4,11 +4,12 @@ const E=require('../js/supabase-asistente-libro-actualizacion-v1.js');
 const res=x=>({estado:'ok',nuevas:[],modificadas:[],ya_no_aparecen:[],ambiguas:[],advertencias:[],...x});
 const row={titular:'Persona Prueba',cabana:8,fecha_checkin:'2026-09-11',fecha_checkout:'2026-09-13'};
 const tick=()=>new Promise(r=>setImmediate(r));
-function cargador({pc=true}={}) {
+function cargador({pc=true,readonly=false,assistant=false}={}) {
     const store=new Map(),eventos=[],timers=[];let fail=false,invalid=false;
     const el={replaceChildren(){},style:{}};
     const ctx=vm.createContext({ArrayBuffer,Uint8Array,URL,structuredClone,console:{error(){}},
-        document:{readyState:'loading',addEventListener(){},getElementById:()=>el,currentScript:{src:'https://test.invalid/libro.js'}},
+        document:{readyState:'loading',addEventListener(){},documentElement:{dataset:{hakuMobileAssistant:assistant?'1':undefined}},
+            getElementById:id=>id==='seccion-libro-reserva'&&readonly?{dataset:{libroModo:'informe-readonly'}}:el,currentScript:{src:'https://test.invalid/libro.js'}},
         matchMedia:()=>({matches:pc}),dispatchEvent:e=>eventos.push(e),CustomEvent:class {constructor(type,opt){this.type=type;this.detail=opt?.detail;}},
         setTimeout:f=>{timers.push(f);},clearTimeout(){},
         indexedDB:{open(){const req={};queueMicrotask(()=>{req.result={close(){},transaction(){
@@ -57,9 +58,23 @@ test('archivo sin hojas, lectura fallida y extensión inválida no emiten',async
 test('fallo de persistencia no emite ni reemplaza las copias',async()=>{
     const h=cargador();await h.cargar([1]);h.fallar();await h.cargar([2]);h.flush();assert.equal(h.avisos().length,0);assert.equal(new Uint8Array(h.store.get('actual').buffer)[0],1);
 });
-test('quitar invalida el evento diferido; móvil sin anterior no emite',async()=>{
+test('quitar invalida el evento diferido también en móvil',async()=>{
     const h=cargador();await h.cargar([1]);await h.cargar([2]);await h.ctx.quitarTest();h.flush();assert.equal(h.avisos().length,0);
-    const m=cargador({pc:false});await m.cargar([1]);await m.cargar([2]);m.flush();assert.equal(m.avisos().length,0);
+    const m=cargador({pc:false});await m.cargar([1]);await m.cargar([2]);await m.ctx.quitarTest();m.flush();assert.equal(m.avisos().length,0);assert.equal(m.store.size,0);
+});
+test('móvil conserva actual/anterior, restaura sin avisos y no rota bytes idénticos',async()=>{
+    const m=cargador({pc:false});await m.cargar([1]);m.flush();assert.equal(m.avisos().length,0);
+    await m.cargarGoogle([2]);m.flush();assert.equal(m.avisos().length,1);
+    assert.equal(new Uint8Array(m.store.get('actual').buffer)[0],2);
+    assert.equal(new Uint8Array(m.store.get('anterior').buffer)[0],1);
+    await m.ctx.restaurarTest();await m.cargarGoogle([2]);m.flush();assert.equal(m.avisos().length,1);
+    assert.equal(new Uint8Array(m.store.get('anterior').buffer)[0],1);
+});
+test('informe readonly y burbuja móvil no rotan las copias locales del visor',async()=>{
+    for(const options of [{readonly:true},{assistant:true}]){
+        const h=cargador(options);await h.cargar([1]);await h.cargarGoogle([2]);h.flush();
+        assert.equal(h.store.size,0);assert.equal(h.avisos().length,0);
+    }
 });
 test('lectura aislada mantiene actual/anterior y hojas en cola durante dos actualizaciones',async()=>{
     const h=cargador();await h.cargar([1]);await h.cargar([2]);
