@@ -1005,13 +1005,21 @@
                     }catch(error){
                         const confirmado=resumenGuardado(error?.incorporado);
                         const motivo=notaBreve(error?.message||'No pude confirmar el guardado. Reintenta para comprobarlo sin duplicar.',320);
+                        const requiereRevision=error?.haikuConflictoDatos===true;
                         if(confirmado){
                             vistaCambios.hidden=true;bloquePendientes.hidden=true;
                             if(vistaFechas)vistaFechas.hidden=true;
                             mostrarRecibo(error.incorporado,confirmado);
                             nodo(estadoGuardado,'p','haku-libro-auto__aviso',motivo);
                         }else estadoGuardado.textContent=motivo;
-                        for(const b of botonesIncorporar)b.textContent='Reintentar';
+                        if(requiereRevision){
+                            finalizado=true;
+                            vistaCambios.hidden=true;
+                            bloquePendientes.hidden=true;
+                            if(vistaFechas)vistaFechas.hidden=true;
+                            nodo(estadoGuardado,'p','haku-libro-auto__aviso','Abre «Ver informe» para revisar los casos antes de confirmar de nuevo.');
+                            for(const b of botonesIncorporar)b.hidden=true;
+                        }else for(const b of botonesIncorporar)b.textContent='Reintentar';
                     }finally{
                         guardando=false;cerrar.disabled=false;
                         for(const b of acciones){b.incorporacionBloqueada=finalizado&&botonesIncorporar.includes(b);b.disabled=b.incorporacionBloqueada||consultando();}

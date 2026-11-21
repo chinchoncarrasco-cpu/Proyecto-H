@@ -177,7 +177,7 @@ function entorno({ fechaVisible = FECHA, confirmar = true, delegar = false,
         async preparar() {
             const r = { id: 'Oct26!CAB2', titular: 'Mery Vasquez Carrion', cabana: 2,
                 fecha_checkin: FECHA, fecha_checkout: FECHA, tipo_estadia: 'full_day', noches: 0,
-                adultos: 2, ninos: 0, mascotas: 0, rut_documento: '12345678-9',
+                adultos: 2, ninos: 0, mascotas: 0, rut_documento: '12345678-5',
                 correo: 'prueba@example.test', telefono: '+56912345678', pagos: [],
                 pagos_sin_asociacion: [], servicios: [], advertencias: [], notas_importantes: [],
                 coordenadas_origen: { hoja: 'Oct26', celda: 'CAB2' } };

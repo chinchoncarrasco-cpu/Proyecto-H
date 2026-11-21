@@ -64,7 +64,10 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
                 window.HAIKU_ASISTENTE={abrir:()=>__navegacionAviso.chat++};
                 window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={
                     obtenerResultadoAviso:async()=>{__navegacionAviso.lecturas++;return resultado;},
-                    puedeIncorporar:()=>true,incorporarDesdeAviso:async()=>{__navegacionAviso.escrituras++;},
+                    puedeIncorporar:()=>true,incorporarDesdeAviso:async()=>{
+                        __navegacionAviso.escrituras++;
+                        throw Object.assign(Error('RUT inválido. No se guardó el lote.'),{code:'HLI03',haikuConflictoDatos:true});
+                    },
                     mostrarResultado:()=>__navegacionAviso.chat++
                 };
             },total);
@@ -187,6 +190,19 @@ async function comprobarNavegacionAvisoLargo(browser,url) {
             assert.equal(await page.locator('#haiku-asistente-mensajes').textContent(),'Conversación conservada');
             assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Borrador de prueba');
             assert.deepEqual(await page.evaluate(()=>__navegacionAviso),{lecturas:1,chat:0,escrituras:0});
+            await aviso.getByRole('button',{name:'Incorporar',exact:true}).click();
+            await aviso.getByText('Abre «Ver informe» para revisar los casos antes de confirmar de nuevo.',{exact:true}).waitFor();
+            assert.equal(await aviso.getByRole('button',{name:'Reintentar',exact:true}).count(),0);
+            assert.match(await aviso.innerText(),/RUT inválido.*No se guardó el lote/);
+            assert.equal(await aviso.getByText(`Listos para incorporar (${total})`,{exact:true}).isVisible(),false);
+            for(const tema of ['claro','oscuro']){
+                await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+                assert.ok(await aviso.evaluate(el=>el.scrollWidth<=el.clientWidth+1));
+                if(process.env.HAKU_RESUMEN_CAPTURES)await aviso.screenshot({path:path.join(process.env.HAKU_RESUMEN_CAPTURES,`aviso-rut-${tema}-${width}.png`)});
+            }
+            await aviso.getByRole('button',{name:'Ver informe',exact:true}).click();
+            await aviso.waitFor({state:'hidden'});
+            assert.deepEqual(await page.evaluate(()=>__navegacionAviso),{lecturas:1,chat:2,escrituras:1});
             assert.deepEqual(errores,[]);
         }finally{await page.close();}
     }
