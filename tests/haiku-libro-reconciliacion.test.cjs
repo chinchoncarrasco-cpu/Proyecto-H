@@ -73,6 +73,86 @@ test('actualización de RUT inválido no detiene otras reservas en la etapa de i
  assert.deepEqual(Q.serializarIncorporacion(plan).map(i=>i.reserva.titular_nombre),[independiente.titular]);
 });
 
+test('el aviso y la incorporación apartan un alta con RUT registrado a otro nombre y su pago', async t => {
+ const permisoPrevio=global.haikuTienePermiso;
+ global.haikuTienePermiso=p=>['reservas.crear','huespedes.ver','pagos.registrar'].includes(p);
+ t.after(()=>{global.haikuTienePermiso=permisoPrevio;});
+ const bloqueada=readyBook({id:'alta-identidad',titular:'Persona con Segundo Apellido',rut_documento:'12.345.670-K',pagos:[readyPay()]});
+ const libre=readyBook({id:'alta-libre',titular:'Otra Persona Ficticia',rut_documento:'12345678-5',cabana:2});
+ const reservas=[bloqueada,libre],db=client(),lecturas=[],escrituras=[];
+ db.rpc=async(nombre,args)=>{
+  if(nombre==='haiku_libro_revisar_rut_altas_v1'){
+   lecturas.push(args.p_altas);
+   const posicion=args.p_altas.findIndex(alta=>alta.nombre===bloqueada.titular)+1;
+   return {data:posicion?[{posicion,motivo:'nombre_distinto'}]:[]};
+  }
+  escrituras.push({nombre,items:args.p_items});
+  return {data:{ok:true,reservas_creadas:1,resultados:[]}};
+ };
+ const aviso=await Q.revalidarCambiosDetectados(reservas.map(actual=>({id:'aviso:'+actual.id,tipo:'nueva',actual})),db);
+ const caso=aviso.items.find(i=>i.actual.id===bloqueada.id);
+ assert.equal(caso.accionable,false);
+ assert.equal(caso.vistaIncorporacion,undefined);
+ assert.match(caso.revision.motivos.join(' '),/un nombre distinto en Huéspedes/);
+ assert.doesNotMatch(caso.revision.motivos.join(' '),/12345670/);
+ assert.deepEqual(aviso.reservas.map(r=>r.id),[libre.id]);
+ assert.equal(aviso.comparacion.length,1);
+ assert.equal(lecturas.length,1);
+ assert.equal(escrituras.length,0);
+ const result={reservas,q},decisiones=new Map(),aprobados=new Set();
+ const plan=await Q.prepararIncorporacion(result,decisiones,aprobados,db);
+ const alta=plan.items.find(i=>i.payload?.reserva?.titular_nombre===bloqueada.titular);
+ assert.equal(alta.categoria,'pendientes');
+ const pago=plan.items.find(i=>i.pagoLibro);
+ assert.equal(pago.categoria,'pendientes');
+ assert.equal(pago.reservaPendiente,true);
+ assert.equal(pago.manualPago,null);
+ assert.ok(!pago.seleccionado&&!pago.aprobable);
+ await Q.confirmarIncorporacion(result,decisiones,aprobados,plan,db);
+ assert.equal(escrituras.length,1);
+ assert.equal(escrituras[0].nombre,'haiku_incorporar_libro_v1');
+ assert.deepEqual(escrituras[0].items.map(i=>[i.tipo,i.reserva.titular_nombre]),[['reserva_nueva',libre.titular]]);
+});
+
+test('la comprobación del aviso conserva juntas las cabañas de una posible reserva', async t => {
+ const permisoPrevio=global.haikuTienePermiso;
+ global.haikuTienePermiso=p=>['reservas.crear','huespedes.ver'].includes(p);
+ t.after(()=>{global.haikuTienePermiso=permisoPrevio;});
+ const r=readyBook({titular:'Persona de Dos Cabañas',rut_documento:'12345670K'});
+ const reservas=[r,{...r,id:'segunda',cabana:2,rut_documento:null}],db=client();
+ db.rpc=async()=>assert.fail('El aviso no debe verificar una fila aislada del grupo');
+ const aviso=await Q.revalidarCambiosDetectados(reservas.map(actual=>({id:'aviso:'+actual.id,tipo:'nueva',actual})),db);
+ assert.deepEqual(aviso.reservas.map(r=>r.cabana),[1,2]);
+ assert.equal(aviso.comparacion.grupos[0].estado,'ambigua');
+ const plan=await Q.prepararIncorporacion({reservas,q},new Map(),new Set(),db);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+});
+
+test('al confirmar se detecta el RUT que cambió tras la vista previa y se nombra la reserva', async t => {
+ const permisoPrevio=global.haikuTienePermiso;
+ global.haikuTienePermiso=p=>['reservas.crear','huespedes.ver'].includes(p);
+ t.after(()=>{global.haikuTienePermiso=permisoPrevio;});
+ const r=readyBook({titular:'Titular por Comprobar',rut_documento:'12345670K'});
+ const result={reservas:[r],q},decisiones=new Map(),aprobados=new Set(),db=client();
+ let documentoOcupado=false, escrituras=0;
+ db.rpc=async nombre=>{
+  if(nombre==='haiku_libro_revisar_rut_altas_v1')return {data:documentoOcupado?[{posicion:1,motivo:'nombre_distinto'}]:[]};
+  escrituras++;
+  return {data:{ok:true}};
+ };
+ const plan=await Q.prepararIncorporacion(result,decisiones,aprobados,db);
+ assert.ok(plan.items.some(i=>i.seleccionado));
+ documentoOcupado=true;
+ await assert.rejects(Q.confirmarIncorporacion(result,decisiones,aprobados,plan,db), e=>{
+  assert.equal(e.haikuConflictoDatos,true);
+  assert.match(e.message,/CAB 1 · Titular por Comprobar/);
+  assert.doesNotMatch(e.message,/12345670/);
+  assert.ok(e.planActual.items.every(i=>!i.seleccionado));
+  return true;
+ });
+ assert.equal(escrituras,0);
+});
+
 test('identidad conflictiva: dos altas independientes seleccionables, pagos dependientes bloqueados y sin RPC financiero',async()=>{
  const h=await prepararIdentidadFicticia(),{plan}=h;
  assert.equal(plan.etapa,'actualizar_identidad');assert.equal(plan.items.filter(i=>i.payload?.tipo==='reserva_actualizar').length,4);

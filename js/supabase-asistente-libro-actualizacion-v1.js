@@ -256,6 +256,10 @@
             encontro:'Falta incorporar esta reserva en Proyecto H.',motivo:'Los datos permiten preparar su registro.',
             paso:'Pulsa «Revisar cambios» al final del informe para revisarla y confirmar su incorporación.'
         };
+        if(item.revision?.conflictoRutAlta)return {
+            encontro:item.revision.conflictoRutAlta,
+            paso:'Después de comprobar los datos, pulsa «Volver a revisar».'
+        };
         if(!item.sistema){
             const candidato=candidatos.length===1?candidatos[0]:null;
             const mismasFechas=candidato&&r.fecha_checkin===candidato.fecha_checkin&&r.fecha_checkout===candidato.fecha_checkout;
@@ -313,7 +317,8 @@
         const principal=pendienteFuente||contradiccion||financiero;
         // Servicios, notas y la columna de cobros pueden describir la misma
         // prestación. Mostrar una sola conclusión por elemento comprobado.
-        if(!principal&&(lista(c?.servicios).length||lista(c?.notas).length))return detalleOperativo(item,generacion,historia,fechasVisibles);
+        if(!principal&&!item.revision?.conflictoRutAlta&&(lista(c?.servicios).length||lista(c?.notas).length))
+            return detalleOperativo(item,generacion,historia,fechasVisibles);
         if(!principal&&detallesServicios.length&&lista(item.cambios).every(x=>x.campo==='servicios'))e.motivo='';
         const contexto=[...hechos.filter(x=>!x.startsWith('Corregir las fechas')),...detallesServicios,historia,
             ...avisos.filter(x=>x!==principal).map(x=>x.texto)].filter(Boolean);

@@ -28,6 +28,35 @@ test('documento ocupado por otra persona: HLI02 y ausencia de escrituras en alta
   await assert.rejects(create(h,'12.345.670-K','Nombre Diferente Ficticio'),e=>e.code==='HLI02'&&!e.message.includes('12345670'));
   assert.deepEqual(await full(h),before);
 }));
+test('preparación del Libro identifica el alta por posición con permisos y sin escrituras',using({},async h=>{
+  await h.db.exec(read('supabase/migrations/20261121183500_libro_revisar_rut_altas.sql'));
+  await create(h,'12345670K','Persona de Prueba');
+  const antes=await full(h);
+  const revisar=altas=>h.db.query('select * from haiku_libro_revisar_rut_altas_v1($1::jsonb)',[JSON.stringify(altas)]);
+  const altas=[
+    {rut:'12.345.670-k',nombre:'Persona de Prueba'},
+    {rut:'12345670K',nombre:'Persona de Prueba Segundo Apellido'},
+    {rut:'12.345.678-5',nombre:'Persona Ficticia'},
+    {rut:'1234567-4',nombre:'Una Persona'},
+    {rut:'12345674',nombre:'Otra Persona'},
+    {rut:'12345670-1',nombre:'Inválida'}
+  ];
+  await h.db.exec('begin read only; set local role authenticated;');
+  const informe=await revisar(altas);
+  await h.db.exec('commit');
+  assert.deepEqual(informe.rows,[
+    {posicion:2,motivo:'nombre_distinto'},
+    {posicion:4,motivo:'nombres_distintos_en_lote'},
+    {posicion:5,motivo:'nombres_distintos_en_lote'},
+    {posicion:6,motivo:'rut_invalido'}
+  ]);
+  assert.deepEqual(await full(h),antes);
+  await h.db.exec('set role anon');
+  await assert.rejects(revisar(altas),e=>e.code==='42501');
+  await h.db.exec("reset role; select set_config('haku.test_permit','off',false); set role authenticated");
+  await assert.rejects(revisar(altas),e=>e.code==='42501');
+  await h.db.exec('reset role');
+}));
 test('documentos ausentes no fusionan por nombre; inválidos abortan de forma tipada',using({},async h=>{
   await create(h,null);await create(h,'');
   assert.equal((await h.db.query(`select count(distinct titular_huesped_id)::int n from reservas where titular_nombre='Persona Sintética'`)).rows[0].n,2);

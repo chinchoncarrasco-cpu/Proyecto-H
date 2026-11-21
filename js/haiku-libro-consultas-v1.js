@@ -3106,6 +3106,7 @@
             comparacion.snapshot.estadias=comparacion.snapshot.estadias_todas.filter(candidatoElegible);
         }
         const items=[],resueltos=reaparecidas.map(r=>r.id),resueltosDetalle=reaparecidas.map(r=>({...r,motivo:'reserva_reaparecida'})),filasPreparacion=[],reservasPreparacion=[];
+        const altasRut = [];
         for(let indice=0;indice<entradas.length;indice++){
             const grupo=entradas[indice],resultado=Array.from(comparacion).find(x=>x.libro?._historial_indice===indice)||Array.from(comparacion)[indice];
             for(const detectado of grupo.registros){
@@ -3165,10 +3166,15 @@
                     const evaluacion=evaluarFilaHistorial(resultado,comparacion);
                     const accionable=resultado?.estado==='sin_coincidencia'&&evaluacion.accionable&&
                         (!registro.fuente_vigente||registro.fuente_vigente.estado==='verificada');
-                    items.push({...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
+                    const item={...registro,estado:accionable?'pendiente':'revision',accionable,revision:evaluacion.revision,
                         ...(accionable?{vistaIncorporacion:vistaIncorporacionHistorial(evaluacion.propuesta)}:{}),
-                        proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'});
-                    if(accionable){filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);}
+                        proyecto:canceladas.length?'Encontré una reserva cancelada y otras estadías de esta persona. Revisa cuál corresponde antes de guardar cambios.':resultado?.estado||'sin coincidencia'};
+                    items.push(item);
+                    if(accionable){
+                        filasPreparacion.push(resultado);reservasPreparacion.push(resultado.libro);
+                        const alta = altaConRut(evaluacion.propuesta?.reserva);
+                        if (alta) altasRut.push({alta,item,fila:resultado});
+                    }
                     continue;
                 }
                 if(registro.tipo==='cancelacion'){
@@ -3223,8 +3229,27 @@
             }
         }
         const unicas=[...new Map(filasPreparacion.map(x=>[firmaReservaHistorial(x.libro),x])).values()];
-        const prep=comparacionPreparacionHistorial(unicas,comparacion);
-        const reservasPrep=[...new Map(reservasPreparacion.map(x=>[firmaReservaHistorial(x),x])).values()];
+        let prep=comparacionPreparacionHistorial(unicas,comparacion);
+        // Una propuesta de varias cabañas conserva todas sus filas hasta que
+        // se resuelva el grupo. En la confirmación se comprueba el alta entera.
+        const individuales = new Set(prep.grupos.filter(g => g.items.length === 1).map(g => g.items[0]));
+        const altasIndividuales = altasRut.filter(x => individuales.has(x.fila));
+        const conflictos = await revisarRutAltas(altasIndividuales.map(x => x.alta), cliente);
+        const bloqueadas = new Set();
+        for (const {alta,item,fila} of altasIndividuales) {
+            const motivo = conflictos.get(alta);
+            if (!motivo) continue;
+            item.accionable = false;
+            item.estado = 'revision';
+            item.revision.motivos.push(motivo);
+            item.revision.conflictoRutAlta = motivo;
+            item.proyecto = null;
+            delete item.vistaIncorporacion;
+            bloqueadas.add(firmaReservaHistorial(fila.libro));
+        }
+        const preparable = reserva => !bloqueadas.has(firmaReservaHistorial(reserva));
+        if (bloqueadas.size) prep=comparacionPreparacionHistorial(unicas.filter(x => preparable(x.libro)),comparacion);
+        const reservasPrep=[...new Map(reservasPreparacion.filter(preparable).map(x=>[firmaReservaHistorial(x),x])).values()];
         const fichasOperativas=new Map(items.filter(x=>x.sistema&&(x.cambios||[]).some(c=>c.campo==='servicios'))
             .map(x=>[firmaReservaHistorial(x.actual),x.actual]));
         return {items,resueltos,resueltosDetalle,reemplazos:reemplazos.filter(r=>!resueltos.includes(r.id)),total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
@@ -5876,6 +5901,11 @@
         }
         priorizarActualizacionesEstadia(plan);
         bloquearAltasEnCabanasOcupadas(plan, comparacion.snapshot);
+        await apartarConflictosRutAltas(plan, cliente);
+        if (root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion !== revision) {
+            if (intento >= 2) throw Error('El Libro cambió al comprobar el RUT. Vuelve a revisar la fuente vigente.');
+            return prepararIncorporacion(result,decisiones,aprobados,cliente,intento+1,incluirCambios);
+        }
         return plan;
     }
 
@@ -6273,6 +6303,63 @@
         return compacto.at(-1) === (digito === 11 ? '0' : digito === 10 ? 'K' : String(digito));
     }
 
+    function esRutAlta(reserva, numero) {
+        const tipo = reserva.titular_tipo_documento;
+        return tipo === 'rut' || !tipo && /^\d{1,2}(?:\.?\d{3}){2}-?[0-9K]$/.test(numero);
+    }
+
+    function altaConRut(reserva) {
+        if (!reserva) return null;
+        const rut = String(reserva.titular_numero_documento ?? '').trim().toUpperCase();
+        return esRutAlta(reserva,rut) && rutValidoParaIncorporacion(rut)
+            ? {rut,nombre:reserva.titular_nombre} : null;
+    }
+
+    async function revisarRutAltas(altas, cliente) {
+        const conflictos = new Map();
+        if (!altas.length || root.haikuTienePermiso?.('reservas.crear') !== true ||
+            root.haikuTienePermiso?.('huespedes.ver') !== true) return conflictos;
+        const motivos = {
+            nombre_distinto:'El RUT del Libro está registrado con un nombre distinto en Huéspedes. Verifica cuál es el nombre correcto.',
+            rut_en_revision:'Este RUT ya tiene un conflicto de identidad en Huéspedes. Revisa la ficha antes de incorporar.',
+            nombres_distintos_en_lote:'Este RUT aparece con nombres distintos entre las reservas nuevas. Verifica a quién corresponde.',
+            rut_invalido:'Verifica el RUT del Libro antes de incorporar esta reserva.'
+        };
+        for (let i = 0; i < altas.length; i += 100) {
+            const lote = altas.slice(i,i+100);
+            let data, error;
+            try { ({data,error} = await cliente.rpc('haiku_libro_revisar_rut_altas_v1',{p_altas:lote})); }
+            catch (fallo) { error = fallo; }
+            // Durante el despliegue el writer vigente sigue validando la identidad.
+            if (['PGRST202','42883'].includes(error?.code)) break;
+            if (error || !Array.isArray(data)) {
+                for (const alta of lote) conflictos.set(alta,'No se pudo comprobar el RUT en Huéspedes. Vuelve a revisar esta reserva.');
+                continue;
+            }
+            for (const {posicion,motivo} of data) {
+                if (lote[posicion-1] && Object.hasOwn(motivos,motivo)) conflictos.set(lote[posicion-1],motivos[motivo]);
+            }
+        }
+        return conflictos;
+    }
+
+    async function apartarConflictosRutAltas(plan, cliente) {
+        const altas = new Map();
+        for (const item of plan.items) {
+            if (item.categoria !== 'nuevas' || item.motivos.length) continue;
+            const alta = altaConRut(item.payload?.reserva);
+            if (alta) altas.set(alta,item);
+        }
+        const bloqueados = new Set();
+        for (const [alta,motivo] of await revisarRutAltas([...altas.keys()],cliente)) {
+            const item = altas.get(alta);
+            dejarIncorporacionPendiente(item,[motivo]);
+            item.conflictoIdentidad = true;
+            bloqueados.add(item.id);
+        }
+        apartarDependientesRut(plan,bloqueados);
+    }
+
     function apartarRutsInvalidos(plan, snapshot) {
         const bloqueados = new Set();
         for (const item of plan.items) {
@@ -6284,11 +6371,15 @@
             if (!numero) continue;
             const tipo = datos.titular_tipo_documento ?? (!nueva ?
                 (snapshot?.estadias_todas || snapshot?.estadias || []).find(e => e.id === payload.estadia_id)?.tipo_documento : null);
-            const rutInferido = nueva && !tipo && /^\d{1,2}(?:\.?\d{3}){2}-?[0-9K]$/.test(numero);
-            if ((tipo !== 'rut' && !rutInferido) || rutValidoParaIncorporacion(numero)) continue;
+            if (!(nueva ? esRutAlta(datos,numero) : tipo === 'rut') || rutValidoParaIncorporacion(numero)) continue;
             dejarIncorporacionPendiente(item, ['El RUT del Libro es inválido. Verifica el número y el dígito verificador antes de incorporar esta reserva.']);
             bloqueados.add(item.id);
         }
+        apartarDependientesRut(plan,bloqueados);
+    }
+
+    function apartarDependientesRut(plan, bloqueados) {
+        if (!bloqueados.size) return;
         apartarDependientes(plan, bloqueados, 'Verifica primero el RUT de la reserva asociada.');
         for (const item of plan.items) if (item.pagoLibro && bloqueados.has(item.id)) {
             item.reservaPendiente = true;
@@ -6457,6 +6548,8 @@
             const refs = item => JSON.stringify((item?.payload?.estadias || [item?.payload]).map(e => e?.resolucion_manual || null));
             for (const item of itemsBase.filter(i => i.seleccionado)) {
                 const nuevo = actuales.get(item.id);
+                if (nuevo?.conflictoIdentidad && item.categoria === 'nuevas') throw Object.assign(
+                    Error(nuevo.texto + ' · ' + nuevo.motivos[0]), {code:'HLC01',haikuConflictoDatos:true,planActual:actualizado});
                 if (nuevo?.conflictoIdentidad || nuevo?.etapaSiguiente && item.pagoLibro) throw Object.assign(
                     Error('La selección incluye una actualización en revisión o un pago con cambios aún sin confirmar. Revisa la selección antes de continuar.'),
                     {code:'HLC01',haikuConflictoDatos:true});
@@ -7365,7 +7458,7 @@
         // la fuente vigente. Revalidar nuevamente al pulsar el botón evita abrir
         // una propuesta basada en el snapshot que generó el informe.
         const plan=await prepararIncorporacion(result,decisiones,aprobados);
-        if(!plan.items.some(item=>item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))
+        if(!plan.items.some(item=>item.conflictoIdentidad||item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))
             throw Object.assign(new Error('Proyecto H ya no tiene diferencias accionables seguras. Revalida el informe.'),{haikuSinCambiosPreparables:true});
         const volver=async()=>{
             const actualizado=await revalidarEntradaEstructurada(result);

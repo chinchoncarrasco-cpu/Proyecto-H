@@ -1370,7 +1370,9 @@ async function comprobarPendientesTrasConfirmar(browser,url){
             window.HAIKU_LIBRO_CONSULTAS={...HAIKU_LIBRO_CONSULTAS,revalidarCambiosDetectados:async cambios=>{
                 if(__fallaAviso)throw Error('Fallo de consulta simulado');
                 const ya=x=>__confirmadasAviso.has(x.actual?.id);
-                return {items:cambios.filter(x=>!ya(x)).map(x=>({...x,estado:'revision',accionable:false})),
+                const motivo='El RUT del Libro está registrado con un nombre distinto en Huéspedes. Verifica cuál es el nombre correcto.';
+                return {items:cambios.filter(x=>!ya(x)).map(x=>({...x,estado:'revision',accionable:false,
+                    ...(x.actual?.id===nueva.id?{revision:{motivos:[motivo],conflictoRutAlta:motivo}}:{})})),
                     resueltos:cambios.filter(ya).map(x=>x.id),reservas:[],comparacion:[]};
             }};
             window.HAIKU_LIBRO_DIFERENCIAS_V1={...HAIKU_LIBRO_DIFERENCIAS_V1,
@@ -1423,6 +1425,17 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         const pendientesNormales=page.locator('.haku-actualizacion-sites').last().locator('.haku-libro-pendientes-zona');
         await pendientesNormales.getByText(/Reserva para actualizar/).waitFor();
         assert.match(await pendientesNormales.innerText(),/Reserva para crear/);
+        const conflictoRut=pendientesNormales.locator('.haku-pendiente-item').filter({hasText:'Reserva para crear'});
+        await conflictoRut.locator('summary').click();
+        for(const tema of ['claro','oscuro']){
+            await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
+            for(const width of [1280,390,320]){
+                await page.setViewportSize({width,height:900});
+                assert.equal(await conflictoRut.getByText(/registrado con un nombre distinto/).count(),1);
+                assert.match(await conflictoRut.innerText(),/Volver a revisar/);
+                assert.equal(await conflictoRut.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+            }
+        }
 
         await page.evaluate(()=>{__confirmadasAviso.add('reserva-por-crear');__publicarPendientes(2);});
         await pendientesAviso.click();
