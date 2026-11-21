@@ -570,7 +570,7 @@
                     mismasFechas(reserva, s) ? "posible_cambio_cabana" : "modificacion_fechas_o_independiente";
                 confianza = "media";
             }
-            pregunta = categoria === "posible_cambio_cabana" ? "¿Es una estadía adicional o una reserva independiente? Hay identidad compatible y distinta CAB." :
+            pregunta = categoria === "posible_cambio_cabana" ? `¿Es la misma estadía y corresponde corregir Proyecto H de CAB ${posibles[0].cabana} a CAB ${reserva.cabana}, como indica el Libro? Coinciden identidad y fechas; el traslado requiere confirmación y comprobar disponibilidad.` :
                 categoria === "modificacion_titular" ? "¿Es la misma reserva? Coinciden CAB y fechas, pero hay datos de identidad en conflicto; revisa la comparación por campos." :
                 categoria === "modificacion_fechas_o_independiente" ? "¿Es una estadía adicional o una reserva independiente? Hay identidad compatible y fechas diferentes." :
                 "¿Cuál de los candidatos corresponde, o es una reserva independiente?";
@@ -624,6 +624,8 @@
                     r.advertencias?.length ? "Coinciden identidad, CAB y fechas, pero las advertencias del Libro indicadas arriba impiden asociar automáticamente." :
                     candidatos.length > 1 ? "Coinciden identidad, CAB y fechas, pero hay varios candidatos posibles. Elige la referencia correcta." :
                     g.pregunta || "La asociación no es única dentro del grupo; requiere revisión." :
+                    mismasFechas(r,c) && identidad(r,c).compatible ?
+                    `Coinciden identidad y fechas. Proyecto H tiene CAB ${c.cabana} y el Libro CAB ${r.cabana}. Si es un traslado, elige «Es la misma estadía: corregir CAB/fechas y datos con el Libro»; añadir una estadía conservaría también la anterior.` :
                     "Hay identidad compatible, pero CAB o fechas diferentes: podría ser una extensión o segunda estadía. Se conservaría la estadía existente.";
                 comparaciones.push({ candidato: c, campos, razon });
                 const categoria = exacta ? "asociadas" : "estadias";
@@ -6775,7 +6777,7 @@
         return [
             r.titular,
             `Libro: ${cabanasTexto(g.cabanas)}${cabanasProyecto.length ? ` → Proyecto H: ${cabanasTexto(cabanasProyecto)}` : " → Proyecto H: sin candidata asociable"}`,
-            ...(cambiosUnicos.length === 1 ? [`Cambio por resolver: CAB ${cambiosUnicos[0][0]} → CAB ${cambiosUnicos[0][1]}`] : []),
+            ...(cambiosUnicos.length === 1 ? [`Cambio por resolver: Proyecto H CAB ${cambiosUnicos[0][1]} → Libro CAB ${cambiosUnicos[0][0]}`] : []),
             `${r.fecha_checkin} → ${r.fecha_checkout}`,
             estadia
         ].join(" · ");
@@ -7284,6 +7286,7 @@
         const comp = result.comparacion, meta = comp.meta || {}, grupos = comp.grupos || [];
         const faltantes = grupos.filter(g => g.estado === "sin_coincidencia");
         const ambiguas = grupos.filter(g => g.estado === "ambigua");
+        const cambiosCabana = ambiguas.filter(g => g.items.some(i => i.categoria === "posible_cambio_cabana"));
         const diferencias = grupos.filter(g => g.estado === "asociada" && g.diferencias.length);
         const pagosFaltan = (comp.pagosDetalle || []).filter(x => x.estado === "nuevo_seguro");
         const pagosActualizar = (comp.pagosDetalle || []).filter(x => x.actualizacionExistente);
@@ -7298,7 +7301,7 @@
         const advertenciasInformativas = comp.flatMap(x => (x.libro.advertencias_informativas || [])
             .map(a => `${x.libro.titular} · CAB ${x.libro.cabana}: ${a}`));
         const reservasPorIdentificar = result.reservas_por_identificar || [];
-        return { faltantes, ambiguas, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes, reservasPorIdentificar,
+        return { faltantes, ambiguas, cambiosCabana, diferencias, pagosFaltan, pagosRevisar, pagosActualizar, pagosExistentes, reservasPorIdentificar,
             serviciosRevisar, serviciosPreparables, notasPreparables, notasRevisar, advertenciasInformativas,
             contadores: { gruposLibro: meta.libro ?? 0, registrosDetectados: meta.libro_detectadas ?? 0,
                 reservasProyecto: meta.proyecto ?? 0, estadiasAsociadas: comp.filter(x => x.estado === "asociada").length,
@@ -8247,6 +8250,8 @@
         root.HAIKU_LIBRO_CANCELACIONES_V1?.adjuntarRevision(revision, result);
         agregarDetalles(revision, "Reservas con diferencias",
             diferencias.map(g => `${descripcionGrupo(g)} — ${g.diferencias.join("; ")}`), "normal", "reserva");
+        if (modelo.cambiosCabana.length) agregarDetalles(revision, "Cambios de cabaña por revisar",
+            modelo.cambiosCabana.map(g => `${descripcionGrupoPregunta(g)}. ${g.pregunta}`), "revision", "reserva");
         agregarDetalles(revision, "Pagos que requieren revisión",
             pagosRevisar.map(x => [x.reserva.titular, x.pago.tipo_movimiento, money(x.pago.monto),
                 x.motivos?.[0] || x.diferencias?.[0]].filter(Boolean).join(' · ')), "revision", "pago");
@@ -8268,7 +8273,7 @@
         if (!meta.libro && meta.libro_detectadas) agregarLista(revision, "Revisar lectura del Libro",
             [`El lector encontró ${meta.libro_detectadas} filas de reserva, pero ninguna pasó la validación estructural. No se interpreta como Libro vacío.`], { alerta: true });
         agregarDetalles(revision, "Posibles faltantes / modificaciones",
-            ambiguas.map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`), "revision", "reserva");
+            ambiguas.filter(g => !modelo.cambiosCabana.includes(g)).map(g => `${descripcionGrupo(g)} — ${g.categoria.replaceAll("_", " ")} · confianza ${g.confianza}. ${g.pregunta}`), "revision", "reserva");
         if (pagosFaltan.length) agregarLista(revision,
             `Pagos nuevos seguros en esta consulta (${pagosFaltan.length})`,
             pagosFaltan.map(descripcionPagoNuevoSeguro), { alerta: true, tono: "normal", formato: "pago" });
