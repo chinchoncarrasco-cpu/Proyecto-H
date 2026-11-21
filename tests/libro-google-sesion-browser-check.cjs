@@ -28,11 +28,12 @@ const server = http.createServer((req, res) => {
 });
 (async () => {
     await new Promise(ok => server.listen(0, '127.0.0.1', ok)); let browser;
-    const errors = [], external = [], screenshots = path.join(os.tmpdir(), serverMode ? 'haku-libro-enlace' : 'haku-google-sesion'); fs.mkdirSync(screenshots, { recursive: true });
+    const width=Number(process.env.HAIKU_LIBRO_VIEWPORT||1100);
+    const errors = [], external = [], screenshots = process.env.HAIKU_LIBRO_SHOTS||path.join(os.tmpdir(), (serverMode ? 'haku-libro-enlace' : 'haku-google-sesion')+'-'+width); fs.mkdirSync(screenshots, { recursive: true });
     try {
         browser = await chromium.launch({ executablePath: process.env.HAIKU_BROWSER_EXECUTABLE || path.join(assets, 'chromium'), headless: true,
             args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process'] });
-        const context = await browser.newContext({ viewport: { width: 1100, height: 850 } });
+        const context = await browser.newContext({ viewport: { width, height: 850 } });
         const origin = 'http://127.0.0.1:' + server.address().port;
         await context.route('**/*', route => {
             const url = route.request().url();
@@ -76,7 +77,7 @@ const server = http.createServer((req, res) => {
                 return new Response(JSON.stringify(metadata()));
             };
         }, { fileId, versions, serverMode });
-        const page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
+        let page = await context.newPage(); page.on('pageerror', e => errors.push(e.message));
         const ready = () => page.waitForFunction(() => window.HAIKU_LIBRO_GOOGLE_V1?.estado().conectado &&
             !HAIKU_LIBRO_GOOGLE_V1.estado().sincronizando && HAIKU_LIBRO_RESERVA_V1.estado().cargado);
         await page.goto(origin); if (!serverMode) await page.click('#haiku-libro-google-conectar'); await ready();
@@ -86,12 +87,29 @@ const server = http.createServer((req, res) => {
         assert.equal(await page.evaluate(() => __audit.oauth), 0);
         assert.equal(await page.evaluate(() => __audit.downloads), 0);
         assert.equal(await page.evaluate(() => __audit.notices), 0);
+        if(serverMode){
+            await page.close();page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+            await page.goto(origin);await ready();
+            assert.equal(await page.evaluate(()=>__audit.downloads),0,'una vista nueva recupera la copia local');
+            assert.equal(await page.evaluate(()=>__audit.oauth),0);
+        }
         // Cambio guardado en Google mientras se recargaba: recupera A, descarga B y avisa una sola vez.
         await page.evaluate(() => sessionStorage.setItem('test-version', '1'));
         await page.reload(); await ready();
         await page.waitForFunction(() => __audit.notices === 1 && !!document.querySelector('.haku-libro-auto'));
         assert.equal(await page.evaluate(() => __audit.oauth), 0);
         assert.equal(await page.evaluate(() => __audit.downloads), 1);
+        const saved=await page.evaluate(async()=>{
+            const snapshots=await new Promise((resolve,reject)=>{
+                const open=indexedDB.open('haiku-libro-reserva-local',1);open.onerror=()=>reject(open.error);
+                open.onsuccess=()=>{const db=open.result,tx=db.transaction('libro','readonly'),s=tx.objectStore('libro');
+                    const current=s.get('actual'),previous=s.get('anterior');
+                    tx.oncomplete=()=>{db.close();resolve([current.result.buffer,previous.result.buffer]);};
+                    tx.onabort=()=>{db.close();reject(tx.error);};};
+            });
+            return Promise.all(snapshots.map(async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('')));
+        });
+        assert.deepEqual(saved,[versions[1].sha256,versions[0].sha256],'actual y anterior mantienen los bytes exactos');
         await page.click('#haiku-libro-google-sincronizar'); await ready();
         assert.equal(await page.evaluate(() => __audit.notices), 1);
         // La comparación verificada sigue disponible y no desconecta Google.
@@ -100,7 +118,8 @@ const server = http.createServer((req, res) => {
         assert.equal(await page.evaluate(() => HAIKU_LIBRO_GOOGLE_V1.estado().conectado), true);
         for (const theme of ['claro', 'oscuro']) {
             await page.evaluate(theme => document.documentElement.dataset.haikuTema = theme, theme);
-            await page.locator('#haiku-libro-google').screenshot({ path: path.join(screenshots, theme + '.png') });
+            await page.waitForFunction(()=>document.getElementById('sites-libro-memoria-detalle').textContent.includes('anterior'));
+            await page.locator('.sites-libro-origen').screenshot({ path: path.join(screenshots, theme + '.png') });
         }
         await page.evaluate(() => {
             window.haikuSesion = null; sessionStorage.setItem('test-logout', '1');

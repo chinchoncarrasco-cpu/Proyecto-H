@@ -72,6 +72,9 @@
 
     async function restaurarSesion() {
         const usuario = usuarioActual();
+        // Si falla la primera petición, aún no hay una conexión que haya
+        // iniciado el sondeo. Mantener el mismo reintento de lectura cada 15 s.
+        if (usuario && !servidorPausado && servidorDisponible() && !timer) iniciarPolling();
         if (usuario && !servidorPausado && !conexionServidor && servidorDisponible()) {
             try { if (await conectarServidor()) return; }
             catch (error) { ultimoError = errorSeguro(error); pintar("error", "Libro online", ultimoError.message); return; }
@@ -632,7 +635,9 @@
     function iniciarPolling() {
         detenerPolling();
         timer = setInterval(() => {
-            if (document.visibilityState === "visible") void sincronizar(false);
+            if (document.visibilityState !== "visible") return;
+            if (conexionServidor || accessToken) void sincronizar(false);
+            else if (!servidorPausado && usuarioActual() && servidorDisponible()) void restaurarSesion();
         }, POLL_MS);
     }
 
@@ -702,7 +707,8 @@
             if (usuarioAutorizado && usuarioAutorizado !== usuarioActual()) perderAutorizacion();
             void restaurarSesion();
         });
-        document.addEventListener("haiku:supabase-ready", instalarSesion);
+        document.addEventListener("haiku:supabase-ready", () => { instalarSesion(); alVolver(); });
+        document.querySelector('[data-seccion="libro-reserva"]')?.addEventListener("click", alVolver);
         instalarSesion();
         void restaurarSesion();
         root.addEventListener("haiku:libro-vista-actualizada", evento => {
