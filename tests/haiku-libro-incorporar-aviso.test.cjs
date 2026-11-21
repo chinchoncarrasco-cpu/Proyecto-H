@@ -135,7 +135,7 @@ for(const escenario of ['sin permiso','sin fecha','estadía duplicada','respuest
  else assert.equal(e.state.escrituras.length,0);
 });
 test('reserva real: motor canónico envía el RPC desde el aviso y revalida el resultado',async()=>{
- const h=coordinador(),rows=[],calls=[];
+ const h=coordinador(),rows=[],calls=[],lecturas=[];
  const r={...fila,titular:'Persona Sintética',rut_documento:'11111111-1',tipo_estadia:'alojamiento',noches:1,ninos:0,mascotas:0,
   pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],notas_importantes:[],coordenadas_origen:{hoja:'Nov26',celda:'AB10'}};
  h.informe.nuevas=[{actual:r}];h.c.HAIKU_LIBRO_SEMANTICA=require('../js/haiku-libro-semantica-v1.js');
@@ -144,6 +144,7 @@ test('reserva real: motor canónico envía el RPC desde el aviso y revalida el r
   from:table=>{const b={select:()=>b,lte:()=>b,gte:()=>b,in:()=>b,eq:()=>b,order:()=>b,
    range:async(a,z)=>({data:(table==='reserva_estadias'?rows:[]).slice(a,z+1)})};return b;},
   rpc:async(name,args)=>{
+   if(name==='haiku_libro_revisar_rut_altas_v1'){lecturas.push(...args.p_altas);return {data:[]};}
    calls.push({name,args});assert.equal(name,'haiku_incorporar_libro_v1');assert.equal(args.p_items[0].tipo,'reserva_nueva');
    rows.push({id:'00000000-0000-4000-8000-000000000001',reserva_id:'00000000-0000-4000-8000-000000000002',cabana_id:'c8',cabanas:{numero:8},fecha_ingreso:r.fecha_checkin,
     fecha_salida:r.fecha_checkout,tipo_estadia:'alojamiento',estado_estadia:'confirmada',adultos:2,ninos:0,mascotas:0,
@@ -153,6 +154,7 @@ test('reserva real: motor canónico envía el RPC desde el aviso y revalida el r
   }};
  vm.runInNewContext(read('haiku-libro-consultas-v1'),h.c);
  const fin=await h.api.incorporarDesdeAviso(h.informe);
+ assert.ok(lecturas.length&&lecturas.every(x=>x.nombre===r.titular));
  assert.equal(calls.length,1);assert.equal(fin.reservas_creadas,1);assert.equal(fin.pendientes.length,0,JSON.stringify(fin.pendientes));
  assert.equal(fin.confirmados[0].titular,r.titular);
  assert.equal(fin.confirmados[0].cabana,'CAB 8');

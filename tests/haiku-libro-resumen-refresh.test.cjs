@@ -93,6 +93,7 @@ function entorno({ fechaVisible = FECHA, confirmar = true, delegar = false,
             return b;
         },
         async rpc(nombre, args) {
+            if (nombre === 'haiku_libro_revisar_rut_altas_v1') return {data:[]};
             if (nombre === 'haiku_incorporar_libro_v1') {
                 eventos.push('escritura solicitada');
                 assert.equal(args.p_items[0].tipo, 'reserva_nueva');
