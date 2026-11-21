@@ -227,11 +227,12 @@
         const etiqueta = /^(?:notas?|observaci(?:on|ones)|avisos?|comentarios?)(?:\s+de\s+(?:la\s+)?reserva)?\s*[:–—-]\s*\S/;
         const alerta = /^(?:ojo\s+(?:al|con|a\s+la)|(?:la\s+)?cabanas?\s+(?:con|sin|requieren?))\b/;
         const boda = /^(?:se\s+(?:casa(?:n|ron|ra|ran)?|caso)|recien\s+casad[oa]s?|son\s+los\s+novios|luna\s+de\s+miel)\b/;
+        const propuestaMatrimonio = /^(?:propuesta(?:\s+de)?\s+matrimonio|pedida\s+de\s+mano)\b/;
         const celebracion = /^(?:(?:celebr(?:a|an|ar)|festej(?:a|an|ar))\s+(?:(?:su|sus|el|la|un|una)\s+)?(?:bodas?|matrimonio|cumpleanos|aniversarios?)\b|(?:bodas?|matrimonio|cumpleanos|aniversarios?)\s+(?:de\s+\S|cortesias?\b))/;
         const motivoCortesia = /^(?:(?:cortesias?|regalos?|obsequios?|decoracion|tortas?|flores|celebracion)\s+(?:de|por|para)\s+(?:(?:su|el|la|un|una)\s+)?(?:bodas?|matrimonio|cumpleanos|aniversarios?)|reserva\s+de\s+(?:regalo|cortesia))\b/;
         const entrega = /^se\s+(?:les?\s+)?(?:entr{1,2}eg(?:a(?:n|ron)?|o)|dej(?:a(?:n|ron)?|o)|dio)\b/;
         const tareaCortesia = /^(?:quieren?|llevar|dar|preparar|entregad[oa]s?|entrega(?:ron)?)\s+(?:de\s+)?(?:(?:las?|un(?:as?)?|sus?)\s+)?cortesias?\b/;
-        return etiqueta.test(nota) || alerta.test(nota) || boda.test(nota) || celebracion.test(nota) ||
+        return etiqueta.test(nota) || alerta.test(nota) || boda.test(nota) || propuestaMatrimonio.test(nota) || celebracion.test(nota) ||
             motivoCortesia.test(nota) || entrega.test(nota) || tareaCortesia.test(nota);
     }
     // Señales de lenguaje para distinguir al titular de una nota.

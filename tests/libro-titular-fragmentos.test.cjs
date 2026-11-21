@@ -48,6 +48,21 @@ test('post-data context excludes a trailing instruction without resolving two ac
   const r=normalizar(texto);assert.equal(r.reservas.length,0);assert.match(r.advertencias.join(' '),/varios posibles titulares/);
  }
 });
+test('una propuesta de matrimonio es una nota y conserva al titular sin resolver nombres realmente ambiguos',()=>{
+ for(const nota of ['PROPUESTA MATRIMONIO','Propuesta de matrimonio','PEDIDA DE MANO']){
+  const texto=`Ana Pérez // ana@example.test // 2 ADL // 1 NOCHE // ${nota} // SOLICITA ESPUMANTE 22PM (CORTESÍA)`;
+  const h=normalizar(texto);
+  assert.equal(h.reservas.length,1,nota);
+  assert.equal(h.reservas[0].titular,'Ana Pérez');
+  assert.equal(h.reservas[0].texto_original,texto);
+  assert.equal(normalizar(nota).reservas.length,0,nota);
+  const dos=normalizar(`Ana Pérez // Juan Soto // 2 ADL // 1 NOCHE // ${nota}`);
+  assert.equal(dos.reservas.length,0);
+  assert.deepEqual(dos.anotaciones[0].titulares_posibles,['Ana Pérez','Juan Soto']);
+ }
+ // La coincidencia debe ser la expresión completa, no palabras sueltas de un apellido.
+ assert.equal(normalizar('Ana Matrimonio // 2 ADL // 1 NOCHE').reservas[0]?.titular,'Ana Matrimonio');
+});
 test('un titular repetido junto a la nota NO MOVER identifica una sola reserva',()=>{
  const textos=['Lidia Salas // 2 ADL // NO MOVERlidia salas','Lidia Salas // 2 ADL // LIDIA SALAS',
   'NO MOVERlidia salas // 2 ADL // Lidia Salas'];
