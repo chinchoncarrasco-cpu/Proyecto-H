@@ -37,7 +37,7 @@ function harness() {
         render:ejecucion=>Q.renderizarResultadoIncorporacion(out,ejecucion,()=>{})};
 }
 
-const book = (extra={}) => ({id:'libro-actual',titular:'Mery Vasquez Carrion',rut_documento:'12345678-9',cabana:2,
+const book = (extra={}) => ({id:'libro-actual',titular:'Mery Vasquez Carrion',rut_documento:'12345678-5',cabana:2,
     fecha_checkin:'2026-10-06',fecha_checkout:'2026-10-07',tipo_estadia:'alojamiento',noches:1,
     adultos:2,ninos:0,mascotas:0,pagos:[],pagos_sin_asociacion:[],servicios:[],advertencias:[],
     coordenadas_origen:{hoja:'Oct26',celda:'D6'},...extra});
@@ -87,7 +87,7 @@ test('sólo pagos: detalle confirmado, monto/fecha/concepto y apertura por UUID 
 });
 
 test('reservas + pagos: sólo los seleccionados confirmados, sin pendientes ni otra ejecución',async()=>{
-    const h=harness(),r=book({pagos:[pay()]}),pendiente=book({id:'pendiente',titular:'Pendiente ajeno',rut_documento:'98765432-1',cabana:4,
+    const h=harness(),r=book({pagos:[pay()]}),pendiente=book({id:'pendiente',titular:'Pendiente ajeno',rut_documento:'98765432-5',cabana:4,
         coordenadas_origen:{hoja:'Oct26',celda:'E6'}});
     const db=client({},(_n,args)=>({data:respuestaLote(args.p_items)})),result={reservas:[r,pendiente],q};
     const plan=await h.Q.prepararIncorporacion(result,new Map(),new Set(),db);

@@ -227,7 +227,7 @@ test('historial: un cambio de adultos no arrastra una confirmación por color aj
     ]);
 });
 test('historial: el alta muestra los datos de la estadía que se creará y distingue una reserva nueva',async()=>{
-    const actual=libro({notas_importantes:['Preparar dos batas'],rut_documento:'12.345.678-9',correo:'persona@example.test'});
+    const actual=libro({notas_importantes:['Preparar dos batas'],rut_documento:'12.345.678-5',correo:'persona@example.test'});
     const registro={id:'alta-lista',tipo:'nueva',actual,
         cambios:[{campo:'notas_importantes',antes:[],ahora:actual.notas_importantes}]};
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({},[]),{generacion:3});
