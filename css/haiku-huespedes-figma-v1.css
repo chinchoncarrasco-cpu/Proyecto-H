@@ -1,0 +1,186 @@
+/* Approved source: Figma JGnBc0FElO2BamoS6xfYk7, 131:3139 (V1.1).
+   All shell rules are scoped to the active Guests section. */
+@font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Regular.woff') format('woff');font-weight:400;font-display:swap}
+@font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Medium.woff') format('woff');font-weight:500;font-display:swap}
+@font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-SemiBold.woff') format('woff');font-weight:600;font-display:swap}
+@font-face{font-family:HakuGuests;src:url('../assets/huespedes/fonts/Inter-Bold.woff') format('woff');font-weight:700;font-display:swap}
+body:has(#seccion-huespedes.activa){--sites-shell-sidebar-width:184px;--sites-shell-header-height:64px}
+body:has(#seccion-huespedes.activa)>main.contenido.sites-shell-main{padding:0!important;min-width:0}
+body:has(#seccion-huespedes.activa)>.sites-shell-topbar{padding-inline:24px}
+body:has(#seccion-huespedes.activa) .sites-shell-topbar .busqueda-palabra-wrap{display:none!important}
+body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-item{padding:9px 12px;min-height:38px;font-size:13px}
+.hu-shell-brand,.hu-shell-more,.hu-shell-supplies{display:none}
+.hu-shell-supplies[hidden]{display:none!important}
+@media(min-width:781px){
+ body:has(#seccion-huespedes.activa){--sites-shell-font:HakuGuests,Inter,system-ui,sans-serif}
+ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar{background:#1b2621;border-right:1px solid #3e5145}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar{background:#fff;border-color:#d9e3de}
+ body:has(#seccion-huespedes.activa) .sites-shell-sidebar .logo,body:has(#seccion-huespedes.activa) .sites-shell-nav-label{display:none}
+ body:has(#seccion-huespedes.activa) .hu-shell-brand{display:grid;gap:4px;padding:28px 20px 20px;min-height:102px;color:#9fd2b3}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .hu-shell-brand{color:#173d33}
+ body:has(#seccion-huespedes.activa) .hu-shell-brand strong{font-size:28px;line-height:34px}
+ body:has(#seccion-huespedes.activa) .hu-shell-brand .hu-muted{color:#b1c2b7}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .hu-shell-brand .hu-muted{color:#728079}
+ body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu{padding:0 10px 16px;gap:6px}
+ body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .menu-item{font-weight:400;color:#e8efea}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .menu-item{color:#17362d}
+ body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .activo{background:#254736}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-sidebar nav.menu .activo{background:#dceee4}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=resumen]{order:1}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=calendario]{order:2}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=reservas]{order:3}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=cabanas]{order:4}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=huespedes]{order:5}
+ body:has(#seccion-huespedes.activa) .menu-item[data-seccion=servicios]{order:6}
+ body:has(#seccion-huespedes.activa) :is(.hu-shell-supplies,.hu-shell-more){display:flex;align-items:center;border:0;background:transparent;font-size:13px;font-weight:400;padding:9px 12px;min-height:38px;gap:12px;text-align:left;color:#e8efea}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) :is(.hu-shell-supplies,.hu-shell-more){color:#17362d}
+ body:has(#seccion-huespedes.activa) .hu-shell-supplies{order:7}
+ body:has(#seccion-huespedes.activa) .hu-shell-supplies svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+ body:has(#seccion-huespedes.activa) .hu-shell-more{order:8}
+ body:has(#seccion-huespedes.activa) .sites-shell-sidebar .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){order:9}
+ body:has(#seccion-huespedes.activa) nav.menu:not(.hu-nav-extra-open) .menu-item:is([data-seccion=pagos],[data-seccion=cierre],[data-seccion=historial],[data-seccion=libro-reserva]){display:none}
+ body:has(#seccion-huespedes.activa) .sites-shell-topbar .busqueda-reservas-wrap{width:340px!important}
+ body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{background:transparent;color:#9fd2b3;border:1px solid #3e5145;font-size:12px;min-height:36px}
+ html:not([data-haiku-tema=oscuro]) body:has(#seccion-huespedes.activa) .sites-shell-topbar .boton-nueva-reserva{color:#173d33;border-color:#d9e3de}
+}
+#seccion-huespedes{padding:24px!important;font-family:HakuGuests,Inter,system-ui,sans-serif;font-size:13px;line-height:19px}
+#seccion-huespedes *{box-sizing:border-box}
+.huespedes-titulo{margin-bottom:14px;min-height:81px}
+.huespedes-titulo h2{font-size:28px;line-height:34px;font-weight:700}
+.hu-eyebrow{font-size:10px;line-height:15px;margin:0 0 8px;color:var(--guest-muted);font-weight:500}
+.hu-intro{font-size:13px;line-height:19px;margin:6px 0 0;color:var(--guest-muted)}
+.hu-boton,.hu-select,.hu-campo{border-radius:6px;font-size:12px;line-height:17px;min-height:36px}
+.hu-boton{color:var(--guest-accent);font-weight:600;padding:8px 12px;white-space:nowrap}
+.hu-chip{font-size:11px;line-height:16px;min-height:26px;padding:4px 6px;border-radius:6px;font-weight:400!important}
+.hu-toolbar{gap:14px;margin-bottom:15px}
+.hu-toolbar .hu-tabs{min-height:34px}
+.hu-filtros{gap:12px;flex-wrap:nowrap}
+.hu-busqueda{flex:1 1 38%;min-width:150px}
+.hu-filtros [data-hu-control=p_tipo]{flex:0 1 218px}
+.hu-filtros [data-hu-control=p_etiqueta]{flex:0 1 150px}
+.hu-filtros [data-hu-control=p_origen]{flex:0 1 138px}
+.hu-filtros .hu-select{appearance:none;text-align:center;color:var(--guest-accent);padding-inline:10px;max-width:220px}
+.hu-resumen{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;margin:0}
+.hu-layout{grid-template-columns:minmax(0,1.6fr) minmax(338px,1fr);gap:16px}
+.hu-lista,.hu-ficha{border-radius:10px}
+.hu-fila{grid-template-columns:minmax(0,1.84fr) minmax(0,.88fr) minmax(0,1fr) 14px;gap:12px;min-height:88px;padding:12px}
+.hu-lista-cabecera{min-height:38px;padding-block:10px;font-size:10px;line-height:15px;background:var(--guest-soft)}
+.hu-fila .hu-nombre{font-size:14px;line-height:20px}
+.hu-nombre,.hu-columna strong{font-size:13px;line-height:19px}
+.hu-columna strong{font-weight:400}
+.hu-identidad{gap:12px}
+.hu-identidad>div,.hu-columna{gap:4px}
+.hu-muted{font-size:11px;line-height:16px}
+.hu-destacado{font-size:12px;line-height:17px;font-weight:400}
+.hu-avatar{width:32px;height:32px}
+.hu-avatar.hu-avatar-perfil{width:48px;height:48px}
+.hu-lista-pie{padding:11px 12px;display:flex;justify-content:space-between;gap:8px}
+.hu-ficha{padding:14px;display:flex;flex-direction:column;gap:8px}
+.hu-ficha h3{font-size:24px;line-height:29px;font-weight:700}
+.hu-ficha h4{font-size:13px;line-height:19px;font-weight:600}
+.hu-perfil-identidad{min-height:65px}
+.hu-perfil-identidad .hu-identidad{gap:10px}
+.hu-rol{font-size:10px;line-height:15px;color:var(--guest-accent)}
+.hu-contexto{margin:0;padding:10px;border-radius:6px;gap:4px}
+.hu-contexto .hu-boton{padding:0;min-height:16px;font-size:11px;line-height:16px}
+.hu-estadia-info{font-size:11px;line-height:16px;color:var(--guest-link)}
+.hu-separador{margin:0;padding-top:8px}
+.hu-separador.hu-sin-borde{border-top:0;padding-top:4px}
+.hu-bloque{margin:0;gap:8px}
+.hu-ficha>.hu-bloque:first-of-type,.hu-ficha>.hu-contexto+.hu-bloque{border-top:0}
+.hu-subtitulo{min-height:20px}
+.hu-subtitulo .hu-boton{font-size:11px;line-height:16px;padding:0;min-height:20px}
+.hu-integrante{padding:8px 0;min-height:56px;border-bottom:1px solid var(--guest-border)}
+.hu-integrante+.hu-integrante{border-top:0}
+.hu-integrante .hu-boton{min-width:76px;min-height:30px;padding:5px 10px;font-size:11px;line-height:16px}
+.hu-integrante .hu-avatar{border-radius:6px;background:var(--guest-soft)}
+.hu-tipo-icono{width:34px;height:34px;border-radius:6px}
+.hu-mini{min-height:26px;padding:4px 6px;border-radius:6px;font-size:11px;line-height:16px}
+.hu-registro{position:relative;padding:2px 0;min-height:40px;gap:2px}
+.hu-registro-editar{position:absolute;right:0;top:0;opacity:0;padding:3px;min-height:24px}
+.hu-registro:hover .hu-registro-editar,.hu-registro:focus-within .hu-registro-editar{opacity:1}
+.hu-relacionados{display:grid;gap:0}
+.hu-ficha details.hu-separador{padding-top:0;border-top:0;border-bottom:1px solid var(--guest-border)}
+.hu-ficha details summary{min-height:36px;font-size:12px;font-weight:400}
+.hu-resultado:empty{display:none}
+.hu-ficha>.hu-ancho{margin-top:0}
+.hu-opciones{position:relative;align-self:flex-start}
+.hu-opciones summary{list-style:none;cursor:pointer;color:var(--guest-accent);padding:5px;font-weight:700}
+.hu-opciones summary::-webkit-details-marker{display:none}
+.hu-opciones>div{position:absolute;right:0;z-index:3;width:180px;background:var(--guest-surface);border:1px solid var(--guest-border);border-radius:6px;padding:6px;display:grid;gap:4px}
+.hu-dialogo{width:min(560px,calc(100vw - 24px));padding:16px 12px;border-radius:10px;max-height:calc(100dvh - 24px);margin:auto!important}
+.hu-dialogo h3{font-size:22px;line-height:27px;font-weight:700}
+.hu-formulario{gap:16px}
+.hu-formulario>.hu-linea{align-items:flex-start}
+.hu-formulario>.hu-linea>.hu-boton{padding:0;min-height:18px;width:18px;border:0;background:transparent}
+.hu-formulario .hu-campo,.hu-formulario .hu-select{background:var(--guest-soft);font-size:13px;line-height:19px;padding:8px 10px}
+.hu-formulario label{font-size:11px;line-height:16px;gap:4px}
+.hu-formulario textarea{min-height:72px}
+.hu-formulario footer{flex-wrap:nowrap;gap:12px;justify-content:stretch}
+.hu-formulario footer>button:last-child{flex:1}
+.hu-formulario .hu-plano{min-height:24px}
+.hu-formulario fieldset{padding:0;border:0;border-radius:0}
+.hu-formulario legend{font-size:13px;line-height:19px;margin-bottom:8px;color:var(--guest-ink)}
+.hu-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.hu-form-grid>.hu-full{grid-column:1/-1}
+.hu-media{display:flex;gap:16px;align-items:center;min-height:120px}
+.hu-media-preview{width:160px;height:120px;flex:none;border:1px solid var(--guest-border);border-radius:6px;background:var(--guest-soft);display:grid;place-items:center;overflow:hidden}
+.hu-media-preview img{width:100%;height:100%;object-fit:cover}
+.hu-media-preview canvas{width:100%;height:100%;object-fit:cover}
+.hu-media-preview.hu-pet-photo{width:96px;height:96px;border-radius:50%}
+.hu-media-preview.hu-person-photo{width:112px;height:112px;border-radius:50%}
+.hu-media-copy{display:grid;gap:8px;flex:1;min-width:0}
+.hu-media-copy .hu-boton{justify-self:start}
+.hu-media-context{color:var(--guest-accent);font-size:12px;font-weight:500}
+.hu-form-subtitle{font-size:11px;line-height:16px;color:var(--guest-muted);margin:4px 0 0}
+.hu-photo-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hu-foto-previa{width:112px;height:112px;max-width:100%;border-radius:50%;justify-self:start}
+.hu-photo-adjustments{border-top:1px solid var(--guest-border);padding-top:8px}
+.hu-photo-adjustments summary{cursor:pointer;font-size:11px;color:var(--guest-accent)}
+.hu-file-input{max-width:100%;font-size:11px}
+.hu-checkbox{font-size:12px!important;color:var(--guest-ink)!important;min-height:24px}
+.hu-formulario .hu-etiqueta{border-radius:6px;border:1px solid var(--guest-border);background:var(--guest-soft);font-size:11px;line-height:16px;padding:5px 8px;min-height:30px;cursor:pointer}
+.hu-etiqueta:has(input:checked){background:var(--guest-selected);color:var(--guest-accent)}
+.hu-etiqueta input{width:12px;height:12px;accent-color:var(--guest-accent)}
+.hu-choice{min-height:26px;padding:4px 8px;font-size:11px;font-weight:500!important}
+.hu-choice[aria-checked=true]{background:var(--guest-selected);color:var(--guest-accent)}
+.hu-choice-stack{display:grid;gap:6px;justify-items:start}
+.hu-choice-stack .hu-choice{border:0;background:transparent;min-height:20px;padding:0;font-weight:400!important}
+.hu-choice-stack .hu-choice::before{content:'○';padding-right:8px}
+.hu-choice-stack .hu-choice[aria-checked=true]::before{content:'◉'}
+.hu-choice-field legend{font-size:12px;font-weight:500}
+.hu-radio-row{display:flex;gap:8px;text-align:left;white-space:normal;min-height:40px}
+.hu-radio-row>div{display:grid;gap:4px}
+.hu-radio-row:disabled{opacity:1}
+.hu-radio-dot{font-size:15px}
+@media(max-width:1000px) and (min-width:761px){.hu-layout{grid-template-columns:minmax(0,1fr) minmax(320px,1fr)}.hu-fila{grid-template-columns:minmax(0,1fr) 14px}.hu-fila>.hu-columna,.hu-lista-cabecera{display:none}.hu-fila .hu-mini-movil{display:block}}
+@media(max-width:760px){
+ #seccion-huespedes{padding:16px 12px!important}
+ .huespedes-titulo{min-height:35px;margin-bottom:10px}
+ .huespedes-titulo h2{font-size:26px;line-height:32px}
+ .hu-eyebrow,.hu-intro{display:none}
+ .huespedes-titulo .hu-boton{font-size:12px;min-height:35px}
+ .hu-toolbar{gap:10px;margin-bottom:10px}
+ .hu-tabs{min-height:34px;padding:0}
+ .hu-tabs .hu-chip{min-height:34px;padding:8px 10px}
+ .hu-filtros .hu-select{font-size:11px;min-height:36px;max-width:none}
+ .hu-busqueda input{min-height:38px}
+ .hu-resumen{position:static;clip-path:none;width:auto;height:auto;margin:0 0 10px}
+ .hu-fila{min-height:94px;padding:10px;gap:10px}
+ .hu-fila .hu-identidad{gap:10px}
+ .hu-identidad>div{gap:2px}
+ .hu-fila .hu-avatar{width:32px;height:32px}
+ .hu-lista-pie{display:none}
+ .hu-ficha{padding:14px}
+ .hu-ficha>.hu-linea:nth-child(2){margin-top:0}
+ .hu-volver{padding:0!important;min-height:18px!important;margin:0 0 10px;font-weight:400!important}
+ #seccion-huespedes:not([data-ficha=true]) .hu-volver{display:none}
+ .hu-dialogo{padding:16px 12px;max-height:calc(100dvh - 24px)}
+ .hu-media{flex-direction:column;align-items:stretch}
+ .hu-media-preview{width:100%;height:120px}
+ .hu-media.hu-pet-media{flex-direction:row;align-items:center}
+ .hu-person-media{align-items:center}
+ .hu-person-media .hu-media-copy{align-items:center}
+ .hu-person-media .hu-media-copy .hu-boton{justify-self:center}
+ .hu-person-media .hu-media-preview,.hu-person-media .hu-foto-previa{width:112px;height:112px}
+}

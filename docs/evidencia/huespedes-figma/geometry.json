@@ -1,0 +1,94 @@
+[
+  {
+    "client": "web",
+    "theme": "claro",
+    "geometry": {
+      ".hu-layout": {
+        "x": 208,
+        "y": 283,
+        "w": 1208,
+        "h": 1031
+      },
+      ".hu-lista": {
+        "x": 208,
+        "y": 283,
+        "w": 733.53125,
+        "h": 782
+      },
+      ".hu-ficha": {
+        "x": 957.53125,
+        "y": 283,
+        "w": 458.46875,
+        "h": 1031
+      },
+      ".hu-fila[data-person-id]": {
+        "x": 209,
+        "y": 322,
+        "w": 731.53125,
+        "h": 88
+      }
+    }
+  },
+  {
+    "client": "native-components",
+    "theme": "claro",
+    "directoryRow": {
+      "x": 13,
+      "y": 300,
+      "width": 364,
+      "height": 94
+    },
+    "profile": {
+      "x": 12,
+      "y": 114,
+      "width": 366,
+      "height": 1027
+    }
+  },
+  {
+    "client": "web",
+    "theme": "oscuro",
+    "geometry": {
+      ".hu-layout": {
+        "x": 208,
+        "y": 283,
+        "w": 1208,
+        "h": 1031
+      },
+      ".hu-lista": {
+        "x": 208,
+        "y": 283,
+        "w": 733.53125,
+        "h": 782
+      },
+      ".hu-ficha": {
+        "x": 957.53125,
+        "y": 283,
+        "w": 458.46875,
+        "h": 1031
+      },
+      ".hu-fila[data-person-id]": {
+        "x": 209,
+        "y": 322,
+        "w": 731.53125,
+        "h": 88
+      }
+    }
+  },
+  {
+    "client": "native-components",
+    "theme": "oscuro",
+    "directoryRow": {
+      "x": 13,
+      "y": 300,
+      "width": 364,
+      "height": 94
+    },
+    "profile": {
+      "x": 12,
+      "y": 114,
+      "width": 366,
+      "height": 1027
+    }
+  }
+]
