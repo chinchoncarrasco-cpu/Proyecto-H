@@ -49,3 +49,40 @@ test('la relectura conserva la intención de las altas aplazadas, sin selecciona
  const pendiente={contextoSeleccion:{generacion:1},items:[cambio(),alta()]};Q.priorizarActualizacionesEstadia(pendiente);
  Q.restaurarSeleccionIncorporacion(pendiente,p);assert.equal(pendiente.items[1].seleccionado,false);
 });
+
+test('el cruce de una noche queda pendiente y la otra fecha de la misma CAB puede incorporarse', async () => {
+    const primera = F.reserva({pagos:[F.pago()]});
+    const otraFecha = F.reserva({id:'otra-fecha',titular:'Persona independiente',fecha_checkin:'2026-10-11',
+        fecha_checkout:'2026-10-12',fechas_ocupadas:['2026-10-11'],noches:1,coordenadas_origen:F.origen('AQ3')});
+    const x = F.caso('cruce', (r, db, data) => {
+        data.reservas = [primera,otraFecha];
+        db.reserva_estadias = [F.estadia(primera,{fecha_ingreso:'2026-10-04',fecha_salida:'2026-10-07',
+            estado_estadia:'pendiente',reservas:{titular_nombre:'Persona ya registrada',estado_reserva:'pendiente'}})];
+    });
+    const w = F.web(x.data), Q = w.HAIKU_LIBRO_CONSULTAS, cliente = F.cliente(x.db);
+    const result = {reservas:x.data.reservas,generacion:1};
+    const plan = await Q.prepararIncorporacion(result,new Map(),new Set(),cliente);
+    const cruce = plan.items.find(i => i.motivos.some(m => m.includes('Persona ya registrada')));
+    assert.equal(cruce.categoria,'pendientes');
+    assert.equal(cruce.seleccionado,false);
+    assert.match(cruce.motivos.join(' '),/CAB 1 ocupada en Proyecto H.*pendiente/);
+    assert.ok(plan.items.some(i => i.pagoLibro && !i.seleccionado && i.dependeDe.includes(cruce.id)));
+    assert.deepEqual(Array.from(Q.serializarIncorporacion(plan),i => i.reserva.titular_nombre),[otraFecha.titular]);
+    assert.deepEqual(cliente.mutaciones,[]);
+
+    cliente.db.reserva_estadias[0].estado_estadia = 'cancelada';
+    const actualizado = await Q.prepararIncorporacion(result,new Map(),new Set(),cliente);
+    assert.equal(actualizado.items.find(i => i.id === cruce.id).seleccionado,true);
+});
+
+test('un Full Day en la salida bloquea el alta hasta que figure liberado', async () => {
+    const x = F.caso('full-day-salida', (r, db) => {
+        db.reserva_estadias = [F.estadia(r,{fecha_ingreso:r.fecha_checkout,fecha_salida:r.fecha_checkout,
+            tipo_estadia:'fullday',reservas:{titular_nombre:'Visita de día',estado_reserva:'confirmada'}})];
+    });
+    const Q = F.web(x.data).HAIKU_LIBRO_CONSULTAS, cliente = F.cliente(x.db);
+    const preparar = () => Q.prepararIncorporacion({reservas:x.data.reservas,generacion:1},new Map(),new Set(),cliente);
+    assert.match((await preparar()).items[0].motivos.join(' '),/Visita de día/);
+    cliente.db.reserva_estadias[0].fullday_liberado_en = '2026-10-05T16:00:00Z';
+    assert.equal((await preparar()).items[0].categoria,'nuevas');
+});

@@ -43,6 +43,36 @@ test('la fila inmediatamente anterior a CANCELACIONES se lee aparte de la cabañ
  assert.equal(h.cancelaciones_por_identificar.length,1);
  assert.equal(h.cancelaciones_por_identificar[0].origen.celda,'C14');
 });
+
+test('reserva activa y cancelación con el mismo RUT quedan en revisión aunque se abrevie el nombre', async () => {
+ const F=require('./fixtures/libro-comparacion-readonly.cjs');
+ const x=F.caso('estado-contradictorio',(r,db,data)=>{
+  const hoja={celdas:[{r:1,c:2,valor:'3 oct',fechaISO:'2026-10-03'},{r:1,c:6,valor:'4 oct',fechaISO:'2026-10-04'},
+   {r:1,c:10,valor:'5 oct',fechaISO:'2026-10-05'},{r:2,c:0,valor:'cabaña 1'},
+   {r:2,c:2,valor:'Laura Ejemplo // RUT 11.111.111-1 // 2 ADL // 2 noches'},
+   {r:14,c:0,valor:'CANCELACIONES'},{r:16,c:3,valor:'Laura Clara Ejemplo Ficticio // 11111111-1 // 2 ADL // 2 noches'},
+   {r:24,c:2,valor:'Pagos de arriendos de hoy'},{r:25,c:0,valor:'cabaña 1'}],
+   combinaciones:[{s:{r:2,c:2},e:{r:2,c:8}},{s:{r:14,c:0},e:{r:22,c:0}},{s:{r:25,c:0},e:{r:28,c:0}}]};
+  Object.assign(data,S.normalizarHoja(hoja,'Oct26'));
+  db.reserva_estadias=[];
+ });
+ const [activa]=x.data.reservas, [cancelada]=x.data.cancelaciones;
+ assert.equal(S.mismaPersona(activa.titular,cancelada.titular),false);
+ assert.equal(activa.cancelaciones_contradictorias[0].celda,'D17');
+ assert.equal(S.reservaYCancelacionCoinciden(activa,{...cancelada,rut_documento:'22222222-2'}),false);
+ assert.equal(S.reservaYCancelacionCoinciden(activa,{...cancelada,fecha_checkin:'2026-10-06'}),false);
+ activa.pagos=[F.pago({titular:activa.titular})];
+ const w=F.web(x.data),Q=w.HAIKU_LIBRO_CONSULTAS,cliente=F.cliente(x.db);
+ const r=await Q.consultar(F.consulta,w.HAIKU_LIBRO_RESERVA_V1,cliente);
+ assert.equal(r.comparacion[0].categoria,'cancelacion_contradictoria');
+ assert.match(String(r.cancelaciones_revision),/reserva activa/);
+ assert.equal(r.cancelaciones_confirmadas.length,0);
+ const plan=await Q.prepararIncorporacion(r,new Map([[r.comparacion.grupos[0].clave,{valor:'nueva'}]]),new Set(),cliente);
+ assert.match(plan.items[0].motivos.join(' '),/Oct26!C3.*Cancelaciones.*Oct26!D17/);
+ assert.equal(Q.serializarIncorporacion(plan).length,0);
+ assert.ok(plan.items.some(i=>i.reservaPendiente&&i.aprobable===false));
+ assert.deepEqual(cliente.mutaciones,[]);
+});
 function environment(){
  let g=1,allow=true,writerCalls=0,confirmAccepted=true;const caso=compare([e()]).cancelaciones_confirmadas[0];
  const row={id:'r1',titular_nombre:r().titular,correo_contacto:r().correo,estado_reserva:'confirmada',estadias:[{id:'s1',fecha_ingreso:r().fecha_checkin,fecha_salida:r().fecha_checkout,estado_estadia:'confirmada',cabanas:{numero:1}}]};

@@ -514,7 +514,7 @@
         const persona = identidad(reserva, sistema);
         return {
             s: sistema,
-            segura: !reserva.advertencias?.length && cab && fechas && persona.confirmable,
+            segura: !reserva.advertencias?.length && !reserva.cancelaciones_contradictorias?.length && cab && fechas && persona.confirmable,
             posible: (cab && fechas) || persona.compatible
         };
     }
@@ -556,7 +556,16 @@
         };
     }
 
+    function motivoCancelacionContradictoria(reserva) {
+        if (!reserva.cancelaciones_contradictorias?.length) return null;
+        const celdas = reserva.cancelaciones_contradictorias.map(source).join(', ');
+        return `La reserva figura activa en ${source(reserva.coordenadas_origen)} y también en Cancelaciones (${celdas}). Confirma cuál está vigente antes de incorporar.`;
+    }
+
     function asociarConservador(reserva, candidatas) {
+        const motivo = motivoCancelacionContradictoria(reserva);
+        if (motivo) return { estado:'ambigua', categoria:'cancelacion_contradictoria', confianza:'baja',
+            pregunta:motivo, candidatos:[], candidatosDetalle:[] };
         const scores = candidatas.filter(candidatoElegible).map(s => puntuarCandidato(reserva, s));
         const seguros = scores.filter(x => x.segura);
         if (seguros.length === 1) return { estado: "asociada", sistema: seguros[0].s, categoria: "coincide", confianza: "alta" };
@@ -601,6 +610,8 @@
         const avisos = [...new Set(pendientes.flatMap(i => i.libro.advertencias || []))];
         const comparaciones = [];
         const opciones = [{ valor: "", categoria: "pendientes", texto: "Dejar pendiente", efecto: "no se incorpora" }];
+        const conflictoCancelacion = g.items.map(i => motivoCancelacionContradictoria(i.libro)).find(Boolean);
+        if (conflictoCancelacion) return {comparaciones, opciones, razon:conflictoCancelacion, avisos};
         for (const c of candidatos) {
             const relevantes = pendientes.filter(i => i.candidatosDetalle?.some(x => x.id === c.id) ||
                 (!i.candidatosDetalle?.length && g.categoria === "estadia_faltante" && identidad(i.libro, c).compatible));
@@ -2126,7 +2137,7 @@
     async function leerEstadiasSistema(cliente, {desde, hasta, focal, reservaIds} = {}) {
         const consultaEstadias = () => {
             let consulta=cliente.from("reserva_estadias")
-                .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)");
+                .select("id,reserva_id,fecha_ingreso,fecha_salida,estado_estadia,tipo_estadia,fullday_liberado_en,adultos,ninos,mascotas,cabanas(numero),reservas(id,grupo_reserva_id,titular_nombre,titular_tipo_documento,titular_numero_documento,correo_contacto,telefono_contacto,estado_reserva,observaciones)");
             // El informe histórico sólo necesita el pequeño intervalo de sus cambios.
             // Los clientes de prueba/legacy sin estos filtros conservan el recorrido normal.
             if(reservaIds?.length)consulta=consulta.in('reserva_id',reservaIds);
@@ -2151,6 +2162,7 @@
             estado_operativo: e.estado_estadia,
             estado_reserva: e.reservas?.estado_reserva,
             tipo_estadia: e.tipo_estadia,
+            fullday_liberado_en: e.fullday_liberado_en,
             adultos: e.adultos, ninos: e.ninos, mascotas: e.mascotas, observaciones: e.reservas?.observaciones,
             tipo_documento: e.reservas?.titular_tipo_documento
         }));
@@ -3026,6 +3038,7 @@
     function evaluarFilaHistorial(fila,comparacion){
         if(!fila)return {accionable:false,revision:{motivos:['No pude leer todos los datos de esta reserva. Revisa su entrada, salida y cabaña en el Libro.'],candidatos:[]}};
         const plan=crearPlanIncorporacion([fila.libro],comparacionPreparacionHistorial([fila],comparacion));
+        bloquearAltasEnCabanasOcupadas(plan, comparacion.snapshot);
         const elegido=plan.items.find(x=>x.seleccionado&&x.payload&&CATEGORIAS_GUARDABLES.includes(x.categoria));
         return {
             accionable:Boolean(elegido),
@@ -4675,6 +4688,12 @@
         const usados = new Set();
         for (const g of comp.grupos || []) {
             const d = decisiones.get(g.clave);
+            const cancelaciones = g.items.map(i => motivoCancelacionContradictoria(i.libro)).filter(Boolean);
+            if (cancelaciones.length) {
+                g.items.forEach(i => reservasDejadasPendientes.add(claveReserva(i.libro)));
+                add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null, [...new Set(cancelaciones)]);
+                continue;
+            }
             if (d && !d.valor) {
                 g.items.forEach(x => reservasDejadasPendientes.add(claveReserva(x.libro)));
                 add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null,
@@ -5855,6 +5874,7 @@
                 plan.permiteLoteCambios = true;
         }
         priorizarActualizacionesEstadia(plan);
+        bloquearAltasEnCabanasOcupadas(plan, comparacion.snapshot);
         return plan;
     }
 
@@ -6194,25 +6214,69 @@
         return resumen;
     }
 
+    function rangoEstadiaAlta(estadia) {
+        const datos = estadia.datos || estadia;
+        return {cabana:estadia.cabana_numero, ingreso:datos.fecha_ingreso, salida:datos.fecha_salida, tipo:datos.tipo_estadia};
+    }
+
+    function mismaCabanaYFechasSuperpuestas(primera, segunda) {
+        if (!Number.isInteger(Number(primera?.cabana)) || Number(primera.cabana) < 1 ||
+            !Number.isInteger(Number(segunda?.cabana)) || Number(segunda.cabana) < 1) return true;
+        if (Number(primera.cabana) !== Number(segunda.cabana)) return false;
+        const {ingreso:a, salida:b, tipo:tipoA} = primera;
+        const {ingreso:x, salida:y, tipo:tipoB} = segunda;
+        if (![a,b,x,y].every(v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))) return true;
+        const primerFullDay = /full_?day/.test(tipoA), segundoFullDay = /full_?day/.test(tipoB);
+        // Un Full Day se cruza con la salida de un alojamiento del mismo día.
+        if (primerFullDay && segundoFullDay) return a === x;
+        if (primerFullDay) return a >= x && a <= y;
+        if (segundoFullDay) return x >= a && x <= b;
+        return a < y && x < b;
+    }
+
     function altaDependeDeCancelacion(item, cancelacion) {
         const p = item.payload;
         if (!p || !['nuevas','estadias'].includes(item.categoria) && !['reserva_nueva','estadia'].includes(p.tipo)) return false;
-        const ocupacion = cancelacion.ocupacionCancelacion;
         // Sin rango confirmado no se acredita que el alta sea independiente.
-        if (!ocupacion || !Number.isInteger(Number(ocupacion.cabana)) || Number(ocupacion.cabana) < 1) return true;
-        return (p.estadias || [p.estadia || p]).some(e => {
-            if (!Number.isInteger(Number(e.cabana_numero)) || Number(e.cabana_numero) < 1) return true;
-            if (Number(e.cabana_numero) !== Number(ocupacion.cabana)) return false;
-            const d = e.datos || e, a = d.fecha_ingreso, b = d.fecha_salida;
-            const x = ocupacion.ingreso, y = ocupacion.salida;
-            if (![a,b,x,y].every(v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v))) return true;
-            const nuevoFullDay = /full_?day/.test(d.tipo_estadia), anteriorFullDay = /full_?day/.test(ocupacion.tipo);
-            // Mismas fronteras que la disponibilidad: Full Day cruza checkout.
-            if (nuevoFullDay && anteriorFullDay) return a === x;
-            if (nuevoFullDay) return a >= x && a <= y;
-            if (anteriorFullDay) return x >= a && x <= b;
-            return a < y && x < b;
-        });
+        const ocupacion = cancelacion.ocupacionCancelacion;
+        if (!Number.isInteger(Number(ocupacion?.cabana)) || Number(ocupacion.cabana) < 1) return true;
+        return (p.estadias || [p.estadia || p]).some(e => mismaCabanaYFechasSuperpuestas(rangoEstadiaAlta(e), ocupacion));
+    }
+
+    function bloquearAltasEnCabanasOcupadas(plan, snapshot) {
+        const altas = plan.items.filter(i => ['nuevas','estadias'].includes(i.categoria) && !i.etapaSiguiente && !i.motivos.length);
+        if (!altas.length) return;
+        // Una cancelación preparada se comprueba y guarda antes del alta en el flujo existente.
+        const cancelacionesPreparadas = new Set(plan.items.filter(i => i.tipoCambio === 'cancelar_reserva' &&
+            i.propuestaCambio && !i.motivos.length).map(i => i.id));
+        const ocupaciones = (snapshot?.estadias_todas || snapshot?.estadias || []).filter(e =>
+            e.cabana && e.fecha_checkin && e.fecha_checkout && e.estado_operativo &&
+            !['cancelada','no_show'].includes(e.estado_operativo) &&
+            !(/full_?day/.test(e.tipo_estadia) && e.fullday_liberado_en) &&
+            !cancelacionesPreparadas.has('cancelacion:' + e.reserva_id));
+        const bloquear = (item, motivos) => {
+            item.categoria = 'pendientes';
+            item.seleccionado = false;
+            item.aprobable = false;
+            item.motivos = [...item.motivos, ...motivos];
+        };
+        const bloqueados = new Set();
+        for (const alta of altas) {
+            const cruces = ocupaciones.filter(e => alta.payload.estadias.some(s =>
+                mismaCabanaYFechasSuperpuestas(rangoEstadiaAlta(s), {cabana:e.cabana,
+                    ingreso:e.fecha_checkin, salida:e.fecha_checkout, tipo:e.tipo_estadia})));
+            if (!cruces.length) continue;
+            bloquear(alta, cruces.map(e => `CAB ${e.cabana} ocupada en Proyecto H por ${e.titular || 'una estadía existente'}` +
+                ` · ${fechaBreve(e.fecha_checkin)} → ${fechaBreve(e.fecha_checkout)} (${e.estado_operativo}). Revisa la reserva antes de incorporar.`));
+            bloqueados.add(alta.id);
+        }
+        for (let antes = -1; antes !== bloqueados.size;) {
+            antes = bloqueados.size;
+            for (const item of plan.items) if (!bloqueados.has(item.id) && item.dependeDe?.some(id => bloqueados.has(id))) {
+                bloquear(item, ['La reserva de este elemento tiene un cruce de ocupación pendiente.']);
+                bloqueados.add(item.id);
+            }
+        }
     }
 
     async function confirmarIncorporacion(result, decisiones, aprobados, plan, cliente = root.haikuSupabase) {
