@@ -27,6 +27,8 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     await db.exec(sqlFile('supabase/migrations/'+migration));
     await db.exec(sqlFile('supabase/migrations/20261121003000_haku_huespedes_directorio_foto.sql'));
     await db.exec(sqlFile('supabase/migrations/20261122014301_huespedes_directorio_estadias.sql'));
+    await db.exec(sqlFile('supabase/migrations/20261122042015_huespedes_vigencia_hospedados.sql'));
+    await db.exec("set time zone 'America/Santiago'");
     const seed = sqlFile('tests/huespedes-v1-postgres.test.sql').split('set local role authenticated;')[0];
     await db.exec(seed+'commit;');
     if(directoryOnly) await db.exec(sqlFile('tests/fixtures/huespedes-directorio.sql'));
