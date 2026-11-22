@@ -288,7 +288,10 @@
             else frases.push(`${etiquetas[c.campo]||c.campo}: ${valor(c.antes,c.campo)} → ${valor(c.ahora,c.campo)}.`);
         }
         let motivo,paso;
-        if(item.accionable){
+        if(item.requiereConfirmarEstadia){
+            motivo='La estadía existente requiere confirmación para aplicar el cambio del Libro.';
+            paso=manual?'Abre «Aprobación manual» y revisa el origen y el destino.':'Abre «Ver reserva» y comprueba la estadía con el Libro.';
+        }else if(item.accionable){
             motivo='Este cambio todavía no está guardado en Proyecto H.';
             paso=manual?'Falta tu confirmación. Abre «Aprobación manual» para revisar y guardar el cambio.':'Pulsa «Revisar cambios» al final del informe para revisar y confirmar el cambio.';
         }else if(revisionServiciosPendiente(item,generacion)){
@@ -368,7 +371,7 @@
         }
         const extra=[...lista(c.hechos),historia,...lista(c.avisos).map(x=>x.texto)].filter(Boolean);
         const explicacion=otros.length?explicarPendiente({...item,cambios:otros},generacion,fechasVisibles).encontro:'';
-        const accion=esAdministrador()&&revisionServiciosPendiente(item,generacion)
+        const accion=esAdministrador()&&(item.requiereConfirmarEstadia&&item.preparacion||revisionServiciosPendiente(item,generacion))
             ?'Revisa estos datos en «Aprobación manual».' : 'Revisa estos datos en «Ver reserva».';
         // El detalle conserva la evidencia original una sola vez, sin repetir
         // diagnósticos, columnas vacías ni llamar pagos a las notas de cobro.
@@ -383,7 +386,7 @@
             (fuentes.length||otros.length?`<details class="haku-pendiente-comparacion"><summary>Ver detalle del Libro</summary>${fuentes.map(x=>`<p>${escapar(resumenNota(x))}</p>`).join('')}${otros.length?`<dl>${otros.map(x=>cambioPendiente(x)).join('')}</dl>`:''}</details>`:'');
     }
     function revisionServiciosPendiente(item,generacion){
-        if(generacion==null||item?.tipo!=='modificacion'||!item.actual||!item.sistema?.reserva_id||
+        if(generacion==null||item?.tipo!=='modificacion'||item.requiereConfirmarEstadia||!item.actual||!item.sistema?.reserva_id||
             !lista(item.cambios).some(c=>c.campo==='servicios'))return null;
         // Abrir sólo esta ficha con el lector y la confirmación de servicios existentes.
         return {reservas:[item.actual],generacion};

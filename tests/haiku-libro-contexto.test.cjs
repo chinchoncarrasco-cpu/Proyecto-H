@@ -142,6 +142,65 @@ test('integración: el pendiente obsoleto se resuelve con Libro actual y H, sin 
  const cerrada=await ctx.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([cancelada],db,{generacion:4});
  assert.equal(cerrada.items.length,0);assert.equal(cerrada.resueltosDetalle[0].motivo,'cancelada_en_libro');
 });
+
+for(const campo of ['fechas','cabaña']){
+ test(`el cambio de ${campo} identificado por el historial requiere confirmación individual`,async()=>{
+  const anterior=r({estado_operativo:'confirmada',
+   ...(campo==='fechas'?{rut_documento:null}:{fecha_checkout:'2026-09-12',tipo_estadia:'full_day',noches:0})});
+  const valores=campo==='fechas'?{fecha_checkin:'2026-12-10',fecha_checkout:'2026-12-12'}:{cabana:8,estado_operativo:'checked_out'};
+  const actual={...anterior,...valores};
+  const cambios=Object.entries(valores).map(([campo,ahora])=>({campo,antes:anterior[campo],ahora}));
+  const tabla={id:'e1',reserva_id:'r1',fecha_ingreso:anterior.fecha_checkin,fecha_salida:anterior.fecha_checkout,
+   estado_estadia:'confirmada',tipo_estadia:campo==='fechas'?'alojamiento':'fullday',adultos:2,ninos:0,mascotas:0,
+   cabanas:{numero:anterior.cabana},reservas:{id:'r1',titular_nombre:anterior.titular,
+   titular_numero_documento:anterior.rut_documento,estado_reserva:'confirmada'}};
+  const llamadas=[];
+  const db={
+   auth:{getSession:async()=>({data:{session:{user:{id:'operador-ficticio'}}}})},
+   from(nombre){
+    const q={select(){return q},order(){return q},range:async()=>({data:nombre==='reserva_estadias'?[tabla]:[]})};
+    return q;
+   },
+   async rpc(nombre,args){
+    assert.equal(nombre,'haiku_reprogramacion_preparar_v1');
+    llamadas.push(args);
+    return {data:{version:1,reserva_id:'r1',estadia_id:'e1',firma:'propuesta-ficticia',
+     origen:{cabana_numero:anterior.cabana,fecha_ingreso:anterior.fecha_checkin,fecha_salida:anterior.fecha_checkout},
+     destino:args.p_destino,items:[],bloqueos:[],snapshot:{estadia:{tipo_estadia:tabla.tipo_estadia}}}};
+   }
+  };
+  const ctx={HAIKU_LIBRO_SEMANTICA:S,structuredClone,console,Intl,Date,
+   HAIKU_LIBRO_RESERVA_V1:{estado:()=>({generacion:4,version:'lectura-fixture'})},
+   HAIKU_REPROGRAMACION_V1:require('../js/haiku-reprogramacion-estadia-v1.js'),
+   haikuSesion:{usuario:{activo:true},roles:['admin']},haikuTienePermiso:()=>true};
+  for(const script of ['haiku-libro-consultas-v1','supabase-asistente-libro-actualizacion-v1'])
+   vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+script+'.js'),'utf8'),ctx);
+  const api=ctx.HAIKU_LIBRO_CONSULTAS;
+  const resultado=await api.revalidarCambiosDetectados([registro({anterior,actual,cambios,
+   fuente_vigente:{estado:'verificada'}})],db,{generacion:4});
+  const [item]=resultado.items;
+  assert.equal(item.accionable,false);
+  assert.equal(item.requiereConfirmarEstadia,true);
+  assert.equal(resultado.reservas.length,0);
+  assert.equal(llamadas.length,0);
+  assert.equal(item.preparacion.traslado.id,'e1');
+  const html=ctx.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.renderizarPendientes(resultado);
+  assert.match(html,/data-haku-aprobar-pendiente="0">Aprobación manual/);
+  assert.match(html,/revisa el origen y el destino/);
+  assert.doesNotMatch(html,/data-haku-preparar-pendientes/);
+  const plan=await api.prepararIncorporacion(item.preparacion,new Map(),new Set(),db);
+  assert.equal(llamadas.length,1);
+  const enviados=api.serializarIncorporacion(plan);
+  assert.equal(enviados.length,1);
+  assert.equal(enviados[0].tipo,'reserva_actualizar');
+  assert.equal(enviados[0].reserva_id,'r1');
+  assert.equal(enviados[0].estadia_id,'e1');
+  assert.equal(enviados[0].reprogramacion_v1.propuesta.destino.fecha_ingreso,actual.fecha_checkin);
+  assert.equal(enviados[0].reprogramacion_v1.propuesta.destino.fecha_salida,actual.fecha_checkout);
+  assert.equal(enviados[0].reprogramacion_v1.propuesta.destino.cabana_numero,actual.cabana);
+  if(campo==='cabaña')assert.equal(enviados[0].estadia.despues.estado_estadia,'checked_out');
+ });
+}
 test('lote canónico conserva estilos, texto enriquecido y semántica; abre XLSX y ZIP una sola vez',async()=>{
  const path=require('node:path'),os=require('node:os'),assets=process.env.HAIKU_LIBRO_WORKER_ASSETS||path.join(os.tmpdir(),'haiku-jonathan-real-xlsx');
  const XLSX=require(path.join(assets,'xlsx.full.min.js')),JSZip=require(path.join(assets,'jszip.min.js'));
