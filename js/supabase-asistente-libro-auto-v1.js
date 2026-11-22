@@ -183,13 +183,20 @@
                 ultima=detail.generacion;
                 const turno=++token,g=detail.generacion;
                 const vigente=()=>turno===token && generacion()===g;
+                let detectado = false;
                 limpiar();mostrar({texto:'Revisando la actualización…',pendiente:true});
                 clearTimeout(temporizador);
                 const espera=temporizador=setTimeout(()=>{
-                    if (vigente()) mostrar({texto:'El informe está tardando más de lo habitual. Puedes cerrar el aviso y seguir trabajando.',pendiente:true,revision:true});
+                    if (vigente()) mostrar({texto:detectado
+                        ? 'Detecté cambios en el Libro. El informe está tardando más de lo habitual.'
+                        : 'El informe está tardando más de lo habitual. Puedes cerrar el aviso y seguir trabajando.',pendiente:true,revision:true});
                 },30_000);
                 try {
-                    const resultado=await obtener();
+                    const resultado=await obtener(() => {
+                        if (!vigente() || detectado) return;
+                        detectado = true;
+                        mostrar({texto:'Detecté cambios en el Libro. Comprobando qué falta incorporar…',pendiente:true});
+                    });
                     if (!vigente()) return;
                     if (resultado.estado==='sin_linea_base') {limpiar();return;}
                     mostrar({...resumir(resultado),resultado});
@@ -1098,9 +1105,9 @@
             }
         }
         const control=crearControlador({generacion:()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion,
-            obtener:()=>{
+            obtener:alDetectar=>{
                 const api=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
-                return api.obtenerResultadoAviso?.() ?? api.obtenerResultado();
+                return api.obtenerResultadoAviso?.({alDetectar}) ?? api.obtenerResultado({alDetectar});
             },mostrar,limpiar});
         root.addEventListener('haiku:libro-version-cargada',e=>{void control.cargar(e.detail);});
         // Sólo invalida; nunca inicia comparación desde limpieza, restauración ni F5.

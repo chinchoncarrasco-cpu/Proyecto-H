@@ -195,7 +195,7 @@ function interfaz(comparar,{proyectar=false}={}) {
         Event:class {constructor(type){this.type=type;}},
         addEventListener(t,f){(listeners[t] ||= []).push(f);},
         HAIKU_LIBRO_RESERVA_V1:{estado:()=>({generacion:g})},
-        HAIKU_LIBRO_DIFERENCIAS_V1:{compararUltimasVersiones(){calls++;return comparar();}}};
+        HAIKU_LIBRO_DIFERENCIAS_V1:{compararUltimasVersiones(opciones){calls++;return comparar(opciones);}}};
     const timers=new Map();let secuenciaTimer=0;
     const ctx={window,structuredClone,setTimeout(fn){const id=++secuenciaTimer;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}};
     for(const file of ['supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+file+'.js'),'utf8'),ctx);
@@ -247,6 +247,27 @@ test('la demora avisa una sola vez y conserva la comparación en curso',async()=
     resolver(res());await tick();
     assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
     assert.ok(h.botones().length);
+});
+test('la detección se ve mientras se termina de leer y luego se comprueba Proyecto H',async()=>{
+    let terminarLectura, terminarRevision, consultas=0;
+    const cambio={actual:row};
+    const h=interfaz(({alDetectar})=>{
+        alDetectar(2);
+        return new Promise(resolve=>{terminarLectura=()=>resolve(res({nuevas:[cambio],libro_actual:{generacion:2}}));});
+    },{proyectar:true});
+    h.window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados(cambios){
+        consultas++;
+        return new Promise(resolve=>{terminarRevision=()=>resolve({items:[],resueltos:cambios.map(x=>x.id)});});
+    }};
+    h.emitir('haiku:libro-version-cargada',eventoGoogle(2));await tick();
+    assert.ok(h.nodos().some(x=>x.textContent.includes('Detecté cambios en el Libro')));
+    assert.equal(consultas,0);assert.equal(h.botones().length,0);
+    assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
+    terminarLectura();await tick();assert.equal(consultas,1);
+    assert.equal(h.botones().length,0);
+    terminarRevision();await tick();
+    assert.equal(h.botones().length,1);assert.equal(h.calls(),1);
+    assert.equal(h.ids['haiku-asistente-mensajes'].children.length,1);
 });
 test('cerrar la espera descarta el aviso tardío sin reiniciar la comparación',async()=>{
     let resolver;const h=interfaz(()=>new Promise(r=>resolver=r));

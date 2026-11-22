@@ -561,7 +561,7 @@
             }
         };
     }
-    let instalado = false, cacheCompartida, cachePendientesCompartida, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
+    let instalado = false, cacheCompartida, cachePendientesCompartida, observarDeteccion, insertarResultado, insertarIncorporacion, insertarRevisionAbonos;
     const origenAvisos = new WeakMap(), registroLeido = new WeakMap();
     function proyectarPendientesAviso(resultado,registros,{resueltos=false,sinVerificar=false}={}) {
         const aviso={...resultado,nuevas:[],modificadas:[],cancelaciones_confirmadas:[],ya_no_aparecen:[],
@@ -830,9 +830,11 @@
             estado.promesa=null;
         });return estado.promesa;
     }
-    function obtenerResultado() {
-        if (!instalar()) return Promise.reject(new Error('Haku todavía no está disponible.'));
-        return cacheCompartida.obtener();
+    async function obtenerResultado({alDetectar} = {}) {
+        if (!instalar()) throw new Error('Haku todavía no está disponible.');
+        const dejarDeObservar = typeof alDetectar === 'function' ? observarDeteccion(alDetectar) : null;
+        try { return await cacheCompartida.obtener(); }
+        finally { dejarDeObservar?.(); }
     }
     async function conservarRegistros(resultado){
         const origen=generacionInforme(resultado);
@@ -843,8 +845,8 @@
             return sinAvisosCerrados(fusionarHistorialCambios(registro,resultado,origen).cambios,cierres);
         }catch(_){return extraerCambiosDetectados(resultado,origen);}
     }
-    async function obtenerResultadoAviso() {
-        const resultado=await obtenerResultado();
+    async function obtenerResultadoAviso(opciones) {
+        const resultado=await obtenerResultado(opciones);
         try{
             const pendientes=await cachePendientesCompartida.obtener(resultado);
             registroLeido.set(resultado,pendientes.registrosAviso);
@@ -867,9 +869,22 @@
         const doc = root.document, campo = doc.getElementById('haiku-asistente-texto'), enviar = doc.getElementById('haiku-asistente-enviar'), mensajes = doc.getElementById('haiku-asistente-mensajes');
         if (!campo || !enviar || !mensajes) return false;
         instalado = true;
+        const generacion = () => root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion;
+        const observadores = new Set();
+        let generacionDetectada;
+        observarDeteccion = informar => {
+            const avisar = () => { try { informar(); } catch (_) { /* El aviso visual es independiente de la lectura. */ } };
+            observadores.add(avisar);
+            if (generacionDetectada != null && generacionDetectada === generacion()) avisar();
+            return () => observadores.delete(avisar);
+        };
         const cache = crearCache(async()=> {
             if (!root.HAIKU_LIBRO_DIFERENCIAS_V1) throw new Error('El comparador del Libro todavía no está disponible.');
-            const resultado=await root.HAIKU_LIBRO_DIFERENCIAS_V1.compararUltimasVersiones();
+            const resultado=await root.HAIKU_LIBRO_DIFERENCIAS_V1.compararUltimasVersiones({alDetectar(g) {
+                if (g !== generacion() || g === generacionDetectada) return;
+                generacionDetectada = g;
+                for (const avisar of observadores) avisar();
+            }});
             try{
                 const libro=root.HAIKU_LIBRO_RESERVA_V1,g=libro?.estado?.().generacion;
                 if(libro?.leerCambiosDetectados&&libro?.guardarCambiosDetectados&&resultado.libro_actual?.generacion===g){
@@ -887,10 +902,10 @@
                 } catch (_) { /* El informe del Libro sigue disponible para revisar los abonos. */ }
             }
             return resultado;
-        },()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion);
+        },generacion);
         cacheCompartida = cache;
         const cachePendientes=cachePendientesCompartida=crearCachePendientes();
-        root.addEventListener('haiku:libro-cambio',()=>{cache.invalidar();cachePendientes.invalidar();});
+        root.addEventListener('haiku:libro-cambio',()=>{generacionDetectada=undefined;cache.invalidar();cachePendientes.invalidar();});
         root.addEventListener('haiku:libro-incorporado',()=>cachePendientes.invalidar());
         function mensaje(tipo,texto) {
             const el = doc.createElement('div'); el.className = `haiku-asistente-mensaje haiku-asistente-mensaje--${tipo}`; el.textContent = texto; mensajes.appendChild(el); mensajes.scrollTop = mensajes.scrollHeight; return el;
