@@ -41,11 +41,11 @@ async function settled(page){await page.evaluate(async()=>{await document.fonts.
    await page.evaluate(()=>document.fonts.ready);
    await page.waitForFunction(()=>document.querySelector('.hu-avatar-perfil img')?.complete);
    await settled(page);await page.screenshot({path:path.join(out,'web-'+theme+'-perfil.png'),fullPage:true});
-   measurements.push({client:'web',theme,geometry:await section.evaluate(n=>Object.fromEntries(['.hu-layout','.hu-lista','.hu-ficha','.hu-fila[data-person-id]'].map(key=>{const r=n.querySelector(key).getBoundingClientRect();return [key,{x:r.x,y:r.y,w:r.width,h:r.height}];})))});
+   measurements.push({client:'web',theme,geometry:await section.evaluate(n=>Object.fromEntries(['.hu-layout','.hu-lista','.hu-ficha','.hu-estadia-fila'].map(key=>{const r=n.querySelector(key).getBoundingClientRect();return [key,{x:r.x,y:r.y,w:r.width,h:r.height}];})))});
    const geometry=measurements.at(-1).geometry;
    assert.ok(Math.abs(geometry['.hu-layout'].x-208)<=1&&Math.abs(geometry['.hu-layout'].y-283)<=1,'web placement matches approved frame');
    assert.ok(Math.abs(geometry['.hu-ficha'].w-458)<=1&&Math.abs(geometry['.hu-ficha'].h-1031)<=2,'web profile dimensions match Figma');
-   assert.equal(geometry['.hu-fila[data-person-id]'].h,88);
+   assert.equal(geometry['.hu-estadia-fila'].h,68);
    const modal=section.locator('dialog');
    for(const [name,open] of [
     ['foto',()=>card.getByRole('button',{name:'Cambiar foto',exact:true}).click()],
@@ -81,16 +81,17 @@ async function settled(page){await page.evaluate(async()=>{await document.fonts.
     return route.fulfill({path:file,contentType:mime[path.extname(name)]});
    });
    await mobile.goto('https://haku-native-figma.test/');
-   await mobile.getByRole('button',{name:'Diego Rojas',exact:true}).waitFor().catch(async error=>{
+   const titleButton=mobile.getByRole('button',{name:'Ver perfil de Diego Rojas',exact:true});
+   await titleButton.waitFor().catch(async error=>{
      await mobile.screenshot({path:path.join(out,'android-browser-failure.png')});
      throw new Error(JSON.stringify({errors:nativeErrors,body:await mobile.locator('body').innerText(),cause:error.message}));
    });
    await settled(mobile);await mobile.screenshot({path:path.join(out,'android-browser-'+theme+'-directorio.png')});
-   const nativeRow=await mobile.getByRole('button',{name:'Diego Rojas',exact:true}).boundingBox();
+   const nativeRow=await mobile.getByTestId('guest-stay-stay-guest-0').boundingBox();
    measurements.push({client:'native-components',theme,directoryRow:nativeRow});
    assert.ok(Math.abs(nativeRow.x-13)<=1&&Math.abs(nativeRow.width-364)<=2&&nativeRow.height===94,'mobile row width and height match Figma');
    await mobile.setViewportSize({width:390,height:1232});
-   await mobile.getByRole('button',{name:'Diego Rojas',exact:true}).click();await mobile.getByRole('heading',{name:'Diego Rojas',exact:true}).waitFor();
+   await titleButton.click();await mobile.getByRole('heading',{name:'Diego Rojas',exact:true}).waitFor();
    await settled(mobile);await mobile.screenshot({path:path.join(out,'android-browser-'+theme+'-perfil.png')});
    const nativeCard=await mobile.getByTestId('guest-profile-card').boundingBox();
    measurements.at(-1).profile=nativeCard;

@@ -13,12 +13,15 @@
     const detail = root.querySelector(".hu-ficha");
     const dialog = root.querySelector("dialog");
     const roles = {titular:"Titular", acompanante:"Acompañante", borrador:"Borrador"};
-    const labels = {hospedados:"Hospedados", todos:"Todos", pendientes:"Por completar"};
+    const labels = {todos:"Todos", hospedados:"Hospedados", historial:"Historial", pendientes:"Por completar"};
+    const stayGroups = {hospedados:"Hospedados ahora", por_ingresar:"Por ingresar", historial:"Historial"};
     const groups = ["Motivo","Compañía","Intereses","Atención"];
-    const filtersState = {p_estado:"hospedados",p_busqueda:null,p_tipo:null,p_origen:null,p_etiqueta:null,p_desde:0};
+    const filtersState = {p_estado:"todos",p_busqueda:null,p_tipo:null,p_origen:null,p_etiqueta:null};
     const dateFormat = new Intl.DateTimeFormat("es-CL",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"});
+    const operatingYear = new Intl.DateTimeFormat("es-CL",{year:"numeric",timeZone:"America/Santiago"}).format(new Date());
     const dualIcons = ["back","chevron","close","expand","search"];
-    let data, profile, selected, listRequest = 0, detailRequest = 0, timer, scrollY = 0;
+    const expandedStays = new Map();
+    let data, profile, selected, activeStay, listRequest = 0, detailRequest = 0, timer, scrollY = 0;
     let historyOpen = false, baseOpen = false, sessionKey;
 
     function el(tag,cls,...children) {
@@ -88,7 +91,8 @@
         return ok;
     }
     function change(key,value) {
-        Object.assign(filtersState,{[key]:value,p_desde:0});
+        filtersState[key] = value;
+        if(key==="p_busqueda") expandedStays.clear();
         void list();
     }
     async function list(preserve=false, append=false) {
@@ -96,7 +100,7 @@
         const call = ++listRequest;
         if (!preserve && !append) directory.replaceChildren(message("Cargando huéspedes…"));
         try {
-            const next = await api.rpc("directorio",{...filtersState});
+            const next = await api.rpc("directorio_estadias",{...filtersState,p_desde:append?data.filas.length:0});
             if (call !== listRequest || !allowed()) return;
             data = append ? {...next,filas:data.filas.concat(next.filas)} : next;
             renderList(preserve);
@@ -107,11 +111,59 @@
             }
         }
     }
+    function guestFromStay(stay, id=stay.id) {
+        scrollY=window.scrollY;
+        void openProfile(id,stay.reserva_id,false,stay.estadia_id);
+    }
+    function renderStay(stay) {
+        const title=stay.nombre?name(stay):"Titular por identificar";
+        const info=btn("Ver perfil de "+title,()=>guestFromStay(stay),{cls:"hu-estadia-titular",iconOnly:true});
+        info.append(avatar(stay),box("",el("strong","hu-nombre",title),
+            stay.documento ? muted([stay.tipo_documento?.toUpperCase(),stay.documento].filter(Boolean).join(" ")) : stay.plaza===0 && muted("Por identificar")));
+        info.dataset.personId=stay.id;
+        info.setAttribute("aria-current",String(stay.estadia_id===activeStay));
+        const when=dates(stay);
+        const compactDates=when.replaceAll(" "+operatingYear,"");
+        const location=box("hu-estadia-cabana",
+            el("strong","",stay.numero?"Cabaña "+stay.numero:"Cabaña por asignar"),
+            el("span","hu-estadia-tipo",stay.tipo),
+            el("span","hu-estadia-dias",compactDates));
+        location.title=when;
+        const hasCompanions=stay.acompanantes.length>0;
+        const panel=box("hu-acompanantes");
+        panel.id="hu-acompanantes-"+stay.estadia_id;
+        const toggle=btn(hasCompanions?quantity(stay.acompanantes.length,"acompañante","acompañantes"):"Por asignar",
+            ()=>setExpanded(toggle.getAttribute("aria-expanded")!=="true"),{cls:"hu-estadia-toggle"});
+        toggle.append(icon("expand"));
+        toggle.setAttribute("aria-controls",panel.id);
+        const header=box("hu-estadia-fila",info,location,hasCompanions||stay.por_asignar?toggle:el("span","hu-sin-acompanantes hu-muted","Sin acompañantes"),
+            el("span","hu-estadia-flecha",icon("chevron")));
+        const element=box("hu-estadia-item",header,panel);
+        element.dataset.estadiaId=stay.estadia_id;
+        function setExpanded(open) {
+            expandedStays.set(stay.estadia_id,open);
+            toggle.setAttribute("aria-expanded",String(open));
+            header.dataset.hueAbierto=String(open);
+            panel.hidden=!open;
+            if (!open || panel.hasChildNodes()) return;
+            for (const person of stay.acompanantes) {
+                const draft=person.rol==="borrador";
+                panel.append(box("hu-acompanante-fila",
+                    box("hu-identidad",avatar(person),box("",el("strong","hu-nombre",name(person)),draft&&el("span","hu-por-identificar","Por identificar"))),
+                    btn(draft&&data.puede_editar?"Completar":"Ver perfil",()=>guestFromStay(stay,person.id),{cls:draft&&data.puede_editar?"":"hu-plano"})));
+            }
+            if(stay.por_asignar) panel.append(box("hu-acompanante-fila",muted("Acompañantes por asignar a una cabaña"),
+                btn("Ver en la ficha",()=>guestFromStay(stay),{cls:"hu-plano"})));
+        }
+        const previouslyExpanded=expandedStays.get(stay.estadia_id);
+        setExpanded(previouslyExpanded??stay.abrir_acompanantes);
+        return element;
+    }
     function renderList(preserve) {
         const y = window.scrollY;
         const focused = document.activeElement?.dataset?.huControl;
         tabs.replaceChildren(...Object.entries(labels).map(([key,label])=>{
-            const button = btn(label+" · "+data.conteos[key],()=>change("p_estado",key),{cls:"hu-chip"});
+            const button = btn(label,()=>change("p_estado",key),{cls:"hu-chip"});
             button.setAttribute("aria-pressed",String(filtersState.p_estado===key));
             button.dataset.huControl=key;
             return button;
@@ -127,29 +179,28 @@
         }
         if (focused) root.querySelector('[data-hu-control="'+focused+'"]')?.focus({preventScroll:true});
         const count = data.conteos[filtersState.p_estado];
-        totals.textContent = quantity(count,"persona","personas")+" · "+quantity(data.cabanas,"cabaña","cabañas");
-        const heading = box("hu-fila hu-lista-cabecera",el("span","","HUÉSPED"),el("span","","ESTADÍA Y CABAÑA"),el("span","","PERFIL E INFORMACIÓN"));
-        const rows = data.filas.map(p=>{
-            const tags = p.etiquetas.join(" · ") || (p.excedente ? "Ocupación modificada" : p.pendiente ? "Por completar" : "");
-            const where = p.reserva_id ? (p.numero ? "Cabaña "+p.numero : "Sin cabaña asignada") : "Sin estadía vinculada";
-            const row = el("button","hu-fila",box("hu-identidad",avatar(p),box("",el("strong","hu-nombre",name(p)),
-                muted([roles[p.rol],p.documento].filter(Boolean).join(" · ")),el("span","hu-destacado hu-mini-movil",where),el("span","hu-muted hu-mini-movil",tags))),
-                box("hu-columna",el("strong","",where),muted([p.tipo,dates(p)].filter(Boolean).join(" · "))),box("hu-columna",el("span","hu-destacado",tags),muted(quantity(p.visitas,"estadía","estadías")+(p.registros?" · "+quantity(p.registros,"registro","registros"):""))),icon("chevron"));
-            row.type="button";
-            row.dataset.personId=p.id;
-            row.setAttribute("aria-current",String(selected?.id===p.id));
-            row.onclick=()=>{scrollY=window.scrollY;openProfile(p.id,p.reserva_id);};
-            return row;
-        });
-        directory.replaceChildren(...(rows.length?[heading,...rows]:[message("No hay huéspedes para estos filtros.")]));
-        if(rows.length) directory.append(box("hu-lista-pie",muted(totals.textContent),muted("Orden: cabaña")));
-        if (data.filas.length < count) directory.append(btn("Cargar más",()=>{
-            filtersState.p_desde=data.filas.length;
-            void list(true,true);
+        totals.textContent = quantity(data.titulares,"titular","titulares")+" · "+quantity(data.cabanas,"cabaña","cabañas");
+        const heading=box("hu-estadia-columnas",el("span","","HUÉSPED TITULAR"),el("span","","ESTADÍA Y CABAÑA"),el("span","","ACOMPAÑANTES"));
+        const sections=[];
+        for (const [state,label] of Object.entries(stayGroups)) {
+            const stays=data.filas.filter(stay=>stay.estado===state);
+            if (!stays.length) continue;
+            const summary=data.grupos[state];
+            const groupTotal=state==="historial"?quantity(summary.estadias,"estadía","estadías"):quantity(summary.titulares,"titular","titulares");
+            const group=el("section","hu-estadia-grupo",box("hu-estadia-grupo-cabecera",el("h3","",label),muted(groupTotal)),...stays.map(renderStay));
+            group.dataset.estadiaEstado=state;
+            group.setAttribute("aria-label",label);
+            sections.push(group);
+        }
+        directory.replaceChildren(...(sections.length?[heading,...sections]:[message("No hay estadías para estos filtros.")]));
+        if (sections.length) directory.append(box("hu-lista-pie",muted(totals.textContent),muted("Orden por cabaña")));
+        if (data.filas.length < count) directory.append(btn("Cargar más",event=>{
+            const button=event.currentTarget;
+            button.disabled=true;
+            void list(true,true).finally(()=>{button.disabled=false;});
         },{cls:"hu-ancho"}));
-        if (!selected && rows.length && !matchMedia("(max-width:760px)").matches) {
-            const first = data.filas[0];
-            void openProfile(first.id,first.reserva_id);
+        if (!selected && sections.length && !matchMedia("(max-width:760px)").matches) {
+            guestFromStay(data.filas[0]);
         }
         if (preserve) window.scrollTo(0,y);
     }
@@ -158,15 +209,18 @@
         root.dataset.ficha="false";
         window.scrollTo(0,scrollY);
     }
-    async function openProfile(id,res,keep=false) {
+    async function openProfile(id,res,keep=false,stayId) {
         if (!allowed()) return;
         const call = ++detailRequest;
         if (!keep) {
+            activeStay=stayId??(selected?.res===res?activeStay:undefined);
             selected={id,res};
             profile=undefined;
             historyOpen=baseOpen=false;
             root.dataset.ficha="true";
-            directory.querySelectorAll("[data-person-id]").forEach(row=>row.setAttribute("aria-current",String(row.dataset.personId===id)));
+            directory.querySelectorAll(".hu-estadia-titular").forEach(button=>{
+                button.setAttribute("aria-current",String(button.closest("[data-estadia-id]").dataset.estadiaId===activeStay));
+            });
             detail.replaceChildren(message("Cargando perfil…"));
             if (matchMedia("(max-width:760px)").matches) detail.scrollIntoView({block:"start"});
         }
@@ -612,9 +666,10 @@
         sessionKey=identity;
         clearTimeout(timer);
         root.querySelector("[name=hu-buscar]").value="";
-        Object.assign(filtersState,{p_estado:"hospedados",p_busqueda:null,p_tipo:null,p_origen:null,p_etiqueta:null,p_desde:0});
+        Object.assign(filtersState,{p_estado:"todos",p_busqueda:null,p_tipo:null,p_origen:null,p_etiqueta:null});
         ++listRequest;++detailRequest;
-        data=profile=selected=undefined;
+        data=profile=selected=activeStay=undefined;
+        expandedStays.clear();
         directory.replaceChildren();detail.replaceChildren(message("Selecciona un huésped."));
         totals.textContent="";root.dataset.ficha="false";
         if(dialog.open) dialog.close();
@@ -627,7 +682,8 @@
             menu.hidden=true;sessionKey=null;clearTimeout(timer);
             root.querySelector("[name=hu-buscar]").value="";
             ++listRequest;++detailRequest;
-            data=profile=selected=undefined;
+            data=profile=selected=activeStay=undefined;
+            expandedStays.clear();
             directory.replaceChildren();detail.replaceChildren();totals.textContent="";
             if(dialog.open) dialog.close();
         }

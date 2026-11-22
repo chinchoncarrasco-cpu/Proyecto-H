@@ -5,12 +5,17 @@ on:
       - 'js/**'
       - 'css/haiku-dialogos-v1.css'
       - 'css/haiku-paleta-v1.css'
+      - 'css/haiku-huespedes*'
+      - 'supabase/migrations/*huesped*'
       - 'index.html'
       - 'panel.html'
       - 'calendario-redes.html'
       - 'libro-comparacion.html'
       - 'tests/dialogos-haku*'
       - 'tests/fixtures/dialogos.cjs'
+      - 'tests/*huespedes*'
+      - 'tests/fixtures/huespedes*'
+      - 'tests/fixtures/huespedes-figma/**'
       - '.github/workflows/dialogos-haku.yml'
 permissions:
   contents: read
@@ -43,7 +48,7 @@ jobs:
           tests/nueva-reserva-ver-ficha-id.test.cjs tests/sites-cierre-v1.test.cjs tests/libro-servicio-confirmacion-unica.test.cjs
       - name: Navegador aislado
         run: |
-          npm install --prefix "$RUNNER_TEMP/haku-dialogos" --no-save --ignore-scripts --package-lock=false playwright@1.56.1
+          npm install --prefix "$RUNNER_TEMP/haku-dialogos" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 @electric-sql/pglite@0.5.14
           node "$RUNNER_TEMP/haku-dialogos/node_modules/playwright/cli.js" install chromium --with-deps
       - name: Escritorio y móvil, claro y oscuro
         env:
@@ -52,10 +57,25 @@ jobs:
         run: |
           node tests/dialogos-haku-browser-check.cjs
           node tests/libro-cambio-cabana-browser-check.cjs
+      - name: Directorio y fichas de Huéspedes en escritorio y móvil
+        env:
+          NODE_PATH: ${{ runner.temp }}/haku-dialogos/node_modules
+          HAKU_GUEST_SHOTS: ${{ runner.temp }}/haku-guests-shots
+        run: |
+          node --test tests/huespedes-directorio-estadias.test.cjs tests/huespedes-foto-directorio.test.cjs
+          node tests/huespedes-browser-check.cjs --directorio
+          node tests/huespedes-figma-browser-check.cjs
       - name: Capturas y resultados
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dialogos-haku
           path: ${{ runner.temp }}/haku-dialogos-capturas
+          retention-days: 7
+      - name: Capturas de Huéspedes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: huespedes-web
+          path: ${{ runner.temp }}/haku-guests-shots
           retention-days: 7

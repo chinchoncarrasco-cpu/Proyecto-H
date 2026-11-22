@@ -44,17 +44,9 @@ html[data-haiku-tema="oscuro"] .hu-icono-oscuro { display:inline-block; }
 .hu-lista, .hu-ficha { border:1px solid var(--guest-border); border-radius:11px; background:var(--guest-surface); min-width:0; }
 .hu-lista { overflow:hidden; }
 .hu-empty { margin:0; padding:18px 14px; color:var(--guest-muted); }
-.hu-fila { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr) 14px;
-    gap:9px; width:100%; align-items:center; text-align:left; border:0; border-bottom:1px solid var(--guest-border);
-    background:transparent; color:var(--guest-ink); padding:12px; min-height:68px; }
-button.hu-fila { cursor:pointer; }
-button.hu-fila:hover { background:var(--guest-soft); }
-button.hu-fila[aria-current="true"] { background:var(--guest-selected); }
-.hu-fila:last-child { border-bottom:0; }
-.hu-lista-cabecera { min-height:38px; color:var(--guest-muted); font-size:10px; font-weight:600; background:var(--guest-soft); }
 .hu-identidad { display:flex; align-items:center; gap:10px; min-width:0; }
-.hu-identidad > div, .hu-columna { min-width:0; display:grid; gap:2px; }
-.hu-nombre, .hu-columna strong { font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.hu-identidad > div { min-width:0; display:grid; gap:2px; }
+.hu-nombre { font-size:13px; font-weight:600; overflow-wrap:anywhere; }
 .hu-muted { color:var(--guest-muted); font-size:11px; line-height:1.4; overflow-wrap:anywhere; }
 .hu-destacado { color:var(--guest-accent); font-size:12px; }
 .hu-avatar { display:grid; place-items:center; flex:none; width:34px; height:34px; border-radius:50%; background:var(--guest-selected);
@@ -78,7 +70,7 @@ button.hu-fila[aria-current="true"] { background:var(--guest-selected); }
 .hu-mini { min-height:26px; color:var(--guest-accent); font-size:11px; border:1px solid var(--guest-border);
     background:var(--guest-selected); border-radius:6px; padding:4px 7px; }
 .hu-aviso { color:var(--guest-warn-text); background:var(--guest-warn); border-radius:7px; padding:9px; margin:4px 0; }
-.hu-movil, .hu-fila .hu-mini-movil { display:none; }
+.hu-movil { display:none; }
 .hu-ficha details summary { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; min-height:34px; }
 .hu-ficha details[open] summary .hu-icono { transform:rotate(180deg); }
 .hu-base { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; margin:0 0 8px; }
@@ -109,10 +101,7 @@ button.hu-fila[aria-current="true"] { background:var(--guest-selected); }
     .hu-busqueda {grid-column:1/-1; grid-row:1; width:100%;}
     .hu-tabs {grid-column:1/-1; grid-row:2; padding-block:2px;}
     .hu-filtros .hu-select {grid-row:3; min-width:0; width:100%; padding-inline:6px;}
-    .hu-fila { display:flex; gap:8px; min-height:73px; padding:8px 11px; }
-    .hu-lista .hu-lista-cabecera, .hu-fila > .hu-columna { display:none; }
-    .hu-fila .hu-identidad { flex:1; }
-    .hu-fila .hu-mini-movil, .hu-movil { display:block; }
+    .hu-movil { display:block; }
     .hu-desktop { display:none; }
     .hu-ficha { padding:12px; }
     #seccion-huespedes[data-ficha="true"] :is(.huespedes-titulo,.hu-toolbar,.hu-resumen,.hu-lista) { display:none; }
