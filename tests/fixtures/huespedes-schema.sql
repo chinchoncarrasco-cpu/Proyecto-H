@@ -29,7 +29,8 @@ create table public.cabanas (id uuid primary key default gen_random_uuid(),numer
 create table public.reserva_estadias (
  id uuid primary key default gen_random_uuid(),reserva_id uuid not null references public.reservas(id),
  cabana_id uuid not null references public.cabanas(id),fecha_ingreso date not null,fecha_salida date not null,
- adultos smallint not null,ninos smallint not null default 0,mascotas smallint not null default 0,estado_estadia text not null default 'confirmada'
+ adultos smallint not null,ninos smallint not null default 0,mascotas smallint not null default 0,estado_estadia text not null default 'confirmada',
+ checkout_realizado_en timestamptz
 );
 create table public.reserva_huespedes (reserva_id uuid references public.reservas(id),huesped_id uuid references public.huespedes(id),primary key(reserva_id,huesped_id));
 create table public.estadia_huespedes (estadia_id uuid references public.reserva_estadias(id),huesped_id uuid references public.huespedes(id),primary key(estadia_id,huesped_id));
