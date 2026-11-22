@@ -227,12 +227,12 @@ const server = http.createServer((req, res) => {
                     fecha_checkin:'2026-11-21',fecha_checkout:'2026-11-22',
                     pagos:[],servicios:[],advertencias:[],coordenadas_origen:{hoja:'Nov26',celda:'CF7'}
                 }]};
-                const Q=window.HAIKU_LIBRO_CONSULTAS,decisiones=new Map(),aprobaciones=new Set();
+                const Q=window.HAIKU_LIBRO_CONSULTAS;
+                window.haikuSupabase=db;
                 const zona=document.createElement('div');zona.id='probar-titular-rut';
                 document.getElementById('haiku-asistente-mensajes').replaceChildren(zona);
-                const plan=await Q.prepararIncorporacion(result,decisiones,aprobaciones,db);
-                Q.renderizarIncorporacion(zona,plan,()=>{},null,
-                    vigente=>Q.confirmarIncorporacion(result,decisiones,aprobaciones,vigente,db));
+                const comparacion=await Q.compararSistema(result.reservas,db,result.q);
+                await Q.abrirPreparacionComparacion(zona,{...result,comparacion});
             });
             const revisionRut=page.locator('#probar-titular-rut');
             await revisionRut.locator('.haiku-incorporacion-seccion--pendientes > summary').click();
