@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
     fs.mkdirSync(out, { recursive: true });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const origin = `http://127.0.0.1:${server.address().port}`;
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ headless: true, executablePath: process.env.HAIKU_BROWSER_EXECUTABLE });
     const errors = [], native = [], report = []; let page;
     try {
         page = await browser.newPage();
@@ -201,6 +201,54 @@ const server = http.createServer((req, res) => {
                 panel.removeAttribute('style');
                 panel.hidden = false;
             });
+            await page.addScriptTag({url:origin+'/js/haiku-libro-semantica-v1.js'});
+            await page.addScriptTag({url:origin+'/js/haiku-libro-consultas-v1.js'});
+            await page.evaluate(async () => {
+                window.haikuTienePermiso = () => true;
+                window.__libroRutEscrituras = [];
+                const titularId = '10000000-0000-4000-8000-000000000001';
+                const db = {
+                    auth:{getSession:async()=>({data:{session:{user:{id:'usuario-sintetico'}}}})},
+                    from(){
+                        const consulta={select(){return consulta},eq(){return consulta},lte(){return consulta},
+                            gte(){return consulta},in(){return consulta},order(){return consulta},range:async()=>({data:[]})};
+                        return consulta;
+                    },
+                    async rpc(nombre,args){
+                        if(nombre==='haiku_libro_revisar_rut_altas_v1')return {data:[{posicion:1,motivo:'nombre_distinto'}]};
+                        if(nombre==='haiku_libro_sugerir_titular_rut_v1')return {data:[{posicion:1,titular_id:titularId,titular_nombre:'Persona Ficticia'}]};
+                        __libroRutEscrituras.push({nombre,items:args.p_items});
+                        return {data:{ok:true,reservas_creadas:1,resultados:[]}};
+                    }
+                };
+                const result={q:{desde:'2026-11-01',hasta:'2026-11-30'},reservas:[{
+                    id:'alta-ficticia',titular:'Persona Ficticia Apellido',rut_documento:'12.345.670-K',
+                    tipo_estadia:'alojamiento',cabana:5,noches:1,adultos:2,ninos:0,mascotas:0,
+                    fecha_checkin:'2026-11-21',fecha_checkout:'2026-11-22',
+                    pagos:[],servicios:[],advertencias:[],coordenadas_origen:{hoja:'Nov26',celda:'CF7'}
+                }]};
+                const Q=window.HAIKU_LIBRO_CONSULTAS;
+                window.haikuSupabase=db;
+                const zona=document.createElement('div');zona.id='probar-titular-rut';
+                document.getElementById('haiku-asistente-mensajes').replaceChildren(zona);
+                const comparacion=await Q.compararSistema(result.reservas,db,result.q);
+                await Q.abrirPreparacionComparacion(zona,{...result,comparacion});
+            });
+            const revisionRut=page.locator('#probar-titular-rut');
+            await revisionRut.locator('.haiku-incorporacion-seccion--pendientes > summary').click();
+            await revisionRut.getByText('Ficha con el mismo RUT',{exact:true}).waitFor();
+            assert.ok(await revisionRut.getByText('Persona Ficticia',{exact:true}).isVisible());
+            assert.equal(await revisionRut.evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+            await page.screenshot({path:path.join(out,`titular-rut-${tema}-${width}.png`)});
+            await revisionRut.getByRole('button',{name:'Confirmar mismo titular',exact:true}).click();
+            await revisionRut.getByText('Ficha confirmada por RUT · Persona Ficticia',{exact:true}).waitFor();
+            assert.equal(await page.evaluate(()=>__libroRutEscrituras.length),0);
+            await revisionRut.getByRole('button',{name:'Continuar con 1 elemento listo',exact:true}).click();
+            await page.getByRole('button',{name:'Incorporar selección',exact:true}).click();
+            await page.waitForFunction(()=>__libroRutEscrituras.length===1);
+            const guardado=await page.evaluate(()=>__libroRutEscrituras[0]);
+            assert.equal(guardado.nombre,'haiku_libro_incorporar_titular_rut_v1');
+            assert.equal(guardado.items[0].titular_existente_v1,'10000000-0000-4000-8000-000000000001');
             report.push({ tema, width, historial: 'cancelar/escape/aceptar', ocupacion: 'rango/capacidad', pagos: 'resumen', reapertura: 'motivo requerido', validacion: 'contextual' });
         }
         await page.setViewportSize({ width: 390, height: 420 });

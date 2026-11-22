@@ -86,6 +86,7 @@ test('el aviso y la incorporación apartan un alta con RUT registrado a otro nom
    const posicion=args.p_altas.findIndex(alta=>alta.nombre===bloqueada.titular)+1;
    return {data:posicion?[{posicion,motivo:'nombre_distinto'}]:[]};
   }
+  if(nombre==='haiku_libro_sugerir_titular_rut_v1')return {error:{code:'PGRST202'}};
   escrituras.push({nombre,items:args.p_items});
   return {data:{ok:true,reservas_creadas:1,resultados:[]}};
  };
@@ -93,6 +94,7 @@ test('el aviso y la incorporación apartan un alta con RUT registrado a otro nom
  const caso=aviso.items.find(i=>i.actual.id===bloqueada.id);
  assert.equal(caso.accionable,false);
  assert.equal(caso.vistaIncorporacion,undefined);
+ assert.deepEqual(caso.preparacion.reservas.map(r=>r.id),[bloqueada.id]);
  assert.match(caso.revision.motivos.join(' '),/un nombre distinto en Huéspedes/);
  assert.doesNotMatch(caso.revision.motivos.join(' '),/12345670/);
  assert.deepEqual(aviso.reservas.map(r=>r.id),[libre.id]);
@@ -137,6 +139,7 @@ test('al confirmar se detecta el RUT que cambió tras la vista previa y se nombr
  let documentoOcupado=false, escrituras=0;
  db.rpc=async nombre=>{
   if(nombre==='haiku_libro_revisar_rut_altas_v1')return {data:documentoOcupado?[{posicion:1,motivo:'nombre_distinto'}]:[]};
+  if(nombre==='haiku_libro_sugerir_titular_rut_v1')return {error:{code:'PGRST202'}};
   escrituras++;
   return {data:{ok:true}};
  };
@@ -151,6 +154,49 @@ test('al confirmar se detecta el RUT que cambió tras la vista previa y se nombr
   return true;
  });
  assert.equal(escrituras,0);
+});
+
+test('confirmar titular por RUT prepara sólo su alta y revalida el UUID antes de escribir',async t=>{
+ const permisoPrevio=global.haikuTienePermiso;
+ global.haikuTienePermiso=p=>['reservas.crear','huespedes.ver','pagos.registrar'].includes(p);
+ t.after(()=>{global.haikuTienePermiso=permisoPrevio;});
+ const r=readyBook({id:'titular-sugerido',titular:'Persona Ficticia Apellido',rut_documento:'12.345.670-K',pagos:[readyPay()]});
+ const independiente=readyBook({id:'alta-independiente',cabana:2,titular:'Otra Persona Ficticia',rut_documento:null});
+ const result={reservas:[r,independiente],q},decisiones=new Map(),aprobados=new Set(),db=client();
+ const titularInicial='10000000-0000-4000-8000-000000000001';
+ let titularId=titularInicial;
+ const escrituras=[];
+ db.rpc=async (nombre,args)=>{
+  if(nombre==='haiku_libro_revisar_rut_altas_v1')return {data:[{posicion:1,motivo:'nombre_distinto'}]};
+  if(nombre==='haiku_libro_sugerir_titular_rut_v1'){
+   assert.deepEqual(args.p_altas.map(a=>a.nombre),[r.titular]);
+   return {data:[{posicion:1,titular_id:titularId,titular_nombre:'Persona Ficticia'}]};
+  }
+  escrituras.push({nombre,items:args.p_items});
+  return {data:{ok:true,reservas_creadas:1,resultados:[]}};
+ };
+ const preparar=()=>Q.prepararIncorporacion(result,decisiones,aprobados,db);
+ const inicial=await preparar();
+ const pendiente=inicial.items.find(i=>i.titularPorRut);
+ assert.equal(pendiente.categoria,'pendientes');
+ assert.equal(pendiente.seleccionado,false);
+ assert.equal(pendiente.titularPorRut.nombreLibro,r.titular);
+ assert.equal(pendiente.titularPorRut.nombreFicha,'Persona Ficticia');
+ inicial.items.find(i=>i.categoria==='nuevas').seleccionado=false;
+ const listo=await inicial.confirmarTitularPorRut(pendiente.id);
+ assert.equal(escrituras.length,0);
+ assert.ok(listo.items.some(i=>i.pagoLibro&&!i.seleccionado));
+ const enviados=Q.serializarIncorporacion(listo);
+ assert.equal(enviados.length,1);
+ assert.equal(enviados[0].tipo,'reserva_nueva');
+ assert.equal(enviados[0].titular_existente_v1,titularInicial);
+ assert.equal(enviados[0].reserva.titular_nombre,'Persona Ficticia');
+ titularId='10000000-0000-4000-8000-000000000002';
+ await assert.rejects(Q.confirmarIncorporacion(result,decisiones,aprobados,listo,db),e=>e.haikuConflictoDatos===true);
+ assert.equal(escrituras.length,0);
+ titularId=titularInicial;
+ await Q.confirmarIncorporacion(result,decisiones,aprobados,listo,db);
+ assert.deepEqual(escrituras,[{nombre:'haiku_libro_incorporar_titular_rut_v1',items:enviados}]);
 });
 
 test('identidad conflictiva: dos altas independientes seleccionables, pagos dependientes bloqueados y sin RPC financiero',async()=>{

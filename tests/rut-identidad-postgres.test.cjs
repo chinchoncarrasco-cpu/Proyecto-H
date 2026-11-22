@@ -57,6 +57,50 @@ test('preparación del Libro identifica el alta por posición con permisos y sin
   await assert.rejects(revisar(altas),e=>e.code==='42501');
   await h.db.exec('reset role');
 }));
+test('el Libro sugiere sólo la ficha por RUT y verifica su vínculo al incorporar',using({},async h=>{
+  await h.db.exec(read('supabase/migrations/20261121183500_libro_revisar_rut_altas.sql'));
+  await h.db.exec(read('supabase/migrations/20261122004956_libro_titular_por_rut.sql'));
+  // La comprobación final usa la misma lectura de reservas del operador.
+  await h.db.exec('grant select on public.reservas to authenticated');
+  await create(h,'12.345.670-K','Persona de Prueba');
+  const {id}= (await h.db.query("select id from huespedes where nombre='Persona de Prueba'")).rows[0];
+  const consultar=altas=>h.db.query('select * from haiku_libro_sugerir_titular_rut_v1($1::jsonb)',[JSON.stringify(altas)]);
+  const alta={rut:'12345670-k',nombre:'Persona de Prueba Apellido'};
+  const antes=await full(h);
+  await h.db.exec('set role authenticated');
+  assert.deepEqual((await consultar([{...alta,nombre:'Persona de Prueba'},alta,{...alta,rut:'12345670-1'}])).rows,
+    [{posicion:2,titular_id:id,titular_nombre:'Persona de Prueba'}]);
+  await h.db.exec('reset role');
+  assert.deepEqual(await full(h),antes);
+  await h.db.exec('set role anon');
+  await assert.rejects(consultar([alta]),e=>e.code==='42501');
+  await h.db.exec('reset role');
+
+  const base={tipo:'reserva_nueva',item_id:'titular-ficticio',titular_existente_v1:id,
+    reserva:{titular_nombre:'Persona de Prueba',titular_tipo_documento:'rut',titular_numero_documento:'12345670-K'},
+    estadias:[{cabana_numero:1,datos:{fecha_ingreso:'2026-12-20',fecha_salida:'2026-12-21',tipo_estadia:'alojamiento',adultos:2}}]};
+  const registrar=(op,item)=>h.db.query('select haiku_libro_incorporar_titular_rut_v1($1,$2::jsonb) r',
+    [op,JSON.stringify([item])]).then(x=>x.rows[0].r);
+  const operacion=randomUUID();
+  await h.db.exec('set role authenticated');
+  await assert.rejects(registrar(operacion,{...base,titular_existente_v1:randomUUID()}),e=>e.code==='HLI02');
+  await h.db.exec('reset role');
+  assert.deepEqual(await full(h),antes);
+
+  await h.db.exec('set role authenticated');
+  const resultado=await registrar(operacion,base);
+  assert.equal(resultado.reservas_creadas,1);
+  assert.equal((await registrar(operacion,base)).reintento,true);
+  assert.equal((await registrar(randomUUID(),base)).omitidos,1);
+  await h.db.exec('reset role');
+  assert.equal((await h.db.query('select titular_huesped_id from reservas where id=$1',
+    [resultado.resultados[0].reserva_id])).rows[0].titular_huesped_id,id);
+  assert.deepEqual((await full(h)).rows['public.huespedes'],antes.rows['public.huespedes']);
+  await h.db.query('update private.haiku_rut_registro_v1 set bloqueado=true,huesped_id=null where huesped_id=$1',[id]);
+  await h.db.exec('set role authenticated');
+  assert.deepEqual((await consultar([alta])).rows,[]);
+  await h.db.exec('reset role');
+}));
 test('documentos ausentes no fusionan por nombre; inválidos abortan de forma tipada',using({},async h=>{
   await create(h,null);await create(h,'');
   assert.equal((await h.db.query(`select count(distinct titular_huesped_id)::int n from reservas where titular_nombre='Persona Sintética'`)).rows[0].n,2);
