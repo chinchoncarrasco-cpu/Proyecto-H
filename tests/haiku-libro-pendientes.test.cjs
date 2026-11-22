@@ -154,13 +154,15 @@ test('cambio actual de adultos se revalida y prepara sin auditar el mes',async()
     assert.ok(actualizacion?.seleccionado);assert.deepEqual(Array.from(actualizacion.cambios,x=>x.campo),['Adultos']);
     assert.deepEqual(llamadas,['reserva_estadias']);
 });
-test('cambio histórico de CAB usa de forma segura la instantánea anterior como destino',async()=>{
+test('cambio histórico de CAB conserva la estadía anterior para la revisión individual',async()=>{
     const llamadas=[],anterior=libro({cabana:10}),actual=libro({cabana:11});
     const registro={id:'cambio-cab',tipo:'modificacion',detectado_generacion:2,anterior,actual,
         cambios:[{campo:'cabana',antes:10,ahora:11}]};
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[filaSistema('confirmada')]},llamadas),{generacion:3});
-    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,true);assert.equal(out.items[0].cambios[0].proyecto,10);
-    const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(out.reservas,out.comparacion);
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.items[0].cambios[0].proyecto,10);
+    assert.equal(out.reservas.length,0);
+    const prep=out.items[0].preparacion;assert.equal(prep.traslado.id,'e1');
+    const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(prep.reservas,prep.comparacion);
     const actualizacion=plan.items.find(x=>x.categoria==='actualizaciones');
     assert.ok(actualizacion?.seleccionado);assert.deepEqual(Array.from(actualizacion.cambios,x=>x.campo),['Cabaña']);
     assert.deepEqual(llamadas,['reserva_estadias']);
@@ -288,8 +290,9 @@ test('checkout y noches coherentes abren una preparación individual sin arrastr
         {campo:'fecha_checkout',antes:anterior.fecha_checkout,ahora:actual.fecha_checkout},{campo:'noches',antes:2,ahora:1}]};
     const s=filaSistema('checked_out',{fecha_ingreso:anterior.fecha_checkin,fecha_salida:anterior.fecha_checkout});
     const out=await context.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados([registro],clienteFocal({reserva_estadias:[s]},[]),{generacion:3});
-    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,true);assert.equal(out.reservas.length,1);
+    assert.equal(out.items.length,1);assert.equal(out.items[0].accionable,false);assert.equal(out.reservas.length,0);
     const prep=out.items[0].preparacion;assert.equal(prep.reservas.length,1);assert.equal(prep.generacion,3);
+    assert.equal(prep.traslado.id,s.id);assert.equal(prep.traslado.estado_operativo,'checked_out');
     const plan=context.HAIKU_LIBRO_CONSULTAS.crearPlanIncorporacion(prep.reservas,prep.comparacion);
     const update=plan.items.find(x=>x.payload?.tipo==='reserva_actualizar');assert.ok(update?.seleccionado);
     assert.deepEqual({...update.payload.estadia.despues},{fecha_salida:'2026-09-13'});

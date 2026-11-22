@@ -3214,13 +3214,25 @@
                 const libro=reservaPreparacionHistorial(grupo.reserva,sistemaHistorico,new Set(pendientes.map(x=>x.campo)),pendientes,registro.anterior);
                 const fila={...resultado,estado:'asociada',sistema:sistemaHistorico,libro,diferencias:pendientes.map(x=>x.campo)};
                 const evaluacion=evaluarFilaHistorial(fila,comparacion);
-                const accionable=pendientes.every(x=>x.accionable)&&evaluacion.accionable;
+                const preparable=pendientes.every(x=>x.accionable)&&evaluacion.accionable;
+                // La estadía anterior permite mostrar el cambio. La comparación
+                // vigente exige confirmar el destino cuando cambió la ubicación o el tramo.
+                const requiereConfirmarEstadia=preparable&&resultado?.estado!=='asociada'&&
+                    pendientes.some(c=>['cabana','fecha_checkin','fecha_checkout'].includes(c.campo));
+                const accionable=preparable&&!requiereConfirmarEstadia;
                 const item={...registro,cambios:pendientes,estado:accionable?'pendiente':'revision',accionable,sistema:sistemaHistorico,revision:evaluacion.revision,
                     retirosServicios:pendientes.flatMap(x=>x.serviciosRetirados||[])};
-                if(accionable){
+                const traslado=requiereConfirmarEstadia&&identidad(libro,sistemaHistorico).confirmable&&
+                    resultado?.candidatosDetalle?.some(s=>s.id===sistemaHistorico.id)?sistemaHistorico:null;
+                if(accionable||traslado){
                     item.vistaIncorporacion=vistaIncorporacionHistorial(evaluacion.propuesta,pendientes,sistemaHistorico);
                     item.preparacion={reservas:[libro],comparacion:comparacionPreparacionHistorial([fila],comparacion),generacion,
-                        q:{...q,incluirServicios:false,serviciosOperativos:false}};
+                        q:{...q,incluirServicios:false,serviciosOperativos:false},...(traslado?{traslado}:{})};
+                }
+                if(requiereConfirmarEstadia){
+                    item.requiereConfirmarEstadia=true;
+                    item.revision.motivos.push(traslado?'Confirma el cambio de la estadía existente en «Aprobación manual».':
+                        'Comprueba la estadía existente en «Ver reserva» antes de confirmar el cambio.');
                 }
                 items.push(item);
                 if(accionable){
@@ -3253,7 +3265,7 @@
         const preparable = reserva => !bloqueadas.has(firmaReservaHistorial(reserva));
         if (bloqueadas.size) prep=comparacionPreparacionHistorial(unicas.filter(x => preparable(x.libro)),comparacion);
         const reservasPrep=[...new Map(reservasPreparacion.filter(preparable).map(x=>[firmaReservaHistorial(x),x])).values()];
-        const fichasOperativas=new Map(items.filter(x=>x.sistema&&(x.cambios||[]).some(c=>c.campo==='servicios'))
+        const fichasOperativas=new Map(items.filter(x=>x.sistema&&!x.requiereConfirmarEstadia&&(x.cambios||[]).some(c=>c.campo==='servicios'))
             .map(x=>[firmaReservaHistorial(x.actual),x.actual]));
         return {items,resueltos,resueltosDetalle,reemplazos:reemplazos.filter(r=>!resueltos.includes(r.id)),total:items.length,reservas:reservasPrep,comparacion:prep,generacion,
             serviciosContexto:comparacion.serviciosDetalle||[],notasContexto:comparacion.notasDetalle||[],
@@ -7537,7 +7549,7 @@
         // la fuente vigente. Revalidar nuevamente al pulsar el botón evita abrir
         // una propuesta basada en el snapshot que generó el informe.
         const plan=await prepararIncorporacion(result,decisiones,aprobados);
-        if(!plan.items.some(item=>item.conflictoIdentidad||item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))
+        if(!plan.items.some(item=>item.conflictoIdentidad||traslado&&item.reprogramacion||item.seleccionado&&CATEGORIAS_GUARDABLES.includes(item.categoria)))
             throw Object.assign(new Error('Proyecto H ya no tiene diferencias accionables seguras. Revalida el informe.'),{haikuSinCambiosPreparables:true});
         const volver=async()=>{
             const actualizado=await revalidarEntradaEstructurada(result);
