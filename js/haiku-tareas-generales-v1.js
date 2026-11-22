@@ -70,15 +70,22 @@
         lectura.promesa = (async () => {
             do {
                 lectura.repetir = false;
+                let limite;
                 try {
-                    const { data, error } = await cliente().rpc('haiku_tareas_generales_dia_v1', { p_fecha: fecha });
+                    let consulta = cliente().rpc('haiku_tareas_generales_dia_v1', { p_fecha: fecha });
+                    if (typeof consulta.abortSignal === 'function' && globalThis.AbortSignal?.timeout) {
+                        limite = globalThis.AbortSignal.timeout(20_000);
+                        consulta = consulta.abortSignal(limite);
+                    }
+                    const { data, error, status } = await consulta;
                     if (sesion !== generacion || identidad !== usuarioActual()) return;
-                    if (error) throw error;
+                    if (error) throw status >= 500 ? new Error('El servicio de tareas no respondió.') : error;
                     if (!data || data.fecha !== fecha || !Array.isArray(data.tareas) || !Array.isArray(data.anteriores)) throw new Error('No se pudo comprobar la fecha de las tareas.');
                     dia.datos = data; dia.error = ''; dia.fresco = true;
                 } catch (error) {
                     if (sesion !== generacion || identidad !== usuarioActual()) return;
-                    dia.error = error?.message || 'No se pudieron cargar las tareas. Pulsa Actualizar.';
+                    dia.error = limite?.aborted ? 'La consulta de tareas tardó demasiado.' : error?.message || 'No se pudieron cargar las tareas.';
+                    lectura.repetir = false;
                     dia.fresco = true;
                 }
                 if (fechaVista === fecha) renderizar();
