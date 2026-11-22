@@ -1103,10 +1103,10 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntes);
         assert.equal(await page.locator('.haku-incorporacion-aviso').count(),0);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        assert.equal(await burbuja.getByText('Hay otro aviso disponible al cerrar este.').count(),0);
         await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
-        await burbuja.getByRole('button',{name:'Ver informe',exact:true}).waitFor();
-        assert.equal(await burbuja.getByRole('button',{name:'Incorporar',exact:true}).count(),0,'el siguiente aviso llega después del resultado');
-        await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
+        await burbuja.waitFor({state:'detached'});
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         // Un fallo conserva el aviso y reintenta la misma operación desde ahí.
         await page.evaluate(()=>{
             __generation=8;window.dispatchEvent(new Event('haiku:libro-cambio'));

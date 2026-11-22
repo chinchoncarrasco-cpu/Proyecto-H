@@ -37,7 +37,9 @@ const server=http.createServer((req,res)=>{
      from:()=>{const q={select:()=>q,eq:()=>q,in:()=>q,lte:()=>q,gte:()=>q,range:()=>q,order:()=>q,then:(ok,no)=>Promise.resolve({data:[],error:null}).then(ok,no)};return q;},
      rpc:async(n,args)=>{window.__rpc.push({n,args});window.__generation++;
       return {data:{ok:true,reservas_creadas:args.p_items.length,pagos_creados:0,estadias_agregadas:0,omitidos:0}};}};
-    window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={obtenerResultado:()=>new Promise(resolve=>window.__resolverAviso=resolve)};
+    window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1={obtenerResultado:({alDetectar})=>new Promise(resolve=>{
+     window.__detectarAviso=alDetectar;window.__resolverAviso=resolve;
+    })};
    },f.casos().find(c=>c.id==='reserva_faltante').data);
    for(const name of ['haiku-libro-semantica-v1','haiku-fullday-tarifa-v1','haiku-libro-pagos-canon-v1','haiku-libro-lenguaje-natural-v1','haiku-libro-pagos-destinos-v1','haiku-libro-consultas-v1','supabase-asistente-libro-auto-v1'])
     await page.addScriptTag({content:fs.readFileSync(path.join(root,'js',name+'.js'),'utf8')});
@@ -49,8 +51,10 @@ const server=http.createServer((req,res)=>{
     window.__generation++;
     dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{generacion:window.__generation,tenia_anterior:true,carga_automatica:true}}));
    });
+   assert.equal(await page.locator('.haku-libro-auto').count(),0,'la consulta continúa mientras se lee la copia');
+   await page.evaluate(()=>window.__detectarAviso());
    await page.locator('.haku-libro-auto').waitFor();
-   assert.match(await page.locator('.haku-libro-auto').innerText(),/Revisando la actualización/);
+   assert.match(await page.locator('.haku-libro-auto').innerText(),/Detecté cambios en el Libro/);
    const posicion=await page.evaluate(()=>{
     const a=document.querySelector('.haku-libro-auto').getBoundingClientRect(),p=document.getElementById('haiku-asistente-panel').getBoundingClientRect();
     return {right:a.right,left:a.left,panelLeft:p.left,scroll:document.getElementById('haiku-asistente-mensajes').scrollTop,antes:window.__scroll,activo:document.activeElement.id};
