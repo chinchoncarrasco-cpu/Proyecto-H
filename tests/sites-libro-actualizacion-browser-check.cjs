@@ -1397,8 +1397,9 @@ async function comprobarPendientesTrasConfirmar(browser,url){
                 __generation=15+paso;window.dispatchEvent(new Event('haiku:libro-cambio'));
                 const generado_en=new Date().toISOString();
                 __resultadoActual={estado:paso<3?'ok':'sin_cambios',libro_actual:{generacion:__generation},generado_en,...versiones[paso]};
+                // Cuando sólo queda historial, la revisión parte de una carga solicitada.
                 window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{
-                    carga_automatica:true,tenia_anterior:true,generacion:__generation}}));
+                    carga_automatica:paso<3,carga_manual:paso>=3,tenia_anterior:true,generacion:__generation}}));
                 return generado_en;
             };
         });

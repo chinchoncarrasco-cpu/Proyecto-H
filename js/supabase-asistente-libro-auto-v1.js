@@ -183,23 +183,32 @@
                 ultima=detail.generacion;
                 const turno=++token,g=detail.generacion;
                 const vigente=()=>turno===token && generacion()===g;
-                let detectado = false;
-                limpiar();mostrar({texto:'Revisando la actualización…',pendiente:true});
+                const soloCambiosNuevos = detail.carga_automatica && !detail.carga_manual;
+                let detectado = false, espera;
+                limpiar();
                 clearTimeout(temporizador);
-                const espera=temporizador=setTimeout(()=>{
-                    if (vigente()) mostrar({texto:detectado
-                        ? 'Detecté cambios en el Libro. El informe está tardando más de lo habitual.'
-                        : 'El informe está tardando más de lo habitual. Puedes cerrar el aviso y seguir trabajando.',pendiente:true,revision:true});
-                },30_000);
+                const iniciarEspera = () => {
+                    if (espera != null) return;
+                    espera=temporizador=setTimeout(()=>{
+                        if (vigente()) mostrar({texto:detectado
+                            ? 'Detecté cambios en el Libro. El informe está tardando más de lo habitual.'
+                            : 'El informe está tardando más de lo habitual. Puedes cerrar el aviso y seguir trabajando.',pendiente:true,revision:true});
+                    },30_000);
+                };
+                if (!soloCambiosNuevos) {
+                    mostrar({texto:'Revisando la actualización…',pendiente:true});
+                    iniciarEspera();
+                }
                 try {
                     const resultado=await obtener(() => {
                         if (!vigente() || detectado) return;
                         detectado = true;
                         mostrar({texto:'Detecté cambios en el Libro. Comprobando qué falta incorporar…',pendiente:true});
-                    });
+                        iniciarEspera();
+                    },{soloCambiosNuevos});
                     if (!vigente()) return;
-                    if (resultado.estado==='sin_linea_base') {limpiar();return;}
-                    mostrar({...resumir(resultado),resultado});
+                    if (!resultado || resultado.estado==='sin_linea_base') {limpiar();return;}
+                    mostrar({...resumir(resultado),resultado,soloCambiosNuevos});
                 } catch (_) {
                     if (vigente()) mostrar({texto:'No pude completar el informe de esta actualización. Puedes solicitarlo en Haku.',revision:true});
                 } finally {
@@ -515,6 +524,7 @@
             if(e.key==='Escape'&&cerrarVistaLista?.())e.preventDefault();
         },true);
         function limpiar() {
+            avisoDiferido=null;
             if(avisoProtegido)return;
             cerrarVistaLista?.();cerrarVistaLista=null;
             toast?.remove();toast=null;estadoConsulta=null;adaptarPendientes=null;
@@ -535,8 +545,9 @@
             // El siguiente aviso pudo compararse mientras aún se estaba guardando.
             const generacion=root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion;
             const vigente=()=>!toast&&root.HAIKU_LIBRO_RESERVA_V1?.estado?.().generacion===generacion;
-            void api.obtenerResultadoAviso().then(resultado=>{
-                if(vigente())mostrar({...resumir(resultado),resultado});
+            const {soloCambiosNuevos}=siguiente;
+            void api.obtenerResultadoAviso({soloCambiosNuevos}).then(resultado=>{
+                if(resultado&&vigente())mostrar({...resumir(resultado),resultado,soloCambiosNuevos});
             },()=>{if(vigente())mostrar(siguiente);});
         }
         function mostrar(aviso) {
@@ -1105,9 +1116,10 @@
             }
         }
         const control=crearControlador({generacion:()=>root.HAIKU_LIBRO_RESERVA_V1?.estado().generacion,
-            obtener:alDetectar=>{
+            obtener:(alDetectar,{soloCambiosNuevos})=>{
                 const api=root.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
-                return api.obtenerResultadoAviso?.({alDetectar}) ?? api.obtenerResultado({alDetectar});
+                const opciones={alDetectar,soloCambiosNuevos};
+                return api.obtenerResultadoAviso?.(opciones) ?? api.obtenerResultado(opciones);
             },mostrar,limpiar});
         root.addEventListener('haiku:libro-version-cargada',e=>{void control.cargar(e.detail);});
         // Sólo invalida; nunca inicia comparación desde limpieza, restauración ni F5.
