@@ -373,7 +373,7 @@
         return {seleccionadas, hojas_totales_libro:nombres.length, hojas_revisadas_actualizacion:seleccionadas.length,
             hojas_historicas_omitidas:historicas.length, hojas_desconocidas_omitidas:nombres.filter(h => !mesHoja(h) && !seleccionadas.includes(h))};
     }
-    async function compararUltimasVersiones({libro = root.HAIKU_LIBRO_RESERVA_V1, periodo,
+    async function compararUltimasVersiones({libro = root.HAIKU_LIBRO_RESERVA_V1, periodo, alDetectar,
         fechaReferencia = new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())} = {}) {
         const generado_en = new Date().toISOString();
         const error = motivo => ({...salida('no_comparable'), generado_en, advertencias: [{motivo}]});
@@ -399,6 +399,7 @@
             const diagnostico = {...planificarHojas(previo,siguiente,fechaReferencia),...alcance};
             diagnostico.hojas_totales = alcance.hojas_totales_libro;
             diagnostico.hojas_cambiadas = [...diagnostico.hojas_cambiadas_operacionales,...diagnostico.hojas_especiales_modificadas];
+            if (diagnostico.hojas_cambiadas.length) alDetectar?.(generacion);
             const seleccionadas = diagnostico.hojas_cambiadas_operacionales;
             const leer = async (indice, version, seleccion=seleccionadas) => {
                 if (!Array.isArray(indice?.nombres) || !indice.nombres.length) throw new Error('Índice de hojas no disponible.');
@@ -426,9 +427,18 @@
             const disponibles=[...new Set([...indiceAnterior.nombres,...indiceActual.nombres])];
             const vecinas=semantica.hojasContiguasParaReservas([...anterior,...actual].flatMap(h=>h.reservas||[]),disponibles)
                 .filter(h=>!seleccionadas.includes(h));
-            if(vecinas.length){
-                anterior.push(...await leer(indiceAnterior,'anterior',vecinas));
-                actual.push(...await leer(indiceActual,'actual',vecinas));
+            if (vecinas.length) {
+                const delLibroActual = await leer(indiceActual, 'actual', vecinas);
+                const previasPorHoja = new Map(delLibroActual.filter(h => {
+                    const sha = previo.huellas?.[h.hoja]?.sha256;
+                    return previo.nombres.includes(h.hoja) && siguiente.nombres.includes(h.hoja) && sha &&
+                        sha === siguiente.huellas?.[h.hoja]?.sha256 && h.cobertura?.geometria === true &&
+                        h.fechas?.length && Array.isArray(h.reservas);
+                }).map(h => [h.hoja, h]));
+                const delLibroAnterior = await leer(indiceAnterior, 'anterior', vecinas.filter(h => !previasPorHoja.has(h)));
+                for (const h of delLibroAnterior) previasPorHoja.set(h.hoja, h);
+                for (const hoja of vecinas) if (previasPorHoja.has(hoja)) anterior.push(previasPorHoja.get(hoja));
+                actual.push(...delLibroActual);
                 comprobar();
             }
             diagnostico.hojas_semanticas_procesadas = seleccionadas.length+vecinas.length;

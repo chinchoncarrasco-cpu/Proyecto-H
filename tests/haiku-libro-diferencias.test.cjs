@@ -207,22 +207,28 @@ function reader(before,after,hook=()=>{}) {
             hook(name,version); const data=(version==='anterior'?before:after)[name]; if(data instanceof Error) throw data; return structuredClone(data);
         }};
 }
-test('el aviso lee la hoja vecina aunque su huella no cambie y propone dos noches juntas',async()=>{
+test('el aviso detecta por huella y lee una sola vez la hoja vecina si ambas copias coinciden',async()=>{
     const comun={rut_documento:null,correo:null,telefono:null,noches_texto:2,texto_original:'Ana Pérez // 2 ADLT // 2 noches'};
     const nocheA=row({...comun,id:'Nov26!DP7',hoja:'Nov26',fecha_checkin:'2026-11-30',fecha_checkout:'2026-12-01'});
     const nocheB=row({...comun,id:'Dic26!C7',hoja:'Dic26',fecha_checkin:'2026-12-01',fecha_checkout:'2026-12-02',
         notas_importantes:['Nota de la continuación']});
     const nov=sheet([nocheA],{hoja:'Nov26',fechas:['2026-11-30']});
     const dic=sheet([],{hoja:'Dic26',fechas:['2026-12-01','2026-12-02']});
-    const libro=reader({Nov26:nov,Dic26:dic},{Nov26:nov,Dic26:{...dic,reservas:[nocheB]}});
-    const r=await D.compararUltimasVersiones({libro,fechaReferencia:'2026-11-22'});
-    assert.deepEqual(r.diagnostico.hojas_cambiadas_operacionales,['Dic26']);
-    assert.ok(libro.calls.some(x=>x[0]==='Nov26'&&x[1]==='actual'));
-    assert.equal(r.nuevas.length,1);assert.equal(r.ya_no_aparecen.length,0);
-    const [nueva]=r.nuevas;
-    assert.deepEqual([nueva.actual.fecha_checkin,nueva.actual.fecha_checkout,nueva.actual.noches],['2026-11-30','2026-12-02',2]);
-    assert.deepEqual(nueva.actual.tramos_mensuales.map(t=>t.hoja),['Nov26','Dic26']);
-    assert.deepEqual(nueva.actual.notas_importantes,['Nota de la continuación']);
+    for (const periodo of [undefined, {desde:'2026-12',hasta:'2026-12'}]) {
+        const libro=reader({Nov26:nov,Dic26:dic},{Nov26:nov,Dic26:{...dic,reservas:[nocheB]}});
+        const avisos=[];
+        const r=await D.compararUltimasVersiones({libro,periodo,fechaReferencia:'2026-11-22',alDetectar(g){
+            avisos.push(g);assert.ok(libro.calls.every(x=>['indice','huellas'].includes(x[0])));
+        }});
+        assert.deepEqual(avisos,[1]);
+        assert.deepEqual(r.diagnostico.hojas_cambiadas_operacionales,['Dic26']);
+        assert.deepEqual(libro.calls.filter(x=>x[0]==='Nov26').map(x=>x[1]),periodo?['actual','anterior']:['actual']);
+        assert.equal(r.nuevas.length,1);assert.equal(r.ya_no_aparecen.length,0);
+        const [nueva]=r.nuevas;
+        assert.deepEqual([nueva.actual.fecha_checkin,nueva.actual.fecha_checkout,nueva.actual.noches],['2026-11-30','2026-12-02',2]);
+        assert.deepEqual(nueva.actual.tramos_mensuales.map(t=>t.hoja),['Nov26','Dic26']);
+        assert.deepEqual(nueva.actual.notas_importantes,['Nota de la continuación']);
+    }
 });
 
 test('reservas contiguas completas se conservan y una continuación dudosa espera revisión',()=>{
