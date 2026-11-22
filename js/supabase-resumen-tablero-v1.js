@@ -77,7 +77,11 @@
         if (!reserva && !estadia && !datos.checkinRealizado && !datos.checkin_realizado_en &&
             !datos.checkoutRealizado && !datos.checkout_realizado_en) return "";
         if (["cancelada", "no_show"].includes(reserva)) return reserva;
-        if (datos.checkoutRealizado || datos.checkout_realizado_en || estadia === "checked_out") {
+        // En un recambio, checkoutRealizado describe la salida de la cabaña.
+        // La franja "Hoy" representa al huésped entrante y usa su propio estado.
+        const recambio = (datos.estado || datos.estado_operativo) === "sale-ingresa";
+        const checkoutDeEstadia = datos.checkout_realizado_en || (!recambio && datos.checkoutRealizado);
+        if (checkoutDeEstadia || estadia === "checked_out") {
             return "checked_out";
         }
         if (datos.checkinRealizado || datos.checkin_realizado_en || estadia === "hospedada") {

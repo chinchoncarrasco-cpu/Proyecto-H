@@ -32,7 +32,9 @@ async function htmlPanel(){
      __ops[dia]=[op(1,n,n===1?'continua':'sale-ingresa'),op(2,4,'continua'),op(3,5,dia==='2026-11-09'?'libre-libre':dia==='2026-11-08'?'sale-libre':'continua')];
      datosPorFecha[dia]={cabanas:{}};
      __ops[dia].forEach(o=>{const n=o.numero===1?Number(o.ingreso_reserva_id.slice(-2)):o.numero===2?4:5;
-      datosPorFecha[dia].cabanas[o.numero]={estado:o.estado_operativo,reservaId:id(n),estadiaId:id(n+10),estadoEstadia:n===1||n===5?'checked_out':n===4?'hospedada':'confirmada',titular:name(n),adultos:2};});
+      datosPorFecha[dia].cabanas[o.numero]={estado:o.estado_operativo,reservaId:id(n),estadiaId:id(n+10),
+       estadoEstadia:n===1||n===5?'checked_out':n===2||n===4?'hospedada':'confirmada',
+       checkoutRealizado:o.numero===1&&dia==='2026-11-08',titular:name(n),adultos:2};});
     }
     for(const row of document.querySelectorAll('.sites-resumen-cabana')){
      const cab=Number(row.dataset.cabana),o=__ops['2026-11-08'].find(x=>x.numero===cab),n=cab===1?2:cab===2?4:5;
@@ -44,7 +46,7 @@ async function htmlPanel(){
     window.haikuLeerFichaSupabaseV2=async reservaId=>{
      __reads.push(reservaId);const n=Number(reservaId.slice(-2)),cab=n<=3?1:n===4?2:3;
      const ingreso=n===2?'2026-11-08':n===3?'2026-11-09':'2026-11-06',salida=n===1||n===5?'2026-11-08':n===2?'2026-11-09':'2026-11-11';
-     const state=n===1||n===5?'checked_out':n===4?'hospedada':'confirmada';
+     const state=n===1||n===5?'checked_out':n===2||n===4?'hospedada':'confirmada';
      const e={id:id(n+10),reserva_id:reservaId,cabana_numero:cab,fecha_ingreso:ingreso,fecha_salida:salida,tipo_estadia:'alojamiento',estado_estadia:state,adultos:2};
      return {reserva:{id:reservaId,codigo_haiku:'H-DEMO-'+n,titular_nombre:name(n),estado_reserva:'confirmada',observaciones:''},
       estadias:n===2?[{...e,id:id(99),cabana_numero:5},e]:[e],huespedes:[],servicios:[],cargos:[],pagos:[],notas:[],solicitudes:[],boves:{}};
@@ -58,10 +60,14 @@ async function htmlPanel(){
    for(const tema of ['claro','oscuro']){
     await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
     const hospedado=page.locator('.sites-resumen-cabana[data-cabana="2"] .sites-resumen-dia--actual');
+    const ingreso=row.locator('.sites-resumen-dia--actual');
     const checkout=row.locator('.sites-resumen-dia--anterior');
     const colors=await Promise.all([hospedado,checkout].map(e=>e.evaluate(n=>getComputedStyle(n).backgroundColor)));
     assert.notEqual(colors[0],colors[1]);
     if(tema==='oscuro'){assert.equal(colors[0],'rgb(22, 72, 47)');assert.equal(colors[1],'rgb(56, 59, 66)');}
+    assert.equal(await ingreso.getAttribute('data-reserva-estado'),'hospedada');
+    assert.equal(await ingreso.evaluate(e=>getComputedStyle(e).backgroundColor),colors[0]);
+    assert.doesNotMatch(await ingreso.evaluate(e=>getComputedStyle(e,'::after').content),/Salió/);
     assert.equal(await checkout.evaluate(e=>getComputedStyle(e,'::after').content),'"✓ Salió"');
     assert.equal(await page.locator('.sites-resumen-cabana[data-cabana="3"] .sites-resumen-estado-badge').innerText(),'Ya salió');
     const fallos=await page.evaluate(contraste);
