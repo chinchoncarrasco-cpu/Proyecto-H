@@ -2036,7 +2036,99 @@
         }
         return texto&&/^srv:/.test(item_id||'')?{texto,item_id}:null;
     }
-    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, asociar, compararVersiones, mismaPersona, reservaYCancelacionCoinciden, clavesTitular, varianteTitular, fuente, monto,
+    function mesHoja(hoja) {
+        const m=String(hoja).trim().match(/^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s*(\d{2}|\d{4})$/i);
+        if(!m)return null;
+        const year=m[2].length===2?2000+Number(m[2]):Number(m[2]);
+        return year>=2000&&year<=2099?`${year}-${String(meses.indexOf(m[1].toLowerCase())+1).padStart(2,'0')}`:null;
+    }
+
+    function tramoMensual(r) {
+        const hoja=r.coordenadas_origen?.hoja||r.hoja;
+        const mes=mesHoja(hoja),entrada=r.fecha_checkin,salida=r.fecha_checkout;
+        const valida=f=>/^\d{4}-\d{2}-\d{2}$/.test(f||'')&&iso(...f.split('-'))===f;
+        if(r.tipo_estadia!=='alojamiento'||r.tramos_mensuales?.length||!mes||!r.id||!Number.isInteger(Number(r.cabana))||Number(r.cabana)<=0||
+            !valida(entrada)||!valida(salida)||entrada>=salida||entrada.slice(0,7)!==mes||sumarDias(salida,-1).slice(0,7)!==mes)return null;
+        const noches=(Date.parse(salida)-Date.parse(entrada))/86400000;
+        if(noches!==Number(r.noches))return null;
+        return {reserva:r,hoja,entrada,salida,noches,declaradas:r.noches_texto_efectivas??r.noches_texto,
+            inicio:entrada.endsWith('-01'),fin:salida.endsWith('-01')};
+    }
+
+    function hojasContiguasParaReservas(reservas,hojas) {
+        const requeridas=new Set(),mesesVecinos=new Set();
+        for(const reserva of reservas){
+            for(const tramo of reserva.tramos_mensuales||[])requeridas.add(tramo.hoja);
+            const tramo=tramoMensual(reserva);
+            if(tramo?.inicio)mesesVecinos.add(sumarDias(tramo.entrada,-1).slice(0,7));
+            if(tramo?.fin)mesesVecinos.add(tramo.salida.slice(0,7));
+        }
+        return hojas.filter(hoja=>requeridas.has(hoja)||mesesVecinos.has(mesHoja(hoja)));
+    }
+
+    function consolidarEstadiasMensuales(reservas) {
+        const tramos=reservas.map((r,indice)=>{
+            const tramo=tramoMensual(r);
+            return tramo&&(tramo.inicio||tramo.fin)?{...tramo,indice,siguientes:[],anteriores:[]}:null;
+        }).filter(Boolean);
+        const clave=(r,fecha)=>`${Number(r.cabana)}|${fecha}`;
+        const entradas=new Map();
+        for(const tramo of tramos.filter(t=>t.inicio)){
+            const key=clave(tramo.reserva,tramo.entrada);
+            if(!entradas.has(key))entradas.set(key,[]);
+            entradas.get(key).push(tramo);
+        }
+        const documento=r=>documentoCanon(r.rut_documento,r.tipo_documento);
+        const telefono=r=>String(r.telefono||'').replace(/\D/g,'');
+        for(const a of tramos.filter(t=>t.fin))for(const b of entradas.get(clave(a.reserva,a.salida))||[]){
+            if(!mismaPersona(a.reserva.titular,b.reserva.titular)||
+                documento(a.reserva)&&documento(b.reserva)&&documento(a.reserva)!==documento(b.reserva)||
+                a.declaradas===a.noches&&b.declaradas===b.noches)continue;
+            a.siguientes.push(b);b.anteriores.push(a);
+        }
+        const consolidadas=new Map(),absorbidas=new Set();
+        for(const primero of tramos.filter(t=>!t.anteriores.length&&t.siguientes.length===1)){
+            const cadena=[primero];
+            let ultimo=primero;
+            while(ultimo.siguientes.length===1&&ultimo.siguientes[0].anteriores.length===1){
+                ultimo=ultimo.siguientes[0];cadena.push(ultimo);
+            }
+            if(cadena.length<2||ultimo.siguientes.length)continue;
+            const noches=cadena.reduce((total,t)=>total+t.noches,0),r=primero.reserva;
+            const repetido=normalizar(r.texto_original),doc=documento(r);
+            const correo=normalizar(r.correo),tel=telefono(r);
+            const mismoRegistro=t=>doc&&doc===documento(t)||repetido&&repetido===normalizar(t.texto_original)||
+                correo&&correo===normalizar(t.correo)&&tel.length>=9&&tel===telefono(t);
+            const sinConflictos=['adultos','ninos','mascotas','estado_confirmacion'].every(campo=>
+                new Set(cadena.map(t=>t.reserva[campo]).filter(v=>v!=null&&v!=='no_determinado')).size<=1);
+            const documentos=new Set(cadena.map(t=>documento(t.reserva)).filter(Boolean));
+            if(!sinConflictos||documentos.size>1||!cadena.every(({reserva:t,declaradas})=>declaradas===noches&&
+                !t.advertencias?.length&&!t.advertencias_validacion?.length&&!t.cancelaciones_contradictorias?.length&&
+                !t.noches_extension_ambigua&&!/cancelad|no[\s_-]*show/.test(normalizar(t.estado_operativo))&&mismoRegistro(t)))continue;
+            const juntar=campo=>[...new Map(cadena.flatMap(t=>t.reserva[campo]||[]).map(v=>[JSON.stringify(v),v])).values()];
+            const fichas=cadena.map(t=>t.reserva);
+            const estado=ultimo.reserva.estado_operativo==='checked_out'?'checked_out':
+                fichas.some(f=>f.estado_operativo==='hospedada')?'hospedada':ultimo.reserva.estado_operativo;
+            consolidadas.set(primero.indice,{...r,fecha_checkout:ultimo.salida,noches,
+                fechas_ocupadas:Array.from({length:noches},(_,i)=>sumarDias(primero.entrada,i)),
+                estado_operativo:estado,texto_original:[...new Set(fichas.flatMap(f=>separarCampos(f.texto_original||'')))].join(' // '),
+                notas_importantes:juntar('notas_importantes'),pagos_pendientes:juntar('pagos_pendientes'),
+                notas_interpretacion:juntar('notas_interpretacion').filter(t=>!/^El texto del Libro indica \d+ noches?, pero la geometría abarca /.test(t)),
+                advertencias_informativas:juntar('advertencias_informativas'),
+                servicios:juntar('servicios'),menciones_servicio:juntar('menciones_servicio'),
+                pagos:juntar('pagos'),pagos_sin_asociacion:juntar('pagos_sin_asociacion'),
+                cobertura_pagos:fichas.every(f=>f.cobertura_pagos===true),
+                tramos_mensuales:cadena.map(t=>({id:t.reserva.id,hoja:t.hoja,origen:t.reserva.coordenadas_origen,
+                    fecha_checkin:t.entrada,fecha_checkout:t.salida}))});
+            for(const tramo of cadena.slice(1))absorbidas.add(tramo.indice);
+        }
+        const porRevisar=new Set(tramos.filter(t=>t.anteriores.length||t.siguientes.length||t.declaradas>t.noches).map(t=>t.indice));
+        return reservas.flatMap((r,i)=>absorbidas.has(i)?[]:consolidadas.get(i)||
+            (porRevisar.has(i)?{...r,continuidad_mensual_por_revisar:true,advertencias:[...new Set([...(r.advertencias||[]),
+                'Revisa la continuidad de esta estadía entre las hojas de fin e inicio de mes.'])]}:r));
+    }
+
+    root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, mesHoja, hojasContiguasParaReservas, consolidarEstadiasMensuales, asociar, compararVersiones, mismaPersona, reservaYCancelacionCoinciden, clavesTitular, varianteTitular, fuente, monto,
         servicios, interpretarConceptoPago, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;

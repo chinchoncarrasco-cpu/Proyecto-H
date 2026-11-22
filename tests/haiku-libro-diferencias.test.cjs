@@ -207,6 +207,36 @@ function reader(before,after,hook=()=>{}) {
             hook(name,version); const data=(version==='anterior'?before:after)[name]; if(data instanceof Error) throw data; return structuredClone(data);
         }};
 }
+test('el aviso lee la hoja vecina aunque su huella no cambie y propone dos noches juntas',async()=>{
+    const comun={rut_documento:null,correo:null,telefono:null,noches_texto:2,texto_original:'Ana Pérez // 2 ADLT // 2 noches'};
+    const nocheA=row({...comun,id:'Nov26!DP7',hoja:'Nov26',fecha_checkin:'2026-11-30',fecha_checkout:'2026-12-01'});
+    const nocheB=row({...comun,id:'Dic26!C7',hoja:'Dic26',fecha_checkin:'2026-12-01',fecha_checkout:'2026-12-02',
+        notas_importantes:['Nota de la continuación']});
+    const nov=sheet([nocheA],{hoja:'Nov26',fechas:['2026-11-30']});
+    const dic=sheet([],{hoja:'Dic26',fechas:['2026-12-01','2026-12-02']});
+    const libro=reader({Nov26:nov,Dic26:dic},{Nov26:nov,Dic26:{...dic,reservas:[nocheB]}});
+    const r=await D.compararUltimasVersiones({libro,fechaReferencia:'2026-11-22'});
+    assert.deepEqual(r.diagnostico.hojas_cambiadas_operacionales,['Dic26']);
+    assert.ok(libro.calls.some(x=>x[0]==='Nov26'&&x[1]==='actual'));
+    assert.equal(r.nuevas.length,1);assert.equal(r.ya_no_aparecen.length,0);
+    const [nueva]=r.nuevas;
+    assert.deepEqual([nueva.actual.fecha_checkin,nueva.actual.fecha_checkout,nueva.actual.noches],['2026-11-30','2026-12-02',2]);
+    assert.deepEqual(nueva.actual.tramos_mensuales.map(t=>t.hoja),['Nov26','Dic26']);
+    assert.deepEqual(nueva.actual.notas_importantes,['Nota de la continuación']);
+});
+
+test('reservas contiguas completas se conservan y una continuación dudosa espera revisión',()=>{
+    const izq=row({id:'Dic26!DP7',hoja:'Dic26',fecha_checkin:'2026-12-31',fecha_checkout:'2027-01-01',noches_texto:1});
+    const der=row({id:'Ene27!C7',hoja:'Ene27',fecha_checkin:'2027-01-01',fecha_checkout:'2027-01-02',noches_texto:1});
+    const anterior=[sheet([],{hoja:'Dic26',fechas:['2026-12-31']}),sheet([],{hoja:'Ene27',fechas:['2027-01-01']})];
+    const probar=(a,b)=>D.comparar(anterior,[{...anterior[0],reservas:[a]},{...anterior[1],reservas:b?[b]:[]}]);
+    assert.equal(probar(izq,der).nuevas.length,2);
+    const faltante=probar({...izq,noches_texto:2},null);
+    assert.equal(faltante.nuevas.length,0);assert.equal(faltante.ambiguas.length,1);
+    const discrepancia=probar({...izq,noches_texto:2},{...der,noches_texto:3});
+    assert.equal(discrepancia.nuevas.length,0);assert.equal(discrepancia.ambiguas.length,2);
+});
+
 test('API: primera carga conserva el contexto actual sin consultar hojas todavía',async()=>{
     const libro=reader(null,{Sep26:sheet([row()])}); const r=await D.compararUltimasVersiones({libro,fechaReferencia:'2026-09-09'});
     assert.equal(r.estado,'sin_linea_base'); assert.deepEqual(libro.calls,[['indice','actual'],['indice','anterior']]);

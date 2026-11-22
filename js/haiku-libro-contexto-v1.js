@@ -43,7 +43,8 @@
         if(!libro?.crearLectura)return registros.map(sinFuente);
         let lectura;
         try{lectura=await libro.crearLectura();}catch(_){return registros.map(sinFuente);}
-        const hojas=[...new Set(registros.filter(x=>x.tipo!=='cancelacion').map(x=>hoja(x.actual||x.anterior)).filter(Boolean))];
+        const referencias=registros.filter(x=>x.tipo!=='cancelacion').map(x=>x.actual||x.anterior).filter(Boolean);
+        const hojas=[...new Set(referencias.map(hoja).filter(Boolean))];
         const disponibles=new Set(lectura.listarHojas()),resultados=new Map(),cancelaciones=new Map(),datosHojas=new Map();
         const guardarHoja=(h,data)=>{
             resultados.set(h,data?.cobertura?.geometria===true&&Array.isArray(data.reservas)?data.reservas:null);
@@ -67,7 +68,8 @@
                 }
             }
         };
-        await leerHojas(hojas);
+        const S=root.HAIKU_LIBRO_SEMANTICA;
+        await leerHojas([...new Set([...hojas,...(S?.hojasContiguasParaReservas?.(referencias,[...disponibles])||[])])]);
         // Ante una ausencia, buscar continuidad en las demás hojas mensuales.
         // Se leen una vez por lote; una hoja fallida impide acreditar el retiro.
         const sinUbicacion=registros.some(registro=>{
@@ -84,15 +86,24 @@
             });
             await leerHojas(otras);
         }
+        const leidas=[...resultados.values()].flatMap(lista);
+        const reservas=S?.consolidarEstadiasMensuales?.(leidas)??leidas;
+        const porHoja=new Map();
+        for(const reserva of reservas)for(const h of new Set([hoja(reserva),...lista(reserva.tramos_mensuales).map(t=>t.hoja)])){
+            if(!porHoja.has(h))porHoja.set(h,[]);
+            porHoja.get(h).push(reserva);
+        }
         const actualizados=registros.map(registro=>{
             if(registro.tipo==='cancelacion')return registro;
             const r=registro.actual||registro.anterior,rows=resultados.get(hoja(r));
             if(!rows)return sinFuente(registro);
-            let candidatos=rows.filter(x=>mismaPersona(r,x)&&
+            let candidatos=lista(porHoja.get(hoja(r))).filter(x=>mismaPersona(r,x)&&
                 (x.id===r.id||Number(x.cabana)===Number(r.cabana)&&
-                    (x.fecha_checkin===r.fecha_checkin||x.fecha_checkout===r.fecha_checkout)));
+                    (x.fecha_checkin===r.fecha_checkin||x.fecha_checkout===r.fecha_checkout||
+                        lista(x.tramos_mensuales).some(t=>t.hoja===hoja(r)&&(t.id===r.id||
+                            t.fecha_checkin===r.fecha_checkin&&t.fecha_checkout===r.fecha_checkout)))));
             if(!candidatos.length){
-                candidatos=[...datosHojas.values()].flatMap(h=>lista(h.reservas)).filter(x=>mismaPersona(r,x)&&
+                candidatos=reservas.filter(x=>mismaPersona(r,x)&&
                     Number(x.cabana)===Number(r.cabana)&&x.fecha_checkin===r.fecha_checkin&&x.fecha_checkout===r.fecha_checkout);
             }
             if(!candidatos.length){
@@ -120,7 +131,7 @@
                         (a.origen?.celda&&a.origen.celda===r.coordenadas_origen?.celda||
                             [a.fecha,...lista(a.fechas_ocupadas)].some(d=>d>=r.fecha_checkin&&d<=(r.fecha_checkout||r.fecha_checkin)))||
                         a.titulares_posibles?.some(t=>mismaPersona(r,{titular:t})))));
-                const otras=[...datosHojas.values()].flatMap(h=>lista(h?.reservas)).filter(x=>mismaPersona(r,x));
+                const otras=reservas.filter(x=>mismaPersona(r,x));
                 const destino=periodo&&registro.tipo==='retiro'&&!parcial&&!candidatos.length&&otras.length===1&&
                     !otras[0].advertencias?.length&&otras[0].coordenadas_origen?.hoja?otras[0]:null;
                 const fechas=new Set([...datosHojas.values()].flatMap(h=>lista(h.fechas))),dias=[];
@@ -162,8 +173,9 @@
         // conservan todos sus campos e IDs para retirar sólo los avisos resueltos.
         const grupos=new Map(),salida=[];
         for(const registro of actualizados){
-            if(registro.tipo!=='modificacion'||registro.fuente_vigente?.estado!=='verificada'){salida.push(registro);continue;}
-            const key=JSON.stringify([hoja(registro.actual),registro.actual.id]);
+            const altaConsolidada=registro.tipo==='nueva'&&registro.actual?.tramos_mensuales?.length;
+            if((registro.tipo!=='modificacion'&&!altaConsolidada)||registro.fuente_vigente?.estado!=='verificada'){salida.push(registro);continue;}
+            const key=JSON.stringify([registro.tipo,hoja(registro.actual),registro.actual.id]);
             const previo=grupos.get(key);
             if(!previo){const nuevo={...registro,ids_origen:[registro.id]};grupos.set(key,nuevo);salida.push(nuevo);}
             else{
