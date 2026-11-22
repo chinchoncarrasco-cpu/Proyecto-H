@@ -615,6 +615,11 @@
         return [...new Set(hallados)];
     }
 
+    function esNotaPrecaucionMasaje(texto) {
+        const nota = normalizar(texto).match(/^(?:ojo\s+(?:en|con|al)|precaucion\s+(?:en|con|para))\s+(?:(?:el|los)\s+)?masajes?\s*[:–—-]\s*(.+)$/);
+        return Boolean(nota && !/^(?:agendar|reservar|programar|confirmar|solicitar|\d+\s+masajes?)\b/.test(nota[1]));
+    }
+
     function horasDeServicio(texto) {
         const sinFechas = normalizar(leerFechasConBarraRepetida(texto, () => ' ')).replace(/\b\d{1,2}[-/]\d{1,2}(?:[-/.](?:\d{2}|\d{4}))?\b|\b\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4})\b/g, " ");
         const horas = [];
@@ -752,10 +757,20 @@
             .replace(/\b(?:no\s+(?:son\s+)?|sin\s+)simultane(?:o|a|os|as)\b/g, ''));
     }
 
+    function turnosExplicitosMasaje(texto, horas, cantidad) {
+        if (cantidad !== 2 || horas.length !== 2) return null;
+        const t = normalizar(texto);
+        const reloj = String.raw`\d{1,2}(?:\s*[:.,]\s*\d{2})?(?:\s*(?:am|pm|hra?s?|hs|h))?`;
+        const par = t.match(new RegExp(String.raw`(?<![\d:.,])\b${reloj}\b\s+(?:y|e)\s+(?:(?:a\s+)?las?\s+)?${reloj}\b(?![.:,]\d)`));
+        if (!par || /\b(?:entre|de|desde)\s+(?:las?\s+)?$/.test(t.slice(0, par.index))) return null;
+        const turnos = horasDeServicio(par[0]);
+        return turnos.length === 2 && turnos.every((hora, i) => horas[i] === hora) ? turnos : null;
+    }
+
     function inferirTurnosMasaje(unidades, original, simultaneos) {
         const conHora = unidades.filter(u => u.hora), primera = unidades[0];
         if (pendienteDeCoordinarOConfirmar(original) || conHora.length !== 1 ||
-            unidades.some(u => !u.ancla_prestacion || !u.duracion_minutos || u.hora_fin)) return;
+            unidades.some(u => !u.ancla_prestacion || !u.duracion_minutos || u.hora_fin || u.turnos_explicitos)) return;
         const hora = conHora[0].hora;
         const [h, m] = hora.split(':').map(Number), inicio = h * 60 + m;
         const reloj = n => `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
@@ -793,7 +808,10 @@
         const inicios = anclas.map((a, i) => i === 0 ? 0 : inicioUnidadMasaje(original, a.indice));
         const unidades = anclas.map((ancla, indice) => {
             const segmento = original.slice(inicios[indice], inicios[indice + 1] ?? original.length).trim();
-            const horas = horasDeServicio(textoSinDuracionMasaje(segmento));
+            const textoHorario = textoSinDuracionMasaje(segmento);
+            const horas = horasDeServicio(textoHorario);
+            const cantidad = cantidadMasaje(segmento, ancla.cantidad);
+            const turnos = turnosExplicitosMasaje(textoHorario, horas, cantidad);
             const profesionales = profesionalesMasaje(segmento);
             const marcadores = [...normalizarPosicional(segmento).matchAll(/\bc\s*\/\s*([ud])\b/g)]
                 .map(m => `C/${m[1].toUpperCase()}`);
@@ -801,7 +819,8 @@
                 concepto: "masaje", ancla_prestacion: ancla.prestacion,
                 posicion_inicio: inicios[indice] + original.slice(inicios[indice], inicios[indice + 1] ?? original.length).indexOf(segmento),
                 tipo: tipoMasaje(segmento), duracion_minutos: duracionMasaje(segmento),
-                cantidad: cantidadMasaje(segmento, ancla.cantidad), hora: horas[0] || null, hora_fin: horas[1] || null,
+                cantidad, hora: horas[0] || null, hora_fin: turnos ? null : horas[1] || null,
+                ...(turnos ? { turnos_masaje: turnos, turnos_explicitos: true } : {}),
                 simultaneo: masajesSimultaneos(segmento), profesionales,
                 asignacion_profesional: null, marcadores_distribucion: [...new Set(marcadores)],
                 modalidad_horario: /\bdesde\s+las?\b/.test(normalizar(segmento)) ? "desde" : /\ba\s+las?\b/.test(normalizar(segmento)) ? "a_las" : null,
@@ -999,7 +1018,8 @@
             }
             if (!bloque.length && adjuntarComplementoServicio(entradas.at(-1), f, anteriores.at(-1), fuente, opciones)) continue;
             const conceptos = conceptosDeServicio(f.texto);
-            if ((conceptos.length === 1 && conceptos[0] === 'masaje') || (!conceptos.length && esComplementoMasaje(f.texto))) bloque.push(f);
+            if ((conceptos.length === 1 && conceptos[0] === 'masaje' && !esNotaPrecaucionMasaje(f.texto)) ||
+                (!conceptos.length && esComplementoMasaje(f.texto))) bloque.push(f);
             else { vaciar(); entradas.push({ parte: f.texto, inicio: f.inicio, fin: f.fin }); }
         }
         vaciar();
@@ -1046,6 +1066,10 @@
         const texto = String(fragmento || "").trim(), t = normalizar(texto), conceptos = conceptosDeServicio(texto), evidencias = [];
         const base = semantica => ({ semantica, conceptos, evidencias: [...evidencias], unidadesServicio: [] });
         if (!conceptos.length) return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        if (conceptos.length === 1 && conceptos[0] === 'masaje' && esNotaPrecaucionMasaje(texto)) {
+            evidencias.push('precaución sobre el masaje');
+            return base(SEMANTICA_SERVICIO.NO_SERVICIO);
+        }
         const estadoReserva = normalizar(contextoReserva?.estado_reserva || contextoReserva?.estado || "");
         const descartado = /\b(?:no|nunca)\s+(?:confirmo|reservo|contrato|solicito|pidio|agendo|uso)\b|\bfinalmente\s+no\s+reservo\b/.test(t);
         const consulta = /\bconsultar\s+si\s+desea\b|\b(?:consulto|pregunto|averiguo|cotizo|consulta(?:ndo)?|pregunta(?:ndo)?|interesaba)\b|\bse\s+le\s+(?:explico|indico|informo)\b|\bcomo\s+(?:era|funciona|funcionaba)\b/.test(t);
@@ -2129,7 +2153,7 @@
     }
 
     root.HAIKU_LIBRO_SEMANTICA = Object.freeze({ mapearConceptoServicio, referenciaServicioLibro, fuenteServicioIncorporado, analizarTitular, normalizarHoja, normalizar, normalizarDocumento, documentoCanon, evidenciaTransferencia, separarCampos, iso, sumarDias, fechaTexto, meses, mesHoja, hojasContiguasParaReservas, consolidarEstadiasMensuales, asociar, compararVersiones, mismaPersona, reservaYCancelacionCoinciden, clavesTitular, varianteTitular, fuente, monto,
-        servicios, interpretarConceptoPago, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
+        servicios, interpretarConceptoPago, clasificarFragmentoServicio, clasificarIntencionFinanciera, promocionReserva, parsearUnidadesMasaje, horasDeServicio, esNotaPrecaucionMasaje, textoSinHorasParaFecha, SEMANTICA_SERVICIO, INTENCION_FINANCIERA,
         evidenciaIntencionOperativaServicio, adultosPorPersonas });
     if (typeof module !== "undefined") module.exports = root.HAIKU_LIBRO_SEMANTICA;
 })(typeof self !== "undefined" ? self : globalThis);

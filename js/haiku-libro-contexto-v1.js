@@ -270,6 +270,7 @@
                 tipo:x.servicio?.concepto, texto:x.servicio?.fragmento_original||x.servicio?.texto_original||'',
                 fecha:x.estado==='en_sistema'?x.sistema?.fecha_servicio||x.lectura?.fecha:x.lectura?.fecha,
                 hora:(x.estado==='en_sistema'?x.sistema?.hora_inicio:null)||x.lectura?.hora||x.servicio?.hora_inicio||x.servicio?.hora||'',
+                turnos:x.servicio?.unidad_servicio?.turnos_explicitos?x.servicio.unidad_servicio.turnos_masaje:undefined,
                 cantidad:(x.estado==='en_sistema'?x.sistema?.cantidad:null)||x.lectura?.cantidad||x.servicio?.cantidad,
                 razones:x.lectura?.razones||[]}));
             contexto.notas=notas.map(x=>({estado:x.estado,texto:x.texto||''}));
