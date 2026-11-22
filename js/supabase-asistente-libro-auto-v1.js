@@ -174,9 +174,9 @@
         return {texto,revision,burbuja:describirBurbuja(r)};
     }
     function crearControlador({generacion,obtener,mostrar,limpiar}) {
-        let ultima=-1, token=0;
+        let ultima=-1, token=0, temporizador;
         return {
-            invalidar(){token++;limpiar();},
+            invalidar(){token++;clearTimeout(temporizador);limpiar();},
             async cargar(detail) {
                 const cargaAdmitida = detail?.carga_manual || detail?.carga_automatica;
                 if (!cargaAdmitida || !detail.tenia_anterior || !Number.isInteger(detail.generacion) || detail.generacion!==generacion() || detail.generacion<=ultima) return;
@@ -184,6 +184,10 @@
                 const turno=++token,g=detail.generacion;
                 const vigente=()=>turno===token && generacion()===g;
                 limpiar();mostrar({texto:'Revisando la actualización…',pendiente:true});
+                clearTimeout(temporizador);
+                const espera=temporizador=setTimeout(()=>{
+                    if (vigente()) mostrar({texto:'El informe está tardando más de lo habitual. Puedes cerrar el aviso y seguir trabajando.',pendiente:true,revision:true});
+                },30_000);
                 try {
                     const resultado=await obtener();
                     if (!vigente()) return;
@@ -191,6 +195,8 @@
                     mostrar({...resumir(resultado),resultado});
                 } catch (_) {
                     if (vigente()) mostrar({texto:'No pude completar el informe de esta actualización. Puedes solicitarlo en Haku.',revision:true});
+                } finally {
+                    clearTimeout(espera);
                 }
             }
         };
@@ -1067,7 +1073,13 @@
                 });
             }
             if (resultado) botonInforme(pie);
-            const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent=conservarConsulta?'Seguir con mi consulta':'Cerrar';cerrar.addEventListener('click',()=>{if(!guardando)cerrarAviso();});pie.appendChild(cerrar);
+            const cerrar=doc.createElement('button');cerrar.type='button';cerrar.textContent=conservarConsulta?'Seguir con mi consulta':'Cerrar';
+            cerrar.addEventListener('click',()=>{
+                if(guardando)return;
+                if(pendiente)control.invalidar();
+                else cerrarAviso();
+            });
+            pie.appendChild(cerrar);
             if(pendientesIniciales.length)presentarPendientes(bloquePendientes,pendientesIniciales);
             doc.body.appendChild(toast);
             posicionarAviso();

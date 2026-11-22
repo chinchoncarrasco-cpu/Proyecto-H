@@ -21,7 +21,7 @@ const elegirEstado = (e, accion) => {
 };
 const terminar = async () => { for (let i = 0; i < 6; i++) await esperar(); };
 
-async function entorno(handler) {
+async function entorno(handler, { AbortSignal } = {}) {
     const dom = parseHTML('<html><body><section id="cabinsGeneralTasks"></section></body></html>');
     const document = dom.document;
     const eventos = new EventTarget();
@@ -30,15 +30,16 @@ async function entorno(handler) {
     let canalEliminado = 0;
     window.haikuSesion = { auth: { id: 'usuario-a' } };
     const apiCliente = {
-        rpc: async (nombre, args) => {
+        rpc: (nombre, args) => {
             llamadas.push({ nombre, args: structuredClone(args) });
-            return handler ? handler(nombre, args, almacen) : { data: almacen.get(args.p_fecha) || datos(args.p_fecha) };
+            const responder = async signal => handler ? handler(nombre, args, almacen, signal) : { data: almacen.get(args.p_fecha) || datos(args.p_fecha) };
+            return AbortSignal ? { abortSignal: responder } : responder();
         },
         channel: () => ({ on() { return this; }, subscribe() { return this; } }),
         removeChannel: () => { canalEliminado++; }
     };
     window.haikuSupabase = apiCliente;
-    const contexto = vm.createContext({ window, document, fechaSeleccionada: '2026-01-19', console, Intl, Date, setTimeout, clearTimeout });
+    const contexto = vm.createContext({ window, document, fechaSeleccionada: '2026-01-19', console, Intl, Date, setTimeout, clearTimeout, AbortSignal });
     vm.runInContext(source, contexto);
     await esperar(); await esperar();
     return { window, document, contexto, api: window.HAIKU_TAREAS_GENERALES_V1, llamadas, almacen, canalEliminado: () => canalEliminado };
@@ -52,6 +53,27 @@ test('sólo confirma datos remotos y escapa nombres y notas al construir el DOM'
     assert.match(e.document.querySelector('input[name="encargado"]').value, /<img/);
     assert.match(e.document.querySelector('textarea').innerHTML, /&lt;script&gt;/);
     assert.equal(e.llamadas.some(c => c.nombre.includes('guardar')), false);
+});
+
+test('una lectura vencida deja actualizar sin encolar otra consulta durante la demora', async () => {
+    const plazos = [];
+    const e = await entorno((nombre, args, _, signal) => {
+        assert.equal(nombre, 'haiku_tareas_generales_dia_v1');
+        if (plazos.length > 1) return { data: datos(args.p_fecha) };
+        return new Promise(resolve => signal.addEventListener('abort', () => resolve({ error: { message: 'AbortError' } })));
+    }, { AbortSignal: { timeout(ms) {
+        assert.equal(ms, 20_000);
+        const control = new AbortController(); plazos.push(control); return control.signal;
+    } } });
+    assert.match(e.document.querySelector('.tg-meta').textContent, /Cargando/);
+    const lectura = e.api.cargar('2026-01-19', { forzar: true });
+    plazos[0].abort(); await lectura;
+    assert.equal(e.llamadas.length, 1);
+    assert.match(e.document.querySelector('.tg-error').textContent, /tardó demasiado.*Actualizar/);
+    await e.api.cargar('2026-01-19', { forzar: true });
+    assert.equal(e.document.querySelector('.tg-error'), null);
+    assert.equal(e.llamadas.length, 2);
+    assert.equal(e.api.contexto().datos.tareas.length, 1);
 });
 
 test('una lectura atrasada de otro día nunca reemplaza el día seleccionado', async () => {

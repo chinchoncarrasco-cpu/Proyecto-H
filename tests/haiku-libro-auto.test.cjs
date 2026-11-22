@@ -196,7 +196,8 @@ function interfaz(comparar,{proyectar=false}={}) {
         addEventListener(t,f){(listeners[t] ||= []).push(f);},
         HAIKU_LIBRO_RESERVA_V1:{estado:()=>({generacion:g})},
         HAIKU_LIBRO_DIFERENCIAS_V1:{compararUltimasVersiones(){calls++;return comparar();}}};
-    const ctx={window,structuredClone};
+    const timers=new Map();let secuenciaTimer=0;
+    const ctx={window,structuredClone,setTimeout(fn){const id=++secuenciaTimer;timers.set(id,fn);return id;},clearTimeout(id){timers.delete(id);}};
     for(const file of ['supabase-asistente-libro-actualizacion-v1','supabase-asistente-libro-auto-v1'])vm.runInNewContext(fs.readFileSync(require.resolve('../js/'+file+'.js'),'utf8'),ctx);
     if(!proyectar){
         const actualizacion=window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1;
@@ -210,6 +211,7 @@ function interfaz(comparar,{proyectar=false}={}) {
     };
     const nodos=el=>[el,...el.children.flatMap(nodos)];
     return {window,document,ids,emitir,manual,nodos:()=>nodos(document.body),calls:()=>calls,abierto:()=>abierto,cambiar:()=>{g++;emitir('haiku:libro-cambio');},
+        vencerEspera(){for(const [id,fn] of timers){timers.delete(id);fn();}},
         botones:()=>nodos(document.body).filter(x=>x.textContent==='Ver informe')};
 }
 test('módulo al cargar y evento genérico no comparan ni notifican; primera carga no inicia',async()=>{
@@ -235,6 +237,25 @@ test('error obsoleto no se notifica; error vigente es breve y permite una carga 
     h.emitir('haiku:libro-version-cargada',evento(3));await tick();assert.equal(h.calls(),2);assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
     const fallo=interfaz(async()=>{throw Error('detalle técnico secreto');});fallo.emitir('haiku:libro-version-cargada',evento(2));await tick();
     assert.match(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/No pude completar/);assert.doesNotMatch(fallo.ids['haiku-asistente-mensajes'].children[0].textContent,/secreto/);
+});
+test('la demora avisa una sola vez y conserva la comparación en curso',async()=>{
+    let resolver;const h=interfaz(()=>new Promise(r=>resolver=r));
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    h.vencerEspera();
+    assert.ok(h.nodos().some(x=>x.textContent.includes('El informe está tardando')));
+    assert.equal(h.calls(),1);
+    resolver(res());await tick();
+    assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
+    assert.ok(h.botones().length);
+});
+test('cerrar la espera descarta el aviso tardío sin reiniciar la comparación',async()=>{
+    let resolver;const h=interfaz(()=>new Promise(r=>resolver=r));
+    h.emitir('haiku:libro-version-cargada',evento(2));await tick();
+    h.nodos().find(x=>x.textContent==='Cerrar').dispatchEvent({type:'click'});
+    h.vencerEspera();resolver(res());await tick();
+    assert.equal(h.document.body.children.length,0);
+    assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
+    assert.equal(h.calls(),1);
 });
 test('aviso en segundo plano conserva conversación, borrador y posición y espera al terminar para abrir',async()=>{
     const h=interfaz(async()=>res({nuevas:[{actual:row}]}));let ocupado=true;

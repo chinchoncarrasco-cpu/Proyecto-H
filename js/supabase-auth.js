@@ -264,6 +264,8 @@
         document.getElementById("haiku-usuario-chip-rol");
     const botonSalir =
         document.getElementById("haiku-cerrar-sesion");
+    let turnoSesion = 0;
+    let validacionSesion = null;
 
     const emailRecordado =
         localStorage.getItem("haikuLoginEmail") || "";
@@ -311,32 +313,73 @@
             .join(" · ");
     }
 
-    async function validarSesion(session) {
+    function retirarAcceso() {
+        window.haikuSesion = null;
+        window.haikuTienePermiso = () => false;
+    }
+
+    function cerrarSesionLocal(estado) {
+        turnoSesion++;
+        validacionSesion = null;
+        retirarAcceso();
+        mostrarLogin(estado);
+    }
+
+    function validarSesion(session) {
         if (!session?.user) {
-            window.haikuSesion = null;
-            window.haikuTienePermiso = () => false;
-            mostrarLogin("Ingresa para continuar.");
+            cerrarSesionLocal("Ingresa para continuar.");
+            return Promise.resolve(false);
+        }
+        const { access_token: token, user: { id: usuario } } = session;
+        if (validacionSesion?.token === token && validacionSesion?.usuario === usuario) {
+            return validacionSesion.promesa;
+        }
+        if (window.haikuSesion && window.haikuSesion.auth.id !== usuario) {
+            retirarAcceso();
+            mostrarLogin("Validando acceso…");
+        }
+        const turno = ++turnoSesion;
+        // Supabase aún mantiene el bloqueo de Auth dentro de onAuthStateChange.
+        const promesa = new Promise(resolve => setTimeout(resolve, 0))
+            .then(() => turno === turnoSesion && comprobarSesion(session, turno))
+            .finally(() => {
+                if (turno === turnoSesion) validacionSesion = null;
+            });
+        validacionSesion = { token, usuario, promesa };
+        return promesa;
+    }
+
+    async function comprobarSesion(session, turno) {
+        let data;
+        try {
+            let solicitud = cliente.rpc("haiku_sesion_actual");
+            if (typeof solicitud.abortSignal === "function" && globalThis.AbortSignal?.timeout) {
+                solicitud = solicitud.abortSignal(globalThis.AbortSignal.timeout(20_000));
+            }
+            const respuesta = await solicitud;
+            if (respuesta.error) throw respuesta.error;
+            data = respuesta.data;
+        } catch (error) {
+            if (turno !== turnoSesion) return false;
+            retirarAcceso();
+            console.warn("HAIKU · No se pudo comprobar el acceso:", error?.code || error?.name);
+            mensajeError(
+                "No pudimos comprobar tu acceso en este momento. Recarga el panel para volver a intentarlo."
+            );
+            mostrarLogin("Acceso por comprobar.");
             return false;
         }
 
-        const { data, error } =
-            await cliente.rpc("haiku_sesion_actual");
-
-        if (error || !data?.usuario?.activo) {
-            console.error(
-                "HAIKU · Sesión rechazada:",
-                error || data
-            );
-
-            await cliente.auth.signOut();
-
-            window.haikuSesion = null;
-            window.haikuTienePermiso = () => false;
-
-            mensajeError(
-                "Tu cuenta no está habilitada para este acceso."
-            );
-            mostrarLogin("");
+        if (turno !== turnoSesion) return false;
+        if (!data?.usuario?.activo) {
+            retirarAcceso();
+            mensajeError("Tu cuenta no está habilitada para este acceso.");
+            mostrarLogin("Acceso restringido.");
+            try {
+                await cliente.auth.signOut();
+            } catch (error) {
+                console.warn("HAIKU · No se pudo cerrar la sesión local:", error?.code || error?.name);
+            }
             return false;
         }
 
@@ -438,11 +481,10 @@
                     error
                 );
 
-                mensajeError(
-                    error?.message === "Invalid login credentials"
-                        ? "Correo o contraseña incorrectos."
-                        : "No fue posible iniciar sesión. Revisa tu conexión e inténtalo otra vez."
-                );
+                let mensaje = "No fue posible iniciar sesión. Inténtalo otra vez en unos segundos.";
+                if (error?.message === "Invalid login credentials") mensaje = "Correo o contraseña incorrectos.";
+                if (error?.status >= 500) mensaje = "El servicio de acceso no respondió. Inténtalo otra vez en unos segundos.";
+                mensajeError(mensaje);
 
                 mensajeEstado("");
             } finally {
@@ -460,19 +502,15 @@
                 await cliente.auth.signOut();
             } finally {
                 botonSalir.disabled = false;
-                window.haikuSesion = null;
-                window.haikuTienePermiso = () => false;
-                mostrarLogin("Sesión cerrada.");
+                cerrarSesionLocal("Sesión cerrada.");
             }
         }
     );
 
     cliente.auth.onAuthStateChange(
-        async (evento, session) => {
+        (evento, session) => {
             if (evento === "SIGNED_OUT") {
-                window.haikuSesion = null;
-                window.haikuTienePermiso = () => false;
-                mostrarLogin("Sesión cerrada.");
+                cerrarSesionLocal("Sesión cerrada.");
                 return;
             }
 
@@ -480,7 +518,7 @@
                 evento === "TOKEN_REFRESHED" ||
                 evento === "SIGNED_IN"
             ) {
-                await validarSesion(session);
+                void validarSesion(session);
             }
         }
     );
