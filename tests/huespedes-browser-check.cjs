@@ -10,6 +10,9 @@ const root = path.resolve(__dirname, '..');
 const out = process.env.HAKU_GUEST_SHOTS || fs.mkdtempSync(path.join(os.tmpdir(), 'haku-huespedes-'));
 const user = 'a0000000-0000-4000-8000-000000000001';
 const ada = 'a1000000-0000-4000-8000-000000000001';
+const activeAda = '[data-estadia-id="a4000000-0000-4000-8000-000000000001"]';
+const guestButton = activeAda + ' .hu-estadia-titular';
+const directoryOnly = process.argv.includes('--directorio');
 const allowed = new Set(['js/historial.js','js/calendario.js','js/checklist.js','js/app.js','js/cabanas.js',
   'js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
 const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
@@ -23,12 +26,15 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     await db.exec(sqlFile('tests/fixtures/huespedes-schema.sql'));
     await db.exec(sqlFile('supabase/migrations/'+migration));
     await db.exec(sqlFile('supabase/migrations/20261121003000_haku_huespedes_directorio_foto.sql'));
+    await db.exec(sqlFile('supabase/migrations/20261122014301_huespedes_directorio_estadias.sql'));
     const seed = sqlFile('tests/huespedes-v1-postgres.test.sql').split('set local role authenticated;')[0];
     await db.exec(seed+'commit;');
+    if(directoryOnly) await db.exec(sqlFile('tests/fixtures/huespedes-directorio.sql'));
     await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
     await db.exec('set role authenticated');
     const config = {
       directorio: ['p_estado','p_busqueda','p_tipo','p_origen','p_etiqueta','p_desde'],
+      directorio_estadias: ['p_estado','p_busqueda','p_tipo','p_origen','p_etiqueta','p_desde'],
       perfil: ['p_id','p_reserva','p_historial'], guardar: ['p_id','p_reserva','p_accion','p_datos'],
     };
     let queue = Promise.resolve();
@@ -38,7 +44,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       return result;
     }
     const rpc = (name, values)=>{
-      const kind = /^haiku_huesped_(directorio|perfil|guardar)_v1$/.exec(name)?.[1];
+      const kind = /^haiku_huesped_(directorio(?:_estadias)?|perfil|guardar)_v1$/.exec(name)?.[1];
       assert.ok(kind, 'RPC de Huéspedes esperada');
       const args = config[kind].map(key=>values[key] ?? ({p_estado:'hospedados',p_historial:false,p_desde:0}[key]??null));
       if(kind==='guardar') args[3]=JSON.stringify(args[3]);
@@ -103,7 +109,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         return route.fulfill({path:file,contentType:name.endsWith('.html')?'text/html':name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':undefined});
       });
       await page.goto('https://haku-huespedes.test/panel.html');
-      await page.locator('#seccion-huespedes .hu-fila[data-person-id]').first().waitFor();
+      await page.locator('#seccion-huespedes '+guestButton).waitFor();
       await page.evaluate(theme=>{
         document.documentElement.dataset.haikuTema=theme;
         document.documentElement.classList.remove('haiku-privacidad-arranque','haiku-resumen-pendiente','haiku-cabanas-pendiente','haiku-pagos-pendiente');
@@ -129,6 +135,48 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       return {mobile,mobileErrors};
     }
 
+    if(directoryOnly){
+      for(const width of [1440,390]) for(const theme of ['claro','oscuro']){
+        const {page,errors}=await web(width,theme);
+        const section=page.locator('#seccion-huespedes');
+        const list=section.locator('.hu-lista');
+        const current=list.locator('[data-estadia-estado="hospedados"]');
+        const previous=list.locator('[data-estadia-estado="historial"]');
+        const holder=current.locator(activeAda);
+        const toggle=holder.getByRole('button',{name:'1 acompañante',exact:true});
+        assert.equal(await current.locator('[data-person-id="'+ada+'"]').count(),1);
+        assert.equal(await previous.locator('[data-person-id="'+ada+'"]').count(),1);
+        assert.deepEqual(await list.locator('.hu-estadia-grupo h3').allTextContents(),['Hospedados ahora','Por ingresar','Historial']);
+        assert.equal(await list.getByText('Ciro Prueba',{exact:true}).count(),0);
+        assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+        assert.ok(await list.evaluate(el=>el.scrollWidth<=el.clientWidth+1),'el directorio no desborda');
+        await toggle.focus();
+        await toggle.press('Enter');
+        assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+        await holder.getByText('Berta Prueba',{exact:true}).waitFor();
+        await holder.getByText('Acompañantes por asignar a una cabaña').waitFor();
+        await page.evaluate(()=>document.fonts.ready);
+        await page.screenshot({path:path.join(out,'web-'+width+'-'+theme+'-directorio.png'),fullPage:true});
+        await toggle.click();
+        await holder.getByText('Berta Prueba',{exact:true}).waitFor({state:'hidden'});
+        const draft=current.getByRole('button',{name:'1 acompañante',exact:true}).last();
+        await draft.click();
+        await current.getByRole('button',{name:'Completar',exact:true}).click();
+        await section.locator('.hu-ficha').getByRole('button',{name:'Completar datos',exact:true}).waitFor();
+        if(width===390) await section.locator('.hu-ficha').getByRole('button',{name:'Huéspedes',exact:true}).click();
+        await section.locator('.hu-tabs').getByRole('button',{name:'Historial',exact:true}).click();
+        await current.waitFor({state:'detached'});
+        await previous.waitFor();
+        await section.getByRole('searchbox').fill('Ciro');
+        await previous.getByText('Ciro Prueba',{exact:true}).waitFor();
+        await previous.getByRole('button',{name:'Ver perfil',exact:true}).click();
+        await section.locator('.hu-ficha').getByRole('heading',{name:'Ciro Prueba',exact:true}).waitFor();
+        assert.deepEqual(errors,[]);
+        await page.close();
+      }
+      console.log('Directorio web verificado con PostgreSQL aislado, escritorio y móvil, claro y oscuro.');
+      return;
+    }
     if(process.argv.includes('--correcciones')){
       const preview=process.env.HAKU_GUEST_NATIVE_PREVIEW;
       assert.ok(preview,'Indica la vista Android en HAKU_GUEST_NATIVE_PREVIEW.');
@@ -141,7 +189,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       const note='Preferencia de prueba con respuesta demorada';
       for(const theme of ['light','dark']){
         const {mobile,mobileErrors}=await android(preview,theme);
-        await mobile.getByRole('button',{name:'Ada Prueba',exact:true}).click();
+        await mobile.getByRole('button',{name:'Ver perfil de Ada Prueba',exact:true}).first().click();
         await mobile.getByRole('button',{name:'Completar',exact:true}).click();
         await mobile.getByRole('button',{name:'Vincular perfil existente',exact:true}).click();
         const search=mobile.getByRole('textbox',{name:'Nombre o documento',exact:true});
@@ -157,7 +205,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         const {page,errors}=await web(width,theme);
         const section=page.locator('#seccion-huespedes');
         const modal=section.locator('dialog');
-        await section.locator('[data-person-id="'+ada+'"]').click();
+        await section.locator(guestButton).click();
         await section.getByRole('button',{name:'Completar',exact:true}).click();
 
         await section.getByRole('button',{name:'Vincular perfil existente',exact:true}).click();
@@ -229,7 +277,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     for(const width of [1440,390]) for(const theme of ['claro','oscuro']){
       const {page,errors}=await web(width,theme);
       const section=page.locator('#seccion-huespedes');
-      assert.equal(await section.locator('.hu-fila[data-person-id]').count(),3);
+      assert.equal(await section.locator('.hu-estadia-titular').count(),4);
       assert.ok(await section.evaluate(n=>n.scrollWidth<=n.clientWidth+1),'la sección no desborda horizontalmente');
       if(width>760){
         const geometry=await section.locator('.hu-layout').evaluate(n=>{
@@ -243,7 +291,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         assert.ok(search.width>300&&search.y<type.y,'la búsqueda usa una línea completa en móvil');
       }
       await page.screenshot({path:path.join(out,'web-'+width+'-'+theme+'-directorio.png'),fullPage:true});
-      await section.locator('[data-person-id="'+ada+'"]').click();
+      await section.locator(guestButton).click();
       await section.getByRole('heading',{name:'Ada Prueba'}).waitFor();
       assert.equal(await section.locator('.hu-lista').isVisible(),width>760);
       await page.screenshot({path:path.join(out,'web-'+width+'-'+theme+'-perfil.png'),fullPage:true});
@@ -255,7 +303,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     const {page,errors}=await web(390,'claro');
     const section=page.locator('#seccion-huespedes');
     const modal=section.locator('dialog');
-    await section.locator('[data-person-id="'+ada+'"]').click();
+    await section.locator(guestButton).click();
     await section.getByRole('heading',{name:'Ada Prueba'}).waitFor();
     await section.locator('.hu-ficha').getByRole('button',{name:'Registrar información',exact:true}).click();
     await modal.getByLabel('Información o detalles').fill('Prefiere chocolate amargo');
@@ -333,7 +381,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     await page.close();
 
     const fresh=await web(390,'oscuro');
-    await fresh.page.locator('[data-person-id="'+ada+'"]').click();
+    await fresh.page.locator(guestButton).click();
     await fresh.page.getByText('Prefiere chocolate amargo',{exact:true}).waitFor();
     await fresh.page.close();
 
@@ -341,10 +389,10 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
       const preview=process.env.HAKU_GUEST_NATIVE_PREVIEW;
       for(const colorScheme of ['light','dark']){
         const {mobile,mobileErrors}=await android(preview,colorScheme);
-        await mobile.getByRole('button',{name:'Ada Prueba',exact:true}).waitFor();
+        await mobile.getByRole('button',{name:'Ver perfil de Ada Prueba',exact:true}).first().waitFor();
         await mobile.evaluate(()=>document.fonts.ready);
         await mobile.screenshot({path:path.join(out,'android-vista-'+colorScheme+'-directorio.png')});
-        await mobile.getByRole('button',{name:'Ada Prueba',exact:true}).click();
+        await mobile.getByRole('button',{name:'Ver perfil de Ada Prueba',exact:true}).first().click();
         await mobile.getByText('Prefiere chocolate amargo',{exact:true}).waitFor();
         await mobile.screenshot({path:path.join(out,'android-vista-'+colorScheme+'-perfil.png')});
         if(colorScheme==='dark'){

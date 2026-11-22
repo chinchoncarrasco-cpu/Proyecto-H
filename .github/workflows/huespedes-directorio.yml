@@ -1,0 +1,42 @@
+name: Huéspedes · directorio web
+on:
+  pull_request:
+    paths:
+      - 'js/haiku-huespedes*'
+      - 'css/haiku-huespedes*'
+      - 'supabase/migrations/*huesped*'
+      - 'tests/*huespedes*'
+      - 'tests/fixtures/huespedes*'
+      - '.github/workflows/huespedes-directorio.yml'
+permissions:
+  contents: read
+jobs:
+  directorio-web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      HAKU_GUEST_SHOTS: ${{ runner.temp }}/haku-guests-shots
+      NODE_PATH: ${{ runner.temp }}/haku-guests-deps/node_modules
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: PostgreSQL y navegador aislados
+        run: |
+          npm install --prefix "$RUNNER_TEMP/haku-guests-deps" --no-save --ignore-scripts --package-lock=false playwright@1.56.1 @electric-sql/pglite@0.5.14
+      - name: Estadías, permisos y fichas previas
+        run: node --test tests/huespedes-directorio-estadias.test.cjs tests/huespedes-foto-directorio.test.cjs
+      - run: node "$NODE_PATH/playwright/cli.js" install chromium --with-deps
+      - name: Directorio y fichas en escritorio y móvil, claro y oscuro
+        run: |
+          node tests/huespedes-browser-check.cjs --directorio
+          node tests/huespedes-figma-browser-check.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: huespedes-web
+          path: ${{ env.HAKU_GUEST_SHOTS }}
+          retention-days: 7

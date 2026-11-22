@@ -25,6 +25,16 @@ const profiles=Object.fromEntries(personas.map((persona,i)=>[persona.id,{
 function rpc(name,args={}){
   const kind=name.replace('haiku_huesped_','').replace('_v1','');
   if(kind==='perfil')return profiles[args.p_id];
+  if(kind==='directorio_estadias'){
+    const rows=filas.filter(r=>r.rol==='titular').map((r,i)=>({
+      ...r,documento:r.documento?.replace(/^RUT /,''),estadia_id:'stay-'+r.id,
+      estado:i<2?'hospedados':'historial',por_asignar:false,abrir_acompanantes:false,
+      acompanantes:i===0?[filas[1],filas[7]]:i===1?[filas[3]]:[],
+    }));
+    const grupos={hospedados:{titulares:2,estadias:2},historial:{titulares:rows.length-2,estadias:rows.length-2}};
+    return {...rpc('haiku_huesped_directorio_v1'),filas:rows,grupos,titulares:rows.length,
+      conteos:{todos:rows.length,hospedados:2,historial:rows.length-2,pendientes:1}};
+  }
   if(kind==='directorio'){
     const rows=filas.filter(r=>(args.p_estado!=='pendientes'||r.pendiente)&&(!args.p_busqueda||[r.nombre,r.apellido,r.documento].join(' ').toLocaleLowerCase('es').includes(args.p_busqueda.toLocaleLowerCase('es')))&&(!args.p_tipo||r.tipo===args.p_tipo)&&(!args.p_etiqueta||r.etiquetas.includes(args.p_etiqueta.replace('tag-','')))&&(!args.p_origen||r.nacionalidad===args.p_origen));
     return {filas:rows,conteos:{hospedados:rows.length,todos:128,pendientes:3},cabanas:5,puede_editar:true,tipos:[...new Set(types)],origenes:['Chile','Francia'],etiquetas:tags};
