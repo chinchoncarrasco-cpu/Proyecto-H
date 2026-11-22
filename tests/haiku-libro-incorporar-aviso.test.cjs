@@ -64,20 +64,81 @@ test('los incompletos explican el dato que falta y nunca llegan al writer',async
 });
 test('el mismo clic termina las notas que quedan listas después del servicio',async()=>{
  const h=coordinador();
+ let lecturasLibro=0,lecturasProyecto=0;
+ h.informe.generado_en='2026-11-21T19:00:00Z';
+ h.c.HAIKU_LIBRO_RESERVA_V1.estado=()=>({generacion:1,version:'libro-1'});
+ h.c.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro=async rows=>{lecturasLibro++;return rows;};
  h.informe.incorporacion.operacionesListas=[{id:'srv:ficticio',reserva:fila.id}];
- h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async()=>h.estado.resuelto?{items:[],reservas:[],comparacion:[]}:
-  {items:[{tipo:'modificacion',actual:fila}],reservas:h.estado.servicios?[fila]:[],comparacion:[],q:{},revisionServicios:{reservas:[fila],generacion:1}};
+ h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async()=>{
+  lecturasProyecto++;
+  return h.estado.resuelto?{items:[],reservas:[],comparacion:[]}:
+   {items:[{tipo:'modificacion',actual:fila}],reservas:h.estado.servicios?[fila]:[],comparacion:[],q:{},revisionServicios:{reservas:[fila],generacion:1}};
+ };
  h.c.HAIKU_LIBRO_CONFIRM_CANCEL_FIX_V4={crearIncorporacionAviso:()=>async()=>{h.estado.servicios++;
   return {ok:true,servicios_creados:1,notas_creadas:1};}};
  const fin=await h.api.incorporarDesdeAviso(h.informe);
  assert.equal(h.estado.escrituras,1);assert.equal(h.estado.servicios,1);assert.equal(fin.pendientes.length,0);
  assert.equal(fin.servicios_creados,1);assert.equal(fin.notas_creadas,1);
+ assert.deepEqual([lecturasLibro,lecturasProyecto],[1,3]);
 });
 test('si falla la lectura final no pierde el recibo ni vuelve a guardar',async()=>{
  const h=coordinador(),original=h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados;let n=0;
  h.c.HAIKU_LIBRO_CONSULTAS.revalidarCambiosDetectados=async rows=>{if(++n===2)throw Error('Lectura final');return original(rows);};
  await assert.rejects(h.api.incorporarDesdeAviso(h.informe),e=>e.incorporado.reservas_creadas===1);
  const fin=await h.api.incorporarDesdeAviso(h.informe);assert.equal(fin.reservas_creadas,1);assert.equal(h.estado.escrituras,1);
+});
+for(const cambiaVersion of [false,true])test(`conserva el comprobante durante la revisión y ${cambiaVersion?'coteja la versión nueva':'reutiliza el mismo Libro'}`,async()=>{
+ const h=coordinador(),api=h.c.HAIKU_LIBRO_CONSULTAS;
+ h.informe.generado_en='2026-11-21T19:00:00Z';
+ h.c.HAIKU_LIBRO_RESERVA_V1.estado=()=>({generacion:h.estado.gen,version:'libro-'+h.estado.gen});
+ const lecturas=[],progreso=[];
+ h.c.HAIKU_LIBRO_CONTEXTO_V1.actualizarDesdeLibro=async rows=>{
+  lecturas.push(h.estado.gen);
+  return rows.map(r=>({...r,fuente_vigente:{estado:'verificada',generacion:h.estado.gen}}));
+ };
+ const confirmar=api.confirmarIncorporacion;
+ api.confirmarIncorporacion=async(...args)=>{
+  const fin=await confirmar(...args);
+  if(cambiaVersion)h.estado.gen++;
+  return fin;
+ };
+ const revalidar=api.revalidarCambiosDetectados;
+ let entrar,continuar;
+ const inicio=new Promise(resolve=>{entrar=resolve;});
+ const bloqueo=new Promise(resolve=>{continuar=resolve;});
+ api.revalidarCambiosDetectados=async rows=>{
+  if(h.estado.resuelto){entrar();await bloqueo;}
+  return revalidar(rows);
+ };
+ const operacion=h.api.incorporarDesdeAviso(h.informe,paso=>progreso.push(paso));
+ await inicio;
+ try{
+  assert.equal(h.estado.escrituras,1);
+  assert.equal(progreso.at(-1).fase,'cierre');
+  assert.equal(progreso.at(-1).incorporado.reservas_creadas,1);
+  assert.deepEqual(lecturas,cambiaVersion?[1,2]:[1]);
+ }finally{continuar();}
+ const fin=await operacion;
+ assert.equal(fin.reservas_creadas,1);
+ assert.equal(h.estado.consultas.length,2);
+});
+test('un cierre sin selección conserva la última revisión sin otra consulta',async()=>{
+ const h=coordinador(),api=h.c.HAIKU_LIBRO_CONSULTAS;
+ api.revalidarCambiosDetectados=async rows=>{
+  h.estado.consultas.push(rows);
+  return {items:[{tipo:'modificacion',actual:fila}],reservas:[fila],comparacion:[],q:{}};
+ };
+ const preparar=api.prepararIncorporacion;
+ api.prepararIncorporacion=async(...args)=>{
+  const plan=await preparar(...args);
+  if(h.estado.resuelto)plan.items.forEach(i=>i.seleccionado=false);
+  return plan;
+ };
+ const fin=await h.api.incorporarDesdeAviso(h.informe);
+ assert.equal(fin.reservas_creadas,1);
+ assert.equal(fin.pendientes.length,1);
+ assert.equal(h.estado.consultas.length,2);
+ assert.equal(h.estado.escrituras,1);
 });
 async function servicios(){
  const e=entorno();e.guard();
