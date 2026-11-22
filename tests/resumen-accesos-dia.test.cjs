@@ -43,3 +43,23 @@ test('Ya salió se apoya en la estadía de salida exacta, incluso cuando entra o
  x.api.pintarFlujo(fila,'2026-11-08',{estadias:new Map([[R(11),'checked_out'],[R(12),'confirmada']]),reservas:new Map()});
  assert.equal(badge.textContent,'Salió · ingresa');assert.equal(badge.dataset.estadoVisual,'salio');
 });
+test('el check-out del huésped anterior no se atribuye a la estadía de Hoy',()=>{
+ const x=montar(),ayer='2026-11-07',hoy='2026-11-08';
+ const saliente={estado:'continua',reservaId:R(1),estadiaId:R(11),estadoEstadia:'checked_out'};
+ const entrante={estado:'sale-ingresa',reservaId:R(2),estadiaId:R(12),estadoEstadia:'hospedada',
+  checkinRealizado:true,checkoutRealizado:true,salidaReservaId:R(1),salidaEstadiaId:R(11)};
+ x.context.datosPorFecha={[ayer]:{cabanas:{1:saliente}},[hoy]:{cabanas:{1:entrante}}};
+ x.api.historial.set(ayer,new Map([['1',x.operacion(1)]]));
+ x.api.historial.set(hoy,new Map([['1',x.operacion(2,'sale-ingresa')]]));
+ const nodos={'[data-campo="estado"]':{value:'sale-ingresa'},'.sites-resumen-dia--anterior':x.node(),
+  '.sites-resumen-dia--actual':x.node(),'.sites-resumen-estado-badge':x.node()};
+ const fila={dataset:{cabana:'1'},querySelector:s=>nodos[s]||null};
+ const pintar=()=>x.api.pintarFlujo(fila,hoy);
+ pintar();
+ assert.equal(nodos['.sites-resumen-dia--anterior'].dataset.reservaEstado,'checked_out');
+ assert.equal(nodos['.sites-resumen-dia--actual'].dataset.reservaEstado,'hospedada');
+ assert.equal(nodos['.sites-resumen-estado-badge'].textContent,'Salió · ingresa');
+ entrante.estadoEstadia='checked_out';
+ pintar();
+ assert.equal(nodos['.sites-resumen-dia--actual'].dataset.reservaEstado,'checked_out');
+});
