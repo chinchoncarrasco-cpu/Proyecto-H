@@ -202,7 +202,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await viewer.getByRole('button',{name:'Cerrar foto'}).click();
         assert.equal(await vehicleForm.evaluate(node=>node.scrollWidth>node.clientWidth+1),false);
         await vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true}).click();
-        await vehicleForm.waitFor({state:'detached'});
+        await vehicleForm.waitFor({state:'hidden'});
         const stored=(await rpc('haiku_huesped_perfil_v1',{p_id:ada,p_reserva:reservation})).data.vehiculos.find(v=>v.tipo===type);
         assert.equal(stored.foto_posicion_y,position);
         assert.equal(stored.fotos_adicionales.length,1);
