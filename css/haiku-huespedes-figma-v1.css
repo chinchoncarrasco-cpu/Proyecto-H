@@ -190,6 +190,24 @@ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-
 .hu-media-preview canvas{width:100%;height:100%;object-fit:cover}
 .hu-media-preview.hu-pet-photo{width:96px;height:96px;border-radius:50%}
 .hu-media-preview.hu-person-photo{width:112px;height:112px;border-radius:50%}
+.hu-avatar-trigger.hu-boton{background:none;border:0;padding:0;border-radius:50%;min-width:0;flex:none}
+.hu-media-preview.hu-vehicle-photo{width:100%;height:clamp(112px,30vw,148px)}
+.hu-vehicle-photo img,.hu-vehicle-photo canvas{object-position:50% var(--hu-photo-y,50%);user-select:none;-webkit-user-drag:none}
+.hu-vehicle-photo[data-adjustable]{touch-action:none;cursor:ns-resize}
+.hu-media-preview [hidden],.hu-gallery[hidden],.hu-gallery-thumbnails[hidden]{display:none}
+.hu-vehicle-layout,.hu-vehicle-media,.hu-vehicle-info,.hu-gallery{display:grid;align-content:start;gap:10px;min-width:0}
+.hu-gallery-thumbnails,.hu-gallery-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hu-gallery-thumb.hu-boton{width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;overflow:hidden}
+.hu-gallery-thumb img,.hu-photo-viewer img{height:100%;width:100%;object-fit:cover}
+.hu-dialogo.hu-photo-viewer{width:auto;padding:12px;max-width:calc(100vw - 24px);border:0;background:transparent;box-shadow:none}
+.hu-photo-viewer img{display:block;width:min(68vw,240px);height:min(68vw,240px);border-radius:50%;background:var(--guest-soft);border:1px solid var(--guest-border)}
+.hu-photo-viewer button{display:flex;margin:0 0 8px auto;background:var(--guest-surface)}
+.hu-photo-viewer img+button{margin:8px auto 0}
+@media(min-width:761px){
+ .hu-dialogo:has(.hu-vehicle-form){width:min(760px,calc(100vw - 32px));padding:16px}
+ .hu-vehicle-layout{grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:18px}
+ .hu-vehicle-media .hu-media{display:grid;gap:8px}
+}
 .hu-media-copy{display:grid;gap:8px;flex:1;min-width:0}
 .hu-media-copy .hu-boton{justify-self:start}
 .hu-media-context{color:var(--guest-accent);font-size:12px;font-weight:500}

@@ -28,6 +28,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     await db.exec(sqlFile('supabase/migrations/20261121003000_haku_huespedes_directorio_foto.sql'));
     await db.exec(sqlFile('supabase/migrations/20261122014301_huespedes_directorio_estadias.sql'));
     await db.exec(sqlFile('supabase/migrations/20261122042015_huespedes_vigencia_hospedados.sql'));
+    await db.exec(sqlFile('supabase/migrations/20261122233716_huespedes_fotos_vehiculo.sql'));
     await db.exec("set time zone 'America/Santiago'");
     const seed = sqlFile('tests/huespedes-v1-postgres.test.sql').split('set local role authenticated;')[0];
     await db.exec(seed+'commit;');
@@ -89,7 +90,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
           storage:{from:()=>({
             createSignedUrl:k=>window.__guestStorage('sign',k),
             upload:async(k,file)=>window.__guestStorage('upload',k,Array.from(new Uint8Array(await file.arrayBuffer()))),
-            remove:keys=>window.__guestStorage('delete',keys[0])
+            remove:keys=>Promise.all(keys.map(key=>window.__guestStorage('delete',key)))
           })}};
         addEventListener('DOMContentLoaded',()=>{
           const node=document.documentElement;
@@ -138,6 +139,14 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
     }
 
     if(directoryOnly){
+      const demo=fs.readFileSync(path.join(root,'tests/fixtures/huespedes-figma/demo-avatar.png'));
+      const file={name:'imagen-sintetica.png',mimeType:'image/png',buffer:demo};
+      const face=user+'/a5000000-0000-4000-8000-000000000001.jpg';
+      const reservation='a2000000-0000-4000-8000-000000000001';
+      assert.equal((await storage('upload',face,demo)).error,null);
+      assert.equal((await rpc('haiku_huesped_guardar_v1',{
+        p_id:ada,p_reserva:reservation,p_accion:'foto',p_datos:{clase:'persona',ruta:face,esperada:null}
+      })).error,null);
       for(const width of [1440,390]) for(const theme of ['claro','oscuro']){
         const {page,errors}=await web(width,theme);
         const section=page.locator('#seccion-huespedes');
@@ -161,6 +170,44 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await page.screenshot({path:path.join(out,'web-'+width+'-'+theme+'-directorio.png'),fullPage:true});
         await toggle.click();
         await holder.getByText('Berta Prueba',{exact:true}).waitFor({state:'hidden'});
+        await holder.locator('.hu-estadia-titular').click();
+        const card=section.locator('.hu-ficha');
+        const viewer=section.locator('.hu-photo-viewer');
+        await card.getByRole('button',{name:'Ampliar foto de perfil',exact:true}).click();
+        await viewer.waitFor();
+        const portrait=await viewer.locator('img').boundingBox();
+        assert.ok(portrait.width>100&&portrait.width===portrait.height);
+        assert.equal(await viewer.locator('img').evaluate(n=>getComputedStyle(n).borderRadius),'50%');
+        await viewer.getByRole('button',{name:'Cerrar foto'}).click();
+        await card.locator('summary[aria-label="Más opciones del huésped"]').click();
+        await card.getByRole('button',{name:'Agregar vehículo',exact:true}).click();
+        const vehicleForm=section.locator('.hu-vehicle-form');
+        const type=`Vehículo de prueba ${width} ${theme}`;
+        await vehicleForm.getByLabel('Tipo de vehículo').fill(type);
+        await vehicleForm.getByLabel('Elegir imagen',{exact:true}).setInputFiles(file);
+        const vehiclePhoto=vehicleForm.locator('.hu-vehicle-photo[data-adjustable]');
+        await vehiclePhoto.waitFor();
+        const frame=await vehiclePhoto.boundingBox();
+        await page.mouse.move(frame.x+frame.width/2,frame.y+frame.height/2);
+        await page.mouse.down();
+        await page.mouse.move(frame.x+frame.width/2,frame.y+frame.height/2-26,{steps:4});
+        await page.mouse.up();
+        const position=Number(await vehicleForm.getByLabel('Ajustar vertical').inputValue());
+        assert.ok(position>50,'el arrastre mueve el encuadre');
+        const capture=vehicleForm.getByLabel('Capturar foto adicional',{exact:true});
+        assert.equal(await capture.getAttribute('capture'),'environment');
+        await vehicleForm.getByLabel('Seleccionar fotos adicionales',{exact:true}).setInputFiles(file);
+        const thumb=vehicleForm.getByRole('button',{name:'Foto adicional 1',exact:true});
+        await thumb.click();
+        await viewer.getByRole('button',{name:'Cerrar foto'}).click();
+        assert.equal(await vehicleForm.evaluate(node=>node.scrollWidth>node.clientWidth+1),false);
+        await vehicleForm.getByRole('button',{name:'Guardar vehículo',exact:true}).click();
+        await vehicleForm.waitFor({state:'detached'});
+        const stored=(await rpc('haiku_huesped_perfil_v1',{p_id:ada,p_reserva:reservation})).data.vehiculos.find(v=>v.tipo===type);
+        assert.equal(stored.foto_posicion_y,position);
+        assert.equal(stored.fotos_adicionales.length,1);
+        assert.notEqual(stored.foto,stored.fotos_adicionales[0]);
+        if(width===390)await section.getByRole('button',{name:'Huéspedes',exact:true}).click();
         const draft=current.getByRole('button',{name:'1 acompañante',exact:true}).last();
         await draft.click();
         await current.getByRole('button',{name:'Completar',exact:true}).click();

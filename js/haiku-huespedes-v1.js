@@ -68,19 +68,36 @@
     function avatar(p, big=false) {
         const initials = p.nombre ? name(p).split(/\s+/).slice(0,2).map(s=>s[0]).join("").toLocaleUpperCase("es") : "AP";
         const result = el("span","hu-avatar"+(big ? " hu-avatar-perfil" : ""),initials);
+        const enlarge=big&&p.foto&&btn("Ampliar foto de perfil",()=>{
+            const src=result.querySelector("img")?.src;
+            if(src)showPhoto(src,"Foto de perfil");
+        },{cls:"hu-avatar-trigger",iconOnly:true});
+        if(enlarge){enlarge.disabled=true;enlarge.append(result);}
         if (p.foto) api.signed(p.foto).then(src=>{
             if (!result.isConnected) return;
             const image = el("img","");
             image.alt = "";
-            image.onload=()=>result.replaceChildren(image);
+            image.onload=()=>{result.replaceChildren(image);if(enlarge)enlarge.disabled=false;};
             image.src=src;
         }).catch(()=>{});
-        return result;
+        return enlarge||result;
     }
     function errorText(error) {
         if (error?.code==="PGRST202") return "Huéspedes requiere la migración del servidor.";
+        if (error?.code==="42P01") return "No se pudieron guardar los cambios. Tus datos siguen en la ficha. Vuelve a intentarlo.";
         if (["23505","HLI01"].includes(error?.code)) return "El documento ya está registrado. Busca y vincula el perfil correcto.";
         return error?.message || "No se pudo conectar con Proyecto H.";
+    }
+    function showPhoto(src,label,remove) {
+        const image=el("img","");
+        image.src=src;image.alt=label;
+        const close=btn("Cerrar foto",()=>viewer.close(),{glyph:"close",iconOnly:true});
+        const viewer=el("dialog","hu-dialogo hu-photo-viewer",close,image,
+            remove&&btn("Quitar foto",()=>{remove();viewer.close();}));
+        viewer.setAttribute("aria-label",label);
+        viewer.addEventListener("click",event=>{if(event.target===viewer)viewer.close();});
+        viewer.addEventListener("close",()=>viewer.remove(),{once:true});
+        root.append(viewer);viewer.showModal();close.focus();
     }
     function message(text,retry) { return box("hu-empty",el("p","",text),retry&&btn("Reintentar",retry)); }
     function allowed() {
@@ -524,83 +541,209 @@
             :[["Nombre","nombre",true],["Especie","especie",true],["Raza (opcional)","raza"],["Tamaño","tamano"],["Color","color"]];
         const fields=entries.map(([label,key,needed])=>field(label,key,item[key],key==="cuidados"?"textarea":"text",needed));
         if(!vehicle)fields.at(-1).classList.add("hu-full");
-        const photo=photoEditor({kind,id,path:item.foto},vehicle?"hu-vehicle-photo":"hu-pet-photo",vehicle?"vehicle":"pet");
+        const expected={principal:item.foto??null,posicion_y:item.foto_posicion_y??50,adicionales:item.fotos_adicionales??[]};
+        const photo=photoEditor({kind,id,path:item.foto,positionY:expected.posicion_y},vehicle?"hu-vehicle-photo":"hu-pet-photo",vehicle?"vehicle":"pet",edit);
+        const gallery=vehicle?vehicleGallery(expected.adicionales,edit):null;
         const context=box("hu-media-copy",el("span","hu-media-context",vehicle?"Vehículo de esta estadía":"Mascota del huésped"),
             el("span","",[name(profile.persona),profile.visita?.numero&&"Cabaña "+profile.visita.numero].filter(Boolean).join(" · ")),muted(dates(profile.visita)),
             edit&&btn(item.foto?"Cambiar foto":"Cargar foto",photo.choose));
         const media=box("hu-media"+(!vehicle?" hu-pet-media":""),photo.preview,context);
+        const formFields=box("hu-form-grid",...fields);
+        const vehicleLayout=vehicle&&box("hu-vehicle-layout",
+            box("hu-vehicle-media",media,edit&&photo.controls),box("hu-vehicle-info",formFields,gallery.element));
         const form=formDialog(vehicle?(item.modelo||"Vehículo de la estadía"):(item.nombre||"Perfil de mascota"),[
-            media,edit&&photo.controls,box("hu-form-grid",...fields),
+            vehicle?vehicleLayout:media,!vehicle&&edit&&photo.controls,!vehicle&&formFields,
             !vehicle&&profile.visita&&field("Acompaña en esta estadía","presente",item.presente,"checkbox"),
             !vehicle&&field("Para su cuidado","cuidados",item.cuidados),
             vehicle&&muted("Ligado a esta estadía; puede cambiar en otra visita.")],edit?async(v,f,ctx)=>{
-                await write(kind,{...v,id},ctx);
-                await photo.persist();
+                if(vehicle) {
+                    vehicleLayout.inert=true;
+                    try {
+                        const {tipo,modelo,color,patente}=v;
+                        const data={id,tipo,modelo,color,patente};
+                        const primary=await photo.value(),additional=await gallery.value(),positionY=photo.positionY();
+                        if(primary===expected.principal&&positionY===expected.posicion_y&&
+                            additional.length===expected.adicionales.length&&additional.every((p,i)=>p===expected.adicionales[i])) {
+                            await write(kind,data,ctx);
+                        } else {
+                            await api.vehiclePhotos(fotos=>write(kind,{...data,fotos},ctx),{primary,additional,positionY,expected});
+                        }
+                    } finally {vehicleLayout.inert=false;}
+                } else {
+                    await write(kind,{...v,id},ctx);
+                    await photo.persist();
+                }
                 await refresh(ctx,f);
             }:null,vehicle?"Guardar vehículo":"Guardar mascota",vehicle?"Perfil del vehículo"+(item.tipo?" · "+item.tipo:""):"Perfil de mascota"+(item.especie?" · "+item.especie:""));
         form.querySelector("footer button").textContent="Volver al huésped";
+        if(vehicle){
+            form.classList.add("hu-vehicle-form");
+            dialog.addEventListener("close",gallery.dispose,{once:true});
+        }
         if(!edit) form.querySelectorAll("input,select,textarea").forEach(x=>{x.disabled=true;});
     }
-    function photoEditor(target,cls="hu-person-photo",glyph="camera") {
+    function imageInput(label,{multiple=false,camera=false}={}) {
+        const input=el("input","hu-file-input");
+        input.type="file";input.accept="image/*";input.hidden=true;
+        input.multiple=multiple;
+        input.setAttribute("aria-label",label);
+        if(camera)input.setAttribute("capture","environment");
+        return input;
+    }
+    function loadPhoto(file) {
+        return new Promise((resolve,reject)=>{
+            const image=new Image(),url=URL.createObjectURL(file);
+            image.onload=()=>{URL.revokeObjectURL(url);resolve(image);};
+            image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error("No se pudo leer esta imagen."));};
+            image.src=url;
+        });
+    }
+    function jpeg(canvas) {
+        return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("No se pudo preparar la imagen.")),"image/jpeg",.85));
+    }
+    async function prepareExtraPhoto(file) {
+        const image=await loadPhoto(file), canvas=el("canvas","");
+        const scale=Math.min(1,1200/Math.max(image.naturalWidth,image.naturalHeight));
+        canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+        canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+        canvas.getContext("2d").drawImage(image,0,0,canvas.width,canvas.height);
+        return jpeg(canvas);
+    }
+    function vehicleGallery(paths,edit) {
+        const items=paths.map(value=>({value}));
+        const list=box("hu-gallery-thumbnails");
+        const library=imageInput("Seleccionar fotos adicionales",{multiple:true});
+        const camera=imageInput("Capturar foto adicional",{camera:true});
+        const status=el("span","hu-muted");
+        status.setAttribute("role","status");
+        let pending=Promise.resolve(),disposed=false;
+        const element=el("section","hu-gallery",el("strong","","Fotos adicionales"),list,
+            edit&&box("hu-gallery-actions",library,camera,btn("Adjuntar fotos",()=>library.click()),
+                btn("Tomar foto adicional",()=>camera.click(),{glyph:"camera",cls:"hu-icono-boton"})),status);
+        element.hidden=!edit&&!items.length;
+        function render() {
+            list.replaceChildren(...items.map((item,i)=>{
+                const label="Foto adicional "+(i+1),image=el("img","");
+                image.alt="";
+                const thumb=btn(label,()=>showPhoto(image.src,label,edit?()=>{
+                    if(item.url)URL.revokeObjectURL(item.url);
+                    items.splice(items.indexOf(item),1);render();
+                }:null),{cls:"hu-gallery-thumb",iconOnly:true});
+                thumb.append(image);thumb.disabled=true;
+                Promise.resolve(item.url||api.signed(item.value)).then(src=>{
+                    if(thumb.isConnected&&src){image.src=src;thumb.disabled=false;}
+                }).catch(()=>{if(thumb.isConnected)status.textContent="Una foto adicional no está disponible.";});
+                return thumb;
+            }));
+            list.hidden=!items.length;
+        }
+        function add(input) {
+            const files=Array.from(input.files);input.value="";
+            if(!files.length)return;
+            pending=pending.then(async()=>{
+                for(const file of files){
+                    if(disposed)return;
+                    try{
+                        const value=await prepareExtraPhoto(file);
+                        if(!disposed)items.push({value,url:URL.createObjectURL(value)});
+                    }catch(error){status.textContent=errorText(error);}
+                }
+                if(!disposed)render();
+            });
+        }
+        library.onchange=()=>add(library);camera.onchange=()=>add(camera);
+        render();
+        return {element,value:async()=>{await pending;return items.map(item=>item.value);},dispose:()=>{
+            disposed=true;
+            for(const item of items)if(item.url)URL.revokeObjectURL(item.url);
+        }};
+    }
+    function photoEditor(target,cls="hu-person-photo",glyph="camera",edit=true) {
         const p=profile;
-        const input=el("input","hu-file-input");input.type="file";
-        input.setAttribute("aria-label","Elegir imagen");
-        input.accept="image/*";
-        input.hidden=true;
+        const vehicle=target.kind==="vehiculo",input=imageInput("Elegir imagen");
         const canvas=el("canvas","");canvas.width=canvas.height=800;canvas.hidden=true;
         const empty=box("hu-media-copy",icon(glyph),el("span","hu-media-context","Agregar foto"));
         const preview=box("hu-media-preview "+cls,empty,canvas);
-        let picture, angle=0,changed=false,removed=false;
+        let picture, angle=0,changed=false,removed=false,pending=Promise.resolve(),selection=0;
+        let position=target.positionY??50,drag;
         const ranges={};
         if(target.path)api.signed(target.path).then(src=>{
             if(!preview.isConnected||changed)return;
             const image=el("img","");image.alt="Foto de la ficha";image.src=src;preview.prepend(image);empty.hidden=true;
+            if(vehicle&&edit)preview.dataset.adjustable="true";
         }).catch(()=>{});
-        const controls=[["Acercar","zoom",1,3,.05,1],["Ajustar horizontal","dx",-100,100,1,0],["Ajustar vertical","dy",-100,100,1,0]]
+        const controls=[["Acercar","zoom",1,3,.05,1],["Ajustar horizontal","dx",-100,100,1,0],
+            vehicle?["Ajustar vertical","dy",0,100,1,position]:["Ajustar vertical","dy",-100,100,1,0]]
             .map(([label,key,min,max,step,value])=>{
                 const control=field(label,key,value,"range");
                 const range=control.querySelector("input");
                 Object.assign(range,{min,max,step,value});
                 ranges[key]=range;
-                range.oninput=draw;
+                range.oninput=vehicle&&key==="dy"?()=>frame(Number(range.value)):draw;
                 return control;
             });
         const adjustments=el("details","hu-photo-adjustments",el("summary","","Ajustar encuadre"),...controls);
-        const actions=box("hu-photo-controls",input,btn(target.path?"Cambiar foto":"Cargar foto",()=>input.click()),
-            btn("Quitar",()=>{changed=true;removed=true;picture=null;canvas.hidden=true;preview.querySelector("img")?.remove();empty.hidden=false;state.textContent="Se quitará al guardar.";},{cls:"hu-plano"}),
+        const actions=box("hu-photo-controls",input,!vehicle&&btn(target.path?"Cambiar foto":"Cargar foto",()=>input.click()),
+            btn("Quitar",()=>{selection++;changed=true;removed=true;picture=null;canvas.hidden=true;preview.querySelector("img")?.remove();empty.hidden=false;delete preview.dataset.adjustable;state.textContent="Se quitará al guardar.";},{cls:"hu-plano"}),
             btn("Girar",()=>{angle=(angle+90)%360;draw();},{glyph:"rotate",cls:"hu-icono-boton hu-plano"}));
         const state=el("span","hu-muted");state.setAttribute("role","status");
         input.onchange=()=>{
-            picture=null;canvas.hidden=true;
             const file=input.files[0];
             if(!file) return;
-            const url=URL.createObjectURL(file);
-            const img=new Image();
-            img.onload=()=>{
-                URL.revokeObjectURL(url);
-                if(input.files[0]!==file) return;
+            input.value="";
+            const request=++selection;
+            pending=loadPhoto(file).then(img=>{
+                if(request!==selection)return;
                 picture=img;angle=0;changed=true;removed=false;ranges.zoom.value=1;ranges.dx.value=ranges.dy.value=0;
+                if(vehicle){frame(50);if(edit)preview.dataset.adjustable="true";}
                 preview.querySelector("img")?.remove();empty.hidden=true;state.textContent="";draw();
-            };
-            img.onerror=()=>{URL.revokeObjectURL(url);state.textContent="No se pudo leer esta imagen.";};
-            img.src=url;
+            }).catch(error=>{if(request===selection)state.textContent=errorText(error);});
         };
+        function frame(value) {
+            position=Math.max(0,Math.min(100,Math.round(value)));
+            ranges.dy.value=position;
+            preview.style.setProperty("--hu-photo-y",position+"%");
+        }
+        if(vehicle){
+            frame(position);
+            preview.onpointerdown=event=>{
+                if(preview.dataset.adjustable!=="true"||event.button!==0)return;
+                drag={id:event.pointerId,y:event.clientY,position};
+                preview.setPointerCapture(event.pointerId);
+            };
+            preview.onpointermove=event=>{
+                if(drag?.id===event.pointerId)frame(drag.position-100*(event.clientY-drag.y)/preview.clientHeight);
+            };
+            preview.onlostpointercapture=()=>{drag=undefined;};
+        }
         function draw(){
             if(!picture) return;
-            const ctx2d=canvas.getContext("2d"), size=canvas.width;
-            const scale=size*Number(ranges.zoom.value)/Math.min(picture.naturalWidth,picture.naturalHeight);
+            const rotated=angle%180;
+            if(vehicle){
+                const scale=Math.min(1,1200/Math.max(picture.naturalWidth,picture.naturalHeight));
+                canvas.width=Math.max(1,Math.round((rotated?picture.naturalHeight:picture.naturalWidth)*scale));
+                canvas.height=Math.max(1,Math.round((rotated?picture.naturalWidth:picture.naturalHeight)*scale));
+            }
+            const ctx2d=canvas.getContext("2d"), width=canvas.width,height=canvas.height;
+            const scale=(vehicle?Math.min(width/(rotated?picture.naturalHeight:picture.naturalWidth),
+                height/(rotated?picture.naturalWidth:picture.naturalHeight)):width/Math.min(picture.naturalWidth,picture.naturalHeight))*Number(ranges.zoom.value);
             const w=picture.naturalWidth*scale,h=picture.naturalHeight*scale;
-            const [cw,ch]=angle%180?[h,w]:[w,h];
-            const dx=(cw-size)/2*Number(ranges.dx.value)/100,dy=(ch-size)/2*Number(ranges.dy.value)/100;
-            ctx2d.setTransform(1,0,0,1,0,0);ctx2d.fillStyle="#fff";ctx2d.fillRect(0,0,size,size);
-            ctx2d.translate(size/2+dx,size/2+dy);ctx2d.rotate(angle*Math.PI/180);
+            const [cw,ch]=rotated?[h,w]:[w,h];
+            const dx=(cw-width)/2*Number(ranges.dx.value)/100,dy=vehicle?0:(ch-height)/2*Number(ranges.dy.value)/100;
+            ctx2d.setTransform(1,0,0,1,0,0);ctx2d.fillStyle="#fff";ctx2d.fillRect(0,0,width,height);
+            ctx2d.translate(width/2+dx,height/2+dy);ctx2d.rotate(angle*Math.PI/180);
             ctx2d.drawImage(picture,-w/2,-h/2,w,h);
             canvas.hidden=false;
         }
-        return {preview,controls:box("hu-bloque",actions,adjustments,state),choose:()=>input.click(),persist:async()=>{
+        const value=async()=>{
+            await pending;
+            return !changed?target.path??null:removed?null:jpeg(canvas);
+        };
+        return {preview,controls:box("hu-bloque",actions,adjustments,state),choose:()=>input.click(),value,positionY:()=>position,persist:async()=>{
+            await pending;
             if(!changed)return;
             if(!removed&&!picture)throw new Error("Selecciona una imagen válida.");
-            const image=removed?null:await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error("No se pudo preparar la imagen.")),"image/jpeg",.85));
+            const image=await value();
             const ack=await api.photo(p,target,image);
             target.path=ack.foto;
             changed=false;
