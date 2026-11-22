@@ -570,6 +570,17 @@
         const seguros = scores.filter(x => x.segura);
         if (seguros.length === 1) return { estado: "asociada", sistema: seguros[0].s, categoria: "coincide", confianza: "alta" };
         const posibles = scores.filter(x => x.posible).map(x => x.s);
+        if (reserva.tramos_mensuales?.length > 1) {
+            const guardados = reserva.tramos_mensuales.map(tramo => posibles.filter(s =>
+                s.tipo_estadia === reserva.tipo_estadia && Number(s.cabana) === Number(reserva.cabana) &&
+                mismasFechas(tramo, s) && identidad(reserva, s).confirmable));
+            if (guardados.every(s => s.length === 1)) {
+                const tramos = guardados.flat();
+                return {estado:'ambigua', categoria:'tramos_mensuales_incorporados', confianza:'alta',
+                    pregunta:'El Libro muestra una sola estadía. En Proyecto H ya están guardados sus tramos por separado y requieren consolidación.',
+                    candidatosDetalle:tramos, candidatos:tramos.map(s => s.id)};
+            }
+        }
         let categoria = "reserva_faltante", confianza = "alta", pregunta = null;
         if (posibles.length || reserva.advertencias?.length) {
             categoria = "ambiguo"; confianza = "baja";
@@ -598,6 +609,12 @@
             !/\b(pruebas?|demo|test|testing)\b/.test(titular);
     }
 
+    function motivoContinuidadMensual(fila) {
+        if (fila.categoria === 'tramos_mensuales_incorporados') return fila.pregunta;
+        if (fila.libro.continuidad_mensual_por_revisar) return 'Revisa la continuidad de esta estadía entre las hojas de fin e inicio de mes.';
+        return null;
+    }
+
     // La decisión no altera la comparación original. En la preparación puede
     // aportar una reserva_id explícita para revalidar cambios y pagos con las
     // mismas reglas estrictas, antes de mostrar cualquier escritura.
@@ -610,8 +627,8 @@
         const avisos = [...new Set(pendientes.flatMap(i => i.libro.advertencias || []))];
         const comparaciones = [];
         const opciones = [{ valor: "", categoria: "pendientes", texto: "Dejar pendiente", efecto: "no se incorpora" }];
-        const conflictoCancelacion = g.items.map(i => motivoCancelacionContradictoria(i.libro)).find(Boolean);
-        if (conflictoCancelacion) return {comparaciones, opciones, razon:conflictoCancelacion, avisos};
+        const conflicto = g.items.map(i => motivoCancelacionContradictoria(i.libro) || motivoContinuidadMensual(i)).find(Boolean);
+        if (conflicto) return {comparaciones, opciones, razon:conflicto, avisos};
         for (const c of candidatos) {
             const relevantes = pendientes.filter(i => i.candidatosDetalle?.some(x => x.id === c.id) ||
                 (!i.candidatosDetalle?.length && g.categoria === "estadia_faltante" && identidad(i.libro, c).compatible));
@@ -2221,6 +2238,9 @@
         const desde = q.desde || validas.map(r => r.fecha_checkin).filter(Boolean).sort()[0];
         const hasta = q.hasta || validas.map(r => r.fecha_checkout).filter(Boolean).sort().at(-1);
         if (!desde || !hasta) throw new Error("No pude determinar el intervalo para comparar con Proyecto H.");
+        const completas=validas.filter(r=>r.tramos_mensuales?.length);
+        const desdeLectura=[desde,...completas.map(r=>r.fecha_checkin)].sort()[0];
+        const hastaLectura=[hasta,...completas.map(r=>r.fecha_checkout)].sort().at(-1);
         const sesion = await sesionComparacion(cliente);
         const reservaInforme = q.incluirFinanzas !== false && q.reservaPagoCloudbeds;
         const leerCargosInforme = reservaInforme && D && validas.some(r =>
@@ -2228,7 +2248,7 @@
         // La verificación global de duplicados y las estadías son lecturas
         // independientes. Los informes focalizados también conocen sus cargos.
         const [systemAll, pagos, finanzasInforme, cargosAlojamiento] = await Promise.all([
-            leerEstadiasSistema(cliente, {desde, hasta, focal:q.focal}),
+            leerEstadiasSistema(cliente, {desde:desdeLectura, hasta:hastaLectura, focal:q.focal}),
             q.incluirFinanzas !== false && (validas.length || q.por_fecha_pago || reservaInforme) ? leerPagosSistema(cliente) : [],
             leerCargosInforme ? leerFinanzasServicios(cliente, [reservaInforme]) : null,
             reservaInforme && q.pagoAlojamientoCloudbeds ? leerCargosAlojamiento(cliente, reservaInforme) : null
@@ -2818,7 +2838,9 @@
         return {desde:mes(desde,-1),hasta:mes(hasta,1)};
     }
     async function retirosReservasComparacion(resultado,libro,periodo){
-        const comp=resultado.comparacion,usadas=new Set(Array.from(comp).filter(x=>x.sistema).map(x=>x.sistema.id));
+        const comp=resultado.comparacion;
+        const usadas=new Set(Array.from(comp).flatMap(x=>x.sistema?[x.sistema.id]:
+            x.categoria==='tramos_mensuales_incorporados'?x.candidatos:[]));
         const pendientes=(comp.snapshot?.estadias||[]).filter(s=>!usadas.has(s.id)&&
             s.fecha_checkin<=resultado.q.hasta&&s.fecha_checkout>=resultado.q.desde&&
             (!resultado.q.cabana||Number(s.cabana)===Number(resultado.q.cabana))&&
@@ -4728,10 +4750,10 @@
         const usados = new Set();
         for (const g of comp.grupos || []) {
             const d = decisiones.get(g.clave);
-            const cancelaciones = g.items.map(i => motivoCancelacionContradictoria(i.libro)).filter(Boolean);
-            if (cancelaciones.length) {
+            const conflictos = g.items.map(i => motivoCancelacionContradictoria(i.libro) || motivoContinuidadMensual(i)).filter(Boolean);
+            if (conflictos.length) {
                 g.items.forEach(i => reservasDejadasPendientes.add(claveReserva(i.libro)));
-                add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null, [...new Set(cancelaciones)]);
+                add('pendientes', 'reserva:' + g.clave, descripcionGrupo(g), null, [...new Set(conflictos)]);
                 continue;
             }
             if (d && !d.valor) {
@@ -5643,7 +5665,7 @@
             if (contexto.verificada === actual.generacion && (!libro?.crearLectura || contexto.versionVerificada === actual.version) && contexto.firma === firmaFuente(result.reservas)) return contexto;
             if (!libro?.crearLectura) throw Error('El Libro cambió desde este informe; vuelve a comparar. No se pudo comprobar la fuente de esta consulta.');
             const lector = await libro.crearLectura(), estado = lector.estado();
-            const hojas = [...new Set(result.reservas.map(r=>r.coordenadas_origen?.hoja))];
+            const hojas = [...new Set(result.reservas.flatMap(r=>[r.coordenadas_origen?.hoja,...(r.tramos_mensuales||[]).map(t=>t.hoja)]))];
             if (hojas.some(h=>!h)) throw Error('No pude localizar las celdas de esta consulta. Tus decisiones se conservan.');
             const disponibles = lector.listarHojas?.();
             const presentes = hojas.filter(h=>!disponibles || disponibles.includes(h));
@@ -5652,7 +5674,8 @@
             if (libro.estado().generacion !== estado.generacion) continue;
             if (datos.some(d=>!Array.isArray(d?.reservas) || d.cobertura?.geometria === false))
                 throw Error('No pude comprobar las celdas actuales. Tu consulta se conserva; reintenta cuando termine la lectura.');
-            const actuales = datos.flatMap(d=>d.reservas).map(r=>result[PROYECCION_FUENTE]?.(r) || r);
+            const leidas = datos.flatMap(d=>d.reservas).map(r=>result[PROYECCION_FUENTE]?.(r) || r);
+            const actuales = result.reservas.some(r=>r.tramos_mensuales?.length)?S.consolidarEstadiasMensuales(leidas):leidas;
             const clave=r=>JSON.stringify([r.id,r.coordenadas_origen?.hoja,r.coordenadas_origen?.celda]),indice=new Map();
             for(const r of actuales){const k=clave(r);if(!indice.has(k))indice.set(k,[]);indice.get(k).push(r);}
             contexto.conflictos = result.reservas.flatMap(r=>{
@@ -6867,14 +6890,35 @@
         return {coincidencias, incidencias, cantidad_proyecto:sistema.length};
     }
 
+    async function completarEstadiasMensuales(reservas, libro, leidas, version='actual') {
+        const vecinas=S.hojasContiguasParaReservas(reservas,libro.listarHojas()).filter(h=>!leidas.some(d=>d.hoja===h));
+        const ids=new Set(reservas.map(r=>r.id).filter(Boolean));
+        const datosContexto=[...leidas];
+        for(let i=0;i<vecinas.length;i+=8){
+            const lote=vecinas.slice(i,i+8);
+            let datos;
+            try{datos=libro.consultarHojas?await libro.consultarHojas(lote,version):
+                await Promise.all(lote.map(h=>libro.consultarHoja(h,version)));}
+            catch(_){continue;} // Una hoja sin comprobar conserva el tramo incompleto para revisión.
+            if(Array.isArray(datos))datosContexto.push(...datos);
+        }
+        const anexas=datosContexto.filter(d=>d?.cobertura?.geometria===true&&Array.isArray(d.reservas))
+            .flatMap(d=>d.reservas.filter(r=>r.id&&!ids.has(r.id)));
+        return S.consolidarEstadiasMensuales([...reservas,...anexas]).filter(r=>ids.has(r.id)||reservas.includes(r)||
+            r.tramos_mensuales?.some(t=>ids.has(t.id)));
+    }
+
     async function consultarTitulares(q, libro, estado, cliente) {
-        const reservas = [], dudas = [], avisos = [];
+        let reservas = [];
+        const dudas = [], avisos = [];
+        const leidas=[];
         let coberturaCompleta = true;
         if (!q.proyecto && !q.hojaPrevia) avisos.push("Falta la hoja del mes anterior. Las estadías que empezaron allí podrían quedar fuera.");
         const lote = q.hojas.length && libro.consultarHojas ? await libro.consultarHojas(q.hojas) : null;
         for (const [i,hoja] of q.hojas.entries()) {
             const data = lote ? lote[i] : await libro.consultarHoja(hoja);
             if (!data) throw new Error(`No pude leer ${hoja} en el Libro.`);
+            leidas.push({...data,hoja});
             if (data.cobertura?.geometria !== true) {
                 coberturaCompleta = false;
                 avisos.push(`La hoja ${hoja} tiene fechas o cabañas que no pude verificar.`);
@@ -6886,6 +6930,7 @@
                 (!q.cabana || Number(a.cabana) === q.cabana) && (a.fechas_ocupadas?.length ? a.fechas_ocupadas : [a.fecha])
                     .some(f => fechaEnPeriodo(f, q) || q.movimiento !== "ingresos" && f && fechaEnPeriodo(S.sumarDias(f,1), q))));
         }
+        if(libro)reservas=(await completarEstadiasMensuales(reservas,libro,leidas)).filter(r=>estadiaTitularesEnPeriodo(r,q));
         let sistema = [];
         if (q.proyecto || q.comparar) {
             if (typeof root.haikuTienePermiso === "function" && !root.haikuTienePermiso("reservas.ver"))
@@ -6950,13 +6995,14 @@
             q.hojas = q.hojas.filter(h => matches.hojas.includes(h));
         }
 
-        const versionesAnterior = [], versionesActual = [], hojasCancelaciones = [];
+        const versionesAnterior = [], versionesActual = [], hojasCancelaciones = [], hojasReservas = [];
         const pagosLeidos = new Map(), reembolsosLeidos = new Map();
         resultado.bloqueos_lectura_segura = q.hojas.length > 0;
         for (const h of q.hojas) {
             const data = await libro.consultarHoja(h);
             if (q.comparar && !q.solo_pagos) hojasCancelaciones.push(data);
             if (q.solo_cancelaciones && q.comparar) continue;
+            hojasReservas.push({...data,hoja:h});
             if (q.por_fecha_pago && q.comparar) registrarFilasPeriodo(data,q,pagosLeidos,reembolsosLeidos);
             resultado.bloqueos_lectura_segura &&= data.cobertura?.geometria===true;
             // Una advertencia localizada no invalida la lectura inversa de otras cabañas.
@@ -6996,7 +7042,7 @@
             if (q.nombre) resultado.anotaciones.push(...coincidenciasAnotaciones(data.anotaciones || [], q.nombre));
             if (q.versiones) {
                 const old = await libro.consultarHoja(h, "anterior");
-                versionesAnterior.push(old); versionesActual.push(data);
+                versionesAnterior.push(old&&{...old,hoja:h}); versionesActual.push({...data,hoja:h});
             }
         }
 
@@ -7048,9 +7094,11 @@
             }
         }
 
+        if(!q.solo_pagos&&!q.por_fecha_pago)resultado.reservas=await completarEstadiasMensuales(resultado.reservas,libro,hojasReservas);
         if (q.versiones) {
-            const unir = versiones => ({ cobertura: { geometria: versiones.length > 0 && versiones.every(v => v?.cobertura?.geometria) }, reservas: versiones.flatMap(v => v?.reservas || []) });
-            resultado.cambios = S.compararVersiones(unir(versionesAnterior), unir(versionesActual)).filter(c =>
+            const unir = async (versiones,version) => ({cobertura:{geometria:versiones.length>0&&versiones.every(v=>v?.cobertura?.geometria)},
+                reservas:await completarEstadiasMensuales(versiones.flatMap(v=>v?.reservas||[]),libro,versiones.filter(Boolean),version)});
+            resultado.cambios = S.compararVersiones(await unir(versionesAnterior,'anterior'), await unir(versionesActual,'actual')).filter(c =>
                 (!c.actual && !c.anterior) || (c.actual && filtrar(c.actual, q)) || (c.anterior && filtrar(c.anterior, q)) || c.candidatos?.some(r => filtrar(r, q)));
         }
 

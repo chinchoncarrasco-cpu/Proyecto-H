@@ -4,6 +4,7 @@
     const texto = v => String(v ?? '').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
     const nombre = v => texto(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const semantica = root.HAIKU_LIBRO_SEMANTICA || (typeof require === 'function' ? require('./haiku-libro-semantica-v1.js') : null);
+    const {mesHoja} = semantica;
     const documento = (v, tipo) => semantica.documentoCanon(v, tipo);
     const telefono = v => String(v ?? '').replace(/\D/g, '');
     const conocido = v => v !== null && v !== undefined && v !== '' && v !== 'no_determinado';
@@ -252,7 +253,18 @@
                 return {...r,advertencias_validacion:avisos};
             });
         });
-        const prev = extraer(anterior, 'anterior'), next = extraer(actual, 'actual');
+        const previos = semantica.consolidarEstadiasMensuales(extraer(anterior, 'anterior'));
+        const next = semantica.consolidarEstadiasMensuales(extraer(actual, 'actual'));
+        const tramosCompletos=new Map(next.flatMap(r=>(r.tramos_mensuales||[]).map(t=>[t.id,{tramo:t,reserva:r}])));
+        const prev = previos.filter(r=>{
+            if(!r.continuidad_mensual_por_revisar)return true;
+            const completa=tramosCompletos.get(r.id);
+            // Un tramo pendiente que ahora está completo se evalúa con el rango entero.
+            return !completa||!semantica.mismaPersona(r.titular,completa.reserva.titular)||
+                Number(r.cabana)!==Number(completa.reserva.cabana)||r.fecha_checkin!==completa.tramo.fecha_checkin||
+                r.fecha_checkout!==completa.tramo.fecha_checkout||
+                documento(r.rut_documento,r.tipo_documento)!==documento(completa.reserva.rut_documento,completa.reserva.tipo_documento);
+        });
         for(const h of anterior)if(h?.hoja&&!actual.some(x=>x?.hoja===h.hoja))
             out.no_comparables.push({hoja:h.hoja,motivo:'Falta la hoja en la copia actual; no se acredita una celda vacía.'});
         out.continuidades = [...detectarContinuidades(prev,'anterior'),...detectarContinuidades(next,'actual')];
@@ -322,13 +334,6 @@
         if (abonos.length) out.abonos = abonos;
         return finalizar(out);
     }
-    function mesHoja(hoja) {
-        const m = String(hoja).trim().match(/^(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s*(\d{2}|\d{4})$/i);
-        if (!m) return null;
-        const year = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
-        if (year < 2000 || year > 2099) return null;
-        return `${year}-${String(['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'].indexOf(m[1].toLowerCase())+1).padStart(2,'0')}`;
-    }
     function planificarHojas(anterior, actual, fechaReferencia) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaReferencia) || !Number.isFinite(Date.parse(fechaReferencia)) || new Date(fechaReferencia).toISOString().slice(0,10) !== fechaReferencia) throw new Error('Fecha de referencia no válida.');
         const [year,month] = fechaReferencia.split('-').map(Number);
@@ -395,10 +400,10 @@
             diagnostico.hojas_totales = alcance.hojas_totales_libro;
             diagnostico.hojas_cambiadas = [...diagnostico.hojas_cambiadas_operacionales,...diagnostico.hojas_especiales_modificadas];
             const seleccionadas = diagnostico.hojas_cambiadas_operacionales;
-            const leer = async (indice, version) => {
+            const leer = async (indice, version, seleccion=seleccionadas) => {
                 if (!Array.isArray(indice?.nombres) || !indice.nombres.length) throw new Error('Índice de hojas no disponible.');
                 const hojas = [];
-                const nombres = seleccionadas.filter(h => indice.nombres.includes(h));
+                const nombres = seleccion.filter(h => indice.nombres.includes(h));
                 if (nombres.length && typeof libro.consultarHojas === 'function') {
                     try {
                         const lote = await libro.consultarHojas(nombres, version); comprobar();
@@ -418,7 +423,15 @@
             };
             const anterior = await leer(indiceAnterior, 'anterior');
             const actual = await leer(indiceActual, 'actual'); comprobar();
-            diagnostico.hojas_semanticas_procesadas = seleccionadas.length;
+            const disponibles=[...new Set([...indiceAnterior.nombres,...indiceActual.nombres])];
+            const vecinas=semantica.hojasContiguasParaReservas([...anterior,...actual].flatMap(h=>h.reservas||[]),disponibles)
+                .filter(h=>!seleccionadas.includes(h));
+            if(vecinas.length){
+                anterior.push(...await leer(indiceAnterior,'anterior',vecinas));
+                actual.push(...await leer(indiceActual,'actual',vecinas));
+                comprobar();
+            }
+            diagnostico.hojas_semanticas_procesadas = seleccionadas.length+vecinas.length;
             const fuera = [...diagnostico.hojas_historicas_modificadas,...diagnostico.hojas_especiales_modificadas,...diagnostico.hojas_huella_no_disponible];
             // Un traslado desde/hacia una hoja excluida no es una alta/baja segura.
             if (fuera.length) anterior.push({hoja:'alcance_operacional',cobertura:{geometria:false},advertencias:fuera});

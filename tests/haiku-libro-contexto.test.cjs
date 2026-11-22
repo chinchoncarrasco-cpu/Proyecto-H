@@ -218,6 +218,55 @@ test('la actualización del contexto pide un lote único de las hojas necesarias
  },consultarHoja(){assert.fail('No debe repetir la lectura por hoja')}})};
  const out=await C.actualizarDesdeLibro([registro(),registro({id:'p2'})],l);assert.equal(llamadas,1);assert.equal(out[0].fuente_vigente.estado,'verificada');
 });
+
+test('la consulta mensual y los avisos guardados comprueban ambos tramos de la misma estadía',async()=>{
+ const a=r({id:'Nov26!DP7',hoja:'Nov26',cabana:5,rut_documento:null,estado_operativo:'sin_checkin',noches:1,noches_texto:2,
+  fecha_checkin:'2026-11-30',fecha_checkout:'2026-12-01',coordenadas_origen:{hoja:'Nov26',celda:'DP7'},texto_original:'Persona Ejemplo // 2 ADL // 2 noches'});
+ const b={...a,id:'Dic26!C7',hoja:'Dic26',fecha_checkin:'2026-12-01',fecha_checkout:'2026-12-02',coordenadas_origen:{hoja:'Dic26',celda:'C7'}};
+ const hojas={Nov26:{hoja:'Nov26',reservas:[a],cobertura:{geometria:true}},Dic26:{hoja:'Dic26',reservas:[b],cobertura:{geometria:true}}};
+ const lecturas=[];
+ const fuente={listo:async()=>{},estado:()=>({cargado:true,generacion:4}),listarHojas:()=>Object.keys(hojas),
+  consultarHoja:async hoja=>{lecturas.push(hoja);return structuredClone(hojas[hoja]);}};
+ const ctx={HAIKU_LIBRO_SEMANTICA:S,HAIKU_LIBRO_DIFERENCIAS_V1:require('../js/haiku-libro-diferencias-v1.js'),structuredClone,console,Intl,Date};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../js/haiku-libro-consultas-v1.js'),'utf8'),ctx);
+ const api=ctx.HAIKU_LIBRO_CONSULTAS;
+ const consulta=await api.consultar('reservas de diciembre 2026',fuente);
+ assert.equal(consulta.reservas.length,1);
+ assert.equal(consulta.reservas[0].fecha_checkin,'2026-11-30');
+ assert.equal(consulta.reservas[0].fecha_checkout,'2026-12-02');
+ assert.deepEqual(lecturas,['Dic26','Nov26']);
+
+ const avisos=[a,b].map((actual,i)=>({id:'aviso-'+i,tipo:'nueva',actual,cambios:[]}));
+ const vigentes=await C.actualizarDesdeLibro(avisos,{crearLectura:async()=>fuente});
+ assert.equal(vigentes.length,1);
+ assert.deepEqual(vigentes[0].ids_origen,['aviso-0','aviso-1']);
+ assert.equal(vigentes[0].actual.noches,2);
+ const partidas=[a,b].map((r,i)=>({id:'e'+i,reserva_id:'r'+i,cabanas:{numero:5},
+  fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'pendiente',tipo_estadia:'alojamiento',
+  reservas:{id:'r'+i,titular_nombre:r.titular,estado_reserva:'pendiente',observaciones:'[DATOS DEL LIBRO]\n2 noches\n[/DATOS DEL LIBRO]'}}));
+ const db=(estadias)=>({auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from(tabla){
+  const q={select(){return q},order(){return q},lte(){return q},gte(){return q},range:async()=>({data:tabla==='reserva_estadias'?estadias:[]})};return q;
+ },rpc(){assert.fail('la validación de la propuesta no escribe');}});
+ const nueva=await api.revalidarCambiosDetectados(vigentes,db([]),{generacion:4});
+ assert.equal(nueva.items.length,1);assert.equal(nueva.items[0].accionable,true);
+ const operaciones=api.serializarIncorporacion(api.crearPlanIncorporacion(nueva.reservas,nueva.comparacion));
+ assert.equal(operaciones.length,1);assert.equal(operaciones[0].tipo,'reserva_nueva');
+ assert.equal(operaciones[0].estadias.length,1);
+ const [estadia]=operaciones[0].estadias;
+ assert.equal(estadia.cabana_numero,5);assert.equal(estadia.noches,2);
+ assert.equal(estadia.datos.fecha_ingreso,'2026-11-30');assert.equal(estadia.datos.fecha_salida,'2026-12-02');
+
+ const revalidada=await api.revalidarCambiosDetectados(vigentes,db(partidas),{generacion:4});
+ assert.equal(revalidada.items.length,1);assert.equal(revalidada.items[0].accionable,false);
+ assert.match(revalidada.items[0].revision.motivos.join(' '),/ya están guardados sus tramos por separado/);
+ assert.equal(revalidada.reservas.length,0);
+ const mensual=await api.consultar('comparar reservas de diciembre 2026 con Proyecto H',fuente,db(partidas));
+ assert.equal(mensual.comparacion.length,1);
+ assert.equal(mensual.comparacion[0].categoria,'tramos_mensuales_incorporados');
+ assert.equal(mensual.comparacion.cambiosLibro.filter(c=>c.campo==='reserva').length,0);
+ const guardada=await api.revalidarCambiosDetectados(vigentes,db([{...partidas[0],fecha_salida:b.fecha_checkout}]),{generacion:4});
+ assert.equal(guardada.items.length,0);assert.equal(guardada.resueltos.length,1);
+});
 test('cerrar un caso agrupado retira sus dos avisos y conserva el pendiente no resuelto',async()=>{
  const libroActual=lector([r()]);
  const ctx={HAIKU_LIBRO_CONTEXTO_V1:{...C,actualizarDesdeLibro:rows=>C.actualizarDesdeLibro(rows,libroActual)},HAIKU_LIBRO_RESERVA_V1:libroActual,structuredClone,Date};
