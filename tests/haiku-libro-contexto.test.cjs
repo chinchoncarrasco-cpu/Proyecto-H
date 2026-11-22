@@ -243,7 +243,7 @@ test('la consulta mensual y los avisos guardados comprueban ambos tramos de la m
  assert.equal(vigentes[0].actual.noches,2);
  const partidas=[a,b].map((r,i)=>({id:'e'+i,reserva_id:'r'+i,cabanas:{numero:5},
   fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout,estado_estadia:'pendiente',tipo_estadia:'alojamiento',
-  reservas:{id:'r'+i,titular_nombre:r.titular,estado_reserva:'pendiente'}}));
+  reservas:{id:'r'+i,titular_nombre:r.titular,estado_reserva:'pendiente',observaciones:'[DATOS DEL LIBRO]\n2 noches\n[/DATOS DEL LIBRO]'}}));
  const db=(estadias)=>({auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from(tabla){
   const q={select(){return q},order(){return q},lte(){return q},gte(){return q},range:async()=>({data:tabla==='reserva_estadias'?estadias:[]})};return q;
  },rpc(){assert.fail('la validación de la propuesta no escribe');}});
@@ -260,6 +260,10 @@ test('la consulta mensual y los avisos guardados comprueban ambos tramos de la m
  assert.equal(revalidada.items.length,1);assert.equal(revalidada.items[0].accionable,false);
  assert.match(revalidada.items[0].revision.motivos.join(' '),/ya están guardados sus tramos por separado/);
  assert.equal(revalidada.reservas.length,0);
+ const mensual=await api.consultar('comparar reservas de diciembre 2026 con Proyecto H',fuente,db(partidas));
+ assert.equal(mensual.comparacion.length,1);
+ assert.equal(mensual.comparacion[0].categoria,'tramos_mensuales_incorporados');
+ assert.equal(mensual.comparacion.cambiosLibro.filter(c=>c.campo==='reserva').length,0);
  const guardada=await api.revalidarCambiosDetectados(vigentes,db([{...partidas[0],fecha_salida:b.fecha_checkout}]),{generacion:4});
  assert.equal(guardada.items.length,0);assert.equal(guardada.resueltos.length,1);
 });

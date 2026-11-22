@@ -574,11 +574,12 @@
             const guardados = reserva.tramos_mensuales.map(tramo => posibles.filter(s =>
                 s.tipo_estadia === reserva.tipo_estadia && Number(s.cabana) === Number(reserva.cabana) &&
                 mismasFechas(tramo, s) && identidad(reserva, s).confirmable));
-            if (guardados.every(s => s.length === 1)) return {
-                estado:'ambigua', categoria:'tramos_mensuales_incorporados', confianza:'alta',
-                pregunta:'El Libro muestra una sola estadía. En Proyecto H ya están guardados sus tramos por separado y requieren consolidación.',
-                candidatosDetalle:guardados.flat(), candidatos:guardados.flat().map(s=>s.id)
-            };
+            if (guardados.every(s => s.length === 1)) {
+                const tramos = guardados.flat();
+                return {estado:'ambigua', categoria:'tramos_mensuales_incorporados', confianza:'alta',
+                    pregunta:'El Libro muestra una sola estadía. En Proyecto H ya están guardados sus tramos por separado y requieren consolidación.',
+                    candidatosDetalle:tramos, candidatos:tramos.map(s => s.id)};
+            }
         }
         let categoria = "reserva_faltante", confianza = "alta", pregunta = null;
         if (posibles.length || reserva.advertencias?.length) {
@@ -2837,7 +2838,9 @@
         return {desde:mes(desde,-1),hasta:mes(hasta,1)};
     }
     async function retirosReservasComparacion(resultado,libro,periodo){
-        const comp=resultado.comparacion,usadas=new Set(Array.from(comp).filter(x=>x.sistema).map(x=>x.sistema.id));
+        const comp=resultado.comparacion;
+        const usadas=new Set(Array.from(comp).flatMap(x=>x.sistema?[x.sistema.id]:
+            x.categoria==='tramos_mensuales_incorporados'?x.candidatos:[]));
         const pendientes=(comp.snapshot?.estadias||[]).filter(s=>!usadas.has(s.id)&&
             s.fecha_checkin<=resultado.q.hasta&&s.fecha_checkout>=resultado.q.desde&&
             (!resultado.q.cabana||Number(s.cabana)===Number(resultado.q.cabana))&&
