@@ -132,6 +132,9 @@
             ...(Array.isArray(reserva?.servicios) ? reserva.servicios : []),
             ...(Array.isArray(reserva?.menciones_servicio) ? reserva.menciones_servicio : [])
         ].map(s=>{
+            if (s?.concepto === 'masaje' && s.semantica !== 'NO_SERVICIO' && (s.conceptos?.length ?? 1) === 1 &&
+                semantica?.esNotaPrecaucionMasaje?.(s.fragmento_original || s.texto_original))
+                return { ...s, semantica:'NO_SERVICIO', clasificacion:'nota', intencion_operativa:false };
             // El historial puede conservar la clasificación anterior de una
             // solicitud de cuna. Releer su evidencia antes de exigir aprobación.
             if(s?.semantica==='AMBIGUO'&&s.concepto==='cuna'&&
@@ -948,7 +951,9 @@
         // Alias de presentación conservado temporalmente para la UI existente. No
         // participa en la semántica: deriva exclusivamente de la completitud.
         const clasificacion = completitud === "COMPLETO" ? "servicio_confirmado" : "servicio_por_confirmar";
-        const puedePreparar = completitud === "COMPLETO" && ["cobrable", "cortesia"].includes(intencion_cobro) &&
+        // El alta de servicios admite un solo inicio por registro. Los dos
+        // horarios explícitos se comprueban juntos sin preparar otro cargo.
+        const puedePreparar = completitud === "COMPLETO" && !servicio.unidad_servicio?.turnos_explicitos && ["cobrable", "cortesia"].includes(intencion_cobro) &&
             asociacion.estado === "asociada" && mapa.codigo && fecha;
         const proveniencia = Object.freeze({
             concepto: mapa.codigo ? "EXPLICITO" : "AUSENTE",
@@ -1271,6 +1276,46 @@
             motivo: decision.estado === 'existente' ? 'El servicio está registrado y hay diferencias por revisar.' : decision.motivo };
     }
 
+    function compararTurnosMasaje(item, activos, estadiaId) {
+        const turnos = item.servicio.unidad_servicio.turnos_masaje;
+        const duracion = item.servicio.duracion_minutos;
+        const revisar = motivo => ({ estado:'revisar', motivo });
+        if (!item.fecha || item.fechaFueraEstadia || !item.mapa?.codigo || !estadiaId)
+            return revisar('Falta comprobar la fecha, el tipo o la estadía de los dos turnos.');
+        const [primero, segundo] = turnos.map(minutosHora);
+        if (item.servicio.simultaneo || primero + duracion > segundo || segundo + duracion >= 1440)
+            return revisar('Revisa el orden, la duración y el día de los dos turnos indicados en el Libro.');
+
+        const inicio = s => minutosHora(horaCorta(s.hora_inicio));
+        const fin = s => minutosHora(horaCorta(s.hora_fin));
+        const inicios = [primero, segundo];
+        const candidatos = activos.filter(s => s.fecha_servicio === item.fecha && /^masaje/i.test(codigoExistente(s) || '') &&
+            inicio(s) != null && inicios.some(t => inicio(s) < t + duracion && (fin(s) ?? inicio(s) + 1) > t));
+        const corresponde = s => s.estadia_id === estadiaId && codigoExistente(s) === item.mapa.codigo;
+        const coincide = (s, desde, hasta, cantidad) => corresponde(s) &&
+            inicio(s) === desde && fin(s) === hasta && Number(s.cantidad) === cantidad &&
+            item.intencion_cobro === 'cobrable' && s.tipo_cobro === 'normal';
+        const unico = candidatos.length === 1 ? candidatos[0] : undefined;
+        if (unico && primero + duracion === segundo && coincide(unico, primero, segundo + duracion, 2))
+            return { estado:'existente', candidatos, candidato:unico, motivo:'El registro abarca ambos turnos.' };
+        const importe = importeLibro(item.servicio);
+        if (candidatos.length === 2 && inicios.every(t => candidatos.some(s => coincide(s, t, t + duracion, 1))) &&
+            (importe == null || candidatos.every(s => s.total != null) && candidatos.reduce((n, s) => n + Number(s.total), 0) === importe))
+            return { estado:'existente', candidatos, motivo:'Ambos turnos están registrados.' };
+
+        const faltantes = turnos.filter((_, i) => !candidatos.some(s => corresponde(s) &&
+            inicio(s) <= inicios[i] && fin(s) != null && fin(s) >= inicios[i] + duracion));
+        const horarios = candidatos.map(s => [horaCorta(s.hora_inicio), horaCorta(s.hora_fin)].filter(Boolean).join('–'));
+        return {
+            estado:'revisar', candidatos,
+            motivo: faltantes.length === 1 ? `Falta el turno de las ${faltantes[0]} en la agenda de Proyecto H.`
+                : faltantes.length === 2 ? 'Falta comprobar ambos turnos en la agenda de Proyecto H.'
+                : 'Revisa los registros de ambos turnos en la agenda de Proyecto H.',
+            diferencia:{ servicio:unico, filas:[{ campo:'turnos', etiqueta:'Turnos', libro:turnos.join(' y '),
+                proyecto:horarios.join(' · ') || 'Sin horario registrado' }] }
+        };
+    }
+
     function resolverServicioExistente(item, existentes) {
         if (item?.semantica !== "SERVICIO_REAL") return { estado: "no_aplica", motivo: "La identidad sólo se resuelve para SERVICIO_REAL." };
         const reservaId = item.payload?.reserva_id || (item.asociacion?.estado === 'asociada' ? item.asociacion.sistema.reserva_id : null);
@@ -1282,6 +1327,7 @@
             codigoExistente(s)===item.mapa?.codigo&&(['lateCheckout','earlyCheckin'].includes(codigoExistente(s))||s.fecha_servicio===item.fecha));
         if(pendientesReprogramacion.length)return {estado:'revisar',candidatos:pendientesReprogramacion,
             motivo:'El servicio requiere revisión después de reprogramar la estadía. No está confirmado para el nuevo destino.'};
+        if (item.servicio?.unidad_servicio?.turnos_explicitos) return compararTurnosMasaje(item, activos, estadiaId);
         const revisados = activos.filter(s => revisionAdminValida(item,s));
         if (revisados.length === 1) return { estado:'existente',candidato:revisados[0],revision_admin:true,
             motivo:`Revisión del administrador: ${revisados[0].libro_revision_admin_v1.motivo}.` };
@@ -1849,6 +1895,7 @@
         const actual = await construir(texto, overrides), base = actual.items.find(i => i.item_id === itemId);
         if (!base || actual.items.filter(i => i.item_id === itemId).length !== 1 || base.semantica !== 'SERVICIO_REAL' || base.estado === 'existente' || base.firmaManual !== firma)
             throw new Error('La evidencia o el destino cambiaron; vuelve a abrir la revisión de este servicio.');
+        if (base.servicio.unidad_servicio?.turnos_explicitos) throw new Error('Revisa los dos horarios en la agenda de la reserva.');
         if (soloVerRegistro(base)) throw new Error('La ficha ya tiene un registro relacionado. Revisa la diferencia en Proyecto H.');
         if (base.cambioHorarioExistente) throw new Error('Confirma el cambio de horario de la tinaja existente desde Revisar horario.');
         if (base.cambioCortesiaExistente) throw new Error('Esta tinaja ya existe. Abre Aprobación manual para confirmar el cambio a cortesía.');
@@ -2649,7 +2696,8 @@
     }
 
     function soloVerRegistro(item) {
-        return (item.diferenciaRegistrada || item.posibleCambioRegistrado) && !item.cambioCortesiaExistente &&
+        return item.servicio?.unidad_servicio?.turnos_explicitos ||
+            (item.diferenciaRegistrada || item.posibleCambioRegistrado) && !item.cambioCortesiaExistente &&
             !item.cambioHorarioExistente && !item.conflicto_tinaja_existente && !item.conflicto_tipo_masaje;
     }
 
@@ -2692,10 +2740,12 @@
             nombre.textContent = ''; nombre.append(titular, cab);
         }
         const meta = document.createElement("div"); meta.className = "haku-libro-servicios__meta";
-        const horaVisible = item.horaSalidaLibro && item.estado !== 'existente' && !item.resolucionManual && !item.servicio.hora_fin
+        const turnos = item.servicio?.unidad_servicio?.turnos_explicitos && item.servicio.unidad_servicio.turnos_masaje;
+        const horaVisible = turnos ? turnos.join(' y ') : item.horaSalidaLibro && item.estado !== 'existente' && !item.resolucionManual && !item.servicio.hora_fin
             ? 'Hasta ' + item.horaSalidaLibro : [item.hora, item.hora_fin].filter(Boolean).join('–');
         if (item.kind === "nota") meta.textContent = `${item.payload?.importante ? "Nota importante" : "Nota"} · vinculada a la reserva, no genera servicio ni cargo${item.payload?.fecha_operacion ? ` · Fecha ${item.payload.fecha_operacion}` : ""}`;
         else if (item.estado === "existente" && item.servicio_existente) meta.textContent = `Ya existe en Proyecto H · ${item.fecha ? `Fecha ${item.fecha}` : "fecha registrada"}${horaVisible ? ` · ${horaVisible}` : ""} · ${item.finanzas_existente?.etiqueta || (item.cortesia ? "cortesía" : "Pago por verificar")} · omitido`;
+        else if (item.estado === 'existente' && turnos) meta.textContent = `Ambos turnos registrados · ${item.fecha} · ${horaVisible}`;
         else {
             const estadoServicio = item.diferenciaRegistrada ? "Servicio registrado"
                 : item.estado === "listo" ? "Servicio preparable"

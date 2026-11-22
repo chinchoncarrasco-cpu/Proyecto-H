@@ -1,13 +1,14 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm');
 const {entorno,read}=require('./fixtures/libro-servicio-manual.cjs');
 const C=require('../js/haiku-libro-contexto-v1.js'),A=require('../js/supabase-asistente-libro-actualizacion-v1.js');
-const texto='1 HORA DE TINAJA TONEL DE MADERA A LAS 17.15 X COBRAR // 2 MASAJES RELAJANTES DE 1 HORA C/U SIMULTANEOS CON MONICA Y XXX PARA EL SÁBADO 14 DE NOV A LAS 16.00 HRS X COBRAR';
-async function crearCaso(){
+async function crearCaso(texto='1 HORA DE TINAJA TONEL DE MADERA A LAS 17.15 X COBRAR // 2 MASAJES RELAJANTES DE 1 HORA C/U SIMULTANEOS CON MONICA Y XXX PARA EL SÁBADO 14 DE NOV A LAS 16.00 HRS X COBRAR'){
     const e=entorno(),r=e.state.reservas[0],s=e.state.db.reserva_estadias[0];
     Object.assign(r,{id:'Nov26!CA6',hoja:'Nov26',titular:'Persona Ejemplo',cabana:3,
         fecha_checkin:'2026-11-13',fecha_checkout:'2026-11-15',noches:2,
         texto_original:texto,pagos:[],pagos_sin_asociacion:[],notas_importantes:[],pagos_pendientes:[texto]});
-    r.servicios=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'pagos_pendientes',pendiente:true});
+    const fragmentos=e.c.HAIKU_LIBRO_SEMANTICA.servicios(texto,{origen_campo:'pagos_pendientes',pendiente:true});
+    r.servicios=fragmentos.filter(x=>x.semantica!=='NO_SERVICIO');
+    r.menciones_servicio=fragmentos.filter(x=>x.semantica==='NO_SERVICIO');
     Object.assign(s,{fecha_ingreso:r.fecha_checkin,fecha_salida:r.fecha_checkout});
     e.state.db.reservas[0].titular_nombre=r.titular;e.state.db.cabanas[0].numero=3;
     e.state.db.servicios.push({id:'masajes-registrados',reserva_id:s.reserva_id,estadia_id:s.id,
@@ -33,6 +34,16 @@ test('lector semántico → comparación → contexto: una fecha faltante, dos m
     assert.match(html,/Masaje[^<]*×2[^<]*14-11-2026[^<]*16:00/);assert.match(html,/Ya registrado\./);
     assert.doesNotMatch(html,/inequívoca|sin adivinar|servicios o sus notas|servicio o nota|Pagos pendientes|Antes en el Libro: Ninguno|Nota de cobro · por revisar/);
     assert.match(html,/<details class="haku-pendiente-comparacion"><summary>Ver detalle del Libro/);
+    assert.equal(e.state.escrituras.length,0);
+});
+test('el informe muestra dos inicios, el turno que falta y la precaución como nota',async()=>{
+    const nota='OJO EN MASAJES: USAR ACEITE NEUTRO';
+    const {e,item,html}=await crearCaso(`2 MASAJES RELAJANTES DE 1 HORA C/U EL 14/11 A LAS 16.00 HRS Y 17HRS X COBRAR // ${nota}`);
+    assert.equal(item.contexto.servicios.length,1);
+    assert.match(html,/Masaje[^<]*×2[^<]*16:00 y 17:00/);
+    assert.match(html,/Falta el turno de las 17:00 en la agenda de Proyecto H/);
+    assert.match(html,/Nota · (falta guardar|por revisar)<\/strong><br>OJO EN MASAJES: USAR ACEITE NEUTRO/);
+    assert.doesNotMatch(html,/Semántica ambigua|Ya registrado\./);
     assert.equal(e.state.escrituras.length,0);
 });
 test('conserva una nota independiente, otros cambios y las advertencias que no son la fecha',async()=>{

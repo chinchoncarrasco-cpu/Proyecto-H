@@ -350,7 +350,7 @@
         const otros=lista(item.cambios).filter(x=>!operativos.has(x.campo));
         const tituloServicio=s=>[String(s.concepto||'Servicio').replace(/^./,x=>x.toUpperCase())+
             (/masaje/i.test(s.tipo||s.concepto)&&Number(s.cantidad)>1?` ×${s.cantidad}`:''),
-            s.fecha?fecha(s.fecha):'',s.hora?String(s.hora).slice(0,5):''].filter(Boolean).join(' · ');
+            s.fecha?fecha(s.fecha):'',lista(s.turnos).join(' y ')||String(s.hora||'').slice(0,5)].filter(Boolean).join(' · ');
         const bloques=servicios.map(s=>`<p><strong>${escapar(tituloServicio(s))}</strong><br>${escapar(motivoServicio(s))}</p>`);
         for(const n of notas)bloques.push(`<p><strong>Nota · ${n.estado==='en_sistema'?'ya guardada':n.estado==='faltante'?'falta guardar':'por revisar'}</strong><br>${escapar(resumenNota(n.texto))}</p>`);
         // Conservar las notas independientes. La glosa de cobro no acredita un
@@ -599,7 +599,7 @@
         const cambiosServicio=cambios.filter(c=>c.campo==='servicios');
         const servicios=(operaciones??lista(item.contexto?.servicios).filter(s=>s.estado!=='en_sistema')).map(s=>{
             const motivos=razonesServicio(s);
-            return {nombre:s.concepto,fecha:s.fecha,hora:s.hora,texto:s.texto,
+            return {nombre:s.concepto,fecha:s.fecha,hora:s.hora,turnos:s.turnos,texto:s.texto,
                 motivos:motivos.length?motivos:[motivoServicio(s)]};
         });
         servicios.push(...lista(item.retirosServicios).map(x=>({nombre:x.sistema?.catalogo_servicios?.nombre||'Servicio',
@@ -681,6 +681,7 @@
                     operaciones:revisar.filter(x=>x.tipo==='servicio').map(({detalle:x})=>({
                         estado:x.estado,concepto:x.lectura?.nombre||x.servicio?.concepto,
                         fecha:x.lectura?.fecha,hora:x.lectura?.hora||x.servicio?.hora,
+                        turnos:x.servicio?.unidad_servicio?.turnos_explicitos?x.servicio.unidad_servicio.turnos_masaje:undefined,
                         texto:x.servicio?.fragmento_original||x.servicio?.texto_original,
                         razon:x.estado==='faltante'?'Tu sesión requiere permiso para agregar este servicio.':x.razon,
                         razones:x.lectura?.razones

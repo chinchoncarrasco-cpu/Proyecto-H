@@ -271,7 +271,7 @@
         const vistos=new Set(), bloques=[];
         for(const s of servicios){
             const nombre=notaBreve(s.nombre,60)||'Servicio';
-            const titulo=[nombre,s.fecha?fechaCorta(s.fecha):'',s.hora?String(s.hora).slice(0,5):''].filter(Boolean).join(' · ');
+            const titulo=[nombre,s.fecha?fechaCorta(s.fecha):'',lista(s.turnos).join(' y ')||String(s.hora||'').slice(0,5)].filter(Boolean).join(' · ');
             const {datos,otros}=razonesPendiente(s.motivos,s);
             const texto=notaBreve(s.texto,140);
             const clave=JSON.stringify([titulo,datos.map(d=>d[0]),otros,texto]);

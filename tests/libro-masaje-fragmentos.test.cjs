@@ -197,6 +197,76 @@ test('dos masajes con inicio común quedan consecutivos y respetan la simultanei
     assert.deepEqual(parsear('1 MASAJE RELAJANTE DE 1 HORA Y 1 DESCONTRACTURANTE DE 1 HORA A LAS 11 AM').map(x=>x.hora),[null,'11:00']);
 });
 
+const masajesConTurnos = '2 MASAJES RELAJANTES DE 1 HORA C/U PARA EL 24/10 A LAS 16.00 HRS Y 17HRS X COBRAR';
+const precaucionMasajes = 'OJO EN MASAJES: HUÉSPED REQUIERE ACEITE NEUTRO';
+
+test('la precaución sobre masajes es una nota y la conjunción une dos inicios', async () => {
+    const e = entorno(), r = configurarRocio(e, `${masajesConTurnos} // ${precaucionMasajes}`);
+    assert.equal(r.servicios.length, 1);
+    assert.equal(r.menciones_servicio.find(s => s.texto_original === precaucionMasajes).semantica, 'NO_SERVICIO');
+    const [masaje] = r.servicios;
+    assert.equal(masaje.texto_original, masajesConTurnos);
+    assert.equal(masaje.cantidad, 2);
+    assert.equal(masaje.hora, '16:00');
+    assert.equal(masaje.hora_fin, null);
+    assert.deepEqual(masaje.unidad_servicio.turnos_masaje, ['16:00', '17:00']);
+    const [separados] = parsear(masajesConTurnos.replace('17HRS', '18.30'));
+    assert.deepEqual(separados.unidad_servicio.turnos_masaje, ['16:00', '18:30']);
+    const resultado = await e.construir();
+    assert.equal(rocio(resultado).length, 1);
+    assert.equal(resultado.items.filter(x => x.kind === 'nota' && x.texto === precaucionMasajes).length, 1);
+    assert.equal(e.state.escrituras.length, 0);
+    r.menciones_servicio[0] = { ...r.menciones_servicio[0], semantica: 'AMBIGUO' };
+    const anterior = await e.construir();
+    assert.equal(rocio(anterior).length, 1);
+    assert.equal(anterior.items.filter(x => x.kind === 'nota' && x.texto === precaucionMasajes).length, 1);
+    for (const intervalo of ['DE 16:00 A 17:00', 'ENTRE 16:00 Y 17:00']) {
+        const [servicio] = parsear(`2 MASAJES RELAJANTES DE 1 HORA C/U ${intervalo}`);
+        assert.equal(servicio.hora_fin, '17:00', intervalo);
+        assert.equal(servicio.unidad_servicio.turnos_explicitos, undefined);
+    }
+    assert.equal(S.clasificarFragmentoServicio('OJO EN MASAJES: AGENDAR 1 MASAJE A LAS 16:00').semantica, 'SERVICIO_REAL');
+});
+
+test('comparar dos turnos explícitos comprueba ambos horarios antes de darlos por registrados', async () => {
+    for (const modalidad of ['truncado', 'ambos', 'bloque', 'sin registros', 'dos en la misma hora', 'otra estadía']) {
+        const e = entorno();
+        configurarRocio(e, masajesConTurnos);
+        const destino = e.state.db.reserva_estadias[1];
+        const registro = {
+            id: 'masaje-1', reserva_id: destino.reserva_id, estadia_id: destino.id,
+            catalogo_servicios: { codigo: 'masajeTerapeutico60' }, fecha_servicio: '2026-10-24',
+            hora_inicio: '16:00:00', hora_fin: '17:00:00', estado_servicio: 'programado',
+            cantidad: 2, personas: 1, tipo_cobro: 'normal', total: 90000
+        };
+        if (modalidad === 'truncado') e.state.db.servicios.push(registro);
+        if (modalidad === 'bloque') e.state.db.servicios.push({ ...registro, hora_fin: '18:00:00' });
+        if (modalidad === 'otra estadía') e.state.db.servicios.push({ ...registro, estadia_id: 'otra', hora_fin: '18:00:00' });
+        if (modalidad === 'ambos' || modalidad === 'dos en la misma hora') {
+            const segundo = modalidad === 'ambos' ? { hora_inicio: '17:00:00', hora_fin: '18:00:00' } : {};
+            e.state.db.servicios.push({ ...registro, cantidad: 1, total: 45000 },
+                { ...registro, ...segundo, id: 'masaje-2', cantidad: 1, total: 45000 });
+        }
+        const resultado = await e.construir(), [item] = rocio(resultado);
+        const completo = modalidad === 'ambos' || modalidad === 'bloque';
+        assert.equal(item.semantica, 'SERVICIO_REAL', modalidad);
+        assert.equal(item.estado, completo ? 'existente' : 'revisar', modalidad);
+        assert.equal(item.payload, null, modalidad);
+        if (modalidad === 'truncado') {
+            assert.equal(item.servicio_existente.id, registro.id);
+            assert.match(item.razones.join(' '), /Falta el turno de las 17:00/);
+            assert.equal(item.diferenciaRegistrada.filas[0].proyecto, '16:00–17:00');
+        }
+        if (modalidad === 'ambos') assert.equal(item.servicio_existente, undefined);
+        const out = new e.Element('div');
+        e.api.renderizar(resultado, out, consulta);
+        const fila = out.querySelectorAll('.haku-libro-servicios__item').find(x => x.textContent.includes('Rocío Leal'));
+        assert.match(fila.textContent, /16:00 y 17:00/);
+        assert.ok(!fila.querySelectorAll('button').some(b => b.textContent === 'Aprobación manual'));
+        assert.equal(e.state.escrituras.length, 0);
+    }
+});
+
 test('el reloj con punto no contradice la fecha de un masaje en la mañana de salida', async () => {
     for(const hora of ['10.00','11.00']){
         const e=entorno(),r=configurarRocio(e,`1 MASAJE RELAJANTE DE 1 HORA // PARA EL 24 // ${hora}`);
