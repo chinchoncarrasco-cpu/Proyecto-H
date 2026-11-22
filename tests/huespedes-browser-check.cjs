@@ -163,7 +163,7 @@ const sqlFile = filename => fs.readFileSync(path.join(root, filename), 'utf8');
         await draft.click();
         await current.getByRole('button',{name:'Completar',exact:true}).click();
         await section.locator('.hu-ficha').getByRole('button',{name:'Completar datos',exact:true}).waitFor();
-        if(width===390) await section.locator('.hu-ficha').getByRole('button',{name:'Huéspedes',exact:true}).click();
+        if(width===390) await section.getByRole('button',{name:'Huéspedes',exact:true}).click();
         await section.locator('.hu-tabs').getByRole('button',{name:'Historial',exact:true}).click();
         await current.waitFor({state:'detached'});
         await previous.waitFor();

@@ -108,10 +108,10 @@ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-
 .hu-estadia-tipo:not(:empty)+.hu-estadia-dias::before{content:" · "}
 .hu-estadia-flecha{display:grid;place-items:center}
 .hu-estadia-toggle.hu-boton{
- z-index:1;position:relative;display:inline-flex;align-items:center;justify-self:start;gap:5px;background:transparent;
+ z-index:1;position:relative;display:inline-flex;align-items:center;justify-self:start;gap:5px;background:var(--guest-soft);
  min-height:36px;padding:6px 8px;font-size:12px;line-height:16px
 }
-.hu-estadia-toggle:hover{background:var(--guest-soft)}
+.hu-estadia-toggle[aria-expanded=true]{background:var(--guest-selected)}
 .hu-estadia-toggle[aria-expanded=true] .hu-icono{transform:rotate(180deg)}
 .hu-acompanantes{padding:4px 12px 4px 56px;background:var(--guest-soft)}
 .hu-acompanante-fila{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
@@ -127,6 +127,7 @@ body:has(#seccion-huespedes.activa) .sidebar.sites-shell-sidebar nav.menu .menu-
   grid-template-columns:minmax(0,1fr) auto 32px;grid-template-areas:"titular titular flecha" "cabana control control";
   gap:4px 8px;min-height:94px;padding-block:7px
  }
+ .hu-estadia-fila:not(:has(.hu-estadia-toggle)){min-height:74px}
  .hu-estadia-titular{grid-area:titular}
  .hu-estadia-flecha{grid-area:flecha}
  .hu-estadia-cabana{grid-area:cabana;padding-left:44px;color:var(--guest-accent);font-size:12px;line-height:17px}
