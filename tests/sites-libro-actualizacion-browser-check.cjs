@@ -1103,10 +1103,10 @@ async function comprobarPendientesTrasConfirmar(browser,url){
         assert.equal(await page.locator('.haku-actualizacion-sites').count(),informesAntes);
         assert.equal(await page.locator('.haku-incorporacion-aviso').count(),0);
         assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
+        assert.equal(await burbuja.getByText('Hay otro aviso disponible al cerrar este.').count(),0);
         await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
-        await burbuja.getByRole('button',{name:'Ver informe',exact:true}).waitFor();
-        assert.equal(await burbuja.getByRole('button',{name:'Incorporar',exact:true}).count(),0,'el siguiente aviso llega después del resultado');
-        await burbuja.getByRole('button',{name:'Seguir con mi consulta',exact:true}).click();
+        await burbuja.waitFor({state:'detached'});
+        assert.equal(await page.locator('#haiku-asistente-texto').inputValue(),'Mi consulta sigue aquí');
         // Un fallo conserva el aviso y reintenta la misma operación desde ahí.
         await page.evaluate(()=>{
             __generation=8;window.dispatchEvent(new Event('haiku:libro-cambio'));
@@ -1397,8 +1397,9 @@ async function comprobarPendientesTrasConfirmar(browser,url){
                 __generation=15+paso;window.dispatchEvent(new Event('haiku:libro-cambio'));
                 const generado_en=new Date().toISOString();
                 __resultadoActual={estado:paso<3?'ok':'sin_cambios',libro_actual:{generacion:__generation},generado_en,...versiones[paso]};
+                // Cuando sólo queda historial, la revisión parte de una carga solicitada.
                 window.dispatchEvent(new CustomEvent('haiku:libro-version-cargada',{detail:{
-                    carga_automatica:true,tenia_anterior:true,generacion:__generation}}));
+                    carga_automatica:paso<3,carga_manual:paso>=3,tenia_anterior:true,generacion:__generation}}));
                 return generado_en;
             };
         });

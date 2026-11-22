@@ -248,7 +248,7 @@ test('la demora avisa una sola vez y conserva la comparación en curso',async()=
     assert.match(h.ids['haiku-asistente-mensajes'].children[0].textContent,/no cambiaron respecto/);
     assert.ok(h.botones().length);
 });
-test('la detección se ve mientras se termina de leer y luego se comprueba Proyecto H',async()=>{
+test('el aviso automático espera cambios en los datos y se ve antes de comprobar Proyecto H',async()=>{
     let terminarLectura, terminarRevision, consultas=0;
     const cambio={actual:row};
     const h=interfaz(({alDetectar})=>{
@@ -260,10 +260,11 @@ test('la detección se ve mientras se termina de leer y luego se comprueba Proye
         return new Promise(resolve=>{terminarRevision=()=>resolve({items:[],resueltos:cambios.map(x=>x.id)});});
     }};
     h.emitir('haiku:libro-version-cargada',eventoGoogle(2));await tick();
-    assert.ok(h.nodos().some(x=>x.textContent.includes('Detecté cambios en el Libro')));
+    assert.equal(h.document.body.children.length,0,'la huella sola no abre la burbuja automática');
     assert.equal(consultas,0);assert.equal(h.botones().length,0);
     assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
     terminarLectura();await tick();assert.equal(consultas,1);
+    assert.ok(h.nodos().some(x=>x.textContent.includes('Detecté cambios en el Libro')));
     assert.equal(h.botones().length,0);
     terminarRevision();await tick();
     assert.equal(h.botones().length,1);assert.equal(h.calls(),1);
@@ -277,6 +278,32 @@ test('cerrar la espera descarta el aviso tardío sin reiniciar la comparación',
     assert.equal(h.document.body.children.length,0);
     assert.equal(h.ids['haiku-asistente-mensajes'].children.length,0);
     assert.equal(h.calls(),1);
+});
+test('una sincronización sin cambios queda en silencio y conserva los pendientes para el informe manual',async()=>{
+    const anterior={id:'pendiente-anterior',tipo:'nueva',actual:row,detectado_generacion:1};
+    let terminarLectura;
+    const consultas=[];
+    const h=interfaz(({alDetectar})=>{
+        alDetectar(2);
+        return new Promise(resolve=>{terminarLectura=()=>resolve(res({estado:'sin_cambios',libro_actual:{generacion:2}}));});
+    },{proyectar:true});
+    h.window.HAIKU_LIBRO_RESERVA_V1.leerCambiosDetectados=async()=>({version:1,cambios:[anterior]});
+    h.window.HAIKU_LIBRO_CONSULTAS={revalidarCambiosDetectados(cambios){
+        consultas.push(Array.from(cambios,x=>x.id));
+        return {items:cambios,resueltos:[]};
+    }};
+    h.ids['haiku-asistente-texto'].value='Mi revisión en curso';
+    h.emitir('haiku:libro-version-cargada',eventoGoogle(2));await tick();
+    const seAbrióDuranteLectura=h.document.body.children.length;
+    h.vencerEspera();terminarLectura();await tick();
+    assert.equal(consultas.length,0,'la sincronización sin novedades no vuelve a consultar los pendientes');
+    assert.equal(seAbrióDuranteLectura,0);assert.equal(h.document.body.children.length,0);
+    assert.equal(h.ids['haiku-asistente-texto'].value,'Mi revisión en curso');
+
+    const informe=await h.window.HAIKU_ASISTENTE_LIBRO_ACTUALIZACION_V1.obtenerResultadoAviso();
+    assert.deepEqual(consultas,[['pendiente-anterior']]);assert.equal(h.calls(),1);
+    assert.equal(informe.pendientesSinVerificar,false);
+    assert.equal(informe.nuevas[0].id,anterior.id);
 });
 test('aviso en segundo plano conserva conversación, borrador y posición y espera al terminar para abrir',async()=>{
     const h=interfaz(async()=>res({nuevas:[{actual:row}]}));let ocupado=true;
