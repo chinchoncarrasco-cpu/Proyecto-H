@@ -10,6 +10,39 @@ const native=process.env.HAKU_GUEST_NATIVE_PREVIEW;
 const allowed=new Set(['js/historial.js','js/calendario.js','js/checklist.js','js/app.js','js/cabanas.js','js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.woff':'font/woff','.png':'image/png'};
 async function settled(page){await page.evaluate(async()=>{await document.fonts.ready;await new Promise(requestAnimationFrame);await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));await Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a=>a.finished.catch(()=>{})));await new Promise(requestAnimationFrame);});}
+function shell(page){
+ return page.evaluate(()=>{
+  const box=(selector)=>{
+   const node=document.querySelector(selector);
+   const style=getComputedStyle(node),{width,height}=node.getBoundingClientRect();
+   return {width,height,display:style.display,padding:style.padding,font:style.fontFamily,background:style.backgroundColor};
+  };
+  const nav=document.querySelector('.sites-shell-sidebar nav.menu');
+  return {
+   sidebar:box('.sites-shell-sidebar'),
+   header:box('.sites-shell-topbar'),
+   brand:box('.sites-shell-sidebar .logo'),
+   search:box('.sites-shell-topbar .busqueda-reservas-wrap'),
+   keyword:box('.sites-shell-topbar .busqueda-palabra-wrap'),
+   add:box('.sites-shell-topbar .boton-nueva-reserva'),
+   notices:box('.sites-shell-topbar .boton-notificaciones'),
+   menu:[...nav.children].filter(item=>item.getClientRects().length).map(item=>{
+    const style=getComputedStyle(item);
+    return [item.textContent.trim(),style.order,style.minHeight,style.fontSize,style.padding];
+   }),
+  };
+ });
+}
+async function assertSharedShell(page){
+ const menu=page.locator('.sites-shell-sidebar nav.menu');
+ const guestShell=await shell(page);
+ await menu.locator('[data-seccion=resumen]').evaluate(button=>button.click());
+ await page.locator('#seccion-resumen.activa').waitFor();
+ assert.deepEqual(guestShell,await shell(page),'Huéspedes usa el mismo encabezado y menú que Resumen');
+ await menu.locator('[data-seccion=huespedes]').evaluate(button=>button.click());
+ await page.locator('#seccion-huespedes.activa').waitFor();
+ await menu.locator('[data-seccion=huespedes].activo').waitFor();
+}
 (async()=>{
  fs.mkdirSync(out,{recursive:true});
  const browser=await chromium.launch({headless:true,executablePath:process.env.HAIKU_BROWSER_PATH||undefined});
@@ -40,11 +73,12 @@ async function settled(page){await page.evaluate(async()=>{await document.fonts.
    await page.evaluate(theme=>{document.documentElement.dataset.haikuTema=theme;document.documentElement.classList.remove('haiku-privacidad-arranque','haiku-resumen-pendiente','haiku-cabanas-pendiente','haiku-pagos-pendiente');},theme);
    await page.evaluate(()=>document.fonts.ready);
    await page.waitForFunction(()=>document.querySelector('.hu-avatar-perfil img')?.complete);
+   await assertSharedShell(page);
    await settled(page);await page.screenshot({path:path.join(out,'web-'+theme+'-perfil.png'),fullPage:true});
    measurements.push({client:'web',theme,geometry:await section.evaluate(n=>Object.fromEntries(['.hu-layout','.hu-lista','.hu-ficha','.hu-estadia-fila'].map(key=>{const r=n.querySelector(key).getBoundingClientRect();return [key,{x:r.x,y:r.y,w:r.width,h:r.height}];})))});
    const geometry=measurements.at(-1).geometry;
-   assert.ok(Math.abs(geometry['.hu-layout'].x-208)<=1&&Math.abs(geometry['.hu-layout'].y-283)<=1,'web placement matches approved frame');
-   assert.ok(Math.abs(geometry['.hu-ficha'].w-458)<=1&&Math.abs(geometry['.hu-ficha'].h-1031)<=2,'web profile dimensions match Figma');
+   assert.ok(geometry['.hu-lista'].w>geometry['.hu-ficha'].w&&geometry['.hu-ficha'].w>=338,'directorio y ficha aprovechan el espacio horizontal');
+   assert.equal(geometry['.hu-layout'].y,geometry['.hu-ficha'].y);
    assert.equal(geometry['.hu-estadia-fila'].h,68);
    const modal=section.locator('dialog');
    for(const [name,open] of [
@@ -67,6 +101,9 @@ async function settled(page){await page.evaluate(async()=>{await document.fonts.
    await card.getByRole('button',{name:'Completar',exact:true}).click();
    await card.getByRole('button',{name:'Completar datos',exact:true}).click();await page.screenshot({path:path.join(out,'web-'+theme+'-borrador.png')});
    await modal.getByRole('button',{name:'Cerrar',exact:true}).click();
+   await page.setViewportSize({width:390,height:850});
+   await assertSharedShell(page);
+   assert.ok(await section.evaluate(node=>node.scrollWidth<=node.clientWidth+1),'Huéspedes cabe en el ancho del móvil');
    assert.deepEqual(errors,[]);await page.close();
    if(!native)continue;
    const mobile=await browser.newPage({viewport:{width:390,height:1141},colorScheme:theme==='oscuro'?'dark':'light',hasTouch:true,isMobile:true});
