@@ -117,7 +117,8 @@ main.contenido.sites-shell-main:has(> #seccion-huespedes.activa){max-width:none;
 .hu-integrante+.hu-integrante{border-top:0}
 .hu-integrante .hu-boton{min-width:76px;min-height:30px;padding:5px 10px;font-size:11px;line-height:16px}
 .hu-integrante .hu-avatar{border-radius:6px;background:var(--guest-soft)}
-.hu-tipo-icono{width:34px;height:34px;border-radius:6px}
+.hu-tipo-icono{width:34px;height:34px;flex:none;border-radius:6px;overflow:hidden}
+.hu-vehiculo-miniatura{display:block;width:100%;height:100%;object-fit:cover}
 .hu-mini{min-height:26px;padding:4px 6px;border-radius:6px;font-size:11px;line-height:16px}
 .hu-registro{position:relative;padding:2px 0;min-height:40px;gap:2px}
 .hu-registro-editar{position:absolute;right:0;top:0;opacity:0;padding:3px;min-height:24px}
