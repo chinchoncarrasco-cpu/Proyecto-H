@@ -19,7 +19,7 @@ const server=http.createServer((req,res)=>{
   for(const width of [1280,390,320]){
    await page.setViewportSize({width,height:1000});await page.goto(base+'/');
    await page.setContent(`<!doctype html><html lang="es" data-haiku-tema="claro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    ${['styles','sites-shell-v1','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1','haiku-tema-oscuro-v1','haiku-tema-v1'].map(s=>`<link rel="stylesheet" href="${base}/css/${s}.css">`).join('')}
+    ${['styles','haiku-paleta-v1','sites-shell-v1','supabase-asistente-v1','supabase-haku-reconciliacion-v1','sites-asistente-v1','haiku-libro-pagos-ui-v1','haiku-tema-oscuro-v1','haiku-tema-v1'].map(s=>`<link rel="stylesheet" href="${base}/css/${s}.css">`).join('')}
     </head><body><div class="haiku-asistente-root"><div class="haiku-asistente-panel" id="haiku-asistente-panel">
     <header class="haiku-asistente-cabecera">Haku Consultas</header><div class="haiku-asistente-mensajes" id="haiku-asistente-mensajes">
     <div class="haiku-asistente-preview haku-comparacion-compacta" id="resultado"></div></div></div></div></body></html>`);
@@ -47,8 +47,8 @@ const server=http.createServer((req,res)=>{
    await first.waitFor();
    for(const tema of ['claro','oscuro']){
     await page.evaluate(t=>document.documentElement.dataset.haikuTema=t,tema);
-    assert.equal(await first.evaluate(e=>getComputedStyle(e).backgroundColor),tema==='oscuro'?'rgb(27, 36, 32)':'rgb(255, 255, 255)');
-    assert.equal(await first.evaluate(e=>getComputedStyle(e).color),tema==='oscuro'?'rgb(232, 239, 234)':'rgb(32, 59, 48)');
+    assert.equal(await first.evaluate(e=>getComputedStyle(e).backgroundColor),tema==='oscuro'?'rgb(35, 31, 37)':'rgb(255, 253, 251)');
+    assert.equal(await first.evaluate(e=>getComputedStyle(e).color),tema==='oscuro'?'rgb(244, 236, 239)':'rgb(32, 59, 48)');
     assert.deepEqual(await page.evaluate(contraste),[],`${width} ${tema}: contraste de texto y acciones`);
     assert.ok((await first.boundingBox()).height<190,`${width} ${tema}: ficha compacta`);
     assert.equal(await group.evaluate(e=>e.scrollWidth<=e.clientWidth+1),true,`${width} ${tema}: sin desborde`);

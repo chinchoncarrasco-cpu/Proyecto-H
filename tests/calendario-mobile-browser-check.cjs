@@ -17,7 +17,7 @@ const sectionEnd = end >= 0 ? end : endCrLf;
 assert.ok(start >= 0 && sectionEnd > start);
 const section = html.slice(start, sectionEnd).replace('class="seccion-app sites-calendario"',
     'class="seccion-app sites-calendario activa"');
-const css = ['css/styles.css', 'css/sites-shell-v1.css', 'css/sites-calendario-v1.css', 'css/sites-resumen-v1.css',
+const css = ['css/styles.css', 'css/haiku-paleta-v1.css', 'css/sites-shell-v1.css', 'css/sites-calendario-v1.css', 'css/sites-resumen-v1.css',
     'css/haiku-tema-oscuro-v1.css', 'css/haiku-tema-v1.css', 'css/haiku-tema-legibilidad-v1.css'].map(read).join('\n');
 const edge = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const documentHTML = `<!doctype html><html lang="es" data-haiku-tema="claro"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body><span id="fecha-actual"></span><main style="min-width:0">${section}</main></body></html>`;
@@ -119,20 +119,21 @@ async function comprobarFichaFullDay(page) {
 }
 
 async function comprobarAnchoConPaneles(page, temas) {
-    const shell = html.slice(html.indexOf('<header class="sites-shell-topbar"'), html.indexOf('<main class="contenido sites-shell-main">'));
+    const inicioCabecera = html.indexOf('<header class="sites-shell-topbar haiku-cereza-cabecera"');
+    assert.ok(inicioCabecera >= 0);
+    const shell = html.slice(inicioCabecera, html.indexOf('<main class="contenido sites-shell-main">', inicioCabecera));
     await page.evaluate(shell => {
         document.body.insertAdjacentHTML('afterbegin', shell);
         document.querySelector('main').className = 'contenido sites-shell-main';
         document.querySelectorAll('.menu-item[data-seccion]').forEach(item =>
             item.classList.toggle('activo', item.dataset.seccion === 'calendario'));
         window.haikuSesion.usuario = { id: 'prueba' };
-        localStorage.setItem('haikuSidebarAnchoV1', '180');
     }, shell);
     for (const hoja of ['supabase-asistente-v1', 'sites-asistente-v1', 'supabase-pagos-acciones-desktop-v1',
-        'haiku-panel-coordinacion-v1', 'haiku-redes-v1']) {
+        'haiku-panel-coordinacion-v1', 'haiku-redes-v1', 'haiku-cereza-v1']) {
         await page.addStyleTag({ content: read(`css/${hoja}.css`) });
     }
-    for (const script of ['supabase-sidebar-resize-v1', 'supabase-asistente-v1', 'haiku-panel-coordinacion-v1']) {
+    for (const script of ['haiku-cereza-nav-v1', 'supabase-asistente-v1', 'haiku-panel-coordinacion-v1']) {
         await page.addScriptTag({ content: read(`js/${script}.js`) });
     }
 
@@ -180,14 +181,9 @@ async function comprobarAnchoConPaneles(page, temas) {
             await reserva.click();
             await ficha.locator('[data-reserva-contenido]').waitFor({ state: 'visible' });
             await comprobarAjuste(antes.ancho, `${width} ${tema} ambos`);
-            if (width === 1280) {
-                const separador = page.locator('#haiku-sidebar-resize-v1-handle');
-                const ancho = (await medidas()).ancho;
-                await separador.press('ArrowRight');
-                assert.ok((await medidas()).ancho < ancho, 'El mes se adapta al ancho del menú');
-                await separador.press('ArrowLeft');
-                assert.equal((await medidas()).ancho, ancho);
-            }
+            const enlaceCalendario = page.getByRole('navigation', { name: 'Navegación principal' })
+                .locator('[data-seccion=calendario].activo');
+            await enlaceCalendario.click({ trial: true });
             if (temas && width === 1920) await page.screenshot({ path: path.join(temas, `calendario-paneles-${tema}.png`) });
 
             await haku.locator('#haiku-asistente-cerrar').click();

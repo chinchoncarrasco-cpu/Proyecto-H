@@ -7,9 +7,19 @@ const root=path.resolve(__dirname,'..');
 const out=process.env.HAKU_GUEST_SHOTS;
 if(!out)throw new Error('HAKU_GUEST_SHOTS must name an evidence directory.');
 const native=process.env.HAKU_GUEST_NATIVE_PREVIEW;
-const allowed=new Set(['js/historial.js','js/calendario.js','js/checklist.js','js/app.js','js/cabanas.js','js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
+const allowed=new Set(['js/historial.js','js/calendario.js','js/checklist.js','js/app.js','js/cabanas.js','js/haiku-cereza-nav-v1.js','js/haiku-huespedes-api-v1.js','js/haiku-huespedes-v1.js']);
 const mime={'.html':'text/html','.js':'application/javascript','.css':'text/css','.svg':'image/svg+xml','.ttf':'font/ttf','.woff':'font/woff','.png':'image/png'};
-async function settled(page){await page.evaluate(async()=>{await document.fonts.ready;await new Promise(requestAnimationFrame);await Promise.all([...document.images].map(i=>i.decode().catch(()=>{})));await Promise.all(document.getAnimations().filter(a=>Number.isFinite(a.effect?.getComputedTiming().endTime)).map(a=>a.finished.catch(()=>{})));await new Promise(requestAnimationFrame);});}
+async function settled(page){
+ await page.evaluate(async()=>{
+  await document.fonts.ready;
+  await new Promise(requestAnimationFrame);
+  await Promise.all([...document.images].filter(i=>i.complete).map(i=>i.decode().catch(()=>{})));
+  for(const animation of document.getAnimations()){
+   if(animation.playbackRate&&Number.isFinite(animation.effect?.getComputedTiming().endTime))animation.finish();
+  }
+  await new Promise(requestAnimationFrame);
+ });
+}
 function shell(page){
  return page.evaluate(()=>{
   const box=(selector)=>{
@@ -17,11 +27,10 @@ function shell(page){
    const style=getComputedStyle(node),{width,height}=node.getBoundingClientRect();
    return {width,height,display:style.display,padding:style.padding,font:style.fontFamily,background:style.backgroundColor};
   };
-  const nav=document.querySelector('.sites-shell-sidebar nav.menu');
+  const nav=document.querySelector('.haiku-cereza-cabecera nav');
   return {
-   sidebar:box('.sites-shell-sidebar'),
    header:box('.sites-shell-topbar'),
-   brand:box('.sites-shell-sidebar .logo'),
+   brand:box('.haiku-cereza-marca'),
    search:box('.sites-shell-topbar .busqueda-reservas-wrap'),
    keyword:box('.sites-shell-topbar .busqueda-palabra-wrap'),
    add:box('.sites-shell-topbar .boton-nueva-reserva'),
@@ -34,16 +43,19 @@ function shell(page){
  });
 }
 async function assertSharedShell(page){
- const menu=page.locator('.sites-shell-sidebar nav.menu');
+ const menu=page.getByRole('navigation',{name:'Navegación principal'});
  await settled(page);
  const guestShell=await shell(page);
- await menu.locator('[data-seccion=calendario]').evaluate(button=>button.click());
+ await menu.locator('[data-seccion=calendario]').click();
  await page.locator('#seccion-calendario.activa').waitFor();
  await settled(page);
  assert.deepEqual(guestShell,await shell(page),'Huéspedes usa el mismo encabezado y menú que Calendario');
- await menu.locator('[data-seccion=huespedes]').evaluate(button=>button.click());
+ const gestion=menu.locator('details').filter({has:page.locator('[data-seccion=huespedes]')});
+ await gestion.locator('summary').click();
+ await gestion.locator('[data-seccion=huespedes]').click();
  await page.locator('#seccion-huespedes.activa').waitFor();
- await menu.locator('[data-seccion=huespedes].activo').waitFor();
+ await gestion.locator('[data-seccion=huespedes].activo').waitFor({state:'attached'});
+ assert.equal(await gestion.getAttribute('open'),null);
 }
 (async()=>{
  fs.mkdirSync(out,{recursive:true});

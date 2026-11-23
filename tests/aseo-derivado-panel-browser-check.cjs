@@ -221,10 +221,10 @@ const modulos = new Set([
             window.__demoraSolicitudes = new Promise(resolve => { window.__liberarSolicitudes = resolve; });
         });
         await fila(9).locator('[data-cb-open]').click();
-        assert.equal(await page.locator('#cabinsExpressAvailability').textContent(), 'Verificando…');
         // Una solicitud vigente ahora abre Express automáticamente; mantiene
         // la pantalla completa mientras el mismo puente verifica la lectura.
         await page.waitForFunction(() => window.__lecturaExpressPendiente);
+        assert.equal(await page.locator('#cabinsExpressAvailability').textContent(), 'Verificando…');
         assert.equal(await page.locator('#cabinsReviewMode').inputValue(), 'completa');
         assert.equal(await page.locator('#cabinsReviewMode').isDisabled(), true);
         assert.equal(await page.locator('#aseo-express-individual').isVisible(), false);

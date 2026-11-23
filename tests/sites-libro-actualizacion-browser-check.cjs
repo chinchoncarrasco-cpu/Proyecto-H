@@ -392,7 +392,7 @@ async function comprobarCasosDelAviso(browser, url) {
                         color:getComputedStyle(el.parentElement).backgroundColor};
                 });
                 assert.deepEqual(medidas,{visible:true,sinDesborde:true,movil:width<720,altoBoton:width<720?44:38,
-                    color:tema==='oscuro'?'rgb(32, 45, 38)':'rgb(255, 255, 255)'},tema+' '+width);
+                    color:tema==='oscuro'?'rgb(32, 45, 38)':'rgb(255, 253, 251)'},tema+' '+width);
                 if(capturas)await aviso.screenshot({path:path.join(capturas,'casos-'+tema+'-'+width+'.png')});
             }
         }
@@ -1209,8 +1209,8 @@ async function comprobarPendientesTrasConfirmar(browser,url){
                 assert.ok(Math.abs(medidas.width-medidas.available)<=2,`${tema} ${width}: ancho completo del panel`);
                 assert.ok(medidas.height<=150,`${tema} ${width}: resumen compacto (${medidas.height})`);
                 assert.ok(medidas.button>=32,'Ver informe conserva un objetivo de toque cómodo');
-                assert.equal(medidas.text,tema==='oscuro'?'rgb(232, 239, 234)':'rgb(23, 32, 25)');
-                assert.equal(medidas.accent,tema==='oscuro'?'rgb(159, 210, 179)':'rgb(40, 108, 78)');
+                assert.equal(medidas.text,tema==='oscuro'?'rgb(244, 236, 239)':'rgb(44, 35, 41)');
+                assert.equal(medidas.accent,tema==='oscuro'?'rgb(58, 50, 60)':'rgb(40, 108, 78)');
                 await page.waitForFunction(()=>[...document.querySelectorAll('.haku-libro-resumen img')].every(img=>img.complete&&img.naturalWidth===6));
                 const puntos=await resumen.locator('img:visible').evaluateAll(xs=>xs.map(x=>({w:x.getBoundingClientRect().width,h:x.getBoundingClientRect().height,src:x.getAttribute('src')})));
                 assert.equal(puntos.length,4);
