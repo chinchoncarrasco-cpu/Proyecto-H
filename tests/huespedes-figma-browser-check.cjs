@@ -36,9 +36,9 @@ function shell(page){
 async function assertSharedShell(page){
  const menu=page.locator('.sites-shell-sidebar nav.menu');
  const guestShell=await shell(page);
- await menu.locator('[data-seccion=resumen]').evaluate(button=>button.click());
- await page.locator('#seccion-resumen.activa').waitFor();
- assert.deepEqual(guestShell,await shell(page),'Huéspedes usa el mismo encabezado y menú que Resumen');
+ await menu.locator('[data-seccion=calendario]').evaluate(button=>button.click());
+ await page.locator('#seccion-calendario.activa').waitFor();
+ assert.deepEqual(guestShell,await shell(page),'Huéspedes usa el mismo encabezado y menú que Calendario');
  await menu.locator('[data-seccion=huespedes]').evaluate(button=>button.click());
  await page.locator('#seccion-huespedes.activa').waitFor();
  await menu.locator('[data-seccion=huespedes].activo').waitFor();
